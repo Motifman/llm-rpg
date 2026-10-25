@@ -51,22 +51,12 @@ class ScenarioPredicateTraceEmitter:
                 owner_id=owner_id,
                 owner_index=owner_index,
                 is_satisfied=result.is_satisfied,
-                reason_code=(
-                    result.reason_code.value
-                    if result.reason_code is not None
-                    else None
-                ),
+                reason_code=(result.reason_code.value if result.reason_code is not None else None),
                 root_condition_type=root_condition_type,
                 failed_condition_type=(
-                    result.failed_predicate.condition_type
-                    if result.failed_predicate is not None
-                    else None
+                    result.failed_predicate.condition_type if result.failed_predicate is not None else None
                 ),
-                failed_path=(
-                    list(result.failed_path)
-                    if result.failed_path is not None
-                    else None
-                ),
+                failed_path=(list(result.failed_path) if result.failed_path is not None else None),
                 missing_context=sorted(result.missing_context),
                 probability_decisions=[
                     {
@@ -78,11 +68,7 @@ class ScenarioPredicateTraceEmitter:
                     for decision in evaluation.probability_decisions
                 ],
                 # 1 tick に 2 回評価される個人結果の規則だけが渡す (design_decisions D1618)。
-                **(
-                    {"evaluation_point": evaluation_point}
-                    if evaluation_point is not None
-                    else {}
-                ),
+                **({"evaluation_point": evaluation_point} if evaluation_point is not None else {}),
             )
         except Exception:
             _logger.warning(

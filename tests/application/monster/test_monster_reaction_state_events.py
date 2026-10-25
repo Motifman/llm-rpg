@@ -73,11 +73,16 @@ SPOT_B = SpotId.create(2)
 
 def _node(spot_id: SpotId) -> SpotNode:
     return SpotNode(
-        spot_id=spot_id, name=f"spot{spot_id.value}", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=spot_id,
+        name=f"spot{spot_id.value}",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
-            lighting=LightingEnum.BRIGHT, sound_ambient=None,
-            temperature=TemperatureEnum.NORMAL, smell=None,
+            lighting=LightingEnum.BRIGHT,
+            sound_ambient=None,
+            temperature=TemperatureEnum.NORMAL,
+            smell=None,
         ),
     )
 
@@ -85,9 +90,13 @@ def _node(spot_id: SpotId) -> SpotNode:
 def _conn(connection_id: int, from_id: SpotId, to_id: SpotId) -> SpotConnection:
     return SpotConnection(
         connection_id=ConnectionId.create(connection_id),
-        from_spot_id=from_id, to_spot_id=to_id,
-        name="edge", description="", travel_ticks=1,
-        is_bidirectional=False, passage=Passage.open(),
+        from_spot_id=from_id,
+        to_spot_id=to_id,
+        name="edge",
+        description="",
+        travel_ticks=1,
+        is_bidirectional=False,
+        passage=Passage.open(),
     )
 
 
@@ -111,8 +120,13 @@ def _template(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(100, True),
@@ -132,8 +146,10 @@ def _monster(template: MonsterTemplate | None = None) -> MonsterAggregate:
         template=template or _template(),
         world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -249,13 +265,18 @@ class TestAbandonedChaseEvent:
     """各 abandon 経路で reason 付きで event 発火。"""
 
     def _setup_chasing_monster(
-        self, handler, *, current_tick: WorldTick, chase_started_tick: WorldTick = WorldTick(10),
+        self,
+        handler,
+        *,
+        current_tick: WorldTick,
+        chase_started_tick: WorldTick = WorldTick(10),
         template: MonsterTemplate | None = None,
     ):
         monster = _monster(template or _template())
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=chase_started_tick, attacker_ref=ref,
+            current_tick=chase_started_tick,
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,
@@ -331,7 +352,8 @@ class TestAbandonedChaseEvent:
         monster = _monster(_template())
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(10), attacker_ref=ref,
+            current_tick=WorldTick(10),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,

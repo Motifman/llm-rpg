@@ -1,4 +1,5 @@
 """既存の画面参照に依存せず、公開SNSだけを有限件ずつ取得する。"""
+
 from __future__ import annotations
 
 import base64
@@ -44,14 +45,15 @@ class PublicSnsReadService:
         self._access = PublicSnsAccessPolicy(repository)
         self._now = now
 
-    def read_posts(
-        self, viewer_user_id: int, *, cursor: str | None = None, limit: int = 10
-    ) -> PublicSnsPage:
+    def read_posts(self, viewer_user_id: int, *, cursor: str | None = None, limit: int = 10) -> PublicSnsPage:
         binding = self._binding(viewer_user_id, "posts")
         before = self._validate_request(viewer_user_id, cursor, limit, binding)
         rows = self._repository.scan_posts(before, PUBLIC_SNS_SCAN_BUDGET + 1)
         items, following = self._page(
-            rows, limit, binding, lambda row: row.local_id,
+            rows,
+            limit,
+            binding,
+            lambda row: row.local_id,
             lambda row: self._visible_dto(viewer_user_id, row),
         )
         return PublicSnsPage(items, following)
@@ -67,18 +69,20 @@ class PublicSnsReadService:
         binding = self._binding(viewer_user_id, "thread", target_id)
         before = self._validate_request(viewer_user_id, cursor, limit, binding)
         selected = self._access.require_visible_target(viewer_user_id, target_id)
-        rows = self._repository.scan_replies(
-            selected.kind, selected.local_id, before, PUBLIC_SNS_SCAN_BUDGET + 1
-        )
+        rows = self._repository.scan_replies(selected.kind, selected.local_id, before, PUBLIC_SNS_SCAN_BUDGET + 1)
         items, following = self._page(
-            rows, limit, binding, lambda row: row.local_id,
+            rows,
+            limit,
+            binding,
+            lambda row: row.local_id,
             lambda row: self._visible_dto(viewer_user_id, row),
         )
         chain = self._access.visible_chain(viewer_user_id, selected)
         if chain is None:
             raise PublicSnsUnavailableError()
         return PublicSnsThread(
-            self._dto(selected), PublicSnsPage(items, following),
+            self._dto(selected),
+            PublicSnsPage(items, following),
             tuple(self._dto(ancestor) for ancestor in reversed(chain[1:])),
         )
 
@@ -87,18 +91,17 @@ class PublicSnsReadService:
     ) -> PublicSnsNotificationPage:
         binding = self._binding(viewer_user_id, "inbox")
         before = self._validate_request(viewer_user_id, cursor, limit, binding)
-        rows = self._repository.scan_notifications(
-            viewer_user_id, before, PUBLIC_SNS_SCAN_BUDGET + 1
-        )
+        rows = self._repository.scan_notifications(viewer_user_id, before, PUBLIC_SNS_SCAN_BUDGET + 1)
         items, following = self._page(
-            rows, limit, binding, lambda row: row.notification_id.value,
+            rows,
+            limit,
+            binding,
+            lambda row: row.notification_id.value,
             lambda row: self.visible_notification(viewer_user_id, row),
         )
         return PublicSnsNotificationPage(items, following)
 
-    def visible_notification(
-        self, viewer_user_id: int, notification: Notification
-    ) -> PublicSnsNotificationDto | None:
+    def visible_notification(self, viewer_user_id: int, notification: Notification) -> PublicSnsNotificationDto | None:
         """保存済み本文を信用せず、配送直前にも現在の公開条件を検査できる。"""
         if notification.user_id.value != viewer_user_id or notification.is_expired(self._now()):
             return None
@@ -172,9 +175,7 @@ class PublicSnsReadService:
             raise PublicSnsUnavailableError()
         return [self._repository.namespace, user.identity_token, view, target]
 
-    def _validate_request(
-        self, viewer: int, cursor: str | None, limit: int, binding: list[object]
-    ) -> int | None:
+    def _validate_request(self, viewer: int, cursor: str | None, limit: int, binding: list[object]) -> int | None:
         if type(limit) is not int or not 1 <= limit <= MAX_PUBLIC_SNS_PAGE_SIZE:
             raise PublicSnsInvalidRequestError("取得件数は1から20で指定してください")
         if self._repository.find_user(viewer) is None:

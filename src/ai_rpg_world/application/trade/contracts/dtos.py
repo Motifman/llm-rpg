@@ -8,6 +8,7 @@ from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rar
 @dataclass(frozen=True)
 class TradeDto:
     """取引DTO"""
+
     trade_id: int
     seller_id: int
     seller_name: str
@@ -34,6 +35,7 @@ class TradeDto:
 @dataclass(frozen=True)
 class TradeListDto:
     """取引一覧DTO（カーソルベースページング対応）"""
+
     trades: list[TradeDto]
     next_cursor: str | None = None
 
@@ -41,6 +43,7 @@ class TradeListDto:
 @dataclass(frozen=True)
 class TradeSearchFilterDto:
     """取引検索フィルタDTO（アプリケーション層）"""
+
     item_name: str | None = None
     item_types: list[str] | None = None
     rarities: list[str] | None = None
@@ -53,6 +56,7 @@ class TradeSearchFilterDto:
 @dataclass(frozen=True)
 class TradeCommandResultDto:
     """取引コマンド実行結果DTO"""
+
     success: bool
     message: str
     data: dict[str, Any] | None = None

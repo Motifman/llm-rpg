@@ -68,9 +68,7 @@ class TestConstructor:
                 current_tick_provider=lambda: 0,
             )
 
-    def test_current_tick_provider_callable_raises_type_error(
-        self, memory: InMemoryEncounterMemory
-    ) -> None:
+    def test_current_tick_provider_callable_raises_type_error(self, memory: InMemoryEncounterMemory) -> None:
         """current tick provider が callable でなければ TypeError。"""
         with pytest.raises(TypeError, match="current_tick_provider"):
             EncounterObservationCollector(
@@ -86,9 +84,7 @@ class TestEntityEnteredSpot:
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
         """actor のある entity_entered_spot 観測を受けても、環境の encounter には何も残らない。会った人は Being の知り合いの記録が持つ。"""
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=lambda: 42
-        )
+        collector = EncounterObservationCollector(memory=memory, current_tick_provider=lambda: 42)
         collector.on_observation(
             kai,
             _output(
@@ -105,13 +101,9 @@ class TestEntityEnteredSpot:
 class TestScenarioEvent:
     """type=scenario_event の観測から event encounter を抽出する。"""
 
-    def test_records_event_id_event_encounter(
-        self, memory: InMemoryEncounterMemory, kai: PlayerId
-    ) -> None:
+    def test_records_event_id_event_encounter(self, memory: InMemoryEncounterMemory, kai: PlayerId) -> None:
         """event id を event encounter として 記録する。"""
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=lambda: 96
-        )
+        collector = EncounterObservationCollector(memory=memory, current_tick_provider=lambda: 96)
         collector.on_observation(
             kai,
             _output(
@@ -127,13 +119,9 @@ class TestScenarioEvent:
         assert record is not None
         assert record.first_seen_tick == 96
 
-    def test_event_id_missing_skip(
-        self, memory: InMemoryEncounterMemory, kai: PlayerId
-    ) -> None:
+    def test_event_id_missing_skip(self, memory: InMemoryEncounterMemory, kai: PlayerId) -> None:
         """event id 欠落は skip。"""
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=lambda: 0
-        )
+        collector = EncounterObservationCollector(memory=memory, current_tick_provider=lambda: 0)
         collector.on_observation(
             kai,
             _output(structured={"type": "scenario_event"}),
@@ -144,36 +132,24 @@ class TestScenarioEvent:
 class TestUnknownType:
     """PR3 のスコープ外の type は silent skip。"""
 
-    def test_records_nothing_for_unsupported_type(
-        self, memory: InMemoryEncounterMemory, kai: PlayerId
-    ) -> None:
+    def test_records_nothing_for_unsupported_type(self, memory: InMemoryEncounterMemory, kai: PlayerId) -> None:
         """未対応 type は何も記録しない。"""
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=lambda: 0
-        )
+        collector = EncounterObservationCollector(memory=memory, current_tick_provider=lambda: 0)
         collector.on_observation(
             kai,
             _output(structured={"type": "something_unrelated"}),
         )
         assert memory.get_records_for(kai) == {}
 
-    def test_structured_empty_does_not_crash(
-        self, memory: InMemoryEncounterMemory, kai: PlayerId
-    ) -> None:
+    def test_structured_empty_does_not_crash(self, memory: InMemoryEncounterMemory, kai: PlayerId) -> None:
         """structured が空でも落ちない。"""
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=lambda: 0
-        )
+        collector = EncounterObservationCollector(memory=memory, current_tick_provider=lambda: 0)
         collector.on_observation(kai, _output(structured={}))
         assert memory.get_records_for(kai) == {}
 
-    def test_type_missing_does_not_crash(
-        self, memory: InMemoryEncounterMemory, kai: PlayerId
-    ) -> None:
+    def test_type_missing_does_not_crash(self, memory: InMemoryEncounterMemory, kai: PlayerId) -> None:
         """type 欠落でも 落ちない。"""
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=lambda: 0
-        )
+        collector = EncounterObservationCollector(memory=memory, current_tick_provider=lambda: 0)
         collector.on_observation(
             kai,
             _output(structured={"actor": "someone"}),
@@ -191,25 +167,20 @@ class TestCurrentTickFailures:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """provider が例外を投げたら log して skip。"""
+
         def _bad_provider() -> int:
             raise RuntimeError("clock unavailable")
 
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=_bad_provider
-        )
+        collector = EncounterObservationCollector(memory=memory, current_tick_provider=_bad_provider)
         with caplog.at_level(logging.ERROR):
             collector.on_observation(
                 kai,
-                _output(
-                    structured={"type": "entity_entered_spot", "actor": "ノア"}
-                ),
+                _output(structured={"type": "entity_entered_spot", "actor": "ノア"}),
             )
         # encounter は記録されない
         assert memory.get_records_for(kai) == {}
 
-    def test_returns_skip_provider_none_when(
-        self, memory: InMemoryEncounterMemory, kai: PlayerId
-    ) -> None:
+    def test_returns_skip_provider_none_when(self, memory: InMemoryEncounterMemory, kai: PlayerId) -> None:
         """provider が None を返したら skip。"""
         collector = EncounterObservationCollector(
             memory=memory,
@@ -221,13 +192,9 @@ class TestCurrentTickFailures:
         )
         assert memory.get_records_for(kai) == {}
 
-    def test_returns_skip_provider_negative_int_when(
-        self, memory: InMemoryEncounterMemory, kai: PlayerId
-    ) -> None:
+    def test_returns_skip_provider_negative_int_when(self, memory: InMemoryEncounterMemory, kai: PlayerId) -> None:
         """provider が負の int を返したら skip。"""
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=lambda: -1
-        )
+        collector = EncounterObservationCollector(memory=memory, current_tick_provider=lambda: -1)
         collector.on_observation(
             kai,
             _output(structured={"type": "entity_entered_spot", "actor": "ノア"}),
@@ -244,18 +211,15 @@ class TestExceptionInMemoryObserve:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """memoryobserve が例外を投げても例外を伝播させない。"""
+
         class _BrokenMemory(InMemoryEncounterMemory):
             def observe(self, *args, **kwargs):  # type: ignore[override]
                 raise RuntimeError("storage failure")
 
-        collector = EncounterObservationCollector(
-            memory=_BrokenMemory(), current_tick_provider=lambda: 0
-        )
+        collector = EncounterObservationCollector(memory=_BrokenMemory(), current_tick_provider=lambda: 0)
         with caplog.at_level(logging.ERROR):
             # 例外が外に出ないことを確認
             collector.on_observation(
                 kai,
-                _output(
-                    structured={"type": "entity_entered_spot", "actor": "ノア"}
-                ),
+                _output(structured={"type": "entity_entered_spot", "actor": "ノア"}),
             )

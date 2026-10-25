@@ -23,9 +23,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _SENA = PlayerId(2)
 _KUZE = PlayerId(3)
 _SPOT = "corridor"
@@ -49,9 +47,7 @@ def _place_living(runtime, player_id: PlayerId, spot_name: str) -> None:
 
 def _make_dead(runtime, player_id: PlayerId, spot_name: str) -> None:
     _place_living(runtime, player_id, spot_name)
-    runtime._fallen_body_registry.record(
-        player_id, _spot(runtime, spot_name), WorldTick(runtime.current_tick())
-    )
+    runtime._fallen_body_registry.record(player_id, _spot(runtime, spot_name), WorldTick(runtime.current_tick()))
     status = runtime._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
     runtime._player_status_repo.save(status)
@@ -79,11 +75,7 @@ def _speak(runtime, speaker: PlayerId, arguments: dict):
 
 def _label_of(runtime, speaker: PlayerId, listener: PlayerId) -> str:
     targets = runtime.build_llm_context(speaker).tool_runtime_context.targets
-    return next(
-        label
-        for label, target in targets.items()
-        if getattr(target, "player_id", None) == int(listener)
-    )
+    return next(label for label, target in targets.items() if getattr(target, "player_id", None) == int(listener))
 
 
 def _heard(runtime, listener: PlayerId, content: str) -> bool:
@@ -133,9 +125,7 @@ class TestDepartedWhisperMatchesSay:
 
         assert _heard(runtime, listener, "聞こえるか") is expected
 
-    @pytest.mark.parametrize(
-        "speaker_dead,listener_dead,expected,error_code", _WHISPER_TABLE
-    )
+    @pytest.mark.parametrize("speaker_dead,listener_dead,expected,error_code", _WHISPER_TABLE)
     def test_whisper_reaches_listener_as_in_the_design_table(
         self,
         speaker_dead: bool,
@@ -184,12 +174,8 @@ class TestDepartedWhisperMatchesSay:
         assert "囁きが届いた" not in result.message
         assert "誰にも届きませんでした" in result.message
 
-    @pytest.mark.parametrize(
-        "ghost_spot", [_SPOT, "storage"], ids=["ghost_at_body", "ghost_moved_away"]
-    )
-    def test_living_whisper_to_body_is_rejected_without_revealing_ghost_position(
-        self, ghost_spot: str
-    ) -> None:
+    @pytest.mark.parametrize("ghost_spot", [_SPOT, "storage"], ids=["ghost_at_body", "ghost_moved_away"])
+    def test_living_whisper_to_body_is_rejected_without_revealing_ghost_position(self, ghost_spot: str) -> None:
         """生者が同じ場所の遺体に囁くと、幽霊がその場にいても移動済みでも同じ「死亡しており、囁きは届きません」で拒否され、結果文から幽霊の位置が分からない。"""
         runtime, speaker, listener = _setup(speaker_dead=False, listener_dead=True)
         runtime._departed_position_store.move(listener, _spot(runtime, ghost_spot))
@@ -203,7 +189,5 @@ class TestDepartedWhisperMatchesSay:
 
         assert result.success is False
         assert result.error_code == "INVALID_WHISPER"
-        assert result.message == (
-            "囁きを送れませんでした: クゼは死亡しており、囁きは届きません。"
-        )
+        assert result.message == ("囁きを送れませんでした: クゼは死亡しており、囁きは届きません。")
         assert not _heard(runtime, listener, "内緒の話")

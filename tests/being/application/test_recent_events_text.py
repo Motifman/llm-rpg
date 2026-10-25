@@ -18,7 +18,9 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 ADA = BeingId("being_p1")
 
 
-def _observation(body: str, *, display: str = "1日目 朝", route: object = SeenOrHeard(), order: OccurrenceOrder | None = None) -> Observation:
+def _observation(
+    body: str, *, display: str = "1日目 朝", route: object = SeenOrHeard(), order: OccurrenceOrder | None = None
+) -> Observation:
     return Observation(
         body=body,
         route=route,
@@ -36,7 +38,15 @@ def _move(call_id: str, *, inner_thought: str | None = None) -> AgentMove:
     return AgentMove(call_id=call_id, tool_name="interact", arguments={}, inner_thought=inner_thought)
 
 
-def _answered(memory: ShortTermMemory, call_id: str, body: str, *, turn: int, inner_thought: str | None = None, order: OccurrenceOrder | None = None) -> None:
+def _answered(
+    memory: ShortTermMemory,
+    call_id: str,
+    body: str,
+    *,
+    turn: int,
+    inner_thought: str | None = None,
+    order: OccurrenceOrder | None = None,
+) -> None:
     memory.act(_move(call_id, inner_thought=inner_thought), current_turn=turn)
     memory.receive_result(
         ObservedOutcome(_observation(body, route=OwnActionResult(call_id=call_id, succeeded=True), order=order)),
@@ -74,7 +84,9 @@ class TestRecentEventsText:
         memory = ShortTermMemory.empty(ADA)
         memory.act(_move("call-1", inner_thought="思い出そう"), current_turn=1)
         memory.receive_result(
-            MemoryOperationOutcome(call_id="call-1", body="[行動] 思い出した → [結果] 鍵は事務所", time=ObservedTime(display="1日目 昼")),
+            MemoryOperationOutcome(
+                call_id="call-1", body="[行動] 思い出した → [結果] 鍵は事務所", time=ObservedTime(display="1日目 昼")
+            ),
             current_turn=1,
         )
 
@@ -83,7 +95,9 @@ class TestRecentEventsText:
     def test_lapse_is_a_line_without_inner_thought(self) -> None:
         """1 手を出せなかったことは「- [時刻] 本文」の 1 行になる。"""
         memory = ShortTermMemory.empty(ADA)
-        memory.lapse(body="[行動] 迷い → [失敗] | 決められなかった", time=ObservedTime(display="1日目 夜"), current_turn=1)
+        memory.lapse(
+            body="[行動] 迷い → [失敗] | 決められなかった", time=ObservedTime(display="1日目 夜"), current_turn=1
+        )
 
         assert recent_events_text(memory) == "- [1日目 夜] [行動] 迷い → [失敗] | 決められなかった"
 
@@ -107,8 +121,17 @@ class TestRecentEventsText:
     def test_lines_follow_the_occurrence_order(self) -> None:
         """行は集約の recent() の順。同じ環境で先に起きた他人の行動は、自分の 1 手の結果より前の行になる。"""
         memory = ShortTermMemory.empty(ADA)
-        _answered(memory, "call-1", "[行動] 奪おうとした → [失敗]", turn=5, order=OccurrenceOrder(environment="廃坑の山村", value=20.0))
-        memory.perceive(_observation("ゲンが周囲を探索している", order=OccurrenceOrder(environment="廃坑の山村", value=10.0)), current_turn=5)
+        _answered(
+            memory,
+            "call-1",
+            "[行動] 奪おうとした → [失敗]",
+            turn=5,
+            order=OccurrenceOrder(environment="廃坑の山村", value=20.0),
+        )
+        memory.perceive(
+            _observation("ゲンが周囲を探索している", order=OccurrenceOrder(environment="廃坑の山村", value=10.0)),
+            current_turn=5,
+        )
 
         assert recent_events_text(memory) == (
             "- [1日目 朝] ゲンが周囲を探索している\n- [1日目 朝] [行動] 奪おうとした → [失敗]"

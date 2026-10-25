@@ -33,9 +33,7 @@ class _BrokenRecorder(NullTraceRecorder):
         raise OSError("disk full")
 
 
-def _isolator(
-    policy: WorldTickFailurePolicy, recorder: Any | None
-) -> WorldTickFailureIsolator:
+def _isolator(policy: WorldTickFailurePolicy, recorder: Any | None) -> WorldTickFailureIsolator:
     return WorldTickFailureIsolator(policy=policy, trace_recorder_provider=lambda: recorder)
 
 
@@ -51,9 +49,7 @@ class TestIsolatePolicy:
         recorder = _CollectingRecorder()
         isolator = _isolator(WorldTickFailurePolicy.ISOLATE, recorder)
 
-        with isolator.unit(
-            stage="travel", tick=WorldTick(7), target_kind="player", target_id=3, player_id=3
-        ):
+        with isolator.unit(stage="travel", tick=WorldTick(7), target_kind="player", target_id=3, player_id=3):
             _raise(ValueError("passage closed"))
 
         assert len(recorder.events) == 1
@@ -109,7 +105,9 @@ class TestIsolatePolicy:
         recorder = _CollectingRecorder()
         isolator = _isolator(WorldTickFailurePolicy.ISOLATE, recorder)
 
-        with isolator.unit(stage="trade_offer_expiry", tick=WorldTick(1), target_kind="trade_offer", target_id=("offer", 9)):
+        with isolator.unit(
+            stage="trade_offer_expiry", tick=WorldTick(1), target_kind="trade_offer", target_id=("offer", 9)
+        ):
             _raise(RuntimeError("boom"))
 
         assert recorder.events[0].payload["target_id"] == "('offer', 9)"
@@ -337,9 +335,9 @@ class TestAfterCommitFailureObserver:
 
         dispatcher.handoff([event])
 
-        assert [(e.tick, e.payload["stage"], e.payload["target_id"], e.payload["continued"]) for e in recorder.events] == [
-            (6, "after_commit.observation", "BaseDomainEvent", True)
-        ]
+        assert [
+            (e.tick, e.payload["stage"], e.payload["target_id"], e.payload["continued"]) for e in recorder.events
+        ] == [(6, "after_commit.observation", "BaseDomainEvent", True)]
         assert isolator.failure_counts() == {"after_commit.observation": 1}
 
 

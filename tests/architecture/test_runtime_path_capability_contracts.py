@@ -60,4 +60,3 @@ def test_full_wiring_is_retired() -> None:
         "ai_rpg_world/application/llm/services/llm_turn_trigger.py",
     ):
         assert not (_SRC / rel).exists(), rel
-

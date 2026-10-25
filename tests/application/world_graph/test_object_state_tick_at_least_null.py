@@ -44,13 +44,15 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 def _build_world_with_object(state: dict):
     """1 spot + 1 object のミニマル世界。"""
     g = SpotGraphAggregate.empty(SpotGraphId.create(1))
-    g.add_spot(SpotNode(
-        spot_id=SpotId.create(1),
-        name="S1",
-        description="d",
-        category=SpotCategoryEnum.OTHER,
-        parent_id=None,
-    ))
+    g.add_spot(
+        SpotNode(
+            spot_id=SpotId.create(1),
+            name="S1",
+            description="d",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+        )
+    )
     obj = SpotObject(
         object_id=SpotObjectId.create(7),
         name="bush",
@@ -189,37 +191,65 @@ class TestStrictBooleanRejection:
         scenario = {
             "scenario_format_version": "1.0",
             "metadata": {
-                "id": "x", "title": "x", "description": "x",
-                "theme": "x", "difficulty": "easy", "estimated_ticks": 1,
-                "author": "x", "tags": [],
+                "id": "x",
+                "title": "x",
+                "description": "x",
+                "theme": "x",
+                "difficulty": "easy",
+                "estimated_ticks": 1,
+                "author": "x",
+                "tags": [],
             },
             "item_specs": [],
             "environment": {
-                "weather": {"enabled": False, "initial": {"weather_type": "CLEAR", "intensity": 0.0},
-                            "update_interval_ticks": 100, "announce_changes": False},
+                "weather": {
+                    "enabled": False,
+                    "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+                    "update_interval_ticks": 100,
+                    "announce_changes": False,
+                },
             },
-            "spots": [{
-                "id": "s", "name": "S", "description": "d", "category": "OTHER",
-                "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
-                "interior": {"objects": [{
-                    "id": "bush", "name": "bush", "description": "d", "object_type": "OTHER",
-                    "state": {}, "interactions": [],
-                }]},
-            }],
+            "spots": [
+                {
+                    "id": "s",
+                    "name": "S",
+                    "description": "d",
+                    "category": "OTHER",
+                    "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+                    "interior": {
+                        "objects": [
+                            {
+                                "id": "bush",
+                                "name": "bush",
+                                "description": "d",
+                                "object_type": "OTHER",
+                                "state": {},
+                                "interactions": [],
+                            }
+                        ]
+                    },
+                }
+            ],
             "connections": [],
             "players": [{"id": "p", "name": "P", "spawn_spot": "s", "initial_items": []}],
             "game_end_conditions": {"win": [], "lose": []},
-            "scenario_events": [{
-                "id": "ev", "trigger": "ON_TICK", "once": True,
-                "conditions": [{
-                    "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
-                    "target_object": "bush",
-                    "state_key": "last_harvest_tick",
-                    "ticks_offset": 10,
-                    "treat_missing_as_passed": "true",  # 文字列 (作家ミス)
-                }],
-                "effects": [],
-            }],
+            "scenario_events": [
+                {
+                    "id": "ev",
+                    "trigger": "ON_TICK",
+                    "once": True,
+                    "conditions": [
+                        {
+                            "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+                            "target_object": "bush",
+                            "state_key": "last_harvest_tick",
+                            "ticks_offset": 10,
+                            "treat_missing_as_passed": "true",  # 文字列 (作家ミス)
+                        }
+                    ],
+                    "effects": [],
+                }
+            ],
         }
         with pytest.raises(ScenarioLoadError, match="treat_missing_as_passed"):
             ScenarioLoader().load_from_dict(scenario)
@@ -266,38 +296,65 @@ class TestScenarioLoaderIntegration:
         scenario = {
             "scenario_format_version": "1.0",
             "metadata": {
-                "id": "x", "title": "x", "description": "x",
-                "theme": "x", "difficulty": "easy", "estimated_ticks": 1,
-                "author": "x", "tags": [],
+                "id": "x",
+                "title": "x",
+                "description": "x",
+                "theme": "x",
+                "difficulty": "easy",
+                "estimated_ticks": 1,
+                "author": "x",
+                "tags": [],
             },
             "item_specs": [],
             "environment": {
-                "weather": {"enabled": False, "initial": {"weather_type": "CLEAR", "intensity": 0.0},
-                            "update_interval_ticks": 100, "announce_changes": False},
+                "weather": {
+                    "enabled": False,
+                    "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+                    "update_interval_ticks": 100,
+                    "announce_changes": False,
+                },
             },
-            "spots": [{
-                "id": "s", "name": "S", "description": "d", "category": "OTHER",
-                "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
-                "interior": {"objects": [{
-                    "id": "bush", "name": "bush", "description": "d", "object_type": "OTHER",
-                    "state": {"last_harvest_tick": None},
-                    "interactions": [],
-                }]},
-            }],
+            "spots": [
+                {
+                    "id": "s",
+                    "name": "S",
+                    "description": "d",
+                    "category": "OTHER",
+                    "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+                    "interior": {
+                        "objects": [
+                            {
+                                "id": "bush",
+                                "name": "bush",
+                                "description": "d",
+                                "object_type": "OTHER",
+                                "state": {"last_harvest_tick": None},
+                                "interactions": [],
+                            }
+                        ]
+                    },
+                }
+            ],
             "connections": [],
             "players": [{"id": "p", "name": "P", "spawn_spot": "s", "initial_items": []}],
             "game_end_conditions": {"win": [], "lose": []},
-            "scenario_events": [{
-                "id": "ev", "trigger": "ON_TICK", "once": True,
-                "conditions": [{
-                    "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
-                    "target_object": "bush",
-                    "state_key": "last_harvest_tick",
-                    "ticks_offset": 10,
-                    "treat_missing_as_passed": True,
-                }],
-                "effects": [],
-            }],
+            "scenario_events": [
+                {
+                    "id": "ev",
+                    "trigger": "ON_TICK",
+                    "once": True,
+                    "conditions": [
+                        {
+                            "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+                            "target_object": "bush",
+                            "state_key": "last_harvest_tick",
+                            "ticks_offset": 10,
+                            "treat_missing_as_passed": True,
+                        }
+                    ],
+                    "effects": [],
+                }
+            ],
         }
         result = ScenarioLoader().load_from_dict(scenario)
         cond = result.scenario_events[0].conditions[0]
@@ -311,37 +368,64 @@ class TestScenarioLoaderIntegration:
         scenario = {
             "scenario_format_version": "1.0",
             "metadata": {
-                "id": "x", "title": "x", "description": "x",
-                "theme": "x", "difficulty": "easy", "estimated_ticks": 1,
-                "author": "x", "tags": [],
+                "id": "x",
+                "title": "x",
+                "description": "x",
+                "theme": "x",
+                "difficulty": "easy",
+                "estimated_ticks": 1,
+                "author": "x",
+                "tags": [],
             },
             "item_specs": [],
             "environment": {
-                "weather": {"enabled": False, "initial": {"weather_type": "CLEAR", "intensity": 0.0},
-                            "update_interval_ticks": 100, "announce_changes": False},
+                "weather": {
+                    "enabled": False,
+                    "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+                    "update_interval_ticks": 100,
+                    "announce_changes": False,
+                },
             },
-            "spots": [{
-                "id": "s", "name": "S", "description": "d", "category": "OTHER",
-                "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
-                "interior": {"objects": [{
-                    "id": "bush", "name": "bush", "description": "d", "object_type": "OTHER",
-                    "state": {},
-                    "interactions": [],
-                }]},
-            }],
+            "spots": [
+                {
+                    "id": "s",
+                    "name": "S",
+                    "description": "d",
+                    "category": "OTHER",
+                    "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+                    "interior": {
+                        "objects": [
+                            {
+                                "id": "bush",
+                                "name": "bush",
+                                "description": "d",
+                                "object_type": "OTHER",
+                                "state": {},
+                                "interactions": [],
+                            }
+                        ]
+                    },
+                }
+            ],
             "connections": [],
             "players": [{"id": "p", "name": "P", "spawn_spot": "s", "initial_items": []}],
             "game_end_conditions": {"win": [], "lose": []},
-            "scenario_events": [{
-                "id": "ev", "trigger": "ON_TICK", "once": True,
-                "conditions": [{
-                    "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
-                    "target_object": "bush",
-                    "state_key": "last_harvest_tick",
-                    "ticks_offset": 10,
-                }],
-                "effects": [],
-            }],
+            "scenario_events": [
+                {
+                    "id": "ev",
+                    "trigger": "ON_TICK",
+                    "once": True,
+                    "conditions": [
+                        {
+                            "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+                            "target_object": "bush",
+                            "state_key": "last_harvest_tick",
+                            "ticks_offset": 10,
+                        }
+                    ],
+                    "effects": [],
+                }
+            ],
         }
         cond = ScenarioLoader().load_from_dict(scenario).scenario_events[0].conditions[0]
         assert cond.treat_missing_as_passed is False

@@ -59,21 +59,29 @@ class EventDispatcher(Generic[_Context]):
         self._validate_registration(event_type, handler)
         # 登録時に型引数で結んだイベントと受け手を、型の照合後に呼ぶ。
         self._before_commit.append(
-            _BeforeCommitRegistration(
-                event_type, cast("Callable[[DomainEvent, _Context], None]", handler)
-            )
+            _BeforeCommitRegistration(event_type, cast("Callable[[DomainEvent, _Context], None]", handler))
         )
 
     @overload
     def register_after_commit(
-        self, event_type: type[_Event], handler: Callable[[_Event], None], *,
-        channel: DeliveryChannel, guarantee: DeliveryGuarantee, asynchronous: None = None,
+        self,
+        event_type: type[_Event],
+        handler: Callable[[_Event], None],
+        *,
+        channel: DeliveryChannel,
+        guarantee: DeliveryGuarantee,
+        asynchronous: None = None,
     ) -> None: ...
 
     @overload
     def register_after_commit(
-        self, event_type: type[_Event], handler: Callable[[_Event], _Result], *,
-        channel: DeliveryChannel, guarantee: DeliveryGuarantee, asynchronous: AsyncDelivery[_Event, _Result],
+        self,
+        event_type: type[_Event],
+        handler: Callable[[_Event], _Result],
+        *,
+        channel: DeliveryChannel,
+        guarantee: DeliveryGuarantee,
+        asynchronous: AsyncDelivery[_Event, _Result],
     ) -> None: ...
 
     def register_after_commit(
@@ -96,9 +104,7 @@ class EventDispatcher(Generic[_Context]):
                 raise ValueError("非同期の受け手にはDURABLE_RETRYを指定できません")
             handler = asynchronous.bind(handler)
         self._after_commit.append(
-            _AfterCommitRegistration(
-                event_type, cast("AfterCommitHandler", handler), channel, guarantee
-            )
+            _AfterCommitRegistration(event_type, cast("AfterCommitHandler", handler), channel, guarantee)
         )
 
     def dispatch(self, event: DomainEvent, context: _Context) -> None:
@@ -138,8 +144,7 @@ class EventDispatcher(Generic[_Context]):
     def requires_durable_retry(self, event: DomainEvent) -> bool:
         """再送必須の受け手が一つでも対象なら True を返す。"""
         return any(
-            isinstance(event, registration.event_type)
-            and registration.guarantee is DeliveryGuarantee.DURABLE_RETRY
+            isinstance(event, registration.event_type) and registration.guarantee is DeliveryGuarantee.DURABLE_RETRY
             for registration in self._after_commit
         )
 
@@ -157,8 +162,7 @@ class EventDispatcher(Generic[_Context]):
         error: Exception,
     ) -> None:
         self._logger.warning(
-            "%s after-commit handler failed: channel=%s "
-            "event_type=%s handler=%r",
+            "%s after-commit handler failed: channel=%s event_type=%s handler=%r",
             "Best-effort" if registration.guarantee is DeliveryGuarantee.BEST_EFFORT else "Durable-retry",
             registration.channel.value,
             type(event).__name__,

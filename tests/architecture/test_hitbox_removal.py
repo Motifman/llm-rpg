@@ -1,4 +1,5 @@
 """タイル上の当たり判定だけが退役し、共有の値と保存先が残ることを保証する。"""
+
 from pathlib import Path
 
 
@@ -11,7 +12,11 @@ def test_hitbox_implementation_is_absent() -> None:
     assert not list((combat / "service").glob("*.py"))
     assert not list((combat / "event").glob("*.py"))
     assert {p.stem for p in (combat / "value_object").glob("*.py")} == {
-        "hit_box_shape", "hit_box_velocity", "hit_effect", "status_effect", "status_modifier",
+        "hit_box_shape",
+        "hit_box_velocity",
+        "hit_effect",
+        "status_effect",
+        "status_modifier",
     }
     assert not list((root / "infrastructure" / "repository").glob("*hit_box*.py"))
 

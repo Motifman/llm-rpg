@@ -86,7 +86,8 @@ class TestEntryTrapEvaluation:
         assert len(effects) == 0
 
     @pytest.mark.parametrize(
-        "flags", [frozenset(), frozenset({"trap_triggered:fire"})],
+        "flags",
+        [frozenset(), frozenset({"trap_triggered:fire"})],
         ids=["first-trigger", "already-triggered"],
     )
     def test_repeating_trap_retriggers(self, flags: frozenset[str]) -> None:
@@ -193,6 +194,7 @@ class TestInteractTrapEvaluation:
         flags = frozenset({"trap_triggered:poison_chest"})
         effects, _ = svc.evaluate_interact_trap(trap, flags, frozenset())
         assert len(effects) == 0
+
 
 class TestTrapDefValidation:
     """TrapDef のバリデーション・イミュータブル性テスト"""

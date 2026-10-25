@@ -1,6 +1,5 @@
 """何もしない操作とギルド操作の利用条件を保証する。"""
 
-
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     GuildCreateAvailabilityResolver,
     GuildDisbandAvailabilityResolver,

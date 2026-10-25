@@ -37,7 +37,6 @@ if TYPE_CHECKING:
     )
 
 
-
 class MarketOrderExpiryStage:
     """毎 tick、期限を過ぎた注文を板から下げる。"""
 
@@ -64,9 +63,7 @@ class MarketOrderExpiryStage:
         tick_value = int(raw_tick)
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            raise RuntimeError(
-                "市場注文期限切れ用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("市場注文期限切れ用CommandScopeFactoryが未配線です。")
         for order in self._market.expired_orders(current_tick=tick_value):
             # 失敗した注文は rollback で板へ残るため、次 tick でもう一度拾い直せる。
             with self._failure_isolator.unit(
@@ -81,9 +78,7 @@ class MarketOrderExpiryStage:
         self,
         order: Any,
         tick_value: int,
-        scope_factory: (
-            CommandScopeFactoryPort[MarketOrderExpiryCommandRepositoryProviderPort]
-        ),
+        scope_factory: (CommandScopeFactoryPort[MarketOrderExpiryCommandRepositoryProviderPort]),
     ) -> None:
         result: MarketOrderExpiryResult | None = None
         try:

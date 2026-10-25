@@ -2,7 +2,6 @@
 TradeQueryService専用のアプリケーション例外
 """
 
-
 from typing import Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
@@ -34,10 +33,7 @@ class TradeQueryApplicationException(ApplicationException):
         Returns:
             TradeQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Trade not found: {trade_id}",
-            trade_id=trade_id
-        )
+        return cls(f"Trade not found: {trade_id}", trade_id=trade_id)
 
     @classmethod
     def invalid_player_id(cls, player_id: int) -> "TradeQueryApplicationException":
@@ -49,10 +45,7 @@ class TradeQueryApplicationException(ApplicationException):
         Returns:
             TradeQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Invalid player ID: {player_id}",
-            player_id=player_id
-        )
+        return cls(f"Invalid player ID: {player_id}", player_id=player_id)
 
     @classmethod
     def item_statistics_not_found(cls, item_spec_id: int) -> "TradeQueryApplicationException":
@@ -64,10 +57,7 @@ class TradeQueryApplicationException(ApplicationException):
         Returns:
             TradeQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Item statistics not found: {item_spec_id}",
-            item_spec_id=item_spec_id
-        )
+        return cls(f"Item statistics not found: {item_spec_id}", item_spec_id=item_spec_id)
 
     @classmethod
     def invalid_filter(cls, message: str, **context: Any) -> "TradeQueryApplicationException":

@@ -36,13 +36,25 @@ class TestFormatActionResultBody:
         [
             {},
             {"omit_result_in_prompt": True},
-            {"tool_name": TOOL_NAME_SPEECH, "action_summary": "「おはよう」と言った", "result_summary": "ミオが振り向いた"},
+            {
+                "tool_name": TOOL_NAME_SPEECH,
+                "action_summary": "「おはよう」と言った",
+                "result_summary": "ミオが振り向いた",
+            },
             {"success": False, "error_code": "LOCKED", "should_reschedule": True},
             {"success": False, "error_code": None},
             {"game_time_label": None},
             {"inner_thought": None},
         ],
-        ids=["succeeded", "result-omitted", "speech", "failed-with-code", "failed-outside-world", "no-time-label", "no-inner-thought"],
+        ids=[
+            "succeeded",
+            "result-omitted",
+            "speech",
+            "failed-with-code",
+            "failed-outside-world",
+            "no-time-label",
+            "no-inner-thought",
+        ],
     )
     def test_line_is_time_prefix_plus_body_plus_inner_thought(self, overrides: dict[str, object]) -> None:
         """行は「[時刻] 」+ 本文 + 「心の声:」の続き行でできていて、本文はその間のすべてになる。"""

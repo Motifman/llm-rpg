@@ -35,12 +35,8 @@ def _run_dir(
     run = root / name
     run.mkdir(parents=True)
     if config is not None:
-        (run / "experiment.config.resolved.json").write_text(
-            json.dumps(config, ensure_ascii=False)
-        )
-    (run / "trace.jsonl").write_text(
-        "\n".join(json.dumps(e, ensure_ascii=False) for e in (events or []))
-    )
+        (run / "experiment.config.resolved.json").write_text(json.dumps(config, ensure_ascii=False))
+    (run / "trace.jsonl").write_text("\n".join(json.dumps(e, ensure_ascii=False) for e in (events or [])))
     return run
 
 
@@ -77,9 +73,7 @@ class TestOneRowPerRun:
         assert rows[0]["id"] == "r1"
         assert rows[0]["kind"] == "run"
 
-    def test_the_row_carries_the_conditions_of_the_measurement(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_row_carries_the_conditions_of_the_measurement(self, tmp_path: Path) -> None:
         """どの commit・どの profile・どのシナリオで走ったかが列に入る。"""
         _run_dir(tmp_path, "r1", config=_config(), events=[_action()])
 
@@ -191,9 +185,7 @@ class TestTheIndexOutlivesTheArtifacts:
     def test_rows_are_written_one_per_line(self, tmp_path: Path) -> None:
         """1 行 1 件で書く。grep と jq で引けることが索引の目的なので。"""
         index = tmp_path / "run_index.jsonl"
-        write_index(
-            index, [{"kind": "run", "id": "a"}, {"kind": "run", "id": "b"}]
-        )
+        write_index(index, [{"kind": "run", "id": "a"}, {"kind": "run", "id": "b"}])
 
         lines = index.read_text().strip().splitlines()
 
@@ -286,9 +278,7 @@ class TestTheProbeRowMatchesTheRunShape:
         ):
             assert column in row, column
 
-    def test_a_result_without_conditions_gets_no_recoverable_mark(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_result_without_conditions_gets_no_recoverable_mark(self, tmp_path: Path) -> None:
         """条件の無い結果は、復元できないと印が付く (**正の対照**)。"""
         from scripts.jev_action_name_rescue_demo import index_row
 

@@ -228,18 +228,14 @@ class MemoCompletionHintService:
                 unavailable_reason=getattr(exc, "error_code", "UNAVAILABLE"),
             )
 
-    def _by_overlap(
-        self, memos: list[PendingTodo], haystack: str
-    ) -> MemoCompletionHint | None:
+    def _by_overlap(self, memos: list[PendingTodo], haystack: str) -> MemoCompletionHint | None:
         best: MemoCompletionHint | None = None
         for memo in memos:
             ratio = _memo_coverage_ratio((memo.content or "").strip(), haystack)
             if ratio < self._threshold:
                 continue
             if best is None or ratio > best.similarity:
-                best = MemoCompletionHint(
-                    memo=memo, similarity=ratio, source=SOURCE_OVERLAP
-                )
+                best = MemoCompletionHint(memo=memo, similarity=ratio, source=SOURCE_OVERLAP)
         return best
 
     def _by_judgment(
@@ -251,23 +247,16 @@ class MemoCompletionHintService:
         assert self.judgment_port is not None
         # 質問のキーは連番にする。memo の内部 ID をキーにすると、答えを引く
         # ためだけに ID が state 側の語彙へ混ざりやすい (設計原則 1)。
-        by_key: dict[str, PendingTodo] = {
-            f"{QUESTION_NAME}_{index}": memo for index, memo in enumerate(memos)
-        }
+        by_key: dict[str, PendingTodo] = {f"{QUESTION_NAME}_{index}": memo for index, memo in enumerate(memos)}
         questions = {
             key: NoulQuestion(
-                instructions=(
-                    f"この行動と結果で、memo「{(memo.content or '').strip()}」の"
-                    "意図は果たされたか。"
-                ),
+                instructions=(f"この行動と結果で、memo「{(memo.content or '').strip()}」の意図は果たされたか。"),
                 true_means="果たされた",
                 false_means="まだ果たされていない",
             )
             for key, memo in by_key.items()
         }
-        answers = self.judgment_port.judge(
-            _state(action_summary, result_summary), questions
-        )
+        answers = self.judgment_port.judge(_state(action_summary, result_summary), questions)
 
         judgments: list[MemoCompletionJudgment] = []
         best: MemoCompletionHint | None = None
@@ -293,9 +282,7 @@ class MemoCompletionHintService:
                 )
             )
             if accepted and (best is None or probability > best.similarity):
-                best = MemoCompletionHint(
-                    memo=memo, similarity=probability, source=SOURCE_JUDGMENT
-                )
+                best = MemoCompletionHint(memo=memo, similarity=probability, source=SOURCE_JUDGMENT)
         return MemoHintDetection(hint=best, judgments=tuple(judgments))
 
     def augment_result_summary(

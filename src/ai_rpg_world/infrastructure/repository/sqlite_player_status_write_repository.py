@@ -1,4 +1,5 @@
 """プレイヤーステータス集約の SQLite 実装（正規化テーブル、ゲーム書き込み DB）。"""
+
 from __future__ import annotations
 
 import copy
@@ -142,12 +143,32 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
                 """,
                 (
                     player_id,
-                    status.base_stats.max_hp, status.base_stats.max_mp, status.base_stats.attack, status.base_stats.defense, status.base_stats.speed, status.base_stats.critical_rate, status.base_stats.evasion_rate,
-                    status.stat_growth_factor.hp_factor, status.stat_growth_factor.mp_factor, status.stat_growth_factor.attack_factor, status.stat_growth_factor.defense_factor, status.stat_growth_factor.speed_factor,
-                    status.stat_growth_factor.critical_rate_factor, status.stat_growth_factor.evasion_rate_factor,
-                    status.exp_table.base_exp, status.exp_table.exponent, status.exp_table.level_offset,
-                    status.growth.level, status.growth.total_exp, status.gold.value,
-                    status.hp.value, status.hp.max_hp, status.mp.value, status.mp.max_mp, status.stamina.value, status.stamina.max_stamina,
+                    status.base_stats.max_hp,
+                    status.base_stats.max_mp,
+                    status.base_stats.attack,
+                    status.base_stats.defense,
+                    status.base_stats.speed,
+                    status.base_stats.critical_rate,
+                    status.base_stats.evasion_rate,
+                    status.stat_growth_factor.hp_factor,
+                    status.stat_growth_factor.mp_factor,
+                    status.stat_growth_factor.attack_factor,
+                    status.stat_growth_factor.defense_factor,
+                    status.stat_growth_factor.speed_factor,
+                    status.stat_growth_factor.critical_rate_factor,
+                    status.stat_growth_factor.evasion_rate_factor,
+                    status.exp_table.base_exp,
+                    status.exp_table.exponent,
+                    status.exp_table.level_offset,
+                    status.growth.level,
+                    status.growth.total_exp,
+                    status.gold.value,
+                    status.hp.value,
+                    status.hp.max_hp,
+                    status.mp.value,
+                    status.mp.max_mp,
+                    status.stamina.value,
+                    status.stamina.max_stamina,
                     None if status.current_spot_id is None else int(status.current_spot_id),
                     None if status.current_coordinate is None else status.current_coordinate.x,
                     None if status.current_coordinate is None else status.current_coordinate.y,
@@ -162,8 +183,7 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
                     1 if status.is_down else 0,
                     status.attention_level.value,
                     # Phase 4-D-2: 空 dict は NULL に保存して storage 節約 (旧行と互換)
-                    json.dumps(dict(status.state), ensure_ascii=False, sort_keys=True)
-                    if status.state else None,
+                    json.dumps(dict(status.state), ensure_ascii=False, sort_keys=True) if status.state else None,
                 ),
             )
             for table_name in (
@@ -180,18 +200,38 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
             )
             self._conn.executemany(
                 "INSERT INTO game_player_active_effects (player_id, effect_index, effect_type, effect_value, expiry_tick) VALUES (?, ?, ?, ?, ?)",
-                [(player_id, idx, effect.effect_type.name, effect.value, effect.expiry_tick.value) for idx, effect in enumerate(status.active_effects)],
+                [
+                    (player_id, idx, effect.effect_type.name, effect.value, effect.expiry_tick.value)
+                    for idx, effect in enumerate(status.active_effects)
+                ],
             )
             pursuit = status.pursuit_state
             if pursuit is not None and pursuit.target_snapshot is not None:
                 self._conn.execute(
                     "INSERT INTO game_player_pursuit_target_snapshots (player_id, target_id, spot_id, x, y, z) VALUES (?, ?, ?, ?, ?, ?)",
-                    (player_id, int(pursuit.target_snapshot.target_id), int(pursuit.target_snapshot.spot_id), pursuit.target_snapshot.coordinate.x, pursuit.target_snapshot.coordinate.y, pursuit.target_snapshot.coordinate.z),
+                    (
+                        player_id,
+                        int(pursuit.target_snapshot.target_id),
+                        int(pursuit.target_snapshot.spot_id),
+                        pursuit.target_snapshot.coordinate.x,
+                        pursuit.target_snapshot.coordinate.y,
+                        pursuit.target_snapshot.coordinate.z,
+                    ),
                 )
             if pursuit is not None and pursuit.last_known is not None:
                 self._conn.execute(
                     "INSERT INTO game_player_pursuit_last_known (player_id, target_id, spot_id, x, y, z, observed_at_tick) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (player_id, int(pursuit.last_known.target_id), int(pursuit.last_known.spot_id), pursuit.last_known.coordinate.x, pursuit.last_known.coordinate.y, pursuit.last_known.coordinate.z, None if pursuit.last_known.observed_at_tick is None else pursuit.last_known.observed_at_tick.value),
+                    (
+                        player_id,
+                        int(pursuit.last_known.target_id),
+                        int(pursuit.last_known.spot_id),
+                        pursuit.last_known.coordinate.x,
+                        pursuit.last_known.coordinate.y,
+                        pursuit.last_known.coordinate.z,
+                        None
+                        if pursuit.last_known.observed_at_tick is None
+                        else pursuit.last_known.observed_at_tick.value,
+                    ),
                 )
             # 欲求の保存
             if len(status.needs) > 0:

@@ -78,9 +78,7 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
             return
         sink.add_events_from_aggregate(aggregate)
 
-    def find_by_id(
-        self, slot_id: LocationSlotId
-    ) -> LocationEstablishmentAggregate | None:
+    def find_by_id(self, slot_id: LocationSlotId) -> LocationEstablishmentAggregate | None:
         cur = self._conn.execute(
             """
             SELECT spot_id, location_area_id, establishment_type, establishment_id
@@ -106,14 +104,10 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
     ) -> LocationEstablishmentAggregate | None:
         return self.find_by_id(LocationSlotId(spot_id=spot_id, location_area_id=location_area_id))
 
-    def find_by_ids(
-        self, slot_ids: list[LocationSlotId]
-    ) -> list[LocationEstablishmentAggregate]:
+    def find_by_ids(self, slot_ids: list[LocationSlotId]) -> list[LocationEstablishmentAggregate]:
         return [x for slot_id in slot_ids for x in [self.find_by_id(slot_id)] if x is not None]
 
-    def save(
-        self, slot: LocationEstablishmentAggregate
-    ) -> LocationEstablishmentAggregate:
+    def save(self, slot: LocationEstablishmentAggregate) -> LocationEstablishmentAggregate:
         self._assert_shared_transaction_active()
         self._maybe_emit_events(slot)
         self._conn.execute(
@@ -131,11 +125,7 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
             (
                 int(slot.spot_id),
                 int(slot.location_area_id),
-                (
-                    slot.establishment_type.value
-                    if slot.establishment_type is not None
-                    else None
-                ),
+                (slot.establishment_type.value if slot.establishment_type is not None else None),
                 slot.establishment_id,
             ),
         )

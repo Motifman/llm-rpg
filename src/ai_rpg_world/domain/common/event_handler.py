@@ -3,7 +3,8 @@ from typing import Generic, TypeVar
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 
-E = TypeVar('E', bound=DomainEvent)
+E = TypeVar("E", bound=DomainEvent)
+
 
 class EventHandler(ABC, Generic[E]):
     @abstractmethod

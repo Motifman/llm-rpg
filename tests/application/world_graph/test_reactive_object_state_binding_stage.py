@@ -119,11 +119,7 @@ def _build_stage(
 
 def _collected_events(stage) -> list:
     context = stage._command_scope_factory.create.return_value
-    return [
-        event
-        for call in context.collect_all.call_args_list
-        for event in call.args[0]
-    ]
+    return [event for call in context.collect_all.call_args_list for event in call.args[0]]
 
 
 class TestReactiveObjectStateBindingStage:
@@ -131,9 +127,7 @@ class TestReactiveObjectStateBindingStage:
 
     def test_predicate_true_merges_on_true_state(self) -> None:
         """predicate が True なら on_true_state_updates が object.state にマージされる。"""
-        repo, interior_repo, flags, evaluator = _build_world_with_object(
-            {"available": False, "last_harvest_tick": 5}
-        )
+        repo, interior_repo, flags, evaluator = _build_world_with_object({"available": False, "last_harvest_tick": 5})
         flags.add("ready", context=_SETUP_FLAG_CONTEXT)
         binding = ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(7),
@@ -156,9 +150,7 @@ class TestReactiveObjectStateBindingStage:
 
     def test_predicate_false_merges_on_false_state(self) -> None:
         """predicate が False なら on_false_state_updates が反映される。"""
-        repo, interior_repo, flags, evaluator = _build_world_with_object(
-            {"available": True}
-        )
+        repo, interior_repo, flags, evaluator = _build_world_with_object({"available": True})
         # ready flag を立てない
         binding = ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(7),
@@ -178,9 +170,7 @@ class TestReactiveObjectStateBindingStage:
 
     def test_idempotent_when_state_already_matches(self) -> None:
         """state が既に target と一致していれば save は呼ばれない。"""
-        repo, interior_repo, flags, evaluator = _build_world_with_object(
-            {"available": False}
-        )
+        repo, interior_repo, flags, evaluator = _build_world_with_object({"available": False})
         save_count = {"n": 0}
         original_save = interior_repo.save
 
@@ -234,9 +224,7 @@ class TestReactiveObjectStateBindingStage:
         Phase 2-B: 一方向 lifecycle（例: 「条件成立で phase=ready に推移、
         不成立では phase は触らず作家管理に任せる」）の主要ユースケース。
         """
-        repo, interior_repo, flags, evaluator = _build_world_with_object(
-            {"phase": "smelting"}
-        )
+        repo, interior_repo, flags, evaluator = _build_world_with_object({"phase": "smelting"})
         binding = ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(7),
             predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="ready_signal"),
@@ -264,9 +252,7 @@ class TestReactiveObjectStateBindingStage:
         False で b だけ書く」が正しく動き、相手側のキーには触らない
         （部分マージ semantics の保証）。
         """
-        repo, interior_repo, flags, evaluator = _build_world_with_object(
-            {"a": 0, "b": 0}
-        )
+        repo, interior_repo, flags, evaluator = _build_world_with_object({"a": 0, "b": 0})
         binding = ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(7),
             predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="signal"),
@@ -293,9 +279,7 @@ class TestReactiveObjectStateBindingStage:
 
     def test_asymmetric_no_save_when_updates_empty(self) -> None:
         """空辞書 updates_for は save をトリガーしない（spurious write を避ける）。"""
-        repo, interior_repo, flags, evaluator = _build_world_with_object(
-            {"phase": "smelting"}
-        )
+        repo, interior_repo, flags, evaluator = _build_world_with_object({"phase": "smelting"})
         save_count = {"n": 0}
         original_save = interior_repo.save
 
@@ -354,18 +338,14 @@ class TestReactiveObjectStateChangedEventEmission:
     ) -> ReactiveObjectStateBinding:
         return ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(7),
-            predicate=ScenarioEventCondition(
-                condition_type="FLAG_SET", flag_name=flag_name
-            ),
+            predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name=flag_name),
             on_true_state_updates=true_updates,
             on_false_state_updates=false_updates,
         )
 
     def test_state_change_emits_object_state_changed_event(self) -> None:
         """state が変化したら SpotObjectStateChangedEvent が graph に積まれる。"""
-        repo, interior_repo, flags, evaluator = _build_world_with_object(
-            {"power_on": False}
-        )
+        repo, interior_repo, flags, evaluator = _build_world_with_object({"power_on": False})
         flags.add("ready", context=_SETUP_FLAG_CONTEXT)
         stage = _build_stage(
             bindings=(self._make_binding(),),
@@ -375,9 +355,7 @@ class TestReactiveObjectStateChangedEventEmission:
         )
         stage.run(WorldTick(10))
         events = _collected_events(stage)
-        state_events = [
-            e for e in events if isinstance(e, SpotObjectStateChangedEvent)
-        ]
+        state_events = [e for e in events if isinstance(e, SpotObjectStateChangedEvent)]
         assert len(state_events) == 1
         ev = state_events[0]
         assert ev.spot_id == SpotId.create(1)
@@ -394,9 +372,7 @@ class TestReactiveObjectStateChangedEventEmission:
 
     def test_no_change_emits_no_event(self) -> None:
         """既に同じ値なら event は積まれない (no-op の不変条件)。"""
-        repo, interior_repo, flags, evaluator = _build_world_with_object(
-            {"power_on": True}
-        )
+        repo, interior_repo, flags, evaluator = _build_world_with_object({"power_on": True})
         flags.add("ready", context=_SETUP_FLAG_CONTEXT)
         stage = _build_stage(
             bindings=(self._make_binding(),),
@@ -405,24 +381,17 @@ class TestReactiveObjectStateChangedEventEmission:
             condition_evaluator=evaluator,
         )
         stage.run(WorldTick(10))
-        events = [
-            e for e in _collected_events(stage)
-            if isinstance(e, SpotObjectStateChangedEvent)
-        ]
+        events = [e for e in _collected_events(stage) if isinstance(e, SpotObjectStateChangedEvent)]
         assert events == []
 
     def test_multiple_bindings_emit_one_event_each(self) -> None:
         """複数 binding が同 tick で発火したら、それぞれ独立に event が出る。"""
-        repo, interior_repo, flags, evaluator = _build_world_with_object(
-            {"power_on": False, "alarm": False}
-        )
+        repo, interior_repo, flags, evaluator = _build_world_with_object({"power_on": False, "alarm": False})
         flags.add("ready", context=_SETUP_FLAG_CONTEXT)
         binding1 = self._make_binding(true_updates=(("power_on", True),))
         binding2 = ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(7),
-            predicate=ScenarioEventCondition(
-                condition_type="FLAG_SET", flag_name="ready"
-            ),
+            predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="ready"),
             on_true_state_updates=(("alarm", True),),
             on_false_state_updates=(("alarm", False),),
         )
@@ -433,10 +402,7 @@ class TestReactiveObjectStateChangedEventEmission:
             condition_evaluator=evaluator,
         )
         stage.run(WorldTick(1))
-        events = [
-            e for e in _collected_events(stage)
-            if isinstance(e, SpotObjectStateChangedEvent)
-        ]
+        events = [e for e in _collected_events(stage) if isinstance(e, SpotObjectStateChangedEvent)]
         assert len(events) == 2
         keys = {e.state_delta[0].key for e in events}
         assert keys == {"power_on", "alarm"}
@@ -445,15 +411,11 @@ class TestReactiveObjectStateChangedEventEmission:
         """updates 中、実際に変化した key だけが state_delta に入る。"""
         # 初期 state: power_on=False, alarm=True
         # binding: on_true で power_on=True, alarm=True (alarm は既に一致)
-        repo, interior_repo, flags, evaluator = _build_world_with_object(
-            {"power_on": False, "alarm": True}
-        )
+        repo, interior_repo, flags, evaluator = _build_world_with_object({"power_on": False, "alarm": True})
         flags.add("ready", context=_SETUP_FLAG_CONTEXT)
         binding = ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(7),
-            predicate=ScenarioEventCondition(
-                condition_type="FLAG_SET", flag_name="ready"
-            ),
+            predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="ready"),
             on_true_state_updates=(("power_on", True), ("alarm", True)),
             on_false_state_updates=(("power_on", False), ("alarm", False)),
         )
@@ -464,10 +426,7 @@ class TestReactiveObjectStateChangedEventEmission:
             condition_evaluator=evaluator,
         )
         stage.run(WorldTick(1))
-        events = [
-            e for e in _collected_events(stage)
-            if isinstance(e, SpotObjectStateChangedEvent)
-        ]
+        events = [e for e in _collected_events(stage) if isinstance(e, SpotObjectStateChangedEvent)]
         # alarm は変化していないので state_delta には含まれない
         assert len(events) == 1
         delta_keys = {d.key for d in events[0].state_delta}

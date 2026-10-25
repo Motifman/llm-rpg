@@ -134,10 +134,7 @@ class TestUnavailableCostIsNotShownAsZero:
             ],
         )
 
-        assert (
-            "| 主観の書き込み (episode_subjective) | 2 | 0 | 20 | 10 | $0.0002 + 取れない 1 回 | 2.0 |"
-            in lines
-        )
+        assert "| 主観の書き込み (episode_subjective) | 2 | 0 | 20 | 10 | $0.0002 + 取れない 1 回 | 2.0 |" in lines
 
     def test_header_line_counts_calls_without_cost(self, tmp_path: Path) -> None:
         """費用が取れない呼び出しがあると、冒頭の要約にその回数が添えられる。"""
@@ -150,10 +147,8 @@ class TestUnavailableCostIsNotShownAsZero:
         )
 
         assert (
-            "- 費用 (取れた分の合計): $0.0030 = 行動 $0.0030 + 記憶の部品と Jev $0.0000。"
-            "費用が取れない呼び出し 1 回"
+            "- 費用 (取れた分の合計): $0.0030 = 行動 $0.0030 + 記憶の部品と Jev $0.0000。費用が取れない呼び出し 1 回"
         ) in lines
-
 
     def test_failed_call_without_response_is_not_counted_as_unavailable(self, tmp_path: Path) -> None:
         """応答が届かず失敗した呼び出しは、費用が無くても「取れない」に数えない (課金されていない回と、課金額が分からない回を混ぜない)。"""

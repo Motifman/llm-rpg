@@ -53,6 +53,7 @@ class TestTravelToMessageHidesSpotIds:
 
     def test_unreachable_exception_message_reaches_agent_unchanged_with_error_code(self) -> None:
         """移動サービスの到達不能の例外は、文を変えずに失敗の結果へ写り、error_code が付く。"""
+
         def _raise_unreachable(*args, **kwargs):
             raise SpotTravelUnreachableException("その先へは行けない。")
 

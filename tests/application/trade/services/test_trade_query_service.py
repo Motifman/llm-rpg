@@ -147,11 +147,7 @@ class TestTradeQueryService:
 
         # カーソルが存在する場合、次のページを取得
         if first_page.next_cursor:
-            second_page = self.service.get_trades_for_player(
-                player_id=1,
-                limit=2,
-                cursor=first_page.next_cursor
-            )
+            second_page = self.service.get_trades_for_player(player_id=1, limit=2, cursor=first_page.next_cursor)
 
             # ページングが正しく動作していることを確認
             first_page_ids = {trade.trade_id for trade in first_page.trades}
@@ -208,9 +204,7 @@ class TestTradeQueryService:
         first = self.service.get_active_trades_as_seller(player_id=1, limit=1)
         assert len(first.trades) == 1
         assert first.next_cursor is not None
-        second = self.service.get_active_trades_as_seller(
-            player_id=1, limit=1, cursor=first.next_cursor
-        )
+        second = self.service.get_active_trades_as_seller(player_id=1, limit=1, cursor=first.next_cursor)
         assert len(second.trades) == 1
         assert first.trades[0].trade_id != second.trades[0].trade_id
 
@@ -218,28 +212,20 @@ class TestTradeQueryService:
         """player_id=0 は PlayerId バリデーションで失敗"""
         with pytest.raises(TradeQueryApplicationException) as exc_info:
             self.service.get_active_trades_as_seller(player_id=0)
-        assert "Domain error in TradeQuery usecase: PLAYER.ID_VALIDATION" in str(
-            exc_info.value
-        )
+        assert "Domain error in TradeQuery usecase: PLAYER.ID_VALIDATION" in str(exc_info.value)
 
     def test_get_active_trades_as_seller_invalid_cursor_base64(self):
         """無効な base64 のカーソルは SystemErrorException"""
         with pytest.raises(SystemErrorException) as exc_info:
-            self.service.get_active_trades_as_seller(
-                player_id=1, cursor="invalid_base64_string!"
-            )
-        assert "get_active_trades_as_seller failed: Invalid cursor format" in str(
-            exc_info.value
-        )
+            self.service.get_active_trades_as_seller(player_id=1, cursor="invalid_base64_string!")
+        assert "get_active_trades_as_seller failed: Invalid cursor format" in str(exc_info.value)
 
     def test_get_active_trades_as_seller_invalid_cursor_json(self):
         """base64 は有効だが JSON が無効なカーソルは SystemErrorException"""
         invalid_cursor = "aW52YWxpZF9qc29u"
         with pytest.raises(SystemErrorException) as exc_info:
             self.service.get_active_trades_as_seller(player_id=1, cursor=invalid_cursor)
-        assert "get_active_trades_as_seller failed: Invalid cursor format" in str(
-            exc_info.value
-        )
+        assert "get_active_trades_as_seller failed: Invalid cursor format" in str(exc_info.value)
 
     def test_get_active_trades_as_seller_zero_limit(self):
         """limit=0 は空リスト"""
@@ -318,10 +304,7 @@ class TestTradeQueryService:
     def test_search_trades_multiple_filters(self):
         """複数のフィルタ条件を組み合わせて検索できる"""
         filter_dto = TradeSearchFilterDto(
-            item_types=["equipment"],
-            rarities=["common", "uncommon"],
-            min_price=200,
-            max_price=1500
+            item_types=["equipment"], rarities=["common", "uncommon"], min_price=200, max_price=1500
         )
         result = self.service.search_trades(filter_dto)
 
@@ -341,11 +324,7 @@ class TestTradeQueryService:
 
         # カーソルが存在する場合、次のページを取得
         if first_page.next_cursor:
-            second_page = self.service.search_trades(
-                filter_dto,
-                limit=3,
-                cursor=first_page.next_cursor
-            )
+            second_page = self.service.search_trades(filter_dto, limit=3, cursor=first_page.next_cursor)
             assert isinstance(second_page, TradeListDto)
 
             # ページングが正しく動作していることを確認
@@ -355,10 +334,7 @@ class TestTradeQueryService:
 
     def test_search_trades_empty_result(self):
         """検索条件に一致する取引がない場合、空のリストが返る"""
-        filter_dto = TradeSearchFilterDto(
-            item_name="存在しないアイテム",
-            min_price=999999
-        )
+        filter_dto = TradeSearchFilterDto(item_name="存在しないアイテム", min_price=999999)
         result = self.service.search_trades(filter_dto)
 
         assert isinstance(result, TradeListDto)
@@ -433,13 +409,11 @@ class TestTradeQueryService:
 
         # モックを作成してDomainExceptionを発生させる
         from ai_rpg_world.domain.common.exception import StateException
+
         mock_operation = Mock(side_effect=StateException("Test domain error"))
 
         with pytest.raises(TradeQueryApplicationException) as exc_info:
-            self.service._execute_with_error_handling(
-                operation=mock_operation,
-                context={"action": "test"}
-            )
+            self.service._execute_with_error_handling(operation=mock_operation, context={"action": "test"})
 
         assert "Domain error in TradeQuery usecase: DOMAIN_ERROR" in str(exc_info.value)
 
@@ -452,10 +426,7 @@ class TestTradeQueryService:
         mock_operation = Mock(side_effect=app_exception)
 
         with pytest.raises(TradeQueryApplicationException) as exc_info:
-            self.service._execute_with_error_handling(
-                operation=mock_operation,
-                context={"action": "test"}
-            )
+            self.service._execute_with_error_handling(operation=mock_operation, context={"action": "test"})
 
         assert exc_info.value is app_exception
 
@@ -466,10 +437,7 @@ class TestTradeQueryService:
         mock_operation = Mock(side_effect=ValueError("Unexpected error"))
 
         with pytest.raises(SystemErrorException) as exc_info:
-            self.service._execute_with_error_handling(
-                operation=mock_operation,
-                context={"action": "test_action"}
-            )
+            self.service._execute_with_error_handling(operation=mock_operation, context={"action": "test_action"})
 
         assert "test_action failed: Unexpected error" in str(exc_info.value)
         assert isinstance(exc_info.value.original_exception, ValueError)

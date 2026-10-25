@@ -75,9 +75,7 @@ class PlayerEpisodeWriting:
             written_turn = self._turn_reader.current_turn(being_id)
             environment_name = self._environment_name_of(player_id)
             self_name, persona = self._persona_of(int(player_id.value))
-            contents = self._writer.write(
-                self_name=self_name, persona=persona, events_text=_render(entries)
-            )
+            contents = self._writer.write(self_name=self_name, persona=persona, events_text=_render(entries))
             result = self._add_episodes.add(
                 contents,
                 being_id=being_id,

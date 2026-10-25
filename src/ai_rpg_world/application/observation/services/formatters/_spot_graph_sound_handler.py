@@ -26,7 +26,9 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
     """環境音観測の formatter (Phase 5)。"""
 
     def format(
-        self, event: Any, recipient_player_id: PlayerId,
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
     ) -> ObservationOutput | None:
         if isinstance(event, SpotSoundHeardEvent):
             return self._format_spot_sound_heard(event, recipient_player_id)
@@ -100,10 +102,7 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
 
         if event.ambient_description:
             if is_adjacent:
-                prose = (
-                    f"隣の spot から{intensity_prose}が漏れ聞こえる "
-                    f"({event.ambient_description})。"
-                )
+                prose = f"隣の spot から{intensity_prose}が漏れ聞こえる ({event.ambient_description})。"
             else:
                 prose = f"{intensity_prose}が聞こえる ({event.ambient_description})。"
         else:

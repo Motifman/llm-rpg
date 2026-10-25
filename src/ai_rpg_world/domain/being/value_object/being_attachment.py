@@ -38,13 +38,9 @@ class BeingAttachment:
 
     def __post_init__(self) -> None:
         if not isinstance(self.world_id, WorldId):
-            raise BeingAttachmentValidationException(
-                f"world_id must be WorldId, got {type(self.world_id).__name__}"
-            )
+            raise BeingAttachmentValidationException(f"world_id must be WorldId, got {type(self.world_id).__name__}")
         if not isinstance(self.player_id, PlayerId):
-            raise BeingAttachmentValidationException(
-                f"player_id must be PlayerId, got {type(self.player_id).__name__}"
-            )
+            raise BeingAttachmentValidationException(f"player_id must be PlayerId, got {type(self.player_id).__name__}")
 
 
 __all__ = ["BeingAttachment"]

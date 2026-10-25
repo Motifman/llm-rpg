@@ -201,10 +201,7 @@ class SqliteSkillSpecWriter(SkillSpecWriter):
                 skill_id, race_index, race
             ) VALUES (?, ?, ?)
             """,
-            [
-                (int(spec.skill_id), index, race.value)
-                for index, race in enumerate(spec.slayer_races)
-            ],
+            [(int(spec.skill_id), index, race.value) for index, race in enumerate(spec.slayer_races)],
         )
         self._conn.executemany(
             """

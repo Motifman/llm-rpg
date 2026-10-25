@@ -56,9 +56,7 @@ def test_unified_store_returns_both_kinds_in_occurred_at_order() -> None:
         "action_result",
         "action_result",
     ]
-    assert [entry.occurred_at for entry in timeline] == sorted(
-        entry.occurred_at for entry in timeline
-    )
+    assert [entry.occurred_at for entry in timeline] == sorted(entry.occurred_at for entry in timeline)
 
 
 def test_kind_views_return_only_the_requested_existing_dto_type() -> None:
@@ -71,9 +69,7 @@ def test_kind_views_return_only_the_requested_existing_dto_type() -> None:
     for entry in actions:
         store.append_action_result(_PLAYER, entry)
 
-    assert store.get_recent_observations(_PLAYER, 20) == list(
-        reversed(observations)
-    )
+    assert store.get_recent_observations(_PLAYER, 20) == list(reversed(observations))
     assert store.get_recent_action_results(_PLAYER, 20) == list(reversed(actions))
 
 
@@ -82,9 +78,7 @@ def test_recent_events_rendering_is_byte_identical_to_the_legacy_two_list_path()
     observations = [_observation(1, "物音を聞いた。"), _observation(4, "扉が閉じた。")]
     actions = [_action(2, "周囲を見渡した"), _action(3, "声をかけた")]
     formatter = DefaultRecentEventsFormatter()
-    legacy_text = formatter.format(
-        list(reversed(observations)), list(reversed(actions))
-    )
+    legacy_text = formatter.format(list(reversed(observations)), list(reversed(actions)))
 
     store = UnifiedRecentEventStore()
     for entry in observations:
@@ -161,10 +155,12 @@ def test_many_observations_do_not_evict_actions_from_recent_turns() -> None:
         store.append_action_result(_PLAYER, _action(turn, f"行動{turn}"))
         memory.complete_turn(_PLAYER)
 
-    assert [
-        entry.action_summary
-        for entry in store.action_results_in_storage_order(_PLAYER)
-    ] == ["行動0", "行動1", "行動2", "行動3"]
+    assert [entry.action_summary for entry in store.action_results_in_storage_order(_PLAYER)] == [
+        "行動0",
+        "行動1",
+        "行動2",
+        "行動3",
+    ]
     assert len(store.observations_in_storage_order(_PLAYER)) == 160
 
 

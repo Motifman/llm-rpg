@@ -16,6 +16,7 @@ class TradeCursor:
     ドメイン層でのカーソル表現。アプリケーション層でのエンコード/デコードは
     別途TradeCursorCodecで行う。
     """
+
     created_at: datetime
     trade_id: int
 
@@ -23,9 +24,10 @@ class TradeCursor:
 class TradeReadModelRepository(Repository[TradeReadModel, TradeId]):
     """取引ReadModelリポジトリインターフェース"""
 
-
     @abstractmethod
-    def find_recent_trades(self, limit: int = 10, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
+    def find_recent_trades(
+        self, limit: int = 10, cursor: TradeCursor | None = None
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """最新の取引を取得（カーソルベースページング）
 
         Args:
@@ -38,7 +40,9 @@ class TradeReadModelRepository(Repository[TradeReadModel, TradeId]):
         pass
 
     @abstractmethod
-    def find_trades_for_player(self, player_id: PlayerId, limit: int = 10, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
+    def find_trades_for_player(
+        self, player_id: PlayerId, limit: int = 10, cursor: TradeCursor | None = None
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """プレイヤー宛の取引を取得（カーソルベースページング）
 
         Args:
@@ -75,7 +79,9 @@ class TradeReadModelRepository(Repository[TradeReadModel, TradeId]):
         pass
 
     @abstractmethod
-    def find_active_trades(self, limit: int = 50, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
+    def find_active_trades(
+        self, limit: int = 50, cursor: TradeCursor | None = None
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """アクティブな取引を取得（カーソルベースページング）
 
         Args:
@@ -88,7 +94,9 @@ class TradeReadModelRepository(Repository[TradeReadModel, TradeId]):
         pass
 
     @abstractmethod
-    def search_trades(self, filter: TradeSearchFilter, limit: int = 20, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
+    def search_trades(
+        self, filter: TradeSearchFilter, limit: int = 20, cursor: TradeCursor | None = None
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """フィルタ条件で取引を検索（カーソルベースページング）
 
         Args:

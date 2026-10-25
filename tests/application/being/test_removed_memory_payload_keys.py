@@ -1,4 +1,5 @@
 """Being の snapshot の memory payload から、消した部品の欄を捨てる挙動 (#1631)。"""
+
 from __future__ import annotations
 
 import json
@@ -17,12 +18,14 @@ class TestDropRemovedMemoryPayloadKeys:
 
     def test_listed_keys_are_dropped_and_counted_by_elements(self) -> None:
         """表のキーは取り除かれ、値が list なら要素数を件数にする。空の欄は取り除くが件数に載せない。ほかのキーは残る。"""
-        payload = json.dumps({
-            "schema_version": 1,
-            "memo": [{"id": "m1"}, {"id": "m2"}],
-            "pending_predictions": [],
-            "acquaintances": [{"name": "カイト"}],
-        })
+        payload = json.dumps(
+            {
+                "schema_version": 1,
+                "memo": [{"id": "m1"}, {"id": "m2"}],
+                "pending_predictions": [],
+                "acquaintances": [{"name": "カイト"}],
+            }
+        )
 
         out_json, counts = drop_removed_memory_payload_keys(payload)
 
@@ -31,11 +34,13 @@ class TestDropRemovedMemoryPayloadKeys:
 
     def test_old_episodes_are_dropped_and_counted(self) -> None:
         """古いエピソード (SubjectiveEpisode) の欄 episodic_episodes も取り除かれ、要素数が件数になる。"""
-        payload = json.dumps({
-            "schema_version": 1,
-            "episodic_episodes": [{"episode_id": "ep-1"}, {"episode_id": "ep-2"}, {"episode_id": "ep-3"}],
-            "being_episodes": [],
-        })
+        payload = json.dumps(
+            {
+                "schema_version": 1,
+                "episodic_episodes": [{"episode_id": "ep-1"}, {"episode_id": "ep-2"}, {"episode_id": "ep-3"}],
+                "being_episodes": [],
+            }
+        )
 
         out_json, counts = drop_removed_memory_payload_keys(payload)
 

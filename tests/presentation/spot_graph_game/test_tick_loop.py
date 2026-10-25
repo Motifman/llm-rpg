@@ -62,9 +62,7 @@ def _add_session(
     )
 
 
-async def _wait_until(
-    predicate, timeout: float = 1.0, poll: float = 0.01
-) -> bool:
+async def _wait_until(predicate, timeout: float = 1.0, poll: float = 0.01) -> bool:
     """指定 predicate が True になるまで polling し、bool で結果を返す。
 
     時間ベースの sleep + assert より CI 負荷に強い。
@@ -90,16 +88,12 @@ class TestSimulationTickLoop:
             loop = SimulationTickLoop(manager=manager, interval_seconds=0.02)
             loop.start()
             try:
-                return await _wait_until(
-                    lambda: runtime.advance_calls >= 2, timeout=2.0
-                )
+                return await _wait_until(lambda: runtime.advance_calls >= 2, timeout=2.0)
             finally:
                 await loop.stop()
 
         reached = asyncio.run(scenario())
-        assert reached, (
-            f"ループが 2 tick 進むことを期待 (実際: {runtime.advance_calls})"
-        )
+        assert reached, f"ループが 2 tick 進むことを期待 (実際: {runtime.advance_calls})"
 
     def test_paused_and_ended_sessions_are_skipped(self) -> None:
         """paused / ended のセッションは tick が進まない。"""
@@ -115,9 +109,7 @@ class TestSimulationTickLoop:
             loop = SimulationTickLoop(manager=manager, interval_seconds=0.02)
             loop.start()
             try:
-                await _wait_until(
-                    lambda: running.advance_calls >= 1, timeout=2.0
-                )
+                await _wait_until(lambda: running.advance_calls >= 1, timeout=2.0)
             finally:
                 await loop.stop()
 
@@ -139,9 +131,7 @@ class TestSimulationTickLoop:
             loop = SimulationTickLoop(manager=manager, interval_seconds=0.02)
             loop.start()
             try:
-                await _wait_until(
-                    lambda: good.advance_calls >= 2, timeout=2.0
-                )
+                await _wait_until(lambda: good.advance_calls >= 2, timeout=2.0)
             finally:
                 await loop.stop()
 
@@ -210,9 +200,7 @@ class TestSimulationTickLoop:
             loop.start()
             try:
                 # tick 1 回目を待ってから interval を短くする
-                await _wait_until(
-                    lambda: runtime.advance_calls >= 1, timeout=2.0
-                )
+                await _wait_until(lambda: runtime.advance_calls >= 1, timeout=2.0)
                 baseline = runtime.advance_calls
                 loop.set_interval(0.02)
                 # interval 変更が次の sleep から効くため、現在進行中の sleep が

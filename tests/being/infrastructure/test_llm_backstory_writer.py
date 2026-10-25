@@ -18,7 +18,16 @@ from ai_rpg_world.being.infrastructure.llm_backstory_writer import (
 def _seen(turn: int, body: str) -> Perception:
     return Perception(
         turn=turn,
-        observation=Observation(body=body, route=SeenOrHeard(), time=ObservedTime(display="1日目 朝"), subject_is_self=False, subject_name=UNKNOWN, source=UNKNOWN, place=UNKNOWN, addressed_to_self=UNKNOWN),
+        observation=Observation(
+            body=body,
+            route=SeenOrHeard(),
+            time=ObservedTime(display="1日目 朝"),
+            subject_is_self=False,
+            subject_name=UNKNOWN,
+            source=UNKNOWN,
+            place=UNKNOWN,
+            addressed_to_self=UNKNOWN,
+        ),
     )
 
 
@@ -32,8 +41,15 @@ class _Completion:
         return self.response
 
 
-def _write(writer: LlmBackstoryWriter, *, experiences: tuple[Perception, ...] = (_seen(1, "鐘が鳴った"), _seen(2, "扉が開いた")), previous: Backstory | None = None) -> Backstory:
-    return writer.write(self_name="エイダ", persona="慎重", experiences=experiences, previous=previous, until_turn=10, written_turn=20)
+def _write(
+    writer: LlmBackstoryWriter,
+    *,
+    experiences: tuple[Perception, ...] = (_seen(1, "鐘が鳴った"), _seen(2, "扉が開いた")),
+    previous: Backstory | None = None,
+) -> Backstory:
+    return writer.write(
+        self_name="エイダ", persona="慎重", experiences=experiences, previous=previous, until_turn=10, written_turn=20
+    )
 
 
 class TestLlmBackstoryWriter:
@@ -41,9 +57,13 @@ class TestLlmBackstoryWriter:
 
     def test_response_becomes_a_backstory_for_the_range(self) -> None:
         """応答の流れと気分が、まとめた範囲の終わり (10) と書いたターン (20) を持ついきさつになる。"""
-        writer = LlmBackstoryWriter(_Completion({"compressed_activity": "鐘のあと扉が開いた", "emotional_summary": "落ち着かない"}))
+        writer = LlmBackstoryWriter(
+            _Completion({"compressed_activity": "鐘のあと扉が開いた", "emotional_summary": "落ち着かない"})
+        )
 
-        assert _write(writer) == Backstory(flow="鐘のあと扉が開いた", mood="落ち着かない", written_turn=20, until_turn=10)
+        assert _write(writer) == Backstory(
+            flow="鐘のあと扉が開いた", mood="落ち着かない", written_turn=20, until_turn=10
+        )
 
     def test_messages_carry_the_system_prompt_person_previous_backstory_and_events_in_order(self) -> None:
         """LLM に渡す文は、指示の文面、自分の名前と性格、前のいきさつの流れと気分、出来事を渡した順の【直近の出来事】と同じ行で持つ。"""
@@ -74,7 +94,11 @@ class TestLlmBackstoryWriter:
         no_mood = _write(LlmBackstoryWriter(_Completion({"compressed_activity": "流れ", "emotional_summary": 3})))
         assert no_mood.mood == ""
 
-    @pytest.mark.parametrize("response", [{"emotional_summary": "気分"}, {"compressed_activity": " "}, ["流れ"]], ids=["no-flow", "blank-flow", "not-object"])
+    @pytest.mark.parametrize(
+        "response",
+        [{"emotional_summary": "気分"}, {"compressed_activity": " "}, ["流れ"]],
+        ids=["no-flow", "blank-flow", "not-object"],
+    )
     def test_broken_response_is_rejected(self, response: Any) -> None:
         """流れが無い、空白だけ、JSON object でない応答は ValueError。頼みごとは残り、短期記憶が頼み直す。"""
         with pytest.raises(ValueError):

@@ -1,6 +1,7 @@
 """
 InMemoryItemTradeStatisticsReadModelRepository - ItemTradeStatisticsReadModelを使用するインメモリ実装
 """
+
 from datetime import datetime, timedelta
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -35,7 +36,7 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
             median_price=480,
             total_trades=15,
             success_rate=0.87,
-            last_updated=base_time - timedelta(hours=1)
+            last_updated=base_time - timedelta(hours=1),
         )
         self._statistics[ItemSpecId(1)] = sword_stats
 
@@ -48,7 +49,7 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
             median_price=1150,
             total_trades=8,
             success_rate=0.75,
-            last_updated=base_time - timedelta(minutes=30)
+            last_updated=base_time - timedelta(minutes=30),
         )
         self._statistics[ItemSpecId(2)] = staff_stats
 
@@ -61,7 +62,7 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
             median_price=150,
             total_trades=45,
             success_rate=0.92,
-            last_updated=base_time - timedelta(minutes=15)
+            last_updated=base_time - timedelta(minutes=15),
         )
         self._statistics[ItemSpecId(3)] = potion_stats
 
@@ -74,7 +75,7 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
             median_price=4950,
             total_trades=3,
             success_rate=0.67,
-            last_updated=base_time - timedelta(hours=2)
+            last_updated=base_time - timedelta(hours=2),
         )
         self._statistics[ItemSpecId(4)] = armor_stats
 
@@ -87,7 +88,7 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
             median_price=290,
             total_trades=12,
             success_rate=0.83,
-            last_updated=base_time - timedelta(hours=1, minutes=30)
+            last_updated=base_time - timedelta(hours=1, minutes=30),
         )
         self._statistics[ItemSpecId(5)] = shield_stats
 
@@ -100,7 +101,7 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
             median_price=2450,
             total_trades=5,
             success_rate=0.80,
-            last_updated=base_time - timedelta(hours=3)
+            last_updated=base_time - timedelta(hours=3),
         )
         self._statistics[ItemSpecId(6)] = gem_stats
 
@@ -113,7 +114,7 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
             median_price=None,
             total_trades=0,
             success_rate=0.0,
-            last_updated=base_time - timedelta(days=1)
+            last_updated=base_time - timedelta(days=1),
         )
         self._statistics[ItemSpecId(7)] = legendary_sword_stats
 
@@ -126,14 +127,21 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
             median_price=600,
             total_trades=20,
             success_rate=0.85,
-            last_updated=base_time - timedelta(hours=45)
+            last_updated=base_time - timedelta(hours=45),
         )
         self._statistics[ItemSpecId(10)] = advanced_potion_stats
 
-    def _create_sample_statistics(self, item_spec_id: int, min_price: int | None,
-                                 max_price: int | None, avg_price: float | None,
-                                 median_price: int | None, total_trades: int,
-                                 success_rate: float, last_updated: datetime) -> ItemTradeStatisticsReadModel:
+    def _create_sample_statistics(
+        self,
+        item_spec_id: int,
+        min_price: int | None,
+        max_price: int | None,
+        avg_price: float | None,
+        median_price: int | None,
+        total_trades: int,
+        success_rate: float,
+        last_updated: datetime,
+    ) -> ItemTradeStatisticsReadModel:
         """サンプル統計情報を作成するヘルパーメソッド"""
         return ItemTradeStatisticsReadModel.create_from_statistics(
             item_spec_id=ItemSpecId(item_spec_id),
@@ -143,7 +151,7 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
             median_price=median_price,
             total_trades=total_trades,
             success_rate=success_rate,
-            last_updated=last_updated
+            last_updated=last_updated,
         )
 
     # Repository基本メソッドの実装

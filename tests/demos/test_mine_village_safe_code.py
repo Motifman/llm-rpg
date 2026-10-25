@@ -52,9 +52,7 @@ def _safe_row(runtime) -> str:
 
 def _try_open(runtime, parameters: dict[str, str]) -> tuple[str, str]:
     try:
-        result = runtime.do_interact(
-            _GEN, "office_safe", "open_safe", interaction_parameters=parameters
-        )
+        result = runtime.do_interact(_GEN, "office_safe", "open_safe", interaction_parameters=parameters)
     except InteractionNotAllowedException as exc:
         return "refused", str(exc)
     return "done", "\n".join(result.messages)
@@ -72,9 +70,7 @@ class TestSafeRowShowsTheKeyToEnterTheNumber:
         assert len(keys) == 1, keys
         assert (outcome, "金庫の扉が開いた" in text) == ("done", True), text
 
-    def test_calling_without_the_shown_key_names_the_key_instead_of_saying_the_number_was_wrong(
-        self, runtime
-    ) -> None:
+    def test_calling_without_the_shown_key_names_the_key_instead_of_saying_the_number_was_wrong(self, runtime) -> None:
         """表示されたキーを使わず `{"text": "1907"}` で呼ぶと断られ、返る文は表示されたキーを名指し、番号違いの文ではない。"""
         (key,) = _REQUIRED_KEY.findall(_safe_row(runtime))
 

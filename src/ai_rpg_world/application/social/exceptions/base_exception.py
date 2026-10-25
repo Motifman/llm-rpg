@@ -23,8 +23,8 @@ class ApplicationException(Exception):
         super().__init__(message)
 
         # 便利なプロパティとしてコンテキストから主要な値を抽出
-        self.user_id = context.get('user_id')
-        self.target_user_id = context.get('target_user_id')
+        self.user_id = context.get("user_id")
+        self.target_user_id = context.get("target_user_id")
 
 
 class SystemErrorException(ApplicationException):
@@ -33,6 +33,6 @@ class SystemErrorException(ApplicationException):
     def __init__(self, message: str, original_exception: Exception | None = None):
         context = {}
         if original_exception:
-            context['original_exception'] = original_exception
+            context["original_exception"] = original_exception
         super().__init__(message, error_code="SYSTEM_ERROR", **context)
         self.original_exception = original_exception

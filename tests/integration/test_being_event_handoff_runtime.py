@@ -25,7 +25,16 @@ def _runtime():
 
 
 def _seen() -> Observation:
-    return Observation(body="鐘が鳴った", route=SeenOrHeard(), time=ObservedTime(display="1日目 朝"), subject_is_self=False, subject_name=UNKNOWN, source=UNKNOWN, place=UNKNOWN, addressed_to_self=UNKNOWN)
+    return Observation(
+        body="鐘が鳴った",
+        route=SeenOrHeard(),
+        time=ObservedTime(display="1日目 朝"),
+        subject_is_self=False,
+        subject_name=UNKNOWN,
+        source=UNKNOWN,
+        place=UNKNOWN,
+        addressed_to_self=UNKNOWN,
+    )
 
 
 class TestBeingEventHandoffInTheRuntime:
@@ -42,7 +51,12 @@ class TestBeingEventHandoffInTheRuntime:
         store.save(memory)
 
         (payload,) = recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_FOLD_FORCED)
-        assert (payload["being_id"], payload["turn"], payload["until_turn"], payload["dropped_count"]) == (being_id.value, 40, 10, 1)
+        assert (payload["being_id"], payload["turn"], payload["until_turn"], payload["dropped_count"]) == (
+            being_id.value,
+            40,
+            10,
+            1,
+        )
 
     def test_discarded_backstory_reaches_the_trace(self) -> None:
         """持っているいきさつと同じ範囲のいきさつは入らず、保存すると being_backstory_discarded として trace に残る。"""
@@ -62,7 +76,14 @@ class TestBeingEventHandoffInTheRuntime:
         runtime, _, being_id = _runtime()
         store = runtime._being_memo_store
         book = store.get(being_id)
-        book.add(memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001", kind=MemoKind.TODO, text="火を起こす", provenance=None, turn=1, environment_name="島")
+        book.add(
+            memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
+            kind=MemoKind.TODO,
+            text="火を起こす",
+            provenance=None,
+            turn=1,
+            environment_name="島",
+        )
 
         store.save(book)
 
@@ -72,7 +93,17 @@ class TestBeingEventHandoffInTheRuntime:
         """思い出したエピソードのイベントも配り手を通り、保存したエピソードは思い出した回数を持って取り出せる。"""
         runtime, _, being_id = _runtime()
         store = runtime._being_episode_store
-        store.add(Episode.write(being_id=being_id, episode_id="3f2a7b9c-1d2e-4f00-8a00-000000000001", environment_name="島", written_turn=1, index=EpisodeIndex(summary="火を起こした", recall_when="火の話"), body="流木を集めた。", taken_handles=set()))
+        store.add(
+            Episode.write(
+                being_id=being_id,
+                episode_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
+                environment_name="島",
+                written_turn=1,
+                index=EpisodeIndex(summary="火を起こした", recall_when="火の話"),
+                body="流木を集めた。",
+                taken_handles=set(),
+            )
+        )
         episode = store.list_by_being(being_id)[0]
         episode.recall(turn=2)
 

@@ -86,14 +86,10 @@ class TestTheEnumBackedTablesCoverTheirEnums:
         対象になるので、リストへ足し忘れればここで落ちる。
         """
         defined = {
-            name
-            for name, value in vars(hint_text).items()
-            if name.endswith("_LABELS") and isinstance(value, dict)
+            name for name, value in vars(hint_text).items() if name.endswith("_LABELS") and isinstance(value, dict)
         }
         scanned_ids = {id(table) for _enum, table in hint_text.ENUM_BACKED_LABEL_TABLES}
-        unscanned = sorted(
-            name for name in defined if id(getattr(hint_text, name)) not in scanned_ids
-        )
+        unscanned = sorted(name for name in defined if id(getattr(hint_text, name)) not in scanned_ids)
 
         assert not unscanned, (
             f"走査対象に入っていない呼び名の表があります: {unscanned}。"
@@ -243,6 +239,5 @@ class TestTimeOfDayLabelComesFromTheScenario:
         表を戻したら落とす。時刻帯の呼び名の所有者はシナリオである。
         """
         assert not hasattr(hint_text, "_TIME_OF_DAY_PHASE_LABELS"), (
-            "時刻帯の呼び名表がコードに戻っています。"
-            " シナリオの day_night phases の display_text を使ってください。"
+            "時刻帯の呼び名表がコードに戻っています。 シナリオの day_night phases の display_text を使ってください。"
         )

@@ -55,9 +55,7 @@ def _graph() -> SpotGraphAggregate:
 
 def _condition() -> GameEndCondition:
     return GameEndCondition(
-        condition_type=(
-            GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
-        ),
+        condition_type=(GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE),
         required_state={"role": "crew"},
         comparison_state={"role": "keeper"},
     )
@@ -107,11 +105,10 @@ class TestSurvivingPlayerGroupComparison:
 
         EJECTED は比較母数から除く。固定閾値を 2 にする方式との違いが現れる境界である。
         """
-        result = _evaluate(
-            _outcomes(dead=(_CREW[0],), ejected=(_KEEPERS[0],))
-        )
+        result = _evaluate(_outcomes(dead=(_CREW[0],), ejected=(_KEEPERS[0],)))
 
         assert result.is_ended is False
+
 
 class TestSurvivingPlayerGroupComparisonValidation:
     """比較条件の不足と開始直後から自明に成立する宣言を構築時に拒否する。"""
@@ -120,9 +117,7 @@ class TestSurvivingPlayerGroupComparisonValidation:
         """比較先が無い宣言は、右辺の人数が決まらないため拒否する。"""
         with pytest.raises(GameEndConditionValidationException):
             GameEndCondition(
-                condition_type=(
-                    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
-                ),
+                condition_type=(GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE),
                 required_state={"role": "crew"},
             )
 
@@ -130,9 +125,7 @@ class TestSurvivingPlayerGroupComparisonValidation:
         """同じ集合との比較は常に成立するため、開始即終了を構築時に拒否する。"""
         with pytest.raises(GameEndConditionValidationException, match="同じ"):
             GameEndCondition(
-                condition_type=(
-                    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
-                ),
+                condition_type=(GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE),
                 required_state={"role": "crew"},
                 comparison_state={"role": "crew"},
             )

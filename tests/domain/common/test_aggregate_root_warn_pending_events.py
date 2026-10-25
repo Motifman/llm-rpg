@@ -36,11 +36,7 @@ class TestWarnIfPendingEventsNoWarn:
         agg = AggregateRoot()
         with caplog.at_level(logging.WARNING, logger=_LOGGER):
             agg.warn_if_pending_events(context="MyRepo.save")
-        assert not [
-            record
-            for record in caplog.records
-            if record.name == _LOGGER and record.levelno >= logging.WARNING
-        ]
+        assert not [record for record in caplog.records if record.name == _LOGGER and record.levelno >= logging.WARNING]
 
 
 class TestWarnIfPendingEventsWithEvents:
@@ -50,22 +46,35 @@ class TestWarnIfPendingEventsWithEvents:
         ("event_specs", "context", "expected_total", "expected_counts"),
         [
             pytest.param(
-                [(_FakeEvent, "agg-x")], "SpotAttackOrchestrator.flush", 1,
-                {"_FakeEvent": 1}, id="single-event",
+                [(_FakeEvent, "agg-x")],
+                "SpotAttackOrchestrator.flush",
+                1,
+                {"_FakeEvent": 1},
+                id="single-event",
             ),
             pytest.param(
-                [(_FakeEvent, "agg-1"), (_FakeEvent, "agg-1")], "MyRepo.save", 2,
-                {"_FakeEvent": 2}, id="two-same-type-events",
+                [(_FakeEvent, "agg-1"), (_FakeEvent, "agg-1")],
+                "MyRepo.save",
+                2,
+                {"_FakeEvent": 2},
+                id="two-same-type-events",
             ),
             pytest.param(
                 [(_FakeEvent, "agg-1"), (_FakeEvent, "agg-1"), (BaseDomainEvent, "agg-other")],
-                "SpotAttackOrchestrator.flush", 3,
-                {"_FakeEvent": 2, "BaseDomainEvent": 1}, id="mixed-event-types",
+                "SpotAttackOrchestrator.flush",
+                3,
+                {"_FakeEvent": 2, "BaseDomainEvent": 1},
+                id="mixed-event-types",
             ),
         ],
     )
     def test_warning_includes_context_and_count(
-        self, caplog: pytest.LogCaptureFixture, event_specs, context, expected_total, expected_counts,
+        self,
+        caplog: pytest.LogCaptureFixture,
+        event_specs,
+        context,
+        expected_total,
+        expected_counts,
     ):
         """1件・同型2件・混在3件の総数と型別件数を、呼出場所とともに WARNING で伝える。"""
         agg = AggregateRoot()

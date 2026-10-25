@@ -145,10 +145,7 @@ class ShortTermMemorySummaryService:
             user_lines.append(f"流れ: {previous_l4.compressed_activity}")
             user_lines.append(f"気分: {previous_l4.emotional_summary}")
             user_lines.append("")
-        user_lines.append(
-            f"【直近 {compacted_turn_count} ターン / {len(events)} 件の出来事 "
-            "(古い → 新しい)】"
-        )
+        user_lines.append(f"【直近 {compacted_turn_count} ターン / {len(events)} 件の出来事 (古い → 新しい)】")
         user_lines.append(_format_events_for_l4(events))
         user_lines.append("")
         user_lines.append("上記から JSON 形式で要約を 1 つ生成してください。")

@@ -42,9 +42,7 @@ def _break_first_monster(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 class TestIsolateWorld:
     """isolate の世界では、例外を出した 1 体だけを取りやめて tick を進めること。"""
 
-    def test_one_monster_failure_does_not_stop_the_tick(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_one_monster_failure_does_not_stop_the_tick(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """isolate でモンスター 1 体の行動が例外を出しても tick は進み、残りのモンスターも行動し、trace と件数にその 1 体だけが出る。"""
         runtime = _runtime("isolate")
         recorder = CollectingTraceRecorder()
@@ -62,9 +60,7 @@ class TestIsolateWorld:
         ]
         assert runtime.world_tick_failure_counts() == {"monster_behavior": 1}
 
-    def test_without_trace_recorder_the_failure_stops_the_tick(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_without_trace_recorder_the_failure_stops_the_tick(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """isolate でも trace の記録先が無ければ、取りやめを黙って続けず例外で止める。"""
         runtime = _runtime("isolate")
         _break_first_monster(monkeypatch)
@@ -76,9 +72,7 @@ class TestIsolateWorld:
 class TestFailFastWorld:
     """fail_fast の世界では、1 体の例外で tick を止めること。"""
 
-    def test_one_monster_failure_stops_the_tick_after_recording(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_one_monster_failure_stops_the_tick_after_recording(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """fail_fast でモンスター 1 体の行動が例外を出すと、trace に残したうえで advance_tick が例外を投げ、残りのモンスターは行動しない。"""
         runtime = _runtime("fail_fast")
         recorder = CollectingTraceRecorder()

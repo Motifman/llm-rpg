@@ -233,24 +233,16 @@ class PlayerSpotNavigationStateSubsystemCodec(WorldSubsystemCodec):
                 state_data = {
                     "current_spot_id": int(sn.current_spot_id.value),
                     "current_sub_location_id": (
-                        int(sn.current_sub_location_id.value)
-                        if sn.current_sub_location_id is not None
-                        else None
+                        int(sn.current_sub_location_id.value) if sn.current_sub_location_id is not None else None
                     ),
                     "is_traveling": bool(sn.is_traveling),
                     "route": [int(s.value) for s in sn.route],
                     "leg_index": int(sn.leg_index),
-                    "leg_connection_ids": [
-                        int(c.value) for c in sn.leg_connection_ids
-                    ],
+                    "leg_connection_ids": [int(c.value) for c in sn.leg_connection_ids],
                     "leg_travel_ticks": list(sn.leg_travel_ticks),
-                    "ticks_remaining_on_current_leg": int(
-                        sn.ticks_remaining_on_current_leg
-                    ),
+                    "ticks_remaining_on_current_leg": int(sn.ticks_remaining_on_current_leg),
                 }
-            entries.append(
-                {"player_id": int(pid.value), "state": state_data}
-            )
+            entries.append({"player_id": int(pid.value), "state": state_data})
         return {"schema_version": _SN_SCHEMA_VERSION, "entries": entries}
 
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
@@ -280,22 +272,13 @@ class PlayerSpotNavigationStateSubsystemCodec(WorldSubsystemCodec):
                 sub_raw = sd.get("current_sub_location_id")
                 agg._spot_navigation_state = PlayerSpotNavigationState(
                     current_spot_id=SpotId(int(sd["current_spot_id"])),
-                    current_sub_location_id=(
-                        SubLocationId(int(sub_raw)) if sub_raw is not None else None
-                    ),
+                    current_sub_location_id=(SubLocationId(int(sub_raw)) if sub_raw is not None else None),
                     is_traveling=bool(sd["is_traveling"]),
                     route=tuple(SpotId(int(s)) for s in sd.get("route", [])),
                     leg_index=int(sd.get("leg_index", 0)),
-                    leg_connection_ids=tuple(
-                        ConnectionId(int(c))
-                        for c in sd.get("leg_connection_ids", [])
-                    ),
-                    leg_travel_ticks=tuple(
-                        int(t) for t in sd.get("leg_travel_ticks", [])
-                    ),
-                    ticks_remaining_on_current_leg=int(
-                        sd.get("ticks_remaining_on_current_leg", 0)
-                    ),
+                    leg_connection_ids=tuple(ConnectionId(int(c)) for c in sd.get("leg_connection_ids", [])),
+                    leg_travel_ticks=tuple(int(t) for t in sd.get("leg_travel_ticks", [])),
+                    ticks_remaining_on_current_leg=int(sd.get("ticks_remaining_on_current_leg", 0)),
                 )
             if hasattr(agg, "_events"):
                 agg._events.clear()
@@ -308,18 +291,14 @@ class PlayerSpotNavigationStateSubsystemCodec(WorldSubsystemCodec):
 def _player_status_repo_or_raise(runtime: Any, key: str) -> Any:
     repo = getattr(runtime, "_player_status_repo", None)
     if repo is None:
-        raise RuntimeError(
-            f"runtime._player_status_repo not found; {key} codec requires it"
-        )
+        raise RuntimeError(f"runtime._player_status_repo not found; {key} codec requires it")
     return repo
 
 
 def _check_version(data: dict[str, Any], key: str, expected: int) -> None:
     version = data.get("schema_version")
     if version != expected:
-        raise ValueError(
-            f"{key} schema_version={version!r} unsupported (expected {expected})"
-        )
+        raise ValueError(f"{key} schema_version={version!r} unsupported (expected {expected})")
 
 
 def _pursuit_to_dict(pursuit: Any) -> dict[str, Any]:
@@ -328,20 +307,10 @@ def _pursuit_to_dict(pursuit: Any) -> dict[str, Any]:
         "actor_id": int(pursuit.actor_id.value),
         "target_id": int(pursuit.target_id.value),
         "target_snapshot": (
-            _target_snapshot_to_dict(pursuit.target_snapshot)
-            if pursuit.target_snapshot is not None
-            else None
+            _target_snapshot_to_dict(pursuit.target_snapshot) if pursuit.target_snapshot is not None else None
         ),
-        "last_known": (
-            _last_known_to_dict(pursuit.last_known)
-            if pursuit.last_known is not None
-            else None
-        ),
-        "failure_reason": (
-            pursuit.failure_reason.value
-            if pursuit.failure_reason is not None
-            else None
-        ),
+        "last_known": (_last_known_to_dict(pursuit.last_known) if pursuit.last_known is not None else None),
+        "failure_reason": (pursuit.failure_reason.value if pursuit.failure_reason is not None else None),
     }
 
 
@@ -358,19 +327,11 @@ def _dict_to_pursuit(data: dict[str, Any]) -> Any:
         actor_id=WorldObjectId(int(data["actor_id"])),
         target_id=WorldObjectId(int(data["target_id"])),
         target_snapshot=(
-            _dict_to_target_snapshot(data["target_snapshot"])
-            if data.get("target_snapshot") is not None
-            else None
+            _dict_to_target_snapshot(data["target_snapshot"]) if data.get("target_snapshot") is not None else None
         ),
-        last_known=(
-            _dict_to_last_known(data["last_known"])
-            if data.get("last_known") is not None
-            else None
-        ),
+        last_known=(_dict_to_last_known(data["last_known"]) if data.get("last_known") is not None else None),
         failure_reason=(
-            PursuitFailureReason(data["failure_reason"])
-            if data.get("failure_reason") is not None
-            else None
+            PursuitFailureReason(data["failure_reason"]) if data.get("failure_reason") is not None else None
         ),
     )
 
@@ -401,9 +362,7 @@ def _dict_to_target_snapshot(data: dict[str, Any]) -> Any:
     return PursuitTargetSnapshot(
         target_id=WorldObjectId(int(data["target_id"])),
         spot_id=SpotId(int(data["spot_id"])),
-        coordinate=Coordinate(
-            x=int(coord["x"]), y=int(coord["y"]), z=int(coord.get("z", 0))
-        ),
+        coordinate=Coordinate(x=int(coord["x"]), y=int(coord["y"]), z=int(coord.get("z", 0))),
     )
 
 
@@ -416,11 +375,7 @@ def _last_known_to_dict(lk: Any) -> dict[str, Any]:
             "y": int(lk.coordinate.y),
             "z": int(lk.coordinate.z),
         },
-        "observed_at_tick": (
-            int(lk.observed_at_tick.value)
-            if lk.observed_at_tick is not None
-            else None
-        ),
+        "observed_at_tick": (int(lk.observed_at_tick.value) if lk.observed_at_tick is not None else None),
     }
 
 
@@ -440,9 +395,7 @@ def _dict_to_last_known(data: dict[str, Any]) -> Any:
     return PursuitLastKnownState(
         target_id=WorldObjectId(int(data["target_id"])),
         spot_id=SpotId(int(data["spot_id"])),
-        coordinate=Coordinate(
-            x=int(coord["x"]), y=int(coord["y"]), z=int(coord.get("z", 0))
-        ),
+        coordinate=Coordinate(x=int(coord["x"]), y=int(coord["y"]), z=int(coord.get("z", 0))),
         observed_at_tick=WorldTick(int(obs)) if obs is not None else None,
     )
 

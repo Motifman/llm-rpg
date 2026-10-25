@@ -104,9 +104,7 @@ class _SqliteHarness:
         self.database = database
         connection = sqlite3.connect(database)
         try:
-            connection.execute(
-                "CREATE TABLE values_for_test (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-            )
+            connection.execute("CREATE TABLE values_for_test (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
             connection.commit()
         finally:
             connection.close()
@@ -122,9 +120,7 @@ class _SqliteHarness:
     def read_committed(self, key: str) -> str | None:
         connection = sqlite3.connect(self.database)
         try:
-            row = connection.execute(
-                "SELECT value FROM values_for_test WHERE key = ?", (key,)
-            ).fetchone()
+            row = connection.execute("SELECT value FROM values_for_test WHERE key = ?", (key,)).fetchone()
             return None if row is None else str(row[0])
         finally:
             connection.close()
@@ -160,9 +156,7 @@ class TestCommandScopeTransactionAdapterContract:
         assert harness.read_committed("first") == "a"
         assert harness.read_committed("second") == "b"
 
-    def test_command_error_rolls_back_both_writes(
-        self, harness: _AtomicityHarness
-    ) -> None:
+    def test_command_error_rolls_back_both_writes(self, harness: _AtomicityHarness) -> None:
         """二つ目の処理で失敗すると一つ目を含む全書込みを破棄する。"""
         with pytest.raises(RuntimeError, match="abort"):
             with _scope(harness.adapter):
@@ -173,9 +167,7 @@ class TestCommandScopeTransactionAdapterContract:
         assert harness.read_committed("first") is None
         assert harness.read_committed("second") is None
 
-    def test_adapter_reports_active_state_only_inside_scope(
-        self, harness: _AtomicityHarness
-    ) -> None:
+    def test_adapter_reports_active_state_only_inside_scope(self, harness: _AtomicityHarness) -> None:
         """adapterのis_activeは開始前と終了後にFalse、command内だけTrueになる。"""
         assert harness.adapter.is_active is False
         with _scope(harness.adapter):
@@ -189,9 +181,7 @@ class TestCommandScopeTransactionAdapterContract:
 
         assert harness.read_committed("outside") is None
 
-    def test_legacy_pending_event_rolls_back_instead_of_being_lost(
-        self, harness: _AtomicityHarness
-    ) -> None:
+    def test_legacy_pending_event_rolls_back_instead_of_being_lost(self, harness: _AtomicityHarness) -> None:
         """旧UoWへイベントを残したcommandはcommitせずCommandContext移行を要求する。"""
         event = BaseDomainEvent.create(aggregate_id=1, aggregate_type="test")
 
@@ -201,9 +191,7 @@ class TestCommandScopeTransactionAdapterContract:
 
         assert harness.adapter.is_active is False
 
-    def test_operation_generated_legacy_event_is_detected_before_commit(
-        self, harness: _AtomicityHarness
-    ) -> None:
+    def test_operation_generated_legacy_event_is_detected_before_commit(self, harness: _AtomicityHarness) -> None:
         """保留書込みの実行中に旧UoWへ追加されたイベントもcommit前に拒否する。"""
         if not isinstance(harness, _InMemoryHarness):
             pytest.skip("保留operationを持つインメモリadapter固有の契約")
@@ -239,9 +227,7 @@ class TestTransactionOnlyCommit:
         adapter.rollback()
         assert store.values == {}
 
-    def test_sqlite_commit_failure_leaves_transaction_active(
-        self, tmp_path: Path
-    ) -> None:
+    def test_sqlite_commit_failure_leaves_transaction_active(self, tmp_path: Path) -> None:
         """SQLite commit制約違反後もactiveを保ち、呼出し側がrollbackできる。"""
         database = tmp_path / "deferred_constraint.db"
         bootstrap = sqlite3.connect(database)
@@ -277,7 +263,6 @@ class TestTransactionOnlyCommit:
             assert adapter.is_active is False
         finally:
             connection.close()
-
 
     def test_in_memory_adapter_requires_rollback_snapshot_source(self) -> None:
         """snapshot元なしのインメモリUoWは部分適用を戻せないため拒否する。"""
@@ -355,12 +340,8 @@ class TestInMemoryFailureIsolation:
     def test_second_uow_cannot_snapshot_same_store_concurrently(self) -> None:
         """同じstoreの古いsnapshotを戻して他commandのcommitを消す同時実行を拒否する。"""
         store = _SnapshotDataStore()
-        first = InMemoryUnitOfWorkTransactionAdapter(
-            InMemoryUnitOfWork(data_store=store)
-        )
-        second = InMemoryUnitOfWorkTransactionAdapter(
-            InMemoryUnitOfWork(data_store=store)
-        )
+        first = InMemoryUnitOfWorkTransactionAdapter(InMemoryUnitOfWork(data_store=store))
+        second = InMemoryUnitOfWorkTransactionAdapter(InMemoryUnitOfWork(data_store=store))
         first.begin()
 
         with pytest.raises(RuntimeError, match="already locked"):
@@ -448,9 +429,7 @@ class TestSqliteFailureIsolation:
         with pytest.raises(RuntimeError, match="再利用"):
             adapter.begin()
 
-    def test_commit_cleanup_keyboard_interrupt_keeps_control_flow_type(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_commit_cleanup_keyboard_interrupt_keeps_control_flow_type(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """durable commit後のclose中断はscopeを閉じた後もKeyboardInterruptとして伝播する。"""
         interrupt = KeyboardInterrupt()
         connection = _FailingSqliteConnection(close_error=interrupt)
@@ -468,9 +447,7 @@ class TestSqliteFailureIsolation:
         assert scope.completion is CommandCompletion.COMMITTED
         assert uow.is_poisoned is True
 
-    def test_cleanup_interrupt_preserves_handoff_error_as_cause(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_cleanup_interrupt_preserves_handoff_error_as_cause(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """cleanup中断とhandoff失敗が重なると中断を主例外、handoffを原因として保持する。"""
         interrupt = KeyboardInterrupt()
         handoff_error = RuntimeError("handoff failed")

@@ -2,6 +2,7 @@
 SNS例外の統合テスト（エンドツーエンドテスト）
 DomainException のサブクラスのみ create_from_domain_exception に渡す設計を検証する。
 """
+
 import pytest
 
 from ai_rpg_world.application.social.exceptions.command.user_command_exception import (
@@ -35,9 +36,7 @@ class TestExceptionIntegration:
     def test_domain_exception_to_application_exception_flow(self):
         """ドメイン例外からアプリケーション例外への変換フロー（正常系）"""
         # 1. ユーザー検索のドメイン例外（実ドメイン例外を使用）
-        user_not_found = DomainUserNotFoundException(
-            123, "User with id 123 not found"
-        )
+        user_not_found = DomainUserNotFoundException(123, "User with id 123 not found")
         app_exception = ApplicationExceptionFactory.create_from_domain_exception(
             user_not_found,
             user_id=456,
@@ -53,13 +52,9 @@ class TestExceptionIntegration:
         follow_error.follower_id = 1
         follow_error.followee_id = 2
         follow_error.relationship_type = "follow"
-        app_exception2 = ApplicationExceptionFactory.create_from_domain_exception(
-            follow_error
-        )
+        app_exception2 = ApplicationExceptionFactory.create_from_domain_exception(follow_error)
 
-        assert isinstance(
-            app_exception2, UserCommandException
-        )  # マッピングで UserCommandException に変換
+        assert isinstance(app_exception2, UserCommandException)  # マッピングで UserCommandException に変換
         assert app_exception2.context["relationship_type"] == "follow"
         assert str(app_exception2) == "Cannot follow user 2"
 
@@ -95,26 +90,20 @@ class TestExceptionIntegration:
         assert app_exc.context["target_user_id"] == 300  # パラメータから
         assert app_exc.context["relationship_type"] == "block"  # ドメイン例外から
         assert app_exc.context["additional_info"] == "test"  # パラメータから
-        assert (
-            app_exc.context["error_detail"] == "User is already blocked"
-        )  # ドメイン例外から
+        assert app_exc.context["error_detail"] == "User is already blocked"  # ドメイン例外から
 
     def test_exception_chain_preservation(self):
         """例外チェーンの保存テスト（正常系）"""
         domain_exception = DomainException("ドメインエラー")
 
-        app_exception = ApplicationExceptionFactory.create_from_domain_exception(
-            domain_exception
-        )
+        app_exception = ApplicationExceptionFactory.create_from_domain_exception(domain_exception)
 
         assert app_exception.__cause__ is domain_exception
 
     def test_non_domain_exception_raises_type_error(self):
         """DomainException 以外を渡すと TypeError（例外系）"""
         with pytest.raises(TypeError) as exc_info:
-            ApplicationExceptionFactory.create_from_domain_exception(
-                RuntimeError("ドメインエラー")
-            )
+            ApplicationExceptionFactory.create_from_domain_exception(RuntimeError("ドメインエラー"))
         assert "domain_exception must be a DomainException" in str(exc_info.value)
 
     def test_exception_mapping_completeness(self):
@@ -123,7 +112,9 @@ class TestExceptionIntegration:
 
         # 主要なカテゴリの例外がマッピングされていることを確認
         user_exceptions = [k for k in mapping.keys() if "User" in k]
-        relationship_exceptions = [k for k in mapping.keys() if any(word in k for word in ["Follow", "Block", "Subscribe", "Relationship"])]
+        relationship_exceptions = [
+            k for k in mapping.keys() if any(word in k for word in ["Follow", "Block", "Subscribe", "Relationship"])
+        ]
 
         # 各カテゴリに複数の例外がマッピングされていることを確認
         assert len(user_exceptions) >= 5, f"ユーザー関連例外が少ない: {user_exceptions}"
@@ -140,13 +131,9 @@ class TestExceptionIntegration:
         class UserRepository:
             def find_by_id(self, user_id):
                 if user_id <= 0:
-                    raise UserIdValidationException(
-                        user_id, f"Invalid user id: {user_id}"
-                    )
+                    raise UserIdValidationException(user_id, f"Invalid user id: {user_id}")
                 if user_id == 999:
-                    raise DomainUserNotFoundException(
-                        999, f"User {user_id} not found in database"
-                    )
+                    raise DomainUserNotFoundException(999, f"User {user_id} not found in database")
                 return f"user_{user_id}"
 
         repo = UserRepository()

@@ -152,6 +152,8 @@ class _PrepareActionRejected(Exception):
     def __init__(self, result: LlmCommandResultDto) -> None:
         super().__init__(result.message)
         self.result = result
+
+
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     ItemTransferException,
     SpotGraphItemTransferService,
@@ -271,10 +273,7 @@ _TEND_ERROR_CODES = {
 #: 警告していた点。汎用の「ここには居ない」だと次に何をすればよいかが
 #: 消える。載せ替えで実際に落ちかけ、既存テストが捕まえた。
 _TEND_MESSAGES = {
-    "NOT_IN_SAME_SPOT": (
-        "{name} は同じ場所にいない。"
-        "介抱するにはまず相手のいる場所へ向かう必要がある。"
-    ),
+    "NOT_IN_SAME_SPOT": ("{name} は同じ場所にいない。介抱するにはまず相手のいる場所へ向かう必要がある。"),
     "TARGET_IS_NOT_DOWN": "{name} は倒れていない。介抱の必要はない。",
     "ACTOR_IS_DOWN": "自分も倒れているので他人を介抱できない。",
     "TARGET_IS_ELIMINATED": "{name} はもう息をしていない。介抱しても戻らない。",
@@ -328,10 +327,7 @@ def _item_is_offered_in_trade_failure(verb: str) -> LlmCommandResultDto:
     """
     return LlmCommandResultDto(
         success=False,
-        message=(
-            f"その品は取引に出しているので{verb}。"
-            "提案の返事を待つか、取り下げてください。"
-        ),
+        message=(f"その品は取引に出しているので{verb}。提案の返事を待つか、取り下げてください。"),
         error_code="ITEM_OFFERED_IN_TRADE",
         remediation=get_remediation("ITEM_OFFERED_IN_TRADE"),
     )
@@ -366,10 +362,7 @@ def _counterparty_player_ids(settlements: Any) -> tuple[int, ...]:
 
 def _failed_on_object_state(exc: InteractionNotAllowedException) -> bool:
     condition = getattr(exc, "failed_condition", None)
-    return (
-        getattr(condition, "condition_type", None)
-        is InteractionConditionTypeEnum.OBJECT_STATE
-    )
+    return getattr(condition, "condition_type", None) is InteractionConditionTypeEnum.OBJECT_STATE
 
 
 class SpotGraphToolExecutor:
@@ -398,8 +391,10 @@ class SpotGraphToolExecutor:
         market_service: MarketService | None = None,
         speech_service: PlayerSpeechApplicationService | None = None,
         use_item_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
-        tend_to_player_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
-        prepare_action_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
+        tend_to_player_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
+        | None = None,
+        prepare_action_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
+        | None = None,
         # PR-θ1 (経路統合): tool 実装が 2 経路に分裂していた問題の解消。
         # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
         # wrapper 化することで、既に正しく副作用 (start_travel_to_spot +
@@ -430,9 +425,8 @@ class SpotGraphToolExecutor:
         # resolver stage と同一 instance を共有することで、将来 registry に
         # 状態（キャッシュ等）が増えても乖離しない。渡されない場合は
         # 既定で world_flags を使う独立 instance を生成（後方互換）。
-        self._sync_action_registry = (
-            sync_action_registry
-            or SynchronizedActionRegistry(spot_graph_world_services.world_flags)
+        self._sync_action_registry = sync_action_registry or SynchronizedActionRegistry(
+            spot_graph_world_services.world_flags
         )
         # 戦闘ツール (`spot_graph_attack`) で使用。注入されていない構成では
         # `_attack` が「未対応」エラーを返す（後方互換 + minimal wiring 構成
@@ -450,12 +444,8 @@ class SpotGraphToolExecutor:
         self._item_transfer_service = item_transfer_service
         self._speech_service = speech_service
         self._use_item_command_scope_factory = use_item_command_scope_factory
-        self._tend_to_player_command_scope_factory = (
-            tend_to_player_command_scope_factory
-        )
-        self._prepare_action_command_scope_factory = (
-            prepare_action_command_scope_factory
-        )
+        self._tend_to_player_command_scope_factory = tend_to_player_command_scope_factory
+        self._prepare_action_command_scope_factory = prepare_action_command_scope_factory
         # PR-θ1: travel_to 統合用の WorldRuntime 参照。
         self._runtime = runtime
 
@@ -483,7 +473,9 @@ class SpotGraphToolExecutor:
         # できると、承諾した相手から見て「受けたのに何も来なかった」になる。
         appearances = inventory_item_appearances(inv, self._item_repository)
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            spec_id, bool(is_spoiled_raw), appearances,
+            spec_id,
+            bool(is_spoiled_raw),
+            appearances,
         )
         if found.found:
             return found.slot_id, found.item_instance_id
@@ -509,7 +501,9 @@ class SpotGraphToolExecutor:
             return False
         appearances = inventory_item_appearances(inv, self._item_repository)
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            spec_id, bool(is_spoiled_raw), appearances,
+            spec_id,
+            bool(is_spoiled_raw),
+            appearances,
         )
         return found.blocked_by_reservation
 
@@ -526,9 +520,7 @@ class SpotGraphToolExecutor:
         except Exception:
             return None
 
-    def _is_exhausted_and_block(
-        self, player_id: int, tool_name: str
-    ) -> LlmCommandResultDto | None:
+    def _is_exhausted_and_block(self, player_id: int, tool_name: str) -> LlmCommandResultDto | None:
         """exhausted (疲労 100) で重い tool を呼んだ場合の block 判定 (PR β)。
 
         block 該当なら EXHAUSTED error を返す。それ以外は None。
@@ -578,9 +570,7 @@ class SpotGraphToolExecutor:
 
     def _record_fatigue_failure(self, exc: Exception, player_id: int) -> None:
         if self._runtime is None:
-            logger.warning(
-                "fatigue was not saved (player_id=%s); continuing", player_id, exc_info=exc
-            )
+            logger.warning("fatigue was not saved (player_id=%s); continuing", player_id, exc_info=exc)
             return
         try:
             self._runtime._record_world_tick_follow_up_failure(
@@ -707,9 +697,7 @@ class SpotGraphToolExecutor:
                 **subjective,
             )
             # PR β: travel は 1 leg = 1 fatigue。
-            self._apply_fatigue_safe(
-                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.TRAVEL_LEG)
-            )
+            self._apply_fatigue_safe(player_id, _FATIGUE_POLICY.cost_of(ExertionKind.TRAVEL_LEG))
             # 出力 message は旧 handler と揃えて display_name を使う (LLM /
             # 観戦者が数字 spot_id より名前で認識できるよう)。runtime.
             # _spot_graph_repo は既に SpotGraphToolExecutor が
@@ -766,7 +754,9 @@ class SpotGraphToolExecutor:
         if len(content) > SAY_INLINE_MAX_LENGTH:
             logger.debug(
                 "say_inline truncated: player_id=%s len=%d → %d",
-                player_id, len(content), SAY_INLINE_MAX_LENGTH,
+                player_id,
+                len(content),
+                SAY_INLINE_MAX_LENGTH,
             )
             content = content[:SAY_INLINE_MAX_LENGTH]
         try:
@@ -789,12 +779,15 @@ class SpotGraphToolExecutor:
             return SayInlineDelivery.NOT_DELIVERED
         except Exception:
             logger.exception(
-                "say_inline not delivered: speak failed (player_id=%s)", player_id,
+                "say_inline not delivered: speak failed (player_id=%s)",
+                player_id,
             )
             return SayInlineDelivery.NOT_DELIVERED
         return SayInlineDelivery.SPOKEN
 
-    def _set_sub_location(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _set_sub_location(
+        self, player_id: int, args: dict[str, Any], runtime_context: Any = None
+    ) -> LlmCommandResultDto:
         raw = args.get("sub_location_id")
         sub: SubLocationId | None
         try:
@@ -859,11 +852,7 @@ class SpotGraphToolExecutor:
                 exhausted_hint = ""
                 if not getattr(result, "has_remaining_discoverable_items", False):
                     exhausted_hint = "この場所で新たに探索で見つかるものはもう無い。"
-                targets = (
-                    getattr(runtime_context, "targets", {}) or {}
-                    if runtime_context is not None
-                    else {}
-                )
+                targets = getattr(runtime_context, "targets", {}) or {} if runtime_context is not None else {}
                 visible_objects = list_object_labels(targets) if targets else ""
                 if visible_objects:
                     message = (
@@ -873,11 +862,7 @@ class SpotGraphToolExecutor:
                         " (働きかけるときは、このオブジェクトの名前を target_label に指定する)"
                     )
                 else:
-                    message = (
-                        "新しい発見はなかった。"
-                        f"{exhausted_hint}"
-                        "(この場所に働きかけられるオブジェクトは無い)"
-                    )
+                    message = f"新しい発見はなかった。{exhausted_hint}(この場所に働きかけられるオブジェクトは無い)"
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_EXPLORE,
                 args,
@@ -955,9 +940,7 @@ class SpotGraphToolExecutor:
             # do_interact に渡っていなかった。dict でない値 (None / 型違反)
             # は None として扱い、不正型で落とさない (入口での型ガード)。
             raw_parameters = args.get("parameters")
-            interaction_parameters = (
-                raw_parameters if isinstance(raw_parameters, dict) else None
-            )
+            interaction_parameters = raw_parameters if isinstance(raw_parameters, dict) else None
             # do_interact が execute_interaction + SpotObjectInteractedEvent +
             # _process_graph_events + _record_action_result を面倒見る。
             result = self._runtime.do_interact(
@@ -969,9 +952,7 @@ class SpotGraphToolExecutor:
                 **subjective,
             )
             # PR β: interact は heavy 行動 (default fatigue_cost = 2)。
-            self._apply_fatigue_safe(
-                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
-            )
+            self._apply_fatigue_safe(player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT))
             msg = "; ".join(result.messages) if result.messages else "完了"
             # object.state の増分を trace へ転記する。プロンプトの隠蔽
             # (hidden_state_keys) はエージェント向けで、分析者は値を読めて
@@ -984,28 +965,18 @@ class SpotGraphToolExecutor:
                 LlmCommandResultDto(
                     success=True,
                     message=msg,
-                    trace_payload=(
-                        {"object_state_changes": list(state_changes)}
-                        if state_changes
-                        else None
-                    ),
+                    trace_payload=({"object_state_changes": list(state_changes)} if state_changes else None),
                 ),
             )
         except InteractionNotAllowedException as exc:
-            return self._precondition_failure_result(
-                exc, open_now=self._next_steps(player_id, oid, exc)
-            )
+            return self._precondition_failure_result(exc, open_now=self._next_steps(player_id, oid, exc))
         except InteractionNotFoundException:
             # 実験 #26 で発覚: LLM が表示に無い action_name を
             # 発明して呼んでいた。当該 object で実際に使える一覧を
             # 提示し、現在状況に表示された値だけを選ばせる。
-            available = list_object_interactions(
-                self._runtime, oid, player_id=player_id
-            )
+            available = list_object_interactions(self._runtime, oid, player_id=player_id)
             if not available:
-                hidden_reason = hidden_object_interaction_failure_reason(
-                    self._runtime, oid, player_id=player_id
-                )
+                hidden_reason = hidden_object_interaction_failure_reason(self._runtime, oid, player_id=player_id)
                 if hidden_reason:
                     return LlmCommandResultDto(
                         success=False,
@@ -1027,30 +998,24 @@ class SpotGraphToolExecutor:
                             # 区分を借りようとしたが意味が合わなかった
                             # (「もう変わらない」でも「前提が足りない」でもない)。
                             # この経路専用の文を持つ。
-                            "いま自分がこの対象にできることは表示されていない。"
-                            "表示に無い名前を推測しないこと。"
+                            "いま自分がこの対象にできることは表示されていない。表示に無い名前を推測しないこと。"
                         ),
                     )
             avail_str = ", ".join(available) if available else "(なし)"
             return LlmCommandResultDto(
                 success=False,
-                message=(
-                    f"このオブジェクトには '{action}' という操作がありません。"
-                    f"利用可能な操作: {avail_str}"
-                ),
+                message=(f"このオブジェクトには '{action}' という操作がありません。利用可能な操作: {avail_str}"),
                 error_code="INTERACTION_ACTION_NOT_FOUND",
                 remediation=(
                     "action_name には、現在の状況に表示された対象行の"
-                    "「使える操作」で ``\"\"`` に囲まれた値を"
+                    '「使える操作」で ``""`` に囲まれた値を'
                     "そのまま指定してください。表示に無い名前は推測しないでください。"
                 ),
             )
         except Exception as e:
             return exception_result(e)
 
-    def _interact_with_item(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _interact_with_item(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         """resolver が所持道具へ解決した interact を道具操作へ渡す。"""
         if self._runtime is None:
             return LlmCommandResultDto(
@@ -1080,9 +1045,7 @@ class SpotGraphToolExecutor:
                 **action_history_projection_kwargs(args),
                 **subjective,
             )
-            self._apply_fatigue_safe(
-                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
-            )
+            self._apply_fatigue_safe(player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT))
             message = "; ".join(result.messages) if result.messages else "完了"
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -1098,8 +1061,7 @@ class SpotGraphToolExecutor:
                 message=f"行動が拒否された: {reason}",
                 error_code="INTERACTION_PRECONDITION_FAILED",
                 remediation=(
-                    f"{reason} 同じ条件のまま繰り返さず、所持アイテム欄の"
-                    "『いまできない』を確認してください。"
+                    f"{reason} 同じ条件のまま繰り返さず、所持アイテム欄の『いまできない』を確認してください。"
                 ),
             )
         except InteractionNotFoundException:
@@ -1111,16 +1073,14 @@ class SpotGraphToolExecutor:
                 ),
                 error_code="INTERACTION_ACTION_NOT_FOUND",
                 remediation=(
-                    "action_name には、所持アイテム行で ``\"\"`` に囲まれた値を"
+                    'action_name には、所持アイテム行で ``""`` に囲まれた値を'
                     "そのまま指定してください。表示に無い名前は推測しないでください。"
                 ),
             )
         except Exception as exc:
             return exception_result(exc)
 
-    def _interact_with_player(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _interact_with_player(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         """``interact`` の対象がプレイヤーだったときの実行。
 
         物体経路 (``_interact``) と対になる。失敗コードは物体側と同じものを
@@ -1133,9 +1093,7 @@ class SpotGraphToolExecutor:
                 arg_name="action_name",
                 detail="非空の文字列を指定してください",
             )
-        if self._runtime is None or not hasattr(
-            self._runtime, "do_interact_with_player"
-        ):
+        if self._runtime is None or not hasattr(self._runtime, "do_interact_with_player"):
             # 対人経路を持たない runtime (テスト double / 旧構成) 向けの
             # 安全網。``create_world_runtime`` は常に service を組み立てるので
             # 本番では通らない。シナリオが player_interactions を宣言して
@@ -1144,10 +1102,7 @@ class SpotGraphToolExecutor:
             # (なし)」と返る (こちらではない)。
             return LlmCommandResultDto(
                 success=False,
-                message=(
-                    "この世界では人を対象にした操作が定義されていません。"
-                    "オブジェクトを対象にしてください。"
-                ),
+                message=("この世界では人を対象にした操作が定義されていません。オブジェクトを対象にしてください。"),
                 error_code="NOT_WIRED",
                 remediation=get_remediation("NOT_WIRED"),
             )
@@ -1159,9 +1114,7 @@ class SpotGraphToolExecutor:
                 detail="対象プレイヤーの解決に失敗しました",
             )
         raw_parameters = args.get("parameters")
-        interaction_parameters = (
-            raw_parameters if isinstance(raw_parameters, dict) else None
-        )
+        interaction_parameters = raw_parameters if isinstance(raw_parameters, dict) else None
         try:
             result = self._runtime.do_interact_with_player(
                 PlayerId(player_id),
@@ -1171,9 +1124,7 @@ class SpotGraphToolExecutor:
                 **action_history_projection_kwargs(args),
                 **extract_subjective_action_fields(args),
             )
-            self._apply_fatigue_safe(
-                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
-            )
+            self._apply_fatigue_safe(player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT))
             msg = "; ".join(result.messages) if result.messages else "完了"
             # object.state の増分を trace へ転記する。プロンプトの隠蔽
             # (hidden_state_keys) はエージェント向けで、分析者は値を読めて
@@ -1186,25 +1137,16 @@ class SpotGraphToolExecutor:
                 LlmCommandResultDto(
                     success=True,
                     message=msg,
-                    trace_payload=(
-                        {"object_state_changes": list(state_changes)}
-                        if state_changes
-                        else None
-                    ),
+                    trace_payload=({"object_state_changes": list(state_changes)} if state_changes else None),
                 ),
             )
         except InteractionNotAllowedException as exc:
             return self._precondition_failure_result(exc)
         except InteractionNotFoundException:
-            available = ", ".join(
-                self._runtime.available_player_action_names(PlayerId(player_id))
-            ) or "(なし)"
+            available = ", ".join(self._runtime.available_player_action_names(PlayerId(player_id))) or "(なし)"
             return LlmCommandResultDto(
                 success=False,
-                message=(
-                    f"人を対象にした '{action}' という操作はありません。"
-                    f"人に対して使える操作: {available}"
-                ),
+                message=(f"人を対象にした '{action}' という操作はありません。人に対して使える操作: {available}"),
                 error_code="INTERACTION_ACTION_NOT_FOUND",
                 remediation=(
                     "action_name には、同席しているプレイヤーの行末に表示された"
@@ -1229,16 +1171,10 @@ class SpotGraphToolExecutor:
                     repositories = context.repositories
                     command_executor = copy.copy(self)
                     command_executor._use_item_command_scope_factory = None
-                    command_executor._player_inventory_repository = (
-                        repositories.player_inventories
-                    )
+                    command_executor._player_inventory_repository = repositories.player_inventories
                     command_executor._item_repository = repositories.items
-                    command_executor._player_status_repository = (
-                        repositories.player_statuses
-                    )
-                    command_executor._event_publisher = CommandContextEventPublisher(
-                        context
-                    )
+                    command_executor._player_status_repository = repositories.player_statuses
+                    command_executor._event_publisher = CommandContextEventPublisher(context)
                     command_executor._use_item_strict_effects = True
                     result = command_executor._execute_use_item_in_scope(
                         player_id,
@@ -1284,9 +1220,7 @@ class SpotGraphToolExecutor:
         try:
             inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
         except Exception as e:
-            return _unexpected_exception_result(
-                e, location="_execute_use_item_in_scope", stage="inventory_lookup"
-            )
+            return _unexpected_exception_result(e, location="_execute_use_item_in_scope", stage="inventory_lookup")
         if inv is None:
             return LlmCommandResultDto(
                 success=False,
@@ -1301,16 +1235,14 @@ class SpotGraphToolExecutor:
         # resolver が渡す is_spoiled も含めて実行時に slot を引く。
         try:
             found = self._find_owned_slot_by_item_spec_id_and_spoilage(
-                player_id, item_spec_id_int, args.get("is_spoiled", False),
+                player_id,
+                item_spec_id_int,
+                args.get("is_spoiled", False),
             )
         except Exception as e:
-            return _unexpected_exception_result(
-                e, location="_execute_use_item_in_scope", stage="slot_resolution"
-            )
+            return _unexpected_exception_result(e, location="_execute_use_item_in_scope", stage="slot_resolution")
         if found is None:
-            if self._is_blocked_by_trade(
-                player_id, item_spec_id_int, args.get("is_spoiled", False)
-            ):
+            if self._is_blocked_by_trade(player_id, item_spec_id_int, args.get("is_spoiled", False)):
                 return _item_is_offered_in_trade_failure("使えません")
             return LlmCommandResultDto(
                 success=False,
@@ -1327,9 +1259,7 @@ class SpotGraphToolExecutor:
         try:
             item_instance = self._item_repository.find_by_id(iid)
         except Exception as e:
-            return _unexpected_exception_result(
-                e, location="_execute_use_item_in_scope", stage="item_lookup"
-            )
+            return _unexpected_exception_result(e, location="_execute_use_item_in_scope", stage="item_lookup")
         if item_instance is None:
             return LlmCommandResultDto(
                 success=False,
@@ -1338,6 +1268,7 @@ class SpotGraphToolExecutor:
                 remediation=get_remediation("ITEM_NOT_FOUND"),
             )
         from ai_rpg_world.domain.item.enum.item_enum import ItemType
+
         if item_instance.item_spec.item_type != ItemType.CONSUMABLE:
             return LlmCommandResultDto(
                 success=False,
@@ -1395,9 +1326,7 @@ class SpotGraphToolExecutor:
                 # PlayerStatusAggregate に適用する。HP 回復等は捨てるが、食べ物
                 # として腹に入った分だけ HUNGER 回復は半分だけ残す。damage 量は
                 # 当面ハードコード (10)。per-item config は別 PR で。
-                outcome = spoiled_consumption_outcome(
-                    item_instance.item_spec.consume_effect
-                )
+                outcome = spoiled_consumption_outcome(item_instance.item_spec.consume_effect)
                 damage = outcome.damage_hp
                 retained_hunger = outcome.retained_hunger
                 # 防御: 最小 wiring (テスト等) で _player_status_repository=None
@@ -1440,11 +1369,9 @@ class SpotGraphToolExecutor:
                 )
             # 通常 (新鮮) パス: ConsumableUsedEvent を発行
             # → ConsumableEffectHandler が HP/MP 回復等を適用
-            if (
-                self._event_publisher is not None
-                and item_instance.item_spec.consume_effect is not None
-            ):
+            if self._event_publisher is not None and item_instance.item_spec.consume_effect is not None:
                 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
+
                 self._event_publisher.publish(
                     ConsumableUsedEvent.create(
                         aggregate_id=PlayerId(player_id),
@@ -1465,9 +1392,7 @@ class SpotGraphToolExecutor:
                 message=base,
             )
         except Exception as e:
-            return _unexpected_exception_result(
-                e, location="_execute_use_item_in_scope", stage="effect_application"
-            )
+            return _unexpected_exception_result(e, location="_execute_use_item_in_scope", stage="effect_application")
 
     def _prepare_action(
         self,
@@ -1481,12 +1406,8 @@ class SpotGraphToolExecutor:
         try:
             with factory.create() as context:
                 command_executor = copy.copy(self)
-                command_executor._spot_graph_repository = (
-                    context.repositories.spot_graph
-                )
-                command_executor._event_publisher = CommandContextEventPublisher(
-                    context
-                )
+                command_executor._spot_graph_repository = context.repositories.spot_graph
+                command_executor._event_publisher = CommandContextEventPublisher(context)
                 result = command_executor._execute_prepare_action_in_scope(
                     player_id,
                     args,
@@ -1535,10 +1456,7 @@ class SpotGraphToolExecutor:
         if not self._sync_action_groups:
             return LlmCommandResultDto(
                 success=False,
-                message=(
-                    "このシナリオには二人で合わせる操作が定義されていません。"
-                    "別の行動を選んでください。"
-                ),
+                message=("このシナリオには二人で合わせる操作が定義されていません。別の行動を選んでください。"),
                 error_code="UNSUPPORTED_TOOL",
                 remediation=get_remediation("UNSUPPORTED_TOOL"),
             )
@@ -1583,10 +1501,7 @@ class SpotGraphToolExecutor:
         if self._time_provider is None:
             return LlmCommandResultDto(
                 success=False,
-                message=(
-                    "いまはタイミングを合わせる準備ができない。"
-                    "他の行動を選ぶ必要がある。"
-                ),
+                message=("いまはタイミングを合わせる準備ができない。他の行動を選ぶ必要がある。"),
                 error_code="TOOL_BECAME_UNAVAILABLE",
                 remediation=get_remediation("TOOL_BECAME_UNAVAILABLE"),
             )
@@ -1595,9 +1510,7 @@ class SpotGraphToolExecutor:
             self._svc.interaction.validate_interaction_preparation(
                 PlayerId(player_id), action_name, current_tick=current_tick
             )
-            conflicting_action = self._prepared_role_already_held_by_player(
-                player_id, action_name
-            )
+            conflicting_action = self._prepared_role_already_held_by_player(player_id, action_name)
             if conflicting_action is not None:
                 return LlmCommandResultDto(
                     success=False,
@@ -1651,29 +1564,21 @@ class SpotGraphToolExecutor:
             return build_sanitized_exception_failure(
                 exc=ve,
                 log_context=(
-                    f"spot_graph_prepare_action validation failure "
-                    f"player_id={player_id} action_name={action_name!r}"
+                    f"spot_graph_prepare_action validation failure player_id={player_id} action_name={action_name!r}"
                 ),
                 public_message=(
-                    f"「{action_name}」の準備に失敗した。"
-                    "表示されている操作の名前をそのまま指定する必要がある。"
+                    f"「{action_name}」の準備に失敗した。表示されている操作の名前をそのまま指定する必要がある。"
                 ),
                 error_code="INVALID_ARGUMENT",
             )
         except Exception as e:
             return exception_result(e)
 
-    def _next_steps(
-        self, player_id: int, object_id: int, exc: InteractionNotAllowedException
-    ) -> tuple[Any, ...]:
+    def _next_steps(self, player_id: int, object_id: int, exc: InteractionNotAllowedException) -> tuple[Any, ...]:
         interaction = self._svc.interaction
         if interaction is None or not _failed_on_object_state(exc):
             return ()
-        current_tick = (
-            self._time_provider.get_current_tick()
-            if self._time_provider is not None
-            else None
-        )
+        current_tick = self._time_provider.get_current_tick() if self._time_provider is not None else None
         # 拒否に添える案内なので、調べられなくても拒否そのものは返す。
         # ここで例外を通すと、上の段で汎用の失敗文に置き換わり拒否理由まで消える。
         try:
@@ -1718,20 +1623,18 @@ class SpotGraphToolExecutor:
             )
             # 「待てば戻る」「条件が変われば戻る」は宣言から分かる確かな区分なので
             # 残す。上書きするのは「もう変わらない」と言いかけた場合だけ。
-            if (
-                kind is PreconditionFailureKind.PERMANENT
-                and open_now
-                and _failed_on_object_state(exc)
-            ):
+            if kind is PreconditionFailureKind.PERMANENT and open_now and _failed_on_object_state(exc):
                 kind = PreconditionFailureKind.STATE_MOVED_ON
         message = f"行動が拒否された: {reason}"
         if kind is PreconditionFailureKind.STATE_MOVED_ON:
-            message += "いまできるのは " + "、".join(
-                format_action_display_with_hints(
-                    idef.action_name, (), display_label=idef.display_label
+            message += (
+                "いまできるのは "
+                + "、".join(
+                    format_action_display_with_hints(idef.action_name, (), display_label=idef.display_label)
+                    for idef in open_now
                 )
-                for idef in open_now
-            ) + "。"
+                + "。"
+            )
         return LlmCommandResultDto(
             success=False,
             message=message,
@@ -1771,20 +1674,14 @@ class SpotGraphToolExecutor:
         """action_name が sync group に属していれば tick 付き登録 + 観測発火。"""
         if not self._sync_action_groups or self._time_provider is None:
             return
-        matching = [
-            g for g in self._sync_action_groups
-            if action_name in g.required_action_names
-        ]
+        matching = [g for g in self._sync_action_groups if action_name in g.required_action_names]
         if not matching:
             return
         current_tick = self._time_provider.get_current_tick()
         sync_registry = self._sync_action_registry
         # MEDIUM-2: 同 player+action_name が既に登録済みなら観測の重複を避ける。
         # （tick だけ更新する形で prepare し直し、観測は出さない。）
-        already_prepared_by_same_player = any(
-            e.player_id == player_id
-            for e in sync_registry.entries_for(action_name)
-        )
+        already_prepared_by_same_player = any(e.player_id == player_id for e in sync_registry.entries_for(action_name))
         sync_registry.prepare(
             action_id=action_name,
             player_id=player_id,
@@ -1824,9 +1721,7 @@ class SpotGraphToolExecutor:
         label = _interaction_display_label(runtime_context, args.get("object_id"), action_name)
         return f"「{label}」" if label else "この操作"
 
-    def _prepared_role_already_held_by_player(
-        self, player_id: int, action_name: str
-    ) -> str | None:
+    def _prepared_role_already_held_by_player(self, player_id: int, action_name: str) -> str | None:
         """同じ同期グループで、その人が既に準備した別操作を返す。
 
         required action が二つなら二人、三つなら三人を要求する。二つ目を
@@ -1839,10 +1734,7 @@ class SpotGraphToolExecutor:
             for required_name in group.required_action_names:
                 if required_name == action_name:
                     continue
-                if any(
-                    entry.player_id == player_id
-                    for entry in self._sync_action_registry.entries_for(required_name)
-                ):
+                if any(entry.player_id == player_id for entry in self._sync_action_registry.entries_for(required_name)):
                     return required_name
         return None
 
@@ -1868,33 +1760,30 @@ class SpotGraphToolExecutor:
                 detail="resolver が item_spec_id を埋めませんでした (label 解決失敗の可能性)",
             )
         found = self._find_owned_slot_by_item_spec_id_and_spoilage(
-            player_id, item_spec_id_raw, args.get("is_spoiled", False),
+            player_id,
+            item_spec_id_raw,
+            args.get("is_spoiled", False),
         )
         if found is None:
-            if self._is_blocked_by_trade(
-                player_id, item_spec_id_raw, args.get("is_spoiled", False)
-            ):
+            if self._is_blocked_by_trade(player_id, item_spec_id_raw, args.get("is_spoiled", False)):
                 return _item_is_offered_in_trade_failure("置けません")
             return build_invalid_arg_failure(
                 arg_name="item_label",
                 detail="指定した名前のアイテムをもう持っていません。所持品欄の名前を確認してください。",
             )
         from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+
         slot_id, _item_instance_id = found
         # Phase C: stealth=true なら ACTOR_ONLY、それ以外は従来通り SAME_SPOT
-        policy = (
-            WitnessPolicy.ACTOR_ONLY if bool(args.get("stealth", False))
-            else WitnessPolicy.SAME_SPOT
-        )
+        policy = WitnessPolicy.ACTOR_ONLY if bool(args.get("stealth", False)) else WitnessPolicy.SAME_SPOT
         try:
             result = self._item_transfer_service.drop_item(
-                PlayerId(player_id), slot_id,
+                PlayerId(player_id),
+                slot_id,
                 witness_policy=policy,
             )
             msg = "; ".join(result.messages) if result.messages else "地面に置いた。"
-            return LlmCommandResultDto(
-                success=True, message=msg
-            )
+            return LlmCommandResultDto(success=True, message=msg)
         except ItemTransferException as e:
             # PR-ε: subclass (SlotIsEmptyError 等) の error_code / message を
             # そのまま LLM に返す。base の ItemTransferException では従来通り
@@ -1936,19 +1825,16 @@ class SpotGraphToolExecutor:
             )
         from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
         from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
-        policy = (
-            WitnessPolicy.ACTOR_ONLY if bool(args.get("stealth", False))
-            else WitnessPolicy.SAME_SPOT
-        )
+
+        policy = WitnessPolicy.ACTOR_ONLY if bool(args.get("stealth", False)) else WitnessPolicy.SAME_SPOT
         try:
             result = self._item_transfer_service.pickup_item(
-                PlayerId(player_id), ItemInstanceId.create(iid_int),
+                PlayerId(player_id),
+                ItemInstanceId.create(iid_int),
                 witness_policy=policy,
             )
             msg = "; ".join(result.messages) if result.messages else "拾い上げた。"
-            return LlmCommandResultDto(
-                success=True, message=msg
-            )
+            return LlmCommandResultDto(success=True, message=msg)
         except ItemTransferException as e:
             # PR-ε: subclass (GroundItemGoneError / PickupSelfInventoryFullError)
             # の error_code / message をそのまま LLM に返す。domain 側で
@@ -2144,7 +2030,11 @@ class SpotGraphToolExecutor:
         return self._trade_with_merchant(player_id, args, selling=True)
 
     def _trade_with_merchant(
-        self, player_id: int, args: dict[str, Any], *, selling: bool,
+        self,
+        player_id: int,
+        args: dict[str, Any],
+        *,
+        selling: bool,
     ) -> LlmCommandResultDto:
         """買いと売りの共通処理。
 
@@ -2175,8 +2065,7 @@ class SpotGraphToolExecutor:
             return build_invalid_arg_failure(
                 arg_name="item_label",
                 detail=(
-                    "resolver が取引相手と品を解決できませんでした。"
-                    "「商人:」に出ている品名をそのまま指定してください。"
+                    "resolver が取引相手と品を解決できませんでした。「商人:」に出ている品名をそのまま指定してください。"
                 ),
             )
         try:
@@ -2213,9 +2102,7 @@ class SpotGraphToolExecutor:
         )
         return LlmCommandResultDto(
             success=True,
-            message=(
-                f"{message} ({abs(result.gold_delta)}G)。所持金は {result.gold_after}G。"
-            ),
+            message=(f"{message} ({abs(result.gold_delta)}G)。所持金は {result.gold_after}G。"),
             trace_payload={
                 "gold_delta": result.gold_delta,
                 "gold_after": result.gold_after,
@@ -2230,9 +2117,7 @@ class SpotGraphToolExecutor:
 
     # ── 市場の掲示板 (経済統合 Phase 3) ──────────────────────────────
 
-    def _market_service_or_failure(
-        self, tool: str
-    ) -> tuple[MarketService | None, LlmCommandResultDto | None]:
+    def _market_service_or_failure(self, tool: str) -> tuple[MarketService | None, LlmCommandResultDto | None]:
         if self._market_service is None:
             return None, LlmCommandResultDto(
                 success=False,
@@ -2257,7 +2142,10 @@ class SpotGraphToolExecutor:
         )
 
     def _market_view(
-        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
+        self,
+        player_id: int,
+        args: dict[str, Any],
+        runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_view``: 板を読む。**読むだけで 1 手番を使う。**
 
@@ -2318,7 +2206,10 @@ class SpotGraphToolExecutor:
         return at_board
 
     def _market_list_item(
-        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
+        self,
+        player_id: int,
+        args: dict[str, Any],
+        runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_list_item``: 板へ品を預けて売り注文を出す。"""
         from ai_rpg_world.application.trade.services.market_service import MarketException
@@ -2361,7 +2252,10 @@ class SpotGraphToolExecutor:
         )
 
     def _market_buy(
-        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
+        self,
+        player_id: int,
+        args: dict[str, Any],
+        runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_buy``: 安い出品から順に買う。
 
@@ -2388,27 +2282,16 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        breakdown = "、".join(
-            f"{s.trade.unit_price_gold}G で {s.trade.quantity} つ"
-            for s in purchase.settlements
-        )
-        message = (
-            f"掲示板から{purchase.item_name}を買った ({breakdown}、"
-            f"計 {purchase.total_gold}G)。"
-        )
+        breakdown = "、".join(f"{s.trade.unit_price_gold}G で {s.trade.quantity} つ" for s in purchase.settlements)
+        message = f"掲示板から{purchase.item_name}を買った ({breakdown}、計 {purchase.total_gold}G)。"
         if purchase.is_partial:
-            message += (
-                f" {purchase.requested_quantity} つ求めたが、"
-                f"出ていたのは {purchase.bought_quantity} つだった。"
-            )
+            message += f" {purchase.requested_quantity} つ求めたが、出ていたのは {purchase.bought_quantity} つだった。"
         return LlmCommandResultDto(
             success=True,
             message=message,
             # 板の相手が人なら、その人の所持金も動く。申告しておくと、
             # 実測と食い違ったときに警告が出る。
-            gold_affected_player_ids=_counterparty_player_ids(
-                purchase.settlements
-            ),
+            gold_affected_player_ids=_counterparty_player_ids(purchase.settlements),
             trace_payload={
                 "market_event": "bought",
                 "item_spec_id": purchase.item_spec_id,
@@ -2429,7 +2312,10 @@ class SpotGraphToolExecutor:
         )
 
     def _market_bid(
-        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
+        self,
+        player_id: int,
+        args: dict[str, Any],
+        runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_bid``: gold を板へ預けて買い注文を出す。"""
         from ai_rpg_world.application.trade.services.market_service import MarketException
@@ -2472,7 +2358,10 @@ class SpotGraphToolExecutor:
         )
 
     def _market_sell(
-        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
+        self,
+        player_id: int,
+        args: dict[str, Any],
+        runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_sell``: 高い買い注文から順に売る。"""
         from ai_rpg_world.application.trade.services.market_service import MarketException
@@ -2494,27 +2383,16 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        breakdown = "、".join(
-            f"{s.trade.unit_price_gold}G で {s.trade.quantity} つ"
-            for s in sale.settlements
-        )
-        message = (
-            f"掲示板の買い注文へ{sale.item_name}を売った ({breakdown}、"
-            f"計 {sale.total_gold}G)。"
-        )
+        breakdown = "、".join(f"{s.trade.unit_price_gold}G で {s.trade.quantity} つ" for s in sale.settlements)
+        message = f"掲示板の買い注文へ{sale.item_name}を売った ({breakdown}、計 {sale.total_gold}G)。"
         if sale.is_partial:
-            message += (
-                f" {sale.requested_quantity} つ売ろうとしたが、"
-                f"売れたのは {sale.sold_quantity} つだった。"
-            )
+            message += f" {sale.requested_quantity} つ売ろうとしたが、売れたのは {sale.sold_quantity} つだった。"
         return LlmCommandResultDto(
             success=True,
             message=message,
             # 板の相手が人なら、その人の所持金も動く。申告しておくと、
             # 実測と食い違ったときに警告が出る。
-            gold_affected_player_ids=_counterparty_player_ids(
-                sale.settlements
-            ),
+            gold_affected_player_ids=_counterparty_player_ids(sale.settlements),
             trace_payload={
                 "market_event": "sold",
                 "item_spec_id": sale.item_spec_id,
@@ -2535,7 +2413,10 @@ class SpotGraphToolExecutor:
         )
 
     def _market_reprice(
-        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
+        self,
+        player_id: int,
+        args: dict[str, Any],
+        runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_reprice``: 自分の注文の値だけを変える。"""
         from ai_rpg_world.application.trade.services.market_service import MarketException
@@ -2585,7 +2466,10 @@ class SpotGraphToolExecutor:
         )
 
     def _market_cancel(
-        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
+        self,
+        player_id: int,
+        args: dict[str, Any],
+        runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_cancel``: 自分の注文を取り下げ、預けた品を引き取る。"""
         from ai_rpg_world.application.trade.services.market_service import MarketException
@@ -2612,9 +2496,7 @@ class SpotGraphToolExecutor:
 
         return LlmCommandResultDto(
             success=True,
-            message=(
-                f"{item_label}の出品を取り下げ、{order.quantity}つを引き取った。"
-            ),
+            message=(f"{item_label}の出品を取り下げ、{order.quantity}つを引き取った。"),
             trace_payload={
                 "market_event": "cancelled",
                 "item_spec_id": order.item_spec_id,
@@ -2673,17 +2555,10 @@ class SpotGraphToolExecutor:
         moved_total = 0
         for entry in gives_resolved:
             item_disp = entry.get("item_display_name") or entry.get("item_label") or "?"
-            target_disp = (
-                entry.get("target_display_name")
-                or entry.get("target_player_label")
-                or "?"
-            )
+            target_disp = entry.get("target_display_name") or entry.get("target_player_label") or "?"
             # resolve 段階で失敗していた entry は error_code が埋まっている
             if entry.get("error_code"):
-                ng_lines.append(
-                    f"{item_disp} → {target_disp}: NG "
-                    f"({entry.get('message', '解決失敗')})"
-                )
+                ng_lines.append(f"{item_disp} → {target_disp}: NG ({entry.get('message', '解決失敗')})")
                 if first_ng_code is None:
                     first_ng_code = str(entry.get("error_code"))
                 continue
@@ -2692,9 +2567,7 @@ class SpotGraphToolExecutor:
                 is_spoiled = bool(entry.get("is_spoiled", False))
                 to_int = int(entry["target_player_id"])
             except (KeyError, TypeError, ValueError):
-                ng_lines.append(
-                    f"{item_disp} → {target_disp}: NG (resolver 出力が不正)"
-                )
+                ng_lines.append(f"{item_disp} → {target_disp}: NG (resolver 出力が不正)")
                 if first_ng_code is None:
                     first_ng_code = "INVALID_ARGUMENT"
                 continue
@@ -2707,22 +2580,18 @@ class SpotGraphToolExecutor:
             requested_total += wanted
             moved = 0
             found = self._find_owned_slot_by_item_spec_id_and_spoilage(
-                player_id, item_spec_id, is_spoiled,
+                player_id,
+                item_spec_id,
+                is_spoiled,
             )
             if found is None:
                 if self._is_blocked_by_trade(player_id, item_spec_id, is_spoiled):
-                    msg = (
-                        f"{item_disp} は取引に出しているので渡せません。"
-                        "提案の返事を待つか、取り下げてください。"
-                    )
+                    msg = f"{item_disp} は取引に出しているので渡せません。提案の返事を待つか、取り下げてください。"
                     ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
                     if first_ng_code is None:
                         first_ng_code = "ITEM_OFFERED_IN_TRADE"
                     continue
-                msg = (
-                    f"{item_disp} をもう持っていません。"
-                    "「所持アイテム:」に出ている名前を確認してください。"
-                )
+                msg = f"{item_disp} をもう持っていません。「所持アイテム:」に出ている名前を確認してください。"
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
                 if first_ng_code is None:
                     first_ng_code = "ITEM_TRANSFER_SLOT_IS_EMPTY"
@@ -2731,13 +2600,17 @@ class SpotGraphToolExecutor:
             try:
                 while moved < wanted:
                     self._item_transfer_service.give_item(
-                        PlayerId(player_id), PlayerId(to_int), slot_id,
+                        PlayerId(player_id),
+                        PlayerId(to_int),
+                        slot_id,
                     )
                     moved += 1
                     if moved >= wanted:
                         break
                     nxt = self._find_owned_slot_by_item_spec_id_and_spoilage(
-                        player_id, item_spec_id, is_spoiled,
+                        player_id,
+                        item_spec_id,
+                        is_spoiled,
                     )
                     if nxt is None:
                         # **手元が尽きただけ。渡した数を出して先へ進む。**
@@ -2746,19 +2619,14 @@ class SpotGraphToolExecutor:
                         break
                     slot_id, _item_instance_id = nxt
             except TargetIsSelfError as e:
-                ng_lines.append(
-                    f"{item_disp} → {target_disp}: NG ({e})"
-                )
+                ng_lines.append(f"{item_disp} → {target_disp}: NG ({e})")
                 if first_ng_code is None:
                     first_ng_code = e.error_code
             except TargetNotInSameSpotError:
                 # domain 層は relative 名前を持たないので、ここで target_disp
                 # を差し込んだ message を組み立て直す (現在地名は wiring 未設定
                 # なので相手名だけ具体化)。
-                msg = (
-                    f"{target_disp} は同じ場所にいません。"
-                    f"相手のいる場所へ移ってから、もう一度渡してください。"
-                )
+                msg = f"{target_disp} は同じ場所にいません。相手のいる場所へ移ってから、もう一度渡してください。"
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
                 if first_ng_code is None:
                     first_ng_code = "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT"
@@ -2791,9 +2659,7 @@ class SpotGraphToolExecutor:
                 # ITEM_TRANSFER_FAILED にフォールバック。
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({e})")
                 if first_ng_code is None:
-                    first_ng_code = getattr(
-                        e, "error_code", "ITEM_TRANSFER_FAILED"
-                    )
+                    first_ng_code = getattr(e, "error_code", "ITEM_TRANSFER_FAILED")
             except Exception as e:  # noqa: BLE001
                 ng_lines.append(f"{item_disp} → {target_disp}: NG (内部例外: {e})")
                 if first_ng_code is None:
@@ -2802,9 +2668,7 @@ class SpotGraphToolExecutor:
             # 残すと「1 個も渡っていない」と読める。
             moved_total += moved
             if moved:
-                ok_lines.append(
-                    _give_result_line(item_disp, target_disp, moved, wanted)
-                )
+                ok_lines.append(_give_result_line(item_disp, target_disp, moved, wanted))
 
         # 全失敗の場合は success=False で返し、LLM に「何 1 つ渡せなかった」を明示
         trace_payload = {
@@ -2816,9 +2680,7 @@ class SpotGraphToolExecutor:
             # パンが、成功と報告されたまま動かなかった)。
             "give_item_requested_quantity": requested_total,
             "give_item_moved_quantity": moved_total,
-            "give_item_partial_failure": bool(
-                (ok_lines and ng_lines) or moved_total < requested_total
-            ),
+            "give_item_partial_failure": bool((ok_lines and ng_lines) or moved_total < requested_total),
         }
         if not ok_lines:
             code = first_ng_code or "ITEM_TRANSFER_FAILED"
@@ -2916,9 +2778,7 @@ class SpotGraphToolExecutor:
             if outcome.target_incapacitated:
                 base += " 致命傷で倒した。"
             # PR β: 戦闘は激しい消耗。executed のみ蓄積 (空振り cooldown は除外)。
-            self._apply_fatigue_safe(
-                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.ATTACK)
-            )
+            self._apply_fatigue_safe(player_id, _FATIGUE_POLICY.cost_of(ExertionKind.ATTACK))
             return LlmCommandResultDto(
                 success=True,
                 message=base,
@@ -3011,9 +2871,7 @@ class SpotGraphToolExecutor:
             # 名残で、いまは記録経路がここ 1 本になっている。
             self._runtime.do_wait(PlayerId(player_id), reason=reason)
             # PR β: wait は微回復 (専用 rest tool は作らない設計)。
-            self._recover_fatigue_safe(
-                player_id, _FATIGUE_POLICY.recovery_of(ExertionKind.WAIT)
-            )
+            self._recover_fatigue_safe(player_id, _FATIGUE_POLICY.recovery_of(ExertionKind.WAIT))
             suffix = f"（理由: {reason}）" if reason else ""
             base = f"しばらく行動を控えて、様子を見た{suffix}"
             return with_inner_thought_empty_warning(
@@ -3044,9 +2902,7 @@ class SpotGraphToolExecutor:
     # 本格実装 (StatusEffect 経由の monster attack skip) は別 PR で行う。
     TEND_REVIVE_HP_RATE = 0.6
 
-    def _vote(
-        self, player_id: int, args: dict[str, Any], runtime_context: Any = None
-    ) -> LlmCommandResultDto:
+    def _vote(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_vote` の handler。
 
         resolver が ``target_player_id`` まで解決済み。None は棄権。
@@ -3066,9 +2922,7 @@ class SpotGraphToolExecutor:
         voted: LlmCommandResultDto = self._runtime.cast_vote(PlayerId(player_id), target)
         return voted
 
-    def _report_body(
-        self, player_id: int, args: dict[str, Any], runtime_context: Any = None
-    ) -> LlmCommandResultDto:
+    def _report_body(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_report_body` の handler。
 
         resolver が ``target_player_id`` まで解決済み。同席しているか、相手が
@@ -3093,9 +2947,7 @@ class SpotGraphToolExecutor:
                 error_code="INVALID_TARGET_LABEL",
             )
         try:
-            reported: LlmCommandResultDto = self._runtime.report_body(
-                PlayerId(player_id), PlayerId(int(raw))
-            )
+            reported: LlmCommandResultDto = self._runtime.report_body(PlayerId(player_id), PlayerId(int(raw)))
             return reported
         except Exception as exc:
             # report_body は期待される拒否を DTO で返す一方、身体記録との
@@ -3103,9 +2955,7 @@ class SpotGraphToolExecutor:
             # 他の interaction と同じ SYSTEM_ERROR として trace に残す。
             return exception_result(exc)
 
-    def _tend_to_player(
-        self, player_id: int, args: dict[str, Any], runtime_context: Any = None
-    ) -> LlmCommandResultDto:
+    def _tend_to_player(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_tend_to_player` の handler (Issue #621 Phase 3b)。
 
         resolver で `target_player_id` / `target_display_name` まで解決済み。
@@ -3133,12 +2983,8 @@ class SpotGraphToolExecutor:
                 with factory.create() as context:
                     command_executor = copy.copy(self)
                     command_executor._tend_to_player_command_scope_factory = None
-                    command_executor._player_status_repository = (
-                        context.repositories.player_statuses
-                    )
-                    command_executor._event_publisher = CommandContextEventPublisher(
-                        context
-                    )
+                    command_executor._player_status_repository = context.repositories.player_statuses
+                    command_executor._event_publisher = CommandContextEventPublisher(context)
                     result = command_executor._execute_tend_to_player_in_scope(
                         player_id,
                         args,
@@ -3188,9 +3034,7 @@ class SpotGraphToolExecutor:
                 message="自分自身を介抱することはできません。",
                 error_code="INVALID_TARGET_KIND",
             )
-        display_name = (
-            str(args.get("target_display_name", "")).strip() or "仲間"
-        )
+        display_name = str(args.get("target_display_name", "")).strip() or "仲間"
 
         try:
             attacker_id = PlayerId(player_id)
@@ -3212,21 +3056,14 @@ class SpotGraphToolExecutor:
             # 相手を蘇生できた (この関数の docstring が「将来 PR」として
             # 触れていた穴)。
             registry = getattr(self._runtime, "_player_outcome_registry", None)
-            outcome = (
-                registry.get_outcome(target_id)
-                if registry is not None
-                else PlayerOutcomeEnum.UNRESOLVED
-            )
+            outcome = registry.get_outcome(target_id) if registry is not None else PlayerOutcomeEnum.UNRESOLVED
             rejection = validate_actionable_target(
                 actor_player_id=player_id,
                 target_player_id=target_player_id_raw,
                 actor_status=actor,
                 target_status=target,
                 target_outcome=outcome,
-                same_spot=(
-                    actor.current_spot_id is not None
-                    and actor.current_spot_id == target.current_spot_id
-                ),
+                same_spot=(actor.current_spot_id is not None and actor.current_spot_id == target.current_spot_id),
                 requirement=TargetRequirement.INCAPACITATED,
                 target_display_name=display_name,
             )
@@ -3236,14 +3073,8 @@ class SpotGraphToolExecutor:
                 template = _TEND_MESSAGES.get(rejection.code)
                 return LlmCommandResultDto(
                     success=False,
-                    message=(
-                        template.format(name=display_name)
-                        if template
-                        else rejection.message
-                    ),
-                    error_code=_TEND_ERROR_CODES.get(
-                        rejection.code, "INTERACTION_PRECONDITION_FAILED"
-                    ),
+                    message=(template.format(name=display_name) if template else rejection.message),
+                    error_code=_TEND_ERROR_CODES.get(rejection.code, "INTERACTION_PRECONDITION_FAILED"),
                 )
 
             # Phase 5: caregiver_player_id を渡すことで PlayerRevivedEvent に
@@ -3270,10 +3101,7 @@ class SpotGraphToolExecutor:
             # commit前必須処理が身体削除と猶予取消を行い、確定後に観測する。
             if events:
                 self._event_publisher.publish_all(events)
-            base = (
-                f"{display_name} を介抱して意識を取り戻させた。"
-                f"（HP {target.hp.value}/{target.base_stats.max_hp}）"
-            )
+            base = f"{display_name} を介抱して意識を取り戻させた。（HP {target.hp.value}/{target.base_stats.max_hp}）"
             return LlmCommandResultDto(
                 success=True,
                 message=base,

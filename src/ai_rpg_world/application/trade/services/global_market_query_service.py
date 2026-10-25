@@ -29,9 +29,7 @@ class GlobalMarketQueryService:
         self._repository = global_market_listing_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -43,16 +41,13 @@ class GlobalMarketQueryService:
             raise GlobalMarketQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(
+                f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra={"error_details": context}
+            )
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def get_market_listings(
-        self,
-        filter_dto: GlobalMarketFilterDto | None = None,
-        limit: int = 50,
-        cursor: str | None = None
+        self, filter_dto: GlobalMarketFilterDto | None = None, limit: int = 50, cursor: str | None = None
     ) -> GlobalMarketListDto:
         """グローバル取引所の出品を取得（フィルタ適用・カーソルベースページング）
 
@@ -66,7 +61,9 @@ class GlobalMarketQueryService:
         """
         # 入力バリデーション: limitは0より大きく100以下であること
         if limit <= 0 or limit > 100:
-            raise GlobalMarketQueryApplicationException.invalid_filter(f"Limit must be between 1 and 100, got {limit}", limit=limit)
+            raise GlobalMarketQueryApplicationException.invalid_filter(
+                f"Limit must be between 1 and 100, got {limit}", limit=limit
+            )
 
         return self._execute_with_error_handling(
             operation=lambda: self._get_market_listings_impl(filter_dto, limit, cursor),
@@ -74,11 +71,13 @@ class GlobalMarketQueryService:
                 "action": "get_market_listings",
                 "filter": filter_dto.__dict__ if filter_dto else None,
                 "limit": limit,
-                "cursor": cursor
-            }
+                "cursor": cursor,
+            },
         )
 
-    def _get_market_listings_impl(self, filter_dto: GlobalMarketFilterDto | None, limit: int, cursor: str | None) -> GlobalMarketListDto:
+    def _get_market_listings_impl(
+        self, filter_dto: GlobalMarketFilterDto | None, limit: int, cursor: str | None
+    ) -> GlobalMarketListDto:
         """グローバル取引所出品取得の実装"""
         # DTOからドメインフィルタに変換
         filter_condition = self._convert_to_filter(filter_dto)
@@ -95,10 +94,7 @@ class GlobalMarketQueryService:
         # next_cursorをencode
         next_cursor_encoded = CursorCodec.encode(next_cursor) if next_cursor else None
 
-        return GlobalMarketListDto(
-            listings=listing_dtos,
-            next_cursor=next_cursor_encoded
-        )
+        return GlobalMarketListDto(listings=listing_dtos, next_cursor=next_cursor_encoded)
 
     def _convert_to_filter(self, filter_dto: GlobalMarketFilterDto | None) -> TradeSearchFilter:
         """DTOからドメインフィルタに変換"""
@@ -115,7 +111,7 @@ class GlobalMarketQueryService:
             equipment_types=filter_dto.equipment_types,
             min_price=filter_dto.min_price,
             max_price=filter_dto.max_price,
-            statuses=base_statuses  # グローバル取引所では常にACTIVEステータスのみ
+            statuses=base_statuses,  # グローバル取引所では常にACTIVEステータスのみ
         )
 
     def _convert_to_listing_dto(self, read_model: Any) -> GlobalMarketListingDto:
@@ -133,5 +129,5 @@ class GlobalMarketQueryService:
             created_at=read_model.created_at.isoformat(),
             durability_current=read_model.durability_current,
             durability_max=read_model.durability_max,
-            requested_gold=read_model.requested_gold
+            requested_gold=read_model.requested_gold,
         )

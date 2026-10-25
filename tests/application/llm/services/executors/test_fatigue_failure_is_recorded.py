@@ -124,9 +124,7 @@ class TestFatigueSaveFailureThroughTheTool:
         monkeypatch.setattr(
             runtime,
             "_world_tick_failure_isolator",
-            WorldTickFailureIsolator(
-                policy=WorldTickFailurePolicy.FAIL_FAST, trace_recorder_provider=lambda: recorder
-            ),
+            WorldTickFailureIsolator(policy=WorldTickFailurePolicy.FAIL_FAST, trace_recorder_provider=lambda: recorder),
         )
 
         result = executor.get_handlers()[TOOL_NAME_SPOT_GRAPH_WAIT](1, {})

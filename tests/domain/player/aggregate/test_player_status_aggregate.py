@@ -67,7 +67,7 @@ def create_test_base_stats(
     defense: int = 15,
     speed: int = 10,
     critical_rate: float = 0.05,
-    evasion_rate: float = 0.03
+    evasion_rate: float = 0.03,
 ) -> BaseStats:
     """テスト用のBaseStatsを作成"""
     return BaseStats(
@@ -77,7 +77,7 @@ def create_test_base_stats(
         defense=defense,
         speed=speed,
         critical_rate=critical_rate,
-        evasion_rate=evasion_rate
+        evasion_rate=evasion_rate,
     )
 
 
@@ -88,7 +88,7 @@ def create_test_stat_growth_factor(
     defense_factor: float = 0.1,
     speed_factor: float = 0.1,
     critical_rate_factor: float = 0.01,
-    evasion_rate_factor: float = 0.01
+    evasion_rate_factor: float = 0.01,
 ) -> StatGrowthFactor:
     """テスト用のStatGrowthFactorを作成"""
     return StatGrowthFactor(
@@ -98,7 +98,7 @@ def create_test_stat_growth_factor(
         defense_factor=defense_factor,
         speed_factor=speed_factor,
         critical_rate_factor=critical_rate_factor,
-        evasion_rate_factor=evasion_rate_factor
+        evasion_rate_factor=evasion_rate_factor,
     )
 
 
@@ -552,24 +552,24 @@ class TestPlayerStatusAggregate:
     def test_downed_transition_flow(self):
         """ダウン -> 回復不可 -> 蘇生 -> 回復可能 の遷移テスト"""
         aggregate = create_test_status_aggregate(hp=100)
-        
+
         # 1. ダウン状態にする
         aggregate.apply_damage(100)
         assert aggregate.is_down is True
         assert aggregate.can_receive_healing() is False
-        
+
         # 2. ダウン中の回復試行（回復しないはず）
         aggregate.clear_events()
         aggregate.heal_hp(50)
         assert aggregate.hp.value == 0
         assert len(aggregate.get_events()) == 0
-        
+
         # 3. 蘇生（回復率を値で渡す）
         aggregate.revive(hp_recovery_rate=0.1)
         assert aggregate.is_down is False
         assert aggregate.hp.value == 10
         assert aggregate.can_receive_healing() is True
-        
+
         # 4. 蘇生後の回復
         aggregate.clear_events()
         aggregate.heal_hp(50)
@@ -663,12 +663,12 @@ class TestPlayerStatusAggregate:
         aggregate = create_test_status_aggregate()
         spot1 = SpotId(1)
         coord1 = Coordinate(0, 0, 0)
-        
+
         # 1. 位置の更新
         aggregate.update_location(spot1, coord1)
         assert aggregate.current_spot_id == spot1
         assert aggregate.current_coordinate == coord1
-        
+
         events = aggregate.get_events()
         assert any(isinstance(e, PlayerLocationChangedEvent) for e in events)
         assert len(events) == 1
@@ -680,22 +680,22 @@ class TestPlayerStatusAggregate:
         assert changed.new_spot_id == spot1
         assert changed.new_coordinate == coord1
         assert changed.occurred_tick is None
-        
+
         # 2. 経路の設定
         dest = Coordinate(5, 5, 0)
         path = [coord1, Coordinate(1, 0, 0), dest]
         aggregate.set_destination(dest, path)
-        
+
         assert aggregate.current_destination == dest
         assert aggregate.planned_path == path
-        
+
         # 3. 経路を1ステップ進める
         next_coord = aggregate.advance_path()
         assert next_coord == Coordinate(1, 0, 0)
         # 現在地（[0]）と、まだ進んでいない目的地が残る
         assert len(aggregate.planned_path) == 2
         assert aggregate.planned_path == [coord1, dest]
-        
+
         # 4. 経路のクリア
         aggregate.clear_path()
         assert aggregate.current_destination is None
@@ -704,11 +704,12 @@ class TestPlayerStatusAggregate:
     def test_advance_path_exhaustion(self):
         """経路を最後まで進めた時の挙動"""
         from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+
         aggregate = create_test_status_aggregate()
-        
+
         path = [Coordinate(0, 0), Coordinate(0, 1)]
         aggregate.set_destination(Coordinate(0, 1), path)
-        
+
         next_coord = aggregate.advance_path()
         assert next_coord == Coordinate(0, 1)
         # 残り1要素以下になったらクリアされる仕様
@@ -937,10 +938,10 @@ class TestPlayerStatusAggregate:
         """ゼロコストでの消費が正常に終了すること"""
         aggregate = create_test_status_aggregate(hp=100, mp=50, stamina=100)
         aggregate.clear_events()
-        
+
         # 何も消費しない
         aggregate.consume_resources(mp_cost=0, stamina_cost=0, hp_cost=0)
-        
+
         assert aggregate.hp.value == 100
         assert aggregate.mp.value == 50
         assert aggregate.stamina.value == 100
@@ -950,13 +951,13 @@ class TestPlayerStatusAggregate:
         """全リソースを正常に消費できること"""
         aggregate = create_test_status_aggregate(hp=100, mp=50, stamina=100)
         aggregate.clear_events()
-        
+
         aggregate.consume_resources(mp_cost=10, stamina_cost=20, hp_cost=30)
-        
+
         assert aggregate.hp.value == 70
         assert aggregate.mp.value == 40
         assert aggregate.stamina.value == 80
-        
+
         events = aggregate.get_events()
         # HPダメージ（apply_damage）はイベントを発行しない（死亡時のみ）
         # MP消費、スタミナ消費のイベントが発行される
@@ -967,10 +968,10 @@ class TestPlayerStatusAggregate:
     def test_consume_resources_insufficient_mp(self):
         """MP不足の一括消費は固有例外で拒否し、全残量を保って消費・ダウン通知を作らない。"""
         aggregate = create_test_status_aggregate(hp=100, mp=5, stamina=100)
-        
+
         with pytest.raises(InsufficientMpException, match="MPが不足しています"):
             aggregate.consume_resources(mp_cost=10, stamina_cost=20, hp_cost=30)
-            
+
         # 状態が変わっていないこと
         assert aggregate.hp.value == 100
         assert aggregate.mp.value == 5
@@ -984,10 +985,10 @@ class TestPlayerStatusAggregate:
     def test_consume_resources_insufficient_stamina(self):
         """スタミナ不足の一括消費は固有例外で拒否し、全残量を保って消費・ダウン通知を作らない。"""
         aggregate = create_test_status_aggregate(hp=100, mp=50, stamina=10)
-        
+
         with pytest.raises(InsufficientStaminaException, match="スタミナが不足しています"):
             aggregate.consume_resources(mp_cost=10, stamina_cost=20, hp_cost=30)
-            
+
         # 状態が変わっていないこと
         assert aggregate.hp.value == 100
         assert aggregate.mp.value == 50
@@ -1001,10 +1002,10 @@ class TestPlayerStatusAggregate:
     def test_consume_resources_insufficient_hp(self):
         """HP不足の一括消費は固有例外で拒否し、全残量を保って消費・ダウン通知を作らない。"""
         aggregate = create_test_status_aggregate(hp=20, mp=50, stamina=100)
-        
+
         with pytest.raises(InsufficientHpException, match="HPが不足しています"):
             aggregate.consume_resources(mp_cost=10, stamina_cost=20, hp_cost=30)
-            
+
         # 状態が変わっていないこと
         assert aggregate.hp.value == 20
         assert aggregate.mp.value == 50
@@ -1018,7 +1019,7 @@ class TestPlayerStatusAggregate:
     def test_consume_resources_when_downed(self):
         """ダウン時は一括消費を拒否し、全残量を保って消費・ダウン通知を作らない。"""
         aggregate = create_test_status_aggregate(is_down=True)
-        
+
         with pytest.raises(PlayerDownedException, match="ダウン状態のプレイヤーはリソースを消費できません"):
             aggregate.consume_resources(mp_cost=1, stamina_cost=1, hp_cost=1)
 
@@ -1033,19 +1034,19 @@ class TestPlayerStatusAggregate:
     def test_consume_resources_partial_costs(self):
         """連続する部分費用の消費では、指定しなかった資源の残量を引き継ぐ。"""
         aggregate = create_test_status_aggregate(hp=100, mp=50, stamina=100)
-        
+
         # MPのみ
         aggregate.consume_resources(mp_cost=10)
         assert aggregate.mp.value == 40
         assert aggregate.hp.value == 100
         assert aggregate.stamina.value == 100
-        
+
         # スタミナのみ
         aggregate.consume_resources(stamina_cost=20)
         assert aggregate.stamina.value == 80
         assert aggregate.hp.value == 100
         assert aggregate.mp.value == 40
-        
+
         # HPのみ
         aggregate.consume_resources(hp_cost=30)
         assert aggregate.hp.value == 70
@@ -1055,11 +1056,11 @@ class TestPlayerStatusAggregate:
     def test_consume_resources_validation_priority(self):
         """バリデーションの優先順位（MP > Stamina > HP）の確認"""
         aggregate = create_test_status_aggregate(hp=5, mp=5, stamina=5)
-        
+
         # MPとスタミナが両方不足している場合、MP不足が優先される
         with pytest.raises(InsufficientMpException):
             aggregate.consume_resources(mp_cost=10, stamina_cost=10)
-            
+
         # スタミナとHPが両方不足している場合、スタミナ不足が優先される
         with pytest.raises(InsufficientStaminaException):
             aggregate.consume_resources(stamina_cost=10, hp_cost=10)
@@ -1228,9 +1229,7 @@ class TestPlayerStatusAggregate:
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.2, WorldTick(100)))
 
-            effective_stats = compute_effective_stats(
-                aggregate.base_stats, aggregate.active_effects, WorldTick(10)
-            )
+            effective_stats = compute_effective_stats(aggregate.base_stats, aggregate.active_effects, WorldTick(10))
             assert effective_stats.attack == 36  # 20 * 1.5 * 1.2
 
         def test_effective_stats_filters_expired_effects_via_domain_service(self):
@@ -1245,9 +1244,7 @@ class TestPlayerStatusAggregate:
             active_effect = StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20))
             aggregate.add_status_effect(active_effect)
 
-            effective_stats = compute_effective_stats(
-                aggregate.base_stats, aggregate.active_effects, WorldTick(10)
-            )
+            effective_stats = compute_effective_stats(aggregate.base_stats, aggregate.active_effects, WorldTick(10))
             assert effective_stats.attack == 30  # 20 * 1.5 のみ（期限切れは除外）
             aggregate.cleanup_expired_effects(WorldTick(10))
             assert len(aggregate.active_effects) == 1
@@ -1263,9 +1260,7 @@ class TestPlayerStatusAggregate:
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_DOWN, 0.5, WorldTick(100)))
 
-            effective_stats = compute_effective_stats(
-                aggregate.base_stats, aggregate.active_effects, WorldTick(10)
-            )
+            effective_stats = compute_effective_stats(aggregate.base_stats, aggregate.active_effects, WorldTick(10))
             assert effective_stats.attack == 15  # 20 * 1.5 * 0.5
 
 

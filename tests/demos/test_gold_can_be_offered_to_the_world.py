@@ -71,17 +71,24 @@ def _base_raw() -> dict[str, Any]:
     raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     raw["players"][0]["initial_gold"] = 30
-    raw["players"].append({
-        "id": "poor", "name": "貧しい人", "spawn_spot": spawn,
-        "initial_items": [], "initial_gold": _OFFER_COST - 1,
-        "persona_prompt": "あなたは貧しい人。",
-    })
+    raw["players"].append(
+        {
+            "id": "poor",
+            "name": "貧しい人",
+            "spawn_spot": spawn,
+            "initial_items": [],
+            "initial_gold": _OFFER_COST - 1,
+            "persona_prompt": "あなたは貧しい人。",
+        }
+    )
     raw["player_trade"] = {"enabled": True, "offer_expires_in_ticks": 24}
     square = next(s for s in raw["spots"] if s["id"] == "market_square")
-    square["interior"]["objects"].extend([
-        _altar("east_altar", "東の祭壇"),
-        _altar("west_altar", "西の祭壇"),
-    ])
+    square["interior"]["objects"].extend(
+        [
+            _altar("east_altar", "東の祭壇"),
+            _altar("west_altar", "西の祭壇"),
+        ]
+    )
     return raw
 
 
@@ -103,9 +110,7 @@ def _altar_count(runtime: Any, object_id: str) -> int:
     interior = runtime._spot_interior_repo.find_by_spot_id(
         SpotId.create(runtime.id_mapper.get_int("spot", "market_square"))
     )
-    obj = interior.get_object(
-        SpotObjectId.create(runtime.id_mapper.get_int("object", object_id))
-    )
+    obj = interior.get_object(SpotObjectId.create(runtime.id_mapper.get_int("object", object_id)))
     return int(obj.state.get("gold_offered", 0))
 
 
@@ -181,8 +186,10 @@ class TestGoldMovesIntoTheAltar:
 
         runtime = _runtime(tmp_path, _base_raw())
         runtime._player_trade_service.offer(
-            _RICH, target=_POOR,
-            gives_items=(), gives_gold=25,
+            _RICH,
+            target=_POOR,
+            gives_items=(),
+            gives_gold=25,
             asks_item_labels=({"item_label": _HERB, "quantity": 1},),
             asks_gold=0,
             current_tick=runtime.current_tick(),
@@ -207,35 +214,37 @@ class TestGoldMovesThroughEveryPath:
         丸ごと消しても緑のままになる (レビューの変異 A1/A2 で実証)。
         """
         raw = _base_raw()
-        raw["item_specs"].append({
-            "id": "offering_bowl",
-            "name": "供物の椀",
-            "description": "祭壇へ供物を運ぶ椀。",
-            "category": "MATERIAL",
-            "interactions": [
-                {
-                    "action_name": "offer_by_bowl",
-                    "display_label": "椀で納める",
-                    "preconditions": [
-                        {
-                            "condition_type": "PLAYER_GOLD_AT_LEAST",
-                            "gold_threshold": _OFFER_COST,
-                            "failure_message": "納めるだけの持ち合わせがない。",
-                        }
-                    ],
-                    "effects": [
-                        {
-                            "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
-                            "parameters": {
-                                "target_object": "east_altar",
-                                "state_key": "gold_offered",
-                                "amount": _OFFER_COST,
-                            },
-                        }
-                    ],
-                }
-            ],
-        })
+        raw["item_specs"].append(
+            {
+                "id": "offering_bowl",
+                "name": "供物の椀",
+                "description": "祭壇へ供物を運ぶ椀。",
+                "category": "MATERIAL",
+                "interactions": [
+                    {
+                        "action_name": "offer_by_bowl",
+                        "display_label": "椀で納める",
+                        "preconditions": [
+                            {
+                                "condition_type": "PLAYER_GOLD_AT_LEAST",
+                                "gold_threshold": _OFFER_COST,
+                                "failure_message": "納めるだけの持ち合わせがない。",
+                            }
+                        ],
+                        "effects": [
+                            {
+                                "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
+                                "parameters": {
+                                    "target_object": "east_altar",
+                                    "state_key": "gold_offered",
+                                    "amount": _OFFER_COST,
+                                },
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
         raw["players"][0]["initial_items"] = ["offering_bowl"]
         runtime = _runtime(tmp_path, raw)
 
@@ -255,39 +264,43 @@ class TestGoldMovesThroughEveryPath:
         )
 
         raw = _base_raw()
-        raw["item_specs"].append({
-            "id": "offering_bowl",
-            "name": "供物の椀",
-            "description": "祭壇へ供物を運ぶ椀。",
-            "category": "MATERIAL",
-            "interactions": [
-                {
-                    "action_name": "offer_by_bowl",
-                    "display_label": "椀で納める",
-                    "preconditions": [
-                        {
-                            "condition_type": "PLAYER_GOLD_AT_LEAST",
-                            "gold_threshold": _OFFER_COST,
-                        }
-                    ],
-                    "effects": [
-                        {
-                            "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
-                            "parameters": {
-                                "target_object": "east_altar",
-                                "state_key": "gold_offered",
-                                "amount": _OFFER_COST,
-                            },
-                        }
-                    ],
-                }
-            ],
-        })
+        raw["item_specs"].append(
+            {
+                "id": "offering_bowl",
+                "name": "供物の椀",
+                "description": "祭壇へ供物を運ぶ椀。",
+                "category": "MATERIAL",
+                "interactions": [
+                    {
+                        "action_name": "offer_by_bowl",
+                        "display_label": "椀で納める",
+                        "preconditions": [
+                            {
+                                "condition_type": "PLAYER_GOLD_AT_LEAST",
+                                "gold_threshold": _OFFER_COST,
+                            }
+                        ],
+                        "effects": [
+                            {
+                                "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
+                                "parameters": {
+                                    "target_object": "east_altar",
+                                    "state_key": "gold_offered",
+                                    "amount": _OFFER_COST,
+                                },
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
         raw["players"][0]["initial_items"] = ["offering_bowl"]
         runtime = _runtime(tmp_path, raw)
         runtime._player_trade_service.offer(
-            _RICH, target=_POOR,
-            gives_items=(), gives_gold=25,
+            _RICH,
+            target=_POOR,
+            gives_items=(),
+            gives_gold=25,
             asks_item_labels=({"item_label": _HERB, "quantity": 1},),
             asks_gold=0,
             current_tick=runtime.current_tick(),
@@ -313,10 +326,12 @@ class TestGoldMovesThroughEveryPath:
         square = next(s for s in raw["spots"] if s["id"] == "market_square")
         altar = next(o for o in square["interior"]["objects"] if o["id"] == "east_altar")
         altar["interactions"][0]["preconditions"][0]["gold_threshold"] = _OFFER_COST * 2
-        altar["interactions"][0]["effects"].append({
-            "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
-            "parameters": {"state_key": "gold_offered", "amount": _OFFER_COST},
-        })
+        altar["interactions"][0]["effects"].append(
+            {
+                "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
+                "parameters": {"state_key": "gold_offered", "amount": _OFFER_COST},
+            }
+        )
         runtime = _runtime(tmp_path, raw)
 
         _offer(runtime, _RICH)
@@ -324,9 +339,7 @@ class TestGoldMovesThroughEveryPath:
         assert _gold(runtime, _RICH) == 30 - _OFFER_COST * 2
         assert _altar_count(runtime, "east_altar") == _OFFER_COST * 2
 
-    def test_damage_beside_the_deposit_does_not_undo_the_payment(
-        self, tmp_path: Path
-    ) -> None:
+    def test_damage_beside_the_deposit_does_not_undo_the_payment(self, tmp_path: Path) -> None:
         """APPLY_DAMAGE を併記しても、支払いとダメージの両方が残る。
 
         repo は clone を返すので、支払いを別インスタンスで行うと、後段の
@@ -336,10 +349,12 @@ class TestGoldMovesThroughEveryPath:
         raw = _base_raw()
         square = next(s for s in raw["spots"] if s["id"] == "market_square")
         altar = next(o for o in square["interior"]["objects"] if o["id"] == "east_altar")
-        altar["interactions"][0]["effects"].append({
-            "effect_type": "APPLY_DAMAGE",
-            "parameters": {"damage": 5},
-        })
+        altar["interactions"][0]["effects"].append(
+            {
+                "effect_type": "APPLY_DAMAGE",
+                "parameters": {"damage": 5},
+            }
+        )
         runtime = _runtime(tmp_path, raw)
         hp_before = runtime._player_status_repo.find_by_id(_RICH).hp.value
 
@@ -358,38 +373,40 @@ class TestGoldMovesThroughEveryPath:
         この形では壊れない — 道具経路でだけ観測できる打ち消しを固定する。
         """
         raw = _base_raw()
-        raw["item_specs"].append({
-            "id": "offering_bowl",
-            "name": "供物の椀",
-            "description": "祭壇へ供物を運ぶ椀。縁が鋭く、使うと手が切れる。",
-            "category": "MATERIAL",
-            "interactions": [
-                {
-                    "action_name": "offer_by_bowl",
-                    "display_label": "椀で納める",
-                    "preconditions": [
-                        {
-                            "condition_type": "PLAYER_GOLD_AT_LEAST",
-                            "gold_threshold": _OFFER_COST,
-                        }
-                    ],
-                    "effects": [
-                        {
-                            "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
-                            "parameters": {
-                                "target_object": "east_altar",
-                                "state_key": "gold_offered",
-                                "amount": _OFFER_COST,
+        raw["item_specs"].append(
+            {
+                "id": "offering_bowl",
+                "name": "供物の椀",
+                "description": "祭壇へ供物を運ぶ椀。縁が鋭く、使うと手が切れる。",
+                "category": "MATERIAL",
+                "interactions": [
+                    {
+                        "action_name": "offer_by_bowl",
+                        "display_label": "椀で納める",
+                        "preconditions": [
+                            {
+                                "condition_type": "PLAYER_GOLD_AT_LEAST",
+                                "gold_threshold": _OFFER_COST,
+                            }
+                        ],
+                        "effects": [
+                            {
+                                "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
+                                "parameters": {
+                                    "target_object": "east_altar",
+                                    "state_key": "gold_offered",
+                                    "amount": _OFFER_COST,
+                                },
                             },
-                        },
-                        {
-                            "effect_type": "APPLY_DAMAGE",
-                            "parameters": {"damage": 5},
-                        },
-                    ],
-                }
-            ],
-        })
+                            {
+                                "effect_type": "APPLY_DAMAGE",
+                                "parameters": {"damage": 5},
+                            },
+                        ],
+                    }
+                ],
+            }
+        )
         raw["players"][0]["initial_items"] = ["offering_bowl"]
         runtime = _runtime(tmp_path, raw)
         hp_before = runtime._player_status_repo.find_by_id(_RICH).hp.value
@@ -413,18 +430,13 @@ class TestGoldMovesThroughEveryPath:
 
         result = _offer(runtime, _RICH)
 
-        assert any(
-            f"{_OFFER_COST}G を納めた" in effect.description
-            for effect in result.direct_effects
-        )
+        assert any(f"{_OFFER_COST}G を納めた" in effect.description for effect in result.direct_effects)
 
 
 class TestTheLoaderRefusesUnsafeOfferings:
     """支払いが途中死しうる宣言は、読み込みで止まる。"""
 
-    def test_deposit_without_gold_precondition_is_refused(
-        self, tmp_path: Path
-    ) -> None:
+    def test_deposit_without_gold_precondition_is_refused(self, tmp_path: Path) -> None:
         """PLAYER_GOLD_AT_LEAST の無い DEPOSIT_GOLD_TO_OBJECT は読み込みで落ちる。
 
         前提で受け止めないと「カウンタは増えたのに払えない」部分成功が
@@ -459,16 +471,14 @@ class TestTheLoaderRefusesUnsafeOfferings:
         raw = _base_raw()
         square = next(s for s in raw["spots"] if s["id"] == "market_square")
         altar = next(o for o in square["interior"]["objects"] if o["id"] == "east_altar")
-        altar["interactions"].append({
-            "action_name": "peek_offerings",
-            "display_label": "供物を覗く",
-            "preconditions": [
-                {"condition_type": "PLAYER_GOLD_AT_LEAST", "gold_threshold": True}
-            ],
-            "effects": [
-                {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "覗いた。"}}
-            ],
-        })
+        altar["interactions"].append(
+            {
+                "action_name": "peek_offerings",
+                "display_label": "供物を覗く",
+                "preconditions": [{"condition_type": "PLAYER_GOLD_AT_LEAST", "gold_threshold": True}],
+                "effects": [{"effect_type": "SHOW_MESSAGE", "parameters": {"message": "覗いた。"}}],
+            }
+        )
 
         with pytest.raises(ScenarioLoadError, match="PLAYER_GOLD_AT_LEAST"):
             _runtime(tmp_path, raw)

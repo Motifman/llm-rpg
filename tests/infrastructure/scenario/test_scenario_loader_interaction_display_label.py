@@ -45,9 +45,7 @@ class TestObjectInteractionDisplayLabelValidation:
     def test_missing_display_label_raises_scenario_load_error(self) -> None:
         """display_label 欠落は KeyError ではなく、修正位置が分かる ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match=r"interaction\['open'\].display_label"):
-            ScenarioLoader().load_from_dict(
-                _scenario_with_object_interaction({}, remove_label=True)
-            )
+            ScenarioLoader().load_from_dict(_scenario_with_object_interaction({}, remove_label=True))
 
     def test_blank_display_label_raises_scenario_load_error(self) -> None:
         """空白だけの display_label は、裸の action_name 表示へ戻るので拒否する。"""
@@ -55,9 +53,7 @@ class TestObjectInteractionDisplayLabelValidation:
             ScenarioLoadError,
             match=r"interaction\['open'\].display_label must be a non-empty string",
         ):
-            ScenarioLoader().load_from_dict(
-                _scenario_with_object_interaction({"display_label": "  "})
-            )
+            ScenarioLoader().load_from_dict(_scenario_with_object_interaction({"display_label": "  "}))
 
 
 class TestPlayerInteractionDisplayLabelValidation:
@@ -69,9 +65,7 @@ class TestPlayerInteractionDisplayLabelValidation:
             ScenarioLoadError,
             match=r"interaction\['loot_from_downed'\].display_label",
         ):
-            ScenarioLoader().load_from_dict(
-                _scenario_with_player_interaction({}, remove_label=True)
-            )
+            ScenarioLoader().load_from_dict(_scenario_with_player_interaction({}, remove_label=True))
 
     def test_blank_display_label_raises_scenario_load_error(self) -> None:
         """対人 action でも空白 display_label は拒否する。"""
@@ -82,6 +76,4 @@ class TestPlayerInteractionDisplayLabelValidation:
                 r"must be a non-empty string"
             ),
         ):
-            ScenarioLoader().load_from_dict(
-                _scenario_with_player_interaction({"display_label": ""})
-            )
+            ScenarioLoader().load_from_dict(_scenario_with_player_interaction({"display_label": ""}))

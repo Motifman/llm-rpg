@@ -77,7 +77,9 @@ CASES: tuple[Case, ...] = (
 )
 
 
-def load_window(runs_dir: Path, run: str, player_id: int, end_tick: int, k: int) -> tuple[str, list[RecentAction], list[int]]:
+def load_window(
+    runs_dir: Path, run: str, player_id: int, end_tick: int, k: int
+) -> tuple[str, list[RecentAction], list[int]]:
     trace = runs_dir / run / "trace.jsonl"
     pending: dict[str, Any] | None = None
     pairs: list[tuple[int, RecentAction]] = []
@@ -95,11 +97,16 @@ def load_window(runs_dir: Path, run: str, player_id: int, end_tick: int, k: int)
         if e.get("kind") == "action":
             pending = {"tick": tick, "tool": p.get("tool"), "arguments": p.get("arguments") or {}}
         elif e.get("kind") == "action_result" and pending is not None:
-            pairs.append((pending["tick"], RecentAction(
-                action=format_action_summary_for_display(pending["tool"], pending["arguments"]),
-                result=str(p.get("result_summary") or ""),
-                succeeded=p.get("success"),
-            )))
+            pairs.append(
+                (
+                    pending["tick"],
+                    RecentAction(
+                        action=format_action_summary_for_display(pending["tool"], pending["arguments"]),
+                        result=str(p.get("result_summary") or ""),
+                        succeeded=p.get("success"),
+                    ),
+                )
+            )
             pending = None
     tail = pairs[-k:]
     return _player_name(runs_dir / run, player_id), [a for _, a in tail], [t for t, _ in tail]
@@ -130,16 +137,23 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     from dotenv import load_dotenv
-    load_dotenv(); load_dotenv(_REPO_ROOT.parent.parent.parent / ".env")
+
+    load_dotenv()
+    load_dotenv(_REPO_ROOT.parent.parent.parent / ".env")
     from ai_rpg_world.application.llm.ports.typed_judgment_port import TypedJudgmentUnavailableException
     from ai_rpg_world.application.llm.wiring._typed_judgment_factory import create_typed_judgment_port_from_config
+
     port = create_typed_judgment_port_from_config(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="jev"))
     results = []
     for case in CASES:
         name, actions, ticks = load_window(Path(args.runs_dir), case.run, case.player_id, case.end_tick, args.k)
         row: dict[str, Any] = {
-            "run": case.run, "player_id": case.player_id, "ticks": ticks, "repeating": case.repeating,
-            "note": case.note, "state": build_state(name, actions),
+            "run": case.run,
+            "player_id": case.player_id,
+            "ticks": ticks,
+            "repeating": case.repeating,
+            "note": case.note,
+            "state": build_state(name, actions),
         }
         samples = []
         for _ in range(args.repeat):
@@ -150,14 +164,20 @@ def cmd_run(args: argparse.Namespace) -> int:
                 row["error"] = str(exc)
         row["probabilities"] = samples
         results.append(row)
-        print(f"{'繰り返し' if case.repeating else '非繰返し'} {samples} {case.run} p{case.player_id} t{ticks[0] if ticks else '-'}〜{case.end_tick} {case.note}")
-    out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
+        print(
+            f"{'繰り返し' if case.repeating else '非繰返し'} {samples} {case.run} p{case.player_id} t{ticks[0] if ticks else '-'}〜{case.end_tick} {case.note}"
+        )
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"k": args.k, "results": results}, ensure_ascii=False, indent=1))
     pos = [min(r["probabilities"]) for r in results if r["repeating"] and r["probabilities"]]
     neg = [max(r["probabilities"]) for r in results if not r["repeating"] and r["probabilities"]]
-    print(f"\n繰り返し {len(pos)} 件の最小: {min(pos) if pos else None} / 非繰返し {len(neg)} 件の最大: {max(neg) if neg else None}")
+    print(
+        f"\n繰り返し {len(pos)} 件の最小: {min(pos) if pos else None} / 非繰返し {len(neg)} 件の最大: {max(neg) if neg else None}"
+    )
     for threshold in (0.5, 0.7, 0.8, 0.85, 0.9, 0.95):
-        tp = sum(1 for p in pos if p >= threshold); fp = sum(1 for p in neg if p >= threshold)
+        tp = sum(1 for p in pos if p >= threshold)
+        fp = sum(1 for p in neg if p >= threshold)
         print(f"  閾値 {threshold}: 繰り返しを採る {tp}/{len(pos)}, 非繰返しを採る {fp}/{len(neg)}")
     return 0
 
@@ -165,10 +185,19 @@ def cmd_run(args: argparse.Namespace) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs-dir", default=str(_DEFAULT_RUNS_DIR))
-    parser.add_argument("--k", type=int, default=ResolvedLlmRuntimeConfig.for_tests().typed_judgment_semantic_repeat_window)
+    parser.add_argument(
+        "--k", type=int, default=ResolvedLlmRuntimeConfig.for_tests().typed_judgment_semantic_repeat_window
+    )
     sub = parser.add_subparsers(dest="command", required=True)
-    ps = sub.add_parser("show"); ps.add_argument("--run", required=True); ps.add_argument("--player", type=int, required=True); ps.add_argument("--end-tick", type=int, required=True); ps.set_defaults(func=cmd_show)
-    pr = sub.add_parser("run"); pr.add_argument("--out", default="var/jev_semantic_repeat_demo/results.json"); pr.add_argument("--repeat", type=int, default=2); pr.set_defaults(func=cmd_run)
+    ps = sub.add_parser("show")
+    ps.add_argument("--run", required=True)
+    ps.add_argument("--player", type=int, required=True)
+    ps.add_argument("--end-tick", type=int, required=True)
+    ps.set_defaults(func=cmd_show)
+    pr = sub.add_parser("run")
+    pr.add_argument("--out", default="var/jev_semantic_repeat_demo/results.json")
+    pr.add_argument("--repeat", type=int, default=2)
+    pr.set_defaults(func=cmd_run)
     args = parser.parse_args(argv)
     return args.func(args)
 

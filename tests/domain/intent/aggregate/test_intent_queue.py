@@ -94,9 +94,7 @@ class TestIntentQueueDraining:
         """同フェーズ・同優先度では投稿時刻順、投稿時刻も同じなら ID 順になる。"""
         queue = IntentQueue()
         for intent_id, player_id, submitted in zip((7, 2, 5), (10, 11, 12), submitted_ticks):
-            queue.submit(_make_intent(
-                intent_id, player_id, submitted=submitted, complete=complete_tick
-            ))
+            queue.submit(_make_intent(intent_id, player_id, submitted=submitted, complete=complete_tick))
 
         drained = queue.drain_ready_for_tick(WorldTick(current_tick))
         assert [i.intent_id.value for i in drained] == expected_ids
@@ -184,11 +182,13 @@ class TestIntentQueueExtend:
     def test_extend_inserts_all_intents(self) -> None:
         """extend は複数 intent を順に submit する。"""
         queue = IntentQueue()
-        queue.extend([
-            _make_intent(1, 10),
-            _make_intent(2, 11),
-            _make_intent(3, 12),
-        ])
+        queue.extend(
+            [
+                _make_intent(1, 10),
+                _make_intent(2, 11),
+                _make_intent(3, 12),
+            ]
+        )
         assert queue.size() == 3
 
     def test_extend_with_duplicate_rolls_back(self) -> None:
@@ -196,10 +196,12 @@ class TestIntentQueueExtend:
         queue = IntentQueue()
         queue.submit(_make_intent(99, 99, submitted=1))  # 事前 state
         with pytest.raises(DuplicateIntentForPlayerException):
-            queue.extend([
-                _make_intent(1, 10, submitted=5),
-                _make_intent(2, 10, submitted=5),  # duplicate
-            ])
+            queue.extend(
+                [
+                    _make_intent(1, 10, submitted=5),
+                    _make_intent(2, 10, submitted=5),  # duplicate
+                ]
+            )
         # 事前 state だけが残っており、extend 内の途中分は rollback されている
         ids = sorted(i.intent_id.value for i in queue.pending())
         assert ids == [99]

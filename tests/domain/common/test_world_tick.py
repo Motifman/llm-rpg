@@ -53,7 +53,7 @@ class TestWorldTick:
         tick1 = WorldTick(10)
         tick2 = WorldTick(20)
         tick3 = WorldTick(10)
-        
+
         assert tick2 > tick1
         assert tick1 < tick2
         assert tick1 >= tick3

@@ -96,9 +96,7 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
             if remaining <= 0:
                 lines.append("時間切れまで: もう時間が残っていない (時間切れ寸前)")
             else:
-                lines.append(
-                    f"時間切れまで: あと{span_text(remaining, dto.minutes_per_tick)}"
-                )
+                lines.append(f"時間切れまで: あと{span_text(remaining, dto.minutes_per_tick)}")
 
         # Phase 4-E: スポット内オブジェクトの動的 state は、
         # UiContextBuilder._build_object_section が「オブジェクト:」section
@@ -120,12 +118,8 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
                 if entry.is_dead:
                     lines.append(f"- {entry.display_name}（死骸）")
                 else:
-                    health_label = HEALTH_BUCKET_JP.get(
-                        entry.health_bucket, entry.health_bucket
-                    )
-                    lines.append(
-                        f"- {entry.display_name}（{entry.behavior_label}・{health_label}）"
-                    )
+                    health_label = HEALTH_BUCKET_JP.get(entry.health_bucket, entry.health_bucket)
+                    lines.append(f"- {entry.display_name}（{entry.behavior_label}・{health_label}）")
                 appearance = str(getattr(entry, "appearance", "") or "").strip()
                 if appearance:
                     lines.append(f"  見た目: {appearance}")
@@ -148,8 +142,6 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
                 lines.append(f"自分の状態: {rendered}")
 
         return "\n".join(lines)
-
-
 
 
 def _render_own_state(

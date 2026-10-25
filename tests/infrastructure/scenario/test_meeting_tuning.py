@@ -28,9 +28,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 
-_BASE = (
-    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-)
+_BASE = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
 _MORI = PlayerId(1)
 _KUZE = PlayerId(3)
@@ -83,16 +81,13 @@ class TestOverridesTakeEffect:
         runtime = create_world_runtime(_scenario(tmp_path, {"enabled": True, "tick_limit": 4}))
         runtime.begin_meeting(initiator_player_id=_KUZE, trigger="emergency_button")
 
-        line = next(
-            l for l in runtime.build_observation(_MORI).splitlines() if "話し合い" in l
-        )
+        line = next(l for l in runtime.build_observation(_MORI).splitlines() if "話し合い" in l)
         assert "あと 20 分" in line
 
     def test_more_emergency_buttons_can_be_granted(self, tmp_path) -> None:
         """緊急ボタンの回数を 2 にすると二度押せる。"""
         runtime = create_world_runtime(
-            _scenario(tmp_path, {"enabled": True, "emergency_buttons_per_player": 2,
-                                 "cooldown_ticks": 1})
+            _scenario(tmp_path, {"enabled": True, "emergency_buttons_per_player": 2, "cooldown_ticks": 1})
         )
         assert runtime.call_emergency_meeting(_KUZE).success
         runtime.end_meeting(reason="vote_concluded")
@@ -112,13 +107,9 @@ class TestValidation:
         0 を許すと会議が始まった瞬間に打ち切られる。
         """
         with pytest.raises(ScenarioLoadError):
-            create_world_runtime(
-                _scenario(tmp_path, {"enabled": True, "tick_limit": value})
-            )
+            create_world_runtime(_scenario(tmp_path, {"enabled": True, "tick_limit": value}))
 
     def test_non_integer_values_are_rejected(self, tmp_path) -> None:
         """整数以外は拒否する。"""
         with pytest.raises(ScenarioLoadError):
-            create_world_runtime(
-                _scenario(tmp_path, {"enabled": True, "silence_limit_ticks": "6"})
-            )
+            create_world_runtime(_scenario(tmp_path, {"enabled": True, "silence_limit_ticks": "6"}))

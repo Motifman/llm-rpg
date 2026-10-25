@@ -20,12 +20,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.runtime_config_helpers import runtime_config
 
-_BASE_SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "forbidden_library_demo.json"
-)
+_BASE_SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "forbidden_library_demo.json"
 
 
 def _write_scenario(tmp_path: Path, mutate) -> Path:
@@ -59,24 +54,20 @@ def _user_content(runtime, player_id: PlayerId) -> str:
 class TestPerPlayerObjective:
     """players[].objective がプレイヤーごとの【現在の目的】に載る挙動を保証する。"""
 
-    def test_player_with_objective_sees_own_text(
-        self, tmp_path: Path
-    ) -> None:
+    def test_player_with_objective_sees_own_text(self, tmp_path: Path) -> None:
         """objective を書いたプレイヤーの【現在の目的】には、その文が載る。"""
+
         def mutate(scenario: dict) -> None:
             scenario["players"][0]["objective"] = "禁書を持ち出して 1 人で逃げる"
 
         runtime = _runtime(_write_scenario(tmp_path, mutate))
         player_id = _player_id_of(runtime, "player_a")
 
-        assert _current_objective_section("禁書を持ち出して 1 人で逃げる") in _user_content(
-            runtime, player_id
-        )
+        assert _current_objective_section("禁書を持ち出して 1 人で逃げる") in _user_content(runtime, player_id)
 
-    def test_player_without_objective_falls_back_to_scenario_text(
-        self, tmp_path: Path
-    ) -> None:
+    def test_player_without_objective_falls_back_to_scenario_text(self, tmp_path: Path) -> None:
         """objective を書かないプレイヤーの【現在の目的】には、シナリオ共通の目的文が載る。"""
+
         def mutate(scenario: dict) -> None:
             scenario["players"][0]["objective"] = "禁書を持ち出して 1 人で逃げる"
 
@@ -88,6 +79,7 @@ class TestPerPlayerObjective:
 
     def test_two_players_can_hold_different_objectives(self, tmp_path: Path) -> None:
         """同じ run の 2 人に別々の目的文が載り、互いに混ざらない。"""
+
         def mutate(scenario: dict) -> None:
             scenario["players"][0]["objective"] = "禁書を持ち出して 1 人で逃げる"
             scenario["players"][1]["objective"] = "禁書を書架に戻して封印する"
@@ -101,9 +93,7 @@ class TestPerPlayerObjective:
         assert "禁書を書架に戻して封印する" not in user_a
         assert "禁書を持ち出して 1 人で逃げる" not in user_b
 
-    def test_unmodified_scenario_shows_scenario_text_to_everyone(
-        self, tmp_path: Path
-    ) -> None:
+    def test_unmodified_scenario_shows_scenario_text_to_everyone(self, tmp_path: Path) -> None:
         """objective を 1 つも書かない既存シナリオでは、全員の【現在の目的】に共通目的文が載る (挙動不変)。"""
         runtime = _runtime(_write_scenario(tmp_path, lambda scenario: None))
         scenario_text = runtime._resolve_scenario_llm_objective_text()
@@ -125,6 +115,7 @@ class TestUnknownPlayerFallback:
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """未知の player_id では共通目的文へ縮退し、その旨が warning に残る。"""
+
         def mutate(scenario: dict) -> None:
             scenario["players"][0]["objective"] = "禁書を持ち出して 1 人で逃げる"
 
@@ -132,9 +123,7 @@ class TestUnknownPlayerFallback:
         scenario_text = runtime._resolve_scenario_llm_objective_text()
 
         with caplog.at_level("WARNING"):
-            resolved = runtime._resolve_player_objective_text(
-                PlayerId(9999), scenario_text
-            )
+            resolved = runtime._resolve_player_objective_text(PlayerId(9999), scenario_text)
 
         assert resolved == scenario_text
         assert "9999" in caplog.text
@@ -143,10 +132,9 @@ class TestUnknownPlayerFallback:
 class TestObjectiveFailFast:
     """共通目的文が空のときの fail-fast が、個別目的の有無で切り替わる挙動を保証する。"""
 
-    def test_empty_scenario_text_is_allowed_when_every_player_has_objective(
-        self, tmp_path: Path
-    ) -> None:
+    def test_empty_scenario_text_is_allowed_when_every_player_has_objective(self, tmp_path: Path) -> None:
         """共通目的文が空でも全員に objective があれば起動でき、各自の目的が載る。"""
+
         def mutate(scenario: dict) -> None:
             scenario["metadata"]["llm_objective_text"] = ""
             scenario["players"][0]["objective"] = "禁書を持ち出して 1 人で逃げる"
@@ -158,10 +146,9 @@ class TestObjectiveFailFast:
         user_a = _user_content(runtime, _player_id_of(runtime, "player_a"))
         assert _current_objective_section("禁書を持ち出して 1 人で逃げる") in user_a
 
-    def test_empty_scenario_text_raises_when_one_player_lacks_objective(
-        self, tmp_path: Path
-    ) -> None:
+    def test_empty_scenario_text_raises_when_one_player_lacks_objective(self, tmp_path: Path) -> None:
         """共通目的文が空で objective を欠くプレイヤーが 1 人でもいると、その id を含む例外になる。"""
+
         def mutate(scenario: dict) -> None:
             scenario["metadata"]["llm_objective_text"] = ""
             scenario["players"][0]["objective"] = "禁書を持ち出して 1 人で逃げる"

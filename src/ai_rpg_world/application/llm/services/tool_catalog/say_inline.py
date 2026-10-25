@@ -38,10 +38,7 @@ SAY_INLINE_MAX_LENGTH = 200
 #: 答えを求める、確認は合っているかを問う)。**数文字を惜しんで種類を減らすと、
 #: その種類の発話が起きなくなる。**
 #: 要点 + 参照。詳しくは system prompt の【独白と一言の書き方】にある。
-SAY_INLINE_DEFAULT_DESCRIPTION = (
-    "この行動をしながら発する一言 (任意、200 字以内)。"
-    "書き方は【独白と一言の書き方】。"
-)
+SAY_INLINE_DEFAULT_DESCRIPTION = "この行動をしながら発する一言 (任意、200 字以内)。書き方は【独白と一言の書き方】。"
 
 
 def say_inline_property(

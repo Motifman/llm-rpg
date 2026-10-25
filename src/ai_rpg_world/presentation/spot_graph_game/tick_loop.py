@@ -84,9 +84,7 @@ _CONSECUTIVE_FAILURE_ALERT_THRESHOLD = 5
 
 def _validate_interval(seconds: float) -> None:
     if seconds < _MIN_INTERVAL_SECONDS:
-        raise ValueError(
-            f"interval_seconds must be >= {_MIN_INTERVAL_SECONDS}"
-        )
+        raise ValueError(f"interval_seconds must be >= {_MIN_INTERVAL_SECONDS}")
 
 
 @dataclass
@@ -100,9 +98,7 @@ class SimulationTickLoop:
     # NOTE: mutated only from the executor thread inside
     # `_tick_all_running_sessions`. If a future change exposes it to the
     # event loop (e.g. a health endpoint reads it), guard with a lock.
-    _consecutive_failures: dict[str, int] = field(
-        default_factory=dict, init=False, repr=False
-    )
+    _consecutive_failures: dict[str, int] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         _validate_interval(self.interval_seconds)
@@ -116,9 +112,7 @@ class SimulationTickLoop:
         if self.is_running:
             return
         self._stop_event = asyncio.Event()
-        self._task = asyncio.create_task(
-            self._run(), name="spot_graph_tick_loop"
-        )
+        self._task = asyncio.create_task(self._run(), name="spot_graph_tick_loop")
 
     async def stop(self) -> None:
         """Signal stop and await graceful shutdown of the loop task."""
@@ -132,9 +126,7 @@ class SimulationTickLoop:
                 timeout=self.interval_seconds + _STOP_GRACE_SECONDS,
             )
         except asyncio.TimeoutError:
-            logger.warning(
-                "Tick loop did not stop within grace period; cancelling"
-            )
+            logger.warning("Tick loop did not stop within grace period; cancelling")
             self._task.cancel()
             with suppress(asyncio.CancelledError):
                 await self._task
@@ -155,9 +147,7 @@ class SimulationTickLoop:
     async def _run(self) -> None:
         stop_event = self._stop_event
         if stop_event is None:
-            raise RuntimeError(
-                "_run() called without a stop event; use start() instead"
-            )
+            raise RuntimeError("_run() called without a stop event; use start() instead")
         loop = asyncio.get_running_loop()
         logger.info(
             "Spot graph tick loop started: interval=%.3fs",
@@ -168,9 +158,7 @@ class SimulationTickLoop:
                 # advance_tick は LLM 同期 I/O を含むため event loop を直接
                 # ブロックしないよう default thread pool に offload する。
                 # これで tick 中も HTTP/WebSocket がレスポンスを返せる。
-                await loop.run_in_executor(
-                    None, self._tick_all_running_sessions
-                )
+                await loop.run_in_executor(None, self._tick_all_running_sessions)
                 try:
                     await asyncio.wait_for(
                         stop_event.wait(),
@@ -206,8 +194,7 @@ class SimulationTickLoop:
                 self._consecutive_failures[session_id] = count
                 if count == _CONSECUTIVE_FAILURE_ALERT_THRESHOLD:
                     logger.error(
-                        "session=%s has failed %d ticks in a row; "
-                        "manual intervention may be required",
+                        "session=%s has failed %d ticks in a row; manual intervention may be required",
                         session_id,
                         count,
                     )

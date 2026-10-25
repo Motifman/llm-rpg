@@ -28,9 +28,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 
 
-def _put_player_traveling(
-    runtime, player_id_value: int, current_spot: int = 1
-) -> None:
+def _put_player_traveling(runtime, player_id_value: int, current_spot: int = 1) -> None:
     """runtime の player_status_repo に traveling 状態のプレイヤーを書き込む。"""
     pid = PlayerId(player_id_value)
     status = runtime._player_status_repo.find_by_id(pid)
@@ -53,6 +51,7 @@ class TestBusyInterruptCategorization:
         from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
             _WorldLlmWiring,
         )
+
         free = _WorldLlmWiring._BUSY_FREE_TOOLS
         assert TOOL_NAME_SPEECH in free
         assert TOOL_NAME_SPOT_GRAPH_LISTEN in free
@@ -63,6 +62,7 @@ class TestBusyInterruptCategorization:
         from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
             _WorldLlmWiring,
         )
+
         free = _WorldLlmWiring._BUSY_FREE_TOOLS
         for tool in (
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -75,9 +75,7 @@ class TestBusyInterruptCategorization:
 class TestMaybeInterruptBusy:
     """_maybe_interrupt_busy の挙動。"""
 
-    def test_traveling_heavy_tool(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_traveling_heavy_tool(self, monkeypatch, tmp_path: Path) -> None:
         """traveling 中に heavytool で中断される。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
@@ -97,9 +95,7 @@ class TestMaybeInterruptBusy:
         status = runtime._player_status_repo.find_by_id(PlayerId(player_id_value))
         assert status.spot_navigation_state.is_traveling is False
 
-    def test_traveling_free_tool(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_traveling_free_tool(self, monkeypatch, tmp_path: Path) -> None:
         """traveling 中に freetool は中断されない。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
@@ -110,17 +106,13 @@ class TestMaybeInterruptBusy:
         _put_player_traveling(runtime, player_id_value)
 
         # 発話で中断しない (free tool)
-        was_interrupted, snapshot = wiring._maybe_interrupt_busy(
-            PlayerId(player_id_value), TOOL_NAME_SPEECH
-        )
+        was_interrupted, snapshot = wiring._maybe_interrupt_busy(PlayerId(player_id_value), TOOL_NAME_SPEECH)
         assert was_interrupted is False
         assert snapshot is None
         status = runtime._player_status_repo.find_by_id(PlayerId(player_id_value))
         assert status.spot_navigation_state.is_traveling is True
 
-    def test_traveling(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_traveling(self, monkeypatch, tmp_path: Path) -> None:
         """traveling でない なら 何もしない。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
@@ -140,9 +132,7 @@ class TestMaybeInterruptBusy:
 class TestRestoreNavStateOnFailure:
     """Review HIGH 1 対応: tool が失敗したら travel を復元する。"""
 
-    def test_traveling_travel(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_traveling_travel(self, monkeypatch, tmp_path: Path) -> None:
         """別の travel_to が来たら現在の travel を中断する。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
@@ -158,9 +148,7 @@ class TestRestoreNavStateOnFailure:
         assert was_interrupted is True
         assert snapshot is not None and snapshot.is_traveling is True
 
-    def test_restore_nav_state_travel_state_restored(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_restore_nav_state_travel_state_restored(self, monkeypatch, tmp_path: Path) -> None:
         """restore nav state で travel 状態が 復元される。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
@@ -171,9 +159,7 @@ class TestRestoreNavStateOnFailure:
         _put_player_traveling(runtime, player_id_value)
 
         # 中断 → ロールバック
-        _, snapshot = wiring._maybe_interrupt_busy(
-            PlayerId(player_id_value), TOOL_NAME_SPOT_GRAPH_INTERACT
-        )
+        _, snapshot = wiring._maybe_interrupt_busy(PlayerId(player_id_value), TOOL_NAME_SPOT_GRAPH_INTERACT)
         assert snapshot is not None
         # 中断直後は at_rest
         status = runtime._player_status_repo.find_by_id(PlayerId(player_id_value))

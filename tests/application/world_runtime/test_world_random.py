@@ -1,4 +1,5 @@
 """世界の側の乱数を、シードと回の番号から作る挙動 (#1514)。"""
+
 from __future__ import annotations
 
 import random

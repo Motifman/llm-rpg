@@ -71,9 +71,7 @@ class TestAgentMove:
 
     def test_move_is_hashable_copyable_and_picklable(self) -> None:
         """1 手はハッシュでき、複製と pickle の往復で等しいまま残る。"""
-        move = AgentMove(
-            call_id="call-1", tool_name="give_item", arguments={"gives": [{"item_label": "貝"}]}
-        )
+        move = AgentMove(call_id="call-1", tool_name="give_item", arguments={"gives": [{"item_label": "貝"}]})
 
         assert hash(move) == hash(copy.deepcopy(move))
         assert pickle.loads(pickle.dumps(move)) == move
@@ -164,12 +162,14 @@ class TestIntroductions:
         """本人を紹介したり、同じ名前を 2 回紹介したりすると拒む。"""
         with pytest.raises(ContractViolation):
             EnvironmentEntry(
-                environment_name="山村", self_name="リオ",
+                environment_name="山村",
+                self_name="リオ",
                 introductions=[Introduction(name="リオ")],
             )
         with pytest.raises(ContractViolation):
             EnvironmentEntry(
-                environment_name="山村", self_name="リオ",
+                environment_name="山村",
+                self_name="リオ",
                 introductions=[Introduction(name="ノア"), Introduction(name="ノア")],
             )
 
@@ -177,5 +177,7 @@ class TestIntroductions:
         """紹介に Introduction 以外 (名前の文字列など) を混ぜると拒む。"""
         with pytest.raises(ContractViolation):
             EnvironmentEntry(
-                environment_name="山村", self_name="リオ", introductions=["ノア"],
+                environment_name="山村",
+                self_name="リオ",
+                introductions=["ノア"],
             )

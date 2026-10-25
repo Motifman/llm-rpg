@@ -37,9 +37,7 @@ class IShortTermMemory(ABC):
         pass
 
     @abstractmethod
-    def append_all(
-        self, player_id: PlayerId, entries: list[ObservationEntry]
-    ) -> None:
+    def append_all(self, player_id: PlayerId, entries: list[ObservationEntry]) -> None:
         """指定プレイヤーに観測を複数件追加する。"""
         pass
 
@@ -62,6 +60,7 @@ class IShortTermMemory(ABC):
         渡す。
         """
         return ""
+
 
 class IActionResultStore(ABC):
     """直近の LLM 行動結果を保持する。"""
@@ -131,9 +130,7 @@ class IRecentEventsFormatter(ABC):
         pass
 
     @abstractmethod
-    def format_unified_entries(
-        self, entries: list[UnifiedRecentEventEntry]
-    ) -> str:
+    def format_unified_entries(self, entries: list[UnifiedRecentEventEntry]) -> str:
         """記録時に統一済みの時系列を文字列化する。"""
         pass
 

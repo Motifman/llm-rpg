@@ -47,20 +47,24 @@ OBJ_ID = SpotObjectId.create(1)
 
 def _pool_object(*, interactions: tuple[InteractionDef, ...] = (), **state) -> SpotObject:
     base = {
-        "stock": 6, "stock_capacity": 6,
-        "stock_tick": 0, "stock_refill_interval": 8,
+        "stock": 6,
+        "stock_capacity": 6,
+        "stock_tick": 0,
+        "stock_refill_interval": 8,
     }
     base.update(state)
     return SpotObject(
-        object_id=OBJ_ID, name="貝の岩棚", description="t",
-        object_type=ObjectTypeEnum.RESOURCE, state=base, interactions=interactions,
+        object_id=OBJ_ID,
+        name="貝の岩棚",
+        description="t",
+        object_type=ObjectTypeEnum.RESOURCE,
+        state=base,
+        interactions=interactions,
     )
 
 
 def _interior(obj: SpotObject) -> SpotInterior:
-    return SpotInterior(
-        sub_locations=(), objects=(obj,), ground_items=(), discoverable_items=()
-    )
+    return SpotInterior(sub_locations=(), objects=(obj,), ground_items=(), discoverable_items=())
 
 
 class TestConsumeObjectStockEffect:
@@ -95,7 +99,11 @@ class TestConsumeObjectStockEffect:
         ids=["consume-all-regenerated-stock", "keep-stock-and-partial-progress"],
     )
     def test_consume_credits_regen_first(
-        self, now: int, amount: int, remaining_stock: int, canonical_tick: int,
+        self,
+        now: int,
+        amount: int,
+        remaining_stock: int,
+        canonical_tick: int,
     ) -> None:
         """再生後に消費し、全量消費なら0、残量があればその数と端数の進捗を保存する。
 
@@ -104,7 +112,8 @@ class TestConsumeObjectStockEffect:
         """
         obj = self._consume(
             _pool_object(stock=0, stock_capacity=6, stock_tick=0, stock_refill_interval=8),
-            amount=amount, now=now,
+            amount=amount,
+            now=now,
         )
         assert obj.state["stock"] == remaining_stock
         assert obj.state["stock_tick"] == canonical_tick
@@ -113,7 +122,8 @@ class TestConsumeObjectStockEffect:
         """満杯からの消費では stock_tick が now に揃う (端数を溜めない)。"""
         obj = self._consume(
             _pool_object(stock=6, stock_capacity=6, stock_tick=0, stock_refill_interval=8),
-            amount=2, now=50,
+            amount=2,
+            now=50,
         )
         assert obj.state["stock"] == 4
         assert obj.state["stock_tick"] == 50
@@ -131,11 +141,16 @@ class TestObjectStockAtLeastCondition:
             failure_message="採り尽くした。時間が経てば戻る",
         )
         idef = InteractionDef(
-            action_name="gather", display_label="採る",
-            preconditions=(cond,), effects=(),
+            action_name="gather",
+            display_label="採る",
+            preconditions=(cond,),
+            effects=(),
         )
         return svc.can_interact(
-            idef, obj, frozenset(), frozenset(),
+            idef,
+            obj,
+            frozenset(),
+            frozenset(),
             current_tick=WorldTick(now),
         )
 
@@ -161,45 +176,66 @@ class TestObjectStockAtLeastCondition:
     def test_next_harvest_keeps_partial_regen_progress(self) -> None:
         """20手番で2個採った後、端数4手番を保ち、31では拒否し32で再び2個採れる。"""
         action = InteractionDef(
-            action_name="gather", display_label="採る",
-            preconditions=(InteractionCondition(
-                condition_type=InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST,
-                target_object_id=OBJ_ID,
-                required_quantity=2,
-                failure_message="採り尽くした。時間が経てば戻る",
-            ),),
-            effects=(InteractionEffect(
-                effect_type=InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK,
-                parameters={"amount": 2},
-            ),),
+            action_name="gather",
+            display_label="採る",
+            preconditions=(
+                InteractionCondition(
+                    condition_type=InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST,
+                    target_object_id=OBJ_ID,
+                    required_quantity=2,
+                    failure_message="採り尽くした。時間が経てば戻る",
+                ),
+            ),
+            effects=(
+                InteractionEffect(
+                    effect_type=InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK,
+                    parameters={"amount": 2},
+                ),
+            ),
         )
         original = _interior(_pool_object(stock=0, interactions=(action,)))
         service = SpotInteractionService()
         first = service.execute_interaction(
-            original, OBJ_ID, "gather", frozenset(), frozenset(),
+            original,
+            OBJ_ID,
+            "gather",
+            frozenset(),
+            frozenset(),
             current_tick=WorldTick(20),
         )
         remaining = first.new_interior
         state_after_first = dict(remaining.get_object(OBJ_ID).state)
         assert state_after_first == {
-            "stock": 0, "stock_capacity": 6,
-            "stock_tick": 16, "stock_refill_interval": 8,
+            "stock": 0,
+            "stock_capacity": 6,
+            "stock_tick": 16,
+            "stock_refill_interval": 8,
         }
 
         with pytest.raises(InteractionNotAllowedException, match="採り尽くした"):
             service.execute_interaction(
-                remaining, OBJ_ID, "gather", frozenset(), frozenset(),
+                remaining,
+                OBJ_ID,
+                "gather",
+                frozenset(),
+                frozenset(),
                 current_tick=WorldTick(31),
             )
         assert remaining.get_object(OBJ_ID).state == state_after_first
 
         second = service.execute_interaction(
-            remaining, OBJ_ID, "gather", frozenset(), frozenset(),
+            remaining,
+            OBJ_ID,
+            "gather",
+            frozenset(),
+            frozenset(),
             current_tick=WorldTick(32),
         )
         assert second.new_interior.get_object(OBJ_ID).state == {
-            "stock": 0, "stock_capacity": 6,
-            "stock_tick": 32, "stock_refill_interval": 8,
+            "stock": 0,
+            "stock_capacity": 6,
+            "stock_tick": 32,
+            "stock_refill_interval": 8,
         }
 
 
@@ -219,9 +255,12 @@ class TestStockKeysHiddenFromPrompt:
         """stock 系 key は pool 以外の object でも汎用除外され、それ以外の
         state (opened 等) は従来どおり visible_state に残る。"""
         obj = SpotObject(
-            object_id=OBJ_ID, name="扉", description="t",
+            object_id=OBJ_ID,
+            name="扉",
+            description="t",
             object_type=ObjectTypeEnum.RESOURCE,
-            state={"opened": True, "stock": 5}, interactions=(),
+            state={"opened": True, "stock": 5},
+            interactions=(),
         )
         vis = obj.visible_state()
         assert vis.get("opened") is True

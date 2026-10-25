@@ -92,9 +92,7 @@ class SnapshotRollbackParticipant(Generic[SnapshotT]):
             return
         poison_error = self._poison_error
         self._ownership_lock.release()
-        raise PoisonedRollbackParticipantException(
-            poison_error=poison_error
-        ) from poison_error
+        raise PoisonedRollbackParticipantException(poison_error=poison_error) from poison_error
 
     def release_rollback_ownership(self) -> None:
         self._ownership_lock.release()
@@ -129,14 +127,10 @@ class WorldFlagRollbackParticipant:
         if self._poison_error is not None:
             poison_error = self._poison_error
             self._ownership_lock.release()
-            raise PoisonedRollbackParticipantException(
-                poison_error=poison_error
-            ) from poison_error
+            raise PoisonedRollbackParticipantException(poison_error=poison_error) from poison_error
         self._buffered_changes = []
         self._was_restored = False
-        self._original_callback = self._state.exchange_change_callback(
-            self._buffered_changes.append
-        )
+        self._original_callback = self._state.exchange_change_callback(self._buffered_changes.append)
 
     def release_rollback_ownership(self) -> None:
         callback = self._original_callback
@@ -234,10 +228,7 @@ def build_meeting_rollback_participants(
             player_outcomes,
             take_snapshot=player_outcomes.snapshot,
             restore_snapshot=lambda snapshot: player_outcomes.replace_all(
-                {
-                    PlayerId(player_id): outcome
-                    for player_id, outcome in snapshot.items()
-                }
+                {PlayerId(player_id): outcome for player_id, outcome in snapshot.items()}
             ),
         ),
         SnapshotRollbackParticipant(
@@ -420,10 +411,7 @@ def build_player_outcome_rule_rollback_participants(
             player_outcomes,
             take_snapshot=player_outcomes.snapshot,
             restore_snapshot=lambda snapshot: player_outcomes.replace_all(
-                {
-                    PlayerId(player_id): outcome
-                    for player_id, outcome in snapshot.items()
-                }
+                {PlayerId(player_id): outcome for player_id, outcome in snapshot.items()}
             ),
         ),
         SnapshotRollbackParticipant(
@@ -452,10 +440,7 @@ def build_death_grace_rollback_participants(
             player_outcomes,
             take_snapshot=player_outcomes.snapshot,
             restore_snapshot=lambda snapshot: player_outcomes.replace_all(
-                {
-                    PlayerId(player_id): outcome
-                    for player_id, outcome in snapshot.items()
-                }
+                {PlayerId(player_id): outcome for player_id, outcome in snapshot.items()}
             ),
         ),
         SnapshotRollbackParticipant(

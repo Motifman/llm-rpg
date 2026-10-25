@@ -56,7 +56,7 @@ class TradeDetailReadModel:
         requested_gold: int,
         seller_name: str,
         buyer_name: str | None,
-        status: str
+        status: str,
     ) -> "TradeDetailReadModel":
         """取引情報からReadModelを作成"""
         return cls(
@@ -74,7 +74,7 @@ class TradeDetailReadModel:
             requested_gold=requested_gold,
             seller_name=seller_name,
             buyer_name=buyer_name,
-            status=status
+            status=status,
         )
 
     @property

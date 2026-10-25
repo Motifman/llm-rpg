@@ -63,11 +63,16 @@ WOLF_PACK = PackId.create("wolf_pack_1")
 
 def _node(spot_id: SpotId) -> SpotNode:
     return SpotNode(
-        spot_id=spot_id, name=f"spot{spot_id.value}", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=spot_id,
+        name=f"spot{spot_id.value}",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
-            lighting=LightingEnum.BRIGHT, sound_ambient=None,
-            temperature=TemperatureEnum.NORMAL, smell=None,
+            lighting=LightingEnum.BRIGHT,
+            sound_ambient=None,
+            temperature=TemperatureEnum.NORMAL,
+            smell=None,
         ),
     )
 
@@ -88,8 +93,13 @@ def _follower_template(
         template_id=MonsterTemplateId.create(2),
         name="WolfFollower",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(100, True),
@@ -106,8 +116,13 @@ def _leader_template() -> MonsterTemplate:
         template_id=MonsterTemplateId.create(1),
         name="WolfLeader",
         base_stats=BaseStats(
-            max_hp=30, max_mp=0, attack=6,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=30,
+            max_mp=0,
+            attack=6,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=2, gold=2),
         respawn_info=RespawnInfo(100, True),
@@ -118,7 +133,8 @@ def _leader_template() -> MonsterTemplate:
 
 
 def _make_monster(
-    monster_id: int, *,
+    monster_id: int,
+    *,
     template: MonsterTemplate,
     pack_id: PackId | None = WOLF_PACK,
     is_pack_leader: bool = False,
@@ -128,8 +144,10 @@ def _make_monster(
         template=template,
         world_object_id=WorldObjectId.create(9000 + monster_id),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(monster_id), owner_id=monster_id,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(monster_id),
+            owner_id=monster_id,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -142,9 +160,7 @@ def _make_repo(*monsters: MonsterAggregate):
     repo = MagicMock()
     by_id = {m.monster_id: m for m in monsters}
     repo.find_by_id.side_effect = lambda mid: by_id.get(mid)
-    repo.find_by_pack_id.side_effect = lambda pid: [
-        m for m in monsters if m.pack_id == pid
-    ]
+    repo.find_by_pack_id.side_effect = lambda pid: [m for m in monsters if m.pack_id == pid]
     return repo
 
 
@@ -181,7 +197,10 @@ class TestMultipleFollowers:
 
         for f in followers:
             result = handler.try_follow_pack_flee(
-                f, graph, SPOT_B, WorldTick(10),
+                f,
+                graph,
+                SPOT_B,
+                WorldTick(10),
                 pack_members=pack_members,
             )
             assert result is True
@@ -194,9 +213,7 @@ class TestMultipleFollowers:
         # 全員分の event が発火
         events = _events_of_type(graph, MonsterFollowedPackFleeInSpotEvent)
         assert len(events) == 3
-        assert {e.follower_monster_id for e in events} == {
-            f.monster_id for f in followers
-        }
+        assert {e.follower_monster_id for e in events} == {f.monster_id for f in followers}
 
 
 class TestPackFleeFollowSuccess:
@@ -217,7 +234,10 @@ class TestPackFleeFollowSuccess:
         graph.clear_events()
 
         result = handler.try_follow_pack_flee(
-            follower, graph, SPOT_B, WorldTick(10),
+            follower,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
 
         assert result is True
@@ -241,7 +261,8 @@ class TestNoFollow:
         leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)
         leader.enter_flee_state(WorldTick(9), duration_ticks=10)
         follower = _make_monster(
-            102, template=_follower_template(pack_flee_follower=False),
+            102,
+            template=_follower_template(pack_flee_follower=False),
         )
         repo = _make_repo(leader, follower)
         handler = MonsterPackFleeHandler(monster_repository=repo)
@@ -251,7 +272,10 @@ class TestNoFollow:
         graph.place_monster(follower.monster_id, SPOT_B)
 
         result = handler.try_follow_pack_flee(
-            follower, graph, SPOT_B, WorldTick(10),
+            follower,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
         assert follower.is_fleeing(WorldTick(10)) is False
@@ -271,7 +295,8 @@ class TestNoFollow:
             match="pack_flee_follower_duration",
         ):
             _follower_template(
-                pack_flee_follower=True, pack_flee_follower_duration=0,
+                pack_flee_follower=True,
+                pack_flee_follower_duration=0,
             )
 
     def test_pack_id_none(self) -> None:
@@ -279,7 +304,9 @@ class TestNoFollow:
         leader = _make_monster(101, template=_leader_template(), is_pack_leader=True)
         leader.enter_flee_state(WorldTick(9), duration_ticks=10)
         follower = _make_monster(
-            102, template=_follower_template(), pack_id=None,
+            102,
+            template=_follower_template(),
+            pack_id=None,
         )
         repo = _make_repo(leader, follower)
         handler = MonsterPackFleeHandler(monster_repository=repo)
@@ -289,19 +316,26 @@ class TestNoFollow:
         graph.place_monster(follower.monster_id, SPOT_B)
 
         result = handler.try_follow_pack_flee(
-            follower, graph, SPOT_B, WorldTick(10),
+            follower,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
     def test_self_leader(self) -> None:
         """leader 自身は通常 reaction 経路で FLEE に入る。"""
         another_leader = _make_monster(
-            101, template=_leader_template(), is_pack_leader=True,
+            101,
+            template=_leader_template(),
+            is_pack_leader=True,
         )
         another_leader.enter_flee_state(WorldTick(9), duration_ticks=10)
         # 「自分も leader」(2 leader pack の異常系) でも自分は無反応
         self_leader = _make_monster(
-            102, template=_follower_template(), is_pack_leader=True,
+            102,
+            template=_follower_template(),
+            is_pack_leader=True,
         )
         repo = _make_repo(another_leader, self_leader)
         handler = MonsterPackFleeHandler(monster_repository=repo)
@@ -311,7 +345,10 @@ class TestNoFollow:
         graph.place_monster(self_leader.monster_id, SPOT_B)
 
         result = handler.try_follow_pack_flee(
-            self_leader, graph, SPOT_B, WorldTick(10),
+            self_leader,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -330,7 +367,10 @@ class TestNoFollow:
         graph.place_monster(follower.monster_id, SPOT_B)
 
         result = handler.try_follow_pack_flee(
-            follower, graph, SPOT_B, WorldTick(7),
+            follower,
+            graph,
+            SPOT_B,
+            WorldTick(7),
         )
         assert result is False
 
@@ -352,7 +392,10 @@ class TestNoFollow:
         graph.place_monster(follower.monster_id, SPOT_B)
 
         result = handler.try_follow_pack_flee(
-            follower, graph, SPOT_B, WorldTick(10),
+            follower,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -371,7 +414,10 @@ class TestNoFollow:
 
         # member_a は leader ではないので member_b は連動しない
         result = handler.try_follow_pack_flee(
-            member_b, graph, SPOT_B, WorldTick(10),
+            member_b,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -388,7 +434,10 @@ class TestNoFollow:
         graph.place_monster(follower.monster_id, SPOT_B)
 
         result = handler.try_follow_pack_flee(
-            follower, graph, SPOT_B, WorldTick(10),
+            follower,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -419,6 +468,9 @@ class TestNoFollow:
         graph.place_monster(follower.monster_id, SPOT_B)
 
         result = handler.try_follow_pack_flee(
-            follower, graph, SPOT_B, WorldTick(10),
+            follower,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False

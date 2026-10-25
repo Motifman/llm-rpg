@@ -32,9 +32,7 @@ def build_spawn_slot(
                 else frozenset(WeatherTypeEnum(value) for value in preferred_weather_rows)
             ),
             required_area_traits=(
-                None
-                if not required_trait_rows
-                else frozenset(SpotTraitEnum(value) for value in required_trait_rows)
+                None if not required_trait_rows else frozenset(SpotTraitEnum(value) for value in required_trait_rows)
             ),
         )
     return SpawnSlot(
@@ -49,4 +47,3 @@ def build_spawn_slot(
 
 def build_spawn_table(spot_id: int, slots: list[SpawnSlot]) -> SpotSpawnTable:
     return SpotSpawnTable(spot_id=SpotId(spot_id), slots=slots)
-

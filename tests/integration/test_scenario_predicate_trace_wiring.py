@@ -11,12 +11,7 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEvent, TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "survival_island_v4_coop.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v4_coop.json"
 
 
 class _CollectingRecorder(NullTraceRecorder):
@@ -59,20 +54,13 @@ class TestScenarioPredicateTraceWiring:
         runtime.advance_tick()
 
         predicate_events = [
-            event
-            for event in recorder.events
-            if event.kind == TraceEventKind.SCENARIO_PREDICATE_EVALUATED
+            event for event in recorder.events if event.kind == TraceEventKind.SCENARIO_PREDICATE_EVALUATED
         ]
         assert predicate_events
-        assert {
-            event.payload["purpose"] for event in predicate_events
-        } >= {
+        assert {event.payload["purpose"] for event in predicate_events} >= {
             "scenario_event_conditions",
             "reactive_object_binding",
             "reactive_passage_binding",
             "player_outcome_trigger",
         }
-        assert all(
-            "probability_decisions" in event.payload
-            for event in predicate_events
-        )
+        assert all("probability_decisions" in event.payload for event in predicate_events)

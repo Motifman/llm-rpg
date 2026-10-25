@@ -133,9 +133,7 @@ class ShopAggregate(AggregateRoot):
     ) -> None:
         """アイテムを出品する。listed_by はオーナーである必要がある。"""
         if listed_by not in self._owner_ids:
-            raise NotShopOwnerException(
-                f"Player {listed_by} is not an owner of shop {self._shop_id}"
-            )
+            raise NotShopOwnerException(f"Player {listed_by} is not an owner of shop {self._shop_id}")
         listing = ShopListing(
             listing_id=listing_id,
             item_instance_id=item_instance_id,
@@ -159,13 +157,9 @@ class ShopAggregate(AggregateRoot):
     def unlist_item(self, listing_id: ShopListingId, player_id: PlayerId) -> None:
         """オーナーがリストを取り下げる"""
         if player_id not in self._owner_ids:
-            raise NotShopOwnerException(
-                f"Player {player_id} is not an owner of shop {self._shop_id}"
-            )
+            raise NotShopOwnerException(f"Player {player_id} is not an owner of shop {self._shop_id}")
         if listing_id not in self._listings:
-            raise ListingNotFoundException(
-                f"Listing {listing_id} not found in shop {self._shop_id}"
-            )
+            raise ListingNotFoundException(f"Listing {listing_id} not found in shop {self._shop_id}")
         del self._listings[listing_id]
         event = ShopItemUnlistedEvent.create(
             aggregate_id=self._shop_id,
@@ -180,9 +174,7 @@ class ShopAggregate(AggregateRoot):
     def remove_listing(self, listing_id: ShopListingId) -> None:
         """リストを削除する（在庫切れなど。オーナーによる取り下げは unlist_item を使う）"""
         if listing_id not in self._listings:
-            raise ListingNotFoundException(
-                f"Listing {listing_id} not found in shop {self._shop_id}"
-            )
+            raise ListingNotFoundException(f"Listing {listing_id} not found in shop {self._shop_id}")
         del self._listings[listing_id]
 
     def get_listing(self, listing_id: ShopListingId) -> ShopListing | None:
@@ -203,9 +195,7 @@ class ShopAggregate(AggregateRoot):
         """
         listing = self._listings.get(listing_id)
         if listing is None:
-            raise ListingNotFoundException(
-                f"Listing {listing_id} not found in shop {self._shop_id}"
-            )
+            raise ListingNotFoundException(f"Listing {listing_id} not found in shop {self._shop_id}")
         event = ShopItemPurchasedEvent.create(
             aggregate_id=self._shop_id,
             aggregate_type="ShopAggregate",
@@ -221,9 +211,7 @@ class ShopAggregate(AggregateRoot):
     def close(self, closed_by: PlayerId) -> None:
         """ショップを閉鎖する。オーナーのみ実行可能。閉鎖イベントを発行する。"""
         if closed_by not in self._owner_ids:
-            raise NotShopOwnerException(
-                f"Player {closed_by} is not an owner of shop {self._shop_id}"
-            )
+            raise NotShopOwnerException(f"Player {closed_by} is not an owner of shop {self._shop_id}")
         event = ShopClosedEvent.create(
             aggregate_id=self._shop_id,
             aggregate_type="ShopAggregate",

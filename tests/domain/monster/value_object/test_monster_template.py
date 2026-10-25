@@ -14,15 +14,7 @@ from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 
 @pytest.fixture
 def valid_base_stats():
-    return BaseStats(
-        max_hp=100,
-        max_mp=50,
-        attack=20,
-        defense=15,
-        speed=10,
-        critical_rate=0.05,
-        evasion_rate=0.03
-    )
+    return BaseStats(max_hp=100, max_mp=50, attack=20, defense=15, speed=10, critical_rate=0.05, evasion_rate=0.03)
 
 
 @pytest.fixture
@@ -48,7 +40,7 @@ class TestMonsterTemplate:
             respawn_info=valid_respawn_info,
             race=Race.BEAST,
             faction=MonsterFactionEnum.ENEMY,
-            description="A weak blue slime."
+            description="A weak blue slime.",
         )
         assert template.name == "Slime"
         assert template.description == "A weak blue slime."
@@ -64,7 +56,7 @@ class TestMonsterTemplate:
                 respawn_info=valid_respawn_info,
                 race=Race.BEAST,
                 faction=MonsterFactionEnum.ENEMY,
-                description="A weak blue slime."
+                description="A weak blue slime.",
             )
 
     def test_create_fail_whitespace_only_name(self, valid_base_stats, valid_reward_info, valid_respawn_info):
@@ -78,7 +70,7 @@ class TestMonsterTemplate:
                 respawn_info=valid_respawn_info,
                 race=Race.BEAST,
                 faction=MonsterFactionEnum.ENEMY,
-                description="A weak blue slime."
+                description="A weak blue slime.",
             )
 
     def test_create_fail_empty_description(self, valid_base_stats, valid_reward_info, valid_respawn_info):
@@ -92,7 +84,7 @@ class TestMonsterTemplate:
                 respawn_info=valid_respawn_info,
                 race=Race.BEAST,
                 faction=MonsterFactionEnum.ENEMY,
-                description=""
+                description="",
             )
 
     def test_create_fail_whitespace_only_description(self, valid_base_stats, valid_reward_info, valid_respawn_info):
@@ -106,7 +98,7 @@ class TestMonsterTemplate:
                 respawn_info=valid_respawn_info,
                 race=Race.BEAST,
                 faction=MonsterFactionEnum.ENEMY,
-                description="   "
+                description="   ",
             )
 
     def test_create_fail_too_long_description(self, valid_base_stats, valid_reward_info, valid_respawn_info):
@@ -121,7 +113,7 @@ class TestMonsterTemplate:
                 respawn_info=valid_respawn_info,
                 race=Race.BEAST,
                 faction=MonsterFactionEnum.ENEMY,
-                description=long_description
+                description=long_description,
             )
 
     def test_create_success_with_default_vision_range_and_flee_threshold(
@@ -160,9 +152,7 @@ class TestMonsterTemplate:
         assert template.vision_range == 10
         assert template.flee_threshold == 0.3
 
-    def test_create_fail_negative_vision_range(
-        self, valid_base_stats, valid_reward_info, valid_respawn_info
-    ):
+    def test_create_fail_negative_vision_range(self, valid_base_stats, valid_reward_info, valid_respawn_info):
         """vision_range が負の場合はエラーが発生すること"""
         with pytest.raises(MonsterTemplateValidationException, match="vision_range cannot be negative"):
             MonsterTemplate(
@@ -177,9 +167,7 @@ class TestMonsterTemplate:
                 vision_range=-1,
             )
 
-    def test_create_fail_flee_threshold_out_of_range(
-        self, valid_base_stats, valid_reward_info, valid_respawn_info
-    ):
+    def test_create_fail_flee_threshold_out_of_range(self, valid_base_stats, valid_reward_info, valid_respawn_info):
         """flee_threshold が 0.0〜1.0 の範囲外の場合はエラーが発生すること"""
         with pytest.raises(MonsterTemplateValidationException, match="flee_threshold must be between"):
             MonsterTemplate(
@@ -226,9 +214,7 @@ class TestMonsterTemplate:
                 skill_ids="not_a_list",
             )
 
-    def test_create_fail_skill_ids_element_not_skill_id(
-        self, valid_base_stats, valid_reward_info, valid_respawn_info
-    ):
+    def test_create_fail_skill_ids_element_not_skill_id(self, valid_base_stats, valid_reward_info, valid_respawn_info):
         """skill_ids の要素が SkillId でない場合はエラーが発生すること"""
         with pytest.raises(MonsterTemplateValidationException, match="must be SkillId"):
             MonsterTemplate(
@@ -364,9 +350,7 @@ class TestMonsterTemplate:
                 ],
             )
 
-    def test_create_fail_first_growth_stage_not_zero(
-        self, valid_base_stats, valid_reward_info, valid_respawn_info
-    ):
+    def test_create_fail_first_growth_stage_not_zero(self, valid_base_stats, valid_reward_info, valid_respawn_info):
         """最初の growth_stage の after_ticks が 0 でない場合はエラーが発生すること"""
         with pytest.raises(MonsterTemplateValidationException, match="after_ticks=0"):
             MonsterTemplate(
@@ -384,9 +368,7 @@ class TestMonsterTemplate:
                 ],
             )
 
-    def test_create_fail_growth_stages_exceeds_max(
-        self, valid_base_stats, valid_reward_info, valid_respawn_info
-    ):
+    def test_create_fail_growth_stages_exceeds_max(self, valid_base_stats, valid_reward_info, valid_respawn_info):
         """growth_stages が MAX_GROWTH_STAGES を超える場合はエラーが発生すること"""
         with pytest.raises(MonsterTemplateValidationException, match=f"at most {MAX_GROWTH_STAGES}"):
             MonsterTemplate(
@@ -410,9 +392,7 @@ class TestMonsterTemplate:
     class TestHungerParams:
         """Phase 6: 飢餓パラメータのバリデーション"""
 
-        def test_create_with_hunger_params_success(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_with_hunger_params_success(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """有効な飢餓パラメータで作成できること"""
             template = MonsterTemplate(
                 template_id=MonsterTemplateId.create(1),
@@ -433,9 +413,7 @@ class TestMonsterTemplate:
             assert template.hunger_starvation_threshold == 0.8
             assert template.starvation_ticks == 50
 
-        def test_create_with_default_hunger_params(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_with_default_hunger_params(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """飢餓パラメータ省略時はデフォルトで無効になること"""
             template = MonsterTemplate(
                 template_id=MonsterTemplateId.create(1),
@@ -452,9 +430,7 @@ class TestMonsterTemplate:
             assert template.hunger_starvation_threshold == 1.0
             assert template.starvation_ticks == 0
 
-        def test_create_fail_hunger_increase_negative(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_fail_hunger_increase_negative(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """hunger_increase_per_tick が負の場合はエラー"""
             with pytest.raises(MonsterTemplateValidationException, match="hunger_increase_per_tick"):
                 MonsterTemplate(
@@ -469,9 +445,7 @@ class TestMonsterTemplate:
                     hunger_increase_per_tick=-0.01,
                 )
 
-        def test_create_fail_hunger_decrease_negative(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_fail_hunger_decrease_negative(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """hunger_decrease_on_prey_kill が負の場合はエラー"""
             with pytest.raises(MonsterTemplateValidationException, match="hunger_decrease_on_prey_kill"):
                 MonsterTemplate(
@@ -503,9 +477,7 @@ class TestMonsterTemplate:
                     hunger_starvation_threshold=1.5,
                 )
 
-        def test_create_fail_starvation_ticks_negative(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_fail_starvation_ticks_negative(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """starvation_ticks が負の場合はエラー"""
             with pytest.raises(MonsterTemplateValidationException, match="starvation_ticks"):
                 MonsterTemplate(
@@ -523,9 +495,7 @@ class TestMonsterTemplate:
     class TestMaxAgeTicks:
         """max_age_ticks のバリデーション"""
 
-        def test_create_success_none(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_success_none(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """max_age_ticks が None の場合は有効"""
             t = MonsterTemplate(
                 template_id=MonsterTemplateId.create(1),
@@ -539,9 +509,7 @@ class TestMonsterTemplate:
             )
             assert t.max_age_ticks is None
 
-        def test_create_success_zero(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_success_zero(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """max_age_ticks が 0 の場合は有効（無効扱い）"""
             t = MonsterTemplate(
                 template_id=MonsterTemplateId.create(1),
@@ -556,9 +524,7 @@ class TestMonsterTemplate:
             )
             assert t.max_age_ticks == 0
 
-        def test_create_success_positive(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_success_positive(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """max_age_ticks が正の場合は有効"""
             t = MonsterTemplate(
                 template_id=MonsterTemplateId.create(1),
@@ -573,9 +539,7 @@ class TestMonsterTemplate:
             )
             assert t.max_age_ticks == 1000
 
-        def test_create_fail_max_age_ticks_negative(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_fail_max_age_ticks_negative(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """max_age_ticks が負の場合はエラー"""
             with pytest.raises(MonsterTemplateValidationException, match="max_age_ticks"):
                 MonsterTemplate(
@@ -590,13 +554,10 @@ class TestMonsterTemplate:
                     max_age_ticks=-1,
                 )
 
-
     class TestChaseSearchTicks:
         """Phase 4b PR (b): chase_search_ticks フィールドのバリデーション。"""
 
-        def test_create_with_default_value_3(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_with_default_value_3(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """default は 3 (諦め悪い敵を表現する自然な値)。"""
             t = MonsterTemplate(
                 template_id=MonsterTemplateId.create(1),
@@ -610,9 +571,7 @@ class TestMonsterTemplate:
             )
             assert t.chase_search_ticks == 3
 
-        def test_create_with_zero_value(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_with_zero_value(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """0 は許容 (探索フェーズなしを意味する)。"""
             t = MonsterTemplate(
                 template_id=MonsterTemplateId.create(1),
@@ -627,13 +586,9 @@ class TestMonsterTemplate:
             )
             assert t.chase_search_ticks == 0
 
-        def test_create_fail_negative(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_fail_negative(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """負の値は ValidationException を投げる。"""
-            with pytest.raises(
-                MonsterTemplateValidationException, match="chase_search_ticks"
-            ):
+            with pytest.raises(MonsterTemplateValidationException, match="chase_search_ticks"):
                 MonsterTemplate(
                     template_id=MonsterTemplateId.create(1),
                     name="X",
@@ -646,13 +601,9 @@ class TestMonsterTemplate:
                     chase_search_ticks=-1,
                 )
 
-        def test_create_fail_bool(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_fail_bool(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             """bool は int でないとして拒否される (Python の bool は int の派生)。"""
-            with pytest.raises(
-                MonsterTemplateValidationException, match="chase_search_ticks"
-            ):
+            with pytest.raises(MonsterTemplateValidationException, match="chase_search_ticks"):
                 MonsterTemplate(
                     template_id=MonsterTemplateId.create(1),
                     name="X",
@@ -665,13 +616,10 @@ class TestMonsterTemplate:
                     chase_search_ticks=True,
                 )
 
-
     class TestChaseMaxDistance:
         """Phase 4b PR (c): chase_max_distance フィールドのバリデーション。"""
 
-        def test_create_with_default_5(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_with_default_5(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             t = MonsterTemplate(
                 template_id=MonsterTemplateId.create(1),
                 name="X",
@@ -684,12 +632,8 @@ class TestMonsterTemplate:
             )
             assert t.chase_max_distance == 5
 
-        def test_create_fail_negative(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
-            with pytest.raises(
-                MonsterTemplateValidationException, match="chase_max_distance"
-            ):
+        def test_create_fail_negative(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+            with pytest.raises(MonsterTemplateValidationException, match="chase_max_distance"):
                 MonsterTemplate(
                     template_id=MonsterTemplateId.create(1),
                     name="X",
@@ -702,12 +646,8 @@ class TestMonsterTemplate:
                     chase_max_distance=-1,
                 )
 
-        def test_create_fail_bool(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
-            with pytest.raises(
-                MonsterTemplateValidationException, match="chase_max_distance"
-            ):
+        def test_create_fail_bool(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+            with pytest.raises(MonsterTemplateValidationException, match="chase_max_distance"):
                 MonsterTemplate(
                     template_id=MonsterTemplateId.create(1),
                     name="X",
@@ -720,13 +660,10 @@ class TestMonsterTemplate:
                     chase_max_distance=True,
                 )
 
-
     class TestChaseMaxTicks:
         """Phase 4b PR (c): chase_max_ticks フィールドのバリデーション。"""
 
-        def test_create_with_default_20(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
+        def test_create_with_default_20(self, valid_base_stats, valid_reward_info, valid_respawn_info):
             t = MonsterTemplate(
                 template_id=MonsterTemplateId.create(1),
                 name="X",
@@ -739,12 +676,8 @@ class TestMonsterTemplate:
             )
             assert t.chase_max_ticks == 20
 
-        def test_create_fail_negative(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
-            with pytest.raises(
-                MonsterTemplateValidationException, match="chase_max_ticks"
-            ):
+        def test_create_fail_negative(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+            with pytest.raises(MonsterTemplateValidationException, match="chase_max_ticks"):
                 MonsterTemplate(
                     template_id=MonsterTemplateId.create(1),
                     name="X",
@@ -757,12 +690,8 @@ class TestMonsterTemplate:
                     chase_max_ticks=-1,
                 )
 
-        def test_create_fail_bool(
-            self, valid_base_stats, valid_reward_info, valid_respawn_info
-        ):
-            with pytest.raises(
-                MonsterTemplateValidationException, match="chase_max_ticks"
-            ):
+        def test_create_fail_bool(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+            with pytest.raises(MonsterTemplateValidationException, match="chase_max_ticks"):
                 MonsterTemplate(
                     template_id=MonsterTemplateId.create(1),
                     name="X",

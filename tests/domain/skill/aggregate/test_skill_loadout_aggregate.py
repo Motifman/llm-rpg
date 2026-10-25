@@ -43,8 +43,9 @@ def _sample_skill(skill_id: int, deck_cost: int = 1, required_skill_ids=()) -> S
             pattern_type=SkillHitPatternType.MELEE,
             shape=HitBoxShape.single_cell(),
         ),
-        required_skill_ids=tuple(SkillId(rid) for rid in required_skill_ids)
+        required_skill_ids=tuple(SkillId(rid) for rid in required_skill_ids),
     )
+
 
 class TestSkillLoadoutAggregate:
     @pytest.fixture
@@ -54,10 +55,7 @@ class TestSkillLoadoutAggregate:
     @pytest.fixture
     def aggregate(self, loadout_id):
         return SkillLoadoutAggregate.create(
-            loadout_id=loadout_id,
-            owner_id=100,
-            normal_capacity=10,
-            awakened_capacity=10
+            loadout_id=loadout_id, owner_id=100, normal_capacity=10, awakened_capacity=10
         )
 
     class TestEquipSkill:
@@ -76,7 +74,7 @@ class TestSkillLoadoutAggregate:
             other = aggregate.awakened_deck if deck_tier == DeckTier.NORMAL else aggregate.normal_deck
             assert target.get_skill(slot_index) == skill
             assert other.get_skill(4) == other_skill
-            event, = aggregate.get_events()
+            (event,) = aggregate.get_events()
             assert isinstance(event, SkillEquippedEvent)
             assert event.aggregate_id == aggregate.loadout_id
             assert (event.deck_tier, event.slot_index, event.skill_id) == (deck_tier, slot_index, skill.skill_id)
@@ -84,7 +82,7 @@ class TestSkillLoadoutAggregate:
         def test_equip_fails_when_skill_already_equipped(self, aggregate):
             skill = _sample_skill(1)
             aggregate.equip_skill(DeckTier.NORMAL, 0, skill)
-            
+
             with pytest.raises(SkillAlreadyEquippedException, match="already equipped"):
                 aggregate.equip_skill(DeckTier.NORMAL, 1, skill)
 
@@ -130,7 +128,7 @@ class TestSkillLoadoutAggregate:
             skill = _sample_skill(1)
             aggregate.equip_skill(DeckTier.NORMAL, 0, skill)
             aggregate.equip_skill(DeckTier.AWAKENED, 0, skill)
-            
+
             assert aggregate.normal_deck.get_skill(0) == skill
             assert aggregate.awakened_deck.get_skill(0) == skill
 
@@ -158,10 +156,14 @@ class TestSkillLoadoutAggregate:
             other = aggregate.awakened_deck if deck_tier == DeckTier.NORMAL else aggregate.normal_deck
             assert target.get_skill(slot_index) is None
             assert other.get_skill(slot_index) == other_skill
-            event, = aggregate.get_events()
+            (event,) = aggregate.get_events()
             assert isinstance(event, SkillUnequippedEvent)
             assert event.aggregate_id == aggregate.loadout_id
-            assert (event.deck_tier, event.slot_index, event.removed_skill_id) == (deck_tier, slot_index, skill.skill_id)
+            assert (event.deck_tier, event.slot_index, event.removed_skill_id) == (
+                deck_tier,
+                slot_index,
+                skill.skill_id,
+            )
 
         def test_unequip_fails_when_slot_empty(self, aggregate):
             with pytest.raises(SkillNotFoundInSlotException):
@@ -173,7 +175,7 @@ class TestSkillLoadoutAggregate:
             skill2 = _sample_skill(2, required_skill_ids=[1])
             aggregate.equip_skill(DeckTier.NORMAL, 0, skill1)
             aggregate.equip_skill(DeckTier.NORMAL, 1, skill2)
-            
+
             # 前提スキルを外す
             aggregate.unequip_skill(DeckTier.NORMAL, 0)
             assert aggregate.normal_deck.get_skill(0) is None
@@ -192,8 +194,8 @@ class TestSkillLoadoutAggregate:
             assert aggregate.cast_lock_until_tick == 11
             events = aggregate.get_events()
             assert len(events) == 2
-            used, = [event for event in events if isinstance(event, SkillUsedEvent)]
-            cooldown, = [event for event in events if isinstance(event, SkillCooldownStartedEvent)]
+            (used,) = [event for event in events if isinstance(event, SkillUsedEvent)]
+            (cooldown,) = [event for event in events if isinstance(event, SkillCooldownStartedEvent)]
             assert used.aggregate_id == cooldown.aggregate_id == aggregate.loadout_id
             assert used.skill_id == cooldown.skill_id == skill.skill_id
             assert used.deck_tier == DeckTier.NORMAL
@@ -234,7 +236,6 @@ class TestSkillLoadoutAggregate:
             assert aggregate.can_use_skill(0, 10) is True
             assert aggregate.get_events() == events_before
 
-
         def test_use_skill_fails_when_cast_locked(self, aggregate):
             """詠唱制限中は別スキルも状態を変えず拒否し、制限期限ちょうどには使用できる。"""
             skill1, skill2 = _sample_skill(1), _sample_skill(2)
@@ -261,7 +262,7 @@ class TestSkillLoadoutAggregate:
             assert aggregate.awaken_state.active_until_tick == 30
             assert aggregate.awaken_state.cooldown_reduction_rate == 0.5
             assert aggregate.current_deck_tier(15) == DeckTier.AWAKENED
-            event, = aggregate.get_events()
+            (event,) = aggregate.get_events()
             assert isinstance(event, AwakenedModeActivatedEvent)
             assert event.aggregate_id == aggregate.loadout_id
             assert (event.activated_at_tick, event.expires_at_tick) == (10, 30)
@@ -332,7 +333,7 @@ class TestSkillLoadoutAggregate:
             assert aggregate.awakened_deck.capacity == 30
             assert aggregate.normal_deck.slots == normal_slots
             assert aggregate.awakened_deck.slots == awakened_slots
-            event, = aggregate.get_events()
+            (event,) = aggregate.get_events()
             assert isinstance(event, SkillLoadoutCapacityChangedEvent)
             assert event.aggregate_id == aggregate.loadout_id
             assert (event.normal_capacity, event.awakened_capacity) == (20, 30)
@@ -340,7 +341,7 @@ class TestSkillLoadoutAggregate:
         def test_update_capacity_fails_when_current_cost_exceeds_new_capacity(self, aggregate):
             skill = _sample_skill(1, deck_cost=10)
             aggregate.equip_skill(DeckTier.NORMAL, 0, skill)
-            
+
             # 既存のコスト(10)を下回るキャパシティ(5)への更新は、SkillDeckの__post_init__でバリデーションされる
             with pytest.raises(SkillDeckCapacityExceededException):
                 aggregate.update_capacity(normal_capacity=5, awakened_capacity=10)
@@ -350,6 +351,6 @@ class TestSkillLoadoutAggregate:
             skill = _sample_skill(1)
             with pytest.raises(SkillDeckValidationException):
                 aggregate.equip_skill(DeckTier.NORMAL, 99, skill)
-            
+
             with pytest.raises(SkillDeckValidationException):
                 aggregate.unequip_skill(DeckTier.NORMAL, -1)

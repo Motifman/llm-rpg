@@ -6,20 +6,28 @@ from pathlib import Path
 _SCENARIO_DIR = Path(__file__).resolve().parents[3] / "data" / "scenarios"
 _EXPECTED = {
     "island_wolf": {
-        "effect_type": "bleeding", "chance": 0.5,
-        "duration_ticks": 12, "value": 1.0,
+        "effect_type": "bleeding",
+        "chance": 0.5,
+        "duration_ticks": 12,
+        "value": 1.0,
     },
     "feral_dog": {
-        "effect_type": "bleeding", "chance": 0.5,
-        "duration_ticks": 12, "value": 1.0,
+        "effect_type": "bleeding",
+        "chance": 0.5,
+        "duration_ticks": 12,
+        "value": 1.0,
     },
     "swamp_snake": {
-        "effect_type": "poison", "chance": 0.6,
-        "duration_ticks": 10, "value": 1.0,
+        "effect_type": "poison",
+        "chance": 0.6,
+        "duration_ticks": 10,
+        "value": 1.0,
     },
     "giant_crab": {
-        "effect_type": "bleeding", "chance": 0.35,
-        "duration_ticks": 8, "value": 1.0,
+        "effect_type": "bleeding",
+        "chance": 0.35,
+        "duration_ticks": 8,
+        "value": 1.0,
     },
 }
 

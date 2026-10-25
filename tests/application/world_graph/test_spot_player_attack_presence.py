@@ -34,8 +34,13 @@ def test_killing_blow_preserves_monster_presence() -> None:
         template_id=MonsterTemplateId.create(1),
         name="灰色のオオカミ",
         base_stats=BaseStats(
-            max_hp=5, max_mp=0, attack=5, defense=0, speed=1,
-            critical_rate=0.0, evasion_rate=0.0,
+            max_hp=5,
+            max_mp=0,
+            attack=5,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -48,7 +53,10 @@ def test_killing_blow_preserves_monster_presence() -> None:
         template=template,
         world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101, normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -59,13 +67,15 @@ def test_killing_blow_preserves_monster_presence() -> None:
     attacker.is_down = False
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
     spot = SpotId.create(1)
-    graph.add_spot(SpotNode(
-        spot_id=spot,
-        name="森",
-        description="",
-        category=SpotCategoryEnum.OTHER,
-        parent_id=None,
-    ))
+    graph.add_spot(
+        SpotNode(
+            spot_id=spot,
+            name="森",
+            description="",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+        )
+    )
     graph.place_monster(MonsterId.create(101), spot)
     orchestrator = SpotAttackOrchestrator(
         spot_graph_repository=MagicMock(),

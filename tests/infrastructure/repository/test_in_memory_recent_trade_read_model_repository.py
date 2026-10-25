@@ -1,6 +1,7 @@
 """
 InMemoryRecentTradeReadModelRepositoryのテスト
 """
+
 from datetime import datetime, timedelta
 
 import pytest
@@ -71,14 +72,12 @@ class TestInMemoryRecentTradeReadModelRepository:
     def test_save_new_read_model(self):
         """新しいReadModelを保存できる"""
         # 新しいReadModelを作成
-        new_trades = [
-            RecentTradeData(trade_id=1001, price=1000, traded_at=datetime.now())
-        ]
+        new_trades = [RecentTradeData(trade_id=1001, price=1000, traded_at=datetime.now())]
         new_read_model = RecentTradeReadModel.create_from_item_and_trades(
             item_spec_id=ItemSpecId(100),
             item_name="テストアイテム",
             recent_trades=new_trades,
-            last_updated=datetime.now()
+            last_updated=datetime.now(),
         )
 
         saved_read_model = self.repository.save(new_read_model)
@@ -97,18 +96,14 @@ class TestInMemoryRecentTradeReadModelRepository:
         assert read_model is not None
 
         # 取引履歴を追加
-        new_trade = RecentTradeData(
-            trade_id=9999,
-            price=999,
-            traded_at=datetime.now()
-        )
+        new_trade = RecentTradeData(trade_id=9999, price=999, traded_at=datetime.now())
         updated_trades = read_model.recent_trades + [new_trade]
 
         updated_read_model = RecentTradeReadModel.create_from_item_and_trades(
             item_spec_id=read_model.item_spec_id,
             item_name=read_model.item_name,
             recent_trades=updated_trades,
-            last_updated=datetime.now()
+            last_updated=datetime.now(),
         )
 
         self.repository.save(updated_read_model)
@@ -137,7 +132,6 @@ class TestInMemoryRecentTradeReadModelRepository:
         """存在しないReadModelを削除しようとするとFalseが返る"""
         result = self.repository.delete(ItemSpecId(999))
         assert result is False
-
 
     def test_find_by_item_name_existing_item(self):
         """存在するアイテム名でReadModelを検索できる"""
@@ -190,8 +184,9 @@ class TestInMemoryRecentTradeReadModelRepository:
         for item_name, expected_count in test_cases:
             read_model = self.repository.find_by_item_name(item_name)
             assert read_model is not None, f"Item {item_name} not found"
-            assert len(read_model.recent_trades) == expected_count, \
+            assert len(read_model.recent_trades) == expected_count, (
                 f"Item {item_name} has {len(read_model.recent_trades)} trades, expected {expected_count}"
+            )
 
     def test_sample_data_trades_ordered_by_time_descending(self):
         """サンプルデータの取引が時系列順（新しい順）に並んでいる"""
@@ -242,7 +237,6 @@ class TestInMemoryRecentTradeReadModelRepository:
         # 検索しても何も見つからない
         read_model = self.repository.find_by_item_name("鋼の剣")
         assert read_model is None
-
 
     def test_get_items_with_trades_returns_correct_items(self):
         """get_items_with_tradesが取引履歴があるアイテムのみを返す"""

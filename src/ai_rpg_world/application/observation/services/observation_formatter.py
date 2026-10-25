@@ -68,9 +68,7 @@ if TYPE_CHECKING:
 class _EventFormatter(Protocol):
     """下位 formatter の共通形。attention_level は受け取らない。"""
 
-    def format(
-        self, event: Any, recipient_player_id: PlayerId
-    ) -> ObservationOutput | None: ...
+    def format(self, event: Any, recipient_player_id: PlayerId) -> ObservationOutput | None: ...
 
 
 class ObservationFormatter(IObservationFormatter):

@@ -74,14 +74,12 @@ class TestObjectSectionQuotesAndActionSimplification:
                     object_id=10,
                     name="流木の山",
                     description="",
-                    interactions=(
-                        SpotGraphInteractionEntry(action_name="gather", display_label="採取する"),
-                    ),
+                    interactions=(SpotGraphInteractionEntry(action_name="gather", display_label="採取する"),),
                 ),
             ),
         )
         text = _build(snap)
-        assert '"流木の山"' in text, "object 名が \"\" で囲まれていない"
+        assert '"流木の山"' in text, 'object 名が "" で囲まれていない'
 
     def test_object_without_actions_is_visible_but_not_an_interact_target(self) -> None:
         """操作が 0 件の物体は情景には残すが、interact の選択肢には登録しない。"""
@@ -105,8 +103,7 @@ class TestObjectSectionQuotesAndActionSimplification:
         assert '"棚卸し帳"' in result.current_state_text
         assert "(なし)" not in result.current_state_text
         assert not any(
-            target.kind == "spot_graph_object"
-            and target.world_object_id == 10
+            target.kind == "spot_graph_object" and target.world_object_id == 10
             for target in result.tool_runtime_context.targets.values()
         )
 
@@ -164,14 +161,10 @@ class TestObjectSectionQuotesAndActionSimplification:
         text = result.current_state_text
         assert '[沖で釣りをする → "fish_deep"（夜不可・嵐不可）]' in text
         assert "fish_deep(夜不可" not in text
-        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
-            "fish_deep",
-        )
+        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == ("fish_deep",)
         assert all(
             "夜不可" not in action and "嵐不可" not in action
-            for action in result.tool_runtime_context.targets[
-                "OBJ1"
-            ].available_interactions
+            for action in result.tool_runtime_context.targets["OBJ1"].available_interactions
         )
 
     def test_required_interaction_parameter_hint(self) -> None:
@@ -240,24 +233,15 @@ class TestObjectSectionQuotesAndActionSimplification:
         )
         result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
 
-        assert (
-            '"古い箱" — ふたの開いた箱。 [調べる → "examine"]'
-            in result.current_state_text
-        )
-        assert (
-            "      いまできない: 箱を開ける → "
-            '"open_chest"（箱はすでに空っぽだ。）'
-            in result.current_state_text
-        )
+        assert '"古い箱" — ふたの開いた箱。 [調べる → "examine"]' in result.current_state_text
+        assert '      いまできない: 箱を開ける → "open_chest"（箱はすでに空っぽだ。）' in result.current_state_text
         assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
             "open_chest",
             "examine",
         )
         assert all(
             "箱はすでに空っぽ" not in action
-            for action in result.tool_runtime_context.targets[
-                "OBJ1"
-            ].available_interactions
+            for action in result.tool_runtime_context.targets["OBJ1"].available_interactions
         )
 
     def test_failed_object_stock_condition_hint_is_prompt_only(self) -> None:
@@ -286,18 +270,13 @@ class TestObjectSectionQuotesAndActionSimplification:
 
         assert (
             "いまできない: 貝を採る → "
-            '"gather_shellfish"（貝は採り尽くした。時間が経てば戻る。）'
-            in result.current_state_text
+            '"gather_shellfish"（貝は採り尽くした。時間が経てば戻る。）' in result.current_state_text
         )
         assert "[gather_shellfish" not in result.current_state_text
-        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
-            "gather_shellfish",
-        )
+        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == ("gather_shellfish",)
         assert all(
             "貝は採り尽くした" not in action
-            for action in result.tool_runtime_context.targets[
-                "OBJ1"
-            ].available_interactions
+            for action in result.tool_runtime_context.targets["OBJ1"].available_interactions
         )
 
     def test_action_with_condition_and_blocking_hints_is_rendered_as_blocked(self) -> None:
@@ -329,14 +308,8 @@ class TestObjectSectionQuotesAndActionSimplification:
         )
         result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
 
-        assert (
-            '"崩れた梁" — 太い梁が斜めに崩れている。 [調べる → "examine"]'
-            in result.current_state_text
-        )
-        assert (
-            '      いまできない: 棚を探す → "search"（棚を調べた後）'
-            in result.current_state_text
-        )
+        assert '"崩れた梁" — 太い梁が斜めに崩れている。 [調べる → "examine"]' in result.current_state_text
+        assert '      いまできない: 棚を探す → "search"（棚を調べた後）' in result.current_state_text
         assert "search(夜不可" not in result.current_state_text
         assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
             "search",
@@ -462,11 +435,7 @@ class TestObjectStateVisibleInPrompt:
                     object_id=10,
                     name="東の茂み",
                     description="",
-                    interactions=(
-                        SpotGraphInteractionEntry(
-                            action_name="harvest_berry", display_label="採取"
-                        ),
-                    ),
+                    interactions=(SpotGraphInteractionEntry(action_name="harvest_berry", display_label="採取"),),
                     state={VISIBLE_STATE_TAGS_KEY: ("今は採れない・時間を置けば戻る",)},
                 ),
             ),
@@ -489,11 +458,7 @@ class TestObjectStateVisibleInPrompt:
                     object_id=10,
                     name="湧水の口",
                     description="",
-                    interactions=(
-                        SpotGraphInteractionEntry(
-                            action_name="drink_water", display_label="水を汲む"
-                        ),
-                    ),
+                    interactions=(SpotGraphInteractionEntry(action_name="drink_water", display_label="水を汲む"),),
                     state={
                         VISIBLE_STATE_TAGS_KEY: ("今は汲めない・時間を置けば戻る",),
                         "opened": True,
@@ -518,9 +483,7 @@ class TestObjectStateVisibleInPrompt:
                     object_id=10,
                     name="石碑",
                     description="",
-                    interactions=(
-                        SpotGraphInteractionEntry(action_name="examine", display_label="調べる"),
-                    ),
+                    interactions=(SpotGraphInteractionEntry(action_name="examine", display_label="調べる"),),
                     state={},
                 ),
             ),
@@ -564,9 +527,7 @@ class TestEntitySectionQuotes:
             current_spot_name="拠点",
             current_spot_description="",
             travel_status_line=None,
-            nearby_entities=(
-                SpotGraphNearbyEntityEntry(entity_id=2, display_name="ノア"),
-            ),
+            nearby_entities=(SpotGraphNearbyEntityEntry(entity_id=2, display_name="ノア"),),
         )
         text = _build(snap)
         assert '"ノア"' in text
@@ -611,6 +572,7 @@ class TestSubLocationResolverStripsQuotes:
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             resolve_sub_location_target,
         )
+
         ctx = ToolRuntimeContextDto(
             current_spot_id=1,
             current_sub_location_id=None,
@@ -637,6 +599,7 @@ class TestSubLocationResolverStripsQuotes:
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             resolve_sub_location_target,
         )
+
         ctx = ToolRuntimeContextDto(
             current_spot_id=1,
             current_sub_location_id=None,
@@ -670,17 +633,13 @@ class TestObjectStateNoneRendersAsNull:
                     object_id=10,
                     name="宝箱",
                     description="",
-                    interactions=(
-                        SpotGraphInteractionEntry(action_name="open", display_label="開ける"),
-                    ),
+                    interactions=(SpotGraphInteractionEntry(action_name="open", display_label="開ける"),),
                     state={"latch": None},
                 ),
             ),
         )
         text = _build(snap)
-        assert "latch=null" in text, (
-            "None → null convention (formatter._render_value 由来) が保たれていない"
-        )
+        assert "latch=null" in text, "None → null convention (formatter._render_value 由来) が保たれていない"
         # Python の "None" 文字列は出さない
         assert "latch=None" not in text
 
@@ -703,9 +662,7 @@ class TestObjectStateNotDuplicatedInFormatter:
                     object_id=10,
                     name="燭台",
                     description="",
-                    interactions=(
-                        SpotGraphInteractionEntry(action_name="light", display_label="点火"),
-                    ),
+                    interactions=(SpotGraphInteractionEntry(action_name="light", display_label="点火"),),
                     state={"lit": True},
                 ),
             ),
@@ -714,6 +671,7 @@ class TestObjectStateNotDuplicatedInFormatter:
         from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
             SpotGraphCurrentStateFormatter,
         )
+
         text = SpotGraphCurrentStateFormatter().format(_make_dto(snap))
         assert "スポット内オブジェクトの状態:" not in text, (
             "旧 block が formatter に残っている。inline 版と重複してしまう"
@@ -725,18 +683,12 @@ class TestInteractDescriptionMentionsQuoteRegime:
 
     def test_target_label_description_included(self) -> None:
         """objectlabeldescription にクオート規約が含まれる。"""
-        desc = INTERACT_DEFINITION.parameters["properties"]["target_label"][
-            "description"
-        ]
-        assert "\"" in desc
-        assert (
-            "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
-        )
+        desc = INTERACT_DEFINITION.parameters["properties"]["target_label"]["description"]
+        assert '"' in desc
+        assert "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
 
     def test_description_string(self) -> None:
         """description は静的文字列。"""
-        desc = INTERACT_DEFINITION.parameters["properties"]["target_label"][
-            "description"
-        ]
+        desc = INTERACT_DEFINITION.parameters["properties"]["target_label"]["description"]
         assert isinstance(desc, str)
         assert "{" not in desc

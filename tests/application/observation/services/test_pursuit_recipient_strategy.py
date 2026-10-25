@@ -68,9 +68,7 @@ class TestPursuitRecipientStrategyNormal:
             world_object_to_player_resolver=world_object_resolver,
         )
 
-    def test_pursuit_started_returns_actor_and_target_when_both_resolved(
-        self, strategy, resolved_players
-    ):
+    def test_pursuit_started_returns_actor_and_target_when_both_resolved(self, strategy, resolved_players):
         """PursuitStartedEvent: actor と target が解決できるとき両方が配信先"""
         resolved_players.update({WorldObjectId(3): PlayerId(3), WorldObjectId(7): PlayerId(7)})
         event = PursuitStartedEvent.create(
@@ -114,9 +112,7 @@ class TestPursuitRecipientStrategyNormal:
         assert len(result) == 1
         assert result[0].value == 2
 
-    def test_pursuit_cancelled_returns_actor_and_target_when_both_resolved(
-        self, strategy, resolved_players
-    ):
+    def test_pursuit_cancelled_returns_actor_and_target_when_both_resolved(self, strategy, resolved_players):
         """PursuitCancelledEvent: actor と target が解決できるとき両方が配信先"""
         resolved_players.update({WorldObjectId(1): PlayerId(1), WorldObjectId(9): PlayerId(9)})
         event = PursuitCancelledEvent.create(
@@ -204,6 +200,8 @@ class TestPursuitRecipientStrategySupports:
 
     def test_supports_returns_false_for_unknown_event(self, strategy):
         """未知のイベントでは False"""
+
         class UnknownEvent:
             pass
+
         assert strategy.supports(UnknownEvent()) is False

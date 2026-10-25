@@ -34,9 +34,7 @@ class TestObservationAppenderNormal:
     def appender(self, buffer):
         return ObservationAppender(buffer=buffer)
 
-    def test_append_adds_entry_buffer_with_all_fields(
-        self, appender, buffer
-    ):
+    def test_append_adds_entry_buffer_with_all_fields(self, appender, buffer):
         """全フィールド指定時に観測がバッファに追加される"""
         player_id = PlayerId(1)
         output = ObservationOutput(
@@ -118,9 +116,7 @@ class TestObservationAppenderNormal:
                 return []
 
         cap = CaptureBuffer()
-        appender = ObservationAppender(
-            buffer=cap, runtime_context_provider=provider
-        )
+        appender = ObservationAppender(buffer=cap, runtime_context_provider=provider)
         out = ObservationOutput(prose="x", structured={"type": "t"})
         appender.append(PlayerId(1), out, datetime.now(), None)
         assert len(calls) == 1
@@ -274,7 +270,6 @@ class TestObservationAppenderTraceRecording:
         assert len(buffer.get_observations(PlayerId(1))) == 1
 
 
-
 class TestRecipientView:
     """受け手ごとに記録する版を選ぶ口が、バッファ・trace・observer のすべてに同じ版を渡すことを保証する。"""
 
@@ -284,9 +279,7 @@ class TestRecipientView:
             structured={"type": "player_spoke", "speaker": "ノア"},
             observation_category="social",
             subject_name="ノア",
-            if_subject_unknown=SubjectUnknownView(
-                prose="誰かが言った: 「水門」", structured={"type": "player_spoke"}
-            ),
+            if_subject_unknown=SubjectUnknownView(prose="誰かが言った: 「水門」", structured={"type": "player_spoke"}),
         )
 
     def _hide(self, _player_id: PlayerId, output: ObservationOutput) -> ObservationOutput:
@@ -355,9 +348,7 @@ class TestRecipientView:
             structured={"type": "player_spoke", "speaker": "誰か"},
             observation_category="social",
             subject_name="誰か",
-            if_subject_unknown=SubjectUnknownView(
-                prose="誰かが言った: 「水門」", structured={"type": "player_spoke"}
-            ),
+            if_subject_unknown=SubjectUnknownView(prose="誰かが言った: 「水門」", structured={"type": "player_spoke"}),
         )
         appender = ObservationAppender(
             buffer=DefaultObservationContextBuffer(),
@@ -380,6 +371,7 @@ class TestRecipientView:
 
     def test_failing_recipient_view_still_records_hidden_view(self) -> None:
         """選ぶ口が例外を出しても観測は落とさず、伏せた版で記録する。"""
+
         def broken(_pid: PlayerId, _out: ObservationOutput) -> ObservationOutput:
             raise RuntimeError("view failed")
 
@@ -469,6 +461,7 @@ class TestWithheldView:
 
     def test_failing_recipient_view_withholds(self) -> None:
         """選ぶ口が例外を出したら、届けない印を持つ観測は記録しない。"""
+
         def broken(_pid: PlayerId, _out: ObservationOutput) -> ObservationOutput:
             raise RuntimeError("view failed")
 

@@ -133,9 +133,7 @@ class ConsecutiveSameActionDetector:
             raise ValueError("default_threshold must be int >= 2")
         if not isinstance(window_size, int) or window_size < 2:
             raise ValueError("window_size must be int >= 2")
-        self._thresholds: dict[str, int] = dict(thresholds) if thresholds else dict(
-            DEFAULT_LOOP_THRESHOLDS
-        )
+        self._thresholds: dict[str, int] = dict(thresholds) if thresholds else dict(DEFAULT_LOOP_THRESHOLDS)
         self._default_threshold = default_threshold
         self._window_size = window_size
         self._history: dict[int, list[_ToolCallRecord]] = {}
@@ -143,9 +141,7 @@ class ConsecutiveSameActionDetector:
 
     def observe(self, action: RecordedAction) -> ConsecutiveRepeat | None:
         key = action.player_key
-        record = _ToolCallRecord(
-            tool_name=action.tool_name, fingerprint=action.fingerprint
-        )
+        record = _ToolCallRecord(tool_name=action.tool_name, fingerprint=action.fingerprint)
         history = self._history.setdefault(key, [])
         history.append(record)
         if len(history) > self._window_size:
@@ -221,11 +217,7 @@ class CrossTickFailureDetector:
         window = self._window
         history[:] = [r for r in history if (current_tick - r.tick) < window]
         pattern = (action.tool_name, action.fingerprint, error_code)
-        count = sum(
-            1
-            for r in history
-            if (r.tool_name, r.fingerprint, r.error_code) == pattern
-        )
+        count = sum(1 for r in history if (r.tool_name, r.fingerprint, r.error_code) == pattern)
         if count < self._threshold:
             return None
         last_warns = self._last_warn.setdefault(key, {})

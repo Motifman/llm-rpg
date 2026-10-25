@@ -22,9 +22,7 @@ class TestAcquaintance:
 
     def test_introduction_is_known_but_not_met(self) -> None:
         """紹介された記録は、知り方が「紹介された」で関係の注記を持ち、会った回数は 0、会ったターンは無い。"""
-        known = Acquaintance.introduced(
-            environment_name="山村", name="ノア", turn=0, relation_note="あなたと同じ側"
-        )
+        known = Acquaintance.introduced(environment_name="山村", name="ノア", turn=0, relation_note="あなたと同じ側")
 
         assert known.how_known is HowKnown.INTRODUCED
         assert known.relation_note == "あなたと同じ側"
@@ -84,7 +82,13 @@ class TestAcquaintance:
             {"how_known": HowKnown.INTRODUCED, "met_count": 1, "first_met_turn": 1, "last_met_turn": 1},
             {"how_known": HowKnown.MET, "met_count": 1, "first_met_turn": 3, "last_met_turn": 3},
             {"how_known": HowKnown.INTRODUCED, "met_count": -1, "first_met_turn": None, "last_met_turn": None},
-            {"how_known": HowKnown.INTRODUCED, "met_count": 0, "first_met_turn": None, "last_met_turn": None, "relation_note": ""},
+            {
+                "how_known": HowKnown.INTRODUCED,
+                "met_count": 0,
+                "first_met_turn": None,
+                "last_met_turn": None,
+                "relation_note": "",
+            },
         ],
         ids=[
             "met_without_meeting",
@@ -101,7 +105,9 @@ class TestAcquaintance:
         """回数と会ったターンが食い違う、知る前に会っている、会って知ったのに知ったターンと初めて会ったターンが違う、注記が空、のどれでも作れない。"""
         with pytest.raises(AcquaintanceInvalid):
             Acquaintance(
-                environment_name="島", name="ノア", known_since_turn=2,
+                environment_name="島",
+                name="ノア",
+                known_since_turn=2,
                 **{"name_learned_turn": 2, **fields},
             )
 
@@ -118,9 +124,7 @@ class TestKnowingTheName:
 
     def test_meeting_a_stranger_does_not_teach_the_name(self) -> None:
         """名前を知らずに会った相手は、会った記録はあるが名前を知らない。"""
-        met = Acquaintance.first_meeting(
-            environment_name="山村", name="ノア", turn=3, knows_name=False
-        )
+        met = Acquaintance.first_meeting(environment_name="山村", name="ノア", turn=3, knows_name=False)
 
         assert met.met_count == 1
         assert not met.knows_name
@@ -128,9 +132,7 @@ class TestKnowingTheName:
 
     def test_learning_the_name_keeps_the_meeting_and_fixes_the_turn(self) -> None:
         """名前を知ると、知ったターンが付き、会った回数と知り方は変わらない。"""
-        met = Acquaintance.first_meeting(
-            environment_name="山村", name="ノア", turn=3, knows_name=False
-        ).met_at(turn=5)
+        met = Acquaintance.first_meeting(environment_name="山村", name="ノア", turn=3, knows_name=False).met_at(turn=5)
 
         named = met.learned_name(turn=6)
 
@@ -146,9 +148,7 @@ class TestKnowingTheName:
 
     def test_meeting_again_does_not_teach_the_name(self) -> None:
         """名前を知らない相手と何度会っても、名前は知らないまま。"""
-        met = Acquaintance.first_meeting(
-            environment_name="山村", name="ノア", turn=3, knows_name=False
-        )
+        met = Acquaintance.first_meeting(environment_name="山村", name="ノア", turn=3, knows_name=False)
 
         assert not met.met_at(turn=9).knows_name
 
@@ -157,8 +157,20 @@ class TestKnowingTheName:
         [
             {"how_known": HowKnown.INTRODUCED, "met_count": 0, "name_learned_turn": None},
             {"how_known": HowKnown.INTRODUCED, "met_count": 0, "name_learned_turn": 4},
-            {"how_known": HowKnown.MET, "met_count": 1, "first_met_turn": 2, "last_met_turn": 2, "name_learned_turn": 1},
-            {"how_known": HowKnown.MET, "met_count": 1, "first_met_turn": 2, "last_met_turn": 2, "name_learned_turn": True},
+            {
+                "how_known": HowKnown.MET,
+                "met_count": 1,
+                "first_met_turn": 2,
+                "last_met_turn": 2,
+                "name_learned_turn": 1,
+            },
+            {
+                "how_known": HowKnown.MET,
+                "met_count": 1,
+                "first_met_turn": 2,
+                "last_met_turn": 2,
+                "name_learned_turn": True,
+            },
         ],
         ids=["introduced_without_name", "introduced_name_later", "name_before_meeting", "bool_turn"],
     )
@@ -166,6 +178,8 @@ class TestKnowingTheName:
         """紹介なのに名前を知らない・紹介と違うターンに知った、会う前に名前を知った、ターンが整数でない、のどれでも作れない。"""
         with pytest.raises(AcquaintanceInvalid):
             Acquaintance(
-                environment_name="島", name="ノア", known_since_turn=2,
+                environment_name="島",
+                name="ノア",
+                known_since_turn=2,
                 **{"name_learned_turn": 2, **fields},
             )

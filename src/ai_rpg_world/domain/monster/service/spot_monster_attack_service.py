@@ -74,9 +74,7 @@ class SpotMonsterAttackService:
             # cooldown または DEAD どちらでもまとめて "cannot_attack"
             return AttackOutcome(executed=False, reason="cannot_attack")
 
-        if not self._visibility.can_see_target(
-            monster.template, effective_lighting
-        ):
+        if not self._visibility.can_see_target(monster.template, effective_lighting):
             return AttackOutcome(executed=False, reason="not_visible")
 
         if target_player.is_down:

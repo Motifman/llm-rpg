@@ -50,9 +50,7 @@ class TestDeclaration:
     def test_missing_outcome_is_rejected(self) -> None:
         """required_outcome を書かないと GameEndConditionValidationException を投げる。"""
         with pytest.raises(GameEndConditionValidationException):
-            GameEndCondition(
-                condition_type=GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME
-            )
+            GameEndCondition(condition_type=GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME)
 
     def test_unresolved_outcome_is_rejected(self) -> None:
         """required_outcome に UNRESOLVED を書くと GameEndConditionValidationException を投げる。開始した瞬間に成立してしまうため。"""
@@ -68,35 +66,41 @@ class TestEvaluation:
 
     def test_satisfied_when_every_member_has_the_outcome(self) -> None:
         """北の 2 人が RESCUED なら、南が UNRESOLVED のままでも成立する。"""
-        result = _evaluate({
-            1: PlayerOutcomeEnum.RESCUED,
-            2: PlayerOutcomeEnum.RESCUED,
-            3: PlayerOutcomeEnum.UNRESOLVED,
-            4: PlayerOutcomeEnum.UNRESOLVED,
-        })
+        result = _evaluate(
+            {
+                1: PlayerOutcomeEnum.RESCUED,
+                2: PlayerOutcomeEnum.RESCUED,
+                3: PlayerOutcomeEnum.UNRESOLVED,
+                4: PlayerOutcomeEnum.UNRESOLVED,
+            }
+        )
 
         assert result.is_ended is True
         assert result.result is GameResultEnum.WIN
 
     def test_not_satisfied_when_one_member_is_left_behind(self) -> None:
         """北の 1 人だけが RESCUED で、もう 1 人が UNRESOLVED なら成立しない。"""
-        result = _evaluate({
-            1: PlayerOutcomeEnum.RESCUED,
-            2: PlayerOutcomeEnum.UNRESOLVED,
-            3: PlayerOutcomeEnum.RESCUED,
-            4: PlayerOutcomeEnum.RESCUED,
-        })
+        result = _evaluate(
+            {
+                1: PlayerOutcomeEnum.RESCUED,
+                2: PlayerOutcomeEnum.UNRESOLVED,
+                3: PlayerOutcomeEnum.RESCUED,
+                4: PlayerOutcomeEnum.RESCUED,
+            }
+        )
 
         assert result.is_ended is False
 
     def test_other_teams_outcomes_do_not_count(self) -> None:
         """南の 2 人が RESCUED でも、北の誰も RESCUED でなければ北の条件は成立しない。"""
-        result = _evaluate({
-            1: PlayerOutcomeEnum.DEAD,
-            2: PlayerOutcomeEnum.UNRESOLVED,
-            3: PlayerOutcomeEnum.RESCUED,
-            4: PlayerOutcomeEnum.RESCUED,
-        })
+        result = _evaluate(
+            {
+                1: PlayerOutcomeEnum.DEAD,
+                2: PlayerOutcomeEnum.UNRESOLVED,
+                3: PlayerOutcomeEnum.RESCUED,
+                4: PlayerOutcomeEnum.RESCUED,
+            }
+        )
 
         assert result.is_ended is False
 
@@ -128,4 +132,3 @@ class TestEvaluation:
         result = _evaluate({1: PlayerOutcomeEnum.RESCUED})
 
         assert result.is_ended is False
-

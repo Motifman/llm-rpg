@@ -204,8 +204,7 @@ class SqliteSkillDeckProgressRepository(SkillDeckProgressRepository):
         return build_skill_deck_progress(
             row=row,
             capacity_bonus_rows=[
-                (int(capacity_row["level"]), int(capacity_row["bonus_capacity"]))
-                for capacity_row in capacity_rows
+                (int(capacity_row["level"]), int(capacity_row["bonus_capacity"])) for capacity_row in capacity_rows
             ],
             proposal_rows=proposal_rows,
             required_skill_rows=required_rows,

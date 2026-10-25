@@ -94,14 +94,28 @@ class _World:
         return self.memory().recent()
 
 
-def _observation(prose: str = "ミオが坑道から戻ってきた", *, label: str | None = "1日目 朝", **structured: Any) -> UnifiedRecentEventEntry:
+def _observation(
+    prose: str = "ミオが坑道から戻ってきた", *, label: str | None = "1日目 朝", **structured: Any
+) -> UnifiedRecentEventEntry:
     return UnifiedRecentEventEntry.from_observation(
-        ObservationEntry(occurred_at=_AT, game_time_label=label, output=ObservationOutput(prose=prose, structured=structured))
+        ObservationEntry(
+            occurred_at=_AT, game_time_label=label, output=ObservationOutput(prose=prose, structured=structured)
+        )
     )
 
 
 def _result(provenance: ExecutionProvenance | None, **overrides: Any) -> UnifiedRecentEventEntry:
-    fields: dict[str, Any] = {"occurred_at": _AT, "action_summary": "扉を調べた", "result_summary": "鍵がかかっていた", "success": True, "tool_name": "interact", "game_time_label": "1日目 朝", "inner_thought": "鍵を探そう", "occurred_tick": 3, "execution_provenance": provenance}
+    fields: dict[str, Any] = {
+        "occurred_at": _AT,
+        "action_summary": "扉を調べた",
+        "result_summary": "鍵がかかっていた",
+        "success": True,
+        "tool_name": "interact",
+        "game_time_label": "1日目 朝",
+        "inner_thought": "鍵を探そう",
+        "occurred_tick": 3,
+        "execution_provenance": provenance,
+    }
     return UnifiedRecentEventEntry.from_action_result(ActionResultEntry(**{**fields, **overrides}))
 
 
@@ -129,9 +143,17 @@ class TestCopyOneTurn:
         world.clock.advance_turn(ADA_BEING)
 
         with execution_provenance_scope(_provenance()):
-            world.copy.note_move(ADA, "interact", {"target": "扉", "inner_thought": "鍵を探そう", "expected_result": "開く"})
+            world.copy.note_move(
+                ADA, "interact", {"target": "扉", "inner_thought": "鍵を探そう", "expected_result": "開く"}
+            )
 
-        move = AgentMove(call_id="execution-1", tool_name="interact", arguments={"target": "扉"}, expectation="開く", inner_thought="鍵を探そう")
+        move = AgentMove(
+            call_id="execution-1",
+            tool_name="interact",
+            arguments={"target": "扉"},
+            expectation="開く",
+            inner_thought="鍵を探そう",
+        )
         assert world.memory().awaiting == Attempt(turn=1, move=move)
 
     def test_own_result_pairs_with_the_noted_move_of_the_same_request(self) -> None:
@@ -157,7 +179,10 @@ class TestCopyOneTurn:
         world = _World()
         world.clock.advance_turn(ADA_BEING)
 
-        world.copy.on_appended(ADA, _result(None, tool_name="travel_to", action_summary="通信室へ移動した", result_summary="通信室に着いた"))
+        world.copy.on_appended(
+            ADA,
+            _result(None, tool_name="travel_to", action_summary="通信室へ移動した", result_summary="通信室に着いた"),
+        )
 
         (event,) = world.events()
         assert isinstance(event, Perception)
@@ -186,13 +211,25 @@ class TestNotCopied:
         ("entry", "source", "reason", "kind"),
         [
             (_observation(" ", type="player_spoke"), "observation", "empty_body", "player_spoke"),
-            (_observation("あなたは息を吹き返した", label=None, type="player_revived_post_hoc"), "observation", "missing_time_label", "player_revived_post_hoc"),
+            (
+                _observation("あなたは息を吹き返した", label=None, type="player_revived_post_hoc"),
+                "observation",
+                "missing_time_label",
+                "player_revived_post_hoc",
+            ),
             (_result(None, tool_name="memo_add"), "action_result", "being_inner_record", "memo_add"),
-            (_result(_provenance(), tool_name=WORLD_ACTION_HESITATION, action_summary=" ", result_summary=" "), "action_result", "empty_body", WORLD_ACTION_HESITATION),
+            (
+                _result(_provenance(), tool_name=WORLD_ACTION_HESITATION, action_summary=" ", result_summary=" "),
+                "action_result",
+                "empty_body",
+                WORLD_ACTION_HESITATION,
+            ),
         ],
         ids=["empty-observation", "no-time-label", "memo-result-without-move", "empty-lapse"],
     )
-    def test_rejected_event_is_traced_and_not_remembered(self, entry: UnifiedRecentEventEntry, source: str, reason: str, kind: str) -> None:
+    def test_rejected_event_is_traced_and_not_remembered(
+        self, entry: UnifiedRecentEventEntry, source: str, reason: str, kind: str
+    ) -> None:
         """空の本文、時刻の無い観測、1 手を持たない記憶の道具の結果、本文の無い出せなかったときの行は写さず、trace に 1 件残す。"""
         world = _World()
         world.clock.advance_turn(ADA_BEING)
@@ -200,7 +237,9 @@ class TestNotCopied:
         world.copy.on_appended(ADA, entry)
 
         assert world.events() == ()
-        assert world.recorder.not_copied() == [{"being_id": "being_p1", "source": source, "reason": reason, "event_kind": kind}]
+        assert world.recorder.not_copied() == [
+            {"being_id": "being_p1", "source": source, "reason": reason, "event_kind": kind}
+        ]
         assert [(t, p) for k, t, p, _ in world.recorder.events] == [(3, 1)]
 
     def test_result_of_another_request_is_traced_as_unpaired(self) -> None:
@@ -239,7 +278,10 @@ class TestNotCopied:
             world.copy.note_move(ADA, "interact", {"target": object()})
         world.copy.on_appended(ADA, _result(provenance))
 
-        assert [(p["source"], p["reason"]) for p in world.recorder.not_copied()] == [("move", "contract_violation"), ("action_result", "unpaired_result")]
+        assert [(p["source"], p["reason"]) for p in world.recorder.not_copied()] == [
+            ("move", "contract_violation"),
+            ("action_result", "unpaired_result"),
+        ]
 
     def test_result_after_the_next_turn_observation_goes_before_it(self) -> None:
         """時計を進めたあとに観測が入り (番号 2)、そのあとで番号 1 の結果が来ても、結果は番号 1 として観測より前に入る。"""
@@ -262,7 +304,15 @@ class TestNotCopied:
 
         world.copy.on_appended(ADA, _observation())
 
-        assert world.recorder.not_copied() == [{"being_id": "being_p1", "source": "observation", "reason": "unexpected_error", "event_kind": None, "error_type": "RuntimeError"}]
+        assert world.recorder.not_copied() == [
+            {
+                "being_id": "being_p1",
+                "source": "observation",
+                "reason": "unexpected_error",
+                "event_kind": None,
+                "error_type": "RuntimeError",
+            }
+        ]
 
 
 class TestMemoryOperationsAndLapses:
@@ -275,7 +325,9 @@ class TestMemoryOperationsAndLapses:
         provenance = _provenance()
         with execution_provenance_scope(provenance):
             world.copy.note_move(ADA, "memo_add", {"text": "鍵を探す"})
-        result = _result(provenance, tool_name="memo_add", action_summary="メモを書いた", result_summary="メモを追加しました")
+        result = _result(
+            provenance, tool_name="memo_add", action_summary="メモを書いた", result_summary="メモを追加しました"
+        )
 
         world.copy.on_appended(ADA, result)
 
@@ -320,7 +372,6 @@ class TestMemoryOperationsAndLapses:
         assert world.memory().awaiting is not None and world.memory().awaiting.move.call_id == "execution-1"
         assert world.recorder.not_copied() == []
 
-
     def test_lapse_line_without_a_request_is_still_a_lapse(self) -> None:
         """迷いの行は、実行の要求の ID を持たなくても、見聞きしたことではなく Lapse として残る。道具の名前で先に見分けるため。"""
         world = _World()
@@ -339,8 +390,10 @@ class TestFailuresOutsideTheTranslation:
     def test_being_lookup_error_is_traced_without_being_id(self, call: str) -> None:
         """Being を引く処理が例外を投げると、外へ投げず、being_id の無い unexpected_error を 1 件残す。"""
         world = _World()
+
         def broken_being_id_of(player_id: PlayerId) -> BeingId | None:
             raise RuntimeError("解決できない")
+
         world.copy._being_id_of = broken_being_id_of
 
         with execution_provenance_scope(_provenance()):
@@ -350,7 +403,11 @@ class TestFailuresOutsideTheTranslation:
                 world.copy.on_appended(ADA, _observation())
 
         (payload,) = world.recorder.not_copied()
-        assert (payload["being_id"], payload["reason"], payload["error_type"]) == (None, "unexpected_error", "RuntimeError")
+        assert (payload["being_id"], payload["reason"], payload["error_type"]) == (
+            None,
+            "unexpected_error",
+            "RuntimeError",
+        )
 
 
 class TestOccurrenceOrder:

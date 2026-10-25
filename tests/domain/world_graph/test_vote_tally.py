@@ -36,14 +36,10 @@ class TestPlurality:
         [
             pytest.param({_A: _C, _B: _C, _C: _A}, id="majority"),
             pytest.param({_A: _C, _B: _C, _C: _A, _D: _B}, id="half"),
-            pytest.param(
-                {_A: _C, _B: _C, _C: _A, _D: _B, _E: _D}, id="below_half"
-            ),
+            pytest.param({_A: _C, _B: _C, _C: _A, _D: _B, _E: _D}, id="below_half"),
         ],
     )
-    def test_clear_winner_is_ejected(
-        self, ballots: dict[PlayerId, PlayerId | None]
-    ) -> None:
+    def test_clear_winner_is_ejected(self, ballots: dict[PlayerId, PlayerId | None]) -> None:
         """2対1、2対1対1、2対1対1対1では、過半数を要せず最多のCを追放する。"""
         result = resolve_vote(ballots)
         assert result.ejected_player_id == _C
@@ -55,9 +51,7 @@ class TestPlurality:
             pytest.param({_A: _SKIP, _B: _SKIP, _C: _B}, id="last_voter_names_b"),
         ],
     )
-    def test_a_lone_vote_loses_to_the_skips(
-        self, ballots: dict[PlayerId, PlayerId | None]
-    ) -> None:
+    def test_a_lone_vote_loses_to_the_skips(self, ballots: dict[PlayerId, PlayerId | None]) -> None:
         """1 票の指名は、2 つの棄権に負ける。
 
         **棄権は票として数える。** 保留する側が多ければ「決めない」が

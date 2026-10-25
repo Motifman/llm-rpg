@@ -53,7 +53,11 @@ def test_registered_trade_event_is_restored_with_its_typed_values(event) -> None
 
 @pytest.mark.parametrize(
     ("event_type", "schema_version", "payload"),
-    (("unknown:Event", 1, b"{}"), (event_type_name(TradeCancelledEvent), 2, b"{}"), (event_type_name(TradeCancelledEvent), 1, b"not-json")),
+    (
+        ("unknown:Event", 1, b"{}"),
+        (event_type_name(TradeCancelledEvent), 2, b"{}"),
+        (event_type_name(TradeCancelledEvent), 1, b"not-json"),
+    ),
 )
 def test_unknown_type_schema_or_invalid_payload_is_permanent_failure(
     event_type: str,

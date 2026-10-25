@@ -154,8 +154,11 @@ class TargetLabelRescue:
                 original=written,
                 target=None,
                 judgment=TargetLabelJudgment(
-                    chosen=None, probability=None, confidence=None,
-                    min_confidence=self.min_confidence, accepted=False,
+                    chosen=None,
+                    probability=None,
+                    confidence=None,
+                    min_confidence=self.min_confidence,
+                    accepted=False,
                     unavailable_reason=exc.code,
                 ),
                 tool=tool,
@@ -203,7 +206,10 @@ class _TargetLabelBackend:
         chosen = str(answer.value)
         return Judgment(
             value=None if chosen == NO_MATCH_OPTION else chosen,
-            evidence=answer, backend=answer.source.value, model="", latency_ms=answer.latency_ms,
+            evidence=answer,
+            backend=answer.source.value,
+            model="",
+            latency_ms=answer.latency_ms,
         )
 
 

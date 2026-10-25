@@ -36,10 +36,7 @@ class TestWorldRuntimeEndOnAllDown:
         assert result.reason.startswith("外的停止 END_ON_ALL_DOWN:")
         assert "行動可能プレイヤーがいない" in result.reason
         assert result.player_outcomes is not None
-        assert all(
-            outcome is PlayerOutcomeEnum.UNRESOLVED
-            for outcome in result.player_outcomes.values()
-        )
+        assert all(outcome is PlayerOutcomeEnum.UNRESOLVED for outcome in result.player_outcomes.values())
 
     def test_treats_resolved_players_as_unable_to_act(self) -> None:
         """outcome 確定済み player と down player だけなら終了する。"""

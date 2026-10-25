@@ -52,9 +52,7 @@ class TestOutcomeAndReason:
 
         assert _outcome_and_reason(end_check) == ("ENDED", None)
 
-    def test_drive_scenario_returns_the_declared_outcome_value(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_drive_scenario_returns_the_declared_outcome_value(self, tmp_path: Path, monkeypatch) -> None:
         """実験駆動の公開結果にも enum の repr でなく LOSE と理由を載せる。"""
         import ai_rpg_world.presentation.spot_graph_game.runtime_manager as manager_module
 
@@ -138,9 +136,7 @@ class TestOutcomeAndReason:
         events = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
         assert not [e for e in events if e["kind"] == TraceEventKind.TEAM_RESULT]
 
-    def test_drive_scenario_records_team_result_when_the_game_ends(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_drive_scenario_records_team_result_when_the_game_ends(self, tmp_path: Path, monkeypatch) -> None:
         """終了した判定結果から runtime が team_result の payload を返すと、その tick で trace に 1 件残る。"""
         import ai_rpg_world.presentation.spot_graph_game.runtime_manager as manager_module
 
@@ -232,9 +228,7 @@ class TestOutcomeAndReason:
 class TestLlmRunHealth:
     """LLM 呼び出しが全滅した run を正常な TIMEOUT に見せない。"""
 
-    def test_all_failed_calls_turn_timeout_into_llm_failure(
-        self, tmp_path: Path
-    ) -> None:
+    def test_all_failed_calls_turn_timeout_into_llm_failure(self, tmp_path: Path) -> None:
         """呼び出しが1件以上あり成功0件なら、LLM_FAILUREと失敗理由を返す。"""
         trace_path = tmp_path / "trace.jsonl"
         with JsonlTraceRecorder(trace_path) as recorder:
@@ -281,9 +275,7 @@ class TestLlmRunHealth:
         assert (outcome, reason) == ("TIMEOUT", None)
         assert (total, succeeded) == (0, 0)
 
-    def test_main_preserves_artifacts_but_returns_failure(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_main_preserves_artifacts_but_returns_failure(self, tmp_path: Path, monkeypatch) -> None:
         """LLM_FAILUREでもtrace/reportを残し、呼び出し元には終了コード1を返す。"""
         import scripts.run_scenario_experiment as runner
 
@@ -318,9 +310,7 @@ class TestLlmRunHealth:
 
         assert rc == 1
         assert (out_dir / "trace.jsonl").exists()
-        assert "outcome: **LLM_FAILURE**" in (
-            out_dir / "report.md"
-        ).read_text(encoding="utf-8")
+        assert "outcome: **LLM_FAILURE**" in (out_dir / "report.md").read_text(encoding="utf-8")
 
 
 class TestBuildReport:
@@ -398,23 +388,16 @@ class TestBuildReport:
             trace_path=trace_path,
             summary={
                 "outcome": "ENDED",
-                "end_reason": (
-                    "外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない"
-                ),
+                "end_reason": ("外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない"),
                 "last_tick": 3,
                 "max_world_ticks": 30,
                 "elapsed_sec": 0.1,
             },
         )
 
-        assert (
-            "end reason: 外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない"
-            in report
-        )
+        assert "end reason: 外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない" in report
 
-    def test_position_change_event_moves_column_aggregated(
-        self, tmp_path: Path
-    ) -> None:
+    def test_position_change_event_moves_column_aggregated(self, tmp_path: Path) -> None:
         """from_spot_id=None の初期配置は moves に含めず、移動だけがカウントされる。"""
         scenario = tmp_path / "demo.json"
         scenario.write_text("{}", encoding="utf-8")
@@ -459,9 +442,7 @@ class TestBuildReport:
         # player 1: actions=0 successes=0 failures=0 moves=2
         assert "| 1 | 0 | 0 | 0 | 2 |" in report
 
-    def test_event_observation_table_min_rendered(
-        self, tmp_path: Path
-    ) -> None:
+    def test_event_observation_table_min_rendered(self, tmp_path: Path) -> None:
         """action がゼロでもクラッシュせず 0 件として表示される。"""
         scenario = tmp_path / "demo.json"
         scenario.write_text("{}", encoding="utf-8")
@@ -533,20 +514,11 @@ class TestEmitHtmlArtifacts:
             "prompt.html",
         ]
         assert all(r.generated for r in results)
-        assert (
-            (tmp_path / "trace.html").read_text(encoding="utf-8")
-            == "<html>legacy</html>"
-        )
+        assert (tmp_path / "trace.html").read_text(encoding="utf-8") == "<html>legacy</html>"
         assert (tmp_path / "viewer.html").read_text(encoding="utf-8") == "<html>map</html>"
         assert not (tmp_path / "episodic.html").exists()
-        assert (
-            (tmp_path / "timeline.html").read_text(encoding="utf-8")
-            == "<html>timeline</html>"
-        )
-        assert (
-            (tmp_path / "prompt.html").read_text(encoding="utf-8")
-            == "<html>prompt</html>"
-        )
+        assert (tmp_path / "timeline.html").read_text(encoding="utf-8") == "<html>timeline</html>"
+        assert (tmp_path / "prompt.html").read_text(encoding="utf-8") == "<html>prompt</html>"
         out = capsys.readouterr().out
         assert "[html] trace.html:" in out
         assert "[html] viewer.html:" in out
@@ -680,6 +652,7 @@ class TestMaxWorldTicksRename:
         import io
 
         from scripts.run_scenario_experiment import _ExperimentProgressReporter
+
         progress_path = tmp_path / "progress.jsonl"
         reporter = _ExperimentProgressReporter(
             max_world_ticks=10,
@@ -693,9 +666,7 @@ class TestMaxWorldTicksRename:
         assert entry["max_world_ticks"] == 10
         assert "max_ticks" not in entry
 
-    def test_build_report_max_world_ticks_displays(
-        self, tmp_path: Path
-    ) -> None:
+    def test_build_report_max_world_ticks_displays(self, tmp_path: Path) -> None:
         """report.md に ``max world ticks`` 行が含まれる (旧 ``max ticks`` リネーム)。"""
         scenario = tmp_path / "demo.json"
         scenario.write_text("{}", encoding="utf-8")
@@ -727,12 +698,7 @@ class TestExperimentProfileManifest:
     @staticmethod
     def _load_profile(profile_name: str) -> dict:
         return json.loads(
-            (
-                _REPO_ROOT
-                / "data"
-                / "experiment_profiles"
-                / f"{profile_name}.json"
-            ).read_text(encoding="utf-8")
+            (_REPO_ROOT / "data" / "experiment_profiles" / f"{profile_name}.json").read_text(encoding="utf-8")
         )
 
     def test_station_drill_lean_captures_prompts_without_episodic_memory(self) -> None:
@@ -785,9 +751,7 @@ class TestExperimentProfileManifest:
         expected["runtime_config"]["LLM_REASONING_EFFORT"] = "minimal"
 
         assert thinking == expected
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(
-            _runtime_config_mapping_from_source(thinking)
-        )
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(_runtime_config_mapping_from_source(thinking))
         assert cfg.openrouter_provider == "Cloudflare"
         assert cfg.llm_reasoning_effort == "minimal"
         assert cfg.llm_turn_parallel_workers == 8
@@ -809,9 +773,7 @@ class TestExperimentProfileManifest:
         expected["runtime_config"]["LLM_TOOL_CHOICE"] = "auto"
 
         assert deepseek_auto == expected
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(
-            _runtime_config_mapping_from_source(deepseek_auto)
-        )
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(_runtime_config_mapping_from_source(deepseek_auto))
         assert cfg.openrouter_provider == "DeepSeek"
         assert cfg.llm_reasoning_effort == "minimal"
         assert cfg.llm_tool_choice == "auto"
@@ -822,9 +784,7 @@ class TestExperimentProfileManifest:
     ) -> None:
         """session_id 無しの比較腕は基準 profile から送信設定だけを変える。"""
         base = self._load_profile("station_drill_deepseek_auto")
-        without_session = self._load_profile(
-            "station_drill_deepseek_auto_without_session"
-        )
+        without_session = self._load_profile("station_drill_deepseek_auto_without_session")
         expected = dict(base)
         expected["profile"] = "station_drill_deepseek_auto_without_session"
         expected["description"] = (
@@ -835,9 +795,7 @@ class TestExperimentProfileManifest:
         expected["runtime_config"]["LLM_SESSION_ID_ENABLED"] = False
 
         assert without_session == expected
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(
-            _runtime_config_mapping_from_source(without_session)
-        )
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(_runtime_config_mapping_from_source(without_session))
         assert cfg.llm_session_id_enabled is False
 
     def test_historical_deepseek_profiles_keep_original_model_routing(self) -> None:
@@ -845,9 +803,7 @@ class TestExperimentProfileManifest:
         for profile_name in self._HISTORICAL_DEEPSEEK_PROFILES:
             runtime_config = self._load_profile(profile_name)["runtime_config"]
 
-            assert runtime_config["LLM_MODEL"] == (
-                "openrouter/deepseek/deepseek-v4-flash"
-            ), profile_name
+            assert runtime_config["LLM_MODEL"] == ("openrouter/deepseek/deepseek-v4-flash"), profile_name
             assert runtime_config["OPENROUTER_PROVIDER"] == "DeepSeek", profile_name
 
     def test_uses_manifest_run_start_resolved_config_remains_profile(
@@ -868,9 +824,7 @@ class TestExperimentProfileManifest:
                 "elapsed_sec": 0.0,
                 "max_world_ticks": kwargs["max_world_ticks"],
                 "snapshot_save_dir": (
-                    str(kwargs.get("snapshot_save_dir"))
-                    if kwargs.get("snapshot_save_dir")
-                    else None
+                    str(kwargs.get("snapshot_save_dir")) if kwargs.get("snapshot_save_dir") else None
                 ),
                 "snapshot_load_dir": None,
             }
@@ -895,9 +849,7 @@ class TestExperimentProfileManifest:
         assert cfg.llm_client_kind == "stub"
         assert cfg.reason_first_two_step_enabled is True
 
-        resolved = json.loads(
-            (out_dir / "experiment.config.resolved.json").read_text(encoding="utf-8")
-        )
+        resolved = json.loads((out_dir / "experiment.config.resolved.json").read_text(encoding="utf-8"))
         assert resolved["profile"] == "smoke_stub"
         assert resolved["runtime_config"]["llm_client_kind"] == "stub"
         assert resolved["runtime_config"]["reason_first_two_step_enabled"] is True
@@ -905,9 +857,7 @@ class TestExperimentProfileManifest:
         assert resolved["scenario_sha256"]
         assert resolved["git"]["dirty"] in (True, False)
 
-        first = json.loads(
-            (out_dir / "trace.jsonl").read_text(encoding="utf-8").splitlines()[0]
-        )
+        first = json.loads((out_dir / "trace.jsonl").read_text(encoding="utf-8").splitlines()[0])
         payload = first["payload"]
         assert payload["experiment_profile"] == "smoke_stub"
         assert payload["experiment_manifest_sha256"]
@@ -1012,13 +962,15 @@ class TestTeamResultReachesTheTrace:
         for player in raw["players"]:
             if player["id"] in ("north_1", "north_2", "south_1"):
                 player["spawn_spot"] = "lift"
-        raw["scenario_events"] = [{
-            "id": "lever_pulled",
-            "trigger": "ON_TICK",
-            "once": True,
-            "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 2}],
-            "effects": [{"effect_type": "SET_FLAG", "parameters": {"flag_name": "lift_departed"}}],
-        }]
+        raw["scenario_events"] = [
+            {
+                "id": "lever_pulled",
+                "trigger": "ON_TICK",
+                "once": True,
+                "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 2}],
+                "effects": [{"effect_type": "SET_FLAG", "parameters": {"flag_name": "lift_departed"}}],
+            }
+        ]
         scenario_path = tmp_path / "two_teams_lift_auto.json"
         scenario_path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
         trace_path = tmp_path / "trace.jsonl"

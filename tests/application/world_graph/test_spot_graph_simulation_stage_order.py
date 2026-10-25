@@ -156,9 +156,7 @@ def _build_service_with_all_stages(
         food_spoilage_stage=stage("food_spoilage"),
         trade_offer_expiry_stage=stage("trade_offer_expiry"),
         market_order_expiry_stage=stage("market_order_expiry"),
-        player_outcome_rule_stage=_RecordingOutcomeRuleStage(
-            name="player_outcome_rule", recorder=recorder
-        ),
+        player_outcome_rule_stage=_RecordingOutcomeRuleStage(name="player_outcome_rule", recorder=recorder),
         death_grace_stage=stage("death_grace"),
         heartbeat_emitter=_RecordingHeartbeat(recorder=recorder),
         llm_turn_trigger=_RecordingTrigger(recorder=recorder),

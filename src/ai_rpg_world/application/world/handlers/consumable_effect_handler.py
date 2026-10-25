@@ -94,9 +94,7 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
             event.item_spec_id,
         )
 
-    def _apply_effect_to_status(
-        self, effect: ItemEffect, player_status: PlayerStatusAggregate
-    ) -> None:
+    def _apply_effect_to_status(self, effect: ItemEffect, player_status: PlayerStatusAggregate) -> None:
         """効果データを PlayerStatusAggregate に反映する。効果の種類ごとに適切なメソッドを呼ぶ。"""
         if isinstance(effect, HealEffect):
             player_status.heal_hp(effect.amount)

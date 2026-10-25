@@ -45,9 +45,7 @@ def _node(i: int) -> SpotNode:
     )
 
 
-def _graph_with_two_spots_and_path(
-    *, traversable: bool = True
-) -> SpotGraphAggregate:
+def _graph_with_two_spots_and_path(*, traversable: bool = True) -> SpotGraphAggregate:
     """spot1 → spot2 の単方向接続を持つ最小グラフ。"""
     g = SpotGraphAggregate.empty(SpotGraphId.create(1))
     g.add_spot(_node(1))
@@ -335,12 +333,7 @@ class TestCanTraverseConnection:
     def test_traversable_true(self) -> None:
         """通常通行可能な接続では True を返す。"""
         g = _graph_with_two_spots_and_path()
-        assert (
-            g.can_traverse_connection(
-                ConnectionId.create(10), frozenset(), frozenset()
-            )
-            is True
-        )
+        assert g.can_traverse_connection(ConnectionId.create(10), frozenset(), frozenset()) is True
 
     def test_traversable_false(self) -> None:
         """traversable=False では False。"""
@@ -360,9 +353,4 @@ class TestCanTraverseConnection:
                 passage_conditions=[],
             )
         )
-        assert (
-            g.can_traverse_connection(
-                ConnectionId.create(10), frozenset(), frozenset()
-            )
-            is False
-        )
+        assert g.can_traverse_connection(ConnectionId.create(10), frozenset(), frozenset()) is False

@@ -43,9 +43,7 @@ def render_html(events: list[TraceEvent], *, title: str = "Trace") -> str:
     meta = _collect_meta(events)
     mermaid_src = _build_mermaid_sequence(events, meta["player_labels"])
     per_tick_html = _build_per_tick_sections(events)
-    raw_jsonl = "\n".join(
-        json.dumps(e.to_jsonable(), ensure_ascii=False) for e in events
-    )
+    raw_jsonl = "\n".join(json.dumps(e.to_jsonable(), ensure_ascii=False) for e in events)
     return _HTML_TEMPLATE.format(
         title=html.escape(title),
         total_events=meta["total_events"],
@@ -81,10 +79,7 @@ def _collect_meta(events: list[TraceEvent]) -> dict[str, object]:
         tick_range = f"{min(ticks)} 〜 {max(ticks)}"
     else:
         tick_range = "(なし)"
-    player_html = "".join(
-        f"<li><code>{pid}</code>: {html.escape(labels[pid])}</li>"
-        for pid in player_ids
-    )
+    player_html = "".join(f"<li><code>{pid}</code>: {html.escape(labels[pid])}</li>" for pid in player_ids)
     return {
         "total_events": len(events),
         "tick_range_label": tick_range,
@@ -93,9 +88,7 @@ def _collect_meta(events: list[TraceEvent]) -> dict[str, object]:
     }
 
 
-def _build_mermaid_sequence(
-    events: list[TraceEvent], player_labels: dict[int, str]
-) -> str:
+def _build_mermaid_sequence(events: list[TraceEvent], player_labels: dict[int, str]) -> str:
     """sequence 図用の mermaid ソースを組み立てる。
 
     Note (memo / hint / scene 等) は sequence 図ではなく per-tick セクションに
@@ -106,7 +99,7 @@ def _build_mermaid_sequence(
     for pid, label in player_labels.items():
         alias = f"P{pid}"
         actor_alias[pid] = alias
-        lines.append(f'    actor {alias} as {_mermaid_actor_label(label)}')
+        lines.append(f"    actor {alias} as {_mermaid_actor_label(label)}")
     # 世界 (World) を共通の peer として用意
     lines.append("    participant W as 世界")
 
@@ -133,18 +126,14 @@ def _build_mermaid_sequence(
         elif e.kind == "episodic_chunk_written":
             ep_short = (_payload_str(e.payload, "episode_id"))[:6]
             reason = _payload_str(e.payload, "boundary_reason") or "?"
-            label = _mermaid_label(
-                f"t{e.tick}: ✎ chunk written ({ep_short}…, {reason})"
-            )
+            label = _mermaid_label(f"t{e.tick}: ✎ chunk written ({ep_short}…, {reason})")
             # self-note (actor が自分の記憶に書き込んだ)
             lines.append(f"    {actor}-->{actor}: {label}")
         elif e.kind == "episodic_recall":
             cand_count = 0
             if isinstance(e.payload, dict):
                 cand_count = int(e.payload.get("candidate_count") or 0)
-            label = _mermaid_label(
-                f"t{e.tick}: ⟲ recall {cand_count} candidates"
-            )
+            label = _mermaid_label(f"t{e.tick}: ⟲ recall {cand_count} candidates")
             lines.append(f"    {actor}-->{actor}: {label}")
     return "\n".join(lines)
 
@@ -160,9 +149,7 @@ def _build_per_tick_sections(events: list[TraceEvent]) -> str:
         title = "(tick 無し)" if tick is None else f"tick {tick}"
         rows: list[str] = []
         for e in evs:
-            actor_label = (
-                f"player {e.player_id}" if e.player_id is not None else "system"
-            )
+            actor_label = f"player {e.player_id}" if e.player_id is not None else "system"
             payload_text = json.dumps(e.payload, ensure_ascii=False)
             rows.append(
                 "<tr>"
@@ -177,9 +164,7 @@ def _build_per_tick_sections(events: list[TraceEvent]) -> str:
             "<thead><tr><th>#</th><th>kind</th><th>actor</th><th>payload</th></tr></thead>"
             f"<tbody>{''.join(rows)}</tbody></table>"
         )
-        parts.append(
-            f"<details><summary>{html.escape(title)} ({len(evs)} events)</summary>{table}</details>"
-        )
+        parts.append(f"<details><summary>{html.escape(title)} ({len(evs)} events)</summary>{table}</details>")
     return "".join(parts)
 
 

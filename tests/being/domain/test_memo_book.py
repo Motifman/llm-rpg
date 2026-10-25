@@ -29,9 +29,7 @@ FIRST_ID = "3f2a7b9c-1d2e-4f00-8a00-000000000001"
 SECOND_ID = "91c0de00-1d2e-4f00-8a00-000000000002"
 SAME_PREFIX_ID = "3f2a7b11-1d2e-4f00-8a00-000000000003"
 SURE_BY_SELF = MemoProvenance(source=MemoSource.SELF, certainty=MemoCertainty.SURE)
-FROM_UNKNOWN_EPISODE = MemoProvenance(
-    source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33"
-)
+FROM_UNKNOWN_EPISODE = MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33")
 
 
 def _id(n: int) -> str:
@@ -64,25 +62,19 @@ class TestMemoProvenance:
 
     def test_heard_keeps_who(self) -> None:
         """出どころが「人から聞いた」なら、誰からの文をそのまま持つ。"""
-        provenance = MemoProvenance(
-            source=MemoSource.HEARD, certainty=MemoCertainty.GUESS, source_from="ミオ"
-        )
+        provenance = MemoProvenance(source=MemoSource.HEARD, certainty=MemoCertainty.GUESS, source_from="ミオ")
 
         assert provenance.source_from == "ミオ"
 
     def test_episode_requires_an_episode_handle(self) -> None:
         """出どころが「エピソードから」なら、ep_ で始まる呼び名でないと MemoValidationException を投げる。"""
         with pytest.raises(MemoValidationException):
-            MemoProvenance(
-                source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ミオ"
-            )
+            MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ミオ")
 
     def test_self_must_not_name_a_source(self) -> None:
         """出どころが「自分で確かめた」なのに誰からを持たせると MemoValidationException を投げる。"""
         with pytest.raises(MemoValidationException):
-            MemoProvenance(
-                source=MemoSource.SELF, certainty=MemoCertainty.SURE, source_from="ミオ"
-            )
+            MemoProvenance(source=MemoSource.SELF, certainty=MemoCertainty.SURE, source_from="ミオ")
 
 
 class TestAddingAMemo:
@@ -149,18 +141,14 @@ class TestAddingAMemo:
 
     def test_episode_source_must_be_a_known_episode(self) -> None:
         """出どころのエピソードの呼び名が、知っている呼び名に無ければ MemoValidationException を投げる。"""
-        provenance = MemoProvenance(
-            source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33"
-        )
+        provenance = MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33")
 
         with pytest.raises(MemoValidationException):
             _add(MemoBook.empty(ADA), kind=MemoKind.FACT, provenance=provenance)
 
     def test_episode_source_is_accepted_when_known(self) -> None:
         """出どころのエピソードの呼び名が、知っている呼び名にあれば受け付ける。"""
-        provenance = MemoProvenance(
-            source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33"
-        )
+        provenance = MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33")
 
         book = _add(
             MemoBook.empty(ADA),
@@ -254,9 +242,7 @@ class TestEditingAMemo:
     def test_edit_of_a_fact_can_replace_provenance(self) -> None:
         """分かったことを書き換えるとき、出どころと確かさを渡すと置き換わる。"""
         book = _add(MemoBook.empty(ADA), kind=MemoKind.FACT, provenance=SURE_BY_SELF)
-        heard = MemoProvenance(
-            source=MemoSource.HEARD, certainty=MemoCertainty.GUESS, source_from="ミオ"
-        )
+        heard = MemoProvenance(source=MemoSource.HEARD, certainty=MemoCertainty.GUESS, source_from="ミオ")
 
         book.edit("m_3f2a7b", text="弁の目盛りが関係する", provenance=heard, turn=8)
 

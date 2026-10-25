@@ -73,8 +73,7 @@ class TestCopyInTheRuntime:
 
         being_id = runtime._acting_being_for(_ME).being_id
         own_results = [
-            e for e in runtime._being_short_term_memory_store.get(being_id).experiences
-            if isinstance(e, Attempt)
+            e for e in runtime._being_short_term_memory_store.get(being_id).experiences if isinstance(e, Attempt)
         ]
         assert [(e.turn, e.move.tool_name, e.move.inner_thought) for e in own_results] == [
             (1, TOOL_NAME_SPOT_GRAPH_WAIT, "様子を見る"),
@@ -82,7 +81,8 @@ class TestCopyInTheRuntime:
         ]
         assert runtime._memory_turn_clock.current_turn(being_id) == 2
         assert [
-            p for p in recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_NOT_COPIED)
+            p
+            for p in recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_NOT_COPIED)
             if p["reason"] in {"memory_rule", "contract_violation", "unexpected_error"}
         ] == []
 
@@ -93,14 +93,22 @@ class TestCopyInTheRuntime:
         for minute, prose in ((1, "鐘が鳴った"), (2, "扉の向こうで足音がした")):
             runtime._obs_buffer.append(
                 _ME,
-                ObservationEntry(occurred_at=datetime(2026, 6, 1, 0, minute, tzinfo=timezone.utc), game_time_label=f"深夜 0:0{minute}", output=ObservationOutput(prose=prose, structured={"type": "distant_cue_appeared"})),
+                ObservationEntry(
+                    occurred_at=datetime(2026, 6, 1, 0, minute, tzinfo=timezone.utc),
+                    game_time_label=f"深夜 0:0{minute}",
+                    output=ObservationOutput(prose=prose, structured={"type": "distant_cue_appeared"}),
+                ),
             )
             _turn(wiring)
 
         being_id = runtime._acting_being_for(_ME).being_id
         experiences = runtime._being_short_term_memory_store.get(being_id).experiences
         bodies = [
-            (e.turn, type(e).__name__, (e.observation if isinstance(e, Perception) else e.result.observation).body.split("\n")[0])
+            (
+                e.turn,
+                type(e).__name__,
+                (e.observation if isinstance(e, Perception) else e.result.observation).body.split("\n")[0],
+            )
             for e in experiences
         ]
         assert bodies == [
@@ -127,13 +135,18 @@ class TestMemoryOperationsAndLapsesInTheRuntime:
     def test_memory_tool_move_is_kept_with_its_memory_operation_result(self) -> None:
         """エピソードを思い出す 1 手を選ぶと、その 1 手と組の Attempt が、記憶の結果を持って番号 1 で入る。写せなかった trace は残らない。"""
         runtime, wiring, recorder = _game(
-            tool_call={"name": TOOL_NAME_EPISODE_RECALL, "arguments": {"handles": ["鍵のこと"], "inner_thought": "思い出す"}}
+            tool_call={
+                "name": TOOL_NAME_EPISODE_RECALL,
+                "arguments": {"handles": ["鍵のこと"], "inner_thought": "思い出す"},
+            }
         )
 
         _turn(wiring)
 
         being_id = runtime._acting_being_for(_ME).being_id
-        (attempt,) = [e for e in runtime._being_short_term_memory_store.get(being_id).experiences if isinstance(e, Attempt)]
+        (attempt,) = [
+            e for e in runtime._being_short_term_memory_store.get(being_id).experiences if isinstance(e, Attempt)
+        ]
         assert (attempt.turn, attempt.move.tool_name) == (1, TOOL_NAME_EPISODE_RECALL)
         assert isinstance(attempt.result, MemoryOperationOutcome)
         assert recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_NOT_COPIED) == []
@@ -161,10 +174,16 @@ class TestRecentEventsShadowInTheRuntime:
         runtime, wiring, recorder = _game()
         runtime._obs_buffer.append(
             _ME,
-            ObservationEntry(occurred_at=datetime(2026, 6, 1, 0, 1, tzinfo=timezone.utc), game_time_label="深夜 0:01", output=ObservationOutput(prose="鐘が鳴った", structured={"type": "distant_cue_appeared"})),
+            ObservationEntry(
+                occurred_at=datetime(2026, 6, 1, 0, 1, tzinfo=timezone.utc),
+                game_time_label="深夜 0:01",
+                output=ObservationOutput(prose="鐘が鳴った", structured={"type": "distant_cue_appeared"}),
+            ),
         )
         _turn(wiring)
-        wiring.llm_client.set_tool_call_to_return({"name": TOOL_NAME_EPISODE_RECALL, "arguments": {"handles": ["鍵のこと"], "inner_thought": "思い出す"}})
+        wiring.llm_client.set_tool_call_to_return(
+            {"name": TOOL_NAME_EPISODE_RECALL, "arguments": {"handles": ["鍵のこと"], "inner_thought": "思い出す"}}
+        )
         _turn(wiring)
         wiring.llm_client.set_tool_call_to_return(None)
         _turn(wiring)

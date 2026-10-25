@@ -130,9 +130,7 @@ def _graph_repository() -> InMemorySpotGraphRepository:
     return InMemorySpotGraphRepository(graph)
 
 
-def _interaction_object(
-    *, reject: bool = False, grant_overflow_item: bool = False
-) -> SpotObject:
+def _interaction_object(*, reject: bool = False, grant_overflow_item: bool = False) -> SpotObject:
     return SpotObject(
         object_id=OBJECT_ID,
         name="転送装置",
@@ -230,17 +228,13 @@ def _build_service(
     cooldowns = InteractionCooldownStore()
     departed = DepartedPositionStore()
     flag_notifications: list[str] = []
-    world_flags.set_change_callback(
-        lambda change: flag_notifications.append(change.flag_name)
-    )
+    world_flags.set_change_callback(lambda change: flag_notifications.append(change.flag_name))
 
     dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     if fail_before_commit:
         dispatcher.register_required_before_commit(
             SpotObjectInteractedEvent,
-            lambda event, context: (_ for _ in ()).throw(
-                RuntimeError("sync interaction handler failed")
-            ),
+            lambda event, context: (_ for _ in ()).throw(RuntimeError("sync interaction handler failed")),
         )
     observations: list[_ObservedState] = []
     failure_publisher = _EventPublisher()
@@ -258,9 +252,7 @@ def _build_service(
             _ObservedState(
                 flag_is_set="activated" in world_flags.as_frozen_set(),
                 object_is_active=bool(obj and obj.state.get("active")),
-                player_spot_id=graph_repository.find_graph().get_entity_spot(
-                    EntityId.create(int(PLAYER_ID))
-                ),
+                player_spot_id=graph_repository.find_graph().get_entity_spot(EntityId.create(int(PLAYER_ID))),
                 cooldown_tick=cooldowns.last_success_tick(
                     PLAYER_ID,
                     object_action_key(int(OBJECT_ID), "activate"),
@@ -327,9 +319,7 @@ def _build_service(
 
 def test_success_commits_every_resource_before_observation() -> None:
     """成功観測はrepositoryと外部4資源がすべて確定した後にだけ届く。"""
-    service, _, _, _, _, notifications, observations, failure_publisher = (
-        _build_service()
-    )
+    service, _, _, _, _, notifications, observations, failure_publisher = _build_service()
 
     service.execute_interaction(
         PLAYER_ID,
@@ -368,13 +358,14 @@ def test_sync_failure_rolls_back_repository_external_state_and_observation() -> 
     obj = interior.get_object(OBJECT_ID) if interior is not None else None
     assert obj is not None and obj.state == {"active": False}
     assert world_flags.as_frozen_set() == frozenset()
-    assert graph_repository.find_graph().get_entity_spot(
-        EntityId.create(int(PLAYER_ID))
-    ) == ORIGIN
-    assert cooldowns.last_success_tick(
-        PLAYER_ID,
-        object_action_key(int(OBJECT_ID), "activate"),
-    ) is None
+    assert graph_repository.find_graph().get_entity_spot(EntityId.create(int(PLAYER_ID))) == ORIGIN
+    assert (
+        cooldowns.last_success_tick(
+            PLAYER_ID,
+            object_action_key(int(OBJECT_ID), "activate"),
+        )
+        is None
+    )
     assert notifications == []
     assert observations == []
     assert failure_publisher.events == []
@@ -424,16 +415,10 @@ def test_precondition_failure_is_observed_after_rollback_without_success_event()
         service.execute_interaction(PLAYER_ID, OBJECT_ID, "activate")
 
     assert world_flags.as_frozen_set() == frozenset()
-    assert graph_repository.find_graph().get_entity_spot(
-        EntityId.create(int(PLAYER_ID))
-    ) == ORIGIN
+    assert graph_repository.find_graph().get_entity_spot(EntityId.create(int(PLAYER_ID))) == ORIGIN
     assert notifications == []
     assert observations == []
-    failed = [
-        event
-        for event in failure_publisher.events
-        if isinstance(event, SpotObjectInteractionFailedEvent)
-    ]
+    failed = [event for event in failure_publisher.events if isinstance(event, SpotObjectInteractionFailedEvent)]
     assert len(failed) == 1
 
 
@@ -461,7 +446,4 @@ def test_cooldown_refusal_does_not_become_a_precondition_failure_observation() -
             current_tick=WorldTick(8),
         )
 
-    assert not any(
-        isinstance(event, SpotObjectInteractionFailedEvent)
-        for event in failure_publisher.events
-    )
+    assert not any(isinstance(event, SpotObjectInteractionFailedEvent) for event in failure_publisher.events)

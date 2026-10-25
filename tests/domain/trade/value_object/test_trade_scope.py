@@ -116,7 +116,6 @@ class TestTradeScope:
         scope2 = TradeScope.direct_trade(player_id2)
         assert scope1 != scope2
 
-
     # ===== 不変性のテスト =====
 
     def test_immutability(self):

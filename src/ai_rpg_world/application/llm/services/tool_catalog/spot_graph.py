@@ -1,6 +1,5 @@
 """スポットグラフ用 LLM ツール定義"""
 
-
 from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
@@ -71,9 +70,9 @@ TRAVEL_TO_DEFINITION = ToolDefinitionDto(
                 "description": (
                     "行き先スポットの名前 (例: 入口広間)。"
                     "【現在地と周囲】の接続先 section では "
-                    "``- 扉 → \"館長書斎\"（通行可）`` のように、"
-                    "渡すべき spot 名のみが ``\"\"`` で囲まれて表示される。"
-                    "**``\"\"`` 内の値をそのまま渡すこと** (quote 記号は剥がして"
+                    '``- 扉 → "館長書斎"（通行可）`` のように、'
+                    '渡すべき spot 名のみが ``""`` で囲まれて表示される。'
+                    '**``""`` 内の値をそのまま渡すこと** (quote 記号は剥がして'
                     "中身だけ、または quote ごとどちらでも resolver が解釈する)。"
                     "矢印の左側 (= 道や扉の名前) は渡さない。"
                     "同名スポットが複数ある場合 (まれ) は ``#1`` / ``#2`` の"
@@ -96,8 +95,7 @@ SET_SUB_LOCATION_DEFINITION = ToolDefinitionDto(
             "sub_location_label": {
                 "type": "string",
                 "description": (
-                    "サブロケーションの名前 (例: \"祭壇前\")。同名衝突時は"
-                    "``#N`` ordinal を含めて指定。未指定でクリア。"
+                    'サブロケーションの名前 (例: "祭壇前")。同名衝突時は``#N`` ordinal を含めて指定。未指定でクリア。'
                 ),
             },
             "inner_thought": _IT,
@@ -132,7 +130,7 @@ INTERACT_DEFINITION = ToolDefinitionDto(
         "利用可能な action_name と現在の object 状態は【現在地と周囲】section の"
         "各オブジェクト行に出ているので、そこから読み取って渡すこと。"
         "追加入力を要求する action では、各オブジェクト行の action 候補に"
-        "必要なキーが『\"キー名\" が要る』の形で表示されるため、表示されたキーを parameters に指定する。"
+        '必要なキーが『"キー名" が要る』の形で表示されるため、表示されたキーを parameters に指定する。'
         "物を触りながら同 spot の他者へ短く声をかけたい場合は say_inline に"
         "一言を書ける。"
     ),
@@ -148,8 +146,8 @@ INTERACT_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": (
                     "対象の名前。【現在地と周囲】の対象行で、"
-                    "渡すべき名前のみが ``\"\"`` で囲まれて表示される。"
-                    "**``\"\"`` 内の値をそのまま渡すこと** (quote 記号は剥がして"
+                    '渡すべき名前のみが ``""`` で囲まれて表示される。'
+                    '**``""`` 内の値をそのまま渡すこと** (quote 記号は剥がして'
                     "中身だけ、または quote ごとどちらでも resolver が解釈する)。"
                     "同名衝突時は、表示された番号も名前に含める。"
                 ),
@@ -159,7 +157,7 @@ INTERACT_DEFINITION = ToolDefinitionDto(
                 "description": (
                     "対象に定義された action_name。"
                     "【現在地と周囲】の対象行にある「使える操作」から、"
-                    "``\"\"`` で囲まれた値をそのまま 1 つ選んで渡す。"
+                    '``""`` で囲まれた値をそのまま 1 つ選んで渡す。'
                     "表示名へ言い換えたり、表示に無い名前を推測したりしないこと。"
                 ),
             },
@@ -167,8 +165,8 @@ INTERACT_DEFINITION = ToolDefinitionDto(
                 "type": "object",
                 "description": (
                     "action が要求する追加入力。必要なキーは【現在地と周囲】の action 候補に"
-                    "『\"キー名\" が要る』の形で表示される"
-                    "（例: \"text\" が要る と出ていれば {\"text\": \"山頂へ向かった\"}）。"
+                    '『"キー名" が要る』の形で表示される'
+                    '（例: "text" が要る と出ていれば {"text": "山頂へ向かった"}）。'
                     "必要なキーが表示されない action では省略できる。"
                 ),
             },
@@ -243,7 +241,7 @@ SPEECH_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": (
                     "channel=whisper のときのみ必須。同じ場所にいるプレイヤーの"
-                    "名前 (例: \"リン\")。同名衝突時は ``#N`` を含めて指定。"
+                    '名前 (例: "リン")。同名衝突時は ``#N`` を含めて指定。'
                     "say / shout では指定しても無視される。"
                 ),
             },
@@ -272,9 +270,9 @@ USE_ITEM_DEFINITION = ToolDefinitionDto(
                 "description": (
                     "使用するアイテムの名前 (例: 生の魚)。"
                     "【現在地と周囲】の「所持アイテム」には "
-                    "``- \"生の魚\" x2 (食料) (腐敗)`` のように、渡すべき"
-                    "item 名のみが ``\"\"`` で囲まれて表示される。"
-                    "**``\"\"`` 内の値をそのまま渡すこと** (quote 記号は剥がして"
+                    '``- "生の魚" x2 (食料) (腐敗)`` のように、渡すべき'
+                    'item 名のみが ``""`` で囲まれて表示される。'
+                    '**``""`` 内の値をそのまま渡すこと** (quote 記号は剥がして'
                     "中身だけ、または quote ごとどちらでも resolver が解釈する)。"
                     "数量 (xN) / 種別タグ / (腐敗) などの装飾は付けない。"
                     "同名で複数エントリある場合 (例: 新鮮/腐敗別の魚) は"
@@ -331,7 +329,7 @@ DROP_ITEM_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": (
                     "落とすアイテムの名前 (例: 流木)。"
-                    "【現在地と周囲】の「所持アイテム」で ``\"\"`` で囲まれて"
+                    '【現在地と周囲】の「所持アイテム」で ``""`` で囲まれて'
                     "表示された値をそのまま渡す (装飾サフィックスは付けない)。"
                     "同じ種類のアイテムを複数所持している場合 (例: 流木 x2) は、"
                     "そのうち 1 つだけが落とされる。同じ名前が複数あるときは"
@@ -381,8 +379,7 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
             "gives": {
                 "type": "array",
                 "description": (
-                    "渡すアイテム × 相手のペア配列。1 件でも複数件でも "
-                    "同じ形で渡す。順序どおりに処理される。"
+                    "渡すアイテム × 相手のペア配列。1 件でも複数件でも 同じ形で渡す。順序どおりに処理される。"
                 ),
                 "minItems": 1,
                 "maxItems": 8,
@@ -393,7 +390,7 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
                             "type": "string",
                             "description": (
                                 "渡すアイテムの名前 (例: 流木)。"
-                                "「所持アイテム」で ``\"\"`` で囲まれた値を"
+                                '「所持アイテム」で ``""`` で囲まれた値を'
                                 "そのまま渡す。同じ名前が複数あるときは "
                                 "``#N`` を含めて指定。"
                             ),
@@ -401,9 +398,7 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
                         "target_player_label": {
                             "type": "string",
                             "description": (
-                                "渡す相手の名前 (例: トマ)。"
-                                "同名衝突時は ``#N`` を含めて指定。"
-                                "自分自身は指定不可。"
+                                "渡す相手の名前 (例: トマ)。同名衝突時は ``#N`` を含めて指定。自分自身は指定不可。"
                             ),
                         },
                         "quantity": {
@@ -443,8 +438,8 @@ PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": (
                     "拾うアイテムの名前 (例: 流木)。【現在地と周囲】の「地面に"
-                    "落ちているもの」では ``- \"流木\"`` のように item 名が"
-                    "``\"\"`` で囲まれて表示される。**``\"\"`` 内の値をそのまま"
+                    '落ちているもの」では ``- "流木"`` のように item 名が'
+                    '``""`` で囲まれて表示される。**``""`` 内の値をそのまま'
                     "渡すこと**。同じ名前が複数あるときは ``#N`` を含めて指定。"
                 ),
             },
@@ -486,9 +481,9 @@ ATTACK_DEFINITION = ToolDefinitionDto(
             "target_label": {
                 "type": "string",
                 "description": (
-                    "攻撃対象モンスターの名前 (例: \"灰色のオオカミ\")。"
+                    '攻撃対象モンスターの名前 (例: "灰色のオオカミ")。'
                     "同種が複数いる場合は ``#N`` ordinal を含めて指定"
-                    "(例: \"灰色のオオカミ #2\")。"
+                    '(例: "灰色のオオカミ #2")。'
                 ),
             },
             "say_inline": _SAY,
@@ -520,10 +515,7 @@ TEND_TO_PLAYER_DEFINITION = ToolDefinitionDto(
         "properties": {
             "target_player_label": {
                 "type": "string",
-                "description": (
-                    "介抱する相手の名前 (例: \"エイダ\")。同名衝突時は"
-                    "``#N`` ordinal を含めて指定。"
-                ),
+                "description": ('介抱する相手の名前 (例: "エイダ")。同名衝突時は``#N`` ordinal を含めて指定。'),
             },
             "say_inline": _SAY,
             "inner_thought": inner_thought_property(),
@@ -551,10 +543,7 @@ VOTE_DEFINITION = ToolDefinitionDto(
         "properties": {
             "target_player_label": {
                 "type": "string",
-                "description": (
-                    "追放したい相手の名前 (例: \"エイダ\")。"
-                    "棄権する場合は空文字にする。"
-                ),
+                "description": ('追放したい相手の名前 (例: "エイダ")。棄権する場合は空文字にする。'),
             },
             "inner_thought": inner_thought_property(),
         },
@@ -579,7 +568,7 @@ REPORT_BODY_DEFINITION = ToolDefinitionDto(
         "properties": {
             "target_player_label": {
                 "type": "string",
-                "description": "倒れている相手の名前 (例: \"アオイ\")。",
+                "description": '倒れている相手の名前 (例: "アオイ")。',
             },
             "inner_thought": inner_thought_property(),
         },
@@ -593,7 +582,7 @@ _TRADE_COMMON = (
     "商人と同じ場所に居るときだけ使える (別の場所からは取引できない)。"
     "取引はその場の第三者に観測される。"
     "品名と価格は【現在地と周囲】の「商人:」に出ているものを、"
-    "``\"\"`` の中身そのままで指定する。"
+    '``""`` の中身そのままで指定する。'
     "**give_item と違って部分成功しない**: 数量ぶんすべて成立するか、"
     "1 つも成立せずに失敗するかのどちらかになる。"
 )
@@ -603,8 +592,7 @@ BUY_ITEM_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
     description=(
         "同じ場所に居る商人から品を買う。所持金が代金ぶん減り、買った品が"
-        "持ち物に入る。" + _TRADE_COMMON +
-        "所持金が足りない / 持ち物に空きが無いときは何も買わずに失敗する。"
+        "持ち物に入る。" + _TRADE_COMMON + "所持金が足りない / 持ち物に空きが無いときは何も買わずに失敗する。"
     ),
     parameters={
         "type": "object",
@@ -612,8 +600,7 @@ BUY_ITEM_DEFINITION = ToolDefinitionDto(
             "item_label": {
                 "type": "string",
                 "description": (
-                    "買う品の名前 (例: パン)。「商人:」の売りの行で "
-                    "``\"\"`` に囲まれている値をそのまま渡す。"
+                    '買う品の名前 (例: パン)。「商人:」の売りの行で ``""`` に囲まれている値をそのまま渡す。'
                 ),
             },
             "quantity": {
@@ -642,8 +629,7 @@ SELL_ITEM_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     description=(
         "同じ場所に居る商人へ持ち物を売る。売った品が持ち物から消え、"
-        "買値ぶん所持金が増える。" + _TRADE_COMMON +
-        "その商人が買い取らない品や、持っている数より多い個数は売れない。"
+        "買値ぶん所持金が増える。" + _TRADE_COMMON + "その商人が買い取らない品や、持っている数より多い個数は売れない。"
     ),
     parameters={
         "type": "object",
@@ -663,10 +649,7 @@ SELL_ITEM_DEFINITION = ToolDefinitionDto(
             },
             "merchant_label": {
                 "type": "string",
-                "description": (
-                    "商人の名前 (例: 商人グスタフ)。**同じ品を複数の商人が"
-                    "買い取るときだけ指定する。**"
-                ),
+                "description": ("商人の名前 (例: 商人グスタフ)。**同じ品を複数の商人が買い取るときだけ指定する。**"),
             },
             "say_inline": _SAY,
             "inner_thought": _IT,
@@ -732,8 +715,7 @@ TRADE_OFFER_DEFINITION = ToolDefinitionDto(
         "持ちかけたことと中身は、その場の第三者にも見える。"
         "相手が持っていない品を求めてもよい (断られるだけ)。"
         "**部分的には成立しない**: 書いた組み合わせがそのまま成立するか、"
-        "成立しないかのどちらか。"
-        + _TRADE_RULES
+        "成立しないかのどちらか。" + _TRADE_RULES
     ),
     parameters={
         "type": "object",
@@ -741,8 +723,7 @@ TRADE_OFFER_DEFINITION = ToolDefinitionDto(
             "target_player_label": {
                 "type": "string",
                 "description": (
-                    "持ちかける相手の名前 (例: トマ)。同名衝突時は ``#N`` を含めて指定。"
-                    "自分自身は指定不可。"
+                    "持ちかける相手の名前 (例: トマ)。同名衝突時は ``#N`` を含めて指定。自分自身は指定不可。"
                 ),
             },
             "gives": _trade_side_schema("自分が差し出すもの"),
@@ -768,10 +749,7 @@ TRADE_ACCEPT_DEFINITION = ToolDefinitionDto(
         "properties": {
             "offerer_player_label": {
                 "type": "string",
-                "description": (
-                    "誰の申し出を受けるか (例: レナ)。"
-                    "**自分宛ての申し出が 1 件だけなら省略できる。**"
-                ),
+                "description": ("誰の申し出を受けるか (例: レナ)。**自分宛ての申し出が 1 件だけなら省略できる。**"),
             },
             "say_inline": _SAY,
             "inner_thought": _IT,
@@ -794,10 +772,7 @@ TRADE_DECLINE_DEFINITION = ToolDefinitionDto(
         "properties": {
             "offerer_player_label": {
                 "type": "string",
-                "description": (
-                    "誰の申し出を断るか (例: レナ)。"
-                    "**自分宛ての申し出が 1 件だけなら省略できる。**"
-                ),
+                "description": ("誰の申し出を断るか (例: レナ)。**自分宛ての申し出が 1 件だけなら省略できる。**"),
             },
             "say_inline": _SAY,
             "inner_thought": _IT,

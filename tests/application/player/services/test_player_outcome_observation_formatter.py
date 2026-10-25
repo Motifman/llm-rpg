@@ -54,18 +54,22 @@ class TestScenarioOutcomeMessages:
             {PlayerOutcomeEnum.STRANDED: "{player_name}は島に取り残されたままだ。"}
         )
 
-        assert formatter.format(
-            player_name="リン",
-            outcome=PlayerOutcomeEnum.STRANDED,
-        ) == "リンは島に取り残されたままだ。"
+        assert (
+            formatter.format(
+                player_name="リン",
+                outcome=PlayerOutcomeEnum.STRANDED,
+            )
+            == "リンは島に取り残されたままだ。"
+        )
 
     def test_unspecified_outcome_keeps_generic_message(self) -> None:
         """一結果だけ差し替えても、他の結果は汎用の既定文を保つ。"""
-        formatter = PlayerOutcomeObservationFormatter(
-            {PlayerOutcomeEnum.STRANDED: "{player_name}は島に残された。"}
-        )
+        formatter = PlayerOutcomeObservationFormatter({PlayerOutcomeEnum.STRANDED: "{player_name}は島に残された。"})
 
-        assert formatter.format(
-            player_name="リン",
-            outcome=PlayerOutcomeEnum.RESCUED,
-        ) == "リンは救助された。"
+        assert (
+            formatter.format(
+                player_name="リン",
+                outcome=PlayerOutcomeEnum.RESCUED,
+            )
+            == "リンは救助された。"
+        )

@@ -88,7 +88,9 @@ class TestEffectItemRemovalPreflight:
     @pytest.mark.parametrize("entrypoint", ["declared", "object"])
     @pytest.mark.parametrize("removal_kind", ["single", "split", "combine"])
     def test_item_state_changes_only_after_all_removals_are_available(
-        self, entrypoint: str, removal_kind: str,
+        self,
+        entrypoint: str,
+        removal_kind: str,
     ) -> None:
         """道具・物体入口は削除全量2個が揃う前に実体を変えず、揃えば状態と削除予約を返す。"""
         item = _item()
@@ -98,19 +100,28 @@ class TestEffectItemRemovalPreflight:
         )
         removals = {
             "single": (_remove_two(),),
-            "split": (InteractionEffect(
-                effect_type=InteractionEffectTypeEnum.REMOVE_ITEM,
-                parameters={"item_spec_id": int(_ORE)},
-            ),) * 2,
-            "combine": (InteractionEffect(
-                effect_type=InteractionEffectTypeEnum.COMBINE_ITEMS,
-                parameters={"input_item_spec_ids": [int(_ORE), int(_ORE)], "output_item_spec_id": 43},
-            ),),
+            "split": (
+                InteractionEffect(
+                    effect_type=InteractionEffectTypeEnum.REMOVE_ITEM,
+                    parameters={"item_spec_id": int(_ORE)},
+                ),
+            )
+            * 2,
+            "combine": (
+                InteractionEffect(
+                    effect_type=InteractionEffectTypeEnum.COMBINE_ITEMS,
+                    parameters={"input_item_spec_ids": [int(_ORE), int(_ORE)], "output_item_spec_id": 43},
+                ),
+            ),
         }[removal_kind]
         interaction = _interaction(change, *removals)
         obj = SpotObject(
-            object_id=SpotObjectId.create(1), name="作業台", description="",
-            object_type=SpotObjectTypeEnum.OTHER, state={}, interactions=(interaction,),
+            object_id=SpotObjectId.create(1),
+            name="作業台",
+            description="",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={},
+            interactions=(interaction,),
         )
         service = SpotInteractionService()
 
@@ -118,11 +129,19 @@ class TestEffectItemRemovalPreflight:
             kwargs = {"owned_item_spec_counts": {_ORE: owned}, "acting_item_aggregate": item}
             if entrypoint == "declared":
                 return service.execute_declared_interaction(
-                    _empty_interior(), interaction, frozenset({_ORE}), frozenset(), **kwargs,
+                    _empty_interior(),
+                    interaction,
+                    frozenset({_ORE}),
+                    frozenset(),
+                    **kwargs,
                 )
             return service.execute_interaction(
-                SpotInterior((), (obj,), (), ()), obj.object_id, "test",
-                frozenset({_ORE}), frozenset(), **kwargs,
+                SpotInterior((), (obj,), (), ()),
+                obj.object_id,
+                "test",
+                frozenset({_ORE}),
+                frozenset(),
+                **kwargs,
             )
 
         with pytest.raises(InsufficientEffectItemsException):
@@ -157,9 +176,7 @@ class TestEffectItemRemovalPreflight:
     def test_loot_roll_is_not_started_when_removal_is_insufficient(self) -> None:
         """loot効果が先に宣言されていても、不足時は抽選元へ問い合わせない。"""
         loot_repository = Mock()
-        effect_service = WorldGraphEffectService(
-            loot_table_repository=loot_repository
-        )
+        effect_service = WorldGraphEffectService(loot_table_repository=loot_repository)
         loot = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE,
             parameters={"loot_table_id": 1},
@@ -192,9 +209,7 @@ class TestEffectItemRemovalPreflight:
             },
         )
 
-        with pytest.raises(
-            InteractionEffectValidationException, match="所持数を必要とします"
-        ):
+        with pytest.raises(InteractionEffectValidationException, match="所持数を必要とします"):
             SpotInteractionService().execute_declared_interaction(
                 _empty_interior(),
                 _interaction(change, deposit),
@@ -208,9 +223,7 @@ class TestEffectItemRemovalPreflight:
     def test_deposit_without_counts_stops_before_loot_roll(self) -> None:
         """DEPOSITの所持数が未配線なら、先行するloot抽選を開始しない。"""
         loot_repository = Mock()
-        effect_service = WorldGraphEffectService(
-            loot_table_repository=loot_repository
-        )
+        effect_service = WorldGraphEffectService(loot_table_repository=loot_repository)
         loot = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE,
             parameters={"loot_table_id": 1},
@@ -224,9 +237,7 @@ class TestEffectItemRemovalPreflight:
             },
         )
 
-        with pytest.raises(
-            InteractionEffectValidationException, match="所持数を必要とします"
-        ):
+        with pytest.raises(InteractionEffectValidationException, match="所持数を必要とします"):
             SpotInteractionService(effect_service=effect_service).execute_declared_interaction(
                 _empty_interior(),
                 _interaction(loot, deposit),

@@ -182,8 +182,7 @@ def observation_from_game(
             else None
         ),
         withheld_if_subject_unknown=(
-            isinstance(output.if_subject_unknown, WithheldFromStrangers)
-            and not subject_is_self
+            isinstance(output.if_subject_unknown, WithheldFromStrangers) and not subject_is_self
         ),
         order=order,
     )
@@ -220,9 +219,7 @@ def result_from_action_result(
     記憶の道具は手書きの一覧で見分ける。道具のカタログの分類 (world_action でないもの) と一致することは試験が見張る。
     """
     if not _is_agent_side_tool(entry.tool_name):
-        return ObservedOutcome(
-            observation_from_action_result(entry, call_id=call_id, observer=observer, order=order)
-        )
+        return ObservedOutcome(observation_from_action_result(entry, call_id=call_id, observer=observer, order=order))
     body, time = _body_and_time(entry, observer=observer)
     return MemoryOperationOutcome(call_id=call_id, body=body, time=time, order=order)
 
@@ -243,9 +240,7 @@ def _observation_from_result(
     entry: ActionResultEntry, *, route: Route, observer: Observer, order: OccurrenceOrder | None
 ) -> Observation:
     if _is_agent_side_tool(entry.tool_name):
-        raise ObservationNotRepresentable(
-            NotRepresentableReason.BEING_INNER_RECORD, entry.tool_name
-        )
+        raise ObservationNotRepresentable(NotRepresentableReason.BEING_INNER_RECORD, entry.tool_name)
     body, time = _body_and_time(entry, observer=observer)
     return Observation(
         body=body,
@@ -265,9 +260,7 @@ def _body_and_time(entry: ActionResultEntry, *, observer: Observer) -> tuple[str
     if not (entry.result_summary.strip() or entry.action_summary.strip()):
         raise ObservationNotRepresentable(NotRepresentableReason.EMPTY_BODY, entry.tool_name)
     if entry.game_time_label is None or not entry.game_time_label.strip():
-        raise ObservationNotRepresentable(
-            NotRepresentableReason.MISSING_TIME_LABEL, entry.tool_name
-        )
+        raise ObservationNotRepresentable(NotRepresentableReason.MISSING_TIME_LABEL, entry.tool_name)
     time = _observed_time(entry.occurred_tick, entry.game_time_label, observer.seconds_per_tick)
     return format_action_result_body(entry), time
 
@@ -290,9 +283,7 @@ def _targets_self(structured: Mapping[str, Any], observer: Observer) -> bool | N
     return bool(target == observer.player_id.value)
 
 
-def _route(
-    kind: str | None, category: ObservationCategory, targets_self: bool | None
-) -> Route:
+def _route(kind: str | None, category: ObservationCategory, targets_self: bool | None) -> Route:
     if targets_self and kind in _HARM_TO_TARGET_TYPES:
         return OwnBodyState()
     if kind is not None and kind in _ROUTE_BY_TYPE:
@@ -320,16 +311,10 @@ def _subject(
 
 
 def _subject_names(structured: Mapping[str, Any]) -> tuple[str, ...]:
-    return tuple(
-        value
-        for key in _SUBJECT_NAME_KEYS
-        if isinstance(value := structured.get(key), str) and value.strip()
-    )
+    return tuple(value for key in _SUBJECT_NAME_KEYS if isinstance(value := structured.get(key), str) and value.strip())
 
 
-def _source(
-    route: Route, subject_name: str | UnknownValue, observer: Observer
-) -> str | UnknownValue:
+def _source(route: Route, subject_name: str | UnknownValue, observer: Observer) -> str | UnknownValue:
     if isinstance(route, ToldOrWritten):
         return subject_name
     if isinstance(route, EnvironmentNotice):
@@ -337,9 +322,7 @@ def _source(
     return observer.name
 
 
-def _place(
-    structured: Mapping[str, Any], route: Route, prose: str, observer: Observer
-) -> str | UnknownValue:
+def _place(structured: Mapping[str, Any], route: Route, prose: str, observer: Observer) -> str | UnknownValue:
     for key in ("source_adjacent_spot_name", "spot_name"):
         value = structured.get(key)
         if isinstance(value, str) and value.strip() and value in prose:
@@ -349,9 +332,7 @@ def _place(
     return _known(observer.place_name)
 
 
-def _addressed_to_self(
-    structured: Mapping[str, Any], route: Route, targets_self: bool | None
-) -> bool | UnknownValue:
+def _addressed_to_self(structured: Mapping[str, Any], route: Route, targets_self: bool | None) -> bool | UnknownValue:
     if targets_self is not None:
         return targets_self
     if structured.get("channel") == "whisper" and structured.get("role") != "self":
@@ -364,14 +345,8 @@ def _addressed_to_self(
     return UNKNOWN
 
 
-def _observed_time(
-    tick: int | None, game_time_label: str, seconds_per_tick: float | None
-) -> ObservedTime:
-    seconds = (
-        tick * seconds_per_tick
-        if tick is not None and seconds_per_tick is not None
-        else None
-    )
+def _observed_time(tick: int | None, game_time_label: str, seconds_per_tick: float | None) -> ObservedTime:
+    seconds = tick * seconds_per_tick if tick is not None and seconds_per_tick is not None else None
     return ObservedTime(display=game_time_label, seconds=seconds)
 
 

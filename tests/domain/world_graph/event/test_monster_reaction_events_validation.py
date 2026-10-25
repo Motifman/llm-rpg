@@ -27,8 +27,10 @@ class TestStartedChasingValidation:
     def test_player_target_non_none_ok(self) -> None:
         """player target だけ非None は OK。"""
         ev = MonsterStartedChasingInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-            monster_id=MONSTER_1, spot_id=SPOT_A,
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            monster_id=MONSTER_1,
+            spot_id=SPOT_A,
             target_player_id=EntityId.create(7),
         )
         assert ev.target_player_id is not None
@@ -37,8 +39,10 @@ class TestStartedChasingValidation:
     def test_monster_target_non_none_ok(self) -> None:
         """monster target だけ非None は OK。"""
         ev = MonsterStartedChasingInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-            monster_id=MONSTER_1, spot_id=SPOT_A,
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            monster_id=MONSTER_1,
+            spot_id=SPOT_A,
             target_monster_id=MonsterId.create(202),
         )
         assert ev.target_monster_id is not None
@@ -48,16 +52,20 @@ class TestStartedChasingValidation:
         """両方None は ValueError。"""
         with pytest.raises(ValueError, match="片方だけ非 None"):
             MonsterStartedChasingInSpotEvent.create(
-                aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-                monster_id=MONSTER_1, spot_id=SPOT_A,
+                aggregate_id=GRAPH_ID,
+                aggregate_type="SpotGraphAggregate",
+                monster_id=MONSTER_1,
+                spot_id=SPOT_A,
             )
 
     def test_both_targets_raise_value_error(self) -> None:
         """両方非None は ValueError。"""
         with pytest.raises(ValueError, match="片方だけ非 None"):
             MonsterStartedChasingInSpotEvent.create(
-                aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-                monster_id=MONSTER_1, spot_id=SPOT_A,
+                aggregate_id=GRAPH_ID,
+                aggregate_type="SpotGraphAggregate",
+                monster_id=MONSTER_1,
+                spot_id=SPOT_A,
                 target_player_id=EntityId.create(7),
                 target_monster_id=MonsterId.create(202),
             )

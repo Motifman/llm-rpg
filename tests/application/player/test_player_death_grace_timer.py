@@ -91,9 +91,9 @@ class TestOverduePlayers:
     def test_multiple_player_overdue_independently(self) -> None:
         """複数 player の overdue を独立に判定。"""
         timer = PlayerDeathGraceTimer()
-        timer.register(PlayerId(1), downed_at_tick=10)   # tick 40 で overdue
-        timer.register(PlayerId(2), downed_at_tick=20)   # tick 50 で overdue
-        timer.register(PlayerId(3), downed_at_tick=30)   # tick 60 で overdue
+        timer.register(PlayerId(1), downed_at_tick=10)  # tick 40 で overdue
+        timer.register(PlayerId(2), downed_at_tick=20)  # tick 50 で overdue
+        timer.register(PlayerId(3), downed_at_tick=30)  # tick 60 で overdue
         overdue = timer.overdue_players(current_tick=45, grace_ticks=30)
         assert PlayerId(1) in overdue
         assert PlayerId(2) not in overdue

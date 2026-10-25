@@ -1,4 +1,5 @@
 """EffectiveStatsDomainService（compute_effective_stats）のユニットテスト"""
+
 import pytest
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType

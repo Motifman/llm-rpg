@@ -107,10 +107,7 @@ class InMemoryMarketOrderExpiryCommandRepositoryProviderFactory:
     ) -> InMemoryMarketOrderExpiryCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "インメモリmarket order expiry providerには"
-                "InMemoryUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("インメモリmarket order expiry providerにはInMemoryUnitOfWorkTransactionAdapterが必要です")
         return InMemoryMarketOrderExpiryCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

@@ -73,9 +73,7 @@ def _stage(
         _FirstPlayerFails(repo),  # type: ignore[arg-type]
         _NoItemsContext(),
         on_arrival=lambda player_id: arrived.append(int(player_id)),
-        failure_isolator=WorldTickFailureIsolator(
-            policy=policy, trace_recorder_provider=lambda: recorder
-        ),
+        failure_isolator=WorldTickFailureIsolator(policy=policy, trace_recorder_provider=lambda: recorder),
     )
 
 

@@ -1,4 +1,5 @@
 """ゲームと公開 SNS の SQLite リポジトリを組み立てる。"""
+
 import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -99,32 +100,24 @@ class SqliteSocialDependencyInjectionContainer:
 
     def get_user_repository(self) -> SqliteSnsUserRepository:
         if self._user_repository is None:
-            self._user_repository = SqliteSnsUserRepository.for_standalone_connection(
-                self._get_connection()
-            )
+            self._user_repository = SqliteSnsUserRepository.for_standalone_connection(self._get_connection())
         return self._user_repository
 
     def get_post_repository(self) -> SqlitePostRepository:
         if self._post_repository is None:
-            self._post_repository = SqlitePostRepository.for_standalone_connection(
-                self._get_connection()
-            )
+            self._post_repository = SqlitePostRepository.for_standalone_connection(self._get_connection())
         return self._post_repository
 
     def get_notification_repository(self) -> SqliteSnsNotificationRepository:
         if self._notification_repository is None:
-            self._notification_repository = (
-                SqliteSnsNotificationRepository.for_standalone_connection(
-                    self._get_connection()
-                )
+            self._notification_repository = SqliteSnsNotificationRepository.for_standalone_connection(
+                self._get_connection()
             )
         return self._notification_repository
 
     def get_reply_repository(self) -> SqliteReplyRepository:
         if self._reply_repository is None:
-            self._reply_repository = SqliteReplyRepository.for_standalone_connection(
-                self._get_connection()
-            )
+            self._reply_repository = SqliteReplyRepository.for_standalone_connection(self._get_connection())
         return self._reply_repository
 
     def close(self) -> None:
@@ -168,16 +161,12 @@ class SqliteGameDependencyInjectionContainer:
 
     def get_world_state_repositories(self) -> WorldStateSqliteRepositories:
         if self._world_state is None:
-            self._world_state = attach_world_state_sqlite_repositories(
-                self._get_connection()
-            )
+            self._world_state = attach_world_state_sqlite_repositories(self._get_connection())
         return self._world_state
 
     def get_static_master_repositories(self) -> StaticMasterSqliteRepositories:
         if self._static_master is None:
-            self._static_master = attach_static_master_sqlite_repositories(
-                self._get_connection()
-            )
+            self._static_master = attach_static_master_sqlite_repositories(self._get_connection())
         return self._static_master
 
     def get_shop_repositories(self) -> ShopSqliteRepositories:
@@ -207,9 +196,7 @@ class SqliteGameDependencyInjectionContainer:
 
     def get_trade_command_repositories(self) -> TradeCommandRepositories:
         if self._trade_command_repositories is None:
-            self._trade_command_repositories = attach_trade_command_sqlite_repositories(
-                self._get_connection()
-            )
+            self._trade_command_repositories = attach_trade_command_sqlite_repositories(self._get_connection())
         return self._trade_command_repositories
 
     def close(self) -> None:

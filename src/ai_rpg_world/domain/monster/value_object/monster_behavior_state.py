@@ -58,17 +58,11 @@ class MonsterBehaviorState:
 
     def __post_init__(self) -> None:
         if self.patrol_index < 0:
-            raise MonsterStatsValidationException(
-                f"patrol_index cannot be negative: {self.patrol_index}"
-            )
+            raise MonsterStatsValidationException(f"patrol_index cannot be negative: {self.patrol_index}")
         if self.search_timer < 0:
-            raise MonsterStatsValidationException(
-                f"search_timer cannot be negative: {self.search_timer}"
-            )
+            raise MonsterStatsValidationException(f"search_timer cannot be negative: {self.search_timer}")
         if self.failure_count < 0:
-            raise MonsterStatsValidationException(
-                f"failure_count cannot be negative: {self.failure_count}"
-            )
+            raise MonsterStatsValidationException(f"failure_count cannot be negative: {self.failure_count}")
 
     @classmethod
     def create_idle(
@@ -127,7 +121,6 @@ class MonsterBehaviorState:
             chase_started_at_tick=chase_started_at_tick,
         )
 
-
     def with_spawn_reset(
         self,
         initial_position: Coordinate,
@@ -159,9 +152,7 @@ class MonsterBehaviorState:
             failure_count=0,
         )
 
-    def with_spot_flee(
-        self, flee_until_tick: WorldTick
-    ) -> "MonsterBehaviorState":
+    def with_spot_flee(self, flee_until_tick: WorldTick) -> "MonsterBehaviorState":
         """スポットグラフ世界用 FLEE 状態への遷移。
 
         `flee_until_tick` を指定して自動解除タイミングを設定する。
@@ -232,7 +223,8 @@ class MonsterBehaviorState:
         )
 
     def with_chase_last_observed_target_spot_updated(
-        self, spot_id: SpotId,
+        self,
+        spot_id: SpotId,
     ) -> "MonsterBehaviorState":
         """CHASE 中に target を見た spot を更新した新しい state を返す。
 

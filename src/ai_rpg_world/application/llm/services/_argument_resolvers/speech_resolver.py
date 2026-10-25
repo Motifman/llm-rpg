@@ -1,4 +1,5 @@
 """発言ツールの引数を、送信先と発言範囲へ解決する。"""
+
 from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
@@ -37,8 +38,7 @@ class SpeechArgumentResolver:
         channel_str = args.get("channel")
         if not isinstance(channel_str, str) or channel_str not in SPEECH_CHANNEL_VALUES:
             raise ToolArgumentResolutionException(
-                f"channel は {list(SPEECH_CHANNEL_VALUES)!r} のいずれかを指定してください "
-                f"(現在: {channel_str!r})",
+                f"channel は {list(SPEECH_CHANNEL_VALUES)!r} のいずれかを指定してください (現在: {channel_str!r})",
                 "INVALID_SPEECH_CHANNEL",
             )
         channel_map = {
@@ -49,11 +49,7 @@ class SpeechArgumentResolver:
         channel_enum = channel_map[channel_str]
 
         raw_it = args.get("inner_thought", "")
-        inner = (
-            raw_it.strip()
-            if isinstance(raw_it, str)
-            else (str(raw_it) if raw_it is not None else "")
-        )
+        inner = raw_it.strip() if isinstance(raw_it, str) else (str(raw_it) if raw_it is not None else "")
 
         result: dict[str, Any] = {
             "content": args.get("content", ""),

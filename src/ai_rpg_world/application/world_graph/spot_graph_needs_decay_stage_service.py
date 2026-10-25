@@ -74,15 +74,11 @@ class SpotGraphNeedsDecayStageService:
         """全プレイヤーの欲求を増加させ、一括保存する + 飢餓ダメージを適用。"""
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            raise RuntimeError(
-                "needs decay tickにはCommandScopeFactoryの配線が必要です"
-            )
+            raise RuntimeError("needs decay tickにはCommandScopeFactoryの配線が必要です")
         with scope_factory.create() as scope:
             repositories = scope.repositories
             if repositories is None:
-                raise RuntimeError(
-                    "needs decay tick用repository providerがありません"
-                )
+                raise RuntimeError("needs decay tick用repository providerがありません")
             self._run_with_repository(repositories.player_statuses)
 
     def _run_with_repository(

@@ -89,7 +89,8 @@ class TestPredicateResultInvariants:
         ids=["combined", "reason", "message", "predicate", "path", "context"],
     )
     def test_satisfied_result_rejects_failure_details(
-        self, failure_details: dict[str, object],
+        self,
+        failure_details: dict[str, object],
     ) -> None:
         """成立結果は、各失敗詳細が単独でも複数でも混じると拒否する。"""
         with pytest.raises(PredicateResultValidationException):
@@ -106,7 +107,9 @@ class TestPredicateResultInvariants:
         ids=["both-missing", "predicate-missing", "path-missing"],
     )
     def test_failed_result_requires_predicate_and_path(
-        self, failed_predicate: object, failed_path: tuple[int, ...] | None,
+        self,
+        failed_predicate: object,
+        failed_path: tuple[int, ...] | None,
     ) -> None:
         """未成立結果は、失敗述語と経路の片方だけでも欠けると拒否する。"""
         with pytest.raises(PredicateResultValidationException):

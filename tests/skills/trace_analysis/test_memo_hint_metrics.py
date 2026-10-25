@@ -10,13 +10,7 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
-_MODULE_PATH = (
-    Path(__file__).resolve().parents[3]
-    / ".claude"
-    / "skills"
-    / "trace-analysis"
-    / "extract_metrics.py"
-)
+_MODULE_PATH = Path(__file__).resolve().parents[3] / ".claude" / "skills" / "trace-analysis" / "extract_metrics.py"
 _spec = importlib.util.spec_from_file_location("extract_metrics", _MODULE_PATH)
 assert _spec is not None and _spec.loader is not None
 extract_metrics = importlib.util.module_from_spec(_spec)

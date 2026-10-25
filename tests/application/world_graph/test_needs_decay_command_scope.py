@@ -87,9 +87,7 @@ def _build_stage(
         InMemoryUnitOfWorkTransactionFactory(store),
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
-        repository_provider_factory=(
-            InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
-        ),
+        repository_provider_factory=(InMemoryPlayerStatusTickCommandRepositoryProviderFactory()),
     )
     stage = SpotGraphNeedsDecayStageService(
         rates={NeedType.HUNGER: 1, NeedType.FATIGUE: 1},
@@ -142,11 +140,14 @@ class TestNeedsDecayCommandScope:
             original_save_all(self, statuses)
             raise RuntimeError("needs save failed")
 
-        with patch.object(
-            InMemoryPlayerStatusRepository,
-            "save_all",
-            fail_after_staging,
-        ), pytest.raises(RuntimeError, match="needs save failed"):
+        with (
+            patch.object(
+                InMemoryPlayerStatusRepository,
+                "save_all",
+                fail_after_staging,
+            ),
+            pytest.raises(RuntimeError, match="needs save failed"),
+        ):
             stage.run(WorldTick(1))
 
         first = repository.find_by_id(PlayerId(1))

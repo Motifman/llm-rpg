@@ -43,8 +43,11 @@ def _relationships(aggregate):
 def _state(aggregate):
     # getterのlistを参照したままにせず、拒否前の独立した状態を残す。
     return (
-        tuple(aggregate.follow_relationships), tuple(aggregate.block_relationships),
-        tuple(aggregate.subscribe_relationships), aggregate.profile, aggregate.identity_token,
+        tuple(aggregate.follow_relationships),
+        tuple(aggregate.block_relationships),
+        tuple(aggregate.subscribe_relationships),
+        aggregate.profile,
+        aggregate.identity_token,
     )
 
 
@@ -83,6 +86,7 @@ def _assert_event(aggregate, prefix, event_type, aggregate_id, **payload):
 
 class TestUserAggregate:
     """利用者の関係・プロフィール変更と拒否が状態と通知を矛盾させない。"""
+
     def setup_method(self):
         """各テストメソッドの前に実行"""
         self.user_id = 1
@@ -95,7 +99,7 @@ class TestUserAggregate:
             sns_user=self.sns_user,
             follow_relationships=[],
             block_relationships=[],
-            subscribe_relationships=[]
+            subscribe_relationships=[],
         )
 
     def test_create_user_aggregate_success(self):
@@ -159,10 +163,20 @@ class TestUserAggregate:
         events = tuple(aggregate.get_events())
         assert len(events) == len(prefix) + 3
         assert events[:-3] == prefix
-        for event, event_type, fields in zip(events[-3:], (
-            SnsUserUnfollowedEvent, SnsUserUnsubscribedEvent, SnsUserBlockedEvent,
-        ), (("follower_user_id", "followee_user_id"),
-            ("subscriber_user_id", "subscribed_user_id"), ("blocker_user_id", "blocked_user_id")), strict=True):
+        for event, event_type, fields in zip(
+            events[-3:],
+            (
+                SnsUserUnfollowedEvent,
+                SnsUserUnsubscribedEvent,
+                SnsUserBlockedEvent,
+            ),
+            (
+                ("follower_user_id", "followee_user_id"),
+                ("subscriber_user_id", "subscribed_user_id"),
+                ("blocker_user_id", "blocked_user_id"),
+            ),
+            strict=True,
+        ):
             assert isinstance(event, event_type)
             assert event.aggregate_id == owner
             assert event.aggregate_type == "UserAggregate"
@@ -176,8 +190,16 @@ class TestUserAggregate:
         assert aggregate.user_id == user_id
         assert aggregate.profile == UserProfile("testuser", "テストユーザー", "テストです")
         assert _relationships(aggregate) == ((), (), ())
-        _assert_event(aggregate, (), SnsUserCreatedEvent, user_id, user_id=user_id,
-                      user_name="testuser", display_name="テストユーザー", bio="テストです")
+        _assert_event(
+            aggregate,
+            (),
+            SnsUserCreatedEvent,
+            user_id,
+            user_id=user_id,
+            user_name="testuser",
+            display_name="テストユーザー",
+            bio="テストです",
+        )
 
     def test_follow_generates_event(self, relationship_case):
         """フォローは指定した両端点を一件追加し、既存通知を保って専用イベントを一件積む。"""
@@ -187,8 +209,9 @@ class TestUserAggregate:
         aggregate.follow(target)
         assert _relationships(aggregate) == (follows + ((owner, target),), blocks, subscriptions)
         assert aggregate.is_following(target)
-        _assert_event(aggregate, prefix, SnsUserFollowedEvent, int(owner),
-                      follower_user_id=owner, followee_user_id=target)
+        _assert_event(
+            aggregate, prefix, SnsUserFollowedEvent, int(owner), follower_user_id=owner, followee_user_id=target
+        )
 
     def test_unfollow_generates_event(self, relationship_case):
         """フォロー解除は対象だけを取り除き、他者の関係と通知を保って解除を一件知らせる。"""
@@ -199,8 +222,7 @@ class TestUserAggregate:
         aggregate.unfollow(target)
         assert _relationships(aggregate) == before
         assert not aggregate.is_following(target)
-        _assert_event(aggregate, prefix, SnsUserUnfollowedEvent, owner,
-                      follower_user_id=owner, followee_user_id=target)
+        _assert_event(aggregate, prefix, SnsUserUnfollowedEvent, owner, follower_user_id=owner, followee_user_id=target)
 
     def test_block_generates_event(self, relationship_case):
         """無関係な対象のブロックは一件だけ追加され、既存関係を消さず専用イベントを積む。"""
@@ -210,8 +232,7 @@ class TestUserAggregate:
         aggregate.block(target)
         assert _relationships(aggregate) == (follows, blocks + ((owner, target),), subscriptions)
         assert aggregate.is_blocked(target)
-        _assert_event(aggregate, prefix, SnsUserBlockedEvent, owner,
-                      blocker_user_id=owner, blocked_user_id=target)
+        _assert_event(aggregate, prefix, SnsUserBlockedEvent, owner, blocker_user_id=owner, blocked_user_id=target)
 
     def test_unblock_generates_event(self, relationship_case):
         """ブロック解除は対象だけを取り除き、残る関係と通知を保って専用イベントを積む。"""
@@ -222,8 +243,7 @@ class TestUserAggregate:
         aggregate.unblock(target)
         assert _relationships(aggregate) == before
         assert not aggregate.is_blocked(target)
-        _assert_event(aggregate, prefix, SnsUserUnblockedEvent, owner,
-                      blocker_user_id=owner, blocked_user_id=target)
+        _assert_event(aggregate, prefix, SnsUserUnblockedEvent, owner, blocker_user_id=owner, blocked_user_id=target)
 
     def test_subscribe_generates_event(self, relationship_case):
         """フォロー済み対象の購読を一件追加し、元のフォローと通知を保って購読を知らせる。"""
@@ -235,8 +255,9 @@ class TestUserAggregate:
         assert _relationships(aggregate) == (follows, blocks, subscriptions + ((owner, target),))
         assert aggregate.is_subscribed(target)
         assert aggregate.is_following(target)
-        _assert_event(aggregate, prefix, SnsUserSubscribedEvent, owner,
-                      subscriber_user_id=owner, subscribed_user_id=target)
+        _assert_event(
+            aggregate, prefix, SnsUserSubscribedEvent, owner, subscriber_user_id=owner, subscribed_user_id=target
+        )
 
     def test_unsubscribe_generates_event(self, relationship_case):
         """購読解除は対象の購読だけを取り除き、フォローと既存通知を保って解除を知らせる。"""
@@ -249,14 +270,18 @@ class TestUserAggregate:
         assert _relationships(aggregate) == before
         assert not aggregate.is_subscribed(target)
         assert aggregate.is_following(target)
-        _assert_event(aggregate, prefix, SnsUserUnsubscribedEvent, owner,
-                      subscriber_user_id=owner, subscribed_user_id=target)
+        _assert_event(
+            aggregate, prefix, SnsUserUnsubscribedEvent, owner, subscriber_user_id=owner, subscribed_user_id=target
+        )
 
-    @pytest.mark.parametrize("owner,new_bio,new_display_name,expected_bio,expected_name", [
-        (1, "新しいbio", "新しい表示名", "新しいbio", "新しい表示名"),
-        (UserId(1), "新しいbio", None, "新しいbio", "テストユーザー"),
-        (UserId(1), None, "新しい表示名", "テストです", "新しい表示名"),
-    ])
+    @pytest.mark.parametrize(
+        "owner,new_bio,new_display_name,expected_bio,expected_name",
+        [
+            (1, "新しいbio", "新しい表示名", "新しいbio", "新しい表示名"),
+            (UserId(1), "新しいbio", None, "新しいbio", "テストユーザー"),
+            (UserId(1), None, "新しい表示名", "テストです", "新しい表示名"),
+        ],
+    )
     def test_update_profile_generates_event(self, owner, new_bio, new_display_name, expected_bio, expected_name):
         """指定したプロフィール項目だけを更新し、利用者名を保って元の更新入力を一件通知する。"""
         aggregate = _user(owner)
@@ -264,18 +289,32 @@ class TestUserAggregate:
         assert aggregate.profile.bio == expected_bio
         assert aggregate.profile.display_name == expected_name
         assert aggregate.profile.user_name == "testuser"
-        _assert_event(aggregate, (), SnsUserProfileUpdatedEvent, owner,
-                      user_id=owner, new_bio=new_bio, new_display_name=new_display_name)
+        _assert_event(
+            aggregate,
+            (),
+            SnsUserProfileUpdatedEvent,
+            owner,
+            user_id=owner,
+            new_bio=new_bio,
+            new_display_name=new_display_name,
+        )
 
     def test_multiple_events_are_accumulated(self):
         """フォロー・購読・プロフィール更新は各入力の通知を順に一件ずつ積み、先行通知を保つ。"""
         target = UserId(2)
         self.aggregate.follow(target)
-        prefix = _assert_event(self.aggregate, (), SnsUserFollowedEvent, 1,
-                               follower_user_id=1, followee_user_id=target)
+        prefix = _assert_event(self.aggregate, (), SnsUserFollowedEvent, 1, follower_user_id=1, followee_user_id=target)
         self.aggregate.subscribe(target)
-        prefix = _assert_event(self.aggregate, prefix, SnsUserSubscribedEvent, 1,
-                               subscriber_user_id=1, subscribed_user_id=target)
+        prefix = _assert_event(
+            self.aggregate, prefix, SnsUserSubscribedEvent, 1, subscriber_user_id=1, subscribed_user_id=target
+        )
         self.aggregate.update_user_profile("新しいbio", "新しい名前")
-        _assert_event(self.aggregate, prefix, SnsUserProfileUpdatedEvent, 1,
-                      user_id=1, new_bio="新しいbio", new_display_name="新しい名前")
+        _assert_event(
+            self.aggregate,
+            prefix,
+            SnsUserProfileUpdatedEvent,
+            1,
+            user_id=1,
+            new_bio="新しいbio",
+            new_display_name="新しい名前",
+        )

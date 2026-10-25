@@ -27,9 +27,7 @@ async def get_character(character_id: str) -> CharacterDetailResponse:
     manager = get_runtime_manager()
     character = manager.get_character(character_id)
     if character is None:
-        raise HTTPException(
-            status_code=404, detail=f"Character not found: {character_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Character not found: {character_id}")
     return character
 
 
@@ -40,13 +38,9 @@ async def create_character(request: CharacterCreateRequest) -> CharacterDetailRe
 
 
 @router.put("/{character_id}", response_model=CharacterDetailResponse)
-async def update_character(
-    character_id: str, request: CharacterUpdateRequest
-) -> CharacterDetailResponse:
+async def update_character(character_id: str, request: CharacterUpdateRequest) -> CharacterDetailResponse:
     manager = get_runtime_manager()
     updated = manager.update_character(character_id, request)
     if updated is None:
-        raise HTTPException(
-            status_code=404, detail=f"Character not found: {character_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Character not found: {character_id}")
     return updated

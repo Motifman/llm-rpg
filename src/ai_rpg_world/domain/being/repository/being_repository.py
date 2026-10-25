@@ -62,9 +62,7 @@ class BeingRepository(ABC):
         """
 
     @abstractmethod
-    def find_all_attached_to(
-        self, world_id: WorldId, player_id: PlayerId
-    ) -> list[Being]:
+    def find_all_attached_to(self, world_id: WorldId, player_id: PlayerId) -> list[Being]:
         """指定 (world, player) に attach 中の Being をすべて返す。
 
         正常系では 0..1 件しか返らない (= ``Being.attach`` で 0..1 を強制)。

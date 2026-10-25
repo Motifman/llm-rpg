@@ -65,16 +65,10 @@ class TestMapAgreesWithTheClock:
         travel_ticks = next(
             c.travel_ticks
             for c in runtime.scenario.graph.all_connections()
-            if names[str(c.from_spot_id)] == origin
-            and names[str(c.to_spot_id)] == destination
+            if names[str(c.from_spot_id)] == origin and names[str(c.to_spot_id)] == destination
         )
-        prompt = (
-            runtime._world_llm_system_prompts_by_player_id.get(1)
-            or runtime._world_llm_system_prompt
-        )
-        origin_line = next(
-            line for line in prompt.splitlines() if line.startswith(f"  {origin} ")
-        )
+        prompt = runtime._world_llm_system_prompts_by_player_id.get(1) or runtime._world_llm_system_prompt
+        origin_line = next(line for line in prompt.splitlines() if line.startswith(f"  {origin} "))
         before = _clock_minutes(runtime._time_label())
 
         for _ in range(travel_ticks):

@@ -234,7 +234,8 @@ class TestIntroductionsAndKnownPeople:
             acquaintances.receive_entry(
                 ADA,
                 EnvironmentEntry(
-                    environment_name="山村", self_name="エイダ",
+                    environment_name="山村",
+                    self_name="エイダ",
                     introductions=[Introduction(name="ノア")],
                 ),
             )
@@ -249,10 +250,9 @@ class TestIntroductionsAndKnownPeople:
 
         assert acquaintances.known_people_text(STRANGER) == ""
 
+
 def _entry(*introductions: Introduction) -> EnvironmentEntry:
-    return EnvironmentEntry(
-        environment_name="島", self_name="エイダ", introductions=introductions
-    )
+    return EnvironmentEntry(environment_name="島", self_name="エイダ", introductions=introductions)
 
 
 def _heard(speaker: str = "ノア") -> ObservationOutput:
@@ -314,6 +314,7 @@ class TestViewForRecipient:
 
     def test_lookup_failure_hides_the_name(self) -> None:
         """知り合いの記録を引くところで例外が出ても観測は失われず、名前を伏せた版で記録される。"""
+
         def broken(_pid: PlayerId) -> BeingId | None:
             raise RuntimeError("lookup failed")
 
@@ -367,6 +368,7 @@ class TestViewForWithheld:
 
     def test_lookup_failure_withholds(self) -> None:
         """知り合いの記録を引くところで例外が出たら、届けない側へ倒す。"""
+
         def broken(_pid: PlayerId) -> BeingId | None:
             raise RuntimeError("lookup failed")
 
@@ -411,6 +413,7 @@ class TestKnowsPlayer:
 
     def test_lookup_failure_is_not_known(self) -> None:
         """受け手の Being を引くところで例外が出たら、知らないと答える。知っていると答えると相手の存在が届くため。"""
+
         def broken(_pid: PlayerId) -> BeingId | None:
             raise RuntimeError("lookup failed")
 

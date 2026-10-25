@@ -43,10 +43,7 @@ def _values(snapshot: dict[str, Any], tool: str, argument: str) -> list[str]:
 def load_cases(runs_dir: Path) -> list[dict[str, Any]]:
     cases = []
     for run, call_id, argument, expected in FAILURE_CALLS:
-        calls = {
-            row["llm_call_id"]: row
-            for row in _read_jsonl(runs_dir / run / "prompt_dataset" / "calls.jsonl")
-        }
+        calls = {row["llm_call_id"]: row for row in _read_jsonl(runs_dir / run / "prompt_dataset" / "calls.jsonl")}
         call = calls[call_id]
         output = call["output"]
         tool = output["name"]
@@ -166,12 +163,8 @@ def main() -> int:
             "repairable": sum(row["repairable"] for row in results),
             "repaired": sum(row["repairable"] and row["chosen"] == row["expected"] for row in results),
             "should_refuse": sum(not row["repairable"] for row in results),
-            "correctly_refused": sum(
-                not row["repairable"] and row["raw_choice"] == NO_MATCH for row in results
-            ),
-            "wrong_substitutions": sum(
-                not row["repairable"] and row["raw_choice"] != NO_MATCH for row in results
-            ),
+            "correctly_refused": sum(not row["repairable"] and row["raw_choice"] == NO_MATCH for row in results),
+            "wrong_substitutions": sum(not row["repairable"] and row["raw_choice"] != NO_MATCH for row in results),
             "cost_usd": None,
         },
     }

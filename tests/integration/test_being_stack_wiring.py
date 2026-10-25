@@ -11,9 +11,7 @@ from ai_rpg_world.application.llm.services.action_result_store import (  # noqa:
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_EPISODE_RECALL
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "forbidden_library_demo.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "forbidden_library_demo.json"
 
 
 class TestBeingStack:
@@ -47,9 +45,7 @@ class TestBeingStack:
         player_id = runtime.get_player_ids()[0]
 
         old_memo = runtime.run_llm_auxiliary_tool(player_id, "memo_add", {"content": "鍵を探す"})
-        recall = runtime.run_llm_auxiliary_tool(
-            player_id, TOOL_NAME_EPISODE_RECALL, {"handles": ["ep_000000"]}
-        )
+        recall = runtime.run_llm_auxiliary_tool(player_id, TOOL_NAME_EPISODE_RECALL, {"handles": ["ep_000000"]})
 
         assert (old_memo.success, old_memo.error_code) == (False, "UNSUPPORTED_TOOL")
         assert recall.error_code != "UNSUPPORTED_TOOL"

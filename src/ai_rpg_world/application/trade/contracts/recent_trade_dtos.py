@@ -5,6 +5,7 @@ from datetime import datetime
 @dataclass(frozen=True)
 class RecentTradeSummaryDto:
     """最近の取引サマリーDTO"""
+
     trade_id: int
     item_name: str
     price: int
@@ -14,5 +15,6 @@ class RecentTradeSummaryDto:
 @dataclass(frozen=True)
 class RecentTradeDto:
     """最近の取引履歴DTO"""
+
     item_name: str
     trades: list[RecentTradeSummaryDto]

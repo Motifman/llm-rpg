@@ -10,6 +10,7 @@ class QuestObjective:
     target_id は種別に応じた ID（KILL_MONSTER の場合は MonsterTemplateId の値など）を int で保持。
     TAKE_FROM_CHEST の場合は target_id=spot_id.value, target_id_secondary=chest_id.value とする。
     """
+
     objective_type: QuestObjectiveType
     target_id: int
     required_count: int

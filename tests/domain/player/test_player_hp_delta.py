@@ -71,9 +71,9 @@ class TestComputeHpDelta:
         """2 回目の snapshot 後は新しい baseline からの差分になる。"""
         player = _make_player(hp=100)
         player.snapshot_hp_for_delta()
-        player.apply_damage(20)          # 80
-        player.snapshot_hp_for_delta()   # baseline 更新 = 80
-        player.apply_damage(10)          # 70
+        player.apply_damage(20)  # 80
+        player.snapshot_hp_for_delta()  # baseline 更新 = 80
+        player.apply_damage(10)  # 70
         assert player.compute_hp_delta() == -10
 
     def test_compute_has_no_side_effect(self):

@@ -36,8 +36,13 @@ _TOOLS = ("interact", "use_item", "give_item", "pickup_item", "drop_item")
 
 # 失敗文の形式。engine の世代で 4 つある。
 _PATTERNS = (
-    re.compile(r"(?:対象の名前|オブジェクト名|オブジェクトラベル)が見つかりません: (?P<written>.*?)。有効な (?:target_label|object_label): (?P<cands>.+)$", re.S),
-    re.compile(r"指定された(?P<kind>[^は]+?)は現在の候補にありません: (?P<written>.*?) → 有効な[^:]+: (?P<cands>.+)$", re.S),
+    re.compile(
+        r"(?:対象の名前|オブジェクト名|オブジェクトラベル)が見つかりません: (?P<written>.*?)。有効な (?:target_label|object_label): (?P<cands>.+)$",
+        re.S,
+    ),
+    re.compile(
+        r"指定された(?P<kind>[^は]+?)は現在の候補にありません: (?P<written>.*?) → 有効な[^:]+: (?P<cands>.+)$", re.S
+    ),
 )
 
 
@@ -170,13 +175,18 @@ def extract_cases(runs_dir: Path) -> tuple[list[Case], dict[str, int]]:
                 continue
             census["with_candidates"] += 1
             args = _preceding_action(events, i).get("arguments") or {}
-            cases.append(Case(
-                run=trace.parent.name, tick=e.get("tick"), player_id=e.get("player_id"),
-                tool=p["tool"], written=written,
-                inner_thought=str(args.get("inner_thought") or ""),
-                candidates={n: descriptions.get(n, "") for n in names},
-                scenario_path=scenario_path,
-            ))
+            cases.append(
+                Case(
+                    run=trace.parent.name,
+                    tick=e.get("tick"),
+                    player_id=e.get("player_id"),
+                    tool=p["tool"],
+                    written=written,
+                    inner_thought=str(args.get("inner_thought") or ""),
+                    candidates={n: descriptions.get(n, "") for n in names},
+                    scenario_path=scenario_path,
+                )
+            )
     return cases, census
 
 
@@ -188,12 +198,20 @@ def build_controls(cases: Sequence[Case], seed: int = 20260922) -> list[Case]:
         if not others:
             continue
         donor = rng.choice(others)
-        controls.append(Case(
-            run=case.run, tick=case.tick, player_id=case.player_id, tool=case.tool,
-            written=case.written, inner_thought=case.inner_thought,
-            candidates=dict(donor.candidates), scenario_path=donor.scenario_path,
-            is_control=True, borrowed_from=donor.run,
-        ))
+        controls.append(
+            Case(
+                run=case.run,
+                tick=case.tick,
+                player_id=case.player_id,
+                tool=case.tool,
+                written=case.written,
+                inner_thought=case.inner_thought,
+                candidates=dict(donor.candidates),
+                scenario_path=donor.scenario_path,
+                is_control=True,
+                borrowed_from=donor.run,
+            )
+        )
     return controls
 
 
@@ -235,13 +253,27 @@ def judge_jev(case: Case, port: Any, min_confidence: float) -> Outcome:
     a = answers["target_label_rescue"]
     chosen = str(a.value)
     prob = a.probabilities.get(chosen)
-    accepted = chosen != _NO_MATCH and chosen in case.candidates and prob is not None and prob >= min_confidence and (a.confidence is None or a.confidence >= min_confidence)
-    return Outcome("jev", chosen if accepted else None, raw_choice=chosen, score=prob, confidence=a.confidence, latency_ms=round(a.latency_ms, 1))
+    accepted = (
+        chosen != _NO_MATCH
+        and chosen in case.candidates
+        and prob is not None
+        and prob >= min_confidence
+        and (a.confidence is None or a.confidence >= min_confidence)
+    )
+    return Outcome(
+        "jev",
+        chosen if accepted else None,
+        raw_choice=chosen,
+        score=prob,
+        confidence=a.confidence,
+        latency_ms=round(a.latency_ms, 1),
+    )
 
 
 def cmd_extract(args: argparse.Namespace) -> int:
     cases, census = extract_cases(Path(args.runs_dir))
-    out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"census": census, "cases": [asdict(c) for c in cases]}, ensure_ascii=False, indent=1))
     print(json.dumps(census, ensure_ascii=False))
     print(f"cases: {len(cases)} → {out}")
@@ -250,43 +282,75 @@ def cmd_extract(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     from dotenv import load_dotenv
-    load_dotenv(); load_dotenv(_REPO_ROOT.parent.parent.parent / ".env")
+
+    load_dotenv()
+    load_dotenv(_REPO_ROOT.parent.parent.parent / ".env")
     from ai_rpg_world.application.llm.wiring._typed_judgment_factory import create_typed_judgment_port_from_config
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import ResolvedLlmRuntimeConfig
+
     port = create_typed_judgment_port_from_config(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="jev"))
     data = json.loads(Path(args.cases).read_text())
     cases = [Case(**c) for c in data["cases"]]
     controls = build_controls(cases)
     results = []
     for c in cases + controls:
-        results.append({"case": asdict(c), "difflib": asdict(judge_difflib(c)), "jev": asdict(judge_jev(c, port, args.min_confidence))})
-    out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps({"census": data["census"], "min_confidence": args.min_confidence, "results": results}, ensure_ascii=False, indent=1))
+        results.append(
+            {
+                "case": asdict(c),
+                "difflib": asdict(judge_difflib(c)),
+                "jev": asdict(judge_jev(c, port, args.min_confidence)),
+            }
+        )
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(
+            {"census": data["census"], "min_confidence": args.min_confidence, "results": results},
+            ensure_ascii=False,
+            indent=1,
+        )
+    )
     real = [r for r in results if not r["case"]["is_control"]]
     ctrl = [r for r in results if r["case"]["is_control"]]
     print(f"\n事例 {len(real)} 件 / 対照 {len(ctrl)} 件 (閾値 {args.min_confidence})")
     for name, rows in (("事例", real), ("対照", ctrl)):
-        jev_acc = sum(1 for r in rows if r["jev"]["chosen"]); jev_no = sum(1 for r in rows if r["jev"]["raw_choice"] == _NO_MATCH)
+        jev_acc = sum(1 for r in rows if r["jev"]["chosen"])
+        jev_no = sum(1 for r in rows if r["jev"]["raw_choice"] == _NO_MATCH)
         dl = sum(1 for r in rows if r["difflib"]["chosen"])
-        print(f"  {name}: jev 採用 {jev_acc}, 該当なし {jev_no}, 閾値未満 {len(rows)-jev_acc-jev_no} | difflib 採用 {dl}")
+        print(
+            f"  {name}: jev 採用 {jev_acc}, 該当なし {jev_no}, 閾値未満 {len(rows) - jev_acc - jev_no} | difflib 採用 {dl}"
+        )
     print("\n=== 事例 (書かれた名前 → Jev の選択 [確率/確信] | 候補) ===")
     for r in real:
-        c = r["case"]; j = r["jev"]
+        c = r["case"]
+        j = r["jev"]
         mark = "採用" if j["chosen"] else ("該当なし" if j["raw_choice"] == _NO_MATCH else "閾値未満")
-        print(f"[{c['tool']}] 「{c['written']}」 → {j['raw_choice']} ({j['score']}/{j['confidence']}) {mark} | 候補: {' / '.join(c['candidates'])}")
+        print(
+            f"[{c['tool']}] 「{c['written']}」 → {j['raw_choice']} ({j['score']}/{j['confidence']}) {mark} | 候補: {' / '.join(c['candidates'])}"
+        )
     print("\n=== 対照で何かを選んだもの (誤救済) ===")
     for r in ctrl:
-        c = r["case"]; j = r["jev"]
+        c = r["case"]
+        j = r["jev"]
         if j["chosen"]:
-            print(f"[{c['tool']}] 「{c['written']}」 → {j['raw_choice']} ({j['score']}/{j['confidence']}) | 候補: {' / '.join(c['candidates'])}")
+            print(
+                f"[{c['tool']}] 「{c['written']}」 → {j['raw_choice']} ({j['score']}/{j['confidence']}) | 候補: {' / '.join(c['candidates'])}"
+            )
     return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    pe = sub.add_parser("extract"); pe.add_argument("--runs-dir", required=True); pe.add_argument("--out", default="var/jev_label_demo/cases.json"); pe.set_defaults(func=cmd_extract)
-    pr = sub.add_parser("run"); pr.add_argument("--cases", default="var/jev_label_demo/cases.json"); pr.add_argument("--out", default="var/jev_label_demo/results.json"); pr.add_argument("--min-confidence", type=float, default=0.7); pr.set_defaults(func=cmd_run)
+    pe = sub.add_parser("extract")
+    pe.add_argument("--runs-dir", required=True)
+    pe.add_argument("--out", default="var/jev_label_demo/cases.json")
+    pe.set_defaults(func=cmd_extract)
+    pr = sub.add_parser("run")
+    pr.add_argument("--cases", default="var/jev_label_demo/cases.json")
+    pr.add_argument("--out", default="var/jev_label_demo/results.json")
+    pr.add_argument("--min-confidence", type=float, default=0.7)
+    pr.set_defaults(func=cmd_run)
     args = parser.parse_args(argv)
     return args.func(args)
 

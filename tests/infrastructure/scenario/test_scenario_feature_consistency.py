@@ -22,9 +22,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
 )
 
 _SCENARIOS = Path(__file__).resolve().parents[3] / "data" / "scenarios"
-_FIXTURE_SCENARIOS = (
-    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
-)
+_FIXTURE_SCENARIOS = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
 
 
 def _walk_dicts(value: Any) -> Iterable[dict[str, Any]]:
@@ -85,10 +83,9 @@ class TestScenarioFeatureConsistency:
 
     def test_unknown_spawn_condition_key_is_rejected(self, tmp_path: Path) -> None:
         """分類表に無いspawn_conditionキーは、黙って無視せず読み込み時に拒否する。"""
+
         def add_unknown_key(raw: dict[str, Any]) -> None:
-            raw["monsters"]["initial_placements"][0]["spawn_condition"][
-                "moon_phases"
-            ] = ["full_moon"]
+            raw["monsters"]["initial_placements"][0]["spawn_condition"]["moon_phases"] = ["full_moon"]
 
         with pytest.raises(ScenarioLoadError, match="moon_phases"):
             _load_mutated(
@@ -99,6 +96,7 @@ class TestScenarioFeatureConsistency:
 
     def test_zero_grace_rejects_exposed_tend_to_player(self, tmp_path: Path) -> None:
         """即死の世界でtend_to_playerが露出する宣言は、実行不能な手として拒否する。"""
+
         def expose_tending(raw: dict[str, Any]) -> None:
             raw["disabled_tools"].remove("tend_to_player")
 
@@ -107,6 +105,7 @@ class TestScenarioFeatureConsistency:
 
     def test_call_meeting_requires_an_enabled_meeting(self, tmp_path: Path) -> None:
         """CALL_MEETINGを置いた世界に会議宣言が無ければ、押しても進まないため拒否する。"""
+
         def remove_meeting(raw: dict[str, Any]) -> None:
             raw.pop("meeting")
 
@@ -115,6 +114,7 @@ class TestScenarioFeatureConsistency:
 
     def test_call_meeting_rejects_a_disabled_meeting(self, tmp_path: Path) -> None:
         """meeting宣言が存在しても無効なら、CALL_MEETINGを実行できないため拒否する。"""
+
         def disable_meeting(raw: dict[str, Any]) -> None:
             raw["meeting"]["enabled"] = False
 
@@ -123,6 +123,7 @@ class TestScenarioFeatureConsistency:
 
     def test_call_meeting_rejects_an_unknown_trigger(self, tmp_path: Path) -> None:
         """未定義のtriggerは固定値へ縮退させず、読み込み時に拒否する。"""
+
         def replace_trigger(raw: dict[str, Any]) -> None:
             for node in _walk_dicts(raw):
                 if node.get("effect_type") == "CALL_MEETING":
@@ -133,6 +134,7 @@ class TestScenarioFeatureConsistency:
 
     def test_call_meeting_requires_an_explicit_trigger(self, tmp_path: Path) -> None:
         """triggerの省略は暗黙のemergency_buttonへ補完せず、読み込み時に拒否する。"""
+
         def remove_trigger(raw: dict[str, Any]) -> None:
             for node in _walk_dicts(raw):
                 if node.get("effect_type") == "CALL_MEETING":
@@ -143,16 +145,13 @@ class TestScenarioFeatureConsistency:
 
     def test_call_meeting_must_be_the_only_effect(self, tmp_path: Path) -> None:
         """会議commandと通常効果を同じinteractionへ混在させる宣言を拒否する。"""
+
         def append_world_flag_effect(raw: dict[str, Any]) -> None:
             for node in _walk_dicts(raw):
                 effects = node.get("effects")
                 if not isinstance(effects, list):
                     continue
-                if any(
-                    effect.get("effect_type") == "CALL_MEETING"
-                    for effect in effects
-                    if isinstance(effect, dict)
-                ):
+                if any(effect.get("effect_type") == "CALL_MEETING" for effect in effects if isinstance(effect, dict)):
                     effects.append(
                         {
                             "effect_type": "SET_FLAG",
@@ -171,6 +170,7 @@ class TestScenarioFeatureConsistency:
 
     def test_time_condition_requires_day_night(self, tmp_path: Path) -> None:
         """時間帯を読む条件に昼夜設定が無ければ、値が変化しないため拒否する。"""
+
         def remove_day_night(raw: dict[str, Any]) -> None:
             raw["environment"].pop("day_night")
             for node in _walk_dicts(raw):
@@ -188,6 +188,7 @@ class TestScenarioFeatureConsistency:
         tmp_path: Path,
     ) -> None:
         """出現条件のday_night_phasesにも昼夜設定が無ければ拒否する。"""
+
         def remove_day_night(raw: dict[str, Any]) -> None:
             raw["environment"].pop("day_night")
 
@@ -196,6 +197,7 @@ class TestScenarioFeatureConsistency:
 
     def test_weather_condition_requires_weather(self, tmp_path: Path) -> None:
         """天候を読む条件に天候設定が無ければ、値が変化しないため拒否する。"""
+
         def remove_weather(raw: dict[str, Any]) -> None:
             raw["environment"].pop("weather")
 
@@ -204,6 +206,7 @@ class TestScenarioFeatureConsistency:
 
     def test_weather_condition_rejects_disabled_weather(self, tmp_path: Path) -> None:
         """天候設定が存在しても無効なら、天候条件の値が変化しないため拒否する。"""
+
         def disable_weather(raw: dict[str, Any]) -> None:
             raw["environment"]["weather"]["enabled"] = False
 
@@ -212,6 +215,7 @@ class TestScenarioFeatureConsistency:
 
     def test_weather_spawn_condition_requires_weather(self, tmp_path: Path) -> None:
         """出現条件のweather_typesにも天候設定が無ければ拒否する。"""
+
         def remove_weather_and_other_weather_conditions(raw: dict[str, Any]) -> None:
             raw["environment"].pop("weather")
             for node in _walk_dicts(raw):
@@ -225,9 +229,7 @@ class TestScenarioFeatureConsistency:
                     # 語彙は重なりつつ違うので、**両方で通る語**を選ぶ。
                     node["condition_type"] = "FLAG_SET"
                     node["flag_name"] = "never_set_by_this_test"
-            raw["monsters"]["initial_placements"][0]["spawn_condition"][
-                "weather_types"
-            ] = ["STORM"]
+            raw["monsters"]["initial_placements"][0]["spawn_condition"]["weather_types"] = ["STORM"]
 
         with pytest.raises(ScenarioLoadError, match="weather"):
             _load_mutated(

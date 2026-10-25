@@ -69,9 +69,7 @@ def _session_with_hal_in_the_office(tmp: str):
         ),
     )
     character = manager.create_character(CharacterCreateRequest(name="probe"))
-    summary = manager.create_session(
-        SessionCreateRequest(world_id=_SCENARIO.stem, character_ids=[character.id])
-    )
+    summary = manager.create_session(SessionCreateRequest(world_id=_SCENARIO.stem, character_ids=[character.id]))
     wiring = manager._sessions[summary.session_id].llm_wiring
     runtime = wiring.runtime
     graph = runtime._spot_graph_repo.find_graph()
@@ -132,13 +130,14 @@ class TestSafeRetriedWithNewWords:
                 _search_the_office(wiring)
 
             warnings = [
-                e for e in trace.events
+                e
+                for e in trace.events
                 if e["kind"] == TraceEventKind.LOOP_GUARD_WARNING and e["player_id"] == int(_HAL)
             ]
             diagnoses = [
-                e for e in trace.events
-                if e["kind"] == TraceEventKind.TYPED_JUDGMENT
-                and e.get("question") == "loop_diagnosis"
+                e
+                for e in trace.events
+                if e["kind"] == TraceEventKind.TYPED_JUDGMENT and e.get("question") == "loop_diagnosis"
             ]
             assert [r.success for r in results] == [False] * len(_ATTEMPTS)
             assert [w.get("pattern") for w in warnings] == ["cross_tick_failure"], warnings

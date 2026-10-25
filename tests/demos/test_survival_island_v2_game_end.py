@@ -18,17 +18,13 @@ import pytest
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "survival_island_v2.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 @pytest.fixture(scope="module")
 def runtime():
     from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+
     return create_world_runtime(SCENARIO_PATH)
 
 
@@ -48,6 +44,7 @@ class TestOutcomeGameEnd:
         # 4 人全員に outcome をセット
         for spawn in runtime.scenario.player_spawns:
             from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
             registry.set_outcome(PlayerId(spawn.player_id), PlayerOutcomeEnum.STRANDED)
 
         result = runtime.check_game_end()

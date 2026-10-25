@@ -1,4 +1,5 @@
 """確定済み通知だけを配送し、失敗した観測を保存済み通知から再送する。"""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
@@ -45,7 +46,8 @@ class PublicSnsAfterCommitHandoff:
             return
         self._deliver_batch(
             (event.notification_id, event.notification_identity_token)
-            for event in events if isinstance(event, PublicSnsNotificationReadyEvent)
+            for event in events
+            if isinstance(event, PublicSnsNotificationReadyEvent)
         )
 
     def _deliver_batch(self, candidates: Iterable[tuple[int, str]]) -> int:
@@ -67,7 +69,11 @@ class PublicSnsAfterCommitHandoff:
         with self._scope_factory.create() as context:
             repos = context.repositories
             notification = repos.notifications.find_by_id(NotificationId(notification_id))
-            if notification is None or notification.identity_token != identity_token or notification.observation_delivered:
+            if (
+                notification is None
+                or notification.identity_token != identity_token
+                or notification.observation_delivered
+            ):
                 return False
             dto = PublicSnsReadService(repos.read).visible_notification(notification.user_id.value, notification)
             provenance_data = notification.execution_provenance

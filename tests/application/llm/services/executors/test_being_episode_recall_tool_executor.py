@@ -44,7 +44,9 @@ class _Recorder(NullTraceRecorder):
         return super().record(kind, tick=tick, player_id=player_id, **payload)
 
 
-def _episode(number: int, *, summary: str = "金庫の番号を探した", body: str = "棚の紙に 4 桁が書いてあった。") -> Episode:
+def _episode(
+    number: int, *, summary: str = "金庫の番号を探した", body: str = "棚の紙に 4 桁が書いてあった。"
+) -> Episode:
     return Episode.write(
         being_id=ADA,
         episode_id=f"{number:06x}00-0000-4000-8000-000000000000",

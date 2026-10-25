@@ -8,5 +8,5 @@ __all__ = [
     "ApplicationException",
     "SystemErrorException",
     "ItemInfoQueryApplicationException",
-    "RecipeInfoQueryApplicationException"
+    "RecipeInfoQueryApplicationException",
 ]

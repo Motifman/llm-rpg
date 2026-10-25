@@ -13,7 +13,7 @@ class TrendingDomainService:
         now: datetime,
         decay_lambda: float,
         recent_window_hours: float = 1.0,
-        max_results: int = 10
+        max_results: int = 10,
     ) -> list[tuple[str, float]]:
         """過去のポストからトレンドハッシュタグを計算 (ハイブリッド方式)
 

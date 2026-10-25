@@ -30,9 +30,7 @@ def _frozen_runtime_with_mori_at_the_valve():
         "freeze_fuel",
     )
     graph = runtime._spot_graph_repo.find_graph()
-    graph.teleport_entity(
-        EntityId.create(int(_MORI)), SpotId.create(runtime.id_mapper.get_int("spot", "fuel_bay"))
-    )
+    graph.teleport_entity(EntityId.create(int(_MORI)), SpotId.create(runtime.id_mapper.get_int("spot", "fuel_bay")))
     runtime._spot_graph_repo.save(graph)
     return runtime
 
@@ -101,7 +99,11 @@ class TestTheTakenSideIsRecorded:
             runtime,
             {
                 "name": "interact",
-                "arguments": {"target_label": "解氷弁", "action_name": "open_thaw_valve", "inner_thought": "弁を受け持つ"},
+                "arguments": {
+                    "target_label": "解氷弁",
+                    "action_name": "open_thaw_valve",
+                    "inner_thought": "弁を受け持つ",
+                },
             },
         ).run_turn(_MORI)
         graph = runtime._spot_graph_repo.find_graph()
@@ -113,7 +115,11 @@ class TestTheTakenSideIsRecorded:
             runtime,
             {
                 "name": "interact",
-                "arguments": {"target_label": "送油弁", "action_name": "open_oil_feed_valve", "inner_thought": "もう一方も"},
+                "arguments": {
+                    "target_label": "送油弁",
+                    "action_name": "open_oil_feed_valve",
+                    "inner_thought": "もう一方も",
+                },
             },
         )
         before = len(runtime._action_result_store.get_recent(_MORI, 100))
@@ -131,7 +137,11 @@ class TestTheTakenSideIsRecorded:
             runtime,
             {
                 "name": "interact",
-                "arguments": {"target_label": "解氷弁", "action_name": "open_thaw_valve", "inner_thought": "弁を受け持つ"},
+                "arguments": {
+                    "target_label": "解氷弁",
+                    "action_name": "open_thaw_valve",
+                    "inner_thought": "弁を受け持つ",
+                },
             },
         ).run_turn(_MORI)
         graph = runtime._spot_graph_repo.find_graph()
@@ -144,7 +154,11 @@ class TestTheTakenSideIsRecorded:
             runtime,
             {
                 "name": "interact",
-                "arguments": {"target_label": "送油弁", "action_name": "open_oil_feed_valve", "inner_thought": "もう一方も"},
+                "arguments": {
+                    "target_label": "送油弁",
+                    "action_name": "open_oil_feed_valve",
+                    "inner_thought": "もう一方も",
+                },
             },
         ).run_turn(_MORI)
 
@@ -163,7 +177,11 @@ class TestTheTakenSideIsToldByItsDisplayName:
             runtime,
             {
                 "name": "interact",
-                "arguments": {"target_label": "解氷弁", "action_name": "open_thaw_valve", "inner_thought": "弁を受け持つ"},
+                "arguments": {
+                    "target_label": "解氷弁",
+                    "action_name": "open_thaw_valve",
+                    "inner_thought": "弁を受け持つ",
+                },
             },
         )
 

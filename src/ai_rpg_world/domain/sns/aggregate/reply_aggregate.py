@@ -36,7 +36,20 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         if parent_post_id is not None and parent_reply_id is not None:
             raise InvalidParentReferenceException("親ポストIDと親リプライIDを同時に設定することはできません。")
 
-        super().__init__(reply_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at, identity_token, author_identity_token, parent_identity_token)
+        super().__init__(
+            reply_id,
+            author_user_id,
+            content,
+            likes,
+            mentions,
+            deleted,
+            parent_post_id,
+            parent_reply_id,
+            created_at,
+            identity_token,
+            author_identity_token,
+            parent_identity_token,
+        )
         self._reply_ids = reply_ids.copy()
 
     @classmethod
@@ -56,7 +69,21 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         author_identity_token: str | None = None,
         parent_identity_token: str | None = None,
     ) -> "ReplyAggregate":
-        return cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted, parent_post_id, parent_reply_id, created_at, identity_token, author_identity_token, parent_identity_token)
+        return cls(
+            reply_id,
+            author_user_id,
+            content,
+            likes,
+            mentions,
+            reply_ids,
+            deleted,
+            parent_post_id,
+            parent_reply_id,
+            created_at,
+            identity_token,
+            author_identity_token,
+            parent_identity_token,
+        )
 
     @classmethod
     def create(
@@ -77,7 +104,19 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         mentions = cls._create_mentions_from_content_static(reply_id, content)
         likes: set[Like] = set()
         reply_ids: set[ReplyId] = set()  # 新しいリプライなので子リプライは空
-        reply = cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted=False, parent_post_id=parent_post_id, parent_reply_id=parent_reply_id, author_identity_token=author_identity_token, parent_identity_token=parent_identity_token)
+        reply = cls(
+            reply_id,
+            author_user_id,
+            content,
+            likes,
+            mentions,
+            reply_ids,
+            deleted=False,
+            parent_post_id=parent_post_id,
+            parent_reply_id=parent_reply_id,
+            author_identity_token=author_identity_token,
+            parent_identity_token=parent_identity_token,
+        )
 
         # 作成イベントを発行
         event = SnsReplyCreatedEvent.create(
@@ -104,7 +143,8 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
     def _create_mentions_from_content_static(reply_id: ReplyId, content: PostContent) -> set[Mention]:
         """コンテンツからメンションを抽出（静的メソッド）"""
         import re
-        mention_pattern = r'@(\S+)'
+
+        mention_pattern = r"@(\S+)"
         matches = re.findall(mention_pattern, content.content)
         return set(Mention(mentioned_user_name=match, post_id=reply_id) for match in matches)
 
@@ -121,9 +161,22 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         """親情報を取得"""
         return self._parent_post_id, self._parent_reply_id
 
-    def like_reply(self, user_id: UserId, liker_display_name: str = "", *, liker_identity_token: str | None = None, execution_provenance: dict[str, object] | None = None) -> None:
+    def like_reply(
+        self,
+        user_id: UserId,
+        liker_display_name: str = "",
+        *,
+        liker_identity_token: str | None = None,
+        execution_provenance: dict[str, object] | None = None,
+    ) -> None:
         """リプライにいいね"""
-        self.like(user_id, "reply", liker_display_name=liker_display_name, liker_identity_token=liker_identity_token, execution_provenance=execution_provenance)
+        self.like(
+            user_id,
+            "reply",
+            liker_display_name=liker_display_name,
+            liker_identity_token=liker_identity_token,
+            execution_provenance=execution_provenance,
+        )
 
     def delete_reply(self, user_id: UserId) -> None:
         """リプライを削除"""

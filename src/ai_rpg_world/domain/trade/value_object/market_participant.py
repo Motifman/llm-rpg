@@ -39,9 +39,7 @@ class MarketParticipant:
                 f"kind は MarketParticipantKind で指定してください (got {self.kind!r})"
             )
         if isinstance(self.entity_id, bool) or not isinstance(self.entity_id, int):
-            raise MarketOrderValidationException(
-                f"entity_id は整数で指定してください (got {self.entity_id!r})"
-            )
+            raise MarketOrderValidationException(f"entity_id は整数で指定してください (got {self.entity_id!r})")
 
     @classmethod
     def player(cls, player_id: PlayerId) -> "MarketParticipant":
@@ -63,7 +61,5 @@ class MarketParticipant:
     def player_id(self) -> PlayerId:
         """エージェントとしての ID。商人に対して呼ぶのは誤り。"""
         if not self.is_player:
-            raise MarketOrderValidationException(
-                "商人は PlayerId を持ちません (決済の相手を取り違えています)"
-            )
+            raise MarketOrderValidationException("商人は PlayerId を持ちません (決済の相手を取り違えています)")
         return PlayerId(self.entity_id)

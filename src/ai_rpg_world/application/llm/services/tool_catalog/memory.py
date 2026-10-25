@@ -1,6 +1,5 @@
 """エピソード記憶メタツールの定義。"""
 
-
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory

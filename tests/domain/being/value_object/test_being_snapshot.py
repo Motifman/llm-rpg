@@ -39,9 +39,7 @@ class TestBeingSnapshotConstruction:
 
     def test_attachment(self) -> None:
         """world / player 両方とも値があれば has_attachment は True。"""
-        snapshot = _minimal_snapshot(
-            attachment_world_id=1, attachment_player_id=2
-        )
+        snapshot = _minimal_snapshot(attachment_world_id=1, attachment_player_id=2)
         assert snapshot.has_attachment is True
 
 
@@ -141,6 +139,4 @@ class TestBeingSnapshotEquality:
 
     def test_name_not_equal(self) -> None:
         """name が違えば等しくない。"""
-        assert _minimal_snapshot(identity_name="アダ") != _minimal_snapshot(
-            identity_name="ベン"
-        )
+        assert _minimal_snapshot(identity_name="アダ") != _minimal_snapshot(identity_name="ベン")

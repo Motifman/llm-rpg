@@ -127,9 +127,7 @@ class ObservedOutcome(Outcome):
     observation: Observation
 
     def __post_init__(self) -> None:
-        if not isinstance(self.observation, Observation) or not isinstance(
-            self.observation.route, OwnActionResult
-        ):
+        if not isinstance(self.observation, Observation) or not isinstance(self.observation.route, OwnActionResult):
             raise ShortTermMemoryValidationException("an observed outcome must be an own action result")
 
     @property
@@ -199,9 +197,7 @@ class Attempt(Experience):
         if not isinstance(self.result, Outcome):
             raise ShortTermMemoryValidationException("result must be Outcome")
         if not self.result.fits(self.move.call_id):
-            raise ShortTermMemoryValidationException(
-                f"{self.result!r} does not answer move {self.move.call_id!r}"
-            )
+            raise ShortTermMemoryValidationException(f"{self.result!r} does not answer move {self.move.call_id!r}")
 
     @property
     def order(self) -> OccurrenceOrder | None:
@@ -488,9 +484,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         self._become(experiences, self._backstories, recent_from, awaiting, request)
         return dropped
 
-    def _after_forgetting(
-        self, until_turn: int
-    ) -> tuple[tuple[Experience, ...], int, Attempt | None]:
+    def _after_forgetting(self, until_turn: int) -> tuple[tuple[Experience, ...], int, Attempt | None]:
         """``until_turn`` までを外したあとの出来事、範囲の始まり、待っている 1 手。外すターンに選んだまま結果の来ない 1 手も外す。"""
         recent_from = max(self._recent_from, until_turn + 1)
         experiences, awaiting = self._experiences, self._awaiting
@@ -566,11 +560,7 @@ def _in_recent_order(experiences: tuple[Experience, ...]) -> tuple[Experience, .
 
 
 def _same_environment(left: Experience, right: Experience) -> bool:
-    return (
-        left.order is not None
-        and right.order is not None
-        and left.order.environment == right.order.environment
-    )
+    return left.order is not None and right.order is not None and left.order.environment == right.order.environment
 
 
 def _in_occurrence_order(run: list[Experience]) -> list[Experience]:

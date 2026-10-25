@@ -1,4 +1,3 @@
-
 from ai_rpg_world.application.common.event_delivery import (
     CommandEventHandlerRegistrarPort,
     DeliveryChannel,
@@ -30,14 +29,20 @@ class QuestEventHandlerRegistry:
     def register_command_handlers(self, registrar: CommandEventHandlerRegistrarPort) -> None:
         """既存の進捗更新を、同じ対応と順序で確定後へ登録する。"""
         registrar.register_after_commit(
-            MonsterDiedEvent, self._monster_died_handler.handle,
-            channel=DeliveryChannel.INTEGRATION, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            MonsterDiedEvent,
+            self._monster_died_handler.handle,
+            channel=DeliveryChannel.INTEGRATION,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
         registrar.register_after_commit(
-            PlayerDownedEvent, self._player_downed_handler.handle,
-            channel=DeliveryChannel.INTEGRATION, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            PlayerDownedEvent,
+            self._player_downed_handler.handle,
+            channel=DeliveryChannel.INTEGRATION,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
         registrar.register_after_commit(
-            ItemAddedToInventoryEvent, self._item_added_to_inventory_handler.handle,
-            channel=DeliveryChannel.INTEGRATION, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            ItemAddedToInventoryEvent,
+            self._item_added_to_inventory_handler.handle,
+            channel=DeliveryChannel.INTEGRATION,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )

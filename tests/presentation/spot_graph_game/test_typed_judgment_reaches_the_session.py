@@ -35,9 +35,7 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 @pytest.fixture(autouse=True)
@@ -63,11 +61,7 @@ def _session_wiring(config: Any) -> Iterator[Any]:
             runtime_config=config,
         )
         character = manager.create_character(CharacterCreateRequest(name="probe"))
-        summary = manager.create_session(
-            SessionCreateRequest(
-                world_id=_SCENARIO.stem, character_ids=[character.id]
-            )
-        )
+        summary = manager.create_session(SessionCreateRequest(world_id=_SCENARIO.stem, character_ids=[character.id]))
         yield manager._sessions[summary.session_id].llm_wiring
 
 
@@ -81,9 +75,7 @@ class TestTheSessionCarriesWhatTheProfileAskedFor:
 
     def test_a_session_carries_the_stub_when_the_profile_asks_for_it(self) -> None:
         """provider=stub なら、実 API を呼ばない実装が配線に載る。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
-        ):
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")):
             assert isinstance(wiring.typed_judgment_port, DeterministicTypedJudgmentPort)
 
 
@@ -93,17 +85,11 @@ class TestAMissingKeyStopsTheRunBeforeItStarts:
     def test_jev_without_a_key_fails_at_session_creation(self) -> None:
         """provider=jev でキーが無ければ、session を作る時点で ValueError になる。"""
         with pytest.raises(ValueError) as caught:
-            list(
-                _session_wiring(
-                    ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="jev")
-                )
-            )
+            list(_session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="jev")))
 
         assert "OPENROUTER_API_KEY" in str(caught.value)
 
-    def test_jev_with_a_placeholder_key_fails_at_session_creation(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_jev_with_a_placeholder_key_fails_at_session_creation(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """キー欄が EMPTY のままなら、session を作る時点で落ちる。
 
         ローカル vLLM 構成では ``OPENAI_API_KEY`` が ``EMPTY`` になる。その値で
@@ -112,11 +98,7 @@ class TestAMissingKeyStopsTheRunBeforeItStarts:
         monkeypatch.setenv("OPENAI_API_KEY", "EMPTY")
 
         with pytest.raises(ValueError):
-            list(
-                _session_wiring(
-                    ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="jev")
-                )
-            )
+            list(_session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="jev")))
 
 
 class TestTheArgumentResolverGetsTheJudgment:
@@ -128,9 +110,7 @@ class TestTheArgumentResolverGetsTheJudgment:
 
     def test_the_resolver_can_rescue_when_the_profile_asks_for_judgment(self) -> None:
         """provider が判断を求めていれば、resolver が選び直す口を持つ。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
-        ):
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")):
             assert wiring.argument_resolver.action_name_rescue is not None
 
     def test_the_resolver_has_no_rescue_by_default(self) -> None:
@@ -151,15 +131,12 @@ class TestTheArgumentResolverGetsTheJudgment:
             assert rescue.min_confidence == 0.85
 
 
-
 class TestTheArgumentResolverGetsTheTargetLabelJudgment:
     """対象の名前を解決する resolver にも、判断が注入されることを保証する。"""
 
     def test_the_resolver_can_rescue_target_labels_when_the_profile_asks_for_judgment(self) -> None:
         """provider が判断を求めていれば、resolver は対象名を選び直す口を持つ。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
-        ):
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")):
             assert wiring.argument_resolver.target_label_rescue is not None
 
     def test_the_resolver_has_no_target_label_rescue_by_default(self) -> None:
@@ -169,9 +146,7 @@ class TestTheArgumentResolverGetsTheTargetLabelJudgment:
 
     def test_the_target_label_threshold_comes_from_the_profile(self) -> None:
         """対象名の閾値が profile から resolver まで届き、既定は行動名より高い 0.85。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
-        ):
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")):
             assert wiring.argument_resolver.target_label_rescue.min_confidence == 0.85
         for wiring in _session_wiring(
             ResolvedLlmRuntimeConfig.for_tests(
@@ -204,9 +179,7 @@ class TestTheWiringGetsTheToolNameJudgment:
 
     def test_the_wiring_can_rescue_tool_names_when_the_profile_asks_for_judgment(self) -> None:
         """provider が判断を求めていれば、配線は tool 名の提案を意味で選ぶ口を持つ。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
-        ):
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")):
             assert wiring.tool_name_rescue is not None
 
     def test_the_wiring_has_no_tool_name_rescue_by_default(self) -> None:
@@ -232,17 +205,13 @@ class TestTheLoopGuardGetsTheDiagnosis:
 
     def test_judgment_alone_does_not_bring_the_diagnosis(self) -> None:
         """provider だけを入れた profile では、判断ポートは載るが見立ては入らない (既定 off)。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
-        ):
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")):
             assert wiring.typed_judgment_port is not None
             assert wiring.tool_call_loop_guard.loop_diagnosis is None
 
     def test_enabling_without_a_port_brings_no_diagnosis(self) -> None:
         """provider が off なら、見立てを有効にしても入らない。判断ポートが無いため。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_loop_diagnosis_enabled=True)
-        ):
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_loop_diagnosis_enabled=True)):
             assert wiring.tool_call_loop_guard.loop_diagnosis is None
 
 
@@ -267,17 +236,13 @@ class TestTheLoopGuardGetsTheSemanticRepeatDetector:
 
     def test_judgment_alone_does_not_bring_the_detector(self) -> None:
         """provider だけを入れた profile では、判断ポートは載るが検出器は入らない (既定 off)。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
-        ):
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")):
             assert wiring.typed_judgment_port is not None
             assert wiring.tool_call_loop_guard.semantic_repeat_detector is None
 
     def test_enabling_without_a_port_brings_no_detector(self) -> None:
         """provider が off なら、検出を有効にしても入らない。判断ポートが無いため。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_semantic_repeat_enabled=True)
-        ):
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_semantic_repeat_enabled=True)):
             assert wiring.tool_call_loop_guard.semantic_repeat_detector is None
 
 
@@ -286,9 +251,7 @@ class TestTheItemNameRescueReachesThePlayerInteractions:
 
     def test_the_runtime_can_rescue_item_names_when_the_profile_asks_for_judgment(self) -> None:
         """provider が判断を求めていれば、runtime は品名を選び直す口を持ち、閾値は対象名と同じ 0.85。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
-        ):
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")):
             rescue = wiring.runtime.target_item_name_rescue
             assert rescue is not None
             assert rescue.min_confidence == 0.85

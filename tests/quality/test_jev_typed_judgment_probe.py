@@ -74,8 +74,7 @@ def test_jev_answers_three_typed_questions_about_one_japanese_state() -> None:
         {
             "rescue": ChoiceQuestion(
                 instructions=(
-                    "書かれた行動名は、対象の操作一覧のどれを意図しているか。"
-                    "どれにも当たらなければ該当なしを選ぶ。"
+                    "書かれた行動名は、対象の操作一覧のどれを意図しているか。どれにも当たらなければ該当なしを選ぶ。"
                 ),
                 options={
                     "reap_wheat": "麦を刈り取る操作",

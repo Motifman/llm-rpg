@@ -82,42 +82,32 @@ class TestLightingPerceptionText:
     def test_bright_no_note(self) -> None:
         """明るい部屋では補足テキストなし"""
         svc = SpotPerceptionService()
-        assert svc.describe_lighting_perception(
-            LightingEnum.BRIGHT, LightingEnum.BRIGHT, False, None
-        ) is None
+        assert svc.describe_lighting_perception(LightingEnum.BRIGHT, LightingEnum.BRIGHT, False, None) is None
 
     def test_dark_with_own_light(self) -> None:
         """自分が光源を持つ場合の知覚テキスト"""
         svc = SpotPerceptionService()
-        note = svc.describe_lighting_perception(
-            LightingEnum.DARK, LightingEnum.DIM, True, None
-        )
+        note = svc.describe_lighting_perception(LightingEnum.DARK, LightingEnum.DIM, True, None)
         assert note is not None
         assert "手元" in note
 
     def test_dark_with_companion_light(self) -> None:
         """同行者が光源を持つ場合の知覚テキスト"""
         svc = SpotPerceptionService()
-        note = svc.describe_lighting_perception(
-            LightingEnum.DARK, LightingEnum.DIM, False, "太郎"
-        )
+        note = svc.describe_lighting_perception(LightingEnum.DARK, LightingEnum.DIM, False, "太郎")
         assert note is not None
         assert "太郎" in note
 
     def test_pitch_black_no_light(self) -> None:
         """完全な暗闇で光源なしの知覚テキスト"""
         svc = SpotPerceptionService()
-        note = svc.describe_lighting_perception(
-            LightingEnum.PITCH_BLACK, LightingEnum.PITCH_BLACK, False, None
-        )
+        note = svc.describe_lighting_perception(LightingEnum.PITCH_BLACK, LightingEnum.PITCH_BLACK, False, None)
         assert note is not None
         assert "暗闇" in note
 
     def test_dark_no_light(self) -> None:
         """暗闇で光源なしの知覚テキスト"""
         svc = SpotPerceptionService()
-        note = svc.describe_lighting_perception(
-            LightingEnum.DARK, LightingEnum.DARK, False, None
-        )
+        note = svc.describe_lighting_perception(LightingEnum.DARK, LightingEnum.DARK, False, None)
         assert note is not None
         assert "見えない" in note

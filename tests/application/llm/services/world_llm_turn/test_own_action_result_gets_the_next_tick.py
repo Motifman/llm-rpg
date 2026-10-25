@@ -39,9 +39,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[5] / "data" / "scenarios" / "mine_village_v1.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[5] / "data" / "scenarios" / "mine_village_v1.json"
 _HAL = PlayerId(1)
 _WAIT = {"name": "wait", "arguments": {"inner_thought": "様子を見る"}}
 _EXPLORE = {"name": "explore", "arguments": {"inner_thought": "手がかりを探す"}}
@@ -87,9 +85,7 @@ class _Session:
         graph = self.runtime._spot_graph_repo.find_graph()
         entity = EntityId.create(int(_HAL))
         graph.unplace_entity(entity)
-        graph.place_entity(
-            entity, SpotId.create(self.runtime.id_mapper.get_int("spot", spot))
-        )
+        graph.place_entity(entity, SpotId.create(self.runtime.id_mapper.get_int("spot", spot)))
         self.runtime._spot_graph_repo.save(graph)
 
     def script_hal(self, script: list[dict[str, Any]]) -> None:
@@ -100,18 +96,10 @@ class _Session:
             self.runtime.advance_tick()
 
     def hal_turns(self) -> list[tuple[int, str]]:
-        return [
-            (e.tick, e.payload["tool"])
-            for e in self.recorder.of_kind("action_result")
-            if e.player_id == int(_HAL)
-        ]
+        return [(e.tick, e.payload["tool"]) for e in self.recorder.of_kind("action_result") if e.player_id == int(_HAL)]
 
     def hal_results(self) -> list[bool]:
-        return [
-            e.payload["success"]
-            for e in self.recorder.of_kind("action_result")
-            if e.player_id == int(_HAL)
-        ]
+        return [e.payload["success"] for e in self.recorder.of_kind("action_result") if e.player_id == int(_HAL)]
 
     def hal_follow_ups(self) -> list[dict[str, Any]]:
         return [
@@ -131,9 +119,7 @@ def _open_session(tmp: str, config: ResolvedLlmRuntimeConfig | None = None) -> _
         runtime_config=config or ResolvedLlmRuntimeConfig.for_tests(),
     )
     character = manager.create_character(CharacterCreateRequest(name="probe"))
-    summary = manager.create_session(
-        SessionCreateRequest(world_id=_SCENARIO.stem, character_ids=[character.id])
-    )
+    summary = manager.create_session(SessionCreateRequest(world_id=_SCENARIO.stem, character_ids=[character.id]))
     wiring = manager._sessions[summary.session_id].llm_wiring
     recorder = CollectingTraceRecorder()
     wiring.runtime.set_trace_recorder(recorder)
@@ -151,9 +137,7 @@ def _episode_config() -> ResolvedLlmRuntimeConfig:
 def _write_hal_episode(session: _Session) -> Episode:
     runtime = session.runtime
     runtime._acting_being_for(_HAL)
-    being_id = runtime.aux_being_resolver.resolve_being_id(
-        runtime.aux_being_default_world_id, _HAL
-    )
+    being_id = runtime.aux_being_resolver.resolve_being_id(runtime.aux_being_default_world_id, _HAL)
     store = runtime._being_episode_store
     episode = Episode.write(
         being_id=being_id,
@@ -183,9 +167,7 @@ class TestSucceededActionWithoutObservationGetsTheNextTick:
         ],
         ids=["explore_finds_nothing", "interact_reads_a_note"],
     )
-    def test_next_turn_comes_on_the_next_tick(
-        self, spot: str, action: dict[str, Any], tool: str
-    ) -> None:
+    def test_next_turn_comes_on_the_next_tick(self, spot: str, action: dict[str, Any], tool: str) -> None:
         """何も見つからない探索・紙切れを読むだけの interact が成功すると、本人の次の手番は 1 tick 後に来る。"""
         with TemporaryDirectory() as tmp:
             session = _open_session(tmp)
@@ -203,9 +185,7 @@ class TestSucceededActionWithoutObservationGetsTheNextTick:
         with TemporaryDirectory() as tmp:
             session = _open_session(tmp, _episode_config())
             episode = _write_hal_episode(session)
-            session.script_hal(
-                [{"name": TOOL_NAME_EPISODE_RECALL, "arguments": {"handles": [episode.handle]}}]
-            )
+            session.script_hal([{"name": TOOL_NAME_EPISODE_RECALL, "arguments": {"handles": [episode.handle]}}])
 
             session.advance(session.idle_timeout_ticks() + 3)
 
@@ -233,9 +213,7 @@ class TestSucceededActionWithoutObservationGetsTheNextTick:
 class TestWaitRestsUntilWoken:
     """wait を選んだときだけは、今までどおり起こされるまで手番が回らないことを保証する。"""
 
-    @pytest.mark.parametrize(
-        "inner_thought", ["様子を見る", ""], ids=["with_thought", "empty_thought"]
-    )
+    @pytest.mark.parametrize("inner_thought", ["様子を見る", ""], ids=["with_thought", "empty_thought"])
     def test_wait_sleeps_until_the_idle_timer(self, inner_thought: str) -> None:
         """wait のあと、ほかに起こす観測が無ければ、次の手番は待ち時間のタイマーが切れる tick まで来ない。心の声が空で結果の文に警告が付く wait でも同じ。"""
         with TemporaryDirectory() as tmp:
@@ -329,9 +307,7 @@ class TestRepeatingTheSameActionIsWarned:
 
             explores = [tick for tick, tool in session.hal_turns() if tool == "explore"]
             warnings = [
-                e.tick
-                for e in session.recorder.of_kind(TraceEventKind.LOOP_GUARD_WARNING)
-                if e.player_id == int(_HAL)
+                e.tick for e in session.recorder.of_kind(TraceEventKind.LOOP_GUARD_WARNING) if e.player_id == int(_HAL)
             ]
             assert _gaps([(t, "") for t in explores]) == [1, 1, 1, 1]
             assert warnings == [explores[-1]]

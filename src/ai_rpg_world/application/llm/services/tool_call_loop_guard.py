@@ -125,9 +125,7 @@ class ToolCallLoopGuardService:
             完全一致の検出の後に回し、発火したかを渡す。
         """
         if not isinstance(observation_buffer, IObservationContextBuffer):
-            raise TypeError(
-                "observation_buffer must be IObservationContextBuffer"
-            )
+            raise TypeError("observation_buffer must be IObservationContextBuffer")
         if not callable(time_label_provider):
             raise TypeError("time_label_provider must be callable")
         if clock is not None and not callable(clock):
@@ -139,24 +137,16 @@ class ToolCallLoopGuardService:
         )
         if trace_recorder is not None and not isinstance(trace_recorder, ITraceRecorder):
             raise TypeError("trace_recorder must be ITraceRecorder or None")
-        if trace_recorder_provider is not None and not callable(
-            trace_recorder_provider
-        ):
-            raise TypeError(
-                "trace_recorder_provider must be callable or None"
-            )
+        if trace_recorder_provider is not None and not callable(trace_recorder_provider):
+            raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
         if loop_diagnosis is not None and not isinstance(loop_diagnosis, LoopDiagnosis):
             raise TypeError("loop_diagnosis must be LoopDiagnosis or None")
         if location_provider is not None and not callable(location_provider):
             raise TypeError("location_provider must be callable or None")
-        if semantic_repeat_detector is not None and not isinstance(
-            semantic_repeat_detector, SemanticRepeatDetector
-        ):
-            raise TypeError(
-                "semantic_repeat_detector must be SemanticRepeatDetector or None"
-            )
+        if semantic_repeat_detector is not None and not isinstance(semantic_repeat_detector, SemanticRepeatDetector):
+            raise TypeError("semantic_repeat_detector must be SemanticRepeatDetector or None")
         cross_tick_detector = CrossTickFailureDetector(
             window=cross_tick_failure_window,
             threshold=cross_tick_failure_threshold,
@@ -230,9 +220,7 @@ class ToolCallLoopGuardService:
             tick=self._get_current_tick_or_none(),
             result_summary=result_summary,
         )
-        recent = self._recent_actions.setdefault(
-            player_id.value, deque(maxlen=_RECENT_ACTION_LIMIT)
-        )
+        recent = self._recent_actions.setdefault(player_id.value, deque(maxlen=_RECENT_ACTION_LIMIT))
         recent.append(
             RecentAction(
                 action=build_action_summary(tool_name, action.fingerprint),
@@ -247,9 +235,7 @@ class ToolCallLoopGuardService:
             if signal is not None:
                 signals.append(signal)
         if self.semantic_repeat_detector is not None:
-            semantic = self.semantic_repeat_detector.observe(
-                action, exact_match_fired=bool(signals)
-            )
+            semantic = self.semantic_repeat_detector.observe(action, exact_match_fired=bool(signals))
             if semantic is not None:
                 signals.append(semantic)
         self._emitter.emit_all(player_id, signals, tuple(recent))

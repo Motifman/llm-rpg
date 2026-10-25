@@ -33,9 +33,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
-_FIXTURE_SCENARIOS = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
-)
+_FIXTURE_SCENARIOS = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
 _BASE = _FIXTURE_SCENARIOS / "darkened_station.json"
 _SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
     source=WorldFlagMutationSource.SCENARIO_EVENT,
@@ -52,11 +50,13 @@ def runtime(tmp_path):
     """作業 4 個・3 個で勝ち、というシナリオを組んで返す。"""
     raw = json.loads(_BASE.read_text(encoding="utf-8"))
     raw["game_end_conditions"] = {
-        "win": [{
-            "type": "FLAGS_SET_AT_LEAST",
-            "required_flags": _TASKS,
-            "min_set_count": 3,
-        }],
+        "win": [
+            {
+                "type": "FLAGS_SET_AT_LEAST",
+                "required_flags": _TASKS,
+                "min_set_count": 3,
+            }
+        ],
         "lose": [],
     }
     path = tmp_path / "tasks.json"

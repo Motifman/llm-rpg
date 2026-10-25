@@ -153,18 +153,13 @@ def build_duty_roster_text(
     担当と場所の対応は、担当キーを要求する interaction がどの spot に
     あるかで決まる。シナリオに書き直させない (書き直させると必ずずれる)。
     """
-    duties = [
-        (p, str((getattr(p, "initial_state", None) or {}).get(duty_state_key) or ""))
-        for p in players
-    ]
+    duties = [(p, str((getattr(p, "initial_state", None) or {}).get(duty_state_key) or "")) for p in players]
     duties = [(p, d) for p, d in duties if d]
     if not duties:
         return ""
 
     task_entries = _task_places(spots, interiors, duty_state_key)
-    owner_by_duty = {
-        duty: str(getattr(player, "name", "") or "") for player, duty in duties
-    }
+    owner_by_duty = {duty: str(getattr(player, "name", "") or "") for player, duty in duties}
     lines: list[str] = ["【点検の割り当て】"]
     for duty, label, place, _object_name, _action_name in task_entries:
         where = f" ({place})" if place else ""
@@ -186,15 +181,11 @@ def build_duty_roster_text(
         if required_count >= total:
             lines.append(f"  この {total} 件をすべて終えれば{winner_label}の勝ち。")
         else:
-            lines.append(
-                f"  この {total} 件のうち {required_count} 件終えれば{winner_label}の勝ち。"
-            )
+            lines.append(f"  この {total} 件のうち {required_count} 件終えれば{winner_label}の勝ち。")
     return "\n".join(lines)
 
 
-def _task_places(
-    spots: Sequence[Any], interiors: Any, duty_state_key: str
-) -> list[_TaskEntry]:
+def _task_places(spots: Sequence[Any], interiors: Any, duty_state_key: str) -> list[_TaskEntry]:
     """点検を完了フラグから見つけ、担当の有無と入口の呼び名を返す。
 
     `task_` フラグを立てる interaction を点検の最終段とみなし、その
@@ -211,25 +202,17 @@ def _task_places(
         for obj in getattr(interior, "objects", ()) or ():
             interactions = tuple(getattr(obj, "interactions", ()) or ())
             by_action_name = {
-                str(getattr(interaction, "action_name", "") or ""): interaction
-                for interaction in interactions
+                str(getattr(interaction, "action_name", "") or ""): interaction for interaction in interactions
             }
             seen_entry_names: set[str] = set()
             for completion in interactions:
                 if not any(
-                    str(getattr(effect.effect_type, "value", effect.effect_type))
-                    == "SET_FLAG"
-                    and str(
-                        (getattr(effect, "parameters", None) or {}).get(
-                            "flag_name", ""
-                        )
-                    ).startswith("task_")
+                    str(getattr(effect.effect_type, "value", effect.effect_type)) == "SET_FLAG"
+                    and str((getattr(effect, "parameters", None) or {}).get("flag_name", "")).startswith("task_")
                     for effect in getattr(completion, "effects", ()) or ()
                 ):
                     continue
-                completion_name = str(
-                    getattr(completion, "action_name", "") or ""
-                )
+                completion_name = str(getattr(completion, "action_name", "") or "")
                 entry_name = completion_name
                 for suffix in ("_3", "_2"):
                     if entry_name.endswith(suffix):
@@ -260,9 +243,7 @@ def _task_places(
     return found
 
 
-def _duty_places(
-    spots: Sequence[Any], interiors: Any, duty_state_key: str
-) -> dict[str, list[_DutyEntry]]:
+def _duty_places(spots: Sequence[Any], interiors: Any, duty_state_key: str) -> dict[str, list[_DutyEntry]]:
     """担当キー → [(呼び名, 場所名, 物体名, 入口 action_name), ...]。
 
     **担当キーをそのままプロンプトに出さない** (#892)。``weather`` は engine
@@ -284,9 +265,7 @@ def _duty_places(
         if entry not in entries:
             entries.append(entry)
 
-    for duty, label, place, object_name, action_name in _task_places(
-        spots, interiors, duty_state_key
-    ):
+    for duty, label, place, object_name, action_name in _task_places(spots, interiors, duty_state_key):
         if duty:
             _append(duty, (label, place, object_name, action_name))
     # 単体の表示部品では完了効果まで組まない fixture もある。担当表示の
@@ -307,10 +286,7 @@ def _duty_places(
                     _append(
                         str(required_duty),
                         (
-                            str(
-                                getattr(interaction, "display_label", "")
-                                or action_name
-                            ),
+                            str(getattr(interaction, "display_label", "") or action_name),
                             str(getattr(spot, "name", "") or ""),
                             str(getattr(obj, "name", "") or ""),
                             action_name,
@@ -343,16 +319,10 @@ def build_faction_summary_text(
         return ""
     total = sum(counts.values())
     labels = dict(role_labels or {})
-    named = [
-        f"{labels[role]} {n} 人" for role, n in sorted(counts.items()) if role in labels
-    ]
+    named = [f"{labels[role]} {n} 人" for role, n in sorted(counts.items()) if role in labels]
     if not named:
         return f"参加者は {total} 人。自分がどの側かは【ペルソナ】に書かれている。"
-    return (
-        f"参加者は {total} 人。内訳は "
-        + " / ".join(named)
-        + "。自分がどの側かは【ペルソナ】に書かれている。"
-    )
+    return f"参加者は {total} 人。内訳は " + " / ".join(named) + "。自分がどの側かは【ペルソナ】に書かれている。"
 
 
 def build_meeting_rules_text(
@@ -398,8 +368,7 @@ def build_meeting_rules_text(
     lines = [
         "【話し合いと投票の決まり】",
         "- 追放されるのは、最も多く名指しされた 1 人だけ。",
-        "- 棄権も 1 票として数える。**棄権の数が名指しの最多と並ぶか上回ると、"
-        "誰も追放されない。**",
+        "- 棄権も 1 票として数える。**棄権の数が名指しの最多と並ぶか上回ると、誰も追放されない。**",
         "- 棄権が誰も追放しない結果につながれば、襲う者には次に襲える機会が残る。",
         "- 名指しが割れて最多が複数居るときも、誰も追放されない。",
         "- 一度投じた票は変えられない。",
@@ -457,9 +426,7 @@ def build_world_briefing(
     """
     sections = [
         build_faction_summary_text(players, role_labels),
-        build_world_map_text(spots, connections, minutes_per_tick=minutes_per_tick)
-        if show_world_map
-        else "",
+        build_world_map_text(spots, connections, minutes_per_tick=minutes_per_tick) if show_world_map else "",
         build_duty_roster_text(
             players,
             spots,
@@ -557,9 +524,7 @@ def build_own_state_display_names(
     names: dict[str, tuple[str, str]] = {}
     for role, label in (role_labels or {}).items():
         names[f"{role_key}={role}"] = ("立場", label)
-    for duty, entries in _duty_places(
-        spots, interiors, duty_state_key
-    ).items():
+    for duty, entries in _duty_places(spots, interiors, duty_state_key).items():
         rendered: list[str] = []
         for task_label, place, object_name, action_name in entries:
             if action_name:

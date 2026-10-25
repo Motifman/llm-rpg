@@ -71,12 +71,20 @@ def backend(request):
 
 
 def _post(
-    number: int, *, private: bool = False, deleted: bool = False, identity_token: str | None = None,
+    number: int,
+    *,
+    private: bool = False,
+    deleted: bool = False,
+    identity_token: str | None = None,
 ) -> PostAggregate:
     return PostAggregate.create_from_db(
-        PostId(number), UserId(1),
+        PostId(number),
+        UserId(1),
         PostContent("投稿", visibility=PostVisibility.PRIVATE if private else PostVisibility.PUBLIC),
-        set(), set(), set(), deleted=deleted,
+        set(),
+        set(),
+        set(),
+        deleted=deleted,
         created_at=datetime(2026, 1, 1) - timedelta(seconds=number),
         identity_token=identity_token,
         author_identity_token="11111111111141118111111111111111",
@@ -84,12 +92,22 @@ def _post(
 
 
 def _reply(
-    number: int, *, post: int | None = None, reply: int | None = None, identity_token: str | None = None,
+    number: int,
+    *,
+    post: int | None = None,
+    reply: int | None = None,
+    identity_token: str | None = None,
 ) -> ReplyAggregate:
     return ReplyAggregate.create_from_db(
-        ReplyId(number), None if post is None else PostId(post),
-        None if reply is None else ReplyId(reply), UserId(2),
-        PostContent("返信"), set(), set(), set(), created_at=datetime(2026, 1, 1),
+        ReplyId(number),
+        None if post is None else PostId(post),
+        None if reply is None else ReplyId(reply),
+        UserId(2),
+        PostContent("返信"),
+        set(),
+        set(),
+        set(),
+        created_at=datetime(2026, 1, 1),
         identity_token=identity_token,
         author_identity_token="22222222222242228222222222222222",
         parent_identity_token="33333333333343338333333333333333",
@@ -98,7 +116,9 @@ def _reply(
 
 def _notification(number: int, owner: int) -> Notification:
     return Notification.create_persistent_notification(
-        NotificationId(number), UserId(owner), NotificationType.FOLLOW,
+        NotificationId(number),
+        UserId(owner),
+        NotificationType.FOLLOW,
         NotificationContent.create_follow_notification(UserId(2), "魔法使い"),
         created_at=datetime(2026, 1, 1) - timedelta(seconds=number),
     )
@@ -162,11 +182,14 @@ def test_notification_pages_filter_owner_before_limiting_and_do_not_mark_read(ba
 
 
 @pytest.mark.parametrize("limit", [0, -1, 102, True, 1.5])
-@pytest.mark.parametrize("method,args", [
-    ("scan_posts", (None,)),
-    ("scan_replies", ("post", 1, None)),
-    ("scan_notifications", (1, None)),
-])
+@pytest.mark.parametrize(
+    "method,args",
+    [
+        ("scan_posts", (None,)),
+        ("scan_replies", ("post", 1, None)),
+        ("scan_notifications", (1, None)),
+    ],
+)
 def test_all_scan_methods_reject_limits_outside_bounded_integer_range(backend, method, args, limit) -> None:
     """候補取得の上限は1から101までの整数だけを受け付け、真偽値も拒否する。"""
     with pytest.raises(ValueError):
@@ -277,7 +300,8 @@ def test_user_lookup_is_scalar_and_block_lookup_checks_only_the_requested_pair(b
 
 @pytest.mark.parametrize("parent_post_id,parent_reply_id", [(1, 2), (None, None)])
 def test_sqlite_malformed_reply_parent_does_not_choose_a_convenient_ancestor(
-    parent_post_id, parent_reply_id,
+    parent_post_id,
+    parent_reply_id,
 ) -> None:
     """親が二つある返信や親がない返信は、どちらかの親を勝手に選んで読取結果へ載せない。"""
     with sqlite3.connect(":memory:") as connection:
@@ -327,13 +351,21 @@ def test_memory_duplicate_identity_is_rejected_instead_of_selecting_first_match(
     assert reader.find_content(kind, first.identity_token) is None
 
 
-@pytest.mark.parametrize("identity_token", [
-    None, "invalid", "11111111-1111-4111-8111-111111111111", "ABCDEFAB123441238123ABCDEFABCDEF",
-])
+@pytest.mark.parametrize(
+    "identity_token",
+    [
+        None,
+        "invalid",
+        "11111111-1111-4111-8111-111111111111",
+        "ABCDEFAB123441238123ABCDEFABCDEF",
+    ],
+)
 @pytest.mark.parametrize("kind", ["post", "reply"])
 @pytest.mark.parametrize("read_method", ["by_id", "scan"])
 def test_sqlite_content_reads_reject_missing_or_noncanonical_stored_identity(
-    identity_token, kind, read_method,
+    identity_token,
+    kind,
+    read_method,
 ) -> None:
     """保存済み識別子がNULL・不正値・非正規形なら、文字列化や再発行せず復元を拒否する。"""
     with sqlite3.connect(":memory:") as connection:
@@ -353,9 +385,15 @@ def test_sqlite_content_reads_reject_missing_or_noncanonical_stored_identity(
                 reader.scan_replies("post", 1, None, 1)
 
 
-@pytest.mark.parametrize("identity_token", [
-    None, "invalid", "11111111-1111-4111-8111-111111111111", "ABCDEFAB123441238123ABCDEFABCDEF",
-])
+@pytest.mark.parametrize(
+    "identity_token",
+    [
+        None,
+        "invalid",
+        "11111111-1111-4111-8111-111111111111",
+        "ABCDEFAB123441238123ABCDEFABCDEF",
+    ],
+)
 def test_sqlite_user_read_rejects_missing_or_noncanonical_stored_identity(identity_token) -> None:
     """利用者の薄い読取でも保存済み識別子を検証し、破損を明示する例外で停止する。"""
     with sqlite3.connect(":memory:") as connection:
@@ -404,9 +442,14 @@ def test_memory_scalar_reads_reject_corrupted_identity(identity_token, kind) -> 
             reader.find_content_by_id(kind, 1)
 
 
-@pytest.mark.parametrize("namespace", [
-    "invalid", "11111111-1111-4111-8111-111111111111", "ABCDEFAB123441238123ABCDEFABCDEF",
-])
+@pytest.mark.parametrize(
+    "namespace",
+    [
+        "invalid",
+        "11111111-1111-4111-8111-111111111111",
+        "ABCDEFAB123441238123ABCDEFABCDEF",
+    ],
+)
 def test_namespace_read_rejects_noncanonical_stored_value(backend, namespace) -> None:
     """保存済み名前空間が正規形のUUID4でなければ、無効な公開参照を生成する前に停止する。"""
     if backend.store is not None:

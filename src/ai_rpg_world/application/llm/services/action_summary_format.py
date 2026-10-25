@@ -92,6 +92,7 @@ CANONICAL_IDENTIFIERS_KEY = "__canonical_identifiers"
 #: 同じ書き方にするため。action_name は呼び出しの値で、世界の言葉ではない。
 ACTION_DISPLAY_PHRASE_KEY = "__action_display_phrase"
 
+
 def project_action_arguments_for_history(
     args: Mapping[str, Any] | None,
     *,
@@ -125,14 +126,10 @@ def project_action_arguments_for_history(
                 identifiers[name] = canonical[name]
                 continue
             identifiers[name] = (
-                value
-                if isinstance(value, str)
-                else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+                value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
             )
         elif kind == ActionArgumentDisplayKind.IDENTIFIER_JSON:
-            identifiers[name] = json.dumps(
-                value, ensure_ascii=False, separators=(",", ":")
-            )
+            identifiers[name] = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
         elif kind == ActionArgumentDisplayKind.FREE_TEXT:
             free_text_names.append(name)
     return identifiers, tuple(free_text_names)
@@ -415,9 +412,7 @@ INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS = frozenset(
 )
 
 
-def format_action_summary_for_display(
-    tool_name: str, args: Mapping[str, Any] | None = None
-) -> str:
+def format_action_summary_for_display(tool_name: str, args: Mapping[str, Any] | None = None) -> str:
     """tool 名 + args から「直近の出来事」用の行動要約文を作る。"""
     formatter = ACTION_SUMMARY_FORMATTERS.get(tool_name)
     if formatter is not None:
@@ -425,20 +420,14 @@ def format_action_summary_for_display(
     return _format_action_summary_fallback(tool_name, args)
 
 
-def _format_action_summary_fallback(
-    tool_name: str, args: Mapping[str, Any] | None = None
-) -> str:
+def _format_action_summary_fallback(tool_name: str, args: Mapping[str, Any] | None = None) -> str:
     """表に無い tool 名を従来の JSON 形式で安全に表示する。"""
     if not args:
         return f"{tool_name} を実行しました。"
     # ``__`` 始まりは engine 内部の受け渡し用キー (履歴投影・正規値)。
     # LLM が読む文面に出さない。表に無い tool へ内部キーが混ざっても
     # 事故にならないよう、名前の規約で落とす。
-    visible = {
-        k: v
-        for k, v in args.items()
-        if k not in ACTION_SUMMARY_HIDDEN_FIELDS and not str(k).startswith("__")
-    }
+    visible = {k: v for k, v in args.items() if k not in ACTION_SUMMARY_HIDDEN_FIELDS and not str(k).startswith("__")}
     if not visible:
         return f"{tool_name} を実行しました。"
     try:

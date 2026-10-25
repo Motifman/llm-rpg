@@ -39,13 +39,11 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
-_MORI = PlayerId(1)   # crew
-_SENA = PlayerId(2)   # crew
-_KUZE = PlayerId(3)   # keeper
+_MORI = PlayerId(1)  # crew
+_SENA = PlayerId(2)  # crew
+_KUZE = PlayerId(3)  # keeper
 
 #: 温室の照明設備は通信担当セナの作業。担当外には候補に出ない。
 _OWNER = _SENA
@@ -229,9 +227,7 @@ class TestTheFakeLeavesNoTrace:
         assert "task_grow_light_wiring" not in _flags(runtime)
         assert _WIRING_STEPS[0] in _offered(runtime, _OWNER)
 
-    def test_the_fake_can_be_repeated_as_many_times_as_the_real_one(
-        self, runtime
-    ) -> None:
+    def test_the_fake_can_be_repeated_as_many_times_as_the_real_one(self, runtime) -> None:
         """偽装は本物と同じ回数だけ繰り返せる。
 
         本物が 3 手なのに偽装が 1 度きりだと、隣で見ている人は**回数を
@@ -246,6 +242,7 @@ class TestTheFakeLeavesNoTrace:
 
         手数を揃えても文が違えば見分けられる。
         """
+
         def _prose(actor, step):
             before = len(runtime._obs_buffer.get_observations(_BYSTANDER))
             runtime.do_interact(actor, "grow_lights", step)

@@ -42,8 +42,13 @@ def _template() -> MonsterTemplate:
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=5,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=5,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -59,8 +64,10 @@ def _aggregate() -> MonsterAggregate:
         template=_template(),
         world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -71,17 +78,23 @@ def _aggregate() -> MonsterAggregate:
 def _enter_chase(agg: MonsterAggregate) -> None:
     agg.enter_chase_state(
         attacker_ref=AttackerRef.of_player(PlayerId(7)),
-        last_observed_target_spot_id=SpotId(1), current_tick=WorldTick(10),
+        last_observed_target_spot_id=SpotId(1),
+        current_tick=WorldTick(10),
     )
 
 
 def _observed_state(agg: MonsterAggregate) -> tuple:
     """拒否要求の直前と直後で比べる公開状態と未配信イベント。"""
     return (
-        agg.behavior_state, agg.behavior_search_timer,
-        agg.chase_attacker_ref(), agg.chase_last_observed_target_spot_id,
-        agg.chase_started_at_tick, agg.persistence_flee_until_tick,
-        agg.last_attacker_ref, agg.last_attacked_tick, agg.get_events(),
+        agg.behavior_state,
+        agg.behavior_search_timer,
+        agg.chase_attacker_ref(),
+        agg.chase_last_observed_target_spot_id,
+        agg.chase_started_at_tick,
+        agg.persistence_flee_until_tick,
+        agg.last_attacker_ref,
+        agg.last_attacked_tick,
+        agg.get_events(),
     )
 
 
@@ -120,7 +133,8 @@ class TestLastAttackerRef:
         before = _observed_state(agg)
 
         agg.record_attacked_by_in_spot(
-            current_tick=WorldTick(5), attacker_ref=AttackerRef.of_player(PlayerId(1)),
+            current_tick=WorldTick(5),
+            attacker_ref=AttackerRef.of_player(PlayerId(1)),
         )
 
         assert _observed_state(agg) == before
@@ -175,7 +189,9 @@ class TestChaseState:
         """CHASE 遷移後、is_chasing と chase_attacker_ref が一致する。"""
         agg = _aggregate()
         ref = AttackerRef.of_player(PlayerId(7))
-        agg.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SpotId.create(1), current_tick=WorldTick(0))
+        agg.enter_chase_state(
+            attacker_ref=ref, last_observed_target_spot_id=SpotId.create(1), current_tick=WorldTick(0)
+        )
         assert agg.is_chasing() is True
         assert agg.chase_attacker_ref() == ref
         assert agg.chase_last_observed_target_spot_id == SpotId(1)
@@ -219,7 +235,8 @@ class TestChaseState:
 
         agg.enter_chase_state(
             attacker_ref=AttackerRef.of_player(PlayerId(8)),
-            last_observed_target_spot_id=SpotId(2), current_tick=WorldTick(12),
+            last_observed_target_spot_id=SpotId(2),
+            current_tick=WorldTick(12),
         )
 
         assert _observed_state(agg) == before

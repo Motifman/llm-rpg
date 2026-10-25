@@ -30,6 +30,7 @@ class TestActiveEffectLinesBuilder:
         from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
             SpotGraphCurrentStateBuilder,
         )
+
         provider = (lambda: current_tick) if current_tick is not None else None
         return SpotGraphCurrentStateBuilder(
             spot_graph_repository=MagicMock(),
@@ -43,6 +44,7 @@ class TestActiveEffectLinesBuilder:
         from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
         from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
         from ai_rpg_world.domain.common.value_object import WorldTick
+
         return StatusEffect(
             effect_type=StatusEffectType(type_value),
             value=1.0,
@@ -77,11 +79,14 @@ class TestActiveEffectLinesBuilder:
 
     def test_provider_snapshot_raises_exception(self) -> None:
         """provider が例外を投げても snapshot は落ちない。"""
+
         def boom() -> int:
             raise RuntimeError("clock broken")
+
         from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
             SpotGraphCurrentStateBuilder,
         )
+
         builder = SpotGraphCurrentStateBuilder(
             spot_graph_repository=MagicMock(),
             spot_interior_repository=MagicMock(),
@@ -110,8 +115,10 @@ class TestUiContextActiveEffectsSection:
         from ai_rpg_world.application.world.contracts.dtos import (
             PlayerCurrentStateDto,
         )
+
         return PlayerCurrentStateDto(
-            player_id=1, player_name="P",
+            player_id=1,
+            player_name="P",
             current_spot_id=snap.current_spot_id,
             spot_graph_snapshot=snap,
         )

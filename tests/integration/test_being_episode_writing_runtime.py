@@ -100,4 +100,6 @@ class TestEpisodeWritingInTheRuntime:
         assert runtime._being_episode_store.list_by_being(_being_of(runtime, first)) == ()
         writes = [p for k, _, p in recorder.events if k == TraceEventKind.EPISODE_WRITING]
         assert len(writes) == len(runtime.get_player_ids())
-        assert {(p["trigger"], p["outcome"], p["skip_reason"]) for p in writes} == {("leaving", "skipped", "llm_unusable")}
+        assert {(p["trigger"], p["outcome"], p["skip_reason"]) for p in writes} == {
+            ("leaving", "skipped", "llm_unusable")
+        }

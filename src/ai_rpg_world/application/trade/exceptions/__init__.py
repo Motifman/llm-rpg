@@ -9,5 +9,5 @@ __all__ = [
     "RecentTradeQueryApplicationException",
     "GlobalMarketQueryApplicationException",
     "PersonalTradeQueryApplicationException",
-    "TradeDetailQueryApplicationException"
+    "TradeDetailQueryApplicationException",
 ]

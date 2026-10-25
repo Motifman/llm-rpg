@@ -58,8 +58,10 @@ class BeingEpisodeIndexRevisionToolExecutor:
             "handle": handle if isinstance(handle, str) else None,
         }
         raw = {key: arguments.get(key) for key in _TEXT_KEYS}
-        if not isinstance(handle, str) or not handle.strip() or not all(
-            isinstance(v, str) and v.strip() for v in raw.values()
+        if (
+            not isinstance(handle, str)
+            or not handle.strip()
+            or not all(isinstance(v, str) and v.strip() for v in raw.values())
         ):
             self._record(acting, outcome="rejected", reject_reason="malformed", **base)
             return LlmCommandResultDto(success=False, message=_MALFORMED_MESSAGE, error_code="INVALID_ARGUMENT")

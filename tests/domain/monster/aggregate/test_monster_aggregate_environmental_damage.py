@@ -45,8 +45,13 @@ def _aggregate(*, max_hp: int = 20) -> MonsterAggregate:
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=max_hp, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=max_hp,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(100, True),
@@ -59,8 +64,10 @@ def _aggregate(*, max_hp: int = 20) -> MonsterAggregate:
         template=template,
         world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -100,16 +107,12 @@ class TestLethal:
         assert agg.hp.value == 0
         assert agg.status == MonsterStatusEnum.DEAD
         assert agg.last_death_tick == WorldTick(20)
-        damaged_events = [
-            e for e in agg.get_events() if isinstance(e, MonsterDamagedEvent)
-        ]
+        damaged_events = [e for e in agg.get_events() if isinstance(e, MonsterDamagedEvent)]
         assert len(damaged_events) == 1
         assert damaged_events[0].damage == 10
         assert damaged_events[0].current_hp == 0
         assert damaged_events[0].attacker_id is None
-        died_events = [
-            e for e in agg.get_events() if isinstance(e, MonsterDiedEvent)
-        ]
+        died_events = [e for e in agg.get_events() if isinstance(e, MonsterDiedEvent)]
         assert len(died_events) == 1
         assert died_events[0].cause == DeathCauseEnum.ENVIRONMENT
         # killer 情報は無し

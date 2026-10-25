@@ -86,8 +86,10 @@ class TestRegistryRouting:
     def test_started_fleeing_event(self) -> None:
         registry = ObservedEventRegistry()
         ev = MonsterStartedFleeingInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-            monster_id=MONSTER_WOLF, spot_id=SPOT_A,
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            monster_id=MONSTER_WOLF,
+            spot_id=SPOT_A,
         )
         assert registry.is_observed(ev)
         assert registry.get_strategy_for_event(ev) == "spot_graph"
@@ -95,8 +97,10 @@ class TestRegistryRouting:
     def test_started_chasing_event(self) -> None:
         registry = ObservedEventRegistry()
         ev = MonsterStartedChasingInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-            monster_id=MONSTER_WOLF, spot_id=SPOT_A,
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            monster_id=MONSTER_WOLF,
+            spot_id=SPOT_A,
             target_player_id=EntityId.create(7),
         )
         assert registry.is_observed(ev)
@@ -105,8 +109,11 @@ class TestRegistryRouting:
     def test_abandoned_chase_event(self) -> None:
         registry = ObservedEventRegistry()
         ev = MonsterAbandonedChaseInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-            monster_id=MONSTER_WOLF, spot_id=SPOT_A, reason="grace_expired",
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            monster_id=MONSTER_WOLF,
+            spot_id=SPOT_A,
+            reason="grace_expired",
         )
         assert registry.is_observed(ev)
         assert registry.get_strategy_for_event(ev) == "spot_graph"
@@ -131,12 +138,15 @@ class TestFleeingProse:
     """逃走開始の prose。"""
 
     def test_environment_observation_includes_monster_name(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """モンスター名 含む environment 観測。"""
         ev = MonsterStartedFleeingInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-            monster_id=MONSTER_WOLF, spot_id=SPOT_A,
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            monster_id=MONSTER_WOLF,
+            spot_id=SPOT_A,
         )
         result = formatter.format(ev, PLAYER_1)
 
@@ -151,12 +161,15 @@ class TestChasingProse:
     """CHASE 開始の prose は target が観測者本人かで切り替わる。"""
 
     def test_includes_prose_target_self_3(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """target_player が観測者本人なら「あなたを睨み」型 prose。"""
         ev = MonsterStartedChasingInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-            monster_id=MONSTER_WOLF, spot_id=SPOT_A,
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            monster_id=MONSTER_WOLF,
+            spot_id=SPOT_A,
             target_player_id=EntityId.create(PLAYER_TARGET.value),
         )
         result = formatter.format(ev, PLAYER_TARGET)
@@ -166,12 +179,15 @@ class TestChasingProse:
         assert "灰色のオオカミ" in result.prose
 
     def test_uses_observation_target_player(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """第三者観測者には targetplayer 名を使う。"""
         ev = MonsterStartedChasingInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-            monster_id=MONSTER_WOLF, spot_id=SPOT_A,
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            monster_id=MONSTER_WOLF,
+            spot_id=SPOT_A,
             target_player_id=EntityId.create(PLAYER_TARGET.value),
         )
         result = formatter.format(ev, PLAYER_1)  # 第三者
@@ -182,12 +198,15 @@ class TestChasingProse:
         assert "あなた" not in result.prose
 
     def test_target_monster_uses_monster_name(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """targetmonster の場合は monster 名を使う。"""
         ev = MonsterStartedChasingInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-            monster_id=MONSTER_WOLF, spot_id=SPOT_A,
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            monster_id=MONSTER_WOLF,
+            spot_id=SPOT_A,
             target_monster_id=MONSTER_TARGET,
         )
         result = formatter.format(ev, PLAYER_1)
@@ -201,11 +220,13 @@ class TestPackHelpResponseProse:
     """pack 援護応答 prose (Phase 4-O C)。"""
 
     def test_includes_prose_target_self_2(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """target_player が観測者本人なら「あなたを睨んでいる」型 prose。"""
         ev = MonsterRespondedToPackHelpInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
             responder_monster_id=MONSTER_WOLF,
             victim_monster_id=MONSTER_TARGET,
             responder_spot_id=SPOT_A,
@@ -220,11 +241,13 @@ class TestPackHelpResponseProse:
         assert "あなた" in result.prose
 
     def test_observation_prose_2(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """target ではない観測者には中立的な prose。"""
         ev = MonsterRespondedToPackHelpInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
             responder_monster_id=MONSTER_WOLF,
             victim_monster_id=MONSTER_TARGET,
             responder_spot_id=SPOT_A,
@@ -243,13 +266,15 @@ class TestPackFleeFollowProse:
     """pack 群れ逃走 follower 観測 prose (Phase 4-O C #2)。"""
 
     def test_includes_prose_follower_leader(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """「{follower} も {leader} に続いて逃げ出した」prose。"""
         ev = MonsterFollowedPackFleeInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
-            follower_monster_id=MONSTER_TARGET,    # うさぎ (follower 役)
-            leader_monster_id=MONSTER_WOLF,        # オオカミ (leader 役)
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            follower_monster_id=MONSTER_TARGET,  # うさぎ (follower 役)
+            leader_monster_id=MONSTER_WOLF,  # オオカミ (leader 役)
             follower_spot_id=SPOT_A,
             spot_id=SPOT_A,
         )
@@ -270,11 +295,13 @@ class TestPackAwarenessAlertProse:
     """pack 警戒共有 prose (Phase 4-O C #3)。"""
 
     def test_includes_prose_target_self(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """target_player が観測者本人なら「あなたの方を睨み始めた」型 prose。"""
         ev = MonsterAlertedByPackInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
             responder_monster_id=MONSTER_WOLF,
             scout_monster_id=MONSTER_TARGET,
             responder_spot_id=SPOT_A,
@@ -284,16 +311,18 @@ class TestPackAwarenessAlertProse:
         result = formatter.format(ev, PLAYER_TARGET)
         assert result is not None
         assert "灰色のオオカミ" in result.prose  # responder
-        assert "迷子のうさぎ" in result.prose    # scout
+        assert "迷子のうさぎ" in result.prose  # scout
         assert "警戒" in result.prose
         assert "あなた" in result.prose
 
     def test_observation_prose(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """第三者観測者には 中立 prose。"""
         ev = MonsterAlertedByPackInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
             responder_monster_id=MONSTER_WOLF,
             scout_monster_id=MONSTER_TARGET,
             responder_spot_id=SPOT_A,
@@ -304,18 +333,20 @@ class TestPackAwarenessAlertProse:
         assert result is not None
         # responder と scout の両方の名前を含む
         assert "灰色のオオカミ" in result.prose  # responder
-        assert "迷子のうさぎ" in result.prose    # scout
+        assert "迷子のうさぎ" in result.prose  # scout
         assert "あなた" not in result.prose
         assert "警戒" in result.prose
         assert result.observation_category == "environment"
         assert result.structured["type"] == "monster_alerted_by_pack"
 
     def test_target_monster_prose_created(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """target が monster の場合も第三者 prose で正常に処理される。"""
         ev = MonsterAlertedByPackInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
             responder_monster_id=MONSTER_WOLF,
             scout_monster_id=MONSTER_TARGET,
             responder_spot_id=SPOT_A,
@@ -334,11 +365,13 @@ class TestSpotSoundHeardProse:
     """SpotSoundHeardEvent の prose 生成 (Phase 5)。"""
 
     def test_self_moderate_ambient(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """自分宛 MODERATE with ambient。"""
         ev = SpotSoundHeardEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
             entity_id=EntityId.create(PLAYER_1.value),
             spot_id=SPOT_A,
             source_spot_id=SPOT_A,
@@ -354,11 +387,13 @@ class TestSpotSoundHeardProse:
         assert result.schedules_turn is False
 
     def test_loud_turn(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """LOUD は turn 誘発。"""
         ev = SpotSoundHeardEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
             entity_id=EntityId.create(PLAYER_1.value),
             spot_id=SPOT_A,
             source_spot_id=SPOT_A,
@@ -373,11 +408,13 @@ class TestSpotSoundHeardProse:
         assert result.schedules_turn is True
 
     def test_neighbor_spot_prose(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """source_spot_id != spot_id なら「隣の spot から漏れ聞こえる」表現。"""
         ev = SpotSoundHeardEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
             entity_id=EntityId.create(PLAYER_1.value),
             spot_id=SPOT_A,
             source_spot_id=SpotId(99),  # 別 spot
@@ -390,11 +427,13 @@ class TestSpotSoundHeardProse:
         assert result.structured["is_adjacent"] is True
 
     def test_returns_none_other_player(
-        self, formatter: SpotGraphObservationFormatter,
+        self,
+        formatter: SpotGraphObservationFormatter,
     ) -> None:
         """entity_id が recipient と異なれば None (受信者ガード)。"""
         ev = SpotSoundHeardEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
             entity_id=EntityId.create(PLAYER_TARGET.value),  # 別 player
             spot_id=SPOT_A,
             source_spot_id=SPOT_A,
@@ -459,14 +498,13 @@ class TestSpotPresenceListenedProse:
     ) -> None:
         """接続の遮音度に応じて在否と人数の情報量を段階的に落とす。"""
         result = self._format(
-            formatter, hops=hops, moving_occupants=moving_occupants,
+            formatter,
+            hops=hops,
+            moving_occupants=moving_occupants,
         )
         assert result is not None
         assert expected in result.prose
-        assert all(
-            token not in result.prose
-            for token in ("hops", "OPEN", "sound_permeability", "99")
-        )
+        assert all(token not in result.prose for token in ("hops", "OPEN", "sound_permeability", "99"))
         assert result.schedules_turn is False
         assert result.observation_category == "social"
 
@@ -496,12 +534,18 @@ class TestAbandonedChaseProse:
         ],
     )
     def test_reason_single_prose(
-        self, formatter: SpotGraphObservationFormatter, reason: str, graph_id: SpotGraphId,
+        self,
+        formatter: SpotGraphObservationFormatter,
+        reason: str,
+        graph_id: SpotGraphId,
     ) -> None:
         """reason に依らず単一の事実prose。"""
         ev = MonsterAbandonedChaseInSpotEvent.create(
-            aggregate_id=graph_id, aggregate_type="SpotGraphAggregate",
-            monster_id=MONSTER_WOLF, spot_id=SPOT_A, reason=reason,
+            aggregate_id=graph_id,
+            aggregate_type="SpotGraphAggregate",
+            monster_id=MONSTER_WOLF,
+            spot_id=SPOT_A,
+            reason=reason,
         )
         result = formatter.format(ev, PLAYER_1)
 

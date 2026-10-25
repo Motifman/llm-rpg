@@ -1,7 +1,5 @@
 """ツール利用可否リゾルバのデフォルト実装"""
 
-
-
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.world.contracts.dtos import (
     PlayerAppSessionStateDto,
@@ -105,9 +103,7 @@ class GuildAddMemberAvailabilityResolver(IAvailabilityResolver):
         memberships = _runtime(context).guild_memberships
         if not memberships:
             return False
-        return any(
-            m.role in ("leader", "officer") for m in memberships
-        )
+        return any(m.role in ("leader", "officer") for m in memberships)
 
 
 class GuildChangeRoleAvailabilityResolver(IAvailabilityResolver):
@@ -119,9 +115,7 @@ class GuildChangeRoleAvailabilityResolver(IAvailabilityResolver):
         memberships = _runtime(context).guild_memberships
         if not memberships:
             return False
-        return any(
-            m.role in ("leader", "officer") for m in memberships
-        )
+        return any(m.role in ("leader", "officer") for m in memberships)
 
 
 class GuildDisbandAvailabilityResolver(IAvailabilityResolver):

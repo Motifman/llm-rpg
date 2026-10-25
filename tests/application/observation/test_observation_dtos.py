@@ -89,14 +89,18 @@ class TestObservationOutput:
         """schedules_turn が bool でない場合 TypeError"""
         with pytest.raises(TypeError, match="schedules_turn must be bool"):
             ObservationOutput(
-                prose="x", structured={}, schedules_turn="yes"  # type: ignore[arg-type]
+                prose="x",
+                structured={},
+                schedules_turn="yes",  # type: ignore[arg-type]
             )
 
     def test_breaks_movement_not_bool_raises_type_error(self):
         """breaks_movement が bool でない場合 TypeError"""
         with pytest.raises(TypeError, match="breaks_movement must be bool"):
             ObservationOutput(
-                prose="x", structured={}, breaks_movement="yes"  # type: ignore[arg-type]
+                prose="x",
+                structured={},
+                breaks_movement="yes",  # type: ignore[arg-type]
             )
 
 

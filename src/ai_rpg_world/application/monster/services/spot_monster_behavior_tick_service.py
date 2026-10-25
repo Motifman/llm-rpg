@@ -202,9 +202,7 @@ class SpotMonsterBehaviorTickService:
     def tick(self, current_tick: WorldTick) -> list[AttackOutcome]:
         """ID昇順にmonster 1体ずつ独立したcommandとして進める。"""
         if self._command_scope_factory is None:
-            raise RuntimeError(
-                "monster behavior用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("monster behavior用CommandScopeFactoryが未配線です。")
 
         # 対象IDの読取りも長寿命repositoryに戻さない。このscopeは
         # 候補をsnapshotするだけで更新せず、各monsterの変更は後続の
@@ -220,12 +218,15 @@ class SpotMonsterBehaviorTickService:
         outcomes: list[AttackOutcome] = []
         pack_members_cache: dict[Any, Any] = {}
         for monster_id in monster_ids:
-            with self._failure_isolator.unit(
-                stage="monster_behavior",
-                tick=current_tick,
-                target_kind="monster",
-                target_id=monster_id.value,
-            ), self._command_scope_factory.create() as context:
+            with (
+                self._failure_isolator.unit(
+                    stage="monster_behavior",
+                    tick=current_tick,
+                    target_kind="monster",
+                    target_id=monster_id.value,
+                ),
+                self._command_scope_factory.create() as context,
+            ):
                 service = self._for_command(context)
                 outcomes.extend(
                     service._tick_loaded_monsters(
@@ -273,9 +274,7 @@ class SpotMonsterBehaviorTickService:
             random_source=self._random,
             world_flags_provider=self._world_flags_provider,
             spot_interior_repository=(
-                repositories.spot_interiors
-                if self._spot_interior_repository is not None
-                else None
+                repositories.spot_interiors if self._spot_interior_repository is not None else None
             ),
         )
 
@@ -323,9 +322,7 @@ class SpotMonsterBehaviorTickService:
             return cached
 
         if monster_ids is None:
-            monster_ids = tuple(
-                sorted(graph.monster_spot_mapping(), key=lambda m: m.value)
-            )
+            monster_ids = tuple(sorted(graph.monster_spot_mapping(), key=lambda m: m.value))
         for monster_id in monster_ids:
             spot_id = graph.get_monster_spot(monster_id)
             monster = self._monster_repository.find_by_id(monster_id)
@@ -344,9 +341,7 @@ class SpotMonsterBehaviorTickService:
             # hunger を 1 tick 進め、starvation 閾値を一定 tick 超えたら
             # `monster.starve()` で死亡させる。生存していればこの tick の
             # 他のアクション（attack/forage/wander）も継続する。
-            died_of_starvation = self._tick_hunger_and_maybe_starve(
-                monster, current_tick
-            )
+            died_of_starvation = self._tick_hunger_and_maybe_starve(monster, current_tick)
             if died_of_starvation:
                 # 飢餓死した monster は graph presence からは自動除去しない
                 # （Phase 1 と同じ方針: despawn は別 PR）。MonsterDiedEvent は
@@ -359,7 +354,10 @@ class SpotMonsterBehaviorTickService:
             # graph には MonsterFeltTemperatureDiscomfortInSpotEvent が
             # 積まれて観測される。
             died_of_temperature = self._tick_temperature_discomfort(
-                monster, graph, spot_id, current_tick,
+                monster,
+                graph,
+                spot_id,
+                current_tick,
             )
             if died_of_temperature:
                 any_graph_change = True
@@ -370,9 +368,7 @@ class SpotMonsterBehaviorTickService:
             # PASSIVE の monster が、template policy に従って FLEE / CHASE
             # 状態に遷移し、その状態に対応するアクション（逃走移動 or 反撃）を
             # 1 つ実行する。state は ALIVE 中の `_behavior_state` に永続。
-            reaction_outcome = self._reaction.try_react(
-                monster, graph, spot_id, current_tick
-            )
+            reaction_outcome = self._reaction.try_react(monster, graph, spot_id, current_tick)
             if reaction_outcome is not None:
                 if reaction_outcome.executed:
                     attack_outcomes.append(reaction_outcome)
@@ -390,7 +386,10 @@ class SpotMonsterBehaviorTickService:
             # pack 連動 handler に渡す pack member キャッシュ
             cached_pack_members = _get_pack_members(monster.pack_id)
             if self._pack_flee.try_follow_pack_flee(
-                monster, graph, spot_id, current_tick,
+                monster,
+                graph,
+                spot_id,
+                current_tick,
                 pack_members=cached_pack_members or None,
             ):
                 any_graph_change = True
@@ -402,7 +401,10 @@ class SpotMonsterBehaviorTickService:
             # 自然に表現する。次 tick から pack 援護で入った CHASE は
             # reaction の CHASE と同じ chain で進行する。
             if self._pack_reinforcement.try_respond_to_pack_help(
-                monster, graph, spot_id, current_tick,
+                monster,
+                graph,
+                spot_id,
+                current_tick,
                 pack_members=cached_pack_members or None,
             ):
                 any_graph_change = True
@@ -414,7 +416,10 @@ class SpotMonsterBehaviorTickService:
             # 「殴られた」ではなく「scout が見つけた」なので、援護より
             # 後に置く (殴られた緊急事態 → 偵察情報の伝播 という優先順位)。
             if self._pack_awareness.try_alert_from_pack(
-                monster, graph, spot_id, current_tick,
+                monster,
+                graph,
+                spot_id,
+                current_tick,
                 pack_members=cached_pack_members or None,
             ):
                 any_graph_change = True
@@ -425,9 +430,7 @@ class SpotMonsterBehaviorTickService:
             # の生存プレイヤー有り) を満たした場合のみ実行を試みて
             # `AttackOutcome` を返す。前提が欠けるなら None を返し、wander に
             # フォールバックさせる。
-            attack_outcome = self._maybe_attack(
-                monster, graph, spot_id, current_tick
-            )
+            attack_outcome = self._maybe_attack(monster, graph, spot_id, current_tick)
             if attack_outcome is not None:
                 attack_outcomes.append(attack_outcome)
                 if attack_outcome.executed:
@@ -447,9 +450,7 @@ class SpotMonsterBehaviorTickService:
             # 致命時 hunger 回復 + record_attacked_by_in_spot を担当。
             # priority は player attack の後 / forage の前: プレイヤーが
             # 目の前に居るときは player を優先（事前合意）。
-            predation_outcome = self._maybe_predate(
-                monster, graph, spot_id, current_tick
-            )
+            predation_outcome = self._maybe_predate(monster, graph, spot_id, current_tick)
             if predation_outcome is not None:
                 attack_outcomes.append(predation_outcome)
                 if predation_outcome.executed:
@@ -487,7 +488,7 @@ class SpotMonsterBehaviorTickService:
         new_events: tuple[Any, ...] = ()
         if context is not None:
             all_events = tuple(graph.get_events())
-            new_events = all_events[len(existing_events):]
+            new_events = all_events[len(existing_events) :]
             graph.clear_events()
             for event in existing_events:
                 graph.add_event(event)
@@ -514,18 +515,13 @@ class SpotMonsterBehaviorTickService:
         connections = graph.iter_outgoing_connections_from(spot_id)
         if not connections:
             return False
-        world_flags = (
-            self._world_flags_provider()
-            if self._world_flags_provider is not None
-            else frozenset()
-        )
+        world_flags = self._world_flags_provider() if self._world_flags_provider is not None else frozenset()
         owned_item_spec_ids: frozenset[ItemSpecId] = frozenset()
         passable = sorted(
             (
-                conn for conn in connections
-                if graph.can_traverse_connection(
-                    conn.connection_id, owned_item_spec_ids, world_flags
-                )
+                conn
+                for conn in connections
+                if graph.can_traverse_connection(conn.connection_id, owned_item_spec_ids, world_flags)
             ),
             key=lambda c: c.connection_id.value,
         )
@@ -570,9 +566,7 @@ class SpotMonsterBehaviorTickService:
             current_tick=current_tick,
         )
 
-    def _pick_target(
-        self, graph: SpotGraphAggregate, spot_id: SpotId
-    ) -> PlayerStatusAggregate | None:
+    def _pick_target(self, graph: SpotGraphAggregate, spot_id: SpotId) -> PlayerStatusAggregate | None:
         """同スポットの生存プレイヤーからランダムに 1 人を標的として返す。
 
         旧実装は ID 昇順の先頭 (= 常に最小 ID) を返す暫定ロジックだったが、
@@ -584,12 +578,8 @@ class SpotMonsterBehaviorTickService:
         """
         presence = graph.presence_at(spot_id)
         living: list[PlayerStatusAggregate] = []
-        for entity_id in sorted(
-            presence.present_entity_ids, key=lambda e: e.value
-        ):
-            player = self._player_status_repository.find_by_id(
-                PlayerId(entity_id.value)
-            )
+        for entity_id in sorted(presence.present_entity_ids, key=lambda e: e.value):
+            player = self._player_status_repository.find_by_id(PlayerId(entity_id.value))
             if player is None:
                 continue
             if player.is_down:
@@ -659,9 +649,7 @@ class SpotMonsterBehaviorTickService:
         prey に含まれていても自分は襲わない）。
         """
         presence = graph.monster_presence_at(spot_id)
-        for candidate_id in sorted(
-            presence.present_monster_ids, key=lambda m: m.value
-        ):
+        for candidate_id in sorted(presence.present_monster_ids, key=lambda m: m.value):
             if candidate_id == attacker_monster_id:
                 continue
             candidate = self._monster_repository.find_by_id(candidate_id)
@@ -702,11 +690,7 @@ class SpotMonsterBehaviorTickService:
         if not connections:
             return False
 
-        world_flags = (
-            self._world_flags_provider()
-            if self._world_flags_provider is not None
-            else frozenset()
-        )
+        world_flags = self._world_flags_provider() if self._world_flags_provider is not None else frozenset()
         owned_item_spec_ids: frozenset[ItemSpecId] = frozenset()
 
         # passable な接続だけ抽出。`can_traverse_connection` は traversable +
@@ -714,10 +698,9 @@ class SpotMonsterBehaviorTickService:
         # この時点で除外される。connection_id 昇順でソートして決定的に。
         passable = sorted(
             (
-                conn for conn in connections
-                if graph.can_traverse_connection(
-                    conn.connection_id, owned_item_spec_ids, world_flags
-                )
+                conn
+                for conn in connections
+                if graph.can_traverse_connection(conn.connection_id, owned_item_spec_ids, world_flags)
             ),
             key=lambda c: c.connection_id.value,
         )
@@ -818,9 +801,7 @@ class SpotMonsterBehaviorTickService:
         # SpotNode.atmosphere は必須フィールド (None の場合は構造的バグ)
         atmosphere = spot_node.atmosphere
         if atmosphere is None:
-            raise RuntimeError(
-                f"SpotNode.atmosphere is missing: spot_id={spot_node.spot_id}"
-            )
+            raise RuntimeError(f"SpotNode.atmosphere is missing: spot_id={spot_node.spot_id}")
         return monster.template.temperature_discomfort(atmosphere.temperature)
 
     def _tick_hunger_and_maybe_starve(

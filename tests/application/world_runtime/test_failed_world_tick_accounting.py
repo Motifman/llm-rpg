@@ -20,9 +20,7 @@ class _FailingStage:
 
 def test_failed_tick_updates_runtime_clock_and_tick_limit() -> None:
     """後段失敗でも消費したtickを残量表示と終了判定へ反映する。"""
-    runtime = create_world_runtime(
-        _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
-    )
+    runtime = create_world_runtime(_REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json")
     runtime._time_provider.advance_tick(79)
     runtime._tick = 79
     runtime._simulation_service._scenario_event_stage = _FailingStage()
@@ -38,9 +36,7 @@ def test_failed_tick_updates_runtime_clock_and_tick_limit() -> None:
 
 def test_travel_metric_survives_a_later_stage_failure() -> None:
     """移動command確定後の後段失敗でも、そのplayerの移動1tickを記録する。"""
-    runtime = create_world_runtime(
-        _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
-    )
+    runtime = create_world_runtime(_REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json")
     player_id = runtime.get_player_ids()[0]
     runtime.do_move(player_id, "reading_room")
     runtime._simulation_service._scenario_event_stage = _FailingStage()
@@ -55,9 +51,7 @@ def test_travel_metric_survives_committed_cleanup_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """移動commit後の資源解放失敗でも、確定済みの移動1tickを記録する。"""
-    runtime = create_world_runtime(
-        _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
-    )
+    runtime = create_world_runtime(_REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json")
     player_id = runtime.get_player_ids()[0]
     runtime.do_move(player_id, "reading_room")
     data_store = runtime._player_status_repo._data_store
@@ -83,9 +77,7 @@ def test_arrival_read_failure_does_not_hide_committed_cleanup_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """確定後の到着確認も失敗した場合、元のcommit後例外を維持する。"""
-    runtime = create_world_runtime(
-        _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
-    )
+    runtime = create_world_runtime(_REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json")
     player_id = runtime.get_player_ids()[0]
     runtime.do_move(player_id, "reading_room")
     runtime._travel_stage.set_on_arrival(lambda _player_id: None)

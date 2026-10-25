@@ -77,8 +77,13 @@ def _wolf_template(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=attack,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=attack,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -101,8 +106,13 @@ def _rabbit_template() -> MonsterTemplate:
         template_id=MonsterTemplateId.create(2),
         name="Rabbit",
         base_stats=BaseStats(
-            max_hp=10, max_mp=0, attack=1,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=10,
+            max_mp=0,
+            attack=1,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -118,8 +128,10 @@ def _make_monster(template: MonsterTemplate, monster_id: int) -> MonsterAggregat
         template=template,
         world_object_id=WorldObjectId.create(9000 + monster_id),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(monster_id), owner_id=monster_id,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(monster_id),
+            owner_id=monster_id,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -176,10 +188,7 @@ class TestPredationViaTick:
         outcomes = svc.tick(WorldTick(10))
 
         # 捕食 event が積まれた
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterPredatedMonsterInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterPredatedMonsterInSpotEvent)]
         assert len(events) == 1
         # rabbit に attack 記録
         assert rabbit.last_attacked_tick == WorldTick(10)
@@ -200,10 +209,7 @@ class TestPreyRacesGate:
         svc = _make_svc(graph, {wolf.monster_id: wolf, rabbit.monster_id: rabbit})
         svc.tick(WorldTick(10))
 
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterPredatedMonsterInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterPredatedMonsterInSpotEvent)]
         assert events == []
         # rabbit に attack 記録もない
         assert rabbit.last_attacked_tick is None
@@ -218,8 +224,13 @@ class TestHungerThresholdGate:
             template_id=MonsterTemplateId.create(1),
             name="Wolf",
             base_stats=BaseStats(
-                max_hp=20, max_mp=0, attack=5,
-                defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+                max_hp=20,
+                max_mp=0,
+                attack=5,
+                defense=0,
+                speed=1,
+                critical_rate=0.0,
+                evasion_rate=0.0,
             ),
             reward_info=RewardInfo(exp=1, gold=1),
             respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -243,10 +254,7 @@ class TestHungerThresholdGate:
         svc = _make_svc(graph, {wolf.monster_id: wolf, rabbit.monster_id: rabbit})
         svc.tick(WorldTick(10))
 
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterPredatedMonsterInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterPredatedMonsterInSpotEvent)]
         assert events == []
 
 
@@ -261,8 +269,13 @@ class TestPlayerAttackPriority:
             template_id=MonsterTemplateId.create(1),
             name="Wolf",
             base_stats=BaseStats(
-                max_hp=20, max_mp=0, attack=5,
-                defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+                max_hp=20,
+                max_mp=0,
+                attack=5,
+                defense=0,
+                speed=1,
+                critical_rate=0.0,
+                evasion_rate=0.0,
             ),
             reward_info=RewardInfo(exp=1, gold=1),
             respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -284,11 +297,13 @@ class TestPlayerAttackPriority:
 
         # プレイヤーを spot に配置
         from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
         graph.place_entity(EntityId.create(1), SPOT_A)
         graph.clear_events()
 
         # プレイヤー attack 用の mock
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
         player = MagicMock()
         player.player_id = PlayerId(1)
         state = {"down": False}
@@ -298,9 +313,7 @@ class TestPlayerAttackPriority:
         spot_repo = MagicMock()
         spot_repo.find_graph.return_value = graph
         monster_repo = MagicMock()
-        monster_repo.find_by_id.side_effect = lambda mid: (
-            wolf if mid == wolf.monster_id else rabbit
-        )
+        monster_repo.find_by_id.side_effect = lambda mid: wolf if mid == wolf.monster_id else rabbit
         player_repo = MagicMock()
         player_repo.find_by_id.return_value = player
 
@@ -320,15 +333,10 @@ class TestPlayerAttackPriority:
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
             MonsterAttackedPlayerInSpotEvent,
         )
-        attack_events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAttackedPlayerInSpotEvent)
-        ]
-        predation_events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterPredatedMonsterInSpotEvent)
-        ]
+
+        attack_events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
+        predation_events = [e for e in graph.get_events() if isinstance(e, MonsterPredatedMonsterInSpotEvent)]
         assert len(attack_events) == 1  # プレイヤー攻撃成立
-        assert predation_events == []   # 捕食はスキップ
+        assert predation_events == []  # 捕食はスキップ
         # rabbit に attack 記録もない
         assert rabbit.last_attacked_tick is None

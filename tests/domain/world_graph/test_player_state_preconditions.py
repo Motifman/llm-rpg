@@ -48,16 +48,23 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 
 def _player_status(
     *,
-    hp_value: int = 100, hp_max: int = 100,
-    hunger: int = 0, fatigue: int = 0,
+    hp_value: int = 100,
+    hp_max: int = 100,
+    hunger: int = 0,
+    fatigue: int = 0,
 ) -> PlayerStatusAggregate:
     """テスト用に最小限の PlayerStatusAggregate を作る。"""
     exp_table = ExpTable(100, 1.5)
     return PlayerStatusAggregate(
         player_id=PlayerId(1),
         base_stats=BaseStats(
-            max_hp=hp_max, max_mp=50, attack=10, defense=10, speed=10,
-            critical_rate=0.05, evasion_rate=0.05,
+            max_hp=hp_max,
+            max_mp=50,
+            attack=10,
+            defense=10,
+            speed=10,
+            critical_rate=0.05,
+            evasion_rate=0.05,
         ),
         stat_growth_factor=StatGrowthFactor(1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0),
         exp_table=exp_table,
@@ -66,10 +73,12 @@ def _player_status(
         hp=Hp(value=hp_value, max_hp=hp_max),
         mp=Mp(value=50, max_mp=50),
         stamina=Stamina(value=100, max_stamina=100),
-        needs=AgentNeeds((
-            AgentNeed(need_type=NeedType.HUNGER, value=hunger, max_value=100),
-            AgentNeed(need_type=NeedType.FATIGUE, value=fatigue, max_value=100),
-        )),
+        needs=AgentNeeds(
+            (
+                AgentNeed(need_type=NeedType.HUNGER, value=hunger, max_value=100),
+                AgentNeed(need_type=NeedType.FATIGUE, value=fatigue, max_value=100),
+            )
+        ),
     )
 
 
@@ -110,7 +119,8 @@ class TestPlayerNeedAtLeast:
             need_threshold=60,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -128,7 +138,8 @@ class TestPlayerNeedAtLeast:
             failure_message="まだお腹が空いていない",
         )
         ok, msg = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -146,7 +157,8 @@ class TestPlayerNeedAtLeast:
             need_threshold=60,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -162,7 +174,8 @@ class TestPlayerNeedAtLeast:
             need_threshold=60,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             # acting_player_status を渡さない
@@ -179,7 +192,8 @@ class TestPlayerNeedAtLeast:
             need_threshold=60,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -196,7 +210,8 @@ class TestPlayerNeedAtLeast:
             need_threshold=60,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond1), _switch_object(),
+            _interaction_with(cond1),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -208,7 +223,8 @@ class TestPlayerNeedAtLeast:
             need_type="HUNGER",
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond2), _switch_object(),
+            _interaction_with(cond2),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -229,7 +245,8 @@ class TestPlayerHpRatioBelow:
             hp_ratio=hp_ratio,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -245,7 +262,8 @@ class TestPlayerHpRatioBelow:
             hp_ratio=0.5,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -261,7 +279,8 @@ class TestPlayerHpRatioBelow:
             hp_ratio=0.5,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -276,7 +295,8 @@ class TestPlayerHpRatioBelow:
             hp_ratio=0.5,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
         )
@@ -296,7 +316,8 @@ class TestPlayerHpRatioAtLeast:
             hp_ratio=hp_ratio,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -312,7 +333,8 @@ class TestPlayerHpRatioAtLeast:
             hp_ratio=0.5,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -328,7 +350,8 @@ class TestPlayerHpRatioAtLeast:
             hp_ratio=0.5,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -348,7 +371,8 @@ class TestZeroMaxHpEdge:
             hp_ratio=0.5,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -364,7 +388,8 @@ class TestZeroMaxHpEdge:
             hp_ratio=0.0,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -383,11 +408,15 @@ class TestScenarioLoaderValidation:
         )
 
         with pytest.raises(ScenarioLoadError, match="need_type"):
-            ScenarioLoader().load_from_dict(_minimal_scenario_with_precondition({
-                "condition_type": "PLAYER_NEED_AT_LEAST",
-                "need_type": "NOT_A_REAL_NEED",
-                "need_threshold": 50,
-            }))
+            ScenarioLoader().load_from_dict(
+                _minimal_scenario_with_precondition(
+                    {
+                        "condition_type": "PLAYER_NEED_AT_LEAST",
+                        "need_type": "NOT_A_REAL_NEED",
+                        "need_threshold": 50,
+                    }
+                )
+            )
 
     def test_hp_ratio_out_of_range_rejected_at_load(self) -> None:
         """hp_ratio が 0.0..1.0 の範囲外なら ScenarioLoadError で拒否。"""
@@ -398,10 +427,14 @@ class TestScenarioLoaderValidation:
 
         for bad in (-0.1, 1.5, 2.0):
             with pytest.raises(ScenarioLoadError, match="hp_ratio"):
-                ScenarioLoader().load_from_dict(_minimal_scenario_with_precondition({
-                    "condition_type": "PLAYER_HP_RATIO_BELOW",
-                    "hp_ratio": bad,
-                }))
+                ScenarioLoader().load_from_dict(
+                    _minimal_scenario_with_precondition(
+                        {
+                            "condition_type": "PLAYER_HP_RATIO_BELOW",
+                            "hp_ratio": bad,
+                        }
+                    )
+                )
 
     def test_hp_ratio_non_numeric_rejected(self) -> None:
         """hp_ratio が数値でなければ拒否。"""
@@ -411,10 +444,14 @@ class TestScenarioLoaderValidation:
         )
 
         with pytest.raises(ScenarioLoadError, match="hp_ratio"):
-            ScenarioLoader().load_from_dict(_minimal_scenario_with_precondition({
-                "condition_type": "PLAYER_HP_RATIO_BELOW",
-                "hp_ratio": "half",
-            }))
+            ScenarioLoader().load_from_dict(
+                _minimal_scenario_with_precondition(
+                    {
+                        "condition_type": "PLAYER_HP_RATIO_BELOW",
+                        "hp_ratio": "half",
+                    }
+                )
+            )
 
 
 def _minimal_scenario_with_precondition(precondition_raw: dict) -> dict:
@@ -422,28 +459,52 @@ def _minimal_scenario_with_precondition(precondition_raw: dict) -> dict:
     return {
         "scenario_format_version": "1.0",
         "metadata": {
-            "id": "x", "title": "x", "description": "x",
-            "theme": "x", "difficulty": "easy", "estimated_ticks": 1,
-            "author": "x", "tags": [],
+            "id": "x",
+            "title": "x",
+            "description": "x",
+            "theme": "x",
+            "difficulty": "easy",
+            "estimated_ticks": 1,
+            "author": "x",
+            "tags": [],
         },
         "item_specs": [],
         "environment": {
-            "weather": {"enabled": False, "initial": {"weather_type": "CLEAR", "intensity": 0.0},
-                        "update_interval_ticks": 100, "announce_changes": False},
+            "weather": {
+                "enabled": False,
+                "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+                "update_interval_ticks": 100,
+                "announce_changes": False,
+            },
         },
-        "spots": [{
-            "id": "s", "name": "S", "description": "d", "category": "OTHER",
-            "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
-            "interior": {"objects": [{
-                "id": "o", "name": "O", "description": "d", "object_type": "OTHER",
-                "state": {},
-                "interactions": [{
-                    "action_name": "x", "display_label": "X",
-                    "preconditions": [precondition_raw],
-                    "effects": [],
-                }],
-            }]},
-        }],
+        "spots": [
+            {
+                "id": "s",
+                "name": "S",
+                "description": "d",
+                "category": "OTHER",
+                "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+                "interior": {
+                    "objects": [
+                        {
+                            "id": "o",
+                            "name": "O",
+                            "description": "d",
+                            "object_type": "OTHER",
+                            "state": {},
+                            "interactions": [
+                                {
+                                    "action_name": "x",
+                                    "display_label": "X",
+                                    "preconditions": [precondition_raw],
+                                    "effects": [],
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        ],
         "connections": [],
         "players": [{"id": "p", "name": "P", "spawn_spot": "s", "initial_items": []}],
         "game_end_conditions": {"win": [], "lose": []},
@@ -460,35 +521,62 @@ class TestScenarioLoaderParsesPlayerFields:
         scenario = {
             "scenario_format_version": "1.0",
             "metadata": {
-                "id": "x", "title": "x", "description": "x",
-                "theme": "x", "difficulty": "easy", "estimated_ticks": 1,
-                "author": "x", "tags": [],
+                "id": "x",
+                "title": "x",
+                "description": "x",
+                "theme": "x",
+                "difficulty": "easy",
+                "estimated_ticks": 1,
+                "author": "x",
+                "tags": [],
             },
             "item_specs": [],
             "environment": {
-                "weather": {"enabled": False, "initial": {"weather_type": "CLEAR", "intensity": 0.0},
-                            "update_interval_ticks": 100, "announce_changes": False},
+                "weather": {
+                    "enabled": False,
+                    "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+                    "update_interval_ticks": 100,
+                    "announce_changes": False,
+                },
             },
-            "spots": [{
-                "id": "s", "name": "S", "description": "d", "category": "OTHER",
-                "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
-                "interior": {"objects": [{
-                    "id": "o", "name": "O", "description": "d", "object_type": "OTHER",
-                    "state": {},
-                    "interactions": [{
-                        "action_name": "x", "display_label": "X",
-                        "preconditions": [{
-                            "condition_type": "PLAYER_NEED_AT_LEAST",
-                            "need_type": "HUNGER",
-                            "need_threshold": 60,
-                        }, {
-                            "condition_type": "PLAYER_HP_RATIO_BELOW",
-                            "hp_ratio": 0.5,
-                        }],
-                        "effects": [],
-                    }],
-                }]},
-            }],
+            "spots": [
+                {
+                    "id": "s",
+                    "name": "S",
+                    "description": "d",
+                    "category": "OTHER",
+                    "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+                    "interior": {
+                        "objects": [
+                            {
+                                "id": "o",
+                                "name": "O",
+                                "description": "d",
+                                "object_type": "OTHER",
+                                "state": {},
+                                "interactions": [
+                                    {
+                                        "action_name": "x",
+                                        "display_label": "X",
+                                        "preconditions": [
+                                            {
+                                                "condition_type": "PLAYER_NEED_AT_LEAST",
+                                                "need_type": "HUNGER",
+                                                "need_threshold": 60,
+                                            },
+                                            {
+                                                "condition_type": "PLAYER_HP_RATIO_BELOW",
+                                                "hp_ratio": 0.5,
+                                            },
+                                        ],
+                                        "effects": [],
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ],
             "connections": [],
             "players": [{"id": "p", "name": "P", "spawn_spot": "s", "initial_items": []}],
             "game_end_conditions": {"win": [], "lose": []},

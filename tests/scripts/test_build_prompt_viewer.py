@@ -103,9 +103,7 @@ class TestLoadCalls:
         call = _load_calls(run_dir)[0]
         assert call.system_content == "あなたは次のペルソナとして行動する。"
 
-    def test_unresolvable_system_reference_is_left_empty_not_faked(
-        self, tmp_path
-    ) -> None:
+    def test_unresolvable_system_reference_is_left_empty_not_faked(self, tmp_path) -> None:
         """参照先が無い run では本文を捏造せず空のままにし、id を保持して
         「解決できなかった」と表示できる状態にする。"""
         run_dir = _write(tmp_path, [_call(system_content="")])

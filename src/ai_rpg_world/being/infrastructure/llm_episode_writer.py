@@ -90,9 +90,7 @@ def _contents_from(response: object) -> EpisodeContents:
         raise EpisodeWritingResponseException("response must be an object with an episodes list")
     items = response["episodes"]
     kept = items[:MAX_EPISODES_PER_WRITING]
-    return EpisodeContents(
-        contents=tuple(_content_from(item) for item in kept), dropped_count=len(items) - len(kept)
-    )
+    return EpisodeContents(contents=tuple(_content_from(item) for item in kept), dropped_count=len(items) - len(kept))
 
 
 def _messages(*, self_name: str, persona: str, events_text: str) -> list[dict[str, str]]:

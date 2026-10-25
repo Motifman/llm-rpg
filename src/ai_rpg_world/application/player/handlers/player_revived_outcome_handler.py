@@ -35,14 +35,13 @@ class PlayerRevivedOutcomeHandler(EventHandler[PlayerRevivedEvent]):
             self._grace_timer.cancel(event.aggregate_id)
             self._logger.info(
                 "Player %s revived (grace timer cancelled, hp_recovered=%d)",
-                event.aggregate_id, event.hp_recovered,
+                event.aggregate_id,
+                event.hp_recovered,
             )
         except (ApplicationException, DomainException):
             raise
         except Exception as e:
-            self._logger.exception(
-                "Unexpected error in PlayerRevivedOutcomeHandler: %s", e
-            )
+            self._logger.exception("Unexpected error in PlayerRevivedOutcomeHandler: %s", e)
             raise SystemErrorException(
                 f"Player revived outcome handling failed: {e}",
                 original_exception=e,

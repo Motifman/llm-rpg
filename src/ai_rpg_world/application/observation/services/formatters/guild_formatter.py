@@ -45,9 +45,7 @@ class GuildObservationFormatter:
             return self._format_guild_disbanded(event, recipient_player_id)
         return None
 
-    def _format_guild_created(
-        self, event: GuildCreatedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_guild_created(self, event: GuildCreatedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         prose = f"ギルド「{event.name}」が創設されました。"
         guild_id_value = event.aggregate_id.value
         structured: dict[str, Any] = {
@@ -157,9 +155,7 @@ class GuildObservationFormatter:
             observation_category="social",
         )
 
-    def _format_guild_disbanded(
-        self, event: GuildDisbandedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_guild_disbanded(self, event: GuildDisbandedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         prose = "ギルドが解散しました。"
         guild_id_value = event.aggregate_id.value
         structured: dict[str, Any] = {

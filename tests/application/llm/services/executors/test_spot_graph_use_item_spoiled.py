@@ -105,13 +105,9 @@ def _build_executor_with_item(state: dict) -> tuple[SpotGraphToolExecutor, Magic
         assert appearances.get(ItemInstanceId(7001)) == expected
         if bool(is_spoiled) != bool(state.get("spoiled")):
             return AvailableSlotLookup()
-        return AvailableSlotLookup(
-            slot_id=SlotId(0), item_instance_id=ItemInstanceId(7001)
-        )
+        return AvailableSlotLookup(slot_id=SlotId(0), item_instance_id=ItemInstanceId(7001))
 
-    inv.find_available_slot_by_item_spec_id_and_spoilage.side_effect = (
-        find_slot_by_spoilage
-    )
+    inv.find_available_slot_by_item_spec_id_and_spoilage.side_effect = find_slot_by_spoilage
     inv_repo = MagicMock()
     inv_repo.find_by_id.return_value = inv
 
@@ -169,6 +165,7 @@ class TestSpoiledFoodDamage:
         """
         from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
         executor, status, event_publisher = _build_executor_with_item({"spoiled": True})
         # status mock が PlayerDownedEvent を積んだフリをする
         downed = PlayerDownedEvent.create(
@@ -239,15 +236,12 @@ class TestUseItemSilentFailures:
         壊れにくい。
         """
         from ai_rpg_world.domain.item.event.item_event import ItemUsedEvent
+
         executor, _, event_publisher = _build_executor_with_item({})
 
         executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101})
 
-        all_published = [
-            evt
-            for call in event_publisher.publish_all.call_args_list
-            for evt in call.args[0]
-        ]
+        all_published = [evt for call in event_publisher.publish_all.call_args_list for evt in call.args[0]]
         assert any(isinstance(e, ItemUsedEvent) for e in all_published), (
             f"ItemUsedEvent が publish_all に流れていない: {all_published!r}"
         )
@@ -264,9 +258,7 @@ class TestUseItemSilentFailures:
 
         executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101})
 
-        assert tuple(item.get_events()) == (), (
-            f"use() 後も集約が event を抱えている: {item.get_events()!r}"
-        )
+        assert tuple(item.get_events()) == (), f"use() 後も集約が event を抱えている: {item.get_events()!r}"
 
     def test_calls_quantity_zero_inventory_save_item_delete(self) -> None:
         """非アトミック削除の順序回帰: item_repository.delete を先にすると、
@@ -287,9 +279,7 @@ class TestUseItemSilentFailures:
         executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101})
 
         call_names = [c[0] for c in parent.mock_calls]
-        assert "inv_save" in call_names and "item_delete" in call_names, (
-            f"両方呼ばれていない: {call_names}"
-        )
+        assert "inv_save" in call_names and "item_delete" in call_names, f"両方呼ばれていない: {call_names}"
         assert call_names.index("inv_save") < call_names.index("item_delete"), (
             f"inv_save は item_delete より先でなければならない: {call_names}"
         )

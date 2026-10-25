@@ -65,15 +65,16 @@ class _Port(ITypedJudgmentPort):
     ) -> Mapping[str, JudgmentResult]:
         self.asked.extend(questions)
         if self.fail:
-            raise TypedJudgmentUnavailableException(
-                "timeout", error_code="TYPED_JUDGMENT_TIMEOUT"
-            )
+            raise TypedJudgmentUnavailableException("timeout", error_code="TYPED_JUDGMENT_TIMEOUT")
         answers: dict[str, JudgmentResult] = {}
         for name in questions:
             if name == SEMANTIC_REPEAT_QUESTION:
                 answers[name] = JudgmentResult(
-                    value=self.repeat_probability, probabilities={}, confidence=None,
-                    source=JudgmentSource.STUB, latency_ms=2.0,
+                    value=self.repeat_probability,
+                    probabilities={},
+                    confidence=None,
+                    source=JudgmentSource.STUB,
+                    latency_ms=2.0,
                 )
             elif name == LOOP_DIAGNOSIS_QUESTION and self.reason is not None:
                 answers[name] = JudgmentResult(
@@ -96,10 +97,7 @@ class _Recorder(NullTraceRecorder):
         return super().record(kind, tick=tick, player_id=player_id, **payload)
 
     def of(self, kind: str, **match: Any) -> list[dict[str, Any]]:
-        return [
-            p for k, p in self.calls
-            if k == kind and all(p.get(f) == v for f, v in match.items())
-        ]
+        return [p for k, p in self.calls if k == kind and all(p.get(f) == v for f, v in match.items())]
 
 
 def _guard(
@@ -137,17 +135,16 @@ def _rephrase(guard: ToolCallLoopGuardService, times: int) -> None:
     )
     for i in range(times):
         guard.record_and_check(
-            _GAREN, "speak", variants[i % len(variants)],
-            success=True, result_summary="（2 名に届いた）",
+            _GAREN,
+            "speak",
+            variants[i % len(variants)],
+            success=True,
+            result_summary="（2 名に届いた）",
         )
 
 
 def _warnings(buffer: DefaultObservationContextBuffer) -> list[Any]:
-    return [
-        e.output
-        for e in buffer.get_observations(_GAREN)
-        if (e.output.structured or {}).get("loop_guard")
-    ]
+    return [e.output for e in buffer.get_observations(_GAREN) if (e.output.structured or {}).get("loop_guard")]
 
 
 class TestARephrasedRequestIsWarned:
@@ -238,8 +235,7 @@ class TestAnExactMatchOnTheSameActionIsNotDoubled:
         assert judgment["accepted"] is True
         assert judgment["exact_match_fired"] is True
         assert [
-            e["pattern"] if "pattern" in e else "streak"
-            for e in recorder.of(TraceEventKind.LOOP_GUARD_WARNING)
+            e["pattern"] if "pattern" in e else "streak" for e in recorder.of(TraceEventKind.LOOP_GUARD_WARNING)
         ] == ["streak"]
 
 
@@ -254,9 +250,11 @@ class TestAnActionRetriedWithNewWordsIsAnExactMatch:
 
         for said in ("この番号で合わせてみる", "渡し方を変えて試す", "もう一度 1907 だ"):
             guard.record_and_check(
-                _GAREN, "interact",
+                _GAREN,
+                "interact",
                 {"target_label": "金庫", "action_name": "open_safe", "say_inline": said},
-                success=False, error_code="INTERACTION_PRECONDITION_FAILED",
+                success=False,
+                error_code="INTERACTION_PRECONDITION_FAILED",
                 result_summary="扉はびくともしない",
             )
 
@@ -340,8 +338,11 @@ class TestOneRecordGivesOneWarning:
         )
         for _ in range(2):
             guard.record_and_check(
-                _GAREN, "travel_to", {"destination_label": "祭壇"},
-                success=False, error_code="INVALID_DESTINATION_LABEL",
+                _GAREN,
+                "travel_to",
+                {"destination_label": "祭壇"},
+                success=False,
+                error_code="INVALID_DESTINATION_LABEL",
                 result_summary="移動先が見つかりません",
             )
 

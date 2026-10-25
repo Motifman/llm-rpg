@@ -19,19 +19,14 @@ from tests.runtime_config_helpers import runtime_config
 
 _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 _SCENARIO_FILES = sorted(
-    path.name
-    for path in _SCENARIOS.glob("*.json")
-    if "players" in json.loads(path.read_text(encoding="utf-8"))
+    path.name for path in _SCENARIOS.glob("*.json") if "players" in json.loads(path.read_text(encoding="utf-8"))
 )
 
 
 def _written_objectives(scenario_file: str) -> dict[str, str]:
     raw = json.loads((_SCENARIOS / scenario_file).read_text(encoding="utf-8"))
     common = (raw.get("metadata") or {}).get("llm_objective_text") or ""
-    return {
-        player["id"]: (player.get("objective") or common).strip()
-        for player in raw["players"]
-    }
+    return {player["id"]: (player.get("objective") or common).strip() for player in raw["players"]}
 
 
 def _user_content(runtime, player_id: PlayerId) -> str:
@@ -55,6 +50,4 @@ def test_current_objective_is_the_text_written_in_the_scenario(scenario_file: st
 
         user = _user_content(runtime, player_id)
 
-        assert f"【現在の目的】\n{expected}\n\n" in user, (
-            f"{scenario_file} {string_ids[player_id.value]}"
-        )
+        assert f"【現在の目的】\n{expected}\n\n" in user, f"{scenario_file} {string_ids[player_id.value]}"

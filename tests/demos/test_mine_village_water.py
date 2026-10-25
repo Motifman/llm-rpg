@@ -148,8 +148,6 @@ def _fuel_and_start_generator(runtime, cans: int = 1) -> None:
     _act(runtime, _HARU, "machine_room", "generator", "start_generator")
 
 
-
-
 def _clear_gas(runtime) -> None:
     """掘り場のガスを抜く。ガスは確率で溜まり (R6、test_mine_village_light_gas_and_food.py)、溜まっていると予備の燃料が取れない。燃料の量を見るテストを偶然に左右させないため。"""
     if "gas_present" in runtime._world_flag_state.as_frozen_set():
@@ -157,6 +155,7 @@ def _clear_gas(runtime) -> None:
             "gas_present",
             context=WorldFlagMutationContext(source=WorldFlagMutationSource.SCENARIO_EVENT, actor_player_id=None),
         )
+
 
 class TestGatesFloodTheirTargets:
     """R1: 水門ごとに沈む通路が決まっていて、ほかの通路は沈まないことを保証する。"""
@@ -503,7 +502,6 @@ class TestWaterLeavesATrace:
             (False, "scenario_event", None),
         ]
 
-
     def test_pump_drain_is_recorded_as_an_event(self, runtime) -> None:
         """ポンプで近道の水を引かせると、沈んだことのフラグは出来事によって消えたと trace に残る。"""
         recorder = _CapturingRecorder()
@@ -575,11 +573,7 @@ class TestRulesStayOutOfThePrompt:
         raw = json.loads(_SCENARIO.read_text(encoding="utf-8"))
         places = ("北", "南", "近道", "出入り口", "下層")
 
-        texts = [
-            json.dumps(i, ensure_ascii=False)
-            for obj, i in _interactions(raw)
-            if obj in {"valve", "pump"}
-        ]
+        texts = [json.dumps(i, ensure_ascii=False) for obj, i in _interactions(raw) if obj in {"valve", "pump"}]
 
         assert texts
         assert [t for t in texts if any(p in t for p in places)] == []
@@ -599,7 +593,10 @@ class TestPromptsUseWorldWordsForGatesAndValve:
         texts = []
         for pid in (_HARU, PlayerId(2), _GEN, PlayerId(4)):
             prompt = runtime.build_full_prompt(pid)
-            texts.append("\n".join(str(m.get("content", "")) for m in prompt["messages"]) + json.dumps(prompt["tools"], ensure_ascii=False))
+            texts.append(
+                "\n".join(str(m.get("content", "")) for m in prompt["messages"])
+                + json.dumps(prompt["tools"], ensure_ascii=False)
+            )
         full = "\n".join(texts)
 
         assert "open_gate" in full and "turn_valve_to_one" in full

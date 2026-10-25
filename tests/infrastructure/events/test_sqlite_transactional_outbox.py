@@ -178,18 +178,14 @@ def test_duplicate_event_id_creates_one_row(tmp_path: Path) -> None:
         is_durable=lambda event: isinstance(event, TradeCancelledEvent),
     )
     for _ in range(2):
-        transaction = SqliteUnitOfWorkTransactionAdapter(
-            SqliteUnitOfWork(database=database)
-        )
+        transaction = SqliteUnitOfWorkTransactionAdapter(SqliteUnitOfWork(database=database))
         transaction.begin()
         outbox.stage((_event(),), transaction)
         transaction.commit()
 
     connection = sqlite3.connect(database)
     try:
-        count = connection.execute(
-            "SELECT COUNT(*) FROM command_event_outbox WHERE event_id = '1'"
-        ).fetchone()
+        count = connection.execute("SELECT COUNT(*) FROM command_event_outbox WHERE event_id = '1'").fetchone()
         assert count == (1,)
     finally:
         connection.close()
@@ -201,9 +197,7 @@ def test_stage_rejects_transaction_for_different_database(tmp_path: Path) -> Non
     transaction_database = tmp_path / "other.db"
     _initialize(outbox_database)
     _initialize(transaction_database)
-    transaction = SqliteUnitOfWorkTransactionAdapter(
-        SqliteUnitOfWork(database=transaction_database)
-    )
+    transaction = SqliteUnitOfWorkTransactionAdapter(SqliteUnitOfWork(database=transaction_database))
     outbox = SqliteTransactionalOutbox(
         outbox_database,
         serializer=TradeEventJsonSerializer(),

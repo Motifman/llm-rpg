@@ -80,7 +80,13 @@ class SqliteShopRepository(ShopRepository):
             ) VALUES (?, ?, ?, ?, ?)
             """,
             [
-                (shop_id, int(listing.listing_id), int(listing.item_instance_id), int(listing.price_per_unit), int(listing.listed_by))
+                (
+                    shop_id,
+                    int(listing.listing_id),
+                    int(listing.item_instance_id),
+                    int(listing.price_per_unit),
+                    int(listing.listed_by),
+                )
                 for listing in sorted(entity.listings.values(), key=lambda listing: int(listing.listing_id))
             ],
         )
@@ -112,7 +118,9 @@ class SqliteShopRepository(ShopRepository):
 
     def _build_shop_from_row(self, row: sqlite3.Row) -> ShopAggregate:
         shop_id = int(row["shop_id"])
-        owner_rows = self._conn.execute("SELECT owner_id FROM game_shop_owners WHERE shop_id = ? ORDER BY owner_id ASC", (shop_id,)).fetchall()
+        owner_rows = self._conn.execute(
+            "SELECT owner_id FROM game_shop_owners WHERE shop_id = ? ORDER BY owner_id ASC", (shop_id,)
+        ).fetchall()
         listing_rows = self._conn.execute(
             """
             SELECT listing_id, item_instance_id, price_per_unit, listed_by

@@ -12,6 +12,3 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
 def runtime_config(**overrides: Any) -> ResolvedLlmRuntimeConfig:
     """テスト用既定値に差分だけを重ねた解決済み設定を返す。"""
     return ResolvedLlmRuntimeConfig.for_tests(**overrides)
-
-
-

@@ -33,12 +33,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
 
 _TARGET_SPOT = SpotId.create(10)
 _OTHER_SPOT = SpotId.create(20)
-_DRILL = (
-    Path(__file__).resolve().parents[3]
-    / "data"
-    / "scenarios"
-    / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 
 
 def _graph() -> SpotGraphAggregate:
@@ -97,11 +92,14 @@ class TestGamePhaseIs:
             game_phase="MEETING",
         )
 
-        assert _evaluator(phase=GamePhase.MEETING).evaluate(
-            condition,
-            WorldTick(0),
-            _graph(),
-        ) is True
+        assert (
+            _evaluator(phase=GamePhase.MEETING).evaluate(
+                condition,
+                WorldTick(0),
+                _graph(),
+            )
+            is True
+        )
 
     def test_different_phase_is_false(self) -> None:
         """自由時間では `MEETING` 条件は成立しない。"""
@@ -110,11 +108,14 @@ class TestGamePhaseIs:
             game_phase="MEETING",
         )
 
-        assert _evaluator(phase=GamePhase.FREE_ROAM).evaluate(
-            condition,
-            WorldTick(0),
-            _graph(),
-        ) is False
+        assert (
+            _evaluator(phase=GamePhase.FREE_ROAM).evaluate(
+                condition,
+                WorldTick(0),
+                _graph(),
+            )
+            is False
+        )
 
     def test_missing_provider_is_not_a_silent_false(self) -> None:
         """フェーズの配線が無ければ、未成立へ黙って縮退せず失敗する。"""
@@ -157,11 +158,14 @@ class TestPlayersAtSpot:
             spot_id=_TARGET_SPOT.value,
         )
 
-        assert _evaluator().evaluate(
-            condition,
-            WorldTick(0),
-            _graph_with_one_entity_at_target(),
-        ) is False
+        assert (
+            _evaluator().evaluate(
+                condition,
+                WorldTick(0),
+                _graph_with_one_entity_at_target(),
+            )
+            is False
+        )
 
     def test_omitted_required_count_accepts_two_entities(self) -> None:
         """必要人数を省略すると2人で成立し、3人以上を要求しない。"""
@@ -170,11 +174,14 @@ class TestPlayersAtSpot:
             spot_id=_TARGET_SPOT.value,
         )
 
-        assert _evaluator().evaluate(
-            condition,
-            WorldTick(0),
-            _graph_with_two_entities_at_target(),
-        ) is True
+        assert (
+            _evaluator().evaluate(
+                condition,
+                WorldTick(0),
+                _graph_with_two_entities_at_target(),
+            )
+            is True
+        )
 
     def test_player_scoped_entry_keeps_world_entity_count(self) -> None:
         """対象者入口でもPLAYERS_AT_SPOTは本人に狭めず、対象地の全entityを数える。"""
@@ -184,12 +191,15 @@ class TestPlayersAtSpot:
             required_player_count=3,
         )
 
-        assert _evaluator().evaluate_for_player(
-            condition,
-            WorldTick(0),
-            _graph(),
-            target_player_id=PlayerId(3),
-        ) is True
+        assert (
+            _evaluator().evaluate_for_player(
+                condition,
+                WorldTick(0),
+                _graph(),
+                target_player_id=PlayerId(3),
+            )
+            is True
+        )
 
 
 def _load_condition(tmp_path: Path, condition: dict) -> ScenarioEventCondition:
@@ -254,11 +264,14 @@ class TestWorldContextConditionLoading:
         assert condition.spot_id is not None
         assert condition.required_player_count == 2
 
-    @pytest.mark.parametrize("payload", [
-        {"required_player_count": 2},
-        {"target_spot": "hall", "required_player_count": 0},
-        {"target_spot": "hall", "required_player_count": True},
-    ])
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"required_player_count": 2},
+            {"target_spot": "hall", "required_player_count": 0},
+            {"target_spot": "hall", "required_player_count": True},
+        ],
+    )
     def test_player_count_rejects_missing_or_invalid_values(
         self,
         tmp_path,

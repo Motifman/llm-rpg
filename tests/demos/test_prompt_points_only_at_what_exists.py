@@ -161,9 +161,7 @@ def captured(request) -> dict[str, Any]:
 
 
 def _headings(captured: dict[str, Any]) -> set[str]:
-    return set(_HEADING_LINE.findall(captured["system"])) | set(
-        _HEADING_LINE.findall(captured["user"])
-    )
+    return set(_HEADING_LINE.findall(captured["system"])) | set(_HEADING_LINE.findall(captured["user"]))
 
 
 def _remediation_texts() -> list[str]:
@@ -192,9 +190,7 @@ class TestPromptPointsOnlyAtWhatExists:
 
     def test_every_quoted_name_is_a_heading_or_field_in_the_prompt(self, captured) -> None:
         """system prompt とツールの説明が『』で囲む名前は、プロンプトに見出しか欄の名前として在るか、節を指していないと宣言したものである。"""
-        places = _headings(captured) | {
-            label.strip() for label in _FIELD_LABEL_LINE.findall(captured["user"])
-        }
+        places = _headings(captured) | {label.strip() for label in _FIELD_LABEL_LINE.findall(captured["user"])}
         referring_texts = [captured["system"], *captured["descriptions"]]
 
         quoted = {name for text in referring_texts for name in _QUOTED.findall(text)}
@@ -210,26 +206,18 @@ class TestPromptPointsOnlyAtWhatExists:
         known = _argument_names_the_code_knows()
         referring_texts = [captured["system"], *captured["descriptions"]]
 
-        mentioned = {
-            word
-            for text in referring_texts
-            for word in _IDENTIFIER.findall(text)
-            if word in known
-        }
+        mentioned = {word for text in referring_texts for word in _IDENTIFIER.findall(text) if word in known}
         not_offered = mentioned - offered
 
         assert mentioned, "引数名の参照を 1 つも拾えていない。検査が空振りしている"
 
         assert not_offered == set(), f"渡していない引数: {sorted(not_offered)}"
 
-
     def test_every_section_named_in_failure_remediation_is_a_real_heading(self, captured) -> None:
         """失敗したときに返す対処文が【】で指す節も、system prompt か続く文面に、その見出しで始まる行として在る。"""
         headings = _headings(captured)
 
-        referred = {
-            name for text in _remediation_texts() for name in _HEADING_REF.findall(text)
-        }
+        referred = {name for text in _remediation_texts() for name in _HEADING_REF.findall(text)}
         missing = referred - headings
 
         assert referred, "【】の参照を 1 つも拾えていない。検査が空振りしている"
@@ -244,10 +232,6 @@ def test_every_declared_non_place_quote_is_still_in_use() -> None:
         for text in [definition.description, *_descriptions(definition.parameters)]
     ]
 
-    unused = {
-        name
-        for name in _QUOTES_THAT_ARE_NOT_PLACES
-        if not any(f"『{name}』" in text for text in descriptions)
-    }
+    unused = {name for name in _QUOTES_THAT_ARE_NOT_PLACES if not any(f"『{name}』" in text for text in descriptions)}
 
     assert unused == set()

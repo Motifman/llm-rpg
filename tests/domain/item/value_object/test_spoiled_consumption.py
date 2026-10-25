@@ -32,18 +32,14 @@ class TestSpoiledConsumptionOutcome:
 
     def test_hunger_35_retains_half_truncated(self) -> None:
         """HUNGER 35 のとき retained_hunger は int(35*0.5)=17。"""
-        outcome = spoiled_consumption_outcome(
-            SatisfyNeedEffect(need_type_name="HUNGER", amount=35)
-        )
+        outcome = spoiled_consumption_outcome(SatisfyNeedEffect(need_type_name="HUNGER", amount=35))
 
         assert outcome.damage_hp == 10
         assert outcome.retained_hunger == 17
 
     def test_non_hunger_satisfy_need_is_ignored(self) -> None:
         """HUNGER 以外の SatisfyNeedEffect は retained_hunger 0。"""
-        outcome = spoiled_consumption_outcome(
-            SatisfyNeedEffect(need_type_name="FATIGUE", amount=20)
-        )
+        outcome = spoiled_consumption_outcome(SatisfyNeedEffect(need_type_name="FATIGUE", amount=20))
 
         assert outcome.damage_hp == 10
         assert outcome.retained_hunger == 0
@@ -64,9 +60,7 @@ class TestSpoiledConsumptionOutcome:
 
     def test_hunger_1_truncates_to_zero(self) -> None:
         """HUNGER 1 のとき int(0.5)==0 で retained_hunger 0。"""
-        outcome = spoiled_consumption_outcome(
-            SatisfyNeedEffect(need_type_name="HUNGER", amount=1)
-        )
+        outcome = spoiled_consumption_outcome(SatisfyNeedEffect(need_type_name="HUNGER", amount=1))
 
         assert outcome.damage_hp == 10
         assert outcome.retained_hunger == 0

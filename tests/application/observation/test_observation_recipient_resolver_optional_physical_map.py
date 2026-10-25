@@ -31,9 +31,7 @@ class TestCreateObservationRecipientResolverWithoutPhysicalMap:
         # 内部 strategies に MonsterRecipientStrategy が含まれ、
         # その world_object_to_player_resolver が Null 実装になっていることを確認
         strategies = resolver._strategies  # type: ignore[attr-defined]
-        monster_strategies = [
-            s for s in strategies if type(s).__name__ == "MonsterRecipientStrategy"
-        ]
+        monster_strategies = [s for s in strategies if type(s).__name__ == "MonsterRecipientStrategy"]
         assert len(monster_strategies) == 1
         assert isinstance(
             monster_strategies[0]._world_object_to_player_resolver,  # type: ignore[attr-defined]

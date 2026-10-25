@@ -24,7 +24,9 @@ def test_slow_handler_does_not_block_submission(_repeat: int) -> None:
 
     try:
         assert executor.submit(
-            key="a", event=DomainEvent(1, datetime.now(timezone.utc)), handler=work,
+            key="a",
+            event=DomainEvent(1, datetime.now(timezone.utc)),
+            handler=work,
             apply_result=lambda value: applied.append((value, get_ident())),
         )
         assert entered.wait(2)
@@ -53,7 +55,12 @@ def test_same_recipient_is_serial_and_other_recipient_runs_in_parallel(_repeat: 
 
     try:
         for key, number in (("a", 1), ("a", 2), ("b", 3)):
-            executor.submit(key=key, event=DomainEvent(number, datetime.now(timezone.utc)), handler=work, apply_result=lambda _: None)
+            executor.submit(
+                key=key,
+                event=DomainEvent(number, datetime.now(timezone.utc)),
+                handler=work,
+                apply_result=lambda _: None,
+            )
             if number == 1:
                 assert first_entered.wait(2)
         assert first_entered.wait(2)
@@ -77,7 +84,9 @@ def test_handler_failure_is_reported_and_next_job_runs() -> None:
         return event.event_id
 
     for number in (1, 2):
-        executor.submit(key="a", event=DomainEvent(number, datetime.now(timezone.utc)), handler=work, apply_result=applied.append)
+        executor.submit(
+            key="a", event=DomainEvent(number, datetime.now(timezone.utc)), handler=work, apply_result=applied.append
+        )
     executor.shutdown(timeout=2)
     executor.apply_results("a")
     assert applied == [2]
@@ -95,7 +104,9 @@ def test_dispatcher_can_register_async_receiver() -> None:
     dispatcher = EventDispatcher[object](failure_observer=lambda *args: None)
     values: list[int] = []
     dispatcher.register_after_commit(
-        DomainEvent, lambda event: event.event_id, channel=DeliveryChannel.AUXILIARY,
+        DomainEvent,
+        lambda event: event.event_id,
+        channel=DeliveryChannel.AUXILIARY,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
         asynchronous=AsyncDelivery(executor, lambda event: "a", values.append),
     )
@@ -115,7 +126,9 @@ def test_async_registration_rejects_durable_retry() -> None:
     try:
         with pytest.raises(ValueError, match="DURABLE_RETRY"):
             EventDispatcher[object](failure_observer=lambda *args: None).register_after_commit(
-                DomainEvent, lambda event: None, channel=DeliveryChannel.AUXILIARY,
+                DomainEvent,
+                lambda event: None,
+                channel=DeliveryChannel.AUXILIARY,
                 guarantee=DeliveryGuarantee.DURABLE_RETRY,
                 asynchronous=AsyncDelivery(executor, lambda event: "a", lambda result: None),
             )
@@ -137,10 +150,17 @@ def test_capacity_counts_finished_results_until_they_are_applied() -> None:
 
     try:
         for number in (1, 2):
-            executor.submit(key="a", event=DomainEvent(number, datetime.now(timezone.utc)), handler=work, apply_result=lambda _: None)
+            executor.submit(
+                key="a",
+                event=DomainEvent(number, datetime.now(timezone.utc)),
+                handler=work,
+                apply_result=lambda _: None,
+            )
         assert entered.wait(2)
         assert executor.pending_count == 2
-        assert not executor.submit(key="b", event=DomainEvent(3, datetime.now(timezone.utc)), handler=work, apply_result=lambda _: None)
+        assert not executor.submit(
+            key="b", event=DomainEvent(3, datetime.now(timezone.utc)), handler=work, apply_result=lambda _: None
+        )
         assert [failure.reason for failure in failures] == ["capacity"]
     finally:
         release.set()
@@ -165,17 +185,27 @@ def test_shutdown_discards_unfinished_jobs_and_rejects_new_jobs(_repeat: int) ->
 
     try:
         for number in (1, 2):
-            executor.submit(key="a", event=DomainEvent(number, datetime.now(timezone.utc)), handler=work, apply_result=applied.append)
+            executor.submit(
+                key="a",
+                event=DomainEvent(number, datetime.now(timezone.utc)),
+                handler=work,
+                apply_result=applied.append,
+            )
         assert entered.wait(2)
         executor.shutdown(timeout=0)
-        assert not executor.submit(key="a", event=DomainEvent(3, datetime.now(timezone.utc)), handler=work, apply_result=applied.append)
+        assert not executor.submit(
+            key="a", event=DomainEvent(3, datetime.now(timezone.utc)), handler=work, apply_result=applied.append
+        )
         assert [(failure.reason, failure.event.event_id) for failure in failures] == [
-            ("shutdown_timeout", 1), ("shutdown_timeout", 2), ("shutdown", 3)
+            ("shutdown_timeout", 1),
+            ("shutdown_timeout", 2),
+            ("shutdown", 3),
         ]
     finally:
         release.set()
         # 終了後の受け手を確実に片付け、遅い結果が保留一覧に戻らないことを見る。
         from concurrent.futures import wait
+
         wait(tuple(executor._futures), timeout=2)
         executor.shutdown(timeout=2)
     executor.apply_all_results()

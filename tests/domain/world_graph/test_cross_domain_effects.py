@@ -26,8 +26,10 @@ class TestApplyDamageEffect:
             parameters={"damage": 15, "message": "棘に刺さった"},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.damage_specs) == 1
         assert result.damage_specs[0].damage == 15
@@ -41,8 +43,10 @@ class TestApplyDamageEffect:
             parameters={"damage": 0},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.damage_specs) == 0
 
@@ -58,8 +62,10 @@ class TestApplyStatusEffectEffect:
             parameters={"status_effect_type": "POISON", "value": 3.0, "duration_ticks": 50},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.status_effect_specs) == 1
         spec = result.status_effect_specs[0]
@@ -75,8 +81,10 @@ class TestApplyStatusEffectEffect:
             parameters={"status_effect_type": "", "value": 1.0, "duration_ticks": 10},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.status_effect_specs) == 0
 
@@ -92,8 +100,10 @@ class TestTeleportEntityEffect:
             parameters={"spot_id": 42},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.teleport_specs) == 1
         assert result.teleport_specs[0].target_spot_id == 42
@@ -114,8 +124,10 @@ class TestChangeAtmosphereEffect:
             },
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.atmosphere_update_specs) == 1
         spec = result.atmosphere_update_specs[0]
@@ -138,8 +150,10 @@ class TestCombineItemsEffect:
             },
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert [sid.value for sid in result.item_spec_ids_to_remove] == [1, 2]
         assert [sid.value for sid in result.item_spec_ids_to_grant] == [99]
@@ -166,8 +180,10 @@ class TestMultipleEffectsAccumulate:
             ),
         ]
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=effects, world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=effects,
+            world_flags=frozenset(),
         )
         assert [spec.damage for spec in result.damage_specs] == [5]
         assert [spec.target_spot_id for spec in result.teleport_specs] == [10]
@@ -185,8 +201,10 @@ class TestChangePassageStateEffect:
             parameters={"connection_id": 7, "new_state": "BROKEN"},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.passage_state_updates) == 1
         spec = result.passage_state_updates[0]
@@ -208,8 +226,10 @@ class TestChangePassageStateEffect:
             },
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.passage_state_updates) == 1
         spec = result.passage_state_updates[0]
@@ -226,7 +246,9 @@ class TestChangePassageStateEffect:
             parameters={"connection_id": 7},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert result.passage_state_updates == ()

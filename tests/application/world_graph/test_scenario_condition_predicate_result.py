@@ -101,7 +101,9 @@ class TestLeafPredicateResults:
         condition = _condition("FLAG_SET", flag_name="not_set")
 
         result = _evaluator(predicate_evaluator=common).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.is_satisfied is True
@@ -119,7 +121,9 @@ class TestLeafPredicateResults:
         condition = _condition("FLAG_SET", flag_name="not_set")
 
         result = _evaluator(predicate_evaluator=common).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.reason_code is PredicateReasonCode.UNSUPPORTED_PREDICATE
@@ -136,7 +140,9 @@ class TestLeafPredicateResults:
         condition = _condition("TICK_AT_LEAST", tick=10)
 
         result = _evaluator(predicate_evaluator=common).evaluate_result(
-            condition, WorldTick(9), _graph(),
+            condition,
+            WorldTick(9),
+            _graph(),
         )
 
         assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
@@ -152,7 +158,9 @@ class TestLeafPredicateResults:
         condition = _condition("TICK_AT_LEAST")
 
         result = _evaluator(predicate_evaluator=common).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
@@ -165,7 +173,9 @@ class TestLeafPredicateResults:
         condition = _condition("TICK_AT_LEAST", tick="10")
 
         result = _evaluator(predicate_evaluator=common).evaluate_result(
-            condition, WorldTick(10), _graph(),
+            condition,
+            WorldTick(10),
+            _graph(),
         )
 
         assert result.is_satisfied is True
@@ -192,14 +202,16 @@ class TestLeafPredicateResults:
 
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
     def test_flag_not_set_does_not_invert_indeterminate_result(
-        self, reason: str,
+        self,
+        reason: str,
     ) -> None:
         """FLAG_NOT_SETは文脈不足・未対応を「立っていない」と反転しない。"""
         common = MagicMock()
         failed = FlagSetPredicate("sealed")
         common.evaluate.return_value = (
             PredicateResult.context_missing(
-                failed_predicate=failed, failed_path=(),
+                failed_predicate=failed,
+                failed_path=(),
                 required_context={"world_flags"},
             )
             if reason == "missing"
@@ -208,7 +220,9 @@ class TestLeafPredicateResults:
         condition = _condition("FLAG_NOT_SET", flag_name="sealed")
 
         result = _evaluator(predicate_evaluator=common).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert not result.is_satisfied
@@ -216,10 +230,13 @@ class TestLeafPredicateResults:
         assert result.failed_predicate is condition
 
     @pytest.mark.parametrize(
-        ("flag_is_set", "expected"), [(True, False), (False, True)],
+        ("flag_is_set", "expected"),
+        [(True, False), (False, True)],
     )
     def test_flag_not_set_inverts_only_normal_common_result(
-        self, flag_is_set: bool, expected: bool,
+        self,
+        flag_is_set: bool,
+        expected: bool,
     ) -> None:
         """FLAG_NOT_SETは共通FLAG_SETの正常な真偽だけを反転する。"""
         common = MagicMock()
@@ -228,13 +245,16 @@ class TestLeafPredicateResults:
             PredicateResult.satisfied()
             if flag_is_set
             else PredicateResult.not_satisfied(
-                failed_predicate=failed, failed_path=(),
+                failed_predicate=failed,
+                failed_path=(),
             )
         )
         condition = _condition("FLAG_NOT_SET", flag_name="sealed")
 
         result = _evaluator(predicate_evaluator=common).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.is_satisfied is expected
@@ -309,7 +329,9 @@ class TestLeafPredicateResults:
 
         with pytest.raises(RuntimeError, match="weather unavailable"):
             _evaluator(weather_provider=provider).evaluate_result(
-                condition, WorldTick(0), _graph(),
+                condition,
+                WorldTick(0),
+                _graph(),
             )
 
     def test_invalid_direct_weather_definition_keeps_legacy_false(self) -> None:
@@ -318,7 +340,9 @@ class TestLeafPredicateResults:
         weather = MagicMock(weather_type=WeatherTypeEnum.STORM)
 
         result = _evaluator(weather_provider=lambda: weather).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
@@ -331,7 +355,9 @@ class TestLeafPredicateResults:
         weather = MagicMock(weather_type=weather_type)
 
         result = _evaluator(weather_provider=lambda: weather).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.is_satisfied
@@ -381,7 +407,8 @@ class TestLeafPredicateResults:
 
     @pytest.mark.parametrize("condition_type", ["PLAYER_AT_SPOT", "PLAYERS_AT_SPOT"])
     def test_location_condition_restores_legacy_predicate_on_common_failure(
-        self, condition_type: str,
+        self,
+        condition_type: str,
     ) -> None:
         """場所共通核の入力不足は通常falseへ潰さず、元の条件型と経路へ写す。"""
         common = MagicMock()
@@ -397,7 +424,9 @@ class TestLeafPredicateResults:
         )
 
         result = _evaluator(predicate_evaluator=common).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.reason_code is PredicateReasonCode.MISSING_CONTEXT
@@ -422,10 +451,13 @@ class TestLeafPredicateResults:
         """OBJECT_STATEはstate一致を共通核へ委譲し、不成立を元DTOへ写す。"""
         common = MagicMock()
         common.evaluate.return_value = PredicateResult.not_satisfied(
-            failed_predicate=MagicMock(), failed_path=(),
+            failed_predicate=MagicMock(),
+            failed_path=(),
         )
         condition = _condition(
-            "OBJECT_STATE", object_id=1, required_state={"open": True},
+            "OBJECT_STATE",
+            object_id=1,
+            required_state={"open": True},
         )
         obj = MagicMock(state={"open": False, "extra": 1})
 
@@ -434,7 +466,9 @@ class TestLeafPredicateResults:
             return_value=obj,
         ):
             result = _evaluator(predicate_evaluator=common).evaluate_result(
-                condition, WorldTick(0), _graph(),
+                condition,
+                WorldTick(0),
+                _graph(),
             )
 
         assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
@@ -445,7 +479,8 @@ class TestLeafPredicateResults:
 
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
     def test_object_state_preserves_common_indeterminate_result(
-        self, reason: str,
+        self,
+        reason: str,
     ) -> None:
         """state共通核の入力不足・未対応を元OBJECT_STATEへ写して保持する。"""
         common = MagicMock()
@@ -458,11 +493,14 @@ class TestLeafPredicateResults:
             )
             if reason == "missing"
             else PredicateResult.unsupported(
-                failed_predicate=failed, failed_path=(),
+                failed_predicate=failed,
+                failed_path=(),
             )
         )
         condition = _condition(
-            "OBJECT_STATE", object_id=1, required_state={"open": True},
+            "OBJECT_STATE",
+            object_id=1,
+            required_state={"open": True},
         )
 
         with patch(
@@ -470,19 +508,17 @@ class TestLeafPredicateResults:
             return_value=MagicMock(state={"open": False}),
         ):
             result = _evaluator(predicate_evaluator=common).evaluate_result(
-                condition, WorldTick(0), _graph(),
+                condition,
+                WorldTick(0),
+                _graph(),
             )
 
         assert result.reason_code is (
-            PredicateReasonCode.MISSING_CONTEXT
-            if reason == "missing"
-            else PredicateReasonCode.UNSUPPORTED_PREDICATE
+            PredicateReasonCode.MISSING_CONTEXT if reason == "missing" else PredicateReasonCode.UNSUPPORTED_PREDICATE
         )
         assert result.failed_predicate is condition
         assert result.failed_path == ()
-        assert result.missing_context == (
-            frozenset({"state_values"}) if reason == "missing" else frozenset()
-        )
+        assert result.missing_context == (frozenset({"state_values"}) if reason == "missing" else frozenset())
 
     def test_object_state_int_at_least_delegates_and_restores_legacy_predicate(
         self,
@@ -490,7 +526,8 @@ class TestLeafPredicateResults:
         """整数state下限を共通核へ一度委譲し、不成立を元DTOへ写す。"""
         common = MagicMock()
         common.evaluate.return_value = PredicateResult.not_satisfied(
-            failed_predicate=MagicMock(), failed_path=(),
+            failed_predicate=MagicMock(),
+            failed_path=(),
         )
         condition = _condition(
             "OBJECT_STATE_INT_AT_LEAST",
@@ -505,7 +542,9 @@ class TestLeafPredicateResults:
             return_value=obj,
         ):
             result = _evaluator(predicate_evaluator=common).evaluate_result(
-                condition, WorldTick(0), _graph(),
+                condition,
+                WorldTick(0),
+                _graph(),
             )
 
         assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
@@ -518,7 +557,8 @@ class TestLeafPredicateResults:
 
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
     def test_object_state_int_at_least_preserves_common_indeterminate_result(
-        self, reason: str,
+        self,
+        reason: str,
     ) -> None:
         """整数state共通核の入力不足・未対応を元条件へ写して保持する。"""
         common = MagicMock()
@@ -531,7 +571,8 @@ class TestLeafPredicateResults:
             )
             if reason == "missing"
             else PredicateResult.unsupported(
-                failed_predicate=failed, failed_path=(),
+                failed_predicate=failed,
+                failed_path=(),
             )
         )
         condition = _condition(
@@ -546,29 +587,31 @@ class TestLeafPredicateResults:
             return_value=MagicMock(state={"count": 2}),
         ):
             result = _evaluator(predicate_evaluator=common).evaluate_result(
-                condition, WorldTick(0), _graph(),
+                condition,
+                WorldTick(0),
+                _graph(),
             )
 
         assert result.reason_code is (
-            PredicateReasonCode.MISSING_CONTEXT
-            if reason == "missing"
-            else PredicateReasonCode.UNSUPPORTED_PREDICATE
+            PredicateReasonCode.MISSING_CONTEXT if reason == "missing" else PredicateReasonCode.UNSUPPORTED_PREDICATE
         )
         assert result.failed_predicate is condition
         assert result.failed_path == ()
-        assert result.missing_context == (
-            frozenset({"state_values"}) if reason == "missing" else frozenset()
-        )
+        assert result.missing_context == (frozenset({"state_values"}) if reason == "missing" else frozenset())
 
     def test_invalid_object_state_int_definition_skips_common_evaluator(self) -> None:
         """必須field欠落の旧DTOは共通核へ渡さず従来どおり通常不成立にする。"""
         common = MagicMock()
         condition = _condition(
-            "OBJECT_STATE_INT_AT_LEAST", object_id=1, state_key="count",
+            "OBJECT_STATE_INT_AT_LEAST",
+            object_id=1,
+            state_key="count",
         )
 
         result = _evaluator(predicate_evaluator=common).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
@@ -588,7 +631,9 @@ class TestLeafPredicateResults:
             return_value=None,
         ):
             result = _evaluator().evaluate_result(
-                condition, WorldTick(0), _graph(),
+                condition,
+                WorldTick(0),
+                _graph(),
             )
 
         assert result.reason_code is PredicateReasonCode.MISSING_CONTEXT
@@ -619,7 +664,9 @@ class TestLeafPredicateResults:
             return_value=MagicMock(state={"count": 2}),
         ):
             result = _evaluator(random_source=random_source).evaluate_result(
-                condition, WorldTick(0), _graph(),
+                condition,
+                WorldTick(0),
+                _graph(),
             )
 
         assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
@@ -701,7 +748,8 @@ class TestLeafPredicateResults:
 
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
     def test_player_has_item_preserves_common_indeterminate_result(
-        self, reason: str,
+        self,
+        reason: str,
     ) -> None:
         """対象者の所持評価不能を通常未所持へ潰さず、元の条件へ写し戻す。"""
         common = MagicMock()
@@ -722,13 +770,14 @@ class TestLeafPredicateResults:
         evaluator._player_inventory_repository.find_by_id.return_value = inventory
 
         result = evaluator.evaluate_result_for_player(
-            condition, WorldTick(0), _graph(), target_player_id=PlayerId(1),
+            condition,
+            WorldTick(0),
+            _graph(),
+            target_player_id=PlayerId(1),
         )
 
         expected = (
-            PredicateReasonCode.MISSING_CONTEXT
-            if reason == "missing"
-            else PredicateReasonCode.UNSUPPORTED_PREDICATE
+            PredicateReasonCode.MISSING_CONTEXT if reason == "missing" else PredicateReasonCode.UNSUPPORTED_PREDICATE
         )
         assert result.reason_code is expected
         assert result.failed_predicate is condition
@@ -738,7 +787,8 @@ class TestLeafPredicateResults:
         """共通核の未対応は後続playerで隠さず、元のHAS_ITEM条件へ即座に写す。"""
         common = MagicMock()
         common.evaluate.return_value = PredicateResult.unsupported(
-            failed_predicate=MagicMock(), failed_path=(),
+            failed_predicate=MagicMock(),
+            failed_path=(),
         )
         evaluator = _evaluator(predicate_evaluator=common)
         evaluator._player_status_repository.find_all.return_value = (
@@ -783,7 +833,9 @@ class TestLeafPredicateResults:
             return_value=frozenset(),
         ):
             result = evaluator.evaluate_result(
-                _condition("HAS_ITEM", item_spec_id=1), WorldTick(0), _graph(),
+                _condition("HAS_ITEM", item_spec_id=1),
+                WorldTick(0),
+                _graph(),
             )
 
         assert result.is_satisfied
@@ -798,7 +850,8 @@ class TestLeafPredicateResults:
                 required_context={"owned_item_spec_ids"},
             ),
             PredicateResult.not_satisfied(
-                failed_predicate=MagicMock(), failed_path=(),
+                failed_predicate=MagicMock(),
+                failed_path=(),
             ),
         )
         evaluator = _evaluator(predicate_evaluator=common)
@@ -937,7 +990,9 @@ class TestCompositePredicateResults:
         )
 
         result = _evaluator(random_source=random_source).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.reason_code is PredicateReasonCode.MISSING_CONTEXT
@@ -956,7 +1011,9 @@ class TestCompositePredicateResults:
         )
 
         result = _evaluator(random_source=random_source).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.is_satisfied is True
@@ -1081,7 +1138,9 @@ class TestImplicitAndAndCompatibility:
         )
 
         result = _evaluator(random_source=random_source).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.is_satisfied is False
@@ -1099,7 +1158,9 @@ class TestImplicitAndAndCompatibility:
         )
 
         result = _evaluator(random_source=random_source).evaluate_result(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert result.is_satisfied is True
@@ -1143,7 +1204,9 @@ class TestProbabilityDiagnostics:
         )
 
         evaluation = _evaluator(random_source=random_source).evaluate_diagnostic(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert evaluation.result.is_satisfied is True
@@ -1164,7 +1227,9 @@ class TestProbabilityDiagnostics:
         )
 
         evaluation = _evaluator(random_source=random_source).evaluate_diagnostic(
-            condition, WorldTick(0), _graph(),
+            condition,
+            WorldTick(0),
+            _graph(),
         )
 
         assert evaluation.result.is_satisfied is True
@@ -1175,9 +1240,7 @@ class TestProbabilityDiagnostics:
         """暗黙AND内の確率条件は条件番号を経路の先頭へ含める。"""
         random_source = _CountingRandom(0.75)
 
-        evaluation = _evaluator(
-            random_source=random_source
-        ).evaluate_all_diagnostic(
+        evaluation = _evaluator(random_source=random_source).evaluate_all_diagnostic(
             (
                 _condition("TICK_AT_LEAST", tick=0),
                 _condition("PROBABILITY", probability=0.5),

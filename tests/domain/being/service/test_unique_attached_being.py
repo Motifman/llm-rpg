@@ -32,9 +32,7 @@ def _being(
         if attached is not None
         else None
     )
-    return Being(
-        being_id=BeingId(being_id), identity=_identity(), attachment=attachment
-    )
+    return Being(being_id=BeingId(being_id), identity=_identity(), attachment=attachment)
 
 
 class TestUniqueAttachedBeing:
@@ -52,11 +50,6 @@ class TestUniqueAttachedBeing:
     @pytest.mark.parametrize("count", [2, 3])
     def test_multiple_beings_raises_exception(self, count: int) -> None:
         """同じ身体に付く主体が2件でも3件でも、一意性違反として拒否する。"""
-        beings = [
-            _being(being_id, attached=(1, 2))
-            for being_id in ("ada", "ben", "cal")[:count]
-        ]
-        with pytest.raises(
-            BeingMultipleAttachmentException, match="multiple Beings"
-        ):
+        beings = [_being(being_id, attached=(1, 2)) for being_id in ("ada", "ben", "cal")[:count]]
+        with pytest.raises(BeingMultipleAttachmentException, match="multiple Beings"):
             unique_attached_being(beings)

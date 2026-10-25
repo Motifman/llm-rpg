@@ -34,9 +34,7 @@ def _declared_scenario(tmp_path: Path) -> Path:
             "outcome": "RESCUED",
         }
     ]
-    raw["game_end_conditions"]["end"] = [
-        {"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}
-    ]
+    raw["game_end_conditions"]["end"] = [{"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}]
     raw["needs"] = {"starvation_damage_per_tick": 2}
     path = tmp_path / "declared_outcome.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -46,9 +44,7 @@ def _declared_scenario(tmp_path: Path) -> Path:
 class TestPlayerOutcomeRuleWiring:
     """ローダーの規則を同じ条件評価器・進捗ストアで実行する。"""
 
-    def test_declared_rule_resolves_player_through_runtime_tick(
-        self, tmp_path: Path
-    ) -> None:
+    def test_declared_rule_resolves_player_through_runtime_tick(self, tmp_path: Path) -> None:
         """宣言した救助規則は create_world_runtime と advance_tick を通して発火する。"""
         runtime = create_world_runtime(
             _declared_scenario(tmp_path),
@@ -68,13 +64,8 @@ class TestPlayerOutcomeRuleWiring:
 
         runtime.advance_tick()
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(player_id)
-            is PlayerOutcomeEnum.RESCUED
-        )
-        assert runtime._scenario_event_progress.is_fired(
-            "player_outcome_rule:rescue_ship_144"
-        )
+        assert runtime._player_outcome_registry.get_outcome(player_id) is PlayerOutcomeEnum.RESCUED
+        assert runtime._scenario_event_progress.is_fired("player_outcome_rule:rescue_ship_144")
 
     def test_neutral_end_returns_mixed_player_outcomes(self, tmp_path: Path) -> None:
         """全員確定時は混在した個人結果を保ち、集団 WIN/LOSE なしで終了する。"""
@@ -84,11 +75,7 @@ class TestPlayerOutcomeRuleWiring:
         )
         expected: dict[int, PlayerOutcomeEnum] = {}
         for index, player_id in enumerate(runtime.get_player_ids()):
-            outcome = (
-                PlayerOutcomeEnum.RESCUED
-                if index % 2 == 0
-                else PlayerOutcomeEnum.STRANDED
-            )
+            outcome = PlayerOutcomeEnum.RESCUED if index % 2 == 0 else PlayerOutcomeEnum.STRANDED
             runtime._player_outcome_registry.set_outcome(player_id, outcome)
             expected[int(player_id)] = outcome
 
@@ -105,8 +92,4 @@ class TestPlayerOutcomeRuleWiring:
             config=runtime_config(),
         )
 
-        assert (
-            runtime._simulation_service._needs_decay_stage
-            ._starvation_damage_per_tick
-            == 2
-        )
+        assert runtime._simulation_service._needs_decay_stage._starvation_damage_per_tick == 2

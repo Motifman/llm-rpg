@@ -24,9 +24,7 @@ from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
 class TestExportPromptDataset:
     """prompt_dataset 生 JSONL を Parquet dataset に変換する仕様。"""
 
-    def test_single_run_export_load_dataset_and_reconstruct_request(
-        self, tmp_path: Path
-    ) -> None:
+    def test_single_run_export_load_dataset_and_reconstruct_request(self, tmp_path: Path) -> None:
         """単一 run を export すると、既定 config と sidecar から request を復元できる。"""
 
         run_dir = _create_prompt_dataset_run(
@@ -50,15 +48,9 @@ class TestExportPromptDataset:
         assert (out_dir / "raw" / "run-a" / "calls.jsonl.gz").is_file()
 
         turns = load_dataset(str(out_dir), download_mode="force_redownload")["train"]
-        system_prompts = load_dataset(
-            str(out_dir), "system_prompts", download_mode="force_redownload"
-        )["train"]
-        toolsets = load_dataset(
-            str(out_dir), "toolsets", download_mode="force_redownload"
-        )["train"]
-        runs = load_dataset(str(out_dir), "runs", download_mode="force_redownload")[
-            "train"
-        ]
+        system_prompts = load_dataset(str(out_dir), "system_prompts", download_mode="force_redownload")["train"]
+        toolsets = load_dataset(str(out_dir), "toolsets", download_mode="force_redownload")["train"]
+        runs = load_dataset(str(out_dir), "runs", download_mode="force_redownload")["train"]
 
         assert len(turns) == 1
         assert len(system_prompts) == 1
@@ -75,9 +67,7 @@ class TestExportPromptDataset:
         request = json.loads(turns[0]["request"])
         assert request["request_hash"] == compute_request_hash(request["kwargs"])
 
-    def test_multiple_runs_deduplicate_system_prompts_and_toolsets(
-        self, tmp_path: Path
-    ) -> None:
+    def test_multiple_runs_deduplicate_system_prompts_and_toolsets(self, tmp_path: Path) -> None:
         """複数 run export では system prompt と toolset を hash id で重複排除する。"""
 
         run_a = _create_prompt_dataset_run(
@@ -99,21 +89,15 @@ class TestExportPromptDataset:
         summary = export_prompt_dataset(run_dirs=[run_a, run_b], out_dir=out_dir)
 
         turns = load_dataset(str(out_dir), download_mode="force_redownload")["train"]
-        system_prompts = load_dataset(
-            str(out_dir), "system_prompts", download_mode="force_redownload"
-        )["train"]
-        toolsets = load_dataset(
-            str(out_dir), "toolsets", download_mode="force_redownload"
-        )["train"]
+        system_prompts = load_dataset(str(out_dir), "system_prompts", download_mode="force_redownload")["train"]
+        toolsets = load_dataset(str(out_dir), "toolsets", download_mode="force_redownload")["train"]
 
         assert summary.turns_count == 2
         assert len(system_prompts) == 1
         assert len(toolsets) == 1
         assert sorted(row["run_id"] for row in turns) == ["run-a", "run-b"]
 
-    def test_split_map_assigns_runs_without_random_turn_split(
-        self, tmp_path: Path
-    ) -> None:
+    def test_split_map_assigns_runs_without_random_turn_split(self, tmp_path: Path) -> None:
         """split-map を渡すと run 単位で train / validation に割り当てる。"""
 
         run_a = _create_prompt_dataset_run(
@@ -159,9 +143,7 @@ class TestExportPromptDataset:
             system_content="sys",
             tool_name="speak",
         )
-        (run_dir / "prompt_dataset" / "turn_results.jsonl").write_text(
-            "", encoding="utf-8"
-        )
+        (run_dir / "prompt_dataset" / "turn_results.jsonl").write_text("", encoding="utf-8")
 
         try:
             export_prompt_dataset(run_dirs=[run_dir], out_dir=tmp_path / "dataset_missing")

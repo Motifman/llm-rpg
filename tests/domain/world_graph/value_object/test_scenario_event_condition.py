@@ -86,9 +86,7 @@ class TestLeafCondition:
         """leaf 条件（FLAG_SET 等）に children を持たせるとバリデーション例外。"""
         child = ScenarioEventCondition(condition_type="FLAG_SET", flag_name="x")
         with pytest.raises(ScenarioEventConditionValidationException, match="leaf"):
-            ScenarioEventCondition(
-                condition_type="FLAG_SET", flag_name="y", children=(child,)
-            )
+            ScenarioEventCondition(condition_type="FLAG_SET", flag_name="y", children=(child,))
 
     def test_leaf_without_children_is_valid(self) -> None:
         """普通の leaf は children 無しで構築できて is_composite=False。"""

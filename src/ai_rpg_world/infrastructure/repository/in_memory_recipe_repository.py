@@ -36,7 +36,7 @@ class InMemoryRecipeRepository(RecipeRepository, RecipeWriter):
                 RecipeIngredient(item_spec_id=ItemSpecId(9), quantity=2),  # 鉄鉱石 x2
                 RecipeIngredient(item_spec_id=ItemSpecId(10), quantity=1),  # 鋼鉄インゴット x1
             ],
-            result=RecipeResult(item_spec_id=ItemSpecId(1), quantity=1)  # 鉄の剣 x1
+            result=RecipeResult(item_spec_id=ItemSpecId(1), quantity=1),  # 鉄の剣 x1
         )
         self._save_recipe(iron_sword_recipe)
 
@@ -49,7 +49,7 @@ class InMemoryRecipeRepository(RecipeRepository, RecipeWriter):
                 RecipeIngredient(item_spec_id=ItemSpecId(6), quantity=1),  # 回復ポーション x1
                 RecipeIngredient(item_spec_id=ItemSpecId(11), quantity=1),  # 神秘のクリスタル x1
             ],
-            result=RecipeResult(item_spec_id=ItemSpecId(8), quantity=1)  # 上級回復ポーション x1
+            result=RecipeResult(item_spec_id=ItemSpecId(8), quantity=1),  # 上級回復ポーション x1
         )
         self._save_recipe(healing_potion_recipe)
 
@@ -62,7 +62,7 @@ class InMemoryRecipeRepository(RecipeRepository, RecipeWriter):
                 RecipeIngredient(item_spec_id=ItemSpecId(9), quantity=1),  # 鉄鉱石 x1
                 RecipeIngredient(item_spec_id=ItemSpecId(11), quantity=1),  # 神秘のクリスタル x1
             ],
-            result=RecipeResult(item_spec_id=ItemSpecId(10), quantity=1)  # 鋼鉄インゴット x1
+            result=RecipeResult(item_spec_id=ItemSpecId(10), quantity=1),  # 鋼鉄インゴット x1
         )
         self._save_recipe(steel_ingot_recipe)
 

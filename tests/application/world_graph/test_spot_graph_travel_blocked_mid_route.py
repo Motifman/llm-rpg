@@ -162,9 +162,7 @@ class _World:
             on_arrival=self.arrived.append,
             on_travel_tick_committed=self.committed.append,
         )
-        self.stage.add_blocked_observer(
-            lambda pid, blocked: self.blocked.append((pid, blocked))
-        )
+        self.stage.add_blocked_observer(lambda pid, blocked: self.blocked.append((pid, blocked)))
 
     def start(self, destination: SpotId) -> None:
         self.service.start_travel_to_spot(_PLAYER, destination, frozenset(), frozenset())
@@ -185,13 +183,7 @@ class _World:
 
 
 def _door_world() -> _World:
-    return _World(
-        _graph(
-            _connection(
-                _C1, _S1, _S2, name="防火扉", ticks=2, passage=Passage.door(DoorStateEnum.OPEN)
-            )
-        )
-    )
+    return _World(_graph(_connection(_C1, _S1, _S2, name="防火扉", ticks=2, passage=Passage.door(DoorStateEnum.OPEN))))
 
 
 class TestPassageClosedMidTravel:
@@ -271,9 +263,7 @@ class TestPassageClosedMidTravel:
         world.stage.run(WorldTick(2))
 
         assert world.spot() == _S1
-        assert [(b.passage_kind, b.passage_state) for _, b in world.blocked] == [
-            ("BARRIER", "ACTIVE")
-        ]
+        assert [(b.passage_kind, b.passage_state) for _, b in world.blocked] == [("BARRIER", "ACTIVE")]
 
     def test_failed_passage_condition_reports_the_scenario_message(self) -> None:
         """通行条件のフラグが移動中に消えると、理由は通行条件になり、シナリオの failure_message が届く。"""
@@ -297,9 +287,7 @@ class TestPassageClosedMidTravel:
             )
         )
         world.context.flags = frozenset({"bridge_up"})
-        world.service.start_travel_to_spot(
-            _PLAYER, _S2, frozenset(), frozenset({"bridge_up"})
-        )
+        world.service.start_travel_to_spot(_PLAYER, _S2, frozenset(), frozenset({"bridge_up"}))
         world.stage.run(WorldTick(1))
         world.context.flags = frozenset()
 
@@ -351,9 +339,7 @@ class TestPassageClosedOnLaterLeg:
         world = _World(
             _graph(
                 _connection(_C1, _S1, _S2, name="a", ticks=1, passage=Passage.open()),
-                _connection(
-                    _C2, _S2, _S3, name="扉", ticks=0, passage=Passage.door(DoorStateEnum.OPEN)
-                ),
+                _connection(_C2, _S2, _S3, name="扉", ticks=0, passage=Passage.door(DoorStateEnum.OPEN)),
             )
         )
         world.start(_S3)
@@ -369,22 +355,16 @@ class TestPassageClosedOnLaterLeg:
         assert nav.route == ()
         assert world.arrived == []
         assert world.committed == [_PLAYER]
-        assert [
-            (b.connection_id, b.from_spot_id, b.to_spot_id, b.destination_spot_id)
-            for _, b in world.blocked
-        ] == [(_C2, _S2, _S3, _S3)]
-
+        assert [(b.connection_id, b.from_spot_id, b.to_spot_id, b.destination_spot_id) for _, b in world.blocked] == [
+            (_C2, _S2, _S3, _S3)
+        ]
 
     def test_closed_first_leg_stops_at_origin_and_reports_once(self) -> None:
         """2 区間の経路で両方の区間が閉じていても、止まるのは 1 区間目の手前で、通知は 1 回だけ、行き先は最終の場所になる。"""
         world = _World(
             _graph(
-                _connection(
-                    _C1, _S1, _S2, name="扉", ticks=0, passage=Passage.door(DoorStateEnum.OPEN)
-                ),
-                _connection(
-                    _C2, _S2, _S3, name="奥の扉", ticks=0, passage=Passage.door(DoorStateEnum.OPEN)
-                ),
+                _connection(_C1, _S1, _S2, name="扉", ticks=0, passage=Passage.door(DoorStateEnum.OPEN)),
+                _connection(_C2, _S2, _S3, name="奥の扉", ticks=0, passage=Passage.door(DoorStateEnum.OPEN)),
             )
         )
         world.start(_S3)
@@ -394,10 +374,9 @@ class TestPassageClosedOnLaterLeg:
         world.stage.run(WorldTick(1))
 
         assert world.spot() == _S1
-        assert [
-            (b.connection_id, b.from_spot_id, b.to_spot_id, b.destination_spot_id)
-            for _, b in world.blocked
-        ] == [(_C1, _S1, _S2, _S3)]
+        assert [(b.connection_id, b.from_spot_id, b.to_spot_id, b.destination_spot_id) for _, b in world.blocked] == [
+            (_C1, _S1, _S2, _S3)
+        ]
 
 
 class TestDepartedTravelerBlocked:
@@ -406,11 +385,7 @@ class TestDepartedTravelerBlocked:
     def test_departed_traveler_stays_at_origin(self) -> None:
         """幽霊が扉の区間を移動中に扉が LOCKED になると、例外を出さず、幽霊の位置は出発した場所のまま止まる。"""
         world = _World(
-            _graph(
-                _connection(
-                    _C1, _S1, _S2, name="防火扉", ticks=2, passage=Passage.door(DoorStateEnum.OPEN)
-                )
-            ),
+            _graph(_connection(_C1, _S1, _S2, name="防火扉", ticks=2, passage=Passage.door(DoorStateEnum.OPEN))),
             departed=True,
         )
         world.start(_S2)
@@ -459,9 +434,9 @@ class TestBlockedObserverFailure:
         nav = world.nav()
         assert nav is not None
         assert not nav.is_traveling
-        assert [
-            e.payload["stage"] for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
-        ] == ["travel.blocked_observer"]
+        assert [e.payload["stage"] for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)] == [
+            "travel.blocked_observer"
+        ]
 
 
 class TestPostCommitFailureAfterBlocked:

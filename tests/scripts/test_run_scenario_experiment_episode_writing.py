@@ -28,10 +28,15 @@ def test_stub_run_writes_episodes_on_compaction_and_on_leaving_before_the_snapsh
 
     rc = main(
         [
-            "--experiment-config", str(config_path),
-            "--out", str(tmp_path / "run"),
-            "--snapshot-save-dir", str(snapshots),
-            "--no-html", "--no-progress-jsonl", "--no-stderr-progress",
+            "--experiment-config",
+            str(config_path),
+            "--out",
+            str(tmp_path / "run"),
+            "--snapshot-save-dir",
+            str(snapshots),
+            "--no-html",
+            "--no-progress-jsonl",
+            "--no-stderr-progress",
         ]
     )
 
@@ -41,8 +46,7 @@ def test_stub_run_writes_episodes_on_compaction_and_on_leaving_before_the_snapsh
     assert triggers == {"compaction", "leaving"}
     written = sum(w["payload"]["episode_count"] for w in writes if w["payload"]["outcome"] == "written")
     saved = sum(
-        path.read_text(encoding="utf-8").count('\\"handle\\": \\"ep_')
-        for path in snapshots.glob("being_*.json")
+        path.read_text(encoding="utf-8").count('\\"handle\\": \\"ep_') for path in snapshots.glob("being_*.json")
     )
     assert written > 0
     assert saved == written

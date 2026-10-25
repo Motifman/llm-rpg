@@ -149,21 +149,15 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
         倒した本人は離れていることがある (遠距離の一撃) ので、スポットとは別に
         足す。イベントがスポットを持たない場合は monster を引く。
         """
-        self._add_all_at_spot(
-            event.spot_id or self._spot_id_from_monster(event.aggregate_id), add
-        )
+        self._add_all_at_spot(event.spot_id or self._spot_id_from_monster(event.aggregate_id), add)
         if event.killer_player_id is not None:
             add(event.killer_player_id)
 
-    def _deliver_damage_to_the_spot_and_the_attacker(
-        self, event: Any, add: _Add
-    ) -> None:
+    def _deliver_damage_to_the_spot_and_the_attacker(self, event: Any, add: _Add) -> None:
         """monster の居る場所の全員と、攻撃したプレイヤーへ届ける。"""
         self._add_all_at_spot(self._spot_id_from_monster(event.aggregate_id), add)
         if event.attacker_id is not None:
-            player_id = self._world_object_to_player_resolver.resolve_player_id(
-                event.attacker_id
-            )
+            player_id = self._world_object_to_player_resolver.resolve_player_id(event.attacker_id)
             if player_id is not None:
                 add(player_id)
 
@@ -200,12 +194,10 @@ _RECIPIENT_RULES: RuleTable = {
 _DELIVERS_TO_NOBODY: dict[type, str] = {
     ActorStateChangedEvent: "本番では物理マップを持たず、物体の配信先は解決しない。状態変化の文面と登録は維持する",
     MonsterCreatedEvent: (
-        "集約の生成そのもの。世界に現れる瞬間は MonsterSpawnedEvent が表すので、"
-        "生成は誰の知覚にも対応しない"
+        "集約の生成そのもの。世界に現れる瞬間は MonsterSpawnedEvent が表すので、生成は誰の知覚にも対応しない"
     ),
     MonsterMpRecoveredEvent: (
-        "monster の内部資源の回復。外から見て分かる変化ではないので、"
-        "観測させると monster の内部状態が漏れる"
+        "monster の内部資源の回復。外から見て分かる変化ではないので、観測させると monster の内部状態が漏れる"
     ),
     TargetSpottedEvent: (
         "monster が誰かを標的に定めた、という内部状態。狙われたことを本人に"
@@ -214,7 +206,6 @@ _DELIVERS_TO_NOBODY: dict[type, str] = {
     ),
     TargetLostEvent: "同上。見失ったことは MonsterAbandonedChaseInSpotEvent が担う",
     BehaviorStuckEvent: (
-        "monster の行動が詰まったという実装側の診断情報。世界の出来事ではないので"
-        "観測にしない (trace で見る)"
+        "monster の行動が詰まったという実装側の診断情報。世界の出来事ではないので観測にしない (trace で見る)"
     ),
 }

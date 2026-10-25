@@ -67,11 +67,16 @@ WOLF_PACK = PackId.create("wolf_pack_1")
 
 def _node(spot_id: SpotId) -> SpotNode:
     return SpotNode(
-        spot_id=spot_id, name=f"spot{spot_id.value}", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=spot_id,
+        name=f"spot{spot_id.value}",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
-            lighting=LightingEnum.BRIGHT, sound_ambient=None,
-            temperature=TemperatureEnum.NORMAL, smell=None,
+            lighting=LightingEnum.BRIGHT,
+            sound_ambient=None,
+            temperature=TemperatureEnum.NORMAL,
+            smell=None,
         ),
     )
 
@@ -79,9 +84,13 @@ def _node(spot_id: SpotId) -> SpotNode:
 def _conn(connection_id: int, from_id: SpotId, to_id: SpotId) -> SpotConnection:
     return SpotConnection(
         connection_id=ConnectionId.create(connection_id),
-        from_spot_id=from_id, to_spot_id=to_id,
-        name="edge", description="", travel_ticks=1,
-        is_bidirectional=False, passage=Passage.open(),
+        from_spot_id=from_id,
+        to_spot_id=to_id,
+        name="edge",
+        description="",
+        travel_ticks=1,
+        is_bidirectional=False,
+        passage=Passage.open(),
     )
 
 
@@ -101,8 +110,13 @@ def _template(*, pack_awareness_radius: int = 3) -> MonsterTemplate:
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(100, True),
@@ -114,7 +128,8 @@ def _template(*, pack_awareness_radius: int = 3) -> MonsterTemplate:
 
 
 def _make_monster(
-    monster_id: int, *,
+    monster_id: int,
+    *,
     template: MonsterTemplate | None = None,
     pack_id: PackId | None = WOLF_PACK,
 ) -> MonsterAggregate:
@@ -123,8 +138,10 @@ def _make_monster(
         template=template or _template(),
         world_object_id=WorldObjectId.create(9000 + monster_id),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(monster_id), owner_id=monster_id,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(monster_id),
+            owner_id=monster_id,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -136,9 +153,7 @@ def _make_repo(*monsters: MonsterAggregate):
     repo = MagicMock()
     by_id = {m.monster_id: m for m in monsters}
     repo.find_by_id.side_effect = lambda mid: by_id.get(mid)
-    repo.find_by_pack_id.side_effect = lambda pid: [
-        m for m in monsters if m.pack_id == pid
-    ]
+    repo.find_by_pack_id.side_effect = lambda pid: [m for m in monsters if m.pack_id == pid]
     return repo
 
 
@@ -177,7 +192,10 @@ class TestPackAwarenessSuccess:
         graph.clear_events()
 
         result = handler.try_alert_from_pack(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
 
         assert result is True
@@ -217,7 +235,10 @@ class TestPackAwarenessSuccess:
         graph.clear_events()
 
         result = handler.try_alert_from_pack(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
 
         assert result is True
@@ -239,7 +260,8 @@ class TestNoAlert:
             current_tick=WorldTick(9),
         )
         responder = _make_monster(
-            102, template=_template(pack_awareness_radius=0),
+            102,
+            template=_template(pack_awareness_radius=0),
         )
         repo = _make_repo(scout, responder)
         handler = _make_handler(repo)
@@ -249,7 +271,10 @@ class TestNoAlert:
         graph.place_monster(responder.monster_id, SPOT_B)
 
         result = handler.try_alert_from_pack(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -270,7 +295,10 @@ class TestNoAlert:
         graph.place_monster(responder.monster_id, SPOT_B)
 
         result = handler.try_alert_from_pack(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -286,7 +314,10 @@ class TestNoAlert:
         graph.place_monster(responder.monster_id, SPOT_B)
 
         result = handler.try_alert_from_pack(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -312,7 +343,10 @@ class TestNoAlert:
         graph.place_monster(responder.monster_id, SPOT_B)
 
         result = handler.try_alert_from_pack(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
         # 既存の CHASE 対象は変わらない
@@ -327,7 +361,8 @@ class TestNoAlert:
             current_tick=WorldTick(9),
         )
         responder = _make_monster(
-            102, template=_template(pack_awareness_radius=2),
+            102,
+            template=_template(pack_awareness_radius=2),
         )
         repo = _make_repo(scout, responder)
         handler = _make_handler(repo)
@@ -337,7 +372,10 @@ class TestNoAlert:
         graph.place_monster(responder.monster_id, SPOT_C)
 
         result = handler.try_alert_from_pack(
-            responder, graph, SPOT_C, WorldTick(10),
+            responder,
+            graph,
+            SPOT_C,
+            WorldTick(10),
         )
         assert result is True
 
@@ -350,7 +388,8 @@ class TestNoAlert:
             current_tick=WorldTick(9),
         )
         responder = _make_monster(
-            102, template=_template(pack_awareness_radius=1),
+            102,
+            template=_template(pack_awareness_radius=1),
         )
         repo = _make_repo(scout, responder)
         handler = _make_handler(repo)
@@ -360,7 +399,10 @@ class TestNoAlert:
         graph.place_monster(responder.monster_id, SPOT_C)
 
         result = handler.try_alert_from_pack(
-            responder, graph, SPOT_C, WorldTick(10),
+            responder,
+            graph,
+            SPOT_C,
+            WorldTick(10),
         )
         assert result is False
 
@@ -382,7 +424,10 @@ class TestNoAlert:
         graph.place_monster(responder.monster_id, SPOT_B)
 
         result = handler.try_alert_from_pack(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -417,7 +462,10 @@ class TestNoAlert:
         graph.place_monster(responder.monster_id, SPOT_B)
 
         result = handler.try_alert_from_pack(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -454,7 +502,10 @@ class TestMultipleAlerted:
 
         for f in followers:
             result = handler.try_alert_from_pack(
-                f, graph, SPOT_B, WorldTick(10),
+                f,
+                graph,
+                SPOT_B,
+                WorldTick(10),
                 pack_members=pack_members,
             )
             assert result is True
@@ -467,6 +518,4 @@ class TestMultipleAlerted:
         # 全員分の event が発火
         events = _events_of_type(graph, MonsterAlertedByPackInSpotEvent)
         assert len(events) == 3
-        assert {e.responder_monster_id for e in events} == {
-            f.monster_id for f in followers
-        }
+        assert {e.responder_monster_id for e in events} == {f.monster_id for f in followers}

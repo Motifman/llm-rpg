@@ -5,16 +5,15 @@
 LLM 向けの対処ヒントを取得し、IActionResultStore の result_summary に載せる。
 """
 
-
 # error_code → 対処法の短い文言。オーケストレータで「結果: 失敗。{message} 対処: {remediation}」のように組み立てる。
 DEFAULT_REMEDIATION_BY_ERROR_CODE: dict[str, str] = {
     "PLAYER_NOT_FOUND": "指定したプレイヤーが存在しません。",
     "MAP_NOT_FOUND": "現在地または目的地のマップ情報が見つかりません。",
     "INVALID_DESTINATION": "有効な移動先を選んでください。接続先スポット一覧を確認してください。",
-    "INVALID_DESTINATION_LABEL": "【現在地と周囲】の接続先に表示されているスポット名を destination_label に指定してください。矢印の左側の道や扉の名前ではなく、\"\" で囲まれた行き先名を使ってください。",
+    "INVALID_DESTINATION_LABEL": '【現在地と周囲】の接続先に表示されているスポット名を destination_label に指定してください。矢印の左側の道や扉の名前ではなく、"" で囲まれた行き先名を使ってください。',
     "DESTINATION_NOT_ADJACENT": "その場所はここから直接は行けません。【現在地と周囲】の接続先に表示されている隣の場所を destination_label に指定し、順に進んでください。",
     "INVALID_DESTINATION_KIND": "destination_label には移動先として使えるスポット名を指定してください。アイテム名・プレイヤー名・オブジェクト名は移動先には使えません。",
-    "INVALID_TARGET_LABEL": "【現在地と周囲】に表示されている対象の名前を指定してください。名前が \"\" で囲まれている場合は、その中身をそのまま引数に入れてください。",
+    "INVALID_TARGET_LABEL": '【現在地と周囲】に表示されている対象の名前を指定してください。名前が "" で囲まれている場合は、その中身をそのまま引数に入れてください。',
     "INVALID_TARGET_KIND": "指定した名前はこの操作の対象ではありません。ツール説明と【現在地と周囲】を確認し、オブジェクト名・所持アイテム名・その場に落ちているものの名前・プレイヤー名・モンスター名のうち、そのツールが要求する名前を指定してください。",
     "INTERACTION_INVALID": "相互作用できる距離や状態か確認し、別の対象を選んでください。",
     "ITEM_NOT_FOUND": "指定されたアイテムがインベントリにないか、既に失われています。",

@@ -100,7 +100,8 @@ class TestComfortRangeValidation:
     def test_min_max_raises_exception(self) -> None:
         """min が max より 暑なら 例外。"""
         with pytest.raises(
-            MonsterTemplateValidationException, match="min_comfortable_temperature",
+            MonsterTemplateValidationException,
+            match="min_comfortable_temperature",
         ):
             _base_template(
                 min_comfortable_temperature=TemperatureEnum.HOT,
@@ -110,7 +111,8 @@ class TestComfortRangeValidation:
     def test_min_temperature_enum_raises_exception(self) -> None:
         """min が TemperatureEnum でないと例外。"""
         with pytest.raises(
-            MonsterTemplateValidationException, match="min_comfortable_temperature",
+            MonsterTemplateValidationException,
+            match="min_comfortable_temperature",
         ):
             _base_template(min_comfortable_temperature="cold")
 

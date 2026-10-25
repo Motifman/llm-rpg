@@ -73,13 +73,9 @@ class BeingSnapshot:
     @staticmethod
     def _reject_blank(field: str, value: object) -> None:
         if not isinstance(value, str):
-            raise BeingSnapshotIncompleteException(
-                f"BeingSnapshot.{field} must be str, got {type(value).__name__}"
-            )
+            raise BeingSnapshotIncompleteException(f"BeingSnapshot.{field} must be str, got {type(value).__name__}")
         if not value.strip():
-            raise BeingSnapshotIncompleteException(
-                f"BeingSnapshot.{field} must be non-empty"
-            )
+            raise BeingSnapshotIncompleteException(f"BeingSnapshot.{field} must be non-empty")
 
     def _validate_attachment_pair(self) -> None:
         world = self.attachment_world_id
@@ -101,14 +97,12 @@ class BeingSnapshot:
     def _validate_memory_kinds(self) -> None:
         if not isinstance(self.declared_memory_kinds, tuple):
             raise BeingSnapshotIncompleteException(
-                "declared_memory_kinds must be tuple, "
-                f"got {type(self.declared_memory_kinds).__name__}"
+                f"declared_memory_kinds must be tuple, got {type(self.declared_memory_kinds).__name__}"
             )
         for kind in self.declared_memory_kinds:
             if not isinstance(kind, str):
                 raise BeingSnapshotIncompleteException(
-                    "declared_memory_kinds elements must be str, "
-                    f"got {type(kind).__name__}"
+                    f"declared_memory_kinds elements must be str, got {type(kind).__name__}"
                 )
 
     def _validate_version(self) -> None:
@@ -132,16 +126,13 @@ class BeingSnapshot:
             return
         if not isinstance(self.memory_payload_json, str):
             raise BeingSnapshotIncompleteException(
-                "memory_payload_json must be str or None, "
-                f"got {type(self.memory_payload_json).__name__}"
+                f"memory_payload_json must be str or None, got {type(self.memory_payload_json).__name__}"
             )
         # 空文字列は JSON としても不正で、has_memory_payload=True なのに中身が
         # 空という呼び出し元混乱を生むので構造的に弾く (= None と区別する意義
         # を保つ)。
         if not self.memory_payload_json:
-            raise BeingSnapshotIncompleteException(
-                "memory_payload_json must be non-empty when not None"
-            )
+            raise BeingSnapshotIncompleteException("memory_payload_json must be non-empty when not None")
 
     @property
     def has_attachment(self) -> bool:

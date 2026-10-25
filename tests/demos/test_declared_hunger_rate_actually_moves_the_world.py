@@ -26,10 +26,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_TOWN = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "market_town_v1.json"
-)
+_TOWN = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 
 _TICKS = 5
 
@@ -92,7 +89,8 @@ class TestAWorldThatDeclaresNothingDoesNotMove:
         assert _need_after_ticks(runtime, NeedType.FATIGUE, _TICKS) == 0
 
     def test_declaring_only_starvation_damage_leaves_the_pace_alone(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """飢餓ダメージだけを宣言した世界も、空腹の進み方は既定のまま。
 

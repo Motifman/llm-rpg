@@ -138,7 +138,8 @@ def _build_stages(spot_graph_repo, interior_repo, evaluator):
             condition_type="NOT",
             children=(
                 ScenarioEventCondition(
-                    condition_type="PLAYER_AT_SPOT", spot_id=1,
+                    condition_type="PLAYER_AT_SPOT",
+                    spot_id=1,
                 ),
             ),
         ),

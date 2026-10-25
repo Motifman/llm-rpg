@@ -65,8 +65,18 @@ def _build_player_status(pid: PlayerId, spawn_spot_id: SpotId) -> PlayerStatusAg
     exp_table = ExpTable(base_exp=100.0, exponent=1.5)
     return PlayerStatusAggregate(
         player_id=pid,
-        base_stats=BaseStats(max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05),
-        stat_growth_factor=StatGrowthFactor(hp_factor=1.0, mp_factor=1.0, attack_factor=1.0, defense_factor=1.0, speed_factor=1.0, critical_rate_factor=0.0, evasion_rate_factor=0.0),
+        base_stats=BaseStats(
+            max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05
+        ),
+        stat_growth_factor=StatGrowthFactor(
+            hp_factor=1.0,
+            mp_factor=1.0,
+            attack_factor=1.0,
+            defense_factor=1.0,
+            speed_factor=1.0,
+            critical_rate_factor=0.0,
+            evasion_rate_factor=0.0,
+        ),
         exp_table=exp_table,
         growth=Growth(level=1, total_exp=0, exp_table=exp_table),
         gold=Gold(0),
@@ -79,13 +89,15 @@ def _build_player_status(pid: PlayerId, spawn_spot_id: SpotId) -> PlayerStatusAg
 
 def _make_stage(
     events: list[ScenarioEventDef],
-) -> tuple[SpotGraphScenarioEventStageService, MutableWorldFlagState, InMemorySpotGraphScenarioEventProgressStore, list[str]]:
+) -> tuple[
+    SpotGraphScenarioEventStageService, MutableWorldFlagState, InMemorySpotGraphScenarioEventProgressStore, list[str]
+]:
     """テスト用のstageセットアップ。最小構成のグラフ+プレイヤー。"""
     spot_id = SpotId.create(1)
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
-    graph.add_spot(SpotNode(
-        spot_id=spot_id, name="Room", description="", category=SpotCategoryEnum.OTHER, parent_id=None
-    ))
+    graph.add_spot(
+        SpotNode(spot_id=spot_id, name="Room", description="", category=SpotCategoryEnum.OTHER, parent_id=None)
+    )
     data_store = InMemoryDataStore()
     spot_graph_repo = InMemorySpotGraphRepository(graph)
     spot_interior_repo = InMemorySpotInteriorRepository()
@@ -180,19 +192,27 @@ class TestEventChain:
         """3段階チェーンが順次発火すること"""
         events = [
             ScenarioEventDef(
-                event_id="step1", trigger="ON_TICK", once=True,
+                event_id="step1",
+                trigger="ON_TICK",
+                once=True,
                 conditions=(ScenarioEventCondition(condition_type="TICK_AT_LEAST", tick=1),),
                 effects=(_flag_effect("s1"),),
-                next_event_id="step2", delay_ticks=2,
+                next_event_id="step2",
+                delay_ticks=2,
             ),
             ScenarioEventDef(
-                event_id="step2", trigger="ON_CHAIN", once=True,
+                event_id="step2",
+                trigger="ON_CHAIN",
+                once=True,
                 conditions=(),
                 effects=(_flag_effect("s2"),),
-                next_event_id="step3", delay_ticks=2,
+                next_event_id="step3",
+                delay_ticks=2,
             ),
             ScenarioEventDef(
-                event_id="step3", trigger="ON_CHAIN", once=True,
+                event_id="step3",
+                trigger="ON_CHAIN",
+                once=True,
                 conditions=(),
                 effects=(_flag_effect("s3"),),
             ),
@@ -212,13 +232,18 @@ class TestEventChain:
         """チェーンイベントも once=True なら1回だけ発火すること"""
         events = [
             ScenarioEventDef(
-                event_id="trigger", trigger="ON_TICK", once=True,
+                event_id="trigger",
+                trigger="ON_TICK",
+                once=True,
                 conditions=(ScenarioEventCondition(condition_type="TICK_AT_LEAST", tick=1),),
                 effects=(_flag_effect("triggered"),),
-                next_event_id="chained", delay_ticks=1,
+                next_event_id="chained",
+                delay_ticks=1,
             ),
             ScenarioEventDef(
-                event_id="chained", trigger="ON_CHAIN", once=True,
+                event_id="chained",
+                trigger="ON_CHAIN",
+                once=True,
                 conditions=(),
                 effects=(_msg_effect("chained!"),),
             ),

@@ -128,4 +128,5 @@ class TestDispatch:
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             _SPOT_GRAPH_TOOLS,
         )
+
         assert TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER in _SPOT_GRAPH_TOOLS

@@ -65,10 +65,7 @@ class TestPretendActionLines:
         scenario = _SCENARIOS / "station_drill.json"
         for seed in range(20):
             result = run_random_agents(scenario, seed=seed, max_world_ticks=5)
-            if any(
-                str(a.arguments.get("action_name", "")).endswith("_pretend")
-                for a in result.actions
-            ):
+            if any(str(a.arguments.get("action_name", "")).endswith("_pretend") for a in result.actions):
                 break
         else:
             pytest.fail("シード 0〜19 のどれも偽装の操作を選ばなかった。何も確かめていない")

@@ -40,4 +40,3 @@ def build_guild(
         description=description,
         members=members,
     )
-

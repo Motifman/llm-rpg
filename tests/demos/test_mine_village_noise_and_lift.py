@@ -106,9 +106,7 @@ def _hp(runtime, pid: PlayerId) -> int:
 
 def _observations(runtime, pid: PlayerId, kind: str) -> list[str]:
     return [
-        e.output.prose
-        for e in runtime._obs_buffer.get_observations(pid)
-        if e.output.structured.get("type") == kind
+        e.output.prose for e in runtime._obs_buffer.get_observations(pid) if e.output.structured.get("type") == kind
     ]
 
 
@@ -128,7 +126,6 @@ def _open_safe(runtime, pid: PlayerId = _GEN) -> None:
     _act(runtime, pid, "company_office", "office_safe", "open_safe", code=_SAFE_CODE)
 
 
-
 def _clear_gas(runtime) -> None:
     """掘り場のガスを抜く。ガスは確率で溜まり (R6、test_mine_village_light_gas_and_food.py)、溜まっていると予備の燃料が取れない。燃料の量を見るテストを偶然に左右させないため。"""
     if "gas_present" in runtime._world_flag_state.as_frozen_set():
@@ -136,6 +133,7 @@ def _clear_gas(runtime) -> None:
             "gas_present",
             context=WorldFlagMutationContext(source=WorldFlagMutationSource.SCENARIO_EVENT, actor_player_id=None),
         )
+
 
 class TestNoiseWakesTheBeastOfThatSector:
     """R5: 区画ごとに音が積もり、閾値に届くとその区画の決まった場所に獣が現れることを保証する。"""
@@ -405,7 +403,6 @@ class TestLift:
 
         assert outcome == "refused"
         assert message == _LIFT_REFUSAL["short_of_fuel"]
-
 
     def test_people_on_the_landing_escape_and_the_rest_are_left(self, runtime) -> None:
         """昇降機を動かすと、籠に乗り込んだハルとゲンは脱出し、乗り込まなかったミオとサヨは取り残され、ゲームが終わる。"""

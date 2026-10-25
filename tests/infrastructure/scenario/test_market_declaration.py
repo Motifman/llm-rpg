@@ -155,10 +155,12 @@ class TestInitialOrdersAreDeclaredWithTheMarket:
 
     def test_a_declared_order_is_read(self, tmp_path: Path) -> None:
         """宣言した初期注文が、向き・品目・数量・単価つきで読み取られる。"""
-        raw = _with_market(_raw(), initial_orders=[
-            {"merchant": "gustav", "side": "sell", "item_spec": "herb",
-             "quantity": 2, "unit_price": 9},
-        ])
+        raw = _with_market(
+            _raw(),
+            initial_orders=[
+                {"merchant": "gustav", "side": "sell", "item_spec": "herb", "quantity": 2, "unit_price": 9},
+            ],
+        )
 
         result = _load(raw, tmp_path)
 
@@ -169,10 +171,12 @@ class TestInitialOrdersAreDeclaredWithTheMarket:
 
     def test_an_unknown_merchant_is_refused(self, tmp_path: Path) -> None:
         """実在しない商人名の初期注文は読み込めない。"""
-        raw = _with_market(_raw(), initial_orders=[
-            {"merchant": "nobody", "side": "sell", "item_spec": "herb",
-             "quantity": 1, "unit_price": 9},
-        ])
+        raw = _with_market(
+            _raw(),
+            initial_orders=[
+                {"merchant": "nobody", "side": "sell", "item_spec": "herb", "quantity": 1, "unit_price": 9},
+            ],
+        )
 
         with pytest.raises(ScenarioLoadError) as exc:
             _load(raw, tmp_path)
@@ -181,10 +185,12 @@ class TestInitialOrdersAreDeclaredWithTheMarket:
 
     def test_an_unknown_item_is_refused(self, tmp_path: Path) -> None:
         """実在しない品名の初期注文は読み込めない。"""
-        raw = _with_market(_raw(), initial_orders=[
-            {"merchant": "gustav", "side": "sell", "item_spec": "moonstone",
-             "quantity": 1, "unit_price": 9},
-        ])
+        raw = _with_market(
+            _raw(),
+            initial_orders=[
+                {"merchant": "gustav", "side": "sell", "item_spec": "moonstone", "quantity": 1, "unit_price": 9},
+            ],
+        )
 
         with pytest.raises(ScenarioLoadError) as exc:
             _load(raw, tmp_path)
@@ -193,10 +199,12 @@ class TestInitialOrdersAreDeclaredWithTheMarket:
 
     def test_an_unknown_side_is_refused(self, tmp_path: Path) -> None:
         """`sell` / `buy` 以外の向きは読み込めない。"""
-        raw = _with_market(_raw(), initial_orders=[
-            {"merchant": "gustav", "side": "trade", "item_spec": "herb",
-             "quantity": 1, "unit_price": 9},
-        ])
+        raw = _with_market(
+            _raw(),
+            initial_orders=[
+                {"merchant": "gustav", "side": "trade", "item_spec": "herb", "quantity": 1, "unit_price": 9},
+            ],
+        )
 
         with pytest.raises(ScenarioLoadError) as exc:
             _load(raw, tmp_path)
@@ -205,12 +213,9 @@ class TestInitialOrdersAreDeclaredWithTheMarket:
 
     @pytest.mark.parametrize("field", ["quantity", "unit_price"])
     @pytest.mark.parametrize("value", [0, -1, True, "3"])
-    def test_a_non_positive_number_is_refused(
-        self, tmp_path: Path, field: str, value: Any
-    ) -> None:
+    def test_a_non_positive_number_is_refused(self, tmp_path: Path, field: str, value: Any) -> None:
         """数量・単価が 1 以上の整数でない初期注文は読み込めない。"""
-        entry = {"merchant": "gustav", "side": "sell", "item_spec": "herb",
-                 "quantity": 1, "unit_price": 9}
+        entry = {"merchant": "gustav", "side": "sell", "item_spec": "herb", "quantity": 1, "unit_price": 9}
         entry[field] = value
         raw = _with_market(_raw(), initial_orders=[entry])
 

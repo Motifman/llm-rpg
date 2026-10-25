@@ -1,4 +1,5 @@
 """公開SNS専用の、同じ作業領域へ参加するインメモリリポジトリ。"""
+
 from __future__ import annotations
 
 import copy
@@ -44,7 +45,9 @@ class InMemoryPublicSnsCommandRepositoryProvider:
         self.posts = ScopeBoundRepository(InMemoryPostRepository(self._store, facade), self._require_active)
         self.replies = ScopeBoundRepository(InMemoryReplyRepository(self._store, facade), self._require_active)
         self.users = ScopeBoundRepository(InMemorySnsUserRepository(self._store, facade), self._require_active)
-        self.notifications = ScopeBoundRepository(InMemorySnsNotificationRepository(self._store, facade), self._require_active)
+        self.notifications = ScopeBoundRepository(
+            InMemorySnsNotificationRepository(self._store, facade), self._require_active
+        )
         self.read = ScopeBoundRepository(InMemoryPublicSnsReadRepository(self._store), self._require_active)
 
     def _require_active(self) -> None:
@@ -53,23 +56,31 @@ class InMemoryPublicSnsCommandRepositoryProvider:
 
     def notification_exists(self, source_event_id: str, recipient_token: str, kind: str) -> bool:
         self._require_active()
-        return any(n.source_event_id == source_event_id and n.recipient_identity_token == recipient_token
-                   and n.notification_type.value == kind for n in self._store.sns_notifications.values())
+        return any(
+            n.source_event_id == source_event_id
+            and n.recipient_identity_token == recipient_token
+            and n.notification_type.value == kind
+            for n in self._store.sns_notifications.values()
+        )
 
     def pending_notifications(self, limit: int, *, after_id: int = 0) -> list[Notification]:
         self._require_active()
         selected = heapq.nsmallest(
             limit,
-            (n for n in self._store.sns_notifications.values()
-             if n.source_event_id is not None and not n.observation_delivered
-             and n.notification_id.value > after_id),
+            (
+                n
+                for n in self._store.sns_notifications.values()
+                if n.source_event_id is not None and not n.observation_delivered and n.notification_id.value > after_id
+            ),
             key=lambda n: n.notification_id.value,
         )
         return [copy.deepcopy(n) for n in selected]
 
 
 class InMemoryPublicSnsCommandRepositoryProviderFactory:
-    def create(self, context: CommandContext[PublicSnsCommandRepositories], transaction: TransactionPort) -> InMemoryPublicSnsCommandRepositoryProvider:
+    def create(
+        self, context: CommandContext[PublicSnsCommandRepositories], transaction: TransactionPort
+    ) -> InMemoryPublicSnsCommandRepositoryProvider:
         adapter = unwrap_transaction(transaction)
         if not isinstance(adapter, InMemoryUnitOfWorkTransactionAdapter):
             raise TypeError("公開SNSにはInMemoryUnitOfWorkTransactionAdapterが必要です")

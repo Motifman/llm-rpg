@@ -84,9 +84,7 @@ class TestUniversalRules:
         """倒れている本人は、他人に対して何もできない。"""
         assert _check(actor_status=_DOWNED).code == "ACTOR_IS_DOWN"
 
-    @pytest.mark.parametrize(
-        "outcome", [PlayerOutcomeEnum.DEAD, PlayerOutcomeEnum.EJECTED]
-    )
+    @pytest.mark.parametrize("outcome", [PlayerOutcomeEnum.DEAD, PlayerOutcomeEnum.EJECTED])
     def test_an_eliminated_target_is_rejected(self, outcome) -> None:
         """退場した相手は対象にできない。
 

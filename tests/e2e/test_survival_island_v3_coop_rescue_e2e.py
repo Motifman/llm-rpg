@@ -52,11 +52,7 @@ def _create_coop_session(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         characters_path=tmp_path / "characters.json",
     )
     char = mgr.create_character(CharacterCreateRequest(name="テスト探索者"))
-    summary = mgr.create_session(
-        SessionCreateRequest(
-            world_id="survival_island_v3_coop", character_ids=[char.id]
-        )
-    )
+    summary = mgr.create_session(SessionCreateRequest(world_id="survival_island_v3_coop", character_ids=[char.id]))
     return mgr._sessions[summary.session_id]
 
 
@@ -77,9 +73,7 @@ def _teleport(runtime, player_id_int: int, spot_str_id: str) -> None:
 
 
 def _grant_items(runtime, player_id: PlayerId, item_str_ids: tuple) -> None:
-    spec_ids = tuple(
-        ItemSpecId.create(_id_int(runtime, "item_spec", sid)) for sid in item_str_ids
-    )
+    spec_ids = tuple(ItemSpecId.create(_id_int(runtime, "item_spec", sid)) for sid in item_str_ids)
     grant_item_specs_to_inventory(
         player_id=player_id,
         item_spec_ids=spec_ids,
@@ -168,9 +162,7 @@ def _advance_to_tick(state, target_tick: int) -> None:
 class TestSoloCannotLight:
     """材料が全部揃っていても、山頂に 1 人では点火できない (協力の必要条件)。"""
 
-    def test_solo_light_signal_is_rejected(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_solo_light_signal_is_rejected(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """ada が単独で summit に居て材料 3/2/1 を持っていても、
         PLAYERS_AT_SPOT (2 人) ゲートに拒否され signal_fire_lit は立たない。"""
         state = _create_coop_session(monkeypatch, tmp_path)
@@ -183,10 +175,7 @@ class TestSoloCannotLight:
         result = _run_light_signal_turn(state, runtime, ada)
 
         assert _owned_specs(runtime, ada) == before
-        assert not _flag_lit(runtime), (
-            "1 人でも点火できてしまった。PLAYERS_AT_SPOT ゲートが"
-            "ランタイムで効いていない。"
-        )
+        assert not _flag_lit(runtime), "1 人でも点火できてしまった。PLAYERS_AT_SPOT ゲートがランタイムで効いていない。"
         assert result.success is False
         assert "誰かもう一人が山頂にいなければ点火できない" in result.message
 
@@ -194,9 +183,7 @@ class TestSoloCannotLight:
 class TestInsufficientMaterials:
     """2 人いても材料が足りなければ点火できない (増量の検証)。"""
 
-    def test_single_driftwood_is_rejected(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_single_driftwood_is_rejected(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """流木 1 本 (v2 なら足りた量) では required_quantity=3 に拒否される。"""
         state = _create_coop_session(monkeypatch, tmp_path)
         runtime = state.runtime
@@ -211,8 +198,7 @@ class TestInsufficientMaterials:
 
         assert _owned_specs(runtime, ada) == before
         assert not _flag_lit(runtime), (
-            "流木 1 本で点火できてしまった。required_quantity が"
-            "ランタイムで数えられていない。"
+            "流木 1 本で点火できてしまった。required_quantity がランタイムで数えられていない。"
         )
         assert result.success is False
         assert "流木が足りない。太いものが 3 本は要る。" in result.message
@@ -240,8 +226,7 @@ class TestDuoLightsAndSummitOnlyRescue:
 
         result = _run_light_signal_turn(state, runtime, ada)
         assert result.success is True, (
-            f"2 人揃って材料 3/2/1 でも点火に失敗: "
-            f"code={result.error_code} msg={result.message}"
+            f"2 人揃って材料 3/2/1 でも点火に失敗: code={result.error_code} msg={result.message}"
         )
         assert _flag_lit(runtime)
         expected = before.copy()
@@ -251,9 +236,7 @@ class TestDuoLightsAndSummitOnlyRescue:
 
         # 以降は全 player を wait に切り替えて tick を進める。
         stub = state.llm_wiring.llm_client
-        stub.set_tool_call_to_return(
-            {"name": "wait", "arguments": {"reason": "待機", "inner_thought": "待つ"}}
-        )
+        stub.set_tool_call_to_return({"name": "wait", "arguments": {"reason": "待機", "inner_thought": "待つ"}})
 
         # 飢餓は本テストの関心外なので無効化する。
         decay_stage = runtime._simulation_service._needs_decay_stage
@@ -268,10 +251,7 @@ class TestDuoLightsAndSummitOnlyRescue:
         assert registry is not None
         _jump_clock_to(runtime, 142)
         _advance_to_tick(state, 143)
-        assert all(
-            registry.get_outcome(pid) == PlayerOutcomeEnum.UNRESOLVED
-            for pid in (ada, noah, rio, kai)
-        )
+        assert all(registry.get_outcome(pid) == PlayerOutcomeEnum.UNRESOLVED for pid in (ada, noah, rio, kai))
         assert not runtime.check_game_end().is_ended
 
         _advance_to_tick(state, 144)

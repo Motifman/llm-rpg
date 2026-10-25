@@ -113,9 +113,7 @@ class QuestCommandService:
         self._guild_repository = guild_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         try:
             return operation()
         except QuestApplicationException:
@@ -217,7 +215,11 @@ class QuestCommandService:
                         "プレイヤー発行クエストでは経験値報酬を指定できません",
                         user_id=command.issuer_player_id,
                     )
-                if self._player_status_repository is None or self._player_inventory_repository is None or self._item_repository is None:
+                if (
+                    self._player_status_repository is None
+                    or self._player_inventory_repository is None
+                    or self._item_repository is None
+                ):
                     raise QuestCreationException(
                         "プレイヤー発行には PlayerStatus / Inventory / Item リポジトリが必要です",
                         user_id=command.issuer_player_id,
@@ -307,22 +309,14 @@ class QuestCommandService:
             if quest is None:
                 raise QuestNotFoundForCommandException(command.quest_id, "approve_quest")
             if not quest.is_pending_approval():
-                raise QuestAccessDeniedException(
-                    command.quest_id, command.approver_player_id, "approve_quest"
-                )
+                raise QuestAccessDeniedException(command.quest_id, command.approver_player_id, "approve_quest")
             if quest.guild_id is None or self._guild_repository is None:
-                raise QuestAccessDeniedException(
-                    command.quest_id, command.approver_player_id, "approve_quest"
-                )
+                raise QuestAccessDeniedException(command.quest_id, command.approver_player_id, "approve_quest")
             guild = self._guild_repository.find_by_id(GuildId(quest.guild_id))
             if guild is None:
-                raise QuestAccessDeniedException(
-                    command.quest_id, command.approver_player_id, "approve_quest"
-                )
+                raise QuestAccessDeniedException(command.quest_id, command.approver_player_id, "approve_quest")
             if not guild.can_approve_quest(approver_id):
-                raise QuestAccessDeniedException(
-                    command.quest_id, command.approver_player_id, "approve_quest"
-                )
+                raise QuestAccessDeniedException(command.quest_id, command.approver_player_id, "approve_quest")
             quest.approve_by(approver_id)
             self._quest_repository.save(quest)
             self._logger.info(
@@ -356,18 +350,12 @@ class QuestCommandService:
                 raise QuestNotFoundForCommandException(command.quest_id, "accept_quest")
             if quest.scope.is_guild():
                 if quest.guild_id is None or self._guild_repository is None:
-                    raise QuestAccessDeniedException(
-                        command.quest_id, command.player_id, "accept_quest"
-                    )
+                    raise QuestAccessDeniedException(command.quest_id, command.player_id, "accept_quest")
                 guild = self._guild_repository.find_by_id(GuildId(quest.guild_id))
                 if guild is None or not guild.is_member(player_id):
-                    raise QuestAccessDeniedException(
-                        command.quest_id, command.player_id, "accept_quest"
-                    )
+                    raise QuestAccessDeniedException(command.quest_id, command.player_id, "accept_quest")
             if not quest.can_be_accepted_by(player_id):
-                raise QuestAccessDeniedException(
-                    command.quest_id, command.player_id, "accept_quest"
-                )
+                raise QuestAccessDeniedException(command.quest_id, command.player_id, "accept_quest")
             quest.accept_by(player_id)
             self._quest_repository.save(quest)
             self._logger.info(
@@ -400,21 +388,15 @@ class QuestCommandService:
             if quest is None:
                 raise QuestNotFoundForCommandException(command.quest_id, "cancel_quest")
             if not quest.is_issuer_or_acceptor(player_id):
-                raise QuestAccessDeniedException(
-                    command.quest_id, command.player_id, "cancel_quest"
-                )
+                raise QuestAccessDeniedException(command.quest_id, command.player_id, "cancel_quest")
             if (
                 quest.issuer_player_id is not None
                 and (quest.reserved_gold > 0 or quest.reserved_item_instance_ids)
                 and self._player_status_repository is not None
                 and self._player_inventory_repository is not None
             ):
-                issuer_status = self._player_status_repository.find_by_id(
-                    quest.issuer_player_id
-                )
-                issuer_inventory = self._player_inventory_repository.find_by_id(
-                    quest.issuer_player_id
-                )
+                issuer_status = self._player_status_repository.find_by_id(quest.issuer_player_id)
+                issuer_inventory = self._player_inventory_repository.find_by_id(quest.issuer_player_id)
                 if issuer_status is not None and quest.reserved_gold > 0:
                     issuer_status.earn_gold(quest.reserved_gold)
                     self._player_status_repository.save(issuer_status)

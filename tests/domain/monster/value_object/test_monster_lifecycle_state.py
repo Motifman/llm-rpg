@@ -20,9 +20,15 @@ from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
 def _state_values(state: MonsterLifecycleState) -> tuple[object, ...]:
     """期待値を計算せず、変更前後で比較する公開値だけを取り出す。"""
     return (
-        state.hp.value, state.hp.max_hp, state.mp.value, state.mp.max_mp,
-        state.status, state.last_death_tick, state.spawned_at_tick,
-        state.hunger, state.starvation_timer,
+        state.hp.value,
+        state.hp.max_hp,
+        state.mp.value,
+        state.mp.max_mp,
+        state.status,
+        state.last_death_tick,
+        state.spawned_at_tick,
+        state.hunger,
+        state.starvation_timer,
     )
 
 
@@ -299,8 +305,15 @@ class TestMonsterLifecycleStateWithSpawnReset:
     def test_with_spawn_reset_full_recovery(self, dead_state: MonsterLifecycleState):
         """死亡前の飢餓時間を消し、満タンで再出現しても旧状態は変えない。"""
         expected_old = (
-            0, 100, 30, 50, MonsterStatusEnum.DEAD,
-            WorldTick(50), WorldTick(10), 0.8, 1,
+            0,
+            100,
+            30,
+            50,
+            MonsterStatusEnum.DEAD,
+            WorldTick(50),
+            WorldTick(10),
+            0.8,
+            1,
         )
         assert _state_values(dead_state) == expected_old
         tick = WorldTick(150)
@@ -505,8 +518,15 @@ class TestMonsterLifecycleStateDecreaseHunger:
         )
         hungry_state, should_starve = state.tick_hunger(0.2, 0.7, 5)
         expected_old = (
-            100, 100, 50, 50, MonsterStatusEnum.ALIVE,
-            None, WorldTick(0), pytest.approx(0.8), 1,
+            100,
+            100,
+            50,
+            50,
+            MonsterStatusEnum.ALIVE,
+            None,
+            WorldTick(0),
+            pytest.approx(0.8),
+            1,
         )
         assert _state_values(hungry_state) == expected_old
         assert should_starve is False
@@ -539,7 +559,11 @@ class TestMonsterLifecycleStateImmutability:
             ("apply_heal", (0,), (100, 100, 50, 50, MonsterStatusEnum.ALIVE, None, WorldTick(0), 0.0, 0)),
             ("apply_mp_recovery", (0,), (100, 100, 50, 50, MonsterStatusEnum.ALIVE, None, WorldTick(0), 0.0, 0)),
             ("apply_mp_use", (0,), (100, 100, 50, 50, MonsterStatusEnum.ALIVE, None, WorldTick(0), 0.0, 0)),
-            ("with_death", (WorldTick(1),), (100, 100, 50, 50, MonsterStatusEnum.DEAD, WorldTick(1), WorldTick(0), 0.0, 0)),
+            (
+                "with_death",
+                (WorldTick(1),),
+                (100, 100, 50, 50, MonsterStatusEnum.DEAD, WorldTick(1), WorldTick(0), 0.0, 0),
+            ),
             ("decrease_hunger", (0.1,), (100, 100, 50, 50, MonsterStatusEnum.ALIVE, None, WorldTick(0), 0.0, 0)),
             ("tick_hunger", (0.1, 1.0, 5), (100, 100, 50, 50, MonsterStatusEnum.ALIVE, None, WorldTick(0), 0.1, 0)),
         ],
@@ -553,8 +577,15 @@ class TestMonsterLifecycleStateImmutability:
             spawned_at_tick=WorldTick(0),
         )
         expected_old = (
-            100, 100, 50, 50, MonsterStatusEnum.ALIVE,
-            None, WorldTick(0), 0.0, 0,
+            100,
+            100,
+            50,
+            50,
+            MonsterStatusEnum.ALIVE,
+            None,
+            WorldTick(0),
+            0.0,
+            0,
         )
         assert _state_values(state) == expected_old
 

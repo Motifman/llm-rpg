@@ -78,9 +78,7 @@ class GuildCommandService:
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         try:
             return operation()
         except GuildApplicationException:
@@ -125,9 +123,7 @@ class GuildCommandService:
             guild_id = self._guild_repository.generate_guild_id()
             creator_id = PlayerId(command.creator_player_id)
 
-            slot = self._location_establishment_repository.find_by_spot_and_location(
-                spot_id, location_area_id
-            )
+            slot = self._location_establishment_repository.find_by_spot_and_location(spot_id, location_area_id)
             if slot is None:
                 slot = LocationEstablishmentAggregate.create(
                     spot_id=spot_id,
@@ -153,9 +149,7 @@ class GuildCommandService:
             bank = GuildBankAggregate.create_for_guild(guild_id)
             self._guild_bank_repository.save(bank)
             self._location_establishment_repository.save(slot)
-            self._logger.info(
-                "Guild created: guild_id=%s, creator=%s", guild_id.value, creator_id
-            )
+            self._logger.info("Guild created: guild_id=%s, creator=%s", guild_id.value, creator_id)
             return GuildCommandResultDto(
                 success=True,
                 message="ギルドを作成しました",
@@ -263,9 +257,7 @@ class GuildCommandService:
                 data={"guild_id": command.guild_id},
             )
 
-    def deposit_to_guild_bank(
-        self, command: DepositToGuildBankCommand
-    ) -> GuildCommandResultDto:
+    def deposit_to_guild_bank(self, command: DepositToGuildBankCommand) -> GuildCommandResultDto:
         """ギルド金庫に入金する（メンバー全員可能）。プレイヤーのゴールドを差し引き、金庫に加算する。"""
         return self._execute_with_error_handling(
             operation=lambda: self._deposit_to_guild_bank_impl(command),
@@ -276,31 +268,21 @@ class GuildCommandService:
             },
         )
 
-    def _deposit_to_guild_bank_impl(
-        self, command: DepositToGuildBankCommand
-    ) -> GuildCommandResultDto:
+    def _deposit_to_guild_bank_impl(self, command: DepositToGuildBankCommand) -> GuildCommandResultDto:
         with self._unit_of_work:
             guild_id = GuildId(command.guild_id)
             guild = self._guild_repository.find_by_id(guild_id)
             if guild is None:
-                raise GuildNotFoundForCommandException(
-                    command.guild_id, "deposit_to_guild_bank"
-                )
+                raise GuildNotFoundForCommandException(command.guild_id, "deposit_to_guild_bank")
             bank = self._guild_bank_repository.find_by_id(guild_id)
             if bank is None:
-                raise GuildBankNotFoundForCommandException(
-                    command.guild_id, "deposit_to_guild_bank"
-                )
+                raise GuildBankNotFoundForCommandException(command.guild_id, "deposit_to_guild_bank")
             player_id = PlayerId(command.player_id)
             if not guild.is_member(player_id):
-                raise GuildAccessDeniedException(
-                    command.guild_id, command.player_id, "deposit_to_guild_bank"
-                )
+                raise GuildAccessDeniedException(command.guild_id, command.player_id, "deposit_to_guild_bank")
             membership = guild.get_member(player_id)
             if membership is None or not membership.can_deposit_to_bank():
-                raise GuildAccessDeniedException(
-                    command.guild_id, command.player_id, "deposit_to_guild_bank"
-                )
+                raise GuildAccessDeniedException(command.guild_id, command.player_id, "deposit_to_guild_bank")
             if command.amount <= 0:
                 raise GuildCommandException(
                     "入金額は正の整数である必要があります",
@@ -330,9 +312,7 @@ class GuildCommandService:
                 data={"guild_id": command.guild_id, "amount": command.amount},
             )
 
-    def withdraw_from_guild_bank(
-        self, command: WithdrawFromGuildBankCommand
-    ) -> GuildCommandResultDto:
+    def withdraw_from_guild_bank(self, command: WithdrawFromGuildBankCommand) -> GuildCommandResultDto:
         """ギルド金庫から出金する（オフィサー以上のみ）。金庫から差し引き、プレイヤーに付与する。"""
         return self._execute_with_error_handling(
             operation=lambda: self._withdraw_from_guild_bank_impl(command),
@@ -343,31 +323,21 @@ class GuildCommandService:
             },
         )
 
-    def _withdraw_from_guild_bank_impl(
-        self, command: WithdrawFromGuildBankCommand
-    ) -> GuildCommandResultDto:
+    def _withdraw_from_guild_bank_impl(self, command: WithdrawFromGuildBankCommand) -> GuildCommandResultDto:
         with self._unit_of_work:
             guild_id = GuildId(command.guild_id)
             guild = self._guild_repository.find_by_id(guild_id)
             if guild is None:
-                raise GuildNotFoundForCommandException(
-                    command.guild_id, "withdraw_from_guild_bank"
-                )
+                raise GuildNotFoundForCommandException(command.guild_id, "withdraw_from_guild_bank")
             bank = self._guild_bank_repository.find_by_id(guild_id)
             if bank is None:
-                raise GuildBankNotFoundForCommandException(
-                    command.guild_id, "withdraw_from_guild_bank"
-                )
+                raise GuildBankNotFoundForCommandException(command.guild_id, "withdraw_from_guild_bank")
             player_id = PlayerId(command.player_id)
             membership = guild.get_member(player_id)
             if membership is None:
-                raise GuildAccessDeniedException(
-                    command.guild_id, command.player_id, "withdraw_from_guild_bank"
-                )
+                raise GuildAccessDeniedException(command.guild_id, command.player_id, "withdraw_from_guild_bank")
             if not membership.can_withdraw_from_bank():
-                raise GuildAccessDeniedException(
-                    command.guild_id, command.player_id, "withdraw_from_guild_bank"
-                )
+                raise GuildAccessDeniedException(command.guild_id, command.player_id, "withdraw_from_guild_bank")
             if command.amount <= 0:
                 raise GuildCommandException(
                     "出金額は正の整数である必要があります",
@@ -375,9 +345,7 @@ class GuildCommandService:
                     guild_id=command.guild_id,
                 )
             if command.amount > bank.gold.value:
-                raise InsufficientGuildBankBalanceForCommandException(
-                    command.guild_id, command.amount, bank.gold.value
-                )
+                raise InsufficientGuildBankBalanceForCommandException(command.guild_id, command.amount, bank.gold.value)
             player_status = self._player_status_repository.find_by_id(player_id)
             if player_status is None:
                 raise GuildCommandException(
@@ -412,16 +380,12 @@ class GuildCommandService:
             },
         )
 
-    def _disband_guild_impl(
-        self, command: DisbandGuildCommand
-    ) -> GuildCommandResultDto:
+    def _disband_guild_impl(self, command: DisbandGuildCommand) -> GuildCommandResultDto:
         with self._unit_of_work:
             guild_id = GuildId(command.guild_id)
             guild = self._guild_repository.find_by_id(guild_id)
             if guild is None:
-                raise GuildNotFoundForCommandException(
-                    command.guild_id, "disband_guild"
-                )
+                raise GuildNotFoundForCommandException(command.guild_id, "disband_guild")
             player_id = PlayerId(command.player_id)
             guild.disband(player_id)
 

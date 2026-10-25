@@ -177,8 +177,6 @@ def _make_context() -> ToolRuntimeContextDto:
 
 
 class TestDefaultToolArgumentResolver:
-
-
     def test_resolve_whisper_target_label(self):
         """Issue #264 後続: 統合された speech tool で channel=whisper を解決する。"""
         resolver = DefaultToolArgumentResolver()
@@ -192,7 +190,6 @@ class TestDefaultToolArgumentResolver:
         assert result["target_player_id"] == 2
         assert result["content"] == "こんにちは"
         assert result["channel"] == SpeechChannel.WHISPER
-
 
     def test_resolve_say_sets_say_channel(self):
         """Issue #264 後続: channel=say を解決すると SpeechChannel.SAY が入る。"""
@@ -219,7 +216,6 @@ class TestDefaultToolArgumentResolver:
 
         assert result["content"] == "聞こえるか！"
         assert result["channel"] == SpeechChannel.SHOUT
-
 
     def test_resolve_whisper_non_player_label_raises(self):
         """channel=whisper で target_label が non-player なら INVALID_TARGET_KIND。"""
@@ -349,7 +345,9 @@ class TestTheLegacyResolverNoLongerClaimsTheTradeNames:
         """旧 resolver は trade_accept / trade_decline を解決せず、次へ譲る。"""
         assert (
             GuildShopTradeArgumentResolver().resolve_args(
-                tool_name, {"trade_ref": "r_trade_x"}, _make_context(),
+                tool_name,
+                {"trade_ref": "r_trade_x"},
+                _make_context(),
             )
             is None
         )
@@ -361,7 +359,9 @@ class TestTheLegacyResolverNoLongerClaimsTheTradeNames:
         ことを固定する。
         """
         assert GuildShopTradeArgumentResolver().resolve_args(
-            TOOL_NAME_TRADE_CANCEL, {"trade_ref": "  r_trade_x  "}, _make_context(),
+            TOOL_NAME_TRADE_CANCEL,
+            {"trade_ref": "  r_trade_x  "},
+            _make_context(),
         ) == {"trade_ref": "r_trade_x"}
 
 

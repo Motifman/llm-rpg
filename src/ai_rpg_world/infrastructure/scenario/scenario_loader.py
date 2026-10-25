@@ -159,9 +159,7 @@ class ScenarioLoader:
         with open(path, encoding="utf-8") as f:
             raw = json.load(f)
         with declaring(f"{path}:"):
-            return self.load_from_dict(
-                raw, random_seed=random_seed, round_number=round_number
-            )
+            return self.load_from_dict(raw, random_seed=random_seed, round_number=round_number)
 
     def load_from_dict(
         self,
@@ -173,8 +171,7 @@ class ScenarioLoader:
         version = raw.get("scenario_format_version")
         if version not in SUPPORTED_FORMAT_VERSIONS:
             raise ScenarioLoadError(
-                f"Unsupported scenario_format_version: {version!r}. "
-                f"Supported: {SUPPORTED_FORMAT_VERSIONS}"
+                f"Unsupported scenario_format_version: {version!r}. Supported: {SUPPORTED_FORMAT_VERSIONS}"
             )
         if "outcome_resolution" in raw:
             raise ScenarioLoadError(
@@ -182,9 +179,7 @@ class ScenarioLoader:
                 "player_outcome_rules / game_end_conditions.end / needs を"
                 "それぞれ宣言してください"
             )
-        raw, round_assignments = apply_round_assignment(
-            raw, random_seed=random_seed, round_number=round_number
-        )
+        raw, round_assignments = apply_round_assignment(raw, random_seed=random_seed, round_number=round_number)
         mapper = ScenarioIdMapper()
 
         metadata = parse_metadata(raw["metadata"])
@@ -194,9 +189,7 @@ class ScenarioLoader:
         # **効果を読むより先に読む。** 「変えられないと宣言した属性を書く
         # 効果」を落とす検査が、効果をパースする側に要る。後ろに置くと、
         # 効果を読み終えたあとに宣言が届くので検査が空振りする。
-        player_attribute_specs = parse_player_attribute_specs(
-            raw.get("player_attributes")
-        )
+        player_attribute_specs = parse_player_attribute_specs(raw.get("player_attributes"))
         item_defs = parse_item_specs(raw.get("item_specs", []), mapper)
         # PR #1: 動的 loot table を先にパース (effect parameter で
         # "loot_table" → id 解決するため、spots/effects のパース時点で
@@ -210,9 +203,7 @@ class ScenarioLoader:
         graph, interiors = parse_spots_and_graph(
             raw,
             mapper,
-            remote_recorded_tick_keys=remote_recorded_tick_state_keys(
-                raw.get("item_specs", []), mapper
-            ),
+            remote_recorded_tick_keys=remote_recorded_tick_state_keys(raw.get("item_specs", []), mapper),
             player_attribute_specs=player_attribute_specs,
         )
         areas = parse_areas(raw.get("areas", []), raw.get("spots", []))
@@ -230,9 +221,7 @@ class ScenarioLoader:
         # 商人は spot と item_spec の両方を参照するので、どちらの登録も
         # 終わったこの時点で解析する。
         merchants = parse_merchants(raw.get("merchants"), mapper)
-        mutually_known_roles = parse_mutually_known_roles(
-            raw.get("mutually_known_roles"), players
-        )
+        mutually_known_roles = parse_mutually_known_roles(raw.get("mutually_known_roles"), players)
         role_personas = parse_role_personas(raw.get("role_personas"), players)
         teams = parse_teams(raw.get("teams"), players, mapper)
         raw_end_conditions = raw.get("game_end_conditions", {})
@@ -242,12 +231,8 @@ class ScenarioLoader:
                 "置けません。勝ちは teams[].win に、どのチームも勝たない終わりは"
                 " game_end_conditions.end に書いてください"
             )
-        win_conds = parse_end_conditions(
-            raw_end_conditions.get("win", []), mapper, section="win"
-        )
-        lose_conds = parse_end_conditions(
-            raw_end_conditions.get("lose", []), mapper, section="lose"
-        )
+        win_conds = parse_end_conditions(raw_end_conditions.get("win", []), mapper, section="win")
+        lose_conds = parse_end_conditions(raw_end_conditions.get("lose", []), mapper, section="lose")
         end_conds = parse_end_conditions(
             raw_end_conditions.get("end", []),
             mapper,
@@ -277,20 +262,24 @@ class ScenarioLoader:
             player_attribute_specs=player_attribute_specs,
         )
         player_outcome_rules = parse_player_outcome_rules(
-            raw.get("player_outcome_rules", []), mapper,
+            raw.get("player_outcome_rules", []),
+            mapper,
         )
         reject_unreachable_team_outcomes(teams, player_outcome_rules)
         needs_config = parse_needs_config(raw.get("needs"))
         weather_config = parse_weather_config(raw.get("environment", {}))
         day_night_config = parse_day_night_config(raw.get("environment", {}))
         monster_templates, monster_placements = parse_monsters_block(
-            raw.get("monsters"), mapper,
+            raw.get("monsters"),
+            mapper,
         )
         reactive_bindings = parse_reactive_passage_bindings(
-            raw.get("reactive_bindings", {}), mapper,
+            raw.get("reactive_bindings", {}),
+            mapper,
         )
         reactive_object_bindings = parse_reactive_object_state_bindings(
-            raw.get("reactive_bindings", {}), mapper,
+            raw.get("reactive_bindings", {}),
+            mapper,
         )
         player_interactions = parse_player_interactions(
             raw.get("player_interactions", []),
@@ -309,7 +298,11 @@ class ScenarioLoader:
         public_sns_push_budget_chars = raw.get("public_sns_push_budget_chars", 6000)
         if not isinstance(public_sns_enabled, bool):
             raise ScenarioLoadError("public_sns_enabled は真偽値が必要です")
-        if isinstance(public_sns_push_budget_chars, bool) or not isinstance(public_sns_push_budget_chars, int) or not 512 <= public_sns_push_budget_chars <= 24000:
+        if (
+            isinstance(public_sns_push_budget_chars, bool)
+            or not isinstance(public_sns_push_budget_chars, int)
+            or not 512 <= public_sns_push_budget_chars <= 24000
+        ):
             raise ScenarioLoadError("public_sns_push_budget_chars は512以上24000以下の整数が必要です")
         market = parse_market(raw, mapper, merchants)
         departed_agents_enabled = parse_departed_agents_enabled(raw)

@@ -1,4 +1,3 @@
-
 from typing import Any
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
@@ -62,7 +61,7 @@ class UserAggregate(AggregateRoot):
     def identity_token(self) -> str:
         """整数の採番や表示名と独立した、作成時から変わらない識別子。"""
         return self._identity_token.value
-    
+
     @classmethod
     def create_new_user(cls, user_id: UserId, user_name: str, display_name: str, bio: str) -> "UserAggregate":
         """新しいユーザーを作成"""
@@ -74,28 +73,34 @@ class UserAggregate(AggregateRoot):
             user_id=user_id,
             user_name=user_name,
             display_name=display_name,
-            bio=bio
+            bio=bio,
         )
-        user_aggregate = cls(user_id=user_id, sns_user=sns_user, follow_relationships=[], block_relationships=[], subscribe_relationships=[])
+        user_aggregate = cls(
+            user_id=user_id,
+            sns_user=sns_user,
+            follow_relationships=[],
+            block_relationships=[],
+            subscribe_relationships=[],
+        )
         user_aggregate.add_event(event)
         return user_aggregate
-    
+
     @property
     def user_id(self) -> UserId:
         return self._user_id
-    
+
     @property
     def sns_user(self) -> SnsUser:
         return self._sns_user
-    
+
     @property
     def follow_relationships(self) -> list[FollowRelationShip]:
         return self._follow_relationships
-    
+
     @property
     def block_relationships(self) -> list[BlockRelationShip]:
         return self._block_relationships
-    
+
     @property
     def subscribe_relationships(self) -> list[SubscribeRelationShip]:
         return self._subscribe_relationships
@@ -104,8 +109,14 @@ class UserAggregate(AggregateRoot):
     def profile(self) -> UserProfile:
         """ユーザープロファイル（利便性のために追加）"""
         return self._sns_user.user_profile
-        
-    def follow(self, followee_user_id: UserId, *, followee_identity_token: str | None = None, execution_provenance: dict[str, object] | None = None) -> None:
+
+    def follow(
+        self,
+        followee_user_id: UserId,
+        *,
+        followee_identity_token: str | None = None,
+        execution_provenance: dict[str, object] | None = None,
+    ) -> None:
         """ユーザーをフォロー"""
         # 自分自身をフォローしようとしていないかチェック
         if self._user_id == followee_user_id:
@@ -113,7 +124,9 @@ class UserAggregate(AggregateRoot):
 
         if self.is_blocked(followee_user_id):
             raise CannotFollowBlockedUserException(int(self._user_id), int(followee_user_id))
-        self._follow_relationships.append(FollowRelationShip(follower_user_id=self._user_id, followee_user_id=followee_user_id))
+        self._follow_relationships.append(
+            FollowRelationShip(follower_user_id=self._user_id, followee_user_id=followee_user_id)
+        )
         event = SnsUserFollowedEvent.create(
             aggregate_id=int(self._user_id),
             aggregate_type="UserAggregate",
@@ -134,12 +147,14 @@ class UserAggregate(AggregateRoot):
 
         if not self.is_following(followee_user_id):
             raise CannotUnfollowNotFollowedUserException(int(self._user_id), int(followee_user_id))
-        self._follow_relationships = [follow for follow in self._follow_relationships if follow.followee_user_id != followee_user_id]
+        self._follow_relationships = [
+            follow for follow in self._follow_relationships if follow.followee_user_id != followee_user_id
+        ]
         event = SnsUserUnfollowedEvent.create(
             aggregate_id=self._user_id,
             aggregate_type="UserAggregate",
             follower_user_id=self._user_id,
-            followee_user_id=followee_user_id
+            followee_user_id=followee_user_id,
         )
         self.add_event(event)
 
@@ -151,7 +166,9 @@ class UserAggregate(AggregateRoot):
 
         if self.is_blocked(blocked_user_id):
             raise CannotBlockAlreadyBlockedUserException(int(self._user_id), int(blocked_user_id))
-        self._block_relationships.append(BlockRelationShip(blocker_user_id=self._user_id, blocked_user_id=blocked_user_id))
+        self._block_relationships.append(
+            BlockRelationShip(blocker_user_id=self._user_id, blocked_user_id=blocked_user_id)
+        )
 
         # 既にフォローしている場合のみフォロー解除
         if self.is_following(blocked_user_id):
@@ -165,7 +182,7 @@ class UserAggregate(AggregateRoot):
             aggregate_id=self._user_id,
             aggregate_type="UserAggregate",
             blocker_user_id=self._user_id,
-            blocked_user_id=blocked_user_id
+            blocked_user_id=blocked_user_id,
         )
         self.add_event(event)
 
@@ -177,12 +194,14 @@ class UserAggregate(AggregateRoot):
 
         if not self.is_blocked(blocked_user_id):
             raise CannotUnblockNotBlockedUserException(int(self._user_id), int(blocked_user_id))
-        self._block_relationships = [block for block in self._block_relationships if block.blocked_user_id != blocked_user_id]
+        self._block_relationships = [
+            block for block in self._block_relationships if block.blocked_user_id != blocked_user_id
+        ]
         event = SnsUserUnblockedEvent.create(
             aggregate_id=self._user_id,
             aggregate_type="UserAggregate",
             blocker_user_id=self._user_id,
-            blocked_user_id=blocked_user_id
+            blocked_user_id=blocked_user_id,
         )
         self.add_event(event)
 
@@ -198,7 +217,9 @@ class UserAggregate(AggregateRoot):
 
         if self.is_subscribed(subscribed_user_id):
             raise CannotSubscribeAlreadySubscribedUserException(int(self._user_id), int(subscribed_user_id))
-        self._subscribe_relationships.append(SubscribeRelationShip(subscriber_user_id=self._user_id, subscribed_user_id=subscribed_user_id))
+        self._subscribe_relationships.append(
+            SubscribeRelationShip(subscriber_user_id=self._user_id, subscribed_user_id=subscribed_user_id)
+        )
         event = SnsUserSubscribedEvent.create(
             aggregate_id=self._user_id,
             aggregate_type="UserAggregate",
@@ -216,12 +237,16 @@ class UserAggregate(AggregateRoot):
 
         if not self.is_subscribed(subscribed_user_id):
             raise CannotUnsubscribeNotSubscribedUserException(int(self._user_id), int(subscribed_user_id))
-        self._subscribe_relationships = [subscribe for subscribe in self._subscribe_relationships if subscribe.subscribed_user_id != subscribed_user_id]
+        self._subscribe_relationships = [
+            subscribe
+            for subscribe in self._subscribe_relationships
+            if subscribe.subscribed_user_id != subscribed_user_id
+        ]
         event = SnsUserUnsubscribedEvent.create(
             aggregate_id=self._user_id,
             aggregate_type="UserAggregate",
             subscriber_user_id=self._user_id,
-            subscribed_user_id=subscribed_user_id
+            subscribed_user_id=subscribed_user_id,
         )
         self.add_event(event)
 
@@ -278,6 +303,6 @@ class UserAggregate(AggregateRoot):
             aggregate_type="UserAggregate",
             user_id=self._user_id,
             new_bio=new_bio,
-            new_display_name=new_display_name
+            new_display_name=new_display_name,
         )
         self.add_event(event)

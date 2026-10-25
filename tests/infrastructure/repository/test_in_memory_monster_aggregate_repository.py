@@ -57,9 +57,7 @@ class TestInMemoryMonsterAggregateRepository:
         assert isinstance(id1, MonsterId)
         assert isinstance(id2, MonsterId)
 
-    def test_generate_world_object_id_for_npc_returns_unique_ids(
-        self, repo: InMemoryMonsterAggregateRepository
-    ):
+    def test_generate_world_object_id_for_npc_returns_unique_ids(self, repo: InMemoryMonsterAggregateRepository):
         """generate_world_object_id_for_npc は一意の ID を返す"""
         id1 = repo.generate_world_object_id_for_npc()
         id2 = repo.generate_world_object_id_for_npc()
@@ -72,31 +70,17 @@ class TestInMemoryMonsterAggregateRepository:
         result = repo.find_by_spot_id(SpotId(1))
         assert result == []
 
-    def test_find_by_spot_id_returns_monsters_for_spot(
-        self, repo: InMemoryMonsterAggregateRepository
-    ):
+    def test_find_by_spot_id_returns_monsters_for_spot(self, repo: InMemoryMonsterAggregateRepository):
         """find_by_spot_id は指定スポットに紐づくモンスターのみ返す"""
         template = _sample_template()
-        loadout = SkillLoadoutAggregate.create(
-            SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10
-        )
-        m1 = MonsterAggregate.create(
-            MonsterId(1), template, WorldObjectId(1001), skill_loadout=loadout
-        )
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10)
+        m1 = MonsterAggregate.create(MonsterId(1), template, WorldObjectId(1001), skill_loadout=loadout)
         m1.spawn(Coordinate(1, 1, 0), SpotId(1), WorldTick(0))
-        loadout2 = SkillLoadoutAggregate.create(
-            SkillLoadoutId(1002), 1002, normal_capacity=10, awakened_capacity=10
-        )
-        m2 = MonsterAggregate.create(
-            MonsterId(2), template, WorldObjectId(1002), skill_loadout=loadout2
-        )
+        loadout2 = SkillLoadoutAggregate.create(SkillLoadoutId(1002), 1002, normal_capacity=10, awakened_capacity=10)
+        m2 = MonsterAggregate.create(MonsterId(2), template, WorldObjectId(1002), skill_loadout=loadout2)
         m2.spawn(Coordinate(2, 2, 0), SpotId(1), WorldTick(0))
-        loadout3 = SkillLoadoutAggregate.create(
-            SkillLoadoutId(1003), 1003, normal_capacity=10, awakened_capacity=10
-        )
-        m3 = MonsterAggregate.create(
-            MonsterId(3), template, WorldObjectId(1003), skill_loadout=loadout3
-        )
+        loadout3 = SkillLoadoutAggregate.create(SkillLoadoutId(1003), 1003, normal_capacity=10, awakened_capacity=10)
+        m3 = MonsterAggregate.create(MonsterId(3), template, WorldObjectId(1003), skill_loadout=loadout3)
         m3.spawn(Coordinate(3, 3, 0), SpotId(2), WorldTick(0))
         repo.save(m1)
         repo.save(m2)
@@ -109,17 +93,11 @@ class TestInMemoryMonsterAggregateRepository:
         assert spot1_ids == {MonsterId(1), MonsterId(2)}
         assert result_spot2[0].monster_id == MonsterId(3)
 
-    def test_find_by_spot_id_includes_dead_monsters(
-        self, repo: InMemoryMonsterAggregateRepository
-    ):
+    def test_find_by_spot_id_includes_dead_monsters(self, repo: InMemoryMonsterAggregateRepository):
         """find_by_spot_id は DEAD のモンスターも含む"""
         template = _sample_template()
-        loadout = SkillLoadoutAggregate.create(
-            SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10
-        )
-        m = MonsterAggregate.create(
-            MonsterId(1), template, WorldObjectId(1001), skill_loadout=loadout
-        )
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10)
+        m = MonsterAggregate.create(MonsterId(1), template, WorldObjectId(1001), skill_loadout=loadout)
         m.spawn(Coordinate(1, 1, 0), SpotId(1), WorldTick(0))
         m.apply_damage(100, WorldTick(10))
         repo.save(m)
@@ -127,19 +105,13 @@ class TestInMemoryMonsterAggregateRepository:
         assert len(result) == 1
         assert result[0].status == MonsterStatusEnum.DEAD
 
-    def test_save_then_find_by_id_returns_same_aggregate(
-        self, repo: InMemoryMonsterAggregateRepository
-    ):
+    def test_save_then_find_by_id_returns_same_aggregate(self, repo: InMemoryMonsterAggregateRepository):
         """save 後に find_by_id で同一集約を取得できる"""
         template = _sample_template()
-        loadout = SkillLoadoutAggregate.create(
-            SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10
-        )
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10)
         monster_id = MonsterId(1)
         world_object_id = WorldObjectId(1001)
-        m = MonsterAggregate.create(
-            monster_id, template, world_object_id, skill_loadout=loadout
-        )
+        m = MonsterAggregate.create(monster_id, template, world_object_id, skill_loadout=loadout)
         m.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
         repo.save(m)
         found = repo.find_by_id(monster_id)
@@ -149,19 +121,13 @@ class TestInMemoryMonsterAggregateRepository:
         assert found.status == MonsterStatusEnum.ALIVE
         assert found.coordinate == Coordinate(0, 0, 0)
 
-    def test_save_then_find_by_world_object_id_returns_same_aggregate(
-        self, repo: InMemoryMonsterAggregateRepository
-    ):
+    def test_save_then_find_by_world_object_id_returns_same_aggregate(self, repo: InMemoryMonsterAggregateRepository):
         """save 後に find_by_world_object_id で同一集約を取得できる"""
         template = _sample_template()
-        loadout = SkillLoadoutAggregate.create(
-            SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10
-        )
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10)
         monster_id = MonsterId(1)
         world_object_id = WorldObjectId(1001)
-        m = MonsterAggregate.create(
-            monster_id, template, world_object_id, skill_loadout=loadout
-        )
+        m = MonsterAggregate.create(monster_id, template, world_object_id, skill_loadout=loadout)
         m.spawn(Coordinate(2, 3, 0), SpotId(1), WorldTick(0))
         repo.save(m)
         found = repo.find_by_world_object_id(world_object_id)

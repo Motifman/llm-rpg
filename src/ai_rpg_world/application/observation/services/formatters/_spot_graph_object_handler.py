@@ -55,7 +55,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
     """オブジェクト/接続/状態変化系の formatter。"""
 
     def format(
-        self, event: Any, recipient_player_id: PlayerId,
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
     ) -> ObservationOutput | None:
         if isinstance(event, SpotObjectInteractedEvent):
             return self._format_object_interacted(event, recipient_player_id)
@@ -75,7 +77,8 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_connection_destroyed(event, recipient_player_id)
         if isinstance(event, SpotPlayerStateChangedInSpotEvent):
             return self._format_player_state_changed_in_spot(
-                event, recipient_player_id,
+                event,
+                recipient_player_id,
             )
         if isinstance(event, PlayerDroppedItemEvent):
             return self._format_item_dropped(event, recipient_player_id)
@@ -121,9 +124,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
     )
 
     def _meeting_start_suffix(self, recipient_id: PlayerId) -> str:
-        if self._context.is_departed(recipient_id) and not (
-            ToolExposure.offers_to_departed("vote", in_meeting=True)
-        ):
+        if self._context.is_departed(recipient_id) and not (ToolExposure.offers_to_departed("vote", in_meeting=True)):
             return self._MEETING_START_SUFFIX_FOR_NON_VOTING_DEPARTED
         return self._MEETING_START_SUFFIX
 
@@ -165,7 +166,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
     }
 
     def _format_meeting_vote_cast(
-        self, event: "MeetingVoteCastEvent", recipient_id: PlayerId,
+        self,
+        event: "MeetingVoteCastEvent",
+        recipient_id: PlayerId,
     ) -> ObservationOutput:
         """締切前の投票進捗を、投票先を伏せて届ける。"""
         remaining = int(event.remaining_voter_count)
@@ -185,7 +188,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_meeting_vote_resolved(
-        self, event: "MeetingVoteResolvedEvent", recipient_id: PlayerId,
+        self,
+        event: "MeetingVoteResolvedEvent",
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """投票の集計を全員に届ける。
 
@@ -196,9 +201,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         誰が誰に入れたかまで出すのは、投票行動そのものが次の会議の材料に
         なるため。
         """
-        tally = "、".join(
-            f"{name} {n} 票" for name, n in event.counts_by_display_name.items()
-        )
+        tally = "、".join(f"{name} {n} 票" for name, n in event.counts_by_display_name.items())
         parts = ["投票が終わった"]
         if tally:
             parts.append(f"{tally}")
@@ -221,11 +224,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             tail = "名指しの票はなく、誰も追放されなかった。"
         else:
             top = max(event.counts_by_display_name.values())
-            leaders = [
-                name
-                for name, count in event.counts_by_display_name.items()
-                if count == top
-            ]
+            leaders = [name for name, count in event.counts_by_display_name.items() if count == top]
             if len(leaders) > 1:
                 tail = "最多票が同数に割れ、誰も追放されなかった。"
             elif event.skip_count >= top:
@@ -247,7 +246,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_game_phase_changed(
-        self, event: "GamePhaseChangedEvent", recipient_id: PlayerId,
+        self,
+        event: "GamePhaseChangedEvent",
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """世界のモード変化を全員に届ける。
 
@@ -289,7 +290,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_time_of_day_changed(
-        self, event: TimeOfDayChangedEvent, recipient_id: PlayerId,
+        self,
+        event: TimeOfDayChangedEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """昼夜のフェーズが変化したとき、全プレイヤーに「夕暮れになった」等を届ける。
 
@@ -311,7 +314,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_item_given(
-        self, event: PlayerGaveItemEvent, recipient_id: PlayerId,
+        self,
+        event: PlayerGaveItemEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """「ミラが流木をトマに渡した」を同室の他プレイヤー (受け手含む) に届ける。
 
@@ -346,7 +351,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_player_trade(
-        self, event: PlayerTradeOfferEvent, recipient_id: PlayerId,
+        self,
+        event: PlayerTradeOfferEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """人同士の取引の動きを、立場に応じた文で届ける。
 
@@ -360,25 +367,17 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         """
         actor = self._resolve_entity_name(event.entity_id)
         partner = self._resolve_entity_name(event.partner_entity_id)
-        is_party = self._is_self(event.entity_id, recipient_id) or self._is_self(
-            event.partner_entity_id, recipient_id
-        )
+        is_party = self._is_self(event.entity_id, recipient_id) or self._is_self(event.partner_entity_id, recipient_id)
         if event.kind in ("declined", "expired") and not is_party:
             return None
         if event.kind == "offered":
             if self._is_self(event.entity_id, recipient_id):
                 return None
-            prose = (
-                f"{actor}が{partner}に取引を持ちかけた "
-                f"({event.gives_text} ⇄ {event.asks_text})。"
-            )
+            prose = f"{actor}が{partner}に取引を持ちかけた ({event.gives_text} ⇄ {event.asks_text})。"
         elif event.kind == "accepted":
             if self._is_self(event.entity_id, recipient_id):
                 return None
-            prose = (
-                f"{actor}と{partner}の取引が成立した "
-                f"({event.gives_text} ⇄ {event.asks_text})。"
-            )
+            prose = f"{actor}と{partner}の取引が成立した ({event.gives_text} ⇄ {event.asks_text})。"
         elif event.kind == "declined":
             if self._is_self(event.entity_id, recipient_id):
                 return None
@@ -388,9 +387,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             # 明示して組む。** entity_id は返事をしなかった側 (target) なので、
             # そのまま actor として書くと「持ちかけた人」が入れ替わる。
             offerer_name = (
-                self._resolve_entity_name(event.offerer_entity_id)
-                if event.offerer_entity_id is not None
-                else partner
+                self._resolve_entity_name(event.offerer_entity_id) if event.offerer_entity_id is not None else partner
             )
             offerer_is_recipient = event.offerer_entity_id is not None and self._is_self(
                 event.offerer_entity_id, recipient_id
@@ -413,14 +410,13 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             # 持ちかけは**持ちかけられた本人の**手番だけを起こす (会話と同じ)。
             # 第三者まで起こすと、交渉のたびに同席者全員が動いて行動密度が
             # 跳ね上がり、しかも起こされた側には打つ手が無い。
-            schedules_turn=(
-                event.kind == "offered"
-                and self._is_self(event.partner_entity_id, recipient_id)
-            ),
+            schedules_turn=(event.kind == "offered" and self._is_self(event.partner_entity_id, recipient_id)),
         )
 
     def _format_delivery_left_at_board(
-        self, event: MarketDeliveryLeftAtBoardEvent, recipient_id: PlayerId,
+        self,
+        event: MarketDeliveryLeftAtBoardEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """買い注文で届いた品を受け取れなかったことを、買い手へ届ける。
 
@@ -454,7 +450,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_item_overflowed(
-        self, event: PlayerOverflowedItemEvent, recipient_id: PlayerId,
+        self,
+        event: PlayerOverflowedItemEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """持ちきれずに落ちたことを、本人にも同席者にも届ける。
 
@@ -468,10 +466,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         """
         actor = self._resolve_entity_name(event.entity_id)
         if self._is_self(event.entity_id, recipient_id):
-            prose = (
-                f"持ちきれず、{event.item_name}を足元に取り落とした。"
-                f"拾い直すには先に何かを手放す必要がある。"
-            )
+            prose = f"持ちきれず、{event.item_name}を足元に取り落とした。拾い直すには先に何かを手放す必要がある。"
         else:
             prose = f"{actor}が持ちきれず、{event.item_name}を取り落とした。"
         return ObservationOutput(
@@ -490,7 +485,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_market_activity(
-        self, event: MarketBoardActivityEvent, recipient_id: PlayerId,
+        self,
+        event: MarketBoardActivityEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """板の上の動きを、読む人の立場に応じた文で届ける。
 
@@ -504,10 +501,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         actor = self._resolve_entity_name(event.entity_id)
         item = event.item_name
         kind = event.kind
-        is_owner = (
-            event.notify_entity_id is not None
-            and self._is_self(event.notify_entity_id, recipient_id)
-        )
+        is_owner = event.notify_entity_id is not None and self._is_self(event.notify_entity_id, recipient_id)
 
         if kind == "listed":
             if self._is_self(event.entity_id, recipient_id):
@@ -515,25 +509,17 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             # **売りと買いで文を分ける。** どちらも「掲示板に出した」だが、
             # 読む側にとっては真逆の機会になる (買える / 売れる)。
             prose = (
-                f"{actor}が掲示板に{item}を{event.quantity}つ、"
-                f"1つ{event.unit_price}Gで買うと出した。"
+                f"{actor}が掲示板に{item}を{event.quantity}つ、1つ{event.unit_price}Gで買うと出した。"
                 if event.side == "buy"
-                else f"{actor}が掲示板に{item}を{event.quantity}つ、"
-                f"1つ{event.unit_price}Gで出した。"
+                else f"{actor}が掲示板に{item}を{event.quantity}つ、1つ{event.unit_price}Gで出した。"
             )
         elif kind == "repriced":
             if self._is_self(event.entity_id, recipient_id):
                 return None
             direction = (
-                "下げた"
-                if event.old_unit_price is not None
-                and event.unit_price < event.old_unit_price
-                else "上げた"
+                "下げた" if event.old_unit_price is not None and event.unit_price < event.old_unit_price else "上げた"
             )
-            prose = (
-                f"{actor}が{item}の値を 1 つ {event.old_unit_price}G から "
-                f"{event.unit_price}G へ{direction}。"
-            )
+            prose = f"{actor}が{item}の値を 1 つ {event.old_unit_price}G から {event.unit_price}G へ{direction}。"
         elif kind == "bought":
             seller = (
                 self._resolve_entity_name(event.counterparty_entity_id)
@@ -555,11 +541,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 if self._is_self(event.entity_id, recipient_id):
                     return None
                 prose = (
-                    f"{actor}が掲示板の{seller}の買い注文へ{item}を"
-                    f"{event.quantity}つ、1つ{event.unit_price}Gで売った。"
+                    f"{actor}が掲示板の{seller}の買い注文へ{item}を{event.quantity}つ、1つ{event.unit_price}Gで売った。"
                     if event.side == "buy"
-                    else f"{actor}が掲示板から{seller}の{item}を{event.quantity}つ、"
-                    f"1つ{event.unit_price}Gで買った。"
+                    else f"{actor}が掲示板から{seller}の{item}を{event.quantity}つ、1つ{event.unit_price}Gで買った。"
                 )
         elif kind == "cancelled":
             if self._is_self(event.entity_id, recipient_id):
@@ -567,10 +551,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             what = "買い注文" if event.side == "buy" else "出品"
             prose = f"{actor}が{item}の{what}を取り下げた。"
         elif kind == "expired_returned":
-            prose = (
-                f"掲示板に出していた{item}の期限が切れ、{event.quantity}つが"
-                f"手元に戻った。"
-            )
+            prose = f"掲示板に出していた{item}の期限が切れ、{event.quantity}つが手元に戻った。"
         else:  # expired_awaiting
             # **状態で文を分ける。** 手元に戻ったのか、板で引き取りを待って
             # いるのかで次の一手が違う (何もしなくてよい / 空けて引き取りに行く)。
@@ -603,7 +584,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _is_at_the_board(
-        self, event: MarketBoardActivityEvent, recipient_id: PlayerId,
+        self,
+        event: MarketBoardActivityEvent,
+        recipient_id: PlayerId,
     ) -> bool:
         """その人が、出来事の起きた場所に居るか。
 
@@ -616,7 +599,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return False
 
     def _format_merchant_trade(
-        self, event: PlayerTradedWithMerchantEvent, recipient_id: PlayerId,
+        self,
+        event: PlayerTradedWithMerchantEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """「ミラが商人グスタフからパンを 2 つ買った」を同席の第三者に届ける。
 
@@ -633,15 +618,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return None
         actor = self._resolve_entity_name(event.entity_id)
         if event.direction == "merchant_sell":
-            prose = (
-                f"{actor}が{event.merchant_name}に{event.item_name}を"
-                f"{event.quantity}つ売った。"
-            )
+            prose = f"{actor}が{event.merchant_name}に{event.item_name}を{event.quantity}つ売った。"
         else:
-            prose = (
-                f"{actor}が{event.merchant_name}から{event.item_name}を"
-                f"{event.quantity}つ買った。"
-            )
+            prose = f"{actor}が{event.merchant_name}から{event.item_name}を{event.quantity}つ買った。"
         structured: dict[str, Any] = {
             "type": "player_traded_with_merchant",
             "actor": actor,
@@ -659,7 +638,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_item_dropped(
-        self, event: PlayerDroppedItemEvent, recipient_id: PlayerId,
+        self,
+        event: PlayerDroppedItemEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """「ミラが流木を地面に置いた」を同室の他プレイヤーに観測として届ける。
 
@@ -685,7 +666,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_item_picked_up(
-        self, event: PlayerPickedUpItemEvent, recipient_id: PlayerId,
+        self,
+        event: PlayerPickedUpItemEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """「トマが流木を拾い上げた」を同室の他プレイヤーに観測として届ける。
 
@@ -711,14 +694,18 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_object_interacted(
-        self, event: SpotObjectInteractedEvent, recipient_id: PlayerId,
+        self,
+        event: SpotObjectInteractedEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         if self._is_self(event.entity_id, recipient_id):
             return None
         actor = self._resolve_entity_name(event.entity_id)
         obj_name = self._resolve_object_name(event.spot_id, event.object_id)
         prose, witness_source = self._format_object_interacted_prose(
-            event, actor=actor, obj_name=obj_name,
+            event,
+            actor=actor,
+            obj_name=obj_name,
         )
         structured: dict[str, Any] = {
             "type": "spot_object_interacted",
@@ -737,7 +724,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_player_interacted(
-        self, event: "PlayerInteractedWithPlayerEvent", recipient_id: PlayerId,
+        self,
+        event: "PlayerInteractedWithPlayerEvent",
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         """対人行為の目撃 / 被害の観測を作る。
 
@@ -754,29 +743,32 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         message = (event.witness_observation_message or "").strip()
         label = (event.action_display_label or "").strip()
         if message:
-            prose, source = self._render_player_witness_message(
-                message, actor=actor, target=target, action_display_label=label
-            ), "scenario"
+            prose, source = (
+                self._render_player_witness_message(message, actor=actor, target=target, action_display_label=label),
+                "scenario",
+            )
         elif label:
             prose, source = (
-                f"{actor}が{target}に「{label}」を行った。", "display_label",
+                f"{actor}が{target}に「{label}」を行った。",
+                "display_label",
             )
         else:
             prose, source = f"{actor}が{target}に何かをした。", "legacy"
         if is_target:
-            target_message = (
-                getattr(event, "target_observation_message", "") or ""
-            ).strip()
+            target_message = (getattr(event, "target_observation_message", "") or "").strip()
             if target_message:
                 # 対象専用の文面がある場合はそちらを使う。秘匿行為で
                 # 「誰にやられたか」を伏せるために、目撃者向けとは別に
                 # 書けるようにしてある (可視性の 3 軸目)。
-                prose, source = self._render_player_witness_message(
-                    target_message,
-                    actor=actor,
-                    target=target,
-                    action_display_label=label,
-                ), "scenario_target"
+                prose, source = (
+                    self._render_player_witness_message(
+                        target_message,
+                        actor=actor,
+                        target=target,
+                        action_display_label=label,
+                    ),
+                    "scenario_target",
+                )
             else:
                 # 対象本人には「誰かが自分に何かをした」と分かる形で届ける。
                 prose = f"{prose} (あなたが対象だった)"
@@ -801,7 +793,11 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     @staticmethod
     def _render_player_witness_message(
-        message: str, *, actor: str, target: str, action_display_label: str,
+        message: str,
+        *,
+        actor: str,
+        target: str,
+        action_display_label: str,
     ) -> str:
         """対人行為の目撃者文面に placeholder を展開する。"""
         if "{" not in message:
@@ -820,7 +816,11 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return message
 
     def _format_object_interacted_prose(
-        self, event: SpotObjectInteractedEvent, *, actor: str, obj_name: str,
+        self,
+        event: SpotObjectInteractedEvent,
+        *,
+        actor: str,
+        obj_name: str,
     ) -> tuple[str, str]:
         """成功時の目撃者 prose を scenario 宣言 → 表示ラベル → 従来文の順で作る。"""
         message = (event.witness_observation_message or "").strip()
@@ -840,7 +840,12 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         return f"{actor}が{obj_name}を操作した。", "legacy"
 
     def _render_witness_observation_message(
-        self, message: str, *, actor: str, obj_name: str, action_display_label: str,
+        self,
+        message: str,
+        *,
+        actor: str,
+        obj_name: str,
+        action_display_label: str,
     ) -> str:
         """scenario 宣言の目撃者文面に最小限の placeholder を展開する。"""
         if "{" not in message:
@@ -859,7 +864,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return message
 
     def _format_interaction_failed(
-        self, event: SpotObjectInteractionFailedEvent, recipient_id: PlayerId,
+        self,
+        event: SpotObjectInteractionFailedEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         # アクター本人にはツール結果として失敗が返るため、観測は他者にのみ。
         if self._is_self(event.entity_id, recipient_id):
@@ -891,11 +898,15 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             "failure_reason": reason,
         }
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social",
+            prose=prose,
+            structured=structured,
+            observation_category="social",
         )
 
     def _format_connection_changed(
-        self, event: ConnectionStateChangedEvent, recipient_id: PlayerId,
+        self,
+        event: ConnectionStateChangedEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         repo = self._context.spot_graph_repository
         conn_name = "通路"
@@ -915,9 +926,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         #   防御的に直接観測の prose にフォールバック
         recipient_spot = self._context.lookup_recipient_spot(recipient_id)
         is_direct = recipient_spot in (event.from_spot_id, event.to_spot_id)
-        is_neighbor = (
-            recipient_spot is not None and not is_direct
-        )
+        is_neighbor = recipient_spot is not None and not is_direct
         if is_neighbor:
             # 音だけ。「通行可能/不能」のような確定的な状態判断は本人が
             # 隣接 spot からでは知り得ないので、観測としては「音がした」止まり。
@@ -953,13 +962,12 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
 
     def _format_object_state_changed(
-        self, event: SpotObjectStateChangedEvent, recipient_id: PlayerId,
+        self,
+        event: SpotObjectStateChangedEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         # Phase 4-E: actor を念のため二重ガード (recipient strategy 側でも除外済み)。
-        if (
-            event.actor_entity_id is not None
-            and self._is_self(event.actor_entity_id, recipient_id)
-        ):
+        if event.actor_entity_id is not None and self._is_self(event.actor_entity_id, recipient_id):
             return None
         # 著者が narrative を提供したときだけ observation を出す。無ければ
         # silent (= 内部用語 "available", "lit" 等が LLM に漏れない)。
@@ -971,17 +979,12 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return None
         obj_name = self._resolve_object_name(event.spot_id, event.object_id)
         delta: tuple[StateDeltaEntry, ...] = (
-            tuple(event.state_delta)
-            if event.state_delta
-            else _derive_delta(event.old_state, event.new_state)
+            tuple(event.state_delta) if event.state_delta else _derive_delta(event.old_state, event.new_state)
         )
         structured: dict[str, Any] = {
             "type": "spot_object_state_changed",
             "object_name": obj_name,
-            "state_delta": [
-                {"key": d.key, "before": d.before, "after": d.after}
-                for d in delta
-            ],
+            "state_delta": [{"key": d.key, "before": d.before, "after": d.after} for d in delta],
         }
         return ObservationOutput(
             prose=narrative,
@@ -997,16 +1000,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
     ) -> ObservationOutput | None:
         """汎用 public effect の観測。kind で分岐してプロセを組む。"""
         # 二重ガード: actor 自身は除外
-        if (
-            event.actor_entity_id is not None
-            and self._is_self(event.actor_entity_id, recipient_id)
-        ):
+        if event.actor_entity_id is not None and self._is_self(event.actor_entity_id, recipient_id):
             return None
-        actor = (
-            self._resolve_entity_name(event.actor_entity_id)
-            if event.actor_entity_id is not None
-            else "誰か"
-        )
+        actor = self._resolve_entity_name(event.actor_entity_id) if event.actor_entity_id is not None else "誰か"
         delta_text = _format_delta_text(event.state_delta)
         kind = event.kind
         # kind 別のプロセ。ふさわしいものが無いときは description にフォールバック。
@@ -1015,25 +1011,13 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             # actor == 受傷者として扱う。第三者にダメージを与える spec が
             # 入った時点で event 側に target_entity_id を追加してプロセを
             # 切り替える必要がある。
-            prose = (
-                f"{actor}が{event.description}"
-                if event.description
-                else f"{actor}がダメージを受けた"
-            )
+            prose = f"{actor}が{event.description}" if event.description else f"{actor}がダメージを受けた"
             category: ObservationCategory = "social"
         elif kind == AppliedEffectKind.STATUS_EFFECT:
-            prose = (
-                f"{actor}に{event.description}が現れた"
-                if event.description
-                else f"{actor}に状態異常が現れた"
-            )
+            prose = f"{actor}に{event.description}が現れた" if event.description else f"{actor}に状態異常が現れた"
             category = "social"
         elif kind == AppliedEffectKind.SATISFY_NEED:
-            prose = (
-                f"{actor}が{event.description}"
-                if event.description
-                else f"{actor}が回復した様子だ"
-            )
+            prose = f"{actor}が{event.description}" if event.description else f"{actor}が回復した様子だ"
             category = "social"
         elif kind == AppliedEffectKind.ATMOSPHERE_UPDATE:
             # description は "スポット {id} の雰囲気が変化した" という汎用文字列
@@ -1070,10 +1054,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             "kind": kind.value,
             "actor_name": actor,
             "target_ref": event.target_ref,
-            "state_delta": [
-                {"key": d.key, "before": d.before, "after": d.after}
-                for d in event.state_delta
-            ],
+            "state_delta": [{"key": d.key, "before": d.before, "after": d.after} for d in event.state_delta],
         }
         return ObservationOutput(
             prose=prose,
@@ -1142,10 +1123,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         structured: dict[str, Any] = {
             "type": "spot_player_state_changed",
             "actor_name": actor,
-            "state_delta": [
-                {"key": d.key, "before": d.before, "after": d.after}
-                for d in event.state_delta
-            ],
+            "state_delta": [{"key": d.key, "before": d.before, "after": d.after} for d in event.state_delta],
         }
         return ObservationOutput(
             prose=prose,

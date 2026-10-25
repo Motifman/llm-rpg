@@ -21,12 +21,7 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
 
 # 勝敗条件も個人結果規則も宣言しない
 # 永続世界の参照シナリオ (U5 で追加)。
-_PERSISTENT_SCENARIO = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "persistent_world_demo.json"
-)
+_PERSISTENT_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "persistent_world_demo.json"
 
 
 def _create_runtime():
@@ -34,9 +29,7 @@ def _create_runtime():
         create_world_runtime,
     )
 
-    return create_world_runtime(
-        _PERSISTENT_SCENARIO, config=ResolvedLlmRuntimeConfig.for_tests()
-    )
+    return create_world_runtime(_PERSISTENT_SCENARIO, config=ResolvedLlmRuntimeConfig.for_tests())
 
 
 class TestPersistentWorldHasNoEndCondition:
@@ -79,13 +72,11 @@ class TestPersistentWorldHasNoEndCondition:
                 tokens = set(name.split("_"))
                 # game_end は 2 語複合のため、name に "game" と "end" が両方含まれるかも見る
                 if forbidden == "game_end":
-                    assert not (
-                        "game" in tokens and "end" in tokens
-                    ), f"config が勝敗概念 ({forbidden}) を持っている: {name}"
-                else:
-                    assert forbidden not in tokens, (
+                    assert not ("game" in tokens and "end" in tokens), (
                         f"config が勝敗概念 ({forbidden}) を持っている: {name}"
                     )
+                else:
+                    assert forbidden not in tokens, f"config が勝敗概念 ({forbidden}) を持っている: {name}"
 
 
 class TestPersistentWorldSystemPromptIsNeutral:
@@ -94,11 +85,7 @@ class TestPersistentWorldSystemPromptIsNeutral:
     def _system_prompt(self, runtime) -> str:
         player_id = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(player_id)
-        return "\n".join(
-            m.get("content", "")
-            for m in prompt.get("messages", [])
-            if m.get("role") == "system"
-        )
+        return "\n".join(m.get("content", "") for m in prompt.get("messages", []) if m.get("role") == "system")
 
     def test_no_escape_or_goal_framing_in_persistent_world(self) -> None:
         """勝敗のない永続世界では「脱出できない」「勝利条件 (最終目的)」が出ない。"""

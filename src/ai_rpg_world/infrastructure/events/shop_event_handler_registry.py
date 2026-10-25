@@ -23,18 +23,26 @@ class ShopEventHandlerRegistry:
     def register_command_handlers(self, registrar: CommandEventHandlerRegistrarPort) -> None:
         """既存のイベント対応を、確定の前後を保って共通基盤へ登録する。"""
         registrar.register_after_commit(
-            ShopCreatedEvent, self._shop_event_handler.handle_shop_created,
-            channel=DeliveryChannel.READ_MODEL, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            ShopCreatedEvent,
+            self._shop_event_handler.handle_shop_created,
+            channel=DeliveryChannel.READ_MODEL,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
         registrar.register_after_commit(
-            ShopItemListedEvent, self._shop_event_handler.handle_shop_item_listed,
-            channel=DeliveryChannel.READ_MODEL, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            ShopItemListedEvent,
+            self._shop_event_handler.handle_shop_item_listed,
+            channel=DeliveryChannel.READ_MODEL,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
         registrar.register_after_commit(
-            ShopItemUnlistedEvent, self._shop_event_handler.handle_shop_item_unlisted,
-            channel=DeliveryChannel.READ_MODEL, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            ShopItemUnlistedEvent,
+            self._shop_event_handler.handle_shop_item_unlisted,
+            channel=DeliveryChannel.READ_MODEL,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
         registrar.register_after_commit(
-            ShopItemPurchasedEvent, self._shop_event_handler.handle_shop_item_purchased,
-            channel=DeliveryChannel.READ_MODEL, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            ShopItemPurchasedEvent,
+            self._shop_event_handler.handle_shop_item_purchased,
+            channel=DeliveryChannel.READ_MODEL,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )

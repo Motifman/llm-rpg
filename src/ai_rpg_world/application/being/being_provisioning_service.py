@@ -53,15 +53,9 @@ class BeingProvisioningService:
         default_world_id: WorldId | None = None,
     ) -> None:
         if not isinstance(being_repository, BeingRepository):
-            raise TypeError(
-                "being_repository must be BeingRepository, "
-                f"got {type(being_repository).__name__}"
-            )
+            raise TypeError(f"being_repository must be BeingRepository, got {type(being_repository).__name__}")
         if default_world_id is not None and not isinstance(default_world_id, WorldId):
-            raise TypeError(
-                "default_world_id must be WorldId or None, "
-                f"got {type(default_world_id).__name__}"
-            )
+            raise TypeError(f"default_world_id must be WorldId or None, got {type(default_world_id).__name__}")
         self._repo = being_repository
         self._default_world_id = default_world_id or WorldId(1)
         self._resolver = BeingAttachmentResolver(being_repository)
@@ -84,18 +78,11 @@ class BeingProvisioningService:
         - 既存の同 BeingId が別 (world, player) に attach 中なら detach → 再 attach
         """
         if not isinstance(player_id, PlayerId):
-            raise TypeError(
-                f"player_id must be PlayerId, got {type(player_id).__name__}"
-            )
+            raise TypeError(f"player_id must be PlayerId, got {type(player_id).__name__}")
         if world_id is not None and not isinstance(world_id, WorldId):
-            raise TypeError(
-                f"world_id must be WorldId or None, got {type(world_id).__name__}"
-            )
+            raise TypeError(f"world_id must be WorldId or None, got {type(world_id).__name__}")
         if identity_hint is not None and not isinstance(identity_hint, BeingIdentity):
-            raise TypeError(
-                "identity_hint must be BeingIdentity or None, "
-                f"got {type(identity_hint).__name__}"
-            )
+            raise TypeError(f"identity_hint must be BeingIdentity or None, got {type(identity_hint).__name__}")
 
         target_world = world_id or self._default_world_id
 
@@ -116,9 +103,7 @@ class BeingProvisioningService:
         if existing_being is not None:
             if existing_being.is_attached:
                 existing_being.detach()
-            existing_being.attach(
-                BeingAttachment(world_id=target_world, player_id=player_id)
-            )
+            existing_being.attach(BeingAttachment(world_id=target_world, player_id=player_id))
             self._repo.save(existing_being)
             return being_id
 

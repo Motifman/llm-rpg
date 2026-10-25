@@ -2,7 +2,6 @@
 RecipeInfoQueryService専用のアプリケーション例外
 """
 
-
 from typing import Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
@@ -34,10 +33,7 @@ class RecipeInfoQueryApplicationException(ApplicationException):
         Returns:
             RecipeInfoQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Recipe not found: {recipe_id}",
-            recipe_id=recipe_id
-        )
+        return cls(f"Recipe not found: {recipe_id}", recipe_id=recipe_id)
 
     @classmethod
     def invalid_recipe_id(cls, recipe_id: int) -> "RecipeInfoQueryApplicationException":
@@ -49,10 +45,7 @@ class RecipeInfoQueryApplicationException(ApplicationException):
         Returns:
             RecipeInfoQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Invalid recipe ID: {recipe_id}",
-            recipe_id=recipe_id
-        )
+        return cls(f"Invalid recipe ID: {recipe_id}", recipe_id=recipe_id)
 
     @classmethod
     def invalid_request(cls, message: str, **context: Any) -> "RecipeInfoQueryApplicationException":

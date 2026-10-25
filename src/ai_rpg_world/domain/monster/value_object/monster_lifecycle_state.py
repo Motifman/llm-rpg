@@ -33,13 +33,9 @@ class MonsterLifecycleState:
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.hunger <= 1.0):
-            raise MonsterStatsValidationException(
-                f"hunger must be between 0.0 and 1.0: {self.hunger}"
-            )
+            raise MonsterStatsValidationException(f"hunger must be between 0.0 and 1.0: {self.hunger}")
         if self.starvation_timer < 0:
-            raise MonsterStatsValidationException(
-                f"starvation_timer cannot be negative: {self.starvation_timer}"
-            )
+            raise MonsterStatsValidationException(f"starvation_timer cannot be negative: {self.starvation_timer}")
 
     @classmethod
     def create_for_unspawned(
@@ -91,9 +87,7 @@ class MonsterLifecycleState:
     def apply_damage(self, amount: int) -> "MonsterLifecycleState":
         """ダメージを適用した新しい状態を返す。"""
         if amount < 0:
-            raise MonsterStatsValidationException(
-                f"Damage amount cannot be negative: {amount}"
-            )
+            raise MonsterStatsValidationException(f"Damage amount cannot be negative: {amount}")
         new_hp = self.hp.damage(amount)
         return MonsterLifecycleState(
             hp=new_hp,
@@ -108,9 +102,7 @@ class MonsterLifecycleState:
     def apply_heal(self, amount: int) -> "MonsterLifecycleState":
         """HP 回復を適用した新しい状態を返す。"""
         if amount < 0:
-            raise MonsterStatsValidationException(
-                f"Heal amount cannot be negative: {amount}"
-            )
+            raise MonsterStatsValidationException(f"Heal amount cannot be negative: {amount}")
         new_hp = self.hp.heal(amount)
         return MonsterLifecycleState(
             hp=new_hp,
@@ -125,9 +117,7 @@ class MonsterLifecycleState:
     def apply_mp_recovery(self, amount: int) -> "MonsterLifecycleState":
         """MP 回復を適用した新しい状態を返す。"""
         if amount < 0:
-            raise MonsterStatsValidationException(
-                f"Recover amount cannot be negative: {amount}"
-            )
+            raise MonsterStatsValidationException(f"Recover amount cannot be negative: {amount}")
         new_mp = self.mp.recover(amount)
         return MonsterLifecycleState(
             hp=self.hp,
@@ -194,9 +184,7 @@ class MonsterLifecycleState:
         - starvation_ticks == 0 または hunger_increase_per_tick == 0: 飢餓無効として (self, False) を返す。
         """
         if starvation_ticks < 0:
-            raise MonsterStatsValidationException(
-                f"starvation_ticks cannot be negative: {starvation_ticks}"
-            )
+            raise MonsterStatsValidationException(f"starvation_ticks cannot be negative: {starvation_ticks}")
         if hunger_increase_per_tick < 0:
             raise MonsterStatsValidationException(
                 f"hunger_increase_per_tick cannot be negative: {hunger_increase_per_tick}"

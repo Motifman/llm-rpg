@@ -23,7 +23,10 @@ def _user() -> UserAggregate:
 
 def _post(user: UserAggregate) -> PostAggregate:
     return PostAggregate.create(
-        PostId(1), user.user_id, PostContent("投稿"), author_identity_token=user.identity_token,
+        PostId(1),
+        user.user_id,
+        PostContent("投稿"),
+        author_identity_token=user.identity_token,
     )
 
 
@@ -47,25 +50,48 @@ def test_sqlite_reference_tokens_survive_replacement_of_authors_and_parents(nest
         replies = SqliteReplyRepository.for_standalone_connection(connection)
         author = users.save(_user())
         parent = posts.save(_post(author))
-        first = replies.save(ReplyAggregate.create(
-            ReplyId(1), parent.post_id, None, author.user_id, author.user_id, PostContent("返信"),
-            author_identity_token=author.identity_token, parent_identity_token=parent.identity_token,
-        ))
+        first = replies.save(
+            ReplyAggregate.create(
+                ReplyId(1),
+                parent.post_id,
+                None,
+                author.user_id,
+                author.user_id,
+                PostContent("返信"),
+                author_identity_token=author.identity_token,
+                parent_identity_token=parent.identity_token,
+            )
+        )
         target = first
         if nested:
-            target = replies.save(ReplyAggregate.create(
-                ReplyId(2), None, first.reply_id, author.user_id, author.user_id, PostContent("孫返信"),
-                author_identity_token=author.identity_token, parent_identity_token=first.identity_token,
-            ))
+            target = replies.save(
+                ReplyAggregate.create(
+                    ReplyId(2),
+                    None,
+                    first.reply_id,
+                    author.user_id,
+                    author.user_id,
+                    PostContent("孫返信"),
+                    author_identity_token=author.identity_token,
+                    parent_identity_token=first.identity_token,
+                )
+            )
         stored_author, stored_parent = target.author_identity_token, target.parent_identity_token
         replacement_user = users.save(_user())
         posts.save(_post(replacement_user))
         if nested:
-            replies.save(ReplyAggregate.create(
-                ReplyId(1), PostId(1), None, replacement_user.user_id, replacement_user.user_id,
-                PostContent("別返信"), author_identity_token=replacement_user.identity_token,
-                parent_identity_token=posts.find_by_id(PostId(1)).identity_token,
-            ))
+            replies.save(
+                ReplyAggregate.create(
+                    ReplyId(1),
+                    PostId(1),
+                    None,
+                    replacement_user.user_id,
+                    replacement_user.user_id,
+                    PostContent("別返信"),
+                    author_identity_token=replacement_user.identity_token,
+                    parent_identity_token=posts.find_by_id(PostId(1)).identity_token,
+                )
+            )
         restored = replies.find_by_id(target.reply_id)
         assert restored.author_identity_token == stored_author
         assert restored.parent_identity_token == stored_parent
@@ -102,7 +128,8 @@ def test_binding_migration_resolves_only_consistent_existing_references_once() -
     with sqlite3.connect(":memory:") as connection:
         apply_migrations(connection, namespace="game_write", migrations=schema._GAME_WRITE_MIGRATIONS[:36])
         connection.execute(
-            "INSERT INTO game_sns_users VALUES (1, 'hero', '勇者', '', ?)", (author_token,),
+            "INSERT INTO game_sns_users VALUES (1, 'hero', '勇者', '', ?)",
+            (author_token,),
         )
         for number, author in [(1, 1), (2, 999)]:
             connection.execute(
@@ -116,10 +143,21 @@ def test_binding_migration_resolves_only_consistent_existing_references_once() -
             )
         connection.commit()
         schema.init_game_write_schema(connection)
-        assert connection.execute("SELECT author_identity_token FROM game_sns_posts ORDER BY post_id").fetchall() == [(author_token,), (None,)]
-        assert connection.execute("SELECT parent_identity_token FROM game_sns_replies ORDER BY reply_id").fetchall() == [(post_token,), (reply_token,), (None,), (None,)]
+        assert connection.execute("SELECT author_identity_token FROM game_sns_posts ORDER BY post_id").fetchall() == [
+            (author_token,),
+            (None,),
+        ]
+        assert connection.execute(
+            "SELECT parent_identity_token FROM game_sns_replies ORDER BY reply_id"
+        ).fetchall() == [(post_token,), (reply_token,), (None,), (None,)]
         connection.execute("UPDATE game_sns_users SET identity_token = ?", (uuid4().hex,))
         connection.execute("UPDATE game_sns_posts SET identity_token = ? WHERE post_id = 1", (uuid4().hex,))
         schema.init_game_write_schema(connection)
-        assert connection.execute("SELECT author_identity_token FROM game_sns_posts WHERE post_id = 1").fetchone()[0] == author_token
-        assert connection.execute("SELECT parent_identity_token FROM game_sns_replies WHERE reply_id = 1").fetchone()[0] == post_token
+        assert (
+            connection.execute("SELECT author_identity_token FROM game_sns_posts WHERE post_id = 1").fetchone()[0]
+            == author_token
+        )
+        assert (
+            connection.execute("SELECT parent_identity_token FROM game_sns_replies WHERE reply_id = 1").fetchone()[0]
+            == post_token
+        )

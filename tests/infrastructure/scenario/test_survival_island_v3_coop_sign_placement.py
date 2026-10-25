@@ -68,9 +68,7 @@ def _find_interaction(raw: dict, spot_id: str, object_id: str, action: str) -> d
 class TestSignObjectsAreLoaded:
     """2 箇所の看板が SIGN object_type として scenario から解決される。"""
 
-    @pytest.mark.parametrize(
-        "spot_id,object_id,object_name,write_action,read_action", _SIGN_PLACEMENTS
-    )
+    @pytest.mark.parametrize("spot_id,object_id,object_name,write_action,read_action", _SIGN_PLACEMENTS)
     def test_sign_object_resolves_as_sign_type(
         self, loaded, spot_id, object_id, object_name, write_action, read_action
     ) -> None:
@@ -90,9 +88,7 @@ class TestSignInteractionsUseSignEffects:
     """各看板が write 系 (WRITE_PLAYER_TEXT) と examine 系 (SHOW_PLAYER_TEXT)
     の両方を持つ (書けるだけ・読めるだけの片手落ちにしない)。"""
 
-    @pytest.mark.parametrize(
-        "spot_id,object_id,object_name,write_action,read_action", _SIGN_PLACEMENTS
-    )
+    @pytest.mark.parametrize("spot_id,object_id,object_name,write_action,read_action", _SIGN_PLACEMENTS)
     def test_write_action_uses_write_player_text(
         self, raw, spot_id, object_id, object_name, write_action, read_action
     ) -> None:
@@ -100,9 +96,7 @@ class TestSignInteractionsUseSignEffects:
         effect_types = {e["effect_type"] for e in inter["effects"]}
         assert "WRITE_PLAYER_TEXT" in effect_types
 
-    @pytest.mark.parametrize(
-        "spot_id,object_id,object_name,write_action,read_action", _SIGN_PLACEMENTS
-    )
+    @pytest.mark.parametrize("spot_id,object_id,object_name,write_action,read_action", _SIGN_PLACEMENTS)
     def test_read_action_uses_show_player_text(
         self, raw, spot_id, object_id, object_name, write_action, read_action
     ) -> None:
@@ -110,9 +104,7 @@ class TestSignInteractionsUseSignEffects:
         effect_types = {e["effect_type"] for e in inter["effects"]}
         assert "SHOW_PLAYER_TEXT" in effect_types
 
-    @pytest.mark.parametrize(
-        "spot_id,object_id,object_name,write_action,read_action", _SIGN_PLACEMENTS
-    )
+    @pytest.mark.parametrize("spot_id,object_id,object_name,write_action,read_action", _SIGN_PLACEMENTS)
     def test_interactions_have_no_forced_preconditions(
         self, raw, spot_id, object_id, object_name, write_action, read_action
     ) -> None:
@@ -128,9 +120,7 @@ class TestSignWritabilityIsPerceivableWithoutExamine:
     """「書き込めること」がオブジェクトの description (examine 前に見える
     物語文) から知覚できる。知覚できないルールにしない、という要求への対応。"""
 
-    @pytest.mark.parametrize(
-        "spot_id,object_id,object_name,write_action,read_action", _SIGN_PLACEMENTS
-    )
+    @pytest.mark.parametrize("spot_id,object_id,object_name,write_action,read_action", _SIGN_PLACEMENTS)
     def test_object_description_mentions_writing(
         self, raw, spot_id, object_id, object_name, write_action, read_action
     ) -> None:
@@ -143,10 +133,7 @@ class TestSignPlacementDoesNotTouchDifficulty:
 
     def test_light_signal_gate_unchanged(self, raw) -> None:
         inter = _find_interaction(raw, "summit", "signal_fire_pit", "light_signal")
-        gates = [
-            c for c in inter["preconditions"]
-            if c.get("condition_type") == "PLAYERS_AT_SPOT"
-        ]
+        gates = [c for c in inter["preconditions"] if c.get("condition_type") == "PLAYERS_AT_SPOT"]
         assert len(gates) == 1
         assert gates[0]["required_player_count"] == 2
         qty = {
@@ -157,14 +144,13 @@ class TestSignPlacementDoesNotTouchDifficulty:
         assert qty == {"driftwood": 3, "dry_leaves": 2, "flint": 1}
 
     def test_rescue_ticks_unchanged(self, loaded) -> None:
-        assert tuple(
-            rule.trigger.tick for rule in loaded.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        ) == (144, 192)
-        assert next(
-            rule.trigger.tick for rule in loaded.player_outcome_rules
-            if rule.outcome.value == "STRANDED"
-        ) == 240
+        assert tuple(rule.trigger.tick for rule in loaded.player_outcome_rules if rule.outcome.value == "RESCUED") == (
+            144,
+            192,
+        )
+        assert (
+            next(rule.trigger.tick for rule in loaded.player_outcome_rules if rule.outcome.value == "STRANDED") == 240
+        )
 
     def test_estimated_ticks_unchanged(self, loaded) -> None:
         assert loaded.metadata.estimated_ticks == 240
@@ -176,15 +162,16 @@ class TestBaseScenariosNotModified:
     def test_v2_unchanged(self) -> None:
         v2 = ScenarioLoader().load_from_file(str(_V2_PATH))
         assert v2.metadata.estimated_ticks == 384
-        assert tuple(
-            rule.trigger.tick for rule in v2.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        ) == (192, 288, 336)
+        assert tuple(rule.trigger.tick for rule in v2.player_outcome_rules if rule.outcome.value == "RESCUED") == (
+            192,
+            288,
+            336,
+        )
 
     def test_v2_short_unchanged(self) -> None:
         short = ScenarioLoader().load_from_file(str(_V2_SHORT_PATH))
         assert short.metadata.estimated_ticks == 192
-        assert tuple(
-            rule.trigger.tick for rule in short.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        ) == (96, 144)
+        assert tuple(rule.trigger.tick for rule in short.player_outcome_rules if rule.outcome.value == "RESCUED") == (
+            96,
+            144,
+        )

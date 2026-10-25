@@ -1,6 +1,5 @@
 """schedules_turn 観測時の LLM ターンスケジュール呼び出しを担うサービス"""
 
-
 from ai_rpg_world.application.llm.contracts.interfaces import (
     ILLMPlayerResolver,
     ILlmTurnTrigger,

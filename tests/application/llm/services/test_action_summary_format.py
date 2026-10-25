@@ -86,14 +86,8 @@ class TestFormatActionSummaryForDisplay:
             )
             == "「貝」を使った"
         )
-        assert (
-            format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_LISTEN, {})
-            == "耳を澄ました"
-        )
-        assert (
-            format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_EXPLORE, {})
-            == "この場所を探索した"
-        )
+        assert format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_LISTEN, {}) == "耳を澄ました"
+        assert format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_EXPLORE, {}) == "この場所を探索した"
 
     def test_hidden_fields_include_inner_thought_and_duplicate_content(self) -> None:
         """JSON フォールバックから心の声・発話本文・メモ帳への書き込みなどの重複入力を落とす。"""
@@ -133,9 +127,7 @@ class TestFormatActionSummaryForDisplay:
     def test_fingerprint_is_independent_of_display(self) -> None:
         """loop_guard 用 fingerprint は raw args から計算され、表示整形に影響されない。"""
         fp_full = build_argument_fingerprint(_FULL_ARGS)
-        fp_outcome_only = build_argument_fingerprint(
-            {"target_label": "OBJ1", "action_name": "inspect"}
-        )
+        fp_outcome_only = build_argument_fingerprint({"target_label": "OBJ1", "action_name": "inspect"})
         assert fp_full == fp_outcome_only
 
 
@@ -146,7 +138,11 @@ class TestInteractSummaryUsesTheDisplayLabel:
         """resolver が対象名の後ろに続く句 (ACTION_DISPLAY_PHRASE_KEY) を運んでいれば「「対象」〈句〉」と書き、action_name を出さない。成功の行と同じ書き方にそろえる。"""
         summary = format_action_summary_for_display(
             TOOL_NAME_SPOT_GRAPH_INTERACT,
-            {"target_label": "昇降機", "action_name": "start_lift", ACTION_DISPLAY_PHRASE_KEY: "で鍵を差して昇降機を動かす"},
+            {
+                "target_label": "昇降機",
+                "action_name": "start_lift",
+                ACTION_DISPLAY_PHRASE_KEY: "で鍵を差して昇降機を動かす",
+            },
         )
 
         assert summary == "「昇降機」で鍵を差して昇降機を動かす"

@@ -1,4 +1,5 @@
 """公開SNSコマンドが同じ確定境界から受け取るリポジトリ束。"""
+
 from __future__ import annotations
 
 from typing import Protocol

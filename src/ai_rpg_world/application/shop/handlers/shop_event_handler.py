@@ -1,4 +1,5 @@
 """ショップイベントハンドラ"""
+
 import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -44,9 +45,7 @@ class ShopEventHandler:
         self._unit_of_work_factory = unit_of_work_factory
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_in_separate_transaction(
-        self, operation: Callable[[], Any], context: dict[str, Any]
-    ) -> None:
+    def _execute_in_separate_transaction(self, operation: Callable[[], Any], context: dict[str, Any]) -> None:
         """別トランザクションで操作を実行。ApplicationException/DomainException は再送出、その他は SystemErrorException でラップして送出する。"""
         unit_of_work = self._unit_of_work_factory.create()
         try:
@@ -68,6 +67,7 @@ class ShopEventHandler:
 
     def handle_shop_created(self, event: ShopCreatedEvent) -> None:
         """ショップ開設イベントのハンドリング"""
+
         def operation() -> Any:
             read_model = ShopSummaryReadModel.create(
                 shop_id=event.aggregate_id,
@@ -80,17 +80,19 @@ class ShopEventHandler:
                 created_at=event.occurred_at,
             )
             self._shop_summary_read_model_repository.save(read_model)
-            self._logger.info(
-                "ReadModel updated for shop created: %s", event.aggregate_id.value
-            )
+            self._logger.info("ReadModel updated for shop created: %s", event.aggregate_id.value)
 
-        self._execute_in_separate_transaction(operation, {
-            "handler": "handle_shop_created",
-            "shop_id": event.aggregate_id.value,
-        })
+        self._execute_in_separate_transaction(
+            operation,
+            {
+                "handler": "handle_shop_created",
+                "shop_id": event.aggregate_id.value,
+            },
+        )
 
     def handle_shop_item_listed(self, event: ShopItemListedEvent) -> None:
         """ショップ出品イベントのハンドリング"""
+
         def operation() -> Any:
             p = event.listing_projection
             listing_read_model = ShopListingReadModel.create(
@@ -106,9 +108,7 @@ class ShopEventHandler:
             )
             self._shop_listing_read_model_repository.save(listing_read_model)
 
-            summary = self._shop_summary_read_model_repository.find_by_id(
-                event.aggregate_id
-            )
+            summary = self._shop_summary_read_model_repository.find_by_id(event.aggregate_id)
             if summary:
                 summary.listing_count += 1
                 self._shop_summary_read_model_repository.save(summary)
@@ -119,20 +119,22 @@ class ShopEventHandler:
                 event.listing_id.value,
             )
 
-        self._execute_in_separate_transaction(operation, {
-            "handler": "handle_shop_item_listed",
-            "shop_id": event.aggregate_id.value,
-            "listing_id": event.listing_id.value,
-        })
+        self._execute_in_separate_transaction(
+            operation,
+            {
+                "handler": "handle_shop_item_listed",
+                "shop_id": event.aggregate_id.value,
+                "listing_id": event.listing_id.value,
+            },
+        )
 
     def handle_shop_item_unlisted(self, event: ShopItemUnlistedEvent) -> None:
         """ショップ取り下げイベントのハンドリング"""
+
         def operation() -> Any:
             self._shop_listing_read_model_repository.delete(event.listing_id)
 
-            summary = self._shop_summary_read_model_repository.find_by_id(
-                event.aggregate_id
-            )
+            summary = self._shop_summary_read_model_repository.find_by_id(event.aggregate_id)
             if summary and summary.listing_count > 0:
                 summary.listing_count -= 1
                 self._shop_summary_read_model_repository.save(summary)
@@ -143,18 +145,20 @@ class ShopEventHandler:
                 event.listing_id.value,
             )
 
-        self._execute_in_separate_transaction(operation, {
-            "handler": "handle_shop_item_unlisted",
-            "shop_id": event.aggregate_id.value,
-            "listing_id": event.listing_id.value,
-        })
+        self._execute_in_separate_transaction(
+            operation,
+            {
+                "handler": "handle_shop_item_unlisted",
+                "shop_id": event.aggregate_id.value,
+                "listing_id": event.listing_id.value,
+            },
+        )
 
     def handle_shop_item_purchased(self, event: ShopItemPurchasedEvent) -> None:
         """ショップ購入イベントのハンドリング"""
+
         def operation() -> Any:
-            listing_rm = self._shop_listing_read_model_repository.find_by_id(
-                event.listing_id
-            )
+            listing_rm = self._shop_listing_read_model_repository.find_by_id(event.listing_id)
             if not listing_rm:
                 self._logger.warning(
                     "Listing ReadModel not found for purchase update: listing=%s",
@@ -165,9 +169,7 @@ class ShopEventHandler:
             new_quantity = listing_rm.quantity - event.quantity
             if new_quantity <= 0:
                 self._shop_listing_read_model_repository.delete(event.listing_id)
-                summary = self._shop_summary_read_model_repository.find_by_id(
-                    event.aggregate_id
-                )
+                summary = self._shop_summary_read_model_repository.find_by_id(event.aggregate_id)
                 if summary and summary.listing_count > 0:
                     summary.listing_count -= 1
                     self._shop_summary_read_model_repository.save(summary)
@@ -182,8 +184,11 @@ class ShopEventHandler:
                 event.quantity,
             )
 
-        self._execute_in_separate_transaction(operation, {
-            "handler": "handle_shop_item_purchased",
-            "shop_id": event.aggregate_id.value,
-            "listing_id": event.listing_id.value,
-        })
+        self._execute_in_separate_transaction(
+            operation,
+            {
+                "handler": "handle_shop_item_purchased",
+                "shop_id": event.aggregate_id.value,
+                "listing_id": event.listing_id.value,
+            },
+        )

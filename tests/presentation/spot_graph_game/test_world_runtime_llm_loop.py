@@ -30,9 +30,7 @@ class _FakeRuntime:
     def __init__(self) -> None:
         event_store = UnifiedRecentEventStore()
         self._obs_buffer = DefaultObservationContextBuffer(event_store=event_store)
-        self._short_term_memory = SummarizingShortTermMemory(
-            event_store=event_store
-        )
+        self._short_term_memory = SummarizingShortTermMemory(event_store=event_store)
         self.explore_calls: list[int] = []
         self.action_results: list[tuple[int, str, str]] = []
         # PR-θ2 (経路統合): _wire_missing_spot_graph_tools が `needed`

@@ -90,9 +90,16 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
     """実行境界で当人の手番と要求IDを一度だけ確定する。"""
     runtime = wiring.runtime
     projection = getattr(runtime, "_public_sns_projection", None)
-    if projection is not None and phase_a.tool_call is not None and phase_a.exception is None and phase_a.failure_result is None:
+    if (
+        projection is not None
+        and phase_a.tool_call is not None
+        and phase_a.exception is None
+        and phase_a.failure_result is None
+    ):
         projection.confirm_shown(int(phase_a.player_id), phase_a.prompt.get("sns_shown_notification_ids", ()))
-        runtime._public_sns_screens.confirm_presented(int(phase_a.player_id), phase_a.prompt.get("sns_screen_generation"))
+        runtime._public_sns_screens.confirm_presented(
+            int(phase_a.player_id), phase_a.prompt.get("sns_screen_generation")
+        )
     turn = runtime.advance_memory_turn(phase_a.player_id)
     turns = getattr(runtime, "_execution_turns", None)
     if not isinstance(turns, dict):
@@ -223,9 +230,7 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
     # LLM への surface は snapshot の agent_status section で既に通知済み。
     # Review HIGH 1 対応: 中断前の nav_state を snapshot して、tool 実行が
     # 失敗したら travel を復元する (= 「失敗したのに移動が消える」を防ぐ)。
-    was_interrupted, nav_snapshot = maybe_interrupt_busy(
-        wiring, player_id, name
-    )
+    was_interrupted, nav_snapshot = maybe_interrupt_busy(wiring, player_id, name)
     infrastructure_failure = False
     try:
         result = execute_tool(
@@ -234,16 +239,13 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
             name,
             arguments,
             prompt["tool_runtime_context"],
-            offered_tools_at_prompt=offered_tools_from_payload(
-                phase_a.tools_payload
-            ),
+            offered_tools_at_prompt=offered_tools_from_payload(phase_a.tools_payload),
         )
     except CommandPostCommitException as exc:
         # 業務状態はcommit済みなので通常失敗へ縮退させない。成功として扱うことで、
         # busy中断の復元やLLMの再実行が確定済み操作を二重適用するのを防ぐ。
         logger.exception(
-            "tool command committed but post-commit processing failed: "
-            "player_id=%s tool=%s",
+            "tool command committed but post-commit processing failed: player_id=%s tool=%s",
             player_id.value,
             name,
         )
@@ -357,9 +359,7 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
         # ここは generic 経路の補完)。
         # dispatch が resolver の正規値を反映済みの射影を置いていればそれを
         # 使う (置いていない = resolver を通らない tool なら raw から作る)。
-        identifier_arguments, free_text_argument_names = (
-            action_history_projection(arguments)
-        )
+        identifier_arguments, free_text_argument_names = action_history_projection(arguments)
         wiring.runtime._record_action_result(
             player_id,
             format_action_summary_for_display(name, arguments),
@@ -373,9 +373,7 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
         )
     if trace_recorder is not None:
         try:
-            trace_payload = action_result_extra_trace_payload(
-                result.trace_payload
-            )
+            trace_payload = action_result_extra_trace_payload(result.trace_payload)
             trace_recorder.record(
                 "action_result",
                 tick=current_tick,
@@ -481,8 +479,7 @@ def emit_action_failed_observation(
     # 観測そのものは emit しない (LLM API レベル失敗の扱いに準じる)。
     if not tool_name:
         logger.warning(
-            "Skipping ActionFailed emission: empty tool_name from LLM "
-            "(player=%s error_code=%s)",
+            "Skipping ActionFailed emission: empty tool_name from LLM (player=%s error_code=%s)",
             player_id.value,
             result.error_code,
         )

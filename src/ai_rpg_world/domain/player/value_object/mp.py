@@ -10,6 +10,7 @@ class Mp:
     MPは0以上max_mp以下の値を持ちます。
     max_mpは0以上の値である必要があります。
     """
+
     value: int
     max_mp: int
 
@@ -18,7 +19,9 @@ class Mp:
         if self.max_mp < 0:
             raise MpValidationException(f"max_mpは0以上の値である必要があります。max_mp: {self.max_mp}")
         if self.value > self.max_mp:
-            raise MpValidationException(f"MPはmax_mp以下の値である必要があります。value: {self.value}, max_mp: {self.max_mp}")
+            raise MpValidationException(
+                f"MPはmax_mp以下の値である必要があります。value: {self.value}, max_mp: {self.max_mp}"
+            )
         if self.value < 0:
             raise MpValidationException(f"MPは0以上の値である必要があります。value: {self.value}")
 

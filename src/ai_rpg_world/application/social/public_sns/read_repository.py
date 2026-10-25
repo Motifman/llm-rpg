@@ -1,4 +1,5 @@
 """公開SNS専用の小さい読取模型。関連する全返信や全いいねは復元しない。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -49,6 +50,8 @@ class PublicSnsReadRepository(Protocol):
 
     def scan_posts(self, before_id: int | None, limit: int) -> list[PublicSnsContentRecord]: ...
 
-    def scan_replies(self, parent_kind: ContentKind, parent_id: int, before_id: int | None, limit: int) -> list[PublicSnsContentRecord]: ...
+    def scan_replies(
+        self, parent_kind: ContentKind, parent_id: int, before_id: int | None, limit: int
+    ) -> list[PublicSnsContentRecord]: ...
 
     def scan_notifications(self, viewer_user_id: int, before_id: int | None, limit: int) -> list[Notification]: ...

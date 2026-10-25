@@ -62,4 +62,3 @@ def build_quest(
         version=int(row["version"]),
         created_at=datetime.fromisoformat(row["created_at"]),
     )
-

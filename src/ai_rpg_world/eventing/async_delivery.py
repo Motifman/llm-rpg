@@ -40,7 +40,11 @@ class AsyncEventExecutor:
     """未反映の件数を制限し、同じ宛先の受け手を到着順に呼ぶ。"""
 
     def __init__(
-        self, *, failure_observer: Callable[[AsyncFailure], None], max_workers: int = 2, max_pending: int = 100,
+        self,
+        *,
+        failure_observer: Callable[[AsyncFailure], None],
+        max_workers: int = 2,
+        max_pending: int = 100,
     ) -> None:
         if not callable(failure_observer):
             raise TypeError("failure_observerは呼び出せる必要があります")
@@ -67,7 +71,11 @@ class AsyncEventExecutor:
             return self._applying + len(self._unfinished) + sum(len(queue) for queue in self._ready.values())
 
     def submit(
-        self, *, key: Hashable, event: _Event, handler: Callable[[_Event], _Result],
+        self,
+        *,
+        key: Hashable,
+        event: _Event,
+        handler: Callable[[_Event], _Result],
         apply_result: Callable[[_Result], None],
     ) -> bool:
         """受付の可否を返し、実行の完了は待たない。"""
@@ -179,8 +187,10 @@ class AsyncDelivery(Generic[_Event, _Result]):
 
     def bind(self, handler: Callable[[_Event], _Result]) -> Callable[[_Event], None]:
         """共通の配送器に、完了を待たず受付へ渡す受け手を返す。"""
+
         def enqueue(event: _Event) -> None:
             self.executor.submit(
                 key=self.recipient_key(event), event=event, handler=handler, apply_result=self.apply_result
             )
+
         return enqueue

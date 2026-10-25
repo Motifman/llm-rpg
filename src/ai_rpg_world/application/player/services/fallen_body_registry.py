@@ -53,9 +53,7 @@ class FallenBodyRegistry:
     def records_at(self, spot_id: SpotId) -> tuple[FallenBodyRecord, ...]:
         return tuple(
             record
-            for _, record in sorted(
-                self._records.items(), key=lambda item: int(item[0])
-            )
+            for _, record in sorted(self._records.items(), key=lambda item: int(item[0]))
             if record.spot_id == spot_id
         )
 

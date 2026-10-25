@@ -6,6 +6,7 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterStat
 @dataclass(frozen=True)
 class MonsterHp:
     """モンスターのHP値オブジェクト"""
+
     value: int
     max_hp: int
 
@@ -13,9 +14,7 @@ class MonsterHp:
         if self.max_hp < 0:
             raise MonsterStatsValidationException(f"max_hp must be non-negative: {self.max_hp}")
         if self.value > self.max_hp:
-            raise MonsterStatsValidationException(
-                f"HP ({self.value}) cannot exceed max_hp ({self.max_hp})"
-            )
+            raise MonsterStatsValidationException(f"HP ({self.value}) cannot exceed max_hp ({self.max_hp})")
         if self.value < 0:
             raise MonsterStatsValidationException(f"HP cannot be negative: {self.value}")
 

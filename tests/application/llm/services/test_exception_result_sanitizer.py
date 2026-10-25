@@ -42,6 +42,7 @@ class TestExceptionResultDomainException:
 
     def test_error_code_domain_message_code_raises_exception(self) -> None:
         """errorcode 付きの domainexception は message と code を使う。"""
+
         class MyDomainError(Exception):
             error_code = "GIVE_ITEM_TARGET_IS_SELF"
 
@@ -56,6 +57,7 @@ class TestExceptionResultDomainException:
         のように「error_code は日本語じゃないカテゴリだが message 側が
         整備されていない」ケースを塞ぐ。error_code / remediation は保持し、
         message は英語漏れを防ぎつつ、待機再試行を促さない fallback に置換。"""
+
         class MyDomainError(Exception):
             error_code = "PLAYER.ITEM_NOT_IN_SLOT"
 
@@ -71,6 +73,7 @@ class TestExceptionResultDomainException:
 
     def test_error_code_english_message_keeps_remediation_without_retry_fallback(self) -> None:
         """具体 error_code 付きの英語 message は対処ヒントを保ち、待機再試行は促さない。"""
+
         class MyDomainError(Exception):
             error_code = "UNKNOWN_TOOL"
 
@@ -125,6 +128,7 @@ class TestExceptionResultJapaneseMessagePreserved:
 
     def test_error_code_japanese_message_preserved(self) -> None:
         """具体 error_code 付きでも message が日本語なら fallback せず尊重する。"""
+
         class MyDomainError(Exception):
             error_code = "UNKNOWN_TOOL"
 
@@ -156,6 +160,7 @@ class TestExceptionResultRemediation:
 
     def test_domain_remediation_error_code_raises_exception(self) -> None:
         """domain exception の remediation は error code 由来。"""
+
         class MyErr(Exception):
             error_code = "GIVE_ITEM_TARGET_IS_SELF"
 

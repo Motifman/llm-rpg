@@ -49,7 +49,9 @@ class TestHitEffect:
         with pytest.raises(HitEffectValidationException, match="chance must be between 0 and 1"):
             HitEffect(HitEffectType.POISON, duration_ticks=3, intensity=1.0, chance=1.2)
 
-    @pytest.mark.parametrize("effect_type", [HitEffectType.SLOW, HitEffectType.POISON, HitEffectType.PARALYSIS, HitEffectType.SILENCE])
+    @pytest.mark.parametrize(
+        "effect_type", [HitEffectType.SLOW, HitEffectType.POISON, HitEffectType.PARALYSIS, HitEffectType.SILENCE]
+    )
     def test_continuous_effect_requires_positive_duration(self, effect_type: HitEffectType):
         with pytest.raises(HitEffectValidationException, match="requires duration_ticks >= 1"):
             HitEffect(effect_type=effect_type, duration_ticks=0, intensity=1.0)

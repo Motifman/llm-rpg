@@ -59,9 +59,7 @@ class InMemoryEncounterMemory(IEncounterMemory):
         if not isinstance(current_tick, int) or isinstance(current_tick, bool):
             raise EncounterRecordValidationException("current_tick must be int")
         if current_tick < 0:
-            raise EncounterRecordValidationException(
-                f"current_tick must be >= 0 (got {current_tick})"
-            )
+            raise EncounterRecordValidationException(f"current_tick must be >= 0 (got {current_tick})")
 
         pid = player_id.value
         bucket = self._store.setdefault(pid, {})
@@ -99,10 +97,7 @@ class InMemoryEncounterMemory(IEncounterMemory):
             return {}
         # canonical str → record を、EncounterKey → record に変換して返す
         # (snapshot codec が EncounterKey で iterate しやすくする)
-        return {
-            EncounterKey.from_canonical(canonical): record
-            for canonical, record in bucket.items()
-        }
+        return {EncounterKey.from_canonical(canonical): record for canonical, record in bucket.items()}
 
 
 __all__ = ["InMemoryEncounterMemory"]

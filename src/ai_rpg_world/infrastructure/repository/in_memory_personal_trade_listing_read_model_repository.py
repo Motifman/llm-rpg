@@ -1,6 +1,7 @@
 """
 InMemoryPersonalTradeListingReadModelRepository - PersonalTradeListingReadModelを使用するインメモリ実装
 """
+
 import random
 from datetime import datetime, timedelta
 
@@ -48,7 +49,7 @@ class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadMo
             durability_current=85,
             durability_max=100,
             requested_gold=500,
-            seller_name="勇者"
+            seller_name="勇者",
         )
         self._listings[TradeId(1)] = sword_listing
 
@@ -67,7 +68,7 @@ class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadMo
             durability_current=92,
             durability_max=100,
             requested_gold=1200,
-            seller_name="賢者"
+            seller_name="賢者",
         )
         self._listings[TradeId(2)] = staff_listing
 
@@ -86,7 +87,7 @@ class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadMo
             durability_current=None,
             durability_max=None,
             requested_gold=150,
-            seller_name="薬草師"
+            seller_name="薬草師",
         )
         self._listings[TradeId(3)] = potion_listing
 
@@ -108,7 +109,7 @@ class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadMo
             durability_current=95,
             durability_max=100,
             requested_gold=5000,
-            seller_name="トレジャーハンター"
+            seller_name="トレジャーハンター",
         )
         self._listings[TradeId(4)] = rare_armor_listing
 
@@ -127,7 +128,7 @@ class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadMo
             durability_current=78,
             durability_max=100,
             requested_gold=300,
-            seller_name="ガーディアン"
+            seller_name="ガーディアン",
         )
         self._listings[TradeId(5)] = shield_listing
 
@@ -147,7 +148,7 @@ class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadMo
             durability_current=None,
             durability_max=None,
             requested_gold=50,
-            seller_name="トレジャーハンター"
+            seller_name="トレジャーハンター",
         )
         self._listings[TradeId(6)] = cheap_listing
 
@@ -166,16 +167,27 @@ class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadMo
             durability_current=100,
             durability_max=100,
             requested_gold=15000,
-            seller_name="伝説の英雄"
+            seller_name="伝説の英雄",
         )
         self._listings[TradeId(7)] = epic_listing
 
-    def _create_sample_listing(self, trade_id: int, item_spec_id: int, item_instance_id: int,
-                              recipient_player_id: PlayerId, item_name: str, item_quantity: int,
-                              item_type: ItemType, item_rarity: Rarity,
-                              item_equipment_type: EquipmentType | None, created_at: datetime,
-                              durability_current: int | None, durability_max: int | None,
-                              requested_gold: int, seller_name: str) -> PersonalTradeListingReadModel:
+    def _create_sample_listing(
+        self,
+        trade_id: int,
+        item_spec_id: int,
+        item_instance_id: int,
+        recipient_player_id: PlayerId,
+        item_name: str,
+        item_quantity: int,
+        item_type: ItemType,
+        item_rarity: Rarity,
+        item_equipment_type: EquipmentType | None,
+        created_at: datetime,
+        durability_current: int | None,
+        durability_max: int | None,
+        requested_gold: int,
+        seller_name: str,
+    ) -> PersonalTradeListingReadModel:
         """サンプル取引出品を作成するヘルパーメソッド"""
         return PersonalTradeListingReadModel.create_from_trade_data(
             trade_id=TradeId(trade_id),
@@ -191,7 +203,7 @@ class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadMo
             durability_max=durability_max,
             requested_gold=requested_gold,
             seller_name=seller_name,
-            created_at=created_at
+            created_at=created_at,
         )
 
     # Repository基本メソッドの実装
@@ -226,10 +238,7 @@ class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadMo
 
     # PersonalTradeListingReadModelRepository特有メソッドの実装
     def find_for_player(
-        self,
-        player_id: PlayerId,
-        limit: int = 20,
-        cursor: ListingCursor | None = None
+        self, player_id: PlayerId, limit: int = 20, cursor: ListingCursor | None = None
     ) -> tuple[list[PersonalTradeListingReadModel], ListingCursor | None]:
         """プレイヤー宛の取引を取得（カーソルベースページング）
 
@@ -252,8 +261,9 @@ class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadMo
         if cursor:
             cursor_filtered_listings = []
             for listing in player_listings:
-                if (listing.created_at < cursor.created_at or
-                    (listing.created_at == cursor.created_at and int(listing.trade_id) < cursor.listing_id)):
+                if listing.created_at < cursor.created_at or (
+                    listing.created_at == cursor.created_at and int(listing.trade_id) < cursor.listing_id
+                ):
                     cursor_filtered_listings.append(listing)
             player_listings = cursor_filtered_listings
 
@@ -264,10 +274,7 @@ class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadMo
         next_cursor = None
         if len(player_listings) > limit and len(result_listings) > 0:
             last_listing = result_listings[-1]
-            next_cursor = ListingCursor(
-                created_at=last_listing.created_at,
-                listing_id=int(last_listing.trade_id)
-            )
+            next_cursor = ListingCursor(created_at=last_listing.created_at, listing_id=int(last_listing.trade_id))
 
         return result_listings, next_cursor
 

@@ -47,13 +47,11 @@ class TestPostVisibilityDomainService:
         """商人ユーザーのフィクスチャ"""
         return user_repository.find_by_user_name("merchant_user")
 
-    def _create_post(self, post_id: int, author_user_id: int, visibility: PostVisibility, deleted: bool = False) -> PostAggregate:
+    def _create_post(
+        self, post_id: int, author_user_id: int, visibility: PostVisibility, deleted: bool = False
+    ) -> PostAggregate:
         """テスト用のポストを作成するヘルパー関数"""
-        post_content = PostContent(
-            content=f"Test post content {post_id}",
-            hashtags=("test",),
-            visibility=visibility
-        )
+        post_content = PostContent(content=f"Test post content {post_id}", hashtags=("test",), visibility=visibility)
         likes = set()
         mentions = set()
 
@@ -66,7 +64,7 @@ class TestPostVisibilityDomainService:
             likes=likes,
             mentions=mentions,
             reply_ids=reply_ids,
-            deleted=deleted
+            deleted=deleted,
         )
 
     def test_can_view_own_post(self, hero_user):
@@ -217,7 +215,7 @@ class TestPostVisibilityDomainService:
             parent_reply_id=None,
             parent_author_id=hero_user.user_id,  # テストでは同じユーザー
             author_user_id=hero_user.user_id,
-            content=reply_content
+            content=reply_content,
         )
         reply.delete(hero_user.user_id, "reply")  # 削除
 
@@ -240,7 +238,7 @@ class TestPostVisibilityDomainService:
             parent_reply_id=None,
             parent_author_id=hero_user.user_id,  # テストでは同じユーザー
             author_user_id=hero_user.user_id,
-            content=reply_content
+            content=reply_content,
         )
         reply.delete(hero_user.user_id, "reply")  # 削除
 
@@ -263,7 +261,7 @@ class TestPostVisibilityDomainService:
             parent_reply_id=None,
             parent_author_id=hero_user.user_id,  # テストでは同じユーザー
             author_user_id=hero_user.user_id,
-            content=reply_content
+            content=reply_content,
         )
         reply.delete(hero_user.user_id, "reply")  # 削除
 

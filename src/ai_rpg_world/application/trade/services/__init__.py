@@ -11,5 +11,5 @@ __all__ = [
     "RecentTradeQueryService",
     "GlobalMarketQueryService",
     "PersonalTradeQueryService",
-    "TradeDetailQueryService"
+    "TradeDetailQueryService",
 ]

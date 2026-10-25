@@ -27,9 +27,7 @@ def _read(path: Path) -> str:
 
 def test_both_paths_use_section_based_context_format_strategy() -> None:
     """両経路が同一の SectionBasedContextFormatStrategy を使う。"""
-    prompt_builder = _read(
-        _REPO_ROOT / "src/ai_rpg_world/application/llm/services/prompt_builder.py"
-    )
+    prompt_builder = _read(_REPO_ROOT / "src/ai_rpg_world/application/llm/services/prompt_builder.py")
     world_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/world_runtime/world_runtime.py")
     # DefaultPromptBuilder は wiring 経由で受け取る (strategy 名は context_format_strategy.py
     # に集中)。world_runtime も同じ strategy class をクラス定数で持つ。
@@ -65,9 +63,7 @@ def test_world_runtime_build_full_prompt_uses_default_prompt_builder() -> None:
 
 def test_world_runtime_default_prompt_builder_adapters_module_exists() -> None:
     """world_runtime adapter モジュールが存在し、4 つの adapter を提供する (HIGH-3 Part 2)。"""
-    adapters = _read(
-        _REPO_ROOT / "src/ai_rpg_world/application/world_runtime/default_prompt_builder_adapters.py"
-    )
+    adapters = _read(_REPO_ROOT / "src/ai_rpg_world/application/world_runtime/default_prompt_builder_adapters.py")
     assert "class WorldRuntimeQueryAdapter" in adapters
     assert "class WorldProfileRepositoryAdapter" in adapters
     assert "class WorldSystemPromptBuilder" in adapters

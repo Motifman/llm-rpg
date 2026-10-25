@@ -146,9 +146,7 @@ class QuestProgressReactionService:
                 acceptor_player_id=acceptor_id_val,
             )
 
-        if quest.issuer_player_id is not None and (
-            quest.reserved_gold > 0 or quest.reserved_item_instance_ids
-        ):
+        if quest.issuer_player_id is not None and (quest.reserved_gold > 0 or quest.reserved_item_instance_ids):
             self._grant_reserved_reward(quest, player_status, inventory)
         else:
             self._grant_system_reward(quest, player_status, inventory)
@@ -168,9 +166,7 @@ class QuestProgressReactionService:
                 "予約報酬の返却に失敗しました: 発注者が設定されていません",
                 quest_id=quest.quest_id.value,
             )
-        issuer_inventory = self._player_inventory_repository.find_by_id(
-            issuer_player_id
-        )
+        issuer_inventory = self._player_inventory_repository.find_by_id(issuer_player_id)
         if not issuer_inventory:
             raise QuestRewardGrantException(
                 f"報酬付与に失敗しました: 発行者のインベントリが見つかりません (issuer_player_id={quest.issuer_player_id})",
@@ -183,9 +179,7 @@ class QuestProgressReactionService:
             inventory.acquire_item(
                 item_id,
                 item_spec_id_value=(
-                    item_aggregate.item_spec.item_spec_id.value
-                    if item_aggregate is not None
-                    else None
+                    item_aggregate.item_spec.item_spec_id.value if item_aggregate is not None else None
                 ),
             )
         self._player_inventory_repository.save(issuer_inventory)

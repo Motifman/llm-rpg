@@ -74,9 +74,7 @@ def _make_resolver(
 
 
 def _perception_policy(*, dead_player_id: int) -> PlayerPerceptionPolicy:
-    outcomes = PlayerOutcomeRegistry.new_for_players(
-        [PlayerId.create(100), PlayerId.create(2)]
-    )
+    outcomes = PlayerOutcomeRegistry.new_for_players([PlayerId.create(100), PlayerId.create(2)])
     outcomes.set_outcome(PlayerId.create(dead_player_id), PlayerOutcomeEnum.DEAD)
     return PlayerPerceptionPolicy(
         outcome_registry=outcomes,

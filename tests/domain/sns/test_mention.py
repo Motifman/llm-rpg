@@ -60,7 +60,8 @@ class TestMention:
         assert mentions == set()
 
     @pytest.mark.parametrize(
-        ("first_name", "second_name"), [("testuser1", "testuser2"), ("testuser", "otheruser")],
+        ("first_name", "second_name"),
+        [("testuser1", "testuser2"), ("testuser", "otheruser")],
     )
     def test_inequality_with_different_mentioned_user_names(self, first_name, second_name):
         """対象IDが同じでも表示名が違えば、別のメンションとして集合に共存する。"""
@@ -84,7 +85,8 @@ class TestMention:
         assert len({mention1, mention2}) == 2
 
     @pytest.mark.parametrize(
-        ("attribute", "replacement"), [("mentioned_user_name", "otheruser"), ("post_id", PostId(2))],
+        ("attribute", "replacement"),
+        [("mentioned_user_name", "otheruser"), ("post_id", PostId(2))],
     )
     def test_immutability(self, attribute, replacement):
         """表示名と対象IDの再代入を拒み、構築時の両方の値を保持する。"""

@@ -65,9 +65,7 @@ def _build_builder(
         player_status_repository=player_status_repo,
         fallen_body_registry=FallenBodyRegistry(),
         current_tick_provider=lambda: current_tick,
-        time_of_day_phase_label_resolver=(
-            phase_labels.get if phase_labels else None
-        ),
+        time_of_day_phase_label_resolver=(phase_labels.get if phase_labels else None),
     )
 
 
@@ -383,9 +381,7 @@ def test_failing_object_stock_precondition_remains_with_failure_reason_hint() ->
     assert snap is not None
     assert snap.objects[0].interactions[0].action_name == "gather_shellfish"
     assert snap.objects[0].interactions[0].condition_hints == ()
-    assert snap.objects[0].interactions[0].blocking_hints == (
-        "貝は採り尽くした。時間が経てば戻る。",
-    )
+    assert snap.objects[0].interactions[0].blocking_hints == ("貝は採り尽くした。時間が経てば戻る。",)
 
 
 def test_recovered_object_stock_precondition_does_not_show_failure_hint() -> None:

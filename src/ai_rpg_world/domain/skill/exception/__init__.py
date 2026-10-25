@@ -15,4 +15,3 @@ from .skill_exceptions import (
     SkillProposalValidationException,
     SkillSpecValidationException,
 )
-

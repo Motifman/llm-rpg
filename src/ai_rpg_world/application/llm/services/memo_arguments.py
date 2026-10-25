@@ -64,18 +64,14 @@ class ReadMemoOperations:
     present: bool = False
 
 
-def read_memo_operations(
-    arguments: Mapping[str, Any], *, episode_source_offered: bool
-) -> ReadMemoOperations:
+def read_memo_operations(arguments: Mapping[str, Any], *, episode_source_offered: bool) -> ReadMemoOperations:
     if MEMO_FIELD_NAME not in arguments:
         return ReadMemoOperations()
     raw = arguments[MEMO_FIELD_NAME]
     if raw is None:
         return ReadMemoOperations(present=True)
     if not isinstance(raw, list):
-        return ReadMemoOperations(
-            rejected=(RejectedMemoArgument(None, REJECTED_NOT_A_LIST, raw),), present=True
-        )
+        return ReadMemoOperations(rejected=(RejectedMemoArgument(None, REJECTED_NOT_A_LIST, raw),), present=True)
     operations: list[tuple[int, MemoOperation]] = []
     rejected: list[RejectedMemoArgument] = []
     for index, item in enumerate(raw):
@@ -84,9 +80,7 @@ def read_memo_operations(
             rejected.append(RejectedMemoArgument(index, read, item))
         else:
             operations.append((index, read))
-    return ReadMemoOperations(
-        operations=tuple(operations), rejected=tuple(rejected), present=True
-    )
+    return ReadMemoOperations(operations=tuple(operations), rejected=tuple(rejected), present=True)
 
 
 def _given(value: Any) -> bool:
@@ -109,9 +103,7 @@ def _read_handle(item: Mapping[str, Any]) -> str | None:
     return handle.strip()
 
 
-def _read_provenance(
-    item: Mapping[str, Any], *, episode_source_offered: bool
-) -> MemoProvenance | str | None:
+def _read_provenance(item: Mapping[str, Any], *, episode_source_offered: bool) -> MemoProvenance | str | None:
     """どれも書かれていなければ None。書かれていれば、揃っていないと理由を返す。"""
     source_raw, certainty_raw, source_from = (
         item.get("source"),
@@ -139,9 +131,7 @@ def _read_provenance(
         return REJECTED_MISSING_FROM
     if source is MemoSource.EPISODE and not source_from.strip().startswith("ep_"):
         return REJECTED_UNKNOWN_EPISODE
-    return MemoProvenance(
-        source=source, certainty=MemoCertainty(certainty_raw), source_from=source_from.strip()
-    )
+    return MemoProvenance(source=source, certainty=MemoCertainty(certainty_raw), source_from=source_from.strip())
 
 
 def _read_item(item: Any, *, episode_source_offered: bool) -> MemoOperation | str:
@@ -196,10 +186,7 @@ _REASON_TEXTS = {
 def rejection_text(reason: str, *, kind: MemoKind | None = None, detail: str | None = None) -> str:
     """外した理由を、本人に返す文にする。"""
     if reason == REJECTED_LIMIT_REACHED and kind is not None:
-        return (
-            f"{_KIND_LABELS[kind]}が上限 ({KIND_LIMITS[kind]} 件) です。"
-            "消すか書き換えてください。"
-        )
+        return f"{_KIND_LABELS[kind]}が上限 ({KIND_LIMITS[kind]} 件) です。消すか書き換えてください。"
     if reason == REJECTED_NO_SUCH_MEMO:
         return f"{detail} というメモはありません。" if detail else "そのメモはありません。"
     if reason == REJECTED_UNKNOWN_EPISODE:
@@ -209,10 +196,7 @@ def rejection_text(reason: str, *, kind: MemoKind | None = None, detail: str | N
 
 def feedback_text(rejections: Iterable[tuple[int | None, str]]) -> str:
     """``rejections`` は (配列の中の位置, 理由の文)。無ければ空文字。"""
-    lines = [
-        f"- {'memo' if index is None else f'{index + 1} 件目'}: {text}"
-        for index, text in rejections
-    ]
+    lines = [f"- {'memo' if index is None else f'{index + 1} 件目'}: {text}" for index, text in rejections]
     if not lines:
         return ""
     return "\n\n[メモ] 次の操作は書けませんでした。\n" + "\n".join(lines)

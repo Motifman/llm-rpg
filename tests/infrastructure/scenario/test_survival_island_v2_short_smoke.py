@@ -64,29 +64,21 @@ class TestPlayerOutcomeRules:
     """救助 2 回 (2 日目・3 日目) / 漂流確定 4 日目、に機構が縮んでいる。"""
 
     def test_rescue_at_two_ticks(self, loaded) -> None:
-        assert tuple(
-            rule.trigger.tick for rule in loaded.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        ) == (96, 144)
+        assert tuple(rule.trigger.tick for rule in loaded.player_outcome_rules if rule.outcome.value == "RESCUED") == (
+            96,
+            144,
+        )
 
     def test_stranded_at_day_four(self, loaded) -> None:
-        stranded = next(
-            rule for rule in loaded.player_outcome_rules
-            if rule.outcome.value == "STRANDED"
-        )
+        stranded = next(rule for rule in loaded.player_outcome_rules if rule.outcome.value == "STRANDED")
         assert stranded.trigger.tick == 192
 
     def test_summit_and_signal_flag_unchanged(self, loaded) -> None:
         """救助の解決条件 (山頂スポット・狼煙 flag) は v2 と共通で不変。"""
-        rescue = next(
-            rule for rule in loaded.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        )
+        rescue = next(rule for rule in loaded.player_outcome_rules if rule.outcome.value == "RESCUED")
         summit_id = loaded.id_mapper.get_int("spot", "summit")
         assert any(c.spot_id == summit_id for c in rescue.player_conditions)
-        assert any(
-            c.flag_name == "signal_fire_lit" for c in rescue.player_conditions
-        )
+        assert any(c.flag_name == "signal_fire_lit" for c in rescue.player_conditions)
 
 
 class TestNarrativeTimelineConsistency:
@@ -130,11 +122,9 @@ class TestV2NotModified:
         v2 = ScenarioLoader().load_from_file(str(_V2_PATH))
         assert v2.metadata.id == "survival_island_v2"
         assert v2.metadata.estimated_ticks == 384
-        assert tuple(
-            rule.trigger.tick for rule in v2.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        ) == (192, 288, 336)
-        assert next(
-            rule.trigger.tick for rule in v2.player_outcome_rules
-            if rule.outcome.value == "STRANDED"
-        ) == 384
+        assert tuple(rule.trigger.tick for rule in v2.player_outcome_rules if rule.outcome.value == "RESCUED") == (
+            192,
+            288,
+            336,
+        )
+        assert next(rule.trigger.tick for rule in v2.player_outcome_rules if rule.outcome.value == "STRANDED") == 384

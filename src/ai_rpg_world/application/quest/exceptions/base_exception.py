@@ -5,7 +5,6 @@ from typing import Any
 """
 
 
-
 class QuestApplicationException(Exception):
     """クエストアプリケーション層の基底例外"""
 

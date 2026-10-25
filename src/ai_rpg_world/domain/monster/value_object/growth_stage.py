@@ -23,9 +23,7 @@ class GrowthStage:
 
     def __post_init__(self) -> None:
         if self.after_ticks < 0:
-            raise MonsterTemplateValidationException(
-                f"growth_stage.after_ticks cannot be negative: {self.after_ticks}"
-            )
+            raise MonsterTemplateValidationException(f"growth_stage.after_ticks cannot be negative: {self.after_ticks}")
         if not (0.01 <= self.stats_multiplier <= 2.0):
             raise MonsterTemplateValidationException(
                 f"growth_stage.stats_multiplier must be between 0.01 and 2.0: {self.stats_multiplier}"

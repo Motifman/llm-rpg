@@ -76,14 +76,10 @@ def attach_world_state_sqlite_repositories(
             player_inventories=SqlitePlayerInventoryWriteRepository.for_shared_unit_of_work(
                 connection, event_sink=event_sink
             ),
-            items=SqliteItemWriteRepository.for_shared_unit_of_work(
-                connection, event_sink=event_sink
-            ),
+            items=SqliteItemWriteRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
         ),
         world_runtime=WorldRuntimeSqliteRepositories(
-            monsters=SqliteMonsterAggregateRepository.for_shared_unit_of_work(
-                connection, event_sink=event_sink
-            ),
+            monsters=SqliteMonsterAggregateRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
         ),
         world_structure=WorldStructureSqliteRepositories(
             spots=SqliteSpotRepository.for_shared_unit_of_work(connection),

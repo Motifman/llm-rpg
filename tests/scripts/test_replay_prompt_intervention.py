@@ -59,9 +59,7 @@ class TestApplySayInlineIntervention:
     def test_raises_the_cap_on_tools_that_already_have_say_inline(self) -> None:
         """既に say_inline を持つツールの maxLength を介入値へ引き上げる。"""
         out = apply_say_inline_intervention([_tool("travel_to", say_inline=True)])
-        assert _props(out, "travel_to")["say_inline"]["maxLength"] == (
-            INTERVENTION_SAY_INLINE_MAX_LENGTH
-        )
+        assert _props(out, "travel_to")["say_inline"]["maxLength"] == (INTERVENTION_SAY_INLINE_MAX_LENGTH)
 
     def test_cap_is_high_enough_to_hold_a_typical_utterance(self) -> None:
         """実測の speak 本文は中央値 104 字なので、介入値はそれを超えている

@@ -23,6 +23,7 @@ prompt ordering / cache 議論との関係:
 - したがって snapshot の決定性は prompt config と直交する。test も
   memory store 内容に focus する
 """
+
 from __future__ import annotations
 
 import json
@@ -47,13 +48,23 @@ from ai_rpg_world.infrastructure.repository.in_memory_being_repository import In
 
 _FIXED_TIME = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
+
 def _make_stack():
     """新規 in-memory store stack + wiring stub を返す。"""
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
     provisioning = BeingProvisioningService(repo)
-    wiring = SimpleNamespace(being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock(), being_short_term_memory_store=InMemoryShortTermMemoryRepository())
+    wiring = SimpleNamespace(
+        being_repository=repo,
+        being_attachment_resolver=resolver,
+        acquaintance_store=InMemoryAcquaintanceRepository(),
+        being_episode_store=InMemoryEpisodeRepository(),
+        being_memo_store=InMemoryMemoBookRepository(),
+        memory_turn_clock=InMemoryMemoryTurnClock(),
+        being_short_term_memory_store=InMemoryShortTermMemoryRepository(),
+    )
     return (wiring, provisioning)
+
 
 def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
     """全 memory store に決定論的データを投入する。
@@ -61,7 +72,8 @@ def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
     決定論性のため、すべての datetime は ``_FIXED_TIME`` 固定。これにより
     capture → restore → recapture で payload が bit-identical になる。
     """
-    wiring.acquaintance_store.record_meeting(being_id, environment_name='island', name='kaito', turn=3)
+    wiring.acquaintance_store.record_meeting(being_id, environment_name="island", name="kaito", turn=3)
+
 
 def _strip_volatile_metadata(payload_dict: dict) -> dict:
     """``captured_at`` は capture 時刻なので毎回変わる。比較前に取り除く。
@@ -70,11 +82,12 @@ def _strip_volatile_metadata(payload_dict: dict) -> dict:
     determinism 比較からは外す (= 内容の bit-identical 性だけ見る)。
     """
     out = dict(payload_dict)
-    meta = out.get('_metadata')
+    meta = out.get("_metadata")
     if isinstance(meta, dict):
-        cleaned = {k: v for (k, v) in meta.items() if k != 'captured_at'}
-        out['_metadata'] = cleaned
+        cleaned = {k: v for (k, v) in meta.items() if k != "captured_at"}
+        out["_metadata"] = cleaned
     return out
+
 
 class TestSnapshotRoundTripDeterminism:
     """P1: capture → restore → recapture で payload が bit-identical。"""
@@ -86,15 +99,18 @@ class TestSnapshotRoundTripDeterminism:
         being_id = src_wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))
         assert being_id is not None
         _populate_all_stores(src_wiring, being_id)
-        src_session = ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / 'src')
-        src_session.capture_all([PlayerId(1)], source_scenario='test_scenario')
-        src_payload = _strip_volatile_metadata(json.loads((tmp_path / 'src' / f'{being_id.value}.json').read_text()))
+        src_session = ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / "src")
+        src_session.capture_all([PlayerId(1)], source_scenario="test_scenario")
+        src_payload = _strip_volatile_metadata(json.loads((tmp_path / "src" / f"{being_id.value}.json").read_text()))
         (dst_wiring, _) = _make_stack()
-        dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / 'dst')
-        dst_session.restore_all_from_dir(tmp_path / 'src', current_scenario='test_scenario')
-        dst_session.capture_all([PlayerId(1)], source_scenario='test_scenario')
-        dst_payload = _strip_volatile_metadata(json.loads((tmp_path / 'dst' / f'{being_id.value}.json').read_text()))
-        assert src_payload == dst_payload, 'capture → restore → recapture で payload が一致しない。snapshot codec の決定性が壊れている可能性がある。'
+        dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / "dst")
+        dst_session.restore_all_from_dir(tmp_path / "src", current_scenario="test_scenario")
+        dst_session.capture_all([PlayerId(1)], source_scenario="test_scenario")
+        dst_payload = _strip_volatile_metadata(json.loads((tmp_path / "dst" / f"{being_id.value}.json").read_text()))
+        assert src_payload == dst_payload, (
+            "capture → restore → recapture で payload が一致しない。snapshot codec の決定性が壊れている可能性がある。"
+        )
+
 
 class TestRestoreIdempotency:
     """P2: 同じ snapshot を 2 回 restore しても結果は同じ。"""
@@ -106,16 +122,17 @@ class TestRestoreIdempotency:
         being_id = src_wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))
         assert being_id is not None
         _populate_all_stores(src_wiring, being_id)
-        ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / 'src').capture_all([PlayerId(1)])
+        ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / "src").capture_all([PlayerId(1)])
         (dst1_wiring, _) = _make_stack()
-        dst1_session = ExperimentSnapshotSession(wiring_result=dst1_wiring, snapshot_dir=tmp_path / 'dst1')
-        dst1_session.restore_all_from_dir(tmp_path / 'src')
+        dst1_session = ExperimentSnapshotSession(wiring_result=dst1_wiring, snapshot_dir=tmp_path / "dst1")
+        dst1_session.restore_all_from_dir(tmp_path / "src")
         dst1_session.capture_all([PlayerId(1)])
-        payload_1 = _strip_volatile_metadata(json.loads((tmp_path / 'dst1' / f'{being_id.value}.json').read_text()))
-        dst1_session.restore_all_from_dir(tmp_path / 'src')
+        payload_1 = _strip_volatile_metadata(json.loads((tmp_path / "dst1" / f"{being_id.value}.json").read_text()))
+        dst1_session.restore_all_from_dir(tmp_path / "src")
         dst1_session.capture_all([PlayerId(1)])
-        payload_2 = _strip_volatile_metadata(json.loads((tmp_path / 'dst1' / f'{being_id.value}.json').read_text()))
-        assert payload_1 == payload_2, 'restore が冪等でない'
+        payload_2 = _strip_volatile_metadata(json.loads((tmp_path / "dst1" / f"{being_id.value}.json").read_text()))
+        assert payload_1 == payload_2, "restore が冪等でない"
+
 
 class TestRestoreInsensitivityToScenarioName:
     """P4: cross-scenario でも Being aggregate + memory 内容は変わらない。"""
@@ -127,18 +144,23 @@ class TestRestoreInsensitivityToScenarioName:
         being_id = src_wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))
         assert being_id is not None
         _populate_all_stores(src_wiring, being_id)
-        ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / 'src').capture_all([PlayerId(1)], source_scenario='forest_world')
+        ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / "src").capture_all(
+            [PlayerId(1)], source_scenario="forest_world"
+        )
         (dst_wiring, _) = _make_stack()
-        dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / 'dst')
-        dst_session.restore_all_from_dir(tmp_path / 'src', current_scenario='desert_world')
-        dst_session.capture_all([PlayerId(1)], source_scenario='desert_world')
-        src_payload = json.loads((tmp_path / 'src' / f'{being_id.value}.json').read_text())
-        dst_payload = json.loads((tmp_path / 'dst' / f'{being_id.value}.json').read_text())
+        dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / "dst")
+        dst_session.restore_all_from_dir(tmp_path / "src", current_scenario="desert_world")
+        dst_session.capture_all([PlayerId(1)], source_scenario="desert_world")
+        src_payload = json.loads((tmp_path / "src" / f"{being_id.value}.json").read_text())
+        dst_payload = json.loads((tmp_path / "dst" / f"{being_id.value}.json").read_text())
         src_clean = _strip_volatile_metadata(src_payload)
         dst_clean = _strip_volatile_metadata(dst_payload)
-        src_clean['_metadata']['source_scenario'] = 'X'
-        dst_clean['_metadata']['source_scenario'] = 'X'
-        assert src_clean == dst_clean, 'cross-scenario restore で Being aggregate / memory 内容が変わった = scenario 名が data に影響している (= determinism 違反)'
+        src_clean["_metadata"]["source_scenario"] = "X"
+        dst_clean["_metadata"]["source_scenario"] = "X"
+        assert src_clean == dst_clean, (
+            "cross-scenario restore で Being aggregate / memory 内容が変わった = scenario 名が data に影響している (= determinism 違反)"
+        )
+
 
 class TestSchemaStrictness:
     """P5 (schema 進化 (a) 厳格モード): 未知 schema_version は load 失敗。"""
@@ -146,22 +168,52 @@ class TestSchemaStrictness:
     def test_being_snapshot_unknown_snapshot_version_raises_exception(self, tmp_path: Path) -> None:
         """JSON ファイルの ``snapshot_version`` が SUPPORTED_VERSIONS 外なら例外。"""
         from ai_rpg_world.domain.being.exception.being_exceptions import BeingSnapshotVersionException
-        bad_dir = tmp_path / 'bad'
+
+        bad_dir = tmp_path / "bad"
         bad_dir.mkdir()
-        (bad_dir / 'being_w1_p1.json').write_text(json.dumps({'being_id_value': 'being_w1_p1', 'identity_name': 'agent', 'identity_first_person': 'わたし', 'attachment_world_id': 1, 'attachment_player_id': 1, 'declared_memory_kinds': [], 'snapshot_version': 999, 'memory_payload_json': None}), encoding='utf-8')
+        (bad_dir / "being_w1_p1.json").write_text(
+            json.dumps(
+                {
+                    "being_id_value": "being_w1_p1",
+                    "identity_name": "agent",
+                    "identity_first_person": "わたし",
+                    "attachment_world_id": 1,
+                    "attachment_player_id": 1,
+                    "declared_memory_kinds": [],
+                    "snapshot_version": 999,
+                    "memory_payload_json": None,
+                }
+            ),
+            encoding="utf-8",
+        )
         (wiring, _) = _make_stack()
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'x')
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "x")
         with pytest.raises(BeingSnapshotVersionException):
             session.restore_all_from_dir(bad_dir)
 
     def test_memory_payload_unknown_schema_version_raises_exception(self, tmp_path: Path) -> None:
         """payload JSON の ``schema_version`` が SUPPORTED_PAYLOAD_SCHEMA_VERSIONS 外なら例外。"""
         from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemoryPayloadSchemaError
-        bad_payload = json.dumps({'schema_version': 999, 'being_memo_book': []}, ensure_ascii=False)
-        bad_dir = tmp_path / 'bad'
+
+        bad_payload = json.dumps({"schema_version": 999, "being_memo_book": []}, ensure_ascii=False)
+        bad_dir = tmp_path / "bad"
         bad_dir.mkdir()
-        (bad_dir / 'being_w1_p1.json').write_text(json.dumps({'being_id_value': 'being_w1_p1', 'identity_name': 'agent', 'identity_first_person': 'わたし', 'attachment_world_id': 1, 'attachment_player_id': 1, 'declared_memory_kinds': [], 'snapshot_version': 2, 'memory_payload_json': bad_payload}), encoding='utf-8')
+        (bad_dir / "being_w1_p1.json").write_text(
+            json.dumps(
+                {
+                    "being_id_value": "being_w1_p1",
+                    "identity_name": "agent",
+                    "identity_first_person": "わたし",
+                    "attachment_world_id": 1,
+                    "attachment_player_id": 1,
+                    "declared_memory_kinds": [],
+                    "snapshot_version": 2,
+                    "memory_payload_json": bad_payload,
+                }
+            ),
+            encoding="utf-8",
+        )
         (wiring, _) = _make_stack()
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'x')
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "x")
         with pytest.raises(BeingMemoryPayloadSchemaError):
             session.restore_all_from_dir(bad_dir)

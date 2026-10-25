@@ -90,9 +90,7 @@ def test_cross_bundle_rollback_reverts_uncommitted_writes(tmp_path) -> None:
     with pytest.raises(RuntimeError, match="abort"):
         with factory.create() as uow:
             static_master = attach_static_master_sqlite_repositories(uow.connection)
-            world_state = attach_world_state_sqlite_repositories(
-                uow.connection, event_sink=uow
-            )
+            world_state = attach_world_state_sqlite_repositories(uow.connection, event_sink=uow)
             spec = _item_spec(2)
 
             static_master.writers.item_specs.replace_spec(spec)
@@ -114,13 +112,16 @@ def test_event_sink_collects_events_inside_sqlite_scope() -> None:
     dispatcher = CommandEventDispatcher(failure_observer=lambda *args: pytest.fail("配送失敗"))
     received: list[DomainEvent] = []
     dispatcher.register_after_commit(
-        DomainEvent, received.append,
-        channel=DeliveryChannel.INTEGRATION, guarantee=DeliveryGuarantee.BEST_EFFORT,
+        DomainEvent,
+        received.append,
+        channel=DeliveryChannel.INTEGRATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
     transaction = SqliteUnitOfWork(connection=conn)
     scope = CommandScope(
         SqliteUnitOfWorkTransactionAdapter(transaction),
-        sync_dispatcher=dispatcher, after_commit_handoff=dispatcher,
+        sync_dispatcher=dispatcher,
+        after_commit_handoff=dispatcher,
     )
     try:
         with scope as context:

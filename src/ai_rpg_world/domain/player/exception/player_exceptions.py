@@ -19,26 +19,26 @@ class PlayerDomainException(DomainException):
 
     全てのPlayerドメイン例外はこのクラスを継承します。
     """
+
     domain = "player"
 
 
 # ===== 具体的な例外クラス =====
 
-class PlayerAttributeSpecValidationException(
-    PlayerDomainException, ValidationException
-):
+
+class PlayerAttributeSpecValidationException(PlayerDomainException, ValidationException):
     """人が持つ属性の宣言が不正。"""
+
     error_code = "PLAYER.ATTRIBUTE_SPEC_VALIDATION"
 
 
 class PlayerIdValidationException(PlayerDomainException, ValidationException):
     """プレイヤーIDバリデーション例外"""
+
     error_code = "PLAYER.ID_VALIDATION"
 
 
-class PlayerOutcomeRegistryValidationException(
-    PlayerDomainException, ValidationException
-):
+class PlayerOutcomeRegistryValidationException(PlayerDomainException, ValidationException):
     """PlayerOutcomeRegistry の全体置換に不整合がある。"""
 
     error_code = "PLAYER.OUTCOME_REGISTRY_VALIDATION"
@@ -46,182 +46,220 @@ class PlayerOutcomeRegistryValidationException(
 
 class SpotNavigationStateInvalidException(PlayerDomainException, ValidationException):
     """スポットグラフ用ナビゲーション状態の不整合・不正な操作"""
+
     error_code = "PLAYER.SPOT_NAVIGATION_STATE_INVALID"
 
 
 class HpValidationException(PlayerDomainException, ValidationException):
     """HPバリデーション例外"""
+
     error_code = "PLAYER.HP_VALIDATION"
 
 
 class MpValidationException(PlayerDomainException, ValidationException):
     """MPバリデーション例外"""
+
     error_code = "PLAYER.MP_VALIDATION"
 
 
 class BaseStatusValidationException(PlayerDomainException, ValidationException):
     """基礎ステータスバリデーション例外(deprecated)"""
+
     error_code = "PLAYER.BASE_STATUS_VALIDATION"
 
 
 class BaseStatsValidationException(PlayerDomainException, ValidationException):
     """基礎ステータスバリデーション例外"""
+
     error_code = "PLAYER.BASE_STATS_VALIDATION"
 
 
 class MessageValidationException(PlayerDomainException, ValidationException):
     """メッセージバリデーション例外"""
+
     error_code = "PLAYER.MESSAGE_VALIDATION"
 
 
 class SpeechValidationException(PlayerDomainException, ValidationException):
     """発言バリデーション例外（囁きの宛先未指定・発言内容空など）"""
+
     error_code = "PLAYER.SPEECH_VALIDATION"
 
 
 class PlayerInventorySlotIdValidationException(PlayerDomainException, ValidationException):
     """プレイヤーインベントリスロットIDバリデーション例外"""
+
     error_code = "PLAYER.INVENTORY_SLOT_ID_VALIDATION"
 
 
 class PlayerNameValidationException(PlayerDomainException, ValidationException):
     """プレイヤー名バリデーション例外"""
+
     error_code = "PLAYER.NAME_VALIDATION"
 
 
 class ExpTableValidationException(PlayerDomainException, ValidationException):
     """経験値テーブルバリデーション例外"""
+
     error_code = "PLAYER.EXP_TABLE_VALIDATION"
 
 
 class StatGrowthFactorValidationException(PlayerDomainException, ValidationException):
     """ステータス成長率バリデーション例外"""
+
     error_code = "PLAYER.STAT_GROWTH_FACTOR_VALIDATION"
 
 
 class GrowthValidationException(PlayerDomainException, ValidationException):
     """レベル/経験値管理バリデーション例外"""
+
     error_code = "PLAYER.GROWTH_VALIDATION"
 
 
 class StaminaValidationException(PlayerDomainException, ValidationException):
     """スタミナバリデーション例外"""
+
     error_code = "PLAYER.STAMINA_VALIDATION"
 
 
 class GoldValidationException(PlayerDomainException, ValidationException):
     """ゴールドバリデーション例外"""
+
     error_code = "PLAYER.GOLD_VALIDATION"
 
 
 class InsufficientMpException(PlayerDomainException, BusinessRuleException):
     """MP不足例外"""
+
     error_code = "PLAYER.INSUFFICIENT_MP"
 
 
 class InsufficientStaminaException(PlayerDomainException, BusinessRuleException):
     """スタミナ不足例外"""
+
     error_code = "PLAYER.INSUFFICIENT_STAMINA"
 
 
 class InsufficientHpException(PlayerDomainException, BusinessRuleException):
     """HP不足例外"""
+
     error_code = "PLAYER.INSUFFICIENT_HP"
 
 
 class InsufficientGoldException(PlayerDomainException, BusinessRuleException):
     """ゴールド不足例外"""
+
     error_code = "PLAYER.INSUFFICIENT_GOLD"
 
 
 class PlayerDownedException(PlayerDomainException, StateException):
     """プレイヤー戦闘不能状態例外"""
+
     error_code = "PLAYER.DOWNED"
 
 
 class PlayerNotDownedException(PlayerDomainException, StateException):
     """プレイヤーが戦闘不能状態でない例外（蘇生時に発生）"""
+
     error_code = "PLAYER.NOT_DOWNED"
 
 
 # ===== 追跡（Pursuit）関連例外 =====
 
+
 class NoActivePursuitException(PlayerDomainException, StateException):
     """追跡中でない状態で追跡操作を行おうとした例外"""
+
     error_code = "PLAYER.NO_ACTIVE_PURSUIT"
 
 
 class CannotSwitchPursuitTargetException(PlayerDomainException, BusinessRuleException):
     """追跡中に別の対象へ切り替えようとした例外（先に現在の追跡を終了する必要がある）"""
+
     error_code = "PLAYER.CANNOT_SWITCH_PURSUIT_TARGET"
 
 
 class PursuitTargetMismatchException(PlayerDomainException, ValidationException):
     """追跡更新時に target_snapshot の target_id が現行の追跡対象と一致しない例外"""
+
     error_code = "PLAYER.PURSUIT_TARGET_MISMATCH"
 
 
 class PursuitLastKnownMismatchException(PlayerDomainException, ValidationException):
     """last_known の target_id が追跡対象と一致しない例外"""
+
     error_code = "PLAYER.PURSUIT_LAST_KNOWN_MISMATCH"
 
 
 class PursuitStateRequiredException(PlayerDomainException, ValidationException):
     """追跡に必要な target_snapshot または last_known が指定されていない例外"""
+
     error_code = "PLAYER.PURSUIT_STATE_REQUIRED"
 
 
 # ===== インベントリ関連例外 =====
 
+
 class InventoryFullException(PlayerDomainException, BusinessRuleException):
     """インベントリ満杯例外"""
+
     error_code = "PLAYER.INVENTORY_FULL"
 
 
 class InvalidSlotException(PlayerDomainException, BusinessRuleException):
     """無効なスロット例外"""
+
     error_code = "PLAYER.INVALID_SLOT"
 
 
 class ItemNotInSlotException(PlayerDomainException, BusinessRuleException):
     """スロットにアイテムがない例外"""
+
     error_code = "PLAYER.ITEM_NOT_IN_SLOT"
 
 
 class EquipmentSlotOccupiedException(PlayerDomainException, BusinessRuleException):
     """装備スロットが占有されている例外"""
+
     error_code = "PLAYER.EQUIPMENT_SLOT_OCCUPIED"
 
 
 # ===== 装備関連例外 =====
 
+
 class InvalidEquipmentItemException(PlayerDomainException, BusinessRuleException):
     """無効な装備アイテム例外"""
+
     error_code = "PLAYER.INVALID_EQUIPMENT_ITEM"
 
 
 class EquipmentSlotMismatchException(PlayerDomainException, BusinessRuleException):
     """装備スロット不一致例外"""
+
     error_code = "PLAYER.EQUIPMENT_SLOT_MISMATCH"
 
 
 class EquipmentSlotValidationException(PlayerDomainException, ValidationException):
     """装備スロットバリデーション例外"""
+
     error_code = "PLAYER.EQUIPMENT_SLOT_VALIDATION"
 
 
 class ItemReservedException(PlayerDomainException, BusinessRuleException):
     """アイテム予約済み例外"""
+
     error_code = "PLAYER.ITEM_RESERVED"
 
 
 class ItemAlreadyReservedException(PlayerDomainException, BusinessRuleException):
     """アイテム既に予約済み例外"""
+
     error_code = "PLAYER.ITEM_ALREADY_RESERVED"
 
 
 class ItemNotReservedException(PlayerDomainException, BusinessRuleException):
     """アイテム未予約例外"""
+
     error_code = "PLAYER.ITEM_NOT_RESERVED"
 
 
@@ -232,4 +270,5 @@ class PlayerStateValidationException(PlayerDomainException, ValidationException)
     str / int / float / bool / None のみを許容する (Phase 4-D-2)。
     datetime や domain 型を直接入れたい場合は文字列等に変換して渡す。
     """
+
     error_code = "PLAYER.STATE_VALIDATION"

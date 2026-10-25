@@ -22,6 +22,7 @@ class UserProfileDto:
 @dataclass(frozen=True)
 class ErrorResponseDto:
     """エラーレスポンスDTO"""
+
     error_code: str
     message: str
     details: str | None = None
@@ -32,6 +33,7 @@ class ErrorResponseDto:
 @dataclass(frozen=True)
 class UserQueryResultDto:
     """ユーザー検索結果DTO（成功・失敗両方を含む）"""
+
     success: bool
     data: list[UserProfileDto] | None = None
     error: ErrorResponseDto | None = None
@@ -40,6 +42,7 @@ class UserQueryResultDto:
 @dataclass(frozen=True)
 class PostDto:
     """ポスト表示用DTO"""
+
     post_id: int
     author_user_id: int
     author_user_name: str
@@ -64,6 +67,7 @@ class PostDto:
 @dataclass(frozen=True)
 class ReplyDto:
     """リプライ表示用DTO"""
+
     reply_id: int
     parent_post_id: int | None  # 親ポストID
     parent_reply_id: int | None  # 親リプライID（ネスト用）
@@ -92,6 +96,7 @@ class ReplyDto:
 @dataclass(frozen=True)
 class ReplyThreadDto:
     """リプライスレッド表示用DTO（ポスト＋リプライツリー）"""
+
     post: PostDto
     replies: list[ReplyDto]  # フラットなリプライ一覧（ツリー構造はdepthで表現）
 
@@ -99,6 +104,7 @@ class ReplyThreadDto:
 @dataclass(frozen=True)
 class NotificationDto:
     """通知表示用DTO"""
+
     notification_id: int
     user_id: int
     notification_type: str
@@ -118,6 +124,7 @@ class NotificationDto:
 @dataclass(frozen=True)
 class CommandResultDto:
     """コマンド実行結果DTO"""
+
     success: bool
     message: str | None = None
     data: dict[str, Any] | None = None  # 作成されたユーザーIDなど

@@ -140,9 +140,7 @@ def build_skill_deck_progress(
 ) -> SkillDeckProgressAggregate:
     required_by_proposal: dict[int, list[SkillId]] = defaultdict(list)
     for required_row in required_skill_rows:
-        required_by_proposal[int(required_row["proposal_id"])].append(
-            SkillId(int(required_row["skill_id"]))
-        )
+        required_by_proposal[int(required_row["proposal_id"])].append(SkillId(int(required_row["skill_id"])))
     proposals = [
         SkillProposal(
             proposal_id=int(proposal_row["proposal_id"]),
@@ -169,4 +167,3 @@ def build_skill_deck_progress(
         capacity_bonus_by_level={level: bonus for level, bonus in capacity_bonus_rows},
         pending_proposals=proposals,
     )
-

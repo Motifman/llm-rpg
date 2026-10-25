@@ -1,6 +1,7 @@
 """
 Unit of Work Factory - Unit of Workインスタンス作成の抽象化
 """
+
 from typing import Protocol
 
 from .unit_of_work import UnitOfWork

@@ -20,9 +20,7 @@ from pathlib import Path
 
 import pytest
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 @pytest.fixture(scope="module")
@@ -62,48 +60,32 @@ class TestCraftingLogObject:
         assert "craft_fishing_rod" in action_names
 
     def test_preconditions_bone_knife_driftwood_vine_rope_three(
-        self, raw_scenario,
+        self,
+        raw_scenario,
     ) -> None:
         """preconditions は bone knife driftwood vine rope の 3 件。"""
         log = _crafting_log(raw_scenario)
-        interaction = next(
-            i for i in log["interactions"] if i["action_name"] == "craft_fishing_rod"
-        )
-        required = {
-            p["required_item"] for p in interaction["preconditions"]
-            if p["condition_type"] == "HAS_ITEM"
-        }
+        interaction = next(i for i in log["interactions"] if i["action_name"] == "craft_fishing_rod")
+        required = {p["required_item"] for p in interaction["preconditions"] if p["condition_type"] == "HAS_ITEM"}
         assert required == {"bone_knife", "driftwood", "vine_rope"}
 
     def test_driftwood_vine_rope_fishing_rod(
-        self, raw_scenario,
+        self,
+        raw_scenario,
     ) -> None:
         """効果は driftwood と vinerope を消費し fishingrod を付与。"""
         log = _crafting_log(raw_scenario)
-        interaction = next(
-            i for i in log["interactions"] if i["action_name"] == "craft_fishing_rod"
-        )
-        removed = [
-            e["parameters"]["item_spec"] for e in interaction["effects"]
-            if e["effect_type"] == "REMOVE_ITEM"
-        ]
-        given = [
-            e["parameters"]["item_spec"] for e in interaction["effects"]
-            if e["effect_type"] == "GIVE_ITEM"
-        ]
+        interaction = next(i for i in log["interactions"] if i["action_name"] == "craft_fishing_rod")
+        removed = [e["parameters"]["item_spec"] for e in interaction["effects"] if e["effect_type"] == "REMOVE_ITEM"]
+        given = [e["parameters"]["item_spec"] for e in interaction["effects"] if e["effect_type"] == "GIVE_ITEM"]
         assert sorted(removed) == ["driftwood", "vine_rope"]
         assert given == ["fishing_rod"]
 
     def test_bone_knife_not_consumed(self, raw_scenario) -> None:
         """ナイフは precondition では要求するが、消費はしない (= 道具)。"""
         log = _crafting_log(raw_scenario)
-        interaction = next(
-            i for i in log["interactions"] if i["action_name"] == "craft_fishing_rod"
-        )
-        removed = {
-            e["parameters"]["item_spec"] for e in interaction["effects"]
-            if e["effect_type"] == "REMOVE_ITEM"
-        }
+        interaction = next(i for i in log["interactions"] if i["action_name"] == "craft_fishing_rod")
+        removed = {e["parameters"]["item_spec"] for e in interaction["effects"] if e["effect_type"] == "REMOVE_ITEM"}
         assert "bone_knife" not in removed
 
 
@@ -111,7 +93,8 @@ class TestCampsiteDescriptionMentionsCrafting:
     """campsite description が crafting_log の存在を匂わせる (G2 hint)。"""
 
     def test_campsite_description_keyword_included(
-        self, raw_scenario,
+        self,
+        raw_scenario,
     ) -> None:
         """campsitedescription に加工 keyword が含まれる。"""
         cs = _campsite(raw_scenario)

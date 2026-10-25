@@ -24,9 +24,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA = (PlayerId(i) for i in range(1, 7))
 _CREW = (_MORI, _SENA, _AOI, _HAGI, _YURA)
@@ -47,9 +45,7 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
 def _owns_lantern(runtime, player_id: PlayerId) -> bool:
     inventory = runtime._player_inventory_repo.find_by_id(player_id)
     assert inventory is not None
-    owned = collect_owned_item_spec_ids_from_inventory(
-        inventory, runtime._item_repo
-    )
+    owned = collect_owned_item_spec_ids_from_inventory(inventory, runtime._item_repo)
     lantern = runtime.id_mapper.get_int("item_spec", "lantern")
     return any(spec.value == lantern for spec in owned)
 
@@ -79,13 +75,9 @@ class TestLanternsStartInStorage:
             assert "非常用ランタンケース" in prompt
             assert 'ランタンを取り出す → "take_lantern"' in prompt
             if player_id == _MORI:
-                assert "資材棚" not in prompt, (
-                    "暗所可視は非常用品の宣言だけに効き、通常物体を漏らさない"
-                )
+                assert "資材棚" not in prompt, "暗所可視は非常用品の宣言だけに効き、通常物体を漏らさない"
 
-            runtime.do_interact(
-                player_id, "emergency_lantern_case", "take_lantern"
-            )
+            runtime.do_interact(player_id, "emergency_lantern_case", "take_lantern")
             assert _owns_lantern(runtime, player_id)
 
 

@@ -137,9 +137,7 @@ class TestPlayerEpisodeWritingTrace:
 
     def test_written_episodes_are_traced(self) -> None:
         """書けたときは、呼んだきっかけ、件数、各エピソードの呼び名・目次・本文の長さ、切り詰めを残す。"""
-        writing, repository, _, recorder = _make(
-            _Completion({"episodes": [_item(), _item(about="あ" * 45)]})
-        )
+        writing, repository, _, recorder = _make(_Completion({"episodes": [_item(), _item(about="あ" * 45)]}))
 
         writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_LEAVING)
 
@@ -152,8 +150,20 @@ class TestPlayerEpisodeWritingTrace:
         assert payload["episode_count"] == 2
         assert payload["dropped_count"] == 0
         assert payload["episodes"] == [
-            {"handle": first.handle, "summary": "金庫を開けた", "recall_when": "金庫の話が出たとき", "body_length": 12, "truncated": {}},
-            {"handle": second.handle, "summary": "あ" * 40, "recall_when": "金庫の話が出たとき", "body_length": 12, "truncated": {"about": 45}},
+            {
+                "handle": first.handle,
+                "summary": "金庫を開けた",
+                "recall_when": "金庫の話が出たとき",
+                "body_length": 12,
+                "truncated": {},
+            },
+            {
+                "handle": second.handle,
+                "summary": "あ" * 40,
+                "recall_when": "金庫の話が出たとき",
+                "body_length": 12,
+                "truncated": {"about": 45},
+            },
         ]
 
     def test_zero_episodes_is_traced_as_written(self) -> None:
@@ -194,7 +204,7 @@ class TestPlayerEpisodeWritingTrace:
     def test_being_lookup_failure_is_traced_and_swallowed(self) -> None:
         """Being を引く処理が例外を投げても、外へ出さず、LLM を呼ばず、失敗として残す。"""
         completion = _Completion({"episodes": [_item()]})
-        writing, *_ , recorder = _make(completion)
+        writing, *_, recorder = _make(completion)
 
         def _broken(pid: PlayerId) -> BeingId | None:
             raise RuntimeError("resolver down")

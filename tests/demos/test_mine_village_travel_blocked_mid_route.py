@@ -72,9 +72,7 @@ def _blocked_observations(runtime, pid: PlayerId) -> list[Any]:
 
 
 def _blocked_traces(runtime) -> list[Any]:
-    return [
-        e for e in runtime._trace_recorder.events if e.kind == TraceEventKind.TRAVEL_BLOCKED
-    ]
+    return [e for e in runtime._trace_recorder.events if e.kind == TraceEventKind.TRAVEL_BLOCKED]
 
 
 def _gen_heads_north_and_haru_bars_the_door(runtime) -> None:
@@ -112,9 +110,7 @@ class TestBarredFireDoorMidTravel:
         _gen_heads_north_and_haru_bars_the_door(runtime)
 
         observations = _blocked_observations(runtime, _GEN)
-        assert [o.prose for o in observations] == [
-            "防火扉は閉ざされていて、開かない。その先へは行けない。"
-        ]
+        assert [o.prose for o in observations] == ["防火扉は閉ざされていて、開かない。その先へは行けない。"]
         assert observations[0].schedules_turn is True
         assert _blocked_observations(runtime, _HARU) == []
 
@@ -184,9 +180,7 @@ class TestBlockedTravelerGetsATurn:
         _gen_heads_north_and_haru_bars_the_door(runtime)
 
         blocked_calls = [
-            (pid, output)
-            for pid, output in scheduler.calls
-            if output.structured.get("type") == "travel_blocked"
+            (pid, output) for pid, output in scheduler.calls if output.structured.get("type") == "travel_blocked"
         ]
         assert [pid for pid, _ in blocked_calls] == [_GEN]
         assert blocked_calls[0][1].schedules_turn is True
@@ -204,10 +198,9 @@ class TestFloodedPassageMidTravel:
         assert [o.prose for o in _blocked_observations(runtime, _GEN)] == [
             "南の坑道と南の横坑の奥の道は塞がっていて、通れない。その先へは行けない。"
         ]
-        assert [
-            (e.payload["passage_kind"], e.payload["passage_state"])
-            for e in _blocked_traces(runtime)
-        ] == [("BARRIER", "ACTIVE")]
+        assert [(e.payload["passage_kind"], e.payload["passage_state"]) for e in _blocked_traces(runtime)] == [
+            ("BARRIER", "ACTIVE")
+        ]
 
 
 class _FailingBlockedTraceRecorder(_CapturingRecorder):

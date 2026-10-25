@@ -46,8 +46,11 @@ class _Port(ITypedJudgmentPort):
         self.calls.append((state, dict(questions)))
         return {
             q: JudgmentResult(
-                value=self.probability, probabilities={}, confidence=None,
-                source=JudgmentSource.JEV, latency_ms=12.0,
+                value=self.probability,
+                probabilities={},
+                confidence=None,
+                source=JudgmentSource.JEV,
+                latency_ms=12.0,
             )
             for q in questions
         }
@@ -55,9 +58,7 @@ class _Port(ITypedJudgmentPort):
 
 class _FailingPort(ITypedJudgmentPort):
     def judge(self, state, questions):
-        raise TypedJudgmentUnavailableException(
-            "down", error_code="TYPED_JUDGMENT_TRANSPORT_FAILED"
-        )
+        raise TypedJudgmentUnavailableException("down", error_code="TYPED_JUDGMENT_TRANSPORT_FAILED")
 
 
 class _Recorder:
@@ -100,9 +101,7 @@ def _action(player: PlayerId, content: str, *, tick: int = 53) -> RecordedAction
 def _offer(detector: SemanticRepeatDetector, player: PlayerId = GAREN, n: int = 1, **kw):
     signal = None
     for i in range(n):
-        signal = detector.observe(
-            _action(player, f"ユノ、麦束と薬草を交換しないか (言い直し {i})"), **kw
-        )
+        signal = detector.observe(_action(player, f"ユノ、麦束と薬草を交換しないか (言い直し {i})"), **kw)
     return signal
 
 
@@ -129,8 +128,7 @@ class TestTheDetectorAsksOnlyWithAFullWindow:
         assert len(port.calls) == 1
         state, questions = port.calls[0]
         assert [a["action"] for a in state["recent_actions"]] == [
-            f"あなたは言った: 「ユノ、麦束と薬草を交換しないか (言い直し {i})」"
-            for i in range(3)
+            f"あなたは言った: 「ユノ、麦束と薬草を交換しないか (言い直し {i})」" for i in range(3)
         ]
         assert state["recent_actions"][0]["result"] == "（2 名に届いた）"
         assert state["recent_actions"][0]["succeeded"] is True
@@ -217,11 +215,15 @@ class TestTheWindowIsBuiltFromTheRecordedAction:
         port = _Port()
         detector = _detector(port, window=2)
         action = RecordedAction(
-            player_key=1, tool_name="speak",
+            player_key=1,
+            tool_name="speak",
             fingerprint=build_argument_fingerprint(
                 {"channel": "say", "content": "薬草と交換したい", "inner_thought": "焦っている"}
             ),
-            success=True, error_code=None, tick=50, result_summary="（2 名に届いた）",
+            success=True,
+            error_code=None,
+            tick=50,
+            result_summary="（2 名に届いた）",
         )
 
         detector.observe(action)
@@ -236,8 +238,12 @@ class TestTheWindowIsBuiltFromTheRecordedAction:
         port = _Port()
         detector = _detector(port, window=2)
         action = RecordedAction(
-            player_key=1, tool_name="wait", fingerprint=build_argument_fingerprint({}),
-            success=True, error_code=None, tick=50,
+            player_key=1,
+            tool_name="wait",
+            fingerprint=build_argument_fingerprint({}),
+            success=True,
+            error_code=None,
+            tick=50,
         )
 
         detector.observe(action)
@@ -367,8 +373,13 @@ class TestTheTracedWindowIsWhatWasAsked:
         recorder = _Recorder()
         detector = _detector(port, window=2, recorder=recorder)
         action = RecordedAction(
-            player_key=1, tool_name="wait", fingerprint=build_argument_fingerprint({}),
-            success=True, error_code=None, tick=50, result_summary="長" * 5000,
+            player_key=1,
+            tool_name="wait",
+            fingerprint=build_argument_fingerprint({}),
+            success=True,
+            error_code=None,
+            tick=50,
+            result_summary="長" * 5000,
         )
 
         detector.observe(action)

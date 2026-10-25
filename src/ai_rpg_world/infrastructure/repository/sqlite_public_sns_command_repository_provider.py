@@ -1,4 +1,5 @@
 """公開SNSの集約と通知を一つのSQLite確定境界へ参加させる。"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -27,9 +28,13 @@ class SqlitePublicSnsCommandRepositoryProvider:
         self._context = context
         self._connection = unit_of_work.connection
         sink = CommandContextAggregateEventSink(context, is_active=unit_of_work.is_in_transaction)
+
         def bind(cls: Any) -> Any:
-            return ScopeBoundRepository(cls(self._connection, _commits_after_write=False,
-                                           _initialize_schema=False, event_sink=sink), self._require_active)
+            return ScopeBoundRepository(
+                cls(self._connection, _commits_after_write=False, _initialize_schema=False, event_sink=sink),
+                self._require_active,
+            )
+
         self.posts = bind(SqlitePostRepository)
         self.replies = bind(SqliteReplyRepository)
         self.users = bind(SqliteSnsUserRepository)
@@ -42,10 +47,13 @@ class SqlitePublicSnsCommandRepositoryProvider:
 
     def notification_exists(self, source_event_id: str, recipient_token: str, kind: str) -> bool:
         self._require_active()
-        return self._connection.execute(
-            "SELECT 1 FROM game_sns_notifications WHERE source_event_id=? AND recipient_identity_token=? AND notification_type=? LIMIT 1",
-            (source_event_id, recipient_token, kind),
-        ).fetchone() is not None
+        return (
+            self._connection.execute(
+                "SELECT 1 FROM game_sns_notifications WHERE source_event_id=? AND recipient_identity_token=? AND notification_type=? LIMIT 1",
+                (source_event_id, recipient_token, kind),
+            ).fetchone()
+            is not None
+        )
 
     def pending_notifications(self, limit: int, *, after_id: int = 0) -> list[Notification]:
         self._require_active()
@@ -57,7 +65,9 @@ class SqlitePublicSnsCommandRepositoryProvider:
 
 
 class SqlitePublicSnsCommandRepositoryProviderFactory:
-    def create(self, context: CommandContext[PublicSnsCommandRepositories], transaction: TransactionPort) -> SqlitePublicSnsCommandRepositoryProvider:
+    def create(
+        self, context: CommandContext[PublicSnsCommandRepositories], transaction: TransactionPort
+    ) -> SqlitePublicSnsCommandRepositoryProvider:
         adapter = unwrap_transaction(transaction)
         if not isinstance(adapter, SqliteUnitOfWorkTransactionAdapter):
             raise TypeError("公開SNSにはSqliteUnitOfWorkTransactionAdapterが必要です")

@@ -55,8 +55,7 @@ class TestLlmCallCounter:
         per_worker = call_count // workers
         with ThreadPoolExecutor(max_workers=workers) as ex:
             futures = [
-                ex.submit(lambda: [runtime.bump_llm_call_count() for _ in range(per_worker)])
-                for _ in range(workers)
+                ex.submit(lambda: [runtime.bump_llm_call_count() for _ in range(per_worker)]) for _ in range(workers)
             ]
             for f in futures:
                 f.result()

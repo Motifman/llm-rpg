@@ -96,15 +96,11 @@ class SpotGraphSimulationApplicationService:
             context={"action": "spot_graph_tick"},
         )
 
-    def set_llm_turn_trigger(
-        self, trigger: ILlmTurnTrigger | None
-    ) -> None:
+    def set_llm_turn_trigger(self, trigger: ILlmTurnTrigger | None) -> None:
         """プレゼン層などから、ティック後に走らせる LLM トリガを差し替える（主に脱出デモ）。"""
         self._llm_turn_trigger = trigger
 
-    def set_heartbeat_emitter(
-        self, emitter: HeartbeatObservationEmitter | None
-    ) -> None:
+    def set_heartbeat_emitter(self, emitter: HeartbeatObservationEmitter | None) -> None:
         """ティック後の heartbeat emitter を注入する（脱出デモなどプレゼン層から）。"""
         self._heartbeat_emitter = emitter
 
@@ -199,9 +195,7 @@ class SpotGraphSimulationApplicationService:
         self._run_post_tick_hooks(current_tick)
         return current_tick
 
-    def _run_stage(
-        self, name: str, stage: _SpotGraphTickStage, current_tick: WorldTick
-    ) -> None:
+    def _run_stage(self, name: str, stage: _SpotGraphTickStage, current_tick: WorldTick) -> None:
         # 段の中で 1 体ずつ包んでいない例外の受け皿。取りやめる単位は段そのもの。
         with self._failure_isolator.unit(stage=name, tick=current_tick, target_kind="stage"):
             stage.run(current_tick)
@@ -266,9 +260,7 @@ class SpotGraphSimulationApplicationService:
                 original_exception=failures[0][1],
             )
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], WorldTick], context: dict[str, Any]
-    ) -> WorldTick:
+    def _execute_with_error_handling(self, operation: Callable[[], WorldTick], context: dict[str, Any]) -> WorldTick:
         try:
             return operation()
         except ApplicationException:

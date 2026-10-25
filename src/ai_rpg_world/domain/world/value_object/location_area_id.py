@@ -7,6 +7,7 @@ from ai_rpg_world.domain.world.exception.map_exception import LocationAreaIdVali
 @dataclass(frozen=True)
 class LocationAreaId:
     """ロケーションエリアの識別子"""
+
     value: int
 
     def __post_init__(self) -> None:

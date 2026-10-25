@@ -38,26 +38,21 @@ class TestAttackDescriptionHasCombatHints:
     def test_documented_behavior_2(self) -> None:
         """「殴れば倒せる」誤読を防ぐため、素手のダメージが小さいことを書く。"""
         desc = ATTACK_DEFINITION.description
-        assert (
-            "素手" in desc or "武器" in desc
-        ), "武器 / 素手 に関する情報が description に無い"
+        assert "素手" in desc or "武器" in desc, "武器 / 素手 に関する情報が description に無い"
 
     def test_target_hp_bucket(self) -> None:
         """`health_bucket` (健康/弱っている/瀕死) の観測を判断材料に使う旨。"""
         desc = ATTACK_DEFINITION.description
-        assert (
-            "健康" in desc
-            or "弱って" in desc
-            or "瀕死" in desc
-            or "health" in desc.lower()
-        ), "相手 HP の観測手段が説明されていない"
+        assert "健康" in desc or "弱って" in desc or "瀕死" in desc or "health" in desc.lower(), (
+            "相手 HP の観測手段が説明されていない"
+        )
 
     def test_documented_behavior(self) -> None:
         """「攻撃 or 逃走」の判断枠組みを LLM に示す。"""
         desc = ATTACK_DEFINITION.description
-        assert (
-            "逃" in desc or "退" in desc or "travel_to" in desc
-        ), "逃走 / travel_to への言及が無く、attack が唯一の対処と誤読される"
+        assert "逃" in desc or "退" in desc or "travel_to" in desc, (
+            "逃走 / travel_to への言及が無く、attack が唯一の対処と誤読される"
+        )
 
     def test_description_static_placeholder(self) -> None:
         """description は static で placeholder なし。"""

@@ -98,6 +98,7 @@ def _make_monster(
     挙動を検証するテストは個別に明示的に値を設定する。
     """
     from ai_rpg_world.domain.monster.enum.monster_enum import EcologyTypeEnum
+
     monster = MagicMock()
     # graph.move_monster は monster.monster_id を辞書キーとして使うため、
     # 実 MonsterId 値オブジェクトを設定する必要がある（MagicMock 自動値だと
@@ -136,6 +137,7 @@ def _make_monster(
         BehaviorStateEnum,
         ReactionPolicyEnum,
     )
+
     monster.is_fleeing.return_value = False
     monster.is_chasing.return_value = False
     monster.chase_attacker_ref.return_value = None
@@ -265,10 +267,7 @@ class TestAttackHappens:
         assert len(outcomes) == 1
         assert outcomes[0].executed is True
         assert outcomes[0].damage == 7
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAttackedPlayerInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
         assert len(events) == 1
         assert events[0].damage == 7
         assert events[0].target_visible is True
@@ -308,10 +307,7 @@ class TestCooldownSkip:
 
         svc.tick(WorldTick(10))
 
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAttackedPlayerInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
         assert events == []
         player.apply_damage.assert_not_called()
 
@@ -348,10 +344,7 @@ class TestDarknessGate:
 
         svc.tick(WorldTick(10))
 
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAttackedPlayerInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
         assert events == []
 
     def test_darkness_dark_vision_target_visible_false(self) -> None:
@@ -383,10 +376,7 @@ class TestDarknessGate:
 
         svc.tick(WorldTick(10))
 
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAttackedPlayerInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
         assert len(events) == 1
         assert events[0].target_visible is False
 
@@ -422,10 +412,7 @@ class TestNoTarget:
         outcomes = svc.tick(WorldTick(10))
 
         assert outcomes == []
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAttackedPlayerInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
         assert events == []
 
 
@@ -461,10 +448,7 @@ class TestNonHostile:
 
         svc.tick(WorldTick(10))
 
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAttackedPlayerInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
         assert events == []
         monster.can_attack_now.assert_not_called()
 
@@ -512,10 +496,7 @@ def _make_two_spot_graph(*, traversable_to_b: bool = True) -> SpotGraphAggregate
             description="",
             travel_ticks=1,
             is_bidirectional=False,
-            passage=(
-                Passage.open() if traversable_to_b
-                else Passage.open(traversable=False)
-            ),
+            passage=(Passage.open() if traversable_to_b else Passage.open(traversable=False)),
             passage_conditions=[],
         )
     )

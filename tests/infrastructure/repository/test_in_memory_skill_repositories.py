@@ -37,9 +37,7 @@ def _skill_spec(skill_id: int, name: str = "Slash") -> SkillSpec:
         cast_lock_ticks=1,
         cooldown_ticks=5,
         power_multiplier=1.0,
-        hit_pattern=SkillHitPattern.single_pulse(
-            SkillHitPatternType.MELEE, HitBoxShape.single_cell()
-        ),
+        hit_pattern=SkillHitPattern.single_pulse(SkillHitPatternType.MELEE, HitBoxShape.single_cell()),
     )
 
 

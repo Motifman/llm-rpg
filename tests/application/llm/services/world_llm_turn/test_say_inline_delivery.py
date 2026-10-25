@@ -57,9 +57,9 @@ class TestWrapWithSayInline:
 
     def test_spoken_words_are_recorded_in_the_trace_payload(self) -> None:
         """発言を出せたとき、trace_payload に say_inline_spoken=True を足し、既存の項目を残す。"""
-        result = wrap_with_say_inline(
-            _returning(_REFUSED), _Speaker(SayInlineDelivery.SPOKEN)
-        )(PlayerId(3), _ARGS, None)
+        result = wrap_with_say_inline(_returning(_REFUSED), _Speaker(SayInlineDelivery.SPOKEN))(
+            PlayerId(3), _ARGS, None
+        )
 
         assert result.trace_payload == {
             "precondition_failure_kind": "missing_prerequisite",
@@ -68,9 +68,9 @@ class TestWrapWithSayInline:
 
     def test_undelivered_words_are_reported_to_the_actor(self) -> None:
         """発言を出せなかったとき、結果文の末尾に届かなかったことを足し、trace に say_inline_spoken=False を残す。"""
-        result = wrap_with_say_inline(
-            _returning(_REFUSED), _Speaker(SayInlineDelivery.NOT_DELIVERED)
-        )(PlayerId(3), _ARGS, None)
+        result = wrap_with_say_inline(_returning(_REFUSED), _Speaker(SayInlineDelivery.NOT_DELIVERED))(
+            PlayerId(3), _ARGS, None
+        )
 
         assert result.message == _REFUSED.message + NOT_DELIVERED_NOTE
         assert result.trace_payload is not None
@@ -78,9 +78,9 @@ class TestWrapWithSayInline:
 
     def test_nothing_to_say_leaves_the_result_untouched(self) -> None:
         """say_inline が無いときは、結果をそのまま返す。"""
-        result = wrap_with_say_inline(
-            _returning(_REFUSED), _Speaker(SayInlineDelivery.NOTHING_TO_SAY)
-        )(PlayerId(3), {}, None)
+        result = wrap_with_say_inline(_returning(_REFUSED), _Speaker(SayInlineDelivery.NOTHING_TO_SAY))(
+            PlayerId(3), {}, None
+        )
 
         assert result is _REFUSED
 
@@ -103,9 +103,7 @@ class TestWrapWithSayInline:
             raise RuntimeError("boom")
 
         with pytest.raises(RuntimeError) as caught:
-            wrap_with_say_inline(_raising, _Speaker(SayInlineDelivery.NOT_DELIVERED))(
-                PlayerId(3), _ARGS, None
-            )
+            wrap_with_say_inline(_raising, _Speaker(SayInlineDelivery.NOT_DELIVERED))(PlayerId(3), _ARGS, None)
         result = with_delivery_carried_by(_REFUSED, caught.value)
 
         assert result.message == _REFUSED.message + NOT_DELIVERED_NOTE

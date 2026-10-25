@@ -51,9 +51,9 @@ class TestInMemoryRepositoryDrainsPendingEvents:
         agg.apply_damage(9999)  # down
         agg.clear_events()
         agg.revive(hp_recovery_rate=0.4)  # PlayerRevivedEvent
-        assert any(
-            type(e).__name__ == "PlayerRevivedEvent" for e in agg.get_events()
-        ), "前提: 原本に PlayerRevivedEvent がある"
+        assert any(type(e).__name__ == "PlayerRevivedEvent" for e in agg.get_events()), (
+            "前提: 原本に PlayerRevivedEvent がある"
+        )
 
         repo.save(agg)
 

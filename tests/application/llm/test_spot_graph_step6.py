@@ -58,15 +58,33 @@ def test_get_spot_graph_specs_exposes_the_expected_tools() -> None:
     specs = get_spot_graph_specs()
     names = {s[0].name for s in specs}
     assert names == {
-        "travel_to", "set_sub_location", "explore", "interact",
-        "use_item", "drop_item", "pickup_item",
-        "give_item", "buy_item", "sell_item",
-        "trade_offer", "trade_accept", "trade_decline",
+        "travel_to",
+        "set_sub_location",
+        "explore",
+        "interact",
+        "use_item",
+        "drop_item",
+        "pickup_item",
+        "give_item",
+        "buy_item",
+        "sell_item",
+        "trade_offer",
+        "trade_accept",
+        "trade_decline",
         "market_view",
-        "market_list_item", "market_buy", "market_reprice", "market_cancel",
-        "market_bid", "market_sell",
-        "attack", "listen", "wait", "tend_to_player",
-        "vote", "report_body", "speak",
+        "market_list_item",
+        "market_buy",
+        "market_reprice",
+        "market_cancel",
+        "market_bid",
+        "market_sell",
+        "attack",
+        "listen",
+        "wait",
+        "tend_to_player",
+        "vote",
+        "report_body",
+        "speak",
     }
     # PR-CC: spot_graph_ prefix 廃止 → bare 名
     # PR-DD: speech_speak → speak
@@ -135,7 +153,10 @@ def test_spot_graph_formatter_outputs_base_info() -> None:
         current_spot_description="暗い",
         travel_status_line=None,
         atmosphere=SpotGraphAtmosphereEntry(
-            lighting="DIM", sound_ambient="水滴の音", temperature="COLD", smell="カビ",
+            lighting="DIM",
+            sound_ambient="水滴の音",
+            temperature="COLD",
+            smell="カビ",
         ),
     )
     dto = _make_dto(snap)
@@ -172,9 +193,7 @@ def test_spot_graph_ui_context_builder_adds_labels() -> None:
                 object_id=10,
                 name="箱",
                 description="古い木箱",
-                interactions=(
-                    SpotGraphInteractionEntry(action_name="open", display_label="開ける"),
-                ),
+                interactions=(SpotGraphInteractionEntry(action_name="open", display_label="開ける"),),
             ),
         ),
         sub_locations=(
@@ -268,7 +287,10 @@ def test_spot_graph_formatter_omits_weather_for_indoor() -> None:
         current_spot_description="暗い",
         travel_status_line=None,
         atmosphere=SpotGraphAtmosphereEntry(
-            lighting="DIM", sound_ambient="水滴の音", temperature="COLD", smell="カビ",
+            lighting="DIM",
+            sound_ambient="水滴の音",
+            temperature="COLD",
+            smell="カビ",
         ),
         weather=None,
     )

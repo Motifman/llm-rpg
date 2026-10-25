@@ -285,7 +285,7 @@ class TestConnectionState:
                 description="",
                 travel_ticks=0,
                 is_bidirectional=False,
-            passage=Passage.door(DoorStateEnum.LOCKED),
+                passage=Passage.door(DoorStateEnum.LOCKED),
             )
         )
         g.clear_events()
@@ -351,7 +351,9 @@ class TestConnectionStateChangedActor:
         g = self._build_graph()
         actor = EntityId.create(42)
         g.set_connection_passage_state(
-            ConnectionId.create(1), "OPEN", actor_entity_id=actor,
+            ConnectionId.create(1),
+            "OPEN",
+            actor_entity_id=actor,
         )
         evs = g.get_events()
         assert len(evs) == 1
@@ -411,7 +413,7 @@ class TestConnectionRecords:
                 description="",
                 travel_ticks=1,
                 is_bidirectional=False,
-            passage=Passage.door(DoorStateEnum.LOCKED),
+                passage=Passage.door(DoorStateEnum.LOCKED),
             )
         )
         g.add_connection(
@@ -429,7 +431,10 @@ class TestConnectionRecords:
 
         records = g.iter_connection_records()
 
-        assert [(int(r.connection.connection_id.value), r.reverse_connection_id.value if r.reverse_connection_id else None) for r in records] == [
+        assert [
+            (int(r.connection.connection_id.value), r.reverse_connection_id.value if r.reverse_connection_id else None)
+            for r in records
+        ] == [
             (1, 2),
             (3, None),
             (4, 5),

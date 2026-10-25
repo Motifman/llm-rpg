@@ -29,14 +29,18 @@ from scripts.analyze_conversation_mixing import (
 
 def _action(tick: int, pid: int, tool: str = "speech_speak") -> dict:
     return {
-        "kind": "action", "tick": tick, "player_id": pid,
+        "kind": "action",
+        "tick": tick,
+        "player_id": pid,
         "payload": {"tool": tool, "arguments": {}},
     }
 
 
 def _observation(tick: int, pid: int, category: str = "speech") -> dict:
     return {
-        "kind": "observation", "tick": tick, "player_id": pid,
+        "kind": "observation",
+        "tick": tick,
+        "player_id": pid,
         "payload": {"observation_category": category, "prose": ""},
     }
 
@@ -49,7 +53,7 @@ class TestExtractors:
         evs = [
             _action(1, 1),
             _action(2, 2, tool="spot_graph_move"),  # 別 tool
-            {"kind": "tick_start", "tick": 1},      # 別 kind
+            {"kind": "tick_start", "tick": 1},  # 別 kind
         ]
         out = extract_speech_actions(evs)
         assert len(out) == 1
@@ -59,7 +63,7 @@ class TestExtractors:
         evs = [
             _observation(1, 1),
             _observation(2, 2, category="environment"),  # 別 category
-            _action(1, 1),                                # 別 kind
+            _action(1, 1),  # 別 kind
         ]
         out = extract_speech_observations(evs)
         assert len(out) == 1
@@ -155,10 +159,13 @@ class TestSummarizeEndToEnd:
     def test_fake_trace_all_rendered(self, tmp_path: Path) -> None:
         """faketrace から全指標が出る。"""
         events = [
-            _action(1, 1), _action(2, 1), _action(3, 1),  # run len=3 for p1
-            _observation(1, 2),                             # p2 listens
-            _action(4, 2),                                  # p2 replies tick 4, lag 3
-            _action(5, 1), _action(5, 2),                   # crosstalk @ tick 5
+            _action(1, 1),
+            _action(2, 1),
+            _action(3, 1),  # run len=3 for p1
+            _observation(1, 2),  # p2 listens
+            _action(4, 2),  # p2 replies tick 4, lag 3
+            _action(5, 1),
+            _action(5, 2),  # crosstalk @ tick 5
         ]
         trace_path = tmp_path / "trace.jsonl"
         with trace_path.open("w", encoding="utf-8") as f:

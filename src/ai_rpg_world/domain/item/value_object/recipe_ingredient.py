@@ -10,6 +10,7 @@ class RecipeIngredient:
 
     レシピで必要な材料の情報（アイテム種別と数量）を保持する。
     """
+
     item_spec_id: ItemSpecId
     quantity: int
 
@@ -26,8 +27,7 @@ class RecipeIngredient:
         """等価性比較"""
         if not isinstance(other, RecipeIngredient):
             return NotImplemented
-        return (self.item_spec_id == other.item_spec_id and
-                self.quantity == other.quantity)
+        return self.item_spec_id == other.item_spec_id and self.quantity == other.quantity
 
     def __hash__(self) -> int:
         """ハッシュ値"""

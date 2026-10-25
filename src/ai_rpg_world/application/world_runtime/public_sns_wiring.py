@@ -1,4 +1,5 @@
 """公開SNSを物理世界や旧SNSアプリから独立した状態として配線する。"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -32,23 +33,37 @@ def wire_public_sns(runtime: Any) -> None:
     store.next_post_id = store.next_reply_id = store.next_sns_notification_id = 1
     for pid in runtime.get_player_ids():
         uid = UserId(int(pid))
-        username = f'player_{int(pid)}'
-        user = UserAggregate(uid, SnsUser(uid, UserProfile(username, runtime.get_player_name(pid)[:30], '')), [], [], [])
+        username = f"player_{int(pid)}"
+        user = UserAggregate(
+            uid, SnsUser(uid, UserProfile(username, runtime.get_player_name(pid)[:30], "")), [], [], []
+        )
         store.sns_users[uid] = user
         store.sns_username_to_user_id[username] = uid
     store.sns_next_user_id = max((int(uid) for uid in store.sns_users), default=0) + 1
     runtime._public_sns_data_store = store
     runtime._public_sns_read_service = PublicSnsReadService(InMemoryPublicSnsReadRepository(store))
-    runtime._public_sns_projection = PublicSnsPromptProjection(runtime._public_sns_screens, budget_chars=runtime.scenario.public_sns_push_budget_chars, header_chars_provider=lambda pid: len(runtime._public_sns_header_text(PlayerId(pid))) + len(runtime._public_sns_screens.presentation_status(pid)) + 2)
+    runtime._public_sns_projection = PublicSnsPromptProjection(
+        runtime._public_sns_screens,
+        budget_chars=runtime.scenario.public_sns_push_budget_chars,
+        header_chars_provider=lambda pid: (
+            len(runtime._public_sns_header_text(PlayerId(pid)))
+            + len(runtime._public_sns_screens.presentation_status(pid))
+            + 2
+        ),
+    )
 
     def deliver(recipient: int, notification: Any, provenance: Any) -> None:
         projection = runtime._public_sns_projection
         if projection.has_received(recipient, notification.notification_id):
             return
         if runtime._observation_appender is None:
-            raise RuntimeError('SNS通知の観測配信先が未設定です')
+            raise RuntimeError("SNS通知の観測配信先が未設定です")
         runtime._emit_observation_directly(PlayerId(recipient), notification_observation(notification, provenance))
         projection.note_incoming(recipient, notification.notification_id)
 
-    runtime._public_sns_command_service = create_in_memory_public_sns_command_service(store, deliver_notification=deliver)
-    runtime._public_sns_executor = PublicSnsToolExecutor(runtime._public_sns_read_service, runtime._public_sns_command_service, runtime._public_sns_screens)
+    runtime._public_sns_command_service = create_in_memory_public_sns_command_service(
+        store, deliver_notification=deliver
+    )
+    runtime._public_sns_executor = PublicSnsToolExecutor(
+        runtime._public_sns_read_service, runtime._public_sns_command_service, runtime._public_sns_screens
+    )

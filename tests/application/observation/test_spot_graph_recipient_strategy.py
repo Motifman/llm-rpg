@@ -81,8 +81,7 @@ def _make_strategy(
 
     graph = MagicMock()
     graph.entity_spot_mapping.return_value = {
-        EntityId.create(eid): SpotId(sid)
-        for eid, sid in entity_spot_mapping.items()
+        EntityId.create(eid): SpotId(sid) for eid, sid in entity_spot_mapping.items()
     }
 
     repo = MagicMock()
@@ -178,6 +177,7 @@ class TestSpotObjectInteracted:
     def test_actor_only_observation(self):
         """Phase G #1: witness_policy=ACTOR_ONLY なら同室他者にも届かない。"""
         from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+
         strategy = _make_strategy({1: 1, 2: 1})
         event = SpotObjectInteractedEvent.create(
             aggregate_id=GRAPH_ID,
@@ -319,8 +319,7 @@ class TestConnectionStateChangedAdjacentDelivery:
 
         graph = MagicMock()
         graph.entity_spot_mapping.return_value = {
-            EntityId.create(eid): SpotId(sid)
-            for eid, sid in entity_spot_mapping.items()
+            EntityId.create(eid): SpotId(sid) for eid, sid in entity_spot_mapping.items()
         }
 
         def _iter_outgoing(spot_id):
@@ -518,8 +517,7 @@ class TestSpotSoundHeardRecipientResolution:
 
         graph = MagicMock()
         graph.entity_spot_mapping.return_value = {
-            EntityId.create(eid): SpotId(sid)
-            for eid, sid in entity_spot_mapping.items()
+            EntityId.create(eid): SpotId(sid) for eid, sid in entity_spot_mapping.items()
         }
         repo = MagicMock()
         repo.find_graph.return_value = graph
@@ -533,9 +531,7 @@ class TestSpotSoundHeardRecipientResolution:
             statuses.append(status)
             by_id[pid] = status
         player_status_repo.find_all.return_value = statuses
-        player_status_repo.find_by_id.side_effect = (
-            lambda pid: by_id.get(pid.value)
-        )
+        player_status_repo.find_by_id.side_effect = lambda pid: by_id.get(pid.value)
 
         return SpotGraphRecipientStrategy(
             observed_event_registry=registry,
@@ -643,12 +639,8 @@ class TestDownPlayerExcluded:
         )
 
         repository = MagicMock()
-        repository.find_by_id.side_effect = lambda pid: MagicMock(
-            is_down=int(pid) in down_player_ids
-        )
-        resolver = ObservationRecipientResolver(
-            strategies=[strategy], player_status_repository=repository
-        )
+        repository.find_by_id.side_effect = lambda pid: MagicMock(is_down=int(pid) in down_player_ids)
+        resolver = ObservationRecipientResolver(strategies=[strategy], player_status_repository=repository)
         return {r.value for r in resolver.resolve(event)}
 
     def test_spot_down_player_actor_event(self):

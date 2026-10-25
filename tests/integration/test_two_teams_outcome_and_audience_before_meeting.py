@@ -24,9 +24,7 @@ from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnu
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.sound_clarity import SoundClarityEnum
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "two_teams_unaware.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "two_teams_unaware.json"
 
 
 def _ids_by_name(runtime) -> dict[str, PlayerId]:

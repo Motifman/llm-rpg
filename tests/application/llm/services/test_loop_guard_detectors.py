@@ -51,9 +51,7 @@ class TestCrossTickFailureDetector:
         """成功した行動は何回記録しても signal を返さない。"""
         detector = CrossTickFailureDetector(window=20, threshold=2)
 
-        results = [
-            detector.observe(_action(success=True, tick=t)) for t in range(5)
-        ]
+        results = [detector.observe(_action(success=True, tick=t)) for t in range(5)]
 
         assert results == [None] * 5
 

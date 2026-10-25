@@ -47,10 +47,7 @@ class TestEjectedIsItsOwnOutcome:
 
         「死亡」と出ると、追放された相手を殺されたと誤読する。
         """
-        assert (
-            PlayerOutcomeEnum.EJECTED.display_label
-            != PlayerOutcomeEnum.DEAD.display_label
-        )
+        assert PlayerOutcomeEnum.EJECTED.display_label != PlayerOutcomeEnum.DEAD.display_label
 
 
 class TestEliminationPredicate:
@@ -87,9 +84,7 @@ class TestEliminationPredicate:
 class TestEveryMemberDeclaresElimination:
     """全メンバの is_eliminated が例外なく真偽値を返す。"""
 
-    @pytest.mark.parametrize(
-        "outcome", list(PlayerOutcomeEnum), ids=lambda o: o.value
-    )
+    @pytest.mark.parametrize("outcome", list(PlayerOutcomeEnum), ids=lambda o: o.value)
     def test_predicate_is_a_bool(self, outcome) -> None:
         """どのメンバでも真偽値が返る (例外にならない)。"""
         assert isinstance(outcome.is_eliminated, bool)

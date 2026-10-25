@@ -110,9 +110,7 @@ def _load_run(run_dir: Path, errors: list[str]) -> dict[str, Any] | None:
         "turn_results": turn_results,
         "system_prompts": system_prompts,
         "toolsets": toolsets,
-        "trace_llm_calls": [
-            event for event in trace_events if event.get("kind") == "llm_call"
-        ],
+        "trace_llm_calls": [event for event in trace_events if event.get("kind") == "llm_call"],
     }
 
 
@@ -130,19 +128,14 @@ def _check_run(loaded: Mapping[str, Any], errors: list[str]) -> None:
         errors.append(f"{prefix}: capture_incomplete must be false")
 
     call_ids = _index_rows(calls, "llm_call_id", "calls", prefix, errors)
-    result_ids = _index_rows(
-        turn_results, "llm_call_id", "turn_results", prefix, errors
-    )
+    result_ids = _index_rows(turn_results, "llm_call_id", "turn_results", prefix, errors)
     for llm_call_id in sorted(set(call_ids) - set(result_ids)):
         errors.append(f"{prefix}: missing turn_result for llm_call_id {llm_call_id!r}")
     for llm_call_id in sorted(set(result_ids) - set(call_ids)):
         errors.append(f"{prefix}: orphan turn_result for llm_call_id {llm_call_id!r}")
 
     if len(calls) != len(trace_llm_calls):
-        errors.append(
-            f"{prefix}: trace llm_call count mismatch "
-            f"calls={len(calls)} trace={len(trace_llm_calls)}"
-        )
+        errors.append(f"{prefix}: trace llm_call count mismatch calls={len(calls)} trace={len(trace_llm_calls)}")
     trace_ids = _trace_llm_call_ids(trace_llm_calls)
     if trace_ids:
         for llm_call_id in sorted(set(call_ids) - trace_ids):
@@ -159,28 +152,18 @@ def _check_run(loaded: Mapping[str, Any], errors: list[str]) -> None:
             errors,
         )
     )
-    toolset_ids = set(
-        _index_rows(loaded["toolsets"], "toolset_id", "toolsets", prefix, errors)
-    )
+    toolset_ids = set(_index_rows(loaded["toolsets"], "toolset_id", "toolsets", prefix, errors))
     for call in calls:
         llm_call_id = _str_value(call, "llm_call_id") or "<unknown>"
         system_id = _system_prompt_id(call)
         if system_id is not None and system_id not in system_prompt_ids:
-            errors.append(
-                f"{prefix}: missing system_prompt {system_id!r} "
-                f"referenced by call {llm_call_id!r}"
-            )
+            errors.append(f"{prefix}: missing system_prompt {system_id!r} referenced by call {llm_call_id!r}")
         toolset_id = _toolset_id(call)
         if toolset_id is not None and toolset_id not in toolset_ids:
-            errors.append(
-                f"{prefix}: missing toolset {toolset_id!r} "
-                f"referenced by call {llm_call_id!r}"
-            )
+            errors.append(f"{prefix}: missing toolset {toolset_id!r} referenced by call {llm_call_id!r}")
 
 
-def _check_unique_run_ids(
-    loaded_runs: list[Mapping[str, Any]], errors: list[str]
-) -> None:
+def _check_unique_run_ids(loaded_runs: list[Mapping[str, Any]], errors: list[str]) -> None:
     seen: set[str] = set()
     for loaded in loaded_runs:
         run_id = loaded["run_id"]

@@ -82,9 +82,7 @@ def _seed_offer_dependencies(setup: tuple[object, ...]) -> OfferItemCommand:
     inventory = PlayerInventoryAggregate.create_new_inventory(player_id, max_slots=10)
     inventory.acquire_item(item_id, item_spec_id_value=item_spec.item_spec_id.value)
     inventory_repository.save(inventory)
-    profile_repository.save(
-        PlayerProfileAggregate.create(player_id, PlayerName("SellerOne"))
-    )
+    profile_repository.save(PlayerProfileAggregate.create(player_id, PlayerName("SellerOne")))
     item_repository.save(ItemAggregate.create(item_id, item_spec, quantity=1))
     return OfferItemCommand(
         seller_id=1,
@@ -159,16 +157,10 @@ def test_each_trade_command_uses_one_fresh_scope_and_no_legacy_repository_fields
         "_player_profile_repository",
         "_item_repository",
     }
-    accessed_attributes = {
-        node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)
-    }
+    accessed_attributes = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
     assert forbidden.isdisjoint(accessed_attributes)
 
-    methods = {
-        node.name: node
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    methods = {node.name: node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
     for method_name in (
         "_offer_item_impl",
         "_accept_trade_impl",
@@ -178,8 +170,6 @@ def test_each_trade_command_uses_one_fresh_scope_and_no_legacy_repository_fields
         create_calls = [
             node
             for node in ast.walk(methods[method_name])
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "create"
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "create"
         ]
         assert len(create_calls) == 1

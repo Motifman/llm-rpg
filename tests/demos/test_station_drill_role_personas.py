@@ -9,9 +9,7 @@ from pathlib import Path
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 
 def _raw() -> dict:
@@ -20,9 +18,7 @@ def _raw() -> dict:
 
 def _players_by_role(runtime, role: str) -> tuple[PlayerId, ...]:
     return tuple(
-        PlayerId(spawn.player_id)
-        for spawn in runtime.scenario.player_spawns
-        if spawn.initial_state.get("role") == role
+        PlayerId(spawn.player_id) for spawn in runtime.scenario.player_spawns if spawn.initial_state.get("role") == role
     )
 
 
@@ -31,9 +27,7 @@ def test_each_crew_system_joins_its_person_and_the_identical_role_text() -> None
     raw = _raw()
     runtime = create_world_runtime(_DRILL)
     crew_role = raw["role_personas"]["crew"]
-    individual_by_id = {
-        player["id"]: player["persona_prompt"] for player in raw["players"]
-    }
+    individual_by_id = {player["id"]: player["persona_prompt"] for player in raw["players"]}
 
     for spawn in runtime.scenario.player_spawns:
         if spawn.initial_state.get("role") != "crew":
@@ -49,9 +43,7 @@ def test_each_impostor_system_receives_the_same_role_facts_after_personal_text()
     raw = _raw()
     runtime = create_world_runtime(_DRILL)
     keeper_role = raw["role_personas"]["keeper"]
-    individual_by_id = {
-        player["id"]: player["persona_prompt"] for player in raw["players"]
-    }
+    individual_by_id = {player["id"]: player["persona_prompt"] for player in raw["players"]}
 
     for spawn in runtime.scenario.player_spawns:
         if spawn.initial_state.get("role") != "keeper":
@@ -109,9 +101,7 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
 
     actual_by_string_id = {
         spawn.string_id: hashlib.sha256(
-            runtime._world_llm_system_prompts_by_player_id[spawn.player_id].encode(
-                "utf-8"
-            )
+            runtime._world_llm_system_prompts_by_player_id[spawn.player_id].encode("utf-8")
         ).hexdigest()
         for spawn in runtime.scenario.player_spawns
         if spawn.initial_state.get("role") == "crew"

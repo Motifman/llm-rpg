@@ -11,13 +11,7 @@ from ai_rpg_world.application.world_graph.meeting_command_service import (
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[3]
-    / "tests"
-    / "fixtures"
-    / "scenarios"
-    / "darkened_station.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
 
 def test_runtime_builds_the_meeting_command_service() -> None:
@@ -39,10 +33,7 @@ def test_runtime_meeting_entrypoints_only_delegate() -> None:
     initiator = PlayerId(1)
     target = PlayerId(2)
 
-    assert (
-        runtime.call_emergency_meeting(initiator, trigger="scenario_alarm")
-        is emergency_result
-    )
+    assert runtime.call_emergency_meeting(initiator, trigger="scenario_alarm") is emergency_result
     assert runtime.report_body(initiator, target) is report_result
     service.call_emergency_meeting.assert_called_once_with(
         initiator,

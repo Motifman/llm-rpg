@@ -1,4 +1,3 @@
-
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.exception.item_exception import InvalidRecipeException
@@ -20,7 +19,7 @@ class RecipeAggregate(AggregateRoot):
         name: str,
         description: str,
         ingredients: list[RecipeIngredient],
-        result: RecipeResult
+        result: RecipeResult,
     ):
         super().__init__()
         self._recipe_id = recipe_id
@@ -95,10 +94,11 @@ class RecipeAggregate(AggregateRoot):
         for ingredient in self._ingredients:
             available_quantity = available_items.get(ingredient.item_spec_id, 0)
             if available_quantity < ingredient.quantity:
-                missing.append(RecipeIngredient(
-                    item_spec_id=ingredient.item_spec_id,
-                    quantity=ingredient.quantity - available_quantity
-                ))
+                missing.append(
+                    RecipeIngredient(
+                        item_spec_id=ingredient.item_spec_id, quantity=ingredient.quantity - available_quantity
+                    )
+                )
         return missing
 
     @staticmethod

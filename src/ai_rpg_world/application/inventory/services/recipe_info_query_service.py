@@ -23,9 +23,7 @@ class RecipeInfoQueryService:
         self._recipe_repository = recipe_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -37,19 +35,15 @@ class RecipeInfoQueryService:
             raise RecipeInfoQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(
+                f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra={"error_details": context}
+            )
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def get_recipe(self, recipe_id: int) -> RecipeDto:
         """レシピを取得"""
         return self._execute_with_error_handling(
-            operation=lambda: self._get_recipe_impl(recipe_id),
-            context={
-                "action": "get_recipe",
-                "recipe_id": recipe_id
-            }
+            operation=lambda: self._get_recipe_impl(recipe_id), context={"action": "get_recipe", "recipe_id": recipe_id}
         )
 
     def _get_recipe_impl(self, recipe_id: int) -> RecipeDto:
@@ -63,26 +57,17 @@ class RecipeInfoQueryService:
             name=recipe.name,
             description=recipe.description,
             ingredients=[
-                RecipeIngredientDto(
-                    item_spec_id=ing.item_spec_id.value,
-                    quantity=ing.quantity
-                )
+                RecipeIngredientDto(item_spec_id=ing.item_spec_id.value, quantity=ing.quantity)
                 for ing in recipe.ingredients
             ],
-            result=RecipeResultDto(
-                item_spec_id=recipe.result.item_spec_id.value,
-                quantity=recipe.result.quantity
-            )
+            result=RecipeResultDto(item_spec_id=recipe.result.item_spec_id.value, quantity=recipe.result.quantity),
         )
 
     def find_recipes_by_result_item(self, item_spec_id: int) -> list[RecipeDto]:
         """指定アイテムを作成できるレシピを取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._find_recipes_by_result_item_impl(item_spec_id),
-            context={
-                "action": "find_recipes_by_result_item",
-                "item_spec_id": item_spec_id
-            }
+            context={"action": "find_recipes_by_result_item", "item_spec_id": item_spec_id},
         )
 
     def _find_recipes_by_result_item_impl(self, item_spec_id: int) -> list[RecipeDto]:
@@ -94,16 +79,10 @@ class RecipeInfoQueryService:
                 name=recipe.name,
                 description=recipe.description,
                 ingredients=[
-                    RecipeIngredientDto(
-                        item_spec_id=ing.item_spec_id.value,
-                        quantity=ing.quantity
-                    )
+                    RecipeIngredientDto(item_spec_id=ing.item_spec_id.value, quantity=ing.quantity)
                     for ing in recipe.ingredients
                 ],
-                result=RecipeResultDto(
-                    item_spec_id=recipe.result.item_spec_id.value,
-                    quantity=recipe.result.quantity
-                )
+                result=RecipeResultDto(item_spec_id=recipe.result.item_spec_id.value, quantity=recipe.result.quantity),
             )
             for recipe in recipes
         ]
@@ -112,10 +91,7 @@ class RecipeInfoQueryService:
         """指定アイテムを材料として使用するレシピを取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._find_recipes_by_ingredient_impl(item_spec_id),
-            context={
-                "action": "find_recipes_by_ingredient",
-                "item_spec_id": item_spec_id
-            }
+            context={"action": "find_recipes_by_ingredient", "item_spec_id": item_spec_id},
         )
 
     def _find_recipes_by_ingredient_impl(self, item_spec_id: int) -> list[RecipeDto]:
@@ -127,16 +103,10 @@ class RecipeInfoQueryService:
                 name=recipe.name,
                 description=recipe.description,
                 ingredients=[
-                    RecipeIngredientDto(
-                        item_spec_id=ing.item_spec_id.value,
-                        quantity=ing.quantity
-                    )
+                    RecipeIngredientDto(item_spec_id=ing.item_spec_id.value, quantity=ing.quantity)
                     for ing in recipe.ingredients
                 ],
-                result=RecipeResultDto(
-                    item_spec_id=recipe.result.item_spec_id.value,
-                    quantity=recipe.result.quantity
-                )
+                result=RecipeResultDto(item_spec_id=recipe.result.item_spec_id.value, quantity=recipe.result.quantity),
             )
             for recipe in recipes
         ]
@@ -144,10 +114,7 @@ class RecipeInfoQueryService:
     def get_all_recipes(self) -> list[RecipeDto]:
         """全レシピを取得"""
         return self._execute_with_error_handling(
-            operation=lambda: self._get_all_recipes_impl(),
-            context={
-                "action": "get_all_recipes"
-            }
+            operation=lambda: self._get_all_recipes_impl(), context={"action": "get_all_recipes"}
         )
 
     def _get_all_recipes_impl(self) -> list[RecipeDto]:
@@ -159,16 +126,10 @@ class RecipeInfoQueryService:
                 name=recipe.name,
                 description=recipe.description,
                 ingredients=[
-                    RecipeIngredientDto(
-                        item_spec_id=ing.item_spec_id.value,
-                        quantity=ing.quantity
-                    )
+                    RecipeIngredientDto(item_spec_id=ing.item_spec_id.value, quantity=ing.quantity)
                     for ing in recipe.ingredients
                 ],
-                result=RecipeResultDto(
-                    item_spec_id=recipe.result.item_spec_id.value,
-                    quantity=recipe.result.quantity
-                )
+                result=RecipeResultDto(item_spec_id=recipe.result.item_spec_id.value, quantity=recipe.result.quantity),
             )
             for recipe in recipes
         ]

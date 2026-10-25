@@ -38,9 +38,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """デモ規則は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_initial_items_to_inventory,
 )
@@ -81,13 +81,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "tests"
-    / "fixtures"
-    / "scenarios"
-    / "cauldron_crafting_demo.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "cauldron_crafting_demo.json"
 
 
 @pytest.fixture
@@ -186,10 +180,7 @@ def _furnace_state(interior_repo, loaded) -> dict:
 
 def _owned_spec_strs(inventory_repo, item_repo, loaded) -> list[str]:
     """所持アイテム instance を string id 一覧で返す（重複保持）。"""
-    spec_int_to_str = {
-        loaded.id_mapper.get_int("item_spec", s): s
-        for s in ("iron_ore", "iron_ingot")
-    }
+    spec_int_to_str = {loaded.id_mapper.get_int("item_spec", s): s for s in ("iron_ore", "iron_ingot")}
     inv = inventory_repo.find_by_id(_player_id(loaded))
     owned: list[str] = []
     for i in range(inv.max_slots):
@@ -233,23 +224,34 @@ class TestCauldronCraftingDemoScenario:
         """製錬中の炉に再度 stoke しようとすると OBJECT_STATE precondition に弾かれる。"""
         loaded, _, _, _, app, _ = cauldron
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(2),
+            _player_id(loaded),
+            _furnace_id(loaded),
+            "stoke",
+            current_tick=WorldTick(2),
         )
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(3),
+                _player_id(loaded),
+                _furnace_id(loaded),
+                "stoke",
+                current_tick=WorldTick(3),
             )
 
     def test_collect_blocked_until_ready(self, cauldron) -> None:
         """製錬完了前に gather_ingot しようとすると InteractionNotAllowedException で拒否される。"""
         loaded, _, _, _, app, binding_stage = cauldron
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(2),
+            _player_id(loaded),
+            _furnace_id(loaded),
+            "stoke",
+            current_tick=WorldTick(2),
         )
         binding_stage.run(WorldTick(3))  # まだ ready=false
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _furnace_id(loaded), "gather_ingot",
+                _player_id(loaded),
+                _furnace_id(loaded),
+                "gather_ingot",
                 current_tick=WorldTick(4),
             )
 
@@ -257,7 +259,10 @@ class TestCauldronCraftingDemoScenario:
         """stoke から ticks_offset (=5) tick 経過すると reactive binding が ready=true に切り替える。"""
         loaded, interior_repo, _, _, app, binding_stage = cauldron
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(2),
+            _player_id(loaded),
+            _furnace_id(loaded),
+            "stoke",
+            current_tick=WorldTick(2),
         )
         # tick 3-6: まだ ready=false
         for t in range(3, 7):
@@ -271,18 +276,25 @@ class TestCauldronCraftingDemoScenario:
         """stoke → 経過 → gather_ingot でインゴット入手し、炉は再利用可能な状態に戻る。"""
         loaded, interior_repo, inventory_repo, item_repo, app, binding_stage = cauldron
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(2),
+            _player_id(loaded),
+            _furnace_id(loaded),
+            "stoke",
+            current_tick=WorldTick(2),
         )
         for t in range(3, 8):
             binding_stage.run(WorldTick(t))
         assert _furnace_state(interior_repo, loaded)["ready"] is True
 
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "gather_ingot", current_tick=WorldTick(8),
+            _player_id(loaded),
+            _furnace_id(loaded),
+            "gather_ingot",
+            current_tick=WorldTick(8),
         )
         # インゴット入手、鉱石 1 個残
         assert sorted(_owned_spec_strs(inventory_repo, item_repo, loaded)) == [
-            "iron_ingot", "iron_ore",
+            "iron_ingot",
+            "iron_ore",
         ]
         # 炉はリセット
         s = _furnace_state(interior_repo, loaded)
@@ -298,24 +310,37 @@ class TestCauldronCraftingDemoScenario:
         loaded, interior_repo, inventory_repo, item_repo, app, binding_stage = cauldron
         # 1 周目
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(2),
+            _player_id(loaded),
+            _furnace_id(loaded),
+            "stoke",
+            current_tick=WorldTick(2),
         )
         for t in range(3, 8):
             binding_stage.run(WorldTick(t))
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "gather_ingot", current_tick=WorldTick(8),
+            _player_id(loaded),
+            _furnace_id(loaded),
+            "gather_ingot",
+            current_tick=WorldTick(8),
         )
         # 2 周目
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(10),
+            _player_id(loaded),
+            _furnace_id(loaded),
+            "stoke",
+            current_tick=WorldTick(10),
         )
         for t in range(11, 16):
             binding_stage.run(WorldTick(t))
         assert _furnace_state(interior_repo, loaded)["ready"] is True
         app.execute_interaction(
-            _player_id(loaded), _furnace_id(loaded), "gather_ingot", current_tick=WorldTick(16),
+            _player_id(loaded),
+            _furnace_id(loaded),
+            "gather_ingot",
+            current_tick=WorldTick(16),
         )
         # インゴット 2 個 / 鉱石 0 個
         assert sorted(_owned_spec_strs(inventory_repo, item_repo, loaded)) == [
-            "iron_ingot", "iron_ingot",
+            "iron_ingot",
+            "iron_ingot",
         ]

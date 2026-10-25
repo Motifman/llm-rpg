@@ -25,7 +25,7 @@ class TestRecipeAggregate:
             item_type=ItemType.MATERIAL,
             rarity=Rarity.COMMON,
             description="A piece of wood",
-            max_stack_size=MaxStackSize(64)
+            max_stack_size=MaxStackSize(64),
         )
 
     @pytest.fixture
@@ -37,7 +37,7 @@ class TestRecipeAggregate:
             item_type=ItemType.MATERIAL,
             rarity=Rarity.COMMON,
             description="A piece of stone",
-            max_stack_size=MaxStackSize(64)
+            max_stack_size=MaxStackSize(64),
         )
 
     @pytest.fixture
@@ -50,7 +50,7 @@ class TestRecipeAggregate:
             rarity=Rarity.COMMON,
             description="A wooden sword",
             max_stack_size=MaxStackSize(1),
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
 
     @pytest.fixture
@@ -61,19 +61,10 @@ class TestRecipeAggregate:
             name="Wooden Sword Recipe",
             description="Craft a wooden sword using wood and stone",
             ingredients=[
-                RecipeIngredient(
-                    item_spec_id=sample_item_spec_wood.item_spec_id,
-                    quantity=2
-                ),
-                RecipeIngredient(
-                    item_spec_id=sample_item_spec_stone.item_spec_id,
-                    quantity=1
-                )
+                RecipeIngredient(item_spec_id=sample_item_spec_wood.item_spec_id, quantity=2),
+                RecipeIngredient(item_spec_id=sample_item_spec_stone.item_spec_id, quantity=1),
             ],
-            result=RecipeResult(
-                item_spec_id=sample_item_spec_sword.item_spec_id,
-                quantity=1
-            )
+            result=RecipeResult(item_spec_id=sample_item_spec_sword.item_spec_id, quantity=1),
         )
 
     def test_create_recipe_with_empty_name_raises_error(self, sample_item_spec_wood, sample_item_spec_sword):
@@ -83,16 +74,8 @@ class TestRecipeAggregate:
                 recipe_id=RecipeId(1),
                 name="",  # 空の名前
                 description="Test description",
-                ingredients=[
-                    RecipeIngredient(
-                        item_spec_id=sample_item_spec_wood.item_spec_id,
-                        quantity=1
-                    )
-                ],
-                result=RecipeResult(
-                    item_spec_id=sample_item_spec_sword.item_spec_id,
-                    quantity=1
-                )
+                ingredients=[RecipeIngredient(item_spec_id=sample_item_spec_wood.item_spec_id, quantity=1)],
+                result=RecipeResult(item_spec_id=sample_item_spec_sword.item_spec_id, quantity=1),
             )
 
         assert "Recipe 1:" in str(exc_info.value)
@@ -105,16 +88,8 @@ class TestRecipeAggregate:
                 recipe_id=RecipeId(1),
                 name="   ",  # 空白のみ
                 description="Test description",
-                ingredients=[
-                    RecipeIngredient(
-                        item_spec_id=sample_item_spec_wood.item_spec_id,
-                        quantity=1
-                    )
-                ],
-                result=RecipeResult(
-                    item_spec_id=sample_item_spec_sword.item_spec_id,
-                    quantity=1
-                )
+                ingredients=[RecipeIngredient(item_spec_id=sample_item_spec_wood.item_spec_id, quantity=1)],
+                result=RecipeResult(item_spec_id=sample_item_spec_sword.item_spec_id, quantity=1),
             )
 
         assert "Recipe 1:" in str(exc_info.value)
@@ -127,16 +102,8 @@ class TestRecipeAggregate:
                 recipe_id=RecipeId(1),
                 name="Test Recipe",
                 description="",  # 空の説明
-                ingredients=[
-                    RecipeIngredient(
-                        item_spec_id=sample_item_spec_wood.item_spec_id,
-                        quantity=1
-                    )
-                ],
-                result=RecipeResult(
-                    item_spec_id=sample_item_spec_sword.item_spec_id,
-                    quantity=1
-                )
+                ingredients=[RecipeIngredient(item_spec_id=sample_item_spec_wood.item_spec_id, quantity=1)],
+                result=RecipeResult(item_spec_id=sample_item_spec_sword.item_spec_id, quantity=1),
             )
 
         assert "Recipe 1:" in str(exc_info.value)
@@ -150,10 +117,7 @@ class TestRecipeAggregate:
                 name="Test Recipe",
                 description="Test description",
                 ingredients=[],  # 空の材料リスト
-                result=RecipeResult(
-                    item_spec_id=sample_item_spec_sword.item_spec_id,
-                    quantity=1
-                )
+                result=RecipeResult(item_spec_id=sample_item_spec_sword.item_spec_id, quantity=1),
             )
 
         assert "Recipe 1:" in str(exc_info.value)
@@ -167,19 +131,13 @@ class TestRecipeAggregate:
                 name="Test Recipe",
                 description="Test description",
                 ingredients=[
-                    RecipeIngredient(
-                        item_spec_id=sample_item_spec_wood.item_spec_id,
-                        quantity=1
-                    ),
+                    RecipeIngredient(item_spec_id=sample_item_spec_wood.item_spec_id, quantity=1),
                     RecipeIngredient(
                         item_spec_id=sample_item_spec_wood.item_spec_id,  # 重複
-                        quantity=2
-                    )
+                        quantity=2,
+                    ),
                 ],
-                result=RecipeResult(
-                    item_spec_id=sample_item_spec_sword.item_spec_id,
-                    quantity=1
-                )
+                result=RecipeResult(item_spec_id=sample_item_spec_sword.item_spec_id, quantity=1),
             )
 
         assert "Recipe 1:" in str(exc_info.value)
@@ -189,7 +147,7 @@ class TestRecipeAggregate:
         """十分な材料がある場合の合成可能チェック"""
         available_items = {
             sample_item_spec_wood.item_spec_id: 5,  # 必要:2, 十分
-            sample_item_spec_stone.item_spec_id: 3   # 必要:1, 十分
+            sample_item_spec_stone.item_spec_id: 3,  # 必要:1, 十分
         }
 
         assert sample_recipe.can_craft_with(available_items)
@@ -198,7 +156,7 @@ class TestRecipeAggregate:
         """必要な分ちょうどの材料がある場合の合成可能チェック"""
         available_items = {
             sample_item_spec_wood.item_spec_id: 2,  # 必要:2, ちょうど
-            sample_item_spec_stone.item_spec_id: 1   # 必要:1, ちょうど
+            sample_item_spec_stone.item_spec_id: 1,  # 必要:1, ちょうど
         }
 
         assert sample_recipe.can_craft_with(available_items)
@@ -207,7 +165,7 @@ class TestRecipeAggregate:
         """木材が不足している場合の合成不可チェック"""
         available_items = {
             sample_item_spec_wood.item_spec_id: 1,  # 必要:2, 不足
-            sample_item_spec_stone.item_spec_id: 3   # 必要:1, 十分
+            sample_item_spec_stone.item_spec_id: 3,  # 必要:1, 十分
         }
 
         assert not sample_recipe.can_craft_with(available_items)
@@ -216,7 +174,7 @@ class TestRecipeAggregate:
         """石が不足している場合の合成不可チェック"""
         available_items = {
             sample_item_spec_wood.item_spec_id: 5,  # 必要:2, 十分
-            sample_item_spec_stone.item_spec_id: 0   # 必要:1, 不足
+            sample_item_spec_stone.item_spec_id: 0,  # 必要:1, 不足
         }
 
         assert not sample_recipe.can_craft_with(available_items)
@@ -234,12 +192,14 @@ class TestRecipeAggregate:
         """利用可能なアイテムが空の場合の合成不可チェック"""
         assert not sample_recipe.can_craft_with({})
 
-    def test_can_craft_with_extra_ingredients(self, sample_recipe, sample_item_spec_wood, sample_item_spec_stone, sample_item_spec_sword):
+    def test_can_craft_with_extra_ingredients(
+        self, sample_recipe, sample_item_spec_wood, sample_item_spec_stone, sample_item_spec_sword
+    ):
         """余分な材料がある場合でも必要な材料があれば合成可能"""
         available_items = {
-            sample_item_spec_wood.item_spec_id: 5,    # 必要:2, 十分
-            sample_item_spec_stone.item_spec_id: 3,   # 必要:1, 十分
-            sample_item_spec_sword.item_spec_id: 10   # 余分な材料
+            sample_item_spec_wood.item_spec_id: 5,  # 必要:2, 十分
+            sample_item_spec_stone.item_spec_id: 3,  # 必要:1, 十分
+            sample_item_spec_sword.item_spec_id: 10,  # 余分な材料
         }
 
         assert sample_recipe.can_craft_with(available_items)
@@ -248,17 +208,19 @@ class TestRecipeAggregate:
         """全ての材料が十分にある場合の不足材料取得"""
         available_items = {
             sample_item_spec_wood.item_spec_id: 5,  # 必要:2, 十分
-            sample_item_spec_stone.item_spec_id: 3   # 必要:1, 十分
+            sample_item_spec_stone.item_spec_id: 3,  # 必要:1, 十分
         }
 
         missing = sample_recipe.get_missing_ingredients(available_items)
         assert len(missing) == 0
 
-    def test_get_missing_ingredients_partial_missing(self, sample_recipe, sample_item_spec_wood, sample_item_spec_stone):
+    def test_get_missing_ingredients_partial_missing(
+        self, sample_recipe, sample_item_spec_wood, sample_item_spec_stone
+    ):
         """一部材料が不足している場合の不足材料取得"""
         available_items = {
             sample_item_spec_wood.item_spec_id: 1,  # 必要:2, 不足1個
-            sample_item_spec_stone.item_spec_id: 3   # 必要:1, 十分
+            sample_item_spec_stone.item_spec_id: 3,  # 必要:1, 十分
         }
 
         missing = sample_recipe.get_missing_ingredients(available_items)
@@ -271,7 +233,7 @@ class TestRecipeAggregate:
         """全ての材料が不足している場合の不足材料取得"""
         available_items = {
             sample_item_spec_wood.item_spec_id: 0,  # 必要:2, 不足2個
-            sample_item_spec_stone.item_spec_id: 0   # 必要:1, 不足1個
+            sample_item_spec_stone.item_spec_id: 0,  # 必要:1, 不足1個
         }
 
         missing = sample_recipe.get_missing_ingredients(available_items)
@@ -304,30 +266,20 @@ class TestRecipeAggregate:
     def test_calculate_available_quantities_single_item(self, sample_item_spec_wood):
         """単一アイテムのインベントリからの数量計算"""
         inventory = [
-            ItemAggregate.create(
-                item_instance_id=ItemInstanceId(1),
-                item_spec=sample_item_spec_wood,
-                quantity=5
-            )
+            ItemAggregate.create(item_instance_id=ItemInstanceId(1), item_spec=sample_item_spec_wood, quantity=5)
         ]
 
         available = RecipeAggregate.calculate_available_quantities(inventory)
         assert len(available) == 1
         assert available[sample_item_spec_wood.item_spec_id] == 5
 
-    def test_calculate_available_quantities_multiple_different_items(self, sample_item_spec_wood, sample_item_spec_stone):
+    def test_calculate_available_quantities_multiple_different_items(
+        self, sample_item_spec_wood, sample_item_spec_stone
+    ):
         """異なる複数アイテムのインベントリからの数量計算"""
         inventory = [
-            ItemAggregate.create(
-                item_instance_id=ItemInstanceId(1),
-                item_spec=sample_item_spec_wood,
-                quantity=5
-            ),
-            ItemAggregate.create(
-                item_instance_id=ItemInstanceId(2),
-                item_spec=sample_item_spec_stone,
-                quantity=3
-            )
+            ItemAggregate.create(item_instance_id=ItemInstanceId(1), item_spec=sample_item_spec_wood, quantity=5),
+            ItemAggregate.create(item_instance_id=ItemInstanceId(2), item_spec=sample_item_spec_stone, quantity=3),
         ]
 
         available = RecipeAggregate.calculate_available_quantities(inventory)
@@ -338,21 +290,9 @@ class TestRecipeAggregate:
     def test_calculate_available_quantities_same_spec_multiple_items(self, sample_item_spec_wood):
         """同じスペックの複数アイテムのインベントリからの数量計算"""
         inventory = [
-            ItemAggregate.create(
-                item_instance_id=ItemInstanceId(1),
-                item_spec=sample_item_spec_wood,
-                quantity=5
-            ),
-            ItemAggregate.create(
-                item_instance_id=ItemInstanceId(2),
-                item_spec=sample_item_spec_wood,
-                quantity=3
-            ),
-            ItemAggregate.create(
-                item_instance_id=ItemInstanceId(3),
-                item_spec=sample_item_spec_wood,
-                quantity=2
-            )
+            ItemAggregate.create(item_instance_id=ItemInstanceId(1), item_spec=sample_item_spec_wood, quantity=5),
+            ItemAggregate.create(item_instance_id=ItemInstanceId(2), item_spec=sample_item_spec_wood, quantity=3),
+            ItemAggregate.create(item_instance_id=ItemInstanceId(3), item_spec=sample_item_spec_wood, quantity=2),
         ]
 
         available = RecipeAggregate.calculate_available_quantities(inventory)
@@ -362,33 +302,17 @@ class TestRecipeAggregate:
     def test_calculate_inventory_quantities_mixed_specs(self, sample_item_spec_wood, sample_item_spec_stone):
         """混合スペックのインベントリ数量計算テスト"""
         inventory = [
-            ItemAggregate.create(
-                item_instance_id=ItemInstanceId(1),
-                item_spec=sample_item_spec_wood,
-                quantity=5
-            ),
-            ItemAggregate.create(
-                item_instance_id=ItemInstanceId(2),
-                item_spec=sample_item_spec_stone,
-                quantity=3
-            ),
-            ItemAggregate.create(
-                item_instance_id=ItemInstanceId(3),
-                item_spec=sample_item_spec_wood,
-                quantity=2
-            ),
-            ItemAggregate.create(
-                item_instance_id=ItemInstanceId(4),
-                item_spec=sample_item_spec_stone,
-                quantity=1
-            )
+            ItemAggregate.create(item_instance_id=ItemInstanceId(1), item_spec=sample_item_spec_wood, quantity=5),
+            ItemAggregate.create(item_instance_id=ItemInstanceId(2), item_spec=sample_item_spec_stone, quantity=3),
+            ItemAggregate.create(item_instance_id=ItemInstanceId(3), item_spec=sample_item_spec_wood, quantity=2),
+            ItemAggregate.create(item_instance_id=ItemInstanceId(4), item_spec=sample_item_spec_stone, quantity=1),
         ]
 
         quantities = RecipeAggregate.calculate_available_quantities(inventory)
 
         assert len(quantities) == 2
-        assert quantities[sample_item_spec_wood.item_spec_id] == 7   # 5 + 2
-        assert quantities[sample_item_spec_stone.item_spec_id] == 4   # 3 + 1
+        assert quantities[sample_item_spec_wood.item_spec_id] == 7  # 5 + 2
+        assert quantities[sample_item_spec_stone.item_spec_id] == 4  # 3 + 1
 
     def test_equality_same_recipe(self, sample_recipe):
         """同じレシピの等価性テスト"""
@@ -397,19 +321,10 @@ class TestRecipeAggregate:
             name="Different Name",  # 異なる名前（等価性に関係なし）
             description="Different Description",
             ingredients=[
-                RecipeIngredient(
-                    item_spec_id=ItemSpecId(1),
-                    quantity=2
-                ),
-                RecipeIngredient(
-                    item_spec_id=ItemSpecId(2),
-                    quantity=1
-                )
+                RecipeIngredient(item_spec_id=ItemSpecId(1), quantity=2),
+                RecipeIngredient(item_spec_id=ItemSpecId(2), quantity=1),
             ],
-            result=RecipeResult(
-                item_spec_id=ItemSpecId(3),
-                quantity=1
-            )
+            result=RecipeResult(item_spec_id=ItemSpecId(3), quantity=1),
         )
 
         assert sample_recipe == recipe2
@@ -422,19 +337,10 @@ class TestRecipeAggregate:
             name="Wooden Sword Recipe",
             description="Craft a wooden sword using wood and stone",
             ingredients=[
-                RecipeIngredient(
-                    item_spec_id=ItemSpecId(1),
-                    quantity=2
-                ),
-                RecipeIngredient(
-                    item_spec_id=ItemSpecId(2),
-                    quantity=1
-                )
+                RecipeIngredient(item_spec_id=ItemSpecId(1), quantity=2),
+                RecipeIngredient(item_spec_id=ItemSpecId(2), quantity=1),
             ],
-            result=RecipeResult(
-                item_spec_id=ItemSpecId(3),
-                quantity=1
-            )
+            result=RecipeResult(item_spec_id=ItemSpecId(3), quantity=1),
         )
 
         assert sample_recipe != recipe2
@@ -481,16 +387,8 @@ class TestRecipeAggregate:
             recipe_id=RecipeId(2),
             name="Simple Recipe",
             description="Simple crafting",
-            ingredients=[
-                RecipeIngredient(
-                    item_spec_id=sample_item_spec_wood.item_spec_id,
-                    quantity=1
-                )
-            ],
-            result=RecipeResult(
-                item_spec_id=sample_item_spec_sword.item_spec_id,
-                quantity=1
-            )
+            ingredients=[RecipeIngredient(item_spec_id=sample_item_spec_wood.item_spec_id, quantity=1)],
+            result=RecipeResult(item_spec_id=sample_item_spec_sword.item_spec_id, quantity=1),
         )
 
         # 合成可能チェック
@@ -512,32 +410,20 @@ class TestRecipeAggregate:
             name="Massive Recipe",
             description="Requires many materials",
             ingredients=[
-                RecipeIngredient(
-                    item_spec_id=sample_item_spec_wood.item_spec_id,
-                    quantity=10
-                ),
-                RecipeIngredient(
-                    item_spec_id=sample_item_spec_stone.item_spec_id,
-                    quantity=5
-                )
+                RecipeIngredient(item_spec_id=sample_item_spec_wood.item_spec_id, quantity=10),
+                RecipeIngredient(item_spec_id=sample_item_spec_stone.item_spec_id, quantity=5),
             ],
-            result=RecipeResult(
-                item_spec_id=sample_item_spec_sword.item_spec_id,
-                quantity=1
-            )
+            result=RecipeResult(item_spec_id=sample_item_spec_sword.item_spec_id, quantity=1),
         )
 
         # 十分な材料
-        available_sufficient = {
-            sample_item_spec_wood.item_spec_id: 10,
-            sample_item_spec_stone.item_spec_id: 5
-        }
+        available_sufficient = {sample_item_spec_wood.item_spec_id: 10, sample_item_spec_stone.item_spec_id: 5}
         assert recipe.can_craft_with(available_sufficient)
 
         # 木材不足
         available_insufficient_wood = {
-            sample_item_spec_wood.item_spec_id: 9,   # 必要:10, 不足
-            sample_item_spec_stone.item_spec_id: 5
+            sample_item_spec_wood.item_spec_id: 9,  # 必要:10, 不足
+            sample_item_spec_stone.item_spec_id: 5,
         }
         assert not recipe.can_craft_with(available_insufficient_wood)
 

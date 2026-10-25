@@ -2,7 +2,6 @@
 GlobalMarketQueryService専用のアプリケーション例外
 """
 
-
 from typing import Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
@@ -47,7 +46,4 @@ class GlobalMarketQueryApplicationException(ApplicationException):
         Returns:
             GlobalMarketQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"No listings found for filter: {filter_description}",
-            filter_description=filter_description
-        )
+        return cls(f"No listings found for filter: {filter_description}", filter_description=filter_description)

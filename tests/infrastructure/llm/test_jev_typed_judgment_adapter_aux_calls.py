@@ -39,9 +39,7 @@ class _BrokenSink:
         raise RuntimeError("sink is broken")
 
 
-def _adapter(
-    handler: Callable[[httpx.Request], httpx.Response], sink: Any
-) -> JevTypedJudgmentAdapter:
+def _adapter(handler: Callable[[httpx.Request], httpx.Response], sink: Any) -> JevTypedJudgmentAdapter:
     return JevTypedJudgmentAdapter(
         api_key="sk-or-v1-test",
         endpoint="https://openrouter.ai/api/alpha/decisions",
@@ -135,9 +133,7 @@ class TestFailedDecisionCallsAreRecordedToo:
     def test_schema_mismatch_records_failure(self) -> None:
         """答えが欠けた応答は、success=False と TYPED_JUDGMENT_ANSWER_MISSING を残す (課金された 1 回として数える)。"""
         sink = _Sink()
-        adapter = _adapter(
-            lambda _request: httpx.Response(200, json={"answers": {}}), sink
-        )
+        adapter = _adapter(lambda _request: httpx.Response(200, json={"answers": {}}), sink)
 
         with pytest.raises(TypedJudgmentUnavailableException):
             adapter.judge("state", _QUESTIONS)

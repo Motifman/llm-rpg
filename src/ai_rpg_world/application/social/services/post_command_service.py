@@ -38,16 +38,20 @@ _Result = TypeVar("_Result")
 class PostCommandService:
     """ポストコマンドサービス"""
 
-    def __init__(self, post_repository: PostRepository, user_repository: UserRepository, event_publisher: EventPublisher[DomainEvent], unit_of_work: UnitOfWork):
+    def __init__(
+        self,
+        post_repository: PostRepository,
+        user_repository: UserRepository,
+        event_publisher: EventPublisher[DomainEvent],
+        unit_of_work: UnitOfWork,
+    ):
         self._post_repository = post_repository
         self._user_repository = user_repository
         self._event_publisher = event_publisher
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -56,24 +60,17 @@ class PostCommandService:
             raise e
         except SnsDomainException as e:
             raise ApplicationExceptionFactory.create_from_domain_exception(
-                e,
-                user_id=context.get('user_id'),
-                post_id=context.get('post_id')
+                e, user_id=context.get("user_id"), post_id=context.get("post_id")
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra=context)
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def create_post(self, command: CreatePostCommand) -> CommandResultDto:
         """ポストを作成"""
         return self._execute_with_error_handling(
             operation=lambda: self._create_post_impl(command),
-            context={
-                "action": "create_post",
-                "user_id": command.user_id
-            }
+            context={"action": "create_post", "user_id": command.user_id},
         )
 
     def _mentioned_user_ids_for_content(self, post_content: PostContent) -> frozenset[UserId]:
@@ -117,20 +114,14 @@ class PostCommandService:
             self._logger.info(f"Post created successfully: post_id={post_id.value}, user_id={command.user_id}")
 
             return CommandResultDto(
-                success=True,
-                message="ポストが正常に作成されました",
-                data={"post_id": post_id.value}
+                success=True, message="ポストが正常に作成されました", data={"post_id": post_id.value}
             )
 
     def like_post(self, command: LikePostCommand) -> CommandResultDto:
         """ポストにいいね"""
         return self._execute_with_error_handling(
             operation=lambda: self._like_post_impl(command),
-            context={
-                "action": "like_post",
-                "user_id": command.user_id,
-                "post_id": command.post_id
-            }
+            context={"action": "like_post", "user_id": command.user_id, "post_id": command.post_id},
         )
 
     def _like_post_impl(self, command: LikePostCommand) -> CommandResultDto:
@@ -164,18 +155,14 @@ class PostCommandService:
             return CommandResultDto(
                 success=True,
                 message="ポストにいいねしました",
-                data={"post_id": command.post_id, "user_id": command.user_id}
+                data={"post_id": command.post_id, "user_id": command.user_id},
             )
 
     def delete_post(self, command: DeletePostCommand) -> CommandResultDto:
         """ポストを削除"""
         return self._execute_with_error_handling(
             operation=lambda: self._delete_post_impl(command),
-            context={
-                "action": "delete_post",
-                "user_id": command.user_id,
-                "post_id": command.post_id
-            }
+            context={"action": "delete_post", "user_id": command.user_id, "post_id": command.post_id},
         )
 
     def _delete_post_impl(self, command: DeletePostCommand) -> CommandResultDto:
@@ -203,5 +190,5 @@ class PostCommandService:
             return CommandResultDto(
                 success=True,
                 message="ポストが正常に削除されました",
-                data={"post_id": command.post_id, "user_id": command.user_id}
-        )
+                data={"post_id": command.post_id, "user_id": command.user_id},
+            )

@@ -114,8 +114,13 @@ def _template(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=max_hp, max_mp=0, attack=attack,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=max_hp,
+            max_mp=0,
+            attack=attack,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -131,15 +136,18 @@ def _template(
 
 
 def _make_monster(
-    template: MonsterTemplate, monster_id: int = 101,
+    template: MonsterTemplate,
+    monster_id: int = 101,
 ) -> MonsterAggregate:
     return MonsterAggregate(
         monster_id=MonsterId.create(monster_id),
         template=template,
         world_object_id=WorldObjectId.create(9000 + monster_id),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(monster_id), owner_id=monster_id,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(monster_id),
+            owner_id=monster_id,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -279,10 +287,7 @@ class TestAlwaysRetaliate:
         svc.tick(WorldTick(10))
 
         # monster→player の event が発火
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAttackedPlayerInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
         assert len(events) == 1
         # CHASE 状態に遷移している
         assert monster.behavior_state == BehaviorStateEnum.CHASE
@@ -309,15 +314,14 @@ class TestAlwaysRetaliate:
         graph.clear_events()
 
         svc, *_ = _make_service(
-            graph, attacker, second_monster=original_attacker,
+            graph,
+            attacker,
+            second_monster=original_attacker,
         )
         svc.tick(WorldTick(10))
 
         # 反撃 event は MonsterPredatedMonsterInSpotEvent を流用する
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterPredatedMonsterInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterPredatedMonsterInSpotEvent)]
         assert len(events) >= 1
         # 反撃した側 (attacker) は CHASE 状態
         assert attacker.behavior_state == BehaviorStateEnum.CHASE
@@ -420,10 +424,7 @@ class TestFleeingShortCircuit:
         svc.tick(WorldTick(9))
 
         # 攻撃 event は発火していない
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAttackedPlayerInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
         assert len(events) == 0
         assert monster.behavior_state == BehaviorStateEnum.FLEE
 
@@ -463,10 +464,7 @@ class TestStatePersistence:
 
         # FLEE 遷移時 + (wander で graph save はあるが monster save は state 用のみ)
         assert monster_repo.save.call_count >= 1
-        assert any(
-            call.args and call.args[0] is monster
-            for call in monster_repo.save.call_args_list
-        )
+        assert any(call.args and call.args[0] is monster for call in monster_repo.save.call_args_list)
 
     def test_calls_chase_monster_save(self) -> None:
         """ALWAYS_RETALIATE 反応で CHASE に入った直後に save される。"""
@@ -528,16 +526,19 @@ class TestThirdPartyAttackerRefSafety:
         )
         original = AttackerRef.of_player(PlayerId(1))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(8), attacker_ref=original,
+            current_tick=WorldTick(8),
+            attacker_ref=original,
         )
         monster.enter_chase_state(
-            attacker_ref=original, last_observed_target_spot_id=SPOT_A,
+            attacker_ref=original,
+            last_observed_target_spot_id=SPOT_A,
             current_tick=WorldTick(8),
         )
         # 第三者から殴られる
         intruder = AttackerRef.of_monster(MonsterId.create(999))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=intruder,
+            current_tick=WorldTick(9),
+            attacker_ref=intruder,
         )
 
         # chase 対象は最初の attacker のまま

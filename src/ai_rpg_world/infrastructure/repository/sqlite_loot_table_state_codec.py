@@ -23,4 +23,3 @@ def build_loot_table(*, loot_table_id: int, name: str, entry_rows: list[sqlite3.
             for row in entry_rows
         ],
     )
-

@@ -43,9 +43,7 @@ SIGN_WRITTEN_TICK_STATE_KEY = "sign_written_tick"
 # 両方で実際に守るための hidden key 集合。WRITE_PLAYER_TEXT がこの 3 key を
 # 書いた時点で自分で hidden_state_keys へ加える (シナリオ JSON の設定漏れに
 # 依存しない)。
-SIGN_HIDDEN_STATE_KEYS = frozenset(
-    {SIGN_TEXT_STATE_KEY, SIGN_AUTHOR_STATE_KEY, SIGN_WRITTEN_TICK_STATE_KEY}
-)
+SIGN_HIDDEN_STATE_KEYS = frozenset({SIGN_TEXT_STATE_KEY, SIGN_AUTHOR_STATE_KEY, SIGN_WRITTEN_TICK_STATE_KEY})
 
 
 def apply_show_message(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
@@ -54,24 +52,18 @@ def apply_show_message(effect: InteractionEffect, ctx: EffectApplicationState) -
         ctx.messages.append(msg)
 
 
-def apply_show_room_occupancy(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_show_room_occupancy(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     ctx.room_occupancy_display_specs.append(RoomOccupancyDisplaySpec())
 
 
-def apply_write_player_text(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_write_player_text(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     p = effect.parameters
     visibility = resolve_visibility(effect)
     text_param_key = p.get("text_param_key", "text")
     params_in = ctx.interaction_parameters or {}
     raw_text = params_in.get(text_param_key)
     if not isinstance(raw_text, str) or raw_text == "":
-        raise InteractionParameterMissingException(
-            f"何を書くか {text_param_key} パラメータで指定してください。"
-        )
+        raise InteractionParameterMissingException(f"何を書くか {text_param_key} パラメータで指定してください。")
     target = resolve_target_object(ctx.interior, ctx.acting_object, p)
     if target is None:
         return
@@ -84,17 +76,11 @@ def apply_write_player_text(
     new_state = dict(target.state)
     new_state[SIGN_TEXT_STATE_KEY] = text
     new_state[SIGN_AUTHOR_STATE_KEY] = author_name
-    new_state[SIGN_WRITTEN_TICK_STATE_KEY] = (
-        int(ctx.current_tick.value) if ctx.current_tick is not None else None
-    )
-    updated_target = target.with_state(new_state).with_additional_hidden_state_keys(
-        SIGN_HIDDEN_STATE_KEYS
-    )
+    new_state[SIGN_WRITTEN_TICK_STATE_KEY] = int(ctx.current_tick.value) if ctx.current_tick is not None else None
+    updated_target = target.with_state(new_state).with_additional_hidden_state_keys(SIGN_HIDDEN_STATE_KEYS)
     ctx.replace_object(updated_target)
     if truncated:
-        ctx.messages.append(
-            f"本文が{SIGN_TEXT_MAX_LENGTH}字を超えていたため切り詰めました。"
-        )
+        ctx.messages.append(f"本文が{SIGN_TEXT_MAX_LENGTH}字を超えていたため切り詰めました。")
     ctx.messages.append(f"{updated_target.name} に書き込んだ。")
     ctx.summaries.append(
         AppliedEffectSummary(
@@ -102,16 +88,12 @@ def apply_write_player_text(
             visibility=visibility,
             description=f"{updated_target.name} に {author_name} が書き込んだ",
             target_ref=updated_target.name,
-            state_delta=state_delta_entries(
-                before_state, new_state, exclude_keys=SIGN_HIDDEN_STATE_KEYS
-            ),
+            state_delta=state_delta_entries(before_state, new_state, exclude_keys=SIGN_HIDDEN_STATE_KEYS),
         )
     )
 
 
-def apply_show_player_text(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_show_player_text(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     p = effect.parameters
     target = resolve_target_object(ctx.interior, ctx.acting_object, p)
     if target is None:

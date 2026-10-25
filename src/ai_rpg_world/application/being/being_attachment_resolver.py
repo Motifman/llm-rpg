@@ -42,15 +42,10 @@ class BeingAttachmentResolver:
 
     def __init__(self, being_repository: BeingRepository) -> None:
         if not isinstance(being_repository, BeingRepository):
-            raise TypeError(
-                "being_repository must be BeingRepository, "
-                f"got {type(being_repository).__name__}"
-            )
+            raise TypeError(f"being_repository must be BeingRepository, got {type(being_repository).__name__}")
         self._repo = being_repository
 
-    def resolve_attached_being(
-        self, world_id: WorldId, player_id: PlayerId
-    ) -> Being | None:
+    def resolve_attached_being(self, world_id: WorldId, player_id: PlayerId) -> Being | None:
         """(world, player) に attach 中の Being を返す。
 
         - 0 件: ``None``
@@ -58,20 +53,14 @@ class BeingAttachmentResolver:
         - 2 件以上: ``BeingMultipleAttachmentException`` (= 0..1 不変条件違反)
         """
         if not isinstance(world_id, WorldId):
-            raise TypeError(
-                f"world_id must be WorldId, got {type(world_id).__name__}"
-            )
+            raise TypeError(f"world_id must be WorldId, got {type(world_id).__name__}")
         if not isinstance(player_id, PlayerId):
-            raise TypeError(
-                f"player_id must be PlayerId, got {type(player_id).__name__}"
-            )
+            raise TypeError(f"player_id must be PlayerId, got {type(player_id).__name__}")
 
         matches = self._repo.find_all_attached_to(world_id, player_id)
         return unique_attached_being(matches)
 
-    def resolve_being_id(
-        self, world_id: WorldId, player_id: PlayerId
-    ) -> BeingId | None:
+    def resolve_being_id(self, world_id: WorldId, player_id: PlayerId) -> BeingId | None:
         """(world, player) に attach 中の Being の ID を返す。0..1。
 
         他 resolve メソッドと型ガードの揃いを取るため、委譲前にも明示的に
@@ -79,13 +68,9 @@ class BeingAttachmentResolver:
         本メソッド単体でガードされる)。
         """
         if not isinstance(world_id, WorldId):
-            raise TypeError(
-                f"world_id must be WorldId, got {type(world_id).__name__}"
-            )
+            raise TypeError(f"world_id must be WorldId, got {type(world_id).__name__}")
         if not isinstance(player_id, PlayerId):
-            raise TypeError(
-                f"player_id must be PlayerId, got {type(player_id).__name__}"
-            )
+            raise TypeError(f"player_id must be PlayerId, got {type(player_id).__name__}")
         being = self.resolve_attached_being(world_id, player_id)
         return being.being_id if being is not None else None
 
@@ -97,9 +82,7 @@ class BeingAttachmentResolver:
         - attach 中: その ``PlayerId``
         """
         if not isinstance(being_id, BeingId):
-            raise TypeError(
-                f"being_id must be BeingId, got {type(being_id).__name__}"
-            )
+            raise TypeError(f"being_id must be BeingId, got {type(being_id).__name__}")
         being = self._repo.find_by_id(being_id)
         if being is None or being.attachment is None:
             return None

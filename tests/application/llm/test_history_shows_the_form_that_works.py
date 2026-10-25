@@ -44,9 +44,7 @@ class TestBrokenActionNamesAreRecognized:
             ("麦を刈る → reap_wheat", "reap_wheat"),
         ],
     )
-    def test_the_intended_name_is_among_the_candidates(
-        self, raw: str, expected: str
-    ) -> None:
+    def test_the_intended_name_is_among_the_candidates(self, raw: str, expected: str) -> None:
         """quote つき・表示行の丸ごとコピーから、操作名が候補に現れる。"""
         assert expected in normalize_action_name_candidates(raw)
 
@@ -80,9 +78,7 @@ class TestTheHistoryKeepsTheCanonicalForm:
 
         救済の対象でない引数まで黙って書き換えない。
         """
-        identifiers, _ = project_action_arguments_for_history(
-            {"destination_label": "祭りの広場"}
-        )
+        identifiers, _ = project_action_arguments_for_history({"destination_label": "祭りの広場"})
 
         assert identifiers["destination_label"] == "祭りの広場"
 
@@ -103,9 +99,7 @@ class TestCollectingTheCanonicalValue:
     def test_a_difference_is_collected(self) -> None:
         args: dict[str, Any] = {"destination_label": '"広場"'}
 
-        assert canonical_identifiers(
-            args, destination_label="広場"
-        ) == {"destination_label": "広場"}
+        assert canonical_identifiers(args, destination_label="広場") == {"destination_label": "広場"}
 
     def test_no_difference_collects_nothing(self) -> None:
         """生値と同じなら集めない (無駄な差分を作らない)。"""
@@ -156,9 +150,7 @@ class TestTheWholePathWithARealWorld:
         )
         prompt = race.build_full_prompt(PlayerId(player_int))
         handler = wiring._tool_handlers[tool]
-        return handler(
-            PlayerId(player_int), args, prompt["tool_runtime_context"]
-        )
+        return handler(PlayerId(player_int), args, prompt["tool_runtime_context"])
 
     def test_a_quoted_action_name_now_succeeds(self, race) -> None:
         """``"offer_wheat"`` (quote つき) で納品が通る。
@@ -176,16 +168,24 @@ class TestTheWholePathWithARealWorld:
 
         spec = race.id_mapper.get_int("item_spec", "wheat")
         grant_item_specs_to_inventory(
-            PlayerId(1), (ItemSpecId.create(spec),),
-            race._item_repo, race._item_spec_repo,
-            race._player_inventory_repo, overflow_sink=IGNORE_OVERFLOW,
+            PlayerId(1),
+            (ItemSpecId.create(spec),),
+            race._item_repo,
+            race._item_spec_repo,
+            race._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
 
-        result = self._dispatch(race, 1, "interact", {
-            "target_label": '"東の祭壇"',
-            "action_name": '"offer_wheat"',
-            "inner_thought": "納める",
-        })
+        result = self._dispatch(
+            race,
+            1,
+            "interact",
+            {
+                "target_label": '"東の祭壇"',
+                "action_name": '"offer_wheat"',
+                "inner_thought": "納める",
+            },
+        )
 
         assert result.success, result.message
 
@@ -194,10 +194,15 @@ class TestTheWholePathWithARealWorld:
 
         ここが崩れると、次のターンの LLM は「quote つきで通った」を学ぶ。
         """
-        result = self._dispatch(race, 1, "travel_to", {
-            "destination_label": '"麦畑"',
-            "inner_thought": "行く",
-        })
+        result = self._dispatch(
+            race,
+            1,
+            "travel_to",
+            {
+                "destination_label": '"麦畑"',
+                "inner_thought": "行く",
+            },
+        )
         assert result.success, result.message
 
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -224,16 +229,24 @@ class TestTheWholePathWithARealWorld:
 
         spec = race.id_mapper.get_int("item_spec", "wheat")
         grant_item_specs_to_inventory(
-            PlayerId(1), (ItemSpecId.create(spec),),
-            race._item_repo, race._item_spec_repo,
-            race._player_inventory_repo, overflow_sink=IGNORE_OVERFLOW,
+            PlayerId(1),
+            (ItemSpecId.create(spec),),
+            race._item_repo,
+            race._item_spec_repo,
+            race._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
 
-        result = self._dispatch(race, 1, "interact", {
-            "target_label": '"東の祭壇"',
-            "action_name": '麦束を納める → "offer_wheat"',
-            "inner_thought": "納める",
-        })
+        result = self._dispatch(
+            race,
+            1,
+            "interact",
+            {
+                "target_label": '"東の祭壇"',
+                "action_name": '麦束を納める → "offer_wheat"',
+                "inner_thought": "納める",
+            },
+        )
         assert result.success, result.message
 
         ids = race._action_result_store.get_recent(PlayerId(1), 1)[-1].identifier_arguments
@@ -263,17 +276,18 @@ class TestTheWholePathWithARealWorld:
 
         spec = race.id_mapper.get_int("item_spec", "wheat")
         grant_item_specs_to_inventory(
-            PlayerId(1), (ItemSpecId.create(spec),),
-            race._item_repo, race._item_spec_repo,
-            race._player_inventory_repo, overflow_sink=IGNORE_OVERFLOW,
+            PlayerId(1),
+            (ItemSpecId.create(spec),),
+            race._item_repo,
+            race._item_spec_repo,
+            race._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
 
         args = {"item_label": '"麦束"', "inner_thought": "使ってみる"}
         self._dispatch(race, 1, "use_item", args)
 
-        assert ACTION_HISTORY_PROJECTION_KEY in args, (
-            "generic 経路へ射影が届いていない"
-        )
+        assert ACTION_HISTORY_PROJECTION_KEY in args, "generic 経路へ射影が届いていない"
         identifiers, _ = action_history_projection(args)
         assert identifiers["item_label"] == "麦束", identifiers
 
@@ -283,11 +297,16 @@ class TestTheWholePathWithARealWorld:
         救済を「候補を作ったら通す」に広げると、この失敗が消えて
         「適当に書いても通る」を教えることになる (65 run で 111 件の主因)。
         """
-        result = self._dispatch(race, 1, "interact", {
-            "target_label": "東の祭壇",
-            "action_name": "check_contents",
-            "inner_thought": "中を見たい",
-        })
+        result = self._dispatch(
+            race,
+            1,
+            "interact",
+            {
+                "target_label": "東の祭壇",
+                "action_name": "check_contents",
+                "inner_thought": "中を見たい",
+            },
+        )
 
         assert result.success is False
         assert "offer_wheat" in result.message
@@ -303,16 +322,16 @@ class TestWhichIdentifiersAreNormalizedSoFar:
 
     #: (引数名, 正規値を報告する resolver がある)
     _COVERAGE: ClassVar[dict[str, bool]] = {
-        "destination_label": True,   # travel_to
-        "target_label": True,        # interact
-        "action_name": True,         # interact
-        "item_label": True,          # use_item / drop_item
+        "destination_label": True,  # travel_to
+        "target_label": True,  # interact
+        "action_name": True,  # interact
+        "item_label": True,  # use_item / drop_item
         "ground_item_label": False,  # pickup_item
-        "merchant_label": False,     # buy_item / sell_item
+        "merchant_label": False,  # buy_item / sell_item
         "offerer_player_label": False,  # trade_accept / decline
-        "sub_location_label": False,    # set_sub_location
-        "channel": False,            # speak (resolver を通らない)
-        "handle": False,             # memory_*
+        "sub_location_label": False,  # set_sub_location
+        "channel": False,  # speak (resolver を通らない)
+        "handle": False,  # memory_*
     }
 
     def test_the_table_only_names_real_identifier_arguments(self) -> None:
@@ -332,9 +351,7 @@ class TestWhichIdentifiersAreNormalizedSoFar:
             if kind is ActionArgumentDisplayKind.IDENTIFIER_STRING
         }
 
-        assert set(self._COVERAGE) <= identifiers, (
-            f"表に実在しない引数がある: {set(self._COVERAGE) - identifiers}"
-        )
+        assert set(self._COVERAGE) <= identifiers, f"表に実在しない引数がある: {set(self._COVERAGE) - identifiers}"
 
     def test_the_covered_ones_are_actually_covered(self) -> None:
         """True と書いた引数は、resolver が本当に正規値を報告している。"""
@@ -347,6 +364,4 @@ class TestWhichIdentifiersAreNormalizedSoFar:
         source = inspect.getsource(spot_graph_resolver)
         for name, covered in self._COVERAGE.items():
             if covered:
-                assert f"{name}=" in source, (
-                    f"{name} は正規化済みのはずだが canonical_identifiers に無い"
-                )
+                assert f"{name}=" in source, f"{name} は正規化済みのはずだが canonical_identifiers に無い"

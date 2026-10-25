@@ -35,6 +35,4 @@ class SpotConnection:
 
     def __post_init__(self) -> None:
         if self.travel_ticks < 0:
-            raise SpotConnectionValidationException(
-                f"travel_ticks must be non-negative: {self.travel_ticks}"
-            )
+            raise SpotConnectionValidationException(f"travel_ticks must be non-negative: {self.travel_ticks}")

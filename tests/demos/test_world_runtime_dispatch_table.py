@@ -52,8 +52,7 @@ class TestWorldRuntimeDispatchTable:
         state = _create_session(monkeypatch, tmp_path)
 
         assert (
-            state.llm_wiring._spot_graph_executor
-            ._tend_to_player_command_scope_factory
+            state.llm_wiring._spot_graph_executor._tend_to_player_command_scope_factory
             is state.runtime._tend_to_player_command_scope_factory
         )
 
@@ -64,14 +63,11 @@ class TestWorldRuntimeDispatchTable:
         state = _create_session(monkeypatch, tmp_path)
 
         assert (
-            state.llm_wiring._spot_graph_executor
-            ._prepare_action_command_scope_factory
+            state.llm_wiring._spot_graph_executor._prepare_action_command_scope_factory
             is state.runtime._prepare_action_command_scope_factory
         )
 
-    def test_dispatch_table_registers_all_required_tools(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_dispatch_table_registers_all_required_tools(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """必須 tool が dispatch table に揃っているか確認。
 
         PR 7 の refactor で誤って handler が落ちると、その tool は
@@ -95,9 +91,7 @@ class TestWorldRuntimeDispatchTable:
             TOOL_NAME_EPISODE_REVISE_INDEX,
         }
         missing = required - set(handlers.keys())
-        assert not missing, (
-            f"dispatch table から必須 tool が欠落: {missing}"
-        )
+        assert not missing, f"dispatch table から必須 tool が欠落: {missing}"
 
     def test_consumable_effect_handler_runs_before_use_item_commit(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -114,19 +108,15 @@ class TestWorldRuntimeDispatchTable:
         publisher = state.runtime._speech_event_publisher
         assert publisher is not None, "pipeline_event_publisher が runtime に保存されていない"
         assert not any(
-            registration.event_type is ConsumableUsedEvent
-            for registration in publisher._dispatcher._after_commit
+            registration.event_type is ConsumableUsedEvent for registration in publisher._dispatcher._after_commit
         )
         factory = state.runtime._use_item_command_scope_factory
         dispatcher = factory._sync_dispatcher
-        assert any(
-            registration.event_type is ConsumableUsedEvent
-            for registration in dispatcher._before_commit
-        ), "ConsumableUsedEventのcommit前必須handlerが登録されていない"
+        assert any(registration.event_type is ConsumableUsedEvent for registration in dispatcher._before_commit), (
+            "ConsumableUsedEventのcommit前必須handlerが登録されていない"
+        )
 
-    def test_dispatch_table_registers_344_wired_tools(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_dispatch_table_registers_344_wired_tools(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """#344 で配線した spot_graph_use_item / attack / give / pickup / drop
         が dispatch table に登録されていることを直接検証する。
 
@@ -148,9 +138,7 @@ class TestWorldRuntimeDispatchTable:
             f"_WorldLlmWiring._wire_missing_spot_graph_tools が動いていない可能性。"
         )
 
-    def test_unknown_tool_returns_unsupported(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_unknown_tool_returns_unsupported(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """未登録の tool 名は UNSUPPORTED_TOOL を返す。"""
         stub = StubLlmClient(
             tool_call_to_return={
@@ -166,9 +154,7 @@ class TestWorldRuntimeDispatchTable:
         assert result.error_code == "UNSUPPORTED_TOOL"
         assert "totally_made_up_tool" in result.message
 
-    def test_each_handler_returns_command_dto(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_each_handler_returns_command_dto(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """テーブルに登録された各 handler は callable で、LlmCommandResultDto を返す
         signature と整合することを smoke-check する (PR 7 refactor の構造保証)。"""
         state = _create_session(monkeypatch, tmp_path)
@@ -188,9 +174,7 @@ class TestWorldRuntimeScheduleTurnDoesNotTouchSelfRescheduleStreak:
     streak で打ち切られる。
     """
 
-    def test_schedule_turn_preserves_existing_streak(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_schedule_turn_preserves_existing_streak(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """既に streak が積まれているプレイヤーへの schedule_turn は
         streak に触らない (既存値を維持する)。"""
         state = _create_session(monkeypatch, tmp_path)
@@ -224,4 +208,3 @@ class TestWorldRuntimeScheduleTurnDoesNotTouchSelfRescheduleStreak:
         # PR-I: streak には登録しない。pending には乗る。
         assert pid.value not in trigger._self_reschedule_streak
         assert pid.value in trigger.pending_player_ids
-

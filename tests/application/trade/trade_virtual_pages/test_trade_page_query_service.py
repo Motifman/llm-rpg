@@ -120,9 +120,7 @@ class TestTradePageQueryService:
         first_tid = self.session.resolve_trade_ref(pid, data["rows"][0]["trade_ref"])
         assert first_tid is not None
 
-        page2 = self.trade_svc.get_active_trades_as_seller(
-            player_id=pid, limit=1, cursor=snap_cursor
-        )
+        page2 = self.trade_svc.get_active_trades_as_seller(player_id=pid, limit=1, cursor=snap_cursor)
         assert len(page2.trades) == 1
         assert page2.trades[0].trade_id != first_tid
         assert {first_tid, page2.trades[0].trade_id} == {1, 11}

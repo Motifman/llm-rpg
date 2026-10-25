@@ -31,8 +31,7 @@ _ESCAPE_INNER_THOUGHT_REQUIRED: frozenset[str] = frozenset(
 )
 
 _INNER_THOUGHT_EMPTY_WARNING_PREFIX = (
-    "【警告】inner_thought が空です。次のツール呼び出しでは、"
-    "必ずペルソナの口調で短い内心を含めてください。\n\n"
+    "【警告】inner_thought が空です。次のツール呼び出しでは、必ずペルソナの口調で短い内心を含めてください。\n\n"
 )
 
 
@@ -81,12 +80,7 @@ def _has_japanese_char(s: str) -> bool:
         # Halfwidth Katakana (FF66-FF9F), 全角記号 (FF00-FFEF) 等の
         # 主要日本語ブロックをカバー。厳密でなくていい (英語混じりを
         # 「日本語 message」として通す heuristic なので誤検出コスト小)。
-        if (
-            0x3040 <= code <= 0x309F
-            or 0x30A0 <= code <= 0x30FF
-            or 0x4E00 <= code <= 0x9FFF
-            or 0xFF00 <= code <= 0xFFEF
-        ):
+        if 0x3040 <= code <= 0x309F or 0x30A0 <= code <= 0x30FF or 0x4E00 <= code <= 0x9FFF or 0xFF00 <= code <= 0xFFEF:
             return True
     return False
 
@@ -96,16 +90,11 @@ def _has_japanese_char(s: str) -> bool:
 # や、application 層で raise される英語 error) が LLM に漏れないよう、
 # 「日本語文字が 1 文字も無い」message はこの汎用文言に置換する。
 _SANITIZED_SYSTEM_ERROR_MESSAGE = (
-    "システムエラーが発生しました。少し tick を進めてから再試行するか、"
-    "別の tool を選んでください。"
+    "システムエラーが発生しました。少し tick を進めてから再試行するか、別の tool を選んでください。"
 )
-_SANITIZED_DOMAIN_ERROR_MESSAGE = (
-    "入力を見直して、別の対象・別の操作を選んでください。"
-)
+_SANITIZED_DOMAIN_ERROR_MESSAGE = "入力を見直して、別の対象・別の操作を選んでください。"
 
-_COMMAND_COMMITTED_POST_PROCESSING_FAILED = (
-    "COMMAND_COMMITTED_POST_PROCESSING_FAILED"
-)
+_COMMAND_COMMITTED_POST_PROCESSING_FAILED = "COMMAND_COMMITTED_POST_PROCESSING_FAILED"
 
 
 def command_post_commit_result(

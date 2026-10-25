@@ -242,9 +242,7 @@ class TestVisibleMonsterObserver:
         builder = _build_builder(
             graph=graph,
             monster_view_provider=provider,
-            visible_monster_observer=lambda _pid, entry: observed.append(
-                entry.monster_id
-            ),
+            visible_monster_observer=lambda _pid, entry: observed.append(entry.monster_id),
         )
 
         snap = builder.build_snapshot(PLAYER_ID)

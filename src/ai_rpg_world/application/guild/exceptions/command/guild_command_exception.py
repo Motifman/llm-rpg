@@ -2,7 +2,6 @@
 ギルドコマンド関連の例外定義
 """
 
-
 from typing import Any
 
 from ai_rpg_world.application.guild.exceptions.base_exception import GuildApplicationException

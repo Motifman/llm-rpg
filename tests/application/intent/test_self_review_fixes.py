@@ -33,9 +33,7 @@ class TestExceptionSanitization:
         """raw 例外メッセージ (パス・secrets を含みうる) は DTO に出ない。"""
 
         def handler(player_id: int, args: Mapping[str, Any]) -> LlmCommandResultDto:
-            raise RuntimeError(
-                "/home/user/project/secret_path: API_KEY=sk-xxxxxxxx leaked"
-            )
+            raise RuntimeError("/home/user/project/secret_path: API_KEY=sk-xxxxxxxx leaked")
 
         service = IntentResolutionService(
             handler_map={"crash": handler},
@@ -48,9 +46,7 @@ class TestExceptionSanitization:
             logging.ERROR,
             logger="ai_rpg_world.application.intent.intent_resolution_service",
         ):
-            result = service.submit_and_resolve_immediately(
-                player_id=1, tool_name="crash", arguments={}
-            )
+            result = service.submit_and_resolve_immediately(player_id=1, tool_name="crash", arguments={})
 
         assert result.success is False
         assert result.error_code == "INTENT_HANDLER_RAISED"
@@ -59,9 +55,7 @@ class TestExceptionSanitization:
         assert "API_KEY" not in result.message
         assert "sk-xxxxxxxx" not in result.message
         # サーバログには残っていること (観測可能性は維持)
-        assert any(
-            "Intent handler raised" in record.message for record in caplog.records
-        )
+        assert any("Intent handler raised" in record.message for record in caplog.records)
 
     def test_submission_rejection_does_not_leak_exception_message(self) -> None:
         """submit 失敗時にも例外文字列を返さない。"""
@@ -93,9 +87,7 @@ class TestExceptionSanitization:
             tick_provider=lambda: WorldTick(5),
         )
 
-        result = service.submit_and_resolve_immediately(
-            player_id=7, tool_name="noop", arguments={}
-        )
+        result = service.submit_and_resolve_immediately(player_id=7, tool_name="noop", arguments={})
         assert result.success is False
         assert result.error_code == "INTENT_SUBMISSION_REJECTED"
         # 例外オブジェクトの repr 等が漏れていないこと
@@ -113,9 +105,7 @@ class TestEmptyToolNameRejection:
             intent_id_generator=IntentIdGenerator(),
             tick_provider=lambda: WorldTick(1),
         )
-        result = service.submit_and_resolve_immediately(
-            player_id=1, tool_name="", arguments={}
-        )
+        result = service.submit_and_resolve_immediately(player_id=1, tool_name="", arguments={})
         assert result.success is False
         assert result.error_code == "NO_TOOL_CALL"
 
@@ -128,7 +118,9 @@ class TestEmptyToolNameRejection:
             tick_provider=lambda: WorldTick(1),
         )
         result = service.submit_and_resolve_immediately(
-            player_id=1, tool_name=None, arguments={}  # type: ignore[arg-type]
+            player_id=1,
+            tool_name=None,
+            arguments={},  # type: ignore[arg-type]
         )
         assert result.success is False
         assert result.error_code == "NO_TOOL_CALL"
@@ -152,9 +144,7 @@ class TestQueueRemoveFailureBehavior:
                     UnknownIntentException,
                 )
 
-                raise UnknownIntentException(
-                    "sabotaged", intent_id=intent_id.value
-                )
+                raise UnknownIntentException("sabotaged", intent_id=intent_id.value)
 
         service = IntentResolutionService(
             handler_map={"noop": lambda p, a: LlmCommandResultDto(success=True, message="ok")},
@@ -168,6 +158,4 @@ class TestQueueRemoveFailureBehavior:
         )
 
         with pytest.raises(UnknownIntentException):
-            service.submit_and_resolve_immediately(
-                player_id=1, tool_name="noop", arguments={}
-            )
+            service.submit_and_resolve_immediately(player_id=1, tool_name="noop", arguments={})

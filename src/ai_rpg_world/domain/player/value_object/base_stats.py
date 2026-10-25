@@ -31,11 +31,15 @@ class BaseStats:
         if self.speed < 0:
             raise BaseStatsValidationException(f"speed must be greater than 0. speed: {self.speed}")
         if self.critical_rate < 0.0 or self.critical_rate > 1.0:
-            raise BaseStatsValidationException(f"critical_rate must be between 0.0 and 1.0. critical_rate: {self.critical_rate}")
+            raise BaseStatsValidationException(
+                f"critical_rate must be between 0.0 and 1.0. critical_rate: {self.critical_rate}"
+            )
         if self.evasion_rate < 0.0 or self.evasion_rate > 1.0:
-            raise BaseStatsValidationException(f"evasion_rate must be between 0.0 and 1.0. evasion_rate: {self.evasion_rate}")
-    
-    def grow(self, growth_factor: StatGrowthFactor) -> 'BaseStats':
+            raise BaseStatsValidationException(
+                f"evasion_rate must be between 0.0 and 1.0. evasion_rate: {self.evasion_rate}"
+            )
+
+    def grow(self, growth_factor: StatGrowthFactor) -> "BaseStats":
         """成長率に基づいてステータスを成長させた新しいBaseStatsを返す
 
         Args:
@@ -54,9 +58,9 @@ class BaseStats:
             evasion_rate=min(1.0, self.evasion_rate + growth_factor.evasion_rate_factor),
         )
 
-    def apply_modifiers(self, modifiers: list['StatusModifier']) -> 'BaseStats':
+    def apply_modifiers(self, modifiers: list["StatusModifier"]) -> "BaseStats":
         """ステータス補正を適用した新しいBaseStatsを返す
-        
+
         計算順序: (基本値 + 加算補正の合計) * 乗算補正の積
         """
         # 各ステータスごとの補正を保持
@@ -73,7 +77,7 @@ class BaseStats:
         for mod in modifiers:
             if mod.target not in stats_map:
                 continue
-            
+
             if mod.modifier_type == ModifierType.ADDITIVE:
                 stats_map[mod.target]["add"] += mod.value
             elif mod.modifier_type == ModifierType.MULTIPLICATIVE:

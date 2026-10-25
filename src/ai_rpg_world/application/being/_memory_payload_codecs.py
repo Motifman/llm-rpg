@@ -419,9 +419,7 @@ def dict_to_being_short_term_memory(data: dict[str, Any], *, being_id: BeingId) 
                 for b in data["backstories"]
             ),
             recent_from=data.get("recent_from", 1),
-            awaiting=None
-            if awaiting is None
-            else Attempt(turn=awaiting["turn"], move=_dict_to_move(awaiting["move"])),
+            awaiting=None if awaiting is None else Attempt(turn=awaiting["turn"], move=_dict_to_move(awaiting["move"])),
             request=None
             if request is None
             else BackstoryRequest(until_turn=request["until_turn"], requested_turn=request["requested_turn"]),

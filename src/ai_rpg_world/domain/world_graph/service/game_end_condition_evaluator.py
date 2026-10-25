@@ -76,8 +76,7 @@ class GameEndConditionEvaluator:
         max_surviving = condition.max_surviving
         if not required_state or max_surviving is None:
             raise GameEndConditionValidationException(
-                "SURVIVING_PLAYERS_WITH_STATE_AT_MOST に required_state / "
-                "max_surviving がありません"
+                "SURVIVING_PLAYERS_WITH_STATE_AT_MOST に required_state / max_surviving がありません"
             )
         if player_states is None or player_outcomes is None:
             raise GameEndConditionValidationException(
@@ -97,9 +96,7 @@ class GameEndConditionEvaluator:
                 result_on_match,
                 f"陣営の生存者が尽きた ({described}: 残り{surviving}人)",
             )
-        return GameEndResult(
-            False, None, f"陣営はまだ生存している ({described}: 残り{surviving}人)"
-        )
+        return GameEndResult(False, None, f"陣営はまだ生存している ({described}: 残り{surviving}人)")
 
     @staticmethod
     def _evaluate_surviving_group_comparison(
@@ -114,21 +111,17 @@ class GameEndConditionEvaluator:
         comparison_state = condition.comparison_state
         if not required_state or not comparison_state:
             raise GameEndConditionValidationException(
-                f"{condition.condition_type.value} に required_state / "
-                "comparison_state がありません"
+                f"{condition.condition_type.value} に required_state / comparison_state がありません"
             )
         if player_states is None or player_outcomes is None:
             raise GameEndConditionValidationException(
-                f"{condition.condition_type.value} は player_states と "
-                "player_outcomes を必要とします"
+                f"{condition.condition_type.value} は player_states と player_outcomes を必要とします"
             )
         required_count = GameEndConditionEvaluator._count_surviving_players_with_state(
             required_state, player_ids, player_states, player_outcomes
         )
-        comparison_count = (
-            GameEndConditionEvaluator._count_surviving_players_with_state(
-                comparison_state, player_ids, player_states, player_outcomes
-            )
+        comparison_count = GameEndConditionEvaluator._count_surviving_players_with_state(
+            comparison_state, player_ids, player_states, player_outcomes
         )
         left = ", ".join(f"{key}={value}" for key, value in required_state.items())
         right = ", ".join(f"{key}={value}" for key, value in comparison_state.items())
@@ -136,14 +129,12 @@ class GameEndConditionEvaluator:
             return GameEndResult(
                 True,
                 result_on_match,
-                f"生存人数が同数以下になった ({left}: {required_count}人 / "
-                f"{right}: {comparison_count}人)",
+                f"生存人数が同数以下になった ({left}: {required_count}人 / {right}: {comparison_count}人)",
             )
         return GameEndResult(
             False,
             None,
-            f"生存人数に差がある ({left}: {required_count}人 / "
-            f"{right}: {comparison_count}人)",
+            f"生存人数に差がある ({left}: {required_count}人 / {right}: {comparison_count}人)",
         )
 
     @staticmethod
@@ -155,9 +146,7 @@ class GameEndConditionEvaluator:
     ) -> GameEndResult:
         required = condition.required_outcome
         if required is None:
-            raise GameEndConditionValidationException(
-                "ALL_MEMBERS_HAVE_OUTCOME に required_outcome がありません"
-            )
+            raise GameEndConditionValidationException("ALL_MEMBERS_HAVE_OUTCOME に required_outcome がありません")
         if team_member_ids is None or player_outcomes is None:
             raise GameEndConditionValidationException(
                 "ALL_MEMBERS_HAVE_OUTCOME は team_member_ids と player_outcomes を"
@@ -165,11 +154,7 @@ class GameEndConditionEvaluator:
             )
         if not team_member_ids:
             return GameEndResult(False, None, "チームに所属する人がいない")
-        reached = sum(
-            1
-            for player_id in team_member_ids
-            if player_outcomes.get(int(player_id)) is required
-        )
+        reached = sum(1 for player_id in team_member_ids if player_outcomes.get(int(player_id)) is required)
         if reached == len(team_member_ids):
             return GameEndResult(
                 True,
@@ -218,9 +203,7 @@ class GameEndConditionEvaluator:
     ) -> GameEndResult:
         t = condition.condition_type
         if t is GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME:
-            return self._evaluate_all_members_have_outcome(
-                condition, team_member_ids, player_outcomes, result_on_match
-            )
+            return self._evaluate_all_members_have_outcome(condition, team_member_ids, player_outcomes, result_on_match)
         if t == GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST:
             declared = tuple(condition.required_flags or ())
             need = condition.min_set_count
@@ -228,8 +211,7 @@ class GameEndConditionEvaluator:
                 # VO の __post_init__ が弾いているはずだが、直接組まれた
                 # 条件が黙って未成立になると勝敗が永久に決まらない。
                 raise GameEndConditionValidationException(
-                    "FLAGS_SET_AT_LEAST に required_flags / min_set_count が"
-                    "ありません"
+                    "FLAGS_SET_AT_LEAST に required_flags / min_set_count がありません"
                 )
             # **宣言した作業だけを数える。** 立っているフラグ全体を数えると、
             # シナリオが別の用途で立てたフラグ (照明・救難信号) で勝ててしまう。
@@ -240,16 +222,12 @@ class GameEndConditionEvaluator:
                     result_on_match,
                     f"作業が {done}/{len(declared)} 完了 (必要 {need})",
                 )
-            return GameEndResult(
-                False, None, f"作業は {done}/{len(declared)} (必要 {need})"
-            )
+            return GameEndResult(False, None, f"作業は {done}/{len(declared)} (必要 {need})")
 
         if t == GameEndConditionTypeEnum.FLAG_SET:
             name = condition.target_flag
             if not name:
-                raise GameEndConditionValidationException(
-                    "FLAG_SET に target_flag がありません"
-                )
+                raise GameEndConditionValidationException("FLAG_SET に target_flag がありません")
             result = self._predicate_evaluator.evaluate(
                 FlagSetPredicate(name),
                 WorldFlagPredicateContext(world_flags),
@@ -261,9 +239,7 @@ class GameEndConditionEvaluator:
         if t == GameEndConditionTypeEnum.TICK_LIMIT:
             limit = condition.tick_limit
             if limit is None or current_tick is None:
-                raise GameEndConditionValidationException(
-                    "TICK_LIMIT に current_tick または tick_limit がありません"
-                )
+                raise GameEndConditionValidationException("TICK_LIMIT に current_tick または tick_limit がありません")
             # loader/旧DTOはまだ非整数を拒否していない。入力厳格化は別PRで扱い、
             # この共通化では正規の整数値だけを型付き核へ移す。
             if isinstance(limit, int) and not isinstance(limit, bool):
@@ -280,14 +256,14 @@ class GameEndConditionEvaluator:
 
         if t is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST:
             return self._evaluate_faction_elimination(
-                condition, player_ids, player_states, player_outcomes,
+                condition,
+                player_ids,
+                player_states,
+                player_outcomes,
                 result_on_match,
             )
 
-        if (
-            t
-            is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
-        ):
+        if t is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE:
             return self._evaluate_surviving_group_comparison(
                 condition,
                 player_ids,
@@ -310,9 +286,7 @@ class GameEndConditionEvaluator:
                     "対象プレイヤーがいないため個人結果の確定待ち",
                 )
             snapshot = {
-                int(player_id): player_outcomes.get(
-                    int(player_id), PlayerOutcomeEnum.UNRESOLVED
-                )
+                int(player_id): player_outcomes.get(int(player_id), PlayerOutcomeEnum.UNRESOLVED)
                 for player_id in player_ids
             }
             if all(outcome.is_resolved for outcome in snapshot.values()):
@@ -332,12 +306,8 @@ class GameEndConditionEvaluator:
         if t in (GameEndConditionTypeEnum.ALL_AT_SPOT, GameEndConditionTypeEnum.ANY_AT_SPOT):
             spot = condition.target_spot_id
             if spot is None:
-                raise GameEndConditionValidationException(
-                    f"{t.value} に target_spot_id がありません"
-                )
-            placement_context = EntityPlacementPredicateContext(
-                graph.entity_spot_mapping()
-            )
+                raise GameEndConditionValidationException(f"{t.value} に target_spot_id がありません")
+            placement_context = EntityPlacementPredicateContext(graph.entity_spot_mapping())
             at_spot: list[bool] = []
             for pid in player_ids:
                 eid = self.entity_id_for_player(pid)
@@ -345,9 +315,7 @@ class GameEndConditionEvaluator:
                     EntityAtSpotPredicate(eid, spot),
                     placement_context,
                 )
-                at_spot.append(
-                    ScenarioPredicateEvaluator.require_satisfaction(result)
-                )
+                at_spot.append(ScenarioPredicateEvaluator.require_satisfaction(result))
             if t == GameEndConditionTypeEnum.ALL_AT_SPOT:
                 ok = len(at_spot) > 0 and all(at_spot)
                 if ok:

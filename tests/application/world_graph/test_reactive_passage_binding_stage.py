@@ -108,9 +108,7 @@ def _build_stage(graph: SpotGraphAggregate, bindings):
     scope_factory = passthrough_command_scope_factory(
         spot_graph=spot_graph_repo,
     )
-    scope_factory.create.return_value.collect_all.side_effect = (
-        lambda events: observed_events.extend(events)
-    )
+    scope_factory.create.return_value.collect_all.side_effect = lambda events: observed_events.extend(events)
     stage = ReactivePassageBindingStageService(
         bindings=bindings,
         spot_graph_repository=spot_graph_repo,
@@ -124,7 +122,8 @@ def _player_at_control_room_binding() -> ReactivePassageBinding:
     return ReactivePassageBinding(
         target_connection_id=ConnectionId.create(10),
         predicate=ScenarioEventCondition(
-            condition_type="PLAYER_AT_SPOT", spot_id=1,
+            condition_type="PLAYER_AT_SPOT",
+            spot_id=1,
         ),
         on_true_state="OPEN",
         on_false_state="LOCKED",
@@ -149,9 +148,7 @@ def _unwired_stage(
 
 def test_missing_scope_rejects_before_reading_or_evaluating() -> None:
     """bindingがあれば未配線をgraph参照・条件評価より先に拒否する。"""
-    stage, graph_repository, evaluator = _unwired_stage(
-        (_player_at_control_room_binding(),)
-    )
+    stage, graph_repository, evaluator = _unwired_stage((_player_at_control_room_binding(),))
 
     with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
         stage.run(WorldTick(1))
@@ -217,6 +214,7 @@ class TestReactivePassageBindingStage:
         # ControlRoom (cid=1) は LOCKED に戻った状態で初期化されているので、
         # OPEN にしてから run して LOCKED に戻ることを確認する。
         from dataclasses import replace
+
         cid = ConnectionId.create(10)
         old_conn = graph_no_a.get_connection(cid)
         graph_no_a.set_connection_passage(cid, replace(old_conn.passage, state="OPEN", traversable=True))
@@ -248,9 +246,7 @@ class TestReactivePassageBindingStage:
         # 誰も control_room には居ない
         not_at_control = ScenarioEventCondition(
             condition_type="NOT",
-            children=(
-                ScenarioEventCondition(condition_type="PLAYER_AT_SPOT", spot_id=1),
-            ),
+            children=(ScenarioEventCondition(condition_type="PLAYER_AT_SPOT", spot_id=1),),
         )
         binding = ReactivePassageBinding(
             target_connection_id=ConnectionId.create(10),
@@ -344,11 +340,7 @@ class TestReactivePassageBindingStage:
 
         stage.run(WorldTick(1))
 
-        changed = [
-            event
-            for event in observed_events
-            if isinstance(event, ConnectionStateChangedEvent)
-        ]
+        changed = [event for event in observed_events if isinstance(event, ConnectionStateChangedEvent)]
         assert [event.connection_id for event in changed] == [reverse_id]
 
 
@@ -371,7 +363,8 @@ class TestReactivePassageBindingCause:
             condition_type="NOT",
             children=(
                 ScenarioEventCondition(
-                    condition_type="PLAYER_AT_SPOT", spot_id=1,
+                    condition_type="PLAYER_AT_SPOT",
+                    spot_id=1,
                 ),
             ),
         )
@@ -385,10 +378,7 @@ class TestReactivePassageBindingCause:
         stage, repo, _, observed_events = _build_stage(graph, bindings=(binding,))
         stage.run(WorldTick(1))
         # traversable が変わったので確定後配送対象へ収集されているはず
-        events = [
-            e for e in observed_events
-            if isinstance(e, ConnectionStateChangedEvent)
-        ]
+        events = [e for e in observed_events if isinstance(e, ConnectionStateChangedEvent)]
         assert len(events) == 1
         assert events[0].cause == PassageChangeCauseEnum.REACTIVE
         assert events[0].traversable is True

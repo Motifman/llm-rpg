@@ -475,10 +475,7 @@ def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
     「勝敗条件なしの open world」に誤判定される。
     """
     return bool(
-        scenario.win_conditions
-        or scenario.lose_conditions
-        or scenario.end_conditions
-        or scenario.player_outcome_rules
+        scenario.win_conditions or scenario.lose_conditions or scenario.end_conditions or scenario.player_outcome_rules
     )
 
 
@@ -575,15 +572,11 @@ class WorldRuntime:
     # per-world の事実なので player ごとではなく runtime に保持し、snapshot
     # で保存する。値は {"active": bool, "initialized": bool,
     # "last_changed_tick": int | None}。
-    _distant_cue_states: dict[str, dict[str, Any]] = field(
-        default_factory=dict, repr=False
-    )
+    _distant_cue_states: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
     # 世界のフェーズ (自由時間 / 会議)。per-world。会議・投票の土台
     # (docs/memory_system/meeting_and_voting_design.md §2.1)。
     # 常にちょうど 1 つのフェーズを持ち、排他は store の遷移メソッドが守る。
-    _game_phase_store: GamePhaseStore = field(
-        default_factory=lambda: GamePhaseStore(), repr=False
-    )
+    _game_phase_store: GamePhaseStore = field(default_factory=lambda: GamePhaseStore(), repr=False)
     # 対人行為の再使用間隔。per-world。tick 基準で PlayerId をキーにするので
     # Being ではなく world snapshot に載る (codec を同じ PR で入れてある)。
     _interaction_cooldown_store: InteractionCooldownStore = field(
@@ -604,9 +597,7 @@ class WorldRuntime:
     # シナリオに複数 player_spawns がある場合は player ごとに persona を埋めた system
     # prompt を持つ。dict が空 / 該当 id 無しなら _world_llm_system_prompt にフォールバック。
     _world_llm_system_prompt: str = field(default="", repr=False)
-    _world_llm_system_prompts_by_player_id: dict[int, str] = field(
-        default_factory=dict, repr=False
-    )
+    _world_llm_system_prompts_by_player_id: dict[int, str] = field(default_factory=dict, repr=False)
     # create_world_runtime が構築後に差し込む配線。型は circular import 回避で
     # Any。宣言が無いと、代入側の typo を静かに受け入れてしまう。
     _use_item_command_scope_factory: Any | None = field(default=None, repr=False)
@@ -617,39 +608,27 @@ class WorldRuntime:
     # #1631: Being ごとの記憶のターン数。1 手ごとに進め、記憶にターン数を付ける
     # 部品はここから読む。あとから代入し直すと、先に組んだ部品だけが古い時計を
     # 読み続ける。
-    _memory_turn_clock: MemoryTurnClock = field(
-        default_factory=InMemoryMemoryTurnClock, repr=False
-    )
+    _memory_turn_clock: MemoryTurnClock = field(default_factory=InMemoryMemoryTurnClock, repr=False)
     # #1520: Being が会った相手の記録。Being の snapshot に入り、世界の
     # snapshot には入らない。
-    _acquaintance_store: AcquaintanceRepository = field(
-        default_factory=InMemoryAcquaintanceRepository, repr=False
-    )
-    _player_acquaintances: PlayerAcquaintances | None = field(
-        default=None, repr=False
-    )
+    _acquaintance_store: AcquaintanceRepository = field(default_factory=InMemoryAcquaintanceRepository, repr=False)
+    _player_acquaintances: PlayerAcquaintances | None = field(default=None, repr=False)
     # #1623: 知り合いの記録と同じく、世界の snapshot には入らない。
-    _being_episode_store: EpisodeRepository = field(
-        default_factory=InMemoryEpisodeRepository, repr=False
-    )
+    _being_episode_store: EpisodeRepository = field(default_factory=InMemoryEpisodeRepository, repr=False)
     # #1626: profile で書き起こしを有効にしたときだけ create_world_runtime が組む。
     _player_episode_writing: Any | None = field(default=None, repr=False)
     # #1623: profile で目次を出す設定にしたときだけ create_world_runtime が組む。
     _being_episode_recall_tool_executor: Any | None = field(default=None, repr=False)
     _being_episode_index_revision_tool_executor: Any | None = field(default=None, repr=False)
     # #1628: エピソードと同じく、世界の snapshot には入らない。
-    _being_memo_store: MemoBookRepository = field(
-        default_factory=InMemoryMemoBookRepository, repr=False
-    )
+    _being_memo_store: MemoBookRepository = field(default_factory=InMemoryMemoBookRepository, repr=False)
     # #1824: Being 側の短期記憶。世界の snapshot には入らない。今の短期記憶と並べて
     # ``_being_short_term_memory_copy`` が書く。
     _being_short_term_memory_store: ShortTermMemoryRepository = field(
         default_factory=InMemoryShortTermMemoryRepository, repr=False
     )
     # create_world_runtime が組む。phase_b が 1 手を書き留める。
-    _being_short_term_memory_copy: PlayerShortTermMemoryCopy | None = field(
-        default=None, repr=False
-    )
+    _being_short_term_memory_copy: PlayerShortTermMemoryCopy | None = field(default=None, repr=False)
     # create_world_runtime が組む。プロンプトを組むたびに【直近の出来事】を比べる。
     _recent_events_shadow: RecentEventsShadow | None = field(default=None, repr=False)
     # reason-first 2段階 turn の有効化。True でも常時 2 段階ではなく、
@@ -665,9 +644,7 @@ class WorldRuntime:
     _aux_llm_call_sink: Any = field(default=None, repr=False)
     _world_tick_failure_isolator: WorldTickFailureIsolator | None = field(default=None, repr=False)
     # trace 用の run 内集計。世界状態ではなく観測値なので snapshot へは載せない。
-    _cumulative_travel_ticks_by_player: dict[int, int] = field(
-        default_factory=dict, repr=False
-    )
+    _cumulative_travel_ticks_by_player: dict[int, int] = field(default_factory=dict, repr=False)
     _cumulative_meeting_ticks: int = field(default=0, repr=False)
     # 実験設定の解決済み DTO。遅延構築される component も env を読み直さず、
     # runtime 作成時と同じ設定を見るために保持する。
@@ -675,18 +652,12 @@ class WorldRuntime:
     # PR 2 (#227): speech 配信経路統一。PlayerSpokeEvent をドメインイベント
     # として fire し、ObservationPipeline → buffer 経路で配信する。直接
     # broadcast (旧 _append_agent_speech) は廃止。
-    _speech_service: PlayerSpeechApplicationService | None = field(
-        default=None, repr=False
-    )
-    _speech_event_publisher: PipelineEventPublisher | None = field(
-        default=None, repr=False
-    )
+    _speech_service: PlayerSpeechApplicationService | None = field(default=None, repr=False)
+    _speech_event_publisher: PipelineEventPublisher | None = field(default=None, repr=False)
     _observation_appender: ObservationAppender | None = field(default=None, repr=False)
     # turn_scheduler はセッション作成時に create_session で注入される
     # (LlmTurnTrigger と llm_player_resolver は wiring で組み立てる必要があるため)
-    _observation_turn_scheduler: ObservationTurnScheduler | None = field(
-        default=None, repr=False
-    )
+    _observation_turn_scheduler: ObservationTurnScheduler | None = field(default=None, repr=False)
     # #404 fix: travel_stage を runtime に保持する。create_session 経路から
     # 「到着時の schedule_turn コールバック」を後付けで注入するため、参照を
     # 露出させる必要がある (simulation_service の中に隠れたままだと外から
@@ -697,18 +668,12 @@ class WorldRuntime:
     # progress reporter が iteration 終端で snapshot + reset する。Phase A の
     # ThreadPoolExecutor で並行 increment され得るため Lock で保護する。
     _llm_call_count: int = field(default=0, repr=False)
-    _llm_call_count_lock: threading.Lock = field(
-        default_factory=threading.Lock, repr=False
-    )
+    _llm_call_count_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     # 連続失敗による run 停止 (層 2)。`_runtime_config` から閾値を読んで遅延
     # 生成する。設定を持たない runtime (presentation 単体テスト等) でも
     # 既定値で動くので、配線漏れが「監視が黙って無効」にならない。
-    _llm_failure_monitor: LlmFailureStreakMonitor | None = field(
-        default=None, repr=False
-    )
-    _llm_failure_monitor_lock: threading.Lock = field(
-        default_factory=threading.Lock, repr=False
-    )
+    _llm_failure_monitor: LlmFailureStreakMonitor | None = field(default=None, repr=False)
+    _llm_failure_monitor_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -778,9 +743,7 @@ class WorldRuntime:
                     threshold = DEFAULT_FAILURE_STREAK_ABORT
                 else:
                     threshold = int(self._runtime_config.llm_failure_streak_abort)
-                self._llm_failure_monitor = LlmFailureStreakMonitor(
-                    threshold=threshold
-                )
+                self._llm_failure_monitor = LlmFailureStreakMonitor(threshold=threshold)
             return self._llm_failure_monitor
 
     def record_llm_outcome(
@@ -796,9 +759,7 @@ class WorldRuntime:
         判定できることが要件で、run 中に trace.jsonl を舐める形にすると
         tick ごとにファイル全体を読むことになる。
         """
-        self._ensure_llm_failure_monitor().record(
-            success=success, error_code=error_code, tick=tick
-        )
+        self._ensure_llm_failure_monitor().record(success=success, error_code=error_code, tick=tick)
 
     def llm_abort_reason(self) -> str | None:
         """恒久障害とみなせるなら停止理由を返す。健全なら None。
@@ -829,9 +790,7 @@ class WorldRuntime:
         except Exception:
             return 0
 
-    def advance_until_player_idle(
-        self, player_id: PlayerId, max_ticks: int = 500
-    ) -> int:
+    def advance_until_player_idle(self, player_id: PlayerId, max_ticks: int = 500) -> int:
         """テスト / デモ用ヘルパ: 指定 player の travel が終わるまで tick を進める。
 
         #404 修正後の ``do_move`` は travel 開始だけして即 return する非同期
@@ -919,9 +878,7 @@ class WorldRuntime:
             self._cumulative_travel_ticks_by_player.get(player_id_value, 0) + 1
         )
 
-    def _report_travel_blocked(
-        self, player_id: PlayerId, blocked: SpotTravelBlocked
-    ) -> None:
+    def _report_travel_blocked(self, player_id: PlayerId, blocked: SpotTravelBlocked) -> None:
         """区間が閉じて移動を取りやめたことを、本人の観測・trace・行動履歴に残す。
 
         到着の行が無いと本人が移動中だと思い込むのと同じで (到着の履歴の
@@ -1016,9 +973,7 @@ class WorldRuntime:
             travel_scope="all_players_including_departed",
             spot_occupancy=occupancy,
             cumulative_travel_ticks_by_player={
-                str(int(player_id)): self._cumulative_travel_ticks_by_player.get(
-                    int(player_id), 0
-                )
+                str(int(player_id)): self._cumulative_travel_ticks_by_player.get(int(player_id), 0)
                 for player_id in self.get_player_ids()
             },
         )
@@ -1053,8 +1008,11 @@ class WorldRuntime:
         if recorder is None:
             raise RuntimeError("非同期の配送の失敗を記録する trace がありません")
         event = recorder.record(
-            TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED, tick=self.current_tick(),
-            reason=failure.reason, recipient_key=str(failure.key), event_id=failure.event.event_id,
+            TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED,
+            tick=self.current_tick(),
+            reason=failure.reason,
+            recipient_key=str(failure.key),
+            event_id=failure.event.event_id,
             event_type=type(failure.event).__name__,
             handler=getattr(failure.handler, "__qualname__", type(failure.handler).__name__),
             error_type=type(failure.error).__name__ if failure.error is not None else None,
@@ -1128,9 +1086,7 @@ class WorldRuntime:
         self._injected_tool_call_loop_guard = guard
         self._cached_default_prompt_builder: Any | None = None
 
-    def set_simulation_llm_turn_trigger(
-        self, trigger: ILlmTurnTrigger | None
-    ) -> None:
+    def set_simulation_llm_turn_trigger(self, trigger: ILlmTurnTrigger | None) -> None:
         """ティック後の :meth:`ILlmTurnTrigger.run_scheduled_turns` に使う実装を差し替える。
 
         プレゼン層の ``_WorldLlmWiring`` など、実際に LLM を起動するトリガに
@@ -1138,18 +1094,14 @@ class WorldRuntime:
         """
         self._simulation_service.set_llm_turn_trigger(trigger)
 
-    def set_simulation_heartbeat_emitter(
-        self, emitter: HeartbeatObservationEmitter | None
-    ) -> None:
+    def set_simulation_heartbeat_emitter(self, emitter: HeartbeatObservationEmitter | None) -> None:
         """ティック後の heartbeat emitter を注入する（未設定なら送信しない）。
 
         ``SpotGraphSimulationApplicationService`` の post-tick フックに委譲する。
         """
         self._simulation_service.set_heartbeat_emitter(emitter)
 
-    def set_observation_turn_scheduler(
-        self, scheduler: ObservationTurnScheduler | None
-    ) -> None:
+    def set_observation_turn_scheduler(self, scheduler: ObservationTurnScheduler | None) -> None:
         """speech などの observation で recipient のターンを積むスケジューラを注入する。
 
         ``create_session`` が ``ObservationTurnScheduler`` を組み立てた後に
@@ -1175,11 +1127,7 @@ class WorldRuntime:
         """
         if self._speech_service is None:
             return
-        target_id = (
-            int(target_player_id.value)
-            if target_player_id is not None
-            else None
-        )
+        target_id = int(target_player_id.value) if target_player_id is not None else None
         self._speech_service.speak(
             SpeakCommand(
                 speaker_player_id=int(speaker_player_id.value),
@@ -1290,8 +1238,7 @@ class WorldRuntime:
             # run 中の記録失敗で実験データまで失わない。ただし
             # 表記の破れを静かにしないよう warning は必ず残す。
             logger.warning(
-                "prompt argument contract violation trace recording failed "
-                "(player_id=%s)",
+                "prompt argument contract violation trace recording failed (player_id=%s)",
                 player_id.value,
                 exc_info=True,
             )
@@ -1347,8 +1294,7 @@ class WorldRuntime:
                 )
         if failures:
             raise PromptArgumentContractError(
-                "LLM prompt の tool 引数候補が引用符つきで表示されていません:\n"
-                + "\n".join(failures)
+                "LLM prompt の tool 引数候補が引用符つきで表示されていません:\n" + "\n".join(failures)
             )
 
     def _validate_action_argument_classification_at_startup(self) -> None:
@@ -1373,14 +1319,11 @@ class WorldRuntime:
                 episode_index_revision_enabled=True,
             )
         )
-        definitions.append(
-            assess_situation_definition()
-        )
+        definitions.append(assess_situation_definition())
         missing = unclassified_action_argument_names(definitions)
         if missing:
             raise ActionArgumentClassificationError(
-                "行動履歴での扱いが未分類の tool 引数があります: "
-                + ", ".join(missing)
+                "行動履歴での扱いが未分類の tool 引数があります: " + ", ".join(missing)
             )
 
     def _compute_task_progress_line(self) -> str | None:
@@ -1471,9 +1414,7 @@ class WorldRuntime:
         # 促すのは vote を実際に出す相手だけ。投票済みの人や死者にも促して
         # いた run では、促しに従って vote を選び TOOL_NOT_OFFERED_NOW で
         # 手番を捨てていた。
-        _, phase_tools = self._split_spot_tool_names_for(
-            ("vote",), player_id=player_id, in_meeting=True
-        )
+        _, phase_tools = self._split_spot_tool_names_for(("vote",), player_id=player_id, in_meeting=True)
         if "vote" not in phase_tools:
             if self._game_phase_store.has_voted(player_id):
                 parts.append("自分はもう投票した。あとは結果を待つ")
@@ -1509,6 +1450,7 @@ class WorldRuntime:
         from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
             GameEndConditionTypeEnum,
         )
+
         limits: list[int] = []
         for lc in self.scenario.lose_conditions:
             if lc.condition_type != GameEndConditionTypeEnum.TICK_LIMIT:
@@ -1521,7 +1463,9 @@ class WorldRuntime:
         return max(0, min(limits) - self._tick)
 
     def _build_minimal_player_state_dto(
-        self, player_id: PlayerId, snap: Any,
+        self,
+        player_id: PlayerId,
+        snap: Any,
     ) -> PlayerCurrentStateDto:
         time_label = self._time_label()
         return PlayerCurrentStateDto(
@@ -1547,15 +1491,11 @@ class WorldRuntime:
         """
         cached = getattr(self, "_tool_exposure_cache", None)
         if cached is None:
-            cached = ToolExposure.from_scenario(
-                self.scenario, meeting_declared=self._meeting_enabled
-            )
+            cached = ToolExposure.from_scenario(self.scenario, meeting_declared=self._meeting_enabled)
             self._tool_exposure_cache = cached
         return cached
 
-    def _without_tools_the_scenario_disabled(
-        self, definitions: list[ToolDefinitionDto]
-    ) -> list[ToolDefinitionDto]:
+    def _without_tools_the_scenario_disabled(self, definitions: list[ToolDefinitionDto]) -> list[ToolDefinitionDto]:
         """シナリオが「この世界では出さない」と宣言したツールを落とす。
 
         **世界の中身に無いものを出さない。** モンスターの居ない世界に
@@ -1638,17 +1578,12 @@ class WorldRuntime:
         audience_count = int(player_id is not None) + int(for_every_player)
         if audience_count != 1:
             raise ValueError(
-                "get_tool_definitions は player_id または "
-                "for_every_player=True のどちらか一方を必要とします"
+                "get_tool_definitions は player_id または for_every_player=True のどちらか一方を必要とします"
             )
         if tool_schema_mode not in {"legacy", "reason_first"}:
             raise ValueError("tool_schema_mode must be 'legacy' or 'reason_first'")
         spot = self._build_spot_tool_definitions(tool_schema_mode)
-        in_meeting = (
-            self._game_phase_store.is_meeting()
-            if as_meeting_phase is None
-            else bool(as_meeting_phase)
-        )
+        in_meeting = self._game_phase_store.is_meeting() if as_meeting_phase is None else bool(as_meeting_phase)
         # 2 つの問いを両方通す入口を使う。片方だけ呼ぶと無効化が効かない。
         by_name = {d.name: d for d in spot}
         common_names, phase_names = self._split_spot_tool_names_for(
@@ -1656,16 +1591,8 @@ class WorldRuntime:
         )
         common_spot = [by_name[n] for n in common_names]
         phase_spot = [by_name[n] for n in phase_names]
-        assessment = (
-            [
-                assess_situation_definition()
-            ]
-            if tool_schema_mode == "reason_first"
-            else []
-        )
-        definitions = (
-            common_spot + phase_spot + self._build_memory_tool_definitions()
-        )
+        assessment = [assess_situation_definition()] if tool_schema_mode == "reason_first" else []
+        definitions = common_spot + phase_spot + self._build_memory_tool_definitions()
         by_name = {definition.name: definition for definition in definitions}
         ordered_names = self.tool_exposure.order_for_payload(by_name.keys())
         return [by_name[name] for name in ordered_names] + assessment
@@ -1686,20 +1613,11 @@ class WorldRuntime:
         return self.tool_exposure.split_for_phase(
             names,
             in_meeting=in_meeting,
-            voting_completed=(
-                player_id is not None
-                and in_meeting
-                and self._game_phase_store.has_voted(player_id)
-            ),
-            departed=(
-                player_id is not None
-                and self._player_perception_policy.is_departed(player_id)
-            ),
+            voting_completed=(player_id is not None and in_meeting and self._game_phase_store.has_voted(player_id)),
+            departed=(player_id is not None and self._player_perception_policy.is_departed(player_id)),
         )
 
-    def _build_spot_tool_definitions(
-        self, tool_schema_mode: str
-    ) -> list[ToolDefinitionDto]:
+    def _build_spot_tool_definitions(self, tool_schema_mode: str) -> list[ToolDefinitionDto]:
         """この世界に在る spot tool を、フェーズを問わずすべて返す。
 
         並べ替えとフェーズの出し分けは呼び出し側。ここは「在るか無いか」
@@ -1715,9 +1633,7 @@ class WorldRuntime:
         # 集めた結果、状態ビルダーからも同じ答えを引ける。
         exposure = self.tool_exposure
         spot = [
-            without_absent_tool_mentions(defn, exposure.is_exposed)
-            for defn in spot
-            if exposure.is_exposed(defn.name)
+            without_absent_tool_mentions(defn, exposure.is_exposed) for defn in spot if exposure.is_exposed(defn.name)
         ]
         if tool_schema_mode == "reason_first":
             spot = [strip_reason_first_action_subjective_schema(d) for d in spot]
@@ -1760,10 +1676,7 @@ class WorldRuntime:
 
         ツールは #1616 と同じく、実際に出すツールの一覧から決める。
         """
-        offered = {
-            definition.name
-            for definition in self.get_tool_definitions(for_every_player=True)
-        }
+        offered = {definition.name for definition in self.get_tool_definitions(for_every_player=True)}
         return self._episode_index_enabled(), TOOL_NAME_EPISODE_RECALL in offered
 
     def _episode_index_enabled(self) -> bool:
@@ -1808,9 +1721,7 @@ class WorldRuntime:
             logger.exception("trace recorder.record raised for EPISODE_INDEX_SHOWN; skipping")
         return format_episode_index(
             shown,
-            current_environment_name=environment_entry_for_player(
-                self.scenario, player_id
-            ).environment_name,
+            current_environment_name=environment_entry_for_player(self.scenario, player_id).environment_name,
         )
 
     def _being_memo_enabled(self) -> bool:
@@ -1824,9 +1735,7 @@ class WorldRuntime:
         """
         return self._episode_index_enabled()
 
-    def _with_being_memo_if_enabled(
-        self, definition: ToolDefinitionDto
-    ) -> ToolDefinitionDto:
+    def _with_being_memo_if_enabled(self, definition: ToolDefinitionDto) -> ToolDefinitionDto:
         """メモ帳が有効なら、環境の tool に ``memo`` を足す (#1628)。
 
         付ける範囲は予期の引数と同じで、記憶の tool と ``assess_situation`` には付けない。
@@ -1834,9 +1743,7 @@ class WorldRuntime:
         """
         if not self._being_memo_enabled():
             return definition
-        return with_memo_schema(
-            definition, episode_source_offered=self.memo_episode_source_offered()
-        )
+        return with_memo_schema(definition, episode_source_offered=self.memo_episode_source_offered())
 
     def being_memo_text(self, player_id: PlayerId) -> str:
         """【メモ】の本体。本人の Being が引けなければ空文字で、欄を出さない。"""
@@ -1906,9 +1813,7 @@ class WorldRuntime:
         # tz-aware UTC で統一: HeartbeatObservationEmitter /
         # ActionFailedObservationEmitter が aware を発行するため、world_runtime
         # 経路の naive と混ざると時刻の比較で TypeError になる。
-        if not appender.append(
-            player_id, output, datetime.now(timezone.utc), self._time_label()
-        ):
+        if not appender.append(player_id, output, datetime.now(timezone.utc), self._time_label()):
             return
         scheduler = self._observation_turn_scheduler
         if scheduler is not None:
@@ -1978,9 +1883,7 @@ class WorldRuntime:
         )
 
         self._aux_being_repository = InMemoryBeingRepository()
-        self._aux_being_provisioning = BeingProvisioningService(
-            self._aux_being_repository
-        )
+        self._aux_being_provisioning = BeingProvisioningService(self._aux_being_repository)
         self._aux_being_resolver = BeingAttachmentResolver(self._aux_being_repository)
         self._aux_being_default_world_id = DEFAULT_SINGLE_WORLD_ID
 
@@ -2016,9 +1919,7 @@ class WorldRuntime:
             self._recent_events_shadow.note_compacted(player_id)
         self._write_compacted_episodes(player_id, entries)
 
-    def _write_compacted_episodes(
-        self, player_id: PlayerId, entries: Sequence[Any]
-    ) -> None:
+    def _write_compacted_episodes(self, player_id: PlayerId, entries: Sequence[Any]) -> None:
         from ai_rpg_world.application.being.player_episode_writing import (
             TRIGGER_COMPACTION,
         )
@@ -2045,9 +1946,7 @@ class WorldRuntime:
             raise RuntimeError("episode writing needs SummarizingShortTermMemory")
         for player_id in self.get_player_ids():
             if skip_reason is not None:
-                self._player_episode_writing.skip(
-                    player_id, trigger=TRIGGER_LEAVING, reason=skip_reason
-                )
+                self._player_episode_writing.skip(player_id, trigger=TRIGGER_LEAVING, reason=skip_reason)
                 continue
             self._player_episode_writing.write(
                 player_id,
@@ -2058,16 +1957,12 @@ class WorldRuntime:
     def _acting_being_for(self, player_id: PlayerId) -> ActingBeing | None:
         self._wire_being_stack()
         self._aux_being_provisioning.ensure_attached(player_id)
-        being_id = self._aux_being_resolver.resolve_being_id(
-            self._aux_being_default_world_id, player_id
-        )
+        being_id = self._aux_being_resolver.resolve_being_id(self._aux_being_default_world_id, player_id)
         if being_id is None:
             return None
         return ActingBeing(player_id=player_id, being_id=being_id)
 
-    def run_llm_auxiliary_tool(
-        self, player_id: PlayerId, name: str, arguments: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def run_llm_auxiliary_tool(self, player_id: PlayerId, name: str, arguments: dict[str, Any]) -> LlmCommandResultDto:
         """エピソードの道具を実行する。
 
         handler を起動する前に player_id に Being が attach されていることを保証する。
@@ -2086,9 +1981,7 @@ class WorldRuntime:
             # 出ると後勝ちで挙動が変わるため、明示的に衝突を検出する。
             overlap = handlers.keys() & next_handlers.keys()
             if overlap:
-                raise RuntimeError(
-                    f"tool handler name collision in aux stack: {sorted(overlap)}"
-                )
+                raise RuntimeError(f"tool handler name collision in aux stack: {sorted(overlap)}")
             handlers.update(next_handlers)
 
         if self._being_episode_recall_tool_executor is not None:
@@ -2114,9 +2007,7 @@ class WorldRuntime:
     # 廃屋探索に陥った原因)。詳細は docs/memory_system/prefix_cache_v3_deep_analysis.md。
     # consumer 側 (_resolve_scenario_llm_objective_text) で空チェックを行い
     # fail-fast する。fallback も置かない (シナリオごとに勝利条件が違うため)。
-    _ESCAPE_GAME_ACTION_INSTRUCTION = (
-        "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
-    )
+    _ESCAPE_GAME_ACTION_INSTRUCTION = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
 
     @classmethod
     def escape_game_action_instruction(cls, tool_names: Sequence[str]) -> str:
@@ -2153,7 +2044,7 @@ class WorldRuntime:
                     "LLM の objective section に埋め込む勝利条件文を scenario JSON の "
                     "metadata.llm_objective_text に追加するか、全プレイヤーに "
                     "players[].objective を書いてください "
-                    "(例: \"- 山頂の狼煙台で火を上げ、救助船 (4日目/6日目/7日目) を待つ\")"
+                    '(例: "- 山頂の狼煙台で火を上げ、救助船 (4日目/6日目/7日目) を待つ")'
                 )
         return text
 
@@ -2167,15 +2058,9 @@ class WorldRuntime:
         spawns = self.scenario.player_spawns
         if not spawns:
             return ["<no player_spawns>"]
-        return [
-            spawn.string_id
-            for spawn in spawns
-            if not (spawn.objective or "").strip()
-        ]
+        return [spawn.string_id for spawn in spawns if not (spawn.objective or "").strip()]
 
-    def _resolve_player_objective_text(
-        self, player_id: PlayerId, scenario_text: str
-    ) -> str:
+    def _resolve_player_objective_text(self, player_id: PlayerId, scenario_text: str) -> str:
         """目的層 G6: そのプレイヤーの初期目的文を解決する。
 
         優先順は persona_prompt と揃える: ``players[].objective`` があれば
@@ -2207,12 +2092,8 @@ class WorldRuntime:
     # Issue #227 後続 HIGH-3 改善: stateless formatter / strategy を class-level
     # に持ち、build_full_prompt の毎回 new を避ける + 本家 DefaultPromptBuilder と
     # 同じインスタンスタイプを使うことを明示する。
-    _recent_events_formatter: ClassVar[DefaultRecentEventsFormatter] = (
-        DefaultRecentEventsFormatter()
-    )
-    _context_strategy: SectionBasedContextFormatStrategy = field(
-        default_factory=SectionBasedContextFormatStrategy
-    )
+    _recent_events_formatter: ClassVar[DefaultRecentEventsFormatter] = DefaultRecentEventsFormatter()
+    _context_strategy: SectionBasedContextFormatStrategy = field(default_factory=SectionBasedContextFormatStrategy)
 
     def _get_or_build_default_prompt_builder(self) -> DefaultPromptBuilder:
         """本家 DefaultPromptBuilder のインスタンスを lazy 構築してキャッシュする。
@@ -2264,20 +2145,12 @@ class WorldRuntime:
         sections = PromptSectionProviders(
             # 目的層 G6: players[].objective があればその人だけ別の目的文に
             # なり、無ければシナリオ共通文になる。
-            objective_text_provider=lambda pid: self._resolve_player_objective_text(
-                pid, resolved_objective_text
-            ),
-            being_memo_text_provider=(
-                self.being_memo_text if self._being_memo_enabled() else None
-            ),
+            objective_text_provider=lambda pid: self._resolve_player_objective_text(pid, resolved_objective_text),
+            being_memo_text_provider=(self.being_memo_text if self._being_memo_enabled() else None),
             known_people_text_provider=(
-                self._player_acquaintances.known_people_text
-                if self._player_acquaintances is not None
-                else None
+                self._player_acquaintances.known_people_text if self._player_acquaintances is not None else None
             ),
-            episode_index_text_provider=(
-                self.episode_index_text if self._episode_index_enabled() else None
-            ),
+            episode_index_text_provider=(self.episode_index_text if self._episode_index_enabled() else None),
         )
         limits = PromptLimits(
             default_action_instruction=self._ESCAPE_GAME_ACTION_INSTRUCTION,
@@ -2293,9 +2166,7 @@ class WorldRuntime:
             # presentation 層で先に組まれている loop_guard (record_and_check の
             # 呼び出し主) を peek_streak 用にも共有する。``None`` のままなら
             # instruction 末尾の警告 prefix は出ない。
-            tool_call_loop_guard=getattr(
-                self, "_injected_tool_call_loop_guard", None
-            ),
+            tool_call_loop_guard=getattr(self, "_injected_tool_call_loop_guard", None),
         )
         self._cached_default_prompt_builder = builder
         return builder
@@ -2349,9 +2220,7 @@ class WorldRuntime:
             if section
         )
         if tail_sections:
-            tail_instruction = (
-                action_instruction or self._ESCAPE_GAME_ACTION_INSTRUCTION
-            )
+            tail_instruction = action_instruction or self._ESCAPE_GAME_ACTION_INSTRUCTION
             action_instruction = "\n\n".join((*tail_sections, tail_instruction))
 
         builder = self._get_or_build_default_prompt_builder()
@@ -2365,9 +2234,7 @@ class WorldRuntime:
 
         return {
             "messages": result["messages"],
-            "tools": [
-                d.name for d in self.get_tool_definitions(player_id=player_id)
-            ],
+            "tools": [d.name for d in self.get_tool_definitions(player_id=player_id)],
             "tool_runtime_context": ctx.tool_runtime_context,
             "action_instruction": result["action_instruction"],
             "sns_shown_notification_ids": result.get("sns_shown_notification_ids", ()),
@@ -2379,6 +2246,7 @@ class WorldRuntime:
         if store is None:
             return ""
         from ai_rpg_world.domain.sns.value_object.user_id import UserId
+
         user = store.sns_users.get(UserId(int(player_id)))
         if user is None:
             return ""
@@ -2398,15 +2266,11 @@ class WorldRuntime:
         """成立中の異常だけを、最終指示の直前へ置ける本文に整形する。"""
         active_flags = self._world_flag_state.as_frozen_set()
         messages = [
-            condition.message
-            for condition in self.scenario.ongoing_conditions
-            if condition.flag in active_flags
+            condition.message for condition in self.scenario.ongoing_conditions if condition.flag in active_flags
         ]
         if not messages:
             return ""
-        return "\n".join(
-            ["【進行中の異常】", *(f"- {message}" for message in messages)]
-        )
+        return "\n".join(["【進行中の異常】", *(f"- {message}" for message in messages)])
 
     def _format_time_since_last_gathering(self) -> str:
         """自由時間なら、直近の集合からの経過を世界の分数で返す。
@@ -2430,7 +2294,9 @@ class WorldRuntime:
     # ── アクション実行 ──
 
     def _object_display_name_at_player_spot(
-        self, player_id: PlayerId, object_str_id: str,
+        self,
+        player_id: PlayerId,
+        object_str_id: str,
     ) -> str:
         try:
             obj_int = self.id_mapper.get_int("object", object_str_id)
@@ -2451,7 +2317,10 @@ class WorldRuntime:
             return object_str_id
 
     def do_interact(
-        self, player_id: PlayerId, object_str_id: str, action_name: str,
+        self,
+        player_id: PlayerId,
+        object_str_id: str,
+        action_name: str,
         *,
         interaction_parameters: dict[str, Any] | None = None,
         identifier_arguments: Mapping[str, str] | None = None,
@@ -2472,8 +2341,11 @@ class WorldRuntime:
         # do_interact) はここを通るので、current_tick を必ず渡す。渡し忘れると
         # 採取源が再生せず永久枯渇する (reactive_binding も pool 化で削除済み)。
         from ai_rpg_world.domain.common.value_object import WorldTick
+
         result = self._interaction_service.execute_interaction(
-            player_id, obj_id, action_name,
+            player_id,
+            obj_id,
+            action_name,
             interaction_parameters=interaction_parameters,
             current_tick=WorldTick(self.current_tick()),
         )
@@ -2494,33 +2366,21 @@ class WorldRuntime:
         self._evaluate_distant_cue_appearances()
         # SpotInteractionResultDto は現状 success フラグを持たない (messages から
         # しか判定できない)。fail 検出経路がドメイン側に出来るまで暫定で True 固定。
-        fallback_identifiers, fallback_free_text_names = (
-            project_action_arguments_for_history(
-                {
-                    "target_label": obj_label,
-                    "action_name": action_name,
-                    **(
-                        {"parameters": interaction_parameters}
-                        if interaction_parameters is not None
-                        else {}
-                    ),
-                }
-            )
+        fallback_identifiers, fallback_free_text_names = project_action_arguments_for_history(
+            {
+                "target_label": obj_label,
+                "action_name": action_name,
+                **({"parameters": interaction_parameters} if interaction_parameters is not None else {}),
+            }
         )
         self._record_action_result(
             player_id,
             f"「{obj_label}」で{action_display_label}",
             result_text,
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
-            identifier_arguments=(
-                identifier_arguments
-                if identifier_arguments is not None
-                else fallback_identifiers
-            ),
+            identifier_arguments=(identifier_arguments if identifier_arguments is not None else fallback_identifiers),
             free_text_argument_names=(
-                free_text_argument_names
-                if identifier_arguments is not None
-                else fallback_free_text_names
+                free_text_argument_names if identifier_arguments is not None else fallback_free_text_names
             ),
             inner_thought=inner_thought,
         )
@@ -2550,33 +2410,21 @@ class WorldRuntime:
             current_tick=WorldTick(self.current_tick()),
         )
         self._process_graph_events()
-        fallback_identifiers, fallback_free_text_names = (
-            project_action_arguments_for_history(
-                {
-                    "target_label": item_label,
-                    "action_name": action_name,
-                    **(
-                        {"parameters": interaction_parameters}
-                        if interaction_parameters is not None
-                        else {}
-                    ),
-                }
-            )
+        fallback_identifiers, fallback_free_text_names = project_action_arguments_for_history(
+            {
+                "target_label": item_label,
+                "action_name": action_name,
+                **({"parameters": interaction_parameters} if interaction_parameters is not None else {}),
+            }
         )
         self._record_action_result(
             player_id,
             f"「{item_label}」で{result.action_display_label}",
             "; ".join(result.messages) if result.messages else "完了",
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
-            identifier_arguments=(
-                identifier_arguments
-                if identifier_arguments is not None
-                else fallback_identifiers
-            ),
+            identifier_arguments=(identifier_arguments if identifier_arguments is not None else fallback_identifiers),
             free_text_argument_names=(
-                free_text_argument_names
-                if identifier_arguments is not None
-                else fallback_free_text_names
+                free_text_argument_names if identifier_arguments is not None else fallback_free_text_names
             ),
             inner_thought=inner_thought,
         )
@@ -2599,7 +2447,7 @@ class WorldRuntime:
             voters.append(pid)
         return voters
 
-    def cast_vote(self, voter_player_id: PlayerId, target_player_id: Any=None) -> Any:
+    def cast_vote(self, voter_player_id: PlayerId, target_player_id: Any = None) -> Any:
         """会議で 1 票を投じる。``target_player_id`` が None なら棄権。
 
         全員が投じ終えたら、その場で集計して会議を閉じる。
@@ -2693,11 +2541,7 @@ class WorldRuntime:
             lambda tick: self._game_phase_store.begin_meeting(
                 tick=tick,
                 trigger=trigger,
-                initiator_player_id=(
-                    int(initiator_player_id)
-                    if initiator_player_id is not None
-                    else None
-                ),
+                initiator_player_id=(int(initiator_player_id) if initiator_player_id is not None else None),
             ),
             trigger=trigger,
             initiator_player_id=initiator_player_id,
@@ -2863,16 +2707,18 @@ class WorldRuntime:
                 who = ""
         if self._speech_event_publisher is not None:
             graph = self._spot_graph_repo.find_graph()
-            self._speech_event_publisher.publish_all([
-                GamePhaseChangedEvent.create(
-                    aggregate_id=graph.graph_id,
-                    aggregate_type="SpotGraphAggregate",
-                    old_phase=old_phase,
-                    new_phase=state.phase,
-                    trigger=trigger,
-                    initiator_display_name=who,
-                )
-            ])
+            self._speech_event_publisher.publish_all(
+                [
+                    GamePhaseChangedEvent.create(
+                        aggregate_id=graph.graph_id,
+                        aggregate_type="SpotGraphAggregate",
+                        old_phase=old_phase,
+                        new_phase=state.phase,
+                        trigger=trigger,
+                        initiator_display_name=who,
+                    )
+                ]
+            )
         return state
 
     def available_player_action_names(self, actor_player_id: PlayerId) -> tuple[str, ...]:
@@ -2902,7 +2748,10 @@ class WorldRuntime:
         return self._player_interaction_service.item_name_rescue
 
     def do_interact_with_player(
-        self, actor_player_id: PlayerId, target_player_id: PlayerId, action_name: str,
+        self,
+        actor_player_id: PlayerId,
+        target_player_id: PlayerId,
+        action_name: str,
         *,
         interaction_parameters: dict[str, Any] | None = None,
         identifier_arguments: Mapping[str, str] | None = None,
@@ -2916,6 +2765,7 @@ class WorldRuntime:
         (docs/memory_system/interpersonal_interaction_design.md §3.2)。
         """
         from ai_rpg_world.domain.common.value_object import WorldTick
+
         svc = self._player_interaction_service
         result = svc.execute(
             actor_player_id,
@@ -2926,47 +2776,33 @@ class WorldRuntime:
         )
         self._process_graph_events()
         target_label = next(
-            (
-                s.name
-                for s in self.scenario.player_spawns
-                if int(s.player_id) == int(target_player_id)
-            ),
+            (s.name for s in self.scenario.player_spawns if int(s.player_id) == int(target_player_id)),
             f"プレイヤー({int(target_player_id)})",
         )
-        fallback_identifiers, fallback_free_text_names = (
-            project_action_arguments_for_history(
-                {
-                    "target_label": target_label,
-                    "action_name": action_name,
-                    **(
-                        {"parameters": interaction_parameters}
-                        if interaction_parameters is not None
-                        else {}
-                    ),
-                }
-            )
+        fallback_identifiers, fallback_free_text_names = project_action_arguments_for_history(
+            {
+                "target_label": target_label,
+                "action_name": action_name,
+                **({"parameters": interaction_parameters} if interaction_parameters is not None else {}),
+            }
         )
         self._record_action_result(
             actor_player_id,
             f"「{target_label}」に対して{result.action_display_label}",
             "; ".join(result.messages) if result.messages else "完了",
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
-            identifier_arguments=(
-                identifier_arguments
-                if identifier_arguments is not None
-                else fallback_identifiers
-            ),
+            identifier_arguments=(identifier_arguments if identifier_arguments is not None else fallback_identifiers),
             free_text_argument_names=(
-                free_text_argument_names
-                if identifier_arguments is not None
-                else fallback_free_text_names
+                free_text_argument_names if identifier_arguments is not None else fallback_free_text_names
             ),
             inner_thought=inner_thought,
         )
         return result
 
     def do_drop_item(
-        self, player_id: PlayerId, slot_id_value: int,
+        self,
+        player_id: PlayerId,
+        slot_id_value: int,
     ) -> ItemTransferResult:
         """指定スロットのアイテムを現在地に落とす。
 
@@ -2975,6 +2811,7 @@ class WorldRuntime:
         action_result_store に追記して履歴に残すまでを行う。
         """
         from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
         result = self._item_transfer_service.drop_item(player_id, SlotId(slot_id_value))
         result_text = "; ".join(result.messages) if result.messages else "落とした"
         # ItemTransferResult は現状 success フラグなし (例外は service 側で投げる)。
@@ -2988,7 +2825,9 @@ class WorldRuntime:
         return result
 
     def do_pickup_item(
-        self, player_id: PlayerId, item_instance_id_value: int,
+        self,
+        player_id: PlayerId,
+        item_instance_id_value: int,
     ) -> ItemTransferResult:
         """現在地の地面アイテムを拾う。
 
@@ -2997,8 +2836,10 @@ class WorldRuntime:
         tool では将来ラベル (例: G1, G2) で参照させる予定だがそれは別 PR。
         """
         from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+
         result = self._item_transfer_service.pickup_item(
-            player_id, ItemInstanceId.create(item_instance_id_value),
+            player_id,
+            ItemInstanceId.create(item_instance_id_value),
         )
         result_text = "; ".join(result.messages) if result.messages else "拾い上げた"
         self._record_action_result(
@@ -3131,9 +2972,7 @@ class WorldRuntime:
                 identifier_arguments=(
                     identifier_arguments
                     if identifier_arguments is not None
-                    else project_action_arguments_for_history(
-                        {"destination_label": dest_name}
-                    )[0]
+                    else project_action_arguments_for_history({"destination_label": dest_name})[0]
                 ),
                 free_text_argument_names=free_text_argument_names,
                 inner_thought=inner_thought,
@@ -3151,9 +2990,7 @@ class WorldRuntime:
             identifier_arguments=(
                 identifier_arguments
                 if identifier_arguments is not None
-                else project_action_arguments_for_history(
-                    {"destination_label": dest_name}
-                )[0]
+                else project_action_arguments_for_history({"destination_label": dest_name})[0]
             ),
             free_text_argument_names=free_text_argument_names,
             inner_thought=inner_thought,
@@ -3310,9 +3147,7 @@ class WorldRuntime:
                 new_active=active,
                 initialized_before=initialized_before,
                 visible_recipient_count=len(deliveries),
-                delivery_skipped_reason=(
-                    "no_visible_recipients" if not deliveries else None
-                ),
+                delivery_skipped_reason=("no_visible_recipients" if not deliveries else None),
             )
 
     def _is_distant_cue_active(self, cue: Any) -> bool | None:
@@ -3341,9 +3176,7 @@ class WorldRuntime:
     def _find_distant_cue_source_object(self, object_id: Any) -> Any:
         try:
             if not isinstance(object_id, SpotObjectId):
-                object_id = SpotObjectId.create(
-                    int(getattr(object_id, "value", object_id))
-                )
+                object_id = SpotObjectId.create(int(getattr(object_id, "value", object_id)))
         except Exception:
             return None
         graph = self._spot_graph_repo.find_graph()
@@ -3427,9 +3260,7 @@ class WorldRuntime:
                 prominence=float(getattr(area, "prominence", 0.0)),
                 x=getattr(getattr(area, "position", None), "x", None),
                 y=getattr(getattr(area, "position", None), "y", None),
-                distant_descriptions=dict(
-                    getattr(area, "distant_descriptions", {}) or {}
-                ),
+                distant_descriptions=dict(getattr(area, "distant_descriptions", {}) or {}),
             )
             for area in getattr(self.scenario, "areas", ())
         )
@@ -3506,9 +3337,7 @@ class WorldRuntime:
                 origin_area_id=str(getattr(cue, "origin_area_id", "")),
                 skipped_reasons=[reason],
                 source_kind=str(getattr(getattr(cue, "source", None), "kind", "")),
-                source_state_key=str(
-                    getattr(getattr(cue, "source", None), "state_key", "")
-                ),
+                source_state_key=str(getattr(getattr(cue, "source", None), "state_key", "")),
             )
         except Exception:
             logger.warning(
@@ -3606,10 +3435,7 @@ class WorldRuntime:
         ticks_per_day = self._ticks_per_day_or_default()
         current_day = self.current_tick() // max(1, ticks_per_day)
         # 日が変わっていたら前日分を flush してから新日のバッファに積む
-        if (
-            self._pending_spoiled_day is not None
-            and self._pending_spoiled_day != current_day
-        ):
+        if self._pending_spoiled_day is not None and self._pending_spoiled_day != current_day:
             self._flush_pending_food_spoiled()
         self._pending_spoiled_day = current_day
         for instance_id, spec_id, spec_name in spoiled:
@@ -3714,14 +3540,9 @@ class WorldRuntime:
             return GameEndResult(
                 is_ended=True,
                 result=None,
-                reason=(
-                    "外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない "
-                    "(全員 down または outcome 確定済み)"
-                ),
+                reason=("外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない (全員 down または outcome 確定済み)"),
                 player_outcomes=registry.snapshot(),
-                team_results=(
-                    self._decide_team_results() if self.scenario.teams else None
-                ),
+                team_results=(self._decide_team_results() if self.scenario.teams else None),
             )
         return world_end
 
@@ -3739,6 +3560,7 @@ class WorldRuntime:
         flags = self._world_flag_state.as_frozen_set()
         player_ids = self.get_player_ids()
         from ai_rpg_world.domain.common.value_object import WorldTick
+
         tick = WorldTick(self._tick)
         player_states = self._collect_player_states(player_ids)
         player_outcomes = self._collect_player_outcomes(player_ids)
@@ -3747,7 +3569,11 @@ class WorldRuntime:
         for team in self.scenario.teams:
             for condition in team.win_conditions:
                 result = self._game_end_evaluator.evaluate(
-                    graph, condition, flags, player_ids, tick,
+                    graph,
+                    condition,
+                    flags,
+                    player_ids,
+                    tick,
                     player_states=player_states,
                     player_outcomes=player_outcomes,
                     result_on_match=GameResultEnum.WIN,
@@ -3759,9 +3585,7 @@ class WorldRuntime:
                     break
         return frozenset(satisfied), reasons
 
-    def team_result_trace(
-        self, end_result: GameEndResult
-    ) -> dict[str, Any] | None:
+    def team_result_trace(self, end_result: GameEndResult) -> dict[str, Any] | None:
         """終了時のチームの勝敗と個人の結果を、trace の team_result の payload にする。"""
         from ai_rpg_world.domain.player.enum.player_outcome_enum import (
             PlayerOutcomeEnum,
@@ -3776,36 +3600,35 @@ class WorldRuntime:
         teams_payload: list[dict[str, Any]] = []
         for team in self.scenario.teams:
             result = team_results[team.team_id]
-            teams_payload.append({
-                "team_id": team.team_id,
-                "name": team.name,
-                "result": result.value,
-                "satisfied": result is not GameResultEnum.LOSE,
-                "reason": team_reasons[team.team_id],
-                "member_player_ids": [int(pid) for pid in team.member_player_ids],
-                "member_player_string_ids": [
-                    self.id_mapper.get_str("player", int(pid))
-                    for pid in team.member_player_ids
-                ],
-            })
+            teams_payload.append(
+                {
+                    "team_id": team.team_id,
+                    "name": team.name,
+                    "result": result.value,
+                    "satisfied": result is not GameResultEnum.LOSE,
+                    "reason": team_reasons[team.team_id],
+                    "member_player_ids": [int(pid) for pid in team.member_player_ids],
+                    "member_player_string_ids": [
+                        self.id_mapper.get_str("player", int(pid)) for pid in team.member_player_ids
+                    ],
+                }
+            )
             for pid in team.member_player_ids:
                 team_of[int(pid)] = team.team_id
         players_payload: list[dict[str, Any]] = []
         for pid in self.get_player_ids():
             team_id = team_of[int(pid)]
-            outcome = (
-                registry.get_outcome(pid)
-                if registry is not None
-                else PlayerOutcomeEnum.UNRESOLVED
+            outcome = registry.get_outcome(pid) if registry is not None else PlayerOutcomeEnum.UNRESOLVED
+            players_payload.append(
+                {
+                    "player_id": int(pid),
+                    "player_string_id": self.id_mapper.get_str("player", int(pid)),
+                    "player_name": self.get_player_name(pid),
+                    "team_id": team_id,
+                    "outcome": outcome.value,
+                    "result": team_results[team_id].value,
+                }
             )
-            players_payload.append({
-                "player_id": int(pid),
-                "player_string_id": self.id_mapper.get_str("player", int(pid)),
-                "player_name": self.get_player_name(pid),
-                "team_id": team_id,
-                "outcome": outcome.value,
-                "result": team_results[team_id].value,
-            })
         return {
             "reason": end_result.reason,
             "teams": teams_payload,
@@ -3832,6 +3655,7 @@ class WorldRuntime:
         flags = self._world_flag_state.as_frozen_set()
         player_ids = self.get_player_ids()
         from ai_rpg_world.domain.common.value_object import WorldTick
+
         tick = WorldTick(self._tick)
         # 陣営条件 (SURVIVING_PLAYERS_WITH_STATE_AT_MOST) の判定材料。
         # 役割は PlayerStatusAggregate.state、生死は outcome registry が持つ。
@@ -3841,29 +3665,25 @@ class WorldRuntime:
         from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
             GameEndConditionTypeEnum,
         )
+
         all_end_conditions = (
             *self.scenario.win_conditions,
             *self.scenario.lose_conditions,
             *self.scenario.end_conditions,
         )
         needs_faction_inputs = any(
-            c.condition_type in (
+            c.condition_type
+            in (
                 GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST,
                 GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE,
             )
             for c in all_end_conditions
         )
         needs_outcome_inputs = needs_faction_inputs or any(
-            c.condition_type
-            is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED
-            for c in all_end_conditions
+            c.condition_type is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED for c in all_end_conditions
         )
-        player_states = (
-            self._collect_player_states(player_ids) if needs_faction_inputs else None
-        )
-        player_outcomes = (
-            self._collect_player_outcomes(player_ids) if needs_outcome_inputs else None
-        )
+        player_states = self._collect_player_states(player_ids) if needs_faction_inputs else None
+        player_outcomes = self._collect_player_outcomes(player_ids) if needs_outcome_inputs else None
         if self.scenario.teams:
             # チームの win を end より先に見る。勝ちが決まった tick に end も
             # 成立していても、勝ったチームを負けにしない。
@@ -3882,33 +3702,46 @@ class WorldRuntime:
                 )
         for wc in self.scenario.win_conditions:
             result = self._game_end_evaluator.evaluate(
-                graph, wc, flags, player_ids, tick,
-                player_states=player_states, player_outcomes=player_outcomes,
+                graph,
+                wc,
+                flags,
+                player_ids,
+                tick,
+                player_states=player_states,
+                player_outcomes=player_outcomes,
                 result_on_match=GameResultEnum.WIN,
             )
             if result.is_ended:
                 return result
         for lc in self.scenario.lose_conditions:
             result = self._game_end_evaluator.evaluate(
-                graph, lc, flags, player_ids, tick,
-                player_states=player_states, player_outcomes=player_outcomes,
+                graph,
+                lc,
+                flags,
+                player_ids,
+                tick,
+                player_states=player_states,
+                player_outcomes=player_outcomes,
                 result_on_match=GameResultEnum.LOSE,
             )
             if result.is_ended:
                 return result
         for ec in self.scenario.end_conditions:
             result = self._game_end_evaluator.evaluate(
-                graph, ec, flags, player_ids, tick,
-                player_states=player_states, player_outcomes=player_outcomes,
+                graph,
+                ec,
+                flags,
+                player_ids,
+                tick,
+                player_states=player_states,
+                player_outcomes=player_outcomes,
                 result_on_match=None,
             )
             if result.is_ended:
                 if self.scenario.teams:
                     return replace(
                         result,
-                        team_results=decide_team_results(
-                            self.scenario.teams, frozenset()
-                        ),
+                        team_results=decide_team_results(self.scenario.teams, frozenset()),
                     )
                 return result
         return GameEndResult(is_ended=False, result=None, reason="ゲーム続行中")
@@ -3930,6 +3763,7 @@ class WorldRuntime:
         from ai_rpg_world.domain.player.enum.player_outcome_enum import (
             PlayerOutcomeEnum,
         )
+
         registry = self._player_outcome_registry
         if registry is None:
             return {int(pid): PlayerOutcomeEnum.UNRESOLVED for pid in player_ids}
@@ -4048,8 +3882,7 @@ def _build_short_term_memory(
                 persona_block=persona_block,
             )
             logger.info(
-                "short-term memory: LLM 経路を ctor 注入 (rolling_summary + LiteLLM)。"
-                "L4 は LLM 圧縮で生成される。"
+                "short-term memory: LLM 経路を ctor 注入 (rolling_summary + LiteLLM)。L4 は LLM 圧縮で生成される。"
             )
         else:
             logger.info(
@@ -4152,9 +3985,7 @@ def _build_persona_resolver(
                 if (ec_cid and s.string_id == ec_cid) or (ec_name and s.name == ec_name):
                     name_persona_by_pid[int(s.player_id)] = (s.name, persona_block)
                 else:
-                    fallback = build_persona_block_from_character(
-                        None, fallback_display_name=s.name
-                    )
+                    fallback = build_persona_block_from_character(None, fallback_display_name=s.name)
                     name_persona_by_pid[int(s.player_id)] = (s.name, fallback)
         else:
             for s in scenario.player_spawns:
@@ -4166,9 +3997,7 @@ def _build_persona_resolver(
     return _resolver
 
 
-def _record_meetings_at_spawn(
-    scenario: ScenarioLoadResult, acquaintances: PlayerAcquaintances
-) -> None:
+def _record_meetings_at_spawn(scenario: ScenarioLoadResult, acquaintances: PlayerAcquaintances) -> None:
     """初期配置で同じ場所にいた相手とは、最初から顔を合わせている。
 
     人が入ってきた観測は配置のあとにしか出ないので、初期配置の同席はここで記録する。
@@ -4211,13 +4040,9 @@ def _build_player_episode_writing(
 
     completion: EpisodeWritingCompletion
     if cfg.llm_client_kind == "litellm":
-        client = create_llm_client_from_config(
-            cfg, aux_call_sink=runtime._aux_llm_call_sink
-        )
+        client = create_llm_client_from_config(cfg, aux_call_sink=runtime._aux_llm_call_sink)
         if not isinstance(client, EpisodeWritingCompletion):
-            raise RuntimeError(
-                "episode writing needs an LLM client that can write episodes"
-            )
+            raise RuntimeError("episode writing needs an LLM client that can write episodes")
         completion = client
     else:
         completion = StubEpisodeWritingCompletion()
@@ -4231,9 +4056,7 @@ def _build_player_episode_writing(
         add_episodes=AddEpisodesToMemory(runtime._being_episode_store),
         being_id_of=_being_id_of,
         turn_reader=turn_reader,
-        environment_name_of=lambda pid: environment_entry_for_player(
-            runtime.scenario, pid
-        ).environment_name,
+        environment_name_of=lambda pid: environment_entry_for_player(runtime.scenario, pid).environment_name,
         persona_of=persona_of,
         trace_recorder_provider=lambda: runtime._trace_recorder,
         current_tick_provider=lambda: runtime.current_tick(),
@@ -4300,9 +4123,7 @@ def create_world_runtime(
         round_number=round_number,
     )
 
-    fallback_name = (
-        scenario.player_spawns[0].name if scenario.player_spawns else "探索者"
-    )
+    fallback_name = scenario.player_spawns[0].name if scenario.player_spawns else "探索者"
     persona_block = build_persona_block_from_character(
         world_character,
         fallback_display_name=fallback_name,
@@ -4429,10 +4250,7 @@ def create_world_runtime(
         # consume_effect が無いアイテムは従来通り QUEST (素材・装備・道具)。
         # ItemSpec.__post_init__ の invariant: consume_effect は CONSUMABLE 時
         # のみ非 None で居られる。
-        item_type = (
-            ItemType.CONSUMABLE if item_def.consume_effect is not None
-            else ItemType.QUEST
-        )
+        item_type = ItemType.CONSUMABLE if item_def.consume_effect is not None else ItemType.QUEST
         spec = ItemSpec(
             item_spec_id=item_def.spec_id,
             name=item_def.name,
@@ -4491,8 +4309,18 @@ def create_world_runtime(
         exp_table = ExpTable(base_exp=100.0, exponent=1.5)
         status = PlayerStatusAggregate(
             player_id=pid,
-            base_stats=BaseStats(max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05),
-            stat_growth_factor=StatGrowthFactor(hp_factor=1.0, mp_factor=1.0, attack_factor=1.0, defense_factor=1.0, speed_factor=1.0, critical_rate_factor=0.0, evasion_rate_factor=0.0),
+            base_stats=BaseStats(
+                max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05
+            ),
+            stat_growth_factor=StatGrowthFactor(
+                hp_factor=1.0,
+                mp_factor=1.0,
+                attack_factor=1.0,
+                defense_factor=1.0,
+                speed_factor=1.0,
+                critical_rate_factor=0.0,
+                evasion_rate_factor=0.0,
+            ),
             exp_table=exp_table,
             growth=Growth(level=1, total_exp=0, exp_table=exp_table),
             # シナリオが宣言した所持金の初期値。宣言しなければ 0 で、
@@ -4545,12 +4373,8 @@ def create_world_runtime(
             graph.place_entity(eid, spawn.spawn_spot_id)
         # PR4: 初回 spawn の spot encounter を直接記録する (handler 経由では
         # 拾えない、上のコメント参照)。tick は 0 (= scenario 開始時点)。
-        spawn_spot_str_id = scenario.id_mapper.get_str(
-            "spot", spawn.spawn_spot_id.value
-        )
-        encounter_memory.observe(
-            pid, EncounterKey.spot(spawn_spot_str_id), 0
-        )
+        spawn_spot_str_id = scenario.id_mapper.get_str("spot", spawn.spawn_spot_id.value)
+        encounter_memory.observe(pid, EncounterKey.spot(spawn_spot_str_id), 0)
 
     # ── Phase B-2a: モンスターの初期配置 ──
     # シナリオで宣言された MonsterTemplate を template repo に登録し、
@@ -4595,18 +4419,11 @@ def create_world_runtime(
             if placement.spawn_condition is not None and not placement.spawn_condition.is_always:
                 continue
             template = next(
-                (
-                    st.template
-                    for st in scenario.monster_templates
-                    if st.string_id == placement.template_string_id
-                ),
+                (st.template for st in scenario.monster_templates if st.string_id == placement.template_string_id),
                 None,
             )
             if template is None:
-                raise ValueError(
-                    f"monster placement references unknown template: "
-                    f"{placement.template_string_id}"
-                )
+                raise ValueError(f"monster placement references unknown template: {placement.template_string_id}")
             spot_int = scenario.id_mapper.get_int("spot", placement.spot_string_id)
             spot_id = SpotId.create(spot_int)
             monster_id = MonsterId(monster_counter)
@@ -4670,6 +4487,7 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import (
         InMemoryLootTableRepository,
     )
+
     loot_table_repo = InMemoryLootTableRepository()
     for lt_def in scenario.loot_tables:
         entries = [
@@ -4681,11 +4499,13 @@ def create_world_runtime(
             )
             for loot_entry in lt_def.entries
         ]
-        loot_table_repo.save(LootTableAggregate.create(
-            loot_table_id=LootTableId.create(lt_def.table_id),
-            entries=entries,
-            name=lt_def.name,
-        ))
+        loot_table_repo.save(
+            LootTableAggregate.create(
+                loot_table_id=LootTableId.create(lt_def.table_id),
+                entries=entries,
+                name=lt_def.name,
+            )
+        )
     # effect_service に loot_table_repo を注入。
     from ai_rpg_world.application.world_runtime.world_random import world_random
     from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
@@ -4700,9 +4520,7 @@ def create_world_runtime(
         loot_table_repository=loot_table_repo,
         random_source=world_random(_seed, round_number, "loot"),
         ongoing_condition_resolutions={
-            condition.flag: condition.resolution
-            for condition in scenario.ongoing_conditions
-            if condition.resolution
+            condition.flag: condition.resolution for condition in scenario.ongoing_conditions if condition.resolution
         },
     )
     _interaction_domain_service = SpotInteractionService(effect_service=_effect_service)
@@ -4759,9 +4577,7 @@ def create_world_runtime(
         # するために repo を渡す。これまで None だったため damage_specs が
         # 黙って捨てられていた (廃屋の崩れた梁 / 岩礁の縁 等が flavor 止まり)。
         player_status_repository=player_status_repo,
-        player_display_name_resolver=lambda pid: player_name_map.get(
-            int(pid), f"プレイヤー({int(pid)})"
-        ),
+        player_display_name_resolver=lambda pid: player_name_map.get(int(pid), f"プレイヤー({int(pid)})"),
         departed_position_store=departed_position_store,
         player_perception_policy=player_perception_policy,
         item_interaction_registry=scenario.item_interaction_registry,
@@ -4783,6 +4599,7 @@ def create_world_runtime(
     from ai_rpg_world.application.world_graph.spot_effective_lighting_resolver import (
         SpotEffectiveLightingResolver,
     )
+
     # 対人行為の再使用間隔。world 局所の状態なので Being ではなく world
     # snapshot に載る (InteractionCooldownSubsystemCodec)。
     interaction_cooldown_store = InteractionCooldownStore()
@@ -4864,15 +4681,14 @@ def create_world_runtime(
         InMemoryUnitOfWorkTransactionFactory(data_store),
         sync_dispatcher=item_transfer_dispatcher,
         after_commit_handoff=item_transfer_dispatcher,
-        repository_provider_factory=(
-            InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)
-        ),
+        repository_provider_factory=(InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)),
     )
     item_transfer_service = SpotGraphItemTransferService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         item_transfer_command_scope_factory=item_transfer_scope_factory,
     )
+
     def _observe_expired_trade_offer(event: Any) -> None:
         """流れた取引を当事者へ知らせる。
 
@@ -4885,9 +4701,7 @@ def create_world_runtime(
 
         graph = spot_graph_repo.find_graph()
         try:
-            spot_id = graph.get_entity_spot(
-                EntityId.create(int(event.offerer_player_id))
-            )
+            spot_id = graph.get_entity_spot(EntityId.create(int(event.offerer_player_id)))
         except Exception:
             return
         pipeline_event_publisher.publish_all(
@@ -4896,12 +4710,8 @@ def create_world_runtime(
                     aggregate_id=graph.graph_id,
                     aggregate_type="SpotGraphAggregate",
                     entity_id=EntityId.create(int(event.target_player_id)),
-                    partner_entity_id=EntityId.create(
-                        int(event.offerer_player_id)
-                    ),
-                    offerer_entity_id=EntityId.create(
-                        int(event.offerer_player_id)
-                    ),
+                    partner_entity_id=EntityId.create(int(event.offerer_player_id)),
+                    offerer_entity_id=EntityId.create(int(event.offerer_player_id)),
                     spot_id=spot_id,
                     kind="expired",
                     gives_text=_describe_trade_side(event.gives),
@@ -4923,9 +4733,7 @@ def create_world_runtime(
         entity_name_resolver=lambda entity_id: _resolve_entity_name(entity_id),
         # 期限は世界の広さで決まるのでシナリオが持つ。書かれていなければ
         # サービス側の既定に任せる (既定値を 2 箇所に置かない)。
-        **_optional_kwarg(
-            "expires_in_ticks", scenario.player_trade_offer_expires_in_ticks
-        ),
+        **_optional_kwarg("expires_in_ticks", scenario.player_trade_offer_expires_in_ticks),
         overflow_sink=refuse_overflow("同席取引の決済"),
     )
     market_board_store = InMemoryMarketBoardStore(
@@ -5018,6 +4826,7 @@ def create_world_runtime(
         from ai_rpg_world.domain.item.value_object.item_instance_id import (
             ItemInstanceId,
         )
+
         item = item_repo.find_by_id(ItemInstanceId(item_instance_id_value))
         return dict(item.state) if item is not None else None
 
@@ -5035,6 +4844,7 @@ def create_world_runtime(
         seen_groups: dict[tuple[int, bool], list[Any]] = {}
         for slot_id in range(inv._max_slots):
             from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
             iid = inv.get_item_instance_id_by_slot(SlotId(slot_id))
             if iid is None:
                 continue
@@ -5057,11 +4867,7 @@ def create_world_runtime(
                     if item_spec_definition is not None
                     else (item.item_spec.usage_hint or "")
                 )
-                category_value = (
-                    item_spec_definition.category
-                    if item_spec_definition is not None
-                    else ""
-                )
+                category_value = item_spec_definition.category if item_spec_definition is not None else ""
                 seen_groups[key] = [
                     name,
                     0,
@@ -5112,9 +4918,7 @@ def create_world_runtime(
 
     # 光源アイテムを自動検出
     light_source_item_spec_ids = frozenset(
-        spec.item_spec_id
-        for spec in item_spec_repo.find_all()
-        if spec.is_light_source
+        spec.item_spec_id for spec in item_spec_repo.find_all() if spec.is_light_source
     )
 
     def _owned_item_spec_ids_provider(entity_id: int) -> frozenset[Any]:
@@ -5136,11 +4940,7 @@ def create_world_runtime(
         """
         if day_night_config is None:
             return None
-        labels = {
-            phase.name: phase.display_text
-            for phase in day_night_config.cycle.phases
-            if phase.display_text
-        }
+        labels = {phase.name: phase.display_text for phase in day_night_config.cycle.phases if phase.display_text}
         return labels.get if labels else None
 
     def _build_monster_view_provider_for_runtime(_monster_repo: Any) -> Any:
@@ -5152,14 +4952,12 @@ def create_world_runtime(
         from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
             build_monster_view_provider,
         )
+
         return build_monster_view_provider(_monster_repo)
 
     def _describe_trade_side(side: Any) -> str:
         """取引の片側を、人が読める短い形にする。"""
-        parts = [
-            f"{_resolve_item_spec_name(spec_id)} {quantity}つ"
-            for spec_id, quantity in side.items
-        ]
+        parts = [f"{_resolve_item_spec_name(spec_id)} {quantity}つ" for spec_id, quantity in side.items]
         if side.gold:
             parts.append(f"{side.gold}G")
         return "・".join(parts) if parts else "なし"
@@ -5187,6 +4985,7 @@ def create_world_runtime(
     def _resolve_item_spec_name(spec_id_value: int) -> str:
         """item_spec_id → 表示名解決。地面アイテムの prompt 表示などで使う。"""
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId as _ISpecId
+
         spec = item_spec_repo.find_by_id(_ISpecId.create(spec_id_value))
         if spec is None:
             return ""
@@ -5207,10 +5006,7 @@ def create_world_runtime(
         appearance = str(getattr(entry, "appearance", "") or "").strip()
         appearance_suffix = f" {appearance}" if appearance else ""
         output = ObservationOutput(
-            prose=(
-                f"{entry.display_name}が同じ場所にいることに気づいた。"
-                f"{appearance_suffix}"
-            ).strip(),
+            prose=(f"{entry.display_name}が同じ場所にいることに気づいた。{appearance_suffix}").strip(),
             structured={
                 "type": "monster_encountered",
                 "monster_id": int(entry.monster_id),
@@ -5223,9 +5019,7 @@ def create_world_runtime(
         )
         runtime._emit_observation_directly(pid, output)
 
-    def _observe_fallen_body_for_player(
-        player_id: int, victim_entity_id: int, victim_name: str, is_dead: bool
-    ) -> None:
+    def _observe_fallen_body_for_player(player_id: int, victim_entity_id: int, victim_name: str, is_dead: bool) -> None:
         """初めて見た「倒れている人」を observation として届ける。
 
         **同席者行に出ているだけでは、気づいた瞬間が無い。** 行は毎 tick
@@ -5252,6 +5046,7 @@ def create_world_runtime(
         if encounter_memory.lookup(pid, key) is not None:
             return
         encounter_memory.observe(pid, key, _current_tick_provider())
+
         def found_prose(name: str) -> str:
             if is_dead:
                 return f"{name}が倒れているのを見つけた。動かない。"
@@ -5308,16 +5103,14 @@ def create_world_runtime(
     # prompt の状態組み立てへ渡す。これにより「同じ側」と表示した相手への
     # 必ず失敗する襲撃候補を消しつつ、raw の role 語彙を表示層へ持ち込まない。
     _role_by_player_id = {
-        int(spawn.player_id): str(spawn.initial_state.get("role") or "")
-        for spawn in scenario.player_spawns
+        int(spawn.player_id): str(spawn.initial_state.get("role") or "") for spawn in scenario.player_spawns
     }
     _mutually_known_roles = frozenset(scenario.mutually_known_roles)
 
     def _is_known_ally(actor_player_id: PlayerId, target_player_id: PlayerId) -> bool:
         actor_role = _role_by_player_id.get(int(actor_player_id), "")
         return bool(
-            actor_role in _mutually_known_roles
-            and _role_by_player_id.get(int(target_player_id), "") == actor_role
+            actor_role in _mutually_known_roles and _role_by_player_id.get(int(target_player_id), "") == actor_role
         )
 
     state_builder = SpotGraphCurrentStateBuilder(
@@ -5337,15 +5130,9 @@ def create_world_runtime(
         light_source_item_spec_ids=light_source_item_spec_ids,
         owned_item_spec_ids_provider=_owned_item_spec_ids_provider,
         item_spec_name_resolver=_resolve_item_spec_name,
-        time_of_day_provider=(
-            day_night_stage.current_time_of_day
-            if day_night_stage is not None
-            else None
-        ),
+        time_of_day_provider=(day_night_stage.current_time_of_day if day_night_stage is not None else None),
         monster_view_provider=(
-            _build_monster_view_provider_for_runtime(monster_repo)
-            if scenario.monster_placements
-            else None
+            _build_monster_view_provider_for_runtime(monster_repo) if scenario.monster_placements else None
         ),
         # Phase D-3a: 地面アイテムの spoiled 表示。instance_id から state dict を
         # 引く軽量 resolver。InMemoryItemRepository.find_by_id は dict lookup なので
@@ -5374,9 +5161,7 @@ def create_world_runtime(
         # 列挙は識別子が要るので、そちらは
         # ``available_action_names`` を使い続ける
         # (world_runtime.available_player_action_names)。
-        player_action_entries_provider=(
-            player_interaction_service.available_action_entries_for
-        ),
+        player_action_entries_provider=(player_interaction_service.available_action_entries_for),
         known_ally_checker=_is_known_ally,
         # 組み込みツールを行に宣伝する前に、この世界に在るかを訊く。
         # 訊かずに出していたため、`disabled_tools` で消したはずの
@@ -5404,17 +5189,13 @@ def create_world_runtime(
     # 物体操作の待ち時間を行に添える。#964 で対人行に足したのと同じ判断で、
     # 待ちが見えないと「選べるのに必ず失敗する手」になる (#860)。
     state_builder.set_object_cooldown_hint_provider(
-        lambda player_id, object_id, interaction: (
-            interaction_service.cooldown_wait_hint(
-                player_id, object_id, interaction, _current_tick_provider()
-            )
+        lambda player_id, object_id, interaction: interaction_service.cooldown_wait_hint(
+            player_id, object_id, interaction, _current_tick_provider()
         )
     )
     state_builder.set_item_cooldown_hint_provider(
-        lambda player_id, item_spec_id, interaction: (
-            interaction_service.item_cooldown_wait_hint(
-                player_id, item_spec_id, interaction, _current_tick_provider()
-            )
+        lambda player_id, item_spec_id, interaction: interaction_service.item_cooldown_wait_hint(
+            player_id, item_spec_id, interaction, _current_tick_provider()
         )
     )
 
@@ -5441,14 +5222,9 @@ def create_world_runtime(
     _effective_lighting_resolver = SpotEffectiveLightingResolver(
         spot_graph_repository=spot_graph_repo,
         entity_has_light_source=lambda entity_id: bool(
-            light_source_item_spec_ids
-            & _owned_item_spec_ids_provider(entity_id)
+            light_source_item_spec_ids & _owned_item_spec_ids_provider(entity_id)
         ),
-        time_of_day_provider=(
-            day_night_stage.current_time_of_day
-            if day_night_stage is not None
-            else None
-        ),
+        time_of_day_provider=(day_night_stage.current_time_of_day if day_night_stage is not None else None),
         weather_provider=lambda: weather_holder.get("state"),
     )
     obs_formatter = ObservationFormatter(
@@ -5465,10 +5241,7 @@ def create_world_runtime(
         },
         departed_position_store=departed_position_store,
         departed_player_checker=player_perception_policy.is_departed,
-        downed_self_becomes_departed=(
-            scenario.departed_agents_enabled
-            and scenario.death_semantics.grace_ticks == 0
-        ),
+        downed_self_becomes_departed=(scenario.departed_agents_enabled and scenario.death_semantics.grace_ticks == 0),
         effective_lighting_resolver=_effective_lighting_resolver,
     )
     obs_formatter._name_resolver.player_name = lambda pid: player_name_map.get(  # type: ignore[assignment]
@@ -5601,9 +5374,7 @@ def create_world_runtime(
     )
     # recorder は runtime 構築後にも差し替えられるため、値を固定せず実行時に
     # 解決する。同じ評価結果を判定と trace に使い、確率条件を再評価しない。
-    predicate_trace_emitter = ScenarioPredicateTraceEmitter(
-        lambda: getattr(runtime, "_trace_recorder", None)
-    )
+    predicate_trace_emitter = ScenarioPredicateTraceEmitter(lambda: getattr(runtime, "_trace_recorder", None))
     scenario_event_stage = SpotGraphScenarioEventStageService(
         failure_isolator=world_tick_failure_isolator,
         scenario_events=scenario.scenario_events,
@@ -5644,9 +5415,7 @@ def create_world_runtime(
         weather_state_provider=lambda: weather_holder["state"],
         weather_state_setter=lambda s: weather_holder.__setitem__("state", s),
         update_interval_ticks=(
-            weather_config.update_interval_ticks
-            if weather_config is not None and weather_config.enabled
-            else 6
+            weather_config.update_interval_ticks if weather_config is not None and weather_config.enabled else 6
         ),
         random_source=_weather_random,
     )
@@ -5655,9 +5424,7 @@ def create_world_runtime(
     # 参照する holder を埋める。
     _time_provider_holder["provider"] = time_provider
     sim_llm_trigger: ILlmTurnTrigger = (
-        llm_turn_trigger
-        if llm_turn_trigger is not None
-        else WorldStandaloneNoopLlmTurnTrigger()
+        llm_turn_trigger if llm_turn_trigger is not None else WorldStandaloneNoopLlmTurnTrigger()
     )
     # tick 経過で空腹 / 疲労が緩やかに増加するステージ。survival_island のような
     # 長期サバイバルでは生存圧の本体になる。world_runtime v1 (廃病院) でも
@@ -5686,6 +5453,7 @@ def create_world_runtime(
     from ai_rpg_world.application.world_graph.status_effects_tick_stage_service import (
         StatusEffectsTickStageService,
     )
+
     status_effects_stage = StatusEffectsTickStageService()
 
     # Phase B-2a: モンスター攻撃のオーケストレーターと behavior tick service。
@@ -5739,8 +5507,7 @@ def create_world_runtime(
         # に対する動的 spawn / despawn stage。static placement (B-2a 経路) で
         # 既に置いたインスタンスは触らず、条件付き placement だけを動かす。
         conditional_placements = [
-            p for p in scenario.monster_placements
-            if p.spawn_condition is not None and not p.spawn_condition.is_always
+            p for p in scenario.monster_placements if p.spawn_condition is not None and not p.spawn_condition.is_always
         ]
         if conditional_placements:
             from ai_rpg_world.application.world_graph.spot_graph_monster_spawn_stage_service import (
@@ -5751,49 +5518,32 @@ def create_world_runtime(
             slots = []
             for i, placement in enumerate(conditional_placements):
                 template = next(
-                    (
-                        st.template
-                        for st in scenario.monster_templates
-                        if st.string_id == placement.template_string_id
-                    ),
+                    (st.template for st in scenario.monster_templates if st.string_id == placement.template_string_id),
                     None,
                 )
                 if template is None:
-                    raise ValueError(
-                        f"monster placement references unknown template: "
-                        f"{placement.template_string_id}"
-                    )
+                    raise ValueError(f"monster placement references unknown template: {placement.template_string_id}")
                 spot_int = scenario.id_mapper.get_int("spot", placement.spot_string_id)
-                slot_key = (
-                    f"{placement.template_string_id}@{placement.spot_string_id}#{i}"
-                )
+                slot_key = f"{placement.template_string_id}@{placement.spot_string_id}#{i}"
                 spawn_condition = placement.spawn_condition
-                slots.append(MonsterSpawnSlot(
-                    slot_key=slot_key,
-                    template=template,
-                    spot_id=SpotId.create(spot_int),
-                    coordinate=Coordinate(
-                        x=placement.coordinate_x,
-                        y=placement.coordinate_y,
-                        z=placement.coordinate_z,
-                    ),
-                    day_night_phase_names=(
-                        spawn_condition.day_night_phase_names
-                        if spawn_condition is not None
-                        else ()
-                    ),
-                    required_flags=(
-                        spawn_condition.required_flags if spawn_condition is not None else ()
-                    ),
-                    forbidden_flags=(
-                        spawn_condition.forbidden_flags if spawn_condition is not None else ()
-                    ),
-                    weather_type_names=(
-                        spawn_condition.weather_type_names
-                        if spawn_condition is not None
-                        else ()
-                    ),
-                ))
+                slots.append(
+                    MonsterSpawnSlot(
+                        slot_key=slot_key,
+                        template=template,
+                        spot_id=SpotId.create(spot_int),
+                        coordinate=Coordinate(
+                            x=placement.coordinate_x,
+                            y=placement.coordinate_y,
+                            z=placement.coordinate_z,
+                        ),
+                        day_night_phase_names=(
+                            spawn_condition.day_night_phase_names if spawn_condition is not None else ()
+                        ),
+                        required_flags=(spawn_condition.required_flags if spawn_condition is not None else ()),
+                        forbidden_flags=(spawn_condition.forbidden_flags if spawn_condition is not None else ()),
+                        weather_type_names=(spawn_condition.weather_type_names if spawn_condition is not None else ()),
+                    )
+                )
 
             monster_spawn_service = SpotGraphMonsterSpawnStageService(
                 failure_isolator=world_tick_failure_isolator,
@@ -5801,16 +5551,10 @@ def create_world_runtime(
                 monster_repository=monster_repo,
                 skill_loadout_repository=skill_loadout_repo,
                 spot_graph_repository=spot_graph_repo,
-                time_of_day_provider=(
-                    day_night_stage.current_time_of_day
-                    if day_night_stage is not None
-                    else None
-                ),
+                time_of_day_provider=(day_night_stage.current_time_of_day if day_night_stage is not None else None),
                 flags_provider=world_flag_state.as_frozen_set,
                 weather_type_provider=lambda: (
-                    weather_holder["state"].weather_type.name
-                    if weather_holder.get("state") is not None
-                    else None
+                    weather_holder["state"].weather_type.name if weather_holder.get("state") is not None else None
                 ),
             )
             monster_spawn_stage = monster_spawn_service
@@ -5838,15 +5582,12 @@ def create_world_runtime(
     # 後段で PipelineEventPublisher + handler を bind し、broadcast callback も追加する。
     from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
     from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+
     # 同 spot の DEAD (終局・復活不可) player を「(死亡している)」と区別表示する
     # ため、DEAD 判定を state_builder に配線する。state_builder は outcome_registry
     # より先に構築されるので、構築時ではなく setter で後付けする。
-    state_builder.set_dead_player_checker(
-        lambda pid: outcome_registry.get_outcome(pid).is_eliminated
-    )
-    travel_stage.set_eliminated_checker(
-        lambda pid: outcome_registry.get_outcome(pid).is_eliminated
-    )
+    state_builder.set_dead_player_checker(lambda pid: outcome_registry.get_outcome(pid).is_eliminated)
+    travel_stage.set_eliminated_checker(lambda pid: outcome_registry.get_outcome(pid).is_eliminated)
     item_transfer_service.set_player_outcome_registry(outcome_registry)
 
     # Issue #621: ダウン → DEAD の 30 tick 猶予機構。
@@ -5861,6 +5602,7 @@ def create_world_runtime(
     from ai_rpg_world.application.player.services.player_death_grace_timer import (
         PlayerDeathGraceTimer,
     )
+
     death_grace_timer = PlayerDeathGraceTimer()
     death_grace_stage = PlayerDeathGraceTickStage(
         failure_isolator=world_tick_failure_isolator,
@@ -5950,9 +5692,9 @@ def create_world_runtime(
 
         graph = spot_graph_repo.find_graph()
         try:
-            return graph.get_entity_spot(
-                EntityId.create(int(a.value))
-            ) == graph.get_entity_spot(EntityId.create(int(b.value)))
+            return graph.get_entity_spot(EntityId.create(int(a.value))) == graph.get_entity_spot(
+                EntityId.create(int(b.value))
+            )
         except EntityNotInGraphException:
             return False
 
@@ -5961,13 +5703,9 @@ def create_world_runtime(
         being_id_of=_being_id_of,
         turn_reader=memory_turn_clock,
         environment_name=scenario.metadata.title,
-        names_by_player_id={
-            int(spawn.player_id): spawn.name for spawn in scenario.player_spawns
-        },
+        names_by_player_id={int(spawn.player_id): spawn.name for spawn in scenario.player_spawns},
         appearances_by_player_id={
-            int(spawn.player_id): spawn.appearance
-            for spawn in scenario.player_spawns
-            if spawn.appearance is not None
+            int(spawn.player_id): spawn.appearance for spawn in scenario.player_spawns if spawn.appearance is not None
         },
         co_present=_players_share_a_spot,
         trace_recorder_provider=lambda: runtime._trace_recorder,
@@ -6042,9 +5780,7 @@ def create_world_runtime(
         _ui_context_builder=SpotGraphUiContextBuilder(
             encounter_memory=encounter_memory,
             current_tick_provider=lambda: runtime.current_tick(),
-            spot_str_id_resolver=lambda spot_int: scenario.id_mapper.get_str(
-                "spot", spot_int
-            ),
+            spot_str_id_resolver=lambda spot_int: scenario.id_mapper.get_str("spot", spot_int),
             acquaintances=player_acquaintances,
             executed_turn_provider=lambda pid: runtime._execution_turns.get(int(pid.value), 0),
         ),
@@ -6076,14 +5812,10 @@ def create_world_runtime(
         reason_first_two_step_enabled=config.reason_first_two_step_enabled,
         _runtime_config=config,
     )
-    travel_stage.set_on_travel_tick_committed(
-        runtime._record_committed_player_travel_tick
-    )
+    travel_stage.set_on_travel_tick_committed(runtime._record_committed_player_travel_tick)
     travel_stage.add_blocked_observer(runtime._report_travel_blocked)
     world_flag_state.set_change_callback(runtime._record_world_flag_change)
-    scenario_event_stage.set_message_callback(
-        runtime._append_scenario_event_observation
-    )
+    scenario_event_stage.set_message_callback(runtime._append_scenario_event_observation)
     # 発言と操作など、直接発行する経路も同じ観測のパイプラインへ流す。
     # Issue #276: 観測 trace 可視化のため、buffer に積むタイミングで
     # ``TraceEventKind.OBSERVATION`` を記録する。trace_recorder は
@@ -6116,9 +5848,7 @@ def create_world_runtime(
         PlayerDownedOutcomeHandler,
     )
 
-    outcome_observation_formatter = PlayerOutcomeObservationFormatter(
-        scenario.metadata.player_outcome_messages
-    )
+    outcome_observation_formatter = PlayerOutcomeObservationFormatter(scenario.metadata.player_outcome_messages)
 
     def _broadcast_outcome_change(
         player_id: PlayerId,
@@ -6156,9 +5886,7 @@ def create_world_runtime(
             schedules_turn=True,
             breaks_movement=False,
             subject_name=actor_name if withheld_from_strangers else None,
-            if_subject_unknown=(
-                WithheldFromStrangers() if withheld_from_strangers else None
-            ),
+            if_subject_unknown=(WithheldFromStrangers() if withheld_from_strangers else None),
         )
         # 死は世界の設定に従う。追放は常に全員へ。
         #
@@ -6169,10 +5897,7 @@ def create_world_runtime(
         #
         # 追放は会議の場で全員が見て決めたことなので、隠す理由が無い。
         # 殺害と追放で扱いを分ける。
-        if (
-            new_outcome is PlayerOutcomeEnum.DEAD
-            and not scenario.death_semantics.announce_globally
-        ):
+        if new_outcome is PlayerOutcomeEnum.DEAD and not scenario.death_semantics.announce_globally:
             return
         for pid in runtime.get_player_ids():
             runtime._emit_observation_directly(pid, output)
@@ -6189,6 +5914,7 @@ def create_world_runtime(
         RemoveFallenBodyOnReviveHandler,
     )
     from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
+
     class _MarkKillerAsHavingSeenTheBody:
         """倒した本人に「その死体を見つけた」を出さないようにする。
 
@@ -6227,9 +5953,7 @@ def create_world_runtime(
                 )
 
     # 加害者の遭遇記録は確定後の最善努力処理。身体・猶予の正本更新には使わない。
-    pipeline_event_publisher.register_handler(
-        PlayerDownedEvent, _MarkKillerAsHavingSeenTheBody()
-    )
+    pipeline_event_publisher.register_handler(PlayerDownedEvent, _MarkKillerAsHavingSeenTheBody())
     record_fallen_body_handler = RecordFallenBodyHandler(
         registry=fallen_body_registry,
         spot_graph_repository=spot_graph_repo,
@@ -6246,19 +5970,17 @@ def create_world_runtime(
     from ai_rpg_world.application.player.handlers.player_revived_post_hoc_observation_handler import (
         PlayerRevivedPostHocObservationHandler,
     )
-    _caregiver_name_by_pid = {
-        int(spawn.player_id): spawn.name for spawn in scenario.player_spawns
-    }
+
+    _caregiver_name_by_pid = {int(spawn.player_id): spawn.name for spawn in scenario.player_spawns}
     # 倒れている間に自分が対象になった行為の預かり先。倒れている player は
     # observation の宛先から外れる (Phase 4) ので、その瞬間には配れない。
     # 復活時に post hoc summary へ載せる。
     from ai_rpg_world.application.player.services.downed_incident_log import (
         DownedIncidentLog,
     )
+
     downed_incident_log = DownedIncidentLog()
-    remove_fallen_body_handler = RemoveFallenBodyOnReviveHandler(
-        fallen_body_registry
-    )
+    remove_fallen_body_handler = RemoveFallenBodyOnReviveHandler(fallen_body_registry)
     pipeline_event_publisher.register_handler(
         PlayerRevivedEvent,
         PlayerRevivedPostHocObservationHandler(
@@ -6276,6 +5998,7 @@ def create_world_runtime(
     from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
         PlayerInteractedWithPlayerEvent,
     )
+
     pipeline_event_publisher.register_handler(
         PlayerInteractedWithPlayerEvent,
         TargetedWhileDownRecorder(
@@ -6303,9 +6026,7 @@ def create_world_runtime(
     spot_arrival_encounter_handler = SpotArrivalEncounterHandler(
         memory=encounter_memory,
         current_tick_provider=runtime.current_tick,
-        spot_str_id_resolver=lambda spot_int: runtime.id_mapper.get_str(
-            "spot", spot_int
-        ),
+        spot_str_id_resolver=lambda spot_int: runtime.id_mapper.get_str("spot", spot_int),
     )
     pipeline_event_publisher.register_handler(
         _EntityEnteredSpotEvent,
@@ -6585,9 +6306,7 @@ def create_world_runtime(
         ),
         sync_dispatcher=interaction_dispatcher,
         after_commit_handoff=interaction_dispatcher,
-        repository_provider_factory=(
-            InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
-        ),
+        repository_provider_factory=(InMemoryPlayerStatusTickCommandRepositoryProviderFactory()),
     )
     needs_decay_stage.set_command_scope_factory(player_status_tick_scope_factory)
     status_effects_stage.set_command_scope_factory(player_status_tick_scope_factory)
@@ -6607,9 +6326,7 @@ def create_world_runtime(
             InMemoryUnitOfWorkTransactionFactory(data_store),
             sync_dispatcher=food_spoilage_dispatcher,
             after_commit_handoff=food_spoilage_dispatcher,
-            repository_provider_factory=(
-                InMemoryFoodSpoilageCommandRepositoryProviderFactory()
-            ),
+            repository_provider_factory=(InMemoryFoodSpoilageCommandRepositoryProviderFactory()),
         )
         food_spoilage_stage.set_command_scope_factory(food_spoilage_scope_factory)
     from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
@@ -6631,14 +6348,10 @@ def create_world_runtime(
         sync_dispatcher=trade_offer_expiry_dispatcher,
         after_commit_handoff=trade_offer_expiry_dispatcher,
         repository_provider_factory=(
-            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(
-                pending_trade_offer_store
-            )
+            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(pending_trade_offer_store)
         ),
     )
-    trade_offer_expiry_stage.set_command_scope_factory(
-        trade_offer_expiry_scope_factory
-    )
+    trade_offer_expiry_stage.set_command_scope_factory(trade_offer_expiry_scope_factory)
     market_order_expiry_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
@@ -6648,13 +6361,9 @@ def create_world_runtime(
         ),
         sync_dispatcher=interaction_dispatcher,
         after_commit_handoff=interaction_dispatcher,
-        repository_provider_factory=(
-            InMemoryMarketOrderExpiryCommandRepositoryProviderFactory()
-        ),
+        repository_provider_factory=(InMemoryMarketOrderExpiryCommandRepositoryProviderFactory()),
     )
-    market_order_expiry_stage.set_command_scope_factory(
-        market_order_expiry_scope_factory
-    )
+    market_order_expiry_stage.set_command_scope_factory(market_order_expiry_scope_factory)
     if player_outcome_rule_stage is not None:
         player_outcome_rule_scope_factory: CommandScopeFactory[Any] = CommandScopeFactory(
             RollbackParticipantTransactionFactory(
@@ -6668,9 +6377,7 @@ def create_world_runtime(
             sync_dispatcher=interaction_dispatcher,
             after_commit_handoff=interaction_dispatcher,
         )
-        player_outcome_rule_stage.set_command_scope_factory(
-            player_outcome_rule_scope_factory
-        )
+        player_outcome_rule_stage.set_command_scope_factory(player_outcome_rule_scope_factory)
     death_grace_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
@@ -6683,9 +6390,7 @@ def create_world_runtime(
         ),
         sync_dispatcher=interaction_dispatcher,
         after_commit_handoff=interaction_dispatcher,
-        repository_provider_factory=(
-            InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
-        ),
+        repository_provider_factory=(InMemoryPlayerStatusTickCommandRepositoryProviderFactory()),
     )
     death_grace_stage.set_command_scope_factory(death_grace_scope_factory)
     scenario_event_scope_factory = CommandScopeFactory(
@@ -6769,9 +6474,7 @@ def create_world_runtime(
             )
         ),
     )
-    sync_resolver_stage.set_command_scope_factory(
-        synchronized_action_scope_factory
-    )
+    sync_resolver_stage.set_command_scope_factory(synchronized_action_scope_factory)
     from ai_rpg_world.domain.world_graph.event.environment_event import (
         SpotGraphDayNightPhaseChangedEvent,
         SpotGraphWeatherChangedEvent,
@@ -6807,16 +6510,18 @@ def create_world_runtime(
                 event: SpotGraphDayNightPhaseChangedEvent,
             ) -> None:
                 graph = spot_graph_repo.find_graph()
-                pipeline_event_publisher.publish_all((
-                    TimeOfDayChangedEvent.create(
-                        aggregate_id=graph.graph_id,
-                        aggregate_type="SpotGraphAggregate",
-                        old_phase_name=event.old_time.phase_name,
-                        new_phase_name=event.new_time.phase_name,
-                        new_display_text=event.new_time.display_text,
-                        new_is_dark=event.new_time.is_dark,
-                    ),
-                ))
+                pipeline_event_publisher.publish_all(
+                    (
+                        TimeOfDayChangedEvent.create(
+                            aggregate_id=graph.graph_id,
+                            aggregate_type="SpotGraphAggregate",
+                            old_phase_name=event.old_time.phase_name,
+                            new_phase_name=event.new_time.phase_name,
+                            new_display_text=event.new_time.display_text,
+                            new_is_dark=event.new_time.is_dark,
+                        ),
+                    )
+                )
 
             day_night_dispatcher.register_after_commit(
                 SpotGraphDayNightPhaseChangedEvent,
@@ -6855,9 +6560,7 @@ def create_world_runtime(
                 )
             ),
         )
-        monster_behavior_service.set_command_scope_factory(
-            monster_behavior_scope_factory
-        )
+        monster_behavior_service.set_command_scope_factory(monster_behavior_scope_factory)
     if monster_spawn_stage is not None:
         monster_spawn_scope_factory = CommandScopeFactory(
             RollbackParticipantTransactionFactory(
@@ -6950,11 +6653,9 @@ def create_world_runtime(
             )
             for condition in scenario.ongoing_conditions
         ),
-        condition_resolution_observer=lambda notice: (
-            runtime._publish_meeting_condition_resolution(
-                notice.flag,
-                notice.messages,
-            )
+        condition_resolution_observer=lambda notice: runtime._publish_meeting_condition_resolution(
+            notice.flag,
+            notice.messages,
         ),
         player_outcome_registry=outcome_registry,
         meeting_ended_observer=runtime._record_meeting_ended,
@@ -6965,13 +6666,9 @@ def create_world_runtime(
     # day_night_stage / weather_holder が無いシナリオでは provider は None の
     # ままで、該当 condition は「不在として fail」になる (silent skip 回避)。
     if day_night_stage is not None:
-        interaction_service.set_time_of_day_phase_provider(
-            lambda: day_night_stage.current_time_of_day().phase_name
-        )
+        interaction_service.set_time_of_day_phase_provider(lambda: day_night_stage.current_time_of_day().phase_name)
     _weather_type_provider = lambda: (
-        weather_holder["state"].weather_type.value
-        if weather_holder.get("state") is not None
-        else None
+        weather_holder["state"].weather_type.value if weather_holder.get("state") is not None else None
     )
     interaction_service.set_weather_type_provider(_weather_type_provider)
     # PR 3: 対人経路にも同じ provider を配線する。物体経路にだけ入れると
@@ -6994,9 +6691,7 @@ def create_world_runtime(
             trigger=trigger,
         )
     )
-    player_interaction_service.set_effective_lighting_resolver(
-        _effective_lighting_resolver
-    )
+    player_interaction_service.set_effective_lighting_resolver(_effective_lighting_resolver)
     market_service.set_event_publisher(pipeline_event_publisher)
     # 取り落としが誰にも見えないと、採取の結果が手元に無い理由が本人にも
     # 分からない。publisher は runtime を組み終えてからしか作れないので、
@@ -7031,19 +6726,15 @@ def create_world_runtime(
     # 欠けたまま走ると、実験の条件が run のどこにも残らないまま変わる。
     runtime._async_event_executor = AsyncEventExecutor(
         failure_observer=runtime._record_async_delivery_failure,
-        max_workers=config.async_event_workers, max_pending=config.async_event_max_pending,
+        max_workers=config.async_event_workers,
+        max_pending=config.async_event_max_pending,
     )
     runtime._wire_being_stack()
     for spawn in scenario.player_spawns:
         try:
-            runtime._aux_being_provisioning.ensure_attached(
-                PlayerId(int(spawn.player_id))
-            )
+            runtime._aux_being_provisioning.ensure_attached(PlayerId(int(spawn.player_id)))
         except Exception as exc:
-            raise RuntimeError(
-                f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を"
-                "渡せない"
-            ) from exc
+            raise RuntimeError(f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を渡せない") from exc
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
     # (setter 呼び忘れ silent failure を構造で排除)。
@@ -7055,9 +6746,7 @@ def create_world_runtime(
 
     for spawn in scenario.player_spawns:
         player_id = PlayerId(int(spawn.player_id))
-        player_acquaintances.receive_entry(
-            player_id, environment_entry_for_player(scenario, player_id)
-        )
+        player_acquaintances.receive_entry(player_id, environment_entry_for_player(scenario, player_id))
     _record_meetings_at_spawn(scenario, player_acquaintances)
     from ai_rpg_world.application.llm.services.executors.being_episode_index_revision_tool_executor import (
         BeingEpisodeIndexRevisionToolExecutor,
@@ -7073,13 +6762,11 @@ def create_world_runtime(
         trace_recorder_provider=lambda: runtime._trace_recorder,
         current_tick_provider=lambda: runtime.current_tick(),
     )
-    runtime._being_episode_index_revision_tool_executor = (
-        BeingEpisodeIndexRevisionToolExecutor(
-            repository=runtime._being_episode_store,
-            turn_reader=memory_turn_clock,
-            trace_recorder_provider=lambda: runtime._trace_recorder,
-            current_tick_provider=lambda: runtime.current_tick(),
-        )
+    runtime._being_episode_index_revision_tool_executor = BeingEpisodeIndexRevisionToolExecutor(
+        repository=runtime._being_episode_store,
+        turn_reader=memory_turn_clock,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
     )
     from ai_rpg_world.application.being.player_short_term_memory_copy import (
         PlayerShortTermMemoryCopy,
@@ -7130,13 +6817,12 @@ def create_world_runtime(
     # シナリオを読んだ直後に落としたい。** run を 1 本流し終えてから
     # 「無効化したつもりが出たままだった」と気付くのが最悪の形。
     from ai_rpg_world.application.world_runtime.public_sns_wiring import wire_public_sns
+
     wire_public_sns(runtime)
     runtime._validate_disabled_tool_names()
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()
-    episode_index_shown, episode_recall_offered = (
-        runtime._episode_index_parts_named_in_system_prompt()
-    )
+    episode_index_shown, episode_recall_offered = runtime._episode_index_parts_named_in_system_prompt()
     runtime._world_llm_system_prompt = _world_system_prompt(
         persona_block,
         episode_index_shown=episode_index_shown,

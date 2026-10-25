@@ -42,18 +42,14 @@ class MemoCertainty(Enum):
 
 
 #: 上限はプロンプトの大きさの都合で、意味の区切りではない。
-KIND_LIMITS: Mapping[MemoKind, int] = MappingProxyType(
-    {MemoKind.TODO: 5, MemoKind.FACT: 10, MemoKind.PERSON: 5}
-)
+KIND_LIMITS: Mapping[MemoKind, int] = MappingProxyType({MemoKind.TODO: 5, MemoKind.FACT: 10, MemoKind.PERSON: 5})
 
 
 def _require_text(value: object, field_name: str, *, max_length: int | None = None) -> None:
     if not isinstance(value, str) or not value.strip():
         raise MemoValidationException(f"{field_name} must be non-blank str")
     if max_length is not None and len(value) > max_length:
-        raise MemoValidationException(
-            f"{field_name} must be at most {max_length} characters, got {len(value)}"
-        )
+        raise MemoValidationException(f"{field_name} must be at most {max_length} characters, got {len(value)}")
 
 
 def _require_turn(value: object, field_name: str) -> None:
@@ -105,12 +101,8 @@ class MemoProvenance:
                 raise MemoValidationException("source_from must be None when source is self")
             return
         _require_text(self.source_from, "source_from")
-        if self.source is MemoSource.EPISODE and not str(self.source_from).startswith(
-            EPISODE_HANDLE_PREFIX
-        ):
-            raise MemoValidationException(
-                f"source_from must be an episode handle, got {self.source_from!r}"
-            )
+        if self.source is MemoSource.EPISODE and not str(self.source_from).startswith(EPISODE_HANDLE_PREFIX):
+            raise MemoValidationException(f"source_from must be an episode handle, got {self.source_from!r}")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -136,9 +128,7 @@ class Memo:
             or len(id_part) < HANDLE_MIN_ID_LENGTH
             or not hex_id.startswith(id_part)
         ):
-            raise MemoValidationException(
-                f"handle {self.handle!r} does not come from memo_id {self.memo_id!r}"
-            )
+            raise MemoValidationException(f"handle {self.handle!r} does not come from memo_id {self.memo_id!r}")
         if not isinstance(self.kind, MemoKind):
             raise MemoValidationException("kind must be MemoKind")
         _require_text(self.text, "text", max_length=MEMO_TEXT_MAX_LENGTH)
@@ -155,9 +145,7 @@ class Memo:
         _require_text(self.environment_name, "environment_name")
 
 
-def _require_known_episode(
-    provenance: MemoProvenance | None, known_episode_handles: Collection[str]
-) -> None:
+def _require_known_episode(provenance: MemoProvenance | None, known_episode_handles: Collection[str]) -> None:
     if (
         provenance is not None
         and provenance.source is MemoSource.EPISODE
@@ -256,9 +244,7 @@ class MemoBook(AggregateRoot[MemoBookEvent]):
     ) -> None:
         """``known_episode_handles`` は、出どころに書けるエピソードの呼び名。"""
         if isinstance(kind, MemoKind) and self._count(kind) >= KIND_LIMITS[kind]:
-            raise MemoLimitReachedException(
-                f"{kind.value} memos are at the limit of {KIND_LIMITS[kind]}"
-            )
+            raise MemoLimitReachedException(f"{kind.value} memos are at the limit of {KIND_LIMITS[kind]}")
         _require_known_episode(provenance, known_episode_handles)
         memo = Memo(
             memo_id=memo_id,

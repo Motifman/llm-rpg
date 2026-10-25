@@ -75,9 +75,7 @@ class MemoOperationsOutcome:
     rejected: tuple[RejectedMemoOperation, ...]
 
 
-def _from_unknown_episode(
-    provenance: MemoProvenance | None, known_episode_handles: Collection[str]
-) -> bool:
+def _from_unknown_episode(provenance: MemoProvenance | None, known_episode_handles: Collection[str]) -> bool:
     return (
         provenance is not None
         and provenance.source is MemoSource.EPISODE

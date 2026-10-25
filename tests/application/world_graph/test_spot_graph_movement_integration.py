@@ -243,9 +243,7 @@ def test_first_arrival_callback_survives_a_later_player_failure() -> None:
                 raise RuntimeError("second player failed")
             status = player_repo.find_by_id(player_id)
             assert status is not None
-            status.set_spot_navigation_state(
-                PlayerSpotNavigationState.at_rest(SpotId.create(2))
-            )
+            status.set_spot_navigation_state(PlayerSpotNavigationState.at_rest(SpotId.create(2)))
             player_repo.save(status)
 
     arrived: list[int] = []
@@ -281,20 +279,14 @@ class TestTravelStageEliminatedPlayer:
             _FixedContext(items=frozenset(), flags=frozenset()),
         )
         stage.set_eliminated_checker(lambda player_id: player_id == PlayerId(1))
-        svc.start_travel_to_spot(
-            PlayerId(1), SpotId.create(2), frozenset(), frozenset()
-        )
+        svc.start_travel_to_spot(PlayerId(1), SpotId.create(2), frozenset(), frozenset())
 
         stage.run(WorldTick(1))
 
         player = player_repo.find_by_id(PlayerId(1))
         assert player is not None
-        assert player.spot_navigation_state == PlayerSpotNavigationState.at_rest(
-            SpotId.create(1)
-        )
-        assert graph_repo.find_graph().get_entity_spot(
-            EntityId.create(1)
-        ) == SpotId.create(1)
+        assert player.spot_navigation_state == PlayerSpotNavigationState.at_rest(SpotId.create(1))
+        assert graph_repo.find_graph().get_entity_spot(EntityId.create(1)) == SpotId.create(1)
 
     def test_active_player_still_advances_reserved_travel(self) -> None:
         """退場していない移動中 player は、従来どおり次の spot へ進む。"""
@@ -309,20 +301,14 @@ class TestTravelStageEliminatedPlayer:
             _FixedContext(items=frozenset(), flags=frozenset()),
         )
         stage.set_eliminated_checker(lambda _player_id: False)
-        svc.start_travel_to_spot(
-            PlayerId(1), SpotId.create(2), frozenset(), frozenset()
-        )
+        svc.start_travel_to_spot(PlayerId(1), SpotId.create(2), frozenset(), frozenset())
 
         stage.run(WorldTick(1))
 
         player = player_repo.find_by_id(PlayerId(1))
         assert player is not None
-        assert player.spot_navigation_state == PlayerSpotNavigationState.at_rest(
-            SpotId.create(2)
-        )
-        assert graph_repo.find_graph().get_entity_spot(
-            EntityId.create(1)
-        ) == SpotId.create(2)
+        assert player.spot_navigation_state == PlayerSpotNavigationState.at_rest(SpotId.create(2))
+        assert graph_repo.find_graph().get_entity_spot(EntityId.create(1)) == SpotId.create(2)
 
 
 class TestTravelStageOnArrival:
@@ -344,7 +330,9 @@ class TestTravelStageOnArrival:
         ctx = _FixedContext(items=frozenset(), flags=frozenset())
         arrived: list[int] = []
         stage = SpotGraphTravelStageService(
-            player_repo, svc, ctx,
+            player_repo,
+            svc,
+            ctx,
             on_arrival=lambda pid: arrived.append(pid.value),
         )
 
@@ -365,7 +353,9 @@ class TestTravelStageOnArrival:
         ctx = _FixedContext(items=frozenset(), flags=frozenset())
         arrived: list[int] = []
         stage = SpotGraphTravelStageService(
-            player_repo, svc, ctx,
+            player_repo,
+            svc,
+            ctx,
             on_arrival=lambda pid: arrived.append(pid.value),
         )
 
@@ -425,9 +415,9 @@ class TestTravelStageOnArrival:
         assert p is not None
         assert p.spot_navigation_state is not None
         assert not p.spot_navigation_state.is_traveling
-        assert [
-            e.payload["stage"] for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
-        ] == ["travel.arrival_observer"]
+        assert [e.payload["stage"] for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)] == [
+            "travel.arrival_observer"
+        ]
 
 
 class TestUnreachableTravelMessageHidesSpotIds:
@@ -443,9 +433,7 @@ class TestUnreachableTravelMessageHidesSpotIds:
         svc = _movement_service(graph_repo, player_repo)
 
         with pytest.raises(SpotTravelUnreachableException) as excinfo:
-            svc.start_travel_to_spot(
-                PlayerId(1), SpotId.create(19), frozenset(), frozenset()
-            )
+            svc.start_travel_to_spot(PlayerId(1), SpotId.create(19), frozenset(), frozenset())
 
         assert str(excinfo.value) == "その先へは行けない。"
 
@@ -455,18 +443,14 @@ class TestUnreachableTravelMessageHidesSpotIds:
         """唯一の経路の通路が通れなくなる (水で沈むなど) と、同じ行き先の指定が「その先へは行けない。」で失敗する。"""
         graph = _line_graph_three_spots()
         flooded = graph.get_connection(ConnectionId.create(2))
-        graph.set_connection_passage(
-            ConnectionId.create(2), replace(flooded.passage, traversable=False)
-        )
+        graph.set_connection_passage(ConnectionId.create(2), replace(flooded.passage, traversable=False))
         graph_repo = InMemorySpotGraphRepository(graph)
         player_repo = InMemoryPlayerStatusRepository()
         player_repo.save(create_test_status_aggregate(player_id=1))
         svc = _movement_service(graph_repo, player_repo)
 
         with pytest.raises(SpotTravelUnreachableException) as excinfo:
-            svc.start_travel_to_spot(
-                PlayerId(1), SpotId.create(3), frozenset(), frozenset()
-            )
+            svc.start_travel_to_spot(PlayerId(1), SpotId.create(3), frozenset(), frozenset())
 
         assert str(excinfo.value) == "その先へは行けない。"
 
@@ -492,8 +476,6 @@ class TestUnreachableTravelMessageHidesSpotIds:
         )
 
         with pytest.raises(SpotTravelUnreachableException) as excinfo:
-            svc.start_travel_to_spot(
-                PlayerId(1), SpotId.create(19), frozenset(), frozenset()
-            )
+            svc.start_travel_to_spot(PlayerId(1), SpotId.create(19), frozenset(), frozenset())
 
         assert str(excinfo.value) == "その先へは行けない。"

@@ -22,7 +22,9 @@ class TestPostAggregate:
         content = PostContent("テスト投稿")
         parent_post_id = PostId(2)
 
-        with pytest.raises(InvalidParentReferenceException, match="ポストは親ポストまたは親リプライを持つことはできません"):
+        with pytest.raises(
+            InvalidParentReferenceException, match="ポストは親ポストまたは親リプライを持つことはできません"
+        ):
             PostAggregate(post_id, author_user_id, content, set(), set(), set(), False, parent_post_id)
 
     def test_reply_ids_management(self):
@@ -38,6 +40,7 @@ class TestPostAggregate:
 
         # リプライ追加
         from ai_rpg_world.domain.sns.value_object import ReplyId
+
         reply_id1 = ReplyId(1)
         reply_id2 = ReplyId(2)
 
@@ -87,7 +90,9 @@ def test_created_at_sort_key():
     post = PostAggregate.create(PostId(1), UserId(1), PostContent("テスト投稿"))
     assert isinstance(post.get_sort_key_by_created_at(), datetime)
     assert post.get_sort_key_by_created_at() == post.created_at
-    restored = PostAggregate.create_from_db(PostId(1), UserId(1), PostContent("テスト投稿"), set(), set(), set(), created_at=SAVED_AT)
+    restored = PostAggregate.create_from_db(
+        PostId(1), UserId(1), PostContent("テスト投稿"), set(), set(), set(), created_at=SAVED_AT
+    )
     assert restored.get_sort_key_by_created_at() == SAVED_AT
 
 
@@ -99,9 +104,17 @@ def test_get_display_info_preserves_saved_fields():
     post.add_reply(ReplyId(1))
     post.add_reply(ReplyId(2))
     expected = {
-        "post_id": 1, "author_user_id": 1, "content": "テスト投稿", "hashtags": ["#test"],
-        "visibility": "public", "like_count": 1, "reply_count": 2,
-        "is_liked_by_viewer": False, "is_replied_by_viewer": False, "mentioned_users": [], "is_deleted": False,
+        "post_id": 1,
+        "author_user_id": 1,
+        "content": "テスト投稿",
+        "hashtags": ["#test"],
+        "visibility": "public",
+        "like_count": 1,
+        "reply_count": 2,
+        "is_liked_by_viewer": False,
+        "is_replied_by_viewer": False,
+        "mentioned_users": [],
+        "is_deleted": False,
     }
     displayed = post.get_display_info(UserId(3))
     assert {key: displayed[key] for key in expected} == expected

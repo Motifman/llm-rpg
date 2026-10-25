@@ -171,7 +171,9 @@ def _event(event_id: str, *, full_effects: bool) -> ScenarioEventDef:
     )
 
 
-def _unwired_stage(events: tuple[ScenarioEventDef, ...]) -> tuple[
+def _unwired_stage(
+    events: tuple[ScenarioEventDef, ...],
+) -> tuple[
     SpotGraphScenarioEventStageService,
     MagicMock,
     MagicMock,
@@ -200,9 +202,7 @@ def _unwired_stage(events: tuple[ScenarioEventDef, ...]) -> tuple[
 
 def test_missing_scope_rejects_before_reading_world_state() -> None:
     """event定義があれば確定区間未配線を進捗・graph評価より先に拒否する。"""
-    stage, progress, graph_repository, evaluator = _unwired_stage(
-        (_event("alarm", full_effects=False),)
-    )
+    stage, progress, graph_repository, evaluator = _unwired_stage((_event("alarm", full_effects=False),))
 
     with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
         stage.run(WorldTick(1))

@@ -82,17 +82,17 @@ class TestActionLabelsCarryConditionHints:
 
     def test_lighting_condition_becomes_a_hint(self) -> None:
         """SPOT_LIGHTING_IS は「暗い場所のみ」として添う。"""
-        svc = _service(_definition(
-            "strike_down",
-            InteractionCondition(
-                condition_type=InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
-                required_lighting="DARK",
-            ),
-            display_label="背後から襲う",
-        ))
-        assert svc.available_action_labels() == (
-            '背後から襲う → "strike_down"（暗い場所のみ）',
+        svc = _service(
+            _definition(
+                "strike_down",
+                InteractionCondition(
+                    condition_type=InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
+                    required_lighting="DARK",
+                ),
+                display_label="背後から襲う",
+            )
         )
+        assert svc.available_action_labels() == ('背後から襲う → "strike_down"（暗い場所のみ）',)
 
     def test_required_item_becomes_a_hint(self) -> None:
         """HAS_ITEM は品目名つきで「ナイフが要る」として添う。
@@ -129,18 +129,18 @@ class TestActionLabelsCarryConditionHints:
             ),
             item_names={7: "ナイフ"},
         )
-        assert svc.available_action_labels() == (
-            '"strike_down"（暗い場所のみ・ナイフが要る）',
-        )
+        assert svc.available_action_labels() == ('"strike_down"（暗い場所のみ・ナイフが要る）',)
 
     def test_action_without_hintable_conditions_stays_bare(self) -> None:
         """ヒントに落とせる条件が無ければ、名前だけを返す。"""
-        svc = _service(_definition(
-            "tend",
-            InteractionCondition(
-                condition_type=InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED,
-            ),
-        ))
+        svc = _service(
+            _definition(
+                "tend",
+                InteractionCondition(
+                    condition_type=InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED,
+                ),
+            )
+        )
         assert svc.available_action_labels() == ('"tend"',)
 
     def test_unresolvable_item_name_degrades_to_no_hint(self) -> None:
@@ -174,11 +174,13 @@ class TestActionNamesStayBare:
         行為者の state を渡す。渡さないと空が返る (伏せた操作の名前が
         案内から漏れていたため、行為者ごとに絞るようにした)。
         """
-        svc = _service(_definition(
-            "strike_down",
-            InteractionCondition(
-                condition_type=InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
-                required_lighting="DARK",
-            ),
-        ))
+        svc = _service(
+            _definition(
+                "strike_down",
+                InteractionCondition(
+                    condition_type=InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
+                    required_lighting="DARK",
+                ),
+            )
+        )
         assert svc.available_action_names({}) == ("strike_down",)

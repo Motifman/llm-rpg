@@ -98,9 +98,7 @@ def _decode_list(
         try:
             out.append(decoder(item))
         except (KeyError, ValueError, TypeError) as exc:
-            raise BeingMemoryPayloadFormatError(
-                f"payload[{key!r}][{idx}] is malformed: {exc!r}"
-            ) from exc
+            raise BeingMemoryPayloadFormatError(f"payload[{key!r}][{idx}] is malformed: {exc!r}") from exc
     return out
 
 
@@ -164,17 +162,21 @@ class BeingMemorySnapshotService:
 
     # PR-F: 本 service が emit / accept する payload key の SSOT。
     # 新 store を足す PR は、ここに 1 行追加 + capture/restore 更新で揃える。
-    EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
-        "memory_turn",
-        "acquaintances",
-        "being_episodes",
-        "being_memo_book",
-        "being_short_term_memory",
-    })
+    EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset(
+        {
+            "memory_turn",
+            "acquaintances",
+            "being_episodes",
+            "being_memo_book",
+            "being_short_term_memory",
+        }
+    )
     # 後から足したキー。足す前に保存した snapshot には無いので、無ければ空として読む。
-    ADDED_PAYLOAD_KEYS: frozenset[str] = frozenset({
-        "being_short_term_memory",
-    })
+    ADDED_PAYLOAD_KEYS: frozenset[str] = frozenset(
+        {
+            "being_short_term_memory",
+        }
+    )
 
     def __init__(
         self,
@@ -210,20 +212,12 @@ class BeingMemorySnapshotService:
         }
         memory_turn = self._memory_turn_clock.current_turn(being_id)
         payload["memory_turn"] = [memory_turn] if memory_turn else []
-        payload["acquaintances"] = [
-            acquaintance_to_dict(a) for a in self._acquaintance.list_by_being(being_id)
-        ]
-        payload["being_episodes"] = [
-            being_episode_to_dict(e) for e in self._being_episode.list_by_being(being_id)
-        ]
-        payload["being_memo_book"] = [
-            being_memo_to_dict(m) for m in self._being_memo.get(being_id).memos
-        ]
+        payload["acquaintances"] = [acquaintance_to_dict(a) for a in self._acquaintance.list_by_being(being_id)]
+        payload["being_episodes"] = [being_episode_to_dict(e) for e in self._being_episode.list_by_being(being_id)]
+        payload["being_memo_book"] = [being_memo_to_dict(m) for m in self._being_memo.get(being_id).memos]
         short_term_memory = self._being_short_term_memory.get(being_id)
         payload["being_short_term_memory"] = (
-            []
-            if short_term_memory.is_empty()
-            else [being_short_term_memory_to_dict(short_term_memory)]
+            [] if short_term_memory.is_empty() else [being_short_term_memory_to_dict(short_term_memory)]
         )
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
         # しているか起動時に確認する。新 store を追加して EXPECTED に key を
@@ -255,20 +249,15 @@ class BeingMemorySnapshotService:
         try:
             payload = json.loads(payload_json)
         except json.JSONDecodeError as exc:
-            raise BeingMemoryPayloadFormatError(
-                f"payload_json is not valid JSON: {exc}"
-            ) from exc
+            raise BeingMemoryPayloadFormatError(f"payload_json is not valid JSON: {exc}") from exc
 
         if not isinstance(payload, dict):
-            raise BeingMemoryPayloadFormatError(
-                f"payload root must be object, got {type(payload).__name__}"
-            )
+            raise BeingMemoryPayloadFormatError(f"payload root must be object, got {type(payload).__name__}")
 
         version = payload.get("schema_version")
         if version not in SUPPORTED_PAYLOAD_SCHEMA_VERSIONS:
             raise BeingMemoryPayloadSchemaError(
-                f"schema_version={version!r} is not supported "
-                f"(supported: {sorted(SUPPORTED_PAYLOAD_SCHEMA_VERSIONS)})"
+                f"schema_version={version!r} is not supported (supported: {sorted(SUPPORTED_PAYLOAD_SCHEMA_VERSIONS)})"
             )
 
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を一括 validate。
@@ -281,13 +270,9 @@ class BeingMemorySnapshotService:
         }
         for key in sorted(self.EXPECTED_PAYLOAD_KEYS):
             if key not in payload:
-                raise BeingMemoryPayloadFormatError(
-                    f"payload missing required key: {key!r}"
-                )
+                raise BeingMemoryPayloadFormatError(f"payload missing required key: {key!r}")
             if not isinstance(payload[key], list):
-                raise BeingMemoryPayloadFormatError(
-                    f"payload[{key!r}] must be list, got {type(payload[key]).__name__}"
-                )
+                raise BeingMemoryPayloadFormatError(f"payload[{key!r}] must be list, got {type(payload[key]).__name__}")
 
         # 形式 validation はここまで。以降は VO へのデコード → bulk write。
         # 個別 VO 構築中の KeyError / ValueError / TypeError は本 service の
@@ -296,22 +281,16 @@ class BeingMemorySnapshotService:
         # (= silent failure を作らない、呼出側に伝播する)。
         memory_turn_raw = payload["memory_turn"]
         if len(memory_turn_raw) > 1 or not all(
-            isinstance(v, int) and not isinstance(v, bool) and v > 0
-            for v in memory_turn_raw
+            isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in memory_turn_raw
         ):
             raise BeingMemoryPayloadFormatError(
-                "payload['memory_turn'] must be [] or [positive int], "
-                f"got {memory_turn_raw!r}"
+                f"payload['memory_turn'] must be [] or [positive int], got {memory_turn_raw!r}"
             )
         memory_turn = memory_turn_raw[0] if memory_turn_raw else 0
-        acquaintances = _decode_list(
-            payload["acquaintances"], dict_to_acquaintance, "acquaintances"
-        )
+        acquaintances = _decode_list(payload["acquaintances"], dict_to_acquaintance, "acquaintances")
         acquaintance_keys = [(a.environment_name, a.name) for a in acquaintances]
         if len(set(acquaintance_keys)) != len(acquaintance_keys):
-            raise BeingMemoryPayloadFormatError(
-                "payload['acquaintances'] has the same person twice"
-            )
+            raise BeingMemoryPayloadFormatError("payload['acquaintances'] has the same person twice")
         being_episodes = _decode_list(
             payload["being_episodes"],
             lambda data: dict_to_being_episode(data, being_id=being_id),
@@ -320,32 +299,23 @@ class BeingMemorySnapshotService:
         for field_name in ("episode_id", "handle"):
             values = [getattr(e, field_name) for e in being_episodes]
             if len(set(values)) != len(values):
-                raise BeingMemoryPayloadFormatError(
-                    f"payload['being_episodes'] has the same {field_name} twice"
-                )
-        being_memos = _decode_list(
-            payload["being_memo_book"], dict_to_being_memo, "being_memo_book"
-        )
+                raise BeingMemoryPayloadFormatError(f"payload['being_episodes'] has the same {field_name} twice")
+        being_memos = _decode_list(payload["being_memo_book"], dict_to_being_memo, "being_memo_book")
         try:
             being_memo_book = MemoBook(being_id, memos=tuple(being_memos))
         except MemoValidationException as exc:
-            raise BeingMemoryPayloadFormatError(
-                f"payload['being_memo_book'] is not a valid memo book: {exc}"
-            ) from exc
+            raise BeingMemoryPayloadFormatError(f"payload['being_memo_book'] is not a valid memo book: {exc}") from exc
         short_term_raw = payload["being_short_term_memory"]
         if len(short_term_raw) > 1:
             raise BeingMemoryPayloadFormatError(
-                "payload['being_short_term_memory'] must be [] or [one memory], "
-                f"got {len(short_term_raw)} items"
+                f"payload['being_short_term_memory'] must be [] or [one memory], got {len(short_term_raw)} items"
             )
         short_term_memories = _decode_list(
             short_term_raw,
             lambda data: dict_to_being_short_term_memory(data, being_id=being_id),
             "being_short_term_memory",
         )
-        short_term_memory = (
-            short_term_memories[0] if short_term_memories else ShortTermMemory.empty(being_id)
-        )
+        short_term_memory = short_term_memories[0] if short_term_memories else ShortTermMemory.empty(being_id)
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)
         self._being_episode.replace_all_by_being(being_id, being_episodes)

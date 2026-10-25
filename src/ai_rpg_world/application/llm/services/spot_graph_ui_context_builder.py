@@ -285,9 +285,7 @@ def _format_inventory_item_contract_mark(
     ことを伝える安全上の契約なので、作者の散文で置き換えない。
     """
     if item_type == "consumable":
-        return _format_consumable_item_category_tag(
-            category
-        ) or _format_item_type_tag(item_type)
+        return _format_consumable_item_category_tag(category) or _format_item_type_tag(item_type)
     if str(category or "").strip().upper() in ("LORE", "DOCUMENT"):
         return _format_item_category_tag(category)
     return ""
@@ -444,19 +442,11 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         acquaintances: PlayerAcquaintances | None = None,
         executed_turn_provider: Callable[[PlayerId], int] | None = None,
     ) -> None:
-        if encounter_memory is not None and not isinstance(
-            encounter_memory, IEncounterMemory
-        ):
-            raise TypeError(
-                "encounter_memory must be IEncounterMemory or None"
-            )
-        if current_tick_provider is not None and not callable(
-            current_tick_provider
-        ):
+        if encounter_memory is not None and not isinstance(encounter_memory, IEncounterMemory):
+            raise TypeError("encounter_memory must be IEncounterMemory or None")
+        if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
-        if spot_str_id_resolver is not None and not callable(
-            spot_str_id_resolver
-        ):
+        if spot_str_id_resolver is not None and not callable(spot_str_id_resolver):
             raise TypeError("spot_str_id_resolver must be callable or None")
         if executed_turn_provider is not None and not callable(executed_turn_provider):
             raise TypeError("executed_turn_provider must be callable or None")
@@ -481,9 +471,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         return phase if isinstance(phase, GamePhase) else GamePhase.FREE_ROAM
 
     @classmethod
-    def _what_the_departed_can_do_now(
-        cls, current_state: PlayerCurrentStateDto | None
-    ) -> str:
+    def _what_the_departed_can_do_now(cls, current_state: PlayerCurrentStateDto | None) -> str:
         """死者がいまできることを、実際に出すツールに合わせて書く。
 
         会議中は死者にも travel_to / interact を出さない。常に「移動と点検は
@@ -491,15 +479,11 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         TOOL_NOT_OFFERED_NOW になっていた。
         """
         in_meeting = cls._phase_of(current_state) is GamePhase.MEETING
-        if ToolExposure.offers_to_departed(
-            "travel_to", in_meeting=in_meeting
-        ) and ToolExposure.offers_to_departed("interact", in_meeting=in_meeting):
+        if ToolExposure.offers_to_departed("travel_to", in_meeting=in_meeting) and ToolExposure.offers_to_departed(
+            "interact", in_meeting=in_meeting
+        ):
             return "移動と許された点検作業は続けられ、変えた物の状態は生者とも共有される。"
-        vote = (
-            ""
-            if ToolExposure.offers_to_departed("vote", in_meeting=in_meeting)
-            else "投票はできない。"
-        )
+        vote = "" if ToolExposure.offers_to_departed("vote", in_meeting=in_meeting) else "投票はできない。"
         return (
             "話し合いのあいだは、話すことと様子を見ることしかできず、"
             f"{vote}話し合いが終われば、移動と許された点検作業に戻れる。"
@@ -542,12 +526,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         # **ここで is_meeting を見ない。** ビルダごとに分岐を書くと、節を
         # 1 つ足した人が忘れる (死の観測・ツールの出し分けで踏んだ形)。
         builders = {
-            PromptSection.CONNECTIONS: lambda: self._build_connection_section(
-                snap, allocator, collector, extra_lines
-            ),
-            PromptSection.OBJECTS: lambda: self._build_object_section(
-                snap, allocator, collector, extra_lines
-            ),
+            PromptSection.CONNECTIONS: lambda: self._build_connection_section(snap, allocator, collector, extra_lines),
+            PromptSection.OBJECTS: lambda: self._build_object_section(snap, allocator, collector, extra_lines),
             PromptSection.SUB_LOCATIONS: lambda: self._build_sub_location_section(
                 snap, allocator, collector, extra_lines
             ),
@@ -555,39 +535,27 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 snap, allocator, collector, extra_lines, viewer_player_id
             ),
             PromptSection.ENTITIES_PLAIN: lambda: self._build_entity_section(
-                snap, allocator, collector, extra_lines, viewer_player_id,
+                snap,
+                allocator,
+                collector,
+                extra_lines,
+                viewer_player_id,
                 with_actions=False,
             ),
-            PromptSection.MONSTERS: lambda: self._build_monster_section(
-                snap, allocator, collector, extra_lines
-            ),
-            PromptSection.MERCHANTS: lambda: self._build_merchant_section(
-                snap, allocator, collector, extra_lines
-            ),
-            PromptSection.MARKET_BOARD: lambda: self._build_market_section(
-                snap, extra_lines
-            ),
+            PromptSection.MONSTERS: lambda: self._build_monster_section(snap, allocator, collector, extra_lines),
+            PromptSection.MERCHANTS: lambda: self._build_merchant_section(snap, allocator, collector, extra_lines),
+            PromptSection.MARKET_BOARD: lambda: self._build_market_section(snap, extra_lines),
             PromptSection.GOLD: lambda: self._build_gold_section(snap, extra_lines),
-            PromptSection.TRADE_OFFERS: lambda: self._build_trade_offer_section(
-                snap, extra_lines
-            ),
-            PromptSection.INVENTORY: lambda: self._build_inventory_section(
-                snap, allocator, collector, extra_lines
-            ),
+            PromptSection.TRADE_OFFERS: lambda: self._build_trade_offer_section(snap, extra_lines),
+            PromptSection.INVENTORY: lambda: self._build_inventory_section(snap, allocator, collector, extra_lines),
             PromptSection.GROUND_ITEMS: lambda: self._build_ground_items_section(
                 snap, allocator, collector, extra_lines
             ),
             PromptSection.NEEDS: lambda: (
-                None
-                if getattr(snap, "viewer_is_departed", False)
-                else self._build_needs_section(snap, extra_lines)
+                None if getattr(snap, "viewer_is_departed", False) else self._build_needs_section(snap, extra_lines)
             ),
-            PromptSection.ACTIVE_EFFECTS: lambda: self._build_active_effects_section(
-                snap, extra_lines
-            ),
-            PromptSection.AGENT_STATUS: lambda: self._build_agent_status_section(
-                snap, extra_lines
-            ),
+            PromptSection.ACTIVE_EFFECTS: lambda: self._build_active_effects_section(snap, extra_lines),
+            PromptSection.AGENT_STATUS: lambda: self._build_agent_status_section(snap, extra_lines),
         }
         for section in sections_for(self._phase_of(current_state)):
             builders[section]()
@@ -599,11 +567,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
 
         augmented_text = annotated_current_state_text
         if extra_lines:
-            augmented_text = (
-                annotated_current_state_text.rstrip()
-                + "\n"
-                + "\n".join(extra_lines)
-            )
+            augmented_text = annotated_current_state_text.rstrip() + "\n" + "\n".join(extra_lines)
 
         return LlmUiContextDto(
             current_state_text=augmented_text,
@@ -633,9 +597,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             return current_state_text
         if snap.current_spot_id is None:
             return current_state_text
-        annotation = self._spot_familiarity_annotation(
-            viewer_player_id, snap.current_spot_id
-        )
+        annotation = self._spot_familiarity_annotation(viewer_player_id, snap.current_spot_id)
         if annotation is None:
             return current_state_text
         # 「現在地: <name>」line を find & 1 行だけ差し替える。description は触らない。
@@ -660,18 +622,14 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         try:
             spot_str_id = self._spot_str_id_resolver(spot_int_id)  # type: ignore[misc]
         except Exception:
-            _logger.exception(
-                "spot_str_id_resolver failed (spot_id=%s)", spot_int_id
-            )
+            _logger.exception("spot_str_id_resolver failed (spot_id=%s)", spot_int_id)
             return None
         try:
             record = self._encounter_memory.lookup(  # type: ignore[union-attr]
                 viewer_player_id, EncounterKey.spot(spot_str_id)
             )
         except Exception:
-            _logger.exception(
-                "encounter_memory.lookup failed (spot=%s)", spot_str_id
-            )
+            _logger.exception("encounter_memory.lookup failed (spot=%s)", spot_str_id)
             return None
         if record is None or not record.is_first:
             return None
@@ -680,13 +638,9 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         try:
             turn = self._executed_turn_provider(viewer_player_id)
         except Exception:
-            _logger.exception(
-                "executed_turn_provider failed (player=%s)", viewer_player_id
-            )
+            _logger.exception("executed_turn_provider failed (player=%s)", viewer_player_id)
             return None
-        shown_at = self._first_visit_shown_at.setdefault(
-            (int(viewer_player_id.value), spot_str_id), turn
-        )
+        shown_at = self._first_visit_shown_at.setdefault((int(viewer_player_id.value), spot_str_id), turn)
         return "(初めて訪れた)" if shown_at == turn else None
 
     def _player_familiarity_annotation(
@@ -698,13 +652,9 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         if self._acquaintances is None or viewer_player_id is None:
             return None
         try:
-            met = self._acquaintances.find_player(
-                viewer_player_id, PlayerId(int(target_entity_id))
-            )
+            met = self._acquaintances.find_player(viewer_player_id, PlayerId(int(target_entity_id)))
         except Exception:
-            _logger.exception(
-                "acquaintances.find_player failed (player=%s)", target_entity_id
-            )
+            _logger.exception("acquaintances.find_player failed (player=%s)", target_entity_id)
             return None
         if met is not None and met.is_first_meeting:
             return "(初めて会った)"
@@ -858,9 +808,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 # 中身が「永久に届かない」と分かっているときだけ具体に
                 # なる。ここを別の分岐にすると、いままで注記の無かった行に
                 # 注記が生えて、run の差分の出どころが分からなくなる。
-                notes = tuple(
-                    getattr(entry, "unreachable_attribute_notes", ()) or ()
-                ) or (_NOTHING_FOR_THIS_ACTOR,)
+                notes = tuple(getattr(entry, "unreachable_attribute_notes", ()) or ()) or (_NOTHING_FOR_THIS_ACTOR,)
                 act_str = f" [{'、'.join(notes)}]"
             else:
                 act_str = ""
@@ -871,9 +819,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             state_part = _format_object_state(entry.state)
             # PR-FF (Y_after_pr639_640 後続): object 名を ``""`` で囲む
             # (PR #639/#640 で導入した quote 規約を全 section に拡張)。
-            lines.append(
-                f"  - \"{disambiguated_name}\"{state_part}{desc_part}{act_str}"
-            )
+            lines.append(f'  - "{disambiguated_name}"{state_part}{desc_part}{act_str}')
             if blocked_action_labels:
                 lines.append(f"      いまできない: {'、'.join(blocked_action_labels)}")
             # 世界に操作が無い物体は情景にだけ残す。一方、行為者の伏せた条件で
@@ -913,7 +859,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             disambiguated_name = disamb[i]
             here = "（現在ここ）" if entry.is_current else ""
             # PR-FF: sub_location 名を ``""`` で囲む (quote 規約の拡張)
-            lines.append(f"  - \"{disambiguated_name}\"{here}")
+            lines.append(f'  - "{disambiguated_name}"{here}')
             collector.add(
                 label,
                 ToolRuntimeTargetDto(
@@ -954,18 +900,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         # 案内はツールが在る世界でだけ書く。無い世界で勧めると、選べない
         # 手段を勧めることになる。
         if with_actions and getattr(snap, "can_give_item", True):
-            lines.append(
-                "同じ場所にいるプレイヤー: "
-                "(倒れていない相手には give_item で所持品を直接渡せる)"
-            )
+            lines.append("同じ場所にいるプレイヤー: (倒れていない相手には give_item で所持品を直接渡せる)")
         elif with_actions:
             lines.append("同じ場所にいるプレイヤー:")
         else:
             lines.append("この場に居る人:")
-        entity_names = [
-            (e.display_name or f"プレイヤー({e.entity_id})")
-            for e in snap.nearby_entities
-        ]
+        entity_names = [(e.display_name or f"プレイヤー({e.entity_id})") for e in snap.nearby_entities]
         disamb = _build_ordinal_disambiguator(entity_names)
         for i, entry in enumerate(snap.nearby_entities):
             label = allocator.next(PREFIX_ENTITY)
@@ -1009,12 +949,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             carried_suffix = ""
             if is_dead or entry.is_down:
                 carried = tuple(getattr(entry, "carried_item_names", ()) or ())
-                carried_suffix = (
-                    f" 〔{'、'.join(carried)}〕" if carried else " 〔手ぶら〕"
-                )
-            familiarity = self._player_familiarity_annotation(
-                viewer_player_id, entry.entity_id
-            )
+                carried_suffix = f" 〔{'、'.join(carried)}〕" if carried else " 〔手ぶら〕"
+            familiarity = self._player_familiarity_annotation(viewer_player_id, entry.entity_id)
             familiarity_suffix = f" {familiarity}" if familiarity else ""
             # PR-FF: 他プレイヤー名を ``""`` で囲む (quote 規約の拡張)。
             # whisper / give_item / tend_to_player の target_label 系で
@@ -1031,31 +967,17 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # take 16 回全失敗の原因)。
             # 会議中は行動を付けない。選べない手を並べると、#860 で潰した
             # 「選べるのに必ず失敗する」形に戻る。
-            player_actions = (
-                tuple(getattr(entry, "action_entries", ()) or ())
-                if with_actions
-                else ()
-            )
+            player_actions = tuple(getattr(entry, "action_entries", ()) or ()) if with_actions else ()
             (
                 action_names,
                 label_pairs,
                 available_action_labels,
                 blocked_action_labels,
             ) = _split_interactions_for_display_and_resolution(player_actions)
-            action_suffix = (
-                f" [{', '.join(available_action_labels)}]"
-                if available_action_labels
-                else ""
-            )
-            lines.append(
-                f"  - \"{disambiguated_name}\""
-                f"{suffix}{carried_suffix}{familiarity_suffix}"
-                f"{action_suffix}"
-            )
+            action_suffix = f" [{', '.join(available_action_labels)}]" if available_action_labels else ""
+            lines.append(f'  - "{disambiguated_name}"{suffix}{carried_suffix}{familiarity_suffix}{action_suffix}')
             if blocked_action_labels:
-                lines.append(
-                    f"      いまできない: {'、'.join(blocked_action_labels)}"
-                )
+                lines.append(f"      いまできない: {'、'.join(blocked_action_labels)}")
             collector.add(
                 label,
                 PlayerToolRuntimeTargetDto(
@@ -1103,13 +1025,11 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             if entry.is_dead:
                 desc = "死骸"
             else:
-                health_label = HEALTH_BUCKET_JP.get(
-                    entry.health_bucket, entry.health_bucket
-                )
+                health_label = HEALTH_BUCKET_JP.get(entry.health_bucket, entry.health_bucket)
                 desc = f"{entry.behavior_label}・{health_label}"
             # PR-FF: モンスター名を ``""`` で囲む (attack target_label が
             # 「``""`` 内が渡すべき値」規約を満たす)。
-            lines.append(f"  - \"{disambiguated_name}\"（{desc}）")
+            lines.append(f'  - "{disambiguated_name}"（{desc}）')
             appearance = str(getattr(entry, "appearance", "") or "").strip()
             if appearance:
                 lines.append(f"    見た目: {appearance}")
@@ -1218,7 +1138,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             return
         lines.append("商人:")
         for merchant in snap.merchants_at_spot:
-            lines.append(f"  - \"{merchant.name}\"")
+            lines.append(f'  - "{merchant.name}"')
             # 売買ツールが「品名 → どの商人か」を引けるよう、扱う品ごと
             # 対象として積む。ラベルはプロンプトに出さない (商人は名前で指す)。
             label = allocator.next(PREFIX_MERCHANT)
@@ -1250,9 +1170,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             for label, entries in (("売", merchant.sells), ("買", merchant.buys)):
                 if not entries:
                     continue
-                priced = " / ".join(
-                    f"\"{entry.item_name}\" {entry.price}G" for entry in entries
-                )
+                priced = " / ".join(f'"{entry.item_name}" {entry.price}G' for entry in entries)
                 lines.append(f"      {label}: {priced}")
 
     @staticmethod
@@ -1281,11 +1199,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         if not snap.market_declared:
             return
         if snap.market_reaches_everywhere:
-            where = (
-                f"板は{snap.market_board_spot_name}にある。"
-                if snap.market_board_spot_name
-                else ""
-            )
+            where = f"板は{snap.market_board_spot_name}にある。" if snap.market_board_spot_name else ""
             lines.append(f"市場の掲示板: どこからでも読める (market_view)。{where}")
         elif not snap.market_board_here:
             lines.append("市場の掲示板: (この場所には無い)")
@@ -1311,7 +1225,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         lines.append("自分宛ての取引の申し出:")
         for offer in offers:
             lines.append(
-                f"  - \"{offer.offerer_name}\" から: "
+                f'  - "{offer.offerer_name}" から: '
                 f"{offer.gives_text} ⇄ {offer.asks_text} "
                 f"(あと {offer.remaining_ticks} 手番で流れる)"
             )
@@ -1370,28 +1284,19 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     category=entry.category,
                     item_type=entry.item_type,
                 )
-                item_detail = (
-                    f" — {description}{usage_detail}{contract_mark}"
-                )
+                item_detail = f" — {description}{usage_detail}{contract_mark}"
             else:
                 item_detail = item_mark
             action_names, label_pairs, action_labels, blocked_action_labels = (
                 _split_interactions_for_display_and_resolution(entry.interactions)
             )
-            action_part = (
-                f" [{', '.join(action_labels)}]" if action_labels else ""
-            )
+            action_part = f" [{', '.join(action_labels)}]" if action_labels else ""
             # ``""`` 規約 (PR #639 後続): item 名のみ ``""`` で囲み、
             # x{量} / 種別タグ / 腐敗 タグは囲まない。LLM は「``""`` 内の
             # 値が item_label に渡すべき値」と読み取れる。
-            lines.append(
-                f"  - \"{disambiguated_name}\"{qty}{item_detail}{spoiled_mark}"
-                f"{action_part}"
-            )
+            lines.append(f'  - "{disambiguated_name}"{qty}{item_detail}{spoiled_mark}{action_part}')
             if blocked_action_labels:
-                lines.append(
-                    f"      いまできない: {'、'.join(blocked_action_labels)}"
-                )
+                lines.append(f"      いまできない: {'、'.join(blocked_action_labels)}")
             # 後方互換: 既存 use_item は target.item_instance_id に item_spec_id を
             # 入れる慣習 (名前と内容が乖離しているが、リスクを取らないため触らない)。
             # 新しい drop_item / pickup_item は専用フィールド (real_item_instance_id /
@@ -1403,12 +1308,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     kind="inventory_item",
                     display_name=disambiguated_name,
                     item_instance_id=entry.item_spec_id,
-                    real_item_instance_id=(
-                        entry.item_instance_id if entry.item_instance_id >= 0 else None
-                    ),
-                    inventory_slot_id=(
-                        entry.slot_id if entry.slot_id >= 0 else None
-                    ),
+                    real_item_instance_id=(entry.item_instance_id if entry.item_instance_id >= 0 else None),
+                    inventory_slot_id=(entry.slot_id if entry.slot_id >= 0 else None),
                     is_spoiled=entry.is_spoiled,
                     available_interactions=tuple(action_names),
                     interaction_labels=tuple(label_pairs),
@@ -1437,7 +1338,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             disambiguated_name = disamb[i]
             spoiled_mark = " (腐敗)" if entry.is_spoiled else ""
             # ``""`` 規約 (PR #639 後続): ground item 名のみ ``""`` で囲む。
-            lines.append(f"  - \"{disambiguated_name}\"{spoiled_mark}")
+            lines.append(f'  - "{disambiguated_name}"{spoiled_mark}')
             collector.add(
                 label,
                 InventoryToolRuntimeTargetDto(

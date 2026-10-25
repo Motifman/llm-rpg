@@ -38,9 +38,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     ScenarioLoadError,
 )
 
-_DRILL = (
-    Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 
 
 def _load_with(tmp_path: Path, mutate) -> None:
@@ -53,14 +51,14 @@ def _load_with(tmp_path: Path, mutate) -> None:
 
 def _with_event(condition_type: str):
     def mutate(raw: dict) -> None:
-        raw.setdefault("scenario_events", []).append({
-            "id": "probe",
-            "trigger": "ON_TICK",
-            "conditions": [{"condition_type": condition_type, "tick": 3}],
-            "effects": [
-                {"effect_type": "SET_FLAG", "parameters": {"flag_name": "x"}}
-            ],
-        })
+        raw.setdefault("scenario_events", []).append(
+            {
+                "id": "probe",
+                "trigger": "ON_TICK",
+                "conditions": [{"condition_type": condition_type, "tick": 3}],
+                "effects": [{"effect_type": "SET_FLAG", "parameters": {"flag_name": "x"}}],
+            }
+        )
 
     return mutate
 
@@ -103,23 +101,27 @@ class TestAMisspelledEventConditionIsRejected:
         """
 
         def mutate(raw: dict) -> None:
-            raw.setdefault("scenario_events", []).append({
-                "id": "nested",
-                "trigger": "ON_TICK",
-                "conditions": [{
-                    "condition_type": "AND",
-                    "children": [
-                        {"condition_type": "TICK_AT_LEAST", "tick": 1},
-                        {"condition_type": "FLAG_SETT", "flag_name": "x"},
+            raw.setdefault("scenario_events", []).append(
+                {
+                    "id": "nested",
+                    "trigger": "ON_TICK",
+                    "conditions": [
+                        {
+                            "condition_type": "AND",
+                            "children": [
+                                {"condition_type": "TICK_AT_LEAST", "tick": 1},
+                                {"condition_type": "FLAG_SETT", "flag_name": "x"},
+                            ],
+                        }
                     ],
-                }],
-                "effects": [
-                    {
-                        "effect_type": "SET_FLAG",
-                        "parameters": {"flag": "x", "value": True},
-                    }
-                ],
-            })
+                    "effects": [
+                        {
+                            "effect_type": "SET_FLAG",
+                            "parameters": {"flag": "x", "value": True},
+                        }
+                    ],
+                }
+            )
 
         with pytest.raises(ScenarioLoadError) as caught:
             _load_with(tmp_path, mutate)
@@ -172,9 +174,9 @@ class TestTheTableMatchesWhatTheEvaluatorCanDo:
         本文から ``ctype == "..."`` を拾って突き合わせる。合成条件は
         別経路で扱うので手で足す。
         """
-        source = Path(
-            "src/ai_rpg_world/application/world_graph/scenario_condition_evaluator.py"
-        ).read_text(encoding="utf-8")
+        source = Path("src/ai_rpg_world/application/world_graph/scenario_condition_evaluator.py").read_text(
+            encoding="utf-8"
+        )
         in_branches = set(re.findall(r'ctype == "([A-Z_]+)"', source)) | {
             "NOT",
             "AND",
@@ -182,9 +184,7 @@ class TestTheTableMatchesWhatTheEvaluatorCanDo:
         }
 
         assert in_branches, "分岐が 1 つも見つからないなら、この節は何も守れない"
-        assert in_branches - KNOWN_CONDITION_TYPES == set(), (
-            "評価器が判定できるのに表に無い種類がある"
-        )
+        assert in_branches - KNOWN_CONDITION_TYPES == set(), "評価器が判定できるのに表に無い種類がある"
 
     def test_no_table_entry_is_dead(self) -> None:
         """表に載っている種類は、すべて評価器が判定できる。
@@ -192,18 +192,16 @@ class TestTheTableMatchesWhatTheEvaluatorCanDo:
         載せたが実装が無い種類は、**書けるのに常に偽**という別の静かな
         失敗になる。
         """
-        source = Path(
-            "src/ai_rpg_world/application/world_graph/scenario_condition_evaluator.py"
-        ).read_text(encoding="utf-8")
+        source = Path("src/ai_rpg_world/application/world_graph/scenario_condition_evaluator.py").read_text(
+            encoding="utf-8"
+        )
         in_branches = set(re.findall(r'ctype == "([A-Z_]+)"', source)) | {
             "NOT",
             "AND",
             "OR",
         }
 
-        assert KNOWN_CONDITION_TYPES - in_branches == set(), (
-            "表にあるのに評価器が判定できない種類がある"
-        )
+        assert KNOWN_CONDITION_TYPES - in_branches == set(), "表にあるのに評価器が判定できない種類がある"
 
 
 class TestEveryShippedScenarioStillLoads:

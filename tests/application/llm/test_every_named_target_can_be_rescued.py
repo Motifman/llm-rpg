@@ -58,8 +58,11 @@ class _ScriptedPort(ITypedJudgmentPort):
         chosen = self._answers.get(str(state["written_target_name"]), NO_MATCH_OPTION)
         return {
             name: JudgmentResult(
-                value=chosen, probabilities={chosen: self._probability}, confidence=0.9,
-                source=JudgmentSource.JEV, latency_ms=5.0,
+                value=chosen,
+                probabilities={chosen: self._probability},
+                confidence=0.9,
+                source=JudgmentSource.JEV,
+                latency_ms=5.0,
             )
             for name in questions
         }
@@ -75,16 +78,28 @@ class _RecordingTrace:
 
 def _context(*, ground: bool = True) -> ToolRuntimeContextDto:
     targets: dict[str, ToolRuntimeTargetDto] = {
-        "I1": InventoryToolRuntimeTargetDto(label="I1", kind="inventory_item", display_name="干し肉", item_instance_id=41),
-        "I2": InventoryToolRuntimeTargetDto(label="I2", kind="inventory_item", display_name="真水", item_instance_id=42),
-        "S1": DestinationToolRuntimeTargetDto(label="S1", kind="spot_graph_destination", display_name="麦畑", spot_id=7),
-        "S2": DestinationToolRuntimeTargetDto(label="S2", kind="spot_graph_destination", display_name="薬草の土手", spot_id=8),
-        "SL1": ToolRuntimeTargetDto(label="SL1", kind="spot_graph_sub_location", display_name="祭壇前", sub_location_id=2),
+        "I1": InventoryToolRuntimeTargetDto(
+            label="I1", kind="inventory_item", display_name="干し肉", item_instance_id=41
+        ),
+        "I2": InventoryToolRuntimeTargetDto(
+            label="I2", kind="inventory_item", display_name="真水", item_instance_id=42
+        ),
+        "S1": DestinationToolRuntimeTargetDto(
+            label="S1", kind="spot_graph_destination", display_name="麦畑", spot_id=7
+        ),
+        "S2": DestinationToolRuntimeTargetDto(
+            label="S2", kind="spot_graph_destination", display_name="薬草の土手", spot_id=8
+        ),
+        "SL1": ToolRuntimeTargetDto(
+            label="SL1", kind="spot_graph_sub_location", display_name="祭壇前", sub_location_id=2
+        ),
         "P1": PlayerToolRuntimeTargetDto(label="P1", kind="spot_graph_player", display_name="ガレン", player_id=2),
         "P2": PlayerToolRuntimeTargetDto(label="P2", kind="spot_graph_player", display_name="ドナ", player_id=3),
     }
     if ground:
-        targets["G1"] = InventoryToolRuntimeTargetDto(label="G1", kind="ground_item", display_name="流木", real_item_instance_id=51)
+        targets["G1"] = InventoryToolRuntimeTargetDto(
+            label="G1", kind="ground_item", display_name="流木", real_item_instance_id=51
+        )
     return ToolRuntimeContextDto(targets=targets)
 
 
@@ -97,7 +112,9 @@ class TestEachToolAsksAboutAnUnmatchedName:
         """use_item の品名が候補に無いとき、Jev が選んだ手持ちの品に置き換わり、判断が列で運ばれる。"""
         port = _ScriptedPort({"乾し肉": "干し肉"})
 
-        out = _resolver(port).resolve_args("use_item", {"item_label": "乾し肉", "inner_thought": "腹が減った"}, _context())
+        out = _resolver(port).resolve_args(
+            "use_item", {"item_label": "乾し肉", "inner_thought": "腹が減った"}, _context()
+        )
 
         assert out["item_spec_id"] == 41
         (judgment,) = out[TARGET_LABEL_JUDGMENTS_KEY]
@@ -119,7 +136,9 @@ class TestEachToolAsksAboutAnUnmatchedName:
         """pickup_item の名前が候補に無いとき、Jev が選んだ足元の品に置き換わる。"""
         port = _ScriptedPort({"漂着した流木": "流木"})
 
-        out = _resolver(port).resolve_args("pickup_item", {"ground_item_label": "漂着した流木", "inner_thought": ""}, _context())
+        out = _resolver(port).resolve_args(
+            "pickup_item", {"ground_item_label": "漂着した流木", "inner_thought": ""}, _context()
+        )
 
         assert out["item_instance_id"] == 51
         assert out[TARGET_LABEL_JUDGMENTS_KEY][0]["tool"] == "pickup_item"
@@ -148,7 +167,9 @@ class TestWhenTheNameIsNotAskedAbout:
         port = _ScriptedPort({})
 
         with pytest.raises(ToolArgumentResolutionException) as caught:
-            _resolver(port).resolve_args("pickup_item", {"ground_item_label": "流木", "inner_thought": ""}, _context(ground=False))
+            _resolver(port).resolve_args(
+                "pickup_item", {"ground_item_label": "流木", "inner_thought": ""}, _context(ground=False)
+            )
 
         assert caught.value.error_code == "INVALID_TARGET_LABEL"
         assert port.states == []
@@ -227,8 +248,11 @@ class TestTheDispatchShowsAndTracesEveryJudgment:
             return LlmCommandResultDto(success=True, message="渡した")
 
         handler = adapt_executor_handler_with_resolver(
-            raw, TOOL_NAME_SPOT_GRAPH_GIVE_ITEM, _resolver(port),
-            trace_recorder_provider=lambda: trace, current_tick_provider=lambda: 4,
+            raw,
+            TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            _resolver(port),
+            trace_recorder_provider=lambda: trace,
+            current_tick_provider=lambda: 4,
         )
         result = handler(
             PlayerId(1),

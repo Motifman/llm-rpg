@@ -13,7 +13,7 @@ class TestGetPlayerCurrentStateQueryValidation:
     @pytest.mark.parametrize("player_id", [0, -1])
     def test_query_raises_value_error_for_nonpositive_player_id(self, player_id):
         """プレイヤー ID が0以下なら ValueError で拒否する。"""
-        with pytest.raises(ValueError, match='player_id must be greater than 0'):
+        with pytest.raises(ValueError, match="player_id must be greater than 0"):
             GetPlayerCurrentStateQuery(player_id=player_id)
 
     def test_query_accepts_positive_player_id(self):

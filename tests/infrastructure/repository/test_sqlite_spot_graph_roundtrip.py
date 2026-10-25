@@ -251,9 +251,7 @@ def test_sqlite_roundtrip_preserves_interaction_cooldown_group() -> None:
         cooldown_scope=InteractionCooldownScope.WORLD,
         witness_observation_message_in_dark="暗がりで物音がした。",
     )
-    interior = interior.replace_object(
-        replace(obj, interactions=(interaction,))
-    )
+    interior = interior.replace_object(replace(obj, interactions=(interaction,)))
 
     loaded = loads_spot_interior(dumps_spot_interior(interior))
 
@@ -271,9 +269,7 @@ def test_sqlite_roundtrip_preserves_interaction_actor_planes() -> None:
             InteractionActorPlane.DEPARTED,
         ),
     )
-    interior = interior.replace_object(
-        replace(obj, interactions=(interaction,))
-    )
+    interior = interior.replace_object(replace(obj, interactions=(interaction,)))
 
     loaded = loads_spot_interior(dumps_spot_interior(interior))
 
@@ -364,7 +360,8 @@ def test_legacy_interaction_declaration_defaults_are_preserved() -> None:
     ],
 )
 def test_interaction_decoder_rejects_invalid_notification_types(
-    field_name: str, invalid_value: object,
+    field_name: str,
+    invalid_value: object,
 ) -> None:
     """通知設定の不正JSON型を真偽値や文面へ暗黙変換しない。"""
     payload = json.loads(dumps_spot_interior(_switch_interior()))
@@ -384,7 +381,8 @@ def test_interaction_decoder_rejects_invalid_notification_types(
     ],
 )
 def test_interaction_effect_decoder_rejects_invalid_routing_values(
-    field_name: str, invalid_value: object,
+    field_name: str,
+    invalid_value: object,
 ) -> None:
     """効果の可視性・作用先の誤記や型違反を既定値へ縮退させない。"""
     payload = json.loads(dumps_spot_interior(_switch_interior()))
@@ -396,18 +394,18 @@ def test_interaction_effect_decoder_rejects_invalid_routing_values(
 
 def test_interaction_condition_codec_covers_every_dataclass_field() -> None:
     """条件フィールド追加時にcodec追従を忘れると、構造試験が即座に失敗する。"""
-    assert set(_INTERACTION_CONDITION_FIELD_CODECS) == {
-        field.name for field in fields(InteractionCondition)
-    }
+    assert set(_INTERACTION_CONDITION_FIELD_CODECS) == {field.name for field in fields(InteractionCondition)}
 
 
 def test_interaction_condition_decoder_keeps_legacy_payload_defaults() -> None:
     """新フィールドを持たない既存SQLite payloadも従来の既定値で復元できる。"""
-    restored = _interaction_condition_from_dict({
-        "condition_type": "HAS_ITEM",
-        "target_item_spec_id": 1,
-        "failure_message": "鍵が必要だ。",
-    })
+    restored = _interaction_condition_from_dict(
+        {
+            "condition_type": "HAS_ITEM",
+            "target_item_spec_id": 1,
+            "failure_message": "鍵が必要だ。",
+        }
+    )
 
     assert restored == InteractionCondition(
         condition_type=InteractionConditionTypeEnum.HAS_ITEM,
@@ -429,7 +427,8 @@ def test_interaction_condition_decoder_keeps_legacy_payload_defaults() -> None:
     ],
 )
 def test_interaction_condition_decoder_rejects_invalid_json_types(
-    field_name: str, invalid_value: object,
+    field_name: str,
+    invalid_value: object,
 ) -> None:
     """不正なJSON型をIDや数量へ暗黙変換せず、永続化例外で停止する。"""
     payload = {"condition_type": "ALWAYS", field_name: invalid_value}
@@ -445,8 +444,12 @@ def test_spot_interior_v1_payload_remains_readable() -> None:
     for condition in payload["objects"][0]["interactions"][0]["preconditions"]:
         for field_name in _INTERACTION_CONDITION_FIELD_CODECS:
             if field_name not in {
-                "condition_type", "target_item_spec_id", "target_object_id",
-                "required_state", "flag_name", "failure_message",
+                "condition_type",
+                "target_item_spec_id",
+                "target_object_id",
+                "required_state",
+                "flag_name",
+                "failure_message",
             }:
                 condition.pop(field_name, None)
 
@@ -502,9 +505,7 @@ def test_trap_encoder_covers_every_dataclass_field() -> None:
     """TrapDefへ項目を追加してcodec追従を忘れると構造試験が即座に失敗する。"""
     trap = _damage_trap(TrapTriggerTypeEnum.ON_ENTRY)
 
-    assert set(_trap_def_to_dict(trap)) == {
-        field.name for field in fields(TrapDef)
-    }
+    assert set(_trap_def_to_dict(trap)) == {field.name for field in fields(TrapDef)}
 
 
 @pytest.mark.parametrize("schema_version", [1, 2])
@@ -560,7 +561,8 @@ def test_trap_payload_writer_uses_new_schema_versions() -> None:
     ],
 )
 def test_trap_decoder_rejects_invalid_json_types(
-    field_name: str, invalid_value: object,
+    field_name: str,
+    invalid_value: object,
 ) -> None:
     """罠定義の不正なJSON型と未知triggerは永続化例外として即時拒否する。"""
     original = _switch_interior()
@@ -585,7 +587,8 @@ def test_trap_decoder_rejects_invalid_json_types(
     [("is_outdoor", 1), ("traps", {})],
 )
 def test_spot_node_decoder_rejects_invalid_trap_container_fields(
-    field_name: str, invalid_value: object,
+    field_name: str,
+    invalid_value: object,
 ) -> None:
     """ノードの屋外属性と罠一覧を別JSON型へ暗黙変換せず拒否する。"""
     payload = json.loads(dumps_spot_graph_aggregate(_bidirectional_graph()))
@@ -835,9 +838,7 @@ def test_sqlite_roundtrip_preserves_object_display_properties() -> None:
                 interactions=(),
                 is_visible_in_dark=True,
                 hidden_state_keys=frozenset({"read"}),
-                state_display=(
-                    StateDisplayRule("opened", False, "蓋は閉じたまま"),
-                ),
+                state_display=(StateDisplayRule("opened", False, "蓋は閉じたまま"),),
             ),
         ),
         ground_items=(),
@@ -924,9 +925,7 @@ def test_sqlite_roundtrip_preserves_flag_hidden_interaction() -> None:
     )
 
     payload = json.loads(dumps_spot_interior(interior))
-    assert payload["objects"][0]["interactions"][0][
-        "hide_when_flag_preconditions_fail"
-    ] is True
+    assert payload["objects"][0]["interactions"][0]["hide_when_flag_preconditions_fail"] is True
 
     loaded = loads_spot_interior(json.dumps(payload, ensure_ascii=False))
     assert loaded.objects[0].interactions[0].hide_when_flag_preconditions_fail is True
@@ -970,9 +969,7 @@ def test_sqlite_roundtrip_preserves_at_least_display_rule() -> None:
     loaded = loads_spot_interior(json.dumps(payload, ensure_ascii=False))
     rule = loaded.objects[0].state_display[0]
     assert rule.at_least == 2
-    assert loaded.objects[0].visible_state() == {
-        "__tags__": ("作業はかなり進んでいる",)
-    }
+    assert loaded.objects[0].visible_state() == {"__tags__": ("作業はかなり進んでいる",)}
 
 
 def test_find_graph_without_snapshot_raises_specific_exception() -> None:
@@ -1023,7 +1020,18 @@ def test_find_interior_unsupported_schema_raises() -> None:
     repo = SqliteSpotInteriorRepository.for_standalone_connection(conn)
     conn.execute(
         "INSERT INTO spot_graph_interior (spot_id, payload_json) VALUES (?, ?)",
-        (1, json.dumps({"schema_version": 999, "sub_locations": [], "objects": [], "ground_items": [], "discoverable_items": []})),
+        (
+            1,
+            json.dumps(
+                {
+                    "schema_version": 999,
+                    "sub_locations": [],
+                    "objects": [],
+                    "ground_items": [],
+                    "discoverable_items": [],
+                }
+            ),
+        ),
     )
     conn.commit()
 

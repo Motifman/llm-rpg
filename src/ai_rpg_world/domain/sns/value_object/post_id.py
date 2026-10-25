@@ -10,6 +10,7 @@ class PostId:
 
     IDは負の値ではいけません。
     """
+
     value: int
 
     def __post_init__(self) -> None:

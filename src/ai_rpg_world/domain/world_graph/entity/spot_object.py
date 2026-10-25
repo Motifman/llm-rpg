@@ -23,9 +23,7 @@ from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
 
 # 備蓄プールの内部 bookkeeping state key。lazy 再生用の生値なので、第三者
 # プロンプトには常に出さない (visible_state で汎用除外する)。
-_STOCK_POOL_STATE_KEYS: frozenset[str] = frozenset(
-    {"stock", "stock_capacity", "stock_tick", "stock_refill_interval"}
-)
+_STOCK_POOL_STATE_KEYS: frozenset[str] = frozenset({"stock", "stock_capacity", "stock_tick", "stock_refill_interval"})
 
 # 再利用待ちオブジェクトを表す内部 state key。生値のまま prompt に出すと
 # 「false」のような、次の一手につながらない表示になる。
@@ -78,9 +76,7 @@ class SpotObject:
             raise SpotNameEmptyException("Spot object name cannot be empty")
         if self.unavailable_hint is not None:
             if not isinstance(self.unavailable_hint, str) or not self.unavailable_hint.strip():
-                raise SpotObjectValidationException(
-                    "Spot object unavailable_hint must be a non-empty string"
-                )
+                raise SpotObjectValidationException("Spot object unavailable_hint must be a non-empty string")
 
     def with_state(self, new_state: dict[str, Any]) -> SpotObject:
         return replace(self, state=dict(new_state))
@@ -128,8 +124,7 @@ class SpotObject:
         if any(rule.requires_light for rule in self.state_display):
             if effective_lighting is None:
                 raise SpotObjectValidationException(
-                    "SpotObject.visible_state requires effective_lighting "
-                    "for requires_light rules"
+                    "SpotObject.visible_state requires effective_lighting for requires_light rules"
                 )
 
         visible: dict[str, Any] = {}
@@ -139,11 +134,7 @@ class SpotObject:
             recent_rules = tuple(
                 rule
                 for rule in rules
-                if rule.within_ticks is not None
-                and not (
-                    rule.unless_flag_set
-                    and rule.unless_flag_set in world_flags
-                )
+                if rule.within_ticks is not None and not (rule.unless_flag_set and rule.unless_flag_set in world_flags)
             )
             if recent_rules:
                 # loader は within_ticks を RECORD_OBJECT_STATE_TICK の key に
@@ -155,8 +146,7 @@ class SpotObject:
                     # その絞り込みをここまで運べない。
                     if current_tick is None:
                         raise SpotObjectValidationException(
-                            "SpotObject.visible_state requires current_tick "
-                            "for within_ticks state display"
+                            "SpotObject.visible_state requires current_tick for within_ticks state display"
                         )
                     recorded_tick = value
                     matched_rule = min(
@@ -170,9 +160,7 @@ class SpotObject:
                         key=lambda rule: rule.within_ticks or 0,
                         default=None,
                     )
-                    if matched_rule is not None and self._rule_is_visible_in_light(
-                        matched_rule, effective_lighting
-                    ):
+                    if matched_rule is not None and self._rule_is_visible_in_light(matched_rule, effective_lighting):
                         text = matched_rule.text
                         if "{remaining_minutes}" in text:
                             if minutes_per_tick is None or minutes_per_tick <= 0:
@@ -192,29 +180,17 @@ class SpotObject:
                 continue
             if rules:
                 matched_rule = next(
-                    (
-                        rule
-                        for rule in rules
-                        if rule.at_least is None
-                        and state_display_values_equal(rule.value, value)
-                    ),
+                    (rule for rule in rules if rule.at_least is None and state_display_values_equal(rule.value, value)),
                     None,
                 )
                 if matched_rule is None and type(value) is int:
                     matched_rule = max(
-                        (
-                            rule
-                            for rule in rules
-                            if rule.at_least is not None
-                            and value >= rule.at_least
-                        ),
+                        (rule for rule in rules if rule.at_least is not None and value >= rule.at_least),
                         key=lambda rule: rule.at_least or 0,
                         default=None,
                     )
                 if matched_rule is not None:
-                    if self._rule_is_visible_in_light(
-                        matched_rule, effective_lighting
-                    ):
+                    if self._rule_is_visible_in_light(matched_rule, effective_lighting):
                         tags.append(matched_rule.text)
                     continue
                 # 完全一致にも at_least にも該当しなければ生値を出す。ここで

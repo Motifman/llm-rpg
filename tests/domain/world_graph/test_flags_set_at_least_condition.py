@@ -78,10 +78,17 @@ def _graph() -> SpotGraphAggregate:
 
 
 def _evaluate(condition: GameEndCondition, flags: set[str]) -> bool:
-    return GameEndConditionEvaluator().evaluate(
-        _graph(), condition, frozenset(flags), [PlayerId(1)],
-        result_on_match=_SIDE,
-    ).is_ended
+    return (
+        GameEndConditionEvaluator()
+        .evaluate(
+            _graph(),
+            condition,
+            frozenset(flags),
+            [PlayerId(1)],
+            result_on_match=_SIDE,
+        )
+        .is_ended
+    )
 
 
 class TestCounting:
@@ -131,7 +138,8 @@ class TestValidation:
         空を許すと「0 個中 0 個」で **開始した瞬間に勝つ**。
         """
         with pytest.raises(
-            GameEndConditionValidationException, match="required_flags が必要です",
+            GameEndConditionValidationException,
+            match="required_flags が必要です",
         ):
             _condition(flags=())
 
@@ -184,10 +192,7 @@ class TestItCanBeWrittenInAScenario:
         import shutil
         from pathlib import Path
 
-        src = (
-            Path(__file__).resolve().parents[3]
-            / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-        )
+        src = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
         raw = json.loads(src.read_text(encoding="utf-8"))
         raw["game_end_conditions"] = {"win": [condition], "lose": []}
         dst = tmp_path / "tasks.json"
@@ -198,11 +203,14 @@ class TestItCanBeWrittenInAScenario:
         """宣言どおりの条件が組み上がる。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-        path = self._scenario(tmp_path, {
-            "type": "FLAGS_SET_AT_LEAST",
-            "required_flags": list(_TASKS),
-            "min_set_count": 3,
-        })
+        path = self._scenario(
+            tmp_path,
+            {
+                "type": "FLAGS_SET_AT_LEAST",
+                "required_flags": list(_TASKS),
+                "min_set_count": 3,
+            },
+        )
 
         result = ScenarioLoader().load_from_file(path)
 
@@ -218,11 +226,14 @@ class TestItCanBeWrittenInAScenario:
         """
         from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-        path = self._scenario(tmp_path, {
-            "type": "FLAGS_SET_AT_LEAST",
-            "required_flags": ["task_radio"],
-            "min_set_count": 5,
-        })
+        path = self._scenario(
+            tmp_path,
+            {
+                "type": "FLAGS_SET_AT_LEAST",
+                "required_flags": ["task_radio"],
+                "min_set_count": 5,
+            },
+        )
 
         with pytest.raises(
             GameEndConditionValidationException,
@@ -234,10 +245,13 @@ class TestItCanBeWrittenInAScenario:
         """閾値の書き忘れも読み込み時に落とす。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-        path = self._scenario(tmp_path, {
-            "type": "FLAGS_SET_AT_LEAST",
-            "required_flags": list(_TASKS),
-        })
+        path = self._scenario(
+            tmp_path,
+            {
+                "type": "FLAGS_SET_AT_LEAST",
+                "required_flags": list(_TASKS),
+            },
+        )
 
         from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 

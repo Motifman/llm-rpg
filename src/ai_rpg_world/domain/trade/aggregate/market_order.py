@@ -35,13 +35,9 @@ from ai_rpg_world.domain.trade.value_object.market_participant import MarketPart
 
 def _require_positive_int(value: object, *, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
-        raise MarketOrderValidationException(
-            f"{field} は整数で指定してください (got {value!r})"
-        )
+        raise MarketOrderValidationException(f"{field} は整数で指定してください (got {value!r})")
     if value <= 0:
-        raise MarketOrderValidationException(
-            f"{field} は 1 以上で指定してください (got {value})"
-        )
+        raise MarketOrderValidationException(f"{field} は 1 以上で指定してください (got {value})")
     return value
 
 
@@ -75,24 +71,16 @@ class MarketOrder:
     ) -> MarketOrder:
         """板に載せられる注文だけを作る。"""
         if not isinstance(side, MarketOrderSide):
-            raise MarketOrderValidationException(
-                f"side は MarketOrderSide で指定してください (got {side!r})"
-            )
+            raise MarketOrderValidationException(f"side は MarketOrderSide で指定してください (got {side!r})")
         if not isinstance(owner, MarketParticipant):
-            raise MarketOrderValidationException(
-                f"owner は MarketParticipant で指定してください (got {owner!r})"
-            )
+            raise MarketOrderValidationException(f"owner は MarketParticipant で指定してください (got {owner!r})")
         _require_positive_int(quantity, field="quantity")
         _require_positive_int(unit_price_gold, field="unit_price_gold")
         _require_positive_int(expires_in_ticks, field="expires_in_ticks")
         if isinstance(item_spec_id, bool) or not isinstance(item_spec_id, int):
-            raise MarketOrderValidationException(
-                f"item_spec_id は整数で指定してください (got {item_spec_id!r})"
-            )
+            raise MarketOrderValidationException(f"item_spec_id は整数で指定してください (got {item_spec_id!r})")
         if isinstance(listed_at_tick, bool) or not isinstance(listed_at_tick, int):
-            raise MarketOrderValidationException(
-                f"listed_at_tick は整数で指定してください (got {listed_at_tick!r})"
-            )
+            raise MarketOrderValidationException(f"listed_at_tick は整数で指定してください (got {listed_at_tick!r})")
         return cls(
             order_id=order_id,
             side=side,
@@ -125,19 +113,14 @@ class MarketOrder:
     def filled_by(self, quantity: int) -> MarketOrder:
         """その数量ぶんが約定した注文を返す。"""
         if self.is_awaiting_collection:
-            raise MarketOrderStateException(
-                f"引き取り待ちの注文は約定できません (order_id={self.order_id.value})"
-            )
+            raise MarketOrderStateException(f"引き取り待ちの注文は約定できません (order_id={self.order_id.value})")
         if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
-            raise MarketOrderStateException(
-                f"約定する数量は 1 以上の整数で指定してください (got {quantity!r})"
-            )
+            raise MarketOrderStateException(f"約定する数量は 1 以上の整数で指定してください (got {quantity!r})")
         if quantity > self.quantity:
             # 超過を黙って切り詰めると、買った側は「3 つ買えた」と思っている
             # のに 2 つしか届かない。数え違いが観測と食い違う形で残る。
             raise MarketOrderStateException(
-                f"残数を超えて約定できません "
-                f"(order_id={self.order_id.value}, 残り {self.quantity}, 要求 {quantity})"
+                f"残数を超えて約定できません (order_id={self.order_id.value}, 残り {self.quantity}, 要求 {quantity})"
             )
         return replace(self, quantity=self.quantity - quantity)
 
@@ -148,9 +131,7 @@ class MarketOrder:
         続ける注文を作れてしまう。数量も動かさない (品は板に預けたまま)。
         """
         if self.is_awaiting_collection:
-            raise MarketOrderStateException(
-                f"引き取り待ちの注文は値を変えられません (order_id={self.order_id.value})"
-            )
+            raise MarketOrderStateException(f"引き取り待ちの注文は値を変えられません (order_id={self.order_id.value})")
         _require_positive_int(new_unit_price, field="unit_price_gold")
         return replace(self, unit_price_gold=new_unit_price)
 

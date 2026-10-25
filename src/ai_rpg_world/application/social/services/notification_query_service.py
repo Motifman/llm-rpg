@@ -25,9 +25,7 @@ class NotificationQueryService:
         self._notification_repository = notification_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -36,26 +34,17 @@ class NotificationQueryService:
             raise e
         except SnsDomainException as e:
             raise ApplicationExceptionFactory.create_from_domain_exception(
-                e,
-                user_id=context.get('user_id'),
-                **{k: v for k, v in context.items() if k in ['notification_id']}
+                e, user_id=context.get("user_id"), **{k: v for k, v in context.items() if k in ["notification_id"]}
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra=context)
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def get_user_notifications(self, user_id: int, limit: int = 50, offset: int = 0) -> list[NotificationDto]:
         """ユーザーの通知一覧を取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_user_notifications_impl(user_id, limit, offset),
-            context={
-                "action": "get_user_notifications",
-                "user_id": user_id,
-                "limit": limit,
-                "offset": offset
-            }
+            context={"action": "get_user_notifications", "user_id": user_id, "limit": limit, "offset": offset},
         )
 
     def _get_user_notifications_impl(self, user_id: int, limit: int = 50, offset: int = 0) -> list[NotificationDto]:
@@ -72,13 +61,17 @@ class NotificationQueryService:
                 message=notification.content.message,
                 actor_user_id=notification.content.actor_user_id.value,
                 actor_user_name=notification.content.actor_user_name,
-                related_post_id=notification.content.related_post_id.value if notification.content.related_post_id else None,
-                related_reply_id=notification.content.related_reply_id.value if notification.content.related_reply_id else None,
+                related_post_id=notification.content.related_post_id.value
+                if notification.content.related_post_id
+                else None,
+                related_reply_id=notification.content.related_reply_id.value
+                if notification.content.related_reply_id
+                else None,
                 content_type=notification.content.content_type,
                 content_text=notification.content.content_text,
                 created_at=notification.created_at,
                 is_read=notification.is_read,
-                expires_at=notification.expires_at
+                expires_at=notification.expires_at,
             )
             for notification in notifications
         ]
@@ -87,10 +80,7 @@ class NotificationQueryService:
         """ユーザーの未読通知を取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_unread_notifications_impl(user_id),
-            context={
-                "action": "get_unread_notifications",
-                "user_id": user_id
-            }
+            context={"action": "get_unread_notifications", "user_id": user_id},
         )
 
     def _get_unread_notifications_impl(self, user_id: int) -> list[NotificationDto]:
@@ -107,13 +97,17 @@ class NotificationQueryService:
                 message=notification.content.message,
                 actor_user_id=notification.content.actor_user_id.value,
                 actor_user_name=notification.content.actor_user_name,
-                related_post_id=notification.content.related_post_id.value if notification.content.related_post_id else None,
-                related_reply_id=notification.content.related_reply_id.value if notification.content.related_reply_id else None,
+                related_post_id=notification.content.related_post_id.value
+                if notification.content.related_post_id
+                else None,
+                related_reply_id=notification.content.related_reply_id.value
+                if notification.content.related_reply_id
+                else None,
                 content_type=notification.content.content_type,
                 content_text=notification.content.content_text,
                 created_at=notification.created_at,
                 is_read=notification.is_read,
-                expires_at=notification.expires_at
+                expires_at=notification.expires_at,
             )
             for notification in notifications
         ]
@@ -122,10 +116,7 @@ class NotificationQueryService:
         """未読通知数を取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_unread_count_impl(user_id),
-            context={
-                "action": "get_unread_count",
-                "user_id": user_id
-            }
+            context={"action": "get_unread_count", "user_id": user_id},
         )
 
     def _get_unread_count_impl(self, user_id: int) -> int:

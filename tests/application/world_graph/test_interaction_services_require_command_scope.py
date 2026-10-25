@@ -26,17 +26,12 @@ def _untouchable(name: str) -> Mock:
         "publish_all",
         "save",
     ):
-        getattr(dependency, method_name).side_effect = AssertionError(
-            f"{name}.{method_name} was touched"
-        )
+        getattr(dependency, method_name).side_effect = AssertionError(f"{name}.{method_name} was touched")
     return dependency
 
 
 def _spot_service() -> tuple[SpotInteractionApplicationService, tuple[Mock, ...]]:
-    dependencies = tuple(
-        _untouchable(name)
-        for name in ("graph", "interiors", "inventories", "items", "item_specs")
-    )
+    dependencies = tuple(_untouchable(name) for name in ("graph", "interiors", "inventories", "items", "item_specs"))
     service = SpotInteractionApplicationService(
         spot_graph_repository=dependencies[0],
         spot_interior_repository=dependencies[1],
@@ -66,10 +61,7 @@ def test_spot_interaction_updates_require_scope_before_repository_access(
 
 def test_player_interaction_update_requires_scope_before_repository_access() -> None:
     """対人操作はscope未配線ならrepositoryへ触れる前に拒否する。"""
-    dependencies = tuple(
-        _untouchable(name)
-        for name in ("graph", "inventories", "items", "item_specs", "statuses")
-    )
+    dependencies = tuple(_untouchable(name) for name in ("graph", "inventories", "items", "item_specs", "statuses"))
     interaction = Mock(action_name="help", effects=())
     service = PlayerInteractionApplicationService(
         spot_graph_repository=dependencies[0],

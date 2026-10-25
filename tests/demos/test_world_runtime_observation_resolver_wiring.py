@@ -129,7 +129,4 @@ class TestWorldRuntimeObservationResolverWiring:
             "SpotGraphSpeechRecipientStrategy",
         }
         missing = required - class_names
-        assert not missing, (
-            f"BUG: 必須 strategy が未登録 ({missing})。"
-            f"登録済みは: {sorted(class_names)}"
-        )
+        assert not missing, f"BUG: 必須 strategy が未登録 ({missing})。登録済みは: {sorted(class_names)}"

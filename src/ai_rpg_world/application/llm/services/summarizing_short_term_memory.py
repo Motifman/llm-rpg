@@ -137,18 +137,12 @@ class SummarizingShortTermMemory(IShortTermMemory):
     ) -> None:
         if l4_keep_generations <= 0:
             raise ValueError("l4_keep_generations must be positive")
-        if summary_service is not None and not isinstance(
-            summary_service, ShortTermMemorySummaryService
-        ):
-            raise TypeError(
-                "summary_service must be ShortTermMemorySummaryService or None"
-            )
+        if summary_service is not None and not isinstance(summary_service, ShortTermMemorySummaryService):
+            raise TypeError("summary_service must be ShortTermMemorySummaryService or None")
         if persona_resolver is not None and not callable(persona_resolver):
             raise TypeError("persona_resolver must be callable or None")
         if scheduler is not None and not isinstance(scheduler, IShortTermMemoryScheduler):
-            raise TypeError(
-                "scheduler must be IShortTermMemoryScheduler or None"
-            )
+            raise TypeError("scheduler must be IShortTermMemoryScheduler or None")
         self._service = summary_service
         self._persona_resolver = persona_resolver
         self._keep_gen = l4_keep_generations
@@ -159,8 +153,8 @@ class SummarizingShortTermMemory(IShortTermMemory):
         # NullTraceRecorder を返す callable に正規化する。これで emit 側の
         # `if provider is None: return` / `if recorder is None: return` の
         # silent skip 経路を排除できる (= NullObject パターン)。
-        self._trace_recorder_provider: Callable[[], ITraceRecorder] = (
-            _ensure_trace_recorder_provider(trace_recorder_provider)
+        self._trace_recorder_provider: Callable[[], ITraceRecorder] = _ensure_trace_recorder_provider(
+            trace_recorder_provider
         )
         self._current_tick_provider = current_tick_provider
         self._event_store = event_store or UnifiedRecentEventStore()
@@ -183,22 +177,16 @@ class SummarizingShortTermMemory(IShortTermMemory):
         self._ensure_player(pid)
         self._event_store.append_observation(player_id, entry)
 
-    def append_all(
-        self, player_id: PlayerId, entries: list[ObservationEntry]
-    ) -> None:
+    def append_all(self, player_id: PlayerId, entries: list[ObservationEntry]) -> None:
         """observations を順に append する。古いターンは捨てずに L4 に畳む。"""
         for e in entries:
             self.append(player_id, e)
 
-    def get_recent(
-        self, player_id: PlayerId, limit: int
-    ) -> list[ObservationEntry]:
+    def get_recent(self, player_id: PlayerId, limit: int) -> list[ObservationEntry]:
         pid = int(player_id.value)
         if limit <= 0:
             return []
-        return self._event_store.get_recent_observations(
-            player_id, limit, newest_equal_first=True
-        )
+        return self._event_store.get_recent_observations(player_id, limit, newest_equal_first=True)
 
     def complete_turn(self, player_id: PlayerId) -> None:
         """ターンを閉じ、cap 到達時は古い K ターンの出来事を L4 へ送る。"""
@@ -210,9 +198,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
             return
         turns_before = self._event_store.completed_turn_count(player_id)
         entries_before = len(self._event_store.get_active_timeline(player_id))
-        compaction = self._event_store.compact_oldest_turns(
-            player_id, self._compact_turn_count
-        )
+        compaction = self._event_store.compact_oldest_turns(player_id, self._compact_turn_count)
         self._emit_compaction(
             player_id,
             completed_turn_count_before=turns_before,
@@ -231,22 +217,16 @@ class SummarizingShortTermMemory(IShortTermMemory):
             finally:
                 self._notify_compacted(player_id, consumed)
 
-    def _notify_compacted(
-        self, player_id: PlayerId, consumed: list[UnifiedRecentEventEntry]
-    ) -> None:
+    def _notify_compacted(self, player_id: PlayerId, consumed: list[UnifiedRecentEventEntry]) -> None:
         """要約の scheduler とは別に、この場で同期して呼ぶ。"""
         if self._on_compacted is None:
             return
         try:
             self._on_compacted(player_id, tuple(consumed))
         except Exception:
-            _logger.exception(
-                "compaction listener raised (player_id=%s); continuing", player_id.value
-            )
+            _logger.exception("compaction listener raised (player_id=%s); continuing", player_id.value)
 
-    def uncompacted_entries(
-        self, player_id: PlayerId
-    ) -> tuple[UnifiedRecentEventEntry, ...]:
+    def uncompacted_entries(self, player_id: PlayerId) -> tuple[UnifiedRecentEventEntry, ...]:
         """まだ畳んでいない出来事。閉じていないターンの分も含む。"""
         return tuple(self._event_store.get_active_timeline(player_id))
 
@@ -265,19 +245,13 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 tick=self._safe_current_tick(),
                 player_id=int(player_id),
                 completed_turn_count_before=completed_turn_count_before,
-                completed_turn_count_after=self._event_store.completed_turn_count(
-                    player_id
-                ),
+                completed_turn_count_after=self._event_store.completed_turn_count(player_id),
                 entry_count_before=entry_count_before,
-                entry_count_after=len(
-                    self._event_store.get_active_timeline(player_id)
-                ),
+                entry_count_after=len(self._event_store.get_active_timeline(player_id)),
                 compacted_turn_count=compacted_turn_count,
             )
         except Exception:
-            _logger.exception(
-                "trace recorder.record raised for SHORT_TERM_MEMORY_COMPACTED; skipping"
-            )
+            _logger.exception("trace recorder.record raised for SHORT_TERM_MEMORY_COMPACTED; skipping")
 
     def get_mid_summary_text(self, player_id: PlayerId) -> str:
         """L4 mid summary を prompt 用テキストに整形する。
@@ -379,8 +353,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 )
             except (LlmApiCallException, ValueError) as e:
                 _logger.warning(
-                    "SummarizingShortTermMemory(player_id=%s): L4 LLM 生成失敗 "
-                    "(%s); template fallback に縮退します",
+                    "SummarizingShortTermMemory(player_id=%s): L4 LLM 生成失敗 (%s); template fallback に縮退します",
                     pid,
                     e,
                 )
@@ -388,8 +361,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 is_fallback = True
             except Exception as e:  # pragma: no cover - 想定外も握って続行
                 _logger.exception(
-                    "SummarizingShortTermMemory(player_id=%s): 想定外の例外 "
-                    "(%s); template fallback に縮退します",
+                    "SummarizingShortTermMemory(player_id=%s): 想定外の例外 (%s); template fallback に縮退します",
                     pid,
                     e,
                 )
@@ -407,9 +379,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         )
         self._install_l4(summary)
 
-    def set_trace_recorder_provider(
-        self, provider: Callable[[], Any] | None
-    ) -> None:
+    def set_trace_recorder_provider(self, provider: Callable[[], Any] | None) -> None:
         """trace_recorder_provider を後から差し替える (PR #439 / PR #449 正規化)。
 
         ``world_runtime`` のように runtime 構築時点では trace_recorder が
@@ -422,9 +392,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         """
         self._trace_recorder_provider = _ensure_trace_recorder_provider(provider)
 
-    def set_current_tick_provider(
-        self, provider: Callable[[], int | None] | None
-    ) -> None:
+    def set_current_tick_provider(self, provider: Callable[[], int | None] | None) -> None:
         """current_tick_provider を後から差し替える (PR #439)。
 
         trace event の tick フィールドを正しく入れたいときに使う。
@@ -461,9 +429,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 is_fallback=summary.is_fallback,
             )
         except Exception:
-            _logger.exception(
-                "trace recorder.record raised for SHORT_TERM_SUMMARY_GENERATED; skipping"
-            )
+            _logger.exception("trace recorder.record raised for SHORT_TERM_SUMMARY_GENERATED; skipping")
 
     def _safe_current_tick(self) -> int | None:
         """current_tick_provider を best-effort で評価。例外は None に縮退。"""
@@ -531,6 +497,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         with self._mid_lock:
             return list(self._mid.get(player_id, ()))
 
+
 def format_mid_summary_block(generations: Sequence[L4MidSummary]) -> str:
     """L4 世代群を prompt 表示用に整形する (新しい順)。
 
@@ -540,7 +507,7 @@ def format_mid_summary_block(generations: Sequence[L4MidSummary]) -> str:
         return ""
     blocks: list[str] = []
     for i, gen in enumerate(generations):
-        header = "[最新] " if i == 0 else f"[{i+1} 世代前] "
+        header = "[最新] " if i == 0 else f"[{i + 1} 世代前] "
         lines: list[str] = []
         lines.append(f"{header}{gen.compressed_activity.strip()}")
         if gen.emotional_summary.strip():

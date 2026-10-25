@@ -48,20 +48,14 @@ class SpotGraphTravelStageService:
         # 後から配線する側 (LLM の手番再開) が先に置かれた hook
         # (encounter 記録・到着の履歴) を黙って消していた。実走経路でだけ
         # 発火しない hook が生まれる形で、静かな失敗そのものだった。
-        self._arrival_observers: list[Callable[[PlayerId], None]] = (
-            [on_arrival] if on_arrival is not None else []
-        )
-        self._blocked_observers: list[
-            Callable[[PlayerId, SpotTravelBlocked], None]
-        ] = []
+        self._arrival_observers: list[Callable[[PlayerId], None]] = [on_arrival] if on_arrival is not None else []
+        self._blocked_observers: list[Callable[[PlayerId, SpotTravelBlocked], None]] = []
         self._eliminated_checker: Callable[[PlayerId], bool] | None = None
         self._departed_checker: Callable[[PlayerId], bool] | None = None
         # 確定後の通知の失敗を trace に残すときの tick。run の入口で更新する。
         self._current_tick: WorldTick | None = None
 
-    def add_arrival_observer(
-        self, callback: Callable[[PlayerId], None]
-    ) -> None:
+    def add_arrival_observer(self, callback: Callable[[PlayerId], None]) -> None:
         """到着の観察者を足す。**既にいる観察者は消さない。**
 
         wiring 順序の都合で LLM turn trigger が travel_stage より後に
@@ -70,9 +64,7 @@ class SpotGraphTravelStageService:
         """
         self._arrival_observers.append(callback)
 
-    def add_blocked_observer(
-        self, callback: Callable[[PlayerId, SpotTravelBlocked], None]
-    ) -> None:
+    def add_blocked_observer(self, callback: Callable[[PlayerId, SpotTravelBlocked], None]) -> None:
         """区間が閉じて移動を取りやめたときの観察者を足す。到着の観察者は呼ばない。"""
         self._blocked_observers.append(callback)
 
@@ -106,9 +98,7 @@ class SpotGraphTravelStageService:
         """
         self._eliminated_checker = checker
 
-    def set_departed_checker(
-        self, checker: Callable[[PlayerId], bool] | None
-    ) -> None:
+    def set_departed_checker(self, checker: Callable[[PlayerId], bool] | None) -> None:
         """有効な幽霊は is_down / DEAD でも移動予約を消化できるようにする。"""
         self._departed_checker = checker
 
@@ -124,15 +114,9 @@ class SpotGraphTravelStageService:
             if nav is None or not nav.is_traveling:
                 continue
             is_eliminated = (
-                self._eliminated_checker(status.player_id)
-                if self._eliminated_checker is not None
-                else False
+                self._eliminated_checker(status.player_id) if self._eliminated_checker is not None else False
             )
-            is_departed = (
-                self._departed_checker(status.player_id)
-                if self._departed_checker is not None
-                else False
-            )
+            is_departed = self._departed_checker(status.player_id) if self._departed_checker is not None else False
             if (is_eliminated or status.is_down) and not is_departed:
                 # 移動を予約した同じ tick に倒されても、次の tick 境界で
                 # 予約だけを消化して死体を動かしてはいけない。run 012 では
@@ -167,9 +151,7 @@ class SpotGraphTravelStageService:
                 else:
                     self._notify_blocked_travel(pid, blocked)
 
-    def _player_unit(
-        self, current_tick: WorldTick, player_id: PlayerId
-    ) -> AbstractContextManager[None]:
+    def _player_unit(self, current_tick: WorldTick, player_id: PlayerId) -> AbstractContextManager[None]:
         return self._failure_isolator.unit(
             stage="travel",
             tick=current_tick,
@@ -178,9 +160,7 @@ class SpotGraphTravelStageService:
             player_id=player_id.value,
         )
 
-    def _notify_blocked_travel(
-        self, player_id: PlayerId, blocked: SpotTravelBlocked
-    ) -> None:
+    def _notify_blocked_travel(self, player_id: PlayerId, blocked: SpotTravelBlocked) -> None:
         """取りやめた移動の計測と通知を、いずれも最善努力で行う。"""
         self._notify_travel_tick_committed(player_id)
         for observer in tuple(self._blocked_observers):
@@ -197,9 +177,7 @@ class SpotGraphTravelStageService:
         except Exception as exc:
             self._record_follow_up_failure(exc, "travel.tick_committed_observer", player_id)
 
-    def _notify_committed_travel(
-        self, player_id: PlayerId, destination: SpotId
-    ) -> None:
+    def _notify_committed_travel(self, player_id: PlayerId, destination: SpotId) -> None:
         """確定済み移動の計測と到着通知を、いずれも最善努力で行う。"""
         self._notify_travel_tick_committed(player_id)
         # 到着 (is_traveling=True → False) を検知して on_arrival 通知。
@@ -225,9 +203,7 @@ class SpotGraphTravelStageService:
         except Exception as exc:
             self._record_follow_up_failure(exc, "travel.arrival_detection", player_id)
 
-    def _record_follow_up_failure(
-        self, exc: Exception, stage: str, player_id: PlayerId
-    ) -> None:
+    def _record_follow_up_failure(self, exc: Exception, stage: str, player_id: PlayerId) -> None:
         self._failure_isolator.record_continued_failure(
             exc,
             stage=stage,

@@ -16,9 +16,8 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 logger = logging.getLogger(__name__)
 
-def record_reason_first_trace(
-    wiring: WorldLlmWiring, kind: str, player_id: PlayerId, **payload: Any
-) -> None:
+
+def record_reason_first_trace(wiring: WorldLlmWiring, kind: str, player_id: PlayerId, **payload: Any) -> None:
     trace_recorder = getattr(wiring.runtime, "trace_recorder", None)
     if trace_recorder is None:
         return

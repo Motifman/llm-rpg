@@ -3,6 +3,7 @@ from enum import Enum
 
 class PostVisibility(Enum):
     """投稿の公開範囲"""
+
     PUBLIC = "public"
     FOLLOWERS_ONLY = "followers_only"
     PRIVATE = "private"
@@ -10,6 +11,7 @@ class PostVisibility(Enum):
 
 class UserRelationshipType(Enum):
     """ユーザー関係性の種類"""
+
     FOLLOWEES = "followees"
     FOLLOWERS = "followers"
     BLOCKED_USERS = "blocked_users"

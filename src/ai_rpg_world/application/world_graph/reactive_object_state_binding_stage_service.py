@@ -63,9 +63,7 @@ class ReactiveObjectStateBindingStageService:
         bindings: Iterable[ReactiveObjectStateBinding],
         condition_evaluator: ScenarioConditionEvaluator,
         predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
-        command_scope_factory: (
-            CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort] | None
-        ) = None,
+        command_scope_factory: (CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort] | None) = None,
         failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
         self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
@@ -73,25 +71,24 @@ class ReactiveObjectStateBindingStageService:
         self._condition_evaluator = condition_evaluator
         self._predicate_trace_emitter = predicate_trace_emitter
         self._command_scope_factory = command_scope_factory
-        self._condition_evaluator.validate_dependencies(
-            binding.predicate for binding in self._bindings
-        )
+        self._condition_evaluator.validate_dependencies(binding.predicate for binding in self._bindings)
 
     def run(self, current_tick: WorldTick) -> None:
         if not self._bindings:
             return
         factory = self._command_scope_factory
         if factory is None:
-            raise RuntimeError(
-                "reactive object用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("reactive object用CommandScopeFactoryが未配線です。")
         for binding_index, binding in enumerate(self._bindings):
-            with self._failure_isolator.unit(
-                stage="reactive_object_state",
-                tick=current_tick,
-                target_kind="object_state_binding",
-                target_id=f"{binding_index}:{binding.target_object_id.value}",
-            ), factory.create() as context:
+            with (
+                self._failure_isolator.unit(
+                    stage="reactive_object_state",
+                    tick=current_tick,
+                    target_kind="object_state_binding",
+                    target_id=f"{binding_index}:{binding.target_object_id.value}",
+                ),
+                factory.create() as context,
+            ):
                 repositories = context.repositories
                 graph = repositories.spot_graph.find_graph()
                 existing_events = tuple(graph.get_events())
@@ -125,7 +122,9 @@ class ReactiveObjectStateBindingStageService:
         spot_interior_repository: ISpotInteriorRepository,
     ) -> None:
         target, owner_spot = find_object_with_owner(
-            binding.target_object_id, graph, spot_interior_repository,
+            binding.target_object_id,
+            graph,
+            spot_interior_repository,
         )
         if target is None or owner_spot is None:
             _logger.warning(
@@ -134,7 +133,9 @@ class ReactiveObjectStateBindingStageService:
             )
             return
         evaluation = self._condition_evaluator.evaluate_diagnostic(
-            binding.predicate, current_tick, graph,
+            binding.predicate,
+            current_tick,
+            graph,
         )
         result = evaluation.result
         if self._predicate_trace_emitter is not None:
@@ -178,11 +179,7 @@ class ReactiveObjectStateBindingStageService:
             # 無ければ None → formatter は observation を emit しない (silent)。
             # これにより「available が False から True に変わった」のような
             # 内部用語の漏洩を防ぐ。
-            narrative = (
-                binding.narrative_on_true
-                if predicate_value
-                else binding.narrative_on_false
-            )
+            narrative = binding.narrative_on_true if predicate_value else binding.narrative_on_false
             graph.add_event(
                 SpotObjectStateChangedEvent.create(
                     aggregate_id=graph.graph_id,
@@ -205,7 +202,7 @@ class ReactiveObjectStateBindingStageService:
     ) -> None:
         """このbindingが追加したeventだけを確定後配送へ移す。"""
         all_events = tuple(graph.get_events())
-        new_events = all_events[len(existing_events):]
+        new_events = all_events[len(existing_events) :]
         if not new_events:
             return
         graph.clear_events()
@@ -217,6 +214,4 @@ class ReactiveObjectStateBindingStageService:
     @property
     def managed_state_keys_per_object(self) -> Mapping[int, tuple[str, ...]]:
         """各 object_id → 管理する state キーのマップ（テスト/監査用）。"""
-        return {
-            b.target_object_id.value: b.managed_state_keys for b in self._bindings
-        }
+        return {b.target_object_id.value: b.managed_state_keys for b in self._bindings}

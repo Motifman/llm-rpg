@@ -31,9 +31,7 @@ logger = logging.getLogger(__name__)
 # 採用バージョン: 3.30.4 (2024-11 リリースの安定版、Mermaid と違って CDN 経由
 # のロード問題は無いが念のため pin)。
 CYTOSCAPE_VERSION = "3.30.4"
-CYTOSCAPE_URL = (
-    f"https://unpkg.com/cytoscape@{CYTOSCAPE_VERSION}/dist/cytoscape.min.js"
-)
+CYTOSCAPE_URL = f"https://unpkg.com/cytoscape@{CYTOSCAPE_VERSION}/dist/cytoscape.min.js"
 # 公式 unpkg の minified を一度手動で取得し、検証した SHA256。
 # 更新時は新しい値を手で確認して上書きする。
 CYTOSCAPE_SHA256 = "1bb5340e549511e111b31e5684872c949ad33d40ea5dba0ad8e7d90c62c7b3b9"
@@ -129,8 +127,7 @@ def fetch_cytoscape(*, offline: bool = False) -> VendorAsset:
     cache_path = cache_dir() / f"cytoscape-{CYTOSCAPE_VERSION}.min.js"
     if offline and not cache_path.exists():
         raise VendorFetchError(
-            f"offline mode: vendor not cached at {cache_path}. "
-            f"Run once online to populate the cache."
+            f"offline mode: vendor not cached at {cache_path}. Run once online to populate the cache."
         )
     data = _read_or_download(
         cache_path=cache_path,

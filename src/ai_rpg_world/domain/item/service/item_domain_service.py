@@ -1,4 +1,3 @@
-
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
 from ai_rpg_world.domain.item.exception import InsufficientIngredientsException
@@ -16,11 +15,9 @@ from ai_rpg_world.domain.item.value_object.merge_plan import (
 class ItemStackingDomainService:
     """アイテムスタッキングドメインサービス"""
 
-
     @staticmethod
     def calculate_max_stack_quantity(
-        base_item: ItemAggregate,
-        additional_items: list[ItemAggregate]
+        base_item: ItemAggregate, additional_items: list[ItemAggregate]
     ) -> tuple[int, list[ItemAggregate]]:
         """スタック可能なアイテムから最大スタック数量を計算
 
@@ -53,11 +50,7 @@ class ItemStackingDomainService:
             MergePlan: マージ計画
         """
         if not items:
-            return MergePlan(
-                update_operations=[],
-                create_operations=[],
-                delete_operations=[]
-            )
+            return MergePlan(update_operations=[], create_operations=[], delete_operations=[])
 
         update_operations = []
         create_operations = []
@@ -89,13 +82,12 @@ class ItemStackingDomainService:
         return MergePlan(
             update_operations=update_operations,
             create_operations=create_operations,
-            delete_operations=delete_operations
+            delete_operations=delete_operations,
         )
 
     @staticmethod
     def plan_crafting_consumption(
-        recipe: RecipeAggregate,
-        available_items: list[ItemAggregate]
+        recipe: RecipeAggregate, available_items: list[ItemAggregate]
     ) -> CraftingConsumptionPlan:
         """クラフト材料消費計画を作成
 
@@ -157,40 +149,33 @@ class ItemStackingDomainService:
                 remaining_to_consume -= consume_quantity
 
                 # 消費情報を記録
-                consumed_items.append(ConsumedItem(
-                    item_instance_id=item.item_instance_id,
-                    consumed_quantity=consume_quantity,
-                    remaining_quantity=new_quantity
-                ))
+                consumed_items.append(
+                    ConsumedItem(
+                        item_instance_id=item.item_instance_id,
+                        consumed_quantity=consume_quantity,
+                        remaining_quantity=new_quantity,
+                    )
+                )
 
                 # 操作計画を作成
                 if new_quantity == 0:
                     # 完全に消費された場合は削除
-                    delete_operations.append(DeleteOperation(
-                        item_instance_id=item.item_instance_id
-                    ))
+                    delete_operations.append(DeleteOperation(item_instance_id=item.item_instance_id))
                 else:
                     # 部分的に消費された場合は更新
-                    update_operations.append(UpdateOperation(
-                        item_instance_id=item.item_instance_id,
-                        new_quantity=new_quantity
-                    ))
+                    update_operations.append(
+                        UpdateOperation(item_instance_id=item.item_instance_id, new_quantity=new_quantity)
+                    )
 
         return CraftingConsumptionPlan(
-            consumed_items=consumed_items,
-            update_operations=update_operations,
-            delete_operations=delete_operations
+            consumed_items=consumed_items, update_operations=update_operations, delete_operations=delete_operations
         )
 
     @staticmethod
     def _plan_merge_same_spec_items(items: list[ItemAggregate]) -> MergePlan:
         """同じスペックのアイテムをマージする計画を作成"""
         if not items:
-            return MergePlan(
-                update_operations=[],
-                create_operations=[],
-                delete_operations=[]
-            )
+            return MergePlan(update_operations=[], create_operations=[], delete_operations=[])
 
         update_operations = []
         create_operations = []
@@ -203,30 +188,25 @@ class ItemStackingDomainService:
 
         # base_itemを更新（最初のスタック分）
         first_stack_quantity = min(total_quantity, max_stack)
-        update_operations.append(UpdateOperation(
-            item_instance_id=base_item.item_instance_id,
-            new_quantity=first_stack_quantity
-        ))
+        update_operations.append(
+            UpdateOperation(item_instance_id=base_item.item_instance_id, new_quantity=first_stack_quantity)
+        )
 
         # 残りのアイテムは削除
         for item in items[1:]:
-            delete_operations.append(DeleteOperation(
-                item_instance_id=item.item_instance_id
-            ))
+            delete_operations.append(DeleteOperation(item_instance_id=item.item_instance_id))
 
         # 追加で作成する必要があるアイテム
         remaining_quantity = total_quantity - first_stack_quantity
         while remaining_quantity > 0:
             quantity = min(remaining_quantity, max_stack)
-            create_operations.append(CreateOperation(
-                item_spec=base_item.item_spec,
-                quantity=quantity,
-                durability=base_item.durability
-            ))
+            create_operations.append(
+                CreateOperation(item_spec=base_item.item_spec, quantity=quantity, durability=base_item.durability)
+            )
             remaining_quantity -= quantity
 
         return MergePlan(
             update_operations=update_operations,
             create_operations=create_operations,
-            delete_operations=delete_operations
+            delete_operations=delete_operations,
         )

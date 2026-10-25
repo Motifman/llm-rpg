@@ -18,9 +18,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     ScenarioLoadError,
 )
 
-_FIXTURE = (
-    Path(__file__).resolve().parents[2] / "fixtures" / "scenarios" / "two_teams_lift.json"
-)
+_FIXTURE = Path(__file__).resolve().parents[2] / "fixtures" / "scenarios" / "two_teams_lift.json"
 
 
 def _raw() -> dict[str, Any]:
@@ -33,10 +31,7 @@ def _load(raw: dict[str, Any], **kwargs: Any):
 
 def _members_by_team(result) -> dict[str, list[str]]:
     return {
-        team.team_id: sorted(
-            result.id_mapper.get_str("player", int(pid))
-            for pid in team.member_player_ids
-        )
+        team.team_id: sorted(result.id_mapper.get_str("player", int(pid)) for pid in team.member_player_ids)
         for team in result.teams
     }
 
@@ -82,15 +77,17 @@ class TestTeamsAreRead:
         """round_assignment の枠に team を書くと、所属は割り当てたあとの initial_state で決まる。"""
         raw = _raw()
         raw["round_assignment"] = {
-            "groups": [{
-                "players": ["north_1", "north_2", "south_1", "south_2"],
-                "slots": [
-                    {"initial_state": {"team": "north"}},
-                    {"initial_state": {"team": "north"}},
-                    {"initial_state": {"team": "south"}},
-                    {"initial_state": {"team": "south"}},
-                ],
-            }]
+            "groups": [
+                {
+                    "players": ["north_1", "north_2", "south_1", "south_2"],
+                    "slots": [
+                        {"initial_state": {"team": "north"}},
+                        {"initial_state": {"team": "north"}},
+                        {"initial_state": {"team": "south"}},
+                        {"initial_state": {"team": "south"}},
+                    ],
+                }
+            ]
         }
 
         rounds = [_members_by_team(_load(copy.deepcopy(raw), random_seed=7, round_number=n)) for n in (1, 2, 3, 4)]
@@ -113,12 +110,14 @@ class TestBrokenTeamsAreRejected:
     def test_player_in_two_teams_is_rejected(self) -> None:
         """2 つのチームの member_state に同じ人が一致すると、その人の id を挙げて ScenarioLoadError を投げる。"""
         raw = _raw()
-        raw["teams"].append({
-            "id": "north_again",
-            "name": "もう一つの北",
-            "member_state": {"team": "north"},
-            "win": [{"type": "FLAG_SET", "target_flag": "x"}],
-        })
+        raw["teams"].append(
+            {
+                "id": "north_again",
+                "name": "もう一つの北",
+                "member_state": {"team": "north"},
+                "win": [{"type": "FLAG_SET", "target_flag": "x"}],
+            }
+        )
 
         with pytest.raises(ScenarioLoadError, match="north_1 が teams の north と north_again"):
             _load(raw)
@@ -127,12 +126,14 @@ class TestBrokenTeamsAreRejected:
         """北の member_state に一致する人が、別のチームの member_state にも一致すると ScenarioLoadError を投げる。"""
         raw = _raw()
         raw["players"][0]["initial_state"] = {"team": "north", "squad": "a"}
-        raw["teams"].append({
-            "id": "squad_a",
-            "name": "a 組",
-            "member_state": {"squad": "a"},
-            "win": [{"type": "FLAG_SET", "target_flag": "x"}],
-        })
+        raw["teams"].append(
+            {
+                "id": "squad_a",
+                "name": "a 組",
+                "member_state": {"squad": "a"},
+                "win": [{"type": "FLAG_SET", "target_flag": "x"}],
+            }
+        )
 
         with pytest.raises(ScenarioLoadError, match="north_1"):
             _load(raw)
@@ -166,9 +167,7 @@ class TestBrokenTeamsAreRejected:
     def test_members_condition_outside_teams_is_rejected(self) -> None:
         """ALL_MEMBERS_HAVE_OUTCOME を game_end_conditions.end に置くと ScenarioLoadError を投げる。"""
         raw = _raw()
-        raw["game_end_conditions"]["end"].append(
-            {"type": "ALL_MEMBERS_HAVE_OUTCOME", "outcome": "RESCUED"}
-        )
+        raw["game_end_conditions"]["end"].append({"type": "ALL_MEMBERS_HAVE_OUTCOME", "outcome": "RESCUED"})
 
         with pytest.raises(ScenarioLoadError, match="ALL_MEMBERS_HAVE_OUTCOME"):
             _load(raw)
@@ -177,9 +176,7 @@ class TestBrokenTeamsAreRejected:
         """teams の無いシナリオで game_end_conditions.win に ALL_MEMBERS_HAVE_OUTCOME を置くと ScenarioLoadError を投げる。"""
         raw = _raw()
         del raw["teams"]
-        raw["game_end_conditions"] = {
-            "win": [{"type": "ALL_MEMBERS_HAVE_OUTCOME", "outcome": "RESCUED"}]
-        }
+        raw["game_end_conditions"] = {"win": [{"type": "ALL_MEMBERS_HAVE_OUTCOME", "outcome": "RESCUED"}]}
 
         with pytest.raises(ScenarioLoadError, match="ALL_MEMBERS_HAVE_OUTCOME"):
             _load(raw)
@@ -282,4 +279,3 @@ class TestBrokenTeamsAreRejected:
         result = _load(raw)
 
         assert result.teams[1].win_conditions[0].required_outcome is PlayerOutcomeEnum.DEAD
-

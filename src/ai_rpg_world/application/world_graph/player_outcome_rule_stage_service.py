@@ -69,9 +69,7 @@ class PlayerOutcomeRuleStageService:
         self._predicate_trace_emitter = predicate_trace_emitter
         self._command_scope_factory = command_scope_factory
         self._condition_evaluator.validate_dependencies(
-            condition
-            for rule in self._rules
-            for condition in (rule.trigger, *rule.player_conditions)
+            condition for rule in self._rules for condition in (rule.trigger, *rule.player_conditions)
         )
 
     def set_command_scope_factory(
@@ -94,9 +92,7 @@ class PlayerOutcomeRuleStageService:
             return
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            raise RuntimeError(
-                "player outcome rule用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("player outcome rule用CommandScopeFactoryが未配線です。")
         for rule in self._rules:
             progress_id = f"{_PROGRESS_PREFIX}{rule.rule_id}"
             if rule.once and self._progress_store.is_fired(progress_id):
@@ -147,9 +143,7 @@ class PlayerOutcomeRuleStageService:
         # 外側の確認は不要なscope生成を避ける高速経路にすぎない。
         # 待機中に別commandが同じonce規則を確定し得るため、資源所有権を
         # 取得した後にも進捗を再確認してから条件評価へ進む。
-        if rule.once and self._progress_store.is_fired(
-            f"{_PROGRESS_PREFIX}{rule.rule_id}"
-        ):
+        if rule.once and self._progress_store.is_fired(f"{_PROGRESS_PREFIX}{rule.rule_id}"):
             return (), False
 
         graph = self._graph_provider()
@@ -176,13 +170,11 @@ class PlayerOutcomeRuleStageService:
             old_outcome = self._outcome_registry.get_outcome(player_id)
             if old_outcome.is_resolved:
                 continue
-            eligibility_evaluation = (
-                self._condition_evaluator.evaluate_all_diagnostic_for_player(
-                    rule.player_conditions,
-                    current_tick,
-                    graph,
-                    target_player_id=player_id,
-                )
+            eligibility_evaluation = self._condition_evaluator.evaluate_all_diagnostic_for_player(
+                rule.player_conditions,
+                current_tick,
+                graph,
+                target_player_id=player_id,
             )
             eligibility_result = eligibility_evaluation.result
             if self._predicate_trace_emitter is not None:

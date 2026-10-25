@@ -16,8 +16,12 @@ class TestSpotNodeStep2:
     def test_with_interior_and_atmosphere(self, with_object: bool):
         """指定した内部構造とDIMの雰囲気を値ごと保持し、屋内を既定とする。"""
         obj = SpotObject(
-            SpotObjectId.create(7), "机", "木製", SpotObjectTypeEnum.OTHER,
-            {"opened": False}, (),
+            SpotObjectId.create(7),
+            "机",
+            "木製",
+            SpotObjectTypeEnum.OTHER,
+            {"opened": False},
+            (),
         )
         interior = SpotInterior((), (obj,), (), ()) if with_object else SpotInterior.empty()
         atm = SpotAtmosphere(lighting=LightingEnum.DIM)

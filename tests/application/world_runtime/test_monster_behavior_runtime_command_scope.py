@@ -30,13 +30,7 @@ def _runtime_attack_setup():
     graph.place_entity(entity_id, spot_id)
     graph.clear_events()
     runtime._spot_graph_repo.save(graph)
-    monster_id = next(
-        iter(
-            runtime._spot_graph_repo.find_graph()
-            .monster_presence_at(spot_id)
-            .present_monster_ids
-        )
-    )
+    monster_id = next(iter(runtime._spot_graph_repo.find_graph().monster_presence_at(spot_id).present_monster_ids))
     return runtime, service, player_id, monster_id, spot_id
 
 
@@ -67,11 +61,7 @@ def test_attack_observation_sees_committed_monster_and_player() -> None:
             (
                 type(event).__name__,
                 player.hp.value,
-                (
-                    monster.last_attack_tick.value
-                    if monster.last_attack_tick is not None
-                    else None
-                ),
+                (monster.last_attack_tick.value if monster.last_attack_tick is not None else None),
             )
         )
 
@@ -86,9 +76,7 @@ def test_attack_observation_sees_committed_monster_and_player() -> None:
 
     assert len(outcomes) == 1
     assert outcomes[0].executed is True
-    assert observed == [
-        ("MonsterAttackedPlayerInSpotEvent", 100 - outcomes[0].damage, 10)
-    ]
+    assert observed == [("MonsterAttackedPlayerInSpotEvent", 100 - outcomes[0].damage, 10)]
 
 
 def test_graph_save_failure_rolls_back_attack_event_and_randomness() -> None:

@@ -16,8 +16,20 @@ class TestReplyAggregate:
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
 
-        with pytest.raises(InvalidParentReferenceException, match="リプライは親ポストまたは親リプライのどちらかを持つ必要があります"):
-            ReplyAggregate(reply_id, author_user_id, content, set(), set(), set(), deleted=False, parent_post_id=None, parent_reply_id=None)
+        with pytest.raises(
+            InvalidParentReferenceException, match="リプライは親ポストまたは親リプライのどちらかを持つ必要があります"
+        ):
+            ReplyAggregate(
+                reply_id,
+                author_user_id,
+                content,
+                set(),
+                set(),
+                set(),
+                deleted=False,
+                parent_post_id=None,
+                parent_reply_id=None,
+            )
 
     def test_constructor_with_both_parents_raises_error(self):
         """親ポストIDと親リプライIDの両方を指定すると例外が発生"""
@@ -28,4 +40,14 @@ class TestReplyAggregate:
         content = PostContent("テスト返信")
 
         with pytest.raises(InvalidParentReferenceException):
-            ReplyAggregate(reply_id, author_user_id, content, set(), set(), set(), deleted=False, parent_post_id=parent_post_id, parent_reply_id=parent_reply_id)
+            ReplyAggregate(
+                reply_id,
+                author_user_id,
+                content,
+                set(),
+                set(),
+                set(),
+                deleted=False,
+                parent_post_id=parent_post_id,
+                parent_reply_id=parent_reply_id,
+            )

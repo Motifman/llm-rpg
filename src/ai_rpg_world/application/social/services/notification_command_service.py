@@ -30,18 +30,12 @@ _Result = TypeVar("_Result")
 class NotificationCommandService:
     """通知コマンドサービス"""
 
-    def __init__(
-        self,
-        notification_repository: "SnsNotificationRepository",
-        unit_of_work: "UnitOfWork"
-    ):
+    def __init__(self, notification_repository: "SnsNotificationRepository", unit_of_work: "UnitOfWork"):
         self._notification_repository = notification_repository
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -50,24 +44,17 @@ class NotificationCommandService:
             raise e
         except SnsDomainException as e:
             raise ApplicationExceptionFactory.create_from_domain_exception(
-                e,
-                user_id=context.get('user_id'),
-                **{k: v for k, v in context.items() if k in ['notification_id']}
+                e, user_id=context.get("user_id"), **{k: v for k, v in context.items() if k in ["notification_id"]}
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra=context)
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def mark_notification_as_read(self, command: MarkNotificationAsReadCommand) -> CommandResultDto:
         """通知を既読にする"""
         return self._execute_with_error_handling(
             operation=lambda: self._mark_notification_as_read_impl(command),
-            context={
-                "action": "mark_notification_as_read",
-                "notification_id": command.notification_id
-            }
+            context={"action": "mark_notification_as_read", "notification_id": command.notification_id},
         )
 
     def _mark_notification_as_read_impl(self, command: MarkNotificationAsReadCommand) -> CommandResultDto:
@@ -93,10 +80,7 @@ class NotificationCommandService:
         """全通知を既読にする"""
         return self._execute_with_error_handling(
             operation=lambda: self._mark_all_notifications_as_read_impl(command),
-            context={
-                "action": "mark_all_notifications_as_read",
-                "user_id": command.user_id
-            }
+            context={"action": "mark_all_notifications_as_read", "user_id": command.user_id},
         )
 
     def _mark_all_notifications_as_read_impl(self, command: MarkAllNotificationsAsReadCommand) -> CommandResultDto:

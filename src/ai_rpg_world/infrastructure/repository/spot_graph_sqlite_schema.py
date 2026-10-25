@@ -28,9 +28,7 @@ def _migration_v1(connection: sqlite3.Connection) -> None:
     )
 
 
-SPOT_GRAPH_MIGRATIONS: tuple[SqliteMigration, ...] = (
-    SqliteMigration(version=1, apply=_migration_v1),
-)
+SPOT_GRAPH_MIGRATIONS: tuple[SqliteMigration, ...] = (SqliteMigration(version=1, apply=_migration_v1),)
 
 
 def init_spot_graph_schema(connection: sqlite3.Connection) -> int:

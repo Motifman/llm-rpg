@@ -127,9 +127,7 @@ def _stage(
         ),
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
-        repository_provider_factory=(
-            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(offer_store)
-        ),
+        repository_provider_factory=(InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(offer_store)),
     )
     return TradeOfferExpiryStage(
         command_scope_factory=scope_factory,
@@ -243,9 +241,7 @@ def test_each_offer_commits_independently_before_a_later_offer_fails(
         ).run(2)
 
     first_inventory = InMemoryPlayerInventoryRepository(data_store).find_by_id(OFFERER)
-    second_inventory = InMemoryPlayerInventoryRepository(data_store).find_by_id(
-        second_offerer
-    )
+    second_inventory = InMemoryPlayerInventoryRepository(data_store).find_by_id(second_offerer)
     assert offer_store.find(first.offer_id) is None
     assert first_inventory.reserved_item_ids == frozenset()
     assert offer_store.find(second.offer_id) is not None
@@ -353,9 +349,7 @@ def test_provider_rejects_a_pending_store_outside_the_transaction() -> None:
         ),
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
-        repository_provider_factory=(
-            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(provider_store)
-        ),
+        repository_provider_factory=(InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(provider_store)),
     )
 
     with pytest.raises(TypeError, match="rollback対象にありません"):

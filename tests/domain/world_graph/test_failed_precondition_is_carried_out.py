@@ -127,8 +127,7 @@ class TestEvaluatePreconditionsResult:
     """interaction 前提条件が共通 PredicateResult 契約を正本として返す。"""
 
     def test_second_failure_keeps_condition_message_and_path(self) -> None:
-        """2番目で落ちると、条件の実体・文・子番号1を同じ結果へ保持する。
-        """
+        """2番目で落ちると、条件の実体・文・子番号1を同じ結果へ保持する。"""
         first = _state_condition()
         second = _item_condition()
 
@@ -162,7 +161,6 @@ class TestEvaluatePreconditionsResult:
 
 class TestCanInteractStaysCompatible:
     """`can_interact` の戻り値は 2 要素のまま。"""
-
 
     def test_it_agrees_with_the_richer_method(self) -> None:
         """委譲先と成否・理由が一致する。"""

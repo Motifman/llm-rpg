@@ -3,6 +3,7 @@
 実 ``LlmAgentWiringResult`` の代わりに minimum stub を組んで、capture_all /
 restore_all_from_dir の集計動作を担保する。
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -40,8 +41,17 @@ def _make_wiring_stub() -> tuple[SimpleNamespace, BeingProvisioningService]:
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
     provisioning = BeingProvisioningService(repo)
-    wiring = SimpleNamespace(being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock(), being_short_term_memory_store=InMemoryShortTermMemoryRepository())
+    wiring = SimpleNamespace(
+        being_repository=repo,
+        being_attachment_resolver=resolver,
+        acquaintance_store=InMemoryAcquaintanceRepository(),
+        being_episode_store=InMemoryEpisodeRepository(),
+        being_memo_store=InMemoryMemoBookRepository(),
+        memory_turn_clock=InMemoryMemoryTurnClock(),
+        being_short_term_memory_store=InMemoryShortTermMemoryRepository(),
+    )
     return (wiring, provisioning)
+
 
 class TestConstructorGuards:
     """必須 / 任意 store の判定。"""
@@ -50,29 +60,30 @@ class TestConstructorGuards:
         """being repository missing は RuntimeError。"""
         (wiring, _) = _make_wiring_stub()
         wiring.being_repository = None
-        with pytest.raises(RuntimeError, match='being_repository'):
-            ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        with pytest.raises(RuntimeError, match="being_repository"):
+            ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
 
     def test_being_episode_store_missing_raises_runtime_error(self, tmp_path: Path) -> None:
         """目次つきのエピソードの store が無い wiring では、空の store で代用せず RuntimeError で止まる。代用すると、再開した Being が書いた記憶を忘れたことと配線漏れが見分けられない。"""
         (wiring, _) = _make_wiring_stub()
         wiring.being_episode_store = None
-        with pytest.raises(RuntimeError, match='being_episode_store'):
-            ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        with pytest.raises(RuntimeError, match="being_episode_store"):
+            ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
 
     def test_being_memo_store_missing_raises_runtime_error(self, tmp_path: Path) -> None:
         """メモ帳の store が無い wiring では、空の store で代用せず RuntimeError で止まる。代用すると、再開した Being がメモを忘れたことと配線漏れが見分けられない。"""
         (wiring, _) = _make_wiring_stub()
         wiring.being_memo_store = None
-        with pytest.raises(RuntimeError, match='being_memo_store'):
-            ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        with pytest.raises(RuntimeError, match="being_memo_store"):
+            ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
 
     def test_memory_turn_clock_missing_raises_runtime_error(self, tmp_path: Path) -> None:
         """記憶のターン数の時計が無い wiring では、空の時計で代用せず RuntimeError で止まる。代用すると、再開した Being のターン数が 0 に戻り、記憶に付くターン数が前の回と重なる。"""
         (wiring, _) = _make_wiring_stub()
         wiring.memory_turn_clock = None
-        with pytest.raises(RuntimeError, match='memory_turn_clock'):
-            ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        with pytest.raises(RuntimeError, match="memory_turn_clock"):
+            ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
+
 
 class TestWorldSubsystemCoverage:
     """world snapshot の既定 subsystem 一覧を構造で固定する。"""
@@ -81,6 +92,7 @@ class TestWorldSubsystemCoverage:
         """既定 codec の key が期待一覧と同じ順序・同じ集合で登録される。"""
         keys = [codec.subsystem_key for codec in _default_world_subsystem_codecs()]
         assert keys == list(EXPECTED_WORLD_SUBSYSTEM_KEYS)
+
 
 class TestCaptureAll:
     """capture_all の集計動作。"""
@@ -92,24 +104,24 @@ class TestCaptureAll:
         provisioning.ensure_attached(PlayerId(2))
         being_1 = wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))
         assert being_1 is not None
-        wiring.acquaintance_store.record_meeting(being_1, environment_name='島', name='カイト', turn=1)
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        wiring.acquaintance_store.record_meeting(being_1, environment_name="島", name="カイト", turn=1)
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
         report = session.capture_all([PlayerId(1), PlayerId(2)])
         assert report.is_clean
         assert len(report.succeeded) == 2
-        files = sorted((tmp_path / 'snap').iterdir())
+        files = sorted((tmp_path / "snap").iterdir())
         assert len(files) == 2
-        assert all(f.suffix == '.json' for f in files)
+        assert all(f.suffix == ".json" for f in files)
 
     def test_emits_warning_for_attach_player(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """attach されていない player はスキップして警告。"""
         (wiring, provisioning) = _make_wiring_stub()
         provisioning.ensure_attached(PlayerId(1))
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
-        with caplog.at_level('WARNING'):
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
+        with caplog.at_level("WARNING"):
             report = session.capture_all([PlayerId(1), PlayerId(2)])
         assert len(report.succeeded) == 1
-        assert any('player_id=2' in r.message for r in caplog.records)
+        assert any("player_id=2" in r.message for r in caplog.records)
 
     def test_one_player_capture_failure_other_player_does_not_stop(self, tmp_path: Path) -> None:
         """知り合いの store の読み出しが 1 being だけで例外を投げるよう細工し、
@@ -123,16 +135,18 @@ class TestCaptureAll:
 
         def _raising(being_id):
             if being_id == being_2:
-                raise RuntimeError('synthetic failure')
+                raise RuntimeError("synthetic failure")
             return original(being_id)
+
         wiring.acquaintance_store.list_by_being = _raising
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
         report = session.capture_all([PlayerId(1), PlayerId(2)])
         assert len(report.succeeded) == 1
         assert len(report.failed) == 1
         assert report.failed[0][0] == being_2
-        files = list((tmp_path / 'snap').iterdir())
+        files = list((tmp_path / "snap").iterdir())
         assert len(files) == 1
+
 
 class TestRestoreAll:
     """restore_all_from_dir の挙動。"""
@@ -143,14 +157,14 @@ class TestRestoreAll:
         src_prov.ensure_attached(PlayerId(1))
         being_1 = src_wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))
         assert being_1 is not None
-        src_wiring.acquaintance_store.record_meeting(being_1, environment_name='島', name='カイト', turn=1)
-        src_session = ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / 'snap')
+        src_wiring.acquaintance_store.record_meeting(being_1, environment_name="島", name="カイト", turn=1)
+        src_session = ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / "snap")
         src_session.capture_all([PlayerId(1)])
         (dst_wiring, _) = _make_wiring_stub()
-        dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / 'snap')
-        report = dst_session.restore_all_from_dir(tmp_path / 'snap')
+        dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / "snap")
+        report = dst_session.restore_all_from_dir(tmp_path / "snap")
         assert len(report.restored) == 1
-        assert [a.name for a in dst_wiring.acquaintance_store.list_by_being(being_1)] == ['カイト']
+        assert [a.name for a in dst_wiring.acquaintance_store.list_by_being(being_1)] == ["カイト"]
 
     def test_report_lists_removed_memory_keys_only_for_beings_that_had_them(self, tmp_path: Path) -> None:
         """古いメモの欄を持つ snapshot だけが、Being ごとの捨てた件数として報告に載る。持たない Being は載らない。"""
@@ -159,44 +173,52 @@ class TestRestoreAll:
         src_prov.ensure_attached(PlayerId(2))
         being_1 = src_wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))
         assert being_1 is not None
-        ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / 'snap').capture_all([PlayerId(1), PlayerId(2)])
+        ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / "snap").capture_all(
+            [PlayerId(1), PlayerId(2)]
+        )
         gateway = BeingSnapshotFileGateway()
-        old_path = tmp_path / 'snap' / f'{being_1.value}.json'
+        old_path = tmp_path / "snap" / f"{being_1.value}.json"
         snapshot = gateway.read(old_path)
-        payload = {**json.loads(snapshot.memory_payload_json), 'memo': [{'id': 'm1', 'added_at_tick': 90}, {'id': 'm2', 'added_at_tick': 91}]}
+        payload = {
+            **json.loads(snapshot.memory_payload_json),
+            "memo": [{"id": "m1", "added_at_tick": 90}, {"id": "m2", "added_at_tick": 91}],
+        }
         gateway.write(dataclasses.replace(snapshot, memory_payload_json=json.dumps(payload)), old_path)
         (dst_wiring, _) = _make_wiring_stub()
 
-        report = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / 'dst').restore_all_from_dir(tmp_path / 'snap')
+        report = ExperimentSnapshotSession(
+            wiring_result=dst_wiring, snapshot_dir=tmp_path / "dst"
+        ).restore_all_from_dir(tmp_path / "snap")
 
         assert len(report.restored) == 2
-        assert report.removed_memory_key_counts == {being_1: {'memo': 2}}
+        assert report.removed_memory_key_counts == {being_1: {"memo": 2}}
 
     def test_missing_raises_file_not_found_error(self, tmp_path: Path) -> None:
         """存在しない ディレクトリは FileNotFoundError。"""
         (wiring, _) = _make_wiring_stub()
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
         with pytest.raises(FileNotFoundError):
-            session.restore_all_from_dir(tmp_path / 'no-such-dir')
+            session.restore_all_from_dir(tmp_path / "no-such-dir")
 
     def test_empty_directory_op(self, tmp_path: Path) -> None:
         """空ディレクトリは no op。"""
-        empty = tmp_path / 'empty'
+        empty = tmp_path / "empty"
         empty.mkdir()
         (wiring, _) = _make_wiring_stub()
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
         report = session.restore_all_from_dir(empty)
         assert report.restored == []
 
     def test_invalid_json_all_raises_exception(self, tmp_path: Path) -> None:
         """壊れた JSON は例外で全体停止。"""
         (wiring, _) = _make_wiring_stub()
-        bad_dir = tmp_path / 'bad'
+        bad_dir = tmp_path / "bad"
         bad_dir.mkdir()
-        (bad_dir / 'broken.json').write_text('not json', encoding='utf-8')
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        (bad_dir / "broken.json").write_text("not json", encoding="utf-8")
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
         with pytest.raises(Exception):
             session.restore_all_from_dir(bad_dir)
+
 
 class TestScenarioMetadata:
     """Phase 7: scenario メタデータの埋め込み + cross-scenario transfer 検知。"""
@@ -204,55 +226,58 @@ class TestScenarioMetadata:
     def test_writes_capture_source_scenario_metadata(self, tmp_path: Path) -> None:
         """capture は source scenario を metadata に書き込む。"""
         from ai_rpg_world.application.being.being_snapshot_file_gateway import BeingSnapshotFileGateway
+
         (wiring, prov) = _make_wiring_stub()
         prov.ensure_attached(PlayerId(1))
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
-        session.capture_all([PlayerId(1)], source_scenario='decay_demo')
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
+        session.capture_all([PlayerId(1)], source_scenario="decay_demo")
         gateway = BeingSnapshotFileGateway()
-        files = list((tmp_path / 'snap').iterdir())
+        files = list((tmp_path / "snap").iterdir())
         assert len(files) == 1
         metadata = gateway.read_metadata(files[0])
         assert metadata is not None
-        assert metadata.source_scenario == 'decay_demo'
+        assert metadata.source_scenario == "decay_demo"
         assert metadata.captured_at is not None
 
     def test_same_scenario_restore_cross_transfer_not_included(self, tmp_path: Path) -> None:
         """同じ scenario の restore は cross transfer に乗らない。"""
         (src_wiring, src_prov) = _make_wiring_stub()
         src_prov.ensure_attached(PlayerId(1))
-        src_session = ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / 'snap')
-        src_session.capture_all([PlayerId(1)], source_scenario='A')
+        src_session = ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / "snap")
+        src_session.capture_all([PlayerId(1)], source_scenario="A")
         (dst_wiring, _) = _make_wiring_stub()
-        dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / 'snap')
-        report = dst_session.restore_all_from_dir(tmp_path / 'snap', current_scenario='A')
+        dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / "snap")
+        report = dst_session.restore_all_from_dir(tmp_path / "snap", current_scenario="A")
         assert report.cross_scenario_transfers == []
         assert len(report.metadata_by_being) == 1
 
-    def test_emits_warning_for_different_scenario_restore_re_port(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    def test_emits_warning_for_different_scenario_restore_re_port(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """同じ Being を別シナリオに転送する use case が許容されることを担保。"""
         (src_wiring, src_prov) = _make_wiring_stub()
         src_prov.ensure_attached(PlayerId(1))
-        src_session = ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / 'snap')
-        src_session.capture_all([PlayerId(1)], source_scenario='forest_world')
+        src_session = ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / "snap")
+        src_session.capture_all([PlayerId(1)], source_scenario="forest_world")
         (dst_wiring, _) = _make_wiring_stub()
-        dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / 'snap')
-        with caplog.at_level('WARNING'):
-            report = dst_session.restore_all_from_dir(tmp_path / 'snap', current_scenario='desert_world')
+        dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / "snap")
+        with caplog.at_level("WARNING"):
+            report = dst_session.restore_all_from_dir(tmp_path / "snap", current_scenario="desert_world")
         assert len(report.restored) == 1
         assert len(report.cross_scenario_transfers) == 1
         (bid, src, cur) = report.cross_scenario_transfers[0]
-        assert src == 'forest_world'
-        assert cur == 'desert_world'
-        assert any('cross-scenario transfer' in r.message for r in caplog.records)
+        assert src == "forest_world"
+        assert cur == "desert_world"
+        assert any("cross-scenario transfer" in r.message for r in caplog.records)
 
     def test_legacy_snapshot_dir_world_json_restore_world_skip(self, tmp_path: Path) -> None:
         """Phase 9-1: world.json なしの snapshot dir (= Phase 6 までの形式) の
         後方互換。restore_world_from_dir が None を返す。"""
         (wiring, _) = _make_wiring_stub()
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
-        empty = tmp_path / 'no_world'
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
+        empty = tmp_path / "no_world"
         empty.mkdir()
-        result = session.restore_world_from_dir(runtime=None, input_dir=empty, current_scenario='demo')
+        result = session.restore_world_from_dir(runtime=None, input_dir=empty, current_scenario="demo")
         assert result is None
 
     def test_capture_world_json_rendered(self, tmp_path: Path) -> None:
@@ -260,25 +285,36 @@ class TestScenarioMetadata:
         には runtime が必要。空の subsystem 群でも世界 snapshot が成立する
         ことを担保するため、minimum stub を渡す。"""
         from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import InMemoryGameTimeProvider
+
         (wiring, _) = _make_wiring_stub()
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
-        stub_runtime = SimpleNamespace(_time_provider=InMemoryGameTimeProvider(initial_tick=42), _spot_graph_repo=None, _player_status_repo=None, get_player_ids=lambda : [], get_player_spot_id=lambda pid: None)
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
+        stub_runtime = SimpleNamespace(
+            _time_provider=InMemoryGameTimeProvider(initial_tick=42),
+            _spot_graph_repo=None,
+            _player_status_repo=None,
+            get_player_ids=lambda: [],
+            get_player_spot_id=lambda pid: None,
+        )
         from ai_rpg_world.application.being.world_state_snapshot_service import WorldStateSnapshotService
+
         session._world_snapshot_service = WorldStateSnapshotService()
-        path = session.capture_world(runtime=stub_runtime, source_scenario='demo', world_tick=42)
+        path = session.capture_world(runtime=stub_runtime, source_scenario="demo", world_tick=42)
         assert path.exists()
-        assert path.name == 'world.json'
+        assert path.name == "world.json"
 
     def test_world_snapshot_scenario_mismatch_fail_fast(self, tmp_path: Path) -> None:
         """Phase 9-1: world は scenario 不一致を hard-error で弾く。"""
         from ai_rpg_world.application.being.world_state_snapshot import WorldStateScenarioMismatchError
         from ai_rpg_world.application.being.world_state_snapshot_service import WorldStateSnapshotService
+
         (wiring, _) = _make_wiring_stub()
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
         session._world_snapshot_service = WorldStateSnapshotService()
-        session.capture_world(runtime=SimpleNamespace(), source_scenario='forest_world', world_tick=10)
-        with pytest.raises(WorldStateScenarioMismatchError, match='forest_world'):
-            session.restore_world_from_dir(runtime=SimpleNamespace(), input_dir=tmp_path / 'snap', current_scenario='desert_world')
+        session.capture_world(runtime=SimpleNamespace(), source_scenario="forest_world", world_tick=10)
+        with pytest.raises(WorldStateScenarioMismatchError, match="forest_world"):
+            session.restore_world_from_dir(
+                runtime=SimpleNamespace(), input_dir=tmp_path / "snap", current_scenario="desert_world"
+            )
 
     def test_world_snapshot_restore_strict_missing_subsystem_fail_fast(self, tmp_path: Path) -> None:
         """実験再開では world snapshot の subsystem 欠落を fail-fast にする。"""
@@ -287,24 +323,44 @@ class TestScenarioMetadata:
             WorldStateSnapshot,
             WorldStateSnapshotCoverageError,
         )
+
         (wiring, _) = _make_wiring_stub()
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
-        WorldStateSnapshotFileGateway().write(WorldStateSnapshot(source_scenario='demo', world_tick=10, subsystems={'world_tick': {'schema_version': 1, 'world_tick': 10}}), tmp_path / 'snap')
-        with pytest.raises(WorldStateSnapshotCoverageError, match='missing'):
-            session.restore_world_from_dir(runtime=SimpleNamespace(), input_dir=tmp_path / 'snap', current_scenario='demo')
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
+        WorldStateSnapshotFileGateway().write(
+            WorldStateSnapshot(
+                source_scenario="demo",
+                world_tick=10,
+                subsystems={"world_tick": {"schema_version": 1, "world_tick": 10}},
+            ),
+            tmp_path / "snap",
+        )
+        with pytest.raises(WorldStateSnapshotCoverageError, match="missing"):
+            session.restore_world_from_dir(
+                runtime=SimpleNamespace(), input_dir=tmp_path / "snap", current_scenario="demo"
+            )
 
     def test_metadata_legacy_snapshot_restore_works(self, tmp_path: Path) -> None:
         """``_metadata`` キー無しの旧 snapshot ファイルでも壊れない (後方互換)。"""
         from ai_rpg_world.application.being.being_snapshot_file_gateway import BeingSnapshotFileGateway
         from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
-        snap_dir = tmp_path / 'old'
+
+        snap_dir = tmp_path / "old"
         snap_dir.mkdir()
         gateway = BeingSnapshotFileGateway()
-        snap = BeingSnapshot(being_id_value='being_w1_p1', identity_name='agent', identity_first_person='わたし', attachment_world_id=1, attachment_player_id=1, declared_memory_kinds=(), snapshot_version=2, memory_payload_json=None)
-        gateway.write(snap, snap_dir / 'being_w1_p1.json')
+        snap = BeingSnapshot(
+            being_id_value="being_w1_p1",
+            identity_name="agent",
+            identity_first_person="わたし",
+            attachment_world_id=1,
+            attachment_player_id=1,
+            declared_memory_kinds=(),
+            snapshot_version=2,
+            memory_payload_json=None,
+        )
+        gateway.write(snap, snap_dir / "being_w1_p1.json")
         (wiring, _) = _make_wiring_stub()
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
-        report = session.restore_all_from_dir(snap_dir, current_scenario='anything')
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
+        report = session.restore_all_from_dir(snap_dir, current_scenario="anything")
         assert len(report.restored) == 1
         assert report.cross_scenario_transfers == []
         assert all(v is None for v in report.metadata_by_being.values())
@@ -315,14 +371,14 @@ class TestMemoryTurns:
 
     def test_returns_memory_turn_per_given_being(self, tmp_path: Path) -> None:
         """渡した Being の順に、記憶のターン数を返す。ターンが進んでいない Being は 0。"""
-        rio, noa = BeingId('being-rio'), BeingId('being-noa')
+        rio, noa = BeingId("being-rio"), BeingId("being-noa")
         (wiring, _) = _make_wiring_stub()
         wiring.memory_turn_clock.advance_turn(rio)
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
 
         turns = session.memory_turns([rio, noa])
 
         assert turns == [
-            {'being_id': 'being-rio', 'memory_turn': 1},
-            {'being_id': 'being-noa', 'memory_turn': 0},
+            {"being_id": "being-rio", "memory_turn": 1},
+            {"being_id": "being-noa", "memory_turn": 0},
         ]

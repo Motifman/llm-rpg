@@ -55,4 +55,3 @@ class TestCreateLlmClientFromConfig:
 
         with pytest.raises(AttributeError):
             create_llm_client_from_config(_NotAConfig())
-

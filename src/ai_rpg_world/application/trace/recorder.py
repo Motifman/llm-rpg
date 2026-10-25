@@ -145,8 +145,7 @@ class JsonlTraceRecorder(ITraceRecorder):
                 # カウンタ加算** で処理する。
                 self._record_dropped_after_close += 1
                 _logger.debug(
-                    "JsonlTraceRecorder.record(%s) dropped: recorder already closed "
-                    "(total dropped=%d)",
+                    "JsonlTraceRecorder.record(%s) dropped: recorder already closed (total dropped=%d)",
                     kind,
                     self._record_dropped_after_close,
                 )

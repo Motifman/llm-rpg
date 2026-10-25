@@ -30,7 +30,9 @@ def _config(tmp_path: Path, **overrides: object) -> Path:
 
 def _run(config: Path, out: Path, load_from: Path | None = None, *, ticks: int = 2) -> int:
     load = ["--snapshot-load-dir", str(load_from / "snapshots")] if load_from else []
-    return main(["--experiment-config", str(config), "--out", str(out), "--max-world-ticks", str(ticks), *load, *_COMMON])
+    return main(
+        ["--experiment-config", str(config), "--out", str(out), "--max-world-ticks", str(ticks), *load, *_COMMON]
+    )
 
 
 def _events(run_dir: Path, kind: str) -> list[dict]:
@@ -123,15 +125,17 @@ class TestOldSnapshotWithRemovedMemoryKeys:
 def _scenario_with_round_assignment(tmp_path: Path) -> Path:
     raw = json.loads((_REPO_ROOT / "data/scenarios/survival_island_v3_coop.json").read_text(encoding="utf-8"))
     raw["round_assignment"] = {
-        "groups": [{
-            "players": [p["id"] for p in raw["players"]],
-            "slots": [
-                {"spawn_spot": "shipwreck_beach", "initial_state": {"team": "north"}},
-                {"spawn_spot": "shipwreck_beach", "initial_state": {"team": "north"}},
-                {"spawn_spot": "campsite", "initial_state": {"team": "south"}},
-                {"spawn_spot": "campsite", "initial_state": {"team": "south"}},
-            ],
-        }],
+        "groups": [
+            {
+                "players": [p["id"] for p in raw["players"]],
+                "slots": [
+                    {"spawn_spot": "shipwreck_beach", "initial_state": {"team": "north"}},
+                    {"spawn_spot": "shipwreck_beach", "initial_state": {"team": "north"}},
+                    {"spawn_spot": "campsite", "initial_state": {"team": "south"}},
+                    {"spawn_spot": "campsite", "initial_state": {"team": "south"}},
+                ],
+            }
+        ],
     }
     path = tmp_path / "scenarios" / "island_rounds.json"
     path.parent.mkdir()
@@ -166,7 +170,9 @@ class TestRoundAssignmentFromTheSeed:
         assert event["payload"]["round"] == 1
         expected = ScenarioLoader().load_from_file(scenario, random_seed=3, round_number=1)
         smoke_seed = ScenarioLoader().load_from_file(scenario, random_seed=42, round_number=1)
-        assert [a.slot_index for a in expected.round_assignments] != [a.slot_index for a in smoke_seed.round_assignments]
+        assert [a.slot_index for a in expected.round_assignments] != [
+            a.slot_index for a in smoke_seed.round_assignments
+        ]
         assert {a["player_name"]: a["slot_index"] for a in event["payload"]["assignments"]} == {
             next(p.name for p in expected.player_spawns if p.string_id == a.player_string_id): a.slot_index
             for a in expected.round_assignments

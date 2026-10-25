@@ -49,9 +49,7 @@ class QuestToolExecutor:
             TOOL_NAME_QUEST_ISSUE: self._execute_quest_issue,
         }
 
-    def _execute_quest_accept(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_quest_accept(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._quest_service is None:
             return unknown_tool("クエスト受託ツールはまだ利用できません。")
         if args.get("quest_id") is None:
@@ -64,9 +62,7 @@ class QuestToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _execute_quest_cancel(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_quest_cancel(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._quest_service is None:
             return unknown_tool("クエストキャンセルツールはまだ利用できません。")
         if args.get("quest_id") is None:
@@ -79,26 +75,20 @@ class QuestToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _execute_quest_approve(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_quest_approve(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._quest_service is None:
             return unknown_tool("クエスト承認ツールはまだ利用できません。")
         if args.get("quest_id") is None:
             return invalid_arg_result("quest_id")
         try:
             result = self._quest_service.approve_quest(
-                ApproveQuestCommand(
-                    quest_id=int(args["quest_id"]), approver_player_id=player_id
-                )
+                ApproveQuestCommand(quest_id=int(args["quest_id"]), approver_player_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
             return exception_result(e)
 
-    def _execute_quest_issue(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_quest_issue(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._quest_service is None:
             return unknown_tool("クエスト発行ツールはまだ利用できません。")
         if args.get("objectives") is None or not args.get("objectives"):

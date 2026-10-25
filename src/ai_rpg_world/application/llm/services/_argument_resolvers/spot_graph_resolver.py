@@ -46,14 +46,10 @@ if TYPE_CHECKING:
     )
 
 
-_NO_ACTION_PLACEHOLDER_RE = re.compile(
-    r"^(?:[.…]+\s*)?[（(]\s*なし\s*[）)]$"
-)
+_NO_ACTION_PLACEHOLDER_RE = re.compile(r"^(?:[.…]+\s*)?[（(]\s*なし\s*[）)]$")
 
 
-def canonical_identifiers(
-    args: Mapping[str, Any], **resolved: str | None
-) -> dict[str, str]:
+def canonical_identifiers(args: Mapping[str, Any], **resolved: str | None) -> dict[str, str]:
     """解決に使った正規値のうち、生値と違うものだけを集める。
 
     resolver は崩れた表記を救って成功させる。履歴に生値を残すと「その
@@ -120,9 +116,7 @@ class ActionNameResolution:
         return self.value != self.original
 
 
-def pick_action_name(
-    action: str, target: "ToolRuntimeTargetDto"
-) -> ActionNameResolution:
+def pick_action_name(action: str, target: "ToolRuntimeTargetDto") -> ActionNameResolution:
     """表示を写したときの表記の崩れを、対象が実際に持つ操作名に直す。
 
     候補が対象の ``available_interactions`` に無ければ**生値をそのまま送る**。
@@ -134,23 +128,15 @@ def pick_action_name(
     stripped = action.strip()
     available = getattr(target, "available_interactions", ()) or ()
     if not available:
-        return ActionNameResolution(
-            value=stripped, original=stripped, source=ActionNameSource.NOT_OFFERED
-        )
+        return ActionNameResolution(value=stripped, original=stripped, source=ActionNameSource.NOT_OFFERED)
     for candidate in normalize_action_name_candidates(stripped):
         if candidate in available:
             return ActionNameResolution(
                 value=candidate,
                 original=stripped,
-                source=(
-                    ActionNameSource.VERBATIM
-                    if candidate == stripped
-                    else ActionNameSource.NORMALIZED
-                ),
+                source=(ActionNameSource.VERBATIM if candidate == stripped else ActionNameSource.NORMALIZED),
             )
-    return ActionNameResolution(
-        value=stripped, original=stripped, source=ActionNameSource.UNRESOLVED
-    )
+    return ActionNameResolution(value=stripped, original=stripped, source=ActionNameSource.UNRESOLVED)
 
 
 def normalize_action_name_candidates(action: str) -> list[str]:
@@ -403,41 +389,43 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 
-_SPOT_GRAPH_TOOLS = frozenset({
-    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
-    TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    TOOL_NAME_SPOT_GRAPH_INTERACT,
-    TOOL_NAME_SPOT_GRAPH_WAIT,
-    TOOL_NAME_SPOT_GRAPH_ATTACK,
-    TOOL_NAME_SPOT_GRAPH_LISTEN,
-    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
-    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
-    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
-    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
-    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
-    # 経済統合 Phase 3: 市場の掲示板。品名はここで検証だけして名前のまま通す
-    # (世界の宣言との突き合わせは service)。数量・単価はここで整数にする。
-    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
-    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
-    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
-    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
-    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
-    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
-    # PR-α (Y_after_pr639_640 後続): 旧 GIVE_ITEMS は削除、GIVE_ITEM が
-    # batch-always で吸収した。
-    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
-    # 会議と投票 (#869 / #874)。**分岐だけ書いて、この許可リストに足すのを
-    # 忘れていた。** resolve_args は入口でここを見るので分岐に到達せず None を
-    # 返し、presentation 経路では RESOLVER_DISPATCH_MISSING になる。どの run
-    # でも誰も投票しなかったため、一度も発火せず 4 本走らせても気付けなかった。
-    TOOL_NAME_SPOT_GRAPH_VOTE,
-    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
-})
+_SPOT_GRAPH_TOOLS = frozenset(
+    {
+        TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+        TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
+        TOOL_NAME_SPOT_GRAPH_EXPLORE,
+        TOOL_NAME_SPOT_GRAPH_INTERACT,
+        TOOL_NAME_SPOT_GRAPH_WAIT,
+        TOOL_NAME_SPOT_GRAPH_ATTACK,
+        TOOL_NAME_SPOT_GRAPH_LISTEN,
+        TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+        TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+        TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+        TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+        TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+        TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+        TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
+        TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+        TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+        # 経済統合 Phase 3: 市場の掲示板。品名はここで検証だけして名前のまま通す
+        # (世界の宣言との突き合わせは service)。数量・単価はここで整数にする。
+        TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+        TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+        TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+        TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+        TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+        TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+        # PR-α (Y_after_pr639_640 後続): 旧 GIVE_ITEMS は削除、GIVE_ITEM が
+        # batch-always で吸収した。
+        TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+        # 会議と投票 (#869 / #874)。**分岐だけ書いて、この許可リストに足すのを
+        # 忘れていた。** resolve_args は入口でここを見るので分岐に到達せず None を
+        # 返し、presentation 経路では RESOLVER_DISPATCH_MISSING になる。どの run
+        # でも誰も投票しなかったため、一度も発火せず 4 本走らせても気付けなかった。
+        TOOL_NAME_SPOT_GRAPH_VOTE,
+        TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
+    }
+)
 
 
 #: 行動名の選び直しの結果を上流へ運ぶ私的キー。
@@ -489,8 +477,7 @@ def _give_quantity_or_raise(raw: Any) -> int:
         return 1
     if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
         raise ToolArgumentResolutionException(
-            "gives[].quantity は 1 以上の整数で指定してください "
-            f"(受け取った値: {raw!r})。",
+            f"gives[].quantity は 1 以上の整数で指定してください (受け取った値: {raw!r})。",
             "INVALID_ARGUMENT",
         )
     return raw
@@ -597,9 +584,7 @@ class SpotGraphArgumentResolver:
         if tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE:
             return _with_inner_thought({}, args)
         if tool_name == TOOL_NAME_SPOT_GRAPH_WAIT:
-            return _with_inner_thought(
-                {"reason": str(args.get("reason", "")).strip()}, args
-            )
+            return _with_inner_thought({"reason": str(args.get("reason", "")).strip()}, args)
         if tool_name == TOOL_NAME_SPOT_GRAPH_LISTEN:
             return _with_inner_thought({}, args)
         if tool_name == TOOL_NAME_SPOT_GRAPH_INTERACT:
@@ -700,7 +685,9 @@ class SpotGraphArgumentResolver:
             return rescued.target
 
     def _resolve_market(
-        self, tool_name: str, args: dict[str, Any],
+        self,
+        tool_name: str,
+        args: dict[str, Any],
     ) -> dict[str, Any]:
         """市場ツールの引数を整える。
 
@@ -716,8 +703,7 @@ class SpotGraphArgumentResolver:
         label = args.get("item_label")
         if not isinstance(label, str) or not label.strip():
             raise ToolArgumentResolutionException(
-                "品の名前が指定されていません。掲示板や所持品に出ている名前を"
-                "そのまま指定してください。",
+                "品の名前が指定されていません。掲示板や所持品に出ている名前をそのまま指定してください。",
                 "INVALID_ITEM_LABEL",
             )
         resolved["item_label"] = label.strip()
@@ -727,17 +713,20 @@ class SpotGraphArgumentResolver:
             value = args.get(key)
             if isinstance(value, bool) or not isinstance(value, (int, str)):
                 raise ToolArgumentResolutionException(
-                    f"{key} は整数で指定してください。", "INVALID_NUMBER",
+                    f"{key} は整数で指定してください。",
+                    "INVALID_NUMBER",
                 )
             try:
                 number = int(value)
             except (TypeError, ValueError) as exc:
                 raise ToolArgumentResolutionException(
-                    f"{key} は整数で指定してください。", "INVALID_NUMBER",
+                    f"{key} は整数で指定してください。",
+                    "INVALID_NUMBER",
                 ) from exc
             if number < 1:
                 raise ToolArgumentResolutionException(
-                    f"{key} は 1 以上で指定してください。", "INVALID_NUMBER",
+                    f"{key} は 1 以上で指定してください。",
+                    "INVALID_NUMBER",
                 )
             resolved[key] = number
         # 向きは PR 2 では売り注文だけ。既定を置くのは、書かれていないときに
@@ -749,7 +738,8 @@ class SpotGraphArgumentResolver:
             side = args.get("side") or "sell"
             if side not in ("sell", "buy"):
                 raise ToolArgumentResolutionException(
-                    "side は sell か buy で指定してください。", "INVALID_SIDE",
+                    "side は sell か buy で指定してください。",
+                    "INVALID_SIDE",
                 )
             resolved["side"] = side
         return resolved
@@ -854,8 +844,7 @@ class SpotGraphArgumentResolver:
         side = self._read_side_shape(raw, "asks")
         return {
             "item_labels": [
-                {"item_label": entry["item_label"], "quantity": entry["quantity"]}
-                for entry in side["entries"]
+                {"item_label": entry["item_label"], "quantity": entry["quantity"]} for entry in side["entries"]
             ],
             "gold": side["gold"],
         }
@@ -892,14 +881,12 @@ class SpotGraphArgumentResolver:
             quantity = entry.get("quantity", 1)
             if isinstance(quantity, bool) or not isinstance(quantity, int):
                 raise ToolArgumentResolutionException(
-                    f"{field}.items の quantity は整数で指定してください "
-                    f"(指定値: {quantity!r})。",
+                    f"{field}.items の quantity は整数で指定してください (指定値: {quantity!r})。",
                     "INVALID_ARGUMENT",
                 )
             if quantity < 1 or quantity > 99:
                 raise ToolArgumentResolutionException(
-                    f"{field}.items の quantity は 1 以上 99 以下で指定してください "
-                    f"(指定値: {quantity})。",
+                    f"{field}.items の quantity は 1 以上 99 以下で指定してください (指定値: {quantity})。",
                     "INVALID_ARGUMENT",
                 )
             entries.append({"item_label": label.strip(), "quantity": quantity})
@@ -994,9 +981,7 @@ class SpotGraphArgumentResolver:
             )
         if isinstance(merchant_label, str) and merchant_label.strip():
             narrowed = [
-                target
-                for target in merchants
-                if target.display_name in _normalize_label_candidates(merchant_label)
+                target for target in merchants if target.display_name in _normalize_label_candidates(merchant_label)
             ]
             if not narrowed:
                 raise ToolArgumentResolutionException(
@@ -1019,14 +1004,10 @@ class SpotGraphArgumentResolver:
         if len(matches) > 1:
             # 価格まで添える。候補を並べるだけだと、もう 1 手かけて
             # 「商人:」節を読み直すことになる。
-            listed = "、".join(
-                f"{target.display_name}が{offer.price}G"
-                for target, offer in matches
-            )
+            listed = "、".join(f"{target.display_name}が{offer.price}G" for target, offer in matches)
             verb = "買い取る" if selling else "売っている"
             raise ToolArgumentResolutionException(
-                f"{item_label}を{verb}商人が複数居ます ({listed})。"
-                "merchant_label で相手を指定してください。",
+                f"{item_label}を{verb}商人が複数居ます ({listed})。merchant_label で相手を指定してください。",
                 "MERCHANT_AMBIGUOUS",
             )
 
@@ -1065,7 +1046,10 @@ class SpotGraphArgumentResolver:
 
     @staticmethod
     def _no_merchant_message(
-        item_label: str, merchants: list[Any], *, selling: bool,
+        item_label: str,
+        merchants: list[Any],
+        *,
+        selling: bool,
     ) -> str:
         """その品を扱う商人が居ないときの文面。扱う品を添えて次の手を残す。"""
         if not merchants:
@@ -1076,10 +1060,7 @@ class SpotGraphArgumentResolver:
             listed = "、".join(f"{o.item_name} {o.price}G" for o in offers) or "なし"
             parts.append(f"{target.display_name}: {listed}")
         verb = "買い取っている" if selling else "売っている"
-        return (
-            f"{item_label}を{verb}商人がこの場所に居ません。"
-            + " / ".join(parts)
-        )
+        return f"{item_label}を{verb}商人がこの場所に居ません。" + " / ".join(parts)
 
     def _resolve_use_item(
         self,
@@ -1116,7 +1097,7 @@ class SpotGraphArgumentResolver:
             raise ToolArgumentResolutionException(
                 (
                     f"指定されたアイテム名は使用対象として扱えません: {label}。"
-                    "所持アイテム欄の \"\" 内の名前を指定してください。"
+                    '所持アイテム欄の "" 内の名前を指定してください。'
                 ),
                 "INVALID_TARGET_KIND",
             )
@@ -1164,7 +1145,7 @@ class SpotGraphArgumentResolver:
             raise ToolArgumentResolutionException(
                 (
                     f"指定されたアイテム名は渡す対象として扱えません: {item_label}。"
-                    "所持アイテム欄の \"\" 内の名前を指定してください。"
+                    '所持アイテム欄の "" 内の名前を指定してください。'
                 ),
                 "INVALID_TARGET_KIND",
             )
@@ -1233,11 +1214,13 @@ class SpotGraphArgumentResolver:
         judgments: list[dict[str, Any]] = []
         for i, entry in enumerate(gives):
             if not isinstance(entry, dict):
-                resolved.append({
-                    "index": i,
-                    "error_code": "INVALID_ARGUMENT",
-                    "message": f"gives[{i}] は object でなければなりません。",
-                })
+                resolved.append(
+                    {
+                        "index": i,
+                        "error_code": "INVALID_ARGUMENT",
+                        "message": f"gives[{i}] は object でなければなりません。",
+                    }
+                )
                 continue
             try:
                 resolved_entry = self._resolve_single_give_entry(
@@ -1250,25 +1233,29 @@ class SpotGraphArgumentResolver:
                     judgments,
                 )
                 quantity = _give_quantity_or_raise(entry.get("quantity"))
-                resolved.append({
-                    "index": i,
-                    "quantity": quantity,
-                    "item_spec_id": resolved_entry["item_spec_id"],
-                    "is_spoiled": resolved_entry["is_spoiled"],
-                    "target_player_id": resolved_entry["target_player_id"],
-                    "target_display_name": resolved_entry["target_display_name"],
-                    "item_display_name": resolved_entry["item_display_name"],
-                    "item_label": entry.get("item_label"),
-                    "target_player_label": entry.get("target_player_label"),
-                })
+                resolved.append(
+                    {
+                        "index": i,
+                        "quantity": quantity,
+                        "item_spec_id": resolved_entry["item_spec_id"],
+                        "is_spoiled": resolved_entry["is_spoiled"],
+                        "target_player_id": resolved_entry["target_player_id"],
+                        "target_display_name": resolved_entry["target_display_name"],
+                        "item_display_name": resolved_entry["item_display_name"],
+                        "item_label": entry.get("item_label"),
+                        "target_player_label": entry.get("target_player_label"),
+                    }
+                )
             except ToolArgumentResolutionException as e:
-                resolved.append({
-                    "index": i,
-                    "error_code": e.error_code,
-                    "message": str(e),
-                    "item_label": entry.get("item_label"),
-                    "target_player_label": entry.get("target_player_label"),
-                })
+                resolved.append(
+                    {
+                        "index": i,
+                        "error_code": e.error_code,
+                        "message": str(e),
+                        "item_label": entry.get("item_label"),
+                        "target_player_label": entry.get("target_player_label"),
+                    }
+                )
 
         return _with_inner_thought(
             {
@@ -1312,7 +1299,7 @@ class SpotGraphArgumentResolver:
             raise ToolArgumentResolutionException(
                 (
                     f"指定されたアイテム名は手放す対象として扱えません: {label}。"
-                    "所持アイテム欄の \"\" 内の名前を指定してください。"
+                    '所持アイテム欄の "" 内の名前を指定してください。'
                 ),
                 "INVALID_TARGET_KIND",
             )
@@ -1356,7 +1343,7 @@ class SpotGraphArgumentResolver:
             raise ToolArgumentResolutionException(
                 (
                     f"指定された名前は拾う対象として扱えません: {label}。"
-                    "地面に落ちているもの欄の \"\" 内の名前を指定してください。"
+                    '地面に落ちているもの欄の "" 内の名前を指定してください。'
                 ),
                 "INVALID_TARGET_KIND",
             )
@@ -1547,9 +1534,7 @@ class SpotGraphArgumentResolver:
         return _with_inner_thought(
             {"destination_spot_id": target.spot_id},
             args,
-            canonical=canonical_identifiers(
-                args, destination_label=target.display_name
-            ),
+            canonical=canonical_identifiers(args, destination_label=target.display_name),
             target_label_judgments=judgments,
         )
 
@@ -1559,8 +1544,8 @@ class SpotGraphArgumentResolver:
         runtime_context: ToolRuntimeContextDto,
     ) -> dict[str, Any]:
         target = resolve_sub_location_target(
-            args.get("sub_location_label"), runtime_context
-        , tool_is_exposed=self._tool_is_exposed)
+            args.get("sub_location_label"), runtime_context, tool_is_exposed=self._tool_is_exposed
+        )
         sub_location_id = target.sub_location_id if target is not None else None
         return _with_inner_thought({"sub_location_id": sub_location_id}, args)
 
@@ -1612,13 +1597,9 @@ class SpotGraphArgumentResolver:
                 inner_thought=_inner_thought_value(args),
             )
         action = resolution.value
-        canonical = canonical_identifiers(
-            args, action_name=action, target_label=target.display_name
-        )
+        canonical = canonical_identifiers(args, action_name=action, target_label=target.display_name)
         judgment_payload = _action_name_judgment_payload(resolution)
-        display_phrase = interact_display_phrase(
-            target.kind, dict(target.interaction_labels).get(action.strip())
-        )
+        display_phrase = interact_display_phrase(target.kind, dict(target.interaction_labels).get(action.strip()))
         if target.kind == "spot_graph_player":
             if target.player_id is None:
                 raise ToolArgumentResolutionException(

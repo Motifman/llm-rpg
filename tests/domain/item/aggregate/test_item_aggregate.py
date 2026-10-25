@@ -35,7 +35,7 @@ class TestItemAggregate:
             item_type=ItemType.MATERIAL,
             rarity=Rarity.COMMON,
             description="A test item without durability",
-            max_stack_size=MaxStackSize(64)
+            max_stack_size=MaxStackSize(64),
         )
 
     @pytest.fixture
@@ -49,7 +49,7 @@ class TestItemAggregate:
             description="A test item with durability",
             max_stack_size=MaxStackSize(1),
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
 
     @pytest.fixture
@@ -79,9 +79,7 @@ class TestItemAggregate:
         item_id = ItemInstanceId(item_id_value)
 
         aggregate = ItemAggregate.create(
-            item_instance_id=item_id,
-            item_spec=sample_item_spec_no_durability,
-            quantity=quantity
+            item_instance_id=item_id, item_spec=sample_item_spec_no_durability, quantity=quantity
         )
 
         assert aggregate.item_instance_id == item_id
@@ -100,7 +98,7 @@ class TestItemAggregate:
             item_instance_id=item_id,
             item_spec=sample_item_spec_with_durability,
             durability=sample_durability_full,
-            quantity=1
+            quantity=1,
         )
 
         assert aggregate.item_instance_id == item_id
@@ -117,14 +115,16 @@ class TestItemAggregate:
             item_instance_id=item_id,
             item_spec=sample_item_spec_with_durability,
             durability=sample_durability_partial,
-            quantity=1
+            quantity=1,
         )
 
         assert aggregate.durability == sample_durability_partial
         assert not aggregate.is_broken
 
     @pytest.mark.parametrize("item_id_value", [4, 27], ids=["original-id4", "broken-id27"])
-    def test_create_item_with_broken_durability(self, sample_item_spec_with_durability, sample_durability_broken, item_id_value):
+    def test_create_item_with_broken_durability(
+        self, sample_item_spec_with_durability, sample_durability_broken, item_id_value
+    ):
         """耐久0の集約を作ると耐久値を保持し、破損していると判定する。"""
         item_id = ItemInstanceId(item_id_value)
 
@@ -132,7 +132,7 @@ class TestItemAggregate:
             item_instance_id=item_id,
             item_spec=sample_item_spec_with_durability,
             durability=sample_durability_broken,
-            quantity=1
+            quantity=1,
         )
 
         assert aggregate.durability == sample_durability_broken
@@ -147,7 +147,7 @@ class TestItemAggregate:
                 item_instance_id=item_id,
                 item_spec=sample_item_spec_no_durability,  # durability_max=None
                 durability=sample_durability_full,  # durabilityを指定
-                quantity=1
+                quantity=1,
             )
 
         # エラーメッセージに適切な理由が含まれていることを確認
@@ -161,7 +161,7 @@ class TestItemAggregate:
             ItemAggregate.create(
                 item_instance_id=item_id,
                 item_spec=sample_item_spec_no_durability,  # max_stack_size=64
-                quantity=100  # 64を超える
+                quantity=100,  # 64を超える
             )
 
         # エラーメッセージに適切な情報が含まれていることを確認
@@ -172,9 +172,7 @@ class TestItemAggregate:
         item_id = ItemInstanceId(5)
 
         aggregate = ItemAggregate.create_by_crafting(
-            item_instance_id=item_id,
-            item_spec=sample_item_spec_no_durability,
-            quantity=3
+            item_instance_id=item_id, item_spec=sample_item_spec_no_durability, quantity=3
         )
 
         # イベントが発行されていることを確認
@@ -198,9 +196,7 @@ class TestItemAggregate:
         item_id = ItemInstanceId(6)
 
         aggregate = ItemAggregate.create_by_crafting(
-            item_instance_id=item_id,
-            item_spec=sample_item_spec_with_durability,
-            quantity=1
+            item_instance_id=item_id, item_spec=sample_item_spec_with_durability, quantity=1
         )
 
         # 耐久度がアイテム仕様の最大値に設定されていることを確認
@@ -210,9 +206,7 @@ class TestItemAggregate:
     def test_create_from_instance(self, sample_item_spec_no_durability):
         """既存のItemInstanceからの集約作成テスト"""
         item_instance = ItemInstance(
-            item_instance_id=ItemInstanceId(7),
-            item_spec=sample_item_spec_no_durability,
-            quantity=10
+            item_instance_id=ItemInstanceId(7), item_spec=sample_item_spec_no_durability, quantity=10
         )
 
         aggregate = ItemAggregate.create_from_instance(item_instance)
@@ -225,11 +219,7 @@ class TestItemAggregate:
     def test_use_item_without_durability(self, sample_item_spec_no_durability):
         """耐久度なしアイテムの使用テスト"""
         item_id = ItemInstanceId(8)
-        aggregate = ItemAggregate.create(
-            item_instance_id=item_id,
-            item_spec=sample_item_spec_no_durability,
-            quantity=5
-        )
+        aggregate = ItemAggregate.create(item_instance_id=item_id, item_spec=sample_item_spec_no_durability, quantity=5)
 
         # 使用前にイベントなし
         assert len(aggregate.get_events()) == 0
@@ -257,7 +247,7 @@ class TestItemAggregate:
             item_instance_id=item_id,
             item_spec=sample_item_spec_with_durability,
             durability=sample_durability_partial,
-            quantity=1
+            quantity=1,
         )
 
         aggregate.use()
@@ -278,10 +268,7 @@ class TestItemAggregate:
         durability_one = Durability(current=1, max_value=100)
 
         aggregate = ItemAggregate.create(
-            item_instance_id=item_id,
-            item_spec=sample_item_spec_with_durability,
-            durability=durability_one,
-            quantity=1
+            item_instance_id=item_id, item_spec=sample_item_spec_with_durability, durability=durability_one, quantity=1
         )
 
         aggregate.use()
@@ -314,9 +301,7 @@ class TestItemAggregate:
     def test_add_quantity(self, sample_item_spec_no_durability):
         """数量追加のテスト"""
         aggregate = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(17),
-            item_spec=sample_item_spec_no_durability,
-            quantity=5
+            item_instance_id=ItemInstanceId(17), item_spec=sample_item_spec_no_durability, quantity=5
         )
 
         aggregate.add_quantity(3)
@@ -326,9 +311,7 @@ class TestItemAggregate:
     def test_remove_quantity(self, sample_item_spec_no_durability):
         """数量減算のテスト"""
         aggregate = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(18),
-            item_spec=sample_item_spec_no_durability,
-            quantity=10
+            item_instance_id=ItemInstanceId(18), item_spec=sample_item_spec_no_durability, quantity=10
         )
 
         aggregate.remove_quantity(4)
@@ -338,9 +321,7 @@ class TestItemAggregate:
     def test_set_quantity(self, sample_item_spec_no_durability):
         """数量設定のテスト"""
         aggregate = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(19),
-            item_spec=sample_item_spec_no_durability,
-            quantity=5
+            item_instance_id=ItemInstanceId(19), item_spec=sample_item_spec_no_durability, quantity=5
         )
 
         aggregate.set_quantity(15)
@@ -354,7 +335,7 @@ class TestItemAggregate:
             item_instance_id=item_id,
             item_spec=sample_item_spec_with_durability,
             durability=sample_durability_partial,
-            quantity=1
+            quantity=1,
         )
 
         # 修復前にイベントなし
@@ -378,9 +359,7 @@ class TestItemAggregate:
     def test_repair_durability_without_durability_no_effect(self, sample_item_spec_no_durability):
         """耐久度なしアイテムの修復は何も起こらないテスト"""
         aggregate = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(21),
-            item_spec=sample_item_spec_no_durability,
-            quantity=1
+            item_instance_id=ItemInstanceId(21), item_spec=sample_item_spec_no_durability, quantity=1
         )
 
         # 修復前にイベントなし
@@ -399,7 +378,7 @@ class TestItemAggregate:
             item_instance_id=ItemInstanceId(22),
             item_spec=sample_item_spec_with_durability,
             durability=durability_low,
-            quantity=1
+            quantity=1,
         )
 
         # 10回復しようとするが、最大値は100なので95+10=105→100にクランプ
@@ -419,9 +398,7 @@ class TestItemAggregate:
     def test_quantity_operations_with_invalid_values(self, sample_item_spec_no_durability):
         """不正な加算・減算・設定は各例外で拒否し、現在数量5を変えない。"""
         aggregate = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(23),
-            item_spec=sample_item_spec_no_durability,
-            quantity=5
+            item_instance_id=ItemInstanceId(23), item_spec=sample_item_spec_no_durability, quantity=5
         )
 
         # 負の数量追加
@@ -442,9 +419,7 @@ class TestItemAggregate:
     def test_events_persist_after_getting(self, sample_item_spec_no_durability):
         """イベント取得後もイベントが保持されるテスト"""
         aggregate = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(28),
-            item_spec=sample_item_spec_no_durability,
-            quantity=1
+            item_instance_id=ItemInstanceId(28), item_spec=sample_item_spec_no_durability, quantity=1
         )
 
         # イベントを発生させる
@@ -483,9 +458,7 @@ class TestItemAggregate:
     def test_get_item_info_no_durability(self, sample_item_spec_no_durability):
         """耐久度なしアイテムの情報を取得できる"""
         aggregate = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(30),
-            item_spec=sample_item_spec_no_durability,
-            quantity=5
+            item_instance_id=ItemInstanceId(30), item_spec=sample_item_spec_no_durability, quantity=5
         )
 
         info = aggregate.get_item_info()
@@ -511,7 +484,7 @@ class TestItemAggregate:
             item_instance_id=ItemInstanceId(31),
             item_spec=sample_item_spec_with_durability,
             durability=Durability(current=100, max_value=100),
-            quantity=1
+            quantity=1,
         )
 
         info = aggregate.get_item_info()
@@ -537,7 +510,7 @@ class TestItemAggregate:
             item_instance_id=ItemInstanceId(32),
             item_spec=sample_item_spec_with_durability,
             durability=Durability(current=0, max_value=100),
-            quantity=1
+            quantity=1,
         )
 
         info = aggregate.get_item_info()

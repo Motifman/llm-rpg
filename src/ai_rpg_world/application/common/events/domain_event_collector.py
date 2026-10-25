@@ -59,8 +59,7 @@ class DomainEventCollector:
         event_id = event.event_id
         if event_id is None:
             raise ValueError(
-                f"DomainEventCollector.add に event_id=None のイベント "
-                f"{type(event).__name__} が渡された。"
+                f"DomainEventCollector.add に event_id=None のイベント {type(event).__name__} が渡された。"
             )
         if event_id in self._seen_event_ids:
             return

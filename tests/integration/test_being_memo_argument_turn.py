@@ -87,7 +87,10 @@ class TestMemoArgumentInATurn:
     def test_a_broken_operation_is_returned_but_the_others_land(self) -> None:
         """崩れた操作は理由を結果の文に添えて返し、同じ行動のほかの操作はメモ帳に入る。"""
         runtime, wiring, recorder = _game(
-            [{"do": "add", "kind": "fact", "text": "鍵は事務所にある"}, {"do": "add", "kind": "person", "text": "駅長は鍵に詳しい"}]
+            [
+                {"do": "add", "kind": "fact", "text": "鍵は事務所にある"},
+                {"do": "add", "kind": "person", "text": "駅長は鍵に詳しい"},
+            ]
         )
 
         result = _turn(wiring)
@@ -123,7 +126,12 @@ class TestMemoArgumentInATurn:
         assert _book(runtime).memos == ()
         (event,) = recorder.payloads(TraceEventKind.BEING_MEMO)
         assert event["applied"][0] | {"provenance": None} == {
-            "index": 0, "do": "remove", "handle": "m_3f2a7b", "kind": "todo", "text": "鍵を取る", "provenance": None
+            "index": 0,
+            "do": "remove",
+            "handle": "m_3f2a7b",
+            "kind": "todo",
+            "text": "鍵を取る",
+            "provenance": None,
         }
 
     def test_memo_book_is_shown_every_turn_with_all_headings(self) -> None:

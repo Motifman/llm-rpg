@@ -78,9 +78,7 @@ _SIGN = SpotObjectId.create(20)
 
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
 
 
 def _write(action_name: str, *, preconditions=(), on_failure_observation=None):
@@ -123,8 +121,11 @@ def _service_with_a_sign():
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
     graph.add_spot(
         SpotNode(
-            spot_id=_SPOT, name="広場", description="d",
-            category=SpotCategoryEnum.OTHER, parent_id=None,
+            spot_id=_SPOT,
+            name="広場",
+            description="d",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
         )
     )
     for player in (_WRITER, _WITNESS):
@@ -173,9 +174,7 @@ class TestMissingTextOnASign:
     """看板に書く操作で text が無いときと、前提条件で断られたときの、目撃者への失敗の観測の違いを保証する。"""
 
     @pytest.mark.parametrize("action_name", ["write", "write_loudly"])
-    def test_missing_text_returns_guidance_to_the_writer_and_publishes_no_failure(
-        self, action_name: str
-    ) -> None:
+    def test_missing_text_returns_guidance_to_the_writer_and_publishes_no_failure(self, action_name: str) -> None:
         """text を渡さずに看板に書こうとすると、本人には text の案内を返し、シナリオが目撃者向けの失敗の文を宣言していても失敗の観測を出さない。"""
         service, publisher = _service_with_a_sign()
 

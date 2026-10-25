@@ -146,12 +146,14 @@ def _object_state_changes_for_trace(result: Any) -> tuple[dict[str, Any], ...]:
         if summary.kind is not AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE:
             continue
         for entry in summary.state_delta or ():
-            changes.append({
-                "object": summary.target_ref,
-                "state_key": entry.key,
-                "before": entry.before,
-                "after": entry.after,
-            })
+            changes.append(
+                {
+                    "object": summary.target_ref,
+                    "state_key": entry.key,
+                    "before": entry.before,
+                    "after": entry.after,
+                }
+            )
     return tuple(changes)
 
 
@@ -186,7 +188,6 @@ def _tick_value(current_tick: Any) -> int:
     return int(getattr(current_tick, "value", current_tick))
 
 
-
 def _advances_state(
     idef: InteractionDef,
     target_object_id: SpotObjectId,
@@ -204,6 +205,7 @@ def _advances_state(
         if target is not None and target.object_id == target_object_id:
             return True
     return False
+
 
 class SpotInteractionApplicationService:
     """スポット内オブジェクト操作（ドメインサービス + 永続化・フラグ・アイテム・接続状態）。"""
@@ -241,7 +243,8 @@ class SpotInteractionApplicationService:
         player_perception_policy: PlayerPerceptionPolicy | None = None,
         item_interaction_registry: ItemInteractionRegistry | None = None,
         room_occupancy_message_provider: Callable[[], str] | None = None,
-        interaction_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
+        interaction_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
+        | None = None,
         overflow_sink: Any = None,
         # DEPOSIT_GOLD_TO_OBJECT 用: いま使える gold (同席取引に出して凍結中の
         # ぶんを差し引いた残り) を返す provider。未注入なら所持金を生で見る。
@@ -263,16 +266,12 @@ class SpotInteractionApplicationService:
         # 失敗観測 dedup: (entity_id_int, object_id_int, action_name, reason)
         # → last_emit_tick。tick 不明の呼び出しは dedup を skip する。
         self._failure_observation_dedup_window = failure_observation_dedup_window
-        self._failure_observation_last_tick: dict[
-            tuple[int, int, str, str], int
-        ] = {}
+        self._failure_observation_last_tick: dict[tuple[int, int, str, str], int] = {}
         self._player_display_name_resolver = player_display_name_resolver
         self._effective_lighting_resolver = effective_lighting_resolver
         self._departed_position_store = departed_position_store
         self._player_perception_policy = player_perception_policy
-        self._item_interaction_registry = (
-            item_interaction_registry or ItemInteractionRegistry()
-        )
+        self._item_interaction_registry = item_interaction_registry or ItemInteractionRegistry()
         self._room_occupancy_message_provider = room_occupancy_message_provider
         self._interaction_command_scope_factory = interaction_command_scope_factory
         self._meeting_caller: Callable[[PlayerId, str], Any] | None = None
@@ -283,17 +282,10 @@ class SpotInteractionApplicationService:
         self._minutes_per_tick: int | None = None
         self._overflow_sink = overflow_sink
 
-    def _actor_spot(
-        self, player_id: PlayerId, graph: SpotGraphAggregate
-    ) -> SpotId:
-        if (
-            self._player_perception_policy is not None
-            and self._player_perception_policy.is_departed(player_id)
-        ):
+    def _actor_spot(self, player_id: PlayerId, graph: SpotGraphAggregate) -> SpotId:
+        if self._player_perception_policy is not None and self._player_perception_policy.is_departed(player_id):
             spot_id = (
-                self._departed_position_store.find(player_id)
-                if self._departed_position_store is not None
-                else None
+                self._departed_position_store.find(player_id) if self._departed_position_store is not None else None
             )
             if spot_id is None:
                 raise ApplicationException(
@@ -303,9 +295,7 @@ class SpotInteractionApplicationService:
             return spot_id
         return graph.get_entity_spot(EntityId.create(int(player_id)))
 
-    def _declared_observation_for(
-        self, spot_id: SpotId, *, bright: str | None, dark: str | None
-    ) -> str | None:
+    def _declared_observation_for(self, spot_id: SpotId, *, bright: str | None, dark: str | None) -> str | None:
         """その spot の実効照明に合う宣言文を選ぶ。宣言が無ければ None。
 
         **暗所の文だけを宣言した世界**もありうるので、片方しか無い場合は
@@ -364,30 +354,20 @@ class SpotInteractionApplicationService:
                 out.append(event)
                 continue
             _actor, _spot, bright, dark = remaining.pop(match)
-            message = self._declared_observation_for(
-                event.spot_id, bright=bright, dark=dark
-            )
-            out.append(
-                event if message is None else replace(event, observation_message=message)
-            )
+            message = self._declared_observation_for(event.spot_id, bright=bright, dark=dark)
+            out.append(event if message is None else replace(event, observation_message=message))
         return out
 
-    def _interaction_allows_actor(
-        self, player_id: PlayerId, idef: InteractionDef
-    ) -> bool:
+    def _interaction_allows_actor(self, player_id: PlayerId, idef: InteractionDef) -> bool:
         plane = actor_plane_for(player_id, self._player_perception_policy)
         if plane is None:
             return False
         return idef.allows_actor_plane(plane)
 
-    def _actor_plane_refusal(
-        self, player_id: PlayerId
-    ) -> InteractionActorPlaneNotAllowedException:
+    def _actor_plane_refusal(self, player_id: PlayerId) -> InteractionActorPlaneNotAllowedException:
         """候補表示と同じ存在層から、理由のある実行拒否を作る。"""
         plane = actor_plane_for(player_id, self._player_perception_policy)
-        return InteractionActorPlaneNotAllowedException(
-            actor_plane_refusal_message(plane)
-        )
+        return InteractionActorPlaneNotAllowedException(actor_plane_refusal_message(plane))
 
     def set_cooldown_store(
         self,
@@ -437,9 +417,7 @@ class SpotInteractionApplicationService:
         行ごと消さない。消すと**自分の手段そのものを見失う** (#964 と同じ
         判断)。いつ使えるようになるかが書いてあれば、待つという次の手に繋がる。
         """
-        remaining = self.remaining_cooldown_ticks(
-            player_id, object_id, idef, current_tick
-        )
+        remaining = self.remaining_cooldown_ticks(player_id, object_id, idef, current_tick)
         if remaining <= 0:
             return ""
         return f"あと{span_text(remaining, self._minutes_per_tick)}"
@@ -473,18 +451,10 @@ class SpotInteractionApplicationService:
         current_tick: WorldTick | int | None,
     ) -> str:
         """道具操作の待ち時間を、物体操作と同じ文面で返す。"""
-        remaining = self.remaining_item_cooldown_ticks(
-            player_id, item_spec_id, idef, current_tick
-        )
-        return (
-            f"あと{span_text(remaining, self._minutes_per_tick)}"
-            if remaining > 0
-            else ""
-        )
+        remaining = self.remaining_item_cooldown_ticks(player_id, item_spec_id, idef, current_tick)
+        return f"あと{span_text(remaining, self._minutes_per_tick)}" if remaining > 0 else ""
 
-    def _interaction_def(
-        self, interior: Any, object_id: SpotObjectId, action_name: str
-    ) -> Any:
+    def _interaction_def(self, interior: Any, object_id: SpotObjectId, action_name: str) -> Any:
         obj = interior.get_object(object_id)
         if obj is None:
             return None
@@ -510,9 +480,7 @@ class SpotInteractionApplicationService:
         idef = self._interaction_def(interior, object_id, action_name)
         if idef is None:
             return None
-        remaining = self.remaining_cooldown_ticks(
-            player_id, object_id, idef, current_tick
-        )
+        remaining = self.remaining_cooldown_ticks(player_id, object_id, idef, current_tick)
         if remaining <= 0:
             return idef
         raise InteractionNotAllowedException(
@@ -549,9 +517,7 @@ class SpotInteractionApplicationService:
         """PR 3: 実効照明 resolver を後付け bind する (二段構築用)。"""
         self._effective_lighting_resolver = resolver
 
-    def set_player_display_name_resolver(
-        self, resolver: Callable[[PlayerId], str] | None
-    ) -> None:
+    def set_player_display_name_resolver(self, resolver: Callable[[PlayerId], str] | None) -> None:
         """player_display_name_resolver を後付けで注入する (二段構築用)。
 
         world_runtime のように scenario 由来の name map が interaction
@@ -597,9 +563,7 @@ class SpotInteractionApplicationService:
         if not specs:
             return ()
         if self._room_occupancy_message_provider is None:
-            raise ApplicationException(
-                "SHOW_ROOM_OCCUPANCY が宣言されていますが、在室数の配線がありません。"
-            )
+            raise ApplicationException("SHOW_ROOM_OCCUPANCY が宣言されていますが、在室数の配線がありません。")
         return tuple(self._room_occupancy_message_provider() for _ in specs)
 
     def set_event_publisher(self, event_publisher: Any) -> None:
@@ -647,15 +611,11 @@ class SpotInteractionApplicationService:
                 return item, inv
         raise InteractionNotAllowedException("その道具を持っていない。")
 
-    def _item_interaction_def(
-        self, item_spec_id: ItemSpecId, action_name: str
-    ) -> InteractionDef | None:
+    def _item_interaction_def(self, item_spec_id: ItemSpecId, action_name: str) -> InteractionDef | None:
         return next(
             (
                 interaction
-                for interaction in self._item_interaction_registry.interactions_for(
-                    item_spec_id
-                )
+                for interaction in self._item_interaction_registry.interactions_for(item_spec_id)
                 if interaction.action_name == action_name
             ),
             None,
@@ -678,12 +638,9 @@ class SpotInteractionApplicationService:
         scope_factory = self._require_command_scope_factory()
         action_def = self._item_interaction_def(item_spec_id, action_name)
         if action_def is None:
-            raise InteractionNotFoundException(
-                f"その道具に {action_name!r} という操作はない。"
-            )
+            raise InteractionNotFoundException(f"その道具に {action_name!r} という操作はない。")
         declares_call_meeting = any(
-            effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING
-            for effect in action_def.effects
+            effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING for effect in action_def.effects
         )
         if declares_call_meeting:
             return self._execute_item_interaction_with_repositories(
@@ -762,9 +719,7 @@ class SpotInteractionApplicationService:
         )
         if not self._interaction_allows_actor(player_id, action_def):
             raise self._actor_plane_refusal(player_id)
-        remaining = self.remaining_item_cooldown_ticks(
-            player_id, item_spec_id, action_def, current_tick
-        )
+        remaining = self.remaining_item_cooldown_ticks(player_id, item_spec_id, action_def, current_tick)
         if remaining > 0:
             raise InteractionNotAllowedException(
                 f"まだそれはできない。あと{span_text(remaining, self._minutes_per_tick)}。"
@@ -779,17 +734,9 @@ class SpotInteractionApplicationService:
                 f"スポット内部データがありません: {spot_id}",
                 spot_id=int(spot_id),
             )
-        owned = collect_owned_item_spec_ids_from_inventory(
-            inv, item_repository
-        )
-        owned_counts = count_owned_item_instances_by_spec(
-            inv, item_repository
-        )
-        acting_status = (
-            player_status_repository.find_by_id(player_id)
-            if player_status_repository is not None
-            else None
-        )
+        owned = collect_owned_item_spec_ids_from_inventory(inv, item_repository)
+        owned_counts = count_owned_item_instances_by_spec(inv, item_repository)
+        acting_status = player_status_repository.find_by_id(player_id) if player_status_repository is not None else None
         time_phase = None
         if self._time_of_day_phase_provider is not None:
             time_phase = self._time_of_day_phase_provider()
@@ -823,20 +770,14 @@ class SpotInteractionApplicationService:
                 )
                 if target_object is None or owner_spot_id is None:
                     raise ApplicationException(
-                        "道具操作が明示した対象物を世界から解決できません: "
-                        f"{int(target_object_id)}",
+                        f"道具操作が明示した対象物を世界から解決できません: {int(target_object_id)}",
                         object_id=int(target_object_id),
                     )
                 owner_spot_ids.add(owner_spot_id)
             if len(owner_spot_ids) != 1:
-                raise ApplicationException(
-                    "一つの道具操作から複数の部屋の物体へ効果を適用することは"
-                    "できません。"
-                )
+                raise ApplicationException("一つの道具操作から複数の部屋の物体へ効果を適用することはできません。")
             owner_spot_id = next(iter(owner_spot_ids))
-            target_interior = spot_interior_repository.find_by_spot_id(
-                owner_spot_id
-            )
+            target_interior = spot_interior_repository.find_by_spot_id(owner_spot_id)
             if target_interior is None:
                 raise ApplicationException(
                     f"スポット内部データがありません: {owner_spot_id}",
@@ -851,9 +792,7 @@ class SpotInteractionApplicationService:
                 owned,
                 self._world_flag_state.as_frozen_set(),
                 effect_interior=effect_interior,
-                spot_presence_count=len(
-                    graph.presence_at(spot_id).present_entity_ids
-                ),
+                spot_presence_count=len(graph.presence_at(spot_id).present_entity_ids),
                 interaction_parameters=interaction_parameters,
                 current_tick=current_tick,
                 owned_item_spec_counts=owned_counts,
@@ -867,8 +806,7 @@ class SpotInteractionApplicationService:
             )
         except InsufficientEffectItemsException as exc:
             raise ApplicationException(
-                "REMOVE_ITEM effect could not consume all declared items; "
-                "precondition / count mismatch",
+                "REMOVE_ITEM effect could not consume all declared items; precondition / count mismatch",
                 player_id=int(player_id),
             ) from exc
 
@@ -878,12 +816,8 @@ class SpotInteractionApplicationService:
         if meeting_result is not None:
             return meeting_result
 
-        self._require_removable_items(
-            inv, result.item_spec_ids_to_remove, player_id, item_repository
-        )
-        self._require_payable_gold(
-            player_id, result, player_status_repository
-        )
+        self._require_removable_items(inv, result.item_spec_ids_to_remove, player_id, item_repository)
+        self._require_payable_gold(player_id, result, player_status_repository)
 
         self._world_flag_state.replace_from_interaction(
             result.new_flags,
@@ -895,9 +829,7 @@ class SpotInteractionApplicationService:
         spot_interior_repository.save(effect_spot_id, result.new_interior)
         # 支払いはカウンタの保存と同じ側に置く。後段 (ダメージ適用等) で
         # 落ちても「カウンタだけ増えて払っていない」非対称を作らないため。
-        self._apply_deposit_gold(
-            player_id, result, acting_status, player_status_repository
-        )
+        self._apply_deposit_gold(player_id, result, acting_status, player_status_repository)
         for passage in result.passage_state_updates:
             graph.set_connection_passage_state(
                 ConnectionId.create(passage.connection_id),
@@ -907,9 +839,7 @@ class SpotInteractionApplicationService:
                 cause=PassageChangeCauseEnum.ACTOR_ACTION,
                 actor_entity_id=entity_id,
             )
-        pending_arrivals: list[
-            tuple[EntityId, SpotId, str | None, str | None]
-        ] = []
+        pending_arrivals: list[tuple[EntityId, SpotId, str | None, str | None]] = []
         for teleport in result.teleport_specs:
             target_spot = SpotId.create(teleport.target_spot_id)
             if (
@@ -939,16 +869,8 @@ class SpotInteractionApplicationService:
         for atmosphere in result.atmosphere_update_specs:
             graph.update_spot_atmosphere(
                 SpotId.create(atmosphere.spot_id),
-                lighting=(
-                    LightingEnum[atmosphere.lighting]
-                    if atmosphere.lighting is not None
-                    else None
-                ),
-                temperature=(
-                    TemperatureEnum[atmosphere.temperature]
-                    if atmosphere.temperature is not None
-                    else None
-                ),
+                lighting=(LightingEnum[atmosphere.lighting] if atmosphere.lighting is not None else None),
+                temperature=(TemperatureEnum[atmosphere.temperature] if atmosphere.temperature is not None else None),
                 hazard_level=atmosphere.hazard_level,
                 hazard_description=atmosphere.hazard_description,
             )
@@ -967,15 +889,9 @@ class SpotInteractionApplicationService:
                     is_bidirectional=create_spec.is_bidirectional,
                     passage=create_spec.passage,
                 ),
-                reverse_connection_id=(
-                    ConnectionId.create(new_id.value + 1)
-                    if create_spec.is_bidirectional
-                    else None
-                ),
+                reverse_connection_id=(ConnectionId.create(new_id.value + 1) if create_spec.is_bidirectional else None),
             )
-        graph_events = self._with_declared_arrival_messages(
-            list(graph.get_events()), pending_arrivals
-        )
+        graph_events = self._with_declared_arrival_messages(list(graph.get_events()), pending_arrivals)
         graph.clear_events()
         spot_graph_repository.save(graph)
 
@@ -1024,18 +940,13 @@ class SpotInteractionApplicationService:
                     StatusEffect(
                         effect_type=StatusEffectType(status_effect.effect_type_name),
                         value=status_effect.value,
-                        expiry_tick=WorldTick(
-                            effective_tick.value
-                            + max(0, status_effect.duration_ticks)
-                        ),
+                        expiry_tick=WorldTick(effective_tick.value + max(0, status_effect.duration_ticks)),
                     )
                 )
             player_status_repository.save(acting_status)  # type: ignore[union-attr]
         if result.satisfy_need_specs and acting_status is not None:
             for need in result.satisfy_need_specs:
-                acting_status.satisfy_need(
-                    NeedType(need.need_type_name), need.amount
-                )
+                acting_status.satisfy_need(NeedType(need.need_type_name), need.amount)
             player_status_repository.save(acting_status)  # type: ignore[union-attr]
 
         if event_publisher is not None:
@@ -1046,9 +957,7 @@ class SpotInteractionApplicationService:
                 actor_entity_id=entity_id,
             )
             if graph_events or public_events or status_events:
-                event_publisher.publish_all(
-                    [*graph_events, *public_events, *status_events]
-                )
+                event_publisher.publish_all([*graph_events, *public_events, *status_events])
         if self._cooldown_store is not None and current_tick is not None:
             if self._cooldown_ticks_of(action_def) > 0:
                 self._cooldown_store.record_success(
@@ -1132,9 +1041,7 @@ class SpotInteractionApplicationService:
         まで外へ出さない。
         """
         scope_factory = self._require_command_scope_factory()
-        if self._declares_call_meeting(
-            player_id, object_id, action_name
-        ):
+        if self._declares_call_meeting(player_id, object_id, action_name):
             return self._execute_interaction_with_repositories(
                 player_id,
                 object_id,
@@ -1250,9 +1157,7 @@ class SpotInteractionApplicationService:
         # ときだけ item_repository に save する責務がここにある。
         acting_item_aggregate = None
         if acting_item_instance_id is not None:
-            acting_item_aggregate = item_repository.find_by_id(
-                acting_item_instance_id
-            )
+            acting_item_aggregate = item_repository.find_by_id(acting_item_instance_id)
             if acting_item_aggregate is None:
                 raise ApplicationException(
                     f"acting item instance が見つかりません: {acting_item_instance_id.value}",
@@ -1265,10 +1170,7 @@ class SpotInteractionApplicationService:
         # state が変わったときだけ save する責務もここに置く。
         target_item_aggregate = None
         if target_item_instance_id is not None:
-            if (
-                acting_item_instance_id is not None
-                and acting_item_instance_id == target_item_instance_id
-            ):
+            if acting_item_instance_id is not None and acting_item_instance_id == target_item_instance_id:
                 # 同 ID を両方に渡すのは作家ミス。domain 層でも `is` 比較で
                 # 同じ aggregate を弾くが、ID 等価でも別 aggregate ロードに
                 # なるとガードを抜けてしまうので app 層でも値で弾く。
@@ -1276,9 +1178,7 @@ class SpotInteractionApplicationService:
                     "acting と target に同じ item_instance_id を渡すことはできません",
                     player_id=int(player_id),
                 )
-            target_item_aggregate = item_repository.find_by_id(
-                target_item_instance_id
-            )
+            target_item_aggregate = item_repository.find_by_id(target_item_instance_id)
             if target_item_aggregate is None:
                 raise ApplicationException(
                     f"target item instance が見つかりません: {target_item_instance_id.value}",
@@ -1334,20 +1234,14 @@ class SpotInteractionApplicationService:
         # None のままにして、照明条件を成立させない。
         current_effective_lighting = None
         if self._effective_lighting_resolver is not None:
-            current_effective_lighting = self._effective_lighting_resolver.resolve(
-                spot_id
-            )
+            current_effective_lighting = self._effective_lighting_resolver.resolve(spot_id)
 
         # 宣言した待ち時間がまだ明けていなければ、実行の前に断る。
         #
         # 読み込みは cooldown_ticks を受け取り、対人行為では効いていたのに、
         # ここだけ誰も見ていなかった。**作家の宣言が黙って捨てられていた。**
-        action_def = self._refuse_if_still_waiting(
-            player_id, object_id, action_name, interior, current_tick
-        )
-        if action_def is not None and not self._interaction_allows_actor(
-            player_id, action_def
-        ):
+        action_def = self._refuse_if_still_waiting(player_id, object_id, action_name, interior, current_tick)
+        if action_def is not None and not self._interaction_allows_actor(player_id, action_def):
             raise self._actor_plane_refusal(player_id)
 
         try:
@@ -1372,8 +1266,7 @@ class SpotInteractionApplicationService:
             )
         except InsufficientEffectItemsException as exc:
             raise ApplicationException(
-                "REMOVE_ITEM effect could not consume all declared items; "
-                "precondition / count mismatch",
+                "REMOVE_ITEM effect could not consume all declared items; precondition / count mismatch",
                 player_id=int(player_id),
             ) from exc
         except InteractionNotAllowedException as exc:
@@ -1388,7 +1281,12 @@ class SpotInteractionApplicationService:
                 raise
             if emit_failure_observation:
                 self._maybe_emit_failure_observation(
-                    interior, object_id, action_name, entity_id, spot_id, graph,
+                    interior,
+                    object_id,
+                    action_name,
+                    entity_id,
+                    spot_id,
+                    graph,
                     failure_reason=str(exc) if exc.args else "",
                     current_tick=current_tick,
                 )
@@ -1402,12 +1300,8 @@ class SpotInteractionApplicationService:
         if meeting_result is not None:
             return meeting_result
 
-        self._require_removable_items(
-            inv, result.item_spec_ids_to_remove, player_id, item_repository
-        )
-        self._require_payable_gold(
-            player_id, result, player_status_repository
-        )
+        self._require_removable_items(inv, result.item_spec_ids_to_remove, player_id, item_repository)
+        self._require_payable_gold(player_id, result, player_status_repository)
 
         self._world_flag_state.replace_from_interaction(
             result.new_flags,
@@ -1447,9 +1341,7 @@ class SpotInteractionApplicationService:
         # `graph.get_events()` 抽出より前に済ませる (Left / Entered を同じ
         # publish_all に乗せるため)。複数宣言された場合は順に適用し、最後の
         # 宛先が最終位置になる。
-        pending_arrival_messages: list[
-            tuple[EntityId, SpotId, str | None, str | None]
-        ] = []
+        pending_arrival_messages: list[tuple[EntityId, SpotId, str | None, str | None]] = []
         for teleport in result.teleport_specs:
             target_spot = SpotId.create(teleport.target_spot_id)
             if (
@@ -1494,16 +1386,8 @@ class SpotInteractionApplicationService:
         for atmosphere in result.atmosphere_update_specs:
             graph.update_spot_atmosphere(
                 SpotId.create(atmosphere.spot_id),
-                lighting=(
-                    LightingEnum[atmosphere.lighting]
-                    if atmosphere.lighting is not None
-                    else None
-                ),
-                temperature=(
-                    TemperatureEnum[atmosphere.temperature]
-                    if atmosphere.temperature is not None
-                    else None
-                ),
+                lighting=(LightingEnum[atmosphere.lighting] if atmosphere.lighting is not None else None),
+                temperature=(TemperatureEnum[atmosphere.temperature] if atmosphere.temperature is not None else None),
                 hazard_level=atmosphere.hazard_level,
                 hazard_description=atmosphere.hazard_description,
             )
@@ -1531,18 +1415,14 @@ class SpotInteractionApplicationService:
                 item_repository,
             ):
                 raise ApplicationException(
-                    "REMOVE_ITEM effect could not consume all declared items; "
-                    "precondition / count mismatch",
+                    "REMOVE_ITEM effect could not consume all declared items; precondition / count mismatch",
                     player_id=int(player_id),
                 )
             player_inventory_repository.save(inv2)
 
         # Phase 4-A: acting item instance の state が effect で変わった場合、
         # item_repository に save して永続化する。
-        if (
-            result.item_instance_state_changed
-            and acting_item_aggregate is not None
-        ):
+        if result.item_instance_state_changed and acting_item_aggregate is not None:
             item_repository.save(acting_item_aggregate)
 
         # Phase 4-B: target item instance の state が変わった場合も同じく save。
@@ -1553,10 +1433,7 @@ class SpotInteractionApplicationService:
         # 現状は in-memory のため partial failure が顕在化しないが、infra 層が
         # SQLite に切り替わると acting だけ save されて target で失敗する
         # ケースで state が壊れる。
-        if (
-            result.target_item_instance_state_changed
-            and target_item_aggregate is not None
-        ):
+        if result.target_item_instance_state_changed and target_item_aggregate is not None:
             item_repository.save(target_item_aggregate)
 
         # Phase 4-D-2: 行動者プレイヤーの自由 state が effect で変わった場合、
@@ -1630,6 +1507,7 @@ class SpotInteractionApplicationService:
             from ai_rpg_world.domain.combat.value_object.status_effect import (
                 StatusEffect,
             )
+
             status = player_status_repository.find_by_id(player_id)
             if status is not None:
                 effective_tick = current_tick or WorldTick(0)
@@ -1638,18 +1516,21 @@ class SpotInteractionApplicationService:
                         effect_type = StatusEffectType(status_spec.effect_type_name)
                     except ValueError:
                         import logging
+
                         logging.getLogger(__name__).warning(
-                            "Unknown StatusEffectType %r in status_effect_spec, "
-                            "skipping (player_id=%s)",
-                            status_spec.effect_type_name, int(player_id),
+                            "Unknown StatusEffectType %r in status_effect_spec, skipping (player_id=%s)",
+                            status_spec.effect_type_name,
+                            int(player_id),
                         )
                         continue
                     expiry_tick = WorldTick(effective_tick.value + max(0, status_spec.duration_ticks))
-                    status.add_status_effect(StatusEffect(
-                        effect_type=effect_type,
-                        value=status_spec.value,
-                        expiry_tick=expiry_tick,
-                    ))
+                    status.add_status_effect(
+                        StatusEffect(
+                            effect_type=effect_type,
+                            value=status_spec.value,
+                            expiry_tick=expiry_tick,
+                        )
+                    )
                 player_status_repository.save(status)
 
         # 欲求回復
@@ -1665,17 +1546,17 @@ class SpotInteractionApplicationService:
                         # 黙って捨てるとシナリオ作者が「回復が効かない」と
                         # 気づくまで分からないので warning log で surface する。
                         import logging
+
                         logging.getLogger(__name__).warning(
-                            "Unknown NeedType %r in satisfy_need_spec, "
-                            "skipping (player_id=%s, amount=%d)",
-                            need_spec.need_type_name, int(player_id), need_spec.amount,
+                            "Unknown NeedType %r in satisfy_need_spec, skipping (player_id=%s, amount=%d)",
+                            need_spec.need_type_name,
+                            int(player_id),
+                            need_spec.amount,
                         )
                 player_status_repository.save(status)
 
         # aggregate が貯めたイベント (ConnectionStateChanged 等) を抽出
-        graph_events = self._with_declared_arrival_messages(
-            list(graph.get_events()), pending_arrival_messages
-        )
+        graph_events = self._with_declared_arrival_messages(list(graph.get_events()), pending_arrival_messages)
         graph.clear_events()
 
         spot_graph_repository.save(graph)
@@ -1690,6 +1571,7 @@ class SpotInteractionApplicationService:
             from ai_rpg_world.domain.world_graph.enum.witness_policy import (
                 WitnessPolicy,
             )
+
             witness_policy = WitnessPolicy.SAME_SPOT
             witness_observation_message = ""
             new_obj = result.new_interior.get_object(object_id)
@@ -1725,9 +1607,7 @@ class SpotInteractionApplicationService:
             # Phase G #3 (silent failure fix): damage 経由で aggregate が積んだ
             # PlayerDownedEvent も同 publish_all に乗せて、E-3a の
             # PlayerDownedOutcomeHandler へ届ける。空 list の場合は no-op。
-            event_publisher.publish_all(
-                [*graph_events, interacted_event, *public_events, *status_events_from_damage]
-            )
+            event_publisher.publish_all([*graph_events, interacted_event, *public_events, *status_events_from_damage])
 
         # 成功したときだけ起点を更新する。**適用と観測配信がすべて終わったあと**
         # に置く。前提条件で弾かれた場合だけでなく、効果計算より後の保存や配信で
@@ -1736,9 +1616,7 @@ class SpotInteractionApplicationService:
         #
         # 最初は flag 反映の直前に置いていて、後段で落ちた操作にも待ち時間が
         # 付いていた (codex の指摘)。
-        self._record_cooldown_start(
-            player_id, object_id, action_name, action_def, current_tick
-        )
+        self._record_cooldown_start(player_id, object_id, action_name, action_def, current_tick)
 
         return SpotInteractionResultDto(
             messages=(
@@ -1762,8 +1640,7 @@ class SpotInteractionApplicationService:
         caller = self._meeting_caller
         if caller is None:
             raise ApplicationException(
-                "CALL_MEETING が宣言されていますが、招集の配線 "
-                "(set_meeting_caller) がありません。"
+                "CALL_MEETING が宣言されていますが、招集の配線 (set_meeting_caller) がありません。"
             )
         messages = list(result.messages)
         for trigger in triggers:
@@ -1830,8 +1707,7 @@ class SpotInteractionApplicationService:
             return
         if player_status_repository is None or acting_status is None:
             raise ApplicationException(
-                "DEPOSIT_GOLD_TO_OBJECT requires the acting player status; "
-                "支払いを黙って飛ばすとカウンタだけが増える",
+                "DEPOSIT_GOLD_TO_OBJECT requires the acting player status; 支払いを黙って飛ばすとカウンタだけが増える",
                 player_id=int(player_id),
             )
         acting_status.pay_gold(total)
@@ -1845,14 +1721,16 @@ class SpotInteractionApplicationService:
         item_repository: ItemRepository | None = None,
     ) -> None:
         """世界効果を保存する前に、未予約品から削除全量を確保できるか検証する。"""
-        if plan_item_removals_from_inventory(
-            inventory,
-            item_spec_ids,
-            item_repository or self._item_repository,
-        ) is None:
+        if (
+            plan_item_removals_from_inventory(
+                inventory,
+                item_spec_ids,
+                item_repository or self._item_repository,
+            )
+            is None
+        ):
             raise ApplicationException(
-                "REMOVE_ITEM effect could not consume all declared items; "
-                "precondition / count mismatch",
+                "REMOVE_ITEM effect could not consume all declared items; precondition / count mismatch",
                 player_id=int(player_id),
             )
 
@@ -1883,29 +1761,18 @@ class SpotInteractionApplicationService:
                 spot_id=int(spot_id),
             )
         matches = [
-            (obj, idef)
-            for obj in interior.objects
-            for idef in obj.interactions
-            if idef.action_name == action_name
+            (obj, idef) for obj in interior.objects for idef in obj.interactions if idef.action_name == action_name
         ]
         if not matches:
             raise InteractionNotFoundException(action_name)
         if len(matches) > 1:
-            raise InteractionNotFoundException(
-                f"{action_name}: multiple target objects at current spot"
-            )
+            raise InteractionNotFoundException(f"{action_name}: multiple target objects at current spot")
         obj, idef = matches[0]
 
-        action_def = self._refuse_if_still_waiting(
-            player_id, obj.object_id, action_name, interior, current_tick
-        )
-        if action_def is not None and not self._interaction_allows_actor(
-            player_id, action_def
-        ):
+        action_def = self._refuse_if_still_waiting(player_id, obj.object_id, action_name, interior, current_tick)
+        if action_def is not None and not self._interaction_allows_actor(player_id, action_def):
             raise self._actor_plane_refusal(player_id)
-        result = self._evaluate_preconditions_for_actor(
-            player_id, idef, obj, interior, graph, spot_id, current_tick
-        )
+        result = self._evaluate_preconditions_for_actor(player_id, idef, obj, interior, graph, spot_id, current_tick)
         if not result.is_satisfied:
             raise InteractionNotAllowedException(
                 result.failure_message or "Interaction not allowed",
@@ -1938,9 +1805,7 @@ class SpotInteractionApplicationService:
         if plane is None:
             return ()
         acting_status = (
-            self._player_status_repository.find_by_id(player_id)
-            if self._player_status_repository is not None
-            else None
+            self._player_status_repository.find_by_id(player_id) if self._player_status_repository is not None else None
         )
         return tuple(
             idef
@@ -1950,9 +1815,7 @@ class SpotInteractionApplicationService:
                 self._world_flag_state.as_frozen_set(),
                 plane,
             )
-            if self.remaining_cooldown_ticks(
-                player_id, obj.object_id, idef, current_tick
-            ) <= 0
+            if self.remaining_cooldown_ticks(player_id, obj.object_id, idef, current_tick) <= 0
             and self._evaluate_preconditions_for_actor(
                 player_id, idef, obj, interior, graph, spot_id, current_tick
             ).is_satisfied
@@ -1988,9 +1851,7 @@ class SpotInteractionApplicationService:
             return ()
         return tuple(
             idef
-            for idef in self.interactions_open_now(
-                player_id, object_id, current_tick=current_tick
-            )
+            for idef in self.interactions_open_now(player_id, object_id, current_tick=current_tick)
             if _advances_state(idef, target_object_id, keys, obj, interior)
         )
 
@@ -2013,9 +1874,7 @@ class SpotInteractionApplicationService:
         owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repository)
         owned_counts = count_owned_item_instances_by_spec(inv, self._item_repository)
         acting_status = (
-            self._player_status_repository.find_by_id(player_id)
-            if self._player_status_repository is not None
-            else None
+            self._player_status_repository.find_by_id(player_id) if self._player_status_repository is not None else None
         )
         time_phase = None
         if self._time_of_day_phase_provider is not None:
@@ -2142,8 +2001,7 @@ class SpotInteractionApplicationService:
                         observation_spot_id = SpotId.create(int(summary.target_ref))
                     except (TypeError, ValueError) as exc:
                         raise ApplicationException(
-                            "ATMOSPHERE_UPDATE の観測先 spot を解決できません: "
-                            f"target_ref={summary.target_ref!r}"
+                            f"ATMOSPHERE_UPDATE の観測先 spot を解決できません: target_ref={summary.target_ref!r}"
                         ) from exc
                 events.append(
                     SpotPublicEffectObservedEvent.create(
@@ -2210,7 +2068,8 @@ class SpotInteractionApplicationService:
         if obj is None:
             return
         idef = next(
-            (i for i in obj.interactions if i.action_name == action_name), None,
+            (i for i in obj.interactions if i.action_name == action_name),
+            None,
         )
         # **役割で弾かれた失敗は、目撃者に配らない。**
         #
@@ -2223,9 +2082,8 @@ class SpotInteractionApplicationService:
             from ai_rpg_world.domain.player.value_object.player_id import (
                 PlayerId as _PlayerId,
             )
-            status = self._player_status_repository.find_by_id(
-                _PlayerId(int(entity_id))
-            )
+
+            status = self._player_status_repository.find_by_id(_PlayerId(int(entity_id)))
             actor_state = dict(getattr(status, "state", {}) or {}) if status else {}
         if idef is not None and _hidden_precondition_failed(idef, actor_state):
             return
@@ -2253,9 +2111,7 @@ class SpotInteractionApplicationService:
             ttl_cutoff = tick_int - 2 * self._failure_observation_dedup_window
             if ttl_cutoff > 0:
                 self._failure_observation_last_tick = {
-                    k: v
-                    for k, v in self._failure_observation_last_tick.items()
-                    if v > ttl_cutoff
+                    k: v for k, v in self._failure_observation_last_tick.items() if v > ttl_cutoff
                 }
         failed_event = SpotObjectInteractionFailedEvent.create(
             aggregate_id=graph.graph_id,
@@ -2266,7 +2122,7 @@ class SpotInteractionApplicationService:
             action_name=action_name,
             observation_message=override or "",
             failure_reason=failure_reason if not override else "",
-                    display_label=(idef.display_label if idef is not None else ""),
+            display_label=(idef.display_label if idef is not None else ""),
         )
         self._event_publisher.publish_all([failed_event])
 

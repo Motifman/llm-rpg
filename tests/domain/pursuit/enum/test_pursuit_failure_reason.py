@@ -12,10 +12,7 @@ class TestPursuitFailureReason:
         """Phase 1 の失敗理由だけを保持すること"""
         assert PursuitFailureReason.TARGET_MISSING.value == "target_missing"
         assert PursuitFailureReason.PATH_UNREACHABLE.value == "path_unreachable"
-        assert (
-            PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN.value
-            == "vision_lost_at_last_known"
-        )
+        assert PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN.value == "vision_lost_at_last_known"
 
     def test_cancelled_is_not_a_failure_reason(self):
         """cancelled は失敗理由として含めないこと"""

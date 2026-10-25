@@ -46,8 +46,7 @@ class TestInteractTopLevelDescriptionExplainsPrecondition:
         日本語または英語キーワードで明示する。"""
         desc = INTERACT_DEFINITION.description
         assert "前提" in desc or "precondition" in desc, (
-            "前提条件の存在を伝えないと、流木の山 gather 4 連発のような "
-            "PRECONDITION_FAILED の繰り返しが止まらない"
+            "前提条件の存在を伝えないと、流木の山 gather 4 連発のような PRECONDITION_FAILED の繰り返しが止まらない"
         )
 
     def test_interaction_precondition_failed(self) -> None:
@@ -63,8 +62,7 @@ class TestInteractTopLevelDescriptionExplainsPrecondition:
         そこを読めば良いという誘導文を入れる。"""
         desc = INTERACT_DEFINITION.description
         assert "【現在地と周囲】" in desc, (
-            "precondition と action_name の出所を明示しないと、LLM が "
-            "思いつきで推測してしまう"
+            "precondition と action_name の出所を明示しないと、LLM が 思いつきで推測してしまう"
         )
 
 
@@ -73,24 +71,18 @@ class TestInteractActionNameDescriptionUsesOnlyOfferedValues:
 
     def test_concrete_action_names_are_not_advertised(self) -> None:
         """静的な説明は、存在しない操作名を写せる手本にしない。"""
-        action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"][
-            "description"
-        ]
+        action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"]["description"]
         identifiers = set(re.findall(r"[a-z][a-z0-9_]*", action_name_desc))
         assert identifiers == {"action_name"}
         assert "例" not in action_name_desc
 
     def test_points_to_the_quoted_value_in_current_state(self) -> None:
         """実在する値の出所と、そのまま写す規則を明示する。"""
-        action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"][
-            "description"
-        ]
+        action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"]["description"]
         assert "【現在地と周囲】" in action_name_desc
-        assert '``\"\"``' in action_name_desc
+        assert '``""``' in action_name_desc
         assert "そのまま" in action_name_desc
-        assert "推測" in action_name_desc, (
-            "表示に無い値の即興発明を直接禁じる必要がある"
-        )
+        assert "推測" in action_name_desc, "表示に無い値の即興発明を直接禁じる必要がある"
 
 
 class TestInteractTargetDescriptionDoesNotInventAnActionExample:
@@ -98,11 +90,9 @@ class TestInteractTargetDescriptionDoesNotInventAnActionExample:
 
     def test_target_description_uses_the_current_row_without_an_example(self) -> None:
         """対象行の読み方だけを示し、固定の対象や操作は示さない。"""
-        target_desc = INTERACT_DEFINITION.parameters["properties"]["target_label"][
-            "description"
-        ]
+        target_desc = INTERACT_DEFINITION.parameters["properties"]["target_label"]["description"]
         assert "【現在地と周囲】" in target_desc
-        assert '``\"\"``' in target_desc
+        assert '``""``' in target_desc
         assert "例" not in target_desc
         assert not any(name in target_desc for name in ("gather", "search", "examine"))
 
@@ -118,8 +108,6 @@ class TestInteractDescriptionDoesNotBreakPrefixCache:
 
     def test_action_name_description_string(self) -> None:
         """actionnamedescription は静的文字列。"""
-        action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"][
-            "description"
-        ]
+        action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"]["description"]
         assert isinstance(action_name_desc, str)
         assert "{" not in action_name_desc, "placeholder の疑い"

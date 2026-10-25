@@ -50,8 +50,10 @@ class TestGiveItemQuantity:
             parameters={"item_spec_id": 7},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.item_spec_ids_to_grant) == 1
         assert result.item_spec_ids_to_grant[0] == ItemSpecId.create(7)
@@ -64,8 +66,10 @@ class TestGiveItemQuantity:
             parameters={"item_spec_id": 7, "quantity": 3},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.item_spec_ids_to_grant) == 3
         assert all(sid == ItemSpecId.create(7) for sid in result.item_spec_ids_to_grant)
@@ -78,8 +82,10 @@ class TestGiveItemQuantity:
             parameters={"item_spec_id": 7, "quantity": -2},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert result.item_spec_ids_to_grant == ()
 
@@ -91,8 +97,10 @@ class TestGiveItemQuantity:
             parameters={"item_spec_id": 7, "quantity": 0},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert result.item_spec_ids_to_grant == ()
 
@@ -104,8 +112,10 @@ class TestGiveItemQuantity:
             parameters={"item_spec_id": 7, "quantity": "not-an-int"},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert result.item_spec_ids_to_grant == (ItemSpecId.create(7),)
 
@@ -121,8 +131,10 @@ class TestRemoveItemQuantity:
             parameters={"item_spec_id": 7, "quantity": 2},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert result.item_spec_ids_to_remove == (ItemSpecId.create(7),) * 2
 
@@ -134,8 +146,10 @@ class TestRemoveItemQuantity:
             parameters={"item_spec_id": 7},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert result.item_spec_ids_to_remove == (ItemSpecId.create(7),)
 
@@ -162,7 +176,6 @@ class TestHasItemRequiredQuantity:
             effects=(),
         )
 
-
     def test_required_quantity_n_passes_when_owned_n(self) -> None:
         """required_quantity=2 で 2 個保持していれば OK。"""
         svc = SpotInteractionService()
@@ -173,7 +186,8 @@ class TestHasItemRequiredQuantity:
             required_quantity=2,
         )
         ok, _ = svc.can_interact(
-            self._interaction(cond), _switch_obj(),
+            self._interaction(cond),
+            _switch_obj(),
             owned_item_spec_ids=frozenset({spec}),
             world_flags=frozenset(),
             owned_item_spec_counts={spec: 2},
@@ -191,7 +205,8 @@ class TestHasItemRequiredQuantity:
             failure_message="鉱石が 3 個必要です",
         )
         ok, msg = svc.can_interact(
-            self._interaction(cond), _switch_obj(),
+            self._interaction(cond),
+            _switch_obj(),
             owned_item_spec_ids=frozenset({spec}),
             world_flags=frozenset(),
             owned_item_spec_counts={spec: 2},
@@ -212,7 +227,8 @@ class TestHasItemRequiredQuantity:
         )
         with pytest.raises(ValueError, match="owned_item_spec_counts is required"):
             svc.can_interact(
-                self._interaction(cond), _switch_obj(),
+                self._interaction(cond),
+                _switch_obj(),
                 owned_item_spec_ids=frozenset({spec}),
                 world_flags=frozenset(),
                 # counts を渡さない
@@ -228,7 +244,8 @@ class TestHasItemRequiredQuantity:
             # required_quantity は default の 1
         )
         ok, _ = svc.can_interact(
-            self._interaction(cond), _switch_obj(),
+            self._interaction(cond),
+            _switch_obj(),
             owned_item_spec_ids=frozenset({spec}),
             world_flags=frozenset(),
             # counts を渡さない
@@ -252,33 +269,60 @@ class TestRequiredQuantityScenarioLoader:
         scenario = {
             "scenario_format_version": "1.0",
             "metadata": {
-                "id": "x", "title": "x", "description": "x",
-                "theme": "x", "difficulty": "easy", "estimated_ticks": 1, "author": "x", "tags": [],
+                "id": "x",
+                "title": "x",
+                "description": "x",
+                "theme": "x",
+                "difficulty": "easy",
+                "estimated_ticks": 1,
+                "author": "x",
+                "tags": [],
             },
             "item_specs": [
                 {"id": "ore", "name": "鉱石", "description": "d", "category": "MATERIAL"},
             ],
             "environment": {
-                "weather": {"enabled": False, "initial": {"weather_type": "CLEAR", "intensity": 0.0},
-                            "update_interval_ticks": 100, "announce_changes": False},
+                "weather": {
+                    "enabled": False,
+                    "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+                    "update_interval_ticks": 100,
+                    "announce_changes": False,
+                },
             },
-            "spots": [{
-                "id": "s", "name": "S", "description": "d", "category": "OTHER",
-                "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
-                "interior": {"objects": [{
-                    "id": "o", "name": "O", "description": "d", "object_type": "OTHER",
-                    "state": {},
-                    "interactions": [{
-                        "action_name": "x", "display_label": "X",
-                        "preconditions": [{
-                            "condition_type": "HAS_ITEM",
-                            "required_item": "ore",
-                            "required_quantity": raw_quantity,
-                        }],
-                        "effects": [],
-                    }],
-                }]},
-            }],
+            "spots": [
+                {
+                    "id": "s",
+                    "name": "S",
+                    "description": "d",
+                    "category": "OTHER",
+                    "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+                    "interior": {
+                        "objects": [
+                            {
+                                "id": "o",
+                                "name": "O",
+                                "description": "d",
+                                "object_type": "OTHER",
+                                "state": {},
+                                "interactions": [
+                                    {
+                                        "action_name": "x",
+                                        "display_label": "X",
+                                        "preconditions": [
+                                            {
+                                                "condition_type": "HAS_ITEM",
+                                                "required_item": "ore",
+                                                "required_quantity": raw_quantity,
+                                            }
+                                        ],
+                                        "effects": [],
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ],
             "connections": [],
             "players": [{"id": "p", "name": "P", "spawn_spot": "s", "initial_items": []}],
             "game_end_conditions": {"win": [], "lose": []},
@@ -301,11 +345,14 @@ class TestHasItemsRequiredQuantity:
             required_quantity=2,
         )
         idef = InteractionDef(
-            action_name="x", display_label="X",
-            preconditions=(cond,), effects=(),
+            action_name="x",
+            display_label="X",
+            preconditions=(cond,),
+            effects=(),
         )
         ok, _ = svc.can_interact(
-            idef, _switch_obj(),
+            idef,
+            _switch_obj(),
             owned_item_spec_ids=frozenset({a, b}),
             world_flags=frozenset(),
             owned_item_spec_counts={a: 2, b: 3},
@@ -324,11 +371,14 @@ class TestHasItemsRequiredQuantity:
             required_quantity=2,
         )
         idef = InteractionDef(
-            action_name="x", display_label="X",
-            preconditions=(cond,), effects=(),
+            action_name="x",
+            display_label="X",
+            preconditions=(cond,),
+            effects=(),
         )
         ok, _ = svc.can_interact(
-            idef, _switch_obj(),
+            idef,
+            _switch_obj(),
             owned_item_spec_ids=frozenset({a, b}),
             world_flags=frozenset(),
             owned_item_spec_counts={a: a_count, b: b_count},

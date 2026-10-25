@@ -1,6 +1,7 @@
 """
 ItemInfoQueryServiceのテスト
 """
+
 from unittest.mock import Mock
 
 import pytest
@@ -258,7 +259,7 @@ class TestItemSpecQueryService:
 
         # ドメイン例外がアプリケーション例外に変換されていることを確認
         assert exc_info.value.cause is not None
-        assert hasattr(exc_info.value.cause, 'error_code')
+        assert hasattr(exc_info.value.cause, "error_code")
         assert "Domain error in ItemInfoQuery usecase" in str(exc_info.value)
 
     def test_get_item_spec_zero_id(self):
@@ -272,7 +273,7 @@ class TestItemSpecQueryService:
 
         # ドメイン例外がアプリケーション例外に変換されていることを確認
         assert exc_info.value.cause is not None
-        assert hasattr(exc_info.value.cause, 'error_code')
+        assert hasattr(exc_info.value.cause, "error_code")
         assert "Domain error in ItemInfoQuery usecase" in str(exc_info.value)
 
     def test_find_item_by_name_empty_string(self):

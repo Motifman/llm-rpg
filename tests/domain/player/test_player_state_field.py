@@ -29,9 +29,7 @@ from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 
 
-def _player_status(
-    state: dict | None = None, *, hp: int = 100, mp: int = 50, gold: int = 0
-) -> PlayerStatusAggregate:
+def _player_status(state: dict | None = None, *, hp: int = 100, mp: int = 50, gold: int = 0) -> PlayerStatusAggregate:
     """state テスト用の最小 PlayerStatusAggregate。"""
     exp_table = ExpTable(100, 1.5)
     return PlayerStatusAggregate(
@@ -143,9 +141,15 @@ class TestPlayerStateValueValidation:
     def test_all_primitive_types_accepted(self) -> None:
         """str / int / float / bool / None は値も型も変えずに保持される。"""
         status = _player_status()
-        status.merge_state({
-            "s": "x", "i": 42, "f": 1.5, "b": True, "n": None,
-        })
+        status.merge_state(
+            {
+                "s": "x",
+                "i": 42,
+                "f": 1.5,
+                "b": True,
+                "n": None,
+            }
+        )
         assert status.state == {"s": "x", "i": 42, "f": 1.5, "b": True, "n": None}
         assert type(status.state["s"]) is str
         assert type(status.state["i"]) is int

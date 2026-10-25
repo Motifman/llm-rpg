@@ -82,12 +82,8 @@ def _stage(runtime: Any):  # noqa: ANN202
 def test_missing_scope_rejects_before_reading_the_market() -> None:
     """確定区間未配線なら期限切れ候補を読む前にstageを拒否する。"""
     market = Mock()
-    market.expired_orders.side_effect = AssertionError(
-        "未配線時に期限切れ候補を読んではならない"
-    )
-    market.expire_orders.side_effect = AssertionError(
-        "未配線時に旧一括更新を呼んではならない"
-    )
+    market.expired_orders.side_effect = AssertionError("未配線時に期限切れ候補を読んではならない")
+    market.expire_orders.side_effect = AssertionError("未配線時に旧一括更新を呼んではならない")
     stage = MarketOrderExpiryStage(market_service=market)
 
     with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
@@ -101,9 +97,7 @@ def test_public_market_expiry_rejects_without_a_scope(monkeypatch: Any) -> None:
     """MarketServiceの公開期限切れ入口も確定区間なしでは更新しない。"""
     market = _runtime()._market_service
     market._command_scope_factory = None
-    expired_orders = Mock(
-        side_effect=AssertionError("未配線時に期限切れ候補を読んではならない")
-    )
+    expired_orders = Mock(side_effect=AssertionError("未配線時に期限切れ候補を読んではならない"))
     monkeypatch.setattr(market, "expired_orders", expired_orders)
 
     with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
@@ -129,8 +123,7 @@ class _CommitObservation:
         assert tuple(events)
         self.states.append(
             (
-                self._runtime._market_board_store.board().find(self._order_id)
-                is None,
+                self._runtime._market_board_store.board().find(self._order_id) is None,
                 _held(self._runtime, _HERB),
             )
         )
@@ -335,9 +328,7 @@ def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
     assert _held(runtime, _HERB) == 1
     assert observer.states == [(True, 1)]
     failures = recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
-    assert [(e.payload["stage"], e.payload["committed"]) for e in failures] == [
-        ("market_order_expiry", True)
-    ]
+    assert [(e.payload["stage"], e.payload["committed"]) for e in failures] == [("market_order_expiry", True)]
 
 
 def test_public_expiry_notifies_before_preserving_post_commit_failure(

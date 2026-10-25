@@ -129,9 +129,7 @@ class TestMonsterLabeling:
         assert "同じ場所に居るモンスター" in result.current_state_text
         assert "このスポットにモンスターはいない" in result.current_state_text
         # 個体が居ないので M-prefix の target は付かない
-        assert all(
-            not k.startswith("M") for k in result.tool_runtime_context.targets
-        )
+        assert all(not k.startswith("M") for k in result.tool_runtime_context.targets)
 
     def test_health_behavior_label_included(self) -> None:
         """説明部分にも behavior と health の日本語が混じる。"""

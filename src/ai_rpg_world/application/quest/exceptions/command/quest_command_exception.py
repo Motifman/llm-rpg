@@ -2,7 +2,6 @@
 クエストコマンド関連の例外定義
 """
 
-
 from typing import Any
 
 from ai_rpg_world.application.quest.exceptions.base_exception import QuestApplicationException

@@ -15,7 +15,8 @@ def test_retired_map_events_are_absent() -> None:
     """退役したマップのイベントは定義されず、天候変化のイベントだけが残る。"""
     module = import_module("ai_rpg_world.domain.world.event.map_events")
     assert {name for name in vars(module) if name.endswith("Event")} == {
-        "BaseDomainEvent", "SpotWeatherChangedEvent",
+        "BaseDomainEvent",
+        "SpotWeatherChangedEvent",
     }
     with pytest.raises(ModuleNotFoundError):
         import_module("ai_rpg_world.domain.world.event.harvest_events")

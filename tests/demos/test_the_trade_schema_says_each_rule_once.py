@@ -32,23 +32,19 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
 
 #: 交換を正しく組み立てるために要る事実。**これが消えたら削りすぎ。**
 _RULES_THAT_MUST_SURVIVE = (
-    "どちらか片側にだけ",      # gold を両側に置けない
+    "どちらか片側にだけ",  # gold を両側に置けない
     "金だけの両替はできない",
-    "所持アイテム",            # 品名の書き方
+    "所持アイテム",  # 品名の書き方
     "相手の持ち物は見えない",  # 求める品を名前で指名する理由
-    "凍結",                    # 返事まで使えなくなる
+    "凍結",  # 返事まで使えなくなる
     "部分的には成立しない",
 )
 
 
 @pytest.fixture(scope="module")
 def trade_offer_text() -> str:
-    definition = next(
-        d for d, _ in get_spot_graph_specs() if d.name == "trade_offer"
-    )
-    return str(definition.description) + json.dumps(
-        definition.parameters, ensure_ascii=False
-    )
+    definition = next(d for d, _ in get_spot_graph_specs() if d.name == "trade_offer")
+    return str(definition.description) + json.dumps(definition.parameters, ensure_ascii=False)
 
 
 class TestEveryRuleSurvives:

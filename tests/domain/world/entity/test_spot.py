@@ -12,10 +12,10 @@ def test_spot_creation_with_parent():
     parent_id = SpotId(10)
     name = "教室"
     description = "学校の教室"
-    
+
     # When
     spot = Spot(spot_id, name, description, SpotCategoryEnum.OTHER, parent_id)
-    
+
     # Then
     assert spot.spot_id == spot_id
     assert spot.name == name
@@ -28,10 +28,10 @@ def test_spot_creation_without_parent():
     spot_id = SpotId(1)
     name = "街"
     description = "賑やかな街"
-    
+
     # When
     spot = Spot(spot_id, name, description)
-    
+
     # Then
     assert spot.parent_id is None
 

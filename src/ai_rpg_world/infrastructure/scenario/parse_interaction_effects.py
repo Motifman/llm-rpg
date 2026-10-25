@@ -83,9 +83,7 @@ EFFECT_PARAMETER_KEYS: Mapping[InteractionEffectTypeEnum, frozenset[str]] = {
     _E.APPLY_DAMAGE: frozenset({"damage", "message"}),
     _E.APPLY_STATUS_EFFECT: frozenset({"status_effect_type", "value", "duration_ticks"}),
     _E.TELEPORT_ENTITY: frozenset({"target_spot"}) | _TELEPORT_MESSAGE_KEYS,
-    _E.CHANGE_ATMOSPHERE: frozenset(
-        {"target_spot", "lighting", "temperature", "hazard_level", "hazard_description"}
-    ),
+    _E.CHANGE_ATMOSPHERE: frozenset({"target_spot", "lighting", "temperature", "hazard_level", "hazard_description"}),
     _E.COMBINE_ITEMS: frozenset({"input_item_spec_ids", "output_item_spec_id"}),
     _E.CREATE_CONNECTION: frozenset(
         {
@@ -99,9 +97,7 @@ EFFECT_PARAMETER_KEYS: Mapping[InteractionEffectTypeEnum, frozenset[str]] = {
         }
     ),
     _E.DESTROY_CONNECTION: frozenset({"target_connection"}),
-    _E.CHANGE_PASSAGE_STATE: frozenset(
-        {"target_connection", "new_state", "traversable", "sound_permeability"}
-    ),
+    _E.CHANGE_PASSAGE_STATE: frozenset({"target_connection", "new_state", "traversable", "sound_permeability"}),
     _E.SATISFY_NEED: frozenset({"need_type", "amount"}),
     _E.RECORD_OBJECT_STATE_TICK: frozenset({"target_object", "state_key"}),
     _E.CHANGE_ITEM_INSTANCE_STATE: frozenset({"state_updates"}),
@@ -118,8 +114,8 @@ EFFECT_PARAMETER_KEYS: Mapping[InteractionEffectTypeEnum, frozenset[str]] = {
     _E.CALL_MEETING: frozenset({"trigger"}),
 }
 
-def parse_effect_target( raw: dict[str, Any], *, actor_context: str
-) -> EffectTarget:
+
+def parse_effect_target(raw: dict[str, Any], *, actor_context: str) -> EffectTarget:
     """``effects[].target`` を検証して返す。既定は行為者。
 
     3 種類の書き間違いを読み込み時に落とす。
@@ -139,10 +135,7 @@ def parse_effect_target( raw: dict[str, Any], *, actor_context: str
             target = EffectTarget(raw_target)
         except (ValueError, TypeError):
             allowed = ", ".join(sorted(m.value for m in EffectTarget))
-            raise ScenarioLoadError(
-                f"unknown effect target {raw_target!r}. "
-                f"使える値: {allowed}: {raw!r}"
-            )
+            raise ScenarioLoadError(f"unknown effect target {raw_target!r}. 使える値: {allowed}: {raw!r}")
     if target is EffectTarget.ACTOR:
         return target
 
@@ -167,14 +160,12 @@ def parse_effect_target( raw: dict[str, Any], *, actor_context: str
             f"{raw!r}"
         )
     if effect_type not in _TARGET_PLAYER_CAPABLE_EFFECTS:
-        capable = ", ".join(
-            sorted(e.name for e in _TARGET_PLAYER_CAPABLE_EFFECTS)
-        )
+        capable = ", ".join(sorted(e.name for e in _TARGET_PLAYER_CAPABLE_EFFECTS))
         raise ScenarioLoadError(
-            f"{effect_type.name} does not support target=TARGET_PLAYER. "
-            f"対象を取れる効果: {capable}: {raw!r}"
+            f"{effect_type.name} does not support target=TARGET_PLAYER. 対象を取れる効果: {capable}: {raw!r}"
         )
     return target
+
 
 #: 行為者本人の自由 state を書く効果と、書き先の key の読み方。
 #:
@@ -186,9 +177,7 @@ _PLAYER_STATE_WRITERS = {
 }
 
 
-def _written_player_state_keys(
-    effect_type_str: str, params: Mapping[str, Any]
-) -> tuple[str, ...]:
+def _written_player_state_keys(effect_type_str: str, params: Mapping[str, Any]) -> tuple[str, ...]:
     """その効果が書き換える、本人 state の key を返す。"""
     source = _PLAYER_STATE_WRITERS.get(effect_type_str)
     if source is None:
@@ -219,7 +208,9 @@ def _reject_writes_to_unchangeable_attributes(
     """
     if effect_type_str == InteractionEffectTypeEnum.CHANGE_PLAYER_STATE.name:
         reject_values_the_world_does_not_have(
-            params.get("state_updates") or {}, specs, what=effect_type_str,
+            params.get("state_updates") or {},
+            specs,
+            what=effect_type_str,
         )
     for key in _written_player_state_keys(effect_type_str, params):
         spec = specs.spec_of(key)
@@ -256,9 +247,7 @@ def parse_interaction_effect(
     まま進む。必須なら、渡さない限り呼べない。
     """
     if not isinstance(raw, dict):
-        raise ScenarioLoadError(
-            f"効果はオブジェクトで書いてください (got {type(raw).__name__}): {raw!r}"
-        )
+        raise ScenarioLoadError(f"効果はオブジェクトで書いてください (got {type(raw).__name__}): {raw!r}")
     raw_effect_type = raw.get("effect_type")
     try:
         effect_type = InteractionEffectTypeEnum[str(raw_effect_type)]
@@ -274,8 +263,7 @@ def parse_interaction_effect(
     raw_params = raw.get("parameters", {})
     if not isinstance(raw_params, dict):
         raise ScenarioLoadError(
-            f"{where} の parameters はオブジェクトで書いてください "
-            f"(got {type(raw_params).__name__})"
+            f"{where} の parameters はオブジェクトで書いてください (got {type(raw_params).__name__})"
         )
     params = dict(raw_params)
     reject_unknown_keys(
@@ -283,13 +271,8 @@ def parse_interaction_effect(
         EFFECT_PARAMETER_KEYS[effect_type] | _COMMON_EFFECT_PARAMETER_KEYS,
         where=f"{where} の parameters",
     )
-    _reject_writes_to_unchangeable_attributes(
-        effect_type_str, params, player_attribute_specs
-    )
-    if (
-        actor_context == "scenario_event"
-        and effect_type_str == InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK.name
-    ):
+    _reject_writes_to_unchangeable_attributes(effect_type_str, params, player_attribute_specs)
+    if actor_context == "scenario_event" and effect_type_str == InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK.name:
         raise ScenarioLoadError(
             "scenario_event effects cannot use RECORD_PLAYER_STATE_TICK. "
             "scenario_event には行為者が存在せず、誰の state に手番を記録するか"
@@ -319,11 +302,7 @@ def parse_interaction_effect(
     # 過去シナリオ互換で new_state が来た場合は正規化して受け入れる。
     # 他の effect (CHANGE_PASSAGE_STATE 等) では new_state は別の意味で
     # 使われるため、CHANGE_OBJECT_STATE 限定で正規化する。
-    if (
-        effect_type_str == "CHANGE_OBJECT_STATE"
-        and "state_updates" not in params
-        and "new_state" in params
-    ):
+    if effect_type_str == "CHANGE_OBJECT_STATE" and "state_updates" not in params and "new_state" in params:
         params["state_updates"] = params.pop("new_state")
     if "item_spec" in params:
         params["item_spec_id"] = mapper.get_int("item_spec", params.pop("item_spec"))
@@ -338,19 +317,15 @@ def parse_interaction_effect(
     if "loot_table" in params:
         # PR #1: "loot_table" 文字列 id → numeric loot_table_id へ正規化
         params["loot_table_id"] = mapper.get_int(
-            "loot_table", params.pop("loot_table"),
+            "loot_table",
+            params.pop("loot_table"),
         )
     if effect_type is InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION:
         flag = params.get("flag")
         if not isinstance(flag, str) or not flag.strip():
-            raise ScenarioLoadError(
-                "RESOLVE_ONGOING_CONDITION requires parameters.flag"
-            )
+            raise ScenarioLoadError("RESOLVE_ONGOING_CONDITION requires parameters.flag")
         params["flag"] = flag.strip()
-    if (
-        effect_type is InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY
-        and actor_context != "interaction"
-    ):
+    if effect_type is InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY and actor_context != "interaction":
         raise ScenarioLoadError(
             "SHOW_ROOM_OCCUPANCY requires an acting player and is only valid "
             f"in interactions: actor_context={actor_context!r}"
@@ -362,29 +337,19 @@ def parse_interaction_effect(
                 f"valid in interactions: actor_context={actor_context!r}"
             )
         if "item_spec_id" not in params:
-            raise ScenarioLoadError(
-                "DEPOSIT_ITEM_TO_OBJECT requires parameters.item_spec"
-            )
+            raise ScenarioLoadError("DEPOSIT_ITEM_TO_OBJECT requires parameters.item_spec")
         state_key = params.get("state_key")
         if not isinstance(state_key, str) or not state_key.strip():
-            raise ScenarioLoadError(
-                "DEPOSIT_ITEM_TO_OBJECT requires parameters.state_key"
-            )
+            raise ScenarioLoadError("DEPOSIT_ITEM_TO_OBJECT requires parameters.state_key")
         params["state_key"] = state_key.strip()
         if "quantity" not in params:
             raise ScenarioLoadError(
-                "DEPOSIT_ITEM_TO_OBJECT requires parameters.quantity; "
-                "正の整数または 'all' を明示してください"
+                "DEPOSIT_ITEM_TO_OBJECT requires parameters.quantity; 正の整数または 'all' を明示してください"
             )
         quantity = params["quantity"]
-        if quantity != "all" and (
-            isinstance(quantity, bool)
-            or not isinstance(quantity, int)
-            or quantity <= 0
-        ):
+        if quantity != "all" and (isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0):
             raise ScenarioLoadError(
-                "DEPOSIT_ITEM_TO_OBJECT parameters.quantity must be a "
-                f"positive integer or 'all' (got {quantity!r})"
+                f"DEPOSIT_ITEM_TO_OBJECT parameters.quantity must be a positive integer or 'all' (got {quantity!r})"
             )
     if effect_type is InteractionEffectTypeEnum.DEPOSIT_GOLD_TO_OBJECT:
         if actor_context != "interaction":
@@ -394,9 +359,7 @@ def parse_interaction_effect(
             )
         state_key = params.get("state_key")
         if not isinstance(state_key, str) or not state_key.strip():
-            raise ScenarioLoadError(
-                "DEPOSIT_GOLD_TO_OBJECT requires parameters.state_key"
-            )
+            raise ScenarioLoadError("DEPOSIT_GOLD_TO_OBJECT requires parameters.state_key")
         params["state_key"] = state_key.strip()
         amount = params.get("amount")
         if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
@@ -450,10 +413,11 @@ def parse_interaction_effect(
         target=target,
     )
 
+
 _TELEPORT_MESSAGE_PLACEHOLDERS = frozenset({"{actor}"})
 
-def validate_teleport_observation_messages( params: dict[str, Any], raw: dict[str, Any]
-) -> None:
+
+def validate_teleport_observation_messages(params: dict[str, Any], raw: dict[str, Any]) -> None:
     """観測文の宣言ミスを起動時に落とす。
 
     **静かに既定文へ縮退する経路を塞ぐ。** 非文字列は None へ落ち、未知の
@@ -496,9 +460,8 @@ def validate_teleport_observation_messages( params: dict[str, Any], raw: dict[st
                     f"閉じ忘れや綴り違いはそのまま観測へ出ます: {raw!r}"
                 )
 
-def validate_change_atmosphere_params(
-    params: dict[str, Any], raw: dict[str, Any]
-) -> None:
+
+def validate_change_atmosphere_params(params: dict[str, Any], raw: dict[str, Any]) -> None:
     """CHANGE_ATMOSPHERE の対象 spot と enum 値を読み込み時に検証する。
 
     domain 側は ``spot_id <= 0`` なら spec を作らず、``lighting`` /
@@ -523,14 +486,11 @@ def validate_change_atmosphere_params(
         if value not in enum_cls.__members__:
             allowed = ", ".join(sorted(enum_cls.__members__))
             raise ScenarioLoadError(
-                f"CHANGE_ATMOSPHERE effect has unknown {key} {value!r}. "
-                f"使える値: {allowed}: {raw!r}"
+                f"CHANGE_ATMOSPHERE effect has unknown {key} {value!r}. 使える値: {allowed}: {raw!r}"
             )
 
     changed = [
-        key
-        for key in ("lighting", "temperature", "hazard_level", "hazard_description")
-        if params.get(key) is not None
+        key for key in ("lighting", "temperature", "hazard_level", "hazard_description") if params.get(key) is not None
     ]
     if not changed:
         raise ScenarioLoadError(

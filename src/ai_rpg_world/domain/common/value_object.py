@@ -9,19 +9,19 @@ class Exp:
     def __post_init__(self) -> None:
         if self.value < 0:
             raise ValueError(f"Invalid amount: {self.value}")
-    
+
     def __add__(self, exp: "Exp") -> "Exp":
         return Exp(self.value + exp.value)
-    
+
     def __sub__(self, exp: "Exp") -> "Exp":
         return Exp(self.value - exp.value)
-    
+
     def __gt__(self, exp: "Exp") -> bool:
         return self.value > exp.value
 
     def __ge__(self, exp: "Exp") -> bool:
         return self.value >= exp.value
-    
+
 
 @dataclass(frozen=True)
 class Gold:
@@ -36,16 +36,16 @@ class Gold:
 
     def __sub__(self, gold: "Gold") -> "Gold":
         return Gold(self.value - gold.value)
-    
+
     def __gt__(self, gold: "Gold") -> bool:
         return self.value > gold.value
 
     def __ge__(self, gold: "Gold") -> bool:
         return self.value >= gold.value
-    
+
     def __str__(self) -> str:
         return str(self.value)
-    
+
     def __repr__(self) -> str:
         return f"Gold({self.value})"
 
@@ -84,6 +84,7 @@ class Level:
 @dataclass(frozen=True)
 class WorldTick:
     """ワールド内の時間を表す最小単位（ティック）"""
+
     value: int
 
     def __post_init__(self) -> None:

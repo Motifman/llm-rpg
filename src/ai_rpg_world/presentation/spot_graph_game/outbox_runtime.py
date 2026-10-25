@@ -55,9 +55,7 @@ class _OutboxTraceRecorder(NullTraceRecorder):
         self._path = path
         self._file_lock = Lock()
 
-    def record(
-        self, kind: str, *, tick: int | None = None, player_id: int | None = None, **payload: Any
-    ) -> TraceEvent:
+    def record(self, kind: str, *, tick: int | None = None, player_id: int | None = None, **payload: Any) -> TraceEvent:
         with self._file_lock:
             event = super().record(kind, tick=tick, player_id=player_id, **payload)
             with self._path.open("a", encoding="utf-8") as output:
@@ -89,9 +87,7 @@ def build_trade_outbox_delivery_loop_from_env(
 
     read_model_database = resolve_trade_read_model_persisted_path(environ=environ)
     if read_model_database is None:
-        raise RuntimeError(
-            "GAME_DB_PATH設定時に取引read modelの永続化先を解決できません"
-        )
+        raise RuntimeError("GAME_DB_PATH設定時に取引read modelの永続化先を解決できません")
     ensure_parent_dir(str(read_model_database))
     database_path = Path(game_database)
     with tempfile.NamedTemporaryFile(
@@ -99,9 +95,7 @@ def build_trade_outbox_delivery_loop_from_env(
     ) as trace_file:
         trace_path = Path(trace_file.name)
     recorder = _OutboxTraceRecorder(trace_path)
-    isolator = WorldTickFailureIsolator(
-        policy=WorldTickFailurePolicy.ISOLATE, trace_recorder_provider=lambda: recorder
-    )
+    isolator = WorldTickFailureIsolator(policy=WorldTickFailurePolicy.ISOLATE, trace_recorder_provider=lambda: recorder)
     dispatcher = CommandEventDispatcher(
         failure_observer=isolator.after_commit_failure_observer(tick_provider=lambda: None)
     )

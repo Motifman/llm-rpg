@@ -165,20 +165,12 @@ class WorldLlmWiring:
         self.tool_call_loop_guard = ToolCallLoopGuardService(
             observation_buffer=self.observation_buffer,
             time_label_provider=self._time_label,
-            trace_recorder_provider=lambda: getattr(
-                self.runtime, "trace_recorder", None
-            ),
-            current_tick_provider=(
-                self.runtime.current_tick
-                if hasattr(self.runtime, "current_tick")
-                else None
-            ),
+            trace_recorder_provider=lambda: getattr(self.runtime, "trace_recorder", None),
+            current_tick_provider=(self.runtime.current_tick if hasattr(self.runtime, "current_tick") else None),
             loop_diagnosis=self._build_loop_diagnosis(),
             semantic_repeat_detector=self._build_semantic_repeat_detector(),
             location_provider=(
-                self.runtime.get_player_spot_name
-                if hasattr(self.runtime, "get_player_spot_name")
-                else None
+                self.runtime.get_player_spot_name if hasattr(self.runtime, "get_player_spot_name") else None
             ),
         )
         # 同じ instance を prompt_builder にも共有させる。record_and_check で
@@ -218,12 +210,8 @@ class WorldLlmWiring:
                 spot_graph_repository=spot_graph_repo,
                 player_status_repository=player_status_repo,
                 sound_propagation_service=SoundPropagationService(),
-                player_perception_policy=getattr(
-                    self.runtime, "_player_perception_policy", None
-                ),
-                departed_position_store=getattr(
-                    self.runtime, "_departed_position_store", None
-                ),
+                player_perception_policy=getattr(self.runtime, "_player_perception_policy", None),
+                departed_position_store=getattr(self.runtime, "_departed_position_store", None),
             )
         # PR 7 (#227): ツール名→ハンドラの dispatch table。本家
         # ToolCommandMapper.execute と構造を揃え、巨大 if-elif を排除する。
@@ -245,12 +233,8 @@ class WorldLlmWiring:
             #   default `_execute_tool` の UNSUPPORTED_TOOL 経路で正しく弾く。
             TOOL_NAME_SPEECH: self._handle_speech,
             # #1623: 定義は目次を出す設定でだけ get_tool_definitions が出す。
-            TOOL_NAME_EPISODE_RECALL: self._make_auxiliary_tool_handler(
-                TOOL_NAME_EPISODE_RECALL
-            ),
-            TOOL_NAME_EPISODE_REVISE_INDEX: self._make_auxiliary_tool_handler(
-                TOOL_NAME_EPISODE_REVISE_INDEX
-            ),
+            TOOL_NAME_EPISODE_RECALL: self._make_auxiliary_tool_handler(TOOL_NAME_EPISODE_RECALL),
+            TOOL_NAME_EPISODE_REVISE_INDEX: self._make_auxiliary_tool_handler(TOOL_NAME_EPISODE_REVISE_INDEX),
         }
         # #344 配線漏れ修正: spot_graph_use_item / attack / give_item /
         # pickup_item / drop_item / prepare_action は application 層 (executor)
@@ -263,6 +247,7 @@ class WorldLlmWiring:
             self._tool_handlers["sns_publish"] = lambda pid, args, ctx: public_sns_executor.publish(int(pid), args, ctx)
         self._spot_graph_executor: Any | None = None
         wire_missing_spot_graph_tools(self)
+
     def attach_action_failed_wiring(
         self,
         emitter: ActionFailedObservationEmitter,
@@ -285,9 +270,7 @@ class WorldLlmWiring:
     def run_phase_b(self, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
         return run_phase_b(self, phase_a)
 
-    def _build_tools_payload(
-        self, player_id: PlayerId, *, tool_schema_mode: str = "legacy"
-    ) -> list[dict[str, Any]]:
+    def _build_tools_payload(self, player_id: PlayerId, *, tool_schema_mode: str = "legacy") -> list[dict[str, Any]]:
         return build_tools_payload(self, player_id, tool_schema_mode=tool_schema_mode)
 
     def _maybe_interrupt_busy(
@@ -295,9 +278,7 @@ class WorldLlmWiring:
     ) -> tuple[bool, PlayerSpotNavigationState | None]:
         return maybe_interrupt_busy(self, player_id, tool_name)
 
-    def _restore_nav_state(
-        self, player_id: PlayerId, nav_snapshot: PlayerSpotNavigationState
-    ) -> None:
+    def _restore_nav_state(self, player_id: PlayerId, nav_snapshot: PlayerSpotNavigationState) -> None:
         restore_nav_state(self, player_id, nav_snapshot)
 
     def _reason_tool_is_not_offered(
@@ -326,22 +307,14 @@ class WorldLlmWiring:
     def _build_loop_diagnosis(self) -> LoopDiagnosis | None:
         """profile が繰り返しの理由の判定を求め、判断ポートがあるときだけ組む (#1411)。"""
         config = getattr(self.runtime, "_runtime_config", None)
-        if (
-            self.typed_judgment_port is None
-            or config is None
-            or not config.typed_judgment_loop_diagnosis_enabled
-        ):
+        if self.typed_judgment_port is None or config is None or not config.typed_judgment_loop_diagnosis_enabled:
             return None
         return LoopDiagnosis(port=self.typed_judgment_port)
 
     def _build_semantic_repeat_detector(self) -> SemanticRepeatDetector | None:
         """profile が意味上の繰り返しの検出を求め、判断ポートがあるときだけ組む (#1412)。"""
         config = getattr(self.runtime, "_runtime_config", None)
-        if (
-            self.typed_judgment_port is None
-            or config is None
-            or not config.typed_judgment_semantic_repeat_enabled
-        ):
+        if self.typed_judgment_port is None or config is None or not config.typed_judgment_semantic_repeat_enabled:
             return None
         return SemanticRepeatDetector(
             self.typed_judgment_port,
@@ -354,9 +327,7 @@ class WorldLlmWiring:
     def _pending_todos(self, being_id: BeingId) -> list[PendingTodo]:
         book = self.runtime._being_memo_store.get(being_id)
         return [
-            PendingTodo(id=m.memo_id, content=m.text, handle=m.handle)
-            for m in book.memos
-            if m.kind is MemoKind.TODO
+            PendingTodo(id=m.memo_id, content=m.text, handle=m.handle) for m in book.memos if m.kind is MemoKind.TODO
         ]
 
     def _time_label(self) -> str:
@@ -387,7 +358,11 @@ class WorldLlmWiring:
         offered_tools_at_prompt: Mapping[str, str | None],
     ) -> LlmCommandResultDto:
         return execute_tool(
-            self, player_id, name, arguments, runtime_context,
+            self,
+            player_id,
+            name,
+            arguments,
+            runtime_context,
             offered_tools_at_prompt=offered_tools_at_prompt,
         )
 
@@ -409,9 +384,7 @@ class WorldLlmWiring:
     ) -> LlmCommandResultDto:
         return handle_speech(self, player_id, arguments, runtime_context)
 
-    def _resolve_whisper_target(
-        self, target_label: str, targets: dict[str, Any]
-    ) -> Any | None:
+    def _resolve_whisper_target(self, target_label: str, targets: dict[str, Any]) -> Any | None:
         return resolve_whisper_target(self, target_label, targets)
 
     def _make_auxiliary_tool_handler(
@@ -428,7 +401,9 @@ class WorldLlmWiring:
         invalid_label_failure_builder: Any = None,
     ) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
         return adapt_executor_handler_with_resolver(
-            raw_handler, tool_name, argument_resolver,
+            raw_handler,
+            tool_name,
+            argument_resolver,
             invalid_label_failure_builder=invalid_label_failure_builder,
         )
 

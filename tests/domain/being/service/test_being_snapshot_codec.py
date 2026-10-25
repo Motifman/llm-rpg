@@ -138,9 +138,7 @@ class TestBeingSnapshotCodecMemoryPayload:
 
     def test_memory_payload_encode_snapshot_preserved(self) -> None:
         """``memory_payload_json`` を渡すと snapshot にそのまま乗る。"""
-        snapshot = BeingSnapshotCodec.encode(
-            _attached_being(), memory_payload_json='{"memo": [], "semantic": []}'
-        )
+        snapshot = BeingSnapshotCodec.encode(_attached_being(), memory_payload_json='{"memo": [], "semantic": []}')
         assert snapshot.memory_payload_json == '{"memo": [], "semantic": []}'
         assert snapshot.snapshot_version == CURRENT_SNAPSHOT_VERSION
         assert snapshot.has_memory_payload is True
@@ -156,7 +154,8 @@ class TestBeingSnapshotCodecMemoryPayload:
         """渡し間違いは TypeError で弾く (= 形式エラーは早期に検出)。"""
         with pytest.raises(TypeError, match="memory_payload_json"):
             BeingSnapshotCodec.encode(
-                _attached_being(), memory_payload_json=123  # type: ignore[arg-type]
+                _attached_being(),
+                memory_payload_json=123,  # type: ignore[arg-type]
             )
 
     def test_v1_snapshot_decode(self) -> None:
@@ -191,9 +190,7 @@ class TestBeingSnapshotCodecMemoryPayload:
 
     def test_decode_being_restore_payload(self) -> None:
         """memory payload は Phase 4-2 の service 責務なので codec では復元しない。"""
-        snapshot = BeingSnapshotCodec.encode(
-            _attached_being(), memory_payload_json='{"any": "thing"}'
-        )
+        snapshot = BeingSnapshotCodec.encode(_attached_being(), memory_payload_json='{"any": "thing"}')
         being = BeingSnapshotCodec.decode(snapshot)
         # codec は Being 集約 root の状態 (identity / attachment / kinds) だけ復元
         assert being.attachment is not None

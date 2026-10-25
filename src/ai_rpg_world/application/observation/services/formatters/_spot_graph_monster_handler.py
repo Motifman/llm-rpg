@@ -28,7 +28,9 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
     """モンスター基本イベントの formatter (反応/Pack 系を除く)。"""
 
     def format(
-        self, event: Any, recipient_player_id: PlayerId,
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
     ) -> ObservationOutput | None:
         if isinstance(event, MonsterAppearedAtSpotEvent):
             return self._format_monster_appeared(event, recipient_player_id)
@@ -55,9 +57,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         除外ロジックは持たない。モンスター名は ObservationNameResolver
         経由で template.name に解決する。
         """
-        monster_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.monster_id
-        )
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(event.monster_id)
         spot_name = self._resolve_spot_name(event.spot_id)
         prose = f"{monster_name}が{spot_name}に現れた。"
         structured: dict[str, Any] = {
@@ -96,17 +96,11 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
           縮退表記を追加する (被害者と同じく effective_lighting で判定)。
         """
         is_victim = event.target_player_id.value == recipient_id.value
-        monster_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.attacker_monster_id
-        )
-        target_name = self._context.name_resolver.player_name(
-            PlayerId(event.target_player_id.value)
-        )
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(event.attacker_monster_id)
+        target_name = self._context.name_resolver.player_name(PlayerId(event.target_player_id.value))
         if is_victim:
             if event.target_visible:
-                prose = (
-                    f"{monster_name}に襲われ {event.damage} のダメージを受けた。"
-                )
+                prose = f"{monster_name}に襲われ {event.damage} のダメージを受けた。"
             else:
                 prose = "暗闇から何かに襲われた。"
         else:
@@ -145,9 +139,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         「倒した」suffix を追加。
         """
         actor_name = self._resolve_entity_name(event.attacker_entity_id)
-        monster_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.target_monster_id
-        )
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(event.target_monster_id)
         prose = f"{actor_name}が{monster_name}を攻撃した。"
         if event.target_incapacitated:
             prose = prose + _INCAPACITATION_SUFFIX_FOR_MONSTER_TARGET
@@ -176,12 +168,8 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
 
         actor が monster なので self 除外は無し。同スポット全員に届く。
         """
-        monster_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.monster_id
-        )
-        item_name = self._context.name_resolver.item_spec_name(
-            event.item_spec_id.value
-        )
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(event.monster_id)
+        item_name = self._context.name_resolver.item_spec_name(event.item_spec_id.value)
         prose = f"{monster_name}が{item_name}を食べた。"
         structured: dict[str, Any] = {
             "type": "monster_ate_ground_item",
@@ -209,12 +197,8 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         actor / target どちらも monster なので player の self 除外は不要。
         同スポット全員に social として届く。
         """
-        attacker_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.attacker_monster_id
-        )
-        prey_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.target_monster_id
-        )
+        attacker_name = self._context.name_resolver.monster_name_by_monster_id(event.attacker_monster_id)
+        prey_name = self._context.name_resolver.monster_name_by_monster_id(event.target_monster_id)
         if event.target_incapacitated:
             prose = f"{attacker_name}が{prey_name}を仕留めた。"
         else:
@@ -245,9 +229,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         despawn / 死亡 / 撤去いずれの片道遷移も同じプロセでカバーする。
         死亡時など個別の文体が必要になったら専用 event に分離する方針。
         """
-        monster_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.monster_id
-        )
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(event.monster_id)
         spot_name = self._resolve_spot_name(event.spot_id)
         prose = f"{monster_name}の姿が見えなくなった。"
         structured: dict[str, Any] = {

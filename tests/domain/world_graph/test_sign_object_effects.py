@@ -111,17 +111,19 @@ class TestWritePlayerTextEffect:
         assert new_state["sign_written_tick"] == 5
 
     @pytest.mark.parametrize(
-        "parameters", [{}, {"text": ""}, {"text": 12345}],
+        "parameters",
+        [{}, {"text": ""}, {"text": 12345}],
         ids=["missing", "empty", "numeric"],
     )
     @pytest.mark.parametrize(
         "initial_state",
-        [{}, {"sign_text": "前の本文", "sign_author_name": "前の作者",
-              "sign_written_tick": 9, "public_label": "木製"}],
+        [{}, {"sign_text": "前の本文", "sign_author_name": "前の作者", "sign_written_tick": 9, "public_label": "木製"}],
         ids=["empty-state", "existing-state"],
     )
     def test_text_missing_interaction_not_allowed_exception_state(
-        self, parameters: dict, initial_state: dict,
+        self,
+        parameters: dict,
+        initial_state: dict,
     ) -> None:
         """欠落・空文字・数値の本文を拒否し、元の看板の全状態を保持する。
 
@@ -247,13 +249,14 @@ class TestWritePlayerTextEffect:
         ("initial_state", "initial_hidden", "expected_visible"),
         [
             ({}, frozenset(), {}),
-            ({"secret": "封印", "public_label": "木製"},
-             frozenset({"secret"}), {"public_label": "木製"}),
+            ({"secret": "封印", "public_label": "木製"}, frozenset({"secret"}), {"public_label": "木製"}),
         ],
         ids=["original-empty-state", "existing-private-and-public"],
     )
     def test_after_hidden_state_keys_preserved(
-        self, initial_state: dict, initial_hidden: frozenset[str],
+        self,
+        initial_state: dict,
+        initial_hidden: frozenset[str],
         expected_visible: dict,
     ) -> None:
         """初回と再書込みで元の値・秘匿キーを保持し、無関係な公開値は隠さない。"""
@@ -274,11 +277,15 @@ class TestWritePlayerTextEffect:
         )
         updated_sign = first.new_interior.objects[0]
         expected_hidden = initial_hidden | {
-            "sign_text", "sign_author_name", "sign_written_tick",
+            "sign_text",
+            "sign_author_name",
+            "sign_written_tick",
         }
         assert updated_sign.state == {
-            **initial_state, "sign_text": "1人目のメモ",
-            "sign_author_name": "アリス", "sign_written_tick": 1,
+            **initial_state,
+            "sign_text": "1人目のメモ",
+            "sign_author_name": "アリス",
+            "sign_written_tick": 1,
         }
         assert updated_sign.hidden_state_keys == expected_hidden
         assert updated_sign.visible_state() == expected_visible
@@ -293,15 +300,18 @@ class TestWritePlayerTextEffect:
         )
         updated = second.new_interior.objects[0]
         assert updated.state == {
-            **initial_state, "sign_text": "2人目のメモ",
-            "sign_author_name": "ボブ", "sign_written_tick": 5,
+            **initial_state,
+            "sign_text": "2人目のメモ",
+            "sign_author_name": "ボブ",
+            "sign_written_tick": 5,
         }
         assert updated.hidden_state_keys == expected_hidden
         assert updated.visible_state() == expected_visible
         assert "sign_text" not in updated.visible_state()
 
     @pytest.mark.parametrize(
-        "text", ["水場はここから北", "メモ"],
+        "text",
+        ["水場はここから北", "メモ"],
         ids=["original-private-content", "absorbed-public-summary"],
     )
     def test_state_delta_text_tick_not_included(self, text: str) -> None:
@@ -338,11 +348,13 @@ class TestShowPlayerTextEffect:
     def test_text_message(self) -> None:
         """書かれていれば本文と書き手名がmessageに現れる。"""
         svc = WorldGraphEffectService()
-        sign = _sign({
-            "sign_text": "北へ行くと水場がある",
-            "sign_author_name": "アリス",
-            "sign_written_tick": 3,
-        })
+        sign = _sign(
+            {
+                "sign_text": "北へ行くと水場がある",
+                "sign_author_name": "アリス",
+                "sign_written_tick": 3,
+            }
+        )
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.SHOW_PLAYER_TEXT,
             parameters={},

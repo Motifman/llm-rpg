@@ -84,7 +84,14 @@ class TestReadingMemoOperations:
     def test_heard_fact_keeps_who(self) -> None:
         """人から聞いた分かったことは、出どころ・確かさ・誰からを持つ。"""
         read = _read(
-            {"do": "add", "kind": "fact", "text": "弁は目盛りが関係する", "source": "heard", "certainty": "guess", "from": "門番"}
+            {
+                "do": "add",
+                "kind": "fact",
+                "text": "弁は目盛りが関係する",
+                "source": "heard",
+                "certainty": "guess",
+                "from": "門番",
+            }
         )
 
         assert read.operations == ((0, AddMemo(MemoKind.FACT, "弁は目盛りが関係する", HEARD_GUESS)),)
@@ -107,14 +114,27 @@ class TestReadingMemoOperations:
             ({"do": "remove"}, REJECTED_MISSING_ID),
             ({"do": "add", "kind": "fact", "text": "鍵"}, REJECTED_MISSING_PROVENANCE),
             ({"do": "add", "kind": "fact", "text": "鍵", "source": "self"}, REJECTED_MISSING_PROVENANCE),
-            ({"do": "add", "kind": "fact", "text": "鍵", "source": "heard", "certainty": "sure"}, REJECTED_MISSING_FROM),
+            (
+                {"do": "add", "kind": "fact", "text": "鍵", "source": "heard", "certainty": "sure"},
+                REJECTED_MISSING_FROM,
+            ),
             (
                 {"do": "add", "kind": "fact", "text": "鍵", "source": "self", "certainty": "sure", "from": "門番"},
                 REJECTED_FROM_NOT_NEEDED,
             ),
-            ({"do": "add", "kind": "todo", "text": "鍵", "source": "self", "certainty": "sure"}, REJECTED_PROVENANCE_OUTSIDE_FACT),
             (
-                {"do": "add", "kind": "fact", "text": "鍵", "source": "episode", "certainty": "sure", "from": "ep_a07c33"},
+                {"do": "add", "kind": "todo", "text": "鍵", "source": "self", "certainty": "sure"},
+                REJECTED_PROVENANCE_OUTSIDE_FACT,
+            ),
+            (
+                {
+                    "do": "add",
+                    "kind": "fact",
+                    "text": "鍵",
+                    "source": "episode",
+                    "certainty": "sure",
+                    "from": "ep_a07c33",
+                },
                 REJECTED_MISSING_PROVENANCE,
             ),
         ],
@@ -156,11 +176,18 @@ class TestReadingMemoOperations:
     def test_episode_source_is_read_when_offered(self) -> None:
         """出どころの選択肢にエピソードを出す設定では、エピソードの呼び名を出どころとして読む。"""
         read = _read(
-            {"do": "add", "kind": "fact", "text": "籠は 3 人まで", "source": "episode", "certainty": "sure", "from": "ep_a07c33"},
+            {
+                "do": "add",
+                "kind": "fact",
+                "text": "籠は 3 人まで",
+                "source": "episode",
+                "certainty": "sure",
+                "from": "ep_a07c33",
+            },
             episode=True,
         )
 
-        (_, operation), = read.operations
+        ((_, operation),) = read.operations
         assert isinstance(operation, AddMemo)
         assert operation.provenance == MemoProvenance(
             source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33"
@@ -202,7 +229,11 @@ class TestMemoSchema:
         return ToolDefinitionDto(
             name="wait",
             description="待つ",
-            parameters={"type": "object", "properties": {"inner_thought": {"type": "string"}}, "required": ["inner_thought"]},
+            parameters={
+                "type": "object",
+                "properties": {"inner_thought": {"type": "string"}},
+                "required": ["inner_thought"],
+            },
             category=ToolCategory.WORLD_ACTION,
         )
 

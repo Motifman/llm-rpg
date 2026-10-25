@@ -31,10 +31,7 @@ class WorldTickSubsystemCodec(WorldSubsystemCodec):
     def capture(self, runtime: Any) -> dict[str, Any]:
         time_provider = getattr(runtime, "_time_provider", None)
         if time_provider is None:
-            raise RuntimeError(
-                "runtime._time_provider not found; "
-                "WorldTickSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._time_provider not found; WorldTickSubsystemCodec requires it")
         tick = time_provider.get_current_tick()
         return {
             "schema_version": SCHEMA_VERSION,
@@ -44,16 +41,10 @@ class WorldTickSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         time_provider = getattr(runtime, "_time_provider", None)
         if time_provider is None:
-            raise RuntimeError(
-                "runtime._time_provider not found; "
-                "WorldTickSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._time_provider not found; WorldTickSubsystemCodec requires it")
         if not hasattr(time_provider, "set_current_tick"):
             raise RuntimeError(
                 "runtime._time_provider does not support set_current_tick; "

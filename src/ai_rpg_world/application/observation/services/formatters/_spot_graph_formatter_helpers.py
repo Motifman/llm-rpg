@@ -83,9 +83,7 @@ class _SpotGraphFormatterBase:
                     obj = spot.interior.get_object(object_id)
                     if obj is not None:
                         return str(obj.name)
-            interior_repo = getattr(
-                self._context, "spot_interior_repository", None
-            )
+            interior_repo = getattr(self._context, "spot_interior_repository", None)
             if interior_repo is not None:
                 interior = interior_repo.find_by_spot_id(spot_id)
                 if interior is not None:
@@ -97,9 +95,7 @@ class _SpotGraphFormatterBase:
         return "何か"
 
 
-def _derive_delta(
-    old_state: dict[str, Any], new_state: dict[str, Any]
-) -> tuple[StateDeltaEntry, ...]:
+def _derive_delta(old_state: dict[str, Any], new_state: dict[str, Any]) -> tuple[StateDeltaEntry, ...]:
     """formatter 側のフォールバック: event に state_delta が無いとき
     old_state / new_state を比較して StateDeltaEntry tuple を作る。
     """

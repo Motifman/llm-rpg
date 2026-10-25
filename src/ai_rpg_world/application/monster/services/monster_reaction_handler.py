@@ -77,9 +77,7 @@ WorldFlagsProvider = Callable[[], frozenset[str]]
 
 # FLEE 中に呼ぶ wander 関数。tick service 側の `_try_wander_force` を渡す
 # (chance を無視して必ず passable 接続へ移動を試みる版)。
-ForceWanderFn = Callable[
-    [MonsterAggregate, SpotGraphAggregate, SpotId], bool
-]
+ForceWanderFn = Callable[[MonsterAggregate, SpotGraphAggregate, SpotId], bool]
 
 # `_decide_reaction_target` の戻り値。文字列リテラルではなく Literal で
 # タイプセーフに表現する (typo を型チェッカーで検出可能)。
@@ -201,12 +199,10 @@ class MonsterReactionHandler:
                     spot_id=spot_id,
                     target_player_id=(
                         self._player_id_to_entity_id(attacker_ref.player_id)
-                        if attacker_ref.player_id is not None else None
+                        if attacker_ref.player_id is not None
+                        else None
                     ),
-                    target_monster_id=(
-                        attacker_ref.monster_id
-                        if attacker_ref.is_monster else None
-                    ),
+                    target_monster_id=(attacker_ref.monster_id if attacker_ref.is_monster else None),
                 )
             )
             return self._continue_chase(monster, graph, spot_id, current_tick)
@@ -217,7 +213,8 @@ class MonsterReactionHandler:
     # ------------------------------------------------------------------
 
     def _decide_reaction_target(
-        self, monster: MonsterAggregate,
+        self,
+        monster: MonsterAggregate,
     ) -> ReactionTarget | None:
         """policy + HP 比から "flee" / "chase" / None を返す。"""
         policy = monster.template.reaction_to_attack
@@ -283,8 +280,7 @@ class MonsterReactionHandler:
             # に出すほどの意味がないため event は発火しないが、debug の
             # 手がかりとして warning ログだけは残す。
             logger.warning(
-                "CHASE state without chase_attacker_ref for monster=%s, "
-                "falling back to IDLE without event",
+                "CHASE state without chase_attacker_ref for monster=%s, falling back to IDLE without event",
                 monster.monster_id.value,
             )
             monster.clear_behavior_state_to_idle()
@@ -293,10 +289,7 @@ class MonsterReactionHandler:
 
         # grace 切れチェック (被弾以来の反応 tick)
         last_attacked = monster.last_attacked_tick
-        if last_attacked is not None and (
-            current_tick.value - last_attacked.value
-            > monster.template.flee_grace_ticks
-        ):
+        if last_attacked is not None and (current_tick.value - last_attacked.value > monster.template.flee_grace_ticks):
             self._abandon_chase(monster, graph, spot_id, reason="grace_expired")
             return None
 
@@ -314,15 +307,16 @@ class MonsterReactionHandler:
             and (current_tick.value - chase_started.value) > chase_max_ticks
         ):
             self._abandon_chase(
-                monster, graph, spot_id, reason="max_ticks_exceeded",
+                monster,
+                graph,
+                spot_id,
+                reason="max_ticks_exceeded",
             )
             return None
 
         # 1. 同 spot 居れば攻撃 (search 中であっても target 再発見なら攻撃に戻る)
         if attacker_ref.player_id is not None:
-            target_player = self._find_player_at_spot(
-                graph, spot_id, attacker_ref.player_id
-            )
+            target_player = self._find_player_at_spot(graph, spot_id, attacker_ref.player_id)
             if target_player is not None:
                 self._reset_search_on_rediscovery(monster)
                 return self._orchestrator.execute_monster_attack(
@@ -333,9 +327,7 @@ class MonsterReactionHandler:
                     current_tick=current_tick,
                 )
         elif attacker_ref.monster_id is not None:
-            target_monster_obj = self._find_monster_at_spot(
-                graph, spot_id, attacker_ref.monster_id
-            )
+            target_monster_obj = self._find_monster_at_spot(graph, spot_id, attacker_ref.monster_id)
             if target_monster_obj is not None:
                 self._reset_search_on_rediscovery(monster)
                 return self._orchestrator.execute_monster_to_monster_attack(
@@ -352,13 +344,17 @@ class MonsterReactionHandler:
             # 探索中だった場合は search_timer をリセットしてから移動 (再発見扱い)
             self._reset_search_on_rediscovery(monster)
             return self._chase_visible_target(
-                monster=monster, graph=graph, from_spot=spot_id,
+                monster=monster,
+                graph=graph,
+                from_spot=spot_id,
                 target_spot=target_spot,
             )
 
         # 3. target が graph 上に居ない → 見失いフェーズ
         return self._handle_lost_target(
-            monster=monster, graph=graph, current_spot=spot_id,
+            monster=monster,
+            graph=graph,
+            current_spot=spot_id,
         )
 
     @staticmethod
@@ -420,8 +416,10 @@ class MonsterReactionHandler:
     ) -> AttackOutcome | None:
         """target が graph 上に居る場合の 1 hop 追跡。"""
         moved = self._move_one_hop_toward(
-            monster=monster, graph=graph,
-            from_spot=from_spot, target_spot=target_spot,
+            monster=monster,
+            graph=graph,
+            from_spot=from_spot,
+            target_spot=target_spot,
         )
         if not moved:
             self._abandon_chase(monster, graph, from_spot, reason="no_path")
@@ -446,7 +444,10 @@ class MonsterReactionHandler:
         if last_observed is None:
             # 手がかり無し → CHASE 解除
             self._abandon_chase(
-                monster, graph, current_spot, reason="target_lost",
+                monster,
+                graph,
+                current_spot,
+                reason="target_lost",
             )
             return None
 
@@ -458,7 +459,10 @@ class MonsterReactionHandler:
             if not still_running:
                 # timer 切れ → 諦めて IDLE
                 self._abandon_chase(
-                    monster, graph, current_spot, reason="search_expired",
+                    monster,
+                    graph,
+                    current_spot,
+                    reason="search_expired",
                 )
                 return None
             self._monster_repository.save(monster)
@@ -468,12 +472,17 @@ class MonsterReactionHandler:
         if current_spot != last_observed:
             # last_observed へ駆け付ける 1 hop
             moved = self._move_one_hop_toward(
-                monster=monster, graph=graph,
-                from_spot=current_spot, target_spot=last_observed,
+                monster=monster,
+                graph=graph,
+                from_spot=current_spot,
+                target_spot=last_observed,
             )
             if not moved:
                 self._abandon_chase(
-                    monster, graph, current_spot, reason="no_path",
+                    monster,
+                    graph,
+                    current_spot,
+                    reason="no_path",
                 )
                 return None
             self._monster_repository.save(monster)
@@ -484,7 +493,10 @@ class MonsterReactionHandler:
         if search_ticks <= 0:
             # 探索無効テンプレ → 即 IDLE
             self._abandon_chase(
-                monster, graph, current_spot, reason="search_expired",
+                monster,
+                graph,
+                current_spot,
+                reason="search_expired",
             )
             return None
         monster.start_chase_search(search_ticks)
@@ -496,7 +508,10 @@ class MonsterReactionHandler:
         still_running = monster.tick_chase_search_timer()
         if not still_running:
             self._abandon_chase(
-                monster, graph, current_spot, reason="search_expired",
+                monster,
+                graph,
+                current_spot,
+                reason="search_expired",
             )
             return None
         self._monster_repository.save(monster)
@@ -515,9 +530,7 @@ class MonsterReactionHandler:
         """
         if attacker_ref.player_id is not None:
             try:
-                return graph.get_entity_spot(
-                    self._player_id_to_entity_id(attacker_ref.player_id)
-                )
+                return graph.get_entity_spot(self._player_id_to_entity_id(attacker_ref.player_id))
             except EntityNotInGraphException:
                 return None
         if attacker_ref.monster_id is None:
@@ -535,17 +548,11 @@ class MonsterReactionHandler:
         target_spot: SpotId,
     ) -> bool:
         """`target_spot` に向かう最短経路の 1 hop を実行する。成立なら True。"""
-        world_flags = (
-            self._world_flags_provider()
-            if self._world_flags_provider is not None
-            else frozenset()
-        )
+        world_flags = self._world_flags_provider() if self._world_flags_provider is not None else frozenset()
         owned_item_spec_ids: frozenset[ItemSpecId] = frozenset()
 
         def _is_passable(conn: Any) -> bool:
-            return graph.can_traverse_connection(
-                conn.connection_id, owned_item_spec_ids, world_flags
-            )
+            return graph.can_traverse_connection(conn.connection_id, owned_item_spec_ids, world_flags)
 
         # Phase 4b PR (c): MonsterTemplate.chase_max_distance を BFS の
         # 打ち切り基準にする。0 なら制限なし (`None` 扱い)。これにより

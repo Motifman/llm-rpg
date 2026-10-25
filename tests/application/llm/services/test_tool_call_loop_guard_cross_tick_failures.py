@@ -112,9 +112,7 @@ class TestCrossTickFailureDetection:
             success=False,
             error_code="INTERACTION_PRECONDITION_FAILED",
         )
-        assert len(buffer.appended) == 0, (
-            "1 件目で警告は発火しない (閾値未達)"
-        )
+        assert len(buffer.appended) == 0, "1 件目で警告は発火しない (閾値未達)"
 
         # 間に別 tool を挟む (streak がリセットされる)
         tick.tick = 100
@@ -145,16 +143,11 @@ class TestCrossTickFailureDetection:
             success=False,
             error_code="INTERACTION_PRECONDITION_FAILED",
         )
-        assert len(buffer.appended) == 1, (
-            "3 回目で cross_tick 警告が発火するはず"
-        )
+        assert len(buffer.appended) == 1, "3 回目で cross_tick 警告が発火するはず"
         entry = buffer.appended[0][1]
         assert entry.output.structured.get("loop_guard") is True
         assert entry.output.structured.get("pattern") == "cross_tick_failure"
-        assert (
-            entry.output.structured.get("error_code")
-            == "INTERACTION_PRECONDITION_FAILED"
-        )
+        assert entry.output.structured.get("error_code") == "INTERACTION_PRECONDITION_FAILED"
 
     def test_cross_tick_warning_names_target_orders_next_action_and_echoes_remediation(self) -> None:
         """同一失敗の反復警告は対象名・命令形・対処ヒントを含む。"""
@@ -200,9 +193,7 @@ class TestCrossTickFailureDetection:
                 success=False,
                 error_code="INTERACTION_PRECONDITION_FAILED",
             )
-        assert len(buffer.appended) == 0, (
-            "各 tick で failure history には 1 件しか残らないはずなので 3 回に到達しない"
-        )
+        assert len(buffer.appended) == 0, "各 tick で failure history には 1 件しか残らないはずなので 3 回に到達しない"
 
     def test_success_cross_tick_failure_count(self) -> None:
         """success=True は failure history に入らない (cross_tick_failure 側)。
@@ -224,10 +215,9 @@ class TestCrossTickFailureDetection:
                 success=True,
             )
         # cross_tick_failure pattern は発火しない
-        assert not any(
-            e.output.structured.get("pattern") == "cross_tick_failure"
-            for _, e in buffer.appended
-        ), "success=True の呼び出しが cross_tick_failure カウントに入っている"
+        assert not any(e.output.structured.get("pattern") == "cross_tick_failure" for _, e in buffer.appended), (
+            "success=True の呼び出しが cross_tick_failure カウントに入っている"
+        )
 
     def test_error_code_different_count(self) -> None:
         """同 tool + 同 args でも error_code が違えば別カウント (root cause
@@ -250,9 +240,7 @@ class TestCrossTickFailureDetection:
                 success=False,
                 error_code=ec,
             )
-        assert len(buffer.appended) == 0, (
-            "PRECONDITION_FAILED は 2 回、ACTION_NOT_FOUND は 1 回で閾値未達"
-        )
+        assert len(buffer.appended) == 0, "PRECONDITION_FAILED は 2 回、ACTION_NOT_FOUND は 1 回で閾値未達"
 
     def test_emits_warning_for_window(self) -> None:
         """code-review MEDIUM 1 反映: ``_cross_tick_last_warn`` の pruning が
@@ -275,11 +263,7 @@ class TestCrossTickFailureDetection:
             )
 
         def cross_tick_warns() -> list:
-            return [
-                e
-                for _, e in buffer.appended
-                if e.output.structured.get("pattern") == "cross_tick_failure"
-            ]
+            return [e for _, e in buffer.appended if e.output.structured.get("pattern") == "cross_tick_failure"]
 
         # 1 回目の 3 連続 (window 内): tick 0/5/10 で 3 回 → cross_tick 1 発火
         fail_at(0)
@@ -289,9 +273,7 @@ class TestCrossTickFailureDetection:
 
         # 再発火抑制: window (20) 経過前の tick 15 で 4 回目 → まだ silent
         fail_at(15)
-        assert len(cross_tick_warns()) == 1, (
-            "window 内では cross_tick_failure 再発火しないはず"
-        )
+        assert len(cross_tick_warns()) == 1, "window 内では cross_tick_failure 再発火しないはず"
 
         # window 経過後 (tick 40 以降で fresh window 開始): tick 40/45/50 の
         # 3 回で新しい cross_tick カウント → 再警告
@@ -299,8 +281,7 @@ class TestCrossTickFailureDetection:
         fail_at(45)
         fail_at(50)
         assert len(cross_tick_warns()) >= 2, (
-            "window 経過後の再発火が起きていない (_cross_tick_last_warn が"
-            " pruning されていない疑い)"
+            "window 経過後の再発火が起きていない (_cross_tick_last_warn が pruning されていない疑い)"
         )
 
     def test_success_error_code_default_call_existing(self) -> None:
@@ -321,7 +302,4 @@ class TestCrossTickFailureDetection:
         # cross_tick_failure は発火しない (success 情報がないため failure と
         # 見なせない)。だが同 args を連続 4 回 (INTERACT の threshold=4) 呼べば
         # 既存 streak 警告は発火する
-        assert not any(
-            e.output.structured.get("pattern") == "cross_tick_failure"
-            for _, e in buffer.appended
-        )
+        assert not any(e.output.structured.get("pattern") == "cross_tick_failure" for _, e in buffer.appended)

@@ -10,7 +10,9 @@ from tests.support.trace_recorders import CollectingTraceRecorder
 
 
 def _runtime(**overrides):
-    runtime = create_world_runtime(Path("data/scenarios/survival_island_v3_coop.json"), config=ResolvedLlmRuntimeConfig.for_tests(**overrides))
+    runtime = create_world_runtime(
+        Path("data/scenarios/survival_island_v3_coop.json"), config=ResolvedLlmRuntimeConfig.for_tests(**overrides)
+    )
     recorder = CollectingTraceRecorder()
     runtime.set_trace_recorder(recorder)
     return runtime, recorder
@@ -24,7 +26,9 @@ def test_async_handler_failure_reaches_world_trace() -> None:
     def fail(event: DomainEvent) -> None:
         raise RuntimeError("receiver failed")
 
-    executor.submit(key="being-a", event=DomainEvent(42, datetime.now(timezone.utc)), handler=fail, apply_result=lambda _: None)
+    executor.submit(
+        key="being-a", event=DomainEvent(42, datetime.now(timezone.utc)), handler=fail, apply_result=lambda _: None
+    )
     runtime.shutdown_async_events()
     events = recorder.of_kind("async_event_delivery_failed")
     assert len(events) == 1
@@ -43,7 +47,12 @@ def test_turn_entry_applies_only_that_beings_results(monkeypatch) -> None:
     key = runtime._acting_being_for(player).being_id.value
     applied = []
     for recipient in (key, "someone-else"):
-        runtime.async_event_executor.submit(key=recipient, event=DomainEvent(1, datetime.now(timezone.utc)), handler=lambda event: event.event_id, apply_result=lambda value, who=recipient: applied.append(who))
+        runtime.async_event_executor.submit(
+            key=recipient,
+            event=DomainEvent(1, datetime.now(timezone.utc)),
+            handler=lambda event: event.event_id,
+            apply_result=lambda value, who=recipient: applied.append(who),
+        )
     runtime.async_event_executor.shutdown(timeout=2)
     wiring = module.WorldLlmWiring.__new__(module.WorldLlmWiring)
     wiring.runtime = runtime
@@ -62,6 +71,7 @@ def test_rejections_and_abandoned_work_reach_trace() -> None:
     """件数超過・終了期限の破棄・終了後の拒否を、それぞれの理由付きで trace に残す。"""
     from concurrent.futures import wait
     from threading import Event
+
     entered, release = Event(), Event()
     runtime, recorder = _runtime(async_event_max_pending=1, async_event_shutdown_timeout_seconds=0)
     executor = runtime.async_event_executor
@@ -71,12 +81,22 @@ def test_rejections_and_abandoned_work_reach_trace() -> None:
         assert release.wait(5)
 
     try:
-        executor.submit(key="a", event=DomainEvent(1, datetime.now(timezone.utc)), handler=work, apply_result=lambda _: None)
+        executor.submit(
+            key="a", event=DomainEvent(1, datetime.now(timezone.utc)), handler=work, apply_result=lambda _: None
+        )
         assert entered.wait(5)
-        assert not executor.submit(key="a", event=DomainEvent(2, datetime.now(timezone.utc)), handler=work, apply_result=lambda _: None)
+        assert not executor.submit(
+            key="a", event=DomainEvent(2, datetime.now(timezone.utc)), handler=work, apply_result=lambda _: None
+        )
         runtime.shutdown_async_events()
-        assert not executor.submit(key="a", event=DomainEvent(3, datetime.now(timezone.utc)), handler=work, apply_result=lambda _: None)
-        assert [event.payload["reason"] for event in recorder.of_kind("async_event_delivery_failed")] == ["capacity", "shutdown_timeout", "shutdown"]
+        assert not executor.submit(
+            key="a", event=DomainEvent(3, datetime.now(timezone.utc)), handler=work, apply_result=lambda _: None
+        )
+        assert [event.payload["reason"] for event in recorder.of_kind("async_event_delivery_failed")] == [
+            "capacity",
+            "shutdown_timeout",
+            "shutdown",
+        ]
     finally:
         release.set()
         wait(tuple(executor._futures), timeout=5)
@@ -115,7 +135,9 @@ def test_experiment_waits_and_applies_results_before_snapshot(tmp_path, monkeypa
             assert release.wait(10)
             return 7
 
-        runtime.async_event_executor.submit(key="a", event=DomainEvent(1, datetime.now(timezone.utc)), handler=work, apply_result=apply)
+        runtime.async_event_executor.submit(
+            key="a", event=DomainEvent(1, datetime.now(timezone.utc)), handler=work, apply_result=apply
+        )
         assert entered.wait(5)
         return response
 
@@ -133,8 +155,11 @@ def test_experiment_waits_and_applies_results_before_snapshot(tmp_path, monkeypa
     monkeypatch.setattr(ExperimentSnapshotSession, "capture_all", capture)
     try:
         runner._drive_scenario(
-            run_id="async-snapshot", scenario_path=Path("data/scenarios/survival_island_v3_coop.json"),
-            max_world_ticks=1, recorder=CollectingTraceRecorder(), progress=lambda _: None,
+            run_id="async-snapshot",
+            scenario_path=Path("data/scenarios/survival_island_v3_coop.json"),
+            max_world_ticks=1,
+            recorder=CollectingTraceRecorder(),
+            progress=lambda _: None,
             runtime_config=ResolvedLlmRuntimeConfig.for_tests(async_event_shutdown_timeout_seconds=2),
             snapshot_save_dir=tmp_path / "snapshots",
         )
@@ -161,12 +186,17 @@ def test_experiment_stops_accepting_work_when_a_tick_raises(monkeypatch) -> None
     monkeypatch.setattr(WorldRuntime, "advance_tick", fail)
     with pytest.raises(RuntimeError, match="tick failed"):
         runner._drive_scenario(
-            run_id="async-cleanup", scenario_path=Path("data/scenarios/survival_island_v3_coop.json"),
-            max_world_ticks=1, recorder=CollectingTraceRecorder(), progress=lambda _: None,
+            run_id="async-cleanup",
+            scenario_path=Path("data/scenarios/survival_island_v3_coop.json"),
+            max_world_ticks=1,
+            recorder=CollectingTraceRecorder(),
+            progress=lambda _: None,
             runtime_config=ResolvedLlmRuntimeConfig.for_tests(),
         )
     assert len(runtimes) == 1
     assert not runtimes[0].async_event_executor.submit(
-        key="a", event=DomainEvent(1, datetime.now(timezone.utc)),
-        handler=lambda event: None, apply_result=lambda result: None,
+        key="a",
+        event=DomainEvent(1, datetime.now(timezone.utc)),
+        handler=lambda event: None,
+        apply_result=lambda result: None,
     )

@@ -39,9 +39,7 @@ class TestInlineShortTermMemoryScheduler:
         assert accepted is True
         assert called == [True]
 
-    def test_task_scheduler_raises_exception(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_task_scheduler_raises_exception(self, caplog: pytest.LogCaptureFixture) -> None:
         """task の例外は scheduler を止めない。"""
         sch = InlineShortTermMemoryScheduler()
 
@@ -74,10 +72,7 @@ class TestInlineShortTermMemoryScheduler:
             raise ValueError("simulated parse failure")
 
         sch.submit(player_id=7, task=_raise)
-        fails = [
-            ev for ev in captured
-            if ev.kind == TraceEventKind.SHORT_TERM_SUMMARY_GENERATION_FAILED
-        ]
+        fails = [ev for ev in captured if ev.kind == TraceEventKind.SHORT_TERM_SUMMARY_GENERATION_FAILED]
         assert len(fails) == 1
         assert fails[0].player_id == 7
         assert fails[0].tick == 42
@@ -155,9 +150,7 @@ class TestThreadPoolShortTermMemoryScheduler:
         sch.shutdown()  # wait=True で完了待ち
         assert progress["done"] is True
 
-    def test_emits_warning_for_shutdown_timeout(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_emits_warning_for_shutdown_timeout(self, caplog: pytest.LogCaptureFixture) -> None:
         """review MEDIUM #2: ThreadPoolExecutor.shutdown は timeout を取らないので
         サポートできない事実を warning で明示する。"""
         sch = ThreadPoolShortTermMemoryScheduler(max_workers=1)
@@ -168,9 +161,7 @@ class TestThreadPoolShortTermMemoryScheduler:
             sch.shutdown(timeout=1.0)
         assert any("timeout" in rec.message for rec in caplog.records)
 
-    def test_emits_warning_for_shutdown_submit_drop_trace(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_emits_warning_for_shutdown_submit_drop_trace(self, caplog: pytest.LogCaptureFixture) -> None:
         """shutdown 後の submit は drop して warning と trace。"""
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
@@ -186,16 +177,12 @@ class TestThreadPoolShortTermMemoryScheduler:
             accepted = sch.submit(player_id=7, task=lambda: None)
         assert accepted is False
         assert any("after shutdown" in rec.message for rec in caplog.records)
-        drop_events = [
-            ev for ev in captured if ev.kind == TraceEventKind.SHORT_TERM_SUMMARY_DROPPED
-        ]
+        drop_events = [ev for ev in captured if ev.kind == TraceEventKind.SHORT_TERM_SUMMARY_DROPPED]
         assert len(drop_events) == 1
         assert drop_events[0].player_id == 7
         assert drop_events[0].payload["reason"] == "shutdown"
 
-    def test_queue_drop_trace(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_queue_drop_trace(self, caplog: pytest.LogCaptureFixture) -> None:
         """queue 満杯時は drop して trace。"""
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
@@ -224,19 +211,14 @@ class TestThreadPoolShortTermMemoryScheduler:
                 accepted = sch.submit(player_id=2, task=lambda: None)
             assert accepted is False
             assert any("キュー満杯" in rec.message for rec in caplog.records)
-            drop_events = [
-                ev for ev in captured
-                if ev.kind == TraceEventKind.SHORT_TERM_SUMMARY_DROPPED
-            ]
+            drop_events = [ev for ev in captured if ev.kind == TraceEventKind.SHORT_TERM_SUMMARY_DROPPED]
             assert len(drop_events) == 1
             assert drop_events[0].payload["reason"] == "queue_full"
         finally:
             release.set()
             sch.shutdown()
 
-    def test_worker_scheduler_raises_exception(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_worker_scheduler_raises_exception(self, caplog: pytest.LogCaptureFixture) -> None:
         """worker の例外は scheduler を止めない。"""
         sch = ThreadPoolShortTermMemoryScheduler(max_workers=1)
         try:
@@ -282,10 +264,7 @@ class TestThreadPoolShortTermMemoryScheduler:
             assert done.wait(timeout=2.0)
         finally:
             sch.shutdown()  # in-flight 完了待ち
-        fails = [
-            ev for ev in captured
-            if ev.kind == TraceEventKind.SHORT_TERM_SUMMARY_GENERATION_FAILED
-        ]
+        fails = [ev for ev in captured if ev.kind == TraceEventKind.SHORT_TERM_SUMMARY_GENERATION_FAILED]
         assert len(fails) == 1
         assert fails[0].player_id == 3
         assert fails[0].tick == 99

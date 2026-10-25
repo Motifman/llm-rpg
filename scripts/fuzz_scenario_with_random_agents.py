@@ -274,9 +274,7 @@ def player_of_session(session_id: object) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def stranger_names_in(
-    texts: Iterable[str], unknown: Mapping[str, str]
-) -> tuple[list[str], bool]:
+def stranger_names_in(texts: Iterable[str], unknown: Mapping[str, str]) -> tuple[list[str], bool]:
     """名前を知らない相手 (名前 → 見た目) の名前が出ている行と、見た目が 1 つでも出ていたかを返す。
 
     聞いた言葉 (「」の中) に出る名前は、そのまま聞こえてよいので数えない。
@@ -319,9 +317,7 @@ def _smoke_stub_runtime_config(seed: int, profile_path: Path = SMOKE_STUB_PROFIL
         "SCENARIO_RANDOM_SEED": seed,
         "LLM_IDLE_TIMEOUT_TICKS": 1,
     }
-    rendered = {
-        key: ("1" if v else "0") if isinstance(v, bool) else str(v) for key, v in values.items()
-    }
+    rendered = {key: ("1" if v else "0") if isinstance(v, bool) else str(v) for key, v in values.items()}
     return ResolvedLlmRuntimeConfig.from_mapping(values=rendered)
 
 
@@ -364,9 +360,7 @@ def _describe_exception(exc: BaseException) -> str:
 
 def _src_frames(exc: BaseException, limit: int = 4) -> str:
     frames = [f for f in traceback.extract_tb(exc.__traceback__) if "/ai_rpg_world/" in f.filename]
-    return " <- ".join(
-        f"{Path(f.filename).name}:{f.lineno} {f.name}" for f in reversed(frames[-limit:])
-    )
+    return " <- ".join(f"{Path(f.filename).name}:{f.lineno} {f.name}" for f in reversed(frames[-limit:]))
 
 
 def run_random_agents(
@@ -387,7 +381,17 @@ def run_random_agents(
     saved_tick_loop = os.environ.get("SPOT_GRAPH_TICK_LOOP_ENABLED")
     os.environ["SPOT_GRAPH_TICK_LOOP_ENABLED"] = "false"
     try:
-        _drive(scenario_path, seed, max_world_ticks, extra_checks, result, identifiers, action_names, seen_leaks, profile_path)
+        _drive(
+            scenario_path,
+            seed,
+            max_world_ticks,
+            extra_checks,
+            result,
+            identifiers,
+            action_names,
+            seen_leaks,
+            profile_path,
+        )
     finally:
         if saved_tick_loop is None:
             os.environ.pop("SPOT_GRAPH_TICK_LOOP_ENABLED", None)
@@ -424,9 +428,7 @@ def _drive(
             runtime_config=_smoke_stub_runtime_config(seed, profile_path),
         )
         char = mgr.create_character(CharacterCreateRequest(name="fuzz"))
-        summary = mgr.create_session(
-            SessionCreateRequest(world_id=scenario_path.stem, character_ids=[char.id])
-        )
+        summary = mgr.create_session(SessionCreateRequest(world_id=scenario_path.stem, character_ids=[char.id]))
         state = mgr._sessions[summary.session_id]
         runtime = state.runtime
         recorded_by_player = _count_recorded_action_results(runtime)
@@ -435,19 +437,36 @@ def _drive(
         def on_trace(kind: str, tick: int | None, player_id: int | None, payload: Mapping[str, Any]) -> None:
             if kind == "action":
                 result.actions.append(
-                    FuzzAction(int(tick or 0), int(player_id or 0), str(payload.get("tool")), dict(payload.get("arguments") or {}))
+                    FuzzAction(
+                        int(tick or 0),
+                        int(player_id or 0),
+                        str(payload.get("tool")),
+                        dict(payload.get("arguments") or {}),
+                    )
                 )
                 recorded_before_action[int(player_id or 0)] = recorded_by_player.get(int(player_id or 0), 0)
             elif kind == WORLD_TICK_UNIT_FAILED:
-                result.findings.append(FuzzFinding("exception", int(tick or 0), f"世界の tick で 1 体ぶん取りやめた: {_compact(payload)}"))
+                result.findings.append(
+                    FuzzFinding("exception", int(tick or 0), f"世界の tick で 1 体ぶん取りやめた: {_compact(payload)}")
+                )
             elif kind == RECENT_EVENTS_SHADOW_MISMATCH and payload.get("mismatch_kind") == "different":
-                result.findings.append(FuzzFinding("shadow_mismatch", int(tick or 0), f"【直近の出来事】が Being の側の文と違う: {_compact(payload)}"))
+                result.findings.append(
+                    FuzzFinding(
+                        "shadow_mismatch",
+                        int(tick or 0),
+                        f"【直近の出来事】が Being の側の文と違う: {_compact(payload)}",
+                    )
+                )
             elif kind == BEING_SHORT_TERM_MEMORY_NOT_COPIED and payload.get("reason") in BROKEN_COPY_REASONS:
-                result.findings.append(FuzzFinding("exception", int(tick or 0), f"Being 側の短期記憶へ写せなかった: {_compact(payload)}"))
+                result.findings.append(
+                    FuzzFinding("exception", int(tick or 0), f"Being 側の短期記憶へ写せなかった: {_compact(payload)}")
+                )
             elif kind == "action_result":
                 swallowed = _swallowed_exception(payload)
                 if swallowed:
-                    result.findings.append(FuzzFinding("swallowed_exception", int(tick or 0), f"{payload.get('tool')}: {swallowed}"))
+                    result.findings.append(
+                        FuzzFinding("swallowed_exception", int(tick or 0), f"{payload.get('tool')}: {swallowed}")
+                    )
                 before = recorded_before_action.pop(int(player_id or 0), None)
                 if before is not None and recorded_by_player.get(int(player_id or 0), 0) == before:
                     result.findings.append(
@@ -474,12 +493,16 @@ def _drive(
                 texts = tuple(str(m.get("content") or "") for m in messages)
                 viewer = player_of_session(kwargs.get("session_id"))
                 if viewer is None:
-                    result.findings.append(FuzzFinding("check", tick, "手番の人を会話 ID から読めず、名前の漏れを確かめられない"))
+                    result.findings.append(
+                        FuzzFinding("check", tick, "手番の人を会話 ID から読めず、名前の漏れを確かめられない")
+                    )
                 else:
                     try:
                         unknown = _unknown_names(runtime, viewer)
                     except Exception as exc:  # noqa: BLE001
-                        result.findings.append(FuzzFinding("check", tick, f"名前を知らない相手を数えられない: {_describe_exception(exc)}"))
+                        result.findings.append(
+                            FuzzFinding("check", tick, f"名前を知らない相手を数えられない: {_describe_exception(exc)}")
+                        )
                         unknown = {}
                     named, seen = stranger_names_in((*texts, *tool_texts(tools)), unknown)
                     result.strangers_seen += int(seen)
@@ -492,7 +515,10 @@ def _drive(
                 if unreadable:
                     result.findings.append(FuzzFinding("unreadable_candidates", tick, unreadable[0]))
                 for text in (*texts, *tool_texts(tools)):
-                    for line in (*find_leaks(text, identifiers), *find_action_names_in_action_lines(text, action_names)):
+                    for line in (
+                        *find_leaks(text, identifiers),
+                        *find_action_names_in_action_lines(text, action_names),
+                    ):
                         shape = leak_shape(line)
                         if shape not in seen_leaks:
                             seen_leaks.add(shape)

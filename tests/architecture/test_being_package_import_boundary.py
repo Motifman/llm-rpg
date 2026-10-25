@@ -15,9 +15,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _BEING_ROOT = _REPO_ROOT / "src/ai_rpg_world/being"
 _CONTRACT_ROOT = _BEING_ROOT / "contract"
 
-_TEMPORARY_EXCEPTIONS = (
-    "ai_rpg_world.domain.being",
-)
+_TEMPORARY_EXCEPTIONS = ("ai_rpg_world.domain.being",)
 
 
 def _is_within(module: str, package: str) -> bool:
@@ -147,9 +145,7 @@ def test_contract_rejects_even_temporary_exceptions(tmp_path: Path, source: str)
 
 def test_relative_import_reaching_game_package_is_reported(tmp_path: Path) -> None:
     """相対 import で being の外のゲームのパッケージに届くと違反として報告される。"""
-    (tmp_path / "module.py").write_text(
-        "from ..application.llm import contracts\n", encoding="utf-8"
-    )
+    (tmp_path / "module.py").write_text("from ..application.llm import contracts\n", encoding="utf-8")
 
     assert _game_package_violations(tmp_path) == [
         "module.py: ai_rpg_world.application.llm.contracts",
@@ -158,18 +154,14 @@ def test_relative_import_reaching_game_package_is_reported(tmp_path: Path) -> No
 
 def test_relative_import_within_contract_passes(tmp_path: Path) -> None:
     """契約の中の相対 import は違反にならない。"""
-    (tmp_path / "module.py").write_text(
-        "from .observation import Observation\n", encoding="utf-8"
-    )
+    (tmp_path / "module.py").write_text("from .observation import Observation\n", encoding="utf-8")
 
     assert _contract_violations(tmp_path) == []
 
 
 def test_similarly_named_package_is_not_mistaken_for_exception(tmp_path: Path) -> None:
     """名前が例外の前方一致にすぎないパッケージ (domain.beings) は例外として扱わない。"""
-    (tmp_path / "module.py").write_text(
-        "from ai_rpg_world.domain.beings import x\n", encoding="utf-8"
-    )
+    (tmp_path / "module.py").write_text("from ai_rpg_world.domain.beings import x\n", encoding="utf-8")
 
     assert len(_game_package_violations(tmp_path)) >= 1
 
@@ -191,7 +183,5 @@ def test_being_can_import_eventing(tmp_path: Path, source: str) -> None:
 
 def test_contract_cannot_import_eventing(tmp_path: Path) -> None:
     """契約に eventing の import があれば、契約外への依存として報告する。"""
-    (tmp_path / "module.py").write_text(
-        "from ai_rpg_world.eventing import DomainEvent\n", encoding="utf-8"
-    )
+    (tmp_path / "module.py").write_text("from ai_rpg_world.eventing import DomainEvent\n", encoding="utf-8")
     assert _contract_violations(tmp_path)

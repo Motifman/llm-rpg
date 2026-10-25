@@ -64,20 +64,27 @@ class TestPlayerSpeechApplicationService:
     @pytest.mark.parametrize("channel", list(SpeechChannel))
     def test_speak_without_coordinate_publishes_from_current_spot(self, channel):
         """座標がなくスポットだけある場合、各発言種別をその場所から発行できる。"""
-        status = _make_status(1, navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=SpotId(7),
-        ))
+        status = _make_status(
+            1,
+            navigation_state=PlayerNavigationState.from_parts(
+                current_spot_id=SpotId(7),
+            ),
+        )
         repo = MagicMock()
         repo.find_by_id.return_value = status
         pub = MagicMock()
         svc = PlayerSpeechApplicationService(repo, pub)
 
-        svc.speak(SpeakCommand(
-            speaker_player_id=1, content="  ここにいる  ", channel=channel,
-            target_player_id=2 if channel == SpeechChannel.WHISPER else None,
-        ))
+        svc.speak(
+            SpeakCommand(
+                speaker_player_id=1,
+                content="  ここにいる  ",
+                channel=channel,
+                target_player_id=2 if channel == SpeechChannel.WHISPER else None,
+            )
+        )
 
-        event, = pub.publish_all.call_args.args[0]
+        (event,) = pub.publish_all.call_args.args[0]
         assert event.spot_id == SpotId(7)
         assert event.channel == channel
         assert event.content == "ここにいる"
@@ -85,21 +92,26 @@ class TestPlayerSpeechApplicationService:
 
     def test_departed_speaker_without_coordinate_uses_departed_spot(self):
         """座標のない離脱者の発言は、現在のスポットではなく離脱前の場所から発行する。"""
-        status = _make_status(1, navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=SpotId(7),
-        ))
+        status = _make_status(
+            1,
+            navigation_state=PlayerNavigationState.from_parts(
+                current_spot_id=SpotId(7),
+            ),
+        )
         status._is_down = True
         repo = MagicMock()
         repo.find_by_id.return_value = status
         pub = MagicMock()
         svc = PlayerSpeechApplicationService(
-            repo, pub, departed_speaker_checker=lambda pid: True,
+            repo,
+            pub,
+            departed_speaker_checker=lambda pid: True,
             departed_spot_provider=lambda pid: SpotId(3),
         )
 
         svc.speak(SpeakCommand(speaker_player_id=1, content="ここだよ", channel=SpeechChannel.SAY))
 
-        event, = pub.publish_all.call_args.args[0]
+        (event,) = pub.publish_all.call_args.args[0]
         assert event.spot_id == SpotId(3)
         assert status.current_coordinate is None
 
@@ -252,9 +264,7 @@ class TestPlayerSpeechApplicationService:
         # 残る (再放出/再試行 semantics の要)。clear を publish 前や finally に移すと
         # ここで消えるため、その退行を固定する。
         assert status.get_events() != []
-        assert any(
-            isinstance(e, PlayerSpokeEvent) for e in status.get_events()
-        )
+        assert any(isinstance(e, PlayerSpokeEvent) for e in status.get_events())
 
     def test_speak_when_downed_raises(self):
         """ダウン状態のプレイヤーが発言すると SpeechCommandException"""

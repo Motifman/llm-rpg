@@ -205,6 +205,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             TRAVEL_TO_DEFINITION,
         )
+
         self._assert_say_inline_optional(TRAVEL_TO_DEFINITION)
 
     def test_give_item_definition_say_inline_optional_included(self) -> None:
@@ -212,6 +213,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             GIVE_ITEM_DEFINITION,
         )
+
         self._assert_say_inline_optional(GIVE_ITEM_DEFINITION)
 
     def test_drop_item_definition_say_inline_optional_included(self) -> None:
@@ -219,6 +221,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             DROP_ITEM_DEFINITION,
         )
+
         self._assert_say_inline_optional(DROP_ITEM_DEFINITION)
 
     def test_pickup_item_definition_say_inline_optional_included(self) -> None:
@@ -226,6 +229,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             PICKUP_ITEM_DEFINITION,
         )
+
         self._assert_say_inline_optional(PICKUP_ITEM_DEFINITION)
 
     # PR-ι (say_inline 拡張): interact / attack / use_item / tend_to_player
@@ -236,6 +240,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             INTERACT_DEFINITION,
         )
+
         self._assert_say_inline_optional(INTERACT_DEFINITION)
 
     def test_attack_definition_say_inline_optional_included(self) -> None:
@@ -243,6 +248,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             ATTACK_DEFINITION,
         )
+
         self._assert_say_inline_optional(ATTACK_DEFINITION)
 
     def test_use_item_definition_say_inline_optional_included(self) -> None:
@@ -250,6 +256,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             USE_ITEM_DEFINITION,
         )
+
         self._assert_say_inline_optional(USE_ITEM_DEFINITION)
 
     def test_tend_player_definition_say_inline_optional_included(self) -> None:
@@ -257,6 +264,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             TEND_TO_PLAYER_DEFINITION,
         )
+
         self._assert_say_inline_optional(TEND_TO_PLAYER_DEFINITION)
 
     def test_wait_definition_say_inline_optional_included(self) -> None:
@@ -264,6 +272,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             WAIT_DEFINITION,
         )
+
         self._assert_say_inline_optional(WAIT_DEFINITION)
 
     def test_explore_definition_say_inline_optional_included(self) -> None:
@@ -271,6 +280,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             EXPLORE_DEFINITION,
         )
+
         self._assert_say_inline_optional(EXPLORE_DEFINITION)
 
     def test_default_description_no_longer_guides_to_dedicated_speech_turn(self) -> None:
@@ -289,6 +299,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             SPEECH_DEFINITION,
         )
+
         description = SPEECH_DEFINITION.description
         assert "- whisper:" in description
         assert "- say:" in description
@@ -301,6 +312,7 @@ class TestSayInlineToolDef:
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
             get_spot_graph_specs,
         )
+
         expected_with_say_inline = {
             TOOL_NAME_SPOT_GRAPH_ATTACK,
             # 売買は「これを買っていくよ」と声を掛けながら行うのが自然で、
@@ -344,9 +356,7 @@ class TestSayInlineToolDef:
         definitions = [definition for definition, _ in get_spot_graph_specs()]
         all_tool_names = {definition.name for definition in definitions}
         actual_with_say_inline = {
-            definition.name
-            for definition in definitions
-            if "say_inline" in definition.parameters["properties"]
+            definition.name for definition in definitions if "say_inline" in definition.parameters["properties"]
         }
         actual_without_say_inline = all_tool_names - actual_with_say_inline
 

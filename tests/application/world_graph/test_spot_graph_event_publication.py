@@ -22,9 +22,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """interaction eventは公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.spot_exploration_application_service import (
     SpotExplorationApplicationService,
 )
@@ -60,7 +60,9 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 def _build_graph_with_entity(spot_id: SpotId, entity_id: EntityId) -> SpotGraphAggregate:
     """エンティティが1つのスポットに配置されたグラフを構築する。"""
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
-    node = SpotNode(spot_id=spot_id, name="テスト部屋", description="テスト用", category=SpotCategoryEnum.DUNGEON, parent_id=None)
+    node = SpotNode(
+        spot_id=spot_id, name="テスト部屋", description="テスト用", category=SpotCategoryEnum.DUNGEON, parent_id=None
+    )
     graph.add_spot(node)
     graph.place_entity(entity_id, spot_id)
     graph.clear_events()  # 配置イベントをクリア
@@ -347,9 +349,7 @@ class TestInteractionEventPublication:
         svc.execute_interaction(player_id, SpotObjectId.create(40), "reveal")
 
         published = event_publisher.publish_all.call_args[0][0]
-        player_events = [
-            e for e in published if isinstance(e, SpotPlayerStateChangedInSpotEvent)
-        ]
+        player_events = [e for e in published if isinstance(e, SpotPlayerStateChangedInSpotEvent)]
         assert len(player_events) == 1
         ev = player_events[0]
         assert ev.entity_id == entity_id
@@ -489,9 +489,7 @@ class TestInteractionEventPublication:
         svc.execute_interaction(player_id, SpotObjectId.create(70), "step")
 
         published = event_publisher.publish_all.call_args[0][0]
-        public_events = [
-            e for e in published if isinstance(e, SpotPublicEffectObservedEvent)
-        ]
+        public_events = [e for e in published if isinstance(e, SpotPublicEffectObservedEvent)]
         assert len(public_events) == 1
         ev = public_events[0]
         assert ev.kind == AppliedEffectKind.DAMAGE
@@ -555,9 +553,7 @@ class TestInteractionEventPublication:
         svc.execute_interaction(player_id, SpotObjectId.create(80), "off")
 
         published = event_publisher.publish_all.call_args[0][0]
-        public_events = [
-            e for e in published if isinstance(e, SpotPublicEffectObservedEvent)
-        ]
+        public_events = [e for e in published if isinstance(e, SpotPublicEffectObservedEvent)]
         assert len(public_events) == 1
         assert public_events[0].kind == AppliedEffectKind.ATMOSPHERE_UPDATE
 
@@ -661,9 +657,7 @@ class TestInteractionEventPublication:
         svc.execute_interaction(player_id, SpotObjectId.create(90), "touch")
 
         published = event_publisher.publish_all.call_args[0][0]
-        public_events = [
-            e for e in published if isinstance(e, SpotPublicEffectObservedEvent)
-        ]
+        public_events = [e for e in published if isinstance(e, SpotPublicEffectObservedEvent)]
         assert any(e.kind == AppliedEffectKind.STATUS_EFFECT for e in public_events)
 
     def test_publishes_public_effect_observed_for_satisfy_need_when_public(self):
@@ -733,9 +727,7 @@ class TestInteractionEventPublication:
         svc.execute_interaction(player_id, SpotObjectId.create(91), "feast")
 
         published = event_publisher.publish_all.call_args[0][0]
-        public_events = [
-            e for e in published if isinstance(e, SpotPublicEffectObservedEvent)
-        ]
+        public_events = [e for e in published if isinstance(e, SpotPublicEffectObservedEvent)]
         assert any(e.kind == AppliedEffectKind.SATISFY_NEED for e in public_events)
 
     def test_no_event_when_publisher_is_none(self):

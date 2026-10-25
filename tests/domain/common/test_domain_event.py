@@ -34,7 +34,10 @@ def test_game_event_keeps_positional_fields() -> None:
     now = datetime.now(timezone.utc)
     event = BaseDomainEvent(7, now, 42, "TestAggregate")
     assert (event.event_id, event.occurred_at, event.aggregate_id, event.aggregate_type) == (
-        7, now, 42, "TestAggregate"
+        7,
+        now,
+        42,
+        "TestAggregate",
     )
     assert event.occurred_tick is None
 

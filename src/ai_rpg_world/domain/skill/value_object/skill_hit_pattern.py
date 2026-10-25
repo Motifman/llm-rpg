@@ -22,9 +22,7 @@ class SkillHitTimelineSegment:
                 f"start_offset_ticks cannot be negative: {self.start_offset_ticks}"
             )
         if self.duration_ticks <= 0:
-            raise SkillHitPatternValidationException(
-                f"duration_ticks must be greater than 0: {self.duration_ticks}"
-            )
+            raise SkillHitPatternValidationException(f"duration_ticks must be greater than 0: {self.duration_ticks}")
         if self.segment_power_multiplier <= 0:
             raise SkillHitPatternValidationException(
                 f"segment_power_multiplier must be greater than 0: {self.segment_power_multiplier}"
@@ -43,9 +41,7 @@ class SkillHitPattern:
         previous_offset = -1
         for segment in self.timeline_segments:
             if segment.start_offset_ticks < previous_offset:
-                raise SkillHitPatternValidationException(
-                    "timeline_segments must be sorted by start_offset_ticks"
-                )
+                raise SkillHitPatternValidationException("timeline_segments must be sorted by start_offset_ticks")
             previous_offset = segment.start_offset_ticks
 
     @classmethod
@@ -78,4 +74,3 @@ class SkillHitPattern:
                 ),
             ),
         )
-

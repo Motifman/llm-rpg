@@ -31,7 +31,7 @@ def _sections(text: str) -> list[tuple[str, str]]:
         if fence is None and line.startswith("## "):
             starts.append(i)
     starts.append(len(lines))
-    return [(lines[a].strip(), "".join(lines[a + 1:b])) for a, b in pairwise(starts)]
+    return [(lines[a].strip(), "".join(lines[a + 1 : b])) for a, b in pairwise(starts)]
 
 
 def _numbered_headings(directory: Path = _DECISIONS) -> list[tuple[str, str]]:
@@ -111,7 +111,5 @@ def test_new_decision_needs_no_index_update(tmp_path: Path) -> None:
 
 def test_heading_example_in_code_block_is_not_a_decision(tmp_path: Path) -> None:
     """本文のコード例に判断見出しがあっても、新しい判断として数えない。"""
-    (tmp_path / "D9999.md").write_text(
-        "## D9999. 判断\n\n```markdown\n## D1448. 例\n```\n", encoding="utf-8"
-    )
+    (tmp_path / "D9999.md").write_text("## D9999. 判断\n\n```markdown\n## D1448. 例\n```\n", encoding="utf-8")
     assert _numbered_headings(tmp_path) == [("D9999", "判断")]

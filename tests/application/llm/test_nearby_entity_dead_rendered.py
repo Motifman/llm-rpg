@@ -41,9 +41,7 @@ class TestNearbyEntityDeadRendered:
 
     def test_dead_entity_shows_death_directly(self) -> None:
         """is_dead=True の相手は「死亡している」と直接的に表示される。"""
-        dto = _make_dto(
-            SpotGraphNearbyEntityEntry(entity_id=3, display_name="リオ", is_dead=True)
-        )
+        dto = _make_dto(SpotGraphNearbyEntityEntry(entity_id=3, display_name="リオ", is_dead=True))
         text = SpotGraphUiContextBuilder().build("base", dto).current_state_text
         assert '- "リオ"' in text
         assert "死亡" in text
@@ -51,11 +49,7 @@ class TestNearbyEntityDeadRendered:
     def test_dead_not_shown_as_mere_downed(self) -> None:
         """死亡者は蘇生可能なダウンの「(倒れて動かない)」では表示しない
         (= 蘇生を試みる誤解を誘発しない)。"""
-        dto = _make_dto(
-            SpotGraphNearbyEntityEntry(
-                entity_id=3, display_name="リオ", is_down=True, is_dead=True
-            )
-        )
+        dto = _make_dto(SpotGraphNearbyEntityEntry(entity_id=3, display_name="リオ", is_down=True, is_dead=True))
         text = SpotGraphUiContextBuilder().build("base", dto).current_state_text
         rio_line = next(l for l in text.splitlines() if "リオ" in l)
         assert "死亡" in rio_line
@@ -63,11 +57,7 @@ class TestNearbyEntityDeadRendered:
 
     def test_downed_but_not_dead_still_shows_downed(self) -> None:
         """is_down だが is_dead でない相手は従来どおり「(倒れて動かない)」。"""
-        dto = _make_dto(
-            SpotGraphNearbyEntityEntry(
-                entity_id=2, display_name="エイダ", is_down=True, is_dead=False
-            )
-        )
+        dto = _make_dto(SpotGraphNearbyEntityEntry(entity_id=2, display_name="エイダ", is_down=True, is_dead=False))
         text = SpotGraphUiContextBuilder().build("base", dto).current_state_text
         aida_line = next(l for l in text.splitlines() if "エイダ" in l)
         assert "倒れて動かない" in aida_line
@@ -75,8 +65,6 @@ class TestNearbyEntityDeadRendered:
 
     def test_alive_entity_has_no_death_marker(self) -> None:
         """生存している相手には死亡表示が出ない。"""
-        dto = _make_dto(
-            SpotGraphNearbyEntityEntry(entity_id=2, display_name="カイ")
-        )
+        dto = _make_dto(SpotGraphNearbyEntityEntry(entity_id=2, display_name="カイ"))
         text = SpotGraphUiContextBuilder().build("base", dto).current_state_text
         assert "死亡" not in text

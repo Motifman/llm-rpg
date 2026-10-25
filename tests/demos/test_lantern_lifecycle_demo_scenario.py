@@ -33,9 +33,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """デモ規則は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_initial_items_to_inventory,
 )
@@ -77,13 +77,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "tests"
-    / "fixtures"
-    / "scenarios"
-    / "lantern_lifecycle_demo.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "lantern_lifecycle_demo.json"
 
 
 @pytest.fixture
@@ -123,8 +117,11 @@ def shrine():
         inventory_repo.save(PlayerInventoryAggregate(player_id=pid))
         if spawn.initial_items:
             grant_initial_items_to_inventory(
-                pid, spawn.initial_items,
-                item_repo, item_spec_repo, inventory_repo,
+                pid,
+                spawn.initial_items,
+                item_repo,
+                item_spec_repo,
+                inventory_repo,
                 overflow_sink=IGNORE_OVERFLOW,
             )
 
@@ -154,9 +151,7 @@ def _lamp_id(loaded, name: str) -> SpotObjectId:
 
 def _lamp_state(interior_repo, loaded, name: str) -> dict:
     interior = interior_repo.find_by_spot_id(_spot_id(loaded))
-    return next(
-        o.state for o in interior.objects if o.object_id == _lamp_id(loaded, name)
-    )
+    return next(o.state for o in interior.objects if o.object_id == _lamp_id(loaded, name))
 
 
 def _match_instance_ids(inventory_repo, item_repo, loaded) -> list[ItemInstanceId]:
@@ -199,7 +194,9 @@ class TestLanternLifecycleDemo:
 
         # initial state は JSON 側で {used: false} を仕込み済み
         app.execute_interaction(
-            _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light_lamp_a",
+            _player_id(loaded),
+            _lamp_id(loaded, "lamp_a"),
+            "light_lamp_a",
             current_tick=WorldTick(2),
             acting_item_instance_id=match_a,
         )
@@ -219,7 +216,9 @@ class TestLanternLifecycleDemo:
 
         # 中央ランプ点火 (initial state は JSON 側で仕込み済み)
         app.execute_interaction(
-            _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light_lamp_a",
+            _player_id(loaded),
+            _lamp_id(loaded, "lamp_a"),
+            "light_lamp_a",
             current_tick=WorldTick(1),
             acting_item_instance_id=match_a,
         )
@@ -227,7 +226,9 @@ class TestLanternLifecycleDemo:
         # 同じマッチで奥のランプを点けようとする → 拒否
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _lamp_id(loaded, "lamp_b"), "light_lamp_b",
+                _player_id(loaded),
+                _lamp_id(loaded, "lamp_b"),
+                "light_lamp_b",
                 current_tick=WorldTick(2),
                 acting_item_instance_id=match_a,
             )
@@ -246,14 +247,18 @@ class TestLanternLifecycleDemo:
 
         # 中央ランプ点火 → マッチ A.used=true
         app.execute_interaction(
-            _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light_lamp_a",
+            _player_id(loaded),
+            _lamp_id(loaded, "lamp_a"),
+            "light_lamp_a",
             current_tick=WorldTick(1),
             acting_item_instance_id=match_a,
         )
 
         # 奥ランプ点火 → マッチ B.used=true (B は別 instance なのでまだ unused)
         app.execute_interaction(
-            _player_id(loaded), _lamp_id(loaded, "lamp_b"), "light_lamp_b",
+            _player_id(loaded),
+            _lamp_id(loaded, "lamp_b"),
+            "light_lamp_b",
             current_tick=WorldTick(3),
             acting_item_instance_id=match_b,
         )
@@ -295,7 +300,9 @@ class TestLanternLifecycleDemo:
         # マッチ A は used=true なので ITEM_INSTANCE_STATE(required={used: false}) で拒否
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _lamp_id(loaded, "lamp_a"), "light_lamp_a",
+                _player_id(loaded),
+                _lamp_id(loaded, "lamp_a"),
+                "light_lamp_a",
                 current_tick=WorldTick(1),
                 acting_item_instance_id=match_a,
             )

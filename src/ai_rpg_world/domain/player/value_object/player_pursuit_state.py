@@ -97,12 +97,8 @@ class PlayerPursuitState:
         変更がなければ self を返す（同一インスタンス）。
         """
         if self.pursuit is None:
-            raise NoActivePursuitException(
-                "追跡中でない状態では追跡の更新は行えません。"
-            )
-        next_snapshot = (
-            target_snapshot if target_snapshot is not None else self.pursuit.target_snapshot
-        )
+            raise NoActivePursuitException("追跡中でない状態では追跡の更新は行えません。")
+        next_snapshot = target_snapshot if target_snapshot is not None else self.pursuit.target_snapshot
         next_pursuit = PursuitState(
             actor_id=self.pursuit.actor_id,
             target_id=self.pursuit.target_id,

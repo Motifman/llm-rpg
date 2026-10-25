@@ -50,9 +50,7 @@ DEFAULT_ACTION_INSTRUCTION = "利用可能なツールで次の行動を選ん�
 class _PlayerCurrentStateSource(Protocol):
     """prompt 組み立てに要るのは現在状態の取得だけ。"""
 
-    def get_player_current_state(
-        self, query: GetPlayerCurrentStateQuery
-    ) -> PlayerCurrentStateDto | None: ...
+    def get_player_current_state(self, query: GetPlayerCurrentStateQuery) -> PlayerCurrentStateDto | None: ...
 
 
 class _PlayerProfileSource(Protocol):

@@ -22,16 +22,11 @@ def validate_handler_coverage(
     handlers: Mapping[InteractionEffectTypeEnum, EffectHandlerFn],
 ) -> None:
     """RESOLVE_ONGOING_CONDITION 以外の全効果種別に handler があるか検査する。"""
-    expected = {
-        et
-        for et in InteractionEffectTypeEnum
-        if et is not InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION
-    }
+    expected = {et for et in InteractionEffectTypeEnum if et is not InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION}
     missing = expected - set(handlers.keys())
     if missing:
         raise AssertionError(
-            f"handler registry に未登録の InteractionEffectTypeEnum: "
-            f"{sorted(missing, key=lambda e: e.value)}"
+            f"handler registry に未登録の InteractionEffectTypeEnum: {sorted(missing, key=lambda e: e.value)}"
         )
 
 
@@ -43,7 +38,5 @@ def dispatch_effect(
     """registry から handler を引き、効果を適用する。"""
     handler = handlers.get(effect.effect_type)
     if handler is None:
-        raise UnsupportedInteractionEffectException(
-            f"Unsupported interaction effect: {effect.effect_type.value}"
-        )
+        raise UnsupportedInteractionEffectException(f"Unsupported interaction effect: {effect.effect_type.value}")
     handler(effect, ctx)

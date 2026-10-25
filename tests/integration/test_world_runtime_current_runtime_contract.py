@@ -59,23 +59,15 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
     _WorldLlmWiring,
 )
 
-_SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "forbidden_library_demo.json"
-)
+_SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "forbidden_library_demo.json"
 _SCENARIOS_DIR = _SCENARIO_PATH.parent
-_FIXTURE_SCENARIOS_DIR = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
-)
+_FIXTURE_SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
 
 
 @pytest.fixture()
 def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep these contract tests independent from the caller's shell env."""
-    for key in (
-    ):
+    for key in ():
         monkeypatch.delenv(key, raising=False)
 
 
@@ -95,19 +87,11 @@ def _create_runtime(
 
 
 def _user_prompt_text(prompt: dict) -> str:
-    return "\n".join(
-        m.get("content", "")
-        for m in prompt.get("messages", [])
-        if m.get("role") == "user"
-    )
+    return "\n".join(m.get("content", "") for m in prompt.get("messages", []) if m.get("role") == "user")
 
 
 def _system_prompt_text(prompt: dict) -> str:
-    return "\n".join(
-        m.get("content", "")
-        for m in prompt.get("messages", [])
-        if m.get("role") == "system"
-    )
+    return "\n".join(m.get("content", "") for m in prompt.get("messages", []) if m.get("role") == "system")
 
 
 class _OrderedActionStoreSpy:
@@ -157,21 +141,15 @@ class _ContractRuntime:
     def __init__(self, events: list[str] | None = None) -> None:
         self._obs_buffer = DefaultObservationContextBuffer()
         recent_event_store = UnifiedRecentEventStore()
-        self._short_term_memory = SummarizingShortTermMemory(
-            event_store=recent_event_store
-        )
-        self._action_result_store = DefaultActionResultStore(
-            event_store=recent_event_store
-        )
+        self._short_term_memory = SummarizingShortTermMemory(event_store=recent_event_store)
+        self._action_result_store = DefaultActionResultStore(event_store=recent_event_store)
         self.events = events if events is not None else []
         self.action_results: list[dict] = []
         self.trace_recorder = None
         self._runtime_config = ResolvedLlmRuntimeConfig.for_tests()
         self._player_life_query = SimpleNamespace(can_take_turn=lambda player_id: True)
 
-    def build_full_prompt(
-        self, player_id: PlayerId, *, action_instruction: str | None = None
-    ) -> dict:
+    def build_full_prompt(self, player_id: PlayerId, *, action_instruction: str | None = None) -> dict:
         instruction = action_instruction or "user"
         return {
             "messages": [
@@ -294,9 +272,7 @@ class _ReasonFirstRuntime(_ContractRuntime):
         self.trace_recorder = _TraceRecorderSpy()
         self.tool_schema_modes: list[str] = []
 
-    def get_tool_definitions(
-        self, *, tool_schema_mode: str = "legacy", player_id=None
-    ) -> list[ToolDefinitionDto]:
+    def get_tool_definitions(self, *, tool_schema_mode: str = "legacy", player_id=None) -> list[ToolDefinitionDto]:
         self.tool_schema_modes.append(tool_schema_mode)
         tools = [
             ToolDefinitionDto(
@@ -356,9 +332,7 @@ class _SequencedLlmClient:
                 "reasoning_effort": reasoning_effort,
                 "call_phase": call_phase,
                 "session_id_present": session_id is not _SESSION_ID_NOT_PASSED,
-                "session_id": (
-                    None if session_id is _SESSION_ID_NOT_PASSED else session_id
-                ),
+                "session_id": (None if session_id is _SESSION_ID_NOT_PASSED else session_id),
             }
         )
         response = self._responses.pop(0)
@@ -461,15 +435,11 @@ def test_disabled_session_id_is_omitted_from_every_llm_invocation(
 ) -> None:
     """設定を無効にすると、空値でなく session_id キーワード自体を送らない。"""
     runtime = _ReasonFirstRuntime()
-    runtime._runtime_config = ResolvedLlmRuntimeConfig.for_tests(
-        llm_session_id_enabled=False
-    )
+    runtime._runtime_config = ResolvedLlmRuntimeConfig.for_tests(llm_session_id_enabled=False)
     client = _reason_first_success_client()
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     wiring.run_turn(PlayerId(1))
@@ -486,10 +456,8 @@ def test_reason_first_phases_share_one_player_session_id(
     wiring = _reason_first_wiring(runtime, client)
     wiring.llm_session_run_id = "run034"
     wiring.llm_session_world_id = "station_drill"
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     wiring.run_turn(PlayerId(1))
@@ -541,9 +509,7 @@ def test_synchronized_action_groups_expose_no_tool_of_their_own(
     clean_runtime_env: None,
 ) -> None:
     """同期アクショングループを宣言しても専用ツールは出ず、interact が入口になる。"""
-    runtime = _create_runtime(
-        scenario_path=_FIXTURE_SCENARIOS_DIR / "sync_levers_demo.json"
-    )
+    runtime = _create_runtime(scenario_path=_FIXTURE_SCENARIOS_DIR / "sync_levers_demo.json")
 
     tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
 
@@ -595,9 +561,7 @@ def test_no_tool_or_system_prompt_offers_the_prediction_field(
     """行動ごとの結果の予想 expected_result は #1631 で消したので、どのツールの schema にも system prompt にも出ない。"""
     runtime = _create_runtime()
     for mode in ("legacy", "reason_first"):
-        for definition in runtime.get_tool_definitions(
-            tool_schema_mode=mode, for_every_player=True
-        ):
+        for definition in runtime.get_tool_definitions(tool_schema_mode=mode, for_every_player=True):
             assert "expected_result" not in definition.parameters.get("properties", {}), (
                 mode,
                 definition.name,
@@ -646,28 +610,17 @@ def test_reason_first_action_phase_omits_assessment_tool_and_keeps_action_schema
     runtime = _ReasonFirstRuntime()
     client = _reason_first_success_client()
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     result = wiring.run_turn(PlayerId(1))
 
     assert result.success is True
-    assess_tools = [
-        tool["function"]["name"]
-        for tool in client.calls[0]["tools"]
-    ]
-    action_tools = [
-        tool["function"]["name"]
-        for tool in client.calls[1]["tools"]
-    ]
+    assess_tools = [tool["function"]["name"] for tool in client.calls[0]["tools"]]
+    action_tools = [tool["function"]["name"] for tool in client.calls[1]["tools"]]
     legacy_tools = [
-        tool["function"]["name"]
-        for tool in wiring._build_tools_payload(
-            PlayerId(1), tool_schema_mode="legacy"
-        )
+        tool["function"]["name"] for tool in wiring._build_tools_payload(PlayerId(1), tool_schema_mode="legacy")
     ]
     assert TOOL_NAME_ASSESS_SITUATION in assess_tools
     assert assess_tools[-1] == TOOL_NAME_ASSESS_SITUATION
@@ -675,9 +628,7 @@ def test_reason_first_action_phase_omits_assessment_tool_and_keeps_action_schema
     assert assess_tools[:-1] == action_tools
     assert action_tools == legacy_tools
     action_explore = next(
-        tool
-        for tool in client.calls[1]["tools"]
-        if tool["function"]["name"] == TOOL_NAME_SPOT_GRAPH_EXPLORE
+        tool for tool in client.calls[1]["tools"] if tool["function"]["name"] == TOOL_NAME_SPOT_GRAPH_EXPLORE
     )
     properties = action_explore["function"]["parameters"].get("properties", {})
     assert "inner_thought" not in properties
@@ -704,14 +655,10 @@ def test_reason_first_feature_flag_off_keeps_one_step(
     """flag OFF では reason-first へ入らず、既存 1段階経路を使う。"""
     runtime = _GatedReasonFirstRuntime()
     runtime.reason_first_two_step_enabled = False
-    client = _SequencedLlmClient(
-        [{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
-    )
+    client = _SequencedLlmClient([{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}])
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     result = wiring.run_turn(PlayerId(1))
@@ -729,19 +676,15 @@ def test_auto_uses_payload_names_and_retries_one_no_tool_call(
         llm_tool_choice="auto",
         llm_reasoning_effort="minimal",
     )
-    client = _SequencedLlmClient(
-        [None, {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
-    )
+    client = _SequencedLlmClient([None, {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}])
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
         short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     result = wiring.run_turn(PlayerId(1))
@@ -750,9 +693,7 @@ def test_auto_uses_payload_names_and_retries_one_no_tool_call(
     assert [call["tool_choice"] for call in client.calls] == ["auto", "auto"]
     first_names = [tool["function"]["name"] for tool in client.calls[0]["tools"]]
     first_user = client.calls[0]["messages"][-1]["content"]
-    assert first_user.endswith(
-        "tools=" + ",".join(first_names) + "\n必ずツールを呼ぶ"
-    )
+    assert first_user.endswith("tools=" + ",".join(first_names) + "\n必ずツールを呼ぶ")
     assert "必ずツールを呼ぶ" in first_user
     assert client.calls[1]["messages"][-1]["content"].endswith(
         "文章での回答は受け取れません。いま呼べるツールを必ず 1 つ呼び出してください。"
@@ -785,14 +726,10 @@ def test_reason_first_feature_flag_on_without_existing_trigger_keeps_one_step(
 ) -> None:
     """flag ON だけでは常時2段階にせず、繰り返しの警告と同じ失敗の反復が無ければ1段階のまま。"""
     runtime = _GatedReasonFirstRuntime()
-    client = _SequencedLlmClient(
-        [{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
-    )
+    client = _SequencedLlmClient([{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}])
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     result = wiring.run_turn(PlayerId(1))
@@ -819,10 +756,8 @@ def test_reason_first_gates_on_recent_same_failure_from_action_result_store(
         )
     client = _reason_first_success_client()
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     result = wiring.run_turn(player_id)
@@ -833,9 +768,7 @@ def test_reason_first_gates_on_recent_same_failure_from_action_result_store(
         "action_phase",
     ]
     started = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STARTED
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STARTED
     ]
     assert started[-1]["gate_reason"] == "recent_same_failure"
 
@@ -847,10 +780,8 @@ def test_reason_first_gates_on_loop_guard_warning_signal_once(
     runtime = _GatedReasonFirstRuntime()
     client = _reason_first_success_client()
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
     player_id = PlayerId(1)
     for _ in range(4):
@@ -868,9 +799,7 @@ def test_reason_first_gates_on_loop_guard_warning_signal_once(
         "action_phase",
     ]
     started = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STARTED
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STARTED
     ]
     assert started[-1]["gate_reason"] == "loop_guard_warning"
 
@@ -896,10 +825,8 @@ def test_reason_first_gated_turn_writes_assess_and_action_phase_prompt_dataset_r
         llm_client=client,
         prompt_dataset_sink=sink,
     )
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
     for _ in range(4):
         wiring.tool_call_loop_guard.record_and_check(
@@ -912,11 +839,7 @@ def test_reason_first_gated_turn_writes_assess_and_action_phase_prompt_dataset_r
 
     assert result.success is True
     calls_path = tmp_path / "prompt_dataset" / "calls.jsonl"
-    rows = [
-        json.loads(line)
-        for line in calls_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    rows = [json.loads(line) for line in calls_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert [row["phase"] for row in rows] == ["assess_phase", "action_phase"]
     assert rows[0]["request"]["kwargs"]["tool_choice"] == {
         "type": "function",
@@ -927,19 +850,15 @@ def test_reason_first_gated_turn_writes_assess_and_action_phase_prompt_dataset_r
         row["toolset_id"]: row
         for row in (
             json.loads(line)
-            for line in (tmp_path / "prompt_dataset" / "toolsets.jsonl")
-            .read_text(encoding="utf-8")
-            .splitlines()
+            for line in (tmp_path / "prompt_dataset" / "toolsets.jsonl").read_text(encoding="utf-8").splitlines()
             if line.strip()
         )
     }
     assess_tool_names = [
-        tool["function"]["name"]
-        for tool in toolsets[rows[0]["request"]["kwargs"]["tools_ref"]]["tools"]
+        tool["function"]["name"] for tool in toolsets[rows[0]["request"]["kwargs"]["tools_ref"]]["tools"]
     ]
     action_tool_names = [
-        tool["function"]["name"]
-        for tool in toolsets[rows[1]["request"]["kwargs"]["tools_ref"]]["tools"]
+        tool["function"]["name"] for tool in toolsets[rows[1]["request"]["kwargs"]["tools_ref"]]["tools"]
     ]
     assert TOOL_NAME_ASSESS_SITUATION in assess_tool_names
     assert TOOL_NAME_ASSESS_SITUATION not in action_tool_names
@@ -989,12 +908,8 @@ def test_reason_first_two_step_injects_assessment_before_action_execution(
         "function": {"name": TOOL_NAME_ASSESS_SITUATION},
     }
     assert client.calls[1]["tool_choice"] == "required"
-    assert TOOL_NAME_ASSESS_SITUATION in {
-        tool["function"]["name"] for tool in client.calls[0]["tools"]
-    }
-    assert TOOL_NAME_ASSESS_SITUATION not in {
-        tool["function"]["name"] for tool in client.calls[1]["tools"]
-    }
+    assert TOOL_NAME_ASSESS_SITUATION in {tool["function"]["name"] for tool in client.calls[0]["tools"]}
+    assert TOOL_NAME_ASSESS_SITUATION not in {tool["function"]["name"] for tool in client.calls[1]["tools"]}
     assert "水源は一度失敗したので周囲を見直す。" in client.calls[1]["messages"][-1]["content"]
     assert "実行する行動 tool を1つ選ぶ" in client.calls[1]["messages"][-1]["content"]
     assert captured_arguments["inner_thought"] == "水源は一度失敗したので周囲を見直す。"
@@ -1004,14 +919,9 @@ def test_reason_first_two_step_injects_assessment_before_action_execution(
     assert TraceEventKind.REASON_FIRST_ACTION_SELECTED in kinds
     assert TraceEventKind.REASON_FIRST_ASSESSMENT_INJECTED in kinds
     reason_first_payloads = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if str(kind).startswith("reason_first_")
+        payload for kind, payload in runtime.trace_recorder.records if str(kind).startswith("reason_first_")
     ]
-    turn_ids = {
-        payload.get("reason_first_turn_id")
-        for payload in reason_first_payloads
-    }
+    turn_ids = {payload.get("reason_first_turn_id") for payload in reason_first_payloads}
     assert len(turn_ids) == 1
     assert next(iter(turn_ids))
 
@@ -1029,9 +939,8 @@ def test_reason_first_step1_retries_once_then_returns_no_op_without_action(
     )
     wiring = _reason_first_wiring(runtime, client)
     executed: list[str] = []
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: executed.append("executed")
-        or LlmCommandResultDto(success=True, message="実行された。")
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        executed.append("executed") or LlmCommandResultDto(success=True, message="実行された。")
     )
 
     result = wiring.run_turn(PlayerId(1))
@@ -1046,14 +955,11 @@ def test_reason_first_step1_retries_once_then_returns_no_op_without_action(
     ]
     assert len(runtime.action_results) == 1
     assert runtime.action_results[0]["action_summary"] == "迷い"
-    assert runtime.action_results[0]["result_summary"] == (
-        "何をするか決めきれず、時間が過ぎた。"
-    )
+    assert runtime.action_results[0]["result_summary"] == ("何をするか決めきれず、時間が過ぎた。")
     assert runtime.action_results[0]["tool_name"] == "迷い"
     assert runtime.action_results[0]["error_code"] is None
     failed = [
-        payload for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
     ]
     assert failed[-1]["phase"] == "assess_phase"
     assert failed[-1]["final"] is True
@@ -1101,17 +1007,14 @@ def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_acti
         "assess_phase",
         "action_phase",
     ]
-    assert runtime._short_term_memory._event_store.completed_turn_count(
-        PlayerId(1)
-    ) == 1
+    assert runtime._short_term_memory._event_store.completed_turn_count(PlayerId(1)) == 1
     assert executed == [
         {
             "inner_thought": "一度失敗したので状況を見直す。",
         }
     ]
     failed = [
-        payload for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
     ]
     assert failed[0]["phase"] == "assess_phase"
     assert failed[0]["reason"] == "invoke_exception"
@@ -1126,9 +1029,7 @@ def test_reason_first_step1_exception_twice_is_a_failed_call_retried_next_tick(
 ) -> None:
     """step1 の呼び出しが 2 回とも例外で落ちたら、呼び出しの失敗 (LLM_API_FAILED) として返し、その人を次の wave の pending に戻す (#1595)。"""
     runtime = _ReasonFirstRuntime()
-    client = _SequencedLlmClient(
-        [RuntimeError("timed out"), RuntimeError("timed out")]
-    )
+    client = _SequencedLlmClient([RuntimeError("timed out"), RuntimeError("timed out")])
     wiring = _reason_first_wiring(runtime, client)
 
     result = wiring.run_turn(PlayerId(1))
@@ -1137,8 +1038,7 @@ def test_reason_first_step1_exception_twice_is_a_failed_call_retried_next_tick(
     assert result.error_code == "LLM_API_FAILED"
     assert 1 in wiring.llm_turn_trigger.pending_player_ids
     failed = [
-        payload for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
     ]
     assert [(f["reason"], f["final"]) for f in failed] == [
         ("invoke_exception", False),
@@ -1178,14 +1078,11 @@ def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
     assert client.calls[1]["call_phase"] == "action_phase"
     assert len(runtime.action_results) == 1
     assert runtime.action_results[0]["action_summary"] == "迷い"
-    assert runtime.action_results[0]["result_summary"] == (
-        "何をするか決めきれず、時間が過ぎた。"
-    )
+    assert runtime.action_results[0]["result_summary"] == ("何をするか決めきれず、時間が過ぎた。")
     assert runtime.action_results[0]["tool_name"] == "迷い"
     assert runtime.action_results[0]["error_code"] is None
     failed = [
-        payload for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
     ]
     assert failed[-1]["phase"] == "action_phase"
     assert failed[-1]["returned_tool"] == TOOL_NAME_ASSESS_SITUATION
@@ -1232,17 +1129,10 @@ def test_reason_first_action_prompt_places_assessment_before_target_arguments(
     action_user = client.calls[1]["messages"][-1]["content"]
     assert "【現在選べる対象引数】" not in assess_user
     assert "【現在選べる対象引数】" in action_user
-    final_instruction = (
-        "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
-        "inner_thought は再生成しない。"
-    )
+    final_instruction = "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。inner_thought は再生成しない。"
     assert action_user.endswith(final_instruction)
-    assert action_user.index("【行動前の状況評価】") < action_user.index(
-        "【現在選べる対象引数】"
-    )
-    assert action_user.index("【現在選べる対象引数】") < action_user.index(
-        final_instruction
-    )
+    assert action_user.index("【行動前の状況評価】") < action_user.index("【現在選べる対象引数】")
+    assert action_user.index("【現在選べる対象引数】") < action_user.index(final_instruction)
 
 
 def test_world_runtime_build_full_prompt_uses_shared_default_prompt_builder(
@@ -1364,9 +1254,7 @@ def test_phase_b_records_tool_trace_payload_in_action_result_trace(
     )
 
     action_results = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.ACTION_RESULT
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.ACTION_RESULT
     ]
     assert len(action_results) == 1
     payload = action_results[0]
@@ -1421,9 +1309,7 @@ def test_phase_b_keeps_action_result_trace_when_tool_trace_payload_uses_reserved
     )
 
     action_results = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.ACTION_RESULT
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.ACTION_RESULT
     ]
     assert len(action_results) == 1
     payload = action_results[0]
@@ -1482,9 +1368,7 @@ def test_phase_b_preserves_single_domain_action_log_for_successful_core_tools(
     )
 
     assert result.success is True
-    assert [entry["action_summary"] for entry in runtime.action_results] == [
-        domain_summary
-    ]
+    assert [entry["action_summary"] for entry in runtime.action_results] == [domain_summary]
     assert not runtime.action_results[0]["action_summary"].startswith(f"{tool_name}(")
 
 
@@ -1555,9 +1439,7 @@ def _recent_action_result_lines(user_prompt: str) -> list[str]:
 
 def _infrastructure_vocabulary_violations(user_prompt: str) -> list[str]:
     return [
-        line
-        for line in _recent_action_result_lines(user_prompt)
-        if _INFRASTRUCTURE_VOCABULARY.search(line) is not None
+        line for line in _recent_action_result_lines(user_prompt) if _INFRASTRUCTURE_VOCABULARY.search(line) is not None
     ]
 
 
@@ -1592,9 +1474,7 @@ def test_api_failure_reaches_the_actual_prompt_only_in_world_words(
     user_prompt = _user_prompt_text(runtime.build_full_prompt(player_id))
 
     assert result.error_code == "LLM_API_FAILED"
-    assert result.trace_payload == {
-        "technical_error_detail": "litellm.Timeout: network retry failed"
-    }
+    assert result.trace_payload == {"technical_error_detail": "litellm.Timeout: network retry failed"}
     _assert_recent_action_results_use_world_words(user_prompt)
     assert "一瞬の空白" in user_prompt
     assert "意識が途切れ、この間の自分の行動を思い出せない。" in user_prompt
@@ -1629,9 +1509,7 @@ def test_infrastructure_failure_cue_name_is_also_a_world_word(
     )
 
     assert runtime.action_results[0]["tool_name"] == "一瞬の空白"
-    assert _INFRASTRUCTURE_VOCABULARY.search(
-        runtime.action_results[0]["tool_name"]
-    ) is None
+    assert _INFRASTRUCTURE_VOCABULARY.search(runtime.action_results[0]["tool_name"]) is None
 
 
 def test_tool_execution_exception_keeps_diagnostics_out_of_the_actual_prompt(
@@ -1662,9 +1540,7 @@ def test_tool_execution_exception_keeps_diagnostics_out_of_the_actual_prompt(
 
     assert result.error_code == "LLM_TOOL_EXECUTION_FAILED"
     assert result.message == "行動が形にならないまま、時間が過ぎた。"
-    assert result.trace_payload == {
-        "technical_error_detail": "litellm.ToolCrash: traceback timeout"
-    }
+    assert result.trace_payload == {"technical_error_detail": "litellm.ToolCrash: traceback timeout"}
     assert runtime._action_result_store.get_recent(player_id, 1)[0].error_code is None
     _assert_recent_action_results_use_world_words(user_prompt)
 
@@ -1700,9 +1576,7 @@ def test_api_exception_detail_remains_in_prompt_dataset_only(
 
     rows = [
         json.loads(line)
-        for line in (
-            tmp_path / "prompt_dataset" / "turn_results.jsonl"
-        ).read_text(encoding="utf-8").splitlines()
+        for line in (tmp_path / "prompt_dataset" / "turn_results.jsonl").read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     assert rows[0]["result"] == {
@@ -1801,9 +1675,7 @@ def test_direct_travel_start_records_travel_result_and_tick(
     tick_before = runtime.current_tick()
     graph = runtime._spot_graph_repo.find_graph()
     current_spot_id = graph.get_entity_spot(EntityId.create(int(player_id.value)))
-    destination = next(
-        iter(graph.iter_outgoing_connections_from(current_spot_id))
-    ).to_spot_id
+    destination = next(iter(graph.iter_outgoing_connections_from(current_spot_id))).to_spot_id
     destination_key = runtime.id_mapper.get_str("spot", destination.value)
     from_name = runtime.get_player_spot_name(player_id)
     destination_name = graph.get_spot(destination).name
@@ -1816,10 +1688,7 @@ def test_direct_travel_start_records_travel_result_and_tick(
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
     assert entry.success is True
     assert entry.occurred_tick == tick_before
-    assert (
-        entry.action_summary
-        == f"「{from_name}」から「{destination_name}」へ向かって出発した"
-    )
+    assert entry.action_summary == f"「{from_name}」から「{destination_name}」へ向かって出発した"
     assert "移動中" in entry.result_summary
 
 
@@ -1844,9 +1713,7 @@ def test_direct_travel_carries_subjective_fields_when_passed(
     player_id = runtime.get_player_ids()[0]
     graph = runtime._spot_graph_repo.find_graph()
     current_spot_id = graph.get_entity_spot(EntityId.create(int(player_id.value)))
-    destination = next(
-        iter(graph.iter_outgoing_connections_from(current_spot_id))
-    ).to_spot_id
+    destination = next(iter(graph.iter_outgoing_connections_from(current_spot_id))).to_spot_id
     destination_key = runtime.id_mapper.get_str("spot", destination.value)
 
     runtime.do_move(
@@ -1874,6 +1741,7 @@ def test_explore_handler_threads_subjective_args_into_record(
     from ai_rpg_world.application.llm.tool_constants import (
         TOOL_NAME_SPOT_GRAPH_EXPLORE,
     )
+
     runtime = _create_runtime()
     player_id = runtime.get_player_ids()[0]
     wiring = _WorldLlmWiring(
@@ -1930,11 +1798,7 @@ class _CapturingRecorder:
     def record(self, kind, *, tick=None, player_id=None, **payload):
         from types import SimpleNamespace
 
-        self.events.append(
-            SimpleNamespace(
-                kind=str(kind), tick=tick, player_id=player_id, payload=dict(payload)
-            )
-        )
+        self.events.append(SimpleNamespace(kind=str(kind), tick=tick, player_id=player_id, payload=dict(payload)))
         return None
 
     def close(self) -> None:

@@ -19,7 +19,8 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
 
 def _wrap(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     return PlayerCurrentStateDto(
-        player_id=1, player_name="P",
+        player_id=1,
+        player_name="P",
         current_spot_id=snap.current_spot_id,
         spot_graph_snapshot=snap,
     )
@@ -42,11 +43,7 @@ class TestNearbyEntityIsDown:
     def test_down_true(self) -> None:
         """is down True なら 倒れて動かない 接尾辞が付く。"""
         snap = _snap(
-            nearby_entities=(
-                SpotGraphNearbyEntityEntry(
-                    entity_id=2, display_name="エイダ", is_down=True
-                ),
-            ),
+            nearby_entities=(SpotGraphNearbyEntityEntry(entity_id=2, display_name="エイダ", is_down=True),),
         )
         builder = SpotGraphUiContextBuilder()
         dto = builder.build(current_state_text="(base)\n", current_state=_wrap(snap))
@@ -55,11 +52,7 @@ class TestNearbyEntityIsDown:
     def test_down_false(self) -> None:
         """isdownFalse は通常表記。"""
         snap = _snap(
-            nearby_entities=(
-                SpotGraphNearbyEntityEntry(
-                    entity_id=2, display_name="ノア", is_down=False
-                ),
-            ),
+            nearby_entities=(SpotGraphNearbyEntityEntry(entity_id=2, display_name="ノア", is_down=False),),
         )
         builder = SpotGraphUiContextBuilder()
         dto = builder.build(current_state_text="(base)\n", current_state=_wrap(snap))
@@ -71,12 +64,8 @@ class TestNearbyEntityIsDown:
         """混在時はダウンした人だけに「倒れて動かない」が付き、通常の人には付かない。"""
         snap = _snap(
             nearby_entities=(
-                SpotGraphNearbyEntityEntry(
-                    entity_id=2, display_name="エイダ", is_down=True
-                ),
-                SpotGraphNearbyEntityEntry(
-                    entity_id=3, display_name="ノア", is_down=False
-                ),
+                SpotGraphNearbyEntityEntry(entity_id=2, display_name="エイダ", is_down=True),
+                SpotGraphNearbyEntityEntry(entity_id=3, display_name="ノア", is_down=False),
             ),
         )
         builder = SpotGraphUiContextBuilder()

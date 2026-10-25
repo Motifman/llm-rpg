@@ -9,9 +9,7 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI = PlayerId(1)
 _KUZE = PlayerId(3)
 _HEADER = "【時間の経過】"
@@ -79,6 +77,4 @@ def test_departed_player_also_sees_time_since_the_last_gathering(runtime) -> Non
     runtime.advance_tick()
 
     assert runtime._departed_position_store.find(_MORI) is not None
-    assert "ここでの行動が始まってから 5 分が過ぎている。" in _user_prompt(
-        runtime, _MORI
-    )
+    assert "ここでの行動が始まってから 5 分が過ぎている。" in _user_prompt(runtime, _MORI)

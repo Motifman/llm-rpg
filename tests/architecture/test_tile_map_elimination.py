@@ -38,16 +38,20 @@ def test_create_observation_recipient_resolver_has_no_tile_repositories() -> Non
     from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
         create_observation_recipient_resolver,
     )
+
     sig = inspect.signature(create_observation_recipient_resolver)
     assert "physical_map_repository" not in sig.parameters
     assert "hit_box_repository" not in sig.parameters
 
 
-@pytest.mark.parametrize("relative_path", [
-    "application/llm/services/prompt_builder.py",
-    "application/llm/services/prompt_builder_config.py",
-    "application/llm/services/spot_graph_current_state_formatter.py",
-])
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "application/llm/services/prompt_builder.py",
+        "application/llm/services/prompt_builder_config.py",
+        "application/llm/services/spot_graph_current_state_formatter.py",
+    ],
+)
 def test_prompt_path_does_not_import_tile_query_or_formatter(relative_path: str) -> None:
     """本番のプロンプト構築とスポット用整形は、タイル用の問い合わせ・整形を直接読み込まない。"""
     path = _REPO_ROOT / "src/ai_rpg_world" / relative_path
@@ -56,25 +60,22 @@ def test_prompt_path_does_not_import_tile_query_or_formatter(relative_path: str)
         "ai_rpg_world.application.world.services.world_query_service",
         "ai_rpg_world.application.llm.services.current_state_formatter",
     }
-    imports = {
-        node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
-    }
-    imports.update(
-        alias.name for node in ast.walk(tree) if isinstance(node, ast.Import)
-        for alias in node.names
-    )
+    imports = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+    imports.update(alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names)
     assert not imports & retired
 
 
 def test_prompt_limits_have_no_tile_settings() -> None:
     """PromptLimits はタイルの表示切替も視界距離も設定項目として持たない。"""
     from ai_rpg_world.application.llm.services.prompt_builder_config import PromptLimits
+
     assert {field.name for field in fields(PromptLimits)} == {"default_action_instruction"}
 
 
 def test_current_state_query_has_no_tile_settings() -> None:
     """現在状態の問い合わせにはプレイヤーの指定だけがあり、タイル用の設定は無い。"""
     from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
+
     assert {field.name for field in fields(GetPlayerCurrentStateQuery)} == {
         "player_id",
     }
@@ -83,9 +84,7 @@ def test_current_state_query_has_no_tile_settings() -> None:
 def test_spot_graph_augmenting_world_query_module_is_removed() -> None:
     """退役したスポットの状態を追加する問い合わせモジュールは読み込めない。"""
     with pytest.raises(ImportError):
-        importlib.import_module(
-            "ai_rpg_world.application.world_graph.spot_graph_augmenting_world_query"
-        )
+        importlib.import_module("ai_rpg_world.application.world_graph.spot_graph_augmenting_world_query")
 
 
 def test_world_runtime_does_not_import_in_memory_physical_map_repository() -> None:
@@ -95,18 +94,21 @@ def test_world_runtime_does_not_import_in_memory_physical_map_repository() -> No
     assert "InMemoryPhysicalMapRepository" not in text
 
 
-@pytest.mark.parametrize("relative_path", [
-    "ui_context_builder.py",
-    "executors/movement_executor.py",
-    "executors/world_executor.py",
-    "tool_catalog/world.py",
-    "tool_catalog/movement.py",
-    "tool_catalog/pursuit.py",
-    "tool_catalog/combat.py",
-    "_argument_resolvers/movement_resolver.py",
-    "_argument_resolvers/world_resolver.py",
-    "_argument_resolvers/combat_skill_resolver.py",
-])
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "ui_context_builder.py",
+        "executors/movement_executor.py",
+        "executors/world_executor.py",
+        "tool_catalog/world.py",
+        "tool_catalog/movement.py",
+        "tool_catalog/pursuit.py",
+        "tool_catalog/combat.py",
+        "_argument_resolvers/movement_resolver.py",
+        "_argument_resolvers/world_resolver.py",
+        "_argument_resolvers/combat_skill_resolver.py",
+    ],
+)
 def test_tile_llm_modules_are_removed(relative_path: str) -> None:
     """旧タイル用LLMの実装ファイルは存在せず、再公開によって復活しない。"""
     base = _REPO_ROOT / "src/ai_rpg_world/application/llm/services"
@@ -117,51 +119,71 @@ def test_production_prompt_builder_injects_ui_context() -> None:
     """本番のプロンプト構築はUI構築器を明示注入し、省略時の旧実装に頼らない。"""
     path = _REPO_ROOT / "src/ai_rpg_world/application/world_runtime/world_runtime.py"
     calls = [
-        node for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-        and node.func.id == "DefaultPromptBuilder"
+        node
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "DefaultPromptBuilder"
     ]
     assert calls
     assert all(any(kw.arg == "ui_context_builder" for kw in call.keywords) for call in calls)
 
 
-@pytest.mark.parametrize("relative_path", [
-    "application/world/services/world_query_service.py",
-    "application/world/services/player_current_state_builder.py",
-    "application/world/services/visible_tile_map_builder.py",
-    "application/world/services/player_location_query_service.py",
-    "application/world/services/spot_context_query_service.py",
-    "application/world/services/available_moves_query_service.py",
-    "application/world/services/visible_context_query_service.py",
-    "application/world/services/visible_object_read_model_builder.py",
-    "application/world/services/player_runtime_context_builder.py",
-    "application/world/services/player_supplemental_context_builder.py",
-    "application/world/services/attention_level_service.py",
-    "application/world/services/transition_condition_evaluator.py",
-    "application/world/services/gateway_based_connected_spots_provider.py",
-    "application/world/world_query_wiring.py",
-    "application/llm/services/current_state_formatter.py",
-])
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "application/world/services/world_query_service.py",
+        "application/world/services/player_current_state_builder.py",
+        "application/world/services/visible_tile_map_builder.py",
+        "application/world/services/player_location_query_service.py",
+        "application/world/services/spot_context_query_service.py",
+        "application/world/services/available_moves_query_service.py",
+        "application/world/services/visible_context_query_service.py",
+        "application/world/services/visible_object_read_model_builder.py",
+        "application/world/services/player_runtime_context_builder.py",
+        "application/world/services/player_supplemental_context_builder.py",
+        "application/world/services/attention_level_service.py",
+        "application/world/services/transition_condition_evaluator.py",
+        "application/world/services/gateway_based_connected_spots_provider.py",
+        "application/world/world_query_wiring.py",
+        "application/llm/services/current_state_formatter.py",
+    ],
+)
 def test_tile_query_modules_are_removed(relative_path: str) -> None:
     """旧タイル用の問い合わせ・整形・配線の実装ファイルは存在しない。"""
     assert not (_REPO_ROOT / "src/ai_rpg_world" / relative_path).exists()
 
 
-@pytest.mark.parametrize("relative_path", [
-    "aggregate/physical_map_aggregate.py",
-    "entity/tile.py", "entity/area_trigger.py", "entity/map_trigger.py",
-    "entity/gateway.py", "entity/location_area.py", "entity/world_object.py",
-    "entity/world_object_component.py", "service/map_geometry_service.py",
-    "service/map_trigger_engine.py", "service/map_interaction_policy.py",
-    "service/chest_interaction_policy.py", "service/harvest_session_domain_service.py",
-    "service/harvest_session_policy.py", "service/harvest_domain_service.py",
-    "service/skill_selection_policy.py", "value_object/area.py",
-    "value_object/terrain_type.py", "value_object/behavior_context.py",
-    "value_object/behavior_observation.py", "event/harvest_events.py",
-    "value_object/area_trigger_id.py", "value_object/gateway_id.py",
-    "value_object/movement_capability.py", "value_object/aggro_memory_policy.py",
-    "exception/behavior_exception.py", "exception/harvest_exception.py",
-])
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "aggregate/physical_map_aggregate.py",
+        "entity/tile.py",
+        "entity/area_trigger.py",
+        "entity/map_trigger.py",
+        "entity/gateway.py",
+        "entity/location_area.py",
+        "entity/world_object.py",
+        "entity/world_object_component.py",
+        "service/map_geometry_service.py",
+        "service/map_trigger_engine.py",
+        "service/map_interaction_policy.py",
+        "service/chest_interaction_policy.py",
+        "service/harvest_session_domain_service.py",
+        "service/harvest_session_policy.py",
+        "service/harvest_domain_service.py",
+        "service/skill_selection_policy.py",
+        "value_object/area.py",
+        "value_object/terrain_type.py",
+        "value_object/behavior_context.py",
+        "value_object/behavior_observation.py",
+        "event/harvest_events.py",
+        "value_object/area_trigger_id.py",
+        "value_object/gateway_id.py",
+        "value_object/movement_capability.py",
+        "value_object/aggro_memory_policy.py",
+        "exception/behavior_exception.py",
+        "exception/harvest_exception.py",
+    ],
+)
 def test_physical_map_core_modules_are_removed(relative_path: str) -> None:
     """物理マップと専用の部品・サービス・観測値の実装ファイルは存在しない。"""
     assert not (_REPO_ROOT / "src/ai_rpg_world/domain/world" / relative_path).exists()

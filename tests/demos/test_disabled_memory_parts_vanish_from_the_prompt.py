@@ -81,6 +81,7 @@ _ALL_NAMES = (
     _MEMO_EPISODE_SOURCE,
 )
 
+
 class _PromptCaptureClient:
     def __init__(self) -> None:
         self.messages: list[dict] = []
@@ -103,9 +104,7 @@ def _profile_mapping(profile: str) -> tuple[str, dict[str, str]]:
 
 def _first_turn_prompt(scenario: str, mapping: dict[str, str]) -> str:
     """1 ターン目に LLM へ渡すシステムプロンプト・user 文面・ツール定義を 1 つの文字列で返す。"""
-    runtime = create_world_runtime(
-        scenario, config=ResolvedLlmRuntimeConfig.from_mapping(mapping)
-    )
+    runtime = create_world_runtime(scenario, config=ResolvedLlmRuntimeConfig.from_mapping(mapping))
     client = _PromptCaptureClient()
     _WorldLlmWiring(
         runtime=runtime,

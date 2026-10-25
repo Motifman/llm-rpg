@@ -164,9 +164,7 @@ class QuestAggregate(AggregateRoot):
     def approve_by(self, approver_player_id: PlayerId) -> None:
         """ギルド掲示クエストを承認して OPEN にする。権限チェックはアプリ層で行う。"""
         if self._status != QuestStatus.PENDING_APPROVAL:
-            raise InvalidQuestStatusException(
-                f"Quest is not pending approval: {self._status}"
-            )
+            raise InvalidQuestStatusException(f"Quest is not pending approval: {self._status}")
         self._status = QuestStatus.OPEN
         event = QuestApprovedEvent.create(
             aggregate_id=self._quest_id,
@@ -203,9 +201,7 @@ class QuestAggregate(AggregateRoot):
         if self._status != QuestStatus.OPEN:
             raise InvalidQuestStatusException(f"Quest is not open: {self._status}")
         if not self.can_be_accepted_by(player_id):
-            raise CannotAcceptQuestException(
-                f"Player {player_id} cannot accept quest {self._quest_id}"
-            )
+            raise CannotAcceptQuestException(f"Player {player_id} cannot accept quest {self._quest_id}")
         self._acceptor_player_id = player_id
         self._status = QuestStatus.ACCEPTED
         event = QuestAcceptedEvent.create(
@@ -252,9 +248,7 @@ class QuestAggregate(AggregateRoot):
         if self._status != QuestStatus.ACCEPTED:
             raise InvalidQuestStatusException(f"Quest is not accepted: {self._status}")
         if not self.is_all_objectives_completed():
-            raise QuestObjectivesNotCompleteException(
-                "Cannot complete quest: not all objectives completed"
-            )
+            raise QuestObjectivesNotCompleteException("Cannot complete quest: not all objectives completed")
         self._status = QuestStatus.COMPLETED
         event = QuestCompletedEvent.create(
             aggregate_id=self._quest_id,
@@ -276,9 +270,7 @@ class QuestAggregate(AggregateRoot):
         if self._status not in (QuestStatus.OPEN, QuestStatus.ACCEPTED):
             raise InvalidQuestStatusException(f"Quest cannot be cancelled: {self._status}")
         if not self.is_issuer_or_acceptor(player_id):
-            raise CannotCancelQuestException(
-                f"Player {player_id} is not issuer or acceptor of quest {self._quest_id}"
-            )
+            raise CannotCancelQuestException(f"Player {player_id} is not issuer or acceptor of quest {self._quest_id}")
         self._status = QuestStatus.CANCELLED
         event = QuestCancelledEvent.create(
             aggregate_id=self._quest_id,

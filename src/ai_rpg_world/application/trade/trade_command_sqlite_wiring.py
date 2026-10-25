@@ -1,4 +1,5 @@
 """Trade コマンド向け SQLite 書き込みリポジトリ束（`GAME_DB_PATH` 単一 DB 想定）。"""
+
 from __future__ import annotations
 
 import sqlite3
@@ -38,18 +39,10 @@ def attach_trade_command_sqlite_repositories(
 ]:
     """同一接続・UoW 共有モードの 5 リポジトリ。`event_sink` に `CommandContextAggregateEventSink` を渡すと集約イベントを収集する。"""
     return (
-        SqliteTradeAggregateRepository.for_shared_unit_of_work(
-            connection, event_sink=event_sink
-        ),
-        SqlitePlayerInventoryWriteRepository.for_shared_unit_of_work(
-            connection, event_sink=event_sink
-        ),
-        SqlitePlayerStatusWriteRepository.for_shared_unit_of_work(
-            connection, event_sink=event_sink
-        ),
-        SqlitePlayerProfileWriteRepository.for_shared_unit_of_work(
-            connection, event_sink=event_sink
-        ),
+        SqliteTradeAggregateRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
+        SqlitePlayerInventoryWriteRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
+        SqlitePlayerStatusWriteRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
+        SqlitePlayerProfileWriteRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
         SqliteItemWriteRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
     )
 

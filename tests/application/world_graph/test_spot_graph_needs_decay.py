@@ -30,8 +30,18 @@ def _make_player(pid: int = 1, needs: AgentNeeds | None = None) -> PlayerStatusA
     exp_table = ExpTable(base_exp=100.0, exponent=1.5)
     return PlayerStatusAggregate(
         player_id=PlayerId(pid),
-        base_stats=BaseStats(max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05),
-        stat_growth_factor=StatGrowthFactor(hp_factor=1.0, mp_factor=1.0, attack_factor=1.0, defense_factor=1.0, speed_factor=1.0, critical_rate_factor=0.0, evasion_rate_factor=0.0),
+        base_stats=BaseStats(
+            max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05
+        ),
+        stat_growth_factor=StatGrowthFactor(
+            hp_factor=1.0,
+            mp_factor=1.0,
+            attack_factor=1.0,
+            defense_factor=1.0,
+            speed_factor=1.0,
+            critical_rate_factor=0.0,
+            evasion_rate_factor=0.0,
+        ),
         exp_table=exp_table,
         growth=Growth(level=1, total_exp=0, exp_table=exp_table),
         gold=Gold(0),

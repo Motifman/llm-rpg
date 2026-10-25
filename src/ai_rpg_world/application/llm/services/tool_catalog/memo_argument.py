@@ -76,17 +76,13 @@ def memo_field_property(*, episode_source_offered: bool) -> dict[str, Any]:
     }
 
 
-def with_memo_schema(
-    definition: ToolDefinitionDto, *, episode_source_offered: bool
-) -> ToolDefinitionDto:
+def with_memo_schema(definition: ToolDefinitionDto, *, episode_source_offered: bool) -> ToolDefinitionDto:
     """省略できる引数として足す。毎回書かせると、書くことが無いターンにも何かを書かせてしまう。"""
     if not isinstance(definition, ToolDefinitionDto):
         raise TypeError("definition must be ToolDefinitionDto")
     parameters = deepcopy(definition.parameters)
     properties = dict(parameters.get("properties") or {})
-    properties[MEMO_FIELD_NAME] = memo_field_property(
-        episode_source_offered=episode_source_offered
-    )
+    properties[MEMO_FIELD_NAME] = memo_field_property(episode_source_offered=episode_source_offered)
     parameters["properties"] = properties
     return ToolDefinitionDto(
         name=definition.name,

@@ -75,9 +75,7 @@ class PursuitObservationFormatter:
         return {
             "target_id": getattr(getattr(last_known, "target_id", None), "value", None),
             "spot_id_value": getattr(getattr(last_known, "spot_id", None), "value", None),
-            "coordinate": self._serialize_pursuit_coordinate(
-                getattr(last_known, "coordinate", None)
-            ),
+            "coordinate": self._serialize_pursuit_coordinate(getattr(last_known, "coordinate", None)),
             "observed_at_tick": getattr(
                 getattr(last_known, "observed_at_tick", None), "value", getattr(last_known, "observed_at_tick", None)
             ),
@@ -89,9 +87,7 @@ class PursuitObservationFormatter:
         return {
             "target_id": getattr(getattr(target_snapshot, "target_id", None), "value", None),
             "spot_id_value": getattr(getattr(target_snapshot, "spot_id", None), "value", None),
-            "coordinate": self._serialize_pursuit_coordinate(
-                getattr(target_snapshot, "coordinate", None)
-            ),
+            "coordinate": self._serialize_pursuit_coordinate(getattr(target_snapshot, "coordinate", None)),
         }
 
     def _format_pursuit_started(
@@ -107,13 +103,9 @@ class PursuitObservationFormatter:
             pursuit_status_after_event="active",
         )
         structured["last_known"] = self._serialize_last_known_state(event.last_known)
-        structured["spot_id_value"] = getattr(
-            event.last_known.spot_id, "value", event.last_known.spot_id
-        )
+        structured["spot_id_value"] = getattr(event.last_known.spot_id, "value", event.last_known.spot_id)
         structured["target_snapshot"] = self._serialize_target_snapshot(event.target_snapshot)
-        return ObservationOutput(
-            prose=prose, structured=structured, observation_category="self_only"
-        )
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_pursuit_updated(
         self,
@@ -128,15 +120,9 @@ class PursuitObservationFormatter:
             pursuit_status_after_event="active",
         )
         structured["last_known"] = self._serialize_last_known_state(event.last_known)
-        structured["spot_id_value"] = getattr(
-            event.last_known.spot_id, "value", event.last_known.spot_id
-        )
-        structured["target_snapshot"] = self._serialize_target_snapshot(
-            event.target_snapshot
-        )
-        return ObservationOutput(
-            prose=prose, structured=structured, observation_category="self_only"
-        )
+        structured["spot_id_value"] = getattr(event.last_known.spot_id, "value", event.last_known.spot_id)
+        structured["target_snapshot"] = self._serialize_target_snapshot(event.target_snapshot)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_pursuit_failed(
         self,
@@ -153,12 +139,8 @@ class PursuitObservationFormatter:
         )
         structured["failure_reason"] = event.failure_reason.value
         structured["last_known"] = self._serialize_last_known_state(event.last_known)
-        structured["spot_id_value"] = getattr(
-            event.last_known.spot_id, "value", event.last_known.spot_id
-        )
-        structured["target_snapshot"] = self._serialize_target_snapshot(
-            event.target_snapshot
-        )
+        structured["spot_id_value"] = getattr(event.last_known.spot_id, "value", event.last_known.spot_id)
+        structured["target_snapshot"] = self._serialize_target_snapshot(event.target_snapshot)
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -181,12 +163,8 @@ class PursuitObservationFormatter:
             interruption_scope="pursuit",
         )
         structured["last_known"] = self._serialize_last_known_state(event.last_known)
-        structured["spot_id_value"] = getattr(
-            event.last_known.spot_id, "value", event.last_known.spot_id
-        )
-        structured["target_snapshot"] = self._serialize_target_snapshot(
-            event.target_snapshot
-        )
+        structured["spot_id_value"] = getattr(event.last_known.spot_id, "value", event.last_known.spot_id)
+        structured["target_snapshot"] = self._serialize_target_snapshot(event.target_snapshot)
         return ObservationOutput(
             prose=prose,
             structured=structured,

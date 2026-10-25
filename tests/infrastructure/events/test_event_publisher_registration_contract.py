@@ -12,5 +12,7 @@ from ai_rpg_world.domain.common.event_publisher import EventPublisher
 def test_registration_accepts_only_event_type_and_handler(publisher_type) -> None:
     """発行の口と本番の実装は、イベント型と受け手だけを登録の引数にする。"""
     assert list(inspect.signature(publisher_type.register_handler).parameters) == [
-        "self", "event_type", "handler",
+        "self",
+        "event_type",
+        "handler",
     ]

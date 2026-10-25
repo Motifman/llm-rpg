@@ -42,7 +42,9 @@ def _round_trip(store: GamePhaseStore) -> GamePhaseStore:
 class TestMidMeetingRoundTrip:
     """会議中の状態がそのまま戻る。"""
 
-    def test_phase_survives(self, ) -> None:
+    def test_phase_survives(
+        self,
+    ) -> None:
         """再開しても会議が続いている。"""
         store = GamePhaseStore()
         store.begin_meeting(tick=10, trigger="body_report")

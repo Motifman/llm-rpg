@@ -38,9 +38,7 @@ LOOKS = {1: "測量具を背負った年かさの人", 2: "綿入れを着込ん
 def _formatter() -> TradeObservationFormatter:
     name_resolver = MagicMock(spec=ObservationNameResolver)
     name_resolver.player_name.side_effect = lambda pid: NAMES[pid.value]
-    return TradeObservationFormatter(
-        ObservationFormatterContext(name_resolver=name_resolver, item_repository=None)
-    )
+    return TradeObservationFormatter(ObservationFormatterContext(name_resolver=name_resolver, item_repository=None))
 
 
 def _acquaintances() -> PlayerAcquaintances:

@@ -43,7 +43,8 @@ class TestLike:
         assert like.created_at == specific_time
 
     @pytest.mark.parametrize(
-        ("content_id_type", "other_content_id_type"), [(PostId, ReplyId), (ReplyId, PostId)],
+        ("content_id_type", "other_content_id_type"),
+        [(PostId, ReplyId), (ReplyId, PostId)],
         ids=["post", "reply"],
     )
     def test_hash_functionality(self, content_id_type, other_content_id_type):

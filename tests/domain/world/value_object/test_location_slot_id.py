@@ -1,4 +1,5 @@
 """LocationSlotId のテスト"""
+
 import pytest
 
 from ai_rpg_world.domain.world.exception.map_exception import (

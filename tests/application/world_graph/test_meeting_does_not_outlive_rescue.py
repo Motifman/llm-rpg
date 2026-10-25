@@ -42,9 +42,7 @@ def _down_player(runtime: WorldRuntime, player_id: PlayerId) -> None:
     status.clear_events()
     runtime._player_status_repo.save(status)
     current_tick = int(runtime.current_tick())
-    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
-        EntityId.create(int(player_id))
-    )
+    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
     runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(current_tick))
     runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
     runtime._speech_event_publisher.publish_all(events)
@@ -59,10 +57,7 @@ class TestMeetingEndsBeforeTheGraceExpires:
         ここが逆転すると、会議に巻き込まれている間に倒れている人が死ぬ。
         どちらの定数を後から動かしても、この関係が壊れた時点で落ちる。
         """
-        assert (
-            GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT
-            < PlayerDeathGraceTickStage.DEFAULT_GRACE_TICKS
-        )
+        assert GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT < PlayerDeathGraceTickStage.DEFAULT_GRACE_TICKS
 
     def test_there_is_room_to_reach_the_fallen_afterwards(self) -> None:
         """会議が終わってから駆けつける余地が残る。
@@ -70,10 +65,7 @@ class TestMeetingEndsBeforeTheGraceExpires:
         1 tick でも短ければ上の条件は満たすが、閉じた瞬間に死ぬのでは
         「助けに行く」が選べない。移動と手当てに要る分を残す。
         """
-        remaining = (
-            PlayerDeathGraceTickStage.DEFAULT_GRACE_TICKS
-            - GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT
-        )
+        remaining = PlayerDeathGraceTickStage.DEFAULT_GRACE_TICKS - GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT
 
         assert remaining >= 5
 
@@ -138,10 +130,7 @@ class TestReportingDoesNotKillTheReported:
         )
         from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 
-        scenario = (
-            Path(__file__).resolve().parents[3]
-            / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-        )
+        scenario = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
         runtime = create_world_runtime(scenario)
         reporter, fallen = PlayerId(3), PlayerId(4)
 
@@ -162,10 +151,7 @@ class TestReportingDoesNotKillTheReported:
             runtime.advance_tick()
 
         assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM
-        assert (
-            runtime._player_outcome_registry.get_outcome(fallen)
-            is not PlayerOutcomeEnum.DEAD
-        )
+        assert runtime._player_outcome_registry.get_outcome(fallen) is not PlayerOutcomeEnum.DEAD
 
     def test_tending_is_offered_while_the_meeting_runs(self) -> None:
         """会議中、倒れている相手への手当てが選択肢に出ている。
@@ -178,10 +164,8 @@ class TestReportingDoesNotKillTheReported:
         from ai_rpg_world.application.world_runtime.world_runtime import (
             create_world_runtime,
         )
-        scenario = (
-            Path(__file__).resolve().parents[3]
-            / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-        )
+
+        scenario = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
         runtime = create_world_runtime(scenario)
         reporter, fallen = PlayerId(3), PlayerId(4)
 

@@ -1,4 +1,5 @@
 """公開条件を再検査して、通知を投稿と同じ確定境界へ保存する。"""
+
 from __future__ import annotations
 
 from ai_rpg_world.application.common.command_scope import CommandContext
@@ -53,9 +54,12 @@ class PublicSnsNotificationDispatcher:
             if repos.notification_exists(source, recipient_token, kind):
                 continue
             content = NotificationContent(
-                title={"reply": "新しい返信", "mention": "メンション", "like": "いいね", "follow": "新しいフォロワー"}[kind],
+                title={"reply": "新しい返信", "mention": "メンション", "like": "いいね", "follow": "新しいフォロワー"}[
+                    kind
+                ],
                 message=f"{actor.display_name}さんからのSNS通知",
-                actor_user_id=UserId(actor.user_id), actor_user_name=actor.display_name,
+                actor_user_id=UserId(actor.user_id),
+                actor_user_name=actor.display_name,
                 related_post_id=PostId(target.local_id) if target and target.kind == "post" else None,
                 related_reply_id=ReplyId(target.local_id) if target and target.kind == "reply" else None,
                 content_type=target.kind if target else None,
@@ -65,14 +69,20 @@ class PublicSnsNotificationDispatcher:
             )
             notification = Notification(
                 notification_id=repos.notifications.generate_notification_id(),
-                user_id=UserId(recipient_id), notification_type=NotificationType(kind), content=content,
-                created_at=event.occurred_at, source_event_id=source,
+                user_id=UserId(recipient_id),
+                notification_type=NotificationType(kind),
+                content=content,
+                created_at=event.occurred_at,
+                source_event_id=source,
                 recipient_identity_token=recipient_token,
                 execution_provenance=event.provenance.to_dict() if event.provenance else None,
             )
             repos.notifications.save(notification)
-            context.collect(PublicSnsNotificationReadyEvent.create(
-                aggregate_id=notification.identity_token, aggregate_type="PublicSnsNotification",
-                notification_id=notification.notification_id.value,
-                notification_identity_token=notification.identity_token,
-            ))
+            context.collect(
+                PublicSnsNotificationReadyEvent.create(
+                    aggregate_id=notification.identity_token,
+                    aggregate_type="PublicSnsNotification",
+                    notification_id=notification.notification_id.value,
+                    notification_identity_token=notification.identity_token,
+                )
+            )

@@ -71,21 +71,15 @@ class InMemoryTradeCommandRepositoryProvider:
         )
         self._player_inventory_repository = cast(
             PlayerInventoryRepository,
-            ScopeBoundRepository(
-                InMemoryPlayerInventoryRepository(data_store, facade), guard
-            ),
+            ScopeBoundRepository(InMemoryPlayerInventoryRepository(data_store, facade), guard),
         )
         self._player_status_repository = cast(
             PlayerStatusRepository,
-            ScopeBoundRepository(
-                InMemoryPlayerStatusRepository(data_store, facade), guard
-            ),
+            ScopeBoundRepository(InMemoryPlayerStatusRepository(data_store, facade), guard),
         )
         self._player_profile_repository = cast(
             PlayerProfileRepository,
-            ScopeBoundRepository(
-                InMemoryPlayerProfileRepository(data_store, facade), guard
-            ),
+            ScopeBoundRepository(InMemoryPlayerProfileRepository(data_store, facade), guard),
         )
         self._item_repository = cast(
             ItemRepository,
@@ -136,10 +130,7 @@ class InMemoryTradeCommandRepositoryProviderFactory:
     ) -> InMemoryTradeCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "インメモリ取引repository providerには"
-                "InMemoryUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("インメモリ取引repository providerにはInMemoryUnitOfWorkTransactionAdapterが必要です")
         return InMemoryTradeCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

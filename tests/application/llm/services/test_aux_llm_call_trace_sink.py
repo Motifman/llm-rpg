@@ -111,9 +111,7 @@ class TestRecordingFailuresAreVisible:
     def test_both_writes_failing_does_not_raise(self) -> None:
         """失敗の記録まで書けなくても、例外は外へ出さない。"""
         recorder = _Recorder(
-            fail_on=frozenset(
-                {TraceEventKind.AUX_LLM_CALL, TraceEventKind.AUX_LLM_CALL_RECORD_FAILED}
-            )
+            fail_on=frozenset({TraceEventKind.AUX_LLM_CALL, TraceEventKind.AUX_LLM_CALL_RECORD_FAILED})
         )
 
         _sink(recorder).record(_SUMMARY_CALL)

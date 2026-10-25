@@ -135,7 +135,6 @@ class TestTheOutcomeOfEveryCallReachesTheRuntime:
 
         assert runtime.pop_llm_call_count() == 1
 
-
     def test_a_burst_inside_one_tick_does_not_stop_the_run(self) -> None:
         """同じ tick で全員が落ちただけでは止まらない (**負の対照**)。
 
@@ -163,9 +162,7 @@ class TestTheThresholdIsAnExperimentCondition:
 
     def test_a_profile_can_change_it(self) -> None:
         """profile の `LLM_FAILURE_STREAK_ABORT` が解決値に反映される。"""
-        config = ResolvedLlmRuntimeConfig.from_mapping(
-            {"LLM_FAILURE_STREAK_ABORT": "20"}
-        )
+        config = ResolvedLlmRuntimeConfig.from_mapping({"LLM_FAILURE_STREAK_ABORT": "20"})
 
         assert config.llm_failure_streak_abort == 20
 

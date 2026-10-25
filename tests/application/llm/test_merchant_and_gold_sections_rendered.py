@@ -51,7 +51,10 @@ def _make_snapshot(**overrides: Any) -> SpotGraphPlayerSnapshotDto:
 def _render_merchants(snap: SpotGraphPlayerSnapshotDto) -> list[str]:
     lines: list[str] = []
     SpotGraphUiContextBuilder()._build_merchant_section(
-        snap, LabelAllocator(), RuntimeTargetCollector(), lines,
+        snap,
+        LabelAllocator(),
+        RuntimeTargetCollector(),
+        lines,
     )
     return lines
 
@@ -143,7 +146,8 @@ class TestMerchantSection:
         joined = "\n".join(
             _render_merchants(
                 _make_snapshot(
-                    economy_declared=True, merchants_at_spot=(_gustav(), hilda),
+                    economy_declared=True,
+                    merchants_at_spot=(_gustav(), hilda),
                 ),
             )
         )

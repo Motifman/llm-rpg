@@ -17,7 +17,4 @@ def test_runtime_wires_object_and_passage_to_same_scope_factory() -> None:
     assert object_stage._command_scope_factory is not None
     assert passage_stage._command_scope_factory is object_stage._command_scope_factory
     transaction_factory = object_stage._command_scope_factory._transaction_factory
-    assert (
-        transaction_factory._transaction_factory._data_store
-        is runtime._spot_interior_repo._data_store
-    )
+    assert transaction_factory._transaction_factory._data_store is runtime._spot_interior_repo._data_store

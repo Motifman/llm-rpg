@@ -25,18 +25,12 @@ from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
 
 def _load_cli_module():
     """``scripts/being_snapshot_cli.py`` を import 可能な形で読み込む。"""
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "scripts"
-        / "being_snapshot_cli.py"
-    )
+    path = Path(__file__).resolve().parents[2] / "scripts" / "being_snapshot_cli.py"
     spec = importlib.util.spec_from_file_location("being_snapshot_cli", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
-
 
 
 def _populate_source_dbs(
@@ -103,7 +97,6 @@ class TestBeingSnapshotCliEndToEnd:
         loaded = dst_repo.find_by_id(being_id)
         assert loaded is not None
         assert loaded.identity.name == "アダ"
-
 
     def test_save_missing_source_db_exits_one(self, tmp_path: Path) -> None:
         """source DB が無い save は sqlite が自動生成する前に弾かれる。"""

@@ -53,9 +53,7 @@ def _state(
         sns_virtual_page_kind=sns_virtual_page_kind,
         sns_current_page_snapshot_json=None,
         inventory_items=[InventoryItemDto(1, 10, "剣", 1)],
-        available_trades=[
-            AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)
-        ],
+        available_trades=[AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)],
     )
 
 
@@ -70,9 +68,7 @@ def _tool_names(*, sns_virtual_pages_enabled: bool, state: PlayerCurrentStateDto
     )
     provider = DefaultAvailableToolsProvider(registry)
     tools = provider.get_available_tools(state)
-    return {
-        t["function"]["name"] for t in tools if t.get("type") == "function"
-    }
+    return {t["function"]["name"] for t in tools if t.get("type") == "function"}
 
 
 class TestSnsTradeToolGating:

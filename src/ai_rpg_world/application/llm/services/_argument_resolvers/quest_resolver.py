@@ -86,9 +86,7 @@ class QuestArgumentResolver:
                     "INVALID_OBJECTIVES",
                 )
             ot_stripped = ot.strip()
-            tid_val = self._objective_resolver.resolve_target_id(
-                ot_stripped, target_name, tid
-            )
+            tid_val = self._objective_resolver.resolve_target_id(ot_stripped, target_name, tid)
             rc_val = safe_int(rc, f"objectives[{i}].required_count", min_val=1)
             objectives.append((ot_stripped, tid_val, rc_val))
         reward_gold = safe_int(args.get("reward_gold", 0), "reward_gold", min_val=0)
@@ -98,12 +96,8 @@ class QuestArgumentResolver:
             reward_items = []
             for j, item in enumerate(raw_items):
                 if isinstance(item, dict):
-                    spec_id = safe_int(
-                        item.get("item_spec_id"), f"reward_items[{j}].item_spec_id", min_val=1
-                    )
-                    qty = safe_int(
-                        item.get("quantity"), f"reward_items[{j}].quantity", min_val=1
-                    )
+                    spec_id = safe_int(item.get("item_spec_id"), f"reward_items[{j}].item_spec_id", min_val=1)
+                    qty = safe_int(item.get("quantity"), f"reward_items[{j}].quantity", min_val=1)
                     reward_items.append((spec_id, qty))
         result: dict[str, Any] = {
             "objectives": objectives,

@@ -29,9 +29,7 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
 )
 
 SCENARIO_DIR = Path(__file__).resolve().parents[3] / "data" / "scenarios"
-FIXTURE_SCENARIO_DIR = (
-    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
-)
+FIXTURE_SCENARIO_DIR = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
 NAMESPACES = ("object", "item", "player", "flag")
 
 
@@ -53,47 +51,51 @@ _CONDITION_READ_NAMESPACES: Mapping[str, str] = {
 
 # 状態を読まないと決めた条件。InteractionConditionTypeEnum の新要素がどちらの
 # 表にも無ければ網羅テストが落ち、監査対象への追加忘れを黙って通さない。
-_NON_STATE_INTERACTION_CONDITIONS = frozenset({
-    "ALWAYS",
-    "HAS_ITEM",
-    "PLAYERS_AT_SPOT",
-    "PREPARED_ACTION",
-    "PUZZLE_INPUT_MATCH",
-    "HAS_ITEMS",
-    "PLAYER_NEED_AT_LEAST",
-    "PLAYER_GOLD_AT_LEAST",
-    "PLAYER_HP_RATIO_BELOW",
-    "PLAYER_HP_RATIO_AT_LEAST",
-    "TIME_OF_DAY_IS",
-    "TIME_OF_DAY_IS_NOT",
-    "WEATHER_IS",
-    "WEATHER_IS_NOT",
-    "TARGET_PLAYER_IS_INCAPACITATED",
-    "TARGET_HAS_ITEM",
-    "TARGET_HAS_NO_ITEM",
-    "SPOT_LIGHTING_IS",
-    "SPOT_LIGHTING_IS_NOT",
-    "AT_SPOT_IS",
-    "AT_SPOT_IS_NOT",
-})
+_NON_STATE_INTERACTION_CONDITIONS = frozenset(
+    {
+        "ALWAYS",
+        "HAS_ITEM",
+        "PLAYERS_AT_SPOT",
+        "PREPARED_ACTION",
+        "PUZZLE_INPUT_MATCH",
+        "HAS_ITEMS",
+        "PLAYER_NEED_AT_LEAST",
+        "PLAYER_GOLD_AT_LEAST",
+        "PLAYER_HP_RATIO_BELOW",
+        "PLAYER_HP_RATIO_AT_LEAST",
+        "TIME_OF_DAY_IS",
+        "TIME_OF_DAY_IS_NOT",
+        "WEATHER_IS",
+        "WEATHER_IS_NOT",
+        "TARGET_PLAYER_IS_INCAPACITATED",
+        "TARGET_HAS_ITEM",
+        "TARGET_HAS_NO_ITEM",
+        "SPOT_LIGHTING_IS",
+        "SPOT_LIGHTING_IS_NOT",
+        "AT_SPOT_IS",
+        "AT_SPOT_IS_NOT",
+    }
+)
 
 # ScenarioEventCondition は enum が無いため、シナリオに実在する非状態条件を
 # 明示する。新しい condition_type が JSON に入れば走査テストが落ちる。
-_NON_STATE_SCENARIO_EVENT_CONDITIONS = frozenset({
-    "ALWAYS",
-    "AND",
-    "GAME_PHASE_IS",
-    "ITEM_REQUIRED",
-    "NOT",
-    "OR",
-    "PLAYER_AT_SPOT",
-    "PLAYERS_AT_SPOT",
-    "PROBABILITY",
-    "SEARCH_COUNT",
-    "TICK_AT_LEAST",
-    "TICK_MODULO",
-    "WEATHER_IS",
-})
+_NON_STATE_SCENARIO_EVENT_CONDITIONS = frozenset(
+    {
+        "ALWAYS",
+        "AND",
+        "GAME_PHASE_IS",
+        "ITEM_REQUIRED",
+        "NOT",
+        "OR",
+        "PLAYER_AT_SPOT",
+        "PLAYERS_AT_SPOT",
+        "PROBABILITY",
+        "SEARCH_COUNT",
+        "TICK_AT_LEAST",
+        "TICK_MODULO",
+        "WEATHER_IS",
+    }
+)
 
 
 _EFFECT_WRITE_NAMESPACES: Mapping[InteractionEffectTypeEnum, str] = {
@@ -122,25 +124,27 @@ _EFFECT_READ_NAMESPACES: Mapping[InteractionEffectTypeEnum, str] = {
 # 状態を除去するが、参照先を成立させる producer にはならない効果。
 _STATE_CLEARING_EFFECTS = frozenset({InteractionEffectTypeEnum.CLEAR_FLAG})
 
-_NON_STATE_EFFECTS = frozenset({
-    InteractionEffectTypeEnum.GIVE_ITEM,
-    InteractionEffectTypeEnum.REMOVE_ITEM,
-    InteractionEffectTypeEnum.REVEAL_OBJECT,
-    InteractionEffectTypeEnum.REVEAL_SUB_LOCATION,
-    InteractionEffectTypeEnum.SHOW_MESSAGE,
-    InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY,
-    InteractionEffectTypeEnum.APPLY_DAMAGE,
-    InteractionEffectTypeEnum.APPLY_STATUS_EFFECT,
-    InteractionEffectTypeEnum.TELEPORT_ENTITY,
-    InteractionEffectTypeEnum.CHANGE_ATMOSPHERE,
-    InteractionEffectTypeEnum.COMBINE_ITEMS,
-    InteractionEffectTypeEnum.CREATE_CONNECTION,
-    InteractionEffectTypeEnum.DESTROY_CONNECTION,
-    InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE,
-    InteractionEffectTypeEnum.SATISFY_NEED,
-    InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE,
-    InteractionEffectTypeEnum.CALL_MEETING,
-})
+_NON_STATE_EFFECTS = frozenset(
+    {
+        InteractionEffectTypeEnum.GIVE_ITEM,
+        InteractionEffectTypeEnum.REMOVE_ITEM,
+        InteractionEffectTypeEnum.REVEAL_OBJECT,
+        InteractionEffectTypeEnum.REVEAL_SUB_LOCATION,
+        InteractionEffectTypeEnum.SHOW_MESSAGE,
+        InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY,
+        InteractionEffectTypeEnum.APPLY_DAMAGE,
+        InteractionEffectTypeEnum.APPLY_STATUS_EFFECT,
+        InteractionEffectTypeEnum.TELEPORT_ENTITY,
+        InteractionEffectTypeEnum.CHANGE_ATMOSPHERE,
+        InteractionEffectTypeEnum.COMBINE_ITEMS,
+        InteractionEffectTypeEnum.CREATE_CONNECTION,
+        InteractionEffectTypeEnum.DESTROY_CONNECTION,
+        InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE,
+        InteractionEffectTypeEnum.SATISFY_NEED,
+        InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE,
+        InteractionEffectTypeEnum.CALL_MEETING,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -162,9 +166,7 @@ class ScenarioStateAudit:
     @property
     def orphans(self) -> tuple[StateReference, ...]:
         """同じシナリオ内に書き手が無い参照を返す。"""
-        return tuple(
-            ref for ref in self.references if ref.key not in self.written[ref.namespace]
-        )
+        return tuple(ref for ref in self.references if ref.key not in self.written[ref.namespace])
 
 
 def _walk(
@@ -256,9 +258,7 @@ def audit_scenario_state_references(document: Mapping[str, Any]) -> ScenarioStat
 
         # state_display ruleはobject stateを読み、unless_flag_set は解決
         # フラグを読む。時限規則も監査から落とさない。
-        if "text" in node and (
-            "value" in node or "at_least" in node or "within_ticks" in node
-        ):
+        if "text" in node and ("value" in node or "at_least" in node or "within_ticks" in node):
             add_reference("object", node.get("key"), f"{path}.key")
             add_reference(
                 "flag",
@@ -319,9 +319,7 @@ def audit_scenario_state_references(document: Mapping[str, Any]) -> ScenarioStat
     if isinstance(initial_flags, Mapping):
         written["flag"].update(str(key) for key in initial_flags)
     elif isinstance(initial_flags, list):
-        written["flag"].update(
-            flag for flag in initial_flags if isinstance(flag, str) and flag
-        )
+        written["flag"].update(flag for flag in initial_flags if isinstance(flag, str) and flag)
 
     return ScenarioStateAudit(
         references=tuple(references),
@@ -341,10 +339,7 @@ def _load_raw_scenarios() -> list[tuple[Path, Mapping[str, Any]]]:
 
 def _format_orphans(path: Path, audit: ScenarioStateAudit) -> str:
     """孤児参照をファイル・名前空間・JSON経路つきで表示する。"""
-    return "\n".join(
-        f"{path.name}: [{ref.namespace}] {ref.key!r} at {ref.path}"
-        for ref in audit.orphans
-    )
+    return "\n".join(f"{path.name}: [{ref.namespace}] {ref.key!r} at {ref.path}" for ref in audit.orphans)
 
 
 class TestAllScenarioStateReferencesHaveWriters:
@@ -364,21 +359,16 @@ class TestAllScenarioStateReferencesHaveWriters:
             if audit.orphans:
                 violations.append(_format_orphans(path, audit))
 
-        assert all(reference_counts.values()), (
-            "監査が空振りしています: "
-            + ", ".join(f"{key}={value}" for key, value in reference_counts.items())
+        assert all(reference_counts.values()), "監査が空振りしています: " + ", ".join(
+            f"{key}={value}" for key, value in reference_counts.items()
         )
         assert not violations, "\n".join(violations)
 
     def test_every_interaction_condition_type_is_classified(self) -> None:
         """新しいinteraction条件は、状態参照か非状態条件かを必ず宣言する。"""
         known = {condition.value for condition in InteractionConditionTypeEnum}
-        classified = (
-            set(_CONDITION_READ_NAMESPACES) & known
-        ) | set(_NON_STATE_INTERACTION_CONDITIONS)
-        assert classified == known, (
-            f"未分類={sorted(known - classified)}, 廃止済み={sorted(classified - known)}"
-        )
+        classified = (set(_CONDITION_READ_NAMESPACES) & known) | set(_NON_STATE_INTERACTION_CONDITIONS)
+        assert classified == known, f"未分類={sorted(known - classified)}, 廃止済み={sorted(classified - known)}"
 
     def test_every_effect_type_is_classified(self) -> None:
         """新しい効果は、状態の読み書きか非状態効果かを必ず宣言する。"""
@@ -467,19 +457,31 @@ class TestStateReferenceAuditMutationFixtures:
     def test_object_state_reference_without_writer_is_reported(self) -> None:
         """object stateのtypoは、同じキーの書き手が無ければ孤児になる。"""
         document = {
-            "spots": [{"interior": {"objects": [{
-                "object_type": "OTHER",
-                "state": {"driftwood_stacked": 0},
-                "interactions": [{"preconditions": [{
-                    "condition_type": "OBJECT_STATE_INT_AT_LEAST",
-                    "state_key": "driftwood_stackd",
-                }]}],
-            }]}}],
+            "spots": [
+                {
+                    "interior": {
+                        "objects": [
+                            {
+                                "object_type": "OTHER",
+                                "state": {"driftwood_stacked": 0},
+                                "interactions": [
+                                    {
+                                        "preconditions": [
+                                            {
+                                                "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+                                                "state_key": "driftwood_stackd",
+                                            }
+                                        ]
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            ],
         }
         audit = audit_scenario_state_references(document)
-        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [
-            ("object", "driftwood_stackd")
-        ]
+        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [("object", "driftwood_stackd")]
 
     def test_item_state_reference_without_writer_is_reported(self) -> None:
         """item instance stateのtypoは、初期所持品にも更新効果にも無ければ孤児になる。"""
@@ -510,17 +512,13 @@ class TestStateReferenceAuditMutationFixtures:
 
         audit = audit_scenario_state_references(document)
 
-        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [
-            ("player", "rol")
-        ]
+        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [("player", "rol")]
 
     def test_world_flag_reference_without_writer_is_reported(self) -> None:
         """world flagのtypoは、初期フラグにもSET_FLAGにも無ければ孤児になる。"""
         document = {"condition_type": "FLAG_SET", "flag_name": "signal_fire_lti"}
         audit = audit_scenario_state_references(document)
-        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [
-            ("flag", "signal_fire_lti")
-        ]
+        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [("flag", "signal_fire_lti")]
 
     def test_timed_display_completion_flag_without_writer_is_reported(self) -> None:
         """時限表示を消すフラグの誤記も、警告が永久に残る前に孤児として検出する。"""
@@ -539,9 +537,7 @@ class TestStateReferenceAuditMutationFixtures:
 
         audit = audit_scenario_state_references(document)
 
-        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [
-            ("flag", "fuel_restroed")
-        ]
+        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [("flag", "fuel_restroed")]
 
     def test_initial_item_instance_state_is_a_writer(self) -> None:
         """players[].initial_items[].stateは、効果が無くてもitem stateの書き手になる。"""
@@ -555,13 +551,27 @@ class TestStateReferenceAuditMutationFixtures:
     def test_initial_object_state_is_a_writer(self) -> None:
         """spots[].interior.objects[].stateは、効果が無くてもobject stateの書き手になる。"""
         document = {
-            "spots": [{"interior": {"objects": [{
-                "state": {"stock_capacity": 3},
-                "interactions": [{"preconditions": [{
-                    "condition_type": "OBJECT_STATE_INT_AT_LEAST",
-                    "state_key": "stock_capacity",
-                }]}],
-            }]}}],
+            "spots": [
+                {
+                    "interior": {
+                        "objects": [
+                            {
+                                "state": {"stock_capacity": 3},
+                                "interactions": [
+                                    {
+                                        "preconditions": [
+                                            {
+                                                "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+                                                "state_key": "stock_capacity",
+                                            }
+                                        ]
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            ],
         }
         assert audit_scenario_state_references(document).orphans == ()
 
@@ -595,7 +605,12 @@ class TestStateReferenceAuditMutationFixtures:
             ("WRITE_PLAYER_TEXT", {}, "object", SIGN_TEXT_STATE_KEY),
             ("CHANGE_ITEM_INSTANCE_STATE", {"state_updates": {"item_changed": True}}, "item", "item_changed"),
             ("RECORD_ITEM_INSTANCE_STATE_TICK", {"state_key": "item_tick"}, "item", "item_tick"),
-            ("CHANGE_TARGET_ITEM_INSTANCE_STATE", {"state_updates": {"target_item_changed": True}}, "item", "target_item_changed"),
+            (
+                "CHANGE_TARGET_ITEM_INSTANCE_STATE",
+                {"state_updates": {"target_item_changed": True}},
+                "item",
+                "target_item_changed",
+            ),
             ("RECORD_TARGET_ITEM_INSTANCE_STATE_TICK", {"state_key": "target_item_tick"}, "item", "target_item_tick"),
             ("CHANGE_PLAYER_STATE", {"state_updates": {"player_changed": True}}, "player", "player_changed"),
             ("RECORD_PLAYER_STATE_TICK", {"state_key": "player_tick"}, "player", "player_tick"),
@@ -606,35 +621,39 @@ class TestStateReferenceAuditMutationFixtures:
             effect.value for effect in _EFFECT_WRITE_NAMESPACES
         }
         for effect_type, parameters, namespace, key in fixtures:
-            audit = audit_scenario_state_references({
-                "effect_type": effect_type,
-                "parameters": parameters,
-            })
+            audit = audit_scenario_state_references(
+                {
+                    "effect_type": effect_type,
+                    "parameters": parameters,
+                }
+            )
             assert key in audit.written[namespace], effect_type
 
     def test_distant_cue_state_key_without_writer_is_reported(self) -> None:
         """遠景cueのstate_keyも、interaction条件と同じobject state参照として監査する。"""
         document = {
-            "distant_cues": [{
-                "source": {"kind": "object_state", "state_key": "signal_fire_lti"},
-            }],
+            "distant_cues": [
+                {
+                    "source": {"kind": "object_state", "state_key": "signal_fire_lti"},
+                }
+            ],
         }
         audit = audit_scenario_state_references(document)
-        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [
-            ("object", "signal_fire_lti")
-        ]
+        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [("object", "signal_fire_lti")]
 
     def test_player_outcome_rule_flag_without_writer_is_reported(self) -> None:
         """個人結果規則のFLAG_SETも、SET_FLAGの無いtypoなら孤児として扱う。"""
         document = {
-            "player_outcome_rules": [{
-                "player_conditions": [{
-                    "condition_type": "FLAG_SET",
-                    "flag_name": "signal_fire_lti",
-                }],
-            }],
+            "player_outcome_rules": [
+                {
+                    "player_conditions": [
+                        {
+                            "condition_type": "FLAG_SET",
+                            "flag_name": "signal_fire_lti",
+                        }
+                    ],
+                }
+            ],
         }
         audit = audit_scenario_state_references(document)
-        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [
-            ("flag", "signal_fire_lti")
-        ]
+        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [("flag", "signal_fire_lti")]

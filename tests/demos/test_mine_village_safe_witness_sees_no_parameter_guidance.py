@@ -46,9 +46,7 @@ def _session_with_hal_and_mio_in_the_office(tmp: str):
         runtime_config=ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub"),
     )
     character = manager.create_character(CharacterCreateRequest(name="probe"))
-    summary = manager.create_session(
-        SessionCreateRequest(world_id=_SCENARIO.stem, character_ids=[character.id])
-    )
+    summary = manager.create_session(SessionCreateRequest(world_id=_SCENARIO.stem, character_ids=[character.id]))
     wiring = manager._sessions[summary.session_id].llm_wiring
     runtime = wiring.runtime
     office = SpotId.create(runtime.id_mapper.get_int("spot", "company_office"))
@@ -82,10 +80,7 @@ def _hal_tries_the_safe(wiring, arguments: dict[str, Any]):
 
 
 def _what_mio_saw(wiring) -> list[str]:
-    return [
-        entry.output.prose
-        for entry in wiring.runtime._obs_buffer.get_observations(_MIO)
-    ]
+    return [entry.output.prose for entry in wiring.runtime._obs_buffer.get_observations(_MIO)]
 
 
 def _the_safe_attempts(proses: list[str]) -> list[str]:
@@ -102,9 +97,7 @@ class TestWitnessOfAFailedSafe:
             pytest.param({"parameters": {"text": "1907"}}, id="wrong_key"),
         ],
     )
-    def test_missing_code_reaches_mio_without_parameter_guidance(
-        self, arguments: dict[str, Any]
-    ) -> None:
+    def test_missing_code_reaches_mio_without_parameter_guidance(self, arguments: dict[str, Any]) -> None:
         """ハルが "code" を渡さずに金庫を開けようとすると、ハル本人には "code" の案内が返り、ミオの観測には金庫を試した失敗の文が 1 件も出ない。"""
         with TemporaryDirectory() as tmp:
             wiring = _session_with_hal_and_mio_in_the_office(tmp)

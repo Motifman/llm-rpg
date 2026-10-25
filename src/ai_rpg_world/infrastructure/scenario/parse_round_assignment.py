@@ -40,9 +40,7 @@ def apply_round_assignment(
         return dict(raw), ()
     groups = _parse_groups(raw["round_assignment"], raw.get("players", []))
     if random_seed is None:
-        raise ScenarioLoadError(
-            "round_assignment の割り当てを再現するには SCENARIO_RANDOM_SEED が要ります"
-        )
+        raise ScenarioLoadError("round_assignment の割り当てを再現するには SCENARIO_RANDOM_SEED が要ります")
     rng = random.Random(f"round_assignment:{random_seed}:{round_number}")
     assigned_raw = dict(raw)
     players = [copy.deepcopy(p) for p in raw.get("players", [])]
@@ -71,9 +69,7 @@ def apply_round_assignment(
     return assigned_raw, tuple(assignments)
 
 
-def _parse_groups(
-    raw: Any, players_raw: Any
-) -> list[tuple[list[str], list[Mapping[str, Any]]]]:
+def _parse_groups(raw: Any, players_raw: Any) -> list[tuple[list[str], list[Mapping[str, Any]]]]:
     if not isinstance(raw, Mapping):
         raise ScenarioLoadError("round_assignment は object で書いてください")
     reject_unknown_keys(raw, ("groups",), where="round_assignment")

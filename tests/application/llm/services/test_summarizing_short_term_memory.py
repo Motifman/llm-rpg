@@ -47,6 +47,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _SUMMARY_INPUT_COUNT = 15
 
+
 def _obs(prose: str = "p", seq: int = 0) -> ObservationEntry:
     return ObservationEntry(
         occurred_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
@@ -114,11 +115,7 @@ def test_compaction_records_tick_turn_count_and_entry_counts() -> None:
     memory.complete_turn(_PID)
     memory.complete_turn(_PID)
 
-    compacted = [
-        payload
-        for kind, payload in recorder.records
-        if kind == TraceEventKind.SHORT_TERM_MEMORY_COMPACTED
-    ]
+    compacted = [payload for kind, payload in recorder.records if kind == TraceEventKind.SHORT_TERM_MEMORY_COMPACTED]
     assert compacted == [
         {
             "tick": 17,
@@ -211,11 +208,7 @@ class TestRollingSummaryTrigger:
 
     def test_turn_cap_summarizes_only_oldest_compacted_turns(self) -> None:
         """cap 到達時は古い K ターンの観測だけを L4 にし、残りを L1 に保つ。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary=""
-            )
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(
             summary_service=stub,
             turn_cap=4,
@@ -313,9 +306,7 @@ class TestRollingSummaryTrigger:
 
     def test_observations_alone_do_not_create_l4(self) -> None:
         """観測を追加しただけでは、件数にかかわらず L4 は生成されない。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="")
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(summary_service=stub)
         for i in range(_SUMMARY_INPUT_COUNT - 1):
             mem.append(_PID, _obs(f"p{i}", seq=i))
@@ -345,11 +336,7 @@ class TestRollingSummaryTrigger:
 
     def test_l4_three(self) -> None:
         """L4 は 3世代までで 最古を破棄。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary=""
-            )
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(summary_service=stub)
         # 4 世代分積む (= 15 * 4 = 60 件)
         for batch in range(4):
@@ -364,11 +351,7 @@ class TestRollingSummaryTrigger:
 
     def test_l4_append_left(self) -> None:
         """L4 は新しい順に appendleft される。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary=""
-            )
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(summary_service=stub)
         for batch in range(2):
             for i in range(_SUMMARY_INPUT_COUNT):
@@ -401,13 +384,9 @@ class TestRollingSummaryServiceNone:
 class TestRollingSummaryLLMFailure:
     """LLM 失敗時は template fallback + warning ログを出す。"""
 
-    def test_llm_exception_uses_template_fallback(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_llm_exception_uses_template_fallback(self, caplog: pytest.LogCaptureFixture) -> None:
         """LLM 例外なら templatefallback に縮退。"""
-        stub = _StubSummaryService.make(
-            exc=LlmApiCallException("sim", error_code="LLM_API_CALL_FAILED")
-        )
+        stub = _StubSummaryService.make(exc=LlmApiCallException("sim", error_code="LLM_API_CALL_FAILED"))
         mem = SummarizingShortTermMemory(summary_service=stub)
         with caplog.at_level(
             logging.WARNING,
@@ -433,11 +412,7 @@ class TestRollingSummaryLLMFailure:
 
     def test_observation_count_alone_does_not_trigger_summary(self) -> None:
         """観測件数が多くても、自分のターン境界までは L4 を生成しない。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary=""
-            )
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(
             summary_service=stub,
             turn_cap=3,
@@ -484,9 +459,7 @@ class TestRollingSummaryMidSummaryText:
 class TestRollingSummaryPersonaResolver:
     """persona_resolver が失敗しても prompt 構築を止めない。"""
 
-    def test_resolver_exception_falls_back_to_default(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_resolver_exception_falls_back_to_default(self, caplog: pytest.LogCaptureFixture) -> None:
         """resolver の例外は default に縮退する。"""
         called_with_args: dict = {}
 
@@ -641,9 +614,7 @@ class TestRollingSummarySchedulerIntegration:
 
     def test_inline_scheduler_works(self) -> None:
         """明示 Inline scheduler でも 動く。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="")
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(
             summary_service=stub,
             scheduler=InlineShortTermMemoryScheduler(),
@@ -700,9 +671,7 @@ class TestRollingSummarySchedulerIntegration:
         with pytest.raises(TypeError, match="scheduler"):
             SummarizingShortTermMemory(scheduler="not-a-scheduler")  # type: ignore[arg-type]
 
-    def test_emits_warning_for_scheduler_drop_log(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_emits_warning_for_scheduler_drop_log(self, caplog: pytest.LogCaptureFixture) -> None:
         """review HIGH #1: scheduler.submit が False を返すと observations は
         L1 / L4 から消える silent data loss になる。consumed 件数を WARNING
         ログに残して可観測化する。"""
@@ -711,9 +680,7 @@ class TestRollingSummarySchedulerIntegration:
             def submit(self, player_id, task):  # type: ignore[override]
                 return False  # 常に drop
 
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="")
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(
             summary_service=stub,
             scheduler=_DroppingScheduler(),
@@ -729,9 +696,7 @@ class TestRollingSummarySchedulerIntegration:
         assert mem._raw_queue_len(_PID.value) == 0
         assert mem._mid_generations(_PID.value) == []
         # WARNING ログに件数が含まれる
-        assert any(
-            "drop" in rec.message and "15" in rec.message for rec in caplog.records
-        )
+        assert any("drop" in rec.message and "15" in rec.message for rec in caplog.records)
 
     def test_shutdown_scheduler(self) -> None:
         """shutdown は scheduler に委譲。"""
@@ -817,6 +782,7 @@ class TestShortTermSummaryGeneratedTrace:
 
     def test_recorder_provider_exception_does_not_stop_summary(self) -> None:
         """trace recorder の I/O 失敗が L4 install を倒さないこと (best-effort)。"""
+
         def boom() -> object:
             raise RuntimeError("recorder broken")
 
@@ -842,6 +808,7 @@ class TestShortTermSummaryGeneratedTrace:
         _complete_window(mem)
         l4_events = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
         assert l4_events[0]["tick"] is None
+
 
 class TestPostHocSetters:
     """PR #439: trace_recorder_provider / current_tick_provider / summary_services
@@ -909,6 +876,7 @@ class TestTraceRecorderNullObjectNormalization:
 
     def test_provider_null_trace_recorder_raises_exception(self) -> None:
         """provider 自体が raise するケースでも本体は止まらない。"""
+
         def boom() -> object:
             raise RuntimeError("recorder broken")
 
@@ -957,9 +925,7 @@ class TestRollingSummaryCompactionListener:
         mem = SummarizingShortTermMemory(
             turn_cap=4,
             compact_turn_count=2,
-            on_compacted=lambda pid, entries: received.append(
-                (pid, [e.payload.output.prose for e in entries])
-            ),
+            on_compacted=lambda pid, entries: received.append((pid, [e.payload.output.prose for e in entries])),
         )
 
         for turn in range(4):

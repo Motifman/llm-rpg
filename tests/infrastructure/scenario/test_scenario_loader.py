@@ -40,9 +40,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
 _SIDE = GameResultEnum.LOSE
 
 SCENARIO_DIR = Path(__file__).resolve().parents[3] / "data" / "scenarios"
-FIXTURE_SCENARIO_DIR = (
-    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
-)
+FIXTURE_SCENARIO_DIR = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
 HOSPITAL_SCENARIO = SCENARIO_DIR / "abandoned_hospital.json"
 
 
@@ -98,7 +96,7 @@ def _minimal_scenario() -> dict:
                                         {
                                             "effect_type": "GIVE_ITEM",
                                             "parameters": {"item_spec": "key"},
-                                        }
+                                        },
                                     ],
                                 }
                             ],
@@ -283,12 +281,8 @@ class TestScenarioLoaderMinimal:
 
         result = ScenarioLoader().load_from_dict(raw)
 
-        room_a = result.graph.get_spot(
-            SpotId.create(result.id_mapper.get_int("spot", "room_a"))
-        )
-        room_b = result.graph.get_spot(
-            SpotId.create(result.id_mapper.get_int("spot", "room_b"))
-        )
+        room_a = result.graph.get_spot(SpotId.create(result.id_mapper.get_int("spot", "room_a")))
+        room_b = result.graph.get_spot(SpotId.create(result.id_mapper.get_int("spot", "room_b")))
         assert room_a.position == SpotPosition(x=12.5, y=-3.0)
         assert room_b.position is None
 
@@ -573,12 +567,8 @@ class TestScenarioLoaderMinimal:
 
         result = ScenarioLoader().load_from_dict(raw)
 
-        room_a = result.graph.get_spot(
-            SpotId.create(result.id_mapper.get_int("spot", "room_a"))
-        )
-        room_b = result.graph.get_spot(
-            SpotId.create(result.id_mapper.get_int("spot", "room_b"))
-        )
+        room_a = result.graph.get_spot(SpotId.create(result.id_mapper.get_int("spot", "room_a")))
+        room_b = result.graph.get_spot(SpotId.create(result.id_mapper.get_int("spot", "room_b")))
         assert room_a.area_id == "inside"
         assert room_b.area_id is None
 
@@ -692,9 +682,7 @@ class TestScenarioLoaderMinimal:
             ({"type": "ANY_AT_SPOT"}, "target_spot"),
         ],
     )
-    def test_game_end_condition_required_fields_fail_fast(
-        self, condition: dict, required_field: str
-    ) -> None:
+    def test_game_end_condition_required_fields_fail_fast(self, condition: dict, required_field: str) -> None:
         """game_end_conditions の条件型ごとの必須フィールド欠落はロード時に失敗する。"""
         scenario = _minimal_scenario()
         scenario["game_end_conditions"]["win"] = condition
@@ -718,9 +706,7 @@ class TestScenarioLoaderMinimal:
     def test_object_unavailable_hint_is_loaded(self) -> None:
         """object.unavailable_hint は ScenarioLoader 後も SpotObject に保持される。"""
         raw = _minimal_scenario()
-        raw["spots"][0]["interior"]["objects"][0]["unavailable_hint"] = (
-            "今は汲めない・時間を置けば戻る"
-        )
+        raw["spots"][0]["interior"]["objects"][0]["unavailable_hint"] = "今は汲めない・時間を置けば戻る"
 
         result = ScenarioLoader().load_from_dict(raw)
         interior = next(iter(result.interiors.values()))
@@ -897,9 +883,7 @@ class TestScenarioLoaderMinimal:
             ),
         ),
     )
-    def test_invalid_recent_tick_state_display_rule_raises(
-        self, rule: dict, recorded_key: str, message: str
-    ) -> None:
+    def test_invalid_recent_tick_state_display_rule_raises(self, rule: dict, recorded_key: str, message: str) -> None:
         """曖昧な期間規則と記録効果に結び付かない key は読み込み時に拒否する。"""
         raw = _minimal_scenario()
         obj = raw["spots"][0]["interior"]["objects"][0]
@@ -1005,9 +989,7 @@ class TestPlayerOutcomeRuleLoading:
 
     def test_parses_trigger_player_conditions_and_outcome(self) -> None:
         """trigger と対象者条件を分離し、既存条件 AST と解決済み ID へ変換する。"""
-        result = ScenarioLoader().load_from_dict(
-            self._scenario_with_rules([self._rescue_rule()])
-        )
+        result = ScenarioLoader().load_from_dict(self._scenario_with_rules([self._rescue_rule()]))
 
         rule = result.player_outcome_rules[0]
         assert rule.rule_id == "rescue_ship_10"
@@ -1019,9 +1001,7 @@ class TestPlayerOutcomeRuleLoading:
             "FLAG_SET",
             "PLAYER_AT_SPOT",
         ]
-        assert rule.player_conditions[1].spot_id == result.id_mapper.get_int(
-            "spot", "room_b"
-        )
+        assert rule.player_conditions[1].spot_id == result.id_mapper.get_int("spot", "room_b")
 
     def test_allows_empty_player_conditions_for_stranded_deadline(self) -> None:
         """期限時に未確定者全員を対象にする規則は player_conditions を空にできる。"""
@@ -1041,9 +1021,7 @@ class TestPlayerOutcomeRuleLoading:
         """同じ id の規則を二重宣言すると進捗を共有するため読み込み時に拒否する。"""
         rule = self._rescue_rule()
         with pytest.raises(ScenarioLoadError, match="rescue_ship_10.*重複"):
-            ScenarioLoader().load_from_dict(
-                self._scenario_with_rules([rule, dict(rule)])
-            )
+            ScenarioLoader().load_from_dict(self._scenario_with_rules([rule, dict(rule)]))
 
     def test_rejects_unsupported_outcome(self) -> None:
         """未知・未確定・別の世界状態更新を要する結果を読込時に拒否する。"""
@@ -1051,9 +1029,7 @@ class TestPlayerOutcomeRuleLoading:
             rule = self._rescue_rule()
             rule["outcome"] = outcome
             with pytest.raises(ScenarioLoadError, match="outcome"):
-                ScenarioLoader().load_from_dict(
-                    self._scenario_with_rules([rule])
-                )
+                ScenarioLoader().load_from_dict(self._scenario_with_rules([rule]))
 
     def test_requires_explicit_boolean_once(self) -> None:
         """once の省略や文字列指定を既定値へ丸めず、因果の曖昧な規則として拒否する。"""
@@ -1064,9 +1040,7 @@ class TestPlayerOutcomeRuleLoading:
             else:
                 rule["once"] = invalid
             with pytest.raises(ScenarioLoadError, match="once"):
-                ScenarioLoader().load_from_dict(
-                    self._scenario_with_rules([rule])
-                )
+                ScenarioLoader().load_from_dict(self._scenario_with_rules([rule]))
 
     def test_requires_rule_list_and_condition_objects(self) -> None:
         """規則全体・trigger・player_conditions の形が違えば JSON 経路付きで拒否する。"""
@@ -1085,9 +1059,7 @@ class TestPlayerOutcomeRuleLoading:
         )
         for rules, expected in invalid_cases:
             with pytest.raises(ScenarioLoadError, match=expected):
-                ScenarioLoader().load_from_dict(
-                    self._scenario_with_rules(rules)
-                )
+                ScenarioLoader().load_from_dict(self._scenario_with_rules(rules))
 
     def test_legacy_outcome_resolution_is_rejected(self) -> None:
         """廃止した outcome_resolution は単独でも無視せず移行案内付きで拒否する。"""
@@ -1113,18 +1085,13 @@ class TestNeutralEndAndNeedsLoading:
     def test_parses_neutral_end_condition_and_starvation_damage(self) -> None:
         """end 配列と needs 節は集団勝敗や個人結果規則から独立して保持する。"""
         raw = _minimal_scenario()
-        raw["game_end_conditions"]["end"] = [
-            {"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}
-        ]
+        raw["game_end_conditions"]["end"] = [{"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}]
         raw["needs"] = {"starvation_damage_per_tick": 2}
 
         result = ScenarioLoader().load_from_dict(raw)
 
         assert len(result.end_conditions) == 1
-        assert (
-            result.end_conditions[0].condition_type
-            is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED
-        )
+        assert result.end_conditions[0].condition_type is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED
         assert result.needs_config.starvation_damage_per_tick == 2
 
     def test_missing_needs_section_disables_starvation_damage(self) -> None:
@@ -1212,14 +1179,10 @@ class TestNeutralEndAndNeedsLoading:
             ScenarioLoader().load_from_dict(raw)
 
     @pytest.mark.parametrize("section", ["win", "lose"])
-    def test_neutral_condition_is_rejected_from_win_and_lose(
-        self, section: str
-    ) -> None:
+    def test_neutral_condition_is_rejected_from_win_and_lose(self, section: str) -> None:
         """混在する個人結果へ勝敗ラベルを付けないよう、中立条件はendだけに置く。"""
         raw = _minimal_scenario()
-        raw["game_end_conditions"][section] = [
-            {"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}
-        ]
+        raw["game_end_conditions"][section] = [{"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}]
 
         with pytest.raises(ScenarioLoadError, match=f"{section}.*end"):
             ScenarioLoader().load_from_dict(raw)
@@ -1231,9 +1194,7 @@ class TestNeutralEndAndNeedsLoading:
             {"type": "TICK_LIMIT", "tick_limit": 10},
         ],
     )
-    def test_win_loss_condition_is_rejected_from_neutral_end(
-        self, condition: dict
-    ) -> None:
+    def test_win_loss_condition_is_rejected_from_neutral_end(self, condition: dict) -> None:
         """勝敗を表す通常条件をendへ置いて、成立時の勝敗ラベルを消せない。"""
         raw = _minimal_scenario()
         raw["game_end_conditions"]["end"] = [condition]
@@ -1243,9 +1204,7 @@ class TestNeutralEndAndNeedsLoading:
 
     def test_every_end_condition_type_has_allowed_sections(self) -> None:
         """終了条件enumを増やしたら、置ける配列を明示するまで読み込みを許さない。"""
-        assert set(_GAME_END_CONDITION_ALLOWED_SECTIONS) == set(
-            GameEndConditionTypeEnum
-        )
+        assert set(_GAME_END_CONDITION_ALLOWED_SECTIONS) == set(GameEndConditionTypeEnum)
         assert all(_GAME_END_CONDITION_ALLOWED_SECTIONS.values())
 
 
@@ -1293,20 +1252,17 @@ class TestScenarioLoaderHospital:
     def test_revealed_detail_object_starts_hidden(self, result) -> None:
         reception_id_int = result.id_mapper.get_int("spot", "ward_reception")
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
         interior = result.interiors[SpotId.create(reception_id_int)]
         detail_id = result.id_mapper.get_int("object", "suture_pattern_detail")
-        detail = next(
-            obj for obj in interior.objects if obj.object_id.value == detail_id
-        )
+        detail = next(obj for obj in interior.objects if obj.object_id.value == detail_id)
         assert detail.is_visible is False
 
     def test_hospital_weather_and_scenario_event_metadata(self, result) -> None:
         assert result.weather_config is not None
         assert result.weather_config.initial_state.weather_type.value == "FOG"
         assert result.weather_config.update_interval_ticks == 8
-        rear_exit_event = next(
-            ev for ev in result.scenario_events if ev.event_id == "rear_exit_route_revealed"
-        )
+        rear_exit_event = next(ev for ev in result.scenario_events if ev.event_id == "rear_exit_route_revealed")
         assert rear_exit_event.recipients == "players_at_spot"
         assert rear_exit_event.breaks_movement is True
 
@@ -1333,9 +1289,7 @@ class TestScenarioLoaderPassageBlock:
         """passage.kind=WALL,state=INTACT で接続が通行不可・音透過率0.1になる。"""
         scn = self._scenario_with_passage({"kind": "WALL", "state": "INTACT"})
         result = ScenarioLoader().load_from_dict(scn)
-        wall_conn = next(
-            c for c in result.graph.all_connections() if c.name == "教室間の壁"
-        )
+        wall_conn = next(c for c in result.graph.all_connections() if c.name == "教室間の壁")
         assert wall_conn.passage.traversable is False
         assert wall_conn.passage.sound_permeability == pytest.approx(0.1)
         assert wall_conn.passage is not None
@@ -1352,9 +1306,7 @@ class TestScenarioLoaderPassageBlock:
 
     def test_passage_overrides_apply(self) -> None:
         """passage の sound_permeability override が反映される。"""
-        scn = self._scenario_with_passage(
-            {"kind": "WALL", "state": "INTACT", "sound_permeability": 0.25}
-        )
+        scn = self._scenario_with_passage({"kind": "WALL", "state": "INTACT", "sound_permeability": 0.25})
         result = ScenarioLoader().load_from_dict(scn)
         conn = next(c for c in result.graph.all_connections() if c.name == "教室間の壁")
         assert conn.passage.sound_permeability == pytest.approx(0.25)
@@ -1371,9 +1323,7 @@ class TestScenarioLoaderPassageBlock:
 
     def test_open_traversable_override_via_scenario(self) -> None:
         """OPEN でも traversable override がシナリオJSON経由で適用される。"""
-        scn = self._scenario_with_passage(
-            {"kind": "OPEN", "traversable": False, "sound_permeability": 0.5}
-        )
+        scn = self._scenario_with_passage({"kind": "OPEN", "traversable": False, "sound_permeability": 0.5})
         result = ScenarioLoader().load_from_dict(scn)
         conn = next(c for c in result.graph.all_connections() if c.name == "教室間の壁")
         assert conn.passage.traversable is False
@@ -1500,11 +1450,13 @@ class TestSilentReactiveObjectBindingIsWarned:
 
     def test_binding_without_any_narrative_is_warned(self, caplog) -> None:
         """どちらの向きにも narrative が無く状態更新だけある binding を警告する。"""
-        scn = self._scenario_with_object_binding({
-            "target": "chest",
-            "predicate": self._PREDICATE,
-            "on_true_state_updates": {"is_open": True},
-        })
+        scn = self._scenario_with_object_binding(
+            {
+                "target": "chest",
+                "predicate": self._PREDICATE,
+                "on_true_state_updates": {"is_open": True},
+            }
+        )
 
         with caplog.at_level(logging.WARNING):
             ScenarioLoader().load_from_dict(scn)
@@ -1513,15 +1465,15 @@ class TestSilentReactiveObjectBindingIsWarned:
             f"警告が出ていません: {[r.getMessage() for r in caplog.records]}"
         )
 
-    def test_the_warning_names_the_target_so_the_author_can_find_it(
-        self, caplog
-    ) -> None:
+    def test_the_warning_names_the_target_so_the_author_can_find_it(self, caplog) -> None:
         """警告に target の文字列 id が載り、どの binding か特定できる。"""
-        scn = self._scenario_with_object_binding({
-            "target": "chest",
-            "predicate": self._PREDICATE,
-            "on_true_state_updates": {"is_open": True},
-        })
+        scn = self._scenario_with_object_binding(
+            {
+                "target": "chest",
+                "predicate": self._PREDICATE,
+                "on_true_state_updates": {"is_open": True},
+            }
+        )
 
         with caplog.at_level(logging.WARNING):
             ScenarioLoader().load_from_dict(scn)
@@ -1536,20 +1488,21 @@ class TestSilentReactiveObjectBindingIsWarned:
         主要実験シナリオの 48 件がこの形 (``on_true`` に narrative があり
         ``on_false`` は自分の行動で分かるので省略)。ここで警告するとノイズになる。
         """
-        scn = self._scenario_with_object_binding({
-            "target": "chest",
-            "predicate": self._PREDICATE,
-            "on_true_state_updates": {"is_open": True},
-            "on_false_state_updates": {"is_open": False},
-            "narrative_on_true": "箱の蓋が開いた",
-        })
+        scn = self._scenario_with_object_binding(
+            {
+                "target": "chest",
+                "predicate": self._PREDICATE,
+                "on_true_state_updates": {"is_open": True},
+                "on_false_state_updates": {"is_open": False},
+                "narrative_on_true": "箱の蓋が開いた",
+            }
+        )
 
         with caplog.at_level(logging.WARNING):
             ScenarioLoader().load_from_dict(scn)
 
         assert not [r for r in caplog.records if _SILENT_BINDING in r.getMessage()], (
-            f"警告すべきでない binding を警告しました: "
-            f"{[r.getMessage() for r in caplog.records]}"
+            f"警告すべきでない binding を警告しました: {[r.getMessage() for r in caplog.records]}"
         )
 
     def test_an_explicit_empty_narrative_suppresses_the_warning(self, caplog) -> None:
@@ -1558,19 +1511,20 @@ class TestSilentReactiveObjectBindingIsWarned:
         「書き忘れ」と「意図的な無音」を区別する手段を著者に残す。空文字は
         formatter 側では narrative 無しと同じく無音になるので、挙動は変わらない。
         """
-        scn = self._scenario_with_object_binding({
-            "target": "chest",
-            "predicate": self._PREDICATE,
-            "on_true_state_updates": {"is_open": True},
-            "narrative_on_true": "",
-        })
+        scn = self._scenario_with_object_binding(
+            {
+                "target": "chest",
+                "predicate": self._PREDICATE,
+                "on_true_state_updates": {"is_open": True},
+                "narrative_on_true": "",
+            }
+        )
 
         with caplog.at_level(logging.WARNING):
             ScenarioLoader().load_from_dict(scn)
 
         assert not [r for r in caplog.records if _SILENT_BINDING in r.getMessage()], (
-            f"意図的な無音を警告しました: "
-            f"{[r.getMessage() for r in caplog.records]}"
+            f"意図的な無音を警告しました: {[r.getMessage() for r in caplog.records]}"
         )
 
     def test_a_binding_with_no_state_updates_is_rejected_by_the_domain(self) -> None:
@@ -1584,10 +1538,12 @@ class TestSilentReactiveObjectBindingIsWarned:
         この関係が将来崩れたら (ドメインが空を許すようになったら) 警告の条件が
         不足するので、その前提をここで固定する。
         """
-        scn = self._scenario_with_object_binding({
-            "target": "chest",
-            "predicate": self._PREDICATE,
-        })
+        scn = self._scenario_with_object_binding(
+            {
+                "target": "chest",
+                "predicate": self._PREDICATE,
+            }
+        )
 
         with pytest.raises(ReactiveObjectStateBindingValidationException):
             ScenarioLoader().load_from_dict(scn)
@@ -1598,15 +1554,19 @@ class TestSilentReactiveObjectBindingIsWarned:
         既存シナリオを壊さないため、ここは例外にしない。到達不能な宣言を
         `ScenarioLoadError` にするのは #853 の担当。
         """
-        scn = self._scenario_with_object_binding({
-            "target": "chest",
-            "predicate": self._PREDICATE,
-            "on_true_state_updates": {"is_open": True},
-        })
+        scn = self._scenario_with_object_binding(
+            {
+                "target": "chest",
+                "predicate": self._PREDICATE,
+                "on_true_state_updates": {"is_open": True},
+            }
+        )
 
         result = ScenarioLoader().load_from_dict(scn)
 
         assert len(result.reactive_object_state_bindings) == 1
+
+
 class TestWorldVocabularyValuesAreValidatedAtLoad:
     """条件が指す天候・時刻帯が、実在する値であることを読み込み時に確かめる。
 
@@ -1655,17 +1615,13 @@ class TestWorldVocabularyValuesAreValidatedAtLoad:
         return scn
 
     _PHASES: ClassVar[list[dict[str, object]]] = [
-        {"name": "predawn", "start_ratio": 0.0, "display_text": "未明",
-         "ambient_light": 0.2, "is_dark": True},
-        {"name": "noon", "start_ratio": 0.5, "display_text": "昼",
-         "ambient_light": 1.0, "is_dark": False},
+        {"name": "predawn", "start_ratio": 0.0, "display_text": "未明", "ambient_light": 0.2, "is_dark": True},
+        {"name": "noon", "start_ratio": 0.5, "display_text": "昼", "ambient_light": 1.0, "is_dark": False},
     ]
 
     def test_a_declared_weather_loads(self) -> None:
         """`WeatherTypeEnum` にある天候は読み込める (正の対照)。"""
-        scn = self._scenario_with_condition(
-            {"condition_type": "WEATHER_IS", "required_weather_type": "STORM"}
-        )
+        scn = self._scenario_with_condition({"condition_type": "WEATHER_IS", "required_weather_type": "STORM"})
 
         result = ScenarioLoader().load_from_dict(scn)
 
@@ -1673,9 +1629,7 @@ class TestWorldVocabularyValuesAreValidatedAtLoad:
 
     def test_an_unknown_weather_is_rejected(self) -> None:
         """`WeatherTypeEnum` に無い天候はシナリオエラーになる。"""
-        scn = self._scenario_with_condition(
-            {"condition_type": "WEATHER_IS", "required_weather_type": "METEOR_SHOWER"}
-        )
+        scn = self._scenario_with_condition({"condition_type": "WEATHER_IS", "required_weather_type": "METEOR_SHOWER"})
 
         with pytest.raises(ScenarioLoadError, match="METEOR_SHOWER"):
             ScenarioLoader().load_from_dict(scn)
@@ -1731,9 +1685,7 @@ class TestSynchronizedActionNamesMustBeReachable:
     フィールド欠落を読み込み時に落としたのと同じ発想で、宣言した時点で落とす。
     """
 
-    def _scenario_with_group(
-        self, required: list, *, declare: list | None = None
-    ) -> dict:
+    def _scenario_with_group(self, required: list, *, declare: list | None = None) -> dict:
         scn = _minimal_scenario()
         if declare is not None:
             scn["spots"][0]["interior"]["objects"][0]["interactions"] = [
@@ -1748,9 +1700,7 @@ class TestSynchronizedActionNamesMustBeReachable:
                 "id": "g1",
                 "required_action_names": required,
                 "window_ticks": 2,
-                "on_complete": [
-                    {"effect_type": "SET_FLAG", "parameters": {"flag_name": "done"}}
-                ],
+                "on_complete": [{"effect_type": "SET_FLAG", "parameters": {"flag_name": "done"}}],
             }
         ]
         return scn
@@ -1776,9 +1726,7 @@ class TestSynchronizedActionNamesMustBeReachable:
             {
                 "action_name": "look",
                 "display_label": "眺める",
-                "effects": [
-                    {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "見た。"}}
-                ],
+                "effects": [{"effect_type": "SHOW_MESSAGE", "parameters": {"message": "見た。"}}],
             }
         )
 
@@ -1855,12 +1803,14 @@ class TestScenarioLoaderReactiveBindings:
 
     def test_parses_minimal_binding(self) -> None:
         """最小構成 (target/predicate/on_true/on_false) で binding が読まれる。"""
-        scn = self._scenario_with_binding({
-            "target": "c1",
-            "predicate": {"condition_type": "PLAYER_AT_SPOT", "target_spot": "room_a"},
-            "on_true_state": "OPEN",
-            "on_false_state": "LOCKED",
-        })
+        scn = self._scenario_with_binding(
+            {
+                "target": "c1",
+                "predicate": {"condition_type": "PLAYER_AT_SPOT", "target_spot": "room_a"},
+                "on_true_state": "OPEN",
+                "on_false_state": "LOCKED",
+            }
+        )
         result = ScenarioLoader().load_from_dict(scn)
         assert len(result.reactive_passage_bindings) == 1
         b = result.reactive_passage_bindings[0]
@@ -1870,41 +1820,50 @@ class TestScenarioLoaderReactiveBindings:
 
     def test_missing_target_raises(self) -> None:
         """target が無いとシナリオエラー。"""
-        scn = self._scenario_with_binding({
-            "predicate": {"condition_type": "FLAG_SET", "flag_name": "x"},
-            "on_true_state": "OPEN",
-            "on_false_state": "LOCKED",
-        })
+        scn = self._scenario_with_binding(
+            {
+                "predicate": {"condition_type": "FLAG_SET", "flag_name": "x"},
+                "on_true_state": "OPEN",
+                "on_false_state": "LOCKED",
+            }
+        )
         with pytest.raises(ScenarioLoadError, match="target"):
             ScenarioLoader().load_from_dict(scn)
 
     def test_predicate_must_be_dict(self) -> None:
         """predicate が辞書でなければシナリオエラー。"""
-        scn = self._scenario_with_binding({
-            "target": "c1",
-            "predicate": "not_a_dict",
-            "on_true_state": "OPEN",
-            "on_false_state": "LOCKED",
-        })
+        scn = self._scenario_with_binding(
+            {
+                "target": "c1",
+                "predicate": "not_a_dict",
+                "on_true_state": "OPEN",
+                "on_false_state": "LOCKED",
+            }
+        )
         with pytest.raises(ScenarioLoadError, match="predicate"):
             ScenarioLoader().load_from_dict(scn)
 
     def test_composite_predicate_is_parsed_recursively(self) -> None:
         """predicate に NOT/AND を入れ子で書ける。"""
-        scn = self._scenario_with_binding({
-            "target": "c1",
-            "predicate": {
-                "condition_type": "AND",
-                "children": [
-                    {"condition_type": "PLAYER_AT_SPOT", "target_spot": "room_a"},
-                    {"condition_type": "NOT", "children": [
-                        {"condition_type": "FLAG_SET", "flag_name": "blocked"},
-                    ]},
-                ],
-            },
-            "on_true_state": "OPEN",
-            "on_false_state": "LOCKED",
-        })
+        scn = self._scenario_with_binding(
+            {
+                "target": "c1",
+                "predicate": {
+                    "condition_type": "AND",
+                    "children": [
+                        {"condition_type": "PLAYER_AT_SPOT", "target_spot": "room_a"},
+                        {
+                            "condition_type": "NOT",
+                            "children": [
+                                {"condition_type": "FLAG_SET", "flag_name": "blocked"},
+                            ],
+                        },
+                    ],
+                },
+                "on_true_state": "OPEN",
+                "on_false_state": "LOCKED",
+            }
+        )
         result = ScenarioLoader().load_from_dict(scn)
         b = result.reactive_passage_bindings[0]
         assert b.predicate.condition_type == "AND"
@@ -1975,9 +1934,7 @@ class TestGameEndConditionScenarioData:
         条件型を足した人が表を更新しないと、その型はどのシナリオで使われても
         検査されないまま通る。ここで落として気づかせる。
         """
-        covered = set(_REQUIRED_END_CONDITION_FIELDS) | set(
-            _END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS
-        )
+        covered = set(_REQUIRED_END_CONDITION_FIELDS) | set(_END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS)
         missing = sorted(t.value for t in GameEndConditionTypeEnum if t not in covered)
 
         assert not missing, (
@@ -1995,9 +1952,7 @@ class TestGameEndConditionScenarioData:
         どちらが本当の意図か読めなくなる。
         """
         both = sorted(
-            t.value
-            for t in _REQUIRED_END_CONDITION_FIELDS
-            if t in _END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS
+            t.value for t in _REQUIRED_END_CONDITION_FIELDS if t in _END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS
         )
 
         assert not both, f"必須フィールド表と例外表の両方に載っています: {both}"
@@ -2010,20 +1965,14 @@ class TestGameEndConditionScenarioData:
         見るしかないが、空であることは機械で落とせる。
         """
         blank = sorted(
-            t.value
-            for t, reason in _END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS.items()
-            if not reason.strip()
+            t.value for t, reason in _END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS.items() if not reason.strip()
         )
 
         assert not blank, f"必須フィールドが無い理由が書かれていません: {blank}"
 
     @pytest.mark.parametrize(
         ("condition_type", "omitted"),
-        [
-            (t, field)
-            for t, fields in _REQUIRED_END_CONDITION_FIELDS.items()
-            for field in fields
-        ],
+        [(t, field) for t, fields in _REQUIRED_END_CONDITION_FIELDS.items() for field in fields],
         ids=lambda v: v.value if isinstance(v, GameEndConditionTypeEnum) else str(v),
     )
     def test_omitting_a_required_field_is_rejected(
@@ -2065,10 +2014,7 @@ class TestGameEndConditionScenarioData:
         for path in sorted(SCENARIO_DIR.glob("*.json")):
             scenario_count += 1
             result = loader.load_from_file(path)
-            seen.extend(
-                cond.condition_type
-                for cond in (*result.win_conditions, *result.lose_conditions)
-            )
+            seen.extend(cond.condition_type for cond in (*result.win_conditions, *result.lose_conditions))
 
         assert scenario_count > 0, f"{SCENARIO_DIR} にシナリオが 1 本もありません"
         assert seen, "どのシナリオからも終了条件が読めていません"
@@ -2084,9 +2030,7 @@ class TestGameEndConditionScenarioData:
         条件として残すと、いくら作業を足しても一人勝ちの経路が消えない。
         だから救難信号は 5 つのうちの 1 つとして畳んである。
         """
-        result = ScenarioLoader().load_from_file(
-            FIXTURE_SCENARIO_DIR / "darkened_station.json"
-        )
+        result = ScenarioLoader().load_from_file(FIXTURE_SCENARIO_DIR / "darkened_station.json")
         condition = result.win_conditions[0]
 
         evaluated = GameEndConditionEvaluator().evaluate(
@@ -2104,9 +2048,7 @@ class TestGameEndConditionScenarioData:
 
         全部を要求すると、1 人倒れただけで詰む。余白を 1 つ残す。
         """
-        result = ScenarioLoader().load_from_file(
-            FIXTURE_SCENARIO_DIR / "darkened_station.json"
-        )
+        result = ScenarioLoader().load_from_file(FIXTURE_SCENARIO_DIR / "darkened_station.json")
         condition = result.win_conditions[0]
 
         evaluated = GameEndConditionEvaluator().evaluate(

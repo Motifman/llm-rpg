@@ -64,9 +64,7 @@ class TestPendingRegistration:
         # 引数で渡した tick が起点として登録されている
         overdue = timer.overdue_players(current_tick=42 + 30, grace_ticks=30)
         assert PlayerId(1) in overdue
-        overdue_before = timer.overdue_players(
-            current_tick=42 + 29, grace_ticks=30
-        )
+        overdue_before = timer.overdue_players(current_tick=42 + 29, grace_ticks=30)
         assert PlayerId(1) not in overdue_before
 
     def test_player_downed_event_outcome_dead(self) -> None:
@@ -106,9 +104,7 @@ class TestPendingRegistration:
 
     def test_multiple_player_pending_independently(self) -> None:
         """複数 player の pending は独立に処理。"""
-        reg = PlayerOutcomeRegistry.new_for_players(
-            [PlayerId(1), PlayerId(2), PlayerId(3)]
-        )
+        reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1), PlayerId(2), PlayerId(3)])
         timer = PlayerDeathGraceTimer()
         handler = _make_handler(reg=reg, timer=timer, tick=15)
 

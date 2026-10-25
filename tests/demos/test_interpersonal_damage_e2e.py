@@ -122,9 +122,7 @@ class TestDownedEventIsDelivered:
         猶予が始まらないと放置しても DEAD が確定しない。
         """
         runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
-        assert runtime._death_grace_timer.is_pending(_VICTIM), (
-            "PlayerDownedEvent が handler に届いていない"
-        )
+        assert runtime._death_grace_timer.is_pending(_VICTIM), "PlayerDownedEvent が handler に届いていない"
 
     def test_grace_registration_failure_rolls_back_the_whole_knockout(
         self,
@@ -136,9 +134,7 @@ class TestDownedEventIsDelivered:
         original_publish_all = runtime._speech_event_publisher.publish_all
 
         def observe(events) -> None:
-            delivered.extend(
-                event for event in events if isinstance(event, PlayerDownedEvent)
-            )
+            delivered.extend(event for event in events if isinstance(event, PlayerDownedEvent))
             original_publish_all(events)
 
         monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
@@ -205,9 +201,9 @@ class TestDownedEventIsDelivered:
         """
         runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
         status = runtime._player_status_repo.find_by_id(_VICTIM)
-        assert not any(
-            isinstance(e, PlayerDownedEvent) for e in status.get_events()
-        ), "publish 済みの PlayerDownedEvent が集約に残っている"
+        assert not any(isinstance(e, PlayerDownedEvent) for e in status.get_events()), (
+            "publish 済みの PlayerDownedEvent が集約に残っている"
+        )
 
 
 class TestFellingBlowIsNotAnIncidentWhileDown:
@@ -221,9 +217,7 @@ class TestFellingBlowIsNotAnIncidentWhileDown:
     ない。後者で判定すると、致死の一撃は必ず前者に化ける。
     """
 
-    def test_the_knockout_blow_is_not_logged_as_happening_while_down(
-        self, runtime
-    ) -> None:
+    def test_the_knockout_blow_is_not_logged_as_happening_while_down(self, runtime) -> None:
         """立っている相手を倒した一撃は、被害記録に残らない。"""
         recorded: list = []
         log = runtime._downed_incident_log
@@ -264,17 +258,21 @@ class TestSelfDamageIsNotSilentlyIgnored:
         気付けない。
         """
         scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
-        scenario["player_interactions"] = [{
-            "action_name": "reckless_strike",
-            "display_label": "捨て身で殴る",
-            "preconditions": [{"condition_type": "ALWAYS"}],
-            "effects": [
-                {"effect_type": "APPLY_DAMAGE", "target": "TARGET_PLAYER",
-                 "parameters": {"damage": 5}},
-                {"effect_type": "APPLY_DAMAGE", "target": "ACTOR",
-                 "parameters": {"damage": 3, "message": "拳が裂けた。"}},
-            ],
-        }]
+        scenario["player_interactions"] = [
+            {
+                "action_name": "reckless_strike",
+                "display_label": "捨て身で殴る",
+                "preconditions": [{"condition_type": "ALWAYS"}],
+                "effects": [
+                    {"effect_type": "APPLY_DAMAGE", "target": "TARGET_PLAYER", "parameters": {"damage": 5}},
+                    {
+                        "effect_type": "APPLY_DAMAGE",
+                        "target": "ACTOR",
+                        "parameters": {"damage": 3, "message": "拳が裂けた。"},
+                    },
+                ],
+            }
+        ]
         path = tmp_path / "reckless.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
         rt = create_world_runtime(path)

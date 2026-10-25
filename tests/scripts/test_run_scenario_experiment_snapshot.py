@@ -144,9 +144,7 @@ class TestExpectedPayloadKeysCoverage:
 class TestSnapshotArgs:
     """snapshot 関連の argparse / 早期 validation。"""
 
-    def test_snapshot_load_dir_exit_two(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_snapshot_load_dir_exit_two(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """snapshotloaddir が存在しないと exit2。"""
         scenario = tmp_path / "demo.json"
         scenario.write_text("{}", encoding="utf-8")
@@ -169,9 +167,7 @@ class TestSnapshotArgs:
         captured = capsys.readouterr()
         assert "snapshot-load-dir" in captured.err
 
-    def test_snapshot_save_dir_can_get(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_snapshot_save_dir_can_get(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """argparse で --snapshot-save-dir が解釈され、_drive_scenario に渡る。
 
         実 simulation は走らせず、_drive_scenario を mock して引数だけ確認する。
@@ -188,9 +184,7 @@ class TestSnapshotArgs:
                 "elapsed_sec": 0.0,
                 "max_world_ticks": 1,
                 "snapshot_save_dir": (
-                    str(kwargs.get("snapshot_save_dir"))
-                    if kwargs.get("snapshot_save_dir")
-                    else None
+                    str(kwargs.get("snapshot_save_dir")) if kwargs.get("snapshot_save_dir") else None
                 ),
                 "snapshot_load_dir": None,
             }
@@ -238,7 +232,15 @@ class TestSnapshotTraceCarriesMemoryTurns:
         """保存した Being と復元した Being ごとに記憶のターン数が載り、1 手ごとに進んだ値が再開のあとも同じ値で戻る。"""
         from scripts.run_scenario_experiment import main
 
-        common = ["--profile", "smoke_stub", "--max-world-ticks", "2", "--no-html", "--no-progress-jsonl", "--no-stderr-progress"]
+        common = [
+            "--profile",
+            "smoke_stub",
+            "--max-world-ticks",
+            "2",
+            "--no-html",
+            "--no-progress-jsonl",
+            "--no-stderr-progress",
+        ]
         snapshots = tmp_path / "snapshots"
         assert main([*common, "--out", str(tmp_path / "first"), "--snapshot-save-dir", str(snapshots)]) == 0
         assert main([*common, "--out", str(tmp_path / "second"), "--snapshot-load-dir", str(snapshots)]) == 0
@@ -263,9 +265,35 @@ class TestSnapshotTraceCarriesMemoryTurns:
         common = ["--profile", "smoke_stub", "--no-html", "--no-progress-jsonl", "--no-stderr-progress"]
         snapshots = tmp_path / "snapshots"
         # smoke_stub は 4 人が 4 tick に 1 回ずつ手番を持つ。84 tick で 1 人 21 手になり、20 手目で畳む。
-        assert main([*common, "--max-world-ticks", "84", "--out", str(tmp_path / "first"), "--snapshot-save-dir", str(snapshots)]) == 0
+        assert (
+            main(
+                [
+                    *common,
+                    "--max-world-ticks",
+                    "84",
+                    "--out",
+                    str(tmp_path / "first"),
+                    "--snapshot-save-dir",
+                    str(snapshots),
+                ]
+            )
+            == 0
+        )
         # 上限は世界の tick の通し番号なので、続きから 12 tick 回す。
-        assert main([*common, "--max-world-ticks", "96", "--out", str(tmp_path / "second"), "--snapshot-load-dir", str(snapshots)]) == 0
+        assert (
+            main(
+                [
+                    *common,
+                    "--max-world-ticks",
+                    "96",
+                    "--out",
+                    str(tmp_path / "second"),
+                    "--snapshot-load-dir",
+                    str(snapshots),
+                ]
+            )
+            == 0
+        )
 
         writes = self._events(tmp_path / "first" / "trace.jsonl", "episode_writing")
         assert any(w["payload"]["trigger"] == "compaction" for w in writes)

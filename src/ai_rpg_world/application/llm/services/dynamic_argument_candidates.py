@@ -329,7 +329,7 @@ def render_dynamic_argument_candidate_table(
 
 _CANDIDATE_TABLE_HEADING = "【現在選べる対象引数】"
 _CANDIDATE_LINE = re.compile(
-    r'^- (?P<tool>[A-Za-z0-9_]+)\.(?P<argument>[^\s(:]+)'
+    r"^- (?P<tool>[A-Za-z0-9_]+)\.(?P<argument>[^\s(:]+)"
     r'(?: \((?P<target>"(?:[^"\\]|\\.)*")\))?: (?P<values>.+)$'
 )
 

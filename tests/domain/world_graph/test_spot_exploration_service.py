@@ -110,9 +110,7 @@ class TestSpotExplorationService:
             ),
         )
 
-        result = SpotExplorationService(
-            predicate_evaluator=common
-        ).explore(
+        result = SpotExplorationService(predicate_evaluator=common).explore(
             SpotInterior((), (), (), (discoverable,)),
             frozenset(),
             1,

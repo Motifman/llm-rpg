@@ -39,8 +39,7 @@ def parse_teams(
         return ()
     if not isinstance(raw, list) or len(raw) < 2:
         raise ScenarioLoadError(
-            "teams は 2 つ以上のチームの配列で書いてください。"
-            "相手のいない勝敗は game_end_conditions.win と変わりません"
+            "teams は 2 つ以上のチームの配列で書いてください。相手のいない勝敗は game_end_conditions.win と変わりません"
         )
     teams: list[ScenarioTeam] = []
     seen_ids: set[str] = set()
@@ -61,15 +60,10 @@ def parse_teams(
             raise ScenarioLoadError(f"{where}.name は空でない文字列にしてください")
         member_state = team_raw.get("member_state")
         if not isinstance(member_state, Mapping) or not member_state:
-            raise ScenarioLoadError(
-                f"{where}.member_state は空でない object で書いてください"
-                " (空だと全員に一致します)"
-            )
+            raise ScenarioLoadError(f"{where}.member_state は空でない object で書いてください (空だと全員に一致します)")
         win_raw = team_raw.get("win")
         if not isinstance(win_raw, list) or not win_raw:
-            raise ScenarioLoadError(
-                f"{where}.win に勝利条件を 1 つ以上書いてください"
-            )
+            raise ScenarioLoadError(f"{where}.win に勝利条件を 1 つ以上書いてください")
         members: list[PlayerSpawnConfig] = []
         for player in players:
             if not _matches(player.initial_state, member_state):
@@ -77,8 +71,7 @@ def parse_teams(
             other = team_of_player.get(player.string_id)
             if other is not None:
                 raise ScenarioLoadError(
-                    f"player {player.string_id} が teams の {other} と {team_id} の"
-                    " 両方に所属しています"
+                    f"player {player.string_id} が teams の {other} と {team_id} の 両方に所属しています"
                 )
             team_of_player[player.string_id] = team_id
             members.append(player)
@@ -88,27 +81,20 @@ def parse_teams(
                     team_id=team_id,
                     name=name,
                     member_player_ids=tuple(PlayerId(p.player_id) for p in members),
-                    win_conditions=tuple(
-                        parse_end_conditions(win_raw, mapper, section="team_win")
-                    ),
+                    win_conditions=tuple(parse_end_conditions(win_raw, mapper, section="team_win")),
                 )
             )
         except ScenarioTeamValidationException as exc:
             raise ScenarioLoadError(f"{where}: {exc}") from exc
     unassigned = [p.string_id for p in players if p.string_id not in team_of_player]
     if unassigned:
-        raise ScenarioLoadError(
-            f"どのチームにも所属しない player があります: {unassigned}"
-            " (勝敗が決まりません)"
-        )
+        raise ScenarioLoadError(f"どのチームにも所属しない player があります: {unassigned} (勝敗が決まりません)")
     return tuple(teams)
 
 
 # RESCUED / STRANDED は player_outcome_rules からしか付かない。DEAD と EJECTED は
 # 死と会議の投票が付けるので、規則が無くても届く。
-_OUTCOMES_FROM_RULES_ONLY = frozenset(
-    {PlayerOutcomeEnum.RESCUED, PlayerOutcomeEnum.STRANDED}
-)
+_OUTCOMES_FROM_RULES_ONLY = frozenset({PlayerOutcomeEnum.RESCUED, PlayerOutcomeEnum.STRANDED})
 
 
 def reject_unreachable_team_outcomes(
@@ -133,8 +119,6 @@ def reject_unreachable_team_outcomes(
 def _matches(state: Mapping[str, Any], required: Mapping[str, Any]) -> bool:
     # True == 1 で別の値が一致しないよう、真偽値かどうかもそろえる。
     return all(
-        key in state
-        and state[key] == value
-        and isinstance(state[key], bool) == isinstance(value, bool)
+        key in state and state[key] == value and isinstance(state[key], bool) == isinstance(value, bool)
         for key, value in required.items()
     )

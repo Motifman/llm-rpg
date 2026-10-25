@@ -24,9 +24,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 @pytest.fixture(autouse=True)
@@ -68,14 +66,17 @@ class TestTheDiagnosisSeesTheRuntimeLocation:
 
             for _ in range(2):
                 wiring.tool_call_loop_guard.record_and_check(
-                    player, "travel_to", {"destination_label": "存在しない岬"},
-                    success=False, error_code="INVALID_DESTINATION_LABEL",
+                    player,
+                    "travel_to",
+                    {"destination_label": "存在しない岬"},
+                    success=False,
+                    error_code="INVALID_DESTINATION_LABEL",
                     result_summary="移動先が見つかりません",
                 )
 
             [judgment] = [
-                e for e in trace.events
-                if e["kind"] == TraceEventKind.TYPED_JUDGMENT
-                and e.get("question") == "loop_diagnosis"
+                e
+                for e in trace.events
+                if e["kind"] == TraceEventKind.TYPED_JUDGMENT and e.get("question") == "loop_diagnosis"
             ]
             assert judgment["state"]["current_location"] == wiring.runtime.get_player_spot_name(player)

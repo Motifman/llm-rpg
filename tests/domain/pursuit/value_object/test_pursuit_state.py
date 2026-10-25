@@ -75,10 +75,7 @@ class TestPursuitState:
         )
 
         assert state.is_failed is True
-        assert (
-            state.failure_reason
-            == PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
-        )
+        assert state.failure_reason == PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
 
     def test_requires_target_snapshot_or_last_known(self):
         """現在情報か last-known のどちらかは必須であること"""

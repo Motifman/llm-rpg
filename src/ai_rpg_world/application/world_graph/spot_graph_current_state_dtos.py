@@ -8,6 +8,7 @@ from typing import Any
 
 # --- 構造化エントリ（UiContextBuilder がラベル付与に使用） ---
 
+
 @dataclass(frozen=True)
 class SpotGraphInteractionEntry:
     action_name: str
@@ -28,6 +29,7 @@ class SpotGraphConnectionEntry:
     使われている外部互換のフィールド名なので、ドメイン側の `passage.traversable`
     とは意図的に名前を分けている（リネームすると外部契約が壊れるため温存）。
     """
+
     destination_spot_id: int
     connection_name: str
     destination_spot_name: str
@@ -38,6 +40,7 @@ class SpotGraphConnectionEntry:
 @dataclass(frozen=True)
 class SpotGraphObjectEntry:
     """スポット内オブジェクト1件の構造化データ。"""
+
     object_id: int
     name: str
     description: str
@@ -63,6 +66,7 @@ class SpotGraphObjectEntry:
 @dataclass(frozen=True)
 class SpotGraphSubLocationEntry:
     """サブロケーション1件の構造化データ。"""
+
     sub_location_id: int
     name: str
     is_current: bool
@@ -72,6 +76,7 @@ class SpotGraphSubLocationEntry:
 @dataclass(frozen=True)
 class SpotGraphWeatherEntry:
     """天候情報の構造化データ。屋外スポットのみ有効。"""
+
     weather_type: str
     weather_intensity: float
     is_outdoor: bool
@@ -80,6 +85,7 @@ class SpotGraphWeatherEntry:
 @dataclass(frozen=True)
 class SpotGraphAtmosphereEntry:
     """雰囲気情報の構造化データ。"""
+
     lighting: str
     sound_ambient: str | None
     temperature: str
@@ -94,6 +100,7 @@ class SpotGraphTimeOfDayEntry:
     シナリオが day_night サイクルを宣言していなければ snapshot.time_of_day は
     None。「現在時刻: 朝」のような行をプロンプトに 1 行足すために使う。
     """
+
     phase_name: str
     display_text: str
     is_dark: bool
@@ -151,6 +158,7 @@ class SpotGraphInventoryItemEntry:
     も保持する。集約時は代表 instance (最初に発見したスロットの instance)
     の id を載せる。-1 は未設定を表す sentinel。
     """
+
     item_spec_id: int
     name: str
     quantity: int
@@ -192,6 +200,7 @@ class SpotGraphGroundItemEntry:
     初期配置で置かれたアイテムを、pickup tool が指せるラベル付きで
     プロンプトに載せるために使う。
     """
+
     item_instance_id: int
     item_spec_id: int
     name: str
@@ -202,6 +211,7 @@ class SpotGraphGroundItemEntry:
 @dataclass(frozen=True)
 class SpotGraphNearbyEntityEntry:
     """同スポットにいるエンティティ1件の構造化データ。"""
+
     entity_id: int
     display_name: str = ""
     # PR #347 後続: PlayerDownedEvent が一度通知された後でも、snapshot からは
@@ -270,6 +280,7 @@ class SpotGraphMonsterEntry:
 
 # --- agent busy 状態 ---
 
+
 @dataclass(frozen=True)
 class SpotGraphAgentStatusEntry:
     """プレイヤーの現在の行動状態 (busy / 中断可能性) を LLM に伝えるための構造化情報。
@@ -278,6 +289,7 @@ class SpotGraphAgentStatusEntry:
     ことを snapshot から読み取れるようにする。中断可能 (= 別の重い行動を取ると
     travel をキャンセルして新行動に切り替わる) ことも明示する。
     """
+
     # 現在 busy 状態にあるか (= multi-tick action の途中)。
     busy: bool = False
     # busy の理由 (人間可読、例: "山頂への移動中")。None なら busy=False のときだけ。
@@ -291,6 +303,7 @@ class SpotGraphAgentStatusEntry:
 
 
 # --- 市場の掲示板 (経済統合 Phase 3) ---
+
 
 @dataclass(frozen=True)
 class SpotGraphMarketRowEntry:
@@ -334,6 +347,7 @@ class SpotGraphMarketOwnOrderEntry:
 
 
 # --- スナップショット ---
+
 
 @dataclass(frozen=True)
 class SpotGraphPlayerSnapshotDto:
@@ -431,9 +445,7 @@ class SpotGraphPlayerSnapshotDto:
     active_effect_lines: tuple[str, ...] = ()
 
     # 現在の行動状態 (travel 等の multi-tick action 中か)。busy=False が default。
-    agent_status: SpotGraphAgentStatusEntry = field(
-        default_factory=SpotGraphAgentStatusEntry
-    )
+    agent_status: SpotGraphAgentStatusEntry = field(default_factory=SpotGraphAgentStatusEntry)
 
     # 本人の疲労 tier。`ok` / `tired` / `fatigued` / `severe` / `exhausted`。
     # ui_context_builder が「身体の状態」section に

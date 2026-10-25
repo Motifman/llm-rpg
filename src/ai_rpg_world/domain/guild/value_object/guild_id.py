@@ -10,6 +10,7 @@ class GuildId:
 
     IDは正の整数である必要があります。既存の QuestId / PlayerId と同様の形式。
     """
+
     value: int
 
     def __post_init__(self) -> None:

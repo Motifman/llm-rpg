@@ -59,7 +59,7 @@ class TradeReadModel:
         durability_max: int | None,
         requested_gold: TradeRequestedGold,
         status: TradeStatus,
-        created_at: datetime
+        created_at: datetime,
     ) -> "TradeReadModel":
         """取引情報とアイテム情報からReadModelを作成"""
         return cls(
@@ -79,7 +79,7 @@ class TradeReadModel:
             durability_max=durability_max,
             requested_gold=int(requested_gold),
             status=status.name,
-            created_at=created_at
+            created_at=created_at,
         )
 
     @property

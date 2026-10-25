@@ -90,27 +90,15 @@ class Intent:
         if not isinstance(self.phase, IntentPhase):
             raise IntentValidationException("phase must be IntentPhase")
         if not isinstance(self.submitted_at_tick, WorldTick):
-            raise IntentValidationException(
-                "submitted_at_tick must be WorldTick"
-            )
+            raise IntentValidationException("submitted_at_tick must be WorldTick")
         if not isinstance(self.complete_at_tick, WorldTick):
-            raise IntentValidationException(
-                "complete_at_tick must be WorldTick"
-            )
+            raise IntentValidationException("complete_at_tick must be WorldTick")
         if self.complete_at_tick.value < self.submitted_at_tick.value:
-            raise IntentValidationException(
-                "complete_at_tick must be >= submitted_at_tick"
-            )
+            raise IntentValidationException("complete_at_tick must be >= submitted_at_tick")
         if not isinstance(self.priority, IntentPriority):
-            raise IntentValidationException(
-                "priority must be IntentPriority"
-            )
-        if self.target_descriptor is not None and not isinstance(
-            self.target_descriptor, Mapping
-        ):
-            raise IntentValidationException(
-                "target_descriptor must be Mapping or None"
-            )
+            raise IntentValidationException("priority must be IntentPriority")
+        if self.target_descriptor is not None and not isinstance(self.target_descriptor, Mapping):
+            raise IntentValidationException("target_descriptor must be Mapping or None")
 
     @property
     def is_instant(self) -> bool:

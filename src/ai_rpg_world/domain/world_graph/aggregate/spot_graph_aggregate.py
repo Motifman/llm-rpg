@@ -86,9 +86,7 @@ class SpotGraphAggregate(AggregateRoot):
         self._graph_id = graph_id
         self._spots: dict[SpotId, SpotNode] = dict(spots or {})
         self._connections_by_id: dict[ConnectionId, SpotConnection] = dict(connections_by_id or {})
-        self._outgoing: dict[SpotId, list[ConnectionId]] = {
-            k: list(v) for k, v in (outgoing or {}).items()
-        }
+        self._outgoing: dict[SpotId, list[ConnectionId]] = {k: list(v) for k, v in (outgoing or {}).items()}
         self._presences: dict[SpotId, SpotPresence] = dict(presences or {})
         self._entity_spot: dict[EntityId, SpotId] = dict(entity_spot or {})
         self._reverse_connections: dict[ConnectionId, ConnectionId] = dict(reverse_connections or {})
@@ -148,9 +146,7 @@ class SpotGraphAggregate(AggregateRoot):
                 out.append(c.to_spot_id)
         return out
 
-    def find_first_passable_connection_between(
-        self, from_spot_id: SpotId, to_spot_id: SpotId
-    ) -> SpotConnection | None:
+    def find_first_passable_connection_between(self, from_spot_id: SpotId, to_spot_id: SpotId) -> SpotConnection | None:
         """from から出る有向エッジのうち、先が to かつ通行可能な最初の接続。無ければ None。"""
         for cid in self._outgoing.get(from_spot_id, []):
             c = self._connections_by_id[cid]
@@ -209,9 +205,7 @@ class SpotGraphAggregate(AggregateRoot):
             )
             if value is not None
         }
-        self._spots[spot_id] = replace(
-            node, atmosphere=replace(current, **overrides)
-        )
+        self._spots[spot_id] = replace(node, atmosphere=replace(current, **overrides))
 
     def add_connection(
         self,
@@ -225,13 +219,9 @@ class SpotGraphAggregate(AggregateRoot):
         self._register_edge(conn)
         if conn.is_bidirectional:
             if reverse_connection_id is None:
-                raise ValueError(
-                    "reverse_connection_id is required when is_bidirectional is True"
-                )
+                raise ValueError("reverse_connection_id is required when is_bidirectional is True")
             if reverse_connection_id in self._connections_by_id:
-                raise DuplicateConnectionIdException(
-                    f"Reverse connection ID already used: {reverse_connection_id}"
-                )
+                raise DuplicateConnectionIdException(f"Reverse connection ID already used: {reverse_connection_id}")
             rev = replace(
                 conn,
                 connection_id=reverse_connection_id,
@@ -273,6 +263,7 @@ class SpotGraphAggregate(AggregateRoot):
             if reverse_connection_id in self._connections_by_id:
                 raise DuplicateConnectionIdException(f"Reverse connection ID already used: {reverse_connection_id}")
             from dataclasses import replace as _replace
+
             rev = _replace(
                 conn,
                 connection_id=reverse_connection_id,
@@ -458,7 +449,9 @@ class SpotGraphAggregate(AggregateRoot):
         self._maybe_emit_spot_sound_heard(entity_id, to_spot)
 
     def _maybe_emit_spot_sound_heard(
-        self, entity_id: EntityId, spot_id: SpotId,
+        self,
+        entity_id: EntityId,
+        spot_id: SpotId,
     ) -> None:
         """spot の sound_intensity が SILENT 以外なら SpotSoundHeardEvent を発火。
 
@@ -521,8 +514,7 @@ class SpotGraphAggregate(AggregateRoot):
             moving_count = sum(
                 1
                 for moving_entity_id in moving_entity_ids
-                if moving_entity_id != entity_id
-                and self._entity_spot.get(moving_entity_id) == adj_spot
+                if moving_entity_id != entity_id and self._entity_spot.get(moving_entity_id) == adj_spot
             )
             if hops == 1:
                 moving_occupants: int | None = moving_count
@@ -749,9 +741,7 @@ class SpotGraphAggregate(AggregateRoot):
         if spot_id not in self._spots:
             raise SpotNotInGraphException(f"Unknown spot: {spot_id}")
         if monster_id in self._monster_spot:
-            raise MonsterPresenceInvariantException(
-                f"Monster already placed: {monster_id}"
-            )
+            raise MonsterPresenceInvariantException(f"Monster already placed: {monster_id}")
         self._monster_spot[monster_id] = spot_id
         pres = self._monster_presences.get(spot_id, MonsterSpotPresence.empty(spot_id))
         self._monster_presences[spot_id] = pres.add(monster_id)
@@ -838,8 +828,7 @@ class SpotGraphAggregate(AggregateRoot):
         from_spot = self._monster_spot[monster_id]
         if from_spot != conn.from_spot_id:
             raise SpotPresenceInvariantException(
-                f"Monster {monster_id} is at {from_spot}, "
-                f"not at connection origin {conn.from_spot_id}"
+                f"Monster {monster_id} is at {from_spot}, not at connection origin {conn.from_spot_id}"
             )
         ok, reason = self._navigation.can_pass(conn, owned_item_spec_ids, world_flags)
         if not ok:
@@ -847,18 +836,14 @@ class SpotGraphAggregate(AggregateRoot):
 
         to_spot = conn.to_spot_id
 
-        old_pres = self._monster_presences.get(
-            from_spot, MonsterSpotPresence.empty(from_spot)
-        )
+        old_pres = self._monster_presences.get(from_spot, MonsterSpotPresence.empty(from_spot))
         new_old_pres = old_pres.remove(monster_id)
         if new_old_pres.count() == 0:
             self._monster_presences.pop(from_spot, None)
         else:
             self._monster_presences[from_spot] = new_old_pres
 
-        dest_pres = self._monster_presences.get(
-            to_spot, MonsterSpotPresence.empty(to_spot)
-        )
+        dest_pres = self._monster_presences.get(to_spot, MonsterSpotPresence.empty(to_spot))
         self._monster_presences[to_spot] = dest_pres.add(monster_id)
         self._monster_spot[monster_id] = to_spot
 

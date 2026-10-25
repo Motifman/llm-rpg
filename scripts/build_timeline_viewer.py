@@ -74,10 +74,7 @@ def extract_players(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         name = payload.get("player_name") or ""
         if name and not ids[pid]:
             ids[pid] = name
-    return [
-        {"id": pid, "name": ids[pid] or f"P{pid}"}
-        for pid in sorted(ids)
-    ]
+    return [{"id": pid, "name": ids[pid] or f"P{pid}"} for pid in sorted(ids)]
 
 
 def build_cells(
@@ -95,11 +92,13 @@ def build_cells(
             continue
         payload = e.get("payload") or {}
         detail = _summarize(kind, payload)
-        by_player[pid].append({
-            "tick": int(tick),
-            "kind": kind,
-            "detail": detail,
-        })
+        by_player[pid].append(
+            {
+                "tick": int(tick),
+                "kind": kind,
+                "detail": detail,
+            }
+        )
     return by_player
 
 
@@ -118,9 +117,7 @@ def _summarize(kind: str, payload: dict[str, Any]) -> str:
         if isinstance(tool, str) and tool.startswith("speech_"):
             content = (args.get("content") or "").strip()
             target = args.get("target_label") or ""
-            verb = {"speech_say": "say", "speech_whisper": "whisper", "speech_shout": "shout"}.get(
-                tool, "speech"
-            )
+            verb = {"speech_say": "say", "speech_whisper": "whisper", "speech_shout": "shout"}.get(tool, "speech")
             head = f"{verb}"
             if target:
                 head += f"→{target}"
@@ -179,9 +176,7 @@ def render_html(
     cells_by_player = build_cells(events)
 
     # tick → player_id → [cell] に再編する。
-    by_tick_player: dict[int, dict[int, list[dict[str, Any]]]] = defaultdict(
-        lambda: defaultdict(list)
-    )
+    by_tick_player: dict[int, dict[int, list[dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
     for pid, cells in cells_by_player.items():
         for c in cells:
             by_tick_player[c["tick"]][pid].append(c)
@@ -209,20 +204,18 @@ def render_html(
                     f'<div class="cell kind-{esc(c["kind"])}" '
                     f'data-kind="{esc(c["kind"])}">'
                     f'<span class="badge" style="background:{style["color"]}">'
-                    f'{esc(style["label"])}</span>'
+                    f"{esc(style['label'])}</span>"
                     f'<span class="text">{esc(c["detail"])}</span>'
-                    f'</div>'
+                    f"</div>"
                 )
             if not cell_html:
                 cell_html = ['<div class="cell empty">—</div>']
-            per_player_cols.append(
-                f'<div class="player-col">{"".join(cell_html)}</div>'
-            )
+            per_player_cols.append(f'<div class="player-col">{"".join(cell_html)}</div>')
         tick_blocks.append(
             f'<div class="tick-row" id="t{t}">'
             f'<div class="tick-label">t={t}</div>'
             f'<div class="player-grid">{"".join(per_player_cols)}</div>'
-            f'</div>'
+            f"</div>"
         )
 
     # player ヘッダー列 (sticky top で表示)
@@ -230,7 +223,7 @@ def render_html(
         f'<div class="player-header">'
         f'<span class="pl-name">{esc(p["name"])}</span>'
         f'<span class="pl-id">#{esc(p["id"])}</span>'
-        f'</div>'
+        f"</div>"
         for p in players
     )
 
@@ -238,7 +231,7 @@ def render_html(
         f'<div class="legend-item">'
         f'<span class="legend-swatch" style="background:{s["color"]}"></span>'
         f'<span class="legend-label">{esc(s["label"])} = {esc(k)}</span>'
-        f'</div>'
+        f"</div>"
         for k, s in EVENT_STYLES.items()
     )
 
@@ -403,7 +396,7 @@ header h1 {{
   {player_headers_html}
 </div>
 <div class="tick-header">
-  {''.join(tick_blocks)}
+  {"".join(tick_blocks)}
 </div>
 </body>
 </html>
@@ -428,7 +421,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     output = args.output or (args.run_dir / "timeline.html")
     output.write_text(html_text, encoding="utf-8")
-    print(f"[timeline] {output} ({len(html_text)//1024} KB)")
+    print(f"[timeline] {output} ({len(html_text) // 1024} KB)")
     return 0
 
 

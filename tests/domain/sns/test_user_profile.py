@@ -124,8 +124,12 @@ class TestUserProfile:
 
     @pytest.mark.parametrize(
         "other",
-        [("testuser2", "表示名2", "bio2"), ("testuser2", "表示名1", "bio1"),
-         ("testuser1", "表示名2", "bio1"), ("testuser1", "表示名1", "bio2")],
+        [
+            ("testuser2", "表示名2", "bio2"),
+            ("testuser2", "表示名1", "bio1"),
+            ("testuser1", "表示名2", "bio1"),
+            ("testuser1", "表示名1", "bio2"),
+        ],
     )
     def test_inequality_comparison(self, other):
         """全3値またはいずれか1値が違うプロフィールは非等価で、集合に共存できる。"""

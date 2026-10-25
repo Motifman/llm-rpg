@@ -37,10 +37,7 @@ class WorldTickFailurePolicy(str, Enum):
         for policy in cls:
             if policy.value == normalized:
                 return policy
-        raise ValueError(
-            f"world tick failure policy {raw!r} is not recognized. "
-            f"valid: {sorted(p.value for p in cls)}"
-        )
+        raise ValueError(f"world tick failure policy {raw!r} is not recognized. valid: {sorted(p.value for p in cls)}")
 
 
 class WorldTickFailureIsolator:
@@ -100,11 +97,7 @@ class WorldTickFailureIsolator:
                     error_message=_truncate(str(exc)),
                     error_origin=_innermost_frame(exc),
                     # CommandScope 1 回でない単位では、取りやめる前に何が確定したか分からない。
-                    committed=(
-                        isinstance(exc, CommandPostCommitException)
-                        if command_scoped
-                        else None
-                    ),
+                    committed=(isinstance(exc, CommandPostCommitException) if command_scoped else None),
                     continued=False,
                     policy=self._policy.value,
                 )
@@ -114,24 +107,26 @@ class WorldTickFailureIsolator:
             except Exception:
                 _logger.exception(
                     "failed to record world_tick_unit_failed (stage=%s target=%s:%s)",
-                    stage, target_kind, target_id,
+                    stage,
+                    target_kind,
+                    target_id,
                 )
                 raise exc
             with self._lock:
                 self._counts[stage] = self._counts.get(stage, 0) + 1
             # commit 後の後始末に失敗した transaction 資源は、次の 1 体の scope が
             # 再利用してしまう。1 体の失敗ではないので isolate でも止める。
-            if self._policy is WorldTickFailurePolicy.FAIL_FAST or isinstance(
-                exc, CommandPostCommitException
-            ):
+            if self._policy is WorldTickFailurePolicy.FAIL_FAST or isinstance(exc, CommandPostCommitException):
                 setattr(exc, _RECORDED_ATTR, True)
                 raise
             _logger.error(
                 "world tick unit skipped (stage=%s target=%s:%s tick=%s)",
-                stage, target_kind, target_id, tick.value,
+                stage,
+                target_kind,
+                target_id,
+                tick.value,
                 exc_info=True,
             )
-
 
     def record_continued_failure(
         self,
@@ -157,7 +152,9 @@ class WorldTickFailureIsolator:
         if recorder is None:
             _logger.warning(
                 "world tick follow-up failed without trace recorder (stage=%s target=%s:%s)",
-                stage, target_kind, target_id,
+                stage,
+                target_kind,
+                target_id,
                 exc_info=exc,
             )
         else:
@@ -181,7 +178,9 @@ class WorldTickFailureIsolator:
             except Exception:
                 _logger.error(
                     "failed to record world_tick_unit_failed (stage=%s target=%s:%s)",
-                    stage, target_kind, target_id,
+                    stage,
+                    target_kind,
+                    target_id,
                     exc_info=exc,
                 )
                 raise
@@ -189,16 +188,16 @@ class WorldTickFailureIsolator:
                 self._counts[stage] = self._counts.get(stage, 0) + 1
             _logger.warning(
                 "world tick follow-up failed (stage=%s target=%s:%s)",
-                stage, target_kind, target_id,
+                stage,
+                target_kind,
+                target_id,
                 exc_info=exc,
             )
         if self._policy is WorldTickFailurePolicy.FAIL_FAST:
             setattr(exc, _RECORDED_ATTR, True)
             raise exc
 
-    def after_commit_failure_observer(
-        self, *, tick_provider: Callable[[], int | None]
-    ) -> AfterCommitFailureObserver:
+    def after_commit_failure_observer(self, *, tick_provider: Callable[[], int | None]) -> AfterCommitFailureObserver:
         """確定後の受け手の失敗を受ける口を返す。世界を持たない配送の tick は None とする。"""
 
         def observe(

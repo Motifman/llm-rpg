@@ -80,17 +80,13 @@ class InMemoryAcquaintanceRepository(AcquaintanceRepository):
         book[key] = named
         return named
 
-    def find(
-        self, being_id: BeingId, *, environment_name: str, name: str
-    ) -> Acquaintance | None:
+    def find(self, being_id: BeingId, *, environment_name: str, name: str) -> Acquaintance | None:
         return self._by_being.get(being_id, {}).get((environment_name, name))
 
     def list_by_being(self, being_id: BeingId) -> tuple[Acquaintance, ...]:
         return tuple(self._by_being.get(being_id, {}).values())
 
-    def replace_all_by_being(
-        self, being_id: BeingId, acquaintances: Sequence[Acquaintance]
-    ) -> None:
+    def replace_all_by_being(self, being_id: BeingId, acquaintances: Sequence[Acquaintance]) -> None:
         book: dict[_Key, Acquaintance] = {}
         for acquaintance in acquaintances:
             key = (acquaintance.environment_name, acquaintance.name)

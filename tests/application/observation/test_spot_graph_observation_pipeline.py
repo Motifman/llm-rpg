@@ -90,30 +90,36 @@ def _build_graph() -> SpotGraphAggregate:
         ground_items=(),
         discoverable_items=(),
     )
-    graph.add_spot(SpotNode(
-        spot_id=SPOT_A,
-        name="エントランス",
-        description="暗い入口",
-        category=SpotCategoryEnum.OTHER,
-        parent_id=None,
-        interior=interior_a,
-    ))
-    graph.add_spot(SpotNode(
-        spot_id=SPOT_B,
-        name="手術室",
-        description="不気味な手術室",
-        category=SpotCategoryEnum.OTHER,
-        parent_id=None,
-    ))
-    graph.add_connection(SpotConnection(
-        connection_id=CONN_AB,
-        from_spot_id=SPOT_A,
-        to_spot_id=SPOT_B,
-        name="長い廊下",
-        description="",
-        travel_ticks=3,
-        is_bidirectional=False,
-    ))
+    graph.add_spot(
+        SpotNode(
+            spot_id=SPOT_A,
+            name="エントランス",
+            description="暗い入口",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+            interior=interior_a,
+        )
+    )
+    graph.add_spot(
+        SpotNode(
+            spot_id=SPOT_B,
+            name="手術室",
+            description="不気味な手術室",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+        )
+    )
+    graph.add_connection(
+        SpotConnection(
+            connection_id=CONN_AB,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            name="長い廊下",
+            description="",
+            travel_ticks=3,
+            is_bidirectional=False,
+        )
+    )
     graph.place_entity(E1, SPOT_A)
     graph.place_entity(E2, SPOT_A)
     graph.place_entity(E3, SPOT_B)
@@ -146,9 +152,9 @@ def _build_pipeline(graph: SpotGraphAggregate) -> ObservationPipeline:
     resolver = ObservationRecipientResolver(strategies=[strategy])
 
     name_resolver = MagicMock(spec=ObservationNameResolver)
-    name_resolver.player_name.side_effect = lambda pid: {
-        1: "探索者A", 2: "探索者B", 3: "探索者C"
-    }.get(pid.value, "不明")
+    name_resolver.player_name.side_effect = lambda pid: {1: "探索者A", 2: "探索者B", 3: "探索者C"}.get(
+        pid.value, "不明"
+    )
     name_resolver.spot_name.return_value = "不明"
 
     formatter = ObservationFormatter(spot_graph_repository=repo)
@@ -161,6 +167,7 @@ def _build_pipeline(graph: SpotGraphAggregate) -> ObservationPipeline:
     from ai_rpg_world.application.observation.services.formatters.spot_graph_formatter import (
         SpotGraphObservationFormatter,
     )
+
     formatter._formatters = [SpotGraphObservationFormatter(formatter._context)]
 
     return ObservationPipeline(

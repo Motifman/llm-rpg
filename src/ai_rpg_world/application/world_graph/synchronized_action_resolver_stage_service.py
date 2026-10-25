@@ -73,13 +73,15 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
-_SUPPORTED_EFFECT_TYPES = frozenset({
-    "SET_FLAG",
-    "CLEAR_FLAG",
-    "RESOLVE_ONGOING_CONDITION",
-    "CHANGE_PASSAGE_STATE",
-    "SHOW_MESSAGE",
-})
+_SUPPORTED_EFFECT_TYPES = frozenset(
+    {
+        "SET_FLAG",
+        "CLEAR_FLAG",
+        "RESOLVE_ONGOING_CONDITION",
+        "CHANGE_PASSAGE_STATE",
+        "SHOW_MESSAGE",
+    }
+)
 
 
 _GroupOutcome = Literal["completed", "timed_out", "pending", "idle"]
@@ -95,9 +97,7 @@ class SynchronizedActionResolverStageService:
         registry: SynchronizedActionRegistry,
         world_flag_state: MutableWorldFlagState,
         effect_service: WorldGraphEffectService | None = None,
-        command_scope_factory: (
-            CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort] | None
-        ) = None,
+        command_scope_factory: (CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort] | None) = None,
         failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
         self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
@@ -112,9 +112,7 @@ class SynchronizedActionResolverStageService:
             return
         factory = self._command_scope_factory
         if factory is None:
-            raise RuntimeError(
-                "synchronized action用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("synchronized action用CommandScopeFactoryが未配線です。")
         for group in self._groups:
             with self._failure_isolator.unit(
                 stage="sync_action_resolver",
@@ -126,9 +124,7 @@ class SynchronizedActionResolverStageService:
 
     def set_command_scope_factory(
         self,
-        factory: (
-            CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort]
-        ),
+        factory: (CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort]),
     ) -> None:
         """本番stageをgroup 1件単位の確定境界へ接続する。"""
         self._command_scope_factory = factory
@@ -172,7 +168,7 @@ class SynchronizedActionResolverStageService:
     ) -> None:
         """このgroupが追加したgraph eventだけを確定後配送へ移す。"""
         all_events = tuple(graph.get_events())
-        new_events = all_events[len(existing_events):]
+        new_events = all_events[len(existing_events) :]
         graph.clear_events()
         for event in existing_events:
             graph.add_event(event)
@@ -188,8 +184,7 @@ class SynchronizedActionResolverStageService:
         """1 group を解決する。"""
         # 各 required action の最古 prepare を取得
         per_action: dict[str, SyncPrepareEntry | None] = {
-            aid: self._registry.find_oldest_for_action(aid)
-            for aid in group.required_action_names
+            aid: self._registry.find_oldest_for_action(aid) for aid in group.required_action_names
         }
         prepared_count = sum(1 for e in per_action.values() if e is not None)
         if prepared_count == 0:
@@ -198,19 +193,14 @@ class SynchronizedActionResolverStageService:
         # action 名が全部揃っていても、同じ一人が複数の役割を準備したなら
         # 完成させない。通常入口は二つ目を理由つきで拒否するが、snapshot 復元や
         # registry の直接利用が不正な組を作っても resolver 自身が不変条件を守る。
-        prepared_player_ids = {
-            entry.player_id for entry in per_action.values() if entry is not None
-        }
-        all_prepared = (
-            prepared_count == len(group.required_action_names)
-            and len(prepared_player_ids) == len(group.required_action_names)
+        prepared_player_ids = {entry.player_id for entry in per_action.values() if entry is not None}
+        all_prepared = prepared_count == len(group.required_action_names) and len(prepared_player_ids) == len(
+            group.required_action_names
         )
         # 窓判定: 最古 prepare から current_tick が window_ticks 以内か
         prepared_entries = [e for e in per_action.values() if e is not None]
         all_participants = [
-            entry
-            for action_name in group.required_action_names
-            for entry in self._registry.entries_for(action_name)
+            entry for action_name in group.required_action_names for entry in self._registry.entries_for(action_name)
         ]
         oldest_tick = min(e.prepare_tick for e in prepared_entries)
         within_window = (current_tick.value - oldest_tick) < group.window_ticks

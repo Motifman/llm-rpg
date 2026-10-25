@@ -69,20 +69,27 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
         if event_type is None or handler is None:
             return
         self._dispatcher.register_after_commit(
-            event_type, _SideHandler(handler),
+            event_type,
+            _SideHandler(handler),
             channel=DeliveryChannel.OBSERVATION,
             guarantee=DeliveryGuarantee.BEST_EFFORT,
         )
 
     def _observe_side_handler_failure(
-        self, channel: DeliveryChannel, guarantee: DeliveryGuarantee,
-        event: DomainEvent, handler: object, error: Exception,
+        self,
+        channel: DeliveryChannel,
+        guarantee: DeliveryGuarantee,
+        event: DomainEvent,
+        handler: object,
+        error: Exception,
     ) -> None:
         # 静的メソッドや属性の関数でも、trace は登録した受け手の型名を残す。
         receiver = cast(_SideHandler, handler).receiver
         logger.error(
             "side handler %s failed on event %s — continuing pipeline",
-            type(receiver).__name__, type(event).__name__, exc_info=error,
+            type(receiver).__name__,
+            type(event).__name__,
+            exc_info=error,
         )
         self._record_side_handler_failure(receiver, event, error)
 
@@ -124,9 +131,7 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
                 aggregate_id = str(aggregate_id)
             # aggregate が player のときだけ best-effort で player_id に昇格する。
             player_id = (
-                aggregate_id
-                if aggregate_type == "PlayerStatusAggregate" and isinstance(aggregate_id, int)
-                else None
+                aggregate_id if aggregate_type == "PlayerStatusAggregate" and isinstance(aggregate_id, int) else None
             )
             recorder.record(
                 TraceEventKind.SIDE_HANDLER_FAILED,
@@ -143,7 +148,8 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
         except Exception:
             logger.warning(
                 "failed to record SIDE_HANDLER_FAILED trace for handler=%s event=%s",
-                type(handler).__name__, type(event).__name__,
+                type(handler).__name__,
+                type(event).__name__,
                 exc_info=True,
             )
 
@@ -151,6 +157,7 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
         # 公開SNSの受信は専用の確定境界で記録する。旧formatterへ同じ通知を
         # 二重に流すと全文・起床が重複するため、ここで一本化する。
         from ai_rpg_world.domain.sns.event import SnsContentLikedEvent, SnsUserFollowedEvent
+
         public_sns = getattr(self._runtime, "_public_sns_command_service", None)
         if public_sns is not None and isinstance(event, (SnsContentLikedEvent, SnsUserFollowedEvent)):
             public_sns.record_event(event)
@@ -166,8 +173,7 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
         appender = self._runtime._observation_appender
         if appender is None:
             logger.debug(
-                "PipelineEventPublisher: observation_appender is not yet set, "
-                "skipping event=%s",
+                "PipelineEventPublisher: observation_appender is not yet set, skipping event=%s",
                 type(event).__name__,
             )
             return

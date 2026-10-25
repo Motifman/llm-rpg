@@ -73,9 +73,7 @@ class TestFailingObjectStateProducesHint:
                 failure_message="もう漁り尽くした",
             )
         )
-        assert _object_state_precondition_failure_hints(interaction, interior) == (
-            "もう漁り尽くした",
-        )
+        assert _object_state_precondition_failure_hints(interaction, interior) == ("もう漁り尽くした",)
 
     def test_empty_failure_message_falls_back_to_default_hint(self) -> None:
         """failure_message が空文字のとき、既定文でヒントを埋める。"""
@@ -88,9 +86,7 @@ class TestFailingObjectStateProducesHint:
                 failure_message="",
             )
         )
-        assert _object_state_precondition_failure_hints(interaction, interior) == (
-            DEFAULT_HINT,
-        )
+        assert _object_state_precondition_failure_hints(interaction, interior) == (DEFAULT_HINT,)
 
     def test_blank_failure_message_falls_back_to_default_hint(self) -> None:
         """failure_message が空白だけのとき、既定文でヒントを埋める。"""
@@ -103,9 +99,7 @@ class TestFailingObjectStateProducesHint:
                 failure_message="   ",
             )
         )
-        assert _object_state_precondition_failure_hints(interaction, interior) == (
-            DEFAULT_HINT,
-        )
+        assert _object_state_precondition_failure_hints(interaction, interior) == (DEFAULT_HINT,)
 
     def test_multiple_mismatched_keys_in_one_condition_return_single_hint(self) -> None:
         """1 つの条件で複数の key が不一致でも、ヒントは条件あたり 1 件にまとめる。"""
@@ -118,9 +112,7 @@ class TestFailingObjectStateProducesHint:
                 failure_message="もう漁り尽くした",
             )
         )
-        assert _object_state_precondition_failure_hints(interaction, interior) == (
-            "もう漁り尽くした",
-        )
+        assert _object_state_precondition_failure_hints(interaction, interior) == ("もう漁り尽くした",)
 
     def test_multiple_failing_conditions_return_hints_in_declared_order(self) -> None:
         """失敗している条件が複数あるとき、宣言順に failure_message を並べて返す。"""

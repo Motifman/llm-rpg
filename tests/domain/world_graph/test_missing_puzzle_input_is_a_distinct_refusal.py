@@ -64,14 +64,21 @@ def _interior() -> SpotInterior:
 
 def _open_the_safe(parameters):
     return SpotInteractionService().execute_interaction(
-        _interior(), _SAFE, "open_safe", frozenset(), frozenset(),
+        _interior(),
+        _SAFE,
+        "open_safe",
+        frozenset(),
+        frozenset(),
         interaction_parameters=parameters,
     )
 
 
 def _open_by_a_tool(parameters):
     return SpotInteractionService().execute_declared_interaction(
-        _interior(), _OPEN, frozenset(), frozenset(),
+        _interior(),
+        _OPEN,
+        frozenset(),
+        frozenset(),
         interaction_parameters=parameters,
     )
 
@@ -82,7 +89,7 @@ class TestMissingPuzzleInput:
 
     @pytest.mark.parametrize("parameters", _MISSING)
     def test_missing_or_blank_code_raises_parameter_missing(self, attempt, parameters) -> None:
-        """"code" が無いか、空文字か、空白だけのときは InteractionParameterMissingException を投げ、文に "code" を含む。"""
+        """ "code" が無いか、空文字か、空白だけのときは InteractionParameterMissingException を投げ、文に "code" を含む。"""
         with pytest.raises(InteractionParameterMissingException) as caught:
             attempt(parameters)
 
@@ -91,7 +98,7 @@ class TestMissingPuzzleInput:
         assert caught.value.failed_condition is _OPEN.preconditions[0]
 
     def test_wrong_code_raises_the_plain_refusal(self, attempt) -> None:
-        """"code" に違う番号を入れたときは、親の InteractionNotAllowedException をシナリオの文で投げる。"""
+        """ "code" に違う番号を入れたときは、親の InteractionNotAllowedException をシナリオの文で投げる。"""
         with pytest.raises(InteractionNotAllowedException) as caught:
             attempt({"code": "0000"})
 

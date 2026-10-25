@@ -131,9 +131,7 @@ class TestShortTermMemoryLlmServicesWired:
     L4 / L5 が全件 template fallback だった) が fix された。本 test 群は再発防止。
     """
 
-    def test_rolling_summary_stub_client_summary_service_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_rolling_summary_stub_client_summary_service_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """LLM_CLIENT=stub なら LiteLLMClient ではないので summary_service は注入されない
         (= template fallback mode で動く / これは正しい挙動)。"""
         from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
@@ -150,9 +148,7 @@ class TestShortTermMemoryLlmServicesWired:
         # stub なので LLM 経路は注入されない
         assert sw._service is None
 
-    def test_rolling_summary_litellm_client_summary_service(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_rolling_summary_litellm_client_summary_service(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """PR #444 fix の核心 assert: rolling + litellm なら setter 注入が走り、
         ``_service`` が None でなくなる。
 

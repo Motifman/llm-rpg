@@ -94,9 +94,7 @@ class SkillProposalDomainService:
     def _build_reason(entry: SkillProposalTableEntry) -> str:
         parts: list[str] = [f"提案種別: {entry.proposal_type.value}"]
         parts.append(f"推奨レベル帯: {entry.min_player_level}~{entry.max_player_level or '上限なし'}")
-        parts.append(
-            f"空き容量条件: {entry.min_free_capacity_ratio:.2f}~{entry.max_free_capacity_ratio:.2f}"
-        )
+        parts.append(f"空き容量条件: {entry.min_free_capacity_ratio:.2f}~{entry.max_free_capacity_ratio:.2f}")
         if entry.required_race is not None:
             parts.append(f"種族条件: {entry.required_race.value}")
         if entry.required_element is not None:
@@ -107,4 +105,3 @@ class SkillProposalDomainService:
             required = ",".join(str(skill_id.value) for skill_id in entry.required_skill_ids)
             parts.append(f"前提スキル: {required}")
         return " / ".join(parts)
-
