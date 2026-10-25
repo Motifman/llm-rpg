@@ -28,7 +28,6 @@ from ai_rpg_world.application.observation.services.recipient_strategies import (
     ShopRecipientStrategy,
     SkillRecipientStrategy,
     SnsRecipientStrategy,
-    SpeechRecipientStrategy,
     TradeRecipientStrategy,
 )
 from ai_rpg_world.application.observation.services.recipient_strategies.item_use_recipient_strategy import (
@@ -194,8 +193,8 @@ def create_observation_recipient_resolver(
     departed_position_store: DepartedPositionStore | None = None,
 ) -> IObservationRecipientResolver:
     """
-    既存と同様の振る舞いになる Resolver を組み立てる。
-    スポットの配信規則と、物体からプレイヤーを解決しない契約を用いる。
+    スポットの配信規則と、物体からプレイヤーを解決しない契約で組み立てる。
+    グラフを渡さない構築も許すが、その場合は発言を配信しない。
     """
     _ = shop_repository
     _ = sns_user_repository
@@ -266,10 +265,6 @@ def create_observation_recipient_resolver(
             )
             if spot_graph_repository is not None
             else ()
-        ),
-        SpeechRecipientStrategy(
-            observed_event_registry=observed_event_registry,
-            player_status_repository=player_status_repository,
         ),
         DefaultRecipientStrategy(
             observed_event_registry=observed_event_registry,

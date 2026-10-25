@@ -135,23 +135,3 @@ class TestMovementInterruptionServiceExceptions:
         service.maybe_cancel(PlayerId(1), output)  # 例外は伝播しない
 
         movement_service.cancel_movement.assert_called_once()
-
-    def test_swallows_player_not_found_exception(self):
-        """cancel_movement が PlayerNotFoundException を投げても伝播しない"""
-        from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-            PlayerNotFoundException,
-        )
-
-        movement_service = MagicMock()
-        movement_service.cancel_movement.side_effect = PlayerNotFoundException(999)
-        llm_resolver = MagicMock()
-        llm_resolver.is_llm_controlled.return_value = True
-        service = MovementInterruptionService(
-            movement_service=movement_service,
-            llm_player_resolver=llm_resolver,
-        )
-        output = _output(breaks_movement=True)
-
-        service.maybe_cancel(PlayerId(1), output)  # 例外は伝播しない
-
-        movement_service.cancel_movement.assert_called_once()

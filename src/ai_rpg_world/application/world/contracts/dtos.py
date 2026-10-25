@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
@@ -40,39 +39,6 @@ def _normalize_player_app_session_state(
 
 
 @dataclass
-class PlayerLocationDto:
-    """プレイヤー位置DTO"""
-    player_id: int
-    player_name: str
-    current_spot_id: int
-    current_spot_name: str
-    current_spot_description: str
-    x: int
-    y: int
-    z: int
-    area_ids: list[int] = field(default_factory=list)
-    area_names: list[str] = field(default_factory=list)
-    area_id: int | None = None
-    area_name: str | None = None
-
-
-@dataclass
-class SpotInfoDto:
-    """スポット情報DTO"""
-    spot_id: int
-    name: str
-    description: str
-    area_id: int | None
-    area_name: str | None
-    current_player_count: int
-    current_player_ids: set[int]
-    connected_spot_ids: set[int]
-    connected_spot_names: set[str]
-    area_ids: list[int] = field(default_factory=list)
-    area_names: list[str] = field(default_factory=list)
-
-
-@dataclass
 class VisibleObjectDto:
     """視界内オブジェクト1件のDTO"""
     object_id: int
@@ -109,49 +75,6 @@ class VisibleTileMapDto:
 
 
 @dataclass
-class VisibleContextDto:
-    """プレイヤー視点の視界内コンテキストDTO"""
-    player_id: int
-    player_name: str
-    spot_id: int
-    spot_name: str
-    center_x: int
-    center_y: int
-    center_z: int
-    view_distance: int
-    visible_objects: list["VisibleObjectDto"]
-
-
-@dataclass
-class MoveResultDto:
-    """移動結果DTO"""
-    success: bool
-    player_id: int
-    player_name: str
-    from_spot_id: int
-    from_spot_name: str
-    to_spot_id: int
-    to_spot_name: str
-    from_coordinate: dict[str, int]  # {"x": x, "y": y, "z": z}
-    to_coordinate: dict[str, int]
-    moved_at: datetime
-    busy_until_tick: int
-    message: str
-    error_message: str | None = None
-
-
-@dataclass(frozen=True)
-class PursuitCommandResultDto:
-    """追跡開始/中断コマンドの結果 DTO。"""
-
-    success: bool
-    message: str
-    target_world_object_id: int | None = None
-    target_display_name: str | None = None
-    no_op: bool = False
-
-
-@dataclass
 class AvailableMoveDto:
     """利用可能な移動先DTO"""
     spot_id: int
@@ -167,17 +90,6 @@ class AvailableLocationAreaDto:
     """同一スポット内の利用可能なロケーションエリアDTO（LLM 移動先候補用）"""
     location_area_id: int
     name: str
-
-
-@dataclass
-class PlayerMovementOptionsDto:
-    """プレイヤーの移動オプションDTO"""
-    player_id: int
-    player_name: str
-    current_spot_id: int
-    current_spot_name: str
-    available_moves: list[AvailableMoveDto]
-    total_available_moves: int
 
 
 @dataclass
