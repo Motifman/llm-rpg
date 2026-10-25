@@ -21,6 +21,7 @@ def _copy(memory: ShortTermMemory) -> ShortTermMemory:
         backstories=memory.backstories,
         recent_from=memory.recent_from,
         awaiting=memory.awaiting,
+        request=memory.request,
     )
 
 

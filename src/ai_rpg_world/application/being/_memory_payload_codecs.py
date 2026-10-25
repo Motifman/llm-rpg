@@ -38,6 +38,7 @@ from ai_rpg_world.being.domain.memo_book import (
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
     Backstory,
+    BackstoryRequest,
     Lapse,
     MemoryOperationOutcome,
     ObservedOutcome,
@@ -381,8 +382,11 @@ def being_short_term_memory_to_dict(memory: ShortTermMemory) -> dict[str, Any]:
         "experiences": [experience.show_to(to_dict) for experience in memory.experiences],
         "recent_from": memory.recent_from,
         "awaiting": None if memory.awaiting is None else _move_and_turn_to_dict(memory.awaiting),
+        "request": None
+        if memory.request is None
+        else {"until_turn": memory.request.until_turn, "requested_turn": memory.request.requested_turn},
         "backstories": [
-            {"flow": b.flow, "mood": b.mood, "written_turn": b.written_turn}
+            {"flow": b.flow, "mood": b.mood, "written_turn": b.written_turn, "until_turn": b.until_turn}
             for b in memory.backstories
         ],
     }
@@ -400,17 +404,27 @@ def dict_to_being_short_term_memory(data: dict[str, Any], *, being_id: BeingId) 
             else tuple(_dict_to_experience(experience) for experience in data["experiences"])
         )
         awaiting = data.get("awaiting")
+        request = data.get("request")
         return ShortTermMemory(
             being_id,
             experiences=experiences,
             backstories=tuple(
-                Backstory(flow=b["flow"], mood=b["mood"], written_turn=b["written_turn"])
+                Backstory(
+                    flow=b["flow"],
+                    mood=b["mood"],
+                    written_turn=b["written_turn"],
+                    # 範囲の終わりを足す前のいきさつは、書いたターンまでをまとめたとみなす (design_decisions D1824-11)。
+                    until_turn=b.get("until_turn", b["written_turn"]),
+                )
                 for b in data["backstories"]
             ),
             recent_from=data.get("recent_from", 1),
             awaiting=None
             if awaiting is None
             else Attempt(turn=awaiting["turn"], move=_dict_to_move(awaiting["move"])),
+            request=None
+            if request is None
+            else BackstoryRequest(until_turn=request["until_turn"], requested_turn=request["requested_turn"]),
         )
     except DomainException as exc:
         raise ValueError(f"invalid being short-term memory payload: {exc}") from exc
