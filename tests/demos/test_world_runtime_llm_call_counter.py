@@ -4,7 +4,7 @@ progress.jsonl の可観測性フィールド (``llm_calls`` / ``travel_active``
 runtime の counter / aggregator を experiment progress reporter が
 sample することで実現する。本テストは:
 
-- ``bump_llm_call_count`` × call_count → ``pop_llm_call_count`` で call_count が返り、再度
+- ``bump_llm_call_count`` × N → ``pop_llm_call_count`` で N が返り、再度
   pop すると 0 (= read-and-reset セマンティクス) になる
 - ``count_traveling_players`` が is_traveling な player 数を正しく数える
 - 並列 bump (ThreadPoolExecutor 経由) でも値が落ちない
