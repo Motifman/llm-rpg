@@ -19,10 +19,6 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.monster.service.monster_behavior_state_machine import (
-        AttackedTransitionResult,
-        TransitionApplicationOutput,
-    )
     from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
 
 
@@ -131,66 +127,6 @@ class MonsterBehaviorState:
             chase_started_at_tick=chase_started_at_tick,
         )
 
-    def with_attacked(
-        self,
-        transition: "AttackedTransitionResult",
-    ) -> "MonsterBehaviorState":
-        """
-        被弾時の遷移結果を適用した新しい状態を返す。
-        no_transition の場合は self を返す。
-
-        Phase 4a/4b で追加した spot graph 用フィールドは維持する (この遷移
-        は 2D 経路の state machine 用なので、spot graph 系の状態は変更しない)。
-        """
-        if transition.no_transition:
-            return self
-        return MonsterBehaviorState(
-            state=transition.new_state or self.state,
-            target_id=transition.new_target_id,
-            last_known_position=transition.new_last_known_position,
-            initial_position=self.initial_position,
-            patrol_index=self.patrol_index,
-            search_timer=self.search_timer,
-            failure_count=self.failure_count,
-            last_observed_target_spot_id=self.last_observed_target_spot_id,
-            flee_until_tick=self.flee_until_tick,
-            chase_attacker_ref=self.chase_attacker_ref,
-            chase_started_at_tick=self.chase_started_at_tick,
-        )
-
-    def with_transition(
-        self,
-        output: "TransitionApplicationOutput",
-    ) -> "MonsterBehaviorState":
-        """apply_behavior_transition の結果を適用した新しい状態を返す。
-
-        Phase 4a/4b で追加した spot graph 用フィールドは維持する。
-        """
-        return MonsterBehaviorState(
-            state=output.final_state,
-            target_id=output.final_target_id,
-            last_known_position=output.final_last_known_position,
-            initial_position=self.initial_position,
-            patrol_index=self.patrol_index,
-            search_timer=self.search_timer,
-            failure_count=self.failure_count,
-            last_observed_target_spot_id=self.last_observed_target_spot_id,
-            flee_until_tick=self.flee_until_tick,
-            chase_attacker_ref=self.chase_attacker_ref,
-            chase_started_at_tick=self.chase_started_at_tick,
-        )
-
-    def with_territory_return(self) -> "MonsterBehaviorState":
-        """テリトリ復帰（RETURN）に遷移した新しい状態を返す。"""
-        return MonsterBehaviorState(
-            state=BehaviorStateEnum.RETURN,
-            target_id=None,
-            last_known_position=None,
-            initial_position=self.initial_position,
-            patrol_index=self.patrol_index,
-            search_timer=self.search_timer,
-            failure_count=self.failure_count,
-        )
 
     def with_spawn_reset(
         self,
@@ -200,7 +136,7 @@ class MonsterBehaviorState:
         return MonsterBehaviorState.create_idle(initial_position=initial_position)
 
     def with_target_cleared(self) -> "MonsterBehaviorState":
-        """target_id と last_known_position をクリアした新しい状態を返す（fail_pursuit 等）。"""
+        """target_id と last_known_position をクリアした新しい状態を返す。"""
         return MonsterBehaviorState(
             state=self.state,
             target_id=None,

@@ -10,11 +10,6 @@ from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterStatsValidationException,
 )
-from ai_rpg_world.domain.monster.service.monster_behavior_state_machine import (
-    AttackedTransitionResult,
-    EventSpec,
-    TransitionApplicationOutput,
-)
 from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -128,113 +123,6 @@ class TestMonsterBehaviorStateValidation:
         assert "failure_count" in str(exc_info.value).lower()
 
 
-class TestMonsterBehaviorStateWithAttacked:
-    """with_attacked のテスト"""
-
-    @pytest.fixture
-    def base_state(self) -> MonsterBehaviorState:
-        return MonsterBehaviorState.from_parts(
-            state=BehaviorStateEnum.IDLE,
-            target_id=None,
-            last_known_position=None,
-            initial_position=Coordinate(0, 0, 0),
-        )
-
-    def test_no_transition_returns_self(self, base_state: MonsterBehaviorState):
-        """no_transition のときは self を返す"""
-        transition = AttackedTransitionResult(no_transition=True)
-        result = base_state.with_attacked(transition)
-        assert result is base_state
-
-    def test_applies_transition_when_not_no_transition(self, base_state: MonsterBehaviorState):
-        """遷移結果を適用"""
-        transition = AttackedTransitionResult(
-            no_transition=False,
-            new_state=BehaviorStateEnum.FLEE,
-            new_target_id=WorldObjectId(2001),
-            new_last_known_position=Coordinate(10, 10, 0),
-            clear_pursuit=True,
-            sync_pursuit=False,
-        )
-        result = base_state.with_attacked(transition)
-        assert result.state == BehaviorStateEnum.FLEE
-        assert result.target_id == WorldObjectId(2001)
-        assert result.last_known_position == Coordinate(10, 10, 0)
-        assert result.initial_position == Coordinate(0, 0, 0)
-        assert result.patrol_index == 0
-        assert result is not base_state
-
-
-class TestMonsterBehaviorStateWithTransition:
-    """with_transition のテスト"""
-
-    @pytest.fixture
-    def base_state(self) -> MonsterBehaviorState:
-        return MonsterBehaviorState.from_parts(
-            state=BehaviorStateEnum.CHASE,
-            target_id=WorldObjectId(3001),
-            last_known_position=Coordinate(1, 1, 0),
-            initial_position=Coordinate(0, 0, 0),
-        )
-
-    @pytest.mark.parametrize(
-        "target_id",
-        [WorldObjectId(3001), WorldObjectId(3002)],
-        ids=["original_target", "different_target"],
-    )
-    def test_applies_transition_output(self, base_state: MonsterBehaviorState, target_id):
-        """出力の状態・位置・対象を適用し、元の初期位置を保持する。"""
-        output = TransitionApplicationOutput(
-            final_state=BehaviorStateEnum.SEARCH,
-            final_target_id=target_id,
-            final_last_known_position=Coordinate(2, 2, 0),
-            clear_pursuit=False,
-            sync_pursuit=None,
-            preserve_pursuit_last_known=None,
-            events=[],
-        )
-        result = base_state.with_transition(output)
-        assert result.state == BehaviorStateEnum.SEARCH
-        assert result.target_id == target_id
-        assert result.last_known_position == Coordinate(2, 2, 0)
-        assert result.initial_position == base_state.initial_position
-        assert result is not base_state
-
-    def test_handles_none_target_and_position(self, base_state: MonsterBehaviorState):
-        """target_id と last_known_position が None のケース"""
-        output = TransitionApplicationOutput(
-            final_state=BehaviorStateEnum.RETURN,
-            final_target_id=None,
-            final_last_known_position=None,
-        )
-        result = base_state.with_transition(output)
-        assert result.target_id is None
-        assert result.last_known_position is None
-
-
-class TestMonsterBehaviorStateWithTerritoryReturn:
-    """with_territory_return のテスト"""
-
-    @pytest.fixture
-    def chase_state(self) -> MonsterBehaviorState:
-        return MonsterBehaviorState.from_parts(
-            state=BehaviorStateEnum.CHASE,
-            target_id=WorldObjectId(4001),
-            last_known_position=Coordinate(5, 5, 0),
-            initial_position=Coordinate(0, 0, 0),
-            patrol_index=3,
-        )
-
-    def test_sets_return_and_clears_target(self, chase_state: MonsterBehaviorState):
-        """RETURN に遷移し target をクリア"""
-        result = chase_state.with_territory_return()
-        assert result.state == BehaviorStateEnum.RETURN
-        assert result.target_id is None
-        assert result.last_known_position is None
-        assert result.initial_position == chase_state.initial_position
-        assert result.patrol_index == chase_state.patrol_index
-
-
 class TestMonsterBehaviorStateWithSpawnReset:
     """with_spawn_reset のテスト"""
 
@@ -340,35 +228,11 @@ class TestMonsterBehaviorStateAdvancePatrolIndex:
 
 
 class TestMonsterBehaviorStateImmutability:
-    """既存6操作は初期状態の公開値を変えず、新しい実体を返す。"""
+    """残る3操作は初期状態の公開値を変えず、新しい実体を返す。"""
 
     @pytest.mark.parametrize(
         "update",
         [
-            pytest.param(
-                lambda state: state.with_attacked(
-                    AttackedTransitionResult(
-                        no_transition=False,
-                        new_state=BehaviorStateEnum.FLEE,
-                        new_target_id=WorldObjectId(1),
-                        new_last_known_position=Coordinate(1, 1, 0),
-                        clear_pursuit=True,
-                        sync_pursuit=False,
-                    )
-                ),
-                id="attacked",
-            ),
-            pytest.param(
-                lambda state: state.with_transition(
-                    TransitionApplicationOutput(
-                        final_state=BehaviorStateEnum.IDLE,
-                        final_target_id=None,
-                        final_last_known_position=None,
-                    )
-                ),
-                id="transition_noop",
-            ),
-            pytest.param(lambda state: state.with_territory_return(), id="territory_return"),
             pytest.param(
                 lambda state: state.with_spawn_reset(Coordinate(1, 1, 0)),
                 id="spawn_reset",
@@ -378,7 +242,7 @@ class TestMonsterBehaviorStateImmutability:
         ],
     )
     def test_updates_preserve_original_state_and_return_new_instance(self, update):
-        """初期IDLEへの6操作は別実体を返し、元の公開11項目は初期値を保つ。"""
+        """初期IDLEへの3操作は別実体を返し、元の公開11項目は初期値を保つ。"""
         state = MonsterBehaviorState.create_idle(initial_position=Coordinate(0, 0, 0))
         result = update(state)
         assert result is not state

@@ -27,7 +27,6 @@ from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterDamagedEvent,
-    MonsterDecidedToMoveEvent,
     MonsterMpRecoveredEvent,
     TargetSpottedEvent,
 )
@@ -406,14 +405,6 @@ class TestObservationRecipientResolverExtendedEvents:
     @pytest.mark.parametrize(
         "event_factory",
         [
-            lambda: MonsterDecidedToMoveEvent.create(
-                aggregate_id=MonsterId(1),
-                aggregate_type="MonsterAggregate",
-                actor_id=WorldObjectId(1),
-                coordinate={"x": 0, "y": 0, "z": 0},
-                spot_id=SpotId(1),
-                current_tick=1,
-            ),
             lambda: MonsterMpRecoveredEvent.create(
                 aggregate_id=MonsterId(1),
                 aggregate_type="MonsterAggregate",

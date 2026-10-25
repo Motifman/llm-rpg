@@ -20,7 +20,6 @@ from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.monster.event.monster_events import (
     BehaviorStuckEvent,
     MonsterDamagedEvent,
-    MonsterDecidedToMoveEvent,
     MonsterDiedEvent,
     MonsterMpRecoveredEvent,
     MonsterSpawnedEvent,
@@ -1112,14 +1111,6 @@ class TestObservationFormatter:
                 aggregate_type="MonsterAggregate",
                 amount=3,
                 current_mp=10,
-            ),
-            MonsterDecidedToMoveEvent.create(
-                aggregate_id=MonsterId(1),
-                aggregate_type="MonsterAggregate",
-                actor_id=WorldObjectId(1),
-                coordinate={"x": 0, "y": 0, "z": 0},
-                spot_id=SpotId(1),
-                current_tick=WorldTick(1),
             ),
             TargetSpottedEvent.create(
                 aggregate_id=WorldObjectId(1),

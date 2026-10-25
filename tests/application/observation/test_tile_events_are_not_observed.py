@@ -15,8 +15,7 @@ from ai_rpg_world.infrastructure.events.observation_event_handler_registry impor
 
 _TILE_EVENT_GROUPS = {
     "monster.event.monster_events": (
-        "MonsterDecidedToMoveEvent", "MonsterDecidedToUseSkillEvent",
-        "MonsterDecidedToInteractEvent", "MonsterFedEvent",
+        "MonsterFedEvent",
     ),
 }
 _TILE_EVENTS = [
