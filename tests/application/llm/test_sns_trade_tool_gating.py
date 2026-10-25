@@ -33,12 +33,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TRADE_OFFER,
 )
 from ai_rpg_world.application.world.contracts.dtos import (
-    AvailableMoveDto,
     AvailableTradeSummaryDto,
     InventoryItemDto,
     PlayerCurrentStateDto,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 def _state(
@@ -51,34 +49,6 @@ def _state(
         player_id=1,
         player_name="P",
         current_spot_id=1,
-        current_spot_name="A",
-        current_spot_description="",
-        x=0,
-        y=0,
-        z=0,
-        area_id=None,
-        area_name=None,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="clear",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=5,
-        available_moves=[
-            AvailableMoveDto(
-                spot_id=2,
-                spot_name="B",
-                road_id=1,
-                road_description="",
-                conditions_met=True,
-                failed_conditions=[],
-            )
-        ],
-        total_available_moves=1,
-        attention_level=AttentionLevel.FULL,
         is_sns_mode_active=is_sns_mode_active,
         sns_virtual_page_kind=sns_virtual_page_kind,
         sns_current_page_snapshot_json=None,

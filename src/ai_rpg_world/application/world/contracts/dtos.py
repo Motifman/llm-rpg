@@ -1,14 +1,12 @@
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
         SpotGraphPlayerSnapshotDto,
     )
-from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 
 
 def _normalize_player_app_session_state(
@@ -39,60 +37,6 @@ def _normalize_player_app_session_state(
 
 
 @dataclass
-class VisibleObjectDto:
-    """視界内オブジェクト1件のDTO"""
-    object_id: int
-    object_type: str
-    x: int
-    y: int
-    z: int
-    distance: int
-    display_name: str | None = None
-    object_kind: str | None = None
-    direction_from_player: str | None = None
-    is_interactable: bool = False
-    player_id_value: int | None = None
-    is_self: bool = False
-    interaction_type: str | None = None
-    available_interactions: list[str] = field(default_factory=list)
-    can_interact: bool = False
-    can_harvest: bool = False
-    can_store_in_chest: bool = False
-    can_take_from_chest: bool = False
-    is_notable: bool = False
-    notable_reason: str | None = None
-
-
-@dataclass
-class VisibleTileMapDto:
-    """視界範囲のタイルマップ（現在視界のみ、毎ターン更新）"""
-
-    center_x: int
-    center_y: int
-    view_distance: int
-    rows: list[str]
-    legend: dict[str, str]
-
-
-@dataclass
-class AvailableMoveDto:
-    """利用可能な移動先DTO"""
-    spot_id: int
-    spot_name: str
-    road_id: int
-    road_description: str
-    conditions_met: bool
-    failed_conditions: list[str]
-
-
-@dataclass
-class AvailableLocationAreaDto:
-    """同一スポット内の利用可能なロケーションエリアDTO（LLM 移動先候補用）"""
-    location_area_id: int
-    name: str
-
-
-@dataclass
 class InventoryItemDto:
     """インベントリ内アイテム 1 件の DTO"""
 
@@ -101,113 +45,6 @@ class InventoryItemDto:
     display_name: str
     quantity: int
     is_placeable: bool = False
-
-
-@dataclass
-class ChestItemDto:
-    """チェスト内アイテム 1 件の DTO"""
-
-    chest_world_object_id: int
-    chest_display_name: str
-    item_instance_id: int
-    display_name: str
-    quantity: int
-
-
-@dataclass
-class ConversationChoiceDto:
-    """会話の選択肢または次へ操作の DTO"""
-
-    display_text: str
-    choice_index: int | None = None
-    is_next: bool = False
-
-
-@dataclass
-class ActiveConversationDto:
-    """現在進行中の会話セッション DTO"""
-
-    npc_world_object_id: int
-    npc_display_name: str
-    node_text: str
-    choices: list[ConversationChoiceDto]
-    is_terminal: bool
-    dialogue_tree_id_value: int | None = None
-
-
-@dataclass
-class ActiveHarvestDto:
-    """進行中採集の概要 DTO"""
-
-    target_world_object_id: int
-    target_display_name: str
-    finish_tick: int
-
-
-@dataclass
-class UsableSkillDto:
-    """使用可能スキル 1 件の DTO"""
-
-    skill_loadout_id: int
-    skill_slot_index: int
-    skill_id: int
-    display_name: str
-    mp_cost: int = 0
-    stamina_cost: int = 0
-    hp_cost: int = 0
-
-
-@dataclass
-class EquipableSkillCandidateDto:
-    """装備候補スキル 1 件の DTO"""
-
-    skill_loadout_id: int
-    skill_id: int
-    display_name: str
-    source_deck_tier: DeckTier
-
-
-@dataclass
-class SkillEquipSlotDto:
-    """装備先スロット 1 件の DTO"""
-
-    skill_loadout_id: int
-    deck_tier: DeckTier
-    slot_index: int
-    display_name: str
-    equipped_skill_id: int | None = None
-    equipped_skill_name: str | None = None
-
-
-@dataclass
-class PendingSkillProposalDto:
-    """保留中スキル提案 1 件の DTO"""
-
-    progress_id: int
-    proposal_id: int
-    offered_skill_id: int
-    display_name: str
-    proposal_type: SkillProposalType
-    deck_tier: DeckTier
-    target_slot_index: int | None = None
-    reason: str = ""
-
-
-@dataclass
-class AwakenedActionDto:
-    """覚醒モード発動候補 DTO"""
-
-    skill_loadout_id: int
-    display_name: str
-
-
-@dataclass
-class AttentionLevelOptionDto:
-    """選択可能な注意レベル DTO"""
-
-    value: str
-    display_name: str
-    description: str
 
 
 @dataclass
@@ -276,33 +113,7 @@ class PlayerWorldStateDto:
     player_id: int
     player_name: str
     current_spot_id: int | None
-    current_spot_name: str | None
-    current_spot_description: str | None
-    x: int | None
-    y: int | None
-    z: int | None
-    current_player_count: int
-    current_player_ids: set[int]
-    connected_spot_ids: set[int]
-    connected_spot_names: set[str]
-    weather_type: str
-    weather_intensity: float
-    current_terrain_type: str | None
-    visible_objects: list[VisibleObjectDto]
-    view_distance: int
-    available_moves: list[AvailableMoveDto] | None
-    total_available_moves: int | None
-    attention_level: AttentionLevel
     area_ids: list[int] = field(default_factory=list)
-    area_names: list[str] = field(default_factory=list)
-    area_id: int | None = None
-    area_name: str | None = None
-    available_location_areas: list[AvailableLocationAreaDto] | None = None
-    current_location_description: str | None = None
-    is_busy: bool = False
-    busy_until_tick: int | None = None
-    has_active_path: bool = False
-    visible_tile_map: Optional["VisibleTileMapDto"] = None
     current_game_time_label: str | None = None
 
 
@@ -311,18 +122,6 @@ class PlayerRuntimeContextDto:
     """プレイヤーの LLM/runtime 向け補助コンテキスト。"""
 
     inventory_items: list[InventoryItemDto] = field(default_factory=list)
-    chest_items: list[ChestItemDto] = field(default_factory=list)
-    active_conversation: ActiveConversationDto | None = None
-    active_harvest: ActiveHarvestDto | None = None
-    usable_skills: list[UsableSkillDto] = field(default_factory=list)
-    equipable_skill_candidates: list[EquipableSkillCandidateDto] = field(default_factory=list)
-    skill_equip_slots: list[SkillEquipSlotDto] = field(default_factory=list)
-    pending_skill_proposals: list[PendingSkillProposalDto] = field(default_factory=list)
-    awakened_action: AwakenedActionDto | None = None
-    attention_level_options: list[AttentionLevelOptionDto] = field(default_factory=list)
-    can_destroy_placeable: bool = False
-    actionable_objects: list[VisibleObjectDto] = field(default_factory=list)
-    notable_objects: list[VisibleObjectDto] = field(default_factory=list)
     active_quest_ids: list[int] = field(default_factory=list)
     guild_ids: list[int] = field(default_factory=list)
     nearby_shop_ids: list[int] = field(default_factory=list)
@@ -364,65 +163,14 @@ class PlayerAppSessionStateDto:
 
 @dataclass
 class PlayerCurrentStateDto:
-    """
-    LLM 入力用の単一「現在状態」DTO。
-    プレイヤー位置・スポット周辺・天気・地形・視界内オブジェクト・利用可能な移動先・注意レベルをまとめて保持する。
-    """
-    # プレイヤー識別
+    """スポットの状態と、時刻・会議・作業・ゲーム内アプリの情報をLLMへ渡す。"""
+
     player_id: int
     player_name: str
-    # 現在地
+    # ギルド作成の判定に使う場所の文脈。
     current_spot_id: int | None
-    current_spot_name: str | None
-    current_spot_description: str | None
-    x: int | None
-    y: int | None
-    z: int | None
-    # スポット周辺（同スポット他プレイヤー・接続先）
-    current_player_count: int
-    current_player_ids: set[int]
-    connected_spot_ids: set[int]
-    connected_spot_names: set[str]
-    # 天気（現在スポット）
-    weather_type: str
-    weather_intensity: float
-    # 現在タイルの地形
-    current_terrain_type: str | None
-    # 視界内オブジェクト
-    visible_objects: list[VisibleObjectDto]
-    view_distance: int
-    # 利用可能な移動先（オプション）
-    available_moves: list[AvailableMoveDto] | None
-    total_available_moves: int | None
-    # 注意レベル
-    attention_level: AttentionLevel
-    # プレイヤー座標が属する全ロケーション（重なり対応。一次データ）
     area_ids: list[int] = field(default_factory=list)
-    area_names: list[str] = field(default_factory=list)
-    # 後方互換: area_ids[0], area_names[0] の導出値。area_ids が空でないとき使用。
-    area_id: int | None = None
-    area_name: str | None = None
-    # 同一スポット内のロケーションエリア（オプション）
-    available_location_areas: list[AvailableLocationAreaDto] | None = None
-    # 複数ティックの行動中か（経路設定済みの移動中など）。割り込み判定に利用。
-    current_location_description: str | None = None
-    is_busy: bool = False
-    busy_until_tick: int | None = None
-    has_active_path: bool = False
-    # sibling-list UI context
     inventory_items: list[InventoryItemDto] = field(default_factory=list)
-    chest_items: list[ChestItemDto] = field(default_factory=list)
-    active_conversation: ActiveConversationDto | None = None
-    active_harvest: ActiveHarvestDto | None = None
-    usable_skills: list[UsableSkillDto] = field(default_factory=list)
-    equipable_skill_candidates: list[EquipableSkillCandidateDto] = field(default_factory=list)
-    skill_equip_slots: list[SkillEquipSlotDto] = field(default_factory=list)
-    pending_skill_proposals: list[PendingSkillProposalDto] = field(default_factory=list)
-    awakened_action: AwakenedActionDto | None = None
-    attention_level_options: list[AttentionLevelOptionDto] = field(default_factory=list)
-    can_destroy_placeable: bool = False
-    actionable_objects: list[VisibleObjectDto] = field(default_factory=list)
-    notable_objects: list[VisibleObjectDto] = field(default_factory=list)
     # LLM 関係性メモリ検索用（scope_keys 生成）
     active_quest_ids: list[int] = field(default_factory=list)
     guild_ids: list[int] = field(default_factory=list)
@@ -432,8 +180,6 @@ class PlayerCurrentStateDto:
     guild_memberships: list["GuildMembershipSummaryDto"] = field(default_factory=list)
     nearby_shops: list["NearbyShopSummaryDto"] = field(default_factory=list)
     available_trades: list["AvailableTradeSummaryDto"] = field(default_factory=list)
-    # 視界タイルマップ（オプション、LLM 用）
-    visible_tile_map: Optional["VisibleTileMapDto"] = None
     # ゲーム内現在時刻（game_time_provider と world_time_config が設定されているときのみ）
     current_game_time_label: str | None = None
     # シナリオに TICK_LIMIT 系の lose_condition があるときの「残り tick 数」。
@@ -504,33 +250,7 @@ class PlayerCurrentStateDto:
             player_id=self.player_id,
             player_name=self.player_name,
             current_spot_id=self.current_spot_id,
-            current_spot_name=self.current_spot_name,
-            current_spot_description=self.current_spot_description,
-            x=self.x,
-            y=self.y,
-            z=self.z,
-            current_player_count=self.current_player_count,
-            current_player_ids=self.current_player_ids,
-            connected_spot_ids=self.connected_spot_ids,
-            connected_spot_names=self.connected_spot_names,
-            weather_type=self.weather_type,
-            weather_intensity=self.weather_intensity,
-            current_terrain_type=self.current_terrain_type,
-            visible_objects=self.visible_objects,
-            view_distance=self.view_distance,
-            available_moves=self.available_moves,
-            total_available_moves=self.total_available_moves,
-            attention_level=self.attention_level,
             area_ids=self.area_ids,
-            area_names=self.area_names,
-            area_id=self.area_id,
-            area_name=self.area_name,
-            available_location_areas=self.available_location_areas,
-            current_location_description=self.current_location_description,
-            is_busy=self.is_busy,
-            busy_until_tick=self.busy_until_tick,
-            has_active_path=self.has_active_path,
-            visible_tile_map=self.visible_tile_map,
             current_game_time_label=self.current_game_time_label,
         )
 
@@ -539,18 +259,6 @@ class PlayerCurrentStateDto:
         """Phase 1 で導入した runtime context への論理的な分離境界。"""
         return PlayerRuntimeContextDto(
             inventory_items=self.inventory_items,
-            chest_items=self.chest_items,
-            active_conversation=self.active_conversation,
-            active_harvest=self.active_harvest,
-            usable_skills=self.usable_skills,
-            equipable_skill_candidates=self.equipable_skill_candidates,
-            skill_equip_slots=self.skill_equip_slots,
-            pending_skill_proposals=self.pending_skill_proposals,
-            awakened_action=self.awakened_action,
-            attention_level_options=self.attention_level_options,
-            can_destroy_placeable=self.can_destroy_placeable,
-            actionable_objects=self.actionable_objects,
-            notable_objects=self.notable_objects,
             active_quest_ids=self.active_quest_ids,
             guild_ids=self.guild_ids,
             nearby_shop_ids=self.nearby_shop_ids,
@@ -598,45 +306,8 @@ class PlayerCurrentStateDto:
             player_id=world_state.player_id,
             player_name=world_state.player_name,
             current_spot_id=world_state.current_spot_id,
-            current_spot_name=world_state.current_spot_name,
-            current_spot_description=world_state.current_spot_description,
-            x=world_state.x,
-            y=world_state.y,
-            z=world_state.z,
-            current_player_count=world_state.current_player_count,
-            current_player_ids=world_state.current_player_ids,
-            connected_spot_ids=world_state.connected_spot_ids,
-            connected_spot_names=world_state.connected_spot_names,
-            weather_type=world_state.weather_type,
-            weather_intensity=world_state.weather_intensity,
-            current_terrain_type=world_state.current_terrain_type,
-            visible_objects=world_state.visible_objects,
-            view_distance=world_state.view_distance,
-            available_moves=world_state.available_moves,
-            total_available_moves=world_state.total_available_moves,
-            attention_level=world_state.attention_level,
             area_ids=world_state.area_ids,
-            area_names=world_state.area_names,
-            area_id=world_state.area_id,
-            area_name=world_state.area_name,
-            available_location_areas=world_state.available_location_areas,
-            current_location_description=world_state.current_location_description,
-            is_busy=world_state.is_busy,
-            busy_until_tick=world_state.busy_until_tick,
-            has_active_path=world_state.has_active_path,
             inventory_items=runtime_context.inventory_items,
-            chest_items=runtime_context.chest_items,
-            active_conversation=runtime_context.active_conversation,
-            active_harvest=runtime_context.active_harvest,
-            usable_skills=runtime_context.usable_skills,
-            equipable_skill_candidates=runtime_context.equipable_skill_candidates,
-            skill_equip_slots=runtime_context.skill_equip_slots,
-            pending_skill_proposals=runtime_context.pending_skill_proposals,
-            awakened_action=runtime_context.awakened_action,
-            attention_level_options=runtime_context.attention_level_options,
-            can_destroy_placeable=runtime_context.can_destroy_placeable,
-            actionable_objects=runtime_context.actionable_objects,
-            notable_objects=runtime_context.notable_objects,
             active_quest_ids=runtime_context.active_quest_ids,
             guild_ids=runtime_context.guild_ids,
             nearby_shop_ids=runtime_context.nearby_shop_ids,
@@ -644,7 +315,6 @@ class PlayerCurrentStateDto:
             guild_memberships=runtime_context.guild_memberships,
             nearby_shops=runtime_context.nearby_shops,
             available_trades=runtime_context.available_trades,
-            visible_tile_map=world_state.visible_tile_map,
             current_game_time_label=world_state.current_game_time_label,
             is_sns_mode_active=app_session_state.is_sns_mode_active,
             active_game_app=app_session_state.active_game_app,

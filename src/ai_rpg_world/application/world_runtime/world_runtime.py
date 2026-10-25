@@ -338,7 +338,7 @@ from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
 )
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel, SpeechChannel
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
 from ai_rpg_world.domain.player.value_object.gold import Gold
@@ -1528,21 +1528,6 @@ class WorldRuntime:
             player_id=int(player_id),
             player_name=self.get_player_name(player_id),
             current_spot_id=None,
-            current_spot_name=snap.current_spot_name,
-            current_spot_description=snap.current_spot_description,
-            x=None, y=None, z=None,
-            current_player_count=0,
-            current_player_ids=set(),
-            connected_spot_ids=set(),
-            connected_spot_names=set(),
-            weather_type="不明",
-            weather_intensity=0.0,
-            current_terrain_type=None,
-            visible_objects=[],
-            view_distance=0,
-            available_moves=None,
-            total_available_moves=None,
-            attention_level=AttentionLevel.FULL,
             spot_graph_snapshot=snap,
             current_game_time_label=time_label,
             tick_budget_remaining=self._compute_tick_budget_remaining(),

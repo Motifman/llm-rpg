@@ -5,7 +5,6 @@ from ai_rpg_world.application.llm.services.action_result_store import (
 )
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     NoOpAvailabilityResolver,
-    WhisperAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.services.available_tools_provider import (
     DefaultAvailableToolsProvider,
@@ -48,6 +47,5 @@ __all__ = [
     "SectionBasedContextFormatStrategy",
     "StubLlmClient",
     "ToolCommandMapper",
-    "WhisperAvailabilityResolver",
     "register_default_tools",
 ]

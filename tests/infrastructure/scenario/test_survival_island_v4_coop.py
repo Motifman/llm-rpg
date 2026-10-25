@@ -20,7 +20,6 @@ from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_object import VISIBLE_STATE_TAGS_KEY
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
@@ -720,23 +719,6 @@ def _make_player_state(snapshot) -> PlayerCurrentStateDto:
         player_id=1,
         player_name="P",
         current_spot_id=snapshot.current_spot_id,
-        current_spot_name=snapshot.current_spot_name,
-        current_spot_description=snapshot.current_spot_description,
-        x=None,
-        y=None,
-        z=None,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="晴れ",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=0,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=snapshot,
     )
 

@@ -39,7 +39,6 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphObjectEntry,
     SpotGraphPlayerSnapshotDto,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 def _current_state(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
@@ -47,23 +46,6 @@ def _current_state(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
         player_id=1,
         player_name="アオイ",
         current_spot_id=snap.current_spot_id,
-        current_spot_name=snap.current_spot_name,
-        current_spot_description=snap.current_spot_description,
-        x=None,
-        y=None,
-        z=None,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="晴れ",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=0,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=snap,
     )
 
