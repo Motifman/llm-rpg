@@ -54,6 +54,11 @@ class TestGuildAggregate:
             creator_player_id=creator_id,
         )
 
+    @pytest.mark.parametrize("spot_id, expected", [(SpotId(1), True), (SpotId(2), False), (None, False)])
+    def test_is_at_spot(self, guild, spot_id, expected):
+        """ギルドの所在地と同じスポットだけを受け入れ、別スポットと未配置は拒否する。"""
+        assert guild.is_at_spot(spot_id) is expected
+
     @pytest.fixture
     def guild_with_members(self, guild, guild_id, creator_id, player_2_id) -> GuildAggregate:
         """リーダー(1)とメンバー(2)がいるギルド。1はオフィサーに昇格可能。"""

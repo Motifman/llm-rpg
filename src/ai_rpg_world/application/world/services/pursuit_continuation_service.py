@@ -102,7 +102,6 @@ class PursuitContinuationService:
             GetPlayerCurrentStateQuery(
                 player_id=int(player_status.player_id),
                 include_available_moves=False,
-                include_tile_map=False,
             )
         )
         target_world_object_id = int(player_status.pursuit_state.target_id)

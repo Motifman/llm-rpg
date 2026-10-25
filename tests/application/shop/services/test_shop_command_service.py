@@ -44,23 +44,15 @@ from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
 from ai_rpg_world.domain.shop.value_object.shop_listing_id import ShopListingId
 from ai_rpg_world.domain.shop.value_object.shop_listing_price import ShopListingPrice
 from ai_rpg_world.domain.shop.value_object.shop_listing_projection import ShopListingProjection
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.entity.location_area import LocationArea
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.value_object.area import PointArea
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
     InMemoryItemRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_location_establishment_repository import (
     InMemoryLocationEstablishmentRepository,
-)
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
     InMemoryPlayerInventoryRepository,
@@ -112,23 +104,6 @@ def _create_stackable_item_spec():
     )
 
 
-def _create_physical_map_with_location(spot_id_val: int, location_area_id_val: int, coord: Coordinate):
-    """指定座標を含むLocationAreaを持つPhysicalMapを作成"""
-    spot_id = SpotId(spot_id_val)
-    tile = Tile(coord, TerrainType.road())
-    location_area = LocationArea(
-        location_id=LocationAreaId.create(location_area_id_val),
-        area=PointArea(coord),
-        name="Test Area",
-        description="For shop test",
-    )
-    return PhysicalMapAggregate.create(
-        spot_id=spot_id,
-        tiles=[tile],
-        location_areas=[location_area],
-    )
-
-
 class TestShopCommandService:
     """ShopCommandServiceのテスト"""
 
@@ -147,7 +122,6 @@ class TestShopCommandService:
         inventory_repository = InMemoryPlayerInventoryRepository(data_store, unit_of_work)
         status_repository = InMemoryPlayerStatusRepository(data_store, unit_of_work)
         item_repository = InMemoryItemRepository(data_store, unit_of_work)
-        physical_map_repository = InMemoryPhysicalMapRepository(data_store, unit_of_work)
         location_establishment_repository = InMemoryLocationEstablishmentRepository(
             data_store=data_store,
             unit_of_work=unit_of_work,
@@ -158,7 +132,6 @@ class TestShopCommandService:
             player_inventory_repository=inventory_repository,
             player_status_repository=status_repository,
             item_repository=item_repository,
-            physical_map_repository=physical_map_repository,
             location_establishment_repository=location_establishment_repository,
             unit_of_work=unit_of_work,
         )
@@ -168,7 +141,6 @@ class TestShopCommandService:
             "inv_repo": inventory_repository,
             "status_repo": status_repository,
             "item_repo": item_repository,
-            "map_repo": physical_map_repository,
             "uow": unit_of_work,
         }
 
@@ -517,12 +489,11 @@ class TestShopCommandService:
 
     # ----- PurchaseFromShop -----
 
-    def test_purchase_from_shop_success_full_quantity(self, setup_service):
-        """購入が成功する（全量購入・購入者はロケーションにいる）"""
+    @pytest.mark.parametrize("coord", [None, Coordinate(99, 99, 0)])
+    def test_purchase_from_shop_success_full_quantity(self, setup_service, coord):
+        """同じスポットなら座標と物理マップがなくても購入でき、代金と品物が移る。"""
         s = setup_service
         spot_id_val, loc_id_val = 1, 1
-        coord = Coordinate(0, 0, 0)
-        s["map_repo"].save(_create_physical_map_with_location(spot_id_val, loc_id_val, coord))
 
         owner_id, buyer_id = 1, 2
         shop_id = s["shop_repo"].generate_shop_id()
@@ -566,12 +537,11 @@ class TestShopCommandService:
         shop = s["shop_repo"].find_by_id(shop_id)
         assert shop.get_listing(listing_id) is None
 
-    def test_purchase_from_shop_not_at_location_raises(self, setup_service):
-        """購入者がショップのロケーションにいないと例外"""
+    @pytest.mark.parametrize("buyer_spot, status_exists", [(2, True), (None, True), (None, False)])
+    def test_purchase_from_shop_not_at_location_raises(self, setup_service, buyer_spot, status_exists):
+        """別スポット・未配置・状態未取得の購入者は、場所の例外になり出品と所持金が変わらない。"""
         s = setup_service
         spot_id_val, loc_id_val = 1, 1
-        coord = Coordinate(0, 0, 0)
-        s["map_repo"].save(_create_physical_map_with_location(spot_id_val, loc_id_val, coord))
 
         owner_id, buyer_id = 1, 2
         shop_id = s["shop_repo"].generate_shop_id()
@@ -595,7 +565,8 @@ class TestShopCommandService:
         )
         s["shop_repo"].save(shop)
         s["status_repo"].save(_create_player_status(owner_id, 0))
-        s["status_repo"].save(_create_player_status(buyer_id, 1000))
+        if status_exists:
+            s["status_repo"].save(_create_player_status(buyer_id, 1000, buyer_spot))
         buyer_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(buyer_id))
         s["inv_repo"].save(buyer_inv)
 
@@ -607,13 +578,16 @@ class TestShopCommandService:
         )
         with pytest.raises(NotAtShopLocationException):
             s["service"].purchase_from_shop(cmd)
+        assert s["shop_repo"].find_by_id(shop_id).get_listing(listing_id) is not None
+        assert s["status_repo"].find_by_id(PlayerId(owner_id)).gold.value == 0
+        if status_exists:
+            assert s["status_repo"].find_by_id(PlayerId(buyer_id)).gold.value == 1000
 
     def test_purchase_from_shop_insufficient_stock_raises(self, setup_service):
         """在庫不足で購入すると例外"""
         s = setup_service
         spot_id_val, loc_id_val = 1, 1
         coord = Coordinate(0, 0, 0)
-        s["map_repo"].save(_create_physical_map_with_location(spot_id_val, loc_id_val, coord))
         owner_id, buyer_id = 1, 2
         shop_id = s["shop_repo"].generate_shop_id()
         shop = ShopAggregate.create(
@@ -654,7 +628,6 @@ class TestShopCommandService:
         s = setup_service
         spot_id_val, loc_id_val = 1, 1
         coord = Coordinate(0, 0, 0)
-        s["map_repo"].save(_create_physical_map_with_location(spot_id_val, loc_id_val, coord))
         owner_id, buyer_id = 1, 2
         shop_id = s["shop_repo"].generate_shop_id()
         shop = ShopAggregate.create(
@@ -732,9 +705,8 @@ class TestShopCommandService:
     def test_purchase_from_shop_shop_not_found_raises(self, setup_service):
         """存在しないショップから購入すると例外"""
         s = setup_service
-        spot_id_val, loc_id_val = 1, 1
+        spot_id_val = 1
         coord = Coordinate(0, 0, 0)
-        s["map_repo"].save(_create_physical_map_with_location(spot_id_val, loc_id_val, coord))
         s["status_repo"].save(_create_player_status(2, 1000, spot_id_val, coord))
         buyer_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(2))
         s["inv_repo"].save(buyer_inv)
@@ -752,7 +724,6 @@ class TestShopCommandService:
         s = setup_service
         spot_id_val, loc_id_val = 1, 1
         coord = Coordinate(0, 0, 0)
-        s["map_repo"].save(_create_physical_map_with_location(spot_id_val, loc_id_val, coord))
         owner_id, buyer_id = 1, 2
         shop_id = s["shop_repo"].generate_shop_id()
         shop = ShopAggregate.create(
@@ -780,7 +751,6 @@ class TestShopCommandService:
         s = setup_service
         spot_id_val, loc_id_val = 1, 1
         coord = Coordinate(0, 0, 0)
-        s["map_repo"].save(_create_physical_map_with_location(spot_id_val, loc_id_val, coord))
         owner_id, buyer_id = 1, 2
         shop_id = s["shop_repo"].generate_shop_id()
         shop = ShopAggregate.create(

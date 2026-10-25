@@ -27,6 +27,7 @@ from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
@@ -42,9 +43,6 @@ from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
 from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
 from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
-from ai_rpg_world.domain.world.repository.physical_map_repository import (
-    PhysicalMapRepository,
-)
 
 _Result = TypeVar("_Result")
 
@@ -106,7 +104,6 @@ class QuestCommandService:
         player_inventory_repository: PlayerInventoryRepository | None = None,
         item_repository: ItemRepository | None = None,
         guild_repository: GuildRepository | None = None,
-        physical_map_repository: PhysicalMapRepository | None = None,
     ):
         self._quest_repository = quest_repository
         self._unit_of_work = unit_of_work
@@ -114,7 +111,6 @@ class QuestCommandService:
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
         self._guild_repository = guild_repository
-        self._physical_map_repository = physical_map_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
@@ -146,12 +142,12 @@ class QuestCommandService:
         self,
         guild_id: int,
         issuer_player_id: int,
-        issuer_status: Any,
+        issuer_status: PlayerStatusAggregate,
     ) -> None:
-        """ギルド依頼発行時、発行者がギルドのロケーションにいるかを検証する"""
-        if self._guild_repository is None or self._physical_map_repository is None:
+        """ギルド依頼発行時、発行者がギルドと同じスポットにいるかを検証する"""
+        if self._guild_repository is None:
             raise QuestCreationException(
-                "ギルド依頼のロケーション検証に必要なリポジトリが設定されていません",
+                "ギルド依頼の場所の確認に必要なリポジトリが設定されていません",
                 user_id=issuer_player_id,
                 error_code="QUEST_ISSUER_NOT_AT_GUILD_LOCATION",
             )
@@ -162,25 +158,9 @@ class QuestCommandService:
                 user_id=issuer_player_id,
                 error_code="QUEST_GUILD_NOT_FOUND",
             )
-        spot_id = issuer_status.current_spot_id
-        coord = issuer_status.current_coordinate
-        if spot_id is None or coord is None:
+        if not guild.is_at_spot(issuer_status.current_spot_id):
             raise QuestCreationException(
-                "発行者がワールド内の位置にいないため、ギルド依頼を発行できません",
-                user_id=issuer_player_id,
-                error_code="QUEST_ISSUER_NOT_AT_GUILD_LOCATION",
-            )
-        physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
-        if physical_map is None:
-            raise QuestCreationException(
-                "発行者がいるマップが見つかりません",
-                user_id=issuer_player_id,
-                error_code="QUEST_ISSUER_NOT_AT_GUILD_LOCATION",
-            )
-        areas = physical_map.get_location_areas_at(coord)
-        if not any(la.location_id == guild.location_area_id for la in areas):
-            raise QuestCreationException(
-                "ギルド依頼はギルドのロケーションにいる場合のみ発行できます",
+                "ギルド依頼はギルドと同じスポットにいる場合のみ発行できます",
                 user_id=issuer_player_id,
                 error_code="QUEST_ISSUER_NOT_AT_GUILD_LOCATION",
             )

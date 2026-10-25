@@ -233,7 +233,7 @@ class PlayerCurrentStateBuilder:
                 f"{player_status.current_spot_id}"
             ) from e
 
-        distance = max(0, query.view_distance)
+        distance = 5
         visible_objects = self.build_visible_objects(
             physical_map=physical_map,
             origin=coord,
@@ -277,16 +277,14 @@ class PlayerCurrentStateBuilder:
             if la.is_active
         ] or None
 
-        # 視界タイルマップ（include_tile_map=True のときのみ）
-        visible_tile_map = None
-        if query.include_tile_map:
-            visible_tile_map = self._visible_tile_map_builder.build_visible_tile_map(
-                physical_map=physical_map,
-                origin=coord,
-                view_distance=distance,
-                visible_objects=visible_objects,
-                player_id=int(player_id),
-            )
+        # 旧タイル用の問い合わせは、削除まで従来の既定距離で組み立てる。
+        visible_tile_map = self._visible_tile_map_builder.build_visible_tile_map(
+            physical_map=physical_map,
+            origin=coord,
+            view_distance=distance,
+            visible_objects=visible_objects,
+            player_id=int(player_id),
+        )
 
         # ゲーム内現在時刻ラベル（game_time_provider と world_time_config が揃っているときのみ）
         current_game_time_label = None
