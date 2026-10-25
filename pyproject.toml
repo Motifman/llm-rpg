@@ -112,7 +112,6 @@ ignore = [
 extend-immutable-calls = [
     "ai_rpg_world.domain.combat.value_object.hit_box_shape.RelativeCoordinate",
     "ai_rpg_world.domain.combat.value_object.hit_box_velocity.HitBoxVelocity.zero",
-    "ai_rpg_world.domain.world.value_object.movement_cost.MovementCost.normal",
 ]
 
 [tool.mypy]

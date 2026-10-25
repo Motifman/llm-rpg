@@ -33,16 +33,6 @@ class CoordinateValidationException(MapDomainException, ValidationException):
     error_code = "MAP.COORDINATE_VALIDATION"
 
 
-class MovementCostValidationException(MapDomainException, ValidationException):
-    """移動コストバリデーション例外"""
-    error_code = "MAP.MOVEMENT_COST_VALIDATION"
-
-
-class InvalidConnectionException(MapDomainException, BusinessRuleException):
-    """不正な接続の例外"""
-    error_code = "MAP.INVALID_CONNECTION"
-
-
 class WorldObjectIdValidationException(MapDomainException, ValidationException):
     """ワールドオブジェクトIDバリデーション例外"""
     error_code = "MAP.OBJECT_ID_VALIDATION"
