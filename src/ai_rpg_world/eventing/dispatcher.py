@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Generic, TypeVar, cast
+from typing import Any, Generic, TypeVar, cast, overload
 
+from ai_rpg_world.eventing.async_delivery import AsyncDelivery
 from ai_rpg_world.eventing.delivery import (
     AfterCommitFailureObserver,
     AfterCommitHandler,
@@ -17,6 +18,7 @@ from ai_rpg_world.eventing.domain_event import DomainEvent
 
 _Event = TypeVar("_Event", bound=DomainEvent)
 _Context = TypeVar("_Context")
+_Result = TypeVar("_Result")
 
 
 @dataclass(frozen=True)
@@ -62,13 +64,26 @@ class EventDispatcher(Generic[_Context]):
             )
         )
 
+    @overload
+    def register_after_commit(
+        self, event_type: type[_Event], handler: Callable[[_Event], None], *,
+        channel: DeliveryChannel, guarantee: DeliveryGuarantee, asynchronous: None = None,
+    ) -> None: ...
+
+    @overload
+    def register_after_commit(
+        self, event_type: type[_Event], handler: Callable[[_Event], _Result], *,
+        channel: DeliveryChannel, guarantee: DeliveryGuarantee, asynchronous: AsyncDelivery[_Event, _Result],
+    ) -> None: ...
+
     def register_after_commit(
         self,
         event_type: type[_Event],
-        handler: Callable[[_Event], None],
+        handler: Callable[[_Event], Any],
         *,
         channel: DeliveryChannel,
         guarantee: DeliveryGuarantee,
+        asynchronous: AsyncDelivery[_Event, Any] | None = None,
     ) -> None:
         """確定後の受け手を配送先と保証付きで登録する。"""
         self._validate_registration(event_type, handler)
@@ -76,6 +91,10 @@ class EventDispatcher(Generic[_Context]):
             raise TypeError("channelはDeliveryChannelである必要があります")
         if not isinstance(guarantee, DeliveryGuarantee):
             raise TypeError("guaranteeはDeliveryGuaranteeである必要があります")
+        if asynchronous is not None:
+            if guarantee is DeliveryGuarantee.DURABLE_RETRY:
+                raise ValueError("非同期の受け手にはDURABLE_RETRYを指定できません")
+            handler = asynchronous.bind(handler)
         self._after_commit.append(
             _AfterCommitRegistration(
                 event_type, cast("AfterCommitHandler", handler), channel, guarantee

@@ -5557,7 +5557,7 @@ def create_world_runtime(
         ),
         random_source=_weather_random,
     )
-    time_provider = InMemoryGameTimeProvider(initial_tick=0)
+    time_provider: InMemoryGameTimeProvider = InMemoryGameTimeProvider(initial_tick=0)
     # PR #2 状態異常 surface: state_builder の current_tick_provider が
     # 参照する holder を埋める。
     _time_provider_holder["provider"] = time_provider
@@ -5863,7 +5863,7 @@ def create_world_runtime(
         except EntityNotInGraphException:
             return False
 
-    player_acquaintances = PlayerAcquaintances(
+    player_acquaintances: PlayerAcquaintances = PlayerAcquaintances(
         store=acquaintance_store,
         being_id_of=_being_id_of,
         turn_reader=memory_turn_clock,
@@ -5881,7 +5881,7 @@ def create_world_runtime(
         current_tick_provider=lambda: runtime.current_tick(),
     )
 
-    runtime = WorldRuntime(
+    runtime: WorldRuntime = WorldRuntime(
         scenario=scenario,
         _aux_llm_call_sink=aux_llm_call_sink,
         _meeting_enabled=scenario.meeting_enabled,
@@ -5990,7 +5990,7 @@ def create_world_runtime(
         ],
         recipient_view=player_acquaintances.view_for,
     )
-    pipeline_event_publisher = PipelineEventPublisher(runtime)
+    pipeline_event_publisher: PipelineEventPublisher = PipelineEventPublisher(runtime)
 
     # Phase E-3: プレイヤー個別 outcome の event-driven 配線。
     # registry は既に simulation_service 構築前に作成済み。ここでは broadcast
