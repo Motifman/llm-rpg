@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ai_rpg_world.being.application.episode_writing import (
+from ai_rpg_world.being.infrastructure.llm_episode_writer import (
     EVENTS_HEADING,
     EpisodeWritingCompletion,
 )

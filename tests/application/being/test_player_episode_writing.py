@@ -17,15 +17,16 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
-from ai_rpg_world.being.application.episode_writing import (
-    EpisodeWriter,
-    EpisodeWritingCompletion,
-)
+from ai_rpg_world.being.application.episode_writing import EpisodeKeeper
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
 )
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
     InMemoryMemoryTurnClock,
+)
+from ai_rpg_world.being.infrastructure.llm_episode_writer import (
+    EpisodeWritingCompletion,
+    LlmEpisodeWriter,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -92,7 +93,8 @@ def _make(completion: _Completion, *, being: BeingId | None = ADA_BEING):
     turns = InMemoryMemoryTurnClock()
     recorder = _Recorder()
     writing = PlayerEpisodeWriting(
-        writer=EpisodeWriter(completion, repository),
+        writer=LlmEpisodeWriter(completion),
+        keeper=EpisodeKeeper(repository),
         being_id_of=lambda pid: being,
         turn_reader=turns,
         environment_name_of=lambda pid: "地下の金庫室",
