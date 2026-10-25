@@ -824,3 +824,35 @@ class TestQuestProgressHandler:
         q = quest_repository.find_by_id(quest_id)
         assert q.objectives[0].current_count == 0
         assert q.status.value == "accepted"
+
+    def test_command_registration_updates_real_quest_after_commit(
+        self, reaction_service, uow_factory, quest_repository, data_store,
+    ) -> None:
+        """実際の受け手を新登録で呼ぶと、保存の確定後にだけ受託済みクエストの討伐数が増える。"""
+        from tests.support.command_scope_stack import CommandScopeTestStack
+
+        from ai_rpg_world.infrastructure.events.quest_event_handler_registry import QuestEventHandlerRegistry
+
+        quest_id = quest_repository.generate_quest_id()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=[QuestObjective(QuestObjectiveType.KILL_MONSTER, 101, 2, 0)],
+            reward=QuestReward.of(gold=100, exp=50), scope=QuestScope.public_scope(),
+            issuer_player_id=None, guild_id=None,
+        )
+        quest.accept_by(PlayerId(1))
+        quest_repository.save(quest)
+        stack = CommandScopeTestStack(data_store)
+        QuestEventHandlerRegistry(
+            MonsterDiedQuestProgressHandler(reaction_service, uow_factory),
+            PlayerDownedQuestProgressHandler(reaction_service, uow_factory),
+            ItemAddedToInventoryQuestProgressHandler(reaction_service, uow_factory),
+        ).register_command_handlers(stack.dispatcher)
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1), aggregate_type="MonsterAggregate", respawn_tick=0,
+            exp=10, gold=5, template_id=101, killer_player_id=PlayerId(1),
+        )
+        with stack:
+            stack.publish(event)
+            assert quest_repository.find_by_id(quest_id).objectives[0].current_count == 0
+        assert quest_repository.find_by_id(quest_id).objectives[0].current_count == 1
