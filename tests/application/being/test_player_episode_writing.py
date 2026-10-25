@@ -17,7 +17,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
-from ai_rpg_world.being.application.episode_writing import EpisodeKeeper
+from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
 )
@@ -94,7 +94,7 @@ def _make(completion: _Completion, *, being: BeingId | None = ADA_BEING):
     recorder = _Recorder()
     writing = PlayerEpisodeWriting(
         writer=LlmEpisodeWriter(completion),
-        keeper=EpisodeKeeper(repository),
+        add_episodes=AddEpisodesToMemory(repository),
         being_id_of=lambda pid: being,
         turn_reader=turns,
         environment_name_of=lambda pid: "地下の金庫室",

@@ -1,4 +1,4 @@
-"""LLM で、Being 本人がエピソードの下書きを書く (#1626、design_decisions D1824-13)。"""
+"""LLM で、Being 本人がエピソードの中身を書く (#1626、design_decisions D1824-13)。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from ai_rpg_world.being.domain.episode import BODY_MAX_LENGTH, INDEX_TEXT_MAX_LENGTH, EpisodeIndex
-from ai_rpg_world.being.domain.episode_writer import EpisodeDraft, EpisodeDrafts, EpisodeWriter
+from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents, EpisodeWriter
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeWritingResponseException,
 )
@@ -55,16 +55,16 @@ class LlmEpisodeWriter(EpisodeWriter):
     def __init__(self, completion: EpisodeWritingCompletion) -> None:
         self._completion = completion
 
-    def write(self, *, self_name: str, persona: str, events_text: str) -> EpisodeDrafts:
+    def write(self, *, self_name: str, persona: str, events_text: str) -> EpisodeContents:
         if not events_text.strip():
             raise ValueError("events_text must not be blank")
         response = self._completion.complete_episode_writing_json(
             _messages(self_name=self_name, persona=persona, events_text=events_text)
         )
-        return _drafts_from(response)
+        return _contents_from(response)
 
 
-def _draft_from(item: object) -> EpisodeDraft:
+def _content_from(item: object) -> EpisodeContent:
     if not isinstance(item, dict):
         raise EpisodeWritingResponseException(f"episode must be an object, got {type(item).__name__}")
     texts: dict[str, str] = {}
@@ -78,20 +78,20 @@ def _draft_from(item: object) -> EpisodeDraft:
             truncated[key] = len(text)
             text = text[:limit]
         texts[key] = text
-    return EpisodeDraft(
+    return EpisodeContent(
         index=EpisodeIndex(summary=texts["about"], recall_when=texts["recall_when"]),
         body=texts["body"],
         truncated=truncated,
     )
 
 
-def _drafts_from(response: object) -> EpisodeDrafts:
+def _contents_from(response: object) -> EpisodeContents:
     if not isinstance(response, dict) or not isinstance(response.get("episodes"), list):
         raise EpisodeWritingResponseException("response must be an object with an episodes list")
     items = response["episodes"]
     kept = items[:MAX_EPISODES_PER_WRITING]
-    return EpisodeDrafts(
-        drafts=tuple(_draft_from(item) for item in kept), dropped_count=len(items) - len(kept)
+    return EpisodeContents(
+        contents=tuple(_content_from(item) for item in kept), dropped_count=len(items) - len(kept)
     )
 
 

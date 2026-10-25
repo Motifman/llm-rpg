@@ -12,7 +12,7 @@ from ai_rpg_world.application.llm.services.recent_events_formatter import (
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
-from ai_rpg_world.being.application.episode_writing import EpisodeKeeper
+from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
 from ai_rpg_world.being.domain.episode_writer import EpisodeWriter
 from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
@@ -34,7 +34,7 @@ class PlayerEpisodeWriting:
         self,
         *,
         writer: EpisodeWriter,
-        keeper: EpisodeKeeper,
+        add_episodes: AddEpisodesToMemory,
         being_id_of: Callable[[PlayerId], BeingId | None],
         turn_reader: MemoryTurnReader,
         environment_name_of: Callable[[PlayerId], str],
@@ -43,7 +43,7 @@ class PlayerEpisodeWriting:
         current_tick_provider: Callable[[], int | None],
     ) -> None:
         self._writer = writer
-        self._keeper = keeper
+        self._add_episodes = add_episodes
         self._being_id_of = being_id_of
         self._turn_reader = turn_reader
         self._environment_name_of = environment_name_of
@@ -75,11 +75,11 @@ class PlayerEpisodeWriting:
             written_turn = self._turn_reader.current_turn(being_id)
             environment_name = self._environment_name_of(player_id)
             self_name, persona = self._persona_of(int(player_id.value))
-            drafts = self._writer.write(
+            contents = self._writer.write(
                 self_name=self_name, persona=persona, events_text=_render(entries)
             )
-            result = self._keeper.keep(
-                drafts,
+            result = self._add_episodes.add(
+                contents,
                 being_id=being_id,
                 environment_name=environment_name,
                 written_turn=written_turn,

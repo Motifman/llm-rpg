@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from ai_rpg_world.being.domain.episode import EpisodeIndex
-from ai_rpg_world.being.domain.episode_writer import EpisodeDraft, EpisodeDrafts
+from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents
 from ai_rpg_world.being.infrastructure.llm_episode_writer import (
     MAX_EPISODES_PER_WRITING,
     EpisodeWritingCompletion,
@@ -37,7 +37,7 @@ def _item(about: str = "金庫を開けた", recall_when: str = "金庫の話が
     return {"about": about, "recall_when": recall_when, "body": body}
 
 
-def _write(completion: EpisodeWritingCompletion, **overrides: Any) -> EpisodeDrafts:
+def _write(completion: EpisodeWritingCompletion, **overrides: Any) -> EpisodeContents:
     fields: dict[str, Any] = {"self_name": "エイダ", "persona": "慎重な錠前師", "events_text": EVENTS}
     fields.update(overrides)
     return LlmEpisodeWriter(completion).write(**fields)
@@ -88,43 +88,43 @@ class TestLlmEpisodeWriterMessages:
         assert completion.messages == []
 
 
-class TestLlmEpisodeWriterDrafts:
-    """LlmEpisodeWriter が応答の各項目を、目次と本文を持つ下書きにすることを保証する。"""
+class TestLlmEpisodeWriterContents:
+    """LlmEpisodeWriter が応答の各項目を、目次と本文を持つ中身にすることを保証する。"""
 
-    def test_each_item_becomes_a_draft_in_order(self) -> None:
-        """応答の各項目を、応答の順に、目次と本文を持つ下書きにする。"""
-        drafts = _write(_Completion({"episodes": [_item(about="棚の紙"), _item(about="金庫が開いた")]}))
+    def test_each_item_becomes_a_content_in_order(self) -> None:
+        """応答の各項目を、応答の順に、目次と本文を持つ中身にする。"""
+        contents = _write(_Completion({"episodes": [_item(about="棚の紙"), _item(about="金庫が開いた")]}))
 
-        assert drafts == EpisodeDrafts(
-            drafts=(
-                EpisodeDraft(index=EpisodeIndex(summary="棚の紙", recall_when="金庫の話が出たとき"), body="紙の番号で金庫が開いた。"),
-                EpisodeDraft(index=EpisodeIndex(summary="金庫が開いた", recall_when="金庫の話が出たとき"), body="紙の番号で金庫が開いた。"),
+        assert contents == EpisodeContents(
+            contents=(
+                EpisodeContent(index=EpisodeIndex(summary="棚の紙", recall_when="金庫の話が出たとき"), body="紙の番号で金庫が開いた。"),
+                EpisodeContent(index=EpisodeIndex(summary="金庫が開いた", recall_when="金庫の話が出たとき"), body="紙の番号で金庫が開いた。"),
             ),
             dropped_count=0,
         )
 
-    def test_zero_episodes_is_no_draft(self) -> None:
-        """何も起きていないとして 0 件が返れば、下書きは無い。"""
-        assert _write(_Completion({"episodes": []})) == EpisodeDrafts(drafts=(), dropped_count=0)
+    def test_zero_episodes_is_no_content(self) -> None:
+        """何も起きていないとして 0 件が返れば、中身は無い。"""
+        assert _write(_Completion({"episodes": []})) == EpisodeContents(contents=(), dropped_count=0)
 
     def test_items_beyond_the_cap_are_dropped_and_counted(self) -> None:
-        """上限 (3 件) を超えた項目は下書きにせず、捨てた件数を残す。"""
+        """上限 (3 件) を超えた項目は中身にせず、捨てた件数を残す。"""
         items = [_item(about=f"記憶{n}") for n in range(MAX_EPISODES_PER_WRITING + 2)]
 
-        drafts = _write(_Completion({"episodes": items}))
+        contents = _write(_Completion({"episodes": items}))
 
         assert MAX_EPISODES_PER_WRITING == 3
-        assert ([d.index.summary for d in drafts.drafts], drafts.dropped_count) == (["記憶0", "記憶1", "記憶2"], 2)
+        assert ([d.index.summary for d in contents.contents], contents.dropped_count) == (["記憶0", "記憶1", "記憶2"], 2)
 
     def test_surrounding_whitespace_is_stripped(self) -> None:
         """各文の前後の空白は落とす。"""
-        (draft,) = _write(_Completion({"episodes": [_item(about=" 棚の紙\n", body="\n紙があった。 ")]})).drafts
+        (content,) = _write(_Completion({"episodes": [_item(about=" 棚の紙\n", body="\n紙があった。 ")]})).contents
 
-        assert (draft.index.summary, draft.body) == ("棚の紙", "紙があった。")
+        assert (content.index.summary, content.body) == ("棚の紙", "紙があった。")
 
 
 class TestLlmEpisodeWriterTruncation:
-    """LlmEpisodeWriter が上限を超えた文を切り詰め、切り詰めたことを下書きに残すことを保証する。"""
+    """LlmEpisodeWriter が上限を超えた文を切り詰め、切り詰めたことを中身に残すことを保証する。"""
 
     @pytest.mark.parametrize(
         ("field", "limit", "read"),
@@ -135,27 +135,27 @@ class TestLlmEpisodeWriterTruncation:
         ],
     )
     def test_over_limit_text_is_cut_to_the_limit(self, field: str, limit: int, read: Any) -> None:
-        """上限を超えた文は上限の長さまで切り詰め、切り詰めた項目と元の長さを下書きに残す。"""
-        (draft,) = _write(_Completion({"episodes": [_item(**{field: "あ" * (limit + 5)})]})).drafts
+        """上限を超えた文は上限の長さまで切り詰め、切り詰めた項目と元の長さを中身に残す。"""
+        (content,) = _write(_Completion({"episodes": [_item(**{field: "あ" * (limit + 5)})]})).contents
 
-        assert read(draft) == "あ" * limit
-        assert draft.truncated == {field: limit + 5}
+        assert read(content) == "あ" * limit
+        assert content.truncated == {field: limit + 5}
 
     def test_text_at_the_limit_is_not_reported_as_truncated(self) -> None:
         """ちょうど上限の長さの文は切り詰めとして扱わない。"""
-        (draft,) = _write(_Completion({"episodes": [_item(about="あ" * 40, body="い" * 400)]})).drafts
+        (content,) = _write(_Completion({"episodes": [_item(about="あ" * 40, body="い" * 400)]})).contents
 
-        assert draft.truncated == {}
+        assert content.truncated == {}
 
     def test_text_one_over_the_limit_is_cut(self) -> None:
         """上限より 1 字長い文は、上限の長さまで切り詰めとして扱う。"""
-        (draft,) = _write(_Completion({"episodes": [_item(about="あ" * 41)]})).drafts
+        (content,) = _write(_Completion({"episodes": [_item(about="あ" * 41)]})).contents
 
-        assert (draft.index.summary, draft.truncated) == ("あ" * 40, {"about": 41})
+        assert (content.index.summary, content.truncated) == ("あ" * 40, {"about": 41})
 
 
 class TestLlmEpisodeWriterFailures:
-    """LlmEpisodeWriter が呼び出しの失敗と崩れた応答で、下書きを 1 件も返さないことを保証する。"""
+    """LlmEpisodeWriter が呼び出しの失敗と崩れた応答で、中身を 1 件も返さないことを保証する。"""
 
     def test_completion_error_propagates(self) -> None:
         """LLM の呼び出しが例外を投げたら、そのまま伝える。"""
@@ -175,7 +175,7 @@ class TestLlmEpisodeWriterFailures:
             {"episodes": [_item(), _item(recall_when=3)]},  # type: ignore[arg-type]
         ],
     )
-    def test_malformed_response_returns_no_draft(self, response: Any) -> None:
+    def test_malformed_response_returns_no_content(self, response: Any) -> None:
         """応答の形が崩れていれば、正しい項目があっても 1 件も返さず EpisodeWritingResponseException を投げる。"""
         with pytest.raises(EpisodeWritingResponseException):
             _write(_Completion(response))

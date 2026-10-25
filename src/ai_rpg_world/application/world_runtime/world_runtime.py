@@ -4203,7 +4203,7 @@ def _build_player_episode_writing(
     from ai_rpg_world.application.observation.being_contract import (
         environment_entry_for_player,
     )
-    from ai_rpg_world.being.application.episode_writing import EpisodeKeeper
+    from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
     from ai_rpg_world.being.infrastructure.llm_episode_writer import (
         EpisodeWritingCompletion,
         LlmEpisodeWriter,
@@ -4228,7 +4228,7 @@ def _build_player_episode_writing(
 
     return PlayerEpisodeWriting(
         writer=LlmEpisodeWriter(completion),
-        keeper=EpisodeKeeper(runtime._being_episode_store),
+        add_episodes=AddEpisodesToMemory(runtime._being_episode_store),
         being_id_of=_being_id_of,
         turn_reader=turn_reader,
         environment_name_of=lambda pid: environment_entry_for_player(
