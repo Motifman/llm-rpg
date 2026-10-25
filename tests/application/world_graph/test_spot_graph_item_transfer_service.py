@@ -1,6 +1,6 @@
 """SpotGraphItemTransferService の drop / pickup 挙動。
 
-タイルマップ時代の ItemDroppedFromInventoryDropHandler は
+タイルマップで品を落とす旧受け手は
 ``physical_map`` 依存で world_runtime / spot-graph 世界では発火しない。
 本サービスは SpotInterior.ground_items に直接書き込む新経路で、その
 最小往復 (drop → pickup) と境界条件を保証する。

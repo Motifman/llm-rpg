@@ -33,6 +33,7 @@ from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
+from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
 from ai_rpg_world.domain.world.service.movement_config_service import DefaultMovementConfigService
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -283,7 +284,6 @@ class TestMovementStepExecutor:
         from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
         from ai_rpg_world.domain.world.value_object.area import RectArea
         from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-        from ai_rpg_world.infrastructure.events import EventHandlerComposition, EventHandlerProfile
         from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
             InMemoryMonsterAggregateRepository,
         )
@@ -314,8 +314,9 @@ class TestMovementStepExecutor:
             unit_of_work=unit_of_work,
             event_publisher=event_publisher,
         )
-        composition = EventHandlerComposition(gateway_handler=gateway_handler)
-        composition.register_for_profile(event_publisher, EventHandlerProfile.MOVEMENT_ONLY)
+        event_publisher.register_handler(
+            GatewayTriggeredEvent, gateway_handler, is_synchronous=True
+        )
 
         spot_repo.save(Spot(SpotId(1), "S1", ""))
         spot_repo.save(Spot(SpotId(2), "S2", ""))

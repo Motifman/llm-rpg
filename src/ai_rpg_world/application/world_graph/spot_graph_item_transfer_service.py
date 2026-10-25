@@ -1,6 +1,6 @@
 """スポットグラフ世界における drop / pickup の最小サービス。
 
-タイルマップ時代の ItemDroppedFromInventoryDropHandler は ``physical_map``
+タイルマップで品を落とす旧受け手は ``physical_map``
 依存で world_runtime / spot-graph 世界では発火しない (world_runtime
 で ``physical_map_repository=None`` を渡している)。spot-graph 世界では
 SpotInterior.ground_items にアイテムを置き、SpotInterior 経路で

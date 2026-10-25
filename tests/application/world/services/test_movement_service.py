@@ -74,7 +74,6 @@ from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.transition_condition import RequireToll, block_if_weather
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.infrastructure.events import EventHandlerComposition, EventHandlerProfile
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
     InMemoryMonsterAggregateRepository,
@@ -118,7 +117,7 @@ class TestMovementApplicationService:
         map_transition_service = MapTransitionService()
         time_provider = InMemoryGameTimeProvider(initial_tick=100)
 
-        # 同期イベントハンドラの登録（プロファイルで移動・ゲートウェイのみ）
+        # ゲートウェイを跨いだ移動を同期で確定する。
         gateway_handler = GatewayTriggeredEventHandler(
             physical_map_repository=physical_map_repo,
             player_status_repository=player_status_repo,
@@ -127,8 +126,9 @@ class TestMovementApplicationService:
             unit_of_work=unit_of_work,
             event_publisher=event_publisher,
         )
-        composition = EventHandlerComposition(gateway_handler=gateway_handler)
-        composition.register_for_profile(event_publisher, EventHandlerProfile.MOVEMENT_ONLY)
+        event_publisher.register_handler(
+            GatewayTriggeredEvent, gateway_handler, is_synchronous=True
+        )
 
         set_destination_service = SetDestinationService(
             player_status_repository=player_status_repo,

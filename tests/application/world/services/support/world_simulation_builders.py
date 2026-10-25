@@ -141,27 +141,12 @@ def build_world_simulation_test_bed() -> WorldSimulationTestBed:
     hit_box_repo = InMemoryHitBoxRepository(data_store, unit_of_work)
     monster_repo = InMemoryMonsterAggregateRepository(data_store, unit_of_work)
 
-    from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import (
-        MonsterDecidedToInteractHandler,
-    )
-    from ai_rpg_world.application.world.handlers.monster_decided_to_move_handler import (
-        MonsterDecidedToMoveHandler,
-    )
-    from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import (
-        MonsterDecidedToUseSkillHandler,
-    )
-    from ai_rpg_world.application.world.handlers.monster_fed_handler import (
-        MonsterFedHandler,
-    )
     from ai_rpg_world.application.world.services.monster_action_resolver import (
         create_monster_action_resolver_factory,
     )
     from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
     from ai_rpg_world.domain.world.service.skill_selection_policy import (
         FirstInRangeSkillPolicy,
-    )
-    from ai_rpg_world.infrastructure.events.monster_event_handler_registry import (
-        MonsterEventHandlerRegistry,
     )
     from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import (
         AStarPathfindingStrategy,
@@ -190,28 +175,6 @@ def build_world_simulation_test_bed() -> WorldSimulationTestBed:
         caching_pathfinding,
         FirstInRangeSkillPolicy(),
     )
-    monster_decided_to_move_handler = MonsterDecidedToMoveHandler(
-        physical_map_repository=repository,
-        monster_repository=monster_repo,
-    )
-    monster_decided_to_use_skill_handler = MonsterDecidedToUseSkillHandler(
-        physical_map_repository=repository,
-        monster_repository=monster_repo,
-        monster_skill_execution_domain_service=monster_skill_execution_domain_service,
-        hit_box_factory=hit_box_factory,
-        hit_box_repository=hit_box_repo,
-        skill_loadout_repository=skill_loadout_repo,
-    )
-    monster_decided_to_interact_handler = MonsterDecidedToInteractHandler(
-        physical_map_repository=repository,
-    )
-    monster_fed_handler = MonsterFedHandler(monster_repository=monster_repo)
-    MonsterEventHandlerRegistry(
-        monster_decided_to_move_handler,
-        monster_decided_to_use_skill_handler,
-        monster_decided_to_interact_handler,
-        monster_fed_handler,
-    ).register_handlers(event_publisher)
 
     service = WorldSimulationApplicationService(
         time_provider=time_provider,
