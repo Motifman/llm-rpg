@@ -1,5 +1,8 @@
 # 観測まわり実装計画・設計メモ
 
+> 一部失効した計画・記録（2026-10-25、Issue #1862）。会話・採集・当たり判定・タイル由来の観測の計画は失効している。
+> 以下の本文は当時の記録として保存する。現行構成は[世界の現在の構成](game/world_architecture.md)を参照。
+
 本ドキュメントは、Observation 機能の今後の拡張として「ObservationRecipientResolver の責務分離」「attention_level による観測フィルタリング」の実装計画と、`ApplicationExceptionFactory` のモック用フォールバックに関する見解をまとめたものです。
 
 ---

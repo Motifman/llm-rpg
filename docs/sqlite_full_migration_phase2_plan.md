@@ -1,5 +1,8 @@
 # SQLite Full Migration Phase 2 Working Plan
 
+> 一部失効した計画・記録（2026-10-25、Issue #1862）。物理マップ・HitBoxの保存先と接続は削除済み。過去migrationと表は残している。
+> 以下の本文は当時の記録として保存する。現行構成は[世界の現在の構成](game/world_architecture.md)を参照。
+
 このファイルは Phase 2-3 の実装中に使う一時プランです。
 
 ## Goals

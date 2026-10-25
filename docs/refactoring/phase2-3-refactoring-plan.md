@@ -1,5 +1,8 @@
 # Phase 2–3 残リファクタリング計画
 
+> 一部失効した計画・記録（2026-10-25、Issue #1862）。旧WorldQuery・物理マップ・タイル移動・旧シミュレーションの作業項目は失効している。
+> 以下の本文は当時の記録として保存する。現行構成は[世界の現在の構成](../game/world_architecture.md)を参照。
+
 1.1 WorldSimulationService を除く、ロードマップ残り項目の段階的リファクタリング計画。
 親ロードマップ: [llm-agent-refactoring-roadmap.md](./llm-agent-refactoring-roadmap.md)
 

@@ -1,5 +1,8 @@
 # プレイヤー状態効果の保持と清掃を検査する
 
+> 過去の試験監査（2026-10-25追記、Issue #1862）。削除済みのタイルマップ・当たり判定に関する実装や試験の記述を含む。
+> 本文の呼出元・保持先・件数は監査当時の記録で、現在の保証ではない。現存する領域もあるため一括して退役とは扱わない。[世界の現在の構成](../game/world_architecture.md)を参照。
+
 ## 対象と判断
 
 `test_player_status_aggregate.py::TestPlayerStatusAggregate::TestStatusEffects`
