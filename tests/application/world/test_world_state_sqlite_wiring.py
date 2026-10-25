@@ -24,9 +24,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_location_establishment_reposi
 from ai_rpg_world.infrastructure.repository.sqlite_monster_aggregate_repository import (
     SqliteMonsterAggregateRepository,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_physical_map_repository import (
-    SqlitePhysicalMapRepository,
-)
 from ai_rpg_world.infrastructure.repository.sqlite_player_inventory_write_repository import (
     SqlitePlayerInventoryWriteRepository,
 )
@@ -69,7 +66,6 @@ class TestWorldStateSqliteWiring:
         assert isinstance(bundle.player_state.player_statuses, SqlitePlayerStatusWriteRepository)
         assert isinstance(bundle.player_state.player_inventories, SqlitePlayerInventoryWriteRepository)
         assert isinstance(bundle.player_state.items, SqliteItemWriteRepository)
-        assert isinstance(bundle.world_runtime.physical_maps, SqlitePhysicalMapRepository)
         assert isinstance(bundle.world_runtime.monsters, SqliteMonsterAggregateRepository)
         assert isinstance(bundle.world_runtime.hit_boxes, SqliteHitBoxRepository)
         assert isinstance(bundle.world_structure.spots, SqliteSpotRepository)
