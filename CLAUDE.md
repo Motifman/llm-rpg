@@ -7,10 +7,13 @@
 新機能を実装する前に必ず参照してください。
 
 - **[docs/design_decisions.md](docs/design_decisions.md)** — 過去の実験で生まれた個別の設計判断 (プレフィックスキャッシュ不変 / 詰み回避 / ラベルから名前への切替 / 静かな失敗の構造的対処 / エージェントごとの待ち時間タイマー など)
-- **[docs/agent_design_principles.md](docs/agent_design_principles.md)** — 「ゲーム内で生きる AI エージェント」を作る上位方針 (疎結合 / 観測駆動 / 質感優先 / 自己の継続性 / 失敗の質感 / 静かな失敗の回避 / 他者からの可視性)
+- **[docs/agent_design_principles.md](docs/agent_design_principles.md)** — 「ゲーム内で生きる AI エージェント」を作る上位方針 (疎結合 / 観測駆動 / 質感優先 / 自己の継続性 / 失敗の質感 / 静かな失敗の回避 / 他者からの可視性 / 協調の圧力)
 - **[docs/working_habits_that_actually_hold.md](docs/working_habits_that_actually_hold.md)** — 対策が実際に機能する形 (判断を挟むと壊れる / 検査が狙ったものを見ていない / 一次情報に当たらない)。**同じ失敗を繰り返したときに読む**
-- **[docs/agents_reaching_past_the_world.md](docs/agents_reaching_past_the_world.md)** — エージェントが世界に無い行為を試みた記録 (提案の相互デッドロック / 教わることができない)。**直すかどうかの判断材料**で、直さない判断の理由も残す
-- **[docs/trace_observability_review.md](docs/trace_observability_review.md)** — 新しい実験機能を追加するときの観測性レビュー観点 (trace で人間が見えるか / 観測で世界の中の誰かが見えるか)
+
+必要なときに読む資料:
+
+- [docs/agents_reaching_past_the_world.md](docs/agents_reaching_past_the_world.md) — エージェントが世界に無い行為を試みた run の記録。世界に無い行為を足すかどうかを決めるときに読む
+- [docs/trace_observability_review.md](docs/trace_observability_review.md) — 新しい実験機能を足すときの、trace の観測性の見方
 
 「なぜこの形になっているか」を理解せずに変更すると過去に解決した問題が再発します。新しい設計判断は `docs/design_decisions/D<issue番号>.md` に、1件1ファイルで作成してください。同じIssueで複数ある場合は `D1448-2.md` のように分け、見出しのIDもファイル名に合わせます。並行するPRが同じファイルの末尾へ追記して競合するのを防ぐため、共有索引の `docs/design_decisions.md` は新規追加時に変更しません。既存の判断を更新する場合はその個別ファイルを編集します。詳細は [設計判断の追加・更新方法](docs/design_decisions.md) を参照してください。
 
@@ -81,51 +84,9 @@ run 後はまず `experiment.config.resolved.json` を見て、意図した prof
 - 記憶の部品を消して snapshot のキーが無くなったら、`src/ai_rpg_world/application/being/removed_memory_payload_keys.py` の表に足す。古い snapshot に残るそのキーは読み込みで捨て、件数が `snapshot_load` の `removed_memory_keys` に残る (`docs/design_decisions.md` の D1631-5)
 - 詳細は `docs/design_decisions.md` の #15-#18
 
-### LLM に出すツールを増やす / 出し分けるとき
+### プロンプトの本文にツールの名前を書くとき
 
-ツールを出すかどうかの判断は
-`src/ai_rpg_world/application/llm/tool_exposure.py` **だけ**にある。問いは
-2 つで、混ぜない。
-
-| 問い | 答える場所 | run 中の変化 |
-|---|---|---|
-| この世界に在るか | `ToolExposure.is_exposed` | 変わらない |
-| いまのフェーズでどのブロックに置くか | `is_phase_common` / `is_available_in_phase` | 会議境界で変わる |
-
-シナリオが個別に落としたいだけなら、engine を触らず
-`"disabled_tools": ["attack"]` と書く。実在しない名前は
-`create_world_runtime` の時点で落ちる。
-
-**プロンプト本文にツール名を書くときは、必ず露出判断を通すこと。** ツール
-定義の一覧から消しても本文が宣伝し続けると、エージェントは存在しない
-ツールを呼ぶ。無効化しないより悪い状態になる。実際 `tend_to_player` と
-`give_item` がその形だった。
-
-`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` が、全ツールを
-1 つずつ無効化してプロンプト全文に名前が残らないことを総当たりで見張る。
-ツールを足せば自動で対象になるので、この checklist を忘れても落ちる。
-
-### 新しい per-Being store を追加するとき
-
-per-Being scope の state を持つ store (= `BeingId` をキーに保持する store) を
-追加する PR は、その時点で `BeingMemorySnapshotService` への配線まで含めて
-1 PR にまとめる。「あとで足す」と後回しにすると、長走実験の終了 → 再開で
-連続性が静かに壊れる silent failure になる (PR #594 で 3 store ぶんの追従漏れ
-を一度に解消した直接の動機)。
-
-手順は `docs/design_decisions.md` の **#27** を参照。要点だけ:
-
-1. `BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS` に新 key を追加
-2. `BeingMemorySnapshotService.__init__` に新 store の引数を追加
-3. `capture()` の payload dict に新 key の生成ロジックを追加
-4. `restore()` のデコード + 書き戻しを追加 (= store interface に
-   `replace_all_by_being` を生やす)
-5. 足す前の snapshot も読めるようにするなら、`ADDED_PAYLOAD_KEYS` にも足す
-   (`docs/design_decisions.md` の D1824-6)
-
-1 だけ足して 3 / 4 を忘れた状態は PR-F (#593) で導入した起動時 fail-fast が
-止めてくれる。1 を含めて完全に忘れた場合は構造で検出できないので、本
-checklist が最後の砦になる。
+そのツールを出すかどうかの判断 (`src/ai_rpg_world/application/llm/tool_exposure.py`) を通す。ツールの一覧から消したのに本文が勧め続けると、エージェントは無いツールを呼ぶ。`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` が、ツールを 1 つずつ無効にして、プロンプトに名前が残らないことを総当たりで見張る。
 
 ## セットアップとテスト実行
 
@@ -163,37 +124,19 @@ infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM ア�
 
 現在の実装への入口と、旧タイルマップから残した領域は [世界の現在の構成](docs/game/world_architecture.md) を参照してください。
 
-### Bounded Context (`domain/` 配下)
+### 文脈の境界
 
-各領域に集約・値オブジェクト・例外・リポジトリインタフェースを配置します。値だけが残る領域もあります。インフラ層にはインメモリ実装と SQLite 実装があり、実験ランタイムでは必要な保存先を選んで接続します。
+境界を守れている文脈は Being だけです。経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳・短期記憶を持ち、環境 (ゲーム) とは `being/contract` の型だけで結びます。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは `domain/being` だけを一時的に許す)。
 
-- `world_graph`: 空間グラフによる移動と部屋構造
-- `world`: 天候・世界時刻、施設割当、スポットID・座標などの共有の値
-- `player`: プロフィール、ステータス、所持品
-- `item`: アイテムの定義と所持
-- `monster`: 敵の定義とステータス
-- `combat`: 状態異常・能力補正と、スキルの定義が使う形・速度・効果の値。当たり判定の本体は削除済み
-- `skill`: スキルの定義・装備・進行。物理マップ上でスキルを実行する処理は削除済み
-- `shop`: 売買
-- `trade`: プレイヤー間取引
-- `quest`: クエストの状態と進行
-- `guild`: ギルドの所属と進行
-- `sns`: 世界内の SNS、エージェント同士の発信
-- `pursuit`: プレイヤーとモンスターの追跡状態・規則。追跡のスナップショットも維持
-- `being`: 「経験を持つ AI 主体」の識別と継続性 (世界・実験を跨いで永続化される ID)
-- `persona`: エージェントの人格、固有名詞、口調
-- `intent`: エージェントが今やろうとしていること
-- `memory`: 出会いの記録 (`encounter`) と短期記憶の要約の値 (`short_term`)
-- `common`: 横断的な値オブジェクトやイベント基盤
+Being の記憶の保存先を足すときは、同じ PR で Being の snapshot (`BeingMemorySnapshotService`) まで配線します。配線を忘れると、run を止めて再開したときに記憶が静かに途切れます。キーを足すところまでやって読み書きを忘れた場合は起動時に止まりますが、キーごと忘れた場合はどの検査も気づきません (`docs/design_decisions.md` の #27)。
 
-経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳を持ち、環境 (ゲーム) とは `being/contract` の型だけで結びます。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは `domain/being` だけを一時的に許す)。
+ゲームの側は、`domain/` の下に領域ごとのフォルダ (`world_graph`、`player`、`monster` など) がありますが、境界はまだ守れていません。境界の引き直しは、シナリオエンジンのモデリング (#1339) で行います。
 
 エージェントの 1 ターンの流れ: 担当エージェント選定 → 現在状態と直近イベントの収集 → `prompt_builder.py` でシステム / ユーザプロンプト構築 → LLM がツール呼び出しを返す → 実行 → ドメインイベントが観測に変換され短期記憶へ入る (短期記憶を畳むときと環境を離れるときに、本人がエピソードを書き起こす) → WebSocket で観戦者に配信。詳細は `application/llm/services/world_llm_turn/` (Phase A / B とツールの実行) と `application/llm/services/prompt_builder.py`。
 
 ## コーディング規約
 
-- Python 3.10 以上、インデントはスペース 4 つ、関数とモジュールは `snake_case`、クラスは `PascalCase`
-- 公開 API には型注釈を必須とする
+- Python 3.10 以上
 - テストはパッケージ構造を `tests/` 配下に鏡写しで配置する (例: `tests/domain/shop/value_object/test_shop_id.py`)
 - 秘密情報は `.env` のみに置く (`.env.example` からコピー)。コミット禁止
 - LLM クライアントは `litellm` 抽象を経由する
