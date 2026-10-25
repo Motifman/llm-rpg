@@ -4081,6 +4081,71 @@ def _build_short_term_memory(
     )
 
 
+def _wire_backstory_writing(
+    cfg: ResolvedLlmRuntimeConfig,
+    *,
+    runtime: WorldRuntime,
+    dispatcher: EventDispatcher[None],
+    being_id_of: Callable[[PlayerId], BeingId | None],
+    persona_of_player: Callable[[int], tuple[str, str]],
+) -> None:
+    """短期記憶が頼んだいきさつを、非同期の配送で作り、その Being のターンの始めに入れる (design_decisions D1824-12)。"""
+    from ai_rpg_world.application.being.being_backstory_writing import BeingBackstoryWriting
+    from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
+        IShortTermMemorySummaryCompletionPort,
+    )
+    from ai_rpg_world.application.llm.services.stub_backstory_completion import (
+        stub_backstory_completion,
+    )
+    from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+        create_llm_client_from_config,
+    )
+    from ai_rpg_world.being.domain.short_term_memory import BackstoryAsked
+    from ai_rpg_world.being.infrastructure.llm_backstory_writer import LlmBackstoryWriter
+    from ai_rpg_world.eventing import AsyncDelivery
+    from ai_rpg_world.eventing.delivery import DeliveryChannel, DeliveryGuarantee
+
+    complete_json: Callable[[list[dict[str, str]]], Any]
+    if cfg.llm_client_kind == "litellm":
+        client = create_llm_client_from_config(cfg, aux_call_sink=runtime._aux_llm_call_sink)
+        if not isinstance(client, IShortTermMemorySummaryCompletionPort):
+            raise RuntimeError("backstory writing needs an LLM client that can write summaries")
+        complete_json = client.complete_short_term_summary_json
+    else:
+        complete_json = stub_backstory_completion
+
+    def _persona_of_being(being_id: BeingId) -> tuple[str, str]:
+        for player_id in runtime.get_player_ids():
+            if being_id_of(player_id) == being_id:
+                return persona_of_player(int(player_id.value))
+        raise LookupError(f"no player acts as {being_id.value}")
+
+    writing = BeingBackstoryWriting(
+        writer=LlmBackstoryWriter(complete_json),
+        store=runtime._being_short_term_memory_store,
+        persona_of=_persona_of_being,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
+    dispatcher.register_after_commit(
+        BackstoryAsked,
+        writing.note_person,
+        channel=DeliveryChannel.AUXILIARY,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    dispatcher.register_after_commit(
+        BackstoryAsked,
+        writing.write,
+        channel=DeliveryChannel.AUXILIARY,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+        asynchronous=AsyncDelivery(
+            executor=runtime.async_event_executor,
+            recipient_key=lambda event: event.being_id.value,
+            apply_result=writing.apply,
+        ),
+    )
+
+
 def _build_persona_resolver(
     *,
     scenario: Any,
@@ -7073,15 +7138,23 @@ def create_world_runtime(
         current_tick_provider=lambda: runtime.current_tick(),
         trace_recorder_provider=lambda: runtime._trace_recorder,
     )
+    persona_of_player = _build_persona_resolver(
+        scenario=scenario,
+        world_character=world_character,
+        persona_block=persona_block,
+    )
     runtime._player_episode_writing = _build_player_episode_writing(
         config,
         runtime=runtime,
         turn_reader=memory_turn_clock,
-        persona_of=_build_persona_resolver(
-            scenario=scenario,
-            world_character=world_character,
-            persona_block=persona_block,
-        ),
+        persona_of=persona_of_player,
+    )
+    _wire_backstory_writing(
+        config,
+        runtime=runtime,
+        dispatcher=being_dispatcher,
+        being_id_of=_being_id_of,
+        persona_of_player=persona_of_player,
     )
 
     # disabled_tools の名前が実在するかを、ここで確かめる。
