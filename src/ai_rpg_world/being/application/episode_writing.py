@@ -1,66 +1,17 @@
-"""出来事の並びから、Being 本人がエピソードを書き起こす。
+"""Being 本人が書いたエピソードの中身に、ID と呼び名を付け、エピソードとして記憶に加える。
 
-どこで区切って呼ぶかは呼ぶ側が決める。この部品は渡された範囲だけを見る。
+中身を書くのは口 (``EpisodeWriter``)。どこで区切って書かせるかは呼ぶ側が決める。
 """
 
 from __future__ import annotations
 
 import uuid
-from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
 
-from ai_rpg_world.being.domain.episode import (
-    BODY_MAX_LENGTH,
-    INDEX_TEXT_MAX_LENGTH,
-    Episode,
-    EpisodeIndex,
-    EpisodeRepository,
-)
-from ai_rpg_world.domain.being.exception.being_exceptions import (
-    EpisodeWritingResponseException,
-)
+from ai_rpg_world.being.domain.episode import Episode, EpisodeRepository
+from ai_rpg_world.being.domain.episode_writer import EpisodeContents
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-
-MAX_EPISODES_PER_WRITING = 3
-EVENTS_HEADING = "【書き残す範囲の出来事 (古い → 新しい)】"
-
-_FIELD_LIMITS = (
-    ("about", INDEX_TEXT_MAX_LENGTH),
-    ("recall_when", INDEX_TEXT_MAX_LENGTH),
-    ("body", BODY_MAX_LENGTH),
-)
-
-SYSTEM_PROMPT = f"""\
-あなたはあるキャラクター本人として、自分の体験を、あとで思い出せる記憶として書き残します。
-
-【分け方】
-- 出来事の切れ目ごとに 1 件の記憶にする。多くても {MAX_EPISODES_PER_WRITING} 件まで
-- 何も起きていなければ 0 件でよい
-
-【1 件に書くこと】
-- about: どんな記憶か。{INDEX_TEXT_MAX_LENGTH} 字まで
-- recall_when: どんな時に思い出すとよいか。{INDEX_TEXT_MAX_LENGTH} 字まで。「金庫や鍵の話が出たとき」のように場面で書く
-- body: 本文。{BODY_MAX_LENGTH} 字まで。そのとき見たこと・したこと・感じたことを、そのときの自分の言葉で書く。後から分かったことは混ぜない
-
-【書かないこと】
-- 番号や P1 のような呼び方。人や場所や物は、自分が知っている名前で書く
-- ゲームの仕組みの言い回し (「次の行動を選べる」など)
-
-【出力形式】JSON object (この schema を厳守):
-{{
-  "episodes": [
-    {{"about": "どんな記憶か", "recall_when": "どんな時に思い出すか", "body": "本文"}}
-  ]
-}}
-"""
-
-
-class EpisodeWritingCompletion(ABC):
-    @abstractmethod
-    def complete_episode_writing_json(self, messages: list[dict[str, str]]) -> Any:
-        """応答の JSON を読んだ値を返す。呼び出しに失敗したら例外を投げる。"""
 
 
 @dataclass(frozen=True)
@@ -77,113 +28,43 @@ class EpisodeWritingResult:
     dropped_count: int = 0
 
 
-@dataclass(frozen=True)
-class _Draft:
-    texts: dict[str, str]
-    truncated: dict[str, int]
+class AddEpisodesToMemory:
+    """呼び名を決めるのに Being の保存先を読むので、保存先に書く人と同じスレッドで呼ぶ。"""
 
-
-def _draft_from(item: object) -> _Draft:
-    if not isinstance(item, dict):
-        raise EpisodeWritingResponseException(f"episode must be an object, got {type(item).__name__}")
-    texts: dict[str, str] = {}
-    truncated: dict[str, int] = {}
-    for key, limit in _FIELD_LIMITS:
-        value = item.get(key)
-        if not isinstance(value, str) or not value.strip():
-            raise EpisodeWritingResponseException(f"episode {key} must be non-blank str")
-        text = value.strip()
-        if len(text) > limit:
-            truncated[key] = len(text)
-            text = text[:limit]
-        texts[key] = text
-    return _Draft(texts=texts, truncated=truncated)
-
-
-def _drafts_from(response: object) -> tuple[list[_Draft], int]:
-    if not isinstance(response, dict) or not isinstance(response.get("episodes"), list):
-        raise EpisodeWritingResponseException("response must be an object with an episodes list")
-    items = response["episodes"]
-    kept = items[:MAX_EPISODES_PER_WRITING]
-    return [_draft_from(item) for item in kept], len(items) - len(kept)
-
-
-class EpisodeWriter:
     def __init__(
         self,
-        completion: EpisodeWritingCompletion,
         repository: EpisodeRepository,
         *,
         new_episode_id: Callable[[], str] = lambda: str(uuid.uuid4()),
     ) -> None:
-        self._completion = completion
         self._repository = repository
         self._new_episode_id = new_episode_id
 
-    def write(
+    def add(
         self,
+        contents: EpisodeContents,
         *,
         being_id: BeingId,
-        self_name: str,
-        persona: str,
-        events_text: str,
         environment_name: str,
         written_turn: int,
     ) -> EpisodeWritingResult:
-        """``events_text`` は【直近の出来事】と同じ書き方で古い順に並べた範囲。
-
-        応答が崩れていれば 1 件も保存しない。中身の薄い記憶を混ぜないため。
-        """
-        if not events_text.strip():
-            raise ValueError("events_text must not be blank")
-        response = self._completion.complete_episode_writing_json(
-            _messages(self_name=self_name, persona=persona, events_text=events_text)
-        )
-        drafts, dropped = _drafts_from(response)
         taken = {e.handle for e in self._repository.list_by_being(being_id)}
         written: list[WrittenEpisode] = []
-        for draft in drafts:
+        for content in contents.contents:
             episode = Episode.write(
                 being_id=being_id,
                 episode_id=self._new_episode_id(),
                 environment_name=environment_name,
                 written_turn=written_turn,
-                index=EpisodeIndex(
-                    summary=draft.texts["about"], recall_when=draft.texts["recall_when"]
-                ),
-                body=draft.texts["body"],
+                index=content.index,
+                body=content.body,
                 taken_handles=taken,
             )
             taken.add(episode.handle)
-            written.append(WrittenEpisode(episode=episode, truncated=draft.truncated))
+            written.append(WrittenEpisode(episode=episode, truncated=content.truncated))
         for w in written:
             self._repository.add(w.episode)
-        return EpisodeWritingResult(written=tuple(written), dropped_count=dropped)
+        return EpisodeWritingResult(written=tuple(written), dropped_count=contents.dropped_count)
 
 
-def _messages(*, self_name: str, persona: str, events_text: str) -> list[dict[str, str]]:
-    lines = [f"あなた = {self_name}"]
-    if persona.strip():
-        lines.append(f"あなたの人物像 = {persona.strip()}")
-    lines += [
-        "",
-        EVENTS_HEADING,
-        events_text,
-        "",
-        "上記から JSON 形式で記憶を書いてください。",
-    ]
-    return [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": "\n".join(lines)},
-    ]
-
-
-__all__ = [
-    "EVENTS_HEADING",
-    "MAX_EPISODES_PER_WRITING",
-    "SYSTEM_PROMPT",
-    "EpisodeWriter",
-    "EpisodeWritingCompletion",
-    "EpisodeWritingResult",
-    "WrittenEpisode",
-]
+__all__ = ["AddEpisodesToMemory", "EpisodeWritingResult", "WrittenEpisode"]

@@ -40,7 +40,7 @@ from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient, ToolC
 from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemorySummaryCompletionPort,
 )
-from ai_rpg_world.being.application.episode_writing import EpisodeWritingCompletion
+from ai_rpg_world.being.infrastructure.llm_episode_writer import EpisodeWritingCompletion
 
 _DEFAULT_MODEL = "openai/gpt-5-mini"
 DEFAULT_LLM_MODEL = _DEFAULT_MODEL
