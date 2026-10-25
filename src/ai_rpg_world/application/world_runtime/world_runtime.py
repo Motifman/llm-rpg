@@ -4502,11 +4502,6 @@ def create_world_runtime(
     for spawn in scenario.player_spawns:
         pid = PlayerId(spawn.player_id)
         exp_table = ExpTable(base_exp=100.0, exponent=1.5)
-        # PR 2 (#227): PlayerSpeechApplicationService が status.current_coordinate
-        # を要求 (タイル系の SpeechRecipientStrategy 用) するため、spot_graph
-        # でも sentinel として Coordinate(0,0,0) を埋める。
-        # SpotGraphSpeechRecipientStrategy は coordinate を読まないので値は
-        # 影響しない。
         status = PlayerStatusAggregate(
             player_id=pid,
             base_stats=BaseStats(max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05),
@@ -4521,7 +4516,6 @@ def create_world_runtime(
             stamina=Stamina(value=100, max_stamina=100),
             navigation_state=PlayerNavigationState.from_parts(
                 current_spot_id=spawn.spawn_spot_id,
-                current_coordinate=Coordinate(0, 0, 0),
             ),
             spot_navigation_state=PlayerSpotNavigationState.at_rest(spawn.spawn_spot_id),
             # シナリオが宣言した初期 state (役割・印など) をそのまま載せる。

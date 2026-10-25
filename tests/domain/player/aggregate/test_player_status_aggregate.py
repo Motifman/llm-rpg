@@ -1077,7 +1077,6 @@ class TestPlayerStatusAggregate:
             content="こんにちは",
             channel=SpeechChannel.SAY,
             spot_id=spot_id,
-            speaker_coordinate=coord,
         )
         events = aggregate.get_events()
         assert len(events) == 1
@@ -1087,11 +1086,10 @@ class TestPlayerStatusAggregate:
         assert ev.content == "こんにちは"
         assert ev.channel == SpeechChannel.SAY
         assert ev.spot_id == spot_id
-        assert ev.speaker_coordinate == coord
         assert ev.target_player_id is None
 
     def test_speak_shout_success(self):
-        """SHOUTの本文・話者・場所・座標と宛先なしを1件の発話通知へ転記する。"""
+        """SHOUTの本文・話者・場所と宛先なしを1件の発話通知へ転記する。"""
         spot_id = SpotId(2)
         coord = Coordinate(1, 1, 0)
         aggregate = create_test_status_aggregate(
@@ -1103,7 +1101,6 @@ class TestPlayerStatusAggregate:
             content="助けて！",
             channel=SpeechChannel.SHOUT,
             spot_id=spot_id,
-            speaker_coordinate=coord,
         )
         events = aggregate.get_events()
         assert len(events) == 1
@@ -1113,7 +1110,6 @@ class TestPlayerStatusAggregate:
         assert ev.content == "助けて！"
         assert ev.aggregate_id == PlayerId(2)
         assert ev.spot_id == spot_id
-        assert ev.speaker_coordinate == coord
         assert ev.target_player_id is None
 
     def test_speak_whisper_success(self):
@@ -1130,7 +1126,6 @@ class TestPlayerStatusAggregate:
             content="内緒だよ",
             channel=SpeechChannel.WHISPER,
             spot_id=spot_id,
-            speaker_coordinate=coord,
             target_player_id=target,
         )
         events = aggregate.get_events()
@@ -1155,7 +1150,6 @@ class TestPlayerStatusAggregate:
                 content="こんにちは",
                 channel=SpeechChannel.WHISPER,
                 spot_id=spot_id,
-                speaker_coordinate=coord,
                 target_player_id=None,
             )
 
@@ -1175,7 +1169,6 @@ class TestPlayerStatusAggregate:
                 content="",
                 channel=SpeechChannel.SAY,
                 spot_id=spot_id,
-                speaker_coordinate=coord,
             )
         assert aggregate.get_events() == []
         with pytest.raises(SpeechValidationException, match="発言内容を空にできません"):
@@ -1183,7 +1176,6 @@ class TestPlayerStatusAggregate:
                 content="   ",
                 channel=SpeechChannel.SAY,
                 spot_id=spot_id,
-                speaker_coordinate=coord,
             )
         assert aggregate.get_events() == []
 
@@ -1202,7 +1194,6 @@ class TestPlayerStatusAggregate:
                 content="助けて",
                 channel=SpeechChannel.SAY,
                 spot_id=spot_id,
-                speaker_coordinate=coord,
             )
 
         assert aggregate.get_events() == []
@@ -1220,7 +1211,6 @@ class TestPlayerStatusAggregate:
             content="  hello  ",
             channel=SpeechChannel.SAY,
             spot_id=spot_id,
-            speaker_coordinate=coord,
         )
         events = aggregate.get_events()
         assert len(events) == 1

@@ -12,7 +12,7 @@ buffer を clear する仕様 (復活直前の他者発話を引きずらない)
 ## 判定が 1 つの strategy の中にしか無かった
 
 除外は `SpotGraphRecipientStrategy` の末尾だけにあり、発話は別経路
-(`SpeechRecipientStrategy` 系) を通るので効いていなかった。当時のコメント
+(`SpotGraphSpeechRecipientStrategy`) を通るので効いていなかった。当時のコメント
 自身が「別経路で同等の制御を入れる」と書いていて、**書かれないまま実 run で
 出た**。
 

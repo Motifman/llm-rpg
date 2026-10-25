@@ -788,7 +788,6 @@ class TestPlayerObservationFormatterPlayerSpoke:
             content="こんにちは",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
@@ -823,7 +822,6 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
             content="私は廊下で待機する",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
         )
         out = formatter.format(event, PlayerId(2))  # 話者本人
         assert out is None
@@ -838,7 +836,6 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
             content="助けて！",
             channel=SpeechChannel.SHOUT,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
         )
         out = formatter.format(event, PlayerId(2))
         assert out is None
@@ -853,7 +850,6 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
             content="内緒だよ",
             channel=SpeechChannel.WHISPER,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=PlayerId(3),
         )
         out = formatter.format(event, PlayerId(2))
@@ -869,7 +865,6 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
             content="こんにちは",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
         )
         out = formatter.format(event, PlayerId(1))  # 別人 recipient
         assert out is not None
