@@ -2,7 +2,7 @@
 Unit of Workインターフェース
 DDDにおけるトランザクション管理の抽象化を提供します。
 """
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Sequence
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol
@@ -38,18 +38,6 @@ class UnitOfWork(Protocol):
     def add_events_from_aggregate(self, aggregate: Any) -> None:
         """集約からイベントを収集し、add_events 経由で追加する（イベント収集 1 本化）"""
         pass
-
-    def get_sync_processed_count(self) -> int:
-        """同期イベント処理済み件数を返す。flush_sync_events の複数回呼び出しで重複処理を防ぐ。"""
-        ...
-
-    def get_pending_events_since(self, processed_count: int) -> tuple[list["DomainEvent"], int]:
-        """processed_count 以降の保留イベントを取得する。戻り値は (イベントリスト, 次の processed_count)。"""
-        ...
-
-    def advance_sync_processed_count(self, new_count: int) -> None:
-        """同期イベント処理済み件数を進める。"""
-        ...
 
     def get_committed_events(self) -> list["DomainEvent"]:
         """コミット成功後に取り出し可能なイベントを返す。post-commit orchestration で使用。"""

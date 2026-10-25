@@ -49,12 +49,9 @@ class TestGuildCommandService:
 
     @pytest.fixture
     def setup_service(self):
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
 
         data_store = InMemoryDataStore()
         uow = InMemoryUnitOfWork(
-            unit_of_work_factory=create_uow,
             data_store=data_store,
         )
         guild_repository = InMemoryGuildRepository(

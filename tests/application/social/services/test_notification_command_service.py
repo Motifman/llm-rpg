@@ -45,7 +45,7 @@ class TestNotificationCommandService:
     def setup_service(self):
         """テスト用のサービスとリポジトリをセットアップ"""
         # Unit of Workを作成
-        unit_of_work = InMemoryUnitOfWork(unit_of_work_factory=lambda: InMemoryUnitOfWork())
+        unit_of_work = InMemoryUnitOfWork()
         data_store = InMemoryDataStore()
         notification_repository = InMemorySnsNotificationRepository(data_store, unit_of_work)
 

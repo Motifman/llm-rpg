@@ -105,12 +105,9 @@ class TestQuestCommandService:
 
     @pytest.fixture
     def setup_service(self):
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
 
         data_store = InMemoryDataStore()
         uow = InMemoryUnitOfWork(
-            unit_of_work_factory=create_uow,
             data_store=data_store,
         )
         quest_repository = InMemoryQuestRepository(
@@ -131,12 +128,9 @@ class TestQuestCommandService:
     @pytest.fixture
     def setup_service_with_guild(self):
         """Quest + Guild リポジトリ付き（ギルド掲示・承認・受託テスト用）"""
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
 
         data_store = InMemoryDataStore()
         uow = InMemoryUnitOfWork(
-            unit_of_work_factory=create_uow,
             data_store=data_store,
         )
         quest_repository = InMemoryQuestRepository(
@@ -400,15 +394,9 @@ class TestQuestCommandService:
     @pytest.fixture
     def setup_service_with_player_repos(self):
         """PlayerStatus / Inventory / Item リポジトリ付きのサービス（プレイヤー発行テスト用）"""
-        def create_uow():
-            return InMemoryUnitOfWork(
-                unit_of_work_factory=create_uow,
-                data_store=data_store,
-            )
 
         data_store = InMemoryDataStore()
         uow = InMemoryUnitOfWork(
-            unit_of_work_factory=create_uow,
             data_store=data_store,
         )
         quest_repository = InMemoryQuestRepository(
@@ -768,15 +756,9 @@ class TestQuestCommandService:
     @pytest.fixture
     def setup_service_with_guild_location(self):
         """ギルド依頼の発行者ロケーション検証用（ギルドとプレイヤーの保存先）"""
-        def create_uow():
-            return InMemoryUnitOfWork(
-                unit_of_work_factory=create_uow,
-                data_store=data_store,
-            )
 
         data_store = InMemoryDataStore()
         uow = InMemoryUnitOfWork(
-            unit_of_work_factory=create_uow,
             data_store=data_store,
         )
         quest_repository = InMemoryQuestRepository(

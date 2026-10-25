@@ -46,7 +46,6 @@ class TestQuestProgressHandler:
     def create_uow(self, data_store):
         def create():
             return InMemoryUnitOfWork(
-                unit_of_work_factory=create,
                 data_store=data_store,
             )
         return create

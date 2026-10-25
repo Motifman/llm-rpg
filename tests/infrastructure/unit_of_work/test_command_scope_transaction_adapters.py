@@ -278,27 +278,6 @@ class TestTransactionOnlyCommit:
         finally:
             connection.close()
 
-    def test_in_memory_adapter_rejects_legacy_sync_dispatcher(self) -> None:
-        """旧同期dispatcherを持つインメモリUoWは二重処理を避けて拒否する。"""
-        uow = InMemoryUnitOfWork(
-            data_store=_SnapshotDataStore(),
-            sync_event_dispatcher=object(),
-        )
-        with pytest.raises(ValueError, match="sync_event_dispatcher"):
-            InMemoryUnitOfWorkTransactionAdapter(uow)
-
-    def test_sqlite_adapter_rejects_legacy_sync_dispatcher(self) -> None:
-        """旧同期dispatcherを持つSQLite UoWは二重処理を避けて拒否する。"""
-        connection = sqlite3.connect(":memory:")
-        try:
-            uow = SqliteUnitOfWork(
-                connection=connection,
-                sync_event_dispatcher=object(),
-            )
-            with pytest.raises(ValueError, match="sync_event_dispatcher"):
-                SqliteUnitOfWorkTransactionAdapter(uow)
-        finally:
-            connection.close()
 
     def test_in_memory_adapter_requires_rollback_snapshot_source(self) -> None:
         """snapshot元なしのインメモリUoWは部分適用を戻せないため拒否する。"""

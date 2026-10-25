@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
 
 from ai_rpg_world.application.common.exceptions import (
     TransactionCommittedCleanupException,
@@ -22,11 +21,6 @@ class InMemoryUnitOfWorkTransactionAdapter:
     """イベント責務を除いたインメモリtransactionだけを公開する。"""
 
     def __init__(self, unit_of_work: InMemoryUnitOfWork) -> None:
-        if unit_of_work.sync_event_dispatcher is not None:
-            raise ValueError(
-                "CommandScope用adapterにはsync_event_dispatcher未設定の"
-                "InMemoryUnitOfWorkが必要です"
-            )
         if not unit_of_work.supports_atomic_rollback:
             raise ValueError(
                 "CommandScope用InMemoryUnitOfWorkにはrollback用data_storeが必要です"
@@ -75,11 +69,6 @@ class SqliteUnitOfWorkTransactionAdapter:
     """イベント責務を除いたSQLite transactionだけを公開する。"""
 
     def __init__(self, unit_of_work: SqliteUnitOfWork) -> None:
-        if unit_of_work.sync_event_dispatcher is not None:
-            raise ValueError(
-                "CommandScope用adapterにはsync_event_dispatcher未設定の"
-                "SqliteUnitOfWorkが必要です"
-            )
         self._unit_of_work = unit_of_work
 
     @property

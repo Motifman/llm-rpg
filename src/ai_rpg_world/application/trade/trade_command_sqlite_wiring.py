@@ -36,7 +36,7 @@ def attach_trade_command_sqlite_repositories(
     SqlitePlayerProfileWriteRepository,
     SqliteItemWriteRepository,
 ]:
-    """同一接続・UoW 共有モードの 5 リポジトリ。`event_sink` に `TransactionalScope` を渡すと集約イベントを収集する。"""
+    """同一接続・UoW 共有モードの 5 リポジトリ。`event_sink` に `CommandContextAggregateEventSink` を渡すと集約イベントを収集する。"""
     return (
         SqliteTradeAggregateRepository.for_shared_unit_of_work(
             connection, event_sink=event_sink

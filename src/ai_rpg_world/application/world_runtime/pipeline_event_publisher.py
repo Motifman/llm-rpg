@@ -5,9 +5,8 @@ chore で module-level に昇格させたもの (元は ``create_world_runtime``
 関数の内部ローカルクラス)。
 
 設計:
-- 旧 ``InMemoryEventPublisher`` の per-event-type ``register_handler`` を
-  使うアプローチを廃止し、publish / publish_all / publish_async_events
-  のいずれでも ``_dispatch`` に集約する単純な publisher。
+- 受け手の登録と呼び出しは共通の配送器へ委ねる。
+  publish / publish_all / publish_async_events はいずれも ``_dispatch`` に集約する。
 - ``_dispatch`` は ObservationPipeline.run → ObservationAppender.append
   → ObservationTurnScheduler.maybe_schedule の流れで配信する。
 - speech (``PlayerSpokeEvent``) と interaction (``ConnectionStateChangedEvent``
@@ -65,10 +64,8 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
         self,
         event_type: Any,
         handler: Any,
-        is_synchronous: bool = False,
     ) -> None:
         """既存の登録の口を、共通基盤の確定後の同期配送へつなぐ。"""
-        del is_synchronous
         if event_type is None or handler is None:
             return
         self._dispatcher.register_after_commit(

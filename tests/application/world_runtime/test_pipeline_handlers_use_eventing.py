@@ -10,7 +10,7 @@ from ai_rpg_world.application.common.command_scope import CommandScope
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import ResolvedLlmRuntimeConfig
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-from ai_rpg_world.domain.common.domain_event import BaseDomainEvent, DomainEvent
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent, PlayerRevivedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -34,11 +34,11 @@ def wired(monkeypatch):
     timeline, registrations = [], []
     original = PipelineEventPublisher.register_handler
 
-    def register(publisher, event_type, handler, is_synchronous=False):
+    def register(publisher, event_type, handler):
         name = type(handler).__name__
         registrations.append((event_type.__name__, name))
         monkeypatch.setattr(handler, "handle", lambda event: timeline.append(name))
-        original(publisher, event_type, handler, is_synchronous)
+        original(publisher, event_type, handler)
 
     monkeypatch.setattr(PipelineEventPublisher, "register_handler", register)
     runtime = create_world_runtime(

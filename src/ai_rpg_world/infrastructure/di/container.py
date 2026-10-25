@@ -1,15 +1,7 @@
-"""
-Dependency Injection Container - 依存性注入コンテナ実装
-
-SNS 向けスタック（`get_unit_of_work_factory` / `get_unit_of_work_and_publisher`）は
-`InMemoryUnitOfWork` + `InMemoryEventPublisherWithUow` に固定している。
-`InMemoryEventPublisherWithUow` は SQLite UoW とそのままでは併用できない（イベント層の Option C）。
-ゲーム DB 用の `SqliteUnitOfWorkFactory` が必要なときは `create_sqlite_unit_of_work_factory_for_game_db` を使い、
-SNS コンテナの UoW ファクトリとは別経路で組み立てること。
-"""
+"""ゲームと公開 SNS の SQLite リポジトリを組み立てる。"""
 import sqlite3
 from pathlib import Path
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.guild.guild_sqlite_wiring import (
     GuildSqliteRepositories,
@@ -43,26 +35,15 @@ from ai_rpg_world.application.world.world_state_sqlite_wiring import (
     WorldStateSqliteRepositories,
     attach_world_state_sqlite_repositories,
 )
-from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
-from ai_rpg_world.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
-from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import (
-    InMemorySnsNotificationRepository,
-)
-from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 from ai_rpg_world.infrastructure.repository.sqlite_post_repository import SqlitePostRepository
 from ai_rpg_world.infrastructure.repository.sqlite_reply_repository import SqliteReplyRepository
 from ai_rpg_world.infrastructure.repository.sqlite_sns_notification_repository import (
     SqliteSnsNotificationRepository,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_sns_user_repository import SqliteSnsUserRepository
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWorkFactory
-from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 
 if TYPE_CHECKING:
-    from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
     from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import SqliteItemWriteRepository
     from ai_rpg_world.infrastructure.repository.sqlite_player_inventory_write_repository import (
         SqlitePlayerInventoryWriteRepository,
@@ -85,95 +66,10 @@ TradeCommandRepositories = tuple[
 ]
 
 
-class DependencyInjectionContainer:
-    """依存性注入コンテナ
-
-    アプリケーション全体で使用する依存関係を管理します。
-    SNS 用リポジトリは共有 `InMemoryDataStore` と In-Memory UoW に紐づく。
-    """
-
-    def __init__(self) -> None:
-        """初期化"""
-        self._data_store = InMemoryDataStore()
-        self._unit_of_work_factory: UnitOfWorkFactory | None = None
-        self._event_publisher: InMemoryEventPublisherWithUow | None = None
-        self._unit_of_work: InMemoryUnitOfWork | None = None
-        
-        # リポジトリのキャッシュ
-        self._post_repository: InMemoryPostRepository | None = None
-        self._user_repository: InMemorySnsUserRepository | None = None
-        self._notification_repository: InMemorySnsNotificationRepository | None = None
-        self._reply_repository: InMemoryReplyRepository | None = None
-
-    def get_unit_of_work_factory(self) -> UnitOfWorkFactory:
-        """Unit of Workファクトリを取得"""
-        if self._unit_of_work_factory is None:
-            self._unit_of_work_factory = InMemoryUnitOfWorkFactory()
-            self._init_uow_and_publisher()
-            self._unit_of_work_factory._event_publisher = self._event_publisher
-        return self._unit_of_work_factory
-
-    def _init_uow_and_publisher(self) -> None:
-        """UOWとパブリッシャーの初期化"""
-        if self._unit_of_work is None:
-            self._unit_of_work, self._event_publisher = InMemoryUnitOfWork.create_with_event_publisher()
-
-    def get_unit_of_work_and_publisher(self) -> tuple[InMemoryUnitOfWork, "InMemoryEventPublisherWithUow"]:
-        """Unit of Workとイベントパブリッシャーのペアを取得"""
-        self.get_unit_of_work_factory()
-        # get_unit_of_work_factory が _init_uow_and_publisher を通す
-        assert self._unit_of_work is not None
-        assert self._event_publisher is not None
-        return self._unit_of_work, self._event_publisher
-
-    def get_data_store(self) -> InMemoryDataStore:
-        """共有データストアを取得"""
-        return self._data_store
-
-    def get_post_repository(self) -> InMemoryPostRepository:
-        """Postリポジトリを取得"""
-        if self._post_repository is None:
-            uow, _ = self.get_unit_of_work_and_publisher()
-            self._post_repository = InMemoryPostRepository(self._data_store, uow)
-        return self._post_repository
-
-    def get_user_repository(self) -> InMemorySnsUserRepository:
-        """Userリポジトリを取得"""
-        if self._user_repository is None:
-            uow, _ = self.get_unit_of_work_and_publisher()
-            self._user_repository = InMemorySnsUserRepository(self._data_store, uow)
-        return self._user_repository
-
-    def get_notification_repository(self) -> InMemorySnsNotificationRepository:
-        """Notificationリポジトリを取得"""
-        if self._notification_repository is None:
-            uow, _ = self.get_unit_of_work_and_publisher()
-            self._notification_repository = InMemorySnsNotificationRepository(self._data_store, uow)
-        return self._notification_repository
-
-    def get_reply_repository(self) -> InMemoryReplyRepository:
-        """Replyリポジトリを取得"""
-        if self._reply_repository is None:
-            uow, _ = self.get_unit_of_work_and_publisher()
-            self._reply_repository = InMemoryReplyRepository(self._data_store, uow)
-        return self._reply_repository
-
-    @staticmethod
-    def create_sqlite_unit_of_work_factory_for_game_db(
-        database: str | Path,
-    ) -> SqliteUnitOfWorkFactory:
-        """ゲーム永続化用の `SqliteUnitOfWorkFactory` を返す（SNS 用 `get_unit_of_work_factory` とは別）。
-
-        `InMemoryEventPublisherWithUow` と同一プロセスで使い回さないこと。
-        """
-        return SqliteUnitOfWorkFactory(database)
-
-
 class SqliteSocialDependencyInjectionContainer:
     """SNS 用 SQLite コンテナ。
 
-    既存の `DependencyInjectionContainer` を壊さず、本番経路で InMemory に固定しないための
-    明示的な SQLite 版コンテナを提供する。
+    公開 SNS のデータを SQLite に保存するためのリポジトリを提供する。
     """
 
     def __init__(self, database: str | Path):
@@ -324,7 +220,6 @@ class SqliteGameDependencyInjectionContainer:
 
 
 __all__ = [
-    "DependencyInjectionContainer",
     "SqliteGameDependencyInjectionContainer",
     "SqliteSocialDependencyInjectionContainer",
 ]

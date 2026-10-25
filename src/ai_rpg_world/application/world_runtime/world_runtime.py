@@ -6084,12 +6084,7 @@ def create_world_runtime(
     scenario_event_stage.set_message_callback(
         runtime._append_scenario_event_observation
     )
-    # ── PR 2/6 (#227): 任意の DomainEvent を ObservationPipeline 経由で配信する ──
-    # PR 2 では PlayerSpokeEvent 用に InMemoryEventPublisher を使い handler を
-    # 個別登録していたが、PR 6 で interaction_service など他経路の event も
-    # pipeline に流す必要が出たため、event 型ごとの登録ではなく「全 event
-    # を pipeline へ流す」publisher に置き換える。chore (#240 後続) で
-    # module-level に切り出し。
+    # 発言と操作など、直接発行する経路も同じ観測のパイプラインへ流す。
     # Issue #276: 観測 trace 可視化のため、buffer に積むタイミングで
     # ``TraceEventKind.OBSERVATION`` を記録する。trace_recorder は
     # ``set_trace_recorder`` で後から差し込まれるので provider 経由で参照。

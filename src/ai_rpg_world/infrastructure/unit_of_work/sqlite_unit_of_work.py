@@ -5,15 +5,14 @@ SqliteUnitOfWork — 1 UoW スコープで 1 つの sqlite3.Connection とトラ
 `connection` プロパティ経由で同一 Connection を使う。リポジトリ側の `commit()` は
 ReadModel 等は `Sqlite*Repository.for_shared_unit_of_work(connection)` で共有し、永続化の確定は UoW の `commit` に任せる。
 
-イベント関連 API は `UnitOfWork` Protocol および `TransactionalScope` との整合のため
-`InMemoryUnitOfWork` と同形の状態を保持する（同期 dispatcher は任意注入）。
+イベント収集の口は `UnitOfWork` との互換性のため維持する。配送は `CommandScope` が担う。
 """
 from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -36,7 +35,6 @@ class SqliteUnitOfWork(UnitOfWork):
         database: str | Path | None = None,
         *,
         connection: sqlite3.Connection | None = None,
-        sync_event_dispatcher: Any = None,
     ) -> None:
         if (database is None) == (connection is None):
             raise ValueError("database と connection のどちらか一方だけを指定してください")
@@ -46,15 +44,9 @@ class SqliteUnitOfWork(UnitOfWork):
         self._conn: sqlite3.Connection | None = None
         self._in_transaction = False
         self._pending_events: list[DomainEvent] = []
-        self._processed_sync_count = 0
         self._committed = False
         self._committed_events: list[DomainEvent] = []
-        self._sync_event_dispatcher = sync_event_dispatcher
         self._poisoned = False
-
-    @property
-    def sync_event_dispatcher(self) -> Any:
-        return self._sync_event_dispatcher
 
     @property
     def database_path(self) -> Path | None:
@@ -107,7 +99,6 @@ class SqliteUnitOfWork(UnitOfWork):
             raise
         self._in_transaction = True
         self._pending_events = []
-        self._processed_sync_count = 0
         self._committed = False
         self._committed_events = []
 
@@ -116,8 +107,6 @@ class SqliteUnitOfWork(UnitOfWork):
             raise RuntimeError("No transaction in progress")
         assert self._conn is not None
         try:
-            if self._sync_event_dispatcher is not None:
-                self._sync_event_dispatcher.flush_sync_events()
             self.commit_transaction()
         except Exception:
             if self._in_transaction:
@@ -134,7 +123,6 @@ class SqliteUnitOfWork(UnitOfWork):
         self._committed = True
         self._committed_events = self._pending_events.copy()
         self._pending_events.clear()
-        self._processed_sync_count = 0
         self._in_transaction = False
         if self._owns_connection:
             try:
@@ -158,7 +146,6 @@ class SqliteUnitOfWork(UnitOfWork):
             self._poisoned = True
         finally:
             self._pending_events.clear()
-            self._processed_sync_count = 0
             self._committed = False
             self._in_transaction = False
             if self._owns_connection and self._conn is not None:
@@ -191,18 +178,6 @@ class SqliteUnitOfWork(UnitOfWork):
         """旧Unit of Work側に未回収イベントが残っていればTrueを返す。"""
         return bool(self._pending_events)
 
-    def get_sync_processed_count(self) -> int:
-        return self._processed_sync_count
-
-    def get_pending_events_since(
-        self, processed_count: int
-    ) -> tuple[list[DomainEvent], int]:
-        events = self._pending_events[processed_count:]
-        return (events, len(self._pending_events))
-
-    def advance_sync_processed_count(self, new_count: int) -> None:
-        self._processed_sync_count = new_count
-
     def get_committed_events(self) -> list[DomainEvent]:
         return self._committed_events.copy()
 
@@ -213,7 +188,7 @@ class SqliteUnitOfWork(UnitOfWork):
         return self._in_transaction
 
     def execute_pending_operations(self) -> None:
-        """`SyncEventDispatcher` / InMemory UoW との整合。SQLite は即時 SQL のため保留なし。"""
+        """SQLite は即時に SQL を実行するため、保留中の操作は無い。"""
         return
 
     def __enter__(self) -> SqliteUnitOfWork:
