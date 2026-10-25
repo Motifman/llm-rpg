@@ -24,7 +24,6 @@ from collections.abc import Callable
 from ai_rpg_world.application.encounter.contracts.interfaces import (
     IEncounterMemory,
 )
-from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
@@ -32,6 +31,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     EntityEnteredSpotEvent,
 )
+from ai_rpg_world.eventing import EventHandler
 
 _logger = logging.getLogger(__name__)
 

@@ -37,9 +37,9 @@ from ai_rpg_world.application.player.services.downed_incident_log import (
 from ai_rpg_world.application.player.services.player_death_grace_timer import (
     PlayerDeathGraceTimer,
 )
-from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.eventing import EventHandler
 
 CaregiverNameResolver = Callable[[PlayerId], str | None]
 """``PlayerId`` → 表示名 を引く resolver。未解決 (persona 未登録 等) は None。"""
