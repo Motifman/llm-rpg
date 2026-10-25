@@ -11,11 +11,8 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IAvailabilityResolver,
     IGameToolRegistry,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.combat import get_combat_specs
 from ai_rpg_world.application.llm.services.tool_catalog.guild import get_guild_specs
 from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
-from ai_rpg_world.application.llm.services.tool_catalog.movement import get_movement_specs
-from ai_rpg_world.application.llm.services.tool_catalog.pursuit import get_pursuit_specs
 from ai_rpg_world.application.llm.services.tool_catalog.quest import get_quest_specs
 from ai_rpg_world.application.llm.services.tool_catalog.shop import get_shop_specs
 from ai_rpg_world.application.llm.services.tool_catalog.sns import (
@@ -28,7 +25,6 @@ from ai_rpg_world.application.llm.services.tool_catalog.trade import (
     get_trade_specs,
     get_trade_virtual_page_specs,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.world import get_world_specs
 
 
 def _register_specs(
@@ -49,15 +45,6 @@ def register_default_tools(
     registry: IGameToolRegistry,
     *,
     speech_enabled: bool = False,
-    interaction_enabled: bool = False,
-    harvest_enabled: bool = False,
-    attention_enabled: bool = False,
-    conversation_enabled: bool = False,
-    place_enabled: bool = False,
-    drop_enabled: bool = False,
-    chest_enabled: bool = False,
-    pursuit_enabled: bool = False,
-    combat_enabled: bool = False,
     quest_enabled: bool = False,
     guild_enabled: bool = False,
     shop_enabled: bool = False,
@@ -65,13 +52,8 @@ def register_default_tools(
     sns_enabled: bool = False,
     sns_virtual_pages_enabled: bool = False,
     trade_virtual_pages_enabled: bool = False,
-    inspect_item_enabled: bool = False,
-    inspect_target_enabled: bool = False,
-    include_movement_tools: bool = True,
 ) -> None:
     """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。
-
-    `include_movement_tools=False` のときタイル移動系（move_*）は登録しない（スポットグラフ専用ランタイム用）。
 
     取引所（Trade）カタログは `trade_enabled` のみで登録され、`sns_enabled` には依存しない。
     プロダクト設定で SNS と取引の両方を有効にした場合は、SNS 系と取引系が**別カタログとして**並ぶ
@@ -81,29 +63,9 @@ def register_default_tools(
     if not isinstance(registry, IGameToolRegistry):
         raise TypeError("registry must be IGameToolRegistry")
 
-    if include_movement_tools:
-        _register_specs(registry, get_movement_specs())
 
-    if pursuit_enabled:
-        _register_specs(registry, get_pursuit_specs())
     if speech_enabled:
         _register_specs(registry, get_speech_specs())
-    _register_specs(
-        registry,
-        get_world_specs(
-            interaction_enabled=interaction_enabled,
-            harvest_enabled=harvest_enabled,
-            attention_enabled=attention_enabled,
-            conversation_enabled=conversation_enabled,
-            place_enabled=place_enabled,
-            drop_enabled=drop_enabled,
-            chest_enabled=chest_enabled,
-            inspect_item_enabled=inspect_item_enabled,
-            inspect_target_enabled=inspect_target_enabled,
-        ),
-    )
-    if combat_enabled:
-        _register_specs(registry, get_combat_specs())
     if quest_enabled:
         _register_specs(registry, get_quest_specs())
     if guild_enabled:

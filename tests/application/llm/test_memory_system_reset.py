@@ -30,7 +30,7 @@ def test_default_tools_register_no_memory_tools() -> None:
     """ツールカタログは古いメモ・記憶検索・想起ツールを登録せず、環境の道具は登録する。"""
     registry = DefaultGameToolRegistry()
 
-    register_default_tools(registry, speech_enabled=True, include_movement_tools=False)
+    register_default_tools(registry, speech_enabled=True)
     names = {definition.name for definition, _ in registry.get_definitions_with_resolvers()}
 
     assert {"memo_add", "memo_list", "memo_done"} & names == set()

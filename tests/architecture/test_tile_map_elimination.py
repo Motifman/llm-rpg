@@ -96,3 +96,33 @@ def test_world_runtime_does_not_import_in_memory_physical_map_repository() -> No
     runtime_file = _REPO_ROOT / "src/ai_rpg_world/application/world_runtime/world_runtime.py"
     text = runtime_file.read_text(encoding="utf-8")
     assert "InMemoryPhysicalMapRepository" not in text
+
+
+@pytest.mark.parametrize("relative_path", [
+    "ui_context_builder.py",
+    "executors/movement_executor.py",
+    "executors/world_executor.py",
+    "tool_catalog/world.py",
+    "tool_catalog/movement.py",
+    "tool_catalog/pursuit.py",
+    "tool_catalog/combat.py",
+    "_argument_resolvers/movement_resolver.py",
+    "_argument_resolvers/world_resolver.py",
+    "_argument_resolvers/combat_skill_resolver.py",
+])
+def test_tile_llm_modules_are_removed(relative_path: str) -> None:
+    """旧タイル用LLMの実装ファイルは存在せず、再公開によって復活しない。"""
+    base = _REPO_ROOT / "src/ai_rpg_world/application/llm/services"
+    assert not (base / relative_path).exists()
+
+
+def test_production_prompt_builder_injects_ui_context() -> None:
+    """本番のプロンプト構築はUI構築器を明示注入し、省略時の旧実装に頼らない。"""
+    path = _REPO_ROOT / "src/ai_rpg_world/application/world_runtime/world_runtime.py"
+    calls = [
+        node for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        and node.func.id == "DefaultPromptBuilder"
+    ]
+    assert calls
+    assert all(any(kw.arg == "ui_context_builder" for kw in call.keywords) for call in calls)

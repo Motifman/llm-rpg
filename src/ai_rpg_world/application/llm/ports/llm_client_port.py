@@ -35,7 +35,7 @@ class ILLMClient(ABC):
     ) -> dict[str, Any] | None:
         """
         LLM を呼び出し、選択された tool_call を返す。
-        返り値例: {"name": "move_to_destination", "arguments": "{...}"}
+        返り値例: {"name": "travel_to", "arguments": "{...}"}
 
         ``metrics_sink`` (``LlmCallMetricsSink``) が渡されたら、呼び出し完了時に
         ``LlmCallMetrics`` で記録する (実装側の任意)。実 LLM クライアントは

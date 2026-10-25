@@ -2,7 +2,6 @@
 
 import logging
 from collections.abc import Callable
-from importlib import import_module
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
@@ -23,9 +22,6 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 )
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
 from ai_rpg_world.application.llm.services.prompt_builder_config import (
-    DEFAULT_ACTION_INSTRUCTION as _CFG_DEFAULT_ACTION_INSTRUCTION,
-)
-from ai_rpg_world.application.llm.services.prompt_builder_config import (
     PromptBuilderCoreServices,
     PromptLimits,
     PromptSectionProviders,
@@ -41,9 +37,6 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
-from ai_rpg_world.domain.player.repository.player_profile_repository import (
-    PlayerProfileRepository,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 DEFAULT_ACTION_INSTRUCTION = "利用可能なツールで次の行動を選んでください。"
@@ -62,7 +55,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         *,
         sections: PromptSectionProviders | None = None,
         limits: PromptLimits | None = None,
-        ui_context_builder: ILlmUiContextBuilder | None = None,
+        ui_context_builder: ILlmUiContextBuilder,
         current_tick_provider: Callable[[], int | None] | None = None,
         trace_recorder: Optional["ITraceRecorder"] = None,
         trace_recorder_provider: Callable[[], Optional["ITraceRecorder"]] | None = None,
@@ -72,7 +65,7 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         - ``core``: 必須インフラ群 (observation_buffer / world_query_service 等)
         - ``sections``: 任意 provider 群 (persona / objective / inventory / memo)
-        - ``limits``: 数値設定 + action_instruction + tile_map フラグ
+        - ``limits``: action_instruction の設定
 
         sections / limits は省略可能で、それぞれ「全フィールドが
         default」のインスタンスが使われる (= optional 機能はすべて無効)。
@@ -140,10 +133,8 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("system_prompt_builder must be ISystemPromptBuilder")
         if not isinstance(available_tools_provider, IAvailableToolsProvider):
             raise TypeError("available_tools_provider must be IAvailableToolsProvider")
-        if ui_context_builder is not None and not isinstance(
-            ui_context_builder, ILlmUiContextBuilder
-        ):
-            raise TypeError("ui_context_builder must be ILlmUiContextBuilder or None")
+        if not isinstance(ui_context_builder, ILlmUiContextBuilder):
+            raise TypeError("ui_context_builder must be ILlmUiContextBuilder")
         if persona_block_provider is not None and not callable(persona_block_provider):
             raise TypeError("persona_block_provider must be callable or None")
         if not isinstance(default_action_instruction, str):
@@ -199,13 +190,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._context_format_strategy = context_format_strategy
         self._system_prompt_builder = system_prompt_builder
         self._available_tools_provider = available_tools_provider
-        if ui_context_builder is not None:
-            self._ui_context_builder = ui_context_builder
-        else:
-            builder_module = import_module(
-                "ai_rpg_world.application.llm.services.ui_context_builder"
-            )
-            self._ui_context_builder = builder_module.DefaultLlmUiContextBuilder()
+        self._ui_context_builder = ui_context_builder
         self._persona_block_provider = persona_block_provider
         self._default_action_instruction = default_action_instruction
         self._trace_recorder = trace_recorder

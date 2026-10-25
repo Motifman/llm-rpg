@@ -85,8 +85,6 @@ _LEGACY_UNIT_OF_WORK_CLIENT_PATHS = (
 _LEGACY_LOAD_ONLY_MODULES = {
     "ai_rpg_world.application.social.services.notification_event_handler_service",
     "ai_rpg_world.application.social.services.relationship_event_handler_service",
-    "ai_rpg_world.application.world.services.movement_service",
-    "ai_rpg_world.application.world.services.movement_step_executor",
 }
 
 
