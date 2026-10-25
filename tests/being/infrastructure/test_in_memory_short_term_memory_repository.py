@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
-from ai_rpg_world.being.domain.short_term_memory import Backstory, ShortTermMemory
+from ai_rpg_world.being.domain.short_term_memory import Backstory, BackstoryRequest, ShortTermMemory
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
@@ -15,7 +15,7 @@ BEN = BeingId("being-ben")
 
 def _memory(being_id: BeingId = ADA, flow: str = "坑道の奥で鍵を探していた") -> ShortTermMemory:
     memory = ShortTermMemory.empty(being_id)
-    memory.add_backstory(Backstory(flow=flow, mood="", written_turn=20))
+    memory.add_backstory(Backstory(flow=flow, mood="", written_turn=20, until_turn=0))
     return memory
 
 
@@ -113,6 +113,14 @@ class TestCopies:
         memory.perceive(_observation(), current_turn=0)
 
         assert repository.get(ADA).experiences == ()
+
+    def test_request_is_kept_through_save_and_get(self) -> None:
+        """届くのを待っているいきさつの頼みごとは、保存して取り出しても残る。"""
+        repository = InMemoryShortTermMemoryRepository()
+        request = BackstoryRequest(until_turn=10, requested_turn=20)
+        repository.save(ShortTermMemory(ADA, request=request))
+
+        assert repository.get(ADA).request == request
 
     def test_pending_events_are_not_stored(self) -> None:
         """ためたイベントは保存しない。取り出した集約はイベントを持たないので、同じイベントを 2 度渡さない。"""
