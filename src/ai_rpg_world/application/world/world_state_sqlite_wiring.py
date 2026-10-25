@@ -7,9 +7,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from ai_rpg_world.infrastructure.repository.game_db_schema import init_game_db_schema
-from ai_rpg_world.infrastructure.repository.sqlite_hit_box_repository import (
-    SqliteHitBoxRepository,
-)
 from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import SqliteItemWriteRepository
 from ai_rpg_world.infrastructure.repository.sqlite_location_establishment_repository import (
     SqliteLocationEstablishmentRepository,
@@ -46,7 +43,6 @@ class PlayerStateSqliteRepositories:
 class WorldRuntimeSqliteRepositories:
     physical_maps: SqlitePhysicalMapRepository
     monsters: SqliteMonsterAggregateRepository
-    hit_boxes: SqliteHitBoxRepository
 
 
 @dataclass(frozen=True)
@@ -93,9 +89,6 @@ def attach_world_state_sqlite_repositories(
                 connection, event_sink=event_sink
             ),
             monsters=SqliteMonsterAggregateRepository.for_shared_unit_of_work(
-                connection, event_sink=event_sink
-            ),
-            hit_boxes=SqliteHitBoxRepository.for_shared_unit_of_work(
                 connection, event_sink=event_sink
             ),
         ),

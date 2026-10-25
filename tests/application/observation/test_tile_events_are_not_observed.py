@@ -14,10 +14,6 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.events.observation_event_handler_registry import _OBSERVED_EVENT_TYPES
 
 _TILE_EVENT_GROUPS = {
-    "combat.event.combat_events": (
-        "HitBoxCreatedEvent", "HitBoxDeactivatedEvent", "HitBoxHitRecordedEvent",
-        "HitBoxMovedEvent", "HitBoxObstacleCollidedEvent",
-    ),
     "world.event.harvest_events": (
         "HarvestStartedEvent", "HarvestCancelledEvent", "HarvestCompletedEvent",
     ),
