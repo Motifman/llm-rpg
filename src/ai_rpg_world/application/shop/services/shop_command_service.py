@@ -51,7 +51,6 @@ from ai_rpg_world.domain.world.exception.map_exception import (
 from ai_rpg_world.domain.world.repository.location_establishment_repository import (
     LocationEstablishmentRepository,
 )
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
@@ -67,7 +66,6 @@ class ShopCommandService:
         player_inventory_repository: PlayerInventoryRepository,
         player_status_repository: PlayerStatusRepository,
         item_repository: ItemRepository,
-        physical_map_repository: PhysicalMapRepository,
         location_establishment_repository: LocationEstablishmentRepository,
         unit_of_work: UnitOfWork,
     ):
@@ -75,7 +73,6 @@ class ShopCommandService:
         self._player_inventory_repository = player_inventory_repository
         self._player_status_repository = player_status_repository
         self._item_repository = item_repository
-        self._physical_map_repository = physical_map_repository
         self._location_establishment_repository = location_establishment_repository
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -109,21 +106,10 @@ class ShopCommandService:
         self,
         player_id: PlayerId,
         spot_id: SpotId,
-        location_area_id: LocationAreaId,
     ) -> bool:
-        """プレイヤーが指定ロケーションにいるか判定"""
+        """プレイヤーの現在スポットがショップのスポットと一致するか判定する。"""
         status = self._player_status_repository.find_by_id(player_id)
-        if status is None:
-            return False
-        if status.current_spot_id is None or status.current_coordinate is None:
-            return False
-        if status.current_spot_id != spot_id:
-            return False
-        physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
-        if physical_map is None:
-            return False
-        areas = physical_map.get_location_areas_at(status.current_coordinate)
-        return any(la.location_id == location_area_id for la in areas)
+        return status is not None and status.current_spot_id == spot_id
 
     def create_shop(self, command: CreateShopCommand) -> ShopCommandResultDto:
         """ショップを開設する"""
@@ -311,7 +297,7 @@ class ShopCommandService:
     def purchase_from_shop(
         self, command: PurchaseFromShopCommand
     ) -> ShopCommandResultDto:
-        """ショップから購入する（購入者はそのロケーションにいる必要あり）"""
+        """ショップから購入する（購入者は同じスポットにいる必要あり）"""
         return self._execute_with_error_handling(
             operation=lambda: self._purchase_from_shop_impl(command),
             context={
@@ -344,7 +330,7 @@ class ShopCommandService:
                 )
 
             if not self._is_player_at_shop_location(
-                buyer_id, shop.spot_id, shop.location_area_id
+                buyer_id, shop.spot_id
             ):
                 raise NotAtShopLocationException(command.buyer_id, command.shop_id)
 
