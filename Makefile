@@ -211,4 +211,5 @@ SEEDS ?= 0-19
 FUZZ_TICKS ?= 40
 fuzz-scenario:
 	uv run python scripts/fuzz_scenario_with_random_agents.py \
-		--scenario $(if $(SCENARIO),$(SCENARIO),$(FUZZ_SCENARIO)) --seeds $(SEEDS) --ticks $(FUZZ_TICKS)
+		--scenario $(if $(SCENARIO),$(SCENARIO),$(FUZZ_SCENARIO)) --seeds $(SEEDS) --ticks $(FUZZ_TICKS) \
+		$(if $(FUZZ_PROFILE),--profile $(FUZZ_PROFILE),)

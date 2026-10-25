@@ -18,7 +18,14 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-from ai_rpg_world.being.domain.short_term_memory import Attempt, Lapse, MemoryOperationResult, Perception
+from ai_rpg_world.being.domain.short_term_memory import (
+    RECENT_TURNS,
+    Attempt,
+    Lapse,
+    MemoryOperationResult,
+    Perception,
+    ShortTermMemory,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 from tests.judgment_helpers import ScriptedJudgmentPort
@@ -144,3 +151,48 @@ class TestMemoryOperationsAndLapsesInTheRuntime:
         assert WORLD_ACTION_HESITATION in lapse.body
         assert memory.awaiting is None
         assert recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_NOT_COPIED) == []
+
+
+class TestRecentEventsShadowInTheRuntime:
+    """本番の手番の流れで、Being の短期記憶から作った【直近の出来事】が今の文と同じになり、違えば trace に残ることを保証する (design_decisions D1824-10)。"""
+
+    def test_texts_match_through_observations_results_memory_operations_and_lapses(self) -> None:
+        """預かった観測、待つ 1 手、記憶の道具の 1 手、道具を選ばない手番を重ねても、プロンプトを組むたびの比較で食い違いは残らない。"""
+        runtime, wiring, recorder = _game()
+        runtime._obs_buffer.append(
+            _ME,
+            ObservationEntry(occurred_at=datetime(2026, 6, 1, 0, 1, tzinfo=timezone.utc), game_time_label="深夜 0:01", output=ObservationOutput(prose="鐘が鳴った", structured={"type": "distant_cue_appeared"})),
+        )
+        _turn(wiring)
+        wiring.llm_client.set_tool_call_to_return({"name": TOOL_NAME_EPISODE_RECALL, "arguments": {"handles": ["鍵のこと"], "inner_thought": "思い出す"}})
+        _turn(wiring)
+        wiring.llm_client.set_tool_call_to_return(None)
+        _turn(wiring)
+        runtime.build_full_prompt(_ME)
+
+        assert recorder.payloads(TraceEventKind.RECENT_EVENTS_SHADOW_MISMATCH) == []
+
+    def test_texts_still_match_after_the_current_memory_compacts(self) -> None:
+        """今の短期記憶が古いターンを畳むまで (21 手) 待ち続けても、畳んだあとの比較で食い違いは残らない。Being の側はまだ外さないので、畳んだことを影に知らせて比べ方を変える。"""
+        runtime, wiring, recorder = _game()
+
+        for _ in range(RECENT_TURNS + 1):
+            _turn(wiring)
+            # 本番では turn_trigger が手番の終わりに閉じる。
+            runtime._short_term_memory.complete_turn(_ME)
+        runtime.build_full_prompt(_ME)
+
+        assert recorder.payloads(TraceEventKind.EPISODE_WRITING) != []
+        assert recorder.payloads(TraceEventKind.RECENT_EVENTS_SHADOW_MISMATCH) == []
+
+    def test_different_being_memory_is_traced(self) -> None:
+        """Being の短期記憶が今の文と違えば、プロンプトを組んだときに different の食い違いが 1 件残る。"""
+        runtime, wiring, recorder = _game()
+        _turn(wiring)
+        being_id = runtime._acting_being_for(_ME).being_id
+        runtime._being_short_term_memory_store.replace_all_by_being(ShortTermMemory.empty(being_id))
+
+        runtime.build_full_prompt(_ME)
+
+        (payload,) = recorder.payloads(TraceEventKind.RECENT_EVENTS_SHADOW_MISMATCH)
+        assert payload["mismatch_kind"] == "different"

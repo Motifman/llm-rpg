@@ -663,6 +663,7 @@ def _drive_scenario(
                 logger.info(
                     "restored %d being snapshot(s)", len(restore_report.restored)
                 )
+                runtime.note_being_memories_restored(restore_report.restored)
                 # Phase 7: trace に「どの run から続きを取ったか」を残す。
                 # cross-scenario transfer も明示的に payload に乗せる。
                 recorder.record(

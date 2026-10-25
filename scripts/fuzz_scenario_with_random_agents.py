@@ -59,6 +59,8 @@ WORLD_TICK_UNIT_FAILED = "world_tick_unit_failed"
 #: 記憶の道具や 1 手の無い結果のような、決めたとおりに写さないものは数えない。
 BEING_SHORT_TERM_MEMORY_NOT_COPIED = "being_short_term_memory_not_copied"
 BROKEN_COPY_REASONS = frozenset({"memory_rule", "contract_violation", "unpaired_result", "unexpected_error"})
+#: 今の【直近の出来事】と Being の側の文の食い違い (design_decisions D1824-10)。切り替える前に 0 を確かめる。
+RECENT_EVENTS_SHADOW_MISMATCH = "recent_events_shadow_mismatch"
 
 #: ターンの文を見て、穴を見つけたら説明の文を返す検査。シナリオごとに足す。
 TurnCheck = Callable[["TurnView"], Iterable[str]]
@@ -304,12 +306,19 @@ def _identifier_pattern(identifiers: Iterable[str]) -> re.Pattern[str] | None:
     return re.compile(r"(?<![A-Za-z0-9_])(?:" + "|".join(map(re.escape, ids)) + r")(?![A-Za-z0-9_])")
 
 
-def _smoke_stub_runtime_config(seed: int) -> Any:
+def _smoke_stub_runtime_config(seed: int, profile_path: Path = SMOKE_STUB_PROFILE) -> Any:
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import ResolvedLlmRuntimeConfig
 
-    profile = json.loads(SMOKE_STUB_PROFILE.read_text(encoding="utf-8"))
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
     # 待ちの上限を 1 tick にして、全員が毎 tick 行動する。同じ tick 数で試す組み合わせを増やすため。
-    values = {**profile["runtime_config"], "SCENARIO_RANDOM_SEED": seed, "LLM_IDLE_TIMEOUT_TICKS": 1}
+    # 実 LLM と実の判定は呼ばない。profile の他の設定 (記憶の部品など) はそのまま使う。
+    values = {
+        **profile["runtime_config"],
+        "LLM_CLIENT": "stub",
+        "TYPED_JUDGMENT_PROVIDER": "stub",
+        "SCENARIO_RANDOM_SEED": seed,
+        "LLM_IDLE_TIMEOUT_TICKS": 1,
+    }
     rendered = {
         key: ("1" if v else "0") if isinstance(v, bool) else str(v) for key, v in values.items()
     }
@@ -367,6 +376,7 @@ def run_random_agents(
     max_world_ticks: int,
     extra_checks: Sequence[TurnCheck] = (),
     known_holes: Sequence[KnownHole] = KNOWN_HOLES,
+    profile_path: Path = SMOKE_STUB_PROFILE,
 ) -> FuzzResult:
     """シナリオを、全員でたらめに行動させて ``max_world_ticks`` まで回す。"""
     result = FuzzResult(scenario=scenario_path.stem, seed=seed, max_world_ticks=max_world_ticks)
@@ -377,7 +387,7 @@ def run_random_agents(
     saved_tick_loop = os.environ.get("SPOT_GRAPH_TICK_LOOP_ENABLED")
     os.environ["SPOT_GRAPH_TICK_LOOP_ENABLED"] = "false"
     try:
-        _drive(scenario_path, seed, max_world_ticks, extra_checks, result, identifiers, action_names, seen_leaks)
+        _drive(scenario_path, seed, max_world_ticks, extra_checks, result, identifiers, action_names, seen_leaks, profile_path)
     finally:
         if saved_tick_loop is None:
             os.environ.pop("SPOT_GRAPH_TICK_LOOP_ENABLED", None)
@@ -396,6 +406,7 @@ def _drive(
     identifiers: frozenset[str],
     action_names: frozenset[str],
     seen_leaks: set[str],
+    profile_path: Path = SMOKE_STUB_PROFILE,
 ) -> None:
     from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
     from ai_rpg_world.application.llm.services.llm_client_random import RandomLlmClient
@@ -410,7 +421,7 @@ def _drive(
         mgr = GameRuntimeManager(
             scenarios_dir=scenario_path.parent,
             characters_path=Path(tmp) / "characters.json",
-            runtime_config=_smoke_stub_runtime_config(seed),
+            runtime_config=_smoke_stub_runtime_config(seed, profile_path),
         )
         char = mgr.create_character(CharacterCreateRequest(name="fuzz"))
         summary = mgr.create_session(
@@ -429,6 +440,8 @@ def _drive(
                 recorded_before_action[int(player_id or 0)] = recorded_by_player.get(int(player_id or 0), 0)
             elif kind == WORLD_TICK_UNIT_FAILED:
                 result.findings.append(FuzzFinding("exception", int(tick or 0), f"世界の tick で 1 体ぶん取りやめた: {_compact(payload)}"))
+            elif kind == RECENT_EVENTS_SHADOW_MISMATCH and payload.get("mismatch_kind") == "different":
+                result.findings.append(FuzzFinding("shadow_mismatch", int(tick or 0), f"【直近の出来事】が Being の側の文と違う: {_compact(payload)}"))
             elif kind == BEING_SHORT_TERM_MEMORY_NOT_COPIED and payload.get("reason") in BROKEN_COPY_REASONS:
                 result.findings.append(FuzzFinding("exception", int(tick or 0), f"Being 側の短期記憶へ写せなかった: {_compact(payload)}"))
             elif kind == "action_result":
@@ -564,13 +577,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scenario", type=Path, action="append", required=True)
     parser.add_argument("--seeds", default="0-9", help="例: 0-19 / 3,7,11")
     parser.add_argument("--ticks", type=int, default=30)
+    parser.add_argument(
+        "--profile",
+        type=Path,
+        default=SMOKE_STUB_PROFILE,
+        help="runtime_config を読む実験 profile。LLM と判定はスタブに差し替える",
+    )
     args = parser.parse_args(argv)
 
     logging.getLogger().addHandler(logging.NullHandler())
     results: list[FuzzResult] = []
     for scenario in args.scenario:
         for seed in _parse_seeds(args.seeds):
-            result = run_random_agents(scenario, seed=seed, max_world_ticks=args.ticks)
+            result = run_random_agents(scenario, seed=seed, max_world_ticks=args.ticks, profile_path=args.profile)
             results.append(result)
             print(result.report(), flush=True)
     print(summarize(results))

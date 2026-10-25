@@ -183,6 +183,15 @@ class TraceEventKind:
     # memory_rule / contract_violation / unexpected_error) / event_kind (観測の種類か道具の名前。無ければ None)。
     # unexpected_error なら error_type も持つ。
     BEING_SHORT_TERM_MEMORY_NOT_COPIED = "being_short_term_memory_not_copied"
+    # 今の【直近の出来事】と、Being の短期記憶から作った文が違った (#1824、design_decisions D1824-10)。
+    # プロンプトは今の文のまま。プロンプトを組むたびに比べ、違ったときだけ 1 件。
+    # payload: being_id / mismatch_kind (different / public_sns_projection)。
+    # public_sns_projection は比べなかった印で Being ごとに 1 回だけ。different は compared_as
+    # (whole = 全体が同じか / subsequence = 今の短期記憶が畳んだあとで、今の文の行が同じ順で Being の文に
+    # 含まれるか) / line_index (今の文で最初に違った出来事の位置。出来事は「- 」で始まる行と続き行の塊) /
+    # current_line / being_line (whole のときの、同じ位置の Being の側の出来事。無ければ None) /
+    # current_line_count / being_line_count (出来事の数) も持つ。
+    RECENT_EVENTS_SHADOW_MISMATCH = "recent_events_shadow_mismatch"
     # エピソードの目次を 1 ターンのプロンプトに出した (#1623)。プロンプトを組むたびに 1 件。
     # payload: being_id / order (並べ方) / limit (N) / total_count (記録の件数) /
     # shown_handles (出した呼び名、出した順)。
