@@ -58,11 +58,6 @@ _LEGACY_UNIT_OF_WORK_PATHS = {
     "application/social/services/post_command_service.py",
     "application/social/services/reply_command_service.py",
     "application/social/services/user_command_service.py",
-    "application/world/handlers/gateway_handler.py",
-    "application/world/movement_wiring.py",
-    "application/world/services/movement_service.py",
-    "application/world/services/movement_step_executor.py",
-    "application/world/services/pursuit_command_service.py",
 }
 
 _LEGACY_UNIT_OF_WORK_FACTORY_PATHS = {
