@@ -133,7 +133,6 @@ files = [
     "src/ai_rpg_world/application/conversation",
     "src/ai_rpg_world/application/encounter",
     "src/ai_rpg_world/application/guild",
-    "src/ai_rpg_world/application/harvest",
     "src/ai_rpg_world/application/intent",
     "src/ai_rpg_world/application/inventory",
     "src/ai_rpg_world/application/llm",
