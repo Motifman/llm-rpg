@@ -50,7 +50,6 @@ from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
     LocationEstablishmentAggregate,
 )
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
 from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
@@ -120,11 +119,9 @@ class InMemoryDataStore:
         self.next_item_instance_id = 1
         
         # World Domain
-        self.physical_maps: dict[SpotId, PhysicalMapAggregate] = {}
         self.weather_zones: dict[WeatherZoneId, WeatherZone] = {}
         self.monsters: dict[MonsterId, MonsterAggregate] = {}
         self.world_object_to_monster_id: dict[WorldObjectId, MonsterId] = {}
-        self.world_object_id_to_spot_id: dict[WorldObjectId, SpotId] = {}
         self.next_monster_id = 1
         self.next_world_object_id = 100000  # NPC用。プレイヤーIDと衝突しない範囲
         self.spawn_tables: dict[SpotId, SpotSpawnTable] = {}
@@ -343,11 +340,9 @@ class InMemoryDataStore:
         self.skill_deck_progresses.clear()
         self.items.clear()
         self.next_item_instance_id = 1
-        self.physical_maps.clear()
         self.weather_zones.clear()
         self.monsters.clear()
         self.world_object_to_monster_id.clear()
-        self.world_object_id_to_spot_id.clear()
         self.next_monster_id = 1
         self.next_world_object_id = 100000
         self.spawn_tables.clear()

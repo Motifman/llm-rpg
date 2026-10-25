@@ -17,9 +17,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_location_establishment_reposi
 from ai_rpg_world.infrastructure.repository.sqlite_monster_aggregate_repository import (
     SqliteMonsterAggregateRepository,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_physical_map_repository import (
-    SqlitePhysicalMapRepository,
-)
 from ai_rpg_world.infrastructure.repository.sqlite_player_inventory_write_repository import (
     SqlitePlayerInventoryWriteRepository,
 )
@@ -44,7 +41,6 @@ class PlayerStateSqliteRepositories:
 
 @dataclass(frozen=True)
 class WorldRuntimeSqliteRepositories:
-    physical_maps: SqlitePhysicalMapRepository
     monsters: SqliteMonsterAggregateRepository
     hit_boxes: SqliteHitBoxRepository
 
@@ -89,9 +85,6 @@ def attach_world_state_sqlite_repositories(
             ),
         ),
         world_runtime=WorldRuntimeSqliteRepositories(
-            physical_maps=SqlitePhysicalMapRepository.for_shared_unit_of_work(
-                connection, event_sink=event_sink
-            ),
             monsters=SqliteMonsterAggregateRepository.for_shared_unit_of_work(
                 connection, event_sink=event_sink
             ),
