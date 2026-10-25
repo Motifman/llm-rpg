@@ -14,13 +14,6 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.events.observation_event_handler_registry import _OBSERVED_EVENT_TYPES
 
 _TILE_EVENT_GROUPS = {
-    "world.event.harvest_events": (
-        "HarvestStartedEvent", "HarvestCancelledEvent", "HarvestCompletedEvent",
-    ),
-    "world.event.map_events": (
-        "LocationEnteredEvent", "LocationExitedEvent", "ItemStoredInChestEvent",
-        "ItemTakenFromChestEvent", "ResourceHarvestedEvent", "WorldObjectInteractedEvent",
-    ),
     "monster.event.monster_events": (
         "MonsterDecidedToMoveEvent", "MonsterDecidedToUseSkillEvent",
         "MonsterDecidedToInteractEvent", "MonsterFedEvent",
@@ -54,3 +47,13 @@ def test_tile_event_has_no_recipients(event_type: type) -> None:
 def test_tile_event_has_no_prose(event_type: type) -> None:
     """タイル専用の出来事を直接整形しても、観測文を作らない。"""
     assert ObservationFormatter().format(event_type.__new__(event_type), PlayerId(1)) is None
+
+
+def test_retired_map_events_are_absent() -> None:
+    """退役したマップのイベントは定義されず、天候変化のイベントだけが残る。"""
+    module = import_module("ai_rpg_world.domain.world.event.map_events")
+    assert {name for name in vars(module) if name.endswith("Event")} == {
+        "BaseDomainEvent", "SpotWeatherChangedEvent",
+    }
+    with pytest.raises(ModuleNotFoundError):
+        import_module("ai_rpg_world.domain.world.event.harvest_events")

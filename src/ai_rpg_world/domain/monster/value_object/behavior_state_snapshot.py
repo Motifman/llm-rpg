@@ -1,7 +1,5 @@
 """
-状態遷移の入力となる「現在の行動状態」のスナップショット。
-Component または（Phase 3 以降）Monster 集約から生成し、
-BehaviorStateTransitionService に渡す。
+モンスター集約が現在の行動状態を公開する読み取り専用のスナップショット。
 """
 
 from dataclasses import dataclass
@@ -15,7 +13,7 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 class BehaviorStateSnapshot:
     """
     状態遷移ルールが参照する現在状態の読み取り専用スナップショット。
-    リポジトリに依存せず、呼び出し元が Component または Monster から組み立てる。
+    リポジトリに依存せず、モンスター集約から組み立てる。
     """
     state: BehaviorStateEnum
     target_id: WorldObjectId | None = None

@@ -15,6 +15,7 @@ from ai_rpg_world.application.observation.services.formatters.pursuit_formatter 
     PursuitObservationFormatter,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.monster.event.monster_events import MonsterCreatedEvent
 from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
@@ -30,7 +31,6 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
-from ai_rpg_world.domain.world.event.map_events import LocationEnteredEvent
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -444,21 +444,10 @@ class TestPursuitObservationFormatterUnknownEvent:
         out = formatter.format(event, PlayerId(1))
         assert out is None
 
-    def test_returns_none_for_location_entered(self, formatter):
-        """LocationEnteredEvent は None。"""
-        loc_id = LocationAreaId(1)
-        event = LocationEnteredEvent.create(
-            aggregate_id=loc_id,
-            aggregate_type="LocationArea",
-            location_id=loc_id,
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            name="町の広場",
-            description="",
-            player_id_value=1,
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is None
+    def test_returns_none_for_monster_created_event(self, formatter):
+        """担当外のモンスター作成イベントは観測文を作らない。"""
+        event = MonsterCreatedEvent.__new__(MonsterCreatedEvent)
+        assert formatter.format(event, PlayerId(1)) is None
 
     def test_returns_none_for_random_object(self, formatter):
         """任意のオブジェクトは None。"""

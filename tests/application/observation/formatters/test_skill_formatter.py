@@ -15,6 +15,7 @@ from ai_rpg_world.application.observation.services.formatters.skill_formatter im
     SkillObservationFormatter,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.monster.event.monster_events import MonsterCreatedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 from ai_rpg_world.domain.skill.event.skill_events import (
@@ -34,7 +35,6 @@ from ai_rpg_world.domain.skill.event.skill_events import (
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.event.harvest_events import HarvestStartedEvent
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
@@ -397,17 +397,10 @@ class TestSkillObservationFormatterUnknownEvent:
         out = formatter.format(UnknownEvent(), PlayerId(1))
         assert out is None
 
-    def test_returns_none_for_harvest_event(self, formatter):
-        """Harvest イベントは None。"""
-        event = HarvestStartedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="Harvest",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            finish_tick=WorldTick(10),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is None
+    def test_returns_none_for_monster_created_event(self, formatter):
+        """担当外のモンスター作成イベントは観測文を作らない。"""
+        event = MonsterCreatedEvent.__new__(MonsterCreatedEvent)
+        assert formatter.format(event, PlayerId(1)) is None
 
 
 class TestSkillObservationFormatterRecipientIndependence:

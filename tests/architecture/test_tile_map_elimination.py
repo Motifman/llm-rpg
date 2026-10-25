@@ -145,3 +145,23 @@ def test_production_prompt_builder_injects_ui_context() -> None:
 def test_tile_query_modules_are_removed(relative_path: str) -> None:
     """旧タイル用の問い合わせ・整形・配線の実装ファイルは存在しない。"""
     assert not (_REPO_ROOT / "src/ai_rpg_world" / relative_path).exists()
+
+
+@pytest.mark.parametrize("relative_path", [
+    "aggregate/physical_map_aggregate.py",
+    "entity/tile.py", "entity/area_trigger.py", "entity/map_trigger.py",
+    "entity/gateway.py", "entity/location_area.py", "entity/world_object.py",
+    "entity/world_object_component.py", "service/map_geometry_service.py",
+    "service/map_trigger_engine.py", "service/map_interaction_policy.py",
+    "service/chest_interaction_policy.py", "service/harvest_session_domain_service.py",
+    "service/harvest_session_policy.py", "service/harvest_domain_service.py",
+    "service/skill_selection_policy.py", "value_object/area.py",
+    "value_object/terrain_type.py", "value_object/behavior_context.py",
+    "value_object/behavior_observation.py", "event/harvest_events.py",
+    "value_object/area_trigger_id.py", "value_object/gateway_id.py",
+    "value_object/movement_capability.py", "value_object/aggro_memory_policy.py",
+    "exception/behavior_exception.py", "exception/harvest_exception.py",
+])
+def test_physical_map_core_modules_are_removed(relative_path: str) -> None:
+    """物理マップと専用の部品・サービス・観測値の実装ファイルは存在しない。"""
+    assert not (_REPO_ROOT / "src/ai_rpg_world/domain/world" / relative_path).exists()

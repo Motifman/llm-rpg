@@ -28,8 +28,8 @@ from ai_rpg_world.domain.guild.event.guild_event import (
 )
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
+from ai_rpg_world.domain.monster.event.monster_events import MonsterCreatedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.event.harvest_events import HarvestStartedEvent
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -300,17 +300,10 @@ class TestGuildObservationFormatterUnknownEvent:
         out = formatter.format(UnknownEvent(), PlayerId(1))
         assert out is None
 
-    def test_returns_none_for_harvest_event(self, formatter):
-        """Harvest イベントは None。"""
-        event = HarvestStartedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="Harvest",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            finish_tick=WorldTick(10),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is None
+    def test_returns_none_for_monster_created_event(self, formatter):
+        """担当外のモンスター作成イベントは観測文を作らない。"""
+        event = MonsterCreatedEvent.__new__(MonsterCreatedEvent)
+        assert formatter.format(event, PlayerId(1)) is None
 
 
 class TestGuildObservationFormatterRecipientIndependence:

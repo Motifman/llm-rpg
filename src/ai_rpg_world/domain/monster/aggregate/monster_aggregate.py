@@ -75,7 +75,6 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
-    from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
 
 
@@ -1307,7 +1306,7 @@ class MonsterAggregate(AggregateRoot):
     ) -> None:
         """
         状態遷移結果を自身の _behavior_* に反映し、イベントを集約内で生成・add_event する。
-        アプリ層で BehaviorStateTransitionService.compute_transition の結果を渡す。
+        行動の遷移内容を受け取り、状態を更新してイベントを発行する。
         """
         self._ensure_can_perform_behavior()
         hp_percentage = (
