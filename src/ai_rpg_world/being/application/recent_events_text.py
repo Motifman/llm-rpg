@@ -5,9 +5,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ai_rpg_world.being.contract import Observation, ObservedTime
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
+    Experience,
     Lapse,
     MemoryOperationOutcome,
     Perception,
@@ -43,11 +46,16 @@ class _Line:
 
 
 def recent_events_text(memory: ShortTermMemory) -> str:
+    return experiences_text(memory.recent())
+
+
+def experiences_text(experiences: Sequence[Experience]) -> str:
+    """並べた順のまま、出来事を【直近の出来事】と同じ行にする。いきさつやエピソードの材料にも使う。"""
     reader = _Line()
-    lines = [line for experience in memory.recent() if (line := experience.show_to(reader)) is not None]
+    lines = [line for experience in experiences if (line := experience.show_to(reader)) is not None]
     if not lines:
         return NO_RECENT_EVENTS
     return "\n".join(f"- {line}" for line in lines)
 
 
-__all__ = ["NO_RECENT_EVENTS", "recent_events_text"]
+__all__ = ["NO_RECENT_EVENTS", "experiences_text", "recent_events_text"]

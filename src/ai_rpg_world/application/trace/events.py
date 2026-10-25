@@ -198,6 +198,10 @@ class TraceEventKind:
     # 届いたいきさつが、Being が持ついきさつと同じか前の範囲までだったので入れなかった (design_decisions D1824-11)。
     # payload: being_id / until_turn (届いたいきさつの範囲の終わり) / latest_until_turn (持っているいきさつの範囲の終わり)。
     BEING_BACKSTORY_DISCARDED = "being_backstory_discarded"
+    # Being の短期記憶が頼んだいきさつを裏で作り、ターンの始めに短期記憶へ渡した (#1824、design_decisions D1824-12)。
+    # 同じか前の範囲までだったときは、このあと being_backstory_discarded も残る。書けなかったときは
+    # async_event_delivery_failed に残る。payload: being_id / until_turn / written_turn / flow / mood。
+    BEING_BACKSTORY_WRITTEN = "being_backstory_written"
     # エピソードの目次を 1 ターンのプロンプトに出した (#1623)。プロンプトを組むたびに 1 件。
     # payload: being_id / order (並べ方) / limit (N) / total_count (記録の件数) /
     # shown_handles (出した呼び名、出した順)。

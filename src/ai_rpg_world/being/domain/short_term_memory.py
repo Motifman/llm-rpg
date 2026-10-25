@@ -282,10 +282,10 @@ class ShortTermMemoryEvent(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class FoldRequested(ShortTermMemoryEvent):
-    """直近の範囲が満ちたので、``until_turn`` までの出来事を外したい。
+class BackstoryAsked(ShortTermMemoryEvent):
+    """``until_turn`` までの出来事をまとめたいきさつを頼んだ。届いたら ``add_backstory`` に渡す。
 
-    受け手は、いきさつを作り (届いたら ``add_backstory``)、エピソードを書き起こす。出来事は、いきさつが届くまで外さない。
+    ``experiences`` は ``recent()`` と同じ順。``backstories`` は頼んだときに持っていたいきさつ。
     """
 
     turn: int
@@ -293,15 +293,23 @@ class FoldRequested(ShortTermMemoryEvent):
     experiences: tuple[Experience, ...]
     backstories: tuple[Backstory, ...]
 
+    @property
+    def latest_backstory(self) -> Backstory | None:
+        """新しいいきさつが続きを書く、いま持っているいちばん新しいいきさつ。"""
+        return self.backstories[-1] if self.backstories else None
+
 
 @dataclass(frozen=True, kw_only=True)
-class BackstoryRequestedAgain(ShortTermMemoryEvent):
-    """頼んだいきさつが届かないので、同じ範囲のいきさつだけをもう一度頼む。エピソードは書き起こし直さない。"""
+class FoldRequested(BackstoryAsked):
+    """直近の範囲が満ちたので、``until_turn`` までの出来事を外したい。
 
-    turn: int
-    until_turn: int
-    experiences: tuple[Experience, ...]
-    backstories: tuple[Backstory, ...]
+    受け手は、いきさつを作り、エピソードを書き起こす。出来事は、いきさつが届くまで外さない。
+    """
+
+
+@dataclass(frozen=True, kw_only=True)
+class BackstoryRequestedAgain(BackstoryAsked):
+    """頼んだいきさつが届かないので、同じ範囲のいきさつだけをもう一度頼む。エピソードは書き起こし直さない。"""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -414,15 +422,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
 
     def recent(self) -> tuple[Experience, ...]:
         """ターンの順に、同じ環境が続く間は起きた順に並べる。起きた順を持たない出来事は動かさない。"""
-        ordered: list[Experience] = []
-        run: list[Experience] = []
-        for experience in self._experiences:
-            if run and not _same_environment(run[-1], experience):
-                ordered.extend(_in_occurrence_order(run))
-                run = []
-            run.append(experience)
-        ordered.extend(_in_occurrence_order(run))
-        return tuple(ordered)
+        return _in_recent_order(self._experiences)
 
     def fold(self, *, current_turn: int) -> None:
         """直近の範囲が満ちていれば、古い ``FOLD_TURNS`` ターン分のいきさつを頼む (design_decisions D1824-11)。
@@ -470,7 +470,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
 
     def _material(self, until_turn: int) -> dict[str, Any]:
         """いきさつとエピソードの材料。外す範囲の出来事と、今のいきさつ。"""
-        return {"experiences": self._up_to(until_turn), "backstories": self._backstories}
+        return {"experiences": _in_recent_order(self._up_to(until_turn)), "backstories": self._backstories}
 
     def _up_to(self, until_turn: int) -> tuple[Experience, ...]:
         """``until_turn`` までの出来事。そのターンまでに選んだまま結果の来ない 1 手も含む。"""
@@ -553,6 +553,18 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         self._request = request
 
 
+def _in_recent_order(experiences: tuple[Experience, ...]) -> tuple[Experience, ...]:
+    ordered: list[Experience] = []
+    run: list[Experience] = []
+    for experience in experiences:
+        if run and not _same_environment(run[-1], experience):
+            ordered.extend(_in_occurrence_order(run))
+            run = []
+        run.append(experience)
+    ordered.extend(_in_occurrence_order(run))
+    return tuple(ordered)
+
+
 def _same_environment(left: Experience, right: Experience) -> bool:
     return (
         left.order is not None
@@ -589,6 +601,7 @@ __all__ = [
     "RECENT_TURNS",
     "Attempt",
     "Backstory",
+    "BackstoryAsked",
     "BackstoryRequest",
     "BackstoryRequestedAgain",
     "Experience",

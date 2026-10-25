@@ -433,6 +433,44 @@ class TestFold:
             Attempt(turn=5, move=_move("call-5")),
         )
 
+    def test_requested_experiences_follow_the_recent_order(self) -> None:
+        """頼む出来事は recent() と同じ順。同じ環境で先に起きた他人の行動 (ターン 6) は、自分の 1 手の結果 (ターン 5) より前に並ぶ。"""
+        memory = _empty()
+        memory.act(_move(), current_turn=5)
+        memory.receive_result(_result(body="奪えなかった", order=_at(20.0)), current_turn=5)
+        memory.perceive(_observation(body="ゲンが周囲を探索している", order=_at(10.0)), current_turn=5)
+
+        memory.fold(current_turn=20)
+
+        (event,) = memory.get_events()
+        assert [e.turn for e in event.experiences] == [6, 5]
+
+    def test_request_tells_the_latest_backstory(self) -> None:
+        """頼みごとのイベントは、頼んだときに持っていたいきさつのうち、いちばん新しいもの (範囲の終わりが最も後) を教える。持っていなければ None。"""
+        memory = self._one_result_per_turn(20)
+        memory.add_backstory(_backstory(0, flow="古い"))
+        memory.fold(current_turn=20)
+        (with_backstory,) = memory.get_events()
+        assert with_backstory.latest_backstory is not None and with_backstory.latest_backstory.flow == "古い"
+
+        fresh = _empty()
+        fresh.fold(current_turn=20)
+        (no_backstory,) = fresh.get_events()
+        assert no_backstory.latest_backstory is None
+
+    def test_latest_backstory_is_the_newest_of_several(self) -> None:
+        """いきさつを 2 つ持って頼むと、新しい方 (範囲の終わりが後) を教える。"""
+        memory = _empty()
+        memory.add_backstory(_backstory(0, flow="古い"))
+        memory.add_backstory(_backstory(5, flow="新しい"))
+        for turn in range(6, 26):
+            _act_and_answer(memory, f"call-{turn}", turn)
+
+        memory.fold(current_turn=25)
+
+        (event,) = memory.get_events()
+        assert event.latest_backstory is not None and event.latest_backstory.flow == "新しい"
+
     def test_backstory_drops_the_turns_it_covers(self) -> None:
         """ターン 10 までのいきさつが届くと、ターン 10 までの出来事が外れ、範囲の始まりがターン 11 になり、頼みごとは済む。"""
         memory = self._one_result_per_turn(20)
