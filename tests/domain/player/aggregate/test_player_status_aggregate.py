@@ -1,6 +1,5 @@
 import pytest
 
-from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicService
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
@@ -264,30 +263,11 @@ class TestPlayerStatusAggregate:
         assert aggregate.hp.value == 0
         assert aggregate.is_down == True
 
-    def test_application_style_damage_flow_success(self):
-        """アプリケーション層経由で計算したダメージが適用されること"""
-        # テストの決定性を担保するため、防御側の回避率を0%にする
-        defender_base_stats = create_test_base_stats(
-            evasion_rate=0.0,
-        )
-        aggregate = create_test_status_aggregate(hp=100, base_stats=defender_base_stats)
-        attacker_stats = create_test_base_stats(
-            attack=40,
-            defense=10,
-            critical_rate=0.0,
-            evasion_rate=0.0,
-        )
+    def test_apply_damage_reduces_hp_without_downing(self):
+        """HPが100のとき32のダメージを受けると、倒れずにHPが68になる。"""
+        aggregate = create_test_status_aggregate(hp=100)
+        aggregate.apply_damage(32)
 
-        damage = CombatLogicService.calculate_damage(
-            attacker_stats=attacker_stats,
-            defender_stats=aggregate.base_stats,
-        )
-        if damage.is_evaded:
-            aggregate.record_evasion()
-        else:
-            aggregate.apply_damage(damage.value)
-
-        # Damage = (40 - 15/2) = 32.5 -> int(32)
         assert aggregate.hp.value == 68
         assert aggregate.is_down == False
         assert len(aggregate.get_events()) == 0

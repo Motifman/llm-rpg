@@ -6,13 +6,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
-from ai_rpg_world.domain.combat.event.combat_events import (
-    HitBoxCreatedEvent,
-    HitBoxDeactivatedEvent,
-    HitBoxMovedEvent,
-    HitBoxObstacleCollidedEvent,
-)
-from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
 from ai_rpg_world.domain.guild.event.guild_event import (
@@ -1145,35 +1138,6 @@ class TestObservationFormatter:
                 actor_id=WorldObjectId(1),
                 state=BehaviorStateEnum.IDLE,
                 coordinate=Coordinate(0, 0, 0),
-            ),
-            HitBoxCreatedEvent.create(
-                aggregate_id=HitBoxId(1),
-                aggregate_type="HitBoxAggregate",
-                spot_id=SpotId(1),
-                owner_id=WorldObjectId(1),
-                initial_coordinate=Coordinate(0, 0, 0),
-                duration=3,
-                power_multiplier=1.0,
-                shape_cell_count=1,
-                effect_count=0,
-                activation_tick=1,
-            ),
-            HitBoxMovedEvent.create(
-                aggregate_id=HitBoxId(1),
-                aggregate_type="HitBoxAggregate",
-                from_coordinate=Coordinate(0, 0, 0),
-                to_coordinate=Coordinate(1, 0, 0),
-            ),
-            HitBoxDeactivatedEvent.create(
-                aggregate_id=HitBoxId(1),
-                aggregate_type="HitBoxAggregate",
-                reason="expired",
-            ),
-            HitBoxObstacleCollidedEvent.create(
-                aggregate_id=HitBoxId(1),
-                aggregate_type="HitBoxAggregate",
-                collision_coordinate=Coordinate(1, 0, 0),
-                obstacle_collision_policy="stop",
             ),
             SkillCooldownStartedEvent.create(
                 aggregate_id=SkillLoadoutId(1),

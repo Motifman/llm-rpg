@@ -1,10 +1,7 @@
 """スポットグラフ世界における drop / pickup の最小サービス。
 
-タイルマップで品を落とす旧受け手は ``physical_map``
-依存で world_runtime / spot-graph 世界では発火しない (world_runtime
-で ``physical_map_repository=None`` を渡している)。spot-graph 世界では
 SpotInterior.ground_items にアイテムを置き、SpotInterior 経路で
-プレイヤーが拾い直せる必要がある。
+プレイヤーが拾い直せるようにする。
 
 本サービスはそのための機械的動作 (インベントリ↔地面の状態遷移) と、
 witness 最小版 (drop / pickup の事実を同スポットの他プレイヤーに観測として
