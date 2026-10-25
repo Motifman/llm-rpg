@@ -140,7 +140,7 @@ class TestLiteLLMClientInvoke:
         assert captured[0].discarded_tool_calls == 0
         assert captured[0].tool_call_combination is None
 
-    def test_invoke_returns_None_when_tool_calls(self, client):
+    def test_invoke_returns_none_when_tool_calls(self, client):
         """tool_calls が空のとき None を返す"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             msg = MagicMock()
@@ -158,7 +158,7 @@ class TestLiteLLMClientInvoke:
             )
         assert result is None
 
-    def test_invoke_returns_None_when_choices_empty(self, client):
+    def test_invoke_returns_none_when_choices_empty(self, client):
         """choices が空のとき None を返す"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             resp = MagicMock()
@@ -331,7 +331,7 @@ class TestLiteLLMClientInvokeApiKey:
         assert exc_info.value.error_code == "LLM_API_KEY_MISSING"
         assert "OPENAI_API_KEY" in exc_info.value.message or "api_key" in exc_info.value.message.lower()
 
-    def test_invoke_uses_env_var_when_api_key_None(self):
+    def test_invoke_uses_env_var_when_api_key_none(self):
         """api_key が None のとき環境変数 OPENAI_API_KEY を使う"""
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-from-env"}, clear=False):
             client = LiteLLMClient(model="openai/gpt-5-mini", api_key=None)
@@ -1663,7 +1663,7 @@ class TestLiteLLMClientReasoningEffortOverride:
             "thinking": {"type": "disabled"},
         }
 
-    def test_invoke_without_override_keeps_construction_default_None(self, client):
+    def test_invoke_without_override_keeps_construction_default_none(self, client):
         """reasoning_effort を渡さなければ、構築時の既定 (none) のまま送られる
         (= 既存挙動を壊さない・プレフィックスキャッシュ不変)。"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:

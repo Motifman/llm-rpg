@@ -144,7 +144,7 @@ class TestObjectStateSection:
 class TestRenderValue:
     """_render_value のエッジケース。"""
 
-    def test_None_renders_as_null(self) -> None:
+    def test_none_renders_as_null(self) -> None:
         """None は文字列の "None" ではなく "null" として表示される。"""
         snap = _empty_snap(player_state={"target": None})
         text = SpotGraphCurrentStateFormatter().format(_make_dto(snap))

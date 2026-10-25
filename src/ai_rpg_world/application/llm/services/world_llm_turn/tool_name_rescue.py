@@ -117,7 +117,7 @@ def suggest_closest_tool_name(
 
 
 def _fuzzy_score_variant(
-    requested: str, valid_list: list[str], SequenceMatcher: Any
+    requested: str, valid_list: list[str], sequence_matcher: Any
 ) -> tuple[str | None, float]:
     """1 つの ``requested`` variant について、valid 側から最高スコアを持つ
     候補を返す。``suggest_closest_tool_name`` の内部ヘルパー。"""
@@ -148,7 +148,7 @@ def _fuzzy_score_variant(
             # いるはずなので来ない、念のため)
             score = 1.0
         else:
-            score = SequenceMatcher(None, req_suffix, cand_suffix).ratio()
+            score = sequence_matcher(None, req_suffix, cand_suffix).ratio()
         if score > best_score:
             best_score = score
             best = cand

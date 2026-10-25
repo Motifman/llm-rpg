@@ -73,7 +73,7 @@ class TestReactiveBindingNarrativeFields:
 class TestSpotObjectStateChangedEventNarrativeField:
     """`SpotObjectStateChangedEvent` が narrative を保持できる。"""
 
-    def test_narrative_default_None(self) -> None:
+    def test_narrative_default_none(self) -> None:
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
         from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId

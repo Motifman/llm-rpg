@@ -650,12 +650,12 @@ def _require_initial_items_fit(items: tuple[Any, ...], *, owner_id: str) -> None
         PlayerInventoryAggregate,
     )
 
-    DEFAULT_MAX_SLOTS = PlayerInventoryAggregate.DEFAULT_MAX_SLOTS
+    max_slots = PlayerInventoryAggregate.DEFAULT_MAX_SLOTS
 
-    if len(items) <= DEFAULT_MAX_SLOTS:
+    if len(items) <= max_slots:
         return
     raise ScenarioLoadError(
         f"players[{owner_id!r}].initial_items が所持枠に収まりません "
-        f"({len(items)} 個を宣言していますが、枠は {DEFAULT_MAX_SLOTS} 個です)。"
+        f"({len(items)} 個を宣言していますが、枠は {max_slots} 個です)。"
         "枠を超えたぶんは持たせられないので、宣言を減らしてください。"
     )

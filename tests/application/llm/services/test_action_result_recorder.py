@@ -67,7 +67,7 @@ class TestActionResultRecorder:
                 PlayerId(1), action_summary="a", result_summary="r"
             )
 
-    def test_None_store_raises(self) -> None:
+    def test_none_store_raises(self) -> None:
         """store が None なら TypeError。"""
         with pytest.raises(TypeError, match="action_result_store must not be None"):
             ActionResultRecorder(None)  # type: ignore[arg-type]

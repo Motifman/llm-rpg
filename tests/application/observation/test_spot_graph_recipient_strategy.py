@@ -355,14 +355,14 @@ class TestConnectionStateChangedAdjacentDelivery:
         )
 
     def test_includes_player_in_audible_neighbor_spot(self):
-        """SPOT_A → SPOT_C が permeability=0.5 (可聴) なら C にいる人にも届く。"""
-        SPOT_C = 3
+        """A → C が permeability=0.5 (可聴) なら C にいる人にも届く。"""
+        spot_c = 3
         strategy = self._make_strategy_with_adjacency(
-            entity_spot_mapping={1: 1, 2: 2, 3: SPOT_C},  # P3 が SPOT_C
+            entity_spot_mapping={1: 1, 2: 2, 3: spot_c},  # P3 は C にいる
             adjacency={
-                1: [(SPOT_C, 0.5)],  # SPOT_A → SPOT_C は半透過
+                1: [(spot_c, 0.5)],  # A → C は半透過
                 2: [],
-                SPOT_C: [],
+                spot_c: [],
             },
         )
         event = ConnectionStateChangedEvent.create(
@@ -380,12 +380,12 @@ class TestConnectionStateChangedAdjacentDelivery:
 
     def test_excludes_neighbor_when_passage_is_soundproof(self):
         """permeability < 0.1 は完全遮音 → 隣接 spot の人には届かない。"""
-        SPOT_C = 3
+        spot_c = 3
         strategy = self._make_strategy_with_adjacency(
-            entity_spot_mapping={1: 1, 3: SPOT_C},
+            entity_spot_mapping={1: 1, 3: spot_c},
             adjacency={
-                1: [(SPOT_C, 0.05)],  # ほぼ完全遮音
-                SPOT_C: [],
+                1: [(spot_c, 0.05)],  # ほぼ完全遮音
+                spot_c: [],
             },
         )
         event = ConnectionStateChangedEvent.create(
@@ -403,13 +403,13 @@ class TestConnectionStateChangedAdjacentDelivery:
 
     def test_neighbor_via_spot_is_also_audible(self):
         """to_spot から出る隣接 connection も配信対象になる。"""
-        SPOT_D = 4
+        spot_d = 4
         strategy = self._make_strategy_with_adjacency(
-            entity_spot_mapping={2: 2, 4: SPOT_D},
+            entity_spot_mapping={2: 2, 4: spot_d},
             adjacency={
                 1: [],
-                2: [(SPOT_D, 0.7)],  # SPOT_B → SPOT_D は高透過
-                SPOT_D: [],
+                2: [(spot_d, 0.7)],  # B → D は高透過
+                spot_d: [],
             },
         )
         event = ConnectionStateChangedEvent.create(
