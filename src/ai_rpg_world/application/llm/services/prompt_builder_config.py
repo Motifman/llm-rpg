@@ -36,9 +36,6 @@ from ai_rpg_world.application.llm.services.unified_recent_event_store import (
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
-from ai_rpg_world.application.world.services.world_query_service import (
-    WorldQueryService,
-)
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
@@ -51,7 +48,6 @@ if TYPE_CHECKING:
 
 
 DEFAULT_ACTION_INSTRUCTION = "利用可能なツールで次の行動を選んでください。"
-DEFAULT_TILE_MAP_VIEW_DISTANCE = 5
 
 
 class _PlayerCurrentStateSource(Protocol):
@@ -114,8 +110,6 @@ class PromptSectionProviders:
 
 @dataclass(frozen=True)
 class PromptLimits:
-    """数値設定・action_instruction・tile_map フラグ。"""
+    """プロンプトに添える行動指示。"""
 
     default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION
-    tile_map_view_distance: int = DEFAULT_TILE_MAP_VIEW_DISTANCE
-    tile_map_enabled: bool = True

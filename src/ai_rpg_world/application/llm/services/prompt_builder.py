@@ -41,7 +41,6 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
-from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
@@ -123,8 +122,6 @@ class DefaultPromptBuilder(IPromptBuilder):
 
 
         default_action_instruction = limits.default_action_instruction
-        tile_map_view_distance = limits.tile_map_view_distance
-        tile_map_enabled = limits.tile_map_enabled
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
         if not isinstance(short_term_memory, IShortTermMemory):
@@ -149,8 +146,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("ui_context_builder must be ILlmUiContextBuilder or None")
         if persona_block_provider is not None and not callable(persona_block_provider):
             raise TypeError("persona_block_provider must be callable or None")
-        if tile_map_view_distance < 0:
-            raise ValueError("tile_map_view_distance must be 0 or greater")
         if not isinstance(default_action_instruction, str):
             raise TypeError("default_action_instruction must be str")
         if current_tick_provider is not None and not callable(current_tick_provider):
@@ -213,11 +208,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             self._ui_context_builder = builder_module.DefaultLlmUiContextBuilder()
         self._persona_block_provider = persona_block_provider
         self._default_action_instruction = default_action_instruction
-        self._tile_map_view_distance = tile_map_view_distance
-        # Issue #227 PR-4 (tile-map 除去): spot_graph 専用ランタイムでは
-        # include_tile_map=False でクエリを発行し、visible_tile_map と
-        # current_terrain_type が常に None になるよう構造的に保証する。
-        self._tile_map_enabled = tile_map_enabled
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -369,8 +359,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         current_state_dto = self._world_query_service.get_player_current_state(
             GetPlayerCurrentStateQuery(
                 player_id=player_id.value,
-                view_distance=self._tile_map_view_distance,
-                include_tile_map=self._tile_map_enabled,
             )
         )
         if current_state_dto is not None:

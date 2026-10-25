@@ -56,11 +56,7 @@ class GetPlayerCurrentStateQuery:
 
     player_id: int
     include_available_moves: bool = True
-    include_tile_map: bool = True
-    view_distance: int = 5
 
     def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
-        if self.view_distance < 0:
-            raise ValueError("view_distance must be 0 or greater")

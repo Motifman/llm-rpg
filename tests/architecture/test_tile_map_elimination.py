@@ -1,25 +1,11 @@
-"""tile-map 依存除去 (Issue #227) の構造的保証テスト群。
-
-PR-1〜6 を通じて達成した tile-map 依存除去が、将来のリファクタで再混入しないよう
-構造的に固定化する。各 assertion が落ちる場合は「tile-map 依存が spot_graph 経路に
-再混入した」ことを意味するため、慎重に意図を確認すること。
-
-カバー範囲:
-1. wiring API: spot_graph_wiring は退役済み (R2b)
-2. observation factory: physical_map_repository が default=None で省略可 (PR-1)
-3. wiring API: create_llm_agent_wiring (full wiring) は退役済み (R2c-2)
-4. WorldQueryService 系列: 5 クラス + factory の physical_map_repository が Optional (PR-3)
-5. DefaultPromptBuilder: tile_map_enabled パラメータが存在し default=True (PR-4)
-6. spot_graph_wiring 退役: tile-map prompt 切替は escape/generic 側で管理 (R2b)
-7. Decorator 廃止: SpotGraphAugmentingWorldQueryService が存在しない (PR-6)
-8. world_runtime runtime: InMemoryPhysicalMapRepository を import しない (PR-5)
-9. WorldQueryService: spot_graph_snapshot_provider 注入 API が存在 (PR-6)
-"""
+"""本番のプロンプト経路に、タイル用の参照と設定が戻らないことを保証する。"""
 
 from __future__ import annotations
 
+import ast
 import importlib
 import inspect
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
@@ -27,34 +13,29 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-# ── 1. wiring API ───────────────────────────────────────────────────────
 
 def test_spot_graph_wiring_module_is_removed() -> None:
-    """spot_graph_wiring module は R2b で退役済み。"""
+    """退役したスポット用の配線モジュールは読み込めない。"""
     with pytest.raises(ImportError):
         importlib.import_module("ai_rpg_world.application.llm.wiring.spot_graph_wiring")
 
 
 def test_spot_graph_wiring_is_not_exported() -> None:
-    """retired spot_graph_wiring は package API からも露出しない。"""
+    """退役したスポット用の配線関数はパッケージから再公開されない。"""
     wiring_pkg = importlib.import_module("ai_rpg_world.application.llm.wiring")
     assert not hasattr(wiring_pkg, "create_spot_graph_wiring")
     assert "create_spot_graph_wiring" not in getattr(wiring_pkg, "__all__", ())
 
 
 def test_full_wiring_is_retired_from_package() -> None:
-    """create_llm_agent_wiring (full wiring) は R2c-2 で退役済み (package 非露出)。
-
-    PR-2 の『physical_map_repository が Optional』signature 契約は、full wiring 自体が
-    消えたので不要。tile-map の Optional 契約は observation/WorldQuery/PromptLimits 側
-    (本ファイルの他テスト) で引き続き保証する。"""
+    """退役した create_llm_agent_wiring はパッケージから再公開されない。"""
     wiring_pkg = importlib.import_module("ai_rpg_world.application.llm.wiring")
     assert not hasattr(wiring_pkg, "create_llm_agent_wiring")
     assert "create_llm_agent_wiring" not in getattr(wiring_pkg, "__all__", ())
 
 
 def test_create_observation_recipient_resolver_physical_map_repository_is_optional() -> None:
-    """create_observation_recipient_resolver の physical_map_repository は default=None (PR-1)。"""
+    """観測の配信先の組み立てでは、物理マップの保存先を省略できる。"""
     from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
         create_observation_recipient_resolver,
     )
@@ -63,76 +44,55 @@ def test_create_observation_recipient_resolver_physical_map_repository_is_option
     assert param.default is None
 
 
-# ── 2. WorldQueryService 系列 (PR-3) ─────────────────────────────────────
-
-def test_world_query_service_family_physical_map_repository_is_optional() -> None:
-    """WorldQueryService と 4 サブサービス + factory の physical_map_repository が Optional (PR-3)。"""
-    from ai_rpg_world.application.world.services.available_moves_query_service import (
-        AvailableMovesQueryService,
+@pytest.mark.parametrize("relative_path", [
+    "application/llm/services/prompt_builder.py",
+    "application/llm/services/prompt_builder_config.py",
+    "application/llm/services/spot_graph_current_state_formatter.py",
+])
+def test_prompt_path_does_not_import_tile_query_or_formatter(relative_path: str) -> None:
+    """本番のプロンプト構築とスポット用整形は、タイル用の問い合わせ・整形を直接読み込まない。"""
+    path = _REPO_ROOT / "src/ai_rpg_world" / relative_path
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    retired = {
+        "ai_rpg_world.application.world.services.world_query_service",
+        "ai_rpg_world.application.llm.services.current_state_formatter",
+    }
+    imports = {
+        node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+    }
+    imports.update(
+        alias.name for node in ast.walk(tree) if isinstance(node, ast.Import)
+        for alias in node.names
     )
-    from ai_rpg_world.application.world.services.player_location_query_service import (
-        PlayerLocationQueryService,
-    )
-    from ai_rpg_world.application.world.services.spot_context_query_service import (
-        SpotContextQueryService,
-    )
-    from ai_rpg_world.application.world.services.visible_context_query_service import (
-        VisibleContextQueryService,
-    )
-    from ai_rpg_world.application.world.services.world_query_service import (
-        WorldQueryService,
-    )
-    for cls in (
-        PlayerLocationQueryService,
-        SpotContextQueryService,
-        AvailableMovesQueryService,
-        VisibleContextQueryService,
-        WorldQueryService,
-    ):
-        sig = inspect.signature(cls.__init__)
-        ann = str(sig.parameters["physical_map_repository"].annotation)
-        assert "Optional" in ann or "None" in ann, (
-            f"{cls.__name__}.physical_map_repository should be Optional"
-        )
+    assert not imports & retired
 
 
-# ── 3. PromptBuilder の tile_map_enabled (PR-4) ──────────────────────────
-
-def test_default_prompt_builder_has_tile_map_enabled_parameter() -> None:
-    """PromptLimits に tile_map_enabled が default=True で存在する (PR-4 + Config 化後)。
-
-    Issue #227 HIGH-1 で __init__ が Config dataclass ベースになり、
-    tile_map_enabled は PromptLimits の field に移動した。
-    """
-    from ai_rpg_world.application.llm.services.prompt_builder_config import (
-        PromptLimits,
-    )
-    instance = PromptLimits()
-    assert instance.tile_map_enabled is True
+def test_prompt_limits_have_no_tile_settings() -> None:
+    """PromptLimits はタイルの表示切替も視界距離も設定項目として持たない。"""
+    from ai_rpg_world.application.llm.services.prompt_builder_config import PromptLimits
+    assert {field.name for field in fields(PromptLimits)} == {"default_action_instruction"}
 
 
-# ── 4. Decorator 廃止 (PR-6) ────────────────────────────────────────────
+def test_current_state_query_has_no_tile_settings() -> None:
+    """現在状態の問い合わせにはプレイヤーと移動先取得の指定だけがあり、タイル用の設定は無い。"""
+    from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
+    assert {field.name for field in fields(GetPlayerCurrentStateQuery)} == {
+        "player_id", "include_available_moves",
+    }
+
+
 
 def test_spot_graph_augmenting_world_query_module_is_removed() -> None:
-    """SpotGraphAugmentingWorldQueryService の module が import できない (PR-6 で削除)。"""
+    """退役したスポットの状態を追加する問い合わせモジュールは読み込めない。"""
     with pytest.raises(ImportError):
         importlib.import_module(
             "ai_rpg_world.application.world_graph.spot_graph_augmenting_world_query"
         )
 
 
-def test_world_query_service_has_attach_spot_graph_snapshot_provider() -> None:
-    """WorldQueryService に snapshot provider 注入 API が存在する (PR-6)。"""
-    from ai_rpg_world.application.world.services.world_query_service import (
-        WorldQueryService,
-    )
-    assert hasattr(WorldQueryService, "attach_spot_graph_snapshot_provider")
-
-
-# ── 5. world_runtime runtime (PR-5) ───────────────────────────────────────
 
 def test_world_runtime_does_not_import_in_memory_physical_map_repository() -> None:
-    """world_runtime runtime が InMemoryPhysicalMapRepository を import しない (PR-5)。"""
+    """本番の実行環境は InMemoryPhysicalMapRepository を読み込まない。"""
     runtime_file = _REPO_ROOT / "src/ai_rpg_world/application/world_runtime/world_runtime.py"
     text = runtime_file.read_text(encoding="utf-8")
     assert "InMemoryPhysicalMapRepository" not in text
