@@ -5,6 +5,7 @@ import logging
 from unittest.mock import Mock, patch
 
 import pytest
+from tests.support.command_scope_stack import CommandScopeTestStack
 
 from ai_rpg_world.application.social.contracts.commands import (
     CreatePostCommand,
@@ -38,12 +39,10 @@ from ai_rpg_world.domain.sns.exception import (
     VisibilityValidationException,
 )
 from ai_rpg_world.domain.sns.value_object import PostId, ReplyId, UserId
-from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
 from ai_rpg_world.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class TestReplyCommandService:
@@ -52,16 +51,8 @@ class TestReplyCommandService:
     @pytest.fixture
     def setup_service(self):
         """テスト用のサービスとリポジトリをセットアップ"""
-        # Unit of Workファクトリ関数を定義（別トランザクション用）
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-
-        # ファクトリーメソッドでUnit of Workとイベントパブリッシャーを作成
-        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
-            unit_of_work_factory=create_uow
-        )
-
         data_store = InMemoryDataStore()
+        unit_of_work = event_publisher = CommandScopeTestStack(data_store)
         post_repository = InMemoryPostRepository(data_store, unit_of_work)
         user_repository = InMemorySnsUserRepository(data_store, unit_of_work)
         reply_repository = InMemoryReplyRepository(data_store, unit_of_work)

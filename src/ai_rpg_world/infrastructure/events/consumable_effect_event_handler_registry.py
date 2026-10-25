@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from ai_rpg_world.application.common.event_delivery import CommandEventHandlerRegistrarPort
 from ai_rpg_world.application.world.handlers.consumable_effect_handler import ConsumableEffectHandler
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
@@ -24,6 +25,12 @@ class ConsumableEffectEventHandlerRegistry:
             ConsumableUsedEvent,
             self._create_event_handler(self._consumable_effect_handler.handle),
             is_synchronous=True,
+        )
+
+    def register_command_handlers(self, registrar: CommandEventHandlerRegistrarPort) -> None:
+        """既存のイベント対応を、確定の前後を保って共通基盤へ登録する。"""
+        registrar.register_required_before_commit(
+            ConsumableUsedEvent, lambda event, _context: self._consumable_effect_handler.handle(event),
         )
 
     def _create_event_handler(

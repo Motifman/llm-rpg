@@ -5,6 +5,7 @@ import logging
 from unittest.mock import Mock, patch
 
 import pytest
+from tests.support.command_scope_stack import CommandScopeTestStack
 
 from ai_rpg_world.application.social.contracts.commands import (
     BlockUserCommand,
@@ -55,8 +56,8 @@ from ai_rpg_world.domain.sns.exception import (
     UserNotFoundException,
 )
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class TestUserCommandService:
@@ -64,15 +65,9 @@ class TestUserCommandService:
 
     def setup_method(self):
         """各テストメソッドの前に実行"""
-        # Unit of Workファクトリ関数を定義（別トランザクション用）
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-
-        # Unit of Workとイベントパブリッシャーを作成
-        self.unit_of_work, self.event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
-            unit_of_work_factory=create_uow
-        )
-        self.repository = InMemorySnsUserRepository(unit_of_work=self.unit_of_work)
+        store = InMemoryDataStore()
+        self.unit_of_work = self.event_publisher = CommandScopeTestStack(store)
+        self.repository = InMemorySnsUserRepository(store, self.unit_of_work)
         self.service = UserCommandService(self.repository, self.event_publisher, self.unit_of_work)
         # ログ出力をテスト用に設定
         self.service.logger.setLevel(logging.DEBUG)
