@@ -9,13 +9,6 @@
 
 from typing import Any
 
-from ai_rpg_world.domain.combat.event.combat_events import (
-    HitBoxCreatedEvent,
-    HitBoxDeactivatedEvent,
-    HitBoxHitRecordedEvent,
-    HitBoxMovedEvent,
-    HitBoxObstacleCollidedEvent,
-)
 from ai_rpg_world.domain.conversation.event.conversation_event import (
     ConversationEndedEvent,
     ConversationStartedEvent,
@@ -35,12 +28,8 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     BehaviorStuckEvent,
     MonsterCreatedEvent,
     MonsterDamagedEvent,
-    MonsterDecidedToInteractEvent,
-    MonsterDecidedToMoveEvent,
-    MonsterDecidedToUseSkillEvent,
     MonsterDiedEvent,
     MonsterEvadedEvent,
-    MonsterFedEvent,
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
@@ -113,19 +102,8 @@ from ai_rpg_world.domain.trade.event.trade_event import (
     TradeDeclinedEvent,
     TradeOfferedEvent,
 )
-from ai_rpg_world.domain.world.event.harvest_events import (
-    HarvestCancelledEvent,
-    HarvestCompletedEvent,
-    HarvestStartedEvent,
-)
 from ai_rpg_world.domain.world.event.map_events import (
-    ItemStoredInChestEvent,
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-    LocationExitedEvent,
-    ResourceHarvestedEvent,
     SpotWeatherChangedEvent,
-    WorldObjectInteractedEvent,
 )
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionCreatedEvent,
@@ -232,10 +210,6 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
     ):
         mapping[ev] = "guild"
 
-    # harvest
-    for ev in (HarvestStartedEvent, HarvestCancelledEvent, HarvestCompletedEvent):
-        mapping[ev] = "harvest"
-
     # pursuit
     for ev in (
         PursuitStartedEvent,
@@ -255,26 +229,12 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
         MonsterEvadedEvent,
         MonsterHealedEvent,
         MonsterMpRecoveredEvent,
-        MonsterDecidedToMoveEvent,
-        MonsterDecidedToUseSkillEvent,
-        MonsterDecidedToInteractEvent,
-        MonsterFedEvent,
         ActorStateChangedEvent,
         TargetSpottedEvent,
         TargetLostEvent,
         BehaviorStuckEvent,
     ):
         mapping[ev] = "monster"
-
-    # combat
-    for ev in (
-        HitBoxCreatedEvent,
-        HitBoxMovedEvent,
-        HitBoxHitRecordedEvent,
-        HitBoxDeactivatedEvent,
-        HitBoxObstacleCollidedEvent,
-    ):
-        mapping[ev] = "combat"
 
     # skill
     for ev in (
@@ -296,21 +256,15 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
     # speech
     mapping[PlayerSpokeEvent] = "speech"
 
-    # default (Gateway / マップ / プレイヤー状態 / インベントリ系)
+    # default (天候・プレイヤー状態・所持品)
     for ev in (
-        LocationEnteredEvent,
-        LocationExitedEvent,
         PlayerLocationChangedEvent,
         PlayerDownedEvent,
         PlayerRevivedEvent,
         PlayerLevelUpEvent,
         PlayerGoldEarnedEvent,
         PlayerGoldPaidEvent,
-        ItemTakenFromChestEvent,
-        ItemStoredInChestEvent,
-        ResourceHarvestedEvent,
         SpotWeatherChangedEvent,
-        WorldObjectInteractedEvent,
         ItemAddedToInventoryEvent,
         ItemDroppedFromInventoryEvent,
         ItemRemovedFromInventoryEvent,

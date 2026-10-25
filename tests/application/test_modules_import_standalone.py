@@ -50,7 +50,6 @@ _OBSERVATION_MODULES = [
         "ai_rpg_world.application.observation.services.recipient_strategies"
         ".spot_graph_recipient_strategy"
     ),
-    "ai_rpg_world.application.observation.services.formatters.combat_formatter",
 ]
 
 #: 単独 import で落ちるが、**この試験の対象外**にするモジュールと理由。

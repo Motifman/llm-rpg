@@ -59,7 +59,6 @@ def _make_strategy(graph: SpotGraphAggregate, audience_player_ids: list[int]):
     return DefaultRecipientStrategy(
         observed_event_registry=ObservedEventRegistry(),
         player_audience_query=audience_query,
-        world_object_to_player_resolver=world_object_resolver,
         spot_graph_repository=spot_graph_repo,
     )
 
@@ -109,7 +108,6 @@ class TestSpotWeatherObservationByIsOutdoor:
         strategy = DefaultRecipientStrategy(
             observed_event_registry=ObservedEventRegistry(),
             player_audience_query=audience_query,
-            world_object_to_player_resolver=MagicMock(),
         )
 
         result = strategy.resolve(_weather_event(1))
@@ -151,7 +149,6 @@ class TestTheIndoorCheckFailingIsVisible:
         return DefaultRecipientStrategy(
             observed_event_registry=ObservedEventRegistry(),
             player_audience_query=audience_query,
-            world_object_to_player_resolver=MagicMock(),
             spot_graph_repository=spot_graph_repo,
         )
 

@@ -8,17 +8,11 @@ from ai_rpg_world.application.observation.contracts.interfaces import IObservati
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
-from ai_rpg_world.application.observation.services.formatters.combat_formatter import (
-    CombatObservationFormatter,
-)
 from ai_rpg_world.application.observation.services.formatters.conversation_formatter import (
     ConversationObservationFormatter,
 )
 from ai_rpg_world.application.observation.services.formatters.guild_formatter import (
     GuildObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.harvest_formatter import (
-    HarvestObservationFormatter,
 )
 from ai_rpg_world.application.observation.services.formatters.item_use_formatter import (
     ItemUseObservationFormatter,
@@ -148,9 +142,7 @@ class ObservationFormatter(IObservationFormatter):
             TradeObservationFormatter(self._context),
             SnsObservationFormatter(self._context),
             GuildObservationFormatter(self._context),
-            HarvestObservationFormatter(self._context),
             MonsterObservationFormatter(self._context),
-            CombatObservationFormatter(self._context),
             SkillObservationFormatter(self._context),
             SpotGraphObservationFormatter(self._context),
             ItemUseObservationFormatter(self._context),

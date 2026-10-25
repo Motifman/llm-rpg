@@ -18,6 +18,7 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
 from ai_rpg_world.application.observation.services.observation_pipeline import ObservationPipeline
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
+    ObservationRecipientResolver,
     create_observation_recipient_resolver,
 )
 from ai_rpg_world.application.observation.services.observation_timestamp_resolver import (
@@ -25,6 +26,10 @@ from ai_rpg_world.application.observation.services.observation_timestamp_resolve
 )
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
+)
+from ai_rpg_world.application.observation.services.observed_event_registry import ObservedEventRegistry
+from ai_rpg_world.application.observation.services.recipient_strategies.pursuit_recipient_strategy import (
+    PursuitRecipientStrategy,
 )
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
@@ -55,23 +60,13 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.service.world_time_config_service import (
     DefaultWorldTimeConfigService,
 )
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
-)
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
 )
@@ -114,22 +109,6 @@ def _make_pursuit_last_known(target_id: int, spot_id: int = 1) -> PursuitLastKno
         spot_id=SpotId(spot_id),
         coordinate=Coordinate(1, 0, 0),
     )
-
-
-def _make_player_object(player_id: int, x: int = 0, y: int = 0) -> WorldObject:
-    return WorldObject(
-        object_id=WorldObjectId.create(player_id),
-        coordinate=Coordinate(x, y, 0),
-        object_type=ObjectTypeEnum.PLAYER,
-        component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(player_id)),
-    )
-
-
-def _make_simple_map(spot_id: int, objects: list[WorldObject]) -> PhysicalMapAggregate:
-    tiles = {Coordinate(0, 0, 0): Tile(Coordinate(0, 0, 0), TerrainType.grass())}
-    for obj in objects:
-        tiles.setdefault(obj.coordinate, Tile(obj.coordinate, TerrainType.grass()))
-    return PhysicalMapAggregate(spot_id=SpotId(spot_id), tiles=tiles, objects=objects)
 
 
 def _create_handler(
@@ -199,14 +178,9 @@ class TestObservationEventHandler:
         return DefaultObservationContextBuffer()
 
     @pytest.fixture
-    def physical_map_repo(self, data_store):
-        return InMemoryPhysicalMapRepository(data_store=data_store)
-
-    @pytest.fixture
-    def resolver(self, status_repo, physical_map_repo):
+    def resolver(self, status_repo):
         return create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
         )
 
     @pytest.fixture
@@ -522,14 +496,9 @@ class TestObservationEventHandlerLlmTurnScheduling:
         return DefaultObservationContextBuffer()
 
     @pytest.fixture
-    def physical_map_repo(self, data_store):
-        return InMemoryPhysicalMapRepository(data_store=data_store)
-
-    @pytest.fixture
-    def resolver(self, status_repo, physical_map_repo):
+    def resolver(self, status_repo):
         return create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
         )
 
     @pytest.fixture
@@ -718,11 +687,13 @@ class TestObservationEventHandlerLlmTurnScheduling:
         unit_of_work_factory,
         turn_trigger,
         llm_player_resolver_include_one_and_two,
-        physical_map_repo,
     ):
-        physical_map_repo.save(
-            _make_simple_map(1, [_make_player_object(1), _make_player_object(2, 1, 0)])
-        )
+        # 配信先解決後の通知と起床を検証するため、物体の解決だけを代役にする。
+        players = {WorldObjectId(1): PlayerId(1), WorldObjectId(2): PlayerId(2)}
+        resolver = ObservationRecipientResolver(strategies=[PursuitRecipientStrategy(
+            ObservedEventRegistry(),
+            MagicMock(resolve_player_id=MagicMock(side_effect=players.get)),
+        )])
         handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
@@ -755,11 +726,13 @@ class TestObservationEventHandlerLlmTurnScheduling:
         unit_of_work_factory,
         turn_trigger,
         llm_player_resolver_include_one_and_two,
-        physical_map_repo,
     ):
-        physical_map_repo.save(
-            _make_simple_map(1, [_make_player_object(1), _make_player_object(2, 1, 0)])
-        )
+        # 配信先解決後の通知と起床を検証するため、物体の解決だけを代役にする。
+        players = {WorldObjectId(1): PlayerId(1), WorldObjectId(2): PlayerId(2)}
+        resolver = ObservationRecipientResolver(strategies=[PursuitRecipientStrategy(
+            ObservedEventRegistry(),
+            MagicMock(resolve_player_id=MagicMock(side_effect=players.get)),
+        )])
         handler = _create_handler(
             resolver=resolver,
             formatter=formatter,

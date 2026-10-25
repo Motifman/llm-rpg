@@ -1,6 +1,5 @@
 """モンスター系イベントの観測配信先解決戦略"""
 
-from collections.abc import Callable
 from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
@@ -24,12 +23,8 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     BehaviorStuckEvent,
     MonsterCreatedEvent,
     MonsterDamagedEvent,
-    MonsterDecidedToInteractEvent,
-    MonsterDecidedToMoveEvent,
-    MonsterDecidedToUseSkillEvent,
     MonsterDiedEvent,
     MonsterEvadedEvent,
-    MonsterFedEvent,
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
@@ -40,11 +35,7 @@ from ai_rpg_world.domain.monster.event.monster_events import (
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.repository.physical_map_repository import (
-    PhysicalMapRepository,
-)
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class MonsterRecipientStrategy(IRecipientResolutionStrategy):
@@ -56,17 +47,11 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
         self,
         observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
-        physical_map_repository: PhysicalMapRepository | None,
         world_object_to_player_resolver: IWorldObjectToPlayerResolver,
         monster_repository: MonsterRepository | None = None,
     ) -> None:
-        # physical_map_repository は tile-map ベース世界でのみ意味を持つ。
-        # spot_graph 専用ランタイムでは None で渡され、
-        # _spot_id_from_world_object は常に None を返す (該当 monster が tile に
-        # 紐付かない世界では、攻撃者の spot 解決は別経路で行われる)。
         self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
-        self._physical_map_repository = physical_map_repository
         self._world_object_to_player_resolver = world_object_to_player_resolver
         self._monster_repository = monster_repository
         self._verify_the_registry_and_the_rules_agree()
@@ -182,19 +167,6 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
             if player_id is not None:
                 add(player_id)
 
-    def _deliver_to_everyone_at_the_actors_spot(self, event: Any, add: _Add) -> None:
-        """``actor_id`` の world object が居るスポットの全員へ届ける。
-
-        physical map リポジトリが未注入 (spot_graph 専用ランタイム) なら誰にも
-        届かない。
-        """
-        self._add_all_at_spot(self._spot_id_from_world_object(event.actor_id), add)
-
-    def _spot_id_from_world_object(self, object_id: WorldObjectId) -> SpotId | None:
-        if self._physical_map_repository is None:
-            return None
-        return self._physical_map_repository.find_spot_id_by_object_id(object_id)
-
     def _spot_id_from_monster(self, monster_id: MonsterId) -> SpotId | None:
         if self._monster_repository is None:
             return None
@@ -216,9 +188,6 @@ _RECIPIENT_RULES: RuleTable = {
     # 回避・回復は monster を引いて場所を決める (イベントが spot を持たない)。
     MonsterEvadedEvent: MonsterRecipientStrategy._deliver_to_everyone_at_the_monsters_spot,
     MonsterHealedEvent: MonsterRecipientStrategy._deliver_to_everyone_at_the_monsters_spot,
-    # 採食・状態変化は actor の world object から場所を引く。
-    MonsterFedEvent: MonsterRecipientStrategy._deliver_to_everyone_at_the_actors_spot,
-    ActorStateChangedEvent: MonsterRecipientStrategy._deliver_to_everyone_at_the_actors_spot,
 }
 
 #: 意図的に誰にも配らないイベント型と、その理由。
@@ -227,12 +196,9 @@ _RECIPIENT_RULES: RuleTable = {
 #: 型」と「規則を書き忘れた型」が同じ見た目**だった。理由を書く場所を分けて、
 #: 書き忘れは構築時に落ちるようにした (`_ALLOWED_UNCONSUMED` と同じ判断)。
 #:
-#: ここに挙げた 8 型は、配信先だけでなく **formatter も一致して None を返す**
-#: ことを確認済み (monster_formatter.py の `_format_monster_created` /
-#: `_format_target_spotted` / `_format_target_lost` / `_format_behavior_stuck` /
-#: `_format_monster_mp_recovered` / `_format_monster_decided_to_*`)。2 層が揃って
-#: 「観測させない」と言っているので、意図的な非観測と判断した。
+#: 内部状態は観測させない。ActorStateChangedEvent は本番の未解決の配信先を維持する。
 _DELIVERS_TO_NOBODY: dict[type, str] = {
+    ActorStateChangedEvent: "本番では物理マップを持たず、物体の配信先は解決しない。状態変化の文面と登録は維持する",
     MonsterCreatedEvent: (
         "集約の生成そのもの。世界に現れる瞬間は MonsterSpawnedEvent が表すので、"
         "生成は誰の知覚にも対応しない"
@@ -241,12 +207,6 @@ _DELIVERS_TO_NOBODY: dict[type, str] = {
         "monster の内部資源の回復。外から見て分かる変化ではないので、"
         "観測させると monster の内部状態が漏れる"
     ),
-    MonsterDecidedToMoveEvent: (
-        "monster の意思決定そのもの。決定は行動として現れてから観測される "
-        "(移動なら EntityEnteredSpotEvent)。決定を配ると先読みができてしまう"
-    ),
-    MonsterDecidedToUseSkillEvent: "同上。決定ではなく発動の結果を観測させる",
-    MonsterDecidedToInteractEvent: "同上",
     TargetSpottedEvent: (
         "monster が誰かを標的に定めた、という内部状態。狙われたことを本人に"
         "伝えるかは別の設計判断で、伝えるなら追跡の観測 "

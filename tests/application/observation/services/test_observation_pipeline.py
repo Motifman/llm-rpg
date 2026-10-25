@@ -40,9 +40,6 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
     InMemoryDataStore,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
-)
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
 )
@@ -85,14 +82,9 @@ class TestObservationPipelineNormal:
         return InMemoryPlayerStatusRepository(data_store=data_store)
 
     @pytest.fixture
-    def physical_map_repo(self, data_store):
-        return InMemoryPhysicalMapRepository(data_store=data_store)
-
-    @pytest.fixture
-    def resolver(self, status_repo, physical_map_repo):
+    def resolver(self, status_repo):
         return create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
         )
 
     @pytest.fixture

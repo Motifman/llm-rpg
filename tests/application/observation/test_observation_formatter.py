@@ -5,12 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxCreatedEvent,
     HitBoxDeactivatedEvent,
-    HitBoxHitRecordedEvent,
     HitBoxMovedEvent,
     HitBoxObstacleCollidedEvent,
 )
@@ -29,7 +27,6 @@ from ai_rpg_world.domain.guild.event.guild_event import (
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.monster.event.monster_events import (
     BehaviorStuckEvent,
@@ -92,38 +89,23 @@ from ai_rpg_world.domain.shop.value_object.shop_listing_id import ShopListingId
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 from ai_rpg_world.domain.skill.event.skill_events import (
     AwakenedModeActivatedEvent,
-    AwakenedModeExpiredEvent,
     SkillCooldownStartedEvent,
     SkillDeckExpGainedEvent,
     SkillDeckLeveledUpEvent,
     SkillEquippedEvent,
     SkillEvolutionAcceptedEvent,
     SkillEvolutionRejectedEvent,
-    SkillLoadoutCapacityChangedEvent,
     SkillProposalGeneratedEvent,
-    SkillUnequippedEvent,
     SkillUsedEvent,
 )
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
-from ai_rpg_world.domain.world.event.harvest_events import (
-    HarvestCancelledEvent,
-    HarvestCompletedEvent,
-    HarvestStartedEvent,
-)
 from ai_rpg_world.domain.world.event.map_events import (
-    ItemStoredInChestEvent,
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-    ResourceHarvestedEvent,
     SpotWeatherChangedEvent,
-    WorldObjectInteractedEvent,
 )
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
@@ -202,94 +184,6 @@ class TestObservationFormatter:
         assert out.schedules_turn is False and out.breaks_movement is False
 
     # --- LocationEnteredEvent（L1 description 露出）---
-
-    def test_format_location_entered_self_with_description_includes_description(self, formatter):
-        """LocationEnteredEvent 本人向け・description あり: 観測 prose に description が含まれる"""
-        loc_id = LocationAreaId(1)
-        event = LocationEnteredEvent.create(
-            aggregate_id=loc_id,
-            aggregate_type="LocationArea",
-            location_id=loc_id,
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            name="町の広場",
-            description="賑やかな市場が並ぶ中央広場。",
-            player_id_value=1,
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "町の広場に着きました。" in out.prose
-        assert "賑やかな市場が並ぶ中央広場。" in out.prose
-        assert out.structured.get("type") == "location_entered"
-        assert out.structured.get("location_name") == "町の広場"
-        assert out.observation_category == "self_only"
-
-    def test_format_location_entered_self_without_description_returns_arrival_only(self, formatter):
-        """LocationEnteredEvent 本人向け・description なし: prose は「〜に着きました。」のみ"""
-        loc_id = LocationAreaId(1)
-        event = LocationEnteredEvent.create(
-            aggregate_id=loc_id,
-            aggregate_type="LocationArea",
-            location_id=loc_id,
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            name="空き地",
-            description="",
-            player_id_value=1,
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert out.prose == "空き地に着きました。"
-        assert out.structured.get("type") == "location_entered"
-
-    def test_format_location_entered_self_long_description_truncated(self, formatter):
-        """LocationEnteredEvent 本人向け・長文（200文字超）: truncate される"""
-        loc_id = LocationAreaId(1)
-        long_desc = "あ" * 250
-        event = LocationEnteredEvent.create(
-            aggregate_id=loc_id,
-            aggregate_type="LocationArea",
-            location_id=loc_id,
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            name="長文の場所",
-            description=long_desc,
-            player_id_value=1,
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "長文の場所に着きました。" in out.prose
-        assert "あ" * 200 in out.prose
-        assert "…" in out.prose
-        assert len(out.prose) < len(long_desc) + 50
-
-    def test_format_location_entered_other_player_does_not_include_description(self, formatter):
-        """LocationEnteredEvent 他プレイヤー向け: description は含まれない"""
-        profile_repo = MagicMock()
-        profile = MagicMock()
-        profile.name.value = "Bob"
-        profile_repo.find_by_id.return_value = profile
-        fmt = ObservationFormatter(
-            spot_repository=None,
-            player_profile_repository=profile_repo,
-        )
-        loc_id = LocationAreaId(1)
-        event = LocationEnteredEvent.create(
-            aggregate_id=loc_id,
-            aggregate_type="LocationArea",
-            location_id=loc_id,
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(2),
-            name="秘密の部屋",
-            description="誰も知らない隠し場所。",
-            player_id_value=2,
-        )
-        out = fmt.format(event, PlayerId(1))
-        assert out is not None
-        assert "Bobが秘密の部屋に着きました。" in out.prose
-        assert "誰も知らない隠し場所" not in out.prose
-        assert out.structured.get("type") == "player_entered_location"
-        assert out.observation_category == "social"
 
     def test_format_player_downed_self_breaks_movement(self, formatter):
         """PlayerDownedEvent 本人向けは非戦闘表現を出し、breaks_movement=True にする。"""
@@ -736,21 +630,6 @@ class TestObservationFormatter:
         assert "ファイアボルト" in out.prose
         assert out.schedules_turn is True
 
-    def test_format_hit_box_hit_recorded_breaks_movement_and_is_self_only(self, formatter):
-        """HitBoxHitRecordedEvent: 命中は割り込み対象（breaks_movement）"""
-        event = HitBoxHitRecordedEvent.create(
-            aggregate_id=HitBoxId(1),
-            aggregate_type="HitBoxAggregate",
-            owner_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            hit_coordinate=Coordinate(0, 0, 0),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "命中" in out.prose
-        assert out.breaks_movement is True
-        assert out.observation_category == "self_only"
-
     def test_format_monster_spawned_is_environment_and_can_interrupt(self, formatter):
         """MonsterSpawnedEvent: 出現は environment かつ schedules_turn"""
         event = MonsterSpawnedEvent.create(
@@ -1019,252 +898,7 @@ class TestObservationFormatter:
 
     # --- ResourceHarvestedEvent / WorldObjectInteracted / アイテム名フォールバック ---
 
-    def test_format_resource_harvested_empty_items_returns_prose(self, formatter):
-        """ResourceHarvestedEvent: obtained_items が空のとき「採集しました。」"""
-        event = ResourceHarvestedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            object_id=WorldObjectId(1),
-            actor_id=WorldObjectId(2),
-            loot_table_id=LootTableId.create(1),
-            obtained_items=[],
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert "採集" in out.prose
-        assert out.structured.get("type") == "resource_harvested"
-        assert out.schedules_turn is True
-
-    def test_format_resource_harvested_with_items_uses_fallback_without_repo(self, formatter):
-        """ResourceHarvestedEvent: item_spec_repository なしのとき「何かのアイテム」で表示"""
-        event = ResourceHarvestedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            object_id=WorldObjectId(1),
-            actor_id=WorldObjectId(2),
-            loot_table_id=LootTableId.create(1),
-            obtained_items=[{"item_spec_id": 10, "quantity": 2}],
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert "何かのアイテム" in out.prose
-        assert "2" in out.prose
-        assert "10" not in out.prose  # ID 非露出
-
-    def test_format_resource_harvested_with_item_spec_repository_resolves_name(self):
-        """ResourceHarvestedEvent: item_spec_repository で名前解決できるときアイテム名を表示"""
-        spec_repo = MagicMock()
-        spec = MagicMock()
-        spec.name = "銅の鉱石"
-        spec_repo.find_by_id.return_value = spec
-        formatter = ObservationFormatter(
-            spot_repository=None,
-            player_profile_repository=None,
-            item_spec_repository=spec_repo,
-            item_repository=None,
-        )
-        event = ResourceHarvestedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            object_id=WorldObjectId(1),
-            actor_id=WorldObjectId(2),
-            loot_table_id=LootTableId.create(1),
-            obtained_items=[{"item_spec_id": 10, "quantity": 2}],
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert "銅の鉱石" in out.prose
-        assert "2" in out.prose
-
-    def test_format_world_object_interacted_open_chest_returns_5w1h_prose(self, formatter):
-        """WorldObjectInteractedEvent OPEN_CHEST: 「宝箱を開けました。」（5W1H）"""
-        event = WorldObjectInteractedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId(2),
-            target_id=WorldObjectId(1),
-            interaction_type=InteractionTypeEnum.OPEN_CHEST,
-            data={},
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert "宝箱を開けました" in out.prose
-        assert "インタラクション" not in out.prose
-
-    def test_format_world_object_interacted_open_door_uses_data(self, formatter):
-        """WorldObjectInteractedEvent OPEN_DOOR: data.is_open で開く/閉めるを切り替え"""
-        event_open = WorldObjectInteractedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId(2),
-            target_id=WorldObjectId(1),
-            interaction_type=InteractionTypeEnum.OPEN_DOOR,
-            data={"is_open": True},
-        )
-        out_open = formatter.format(event_open, PlayerId(2))
-        assert out_open is not None
-        assert "ドアを開きました" in out_open.prose
-        event_close = WorldObjectInteractedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId(2),
-            target_id=WorldObjectId(1),
-            interaction_type=InteractionTypeEnum.OPEN_DOOR,
-            data={"is_open": False},
-        )
-        out_close = formatter.format(event_close, PlayerId(2))
-        assert out_close is not None
-        assert "ドアを閉めました" in out_close.prose
-
-    def test_format_world_object_interacted_harvest_returns_prose(self, formatter):
-        """WorldObjectInteractedEvent HARVEST: 「資源を採取しました。」"""
-        event = WorldObjectInteractedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId(2),
-            target_id=WorldObjectId(1),
-            interaction_type=InteractionTypeEnum.HARVEST,
-            data={},
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert "資源を採取しました" in out.prose
-
     # --- WorldObjectInteractedEvent EXAMINE + description ---
-
-    def test_format_world_object_interacted_examine_with_description_includes_description(
-        self, formatter
-    ):
-        """WorldObjectInteractedEvent EXAMINE + data.description あり: prose に「調べました。」と description が含まれる"""
-        event = WorldObjectInteractedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId(2),
-            target_id=WorldObjectId(1),
-            interaction_type=InteractionTypeEnum.EXAMINE,
-            data={"description": "石像の説明文"},
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert "調べました。" in out.prose
-        assert "石像の説明文" in out.prose
-        assert out.prose == "調べました。 石像の説明文"
-        assert out.structured.get("type") == "object_interacted"
-        assert out.structured.get("interaction_type") == "examine"
-
-    def test_format_world_object_interacted_examine_without_data_returns_base_prose_only(
-        self, formatter
-    ):
-        """WorldObjectInteractedEvent EXAMINE + data={}: prose は「調べました。」のみ"""
-        event = WorldObjectInteractedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId(2),
-            target_id=WorldObjectId(1),
-            interaction_type=InteractionTypeEnum.EXAMINE,
-            data={},
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert out.prose == "調べました。"
-        assert out.structured.get("interaction_type") == "examine"
-
-    def test_format_world_object_interacted_examine_with_empty_description_returns_base_prose_only(
-        self, formatter
-    ):
-        """WorldObjectInteractedEvent EXAMINE + data.description 空: prose は「調べました。」のみ"""
-        event = WorldObjectInteractedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId(2),
-            target_id=WorldObjectId(1),
-            interaction_type=InteractionTypeEnum.EXAMINE,
-            data={"description": ""},
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert out.prose == "調べました。"
-
-    def test_format_world_object_interacted_examine_long_description_truncated(
-        self, formatter
-    ):
-        """WorldObjectInteractedEvent EXAMINE + 長文（200文字超）: truncate される"""
-        long_desc = "あ" * 250
-        event = WorldObjectInteractedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId(2),
-            target_id=WorldObjectId(1),
-            interaction_type=InteractionTypeEnum.EXAMINE,
-            data={"description": long_desc},
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert "調べました。" in out.prose
-        assert "あ" * 200 in out.prose
-        assert "…" in out.prose
-        assert len(out.prose) < len(long_desc) + 50
-
-    def test_format_world_object_interacted_open_chest_does_not_include_description(
-        self, formatter
-    ):
-        """WorldObjectInteractedEvent OPEN_CHEST: data.description があっても prose に含まれない"""
-        event = WorldObjectInteractedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId(2),
-            target_id=WorldObjectId(1),
-            interaction_type=InteractionTypeEnum.OPEN_CHEST,
-            data={"description": "宝箱の中身の説明"},
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert "宝箱を開けました" in out.prose
-        assert "宝箱の中身の説明" not in out.prose
-        assert out.structured.get("interaction_type") == "open_chest"
-
-    def test_format_item_taken_from_chest_fallback_without_repo(self, formatter):
-        """ItemTakenFromChestEvent: item_repository なしのとき「何かのアイテム」"""
-        event = ItemTakenFromChestEvent.create(
-            aggregate_id=SpotId(1),
-            aggregate_type="Chest",
-            spot_id=SpotId(1),
-            chest_id=WorldObjectId(1),
-            actor_id=WorldObjectId(2),
-            item_instance_id=ItemInstanceId.create(100),
-            player_id_value=2,
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert "何かのアイテム" in out.prose
-        assert "チェストから" in out.prose
-        assert "100" not in out.prose
-
-    def test_format_item_taken_from_chest_resolves_name_when_repo_available(self):
-        """ItemTakenFromChestEvent: item_repository で名前解決できるときアイテム名を表示"""
-        item_repo = MagicMock()
-        agg = MagicMock()
-        agg.item_spec.name = "銅の剣"
-        item_repo.find_by_id.return_value = agg
-        formatter = ObservationFormatter(
-            spot_repository=None,
-            player_profile_repository=None,
-            item_spec_repository=None,
-            item_repository=item_repo,
-        )
-        event = ItemTakenFromChestEvent.create(
-            aggregate_id=SpotId(1),
-            aggregate_type="Chest",
-            spot_id=SpotId(1),
-            chest_id=WorldObjectId(1),
-            actor_id=WorldObjectId(2),
-            item_instance_id=ItemInstanceId.create(100),
-            player_id_value=2,
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert "銅の剣" in out.prose
-        assert out.structured.get("item_name") == "銅の剣"
 
     def test_format_item_added_to_inventory_fallback_without_repo(self, formatter):
         """ItemAddedToInventoryEvent: item_repository なしのとき「何かのアイテムを入手」"""
@@ -1496,39 +1130,6 @@ class TestObservationFormatter:
         deposit_out = formatter.format(deposited, PlayerId(1))
         assert deposit_out is not None
         assert "100ゴールド" in deposit_out.prose
-
-    def test_format_harvest_events_return_self_only_messages(self, formatter):
-        """HarvestStarted / Cancelled / Completed は self_only で返る"""
-        started = HarvestStartedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="Harvest",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            finish_tick=WorldTick(10),
-        )
-        started_out = formatter.format(started, PlayerId(1))
-        assert started_out is not None
-        assert started_out.structured.get("finish_tick") == 10
-        cancelled = HarvestCancelledEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="Harvest",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            reason="moved",
-        )
-        cancelled_out = formatter.format(cancelled, PlayerId(1))
-        assert cancelled_out is not None
-        assert "moved" in cancelled_out.prose
-        completed = HarvestCompletedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="Harvest",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            loot_table_id=LootTableId.create(1),
-        )
-        completed_out = formatter.format(completed, PlayerId(1))
-        assert completed_out is not None
-        assert "完了" in completed_out.prose
 
     def test_format_monster_damaged_returns_environment_message(self, formatter):
         """MonsterDamagedEvent: ダメージ概要を返す"""
