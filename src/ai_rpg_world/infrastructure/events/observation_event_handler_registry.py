@@ -3,10 +3,6 @@
 from ai_rpg_world.application.observation.handlers.observation_event_handler import ObservationEventHandler
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
-    ConversationStartedEvent,
-)
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildBankDepositedEvent,
     GuildBankWithdrawnEvent,
@@ -108,8 +104,6 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 # 観測対象イベント型一覧（仕様に基づく）
 _OBSERVED_EVENT_TYPES = (
     # --- 会話 ---
-    ConversationStartedEvent,
-    ConversationEndedEvent,
     PlayerSpokeEvent,
     # --- クエスト ---
     QuestIssuedEvent,

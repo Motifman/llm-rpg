@@ -9,10 +9,6 @@
 
 from typing import Any
 
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
-    ConversationStartedEvent,
-)
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildBankDepositedEvent,
     GuildBankWithdrawnEvent,
@@ -153,10 +149,6 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
     """観測対象イベント型と担当戦略のマッピングを構築する。"""
     mapping: dict[type[Any], str] = {}
     ev: type[Any]
-
-    # conversation (順序: Resolver の先頭)
-    for ev in (ConversationStartedEvent, ConversationEndedEvent):
-        mapping[ev] = "conversation"
 
     # quest
     for ev in (

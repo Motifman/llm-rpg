@@ -3,9 +3,6 @@
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
-from ai_rpg_world.application.observation.services.formatters.conversation_formatter import (
-    ConversationObservationFormatter,
-)
 from ai_rpg_world.application.observation.services.formatters.guild_formatter import (
     GuildObservationFormatter,
 )
@@ -43,7 +40,6 @@ from ai_rpg_world.application.observation.services.formatters.world_formatter im
 __all__ = [
     "ObservationFormatterContext",
     "ObservationNameResolver",
-    "ConversationObservationFormatter",
     "QuestObservationFormatter",
     "ShopObservationFormatter",
     "TradeObservationFormatter",

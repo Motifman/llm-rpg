@@ -12,9 +12,6 @@ from ai_rpg_world.application.quest.services.quest_progress_reaction_service imp
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
-)
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
@@ -101,15 +98,4 @@ class ItemAddedToInventoryQuestProgressHandler(
         self._execute(
             lambda: self._reaction_service.process_item_added_to_inventory(event),
             handler_name="quest_progress_item_added_to_inventory",
-        )
-
-
-class ConversationEndedQuestProgressHandler(
-    _AsyncQuestProgressHandler,
-    EventHandler[ConversationEndedEvent],
-):
-    def handle(self, event: ConversationEndedEvent) -> None:
-        self._execute(
-            lambda: self._reaction_service.process_conversation_ended(event),
-            handler_name="quest_progress_conversation_ended",
         )

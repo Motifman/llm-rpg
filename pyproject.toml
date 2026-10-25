@@ -130,7 +130,6 @@ files = [
     "src/ai_rpg_world/being",
     "src/ai_rpg_world/application/being",
     "src/ai_rpg_world/application/common",
-    "src/ai_rpg_world/application/conversation",
     "src/ai_rpg_world/application/encounter",
     "src/ai_rpg_world/application/guild",
     "src/ai_rpg_world/application/intent",

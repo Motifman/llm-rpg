@@ -5,10 +5,6 @@ import pytest
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
 )
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
-    ConversationStartedEvent,
-)
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerLevelUpEvent,
@@ -35,17 +31,6 @@ class TestObservedEventRegistryIsObserved:
             aggregate_type="PlayerStatusAggregate",
             earned_amount=100,
             total_gold=1100,
-        )
-        assert registry.is_observed(event) is True
-
-    def test_returns_true_for_conversation_event(self, registry):
-        """conversation 戦略のイベントは観測対象（正常）"""
-        event = ConversationStartedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            npc_id_value=10,
-            dialogue_tree_id_value=1,
-            entry_node_id_value=1,
         )
         assert registry.is_observed(event) is True
 
@@ -88,27 +73,6 @@ class TestObservedEventRegistryGetStrategyForEvent:
         )
         assert registry.get_strategy_for_event(event) == "default"
 
-    def test_returns_conversation_for_conversation_started(self, registry):
-        """ConversationStartedEvent は conversation 戦略が担当（正常）"""
-        event = ConversationStartedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            npc_id_value=10,
-            dialogue_tree_id_value=1,
-            entry_node_id_value=1,
-        )
-        assert registry.get_strategy_for_event(event) == "conversation"
-
-    def test_returns_conversation_for_conversation_ended(self, registry):
-        """ConversationEndedEvent は conversation 戦略が担当（正常）"""
-        event = ConversationEndedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            npc_id_value=10,
-            end_node_id_value=1,
-        )
-        assert registry.get_strategy_for_event(event) == "conversation"
-
     def test_returns_none_for_none(self, registry):
         """None の場合は None を返す（境界）"""
         assert registry.get_strategy_for_event(None) is None
@@ -132,14 +96,6 @@ class TestObservedEventRegistryGetEventTypesForStrategy:
         assert len(types) > 0
         assert PlayerGoldEarnedEvent in types
         assert PlayerLevelUpEvent in types
-        assert ConversationStartedEvent not in types
-
-    def test_returns_event_types_for_conversation_strategy(self, registry):
-        """conversation 戦略のイベント型一覧を取得（正常）"""
-        types = registry.get_event_types_for_strategy("conversation")
-        assert len(types) == 2
-        assert ConversationStartedEvent in types
-        assert ConversationEndedEvent in types
 
     def test_returns_empty_tuple_for_unknown_strategy(self, registry):
         """未知の戦略キーは空タプル（境界）"""
@@ -167,12 +123,12 @@ class TestObservedEventRegistryCustomMapping:
         """カスタムマッピングに含まれないイベントは観測対象外"""
         custom = {PlayerGoldEarnedEvent: "custom"}
         registry = ObservedEventRegistry(event_to_strategy=custom)
-        event = ConversationStartedEvent.create(
+        event = PlayerLevelUpEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerStatusAggregate",
-            npc_id_value=10,
-            dialogue_tree_id_value=1,
-            entry_node_id_value=1,
+            old_level=1,
+            new_level=2,
+            stat_growth=BaseStats(0, 0, 0, 0, 0, 0.0, 0.0),
         )
         assert registry.is_observed(event) is False
         assert registry.get_strategy_for_event(event) is None
