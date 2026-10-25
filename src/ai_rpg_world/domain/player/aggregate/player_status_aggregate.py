@@ -1062,7 +1062,6 @@ class PlayerStatusAggregate(AggregateRoot):
         content: str,
         channel: SpeechChannel,
         spot_id: SpotId,
-        speaker_coordinate: Coordinate,
         target_player_id: PlayerId | None = None,
     ) -> None:
         """発言する（囁き・発言・シャウト）。イベントを発火するのみで状態は変更しない。
@@ -1071,7 +1070,6 @@ class PlayerStatusAggregate(AggregateRoot):
             content: 発言内容（空でないこと）
             channel: 発言種別（WHISPER / SAY / SHOUT）
             spot_id: 発言時のスポットID（配信先解決用）
-            speaker_coordinate: 発言時の座標（範囲計算用）
             target_player_id: 囁き時のみ必須。宛先プレイヤーID。
 
         Raises:
@@ -1091,7 +1089,6 @@ class PlayerStatusAggregate(AggregateRoot):
             content=content.strip(),
             channel=channel,
             spot_id=spot_id,
-            speaker_coordinate=speaker_coordinate,
             target_player_id=target_player_id,
         ))
 

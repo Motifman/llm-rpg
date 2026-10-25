@@ -37,6 +37,22 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class TestWorldRuntimeSpeechViaDomainEvent:
     """do_say が PlayerSpokeEvent 経由で距離 gating する。"""
 
+    def test_spawn_without_tile_coordinate_can_deliver_speech(self) -> None:
+        """本番の初期配置では仮座標を持たず、スポットから同席者へ発言の観測が届く。"""
+        runtime = create_world_runtime(_FORBIDDEN_LIBRARY)
+        speaker = runtime._player_status_repo.find_by_id(PlayerId(1))
+        assert speaker.current_coordinate is None
+        _teleport(runtime, 1, _name_to_spot_id(runtime, "閲覧室"))
+
+        runtime.do_say(PlayerId(1), "座標がなくても聞こえる")
+
+        received = runtime._obs_buffer.get_observations(PlayerId(2))
+        assert any(
+            e.output.structured.get("type") == "player_spoke"
+            and e.output.structured.get("content") == "座標がなくても聞こえる"
+            for e in received
+        )
+
     def test_say_delivers_to_listener_at_same_spot(self) -> None:
         """同 spot の相手は speech_say を受け取る (旧 _append_agent_speech と同じ
         behavior、ただし配信経路は pipeline 経由になっている)。"""

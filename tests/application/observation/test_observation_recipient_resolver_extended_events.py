@@ -160,66 +160,18 @@ def _make_pursuit_target_snapshot(
 
 class TestObservationRecipientResolverExtendedEvents:
 
-    def test_player_spoke_whisper_delivers_to_target_only(self):
-        """囁きは宛先プレイヤーのみ配信先になる"""
+    @pytest.mark.parametrize("channel", list(SpeechChannel))
+    def test_speech_without_graph_has_no_recipients(self, channel):
+        """グラフを渡さない構築では、タイル距離にも囁き宛先にも発言を配信しない。"""
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
         )
         event = PlayerSpokeEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            content="内緒だよ",
-            channel=SpeechChannel.WHISPER,
-            spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
-            target_player_id=PlayerId(2),
+            aggregate_id=PlayerId(1), aggregate_type="PlayerStatusAggregate",
+            content="こんにちは", channel=channel, spot_id=SpotId(1),
+            target_player_id=PlayerId(2) if channel == SpeechChannel.WHISPER else None,
         )
-        assert [p.value for p in resolver.resolve(event)] == [2]
-
-    def test_player_spoke_say_delivers_to_players_within_range(self):
-        """発言（SAY）は同一スポットで範囲内のプレイヤーに配信される"""
-        data_store = InMemoryDataStore()
-        status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        # 話し手(1)が (0,0)、他に (1,0)(2,0)(10,0) にプレイヤー。SAY_RANGE=5 なら (10,0) は届かない
-        status_repo.save(_make_status(1, 1, Coordinate(0, 0, 0)))
-        status_repo.save(_make_status(2, 1, Coordinate(1, 0, 0)))
-        status_repo.save(_make_status(3, 1, Coordinate(2, 0, 0)))
-        status_repo.save(_make_status(4, 1, Coordinate(10, 0, 0)))
-        resolver = create_observation_recipient_resolver(
-            player_status_repository=status_repo,
-        )
-        event = PlayerSpokeEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            content="こんにちは",
-            channel=SpeechChannel.SAY,
-            spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
-            target_player_id=None,
-        )
-        # 1,2,3 は距離 0,1,2 で範囲5以内。4 は距離10で範囲外
-        result_ids = {p.value for p in resolver.resolve(event)}
-        assert result_ids == {1, 2, 3}
-
-    def test_player_spoke_shout_delivers_to_wider_range(self):
-        """シャウトは同一スポットでより広い範囲に配信される"""
-        data_store = InMemoryDataStore()
-        status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        status_repo.save(_make_status(1, 1, Coordinate(0, 0, 0)))
-        status_repo.save(_make_status(2, 1, Coordinate(10, 0, 0)))  # 距離10、SAYでは届かないがSHOUT(15)では届く
-        resolver = create_observation_recipient_resolver(
-            player_status_repository=status_repo,
-        )
-        event = PlayerSpokeEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            content="助けて！",
-            channel=SpeechChannel.SHOUT,
-            spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
-            target_player_id=None,
-        )
-        assert {p.value for p in resolver.resolve(event)} == {1, 2}
+        assert resolver.resolve(event) == []
 
     def test_quest_issued_public_delivers_to_all_known_players(self):
         data_store = InMemoryDataStore()

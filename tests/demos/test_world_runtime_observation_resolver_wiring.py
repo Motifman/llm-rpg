@@ -26,7 +26,6 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 
 class TestWorldRuntimeObservationResolverWiring:
@@ -62,7 +61,6 @@ class TestWorldRuntimeObservationResolverWiring:
             content="hello",
             channel=SpeechChannel.SAY,
             spot_id=SpotId.create(spot_id_value),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
 
@@ -99,7 +97,6 @@ class TestWorldRuntimeObservationResolverWiring:
             content="リン、聞こえるか！",
             channel=SpeechChannel.SAY,
             spot_id=SpotId.create(master_study_id),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
 

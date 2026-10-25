@@ -82,12 +82,12 @@ class TestSpotGraphSpeechRecipientResolver:
             content="こんにちは",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
         assert {p.value for p in resolver.resolve(event)} == {1, 2}
 
-    def test_speaker_not_in_graph_falls_back_to_tile_speech(self) -> None:
+    def test_speaker_not_in_graph_has_no_recipients(self) -> None:
+        """グラフに存在しない話者の発言は、旧タイル距離へ戻らず配信されない。"""
         g = _build_two_spot_graph()
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
@@ -104,10 +104,9 @@ class TestSpotGraphSpeechRecipientResolver:
             content="こんにちは",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
-        assert {p.value for p in resolver.resolve(event)} == {3, 4}
+        assert resolver.resolve(event) == []
 
 
 class TestSpotGraphSpeechFormatter:
@@ -121,7 +120,6 @@ class TestSpotGraphSpeechFormatter:
             content="やあ",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
         out = formatter.format(event, PlayerId(2))
@@ -140,7 +138,6 @@ class TestSpotGraphSpeechFormatter:
             content="やあ",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
         out = formatter.format(event, PlayerId(2))
@@ -164,7 +161,6 @@ class TestSpotGraphSpeechFormatter:
             content="やあ",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
         out = formatter.format(event, PlayerId(2))
@@ -180,7 +176,6 @@ def _spoke(channel: SpeechChannel = SpeechChannel.SAY) -> PlayerSpokeEvent:
         content="水門を開けるな",
         channel=channel,
         spot_id=SpotId(1),
-        speaker_coordinate=Coordinate(0, 0, 0),
         target_player_id=None,
     )
 
@@ -250,7 +245,6 @@ class TestSpeechForListenerWhoDoesNotKnowSpeaker:
             content=f"{speaker}だ、聞こえるか",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
 
@@ -267,7 +261,6 @@ class TestSpeechForListenerWhoDoesNotKnowSpeaker:
             content="水門を開けるな",
             channel=SpeechChannel.WHISPER,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=PlayerId(2),
         )
 

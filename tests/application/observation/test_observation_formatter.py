@@ -454,7 +454,6 @@ class TestObservationFormatter:
             content="こんにちは",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
         out = formatter.format(event, PlayerId(2))
@@ -474,7 +473,6 @@ class TestObservationFormatter:
             content="内緒だよ",
             channel=SpeechChannel.WHISPER,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=PlayerId(2),
         )
         out = formatter.format(event, PlayerId(2))
@@ -491,7 +489,6 @@ class TestObservationFormatter:
             content="助けて！",
             channel=SpeechChannel.SHOUT,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
         out = formatter.format(event, PlayerId(2))
@@ -513,7 +510,6 @@ class TestObservationFormatter:
             content="テスト",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
         out = formatter.format(event, PlayerId(1))
