@@ -259,8 +259,6 @@ class TestTheGuardedPopulationIsNotEmpty:
 _MAX_MODULES_ON_IMPORT: dict[str, int] = {
     # world_graph: 238 → 4
     "ai_rpg_world.application.world_graph.distant_view_service": 20,
-    # harvest: 160 → 6
-    "ai_rpg_world.application.harvest.contracts.commands": 20,
     # guild: 144 → 6
     "ai_rpg_world.application.guild.contracts.commands": 20,
     # speech: 121 → 13

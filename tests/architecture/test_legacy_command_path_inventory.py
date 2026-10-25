@@ -47,12 +47,8 @@ _MANDATORY_SCOPE_PATHS = {
 
 _LEGACY_UNIT_OF_WORK_PATHS = {
     "application/guild/services/guild_command_service.py",
-    "application/harvest/services/harvest_command_service.py",
-    "application/monster/services/monster_skill_application_service.py",
-    "application/monster/services/monster_spawn_application_service.py",
     "application/quest/services/quest_command_service.py",
     "application/shop/services/shop_command_service.py",
-    "application/skill/services/skill_command_service.py",
     "application/social/services/notification_command_service.py",
     "application/social/services/notification_event_handler_service.py",
     "application/social/services/post_command_service.py",

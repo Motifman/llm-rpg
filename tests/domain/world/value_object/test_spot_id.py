@@ -54,3 +54,8 @@ class TestSpotId:
         
         with pytest.raises(AttributeError):
             spot_id.value = 606
+
+    def test_spot_id_create_invalid_format(self) -> None:
+        """SpotId.create に整数へ変換できない文字列を渡すと SpotIdValidationException を投げる。"""
+        with pytest.raises(SpotIdValidationException, match="Invalid Spot ID format"):
+            SpotId.create("invalid")
