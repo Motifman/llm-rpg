@@ -54,6 +54,7 @@ class TestTheDisplayLabelTableCoversEveryNeedType:
         ここで落ちるのは「新しい欲求を足した人が、呼び名を書くまで気づく」形。
         表示に嘘が出るより、起動時に落ちる方がよい。
         """
+
         class _Unregistered:
             name = "THIRST"
 

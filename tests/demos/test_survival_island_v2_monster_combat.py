@@ -22,26 +22,19 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "survival_island_v2.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 @pytest.fixture
 def runtime():
     from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+
     return create_world_runtime(SCENARIO_PATH)
 
 
 def _count_monsters(runtime) -> int:
     g = runtime._spot_graph_repo.find_graph()
-    return sum(
-        len(g.monster_presence_at(n.spot_id).present_monster_ids)
-        for n in g.iter_spot_nodes()
-    )
+    return sum(len(g.monster_presence_at(n.spot_id).present_monster_ids) for n in g.iter_spot_nodes())
 
 
 class TestInitialSpawn:
@@ -81,6 +74,7 @@ class TestPlayerAttackTool:
     def test_llm_tool_catalog_spot_graph_attack_included(self) -> None:
         """tool catalog に attack tool が登録されていること (LLM が呼び出せる)。"""
         from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_ATTACK
+
         assert TOOL_NAME_SPOT_GRAPH_ATTACK.endswith("attack")
 
 

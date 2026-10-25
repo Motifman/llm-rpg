@@ -32,9 +32,7 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 logger = logging.getLogger(__name__)
 
 
-def list_object_interactions(
-    runtime: Any, world_object_id: int, *, player_id: int
-) -> list[str]:
+def list_object_interactions(runtime: Any, world_object_id: int, *, player_id: int) -> list[str]:
     """``world_object_id`` が所属する spot の interior から available action 名を列挙。
 
     実験 #26 で LLM が "search" / "examine" 等の ad-hoc action_name を発明して
@@ -77,9 +75,7 @@ def list_object_interactions(
                 continue
             obj = interior.get_object(target_object_id)
             if obj is not None:
-                player = runtime._player_status_repo.find_by_id(
-                    PlayerId(player_id)
-                )
+                player = runtime._player_status_repo.find_by_id(PlayerId(player_id))
                 plane = actor_plane_for(
                     PlayerId(player_id),
                     getattr(runtime, "_player_perception_policy", None),
@@ -109,9 +105,7 @@ def list_object_interactions(
         return []
 
 
-def hidden_object_interaction_failure_reason(
-    runtime: Any, world_object_id: int, *, player_id: int
-) -> str:
+def hidden_object_interaction_failure_reason(runtime: Any, world_object_id: int, *, player_id: int) -> str:
     """本人に伏せた操作しか無い物体について、宣言済みの理由だけを返す。
 
     操作名は一切返さない。異なる理由が複数ある場合は、どの秘密の操作へ対応

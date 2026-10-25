@@ -42,7 +42,8 @@ class InMemoryPublicSnsReadRepository:
         if user is None:
             return None
         return PublicSnsUserRecord(
-            user_id=int(user.user_id), identity_token=SnsIdentityToken(user.identity_token).value,
+            user_id=int(user.user_id),
+            identity_token=SnsIdentityToken(user.identity_token).value,
             display_name=user.profile.display_name,
         )
 
@@ -88,44 +89,55 @@ class InMemoryPublicSnsReadRepository:
         _validate_kind(kind)
         aggregate = (
             self._data_store.posts.get(PostId(local_id))
-            if kind == "post" else self._data_store.replies.get(ReplyId(local_id))
+            if kind == "post"
+            else self._data_store.replies.get(ReplyId(local_id))
         )
         return None if aggregate is None else self._record(kind, aggregate)
 
     def scan_posts(self, before_id: int | None, limit: int) -> list[PublicSnsContentRecord]:
         _validate_limit(limit)
         candidates = (
-            post for post in self._data_store.posts.values()
-            if before_id is None or int(post.post_id) < before_id
+            post for post in self._data_store.posts.values() if before_id is None or int(post.post_id) < before_id
         )
         bounded = nlargest(limit, candidates, key=lambda post: int(post.post_id))
         return [self._record("post", post) for post in bounded]
 
     def scan_replies(
-        self, parent_kind: ContentKind, parent_id: int, before_id: int | None, limit: int,
+        self,
+        parent_kind: ContentKind,
+        parent_id: int,
+        before_id: int | None,
+        limit: int,
     ) -> list[PublicSnsContentRecord]:
         _validate_limit(limit)
         _validate_kind(parent_kind)
         parent_reference = PostId(parent_id) if parent_kind == "post" else ReplyId(parent_id)
         candidates = (
-            reply for reply in self._data_store.replies.values()
+            reply
+            for reply in self._data_store.replies.values()
             if (before_id is None or int(reply.reply_id) < before_id)
             and (
-                (parent_kind == "post" and reply.parent_post_id == parent_reference
-                 and reply.parent_reply_id is None)
-                or (parent_kind == "reply" and reply.parent_reply_id == parent_reference
-                    and reply.parent_post_id is None)
+                (parent_kind == "post" and reply.parent_post_id == parent_reference and reply.parent_reply_id is None)
+                or (
+                    parent_kind == "reply"
+                    and reply.parent_reply_id == parent_reference
+                    and reply.parent_post_id is None
+                )
             )
         )
         bounded = nlargest(limit, candidates, key=lambda reply: int(reply.reply_id))
         return [self._record("reply", reply) for reply in bounded]
 
     def scan_notifications(
-        self, viewer_user_id: int, before_id: int | None, limit: int,
+        self,
+        viewer_user_id: int,
+        before_id: int | None,
+        limit: int,
     ) -> list[Notification]:
         _validate_limit(limit)
         candidates = (
-            notification for notification in self._data_store.sns_notifications.values()
+            notification
+            for notification in self._data_store.sns_notifications.values()
             if int(notification.user_id) == viewer_user_id
             and (before_id is None or int(notification.notification_id) < before_id)
         )

@@ -201,11 +201,7 @@ def extract_cases(runs_dir: Path) -> tuple[list[Case], dict[str, int]]:
                     tick=event.get("tick"),
                     player_id=event.get("player_id"),
                     written=matched.group("written"),
-                    target=str(
-                        arguments.get("object_label")
-                        or arguments.get("target_label")
-                        or ""
-                    ),
+                    target=str(arguments.get("object_label") or arguments.get("target_label") or ""),
                     inner_thought=str(arguments.get("inner_thought") or ""),
                     available=available,
                     scenario_path=scenario_path,
@@ -353,9 +349,7 @@ class LabelBook:
             return {}
         if case.scenario_path not in self._per_scenario:
             path = self._repo_root / case.scenario_path
-            self._per_scenario[case.scenario_path] = (
-                _labels_in(path) if path.exists() else {}
-            )
+            self._per_scenario[case.scenario_path] = _labels_in(path) if path.exists() else {}
         labels = self._per_scenario[case.scenario_path]
         if not labels:
             self.hits["missing_scenario"] += 1
@@ -396,10 +390,7 @@ def judge_jev(
 
     config = VARIANTS[variant]
     known = labels or {}
-    option_labels = {
-        name: (known.get(name) if config["labels"] else None)
-        for name in case.available
-    }
+    option_labels = {name: (known.get(name) if config["labels"] else None) for name in case.available}
     options: dict[str, str | None] = dict(option_labels)
     options[_NO_MATCH] = "一覧のどの操作とも対応しない"
     listed = {name: label for name, label in option_labels.items() if label}
@@ -471,9 +462,7 @@ def _run_conditions(cases_path: Path, cases: Sequence[Case]) -> dict[str, Any]:
 
     digest = hashlib.sha256()
     for case in cases:
-        digest.update(
-            json.dumps(asdict(case), ensure_ascii=False, sort_keys=True).encode()
-        )
+        digest.update(json.dumps(asdict(case), ensure_ascii=False, sort_keys=True).encode())
     return {
         "measured_at": datetime.now(timezone.utc).isoformat(),
         "git_commit": _git("rev-parse", "HEAD"),
@@ -578,8 +567,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 "difflib_cutoff": args.difflib_cutoff,
                 "elapsed_seconds": round(elapsed, 1),
                 "results": [
-                    {"case": asdict(r.case), "outcomes": {k: asdict(v) for k, v in r.outcomes.items()}}
-                    for r in results
+                    {"case": asdict(r.case), "outcomes": {k: asdict(v) for k, v in r.outcomes.items()}} for r in results
                 ],
             },
             ensure_ascii=False,
@@ -613,11 +601,7 @@ def summarize(results: Sequence[dict], methods: Sequence[str]) -> dict[str, Any]
         if method == "jev":
             # 「該当なし」と言えた数と、選びかけたが閾値に届かなかった数を
             # 分ける。同じ「救済しなかった」でも意味が違う。
-            stats["real_said_no_match"] = sum(
-                1
-                for r in real
-                if r["outcomes"][method].get("raw_choice") == _NO_MATCH
-            )
+            stats["real_said_no_match"] = sum(1 for r in real if r["outcomes"][method].get("raw_choice") == _NO_MATCH)
             stats["real_below_threshold"] = sum(
                 1
                 for r in real
@@ -625,9 +609,7 @@ def summarize(results: Sequence[dict], methods: Sequence[str]) -> dict[str, Any]
                 and r["outcomes"][method].get("raw_choice") not in (None, _NO_MATCH)
             )
             stats["control_said_no_match"] = sum(
-                1
-                for r in control
-                if r["outcomes"][method].get("raw_choice") == _NO_MATCH
+                1 for r in control if r["outcomes"][method].get("raw_choice") == _NO_MATCH
             )
             stats["control_below_threshold"] = sum(
                 1
@@ -642,17 +624,13 @@ def summarize(results: Sequence[dict], methods: Sequence[str]) -> dict[str, Any]
 
     by_written: dict[str, dict[str, int]] = {}
     for item in real:
-        bucket = by_written.setdefault(
-            item["case"]["written"], {"total": 0, "jev": 0, "difflib": 0}
-        )
+        bucket = by_written.setdefault(item["case"]["written"], {"total": 0, "jev": 0, "difflib": 0})
         bucket["total"] += 1
         if item["outcomes"]["jev"]["chosen"]:
             bucket["jev"] += 1
         if item["outcomes"]["difflib"]["chosen"]:
             bucket["difflib"] += 1
-    summary["by_written"] = dict(
-        sorted(by_written.items(), key=lambda kv: -kv[1]["total"])
-    )
+    summary["by_written"] = dict(sorted(by_written.items(), key=lambda kv: -kv[1]["total"]))
 
     by_option_count: dict[str, dict[str, int]] = {}
     for item in real:
@@ -671,11 +649,7 @@ def summarize(results: Sequence[dict], methods: Sequence[str]) -> dict[str, Any]
             bucket["control_wrong"] += 1
     summary["by_option_count"] = dict(sorted(by_option_count.items()))
 
-    latencies = [
-        r["outcomes"]["jev"]["latency_ms"]
-        for r in results
-        if r["outcomes"]["jev"].get("latency_ms")
-    ]
+    latencies = [r["outcomes"]["jev"]["latency_ms"] for r in results if r["outcomes"]["jev"].get("latency_ms")]
     if latencies:
         ordered = sorted(latencies)
         summary["jev_latency_ms"] = {
@@ -764,9 +738,7 @@ def index_row(payload: dict, summary: dict, out: Path) -> dict[str, Any]:
             "control_total": summary.get("control_total"),
             "rescued": summary["methods"]["jev"]["rescued"],
             "false_rescue_raw": summary["methods"]["jev"]["false_rescue"],
-            "false_rescue_labelled_wrong": (
-                summary.get("control_labelled", {}).get("wrong")
-            ),
+            "false_rescue_labelled_wrong": (summary.get("control_labelled", {}).get("wrong")),
             "difflib_rescued": summary["methods"]["difflib"]["rescued"],
             "normalized_rescued": summary["methods"]["normalized"]["rescued"],
             "label_lookup": payload.get("label_lookup"),
@@ -833,8 +805,7 @@ def _render_html(payload: dict, summary: dict) -> str:
         )
 
     method_rows = "".join(
-        "<tr><td class='mono'>{m}</td><td>{rescued}</td><td>{rate}</td>"
-        "<td>{wrong}</td><td>{wrate}</td></tr>".format(
+        "<tr><td class='mono'>{m}</td><td>{rescued}</td><td>{rate}</td><td>{wrong}</td><td>{wrate}</td></tr>".format(
             m=method,
             rescued=stats["rescued"],
             rate=_pct(stats["rescue_rate"]),
@@ -844,15 +815,9 @@ def _render_html(payload: dict, summary: dict) -> str:
         for method, stats in summary["methods"].items()
     )
     census = payload.get("census") or {}
-    by_written = html.escape(
-        json.dumps(summary.get("by_written", {}), ensure_ascii=False, indent=2)
-    )
-    labelled = html.escape(
-        json.dumps(summary.get("control_labelled", {}), ensure_ascii=False, indent=2)
-    )
-    by_option_count = html.escape(
-        json.dumps(summary.get("by_option_count", {}), ensure_ascii=False, indent=2)
-    )
+    by_written = html.escape(json.dumps(summary.get("by_written", {}), ensure_ascii=False, indent=2))
+    labelled = html.escape(json.dumps(summary.get("control_labelled", {}), ensure_ascii=False, indent=2))
+    by_option_count = html.escape(json.dumps(summary.get("by_option_count", {}), ensure_ascii=False, indent=2))
     latency = summary.get("jev_latency_ms") or {}
     return f"""<!doctype html>
 <meta charset="utf-8">
@@ -928,9 +893,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_run.add_argument("--out", default="var/jev_demo/results.json")
     p_run.add_argument("--limit", type=int, default=0)
     p_run.add_argument("--model", default="typesafe/jev-1.13")
-    p_run.add_argument(
-        "--endpoint", default="https://openrouter.ai/api/alpha/decisions"
-    )
+    p_run.add_argument("--endpoint", default="https://openrouter.ai/api/alpha/decisions")
     p_run.add_argument("--min-confidence", type=float, default=0.7)
     p_run.add_argument("--difflib-cutoff", type=float, default=0.6)
     p_run.add_argument(
@@ -943,8 +906,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--repo-root",
         default="",
         help=(
-            "シナリオを引く起点。run の resolved config が持つ scenario_path を"
-            "ここから解決する。variant=full に要る"
+            "シナリオを引く起点。run の resolved config が持つ scenario_path をここから解決する。variant=full に要る"
         ),
     )
     p_run.set_defaults(func=cmd_run)

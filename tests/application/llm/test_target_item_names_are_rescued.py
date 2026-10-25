@@ -35,8 +35,11 @@ class _FixedPort(ITypedJudgmentPort):
         self.calls.append((state, dict(questions)))
         return {
             name: JudgmentResult(
-                value=self.choice, probabilities={self.choice: self.probability},
-                confidence=self.confidence, source=JudgmentSource.JEV, latency_ms=7.0,
+                value=self.choice,
+                probabilities={self.choice: self.probability},
+                confidence=self.confidence,
+                source=JudgmentSource.JEV,
+                latency_ms=7.0,
             )
             for name in questions
         }
@@ -49,7 +52,9 @@ class _FailingPort(ITypedJudgmentPort):
 
 def _rescue(port: ITypedJudgmentPort, written: str = "鉄の鍵"):
     return TargetItemNameRescue(port=port, min_confidence=0.85).rescue(
-        written, candidates=_CANDIDATES, action_name="pickpocket",
+        written,
+        candidates=_CANDIDATES,
+        action_name="pickpocket",
     )
 
 
@@ -72,9 +77,16 @@ class TestChoosingACandidate:
         """trace の値に、書かれた名前・置き換えた名前・確率・確信・下限が入る。"""
         answer = _rescue(_FixedPort("昇降機の起動鍵"))
 
-        assert {k: answer.payload[k] for k in ("original", "replaced_with", "probability", "confidence", "min_confidence", "source")} == {
-            "original": "鉄の鍵", "replaced_with": "昇降機の起動鍵", "probability": 0.95,
-            "confidence": 0.9, "min_confidence": 0.85, "source": "jev",
+        assert {
+            k: answer.payload[k]
+            for k in ("original", "replaced_with", "probability", "confidence", "min_confidence", "source")
+        } == {
+            "original": "鉄の鍵",
+            "replaced_with": "昇降機の起動鍵",
+            "probability": 0.95,
+            "confidence": 0.9,
+            "min_confidence": 0.85,
+            "source": "jev",
         }
 
 

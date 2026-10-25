@@ -87,13 +87,9 @@ class DefaultPromptBuilder(IPromptBuilder):
         # ゆるめる。world_runtime runtime のような独自経路から adapter を差し込めるよう、
         # isinstance ではなく hasattr で構造チェックする。
         if not hasattr(core.world_query_service, "get_player_current_state"):
-            raise TypeError(
-                "core.world_query_service must have get_player_current_state method"
-            )
+            raise TypeError("core.world_query_service must have get_player_current_state method")
         if not hasattr(core.player_profile_repository, "find_by_id"):
-            raise TypeError(
-                "core.player_profile_repository must have find_by_id method"
-            )
+            raise TypeError("core.player_profile_repository must have find_by_id method")
 
         observation_buffer = core.observation_buffer
         short_term_memory = core.short_term_memory
@@ -112,7 +108,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         episode_index_text_provider = sections.episode_index_text_provider
         being_memo_text_provider = sections.being_memo_text_provider
         inventory_text_provider = sections.inventory_text_provider
-
 
         default_action_instruction = limits.default_action_instruction
         if not isinstance(observation_buffer, IObservationContextBuffer):
@@ -166,10 +161,9 @@ class DefaultPromptBuilder(IPromptBuilder):
             from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
                 ToolCallLoopGuardService,
             )
+
             if not isinstance(tool_call_loop_guard, ToolCallLoopGuardService):
-                raise TypeError(
-                    "tool_call_loop_guard must be ToolCallLoopGuardService or None"
-                )
+                raise TypeError("tool_call_loop_guard must be ToolCallLoopGuardService or None")
         self._tool_call_loop_guard = tool_call_loop_guard
         self._objective_text_provider = objective_text_provider
         self._known_people_text_provider = known_people_text_provider
@@ -255,6 +249,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 tick = None
         try:
             import json as _json
+
             tools_chars = len(_json.dumps(tools, ensure_ascii=False))
         except Exception:
             tools_chars = 0
@@ -328,11 +323,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             race=profile.race.value,
             element=profile.element.value,
             game_description="",
-            persona_block=(
-                self._persona_block_provider(player_id)
-                if self._persona_block_provider is not None
-                else ""
-            ),
+            persona_block=(self._persona_block_provider(player_id) if self._persona_block_provider is not None else ""),
         )
 
         # 2. drain して短期記憶に append
@@ -362,9 +353,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         shown_notification_ids: tuple[str, ...] = ()
         if self._recent_events_projection is not None:
             projected_entries, shown_notification_ids = self._recent_events_projection(player_id, recent_entries)
-        recent_events_text = self._recent_events_formatter.format_unified_entries(
-            projected_entries
-        )
+        recent_events_text = self._recent_events_formatter.format_unified_entries(projected_entries)
         if self._recent_events_shadow is not None:
             self._recent_events_shadow(player_id, recent_events_text)
 
@@ -377,12 +366,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         # WARNING ではなく ERROR にする理由: provider 実装バグはサイレントに
         # 黙過すべきでなく、ログ集約側で必ず可視化したい (silent failure 防止)。
         # 一方で prompt 構築全体を中断するのは過剰なので degrade で続行する。
-        objective_text = self._call_text_provider(
-            self._objective_text_provider, player_id, "objective_text_provider"
-        )
-        inventory_text = self._call_text_provider(
-            self._inventory_text_provider, player_id, "inventory_text_provider"
-        )
+        objective_text = self._call_text_provider(self._objective_text_provider, player_id, "objective_text_provider")
+        inventory_text = self._call_text_provider(self._inventory_text_provider, player_id, "inventory_text_provider")
         known_people_text = self._call_text_provider(
             self._known_people_text_provider, player_id, "known_people_text_provider"
         )

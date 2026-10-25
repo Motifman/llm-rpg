@@ -92,16 +92,12 @@ class TestActiveEffectsCodec:
             ]
         )
         src_repo = _repo_stub({PlayerId(1): src_agg})
-        captured = PlayerActiveEffectsSubsystemCodec().capture(
-            _runtime_for_player(src_repo)
-        )
+        captured = PlayerActiveEffectsSubsystemCodec().capture(_runtime_for_player(src_repo))
         assert len(captured["entries"][0]["effects"]) == 2
 
         dst_agg = _make_status_agg()  # 空 effects
         dst_repo = _repo_stub({PlayerId(1): dst_agg})
-        PlayerActiveEffectsSubsystemCodec().restore(
-            _runtime_for_player(dst_repo), captured
-        )
+        PlayerActiveEffectsSubsystemCodec().restore(_runtime_for_player(dst_repo), captured)
         assert len(dst_agg._active_effects) == 2
         assert dst_agg._active_effects[0].effect_type == StatusEffectType.ATTACK_UP
         assert dst_agg._active_effects[0].value == 1.2
@@ -110,25 +106,19 @@ class TestActiveEffectsCodec:
         """空 effects でも 動く。"""
         agg = _make_status_agg(effects=[])
         repo = _repo_stub({PlayerId(1): agg})
-        captured = PlayerActiveEffectsSubsystemCodec().capture(
-            _runtime_for_player(repo)
-        )
+        captured = PlayerActiveEffectsSubsystemCodec().capture(_runtime_for_player(repo))
         assert captured["entries"][0]["effects"] == []
 
 
 class TestAttentionLevelCodec:
     def test_capture_restore_round_trip_2(self) -> None:
         src_agg = _make_status_agg(attention=AttentionLevel.FILTER_SOCIAL)
-        captured = PlayerAttentionLevelSubsystemCodec().capture(
-            _runtime_for_player(_repo_stub({PlayerId(1): src_agg}))
-        )
+        captured = PlayerAttentionLevelSubsystemCodec().capture(_runtime_for_player(_repo_stub({PlayerId(1): src_agg})))
         assert captured["entries"][0]["attention_level"] == "FILTER_SOCIAL"
 
         dst_agg = _make_status_agg(attention=AttentionLevel.FULL)
         dst_repo = _repo_stub({PlayerId(1): dst_agg})
-        PlayerAttentionLevelSubsystemCodec().restore(
-            _runtime_for_player(dst_repo), captured
-        )
+        PlayerAttentionLevelSubsystemCodec().restore(_runtime_for_player(dst_repo), captured)
         assert dst_agg._attention_level == AttentionLevel.FILTER_SOCIAL
 
 
@@ -136,9 +126,7 @@ class TestPursuitStateCodec:
     def test_pursuit_none_round_trips(self) -> None:
         """pursuitNone は None で往復。"""
         src_agg = _make_status_agg()
-        captured = PlayerPursuitStateSubsystemCodec().capture(
-            _runtime_for_player(_repo_stub({PlayerId(1): src_agg}))
-        )
+        captured = PlayerPursuitStateSubsystemCodec().capture(_runtime_for_player(_repo_stub({PlayerId(1): src_agg})))
         assert captured["entries"][0]["pursuit"] is None
 
     def test_active_pursuit_round_trips(self) -> None:
@@ -161,15 +149,11 @@ class TestPursuitStateCodec:
         )
         src_agg = _make_status_agg()
         src_agg._pursuit_state = PlayerPursuitState(pursuit=pursuit)
-        captured = PlayerPursuitStateSubsystemCodec().capture(
-            _runtime_for_player(_repo_stub({PlayerId(1): src_agg}))
-        )
+        captured = PlayerPursuitStateSubsystemCodec().capture(_runtime_for_player(_repo_stub({PlayerId(1): src_agg})))
 
         dst_agg = _make_status_agg()
         dst_repo = _repo_stub({PlayerId(1): dst_agg})
-        PlayerPursuitStateSubsystemCodec().restore(
-            _runtime_for_player(dst_repo), captured
-        )
+        PlayerPursuitStateSubsystemCodec().restore(_runtime_for_player(dst_repo), captured)
         restored = dst_agg._pursuit_state.pursuit
         assert restored is not None
         assert restored.actor_id == WorldObjectId(1)
@@ -192,13 +176,8 @@ class TestPursuitStateCodec:
         )
         src_agg = _make_status_agg()
         src_agg._pursuit_state = PlayerPursuitState(pursuit=pursuit)
-        captured = PlayerPursuitStateSubsystemCodec().capture(
-            _runtime_for_player(_repo_stub({PlayerId(1): src_agg}))
-        )
-        assert (
-            captured["entries"][0]["pursuit"]["failure_reason"]
-            == "path_unreachable"
-        )
+        captured = PlayerPursuitStateSubsystemCodec().capture(_runtime_for_player(_repo_stub({PlayerId(1): src_agg})))
+        assert captured["entries"][0]["pursuit"]["failure_reason"] == "path_unreachable"
 
 
 class TestSpotNavigationStateCodec:
@@ -215,9 +194,7 @@ class TestSpotNavigationStateCodec:
 
         dst_agg = _make_status_agg()
         dst_repo = _repo_stub({PlayerId(1): dst_agg})
-        PlayerSpotNavigationStateSubsystemCodec().restore(
-            _runtime_for_player(dst_repo), captured
-        )
+        PlayerSpotNavigationStateSubsystemCodec().restore(_runtime_for_player(dst_repo), captured)
         assert dst_agg._spot_navigation_state.current_spot_id == SpotId(1)
         assert dst_agg._spot_navigation_state.is_traveling is False
 
@@ -241,9 +218,7 @@ class TestSpotNavigationStateCodec:
 
         dst_agg = _make_status_agg()
         dst_repo = _repo_stub({PlayerId(1): dst_agg})
-        PlayerSpotNavigationStateSubsystemCodec().restore(
-            _runtime_for_player(dst_repo), captured
-        )
+        PlayerSpotNavigationStateSubsystemCodec().restore(_runtime_for_player(dst_repo), captured)
         restored = dst_agg._spot_navigation_state
         assert restored.is_traveling is True
         assert restored.route == (SpotId(1), SpotId(2), SpotId(3))

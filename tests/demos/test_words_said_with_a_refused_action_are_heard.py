@@ -65,9 +65,7 @@ def _session(tmp: str):
         runtime_config=ResolvedLlmRuntimeConfig.for_tests(),
     )
     character = manager.create_character(CharacterCreateRequest(name="probe"))
-    summary = manager.create_session(
-        SessionCreateRequest(world_id=_SCENARIO.stem, character_ids=[character.id])
-    )
+    summary = manager.create_session(SessionCreateRequest(world_id=_SCENARIO.stem, character_ids=[character.id]))
     wiring = manager._sessions[summary.session_id].llm_wiring
     _place(wiring.runtime, _HAL, "company_office")
     _place(wiring.runtime, _MIO, "company_office")
@@ -323,9 +321,7 @@ class TestEveryToolWithWordsDeliversThem:
                 if "say_inline" in definition.parameters["properties"]
             }
 
-            unwrapped = {
-                name for name in offering if not _delivers_say_inline(wiring._tool_handlers.get(name))
-            }
+            unwrapped = {name for name in offering if not _delivers_say_inline(wiring._tool_handlers.get(name))}
 
             assert offering
             assert unwrapped == set()

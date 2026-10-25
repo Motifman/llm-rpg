@@ -54,9 +54,7 @@ class InMemoryMonsterSpawnCommandRepositoryProvider:
         store = unit_of_work.data_store
         self._monsters = cast(
             MonsterRepository,
-            ScopeBoundRepository(
-                InMemoryMonsterAggregateRepository(store, facade), guard
-            ),
+            ScopeBoundRepository(InMemoryMonsterAggregateRepository(store, facade), guard),
         )
         self._skill_loadouts = cast(
             SkillLoadoutRepository,
@@ -104,10 +102,7 @@ class InMemoryMonsterSpawnCommandRepositoryProviderFactory:
     ) -> InMemoryMonsterSpawnCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "インメモリmonster spawn providerには"
-                "InMemoryUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("インメモリmonster spawn providerにはInMemoryUnitOfWorkTransactionAdapterが必要です")
         return InMemoryMonsterSpawnCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

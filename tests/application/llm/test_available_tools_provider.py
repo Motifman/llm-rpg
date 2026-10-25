@@ -166,9 +166,7 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_TRADE_ACCEPT in names
         assert TOOL_NAME_TRADE_CANCEL not in names
 
-    def test_trade_mode_incoming_tab_shows_accept_when_available_trades_empty(
-        self, provider_trade_vp
-    ):
+    def test_trade_mode_incoming_tab_shows_accept_when_available_trades_empty(self, provider_trade_vp):
         """my_trades / incoming では宛先要約が空でも受諾を出す（スナップショットの trade_ref を正とする）"""
         ctx = replace(
             _context(),
@@ -196,7 +194,6 @@ class TestDefaultAvailableToolsProvider:
         names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
         assert TOOL_NAME_TRADE_CANCEL in names
         assert TOOL_NAME_TRADE_ACCEPT not in names
-
 
     def test_tool_format_openai_compatible(self, provider):
         """返却形式が OpenAI の function ツール形式である"""

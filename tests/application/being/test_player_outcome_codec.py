@@ -63,9 +63,7 @@ class TestPlayerOutcomeSubsystemCodec:
         codec = PlayerOutcomeSubsystemCodec()
         restored = PlayerOutcomeRegistry.new_for_players(_PLAYERS)
         callbacks: list[tuple[PlayerId, PlayerOutcomeEnum, PlayerOutcomeEnum]] = []
-        restored.register_callback(
-            lambda player_id, old, new: callbacks.append((player_id, old, new))
-        )
+        restored.register_callback(lambda player_id, old, new: callbacks.append((player_id, old, new)))
 
         codec.restore(
             _runtime(restored),
@@ -77,20 +75,12 @@ class TestPlayerOutcomeSubsystemCodec:
     @pytest.mark.parametrize(
         "entries",
         [
-            [
-                {"player_id": index, "outcome": outcome.value}
-                for index, outcome in zip(range(1, 5), _OUTCOMES[:4])
-            ],
-            [
-                {"player_id": index, "outcome": outcome.value}
-                for index, outcome in zip(range(1, 6), _OUTCOMES)
-            ]
+            [{"player_id": index, "outcome": outcome.value} for index, outcome in zip(range(1, 5), _OUTCOMES[:4])],
+            [{"player_id": index, "outcome": outcome.value} for index, outcome in zip(range(1, 6), _OUTCOMES)]
             + [{"player_id": 6, "outcome": "UNRESOLVED"}],
         ],
     )
-    def test_player_set_mismatch_fails_before_replacing_state(
-        self, entries: list[dict[str, object]]
-    ) -> None:
+    def test_player_set_mismatch_fails_before_replacing_state(self, entries: list[dict[str, object]]) -> None:
         """player の欠落・余分がある payload は部分復元せず拒否する。"""
         codec = PlayerOutcomeSubsystemCodec()
         restored = PlayerOutcomeRegistry.new_for_players(_PLAYERS)
@@ -108,10 +98,7 @@ class TestPlayerOutcomeSubsystemCodec:
         """未知の outcome は UNRESOLVED に丸めず、状態を変える前に拒否する。"""
         codec = PlayerOutcomeSubsystemCodec()
         restored = PlayerOutcomeRegistry.new_for_players(_PLAYERS)
-        entries = [
-            {"player_id": index, "outcome": outcome.value}
-            for index, outcome in zip(range(1, 6), _OUTCOMES)
-        ]
+        entries = [{"player_id": index, "outcome": outcome.value} for index, outcome in zip(range(1, 6), _OUTCOMES)]
         entries[2]["outcome"] = "GHOST"
 
         with pytest.raises(ValueError, match="GHOST"):
@@ -120,6 +107,4 @@ class TestPlayerOutcomeSubsystemCodec:
                 {"schema_version": 1, "entries": entries},
             )
 
-        assert restored.snapshot() == {
-            index: PlayerOutcomeEnum.UNRESOLVED for index in range(1, 6)
-        }
+        assert restored.snapshot() == {index: PlayerOutcomeEnum.UNRESOLVED for index in range(1, 6)}

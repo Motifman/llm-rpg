@@ -44,8 +44,13 @@ def _template() -> MonsterTemplate:
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(100, True),
@@ -56,15 +61,18 @@ def _template() -> MonsterTemplate:
 
 
 def _aggregate(
-    *, behavior_state: MonsterBehaviorState | None = None,
+    *,
+    behavior_state: MonsterBehaviorState | None = None,
 ) -> MonsterAggregate:
     agg = MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=_template(),
         world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -84,10 +92,15 @@ def _enter_chase(agg: MonsterAggregate) -> None:
 def _observed_state(agg: MonsterAggregate) -> tuple:
     """拒否要求の直前と直後で比べる公開状態と未配信イベント。"""
     return (
-        agg.behavior_state, agg.behavior_search_timer,
-        agg.chase_attacker_ref(), agg.chase_last_observed_target_spot_id,
-        agg.chase_started_at_tick, agg.persistence_flee_until_tick,
-        agg.last_attacker_ref, agg.last_attacked_tick, agg.get_events(),
+        agg.behavior_state,
+        agg.behavior_search_timer,
+        agg.chase_attacker_ref(),
+        agg.chase_last_observed_target_spot_id,
+        agg.chase_started_at_tick,
+        agg.persistence_flee_until_tick,
+        agg.last_attacker_ref,
+        agg.last_attacked_tick,
+        agg.get_events(),
     )
 
 
@@ -183,10 +196,15 @@ class TestTickChaseSearchTimer:
     @pytest.mark.parametrize("search_timer", [0, 2])
     def test_chase_false(self, search_timer: int) -> None:
         """非CHASEでは復元した探索時間が正でも減らさずFalseを返す。"""
-        agg = _aggregate(behavior_state=MonsterBehaviorState.from_parts(
-            state=BehaviorStateEnum.IDLE, target_id=None,
-            last_known_position=None, initial_position=None, search_timer=search_timer,
-        ))
+        agg = _aggregate(
+            behavior_state=MonsterBehaviorState.from_parts(
+                state=BehaviorStateEnum.IDLE,
+                target_id=None,
+                last_known_position=None,
+                initial_position=None,
+                search_timer=search_timer,
+            )
+        )
         assert agg.is_chasing() is False
         assert agg.behavior_search_timer == search_timer
         before = _observed_state(agg)

@@ -65,7 +65,6 @@ class TestWorldObservationFormatterCreation:
 class TestWorldObservationFormatterResourceHarvested:
     """ResourceHarvestedEvent のフォーマットテスト"""
 
-
     """SpotWeatherChangedEvent のフォーマットテスト"""
 
     def test_includes_old_and_new_weather(self):

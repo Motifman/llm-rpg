@@ -22,8 +22,13 @@ class TestInMemoryAcquaintanceRepository:
 
         assert repo.list_by_being(ADA) == (
             Acquaintance(
-                environment_name="島", name="ノア", how_known=HowKnown.MET,
-                known_since_turn=1, first_met_turn=1, last_met_turn=4, met_count=2,
+                environment_name="島",
+                name="ノア",
+                how_known=HowKnown.MET,
+                known_since_turn=1,
+                first_met_turn=1,
+                last_met_turn=4,
+                met_count=2,
                 name_learned_turn=1,
             ),
         )
@@ -55,8 +60,13 @@ class TestInMemoryAcquaintanceRepository:
         repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1)
         repo.record_meeting(KAI, environment_name="島", name="リオ", turn=2)
         restored = Acquaintance(
-            environment_name="島", name="カイ", how_known=HowKnown.MET,
-            known_since_turn=0, first_met_turn=0, last_met_turn=5, met_count=3,
+            environment_name="島",
+            name="カイ",
+            how_known=HowKnown.MET,
+            known_since_turn=0,
+            first_met_turn=0,
+            last_met_turn=5,
+            met_count=3,
             name_learned_turn=0,
         )
 
@@ -78,7 +88,9 @@ class TestInMemoryAcquaintanceRepository:
         kai = repo.find(ADA, environment_name="島", name="カイ")
         assert noa is not None and (noa.how_known, noa.relation_note) == (HowKnown.MET, None)
         assert kai is not None and (kai.how_known, kai.relation_note, kai.known_since_turn) == (
-            HowKnown.INTRODUCED, "仲間", 2,
+            HowKnown.INTRODUCED,
+            "仲間",
+            2,
         )
 
     def test_meeting_someone_introduced_counts_as_first_meeting(self) -> None:

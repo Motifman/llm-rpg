@@ -93,9 +93,7 @@ def _validate_player_state_dict(state: Mapping[str, Any]) -> None:
 
     for key, value in state.items():
         if not isinstance(key, str):
-            raise PlayerStateValidationException(
-                f"player state key must be str, got {type(key).__name__}: {key!r}"
-            )
+            raise PlayerStateValidationException(f"player state key must be str, got {type(key).__name__}: {key!r}")
         if not isinstance(value, _ALLOWED_PLAYER_STATE_VALUE_TYPES):
             raise PlayerStateValidationException(
                 f"player state[{key!r}] value type {type(value).__name__} is not "
@@ -136,15 +134,11 @@ class PlayerStatusAggregate(AggregateRoot):
         self._hp = hp
         self._mp = mp
         self._stamina = stamina
-        self._navigation_state = (
-            navigation_state if navigation_state is not None else PlayerNavigationState.empty()
-        )
+        self._navigation_state = navigation_state if navigation_state is not None else PlayerNavigationState.empty()
         self._is_down = is_down
         self._active_effects = active_effects or []
         self._attention_level = attention_level if attention_level is not None else AttentionLevel.FULL
-        self._pursuit_state = (
-            pursuit_state if pursuit_state is not None else PlayerPursuitState.empty()
-        )
+        self._pursuit_state = pursuit_state if pursuit_state is not None else PlayerPursuitState.empty()
         self._spot_navigation_state = spot_navigation_state
         self._needs = needs if needs is not None else AgentNeeds.default()
         # PR-T: 「前回 turn の need 値」を保持する snapshot。初期は空 dict で、
@@ -268,10 +262,7 @@ class PlayerStatusAggregate(AggregateRoot):
                 changed = True
         if tick.fatigue_critical_damage_per_tick > 0:
             fatigue = self.needs.get(NeedType.FATIGUE)
-            if (
-                fatigue is not None
-                and fatigue.value >= tick.fatigue_critical_threshold
-            ):
+            if fatigue is not None and fatigue.value >= tick.fatigue_critical_threshold:
                 self.apply_damage(tick.fatigue_critical_damage_per_tick)
                 changed = True
         return NeedsDecayTickResult(changed=changed)
@@ -627,7 +618,10 @@ class PlayerStatusAggregate(AggregateRoot):
         current_tick: WorldTick | None = None,
     ) -> None:
         """現在地を更新する"""
-        if self._navigation_state.current_spot_id == spot_id and self._navigation_state.current_coordinate == coordinate:
+        if (
+            self._navigation_state.current_spot_id == spot_id
+            and self._navigation_state.current_coordinate == coordinate
+        ):
             return
 
         old_spot_id = self._navigation_state.current_spot_id
@@ -637,15 +631,17 @@ class PlayerStatusAggregate(AggregateRoot):
             coordinate=coordinate,
         )
 
-        self.add_event(PlayerLocationChangedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=old_spot_id,
-            old_coordinate=old_coordinate,
-            new_spot_id=spot_id,
-            new_coordinate=coordinate,
-            occurred_tick=current_tick,
-        ))
+        self.add_event(
+            PlayerLocationChangedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                old_spot_id=old_spot_id,
+                old_coordinate=old_coordinate,
+                new_spot_id=spot_id,
+                new_coordinate=coordinate,
+                occurred_tick=current_tick,
+            )
+        )
 
     def can_act(self) -> bool:
         """戦闘行動が可能かどうか
@@ -739,9 +735,7 @@ class PlayerStatusAggregate(AggregateRoot):
         """
         return not self._is_down
 
-    def apply_damage(
-        self, damage: int, killer_player_id: PlayerId | None = None
-    ) -> None:
+    def apply_damage(self, damage: int, killer_player_id: PlayerId | None = None) -> None:
         """計算済みのダメージを適用する
 
         Args:
@@ -753,22 +747,26 @@ class PlayerStatusAggregate(AggregateRoot):
         # HPが0になった場合は戦闘不能状態にする
         if not self._hp.is_alive():
             self._is_down = True
-            self.add_event(PlayerDownedEvent.create(
-                aggregate_id=self._player_id,
-                aggregate_type="PlayerStatusAggregate",
-                killer_player_id=killer_player_id,
-            ))
+            self.add_event(
+                PlayerDownedEvent.create(
+                    aggregate_id=self._player_id,
+                    aggregate_type="PlayerStatusAggregate",
+                    killer_player_id=killer_player_id,
+                )
+            )
 
     def record_evasion(self) -> None:
         """回避を記録する（行動可能状態のみ）"""
         if self._is_down:
             raise PlayerDownedException("ダウン状態のプレイヤーは回避を記録できません")
 
-        self.add_event(PlayerEvadedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            current_hp=self._hp.value,
-        ))
+        self.add_event(
+            PlayerEvadedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                current_hp=self._hp.value,
+            )
+        )
 
     def gain_exp(self, exp_amount: int) -> None:
         """経験値を獲得する
@@ -799,13 +797,15 @@ class PlayerStatusAggregate(AggregateRoot):
             if self._base_stats.max_mp != old_base_stats.max_mp:
                 self._mp = Mp.create(self._mp.value, self._base_stats.max_mp)
 
-            self.add_event(PlayerLevelUpEvent.create(
-                aggregate_id=self._player_id,
-                aggregate_type="PlayerStatusAggregate",
-                old_level=old_level,
-                new_level=self._growth.level,
-                stat_growth=stat_growth,
-            ))
+            self.add_event(
+                PlayerLevelUpEvent.create(
+                    aggregate_id=self._player_id,
+                    aggregate_type="PlayerStatusAggregate",
+                    old_level=old_level,
+                    new_level=self._growth.level,
+                    stat_growth=stat_growth,
+                )
+            )
 
     def heal_hp(self, amount: int) -> None:
         """HPを回復する
@@ -819,12 +819,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_hp = self._hp.value
         self._hp = self._hp.heal(amount)
 
-        self.add_event(PlayerHpHealedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            healed_amount=self._hp.value - old_hp,
-            total_hp=self._hp.value,
-        ))
+        self.add_event(
+            PlayerHpHealedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                healed_amount=self._hp.value - old_hp,
+                total_hp=self._hp.value,
+            )
+        )
 
     def use_mp(self, amount: int) -> None:
         """MPを消費する
@@ -845,12 +847,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_mp = self._mp.value
         self._mp = self._mp.consume(amount)
 
-        self.add_event(PlayerMpConsumedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            consumed_amount=amount,
-            remaining_mp=self._mp.value,
-        ))
+        self.add_event(
+            PlayerMpConsumedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                consumed_amount=amount,
+                remaining_mp=self._mp.value,
+            )
+        )
 
     def heal_mp(self, amount: int) -> None:
         """MPを回復する
@@ -861,12 +865,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_mp = self._mp.value
         self._mp = self._mp.heal(amount)
 
-        self.add_event(PlayerMpHealedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            healed_amount=self._mp.value - old_mp,
-            total_mp=self._mp.value,
-        ))
+        self.add_event(
+            PlayerMpHealedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                healed_amount=self._mp.value - old_mp,
+                total_mp=self._mp.value,
+            )
+        )
 
     def earn_gold(self, amount: int) -> None:
         """ゴールドを獲得する
@@ -877,12 +883,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_gold = self._gold.value
         self._gold = self._gold.add(amount)
 
-        self.add_event(PlayerGoldEarnedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            earned_amount=amount,
-            total_gold=self._gold.value,
-        ))
+        self.add_event(
+            PlayerGoldEarnedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                earned_amount=amount,
+                total_gold=self._gold.value,
+            )
+        )
 
     def pay_gold(self, amount: int) -> None:
         """ゴールドを支払う
@@ -909,12 +917,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_gold = self._gold.value
         self._gold = self._gold.subtract(amount)
 
-        self.add_event(PlayerGoldPaidEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            paid_amount=amount,
-            total_gold=self._gold.value,
-        ))
+        self.add_event(
+            PlayerGoldPaidEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                paid_amount=amount,
+                total_gold=self._gold.value,
+            )
+        )
 
     def consume_stamina(self, amount: int) -> None:
         """スタミナを消費する
@@ -935,19 +945,16 @@ class PlayerStatusAggregate(AggregateRoot):
         old_stamina = self._stamina.value
         self._stamina = self._stamina.consume(amount)
 
-        self.add_event(PlayerStaminaConsumedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            consumed_amount=amount,
-            remaining_stamina=self._stamina.value,
-        ))
+        self.add_event(
+            PlayerStaminaConsumedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                consumed_amount=amount,
+                remaining_stamina=self._stamina.value,
+            )
+        )
 
-    def validate_resource_consumption(
-        self,
-        mp_cost: int = 0,
-        stamina_cost: int = 0,
-        hp_cost: int = 0
-    ) -> None:
+    def validate_resource_consumption(self, mp_cost: int = 0, stamina_cost: int = 0, hp_cost: int = 0) -> None:
         """リソース消費が可能かバリデーションを行う
 
         Args:
@@ -968,17 +975,14 @@ class PlayerStatusAggregate(AggregateRoot):
             raise InsufficientMpException(f"MPが不足しています。必要: {mp_cost}, 現在: {self._mp.value}")
 
         if stamina_cost > 0 and not self._stamina.can_consume(stamina_cost):
-            raise InsufficientStaminaException(f"スタミナが不足しています。必要: {stamina_cost}, 現在: {self._stamina.value}")
+            raise InsufficientStaminaException(
+                f"スタミナが不足しています。必要: {stamina_cost}, 現在: {self._stamina.value}"
+            )
 
         if hp_cost > 0 and hp_cost >= self._hp.value:
             raise InsufficientHpException(f"HPが不足しています。必要: {hp_cost}, 現在: {self._hp.value}")
 
-    def consume_resources(
-        self,
-        mp_cost: int = 0,
-        stamina_cost: int = 0,
-        hp_cost: int = 0
-    ) -> None:
+    def consume_resources(self, mp_cost: int = 0, stamina_cost: int = 0, hp_cost: int = 0) -> None:
         """リソースを一括で消費する
 
         Args:
@@ -1012,12 +1016,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_stamina = self._stamina.value
         self._stamina = self._stamina.recover(amount)
 
-        self.add_event(PlayerStaminaHealedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            healed_amount=self._stamina.value - old_stamina,
-            total_stamina=self._stamina.value,
-        ))
+        self.add_event(
+            PlayerStaminaHealedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                healed_amount=self._stamina.value - old_stamina,
+                total_stamina=self._stamina.value,
+            )
+        )
 
     def revive(
         self,
@@ -1049,13 +1055,15 @@ class PlayerStatusAggregate(AggregateRoot):
         # ダウン状態を解除
         self._is_down = False
 
-        self.add_event(PlayerRevivedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            hp_recovered=self._hp.value - old_hp,
-            total_hp=self._hp.value,
-            caregiver_player_id=caregiver_player_id,
-        ))
+        self.add_event(
+            PlayerRevivedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                hp_recovered=self._hp.value - old_hp,
+                total_hp=self._hp.value,
+                caregiver_player_id=caregiver_player_id,
+            )
+        )
 
     def speak(
         self,
@@ -1083,14 +1091,16 @@ class PlayerStatusAggregate(AggregateRoot):
         if channel == SpeechChannel.WHISPER and target_player_id is None:
             raise SpeechValidationException("囁きの場合は宛先プレイヤーを指定してください")
 
-        self.add_event(PlayerSpokeEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            content=content.strip(),
-            channel=channel,
-            spot_id=spot_id,
-            target_player_id=target_player_id,
-        ))
+        self.add_event(
+            PlayerSpokeEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                content=content.strip(),
+                channel=channel,
+                spot_id=spot_id,
+                target_player_id=target_player_id,
+            )
+        )
 
     def add_status_effect(self, effect: StatusEffect) -> None:
         """ステータス効果を追加する。

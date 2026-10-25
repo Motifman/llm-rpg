@@ -1,4 +1,5 @@
 """TradeCommandService を SQLite 書き込み 5 リポジトリ＋SqliteUnitOfWork で検証する。"""
+
 from __future__ import annotations
 
 import sqlite3

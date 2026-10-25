@@ -47,9 +47,7 @@ def _make_observation(prose: str, *, minute: int = 0) -> ObservationEntry:
 
 
 def _observation_event(prose: str, *, minute: int = 0) -> UnifiedRecentEventEntry:
-    return UnifiedRecentEventEntry.from_observation(
-        _make_observation(prose, minute=minute)
-    )
+    return UnifiedRecentEventEntry.from_observation(_make_observation(prose, minute=minute))
 
 
 def _action_event(summary: str, *, minute: int = 0) -> UnifiedRecentEventEntry:
@@ -71,9 +69,7 @@ class _StubPort(IShortTermMemorySummaryCompletionPort):
     def __post_init__(self) -> None:
         self.captured = []
 
-    def complete_short_term_summary_json(
-        self, messages: list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def complete_short_term_summary_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         self.captured.append(messages)
         return self.response
 
@@ -82,9 +78,7 @@ class _StubPort(IShortTermMemorySummaryCompletionPort):
 class _RaisingPort(IShortTermMemorySummaryCompletionPort):
     exc: Exception
 
-    def complete_short_term_summary_json(
-        self, messages: list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def complete_short_term_summary_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         raise self.exc
 
 
@@ -93,11 +87,13 @@ class TestShortTermMemorySummaryServiceGenerate:
 
     def test_llm_result_included(self) -> None:
         """有効な LLM 応答の流れと気分が result に乗る。古い形の unresolved を返しても result には無い。"""
-        port = _StubPort(response={
-            "compressed_activity": "北東を探索したが収穫薄",
-            "emotional_summary": "やや疲労",
-            "unresolved": ["水源を見つける", "タカシと再会する"],
-        })
+        port = _StubPort(
+            response={
+                "compressed_activity": "北東を探索したが収穫薄",
+                "emotional_summary": "やや疲労",
+                "unresolved": ["水源を見つける", "タカシと再会する"],
+            }
+        )
         svc = ShortTermMemorySummaryService(port)
         result = svc.generate(
             player_name="ハル",
@@ -112,11 +108,13 @@ class TestShortTermMemorySummaryServiceGenerate:
     def test_compressed_activity_cap(self) -> None:
         """compressed activity は cap される。"""
         long = "あ" * (COMPRESSED_ACTIVITY_MAX_CHARS * 2)
-        port = _StubPort(response={
-            "compressed_activity": long,
-            "emotional_summary": "",
-            "unresolved": [],
-        })
+        port = _StubPort(
+            response={
+                "compressed_activity": long,
+                "emotional_summary": "",
+                "unresolved": [],
+            }
+        )
         svc = ShortTermMemorySummaryService(port)
         result = svc.generate(
             player_name="x",
@@ -129,11 +127,13 @@ class TestShortTermMemorySummaryServiceGenerate:
     def test_emotional_summary_cap(self) -> None:
         """emotional summary は cap される。"""
         long = "あ" * (EMOTIONAL_SUMMARY_MAX_CHARS * 2)
-        port = _StubPort(response={
-            "compressed_activity": "ok",
-            "emotional_summary": long,
-            "unresolved": [],
-        })
+        port = _StubPort(
+            response={
+                "compressed_activity": "ok",
+                "emotional_summary": long,
+                "unresolved": [],
+            }
+        )
         svc = ShortTermMemorySummaryService(port)
         result = svc.generate(
             player_name="x",
@@ -145,11 +145,13 @@ class TestShortTermMemorySummaryServiceGenerate:
 
     def test_emotional_summary_non_str_empty_string(self) -> None:
         """emotionalsummary が非 str でも空文字に縮退。"""
-        port = _StubPort(response={
-            "compressed_activity": "ok",
-            "emotional_summary": 123,
-            "unresolved": [],
-        })
+        port = _StubPort(
+            response={
+                "compressed_activity": "ok",
+                "emotional_summary": 123,
+                "unresolved": [],
+            }
+        )
         svc = ShortTermMemorySummaryService(port)
         result = svc.generate(
             player_name="x",
@@ -216,11 +218,13 @@ class TestShortTermMemorySummaryServicePromptStructure:
 
     def test_observation_and_action_share_one_occurred_at_timeline(self) -> None:
         """観測と実際の行動は種類で分けず、発生時刻順の同じ入力本文へ入る。"""
-        port = _StubPort(response={
-            "compressed_activity": "ok",
-            "emotional_summary": "",
-            "unresolved": [],
-        })
+        port = _StubPort(
+            response={
+                "compressed_activity": "ok",
+                "emotional_summary": "",
+                "unresolved": [],
+            }
+        )
         svc = ShortTermMemorySummaryService(port)
 
         svc.generate(
@@ -252,11 +256,13 @@ class TestShortTermMemorySummaryServicePromptStructure:
         expected: str,
     ) -> None:
         """行動だけ、または観測だけの畳み込みも有効な要約入力になる。"""
-        port = _StubPort(response={
-            "compressed_activity": "ok",
-            "emotional_summary": "",
-            "unresolved": [],
-        })
+        port = _StubPort(
+            response={
+                "compressed_activity": "ok",
+                "emotional_summary": "",
+                "unresolved": [],
+            }
+        )
         svc = ShortTermMemorySummaryService(port)
 
         svc.generate(
@@ -270,11 +276,13 @@ class TestShortTermMemorySummaryServicePromptStructure:
 
     def test_system_prompt_stays_byte_identical_during_input_expansion(self) -> None:
         """入力を統一出来事へ広げても、要約方針を決める system 指示は変えない。"""
-        port = _StubPort(response={
-            "compressed_activity": "ok",
-            "emotional_summary": "",
-            "unresolved": [],
-        })
+        port = _StubPort(
+            response={
+                "compressed_activity": "ok",
+                "emotional_summary": "",
+                "unresolved": [],
+            }
+        )
         svc = ShortTermMemorySummaryService(port)
         svc.generate(
             player_name="ハル",
@@ -290,11 +298,13 @@ class TestShortTermMemorySummaryServicePromptStructure:
 
     def test_relations_and_world_rules_are_left_to_the_memo(self) -> None:
         """関係性の判断と世界ルールの一般化を書かせない理由は、メモに任せるためと指示する。"""
-        port = _StubPort(response={
-            "compressed_activity": "ok",
-            "emotional_summary": "",
-            "unresolved": [],
-        })
+        port = _StubPort(
+            response={
+                "compressed_activity": "ok",
+                "emotional_summary": "",
+                "unresolved": [],
+            }
+        )
         ShortTermMemorySummaryService(port).generate(
             player_name="ハル",
             persona_block="",
@@ -315,9 +325,7 @@ class TestShortTermMemorySummaryServiceErrors:
         port = _StubPort(response={"compressed_activity": "ok", "emotional_summary": "", "unresolved": []})
         svc = ShortTermMemorySummaryService(port)
         with pytest.raises(ValueError, match="events must not be empty"):
-            svc.generate(
-                player_name="x", persona_block="", events=[], compacted_turn_count=2
-            )
+            svc.generate(player_name="x", persona_block="", events=[], compacted_turn_count=2)
 
     def test_port_llm_api_call_exception(self) -> None:
         """port が LlmApiCallException なら 伝播。"""
@@ -334,11 +342,13 @@ class TestShortTermMemorySummaryServiceErrors:
 
     def test_compressed_activity_empty_string_value_error(self) -> None:
         """compressedactivity が空文字なら valueerror。"""
-        port = _StubPort(response={
-            "compressed_activity": "   ",
-            "emotional_summary": "",
-            "unresolved": [],
-        })
+        port = _StubPort(
+            response={
+                "compressed_activity": "   ",
+                "emotional_summary": "",
+                "unresolved": [],
+            }
+        )
         svc = ShortTermMemorySummaryService(port)
         with pytest.raises(ValueError, match="missing or empty compressed_activity"):
             svc.generate(
@@ -382,10 +392,12 @@ class TestBuildTemplateFallbackSummary:
 
     def test_action_is_preserved_in_template_fallback(self) -> None:
         """LLM 失敗時も、実際に積んだ行動を観測と同じ時系列の生ログへ残す。"""
-        result = build_template_fallback_summary([
-            _observation_event("配線箱を見つけた", minute=1),
-            _action_event("配線の結束を締め直した", minute=2),
-        ])
+        result = build_template_fallback_summary(
+            [
+                _observation_event("配線箱を見つけた", minute=1),
+                _action_event("配線の結束を締め直した", minute=2),
+            ]
+        )
 
         assert "配線箱を見つけた" in result.compressed_activity
         assert "[行動] 配線の結束を締め直した" in result.compressed_activity

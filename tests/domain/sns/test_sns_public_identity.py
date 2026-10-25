@@ -16,9 +16,7 @@ from ai_rpg_world.domain.sns.value_object.sns_identity_token import SnsIdentityT
 def _create(kind: str):
     if kind == "post":
         return PostAggregate.create(PostId(1), UserId(1), PostContent("同じ投稿"))
-    return ReplyAggregate.create(
-        ReplyId(1), PostId(1), None, UserId(1), UserId(2), PostContent("同じ返信")
-    )
+    return ReplyAggregate.create(ReplyId(1), PostId(1), None, UserId(1), UserId(2), PostContent("同じ返信"))
 
 
 @pytest.mark.parametrize("kind", ["post", "reply"])
@@ -50,7 +48,12 @@ def test_restoration_rejects_invalid_identity(token: str) -> None:
     """復元識別子が正規形の UUID4 でないとき、新規発行せずドメイン例外で止める。"""
     with pytest.raises(SnsIdentityValidationException):
         PostAggregate.create_from_db(
-            PostId(1), UserId(1), PostContent("本文"), set(), set(), set(),
+            PostId(1),
+            UserId(1),
+            PostContent("本文"),
+            set(),
+            set(),
+            set(),
             identity_token=token,
         )
 

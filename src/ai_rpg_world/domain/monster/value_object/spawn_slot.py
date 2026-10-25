@@ -15,6 +15,7 @@ class SpawnSlot:
     スポーンスロット。このスポットのこの座標に、このテンプレートのモンスターを
     1体まで出現させる単位。条件を満たしたときに spawn または respawn で埋める。
     """
+
     spot_id: SpotId
     coordinate: Coordinate
     template_id: MonsterTemplateId
@@ -24,10 +25,6 @@ class SpawnSlot:
 
     def __post_init__(self) -> None:
         if self.weight < 0:
-            raise MonsterRespawnValidationException(
-                f"SpawnSlot weight cannot be negative: {self.weight}"
-            )
+            raise MonsterRespawnValidationException(f"SpawnSlot weight cannot be negative: {self.weight}")
         if self.max_concurrent < 1:
-            raise MonsterRespawnValidationException(
-                f"SpawnSlot max_concurrent must be positive: {self.max_concurrent}"
-            )
+            raise MonsterRespawnValidationException(f"SpawnSlot max_concurrent must be positive: {self.max_concurrent}")

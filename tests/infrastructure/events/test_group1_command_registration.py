@@ -59,20 +59,44 @@ def _stack():
     handlers = {name: Mock() for name in ("consumable", "shop", "notification", "relationship")}
     ConsumableEffectEventHandlerRegistry(handlers["consumable"]).register_command_handlers(scope.dispatcher)
     ShopEventHandlerRegistry(handlers["shop"]).register_command_handlers(scope.dispatcher)
-    SnsEventHandlerRegistry(handlers["notification"], handlers["relationship"]).register_command_handlers(scope.dispatcher)
+    SnsEventHandlerRegistry(handlers["notification"], handlers["relationship"]).register_command_handlers(
+        scope.dispatcher
+    )
     return store, scope, publisher, handlers
 
 
 def _event(event_type, number=1):
     values = dict(
-        item_spec_id=ItemSpecId(1), spot_id=SpotId(1), location_area_id=LocationAreaId(1),
-        owner_id=PlayerId(1), owner_ids=(PlayerId(1),), name="店", description="説明",
-        listing_id=ShopListingId(1), item_instance_id=ItemInstanceId(1), price_per_unit=ShopListingPrice(1),
-        listed_by=PlayerId(1), unlisted_by=PlayerId(1), buyer_id=PlayerId(2), seller_id=PlayerId(1),
-        listing_projection=ShopListingProjection("品", 1, 1), quantity=1, total_gold=1,
-        subscriber_user_id=UserId(1), subscribed_user_id=UserId(2), follower_user_id=UserId(1), followee_user_id=UserId(2),
-        blocker_user_id=UserId(1), blocked_user_id=UserId(2), post_id=PostId(1), reply_id=ReplyId(1),
-        author_user_id=UserId(1), content=PostContent("本文"), target_id=PostId(1), user_id=UserId(2), content_author_id=UserId(1),
+        item_spec_id=ItemSpecId(1),
+        spot_id=SpotId(1),
+        location_area_id=LocationAreaId(1),
+        owner_id=PlayerId(1),
+        owner_ids=(PlayerId(1),),
+        name="店",
+        description="説明",
+        listing_id=ShopListingId(1),
+        item_instance_id=ItemInstanceId(1),
+        price_per_unit=ShopListingPrice(1),
+        listed_by=PlayerId(1),
+        unlisted_by=PlayerId(1),
+        buyer_id=PlayerId(2),
+        seller_id=PlayerId(1),
+        listing_projection=ShopListingProjection("品", 1, 1),
+        quantity=1,
+        total_gold=1,
+        subscriber_user_id=UserId(1),
+        subscribed_user_id=UserId(2),
+        follower_user_id=UserId(1),
+        followee_user_id=UserId(2),
+        blocker_user_id=UserId(1),
+        blocked_user_id=UserId(2),
+        post_id=PostId(1),
+        reply_id=ReplyId(1),
+        author_user_id=UserId(1),
+        content=PostContent("本文"),
+        target_id=PostId(1),
+        user_id=UserId(2),
+        content_author_id=UserId(1),
     )
     if event_type is ConsumableUsedEvent:
         aggregate_id, aggregate_type = PlayerId(number), "PlayerStatusAggregate"
@@ -111,7 +135,9 @@ def test_same_batch_runs_required_effect_before_after_commit_events() -> None:
     handlers["shop"].handle_shop_created.side_effect = lambda event: order.append("shop")
     handlers["notification"].handle_user_followed.side_effect = lambda event: order.append("sns")
     with scope:
-        publisher.publish_all([_event(ShopCreatedEvent, 1), _event(SnsUserFollowedEvent, 2), _event(ConsumableUsedEvent, 3)])
+        publisher.publish_all(
+            [_event(ShopCreatedEvent, 1), _event(SnsUserFollowedEvent, 2), _event(ConsumableUsedEvent, 3)]
+        )
     assert order == ["effect", "shop", "sns"]
 
 
@@ -120,7 +146,9 @@ def test_effect_failure_rolls_back_and_skips_after_commit() -> None:
     store, scope, publisher, handlers = _stack()
     original = store.next_world_object_id
     handlers["consumable"].handle.side_effect = RuntimeError("効果の失敗")
-    event = ConsumableUsedEvent.create(aggregate_id=PlayerId(1), aggregate_type="PlayerStatusAggregate", item_spec_id=ItemSpecId(1))
+    event = ConsumableUsedEvent.create(
+        aggregate_id=PlayerId(1), aggregate_type="PlayerStatusAggregate", item_spec_id=ItemSpecId(1)
+    )
     with pytest.raises(RuntimeError, match="効果の失敗"):
         with scope:
             store.next_world_object_id = original + 1
@@ -140,7 +168,9 @@ def test_after_commit_failure_is_traced_and_other_deliveries_continue(event_type
     failure = RuntimeError("受け手の失敗")
     getattr(handlers[owner], method).side_effect = failure
     delivered = []
-    scope.dispatcher.register_after_commit(DomainEvent, delivered.append, channel=DeliveryChannel.AUXILIARY, guarantee=DeliveryGuarantee.BEST_EFFORT)
+    scope.dispatcher.register_after_commit(
+        DomainEvent, delivered.append, channel=DeliveryChannel.AUXILIARY, guarantee=DeliveryGuarantee.BEST_EFFORT
+    )
     events = [_event(event_type), BaseDomainEvent.create(aggregate_id=1, aggregate_type="Unrelated")]
     changed = store.next_world_object_id + 1
     with pytest.raises(CommandPostCommitException) as caught:

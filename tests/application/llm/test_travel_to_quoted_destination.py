@@ -99,18 +99,14 @@ class TestPromptQuotesDestinationSpotName:
     def test_prompt_quotes_destination_spot_name(self) -> None:
         """LLM が arrow の右側 (= spot 名) を「渡すべき値」と読み取れるよう、
         spot 名のみ ``""`` で囲む。edge 名は囲まない (= 視覚的に区別)。"""
-        result = SpotGraphUiContextBuilder().build(
-            "現在地: 浜辺", _make_dto(_snap_two_edges())
-        )
+        result = SpotGraphUiContextBuilder().build("現在地: 浜辺", _make_dto(_snap_two_edges()))
         text = result.current_state_text
-        assert '"拠点"' in text, "spot 名 (右側) が \"\" で囲まれていない"
-        assert '"森の入口"' in text, "2 件目の spot 名も \"\" で囲まれること"
+        assert '"拠点"' in text, 'spot 名 (右側) が "" で囲まれていない'
+        assert '"森の入口"' in text, '2 件目の spot 名も "" で囲まれること'
 
     def test_prompt_quotes_connection_name(self) -> None:
         """shadow target として渡せる edge 名も引用符で囲む。"""
-        result = SpotGraphUiContextBuilder().build(
-            "現在地: 浜辺", _make_dto(_snap_two_edges())
-        )
+        result = SpotGraphUiContextBuilder().build("現在地: 浜辺", _make_dto(_snap_two_edges()))
         text = result.current_state_text
         assert '"浜辺の砂道" → "拠点"' in text
         assert '"森への入口" → "森の入口"' in text
@@ -122,21 +118,17 @@ class TestTravelToDescriptionExplainsQuoteConvention:
     def test_destination_label_description_included(self) -> None:
         """『現在の状況の "..." で囲まれた spot 名をそのまま渡す』のような
         記述で、prompt 表記と引数の対応を明示する。"""
-        desc = TRAVEL_TO_DEFINITION.parameters["properties"]["destination_label"][
-            "description"
-        ]
+        desc = TRAVEL_TO_DEFINITION.parameters["properties"]["destination_label"]["description"]
         # ``""`` が prompt 上の規約として登場することを明示
-        assert "\"" in desc, "description に quote の例示がない"
+        assert '"' in desc, "description に quote の例示がない"
         # 説明文脈: 「囲まれた」「クオート」「\"\"」のいずれかを含む
-        assert (
-            "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
-        ), "「\"\" で囲まれた値を渡す」規約が説明されていない"
+        assert "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc, (
+            '「"" で囲まれた値を渡す」規約が説明されていない'
+        )
 
     def test_destination_label_description_string(self) -> None:
         """description は static (prefix cache 安全)。"""
-        desc = TRAVEL_TO_DEFINITION.parameters["properties"]["destination_label"][
-            "description"
-        ]
+        desc = TRAVEL_TO_DEFINITION.parameters["properties"]["destination_label"]["description"]
         assert isinstance(desc, str)
         assert "{" not in desc, "placeholder の疑い"
 
@@ -160,9 +152,7 @@ class TestResolverFallsBackToEdgeName:
     """LLM が edge 名 (connection_name) を渡しても spot に解決される。"""
 
     def _build_context(self) -> ToolRuntimeContextDto:
-        result = SpotGraphUiContextBuilder().build(
-            "現在地: 浜辺", _make_dto(_snap_two_edges())
-        )
+        result = SpotGraphUiContextBuilder().build("現在地: 浜辺", _make_dto(_snap_two_edges()))
         return result.tool_runtime_context
 
     def test_edge_destination_spot_resolve(self) -> None:
@@ -170,9 +160,7 @@ class TestResolverFallsBackToEdgeName:
         その接続先 spot ``拠点`` (spot_id=2) に解決される。silent rescue。"""
         ctx = self._build_context()
         target = resolve_destination_target("浜辺の砂道", ctx)
-        assert target.spot_id == 2, (
-            "edge 名 fallback が機能していない。LLM の typical な誤りを救えない"
-        )
+        assert target.spot_id == 2, "edge 名 fallback が機能していない。LLM の typical な誤りを救えない"
 
     def test_spot_resolve(self) -> None:
         """既存挙動を壊さない。"""
@@ -193,13 +181,9 @@ class TestShadowEntriesAreHiddenFromListing:
     def test_candidate_column_edge(self) -> None:
         """error message での候補一覧には spot 名だけが出る。edge 名は
         内部の fallback 用なのでユーザに見せない (混乱を避ける)。"""
-        result = SpotGraphUiContextBuilder().build(
-            "現在地: 浜辺", _make_dto(_snap_two_edges())
-        )
+        result = SpotGraphUiContextBuilder().build("現在地: 浜辺", _make_dto(_snap_two_edges()))
         listing = list_destination_labels(result.tool_runtime_context.targets)
-        assert "浜辺の砂道" not in listing, (
-            "edge 名は内部 shadow なので候補一覧に出さない"
-        )
+        assert "浜辺の砂道" not in listing, "edge 名は内部 shadow なので候補一覧に出さない"
         assert "森への入口" not in listing
         assert "拠点" in listing, "正規の候補 (spot 名) は出ること"
         assert "森の入口" in listing

@@ -66,9 +66,7 @@ def test_missing_scope_rejects_before_reading_the_timer(
 ) -> None:
     """確定区間未配線なら期限超過候補を読む前にstageを拒否する。"""
     timer = PlayerDeathGraceTimer()
-    overdue_players = Mock(
-        side_effect=AssertionError("未配線時にtimerを読んではならない")
-    )
+    overdue_players = Mock(side_effect=AssertionError("未配線時にtimerを読んではならない"))
     monkeypatch.setattr(timer, "overdue_players", overdue_players)
     stage = PlayerDeathGraceTickStage(
         outcome_registry=PlayerOutcomeRegistry.new_for_players([PlayerId(1)]),
@@ -90,9 +88,7 @@ def test_cancel_failure_rolls_back_outcome_timer_departure_and_notification(
     player_id = runtime.get_player_ids()[0]
     _prepare_overdue(runtime, player_id)
     observed: list[PlayerId] = []
-    runtime._player_outcome_registry.register_callback(
-        lambda changed_id, _old, _new: observed.append(changed_id)
-    )
+    runtime._player_outcome_registry.register_callback(lambda changed_id, _old, _new: observed.append(changed_id))
     original_cancel = runtime._death_grace_timer.cancel
 
     def cancel_then_fail(changed_id: PlayerId) -> None:
@@ -104,10 +100,7 @@ def test_cancel_failure_rolls_back_outcome_timer_departure_and_notification(
     with pytest.raises(RuntimeError, match="grace timer cleanup failed"):
         _stage(runtime).run(_deadline(runtime))
 
-    assert (
-        runtime._player_outcome_registry.get_outcome(player_id)
-        is PlayerOutcomeEnum.UNRESOLVED
-    )
+    assert runtime._player_outcome_registry.get_outcome(player_id) is PlayerOutcomeEnum.UNRESOLVED
     assert runtime._death_grace_timer.is_pending(player_id)
     assert runtime._departed_position_store.find(player_id) is None
     assert observed == []
@@ -145,9 +138,7 @@ def test_committed_player_survives_later_player_failure(
     _prepare_overdue(runtime, first)
     _prepare_overdue(runtime, second)
     observed: list[PlayerId] = []
-    runtime._player_outcome_registry.register_callback(
-        lambda changed_id, _old, _new: observed.append(changed_id)
-    )
+    runtime._player_outcome_registry.register_callback(lambda changed_id, _old, _new: observed.append(changed_id))
     original_cancel = runtime._death_grace_timer.cancel
 
     def fail_second(changed_id: PlayerId) -> None:
@@ -163,10 +154,7 @@ def test_committed_player_survives_later_player_failure(
     assert runtime._player_outcome_registry.get_outcome(first) is PlayerOutcomeEnum.DEAD
     assert not runtime._death_grace_timer.is_pending(first)
     assert runtime._departed_position_store.find(first) == _BODY_SPOT
-    assert (
-        runtime._player_outcome_registry.get_outcome(second)
-        is PlayerOutcomeEnum.UNRESOLVED
-    )
+    assert runtime._player_outcome_registry.get_outcome(second) is PlayerOutcomeEnum.UNRESOLVED
     assert runtime._death_grace_timer.is_pending(second)
     assert runtime._departed_position_store.find(second) is None
     assert observed == [first]
@@ -186,10 +174,7 @@ def test_stale_overdue_candidate_is_rechecked_inside_scope(
 
     _stage(runtime).run(_deadline(runtime))
 
-    assert (
-        runtime._player_outcome_registry.get_outcome(player_id)
-        is PlayerOutcomeEnum.UNRESOLVED
-    )
+    assert runtime._player_outcome_registry.get_outcome(player_id) is PlayerOutcomeEnum.UNRESOLVED
     assert runtime._departed_position_store.find(player_id) is None
 
 
@@ -211,10 +196,7 @@ def test_revived_status_repairs_stale_timer_from_legacy_partial_state() -> None:
 
     _stage(runtime).run(_deadline(runtime))
 
-    assert (
-        runtime._player_outcome_registry.get_outcome(player_id)
-        is PlayerOutcomeEnum.UNRESOLVED
-    )
+    assert runtime._player_outcome_registry.get_outcome(player_id) is PlayerOutcomeEnum.UNRESOLVED
     assert not runtime._death_grace_timer.is_pending(player_id)
     assert runtime._fallen_body_registry.find(player_id) is None
     assert runtime._departed_position_store.find(player_id) is None
@@ -247,16 +229,11 @@ def test_resolved_player_clears_only_pending_timer_inside_scope() -> None:
         PlayerOutcomeEnum.RESCUED,
     )
     observed: list[PlayerId] = []
-    runtime._player_outcome_registry.register_callback(
-        lambda changed_id, _old, _new: observed.append(changed_id)
-    )
+    runtime._player_outcome_registry.register_callback(lambda changed_id, _old, _new: observed.append(changed_id))
 
     _stage(runtime).run(_deadline(runtime))
 
-    assert (
-        runtime._player_outcome_registry.get_outcome(player_id)
-        is PlayerOutcomeEnum.RESCUED
-    )
+    assert runtime._player_outcome_registry.get_outcome(player_id) is PlayerOutcomeEnum.RESCUED
     assert not runtime._death_grace_timer.is_pending(player_id)
     assert runtime._departed_position_store.find(player_id) is None
     assert observed == []
@@ -270,9 +247,7 @@ def test_post_commit_cleanup_failure_notifies_and_preserves_exception(
     player_id = runtime.get_player_ids()[0]
     _prepare_overdue(runtime, player_id)
     observed: list[PlayerId] = []
-    runtime._player_outcome_registry.register_callback(
-        lambda changed_id, _old, _new: observed.append(changed_id)
-    )
+    runtime._player_outcome_registry.register_callback(lambda changed_id, _old, _new: observed.append(changed_id))
     data_store = runtime._item_repo._data_store
     original_release = data_store.release_uow_transaction
 
@@ -295,10 +270,7 @@ def test_runtime_wires_all_death_grace_rollback_resources() -> None:
     """本番factoryはoutcome・timer・退場位置の共有instanceを参加させる。"""
     runtime = _runtime()
     factory = _stage(runtime)._command_scope_factory
-    resources = {
-        participant.rollback_resource
-        for participant in factory._transaction_factory._participants
-    }
+    resources = {participant.rollback_resource for participant in factory._transaction_factory._participants}
 
     assert runtime._player_outcome_registry in resources
     assert runtime._death_grace_timer in resources

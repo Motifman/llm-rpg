@@ -38,9 +38,7 @@ _logger = logging.getLogger(__name__)
 
 def apply_give_item(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     p = effect.parameters
-    sid = resolve_item_spec_for_transfer(
-        p, ctx.interaction_parameters, "GIVE_ITEM"
-    )
+    sid = resolve_item_spec_for_transfer(p, ctx.interaction_parameters, "GIVE_ITEM")
     quantity = read_quantity(p)
     bucket = item_bucket_for(
         effect,
@@ -52,28 +50,20 @@ def apply_give_item(effect: InteractionEffect, ctx: EffectApplicationState) -> N
         bucket.append(sid)
 
 
-def apply_give_from_loot_table(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_give_from_loot_table(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     p = effect.parameters
     if ctx.loot_table_repository is None:
-        _logger.warning(
-            "GIVE_FROM_LOOT_TABLE: loot_table_repository is not injected, skipping"
-        )
+        _logger.warning("GIVE_FROM_LOOT_TABLE: loot_table_repository is not injected, skipping")
         return
     lt_id_raw: Any = p.get("loot_table_id")
     try:
         lt_id_int = int(lt_id_raw)
     except (TypeError, ValueError):
-        _logger.warning(
-            "GIVE_FROM_LOOT_TABLE: loot_table_id is invalid (got %r)", lt_id_raw
-        )
+        _logger.warning("GIVE_FROM_LOOT_TABLE: loot_table_id is invalid (got %r)", lt_id_raw)
         return
     lt = ctx.loot_table_repository.find_by_id(LootTableId.create(lt_id_int))
     if lt is None:
-        _logger.warning(
-            "GIVE_FROM_LOOT_TABLE: loot_table_id=%s not found", lt_id_int
-        )
+        _logger.warning("GIVE_FROM_LOOT_TABLE: loot_table_id=%s not found", lt_id_int)
         return
     times = max(1, min(100, int(p.get("times", 1))))
     for _ in range(times):
@@ -97,9 +87,7 @@ def apply_remove_item(effect: InteractionEffect, ctx: EffectApplicationState) ->
     ctx.target_remove.extend(target_items)
 
 
-def apply_deposit_item_to_object(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_deposit_item_to_object(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     visibility = resolve_visibility(effect)
     sid, state_key, target, deposited = deposit_removal_details(
         interior=ctx.interior,

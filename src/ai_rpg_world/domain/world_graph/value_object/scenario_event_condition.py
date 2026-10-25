@@ -10,28 +10,31 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 
 # 合成条件のタイプ。leaf 条件と区別するため module-level 定数として明示。
 COMPOSITE_CONDITION_TYPES = frozenset({"NOT", "AND", "OR"})
-LEAF_CONDITION_TYPES = frozenset({
-    "PROBABILITY",
-    "TICK_AT_LEAST",
-    "TICK_BETWEEN",
-    "FLAG_SET",
-    "FLAG_NOT_SET",
-    "PLAYER_AT_SPOT",
-    "PLAYERS_AT_SPOT",
-    "GAME_PHASE_IS",
-    "OBJECT_STATE",
-    "HAS_ITEM",
-    "TICK_MODULO",
-    "WEATHER_IS",
-    "OBJECT_STATE_TICK_AT_LEAST",
-    "OBJECT_STATE_INT_AT_LEAST",
-    "OBJECT_STATE_INT_GREATER_THAN_OTHER",
-})
+LEAF_CONDITION_TYPES = frozenset(
+    {
+        "PROBABILITY",
+        "TICK_AT_LEAST",
+        "TICK_BETWEEN",
+        "FLAG_SET",
+        "FLAG_NOT_SET",
+        "PLAYER_AT_SPOT",
+        "PLAYERS_AT_SPOT",
+        "GAME_PHASE_IS",
+        "OBJECT_STATE",
+        "HAS_ITEM",
+        "TICK_MODULO",
+        "WEATHER_IS",
+        "OBJECT_STATE_TICK_AT_LEAST",
+        "OBJECT_STATE_INT_AT_LEAST",
+        "OBJECT_STATE_INT_GREATER_THAN_OTHER",
+    }
+)
 SUPPORTED_CONDITION_TYPES = COMPOSITE_CONDITION_TYPES | LEAF_CONDITION_TYPES
 
 
 class ScenarioEventConditionValidationException(SpotGraphDomainException, ValidationException):
     """ScenarioEventCondition のバリデーション例外。"""
+
     error_code = "WORLD_GRAPH.SCENARIO_EVENT_CONDITION_VALIDATION"
 
 
@@ -106,9 +109,7 @@ class ScenarioEventCondition:
         # PROBABILITY のとき probability は必須かつ [0.0, 1.0]
         if self.condition_type == "PROBABILITY":
             if self.probability is None:
-                raise ScenarioEventConditionValidationException(
-                    "PROBABILITY condition requires `probability` field"
-                )
+                raise ScenarioEventConditionValidationException("PROBABILITY condition requires `probability` field")
             if not (0.0 <= self.probability <= 1.0):
                 raise ScenarioEventConditionValidationException(
                     f"probability must be in [0.0, 1.0], got {self.probability}"

@@ -1,4 +1,5 @@
 """既存のフォロー・いいねイベントを、不変ID付きの公開通知へ変換する。"""
+
 from __future__ import annotations
 
 from ai_rpg_world.application.common.execution_provenance import ExecutionProvenance
@@ -28,9 +29,13 @@ def activity_from_domain_event(event: DomainEvent, namespace: str) -> PublicSnsA
         target_id = None
     provenance = ExecutionProvenance.from_dict(event.execution_provenance) if event.execution_provenance else None
     return PublicSnsActivityEvent(
-        event_id=event.event_id, occurred_at=event.occurred_at,
-        aggregate_id=str(event.aggregate_id), aggregate_type="PublicSnsActivity",
-        actor_user_id=actor_id, actor_identity_token=event.actor_identity_token,
+        event_id=event.event_id,
+        occurred_at=event.occurred_at,
+        aggregate_id=str(event.aggregate_id),
+        aggregate_type="PublicSnsActivity",
+        actor_user_id=actor_id,
+        actor_identity_token=event.actor_identity_token,
         recipients=((recipient_id, event.recipient_identity_token, kind),),
-        target_id=target_id, provenance=provenance,
+        target_id=target_id,
+        provenance=provenance,
     )

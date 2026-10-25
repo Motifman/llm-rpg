@@ -5,7 +5,6 @@ LLM ツール名のプレフィックスとツール名定数。
 利用可能ツール一覧でカテゴリが分かるようにする。
 """
 
-
 # --- プレフィックス一覧（カテゴリ） ---
 TOOL_NAME_PREFIX_WORLD = "world_"
 TOOL_NAME_PREFIX_MOVE = "move_"

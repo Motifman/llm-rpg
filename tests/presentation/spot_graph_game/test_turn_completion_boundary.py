@@ -93,9 +93,7 @@ class _WiringStub:
     def run_phase_a(self, player_id: PlayerId) -> tuple[PlayerId, str]:
         return player_id, self._build_prompt(player_id)
 
-    def run_phase_b(
-        self, phase_a: tuple[PlayerId, str]
-    ) -> LlmCommandResultDto:
+    def run_phase_b(self, phase_a: tuple[PlayerId, str]) -> LlmCommandResultDto:
         player_id, _prompt = phase_a
         self.spoken.append(f"player-{player_id.value} の同 tick 発言")
         return LlmCommandResultDto(success=True, message="完了した。")
@@ -164,20 +162,10 @@ def test_worker_count_does_not_change_prefixes_within_the_same_phase() -> None:
     serial_free_roam = _run_two_players(workers=1, meeting=False)
     parallel_free_roam = _run_two_players(workers=4, meeting=False)
 
-    assert set(serial_meeting.system_hashes.values()) == set(
-        configured_parallel_meeting.system_hashes.values()
-    )
-    assert set(serial_meeting.toolset_hashes.values()) == set(
-        configured_parallel_meeting.toolset_hashes.values()
-    )
-    assert set(serial_free_roam.system_hashes.values()) == set(
-        parallel_free_roam.system_hashes.values()
-    )
-    assert set(serial_free_roam.toolset_hashes.values()) == set(
-        parallel_free_roam.toolset_hashes.values()
-    )
+    assert set(serial_meeting.system_hashes.values()) == set(configured_parallel_meeting.system_hashes.values())
+    assert set(serial_meeting.toolset_hashes.values()) == set(configured_parallel_meeting.toolset_hashes.values())
+    assert set(serial_free_roam.system_hashes.values()) == set(parallel_free_roam.system_hashes.values())
+    assert set(serial_free_roam.toolset_hashes.values()) == set(parallel_free_roam.toolset_hashes.values())
     # フェーズ境界では実物どおり toolset が変わる。この変更は #8 の
     # worker 切替とは別で、キャッシュ不変を主張しない。
-    assert set(serial_meeting.toolset_hashes.values()) != set(
-        serial_free_roam.toolset_hashes.values()
-    )
+    assert set(serial_meeting.toolset_hashes.values()) != set(serial_free_roam.toolset_hashes.values())

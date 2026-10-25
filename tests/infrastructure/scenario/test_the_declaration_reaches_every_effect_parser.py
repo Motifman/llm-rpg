@@ -183,17 +183,13 @@ class TestTheWorldsThatDeclareNothingStillLoad:
 
         assert runtime.scenario is not None
 
-    def test_a_scenario_without_the_section_has_no_specs(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_scenario_without_the_section_has_no_specs(self, tmp_path: Path) -> None:
         """宣言の節が無ければ、空の宣言として読まれる。
 
         **空で届くこと自体は正しい。** 空だと検査が何も落とさないので、
         既存シナリオの挙動が変わらない。
         """
-        raw: dict[str, Any] = json.loads(
-            (_SCENARIOS / "station_drill.json").read_text(encoding="utf-8")
-        )
+        raw: dict[str, Any] = json.loads((_SCENARIOS / "station_drill.json").read_text(encoding="utf-8"))
         raw.pop("player_attributes", None)
         path = tmp_path / "no_attrs.json"
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")

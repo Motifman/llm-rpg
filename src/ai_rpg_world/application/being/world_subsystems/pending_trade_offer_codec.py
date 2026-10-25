@@ -50,10 +50,7 @@ def _dict_to_side(data: Any) -> TradeSide:
     items = []
     for entry in raw_items:
         if not isinstance(entry, (list, tuple)) or len(entry) != 2:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} side.items entry must be "
-                f"[item_spec_id, quantity], got {entry!r}"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} side.items entry must be [item_spec_id, quantity], got {entry!r}")
         items.append((int(entry[0]), int(entry[1])))
     return TradeSide(items=tuple(items), gold=int(data.get("gold", 0)))
 
@@ -88,24 +85,17 @@ class PendingTradeOfferSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         store = getattr(runtime, "_pending_trade_offer_store", None)
         if store is None:
             return
         raw_offers = data.get("offers", [])
         if not isinstance(raw_offers, list):
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} offers must be a list, got {type(raw_offers)}"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} offers must be a list, got {type(raw_offers)}")
         offers = []
         for raw in raw_offers:
             if not isinstance(raw, dict):
-                raise ValueError(
-                    f"{SUBSYSTEM_KEY} offer must be a dict, got {raw!r}"
-                )
+                raise ValueError(f"{SUBSYSTEM_KEY} offer must be a dict, got {raw!r}")
             created_tick = int(raw["created_tick"])
             expires_at_tick = int(raw["expires_at_tick"])
             offers.append(

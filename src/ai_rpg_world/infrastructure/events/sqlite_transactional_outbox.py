@@ -33,11 +33,7 @@ class SqliteTransactionalOutbox:
         if str(database) == ":memory:":
             raise ValueError("SQLite outboxには共有可能なファイルDBが必要です")
         schema_version = serializer.schema_version
-        if (
-            isinstance(schema_version, bool)
-            or not isinstance(schema_version, int)
-            or schema_version < 1
-        ):
+        if isinstance(schema_version, bool) or not isinstance(schema_version, int) or schema_version < 1:
             raise ValueError("serializer.schema_versionは1以上の整数が必要です")
         if not callable(is_durable):
             raise TypeError("is_durableは呼出し可能である必要があります")
@@ -55,14 +51,9 @@ class SqliteTransactionalOutbox:
         """再送対象を現在のSQLite transactionへ重複なく登録する。"""
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, SqliteUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "SqliteTransactionalOutboxには"
-                "SqliteUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("SqliteTransactionalOutboxにはSqliteUnitOfWorkTransactionAdapterが必要です")
         if base_transaction.unit_of_work.database_path != self._database_path:
-            raise ValueError(
-                "SQLite outboxとtransactionは同じDBパスを共有する必要があります"
-            )
+            raise ValueError("SQLite outboxとtransactionは同じDBパスを共有する必要があります")
         connection = base_transaction.unit_of_work.connection
         staged_ids: list[str] = []
         for event in events:
@@ -91,10 +82,7 @@ class SqliteTransactionalOutbox:
                 (event_id,),
             ).fetchone()
             if row is None or str(row[0]) != event_type or bytes(row[1]) != payload:
-                raise RuntimeError(
-                    "同じevent_idに異なるoutbox payloadが保存されています: "
-                    f"event_id={event_id}"
-                )
+                raise RuntimeError(f"同じevent_idに異なるoutbox payloadが保存されています: event_id={event_id}")
             staged_ids.append(event_id)
         return StagedOutboxBatch(event_ids=tuple(dict.fromkeys(staged_ids)))
 
@@ -106,8 +94,7 @@ class SqliteTransactionalOutbox:
         try:
             placeholders = ",".join("?" for _ in batch.event_ids)
             existing = connection.execute(
-                f"SELECT COUNT(*) FROM command_event_outbox "
-                f"WHERE event_id IN ({placeholders})",
+                f"SELECT COUNT(*) FROM command_event_outbox WHERE event_id IN ({placeholders})",
                 batch.event_ids,
             ).fetchone()
             if existing is None or int(existing[0]) != len(batch.event_ids):

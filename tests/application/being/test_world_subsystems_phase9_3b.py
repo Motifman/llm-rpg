@@ -90,9 +90,7 @@ def _disc(spec_id: int = 100, is_discovered: bool = False) -> DiscoverableItem:
 
     return DiscoverableItem(
         item_spec_id=ItemSpecId(spec_id),
-        discovery_condition=DiscoveryCondition(
-            condition_type=DiscoveryConditionTypeEnum.ALWAYS
-        ),
+        discovery_condition=DiscoveryCondition(condition_type=DiscoveryConditionTypeEnum.ALWAYS),
         is_discovered=is_discovered,
     )
 
@@ -115,9 +113,7 @@ class TestSpotInteriorCodec:
             ground_items=(),
             discoverable_items=(),
         )
-        src_repo = InMemorySpotInteriorRepository(
-            {SpotId(1): src_interior}
-        )
+        src_repo = InMemorySpotInteriorRepository({SpotId(1): src_interior})
         src_runtime = SimpleNamespace(_spot_interior_repo=src_repo)
         captured = SpotInteriorSubsystemCodec().capture(src_runtime)
 
@@ -129,9 +125,7 @@ class TestSpotInteriorCodec:
             ground_items=(),
             discoverable_items=(),
         )
-        dst_repo = InMemorySpotInteriorRepository(
-            {SpotId(1): dst_interior}
-        )
+        dst_repo = InMemorySpotInteriorRepository({SpotId(1): dst_interior})
         dst_runtime = SimpleNamespace(_spot_interior_repo=dst_repo)
         SpotInteriorSubsystemCodec().restore(dst_runtime, captured)
 
@@ -158,12 +152,8 @@ class TestSpotInteriorCodec:
             ),
             discoverable_items=(),
         )
-        src_repo = InMemorySpotInteriorRepository(
-            {SpotId(1): src_interior}
-        )
-        captured = SpotInteriorSubsystemCodec().capture(
-            SimpleNamespace(_spot_interior_repo=src_repo)
-        )
+        src_repo = InMemorySpotInteriorRepository({SpotId(1): src_interior})
+        captured = SpotInteriorSubsystemCodec().capture(SimpleNamespace(_spot_interior_repo=src_repo))
 
         # dst: 空 ground_items
         dst_interior = SpotInterior(
@@ -172,12 +162,8 @@ class TestSpotInteriorCodec:
             ground_items=(),
             discoverable_items=(),
         )
-        dst_repo = InMemorySpotInteriorRepository(
-            {SpotId(1): dst_interior}
-        )
-        SpotInteriorSubsystemCodec().restore(
-            SimpleNamespace(_spot_interior_repo=dst_repo), captured
-        )
+        dst_repo = InMemorySpotInteriorRepository({SpotId(1): dst_interior})
+        SpotInteriorSubsystemCodec().restore(SimpleNamespace(_spot_interior_repo=dst_repo), captured)
         restored = dst_repo.find_by_spot_id(SpotId(1))
         assert restored is not None
         assert len(restored.ground_items) == 1
@@ -192,9 +178,7 @@ class TestSpotInteriorCodec:
             discoverable_items=(_disc(spec_id=100, is_discovered=True),),
         )
         src_repo = InMemorySpotInteriorRepository({SpotId(1): src})
-        captured = SpotInteriorSubsystemCodec().capture(
-            SimpleNamespace(_spot_interior_repo=src_repo)
-        )
+        captured = SpotInteriorSubsystemCodec().capture(SimpleNamespace(_spot_interior_repo=src_repo))
         dst = SpotInterior(
             sub_locations=(),
             objects=(),
@@ -202,9 +186,7 @@ class TestSpotInteriorCodec:
             discoverable_items=(_disc(spec_id=100, is_discovered=False),),
         )
         dst_repo = InMemorySpotInteriorRepository({SpotId(1): dst})
-        SpotInteriorSubsystemCodec().restore(
-            SimpleNamespace(_spot_interior_repo=dst_repo), captured
-        )
+        SpotInteriorSubsystemCodec().restore(SimpleNamespace(_spot_interior_repo=dst_repo), captured)
         restored = dst_repo.find_by_spot_id(SpotId(1))
         assert restored is not None
         assert restored.discoverable_items[0].is_discovered is True
@@ -218,11 +200,7 @@ class TestSpotInteriorCodec:
             discoverable_items=(),
         )
         captured = SpotInteriorSubsystemCodec().capture(
-            SimpleNamespace(
-                _spot_interior_repo=InMemorySpotInteriorRepository(
-                    {SpotId(1): src}
-                )
-            )
+            SimpleNamespace(_spot_interior_repo=InMemorySpotInteriorRepository({SpotId(1): src}))
         )
         dst = SpotInterior(
             sub_locations=(_sub_loc(sub_id=1, is_hidden=True),),
@@ -231,9 +209,7 @@ class TestSpotInteriorCodec:
             discoverable_items=(),
         )
         dst_repo = InMemorySpotInteriorRepository({SpotId(1): dst})
-        SpotInteriorSubsystemCodec().restore(
-            SimpleNamespace(_spot_interior_repo=dst_repo), captured
-        )
+        SpotInteriorSubsystemCodec().restore(SimpleNamespace(_spot_interior_repo=dst_repo), captured)
         restored = dst_repo.find_by_spot_id(SpotId(1))
         assert restored is not None
         assert restored.sub_locations[0].is_hidden is False
@@ -255,16 +231,10 @@ class TestSpotInteriorCodec:
             discoverable_items=(),
         )
         captured = SpotInteriorSubsystemCodec().capture(
-            SimpleNamespace(
-                _spot_interior_repo=InMemorySpotInteriorRepository(
-                    {SpotId(1): src_interior}
-                )
-            )
+            SimpleNamespace(_spot_interior_repo=InMemorySpotInteriorRepository({SpotId(1): src_interior}))
         )
         # dst: 初期 puzzle (current_input 空)
-        dst_puzzle = PuzzleState(
-            puzzle_type="combination_lock", solution=("1", "2", "3")
-        )
+        dst_puzzle = PuzzleState(puzzle_type="combination_lock", solution=("1", "2", "3"))
         dst_obj = _spot_obj(object_id=1, puzzle=dst_puzzle)
         dst_interior = SpotInterior(
             sub_locations=(),
@@ -273,17 +243,13 @@ class TestSpotInteriorCodec:
             discoverable_items=(),
         )
         dst_repo = InMemorySpotInteriorRepository({SpotId(1): dst_interior})
-        SpotInteriorSubsystemCodec().restore(
-            SimpleNamespace(_spot_interior_repo=dst_repo), captured
-        )
+        SpotInteriorSubsystemCodec().restore(SimpleNamespace(_spot_interior_repo=dst_repo), captured)
         restored_puzzle = dst_repo.find_by_spot_id(SpotId(1)).objects[0].puzzle
         assert restored_puzzle is not None
         assert restored_puzzle.current_input == ("1", "2")
         assert restored_puzzle.attempts == 2
 
-    def test_snapshot_spot_skip(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_snapshot_spot_skip(self, caplog: pytest.LogCaptureFixture) -> None:
         """snapshot に SpotId(99) のデータがあるが dst には spot がない → skip。"""
         src = SpotInterior(
             sub_locations=(),
@@ -292,27 +258,19 @@ class TestSpotInteriorCodec:
             discoverable_items=(),
         )
         captured = SpotInteriorSubsystemCodec().capture(
-            SimpleNamespace(
-                _spot_interior_repo=InMemorySpotInteriorRepository(
-                    {SpotId(99): src}
-                )
-            )
+            SimpleNamespace(_spot_interior_repo=InMemorySpotInteriorRepository({SpotId(99): src}))
         )
         # dst: 空 (SpotId(99) 自体がない)
         dst_repo = InMemorySpotInteriorRepository()
         with caplog.at_level("INFO"):
-            SpotInteriorSubsystemCodec().restore(
-                SimpleNamespace(_spot_interior_repo=dst_repo), captured
-            )
+            SpotInteriorSubsystemCodec().restore(SimpleNamespace(_spot_interior_repo=dst_repo), captured)
         assert any("spot_id=99" in r.message for r in caplog.records)
 
 
 class TestItemInstanceCodec:
     """ItemInstance の動的部分往復。"""
 
-    def _make_spec(
-        self, spec_id: int = 1, max_stack: int = 99, durability_max: int | None = None
-    ) -> ItemSpec:
+    def _make_spec(self, spec_id: int = 1, max_stack: int = 99, durability_max: int | None = None) -> ItemSpec:
         return ItemSpec(
             item_spec_id=ItemSpecId(spec_id),
             name="potion",
@@ -334,17 +292,13 @@ class TestItemInstanceCodec:
         )
         src_agg = ItemAggregate(src_inst)
         # repo stub with find_all + find_by_id + save
-        repo_store: dict[ItemInstanceId, ItemAggregate] = {
-            ItemInstanceId(10): src_agg
-        }
+        repo_store: dict[ItemInstanceId, ItemAggregate] = {ItemInstanceId(10): src_agg}
         src_repo = SimpleNamespace(
             find_all=lambda: list(repo_store.values()),
             find_by_id=lambda iid: repo_store.get(iid),
             save=lambda agg: repo_store.update({agg.item_instance_id: agg}),
         )
-        captured = ItemInstanceSubsystemCodec().capture(
-            SimpleNamespace(_item_repo=src_repo)
-        )
+        captured = ItemInstanceSubsystemCodec().capture(SimpleNamespace(_item_repo=src_repo))
         assert captured["schema_version"] == 2
         assert captured["entries"][0]["item_spec_id"] == 1
 
@@ -355,17 +309,13 @@ class TestItemInstanceCodec:
             quantity=1,
         )
         dst_agg = ItemAggregate(dst_inst)
-        dst_store: dict[ItemInstanceId, ItemAggregate] = {
-            ItemInstanceId(10): dst_agg
-        }
+        dst_store: dict[ItemInstanceId, ItemAggregate] = {ItemInstanceId(10): dst_agg}
         dst_repo = SimpleNamespace(
             find_all=lambda: list(dst_store.values()),
             find_by_id=lambda iid: dst_store.get(iid),
             save=lambda agg: dst_store.update({agg.item_instance_id: agg}),
         )
-        ItemInstanceSubsystemCodec().restore(
-            SimpleNamespace(_item_repo=dst_repo), captured
-        )
+        ItemInstanceSubsystemCodec().restore(SimpleNamespace(_item_repo=dst_repo), captured)
         restored = dst_store[ItemInstanceId(10)].item_instance
         assert restored.quantity == 5
         assert restored.state == {"opened": True, "remaining": 3}
@@ -423,9 +373,7 @@ class TestItemInstanceCodec:
             state={"fresh": True},
         )
         captured = ItemInstanceSubsystemCodec().capture(
-            SimpleNamespace(
-                _item_repo=SimpleNamespace(find_all=lambda: [ItemAggregate(src_inst)])
-            )
+            SimpleNamespace(_item_repo=SimpleNamespace(find_all=lambda: [ItemAggregate(src_inst)]))
         )
 
         dst_store: dict[ItemInstanceId, ItemAggregate] = {}
@@ -434,9 +382,7 @@ class TestItemInstanceCodec:
             find_by_id=lambda iid: dst_store.get(iid),
             save=lambda agg: dst_store.update({agg.item_instance_id: agg}),
         )
-        dst_spec_repo = SimpleNamespace(
-            find_by_id=lambda spec_id: spec if spec_id == spec.item_spec_id else None
-        )
+        dst_spec_repo = SimpleNamespace(find_by_id=lambda spec_id: spec if spec_id == spec.item_spec_id else None)
 
         ItemInstanceSubsystemCodec().restore(
             SimpleNamespace(_item_repo=dst_repo, _item_spec_repo=dst_spec_repo),
@@ -567,9 +513,7 @@ class TestItemInstanceCodec:
             quantity=0,
         )
         captured = ItemInstanceSubsystemCodec().capture(
-            SimpleNamespace(
-                _item_repo=SimpleNamespace(find_all=lambda: [ItemAggregate(src_inst)])
-            )
+            SimpleNamespace(_item_repo=SimpleNamespace(find_all=lambda: [ItemAggregate(src_inst)]))
         )
         dst_inst = ItemInstance(
             item_instance_id=ItemInstanceId(40),

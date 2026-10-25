@@ -62,15 +62,9 @@ class TestTeleportCarriesDeclaredObservations:
         spec = result.teleport_specs[0]
         assert spec.target_spot_id == 7
         assert spec.departure_observation_message == "{actor}がベントを開けて中に入った。"
-        assert (
-            spec.departure_observation_message_in_dark
-            == "ベントが開いて誰かが入った音がした。"
-        )
+        assert spec.departure_observation_message_in_dark == "ベントが開いて誰かが入った音がした。"
         assert spec.arrival_observation_message == "ベントが開いて{actor}が中から出てきた。"
-        assert (
-            spec.arrival_observation_message_in_dark
-            == "ベントが開いて誰かが出てきた音がした。"
-        )
+        assert spec.arrival_observation_message_in_dark == "ベントが開いて誰かが出てきた音がした。"
 
     def test_teleport_without_declared_messages_keeps_working(self) -> None:
         """観測文を書かない宣言でも移動先は運ばれ、文面は未指定のままになる。"""

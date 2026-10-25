@@ -1,6 +1,7 @@
 """
 NotificationCommandServiceのテスト
 """
+
 import logging
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, Mock, patch
@@ -68,9 +69,8 @@ class TestNotificationCommandService:
             user_id=UserId(1),
             notification_type=NotificationType.FOLLOW,
             content=NotificationContent.create_follow_notification(
-                follower_user_id=UserId(2),
-                follower_user_name="ユーザー2"
-            )
+                follower_user_id=UserId(2), follower_user_name="ユーザー2"
+            ),
         )
 
         notification2 = Notification.create_persistent_notification(
@@ -78,11 +78,8 @@ class TestNotificationCommandService:
             user_id=UserId(1),
             notification_type=NotificationType.LIKE,
             content=NotificationContent.create_like_notification(
-                liker_user_id=UserId(3),
-                liker_user_name="ユーザー3",
-                content_type="post",
-                content_id=1
-            )
+                liker_user_id=UserId(3), liker_user_name="ユーザー3", content_type="post", content_id=1
+            ),
         )
 
         # ユーザー2の通知を作成
@@ -91,11 +88,8 @@ class TestNotificationCommandService:
             user_id=UserId(2),
             notification_type=NotificationType.REPLY,
             content=NotificationContent.create_reply_notification(
-                replier_user_id=UserId(1),
-                replier_user_name="ユーザー1",
-                content_type="post",
-                content_id=2
-            )
+                replier_user_id=UserId(1), replier_user_name="ユーザー1", content_type="post", content_id=2
+            ),
         )
 
         # リポジトリに保存
@@ -103,38 +97,40 @@ class TestNotificationCommandService:
         notification_repository.save(notification2)
         notification_repository.save(notification3)
 
-    def create_test_notification(self, notification_id: int, user_id: int, notification_type: NotificationType, actor_user_id: int, actor_user_name: str) -> Notification:
+    def create_test_notification(
+        self,
+        notification_id: int,
+        user_id: int,
+        notification_type: NotificationType,
+        actor_user_id: int,
+        actor_user_name: str,
+    ) -> Notification:
         """テスト用の通知を作成"""
         if notification_type == NotificationType.FOLLOW:
             content = NotificationContent.create_follow_notification(
-                follower_user_id=UserId(actor_user_id),
-                follower_user_name=actor_user_name
+                follower_user_id=UserId(actor_user_id), follower_user_name=actor_user_name
             )
         elif notification_type == NotificationType.LIKE:
             content = NotificationContent.create_like_notification(
-                liker_user_id=UserId(actor_user_id),
-                liker_user_name=actor_user_name,
-                content_type="post",
-                content_id=1
+                liker_user_id=UserId(actor_user_id), liker_user_name=actor_user_name, content_type="post", content_id=1
             )
         elif notification_type == NotificationType.REPLY:
             content = NotificationContent.create_reply_notification(
                 replier_user_id=UserId(actor_user_id),
                 replier_user_name=actor_user_name,
                 content_type="post",
-                content_id=1
+                content_id=1,
             )
         else:
             content = NotificationContent.create_follow_notification(
-                follower_user_id=UserId(actor_user_id),
-                follower_user_name=actor_user_name
+                follower_user_id=UserId(actor_user_id), follower_user_name=actor_user_name
             )
 
         return Notification.create_persistent_notification(
             notification_id=NotificationId(notification_id),
             user_id=UserId(user_id),
             notification_type=notification_type,
-            content=content
+            content=content,
         )
 
     class TestMarkNotificationAsRead:
@@ -219,7 +215,6 @@ class TestNotificationCommandService:
             with pytest.raises(NotificationCommandException):
                 service.mark_notification_as_read(command)
 
-
     class TestMarkAllNotificationsAsRead:
         """mark_all_notifications_as_readメソッドのテスト"""
 
@@ -283,7 +278,7 @@ class TestNotificationCommandService:
             service, repository, unit_of_work = setup_service
 
             # リポジトリのmark_as_readをモックして例外を投げるようにする
-            with patch.object(repository, 'mark_as_read', side_effect=RuntimeError("Database connection failed")):
+            with patch.object(repository, "mark_as_read", side_effect=RuntimeError("Database connection failed")):
                 command = MarkNotificationAsReadCommand(
                     user_id=1,
                     notification_id=1,
@@ -307,8 +302,7 @@ class TestNotificationCommandService:
                 service.mark_notification_as_read(command)
 
             # INFOレベルのログが含まれていることを確認
-            assert any("Notification marked as read successfully" in record.message
-                      for record in caplog.records)
+            assert any("Notification marked as read successfully" in record.message for record in caplog.records)
 
         def test_all_notifications_logging(self, setup_service, caplog):
             """全通知既読で適切なログが出力される"""
@@ -319,5 +313,4 @@ class TestNotificationCommandService:
                 service.mark_all_notifications_as_read(command)
 
             # INFOレベルのログが含まれていることを確認
-            assert any("All notifications marked as read successfully" in record.message
-                      for record in caplog.records)
+            assert any("All notifications marked as read successfully" in record.message for record in caplog.records)

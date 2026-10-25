@@ -14,9 +14,7 @@ from ai_rpg_world.application.world_runtime.default_prompt_builder_adapters impo
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_FORBIDDEN_LIBRARY = (
-    _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
-)
+_FORBIDDEN_LIBRARY = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 
 
 class TestWorldRuntimePerPlayerSystemPrompt:
@@ -39,9 +37,7 @@ class TestWorldRuntimePerPlayerSystemPrompt:
         for pid in player_ids:
             prompt = runtime.build_system_prompt(pid)
             self_name = runtime.get_player_name(pid)
-            assert self_name in prompt, (
-                f"player {pid} の prompt に自分の名前 {self_name} が含まれていない"
-            )
+            assert self_name in prompt, f"player {pid} の prompt に自分の名前 {self_name} が含まれていない"
 
     def test_system_prompt_builder_adapter_returns_per_player_prompt(self) -> None:
         """WorldSystemPromptBuilder.build() が player_info.player_name から

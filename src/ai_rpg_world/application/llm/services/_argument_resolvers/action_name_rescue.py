@@ -140,9 +140,7 @@ class ActionNameRescue:
         try:
             result = self._resolver.resolve(
                 value=resolution.original,
-                candidates=[
-                    Candidate(name, label or name) for name, label in options.items()
-                ],
+                candidates=[Candidate(name, label or name) for name, label in options.items()],
                 context=state,
             )
         except BackendError as exc:
@@ -258,10 +256,7 @@ def _offered_options(target: ToolRuntimeTargetDto) -> dict[str, str | None]:
     (design_decisions #37)。
     """
     labels = dict(getattr(target, "interaction_labels", ()) or ())
-    return {
-        name: labels.get(name)
-        for name in (getattr(target, "available_interactions", ()) or ())
-    }
+    return {name: labels.get(name) for name in (getattr(target, "available_interactions", ()) or ())}
 
 
 def _state(
@@ -274,10 +269,7 @@ def _state(
     state: dict[str, Any] = {
         "written_action_name": written,
         "target": target.display_name,
-        "available_interactions": {
-            name: label for name, label in options.items() if label
-        }
-        or list(options),
+        "available_interactions": {name: label for name, label in options.items() if label} or list(options),
     }
     thought = (inner_thought or "").strip()
     if thought:

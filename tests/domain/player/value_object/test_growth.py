@@ -53,7 +53,9 @@ class TestGrowth:
         required_exp = self.exp_table.get_required_exp_for_level(5)
         insufficient_exp = required_exp - 1
 
-        with pytest.raises(GrowthValidationException, match=f"total_exp {insufficient_exp} is insufficient for level 5"):
+        with pytest.raises(
+            GrowthValidationException, match=f"total_exp {insufficient_exp} is insufficient for level 5"
+        ):
             Growth(level=5, total_exp=insufficient_exp, exp_table=self.exp_table)
 
     def test_gain_exp_zero_returns_same_growth_no_level_up(self):

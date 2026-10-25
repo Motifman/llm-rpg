@@ -37,17 +37,13 @@ class UnifiedRecentEventEntry:
             raise TypeError("occurred_at must be datetime")
         if self.kind not in ("observation", "action_result"):
             raise TypeError("kind must be 'observation' or 'action_result'")
-        expected_type = (
-            ObservationEntry if self.kind == "observation" else ActionResultEntry
-        )
+        expected_type = ObservationEntry if self.kind == "observation" else ActionResultEntry
         if not isinstance(self.payload, expected_type):
             raise TypeError(f"payload does not match kind={self.kind!r}")
         if self.occurred_at != self.payload.occurred_at:
             raise ValueError("outer occurred_at must match payload.occurred_at")
         if self.game_time_label != self.payload.game_time_label:
-            raise ValueError(
-                "outer game_time_label must match payload.game_time_label"
-            )
+            raise ValueError("outer game_time_label must match payload.game_time_label")
 
     @classmethod
     def from_observation(cls, entry: ObservationEntry) -> UnifiedRecentEventEntry:
@@ -59,9 +55,7 @@ class UnifiedRecentEventEntry:
         )
 
     @classmethod
-    def from_action_result(
-        cls, entry: ActionResultEntry
-    ) -> UnifiedRecentEventEntry:
+    def from_action_result(cls, entry: ActionResultEntry) -> UnifiedRecentEventEntry:
         return cls(
             occurred_at=entry.occurred_at,
             game_time_label=entry.game_time_label,
@@ -125,7 +119,8 @@ def format_action_result_body(entry: ActionResultEntry) -> str:
         call_line = (
             ""
             if entry.tool_name == TOOL_NAME_SPEECH
-            else "\n  呼び出し: " + format_action_call_for_history(
+            else "\n  呼び出し: "
+            + format_action_call_for_history(
                 entry.tool_name,
                 entry.identifier_arguments,
                 entry.free_text_argument_names,

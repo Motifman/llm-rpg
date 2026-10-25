@@ -37,7 +37,9 @@ class Notification(AggregateRoot):
         self._created_at = created_at
         self._is_read = is_read
         self._expires_at = expires_at
-        self._identity_token = SnsIdentityToken(identity_token).value if identity_token is not None else SnsIdentityToken().value
+        self._identity_token = (
+            SnsIdentityToken(identity_token).value if identity_token is not None else SnsIdentityToken().value
+        )
         self._source_event_id = source_event_id
         self._recipient_identity_token = recipient_identity_token
         self._execution_provenance = deepcopy(execution_provenance)
@@ -125,7 +127,7 @@ class Notification(AggregateRoot):
         notification_type: NotificationType,
         content: NotificationContent,
         expires_at: datetime,
-        created_at: datetime | None = None
+        created_at: datetime | None = None,
     ) -> "Notification":
         """プッシュ通知を作成（一時的）"""
         if created_at is None:
@@ -137,7 +139,7 @@ class Notification(AggregateRoot):
             content=content,
             created_at=created_at,
             is_read=False,
-            expires_at=expires_at
+            expires_at=expires_at,
         )
 
     @classmethod
@@ -147,7 +149,7 @@ class Notification(AggregateRoot):
         user_id: UserId,
         notification_type: NotificationType,
         content: NotificationContent,
-        created_at: datetime | None = None
+        created_at: datetime | None = None,
     ) -> "Notification":
         """中期通知を作成（永続的）"""
         if created_at is None:
@@ -159,5 +161,5 @@ class Notification(AggregateRoot):
             content=content,
             created_at=created_at,
             is_read=False,
-            expires_at=None  # 中期通知は自動削除されない
+            expires_at=None,  # 中期通知は自動削除されない
         )

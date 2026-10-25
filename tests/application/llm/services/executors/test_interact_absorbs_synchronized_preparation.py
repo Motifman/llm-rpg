@@ -33,9 +33,7 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_DRILL = (
-    Path(__file__).resolve().parents[5] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[5] / "data" / "scenarios" / "station_drill.json"
 _MORI, _SENA, _KUZE = (PlayerId(i) for i in (1, 2, 3))
 _RESTORED = "レバーが噛み合い、配管に熱が戻る音がした。"
 
@@ -79,21 +77,15 @@ def _executor(runtime) -> SpotGraphToolExecutor:
         sync_action_groups=runtime.scenario.synchronized_action_groups,
         time_provider=runtime._time_provider,
         spot_graph_repository=runtime._spot_graph_repo,
-        sync_action_registry=(
-            runtime._simulation_service._sync_action_resolver_stage._registry
-        ),
-        prepare_action_command_scope_factory=(
-            runtime._prepare_action_command_scope_factory
-        ),
+        sync_action_registry=(runtime._simulation_service._sync_action_resolver_stage._registry),
+        prepare_action_command_scope_factory=(runtime._prepare_action_command_scope_factory),
         speech_service=runtime._speech_service,
         runtime=runtime,
     )
 
 
 def _interact(runtime, executor, player_id: PlayerId, object_str_id: str, action: str, **extra):
-    handler = wrap_with_say_inline(
-        adapt_executor_handler(executor._interact), executor.speak_say_inline
-    )
+    handler = wrap_with_say_inline(adapt_executor_handler(executor._interact), executor.speak_say_inline)
     return handler(
         player_id,
         {
@@ -165,7 +157,11 @@ class TestInteractRegistersTheListenerSide:
         executor = _executor(runtime)
 
         _interact(
-            runtime, executor, _MORI, "fuel_thaw_valve", "open_thaw_valve",
+            runtime,
+            executor,
+            _MORI,
+            "fuel_thaw_valve",
+            "open_thaw_valve",
             say_inline="解氷弁は俺が持つ。",
         )
 

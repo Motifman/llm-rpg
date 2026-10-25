@@ -18,9 +18,7 @@ class TestPlayerOutcomeMessageLoading:
     def test_loads_stranded_message(self) -> None:
         """有効な STRANDED 文型は metadata の表示方針へ変換する。"""
         raw = _minimal_scenario()
-        raw["metadata"]["player_outcome_messages"] = {
-            "STRANDED": "{player_name}は島に取り残されたままだ。"
-        }
+        raw["metadata"]["player_outcome_messages"] = {"STRANDED": "{player_name}は島に取り残されたままだ。"}
 
         loaded = ScenarioLoader().load_from_dict(raw)
 
@@ -38,11 +36,7 @@ class TestPlayerOutcomeMessageLoading:
             ({"STRANDED": "島に残された"}, "player_name"),
             ({"STRANDED": "{name}は島に残された"}, "name"),
             (
-                {
-                    "STRANDED": (
-                        "{player_name}は島に残され、記録は{name!r}とされた"
-                    )
-                },
+                {"STRANDED": ("{player_name}は島に残され、記録は{name!r}とされた")},
                 "name",
             ),
             (

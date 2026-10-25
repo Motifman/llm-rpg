@@ -35,10 +35,7 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "market_town_v3_board.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v3_board.json"
 
 _VIEWER = 1
 
@@ -53,12 +50,8 @@ def _board_lines(runtime: Any) -> str:
     )
 
     service = runtime._market_service
-    text = market_board_text(
-        service.board_view_for(PlayerId(_VIEWER)), service.item_display_name
-    )
-    return "\n".join(
-        line for line in text.splitlines() if "G で" in line or "なし" in line
-    )
+    text = market_board_text(service.board_view_for(PlayerId(_VIEWER)), service.item_display_name)
+    return "\n".join(line for line in text.splitlines() if "G で" in line or "なし" in line)
 
 
 def _town(tmp_path: Path, orders: list) -> Any:
@@ -70,12 +63,10 @@ def _town(tmp_path: Path, orders: list) -> Any:
 
 
 _BREAD_FOR_SALE = [
-    {"merchant": "gustav", "side": "sell", "item_spec": "bread",
-     "quantity": 1, "unit_price": 20},
+    {"merchant": "gustav", "side": "sell", "item_spec": "bread", "quantity": 1, "unit_price": 20},
 ]
 _HERB_WANTED = [
-    {"merchant": "gustav", "side": "buy", "item_spec": "herb",
-     "quantity": 2, "unit_price": 11},
+    {"merchant": "gustav", "side": "buy", "item_spec": "herb", "quantity": 2, "unit_price": 11},
 ]
 
 

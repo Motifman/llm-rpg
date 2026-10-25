@@ -64,11 +64,15 @@ def _observation(
     )
 
 
-def _own_observation(call_id: str = "call-1", body: str = "扉は開かなかった", order: OccurrenceOrder | None = None) -> Observation:
+def _own_observation(
+    call_id: str = "call-1", body: str = "扉は開かなかった", order: OccurrenceOrder | None = None
+) -> Observation:
     return _observation(OwnActionResult(call_id=call_id, succeeded=False), body=body, order=order)
 
 
-def _result(call_id: str = "call-1", body: str = "扉は開かなかった", order: OccurrenceOrder | None = None) -> ObservedOutcome:
+def _result(
+    call_id: str = "call-1", body: str = "扉は開かなかった", order: OccurrenceOrder | None = None
+) -> ObservedOutcome:
     return ObservedOutcome(_own_observation(call_id, body, order))
 
 
@@ -106,6 +110,7 @@ class _BodyReader:
     def lapsed(self, lapse: Lapse) -> str:
         return f"出せなかった:{lapse.body}"
 
+
 def _empty() -> ShortTermMemory:
     return ShortTermMemory.empty(ADA)
 
@@ -116,7 +121,14 @@ def _act_and_answer(memory: ShortTermMemory, call_id: str, turn: int) -> None:
 
 
 def _state(memory: ShortTermMemory) -> tuple[object, ...]:
-    return (memory.experiences, memory.backstories, memory.recent_from, memory.awaiting, memory.request, memory.get_events())
+    return (
+        memory.experiences,
+        memory.backstories,
+        memory.recent_from,
+        memory.awaiting,
+        memory.request,
+        memory.get_events(),
+    )
 
 
 class TestPerceive:
@@ -357,7 +369,9 @@ class TestRecent:
 
 
 def _backstory(until_turn: int, *, written_turn: int | None = None, flow: str = "坑道で鍵を探していた") -> Backstory:
-    return Backstory(flow=flow, mood="", written_turn=until_turn if written_turn is None else written_turn, until_turn=until_turn)
+    return Backstory(
+        flow=flow, mood="", written_turn=until_turn if written_turn is None else written_turn, until_turn=until_turn
+    )
 
 
 class TestFold:
@@ -553,7 +567,12 @@ class TestFold:
         memory.fold(current_turn=40)
 
         forced, requested = memory.get_events()
-        assert (type(forced), forced.until_turn, type(requested), requested.until_turn) == (FoldForced, 10, FoldRequested, 20)
+        assert (type(forced), forced.until_turn, type(requested), requested.until_turn) == (
+            FoldForced,
+            10,
+            FoldRequested,
+            20,
+        )
 
     def test_backstory_short_of_the_request_keeps_the_request(self) -> None:
         """頼んだ範囲 (ターン 10 まで) より手前 (ターン 5 まで) のいきさつが届くと、ターン 5 までは外れるが、頼みごとは済まない。"""
@@ -637,7 +656,12 @@ class TestBackstory:
         """流れ、気分、書いたターン、まとめた範囲の終わりのターンをそのまま持ち、ほかの項目は持たない。"""
         backstory = Backstory(flow="坑道の奥で鍵を探していた", mood="少し焦っている", written_turn=21, until_turn=10)
 
-        assert (backstory.flow, backstory.mood, backstory.written_turn, backstory.until_turn) == ("坑道の奥で鍵を探していた", "少し焦っている", 21, 10)
+        assert (backstory.flow, backstory.mood, backstory.written_turn, backstory.until_turn) == (
+            "坑道の奥で鍵を探していた",
+            "少し焦っている",
+            21,
+            10,
+        )
         assert set(Backstory.__dataclass_fields__) == {"flow", "mood", "written_turn", "until_turn"}
 
     def test_empty_mood_is_allowed(self) -> None:
@@ -711,7 +735,12 @@ class TestExperienceRules:
     @pytest.mark.parametrize(
         "fields",
         [
-            {"experiences": (Perception(turn=3, observation=_observation()), Perception(turn=2, observation=_observation()))},
+            {
+                "experiences": (
+                    Perception(turn=3, observation=_observation()),
+                    Perception(turn=2, observation=_observation()),
+                )
+            },
             {"experiences": (Perception(turn=3, observation=_observation()),), "recent_from": 4},
             {"recent_from": 0},
             {"awaiting": Attempt(turn=3, move=_move(), result=_result())},

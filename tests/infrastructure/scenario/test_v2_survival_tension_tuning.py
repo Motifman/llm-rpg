@@ -18,10 +18,7 @@ from pathlib import Path
 
 import pytest
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "data" / "scenarios" / "survival_island_v2.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 @pytest.fixture(scope="module")
@@ -32,6 +29,7 @@ def raw_scenario():
 @pytest.fixture(scope="module")
 def loaded_scenario():
     from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
+
     return ScenarioLoader().load_from_file(str(SCENARIO_PATH))
 
 
@@ -53,6 +51,7 @@ class TestStarvationDamageConfigurable:
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
             ScenarioNeedsConfig,
         )
+
         assert ScenarioNeedsConfig().starvation_damage_per_tick == 0
 
     def test_negative_value_post_init(self) -> None:
@@ -60,6 +59,7 @@ class TestStarvationDamageConfigurable:
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
             ScenarioNeedsConfig,
         )
+
         with pytest.raises(ValueError):
             ScenarioNeedsConfig(starvation_damage_per_tick=-1)
 
@@ -69,10 +69,9 @@ class TestStarvationDamageConfigurable:
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
             ScenarioLoadError,
         )
+
         with pytest.raises(ScenarioLoadError):
-            parse_needs_config(
-                {"starvation_damage_per_tick": -1}
-            )
+            parse_needs_config({"starvation_damage_per_tick": -1})
 
 
 class TestMonsterDamageRaised:
@@ -87,10 +86,7 @@ class TestMonsterDamageRaised:
 
     def test_swamp_snake_20(self, raw_scenario) -> None:
         """大蛇は毒の状態異常もあるので攻撃力でも一番脅威にする。"""
-        snake = next(
-            m for m in raw_scenario["monsters"]["templates"]
-            if m["id"] == "swamp_snake"
-        )
+        snake = next(m for m in raw_scenario["monsters"]["templates"] if m["id"] == "swamp_snake")
         assert snake["base_stats"]["attack"] == 20
 
 
@@ -98,7 +94,8 @@ class TestPersonaSurvivalMonitoring:
     """全 4 persona_prompt に「HP/空腹度を毎ターン確認」の指針が含まれる。"""
 
     def test_all_persona_hp_empty_included(
-        self, raw_scenario,
+        self,
+        raw_scenario,
     ) -> None:
         """全 persona に HP 空腹度確認の指示が含まれる。"""
         personas = raw_scenario["players"]
@@ -106,9 +103,7 @@ class TestPersonaSurvivalMonitoring:
         for p in personas:
             prompt = p["persona_prompt"]
             # 「HP」と「空腹度」両方が並んで現れる箇所がある
-            assert "HP" in prompt and "空腹度" in prompt, (
-                f"{p['id']} の persona に HP/空腹度 監視指針が無い"
-            )
+            assert "HP" in prompt and "空腹度" in prompt, f"{p['id']} の persona に HP/空腹度 監視指針が無い"
             # 「読み取り」のような自然な動詞が使われている (「監視せよ」のような
             # 不自然な命令調を避ける)
             assert "読み取り" in prompt or "察知" in prompt

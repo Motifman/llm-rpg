@@ -122,9 +122,7 @@ class SpotGraphScenarioEventStageService:
             item_repository=item_repository,
         )
         self._condition_evaluator.validate_dependencies(
-            condition
-            for event in self._scenario_events
-            for condition in event.conditions
+            condition for event in self._scenario_events for condition in event.conditions
         )
         self._overflow_sink = overflow_sink
         self._command_scope_factory = command_scope_factory
@@ -144,9 +142,7 @@ class SpotGraphScenarioEventStageService:
             return
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            raise RuntimeError(
-                "scenario event用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("scenario event用CommandScopeFactoryが未配線です。")
         events_by_id = {e.event_id: e for e in self._scenario_events}
 
         # 1. 通常のtick駆動イベント評価（スケジュール済みはスキップ）
@@ -176,9 +172,7 @@ class SpotGraphScenarioEventStageService:
                         scope_factory=scope_factory,
                     )
 
-    def _event_unit(
-        self, current_tick: WorldTick, event_id: str
-    ) -> AbstractContextManager[None]:
+    def _event_unit(self, current_tick: WorldTick, event_id: str) -> AbstractContextManager[None]:
         return self._failure_isolator.unit(
             stage="scenario_event",
             tick=current_tick,
@@ -192,9 +186,7 @@ class SpotGraphScenarioEventStageService:
         current_tick: WorldTick,
         *,
         scheduled_event_id: str | None = None,
-        scope_factory: (
-            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
-        ),
+        scope_factory: (CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]),
     ) -> None:
         """event定義1件の効果・進捗・eventを一つのscopeで確定する。"""
         messages: tuple[str, ...] = ()
@@ -231,9 +223,7 @@ class SpotGraphScenarioEventStageService:
             raise
         self._notify_committed_messages(event, messages, current_tick)
 
-    def _record_event_progress(
-        self, event: ScenarioEventDef, current_tick: WorldTick
-    ) -> None:
+    def _record_event_progress(self, event: ScenarioEventDef, current_tick: WorldTick) -> None:
         if event.once:
             self._progress_store.mark_fired(event.event_id)
         self._schedule_next_if_chained(event, current_tick)
@@ -241,9 +231,7 @@ class SpotGraphScenarioEventStageService:
     def _discard_scheduled_event(
         self,
         event_id: str,
-        scope_factory: (
-            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
-        ),
+        scope_factory: (CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]),
     ) -> None:
         """定義なし・発火済みの予約だけを安全に取り除く。"""
         with scope_factory.create():
@@ -267,9 +255,7 @@ class SpotGraphScenarioEventStageService:
                     target_id=event.event_id,
                 )
 
-    def _schedule_next_if_chained(
-        self, event: ScenarioEventDef, current_tick: WorldTick
-    ) -> None:
+    def _schedule_next_if_chained(self, event: ScenarioEventDef, current_tick: WorldTick) -> None:
         """イベントにチェーン設定があれば次のイベントをスケジュールする。
 
         delay_ticks=0 の場合、次の run() 呼び出しで発火する（同一 run() 内では発火しない）。
@@ -286,7 +272,9 @@ class SpotGraphScenarioEventStageService:
         """conditions の全てが真なら True（暗黙の AND）。"""
         graph = self._spot_graph_repository.find_graph()
         evaluation = self._condition_evaluator.evaluate_all_diagnostic(
-            event.conditions, current_tick, graph,
+            event.conditions,
+            current_tick,
+            graph,
         )
         result = evaluation.result
         if self._predicate_trace_emitter is not None:
@@ -371,13 +359,9 @@ class SpotGraphScenarioEventStageService:
         for atmosphere_spec in effect_result.atmosphere_update_specs:
             graph.update_spot_atmosphere(
                 SpotId.create(atmosphere_spec.spot_id),
-                lighting=(
-                    LightingEnum[atmosphere_spec.lighting] if atmosphere_spec.lighting is not None else None
-                ),
+                lighting=(LightingEnum[atmosphere_spec.lighting] if atmosphere_spec.lighting is not None else None),
                 temperature=(
-                    TemperatureEnum[atmosphere_spec.temperature]
-                    if atmosphere_spec.temperature is not None
-                    else None
+                    TemperatureEnum[atmosphere_spec.temperature] if atmosphere_spec.temperature is not None else None
                 ),
                 hazard_level=atmosphere_spec.hazard_level,
                 hazard_description=atmosphere_spec.hazard_description,

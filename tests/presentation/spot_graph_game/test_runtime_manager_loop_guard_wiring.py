@@ -81,12 +81,10 @@ def test_run_phase_b_forwards_success_and_error_code_on_failure(
     # 配線検証: spy が record_and_check を呼ばれ、かつ kwargs に
     # success/error_code が渡っている
     assert spy.calls, "loop_guard.record_and_check が呼ばれていない"
-    assert spy.last_kwargs.get("success") is False, (
-        f"success=False が forward されていない: {spy.last_kwargs}"
+    assert spy.last_kwargs.get("success") is False, f"success=False が forward されていない: {spy.last_kwargs}"
+    assert spy.last_kwargs.get("error_code") == "INTERACTION_PRECONDITION_FAILED", (
+        f"error_code が forward されていない: {spy.last_kwargs}"
     )
-    assert (
-        spy.last_kwargs.get("error_code") == "INTERACTION_PRECONDITION_FAILED"
-    ), f"error_code が forward されていない: {spy.last_kwargs}"
 
 
 def test_run_phase_b_forwards_success_true_on_success(
@@ -143,9 +141,7 @@ def test_runtime_wiring_records_loop_warning_with_world_time(
     wiring = _wiring_for_contract_runtime(runtime)
     player_id = PlayerId(1)
     for _ in range(3):
-        wiring.tool_call_loop_guard.record_and_check(
-            player_id, TOOL_NAME_SPOT_GRAPH_WAIT, {}
-        )
+        wiring.tool_call_loop_guard.record_and_check(player_id, TOOL_NAME_SPOT_GRAPH_WAIT, {})
 
     entries = runtime._obs_buffer.get_observations(player_id)
     assert len(entries) == 1

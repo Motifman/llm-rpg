@@ -1,6 +1,5 @@
 """tool_constants（プレフィックス・ツール名定数）のテスト"""
 
-
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PREFIX_COMBAT,
     TOOL_NAME_PREFIX_CONVERSATION,
@@ -40,7 +39,6 @@ class TestToolNamePrefixes:
 
 class TestToolNames:
     """ツール名がプレフィックス付きであること"""
-
 
     def test_speech_tool_name_is_speak(self):
         """PR-DD (Y_after_pr639_640 後続): 発話 tool 名は ``speak`` に短縮。

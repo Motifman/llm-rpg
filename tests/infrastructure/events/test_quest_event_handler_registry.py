@@ -36,9 +36,19 @@ _NAMES = ("monster_died_handler", "player_downed_handler", "item_added_to_invent
 
 def _events():
     return [
-        MonsterDiedEvent.create(aggregate_id=MonsterId(1), aggregate_type="MonsterAggregate", respawn_tick=0, exp=1, gold=1, template_id=101, killer_player_id=PlayerId(1)),
+        MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=0,
+            exp=1,
+            gold=1,
+            template_id=101,
+            killer_player_id=PlayerId(1),
+        ),
         PlayerDownedEvent.create(aggregate_id=PlayerId(1), aggregate_type="PlayerStatusAggregate"),
-        ItemAddedToInventoryEvent.create(aggregate_id=PlayerId(1), aggregate_type="PlayerInventoryAggregate", item_instance_id=ItemInstanceId(1)),
+        ItemAddedToInventoryEvent.create(
+            aggregate_id=PlayerId(1), aggregate_type="PlayerInventoryAggregate", item_instance_id=ItemInstanceId(1)
+        ),
     ]
 
 
@@ -104,7 +114,9 @@ def test_failure_is_traced_without_rollback_and_later_delivery_continues(index) 
     failure = RuntimeError("進捗の更新に失敗")
     handlers[_NAMES[index]].handle.side_effect = failure
     delivered = []
-    scope.dispatcher.register_after_commit(DomainEvent, delivered.append, channel=DeliveryChannel.AUXILIARY, guarantee=DeliveryGuarantee.BEST_EFFORT)
+    scope.dispatcher.register_after_commit(
+        DomainEvent, delivered.append, channel=DeliveryChannel.AUXILIARY, guarantee=DeliveryGuarantee.BEST_EFFORT
+    )
     events = _events()
     changed = store.next_world_object_id + 1
     with pytest.raises(CommandPostCommitException) as caught:

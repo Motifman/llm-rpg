@@ -17,9 +17,7 @@ def _normalize_player_app_session_state(
 ) -> tuple[str, bool, bool]:
     allowed = {"none", "sns", "trade"}
     if active_game_app not in allowed:
-        raise ValueError(
-            f"active_game_app must be one of {allowed}, got {active_game_app!r}"
-        )
+        raise ValueError(f"active_game_app must be one of {allowed}, got {active_game_app!r}")
     if active_game_app == "none":
         if is_sns_mode_active and is_trade_mode_active:
             raise ValueError(
@@ -149,12 +147,10 @@ class PlayerAppSessionStateDto:
     trade_current_page_snapshot_json: str | None = None
 
     def __post_init__(self) -> None:
-        active_game_app, is_sns_mode_active, is_trade_mode_active = (
-            _normalize_player_app_session_state(
-                active_game_app=self.active_game_app,
-                is_sns_mode_active=self.is_sns_mode_active,
-                is_trade_mode_active=self.is_trade_mode_active,
-            )
+        active_game_app, is_sns_mode_active, is_trade_mode_active = _normalize_player_app_session_state(
+            active_game_app=self.active_game_app,
+            is_sns_mode_active=self.is_sns_mode_active,
+            is_trade_mode_active=self.is_trade_mode_active,
         )
         object.__setattr__(self, "active_game_app", active_game_app)
         object.__setattr__(self, "is_sns_mode_active", is_sns_mode_active)
@@ -219,12 +215,10 @@ class PlayerCurrentStateDto:
     spot_graph_snapshot: Optional["SpotGraphPlayerSnapshotDto"] = None
 
     def __post_init__(self) -> None:
-        active_game_app, is_sns_mode_active, is_trade_mode_active = (
-            self._normalize_app_session_state(
-                active_game_app=self.active_game_app,
-                is_sns_mode_active=self.is_sns_mode_active,
-                is_trade_mode_active=self.is_trade_mode_active,
-            )
+        active_game_app, is_sns_mode_active, is_trade_mode_active = self._normalize_app_session_state(
+            active_game_app=self.active_game_app,
+            is_sns_mode_active=self.is_sns_mode_active,
+            is_trade_mode_active=self.is_trade_mode_active,
         )
         self.active_game_app = active_game_app
         self.is_sns_mode_active = is_sns_mode_active
@@ -271,12 +265,10 @@ class PlayerCurrentStateDto:
     @property
     def app_session_state(self) -> PlayerAppSessionStateDto:
         """Phase 1 で導入した app session state への論理的な分離境界。"""
-        active_game_app, is_sns_mode_active, is_trade_mode_active = (
-            self._normalize_app_session_state(
-                active_game_app=self.active_game_app,
-                is_sns_mode_active=self.is_sns_mode_active,
-                is_trade_mode_active=self.is_trade_mode_active,
-            )
+        active_game_app, is_sns_mode_active, is_trade_mode_active = self._normalize_app_session_state(
+            active_game_app=self.active_game_app,
+            is_sns_mode_active=self.is_sns_mode_active,
+            is_trade_mode_active=self.is_trade_mode_active,
         )
         return PlayerAppSessionStateDto(
             active_game_app=active_game_app,

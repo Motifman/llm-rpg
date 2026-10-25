@@ -138,9 +138,7 @@ def apply_item_removal_plan(
 ) -> bool:
     """事前計画が現在も有効なら、全対象を一括でインベントリから外す。"""
     slot_ids = tuple(slot_id for slot_id, _item_instance_id in plan)
-    item_instance_ids = tuple(
-        item_instance_id for _slot_id, item_instance_id in plan
-    )
+    item_instance_ids = tuple(item_instance_id for _slot_id, item_instance_id in plan)
     if len(set(slot_ids)) != len(slot_ids):
         return False
     if len(set(item_instance_ids)) != len(item_instance_ids):
@@ -164,9 +162,7 @@ def remove_items_of_specs_from_inventory(
     by_world_event: bool = False,
 ) -> bool:
     """指定品目を全量確保できる場合だけ、予約品を避けてまとめて除去する。"""
-    plan = plan_item_removals_from_inventory(
-        inventory, item_spec_ids, item_repository
-    )
+    plan = plan_item_removals_from_inventory(inventory, item_spec_ids, item_repository)
     if plan is None:
         return False
     return apply_item_removal_plan(inventory, plan, by_world_event=by_world_event)
@@ -178,9 +174,7 @@ def remove_one_item_of_spec_from_inventory(
     item_repository: ItemRepository,
 ) -> bool:
     """指定仕様の未予約アイテムを1つだけインベントリから除去する。"""
-    return remove_items_of_specs_from_inventory(
-        inventory, (item_spec_id,), item_repository
-    )
+    return remove_items_of_specs_from_inventory(inventory, (item_spec_id,), item_repository)
 
 
 #: 持ちきれなかった品の行き先。``(player_id, 入らなかった spec の並び)`` を受ける。

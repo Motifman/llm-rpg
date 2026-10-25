@@ -66,10 +66,7 @@ class InMemorySynchronizedActionCommandRepositoryProviderFactory:
     ) -> InMemorySynchronizedActionCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "インメモリsynchronized action providerには"
-                "InMemoryUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("インメモリsynchronized action providerにはInMemoryUnitOfWorkTransactionAdapterが必要です")
         return InMemorySynchronizedActionCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

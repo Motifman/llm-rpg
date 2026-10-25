@@ -23,12 +23,7 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "abandoned_hospital.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "abandoned_hospital.json"
 
 
 class TestResolveLlmParallelWorkers:
@@ -41,31 +36,23 @@ class TestResolveLlmParallelWorkers:
 
     def test_config_value(self) -> None:
         """正の整数ならその worker 数を使う。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(
-            values={"LLM_TURN_PARALLEL_WORKERS": "4"}
-        )
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_TURN_PARALLEL_WORKERS": "4"})
         assert cfg.llm_turn_parallel_workers == 4
 
     def test_config_zero_0(self) -> None:
         """0 は明示的な serial 指定として受け付ける。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(
-            values={"LLM_TURN_PARALLEL_WORKERS": "0"}
-        )
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_TURN_PARALLEL_WORKERS": "0"})
         assert cfg.llm_turn_parallel_workers == 0
 
     def test_config_negative_raises_value_error(self) -> None:
         """負値は既定値縮退ではなく profile ミスとして止める。"""
         with pytest.raises(ValueError, match="LLM_TURN_PARALLEL_WORKERS"):
-            ResolvedLlmRuntimeConfig.from_mapping(
-                values={"LLM_TURN_PARALLEL_WORKERS": "-3"}
-            )
+            ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_TURN_PARALLEL_WORKERS": "-3"})
 
     def test_config_invalid_raises_value_error(self) -> None:
         """非整数も fail-fast する。"""
         with pytest.raises(ValueError, match="LLM_TURN_PARALLEL_WORKERS"):
-            ResolvedLlmRuntimeConfig.from_mapping(
-                values={"LLM_TURN_PARALLEL_WORKERS": "not-a-number"}
-            )
+            ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_TURN_PARALLEL_WORKERS": "not-a-number"})
 
 
 class TestPhaseAParallelExecution:
@@ -76,9 +63,7 @@ class TestPhaseAParallelExecution:
     4 並列で直接呼び、LLM stub 側の barrier を全員が通過できることを確認する。
     """
 
-    def test_calls_four_run_phase_four_column(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_calls_four_run_phase_four_column(self, monkeypatch, tmp_path: Path) -> None:
         """run phase a を 4 並列で呼ぶと LLM 呼び出しが実際に重なって走る。"""
         from concurrent.futures import ThreadPoolExecutor
 
@@ -92,7 +77,9 @@ class TestPhaseAParallelExecution:
                 self._lock = threading.Lock()
                 self.passed_calls = 0
 
-            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None) -> dict:
+            def invoke(
+                self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None
+            ) -> dict:
                 self._barrier.wait(timeout=5.0)
                 with self._lock:
                     self.passed_calls += 1
@@ -100,10 +87,7 @@ class TestPhaseAParallelExecution:
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
         wiring = state.llm_wiring
-        player_ids = [
-            PlayerId(int(sp.player_id))
-            for sp in state.runtime.scenario.player_spawns
-        ]
+        player_ids = [PlayerId(int(sp.player_id)) for sp in state.runtime.scenario.player_spawns]
         # review MEDIUM 2 対策: 同 player_id 複数回 sample すると 2 回目以降は
         # buffer が空 / lazy init もキャッシュ済みで serial 時間が不公平に短く
         # 出る。両 path とも warm 状態で比較するよう、計測前に 1 回 prime する。
@@ -123,21 +107,19 @@ class TestPhaseAParallelExecution:
 class TestPhaseAExceptionHandling:
     """Phase A で LLM が例外を投げた場合、Phase B が LlmCommandResultDto 化する。"""
 
-    def test_llm_api_failed_result_raises_exception(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_llm_api_failed_result_raises_exception(self, monkeypatch, tmp_path: Path) -> None:
         """LLM 例外時は本人へ空白だけを返し、技術的原因を trace payload に残す。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         class _BoomLlmClient:
-            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None) -> dict:
+            def invoke(
+                self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None
+            ) -> dict:
                 raise RuntimeError("network down")
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
         state.llm_wiring.llm_client = _BoomLlmClient()
-        player_id = PlayerId(
-            int(state.runtime.scenario.player_spawns[0].player_id)
-        )
+        player_id = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
         result = state.llm_wiring.run_turn(player_id)
         assert result.error_code == "LLM_API_FAILED"
         assert result.was_no_op is True

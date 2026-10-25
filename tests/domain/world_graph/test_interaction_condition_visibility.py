@@ -37,9 +37,7 @@ class TestEveryConditionTypeIsClassified:
         `CONDITION_VISIBILITY` に書く。どちらでもよいから片方に書く、では
         なく「これを満たせない人に、条件の存在を知らせてよいか」を考える。
         """
-        undeclared = sorted(
-            c.value for c in InteractionConditionTypeEnum if c not in CONDITION_VISIBILITY
-        )
+        undeclared = sorted(c.value for c in InteractionConditionTypeEnum if c not in CONDITION_VISIBILITY)
 
         assert not undeclared, f"扱いが宣言されていない条件: {undeclared}"
 

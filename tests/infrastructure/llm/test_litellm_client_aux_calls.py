@@ -111,7 +111,6 @@ class TestEachComponentLeavesOneRecord:
 
         assert sink.calls[0].cost_usd is None
 
-
     def test_response_without_usage_records_tokens_as_none_not_zero(self) -> None:
         """応答に usage が無いとき、トークン数は 0 ではなく None で残る (usage を返さない provider で 0 トークンと読ませない)。"""
         sink = _Sink()

@@ -1,6 +1,7 @@
 """
 SNSアプリケーション層の基底例外テスト
 """
+
 import pytest
 
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException, SystemErrorException
@@ -38,11 +39,7 @@ class TestApplicationException:
     def test_create_exception_with_all_parameters(self):
         """全パラメータ付きの例外作成テスト"""
         context = {"user_id": 1, "target_user_id": 2}
-        exception = ApplicationException(
-            "テストメッセージ",
-            error_code="CUSTOM_ERROR",
-            **context
-        )
+        exception = ApplicationException("テストメッセージ", error_code="CUSTOM_ERROR", **context)
 
         assert str(exception) == "テストメッセージ"
         assert exception.error_code == "CUSTOM_ERROR"

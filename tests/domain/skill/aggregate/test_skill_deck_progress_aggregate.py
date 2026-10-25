@@ -23,7 +23,12 @@ class TestSkillDeckProgressAggregate:
             [
                 pytest.param(0, 25, 2, 25, 3, 4, [(1, 2), (2, 3)], id="original-25"),
                 pytest.param(
-                    0, 65, 1, 65, 7, 6,
+                    0,
+                    65,
+                    1,
+                    65,
+                    7,
+                    6,
                     [(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)],
                     id="original-65",
                 ),
@@ -51,13 +56,13 @@ class TestSkillDeckProgressAggregate:
             assert agg.capacity_bonus() == bonus
             events = agg.get_events()
             gained = [event for event in events if isinstance(event, SkillDeckExpGainedEvent)]
-            assert [
-                (event.aggregate_id, event.gained_exp, event.total_exp) for event in gained
-            ] == [(SkillDeckProgressId(1), amount, total)]
+            assert [(event.aggregate_id, event.gained_exp, event.total_exp) for event in gained] == [
+                (SkillDeckProgressId(1), amount, total)
+            ]
             leveled = [event for event in events if isinstance(event, SkillDeckLeveledUpEvent)]
-            assert [
-                (event.aggregate_id, event.old_level, event.new_level) for event in leveled
-            ] == [(SkillDeckProgressId(1), old, new) for old, new in level_steps]
+            assert [(event.aggregate_id, event.old_level, event.new_level) for event in leveled] == [
+                (SkillDeckProgressId(1), old, new) for old, new in level_steps
+            ]
 
     class TestCapacityBonus:
         def test_capacity_bonus_uses_level_table_when_provided(self):
@@ -79,12 +84,18 @@ class TestSkillDeckProgressAggregate:
             """指定した提案だけを受諾し、他の保留提案を残して登録・受諾の対象を通知する。"""
             agg = SkillDeckProgressAggregate(progress_id=SkillDeckProgressId(2), owner_id=100)
             proposal = SkillProposal(
-                1, SkillProposalType.ADD, SkillId(99), target_slot_index=1,
+                1,
+                SkillProposalType.ADD,
+                SkillId(99),
+                target_slot_index=1,
                 reason="提案種別: add / 推奨レベル帯: 1~上限なし / 空き容量条件: 0.00~1.00",
             )
             before = SkillProposal(
-                2, SkillProposalType.FUSE, SkillId(101),
-                deck_tier=DeckTier.AWAKENED, target_slot_index=4,
+                2,
+                SkillProposalType.FUSE,
+                SkillId(101),
+                deck_tier=DeckTier.AWAKENED,
+                target_slot_index=4,
                 required_skill_ids=(SkillId(1),),
             )
             after = SkillProposal(3, SkillProposalType.REPLACE, SkillId(102), target_slot_index=2)
@@ -101,10 +112,13 @@ class TestSkillDeckProgressAggregate:
             assert tuple(agg.pending_proposals) == expected_proposals
             generated = agg.get_events()
             assert all(isinstance(event, SkillProposalGeneratedEvent) for event in generated)
-            assert Counter(
-                (event.aggregate_id, event.proposal_id, event.proposal_type, event.offered_skill_id)
-                for event in generated
-            ) == expected_generated
+            assert (
+                Counter(
+                    (event.aggregate_id, event.proposal_id, event.proposal_type, event.offered_skill_id)
+                    for event in generated
+                )
+                == expected_generated
+            )
             agg.clear_events()
 
             accepted = agg.accept_proposal(proposal.proposal_id)

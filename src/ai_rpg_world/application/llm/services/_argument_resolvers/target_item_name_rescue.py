@@ -51,13 +51,9 @@ class TargetItemNameRescue:
         if not 0.0 < float(min_confidence) <= 1.0:
             raise ValueError("min_confidence must be in (0, 1]")
         self.min_confidence = float(min_confidence)
-        self._resolver = SemanticResolver(
-            backend=_Backend(port), policy=_Policy(self.min_confidence)
-        )
+        self._resolver = SemanticResolver(backend=_Backend(port), policy=_Policy(self.min_confidence))
 
-    def rescue(
-        self, written: str, *, candidates: Mapping[str, str], action_name: str
-    ) -> ItemNameRescueAnswer:
+    def rescue(self, written: str, *, candidates: Mapping[str, str], action_name: str) -> ItemNameRescueAnswer:
         state = {
             "written_item_name": written,
             "action_name": action_name,
@@ -72,7 +68,9 @@ class TargetItemNameRescue:
         except BackendError as exc:
             logger.warning("target item name rescue unavailable: %s", exc)
             return ItemNameRescueAnswer(
-                chosen=None, accepted=False, confident_no_match=False,
+                chosen=None,
+                accepted=False,
+                confident_no_match=False,
                 payload=self._payload(written, None, None, accepted=False, unavailable_reason=exc.code),
             )
         assert result.judgment is not None
@@ -145,7 +143,10 @@ class _Backend:
         chosen = str(answer.value)
         return Judgment(
             value=None if chosen == NO_MATCH_OPTION else chosen,
-            evidence=answer, backend=answer.source.value, model="", latency_ms=answer.latency_ms,
+            evidence=answer,
+            backend=answer.source.value,
+            model="",
+            latency_ms=answer.latency_ms,
         )
 
 

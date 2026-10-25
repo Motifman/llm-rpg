@@ -145,9 +145,7 @@ def tally_trace(trace_path: Path, tally: Tally) -> None:
             )
             try:
                 tally.add(
-                    observation_from_game(
-                        output, tick=e.get("tick"), game_time_label=label, observer=who
-                    ),
+                    observation_from_game(output, tick=e.get("tick"), game_time_label=label, observer=who),
                     str(structured.get("type") or structured.get("kind")),
                 )
             except ObservationNotRepresentable as refused:

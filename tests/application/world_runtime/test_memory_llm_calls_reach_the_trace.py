@@ -15,9 +15,7 @@ from ai_rpg_world.application.trace import TraceEventKind
 
 _REPO = Path(__file__).resolve().parents[3]
 _SCENARIO = _REPO / "data" / "scenarios" / "forbidden_library_demo.json"
-_FACTORIES = frozenset(
-    {"create_llm_client_from_config", "create_typed_judgment_port_from_config"}
-)
+_FACTORIES = frozenset({"create_llm_client_from_config", "create_typed_judgment_port_from_config"})
 
 
 @pytest.fixture(autouse=True)

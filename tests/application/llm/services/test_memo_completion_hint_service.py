@@ -154,8 +154,6 @@ class TestHintForMemoBookTodos:
         """問わないと渡したやることは、行動と重なっても知らせない。"""
         todo = PendingTodo(id="3f2a7b9c-1d2e-4f00-8a00-000000000001", content="事務所で鍵を取る", handle="m_3f2a7b")
 
-        detection = _service([todo]).detect(
-            _ADA, "事務所で鍵を取る", "鍵を手に入れた", excluded_ids={todo.id}
-        )
+        detection = _service([todo]).detect(_ADA, "事務所で鍵を取る", "鍵を手に入れた", excluded_ids={todo.id})
 
         assert detection.hint is None

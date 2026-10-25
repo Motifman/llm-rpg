@@ -1,4 +1,5 @@
 """GuildBankAggregate の残高・入出金通知・拒否後の不変条件を保証する。"""
+
 import pytest
 
 from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate

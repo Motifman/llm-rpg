@@ -10,15 +10,20 @@ class Stamina:
     スタミナは0以上max_stamina以下の値を持ちます。
     max_staminaは0以上の値である必要があります。
     """
+
     value: int
     max_stamina: int
 
     def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.max_stamina < 0:
-            raise StaminaValidationException(f"max_staminaは0以上の値である必要があります。max_stamina: {self.max_stamina}")
+            raise StaminaValidationException(
+                f"max_staminaは0以上の値である必要があります。max_stamina: {self.max_stamina}"
+            )
         if self.value > self.max_stamina:
-            raise StaminaValidationException(f"スタミナはmax_stamina以下の値である必要があります。value: {self.value}, max_stamina: {self.max_stamina}")
+            raise StaminaValidationException(
+                f"スタミナはmax_stamina以下の値である必要があります。value: {self.value}, max_stamina: {self.max_stamina}"
+            )
         if self.value < 0:
             raise StaminaValidationException(f"スタミナは0以上の値である必要があります。value: {self.value}")
 

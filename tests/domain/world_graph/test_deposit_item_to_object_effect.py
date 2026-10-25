@@ -57,9 +57,7 @@ def _fire_pit(*, stacked: object = 0) -> SpotObject:
         display_label="狼煙を上げる",
         preconditions=(
             InteractionCondition(
-                condition_type=(
-                    InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST
-                ),
+                condition_type=(InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST),
                 target_object_id=FIRE_PIT_ID,
                 state_key="driftwood_stacked",
                 required_quantity=3,
@@ -115,10 +113,7 @@ class TestDistributedDeposit:
 
         assert len(first.item_spec_ids_to_remove) == 2
         assert len(second.item_spec_ids_to_remove) == 1
-        assert (
-            second.new_interior.get_object(FIRE_PIT_ID).state["driftwood_stacked"]
-            == 3
-        )
+        assert second.new_interior.get_object(FIRE_PIT_ID).state["driftwood_stacked"] == 3
         assert lit.new_interior.get_object(FIRE_PIT_ID) is not None
 
     def test_holding_three_without_deposit_does_not_satisfy_light_condition(self) -> None:
@@ -160,10 +155,7 @@ class TestDepositQuantityConsistency:
         )
 
         assert result.item_spec_ids_to_remove == (DRIFTWOOD_ID, DRIFTWOOD_ID)
-        assert (
-            result.new_interior.get_object(FIRE_PIT_ID).state["driftwood_stacked"]
-            == 2
-        )
+        assert result.new_interior.get_object(FIRE_PIT_ID).state["driftwood_stacked"] == 2
 
     @pytest.mark.parametrize("explicit_target", [False, True])
     def test_all_moves_every_owned_item_and_leaves_no_remainder(self, explicit_target: bool) -> None:
@@ -191,10 +183,7 @@ class TestDepositQuantityConsistency:
         )
 
         assert result.item_spec_ids_to_remove == (DRIFTWOOD_ID,) * 4
-        assert (
-            result.new_interior.get_object(target.object_id).state["driftwood_stacked"]
-            == 5
-        )
+        assert result.new_interior.get_object(target.object_id).state["driftwood_stacked"] == 5
 
         if explicit_target:
             assert result.new_interior.get_object(FIRE_PIT_ID).state == {"driftwood_stacked": 1}
@@ -246,9 +235,7 @@ class TestDepositQuantityConsistency:
         )
 
         assert result.item_spec_ids_to_remove == ()
-        assert result.new_interior.get_object(FIRE_PIT_ID).state == {
-            "driftwood_stacked": 2
-        }
+        assert result.new_interior.get_object(FIRE_PIT_ID).state == {"driftwood_stacked": 2}
 
 
 class TestObjectStateIntAtLeast:

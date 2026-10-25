@@ -132,9 +132,7 @@ def test_loop_redelivers_pending_event_into_trade_read_model(tmp_path: Path) -> 
             await loop.stop()
 
     assert asyncio.run(scenario()) is True
-    read_model = create_trade_read_model_repository_from_path(database).find_by_id(
-        TradeId(7)
-    )
+    read_model = create_trade_read_model_repository_from_path(database).find_by_id(TradeId(7))
     assert read_model is not None
     assert read_model.item_name == "Key"
 
@@ -196,7 +194,8 @@ def test_redelivery_failures_are_appended_to_outbox_trace(tmp_path: Path, monkey
     assert loop is not None
     _seed_pending_event(database)
     monkeypatch.setattr(
-        SqliteTradeProjectionExecutor, "execute_once",
+        SqliteTradeProjectionExecutor,
+        "execute_once",
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("projection failed")),
     )
     for _ in range(2):
@@ -205,7 +204,7 @@ def test_redelivery_failures_are_appended_to_outbox_trace(tmp_path: Path, monkey
         with sqlite3.connect(database) as connection:
             connection.execute("UPDATE command_event_outbox SET next_attempt_at = NULL")
 
-    trace_path, = tmp_path.glob("game.db.outbox-*.jsonl")
+    (trace_path,) = tmp_path.glob("game.db.outbox-*.jsonl")
     events = list(load_trace_events(trace_path))
     assert [event.seq for event in events] == [1, 2]
     assert all(event.kind == TraceEventKind.WORLD_TICK_UNIT_FAILED and event.tick is None for event in events)

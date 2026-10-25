@@ -57,7 +57,11 @@ class TestOrdinalDisambiguator:
         """並び順で #1 → #2。後から見た方が #1 にならない。"""
         result = _build_ordinal_disambiguator(["A", "B", "A", "B", "A"])
         assert result == {
-            0: "A #1", 1: "B #1", 2: "A #2", 3: "B #2", 4: "A #3",
+            0: "A #1",
+            1: "B #1",
+            2: "A #2",
+            3: "B #2",
+            4: "A #3",
         }
 
     def test_empty_dict(self) -> None:
@@ -87,6 +91,7 @@ class TestOrdinalDisambiguator:
         from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
             build_ordinal_disambiguator,
         )
+
         assert build_ordinal_disambiguator is _build_ordinal_disambiguator
         # public 名で呼んでも動作する
         assert build_ordinal_disambiguator(["A", "A"]) == {0: "A #1", 1: "A #2"}
@@ -124,9 +129,7 @@ class TestSectionRenderingHasNoLabelPrefix:
     def test_inventory_section_i1_prefix(self) -> None:
         """inventorysection に I1prefix が無い。"""
         snap = _make_snap(
-            inventory_items=(
-                SpotGraphInventoryItemEntry(item_spec_id=1, name="流木", quantity=2),
-            ),
+            inventory_items=(SpotGraphInventoryItemEntry(item_spec_id=1, name="流木", quantity=2),),
         )
         text = _build(snap)
         # PR (use_item quoted): item 名は ``""`` で囲んで表示する規約
@@ -137,9 +140,7 @@ class TestSectionRenderingHasNoLabelPrefix:
     def test_ground_items_section_g1_prefix(self) -> None:
         """grounditemssection に G1prefix が無い。"""
         snap = _make_snap(
-            ground_items=(
-                SpotGraphGroundItemEntry(item_instance_id=1, item_spec_id=1, name="流木"),
-            ),
+            ground_items=(SpotGraphGroundItemEntry(item_instance_id=1, item_spec_id=1, name="流木"),),
         )
         text = _build(snap)
         # PR (use_item quoted): ground item 名は ``""`` で囲んで表示する
@@ -156,7 +157,10 @@ class TestSectionRenderingHasOrdinalDisambiguation:
             inventory_items=(
                 SpotGraphInventoryItemEntry(item_spec_id=1, name="生の魚", quantity=1),
                 SpotGraphInventoryItemEntry(
-                    item_spec_id=1, name="生の魚", quantity=1, is_spoiled=True,
+                    item_spec_id=1,
+                    name="生の魚",
+                    quantity=1,
+                    is_spoiled=True,
                 ),
             ),
         )
@@ -169,12 +173,16 @@ class TestSectionRenderingHasOrdinalDisambiguation:
         snap = _make_snap(
             monsters_at_spot=(
                 SpotGraphMonsterEntry(
-                    monster_id=1, display_name="灰色のオオカミ",
-                    behavior_label="落ち着いている", health_bucket="healthy",
+                    monster_id=1,
+                    display_name="灰色のオオカミ",
+                    behavior_label="落ち着いている",
+                    health_bucket="healthy",
                 ),
                 SpotGraphMonsterEntry(
-                    monster_id=2, display_name="灰色のオオカミ",
-                    behavior_label="こちらを追っている", health_bucket="dying",
+                    monster_id=2,
+                    display_name="灰色のオオカミ",
+                    behavior_label="こちらを追っている",
+                    health_bucket="dying",
                 ),
             ),
         )
@@ -201,9 +209,7 @@ class TestCollectorPreservesLabelKey:
     def test_inventory_collector_key_i1_label(self) -> None:
         """inventory collector key は I1 等のラベルのまま。"""
         snap = _make_snap(
-            inventory_items=(
-                SpotGraphInventoryItemEntry(item_spec_id=1, name="流木", quantity=1),
-            ),
+            inventory_items=(SpotGraphInventoryItemEntry(item_spec_id=1, name="流木", quantity=1),),
         )
         dto = _make_dto(snap)
         result = SpotGraphUiContextBuilder().build("base", dto)
@@ -219,12 +225,16 @@ class TestCollectorPreservesLabelKey:
         snap = _make_snap(
             monsters_at_spot=(
                 SpotGraphMonsterEntry(
-                    monster_id=10, display_name="灰色のオオカミ",
-                    behavior_label="落ち着いている", health_bucket="healthy",
+                    monster_id=10,
+                    display_name="灰色のオオカミ",
+                    behavior_label="落ち着いている",
+                    health_bucket="healthy",
                 ),
                 SpotGraphMonsterEntry(
-                    monster_id=11, display_name="灰色のオオカミ",
-                    behavior_label="こちらを追っている", health_bucket="dying",
+                    monster_id=11,
+                    display_name="灰色のオオカミ",
+                    behavior_label="こちらを追っている",
+                    health_bucket="dying",
                 ),
             ),
         )

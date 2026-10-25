@@ -175,7 +175,11 @@ class TestPostContent:
 
     @pytest.mark.parametrize(
         ("body", "hashtags"),
-        [("content", ["#tag"] * 11), ("content", tuple(["#tag"] * 11)), ("テスト", tuple(f"tag{i}" for i in range(11)))],
+        [
+            ("content", ["#tag"] * 11),
+            ("content", tuple(["#tag"] * 11)),
+            ("テスト", tuple(f"tag{i}" for i in range(11))),
+        ],
         ids=["duplicate-list11", "duplicate-tuple11", "unprefixed-tuple11"],
     )
     def test_aggregate_origin_hashtag_rejections(self, body, hashtags):

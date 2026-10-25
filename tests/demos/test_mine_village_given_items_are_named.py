@@ -26,9 +26,7 @@ def _messages_giving(item_spec: str) -> list[str]:
                 e.get("effect_type") == "GIVE_ITEM" and e.get("parameters", {}).get("item_spec") == item_spec
                 for e in effects
             ):
-                found.extend(
-                    e["parameters"]["message"] for e in effects if e.get("effect_type") == "SHOW_MESSAGE"
-                )
+                found.extend(e["parameters"]["message"] for e in effects if e.get("effect_type") == "SHOW_MESSAGE")
             for value in node.values():
                 walk(value)
         elif isinstance(node, list):

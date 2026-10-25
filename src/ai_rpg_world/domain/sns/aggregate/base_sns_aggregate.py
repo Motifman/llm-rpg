@@ -45,8 +45,12 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
         self._parent_reply_id = parent_reply_id
         self._created_at = created_at if created_at is not None else datetime.now()
         self._identity_token = SnsIdentityToken() if identity_token is None else SnsIdentityToken(identity_token)
-        self._author_identity_token = None if author_identity_token is None else SnsIdentityToken(author_identity_token).value
-        self._parent_identity_token = None if parent_identity_token is None else SnsIdentityToken(parent_identity_token).value
+        self._author_identity_token = (
+            None if author_identity_token is None else SnsIdentityToken(author_identity_token).value
+        )
+        self._parent_identity_token = (
+            None if parent_identity_token is None else SnsIdentityToken(parent_identity_token).value
+        )
 
     @property
     def identity_token(self) -> str:
@@ -108,7 +112,15 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
         """作成日時"""
         return self._created_at
 
-    def like(self, user_id: UserId, content_type: str, *, liker_display_name: str = "", liker_identity_token: str | None = None, execution_provenance: dict[str, object] | None = None) -> None:
+    def like(
+        self,
+        user_id: UserId,
+        content_type: str,
+        *,
+        liker_display_name: str = "",
+        liker_identity_token: str | None = None,
+        execution_provenance: dict[str, object] | None = None,
+    ) -> None:
         """いいね機能（共通実装）"""
         # コンテンツタイプのバリデーション
         if content_type not in ["post", "reply"]:
@@ -162,7 +174,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
             aggregate_type=aggregate_type,
             target_id=self._content_id,
             author_user_id=user_id,
-            content_type=content_type
+            content_type=content_type,
         )
         self.add_event(event)
 
@@ -202,7 +214,8 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
     def _create_mentions_from_content(self, content: PostContent) -> set[Mention]:
         """コンテンツからメンションを抽出"""
         import re
-        mention_pattern = r'@(\S+)'
+
+        mention_pattern = r"@(\S+)"
         matches = re.findall(mention_pattern, content.content)
         return set(Mention(mentioned_user_name=match, post_id=self._content_id) for match in matches)
 
@@ -221,7 +234,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
                 aggregate_type=aggregate_type,
                 target_id=self._content_id,
                 mentioned_by_user_id=self._author_user_id,
-            mentioned_user_names=mentioned_users,
-            content_type=content_type
+                mentioned_user_names=mentioned_users,
+                content_type=content_type,
             )
             self.add_event(event)

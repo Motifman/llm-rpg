@@ -10,9 +10,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 def test_unhandled_post_commit_exception_is_committed_success(monkeypatch) -> None:
     """個別executorが例外を通しても成功を維持し、移動状態を失敗復元しない。"""
-    post_commit_error = CommandPostCommitException(
-        handoff_error=RuntimeError("delivery failed")
-    )
+    post_commit_error = CommandPostCommitException(handoff_error=RuntimeError("delivery failed"))
 
     def _raise_post_commit(*args, **kwargs):
         raise post_commit_error

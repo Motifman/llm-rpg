@@ -18,9 +18,7 @@ def _line(episode: Episode) -> str:
     )
 
 
-def format_episode_index(
-    episodes: Sequence[Episode], *, current_environment_name: str
-) -> str:
+def format_episode_index(episodes: Sequence[Episode], *, current_environment_name: str) -> str:
     """``episodes`` は並べ方が選んだ順。前にいた環境の分は、環境ごとの見出しでまとめる。
 
     空でも欄を消さない。呼び出しのツールは出ているので、空の理由が分からないと

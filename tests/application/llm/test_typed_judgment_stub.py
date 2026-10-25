@@ -127,11 +127,7 @@ class TestTheStubCanBePinnedToAnAnswer:
         with pytest.raises(ValueError):
             DeterministicTypedJudgmentPort({"rescue": "gather"}).judge(
                 "x",
-                {
-                    "rescue": ChoiceQuestion(
-                        instructions="どれか", options={"reap_wheat": None}
-                    )
-                },
+                {"rescue": ChoiceQuestion(instructions="どれか", options={"reap_wheat": None})},
             )
 
     def test_a_pinned_score_level_name_is_accepted(self) -> None:
@@ -151,6 +147,4 @@ class TestTheStubCanBePinnedToAnAnswer:
     def test_a_choice_without_options_is_rejected(self) -> None:
         """選択肢が空の Choice は ValueError になる (問えない質問を黙って通さない)。"""
         with pytest.raises(ValueError):
-            DeterministicTypedJudgmentPort().judge(
-                "x", {"rescue": ChoiceQuestion(instructions="どれか", options={})}
-            )
+            DeterministicTypedJudgmentPort().judge("x", {"rescue": ChoiceQuestion(instructions="どれか", options={})})

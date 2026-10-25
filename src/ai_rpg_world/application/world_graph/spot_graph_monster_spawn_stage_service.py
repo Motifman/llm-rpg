@@ -153,9 +153,7 @@ class SpotGraphMonsterSpawnStageService:
         self._next_world_object_id_value = 2_000_000
 
         # slot_key → 現在 spawn 中の MonsterId。None なら未配置。
-        self._slot_to_monster: dict[str, MonsterId | None] = {
-            slot.slot_key: None for slot in slots
-        }
+        self._slot_to_monster: dict[str, MonsterId | None] = {slot.slot_key: None for slot in slots}
         self._validate_scope_counter_contract(command_scope_factory)
         self._command_scope_factory = command_scope_factory
 
@@ -181,9 +179,7 @@ class SpotGraphMonsterSpawnStageService:
                 self._world_object_id_factory,
             )
         ):
-            raise ValueError(
-                "CommandScopeを使うmonster spawnでは外部ID factoryを使用できません"
-            )
+            raise ValueError("CommandScopeを使うmonster spawnでは外部ID factoryを使用できません")
 
     def rollback_snapshot(
         self,
@@ -213,9 +209,7 @@ class SpotGraphMonsterSpawnStageService:
             return
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            raise RuntimeError(
-                "monster spawn用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("monster spawn用CommandScopeFactoryが未配線です。")
         for slot in self._slots:
             with self._failure_isolator.unit(
                 stage="monster_spawn",
@@ -257,9 +251,7 @@ class SpotGraphMonsterSpawnStageService:
         *,
         spawn: bool,
         monster_id: MonsterId | None = None,
-        scope_factory: (
-            CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort]
-        ),
+        scope_factory: (CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort]),
     ) -> None:
         """slot 1件のspawnまたはdespawnを一つのscopeで確定する。"""
         with scope_factory.create() as context:
@@ -302,21 +294,21 @@ class SpotGraphMonsterSpawnStageService:
             context = WorldFlagPredicateContext(flags)
             for required in slot.required_flags:
                 result = self._predicate_evaluator.evaluate(
-                    FlagSetPredicate(required), context,
+                    FlagSetPredicate(required),
+                    context,
                 )
                 if not ScenarioPredicateEvaluator.require_satisfaction(result):
                     return False
             for forbidden in slot.forbidden_flags:
                 result = self._predicate_evaluator.evaluate(
-                    FlagSetPredicate(forbidden), context,
+                    FlagSetPredicate(forbidden),
+                    context,
                 )
                 if ScenarioPredicateEvaluator.require_satisfaction(result):
                     return False
 
         if slot.weather_type_names:
-            current_weather = (
-                self._weather_type_provider() if self._weather_type_provider else None
-            )
+            current_weather = self._weather_type_provider() if self._weather_type_provider else None
             if current_weather is None:
                 return False
             try:
@@ -333,7 +325,8 @@ class SpotGraphMonsterSpawnStageService:
                         return True
                     continue
                 result = self._predicate_evaluator.evaluate(
-                    WeatherTypeIsPredicate(required_weather_type), weather_context,
+                    WeatherTypeIsPredicate(required_weather_type),
+                    weather_context,
                 )
                 if ScenarioPredicateEvaluator.require_satisfaction(result):
                     return True
@@ -418,7 +411,7 @@ class SpotGraphMonsterSpawnStageService:
         events: tuple[Any, ...] = ()
         if event_publisher is not None:
             all_events = tuple(graph.get_events())
-            events = all_events[len(existing_events):]
+            events = all_events[len(existing_events) :]
             graph.clear_events()
             for event in existing_events:
                 graph.add_event(event)

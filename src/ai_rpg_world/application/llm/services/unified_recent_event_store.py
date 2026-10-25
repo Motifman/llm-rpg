@@ -76,21 +76,15 @@ class UnifiedRecentEventStore:
             raise TypeError("entry must be ActionResultEntry")
         self._append(player_id, UnifiedRecentEventEntry.from_action_result(entry))
 
-    def get_timeline(
-        self, player_id: PlayerId
-    ) -> list[UnifiedRecentEventEntry]:
+    def get_timeline(self, player_id: PlayerId) -> list[UnifiedRecentEventEntry]:
         entries = list(self._entries.get(self._key(player_id), []))
         return sorted(entries, key=lambda entry: entry.occurred_at.timestamp())
 
-    def get_active_timeline(
-        self, player_id: PlayerId
-    ) -> list[UnifiedRecentEventEntry]:
+    def get_active_timeline(self, player_id: PlayerId) -> list[UnifiedRecentEventEntry]:
         """現在のターン窓に残る観測と行動を、件数で切らず時系列順に返す。"""
         return self.get_timeline(player_id)
 
-    def open_turn_entries(
-        self, player_id: PlayerId
-    ) -> list[UnifiedRecentEventEntry]:
+    def open_turn_entries(self, player_id: PlayerId) -> list[UnifiedRecentEventEntry]:
         """前回の自分のターンを閉じたあとに届いた観測と行動を、届いた順に返す。"""
         key = self._key(player_id)
         entries = self._entries.get(key, [])
@@ -106,9 +100,7 @@ class UnifiedRecentEventStore:
             raise RuntimeError("completed turn sizes exceed stored entries")
         sizes.append(open_size)
 
-    def compact_oldest_turns(
-        self, player_id: PlayerId, turn_count: int
-    ) -> CompletedTurnCompaction:
+    def compact_oldest_turns(self, player_id: PlayerId, turn_count: int) -> CompletedTurnCompaction:
         """古い完了ターンを指定数だけ L1 から外す。"""
         if turn_count <= 0:
             raise ValueError("turn_count must be greater than 0")
@@ -135,9 +127,7 @@ class UnifiedRecentEventStore:
         """snapshot codec 用に完了済みターン境界を返す。"""
         return tuple(self._completed_turn_sizes.get(self._key(player_id), []))
 
-    def replace_completed_turn_sizes(
-        self, player_id: PlayerId, sizes: Iterable[int]
-    ) -> None:
+    def replace_completed_turn_sizes(self, player_id: PlayerId, sizes: Iterable[int]) -> None:
         """snapshot から完了済みターン境界を復元する。"""
         values = list(sizes)
         if any(not isinstance(size, int) or size < 0 for size in values):
@@ -161,19 +151,12 @@ class UnifiedRecentEventStore:
             newest_equal_first=newest_equal_observation_first,
         )
         actions = self.get_recent_action_results(player_id, action_result_limit)
-        selected = [
-            UnifiedRecentEventEntry.from_observation(entry)
-            for entry in observations
-        ]
-        selected.extend(
-            UnifiedRecentEventEntry.from_action_result(entry) for entry in actions
-        )
+        selected = [UnifiedRecentEventEntry.from_observation(entry) for entry in observations]
+        selected.extend(UnifiedRecentEventEntry.from_action_result(entry) for entry in actions)
         selected.sort(key=lambda entry: entry.occurred_at.timestamp())
         return selected
 
-    def observations_in_storage_order(
-        self, player_id: PlayerId
-    ) -> list[ObservationEntry]:
+    def observations_in_storage_order(self, player_id: PlayerId) -> list[ObservationEntry]:
         # kind と payload の型が一致することは UnifiedRecentEventEntry の
         # __post_init__ が保証するが、その対応は型では表現されていない
         return [
@@ -182,9 +165,7 @@ class UnifiedRecentEventStore:
             if isinstance(event.payload, ObservationEntry)
         ]
 
-    def action_results_in_storage_order(
-        self, player_id: PlayerId
-    ) -> list[ActionResultEntry]:
+    def action_results_in_storage_order(self, player_id: PlayerId) -> list[ActionResultEntry]:
         return [
             event.payload
             for event in self._entries.get(self._key(player_id), [])
@@ -206,12 +187,8 @@ class UnifiedRecentEventStore:
             newest_equal_first=newest_equal_first,
         )
 
-    def get_recent_action_results(
-        self, player_id: PlayerId, limit: int
-    ) -> list[ActionResultEntry]:
-        return self._get_recent_kind(
-            player_id, limit, "action_result", ActionResultEntry, newest_equal_first=False
-        )
+    def get_recent_action_results(self, player_id: PlayerId, limit: int) -> list[ActionResultEntry]:
+        return self._get_recent_kind(player_id, limit, "action_result", ActionResultEntry, newest_equal_first=False)
 
     def _get_recent_kind(
         self,
@@ -226,9 +203,7 @@ class UnifiedRecentEventStore:
             raise ValueError("limit must be 0 or greater")
         entries = [
             (index, event)
-            for index, event in enumerate(
-                self._entries.get(self._key(player_id), [])
-            )
+            for index, event in enumerate(self._entries.get(self._key(player_id), []))
             if event.kind == kind
         ]
         entries.sort(
@@ -238,113 +213,64 @@ class UnifiedRecentEventStore:
             ),
             reverse=True,
         )
-        return [
-            payload
-            for _, event in entries[:limit]
-            if isinstance(payload := event.payload, payload_type)
-        ]
+        return [payload for _, event in entries[:limit] if isinstance(payload := event.payload, payload_type)]
 
-    def pop_oldest_observations(
-        self, player_id: PlayerId, count: int
-    ) -> list[ObservationEntry]:
+    def pop_oldest_observations(self, player_id: PlayerId, count: int) -> list[ObservationEntry]:
         if count < 0:
             raise ValueError("count must be 0 or greater")
         key = self._key(player_id)
         entries = self._entries.get(key, [])
         observation_indices = [
-            index
-            for index, event in enumerate(entries)
-            if isinstance(event.payload, ObservationEntry)
+            index for index, event in enumerate(entries) if isinstance(event.payload, ObservationEntry)
         ][:count]
         remove = set(observation_indices)
         removed = [
-            payload
-            for index in observation_indices
-            if isinstance(payload := entries[index].payload, ObservationEntry)
+            payload for index in observation_indices if isinstance(payload := entries[index].payload, ObservationEntry)
         ]
-        self._entries[key] = [
-            event for index, event in enumerate(entries) if index not in remove
-        ]
+        self._entries[key] = [event for index, event in enumerate(entries) if index not in remove]
         return removed
 
     def count_observations(self, player_id: PlayerId) -> int:
-        return sum(
-            event.kind == "observation"
-            for event in self._entries.get(self._key(player_id), [])
-        )
+        return sum(event.kind == "observation" for event in self._entries.get(self._key(player_id), []))
 
-    def append_pending_observation(
-        self, player_id: PlayerId, entry: ObservationEntry
-    ) -> None:
+    def append_pending_observation(self, player_id: PlayerId, entry: ObservationEntry) -> None:
         if not isinstance(entry, ObservationEntry):
             raise TypeError("entry must be ObservationEntry")
         key = self._key(player_id)
-        self._pending.setdefault(key, []).append(
-            UnifiedRecentEventEntry.from_observation(entry)
-        )
+        self._pending.setdefault(key, []).append(UnifiedRecentEventEntry.from_observation(entry))
 
-    def get_pending_observations(
-        self, player_id: PlayerId
-    ) -> list[ObservationEntry]:
+    def get_pending_observations(self, player_id: PlayerId) -> list[ObservationEntry]:
         return [
             event.payload
             for event in self._pending.get(self._key(player_id), [])
             if isinstance(event.payload, ObservationEntry)
         ]
 
-    def drain_pending_observations(
-        self, player_id: PlayerId
-    ) -> list[ObservationEntry]:
+    def drain_pending_observations(self, player_id: PlayerId) -> list[ObservationEntry]:
         key = self._key(player_id)
         entries = self._pending.get(key, [])
         self._pending[key] = []
-        return [
-            event.payload
-            for event in entries
-            if isinstance(event.payload, ObservationEntry)
-        ]
+        return [event.payload for event in entries if isinstance(event.payload, ObservationEntry)]
 
-    def replace_timeline(
-        self, player_id: PlayerId, entries: Iterable[UnifiedRecentEventEntry]
-    ) -> None:
+    def replace_timeline(self, player_id: PlayerId, entries: Iterable[UnifiedRecentEventEntry]) -> None:
         key = self._key(player_id)
         self._entries[key] = list(entries)
         self._completed_turn_sizes[key] = []
 
-    def replace_observations(
-        self, player_id: PlayerId, entries: Iterable[ObservationEntry]
-    ) -> None:
+    def replace_observations(self, player_id: PlayerId, entries: Iterable[ObservationEntry]) -> None:
         key = self._key(player_id)
-        retained = [
-            event
-            for event in self._entries.get(key, [])
-            if event.kind != "observation"
-        ]
-        retained.extend(
-            UnifiedRecentEventEntry.from_observation(entry) for entry in entries
-        )
+        retained = [event for event in self._entries.get(key, []) if event.kind != "observation"]
+        retained.extend(UnifiedRecentEventEntry.from_observation(entry) for entry in entries)
         self._entries[key] = retained
 
-    def replace_action_results(
-        self, player_id: PlayerId, entries: Iterable[ActionResultEntry]
-    ) -> None:
+    def replace_action_results(self, player_id: PlayerId, entries: Iterable[ActionResultEntry]) -> None:
         key = self._key(player_id)
-        retained = [
-            event
-            for event in self._entries.get(key, [])
-            if event.kind != "action_result"
-        ]
-        retained.extend(
-            UnifiedRecentEventEntry.from_action_result(entry) for entry in entries
-        )
+        retained = [event for event in self._entries.get(key, []) if event.kind != "action_result"]
+        retained.extend(UnifiedRecentEventEntry.from_action_result(entry) for entry in entries)
         self._entries[key] = retained
 
-    def replace_pending_observations(
-        self, player_id: PlayerId, entries: Iterable[ObservationEntry]
-    ) -> None:
-        self._pending[self._key(player_id)] = [
-            UnifiedRecentEventEntry.from_observation(entry) for entry in entries
-        ]
+    def replace_pending_observations(self, player_id: PlayerId, entries: Iterable[ObservationEntry]) -> None:
+        self._pending[self._key(player_id)] = [UnifiedRecentEventEntry.from_observation(entry) for entry in entries]
 
     def player_ids(self) -> set[int]:
         return set(self._entries) | set(self._pending) | set(self._completed_turn_sizes)

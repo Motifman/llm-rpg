@@ -33,10 +33,9 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition impor
 )
 
 
-class ReactivePassageBindingValidationException(
-    SpotGraphDomainException, ValidationException
-):
+class ReactivePassageBindingValidationException(SpotGraphDomainException, ValidationException):
     """ReactivePassageBinding のバリデーション例外。"""
+
     error_code = "WORLD_GRAPH.REACTIVE_PASSAGE_BINDING_VALIDATION"
 
 
@@ -61,13 +60,9 @@ class ReactivePassageBinding:
 
     def __post_init__(self) -> None:
         if not self.on_true_state:
-            raise ReactivePassageBindingValidationException(
-                "on_true_state must not be empty"
-            )
+            raise ReactivePassageBindingValidationException("on_true_state must not be empty")
         if not self.on_false_state:
-            raise ReactivePassageBindingValidationException(
-                "on_false_state must not be empty"
-            )
+            raise ReactivePassageBindingValidationException("on_false_state must not be empty")
         if self.on_true_state == self.on_false_state:
             raise ReactivePassageBindingValidationException(
                 f"on_true_state and on_false_state must differ "

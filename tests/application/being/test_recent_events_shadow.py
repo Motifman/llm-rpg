@@ -32,7 +32,16 @@ class _Recorder(NullTraceRecorder):
 
 
 def _seen(body: str) -> Observation:
-    return Observation(body=body, route=SeenOrHeard(), time=ObservedTime(display="深夜 0:01"), subject_is_self=False, subject_name=UNKNOWN, source=UNKNOWN, place=UNKNOWN, addressed_to_self=UNKNOWN)
+    return Observation(
+        body=body,
+        route=SeenOrHeard(),
+        time=ObservedTime(display="深夜 0:01"),
+        subject_is_self=False,
+        subject_name=UNKNOWN,
+        source=UNKNOWN,
+        place=UNKNOWN,
+        addressed_to_self=UNKNOWN,
+    )
 
 
 class _World:
@@ -75,16 +84,18 @@ class TestRecentEventsShadow:
 
         world.shadow.compare(ADA, "- [深夜 0:01] 鐘が鳴った\n- [深夜 0:01] 窓が開いた")
 
-        assert world.recorder.mismatches() == [{
-            "being_id": "being_p1",
-            "mismatch_kind": "different",
-            "compared_as": "whole",
-            "line_index": 1,
-            "current_line": "- [深夜 0:01] 窓が開いた",
-            "being_line": "- [深夜 0:01] 扉が開いた",
-            "current_line_count": 2,
-            "being_line_count": 2,
-        }]
+        assert world.recorder.mismatches() == [
+            {
+                "being_id": "being_p1",
+                "mismatch_kind": "different",
+                "compared_as": "whole",
+                "line_index": 1,
+                "current_line": "- [深夜 0:01] 窓が開いた",
+                "being_line": "- [深夜 0:01] 扉が開いた",
+                "current_line_count": 2,
+                "being_line_count": 2,
+            }
+        ]
         assert [(t, p) for k, t, p, _ in world.recorder.events] == [(7, 1)]
 
     def test_missing_lines_are_a_difference_before_compaction(self) -> None:
@@ -95,7 +106,11 @@ class TestRecentEventsShadow:
         world.shadow.compare(ADA, "- [深夜 0:01] 鐘が鳴った")
 
         (payload,) = world.recorder.mismatches()
-        assert (payload["line_index"], payload["current_line"], payload["being_line"]) == (1, None, "- [深夜 0:01] 扉が開いた")
+        assert (payload["line_index"], payload["current_line"], payload["being_line"]) == (
+            1,
+            None,
+            "- [深夜 0:01] 扉が開いた",
+        )
 
     def test_after_compaction_lines_kept_in_order_leave_no_trace(self) -> None:
         """今の短期記憶が畳んだあとは、今の文の行が同じ順で Being の側の文に含まれていれば、間の行が抜けていても何も残さない。"""
@@ -184,4 +199,3 @@ class TestRecentEventsShadow:
         world.shadow.compare(ADA, "- [深夜 0:01] 鐘が鳴った")
 
         assert world.recorder.events == []
-

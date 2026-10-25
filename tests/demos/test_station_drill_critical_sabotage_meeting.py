@@ -25,9 +25,7 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI, _SENA, _KUZE = (PlayerId(i) for i in (1, 2, 3))
 _MANUAL_RESTORE = "レバーが噛み合い、配管に熱が戻る音がした。"
 _MEETING_RESTORE = "凍結は止まった。配管に熱が戻っている。"
@@ -40,9 +38,7 @@ def runtime():
 
 
 def _terminal_spec(runtime) -> ItemSpecId:
-    return ItemSpecId.create(
-        runtime.id_mapper.get_int("item_spec", "control_terminal")
-    )
+    return ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "control_terminal"))
 
 
 def _freeze(runtime) -> None:
@@ -101,12 +97,8 @@ def _executor(runtime) -> SpotGraphToolExecutor:
         sync_action_groups=runtime.scenario.synchronized_action_groups,
         time_provider=runtime._time_provider,
         spot_graph_repository=runtime._spot_graph_repo,
-        sync_action_registry=(
-            runtime._simulation_service._sync_action_resolver_stage._registry
-        ),
-        prepare_action_command_scope_factory=(
-            runtime._prepare_action_command_scope_factory
-        ),
+        sync_action_registry=(runtime._simulation_service._sync_action_resolver_stage._registry),
+        prepare_action_command_scope_factory=(runtime._prepare_action_command_scope_factory),
     )
 
 
@@ -121,10 +113,7 @@ def _restore_with_valves(runtime) -> None:
 
 
 def _prose(runtime, player_id: PlayerId) -> list[str]:
-    return [
-        entry.output.prose
-        for entry in runtime._obs_buffer.get_observations(player_id)
-    ]
+    return [entry.output.prose for entry in runtime._obs_buffer.get_observations(player_id)]
 
 
 def test_body_report_resolves_the_condition_with_declared_meeting_effects(runtime) -> None:
@@ -234,11 +223,7 @@ def test_meeting_resolution_is_declared_as_effects_not_a_second_boolean() -> Non
     """状態遷移は resolution 一箇所に置き、会議と同期操作は同じ flag を参照する。"""
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
     conditions = {entry["flag"]: entry for entry in raw["ongoing_conditions"]}
-    restore_group = next(
-        group
-        for group in raw["synchronized_action_groups"]
-        if group["id"] == "restore_frozen_fuel"
-    )
+    restore_group = next(group for group in raw["synchronized_action_groups"] if group["id"] == "restore_frozen_fuel")
 
     assert "critical" not in conditions["fuel_frozen"]
     assert "on_meeting_start" not in conditions["power_out"]

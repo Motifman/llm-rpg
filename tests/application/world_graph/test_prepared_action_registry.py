@@ -73,6 +73,7 @@ class TestPreparedActionRegistry:
         state = MutableWorldFlagState()
         registry = PreparedActionRegistry(state)
         import pytest
+
         with pytest.raises(ValueError, match="must not contain ':'"):
             registry.prepare(player_id=1, action_id="a:b")
 
@@ -196,9 +197,7 @@ class TestPlayersAtSpotCondition:
         sw = self._multi_player_switch()
         idef = svc.find_interaction(sw, "push")
         assert idef is not None
-        ok, msg = svc.can_interact(
-            idef, sw, frozenset(), frozenset(), spot_presence_count=1
-        )
+        ok, msg = svc.can_interact(idef, sw, frozenset(), frozenset(), spot_presence_count=1)
         assert ok is False
         assert "2人" in (msg or "")
 
@@ -208,7 +207,5 @@ class TestPlayersAtSpotCondition:
         sw = self._multi_player_switch()
         idef = svc.find_interaction(sw, "push")
         assert idef is not None
-        ok, msg = svc.can_interact(
-            idef, sw, frozenset(), frozenset(), spot_presence_count=2
-        )
+        ok, msg = svc.can_interact(idef, sw, frozenset(), frozenset(), spot_presence_count=2)
         assert ok is True

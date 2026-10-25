@@ -182,10 +182,7 @@ class TestPlayerFamiliarityAnnotation:
         acquaintances = _acquaintances()
         acquaintances.record_meeting(PlayerId(1), "ノア")
         builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
-        assert (
-            builder._player_familiarity_annotation(PlayerId(1), 3)
-            == "(初めて会った)"
-        )
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) == "(初めて会った)"
 
     def test_person_met_twice_gets_no_note(self) -> None:
         """二度以上会った相手には注記を付けない。"""
@@ -296,52 +293,36 @@ class TestAnnotateCurrentSpotText:
         memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
         return _make_builder(memory)
 
-    def test_spot_line_2(
-        self, builder: SpotGraphUiContextBuilder
-    ) -> None:
+    def test_spot_line_2(self, builder: SpotGraphUiContextBuilder) -> None:
         """初訪問の spot 行を 書き換える。"""
         # snap stub: SimpleNamespace で必要 field だけ
         from types import SimpleNamespace
 
-        snap = SimpleNamespace(
-            current_spot_id=100, current_spot_name="森の広場"
-        )
+        snap = SimpleNamespace(current_spot_id=100, current_spot_name="森の広場")
         original = "現在地: 森の広場\n  description"
-        out = builder._annotate_current_spot_familiarity(
-            original, snap, PlayerId(1)
-        )
+        out = builder._annotate_current_spot_familiarity(original, snap, PlayerId(1))
         assert "現在地: 森の広場 (初めて訪れた)\n  description" == out
 
-    def test_spot_line(
-        self, builder: SpotGraphUiContextBuilder
-    ) -> None:
+    def test_spot_line(self, builder: SpotGraphUiContextBuilder) -> None:
         """注記なしの spot 行は 書き換えない。"""
         from types import SimpleNamespace
 
         snap = SimpleNamespace(current_spot_id=200, current_spot_name="山頂")
         original = "現在地: 山頂\n  description"
         # spot 200 (summit) は未 observe なので注記なし
-        out = builder._annotate_current_spot_familiarity(
-            original, snap, PlayerId(1)
-        )
+        out = builder._annotate_current_spot_familiarity(original, snap, PlayerId(1))
         assert out == original
 
-    def test_spot_id_none(
-        self, builder: SpotGraphUiContextBuilder
-    ) -> None:
+    def test_spot_id_none(self, builder: SpotGraphUiContextBuilder) -> None:
         """spot id が None なら 書き換えない。"""
         from types import SimpleNamespace
 
         snap = SimpleNamespace(current_spot_id=None, current_spot_name="不明")
         original = "現在地: 不明"
-        out = builder._annotate_current_spot_familiarity(
-            original, snap, PlayerId(1)
-        )
+        out = builder._annotate_current_spot_familiarity(original, snap, PlayerId(1))
         assert out == original
 
-    def test_viewer_none(
-        self, builder: SpotGraphUiContextBuilder
-    ) -> None:
+    def test_viewer_none(self, builder: SpotGraphUiContextBuilder) -> None:
         """viewer None なら 書き換えない。"""
         from types import SimpleNamespace
 
@@ -350,22 +331,15 @@ class TestAnnotateCurrentSpotText:
         out = builder._annotate_current_spot_familiarity(original, snap, None)
         assert out == original
 
-    def test_spot_description_string(
-        self, builder: SpotGraphUiContextBuilder
-    ) -> None:
+    def test_spot_description_string(self, builder: SpotGraphUiContextBuilder) -> None:
         """``str.replace`` で部分一致させると description に紛れた名前まで
         書き換えてしまう。完全一致の行のみ置換する仕様を担保する。"""
         from types import SimpleNamespace
 
         snap = SimpleNamespace(current_spot_id=100, current_spot_name="森の広場")
         # description にも「森の広場」が部分一致で混入する形を想定
-        original = (
-            "現在地: 森の広場\n"
-            "  ここは「森の広場」と呼ばれる場所だ。"
-        )
-        out = builder._annotate_current_spot_familiarity(
-            original, snap, PlayerId(1)
-        )
+        original = "現在地: 森の広場\n  ここは「森の広場」と呼ばれる場所だ。"
+        out = builder._annotate_current_spot_familiarity(original, snap, PlayerId(1))
         # 1 行目だけが書き換わる、2 行目の「森の広場」は触られない
         assert out.splitlines()[0] == "現在地: 森の広場 (初めて訪れた)"
         assert out.splitlines()[1] == "  ここは「森の広場」と呼ばれる場所だ。"

@@ -65,16 +65,11 @@ SCENARIO_EVENT_CONDITION_KEYS: Mapping[str, frozenset[str]] = {
     "OBJECT_STATE": frozenset({"target_object", "required_state"}),
     "HAS_ITEM": frozenset({"required_item"}),
     "WEATHER_IS": frozenset({"weather_type"}),
-    "OBJECT_STATE_TICK_AT_LEAST": frozenset(
-        {"target_object", "state_key", "ticks_offset", "treat_missing_as_passed"}
-    ),
-    "OBJECT_STATE_INT_AT_LEAST": frozenset(
-        {"target_object", "state_key", "ticks_offset"}
-    ),
-    "OBJECT_STATE_INT_GREATER_THAN_OTHER": frozenset(
-        {"target_object", "state_key", "other_object", "other_state_key"}
-    ),
+    "OBJECT_STATE_TICK_AT_LEAST": frozenset({"target_object", "state_key", "ticks_offset", "treat_missing_as_passed"}),
+    "OBJECT_STATE_INT_AT_LEAST": frozenset({"target_object", "state_key", "ticks_offset"}),
+    "OBJECT_STATE_INT_GREATER_THAN_OTHER": frozenset({"target_object", "state_key", "other_object", "other_state_key"}),
 }
+
 
 def parse_scenario_events(
     events_raw: Sequence[dict[str, Any]],
@@ -87,42 +82,28 @@ def parse_scenario_events(
     event_ids: set[str] = set()
     for index, raw in enumerate(events_raw):
         if not isinstance(raw, dict):
-            raise ScenarioLoadError(
-                f"scenario_events[{index}] must be an object"
-            )
+            raise ScenarioLoadError(f"scenario_events[{index}] must be an object")
         event_id = raw.get("id")
         if not isinstance(event_id, str) or not event_id.strip():
-            raise ScenarioLoadError(
-                f"scenario_events[{index}].id must be a non-empty string"
-            )
+            raise ScenarioLoadError(f"scenario_events[{index}].id must be a non-empty string")
         if event_id in event_ids:
-            raise ScenarioLoadError(
-                f"scenario_events has duplicate event id: {event_id!r}"
-            )
+            raise ScenarioLoadError(f"scenario_events has duplicate event id: {event_id!r}")
         event_ids.add(event_id)
 
     parsed: list[ScenarioEventDef] = []
     for index, raw in enumerate(events_raw):
         observation = raw.get("observation", {})
         if not isinstance(observation, dict):
-            raise ScenarioLoadError(
-                f"scenario_events[{index}].observation must be an object"
-            )
+            raise ScenarioLoadError(f"scenario_events[{index}].observation must be an object")
         event_id = raw["id"]
         trigger = raw.get("trigger", "ON_TICK")
-        if (
-            not isinstance(trigger, str)
-            or trigger not in _SCENARIO_EVENT_TRIGGERS
-        ):
+        if not isinstance(trigger, str) or trigger not in _SCENARIO_EVENT_TRIGGERS:
             raise ScenarioLoadError(
                 f"scenario_event[{event_id}].trigger has unknown value "
                 f"{trigger!r}; valid values: {sorted(_SCENARIO_EVENT_TRIGGERS)}"
             )
         recipients = observation.get("recipients", "all_players")
-        if (
-            not isinstance(recipients, str)
-            or recipients not in _SCENARIO_EVENT_RECIPIENTS
-        ):
+        if not isinstance(recipients, str) or recipients not in _SCENARIO_EVENT_RECIPIENTS:
             raise ScenarioLoadError(
                 f"scenario_event[{event_id}].observation.recipients has unknown "
                 f"value {recipients!r}; valid values: "
@@ -131,29 +112,24 @@ def parse_scenario_events(
         target_spot = observation.get("target_spot")
         if recipients == "players_at_spot" and not target_spot:
             raise ScenarioLoadError(
-                f"scenario_event[{event_id}] with recipients=players_at_spot "
-                "requires observation.target_spot"
+                f"scenario_event[{event_id}] with recipients=players_at_spot requires observation.target_spot"
             )
         next_event_id = raw.get("next_event_id")
         if next_event_id is not None:
             if not isinstance(next_event_id, str) or next_event_id not in event_ids:
                 raise ScenarioLoadError(
-                    f"scenario_event[{event_id}].next_event_id references unknown "
-                    f"event: {next_event_id!r}"
+                    f"scenario_event[{event_id}].next_event_id references unknown event: {next_event_id!r}"
                 )
         delay_ticks = raw.get("delay_ticks", 0)
-        if (
-            not isinstance(delay_ticks, int)
-            or isinstance(delay_ticks, bool)
-            or delay_ticks < 0
-        ):
+        if not isinstance(delay_ticks, int) or isinstance(delay_ticks, bool) or delay_ticks < 0:
             raise ScenarioLoadError(
-                f"scenario_event[{event_id}].delay_ticks must be a "
-                f"non-negative integer, got {delay_ticks!r}"
+                f"scenario_event[{event_id}].delay_ticks must be a non-negative integer, got {delay_ticks!r}"
             )
         conditions = tuple(
             parse_scenario_event_condition(
-                c, mapper, path=f"scenario_event[{event_id}].conditions[{i}]",
+                c,
+                mapper,
+                path=f"scenario_event[{event_id}].conditions[{i}]",
             )
             for i, c in enumerate(raw.get("conditions", []))
         )
@@ -182,21 +158,18 @@ def parse_scenario_events(
                 target_spot_id=optional_spot_id(target_spot, mapper),
                 schedules_turn=parse_bool(
                     observation.get("schedules_turn", True),
-                    path=(
-                        f"scenario_event[{event_id}].observation.schedules_turn"
-                    ),
+                    path=(f"scenario_event[{event_id}].observation.schedules_turn"),
                 ),
                 breaks_movement=parse_bool(
                     observation.get("breaks_movement", False),
-                    path=(
-                        f"scenario_event[{event_id}].observation.breaks_movement"
-                    ),
+                    path=(f"scenario_event[{event_id}].observation.breaks_movement"),
                 ),
                 next_event_id=next_event_id,
                 delay_ticks=delay_ticks,
             )
         )
     return tuple(parsed)
+
 
 def parse_player_outcome_rules(
     raw_rules: Any,
@@ -217,9 +190,7 @@ def parse_player_outcome_rules(
         if not isinstance(rule_id, str) or not rule_id.strip():
             raise ScenarioLoadError(f"{path}.id must be a non-empty string")
         if rule_id in seen_ids:
-            raise ScenarioLoadError(
-                f"player_outcome_rules id {rule_id!r} が重複しています"
-            )
+            raise ScenarioLoadError(f"player_outcome_rules id {rule_id!r} が重複しています")
         seen_ids.add(rule_id)
 
         trigger_raw = raw.get("trigger")
@@ -230,10 +201,7 @@ def parse_player_outcome_rules(
             raise ScenarioLoadError(f"{path}.player_conditions must be a list")
         for condition_index, condition_raw in enumerate(player_conditions_raw):
             if not isinstance(condition_raw, dict):
-                raise ScenarioLoadError(
-                    f"{path}.player_conditions[{condition_index}] must be a "
-                    "condition object"
-                )
+                raise ScenarioLoadError(f"{path}.player_conditions[{condition_index}] must be a condition object")
 
         once = raw.get("once")
         if not isinstance(once, bool):
@@ -243,9 +211,7 @@ def parse_player_outcome_rules(
         try:
             outcome = PlayerOutcomeEnum(outcome_raw)
         except (TypeError, ValueError) as exc:
-            raise ScenarioLoadError(
-                f"{path}.outcome is unknown: {outcome_raw!r}"
-            ) from exc
+            raise ScenarioLoadError(f"{path}.outcome is unknown: {outcome_raw!r}") from exc
 
         try:
             parsed.append(
@@ -260,13 +226,9 @@ def parse_player_outcome_rules(
                         parse_scenario_event_condition(
                             condition_raw,
                             mapper,
-                            path=(
-                                f"{path}.player_conditions[{condition_index}]"
-                            ),
+                            path=(f"{path}.player_conditions[{condition_index}]"),
                         )
-                        for condition_index, condition_raw in enumerate(
-                            player_conditions_raw
-                        )
+                        for condition_index, condition_raw in enumerate(player_conditions_raw)
                     ),
                     outcome=outcome,
                     once=once,
@@ -276,6 +238,7 @@ def parse_player_outcome_rules(
             raise ScenarioLoadError(f"{path}: {exc}") from exc
     return tuple(parsed)
 
+
 def parse_scenario_event_condition(
     raw: dict[str, Any],
     mapper: ScenarioIdMapper,
@@ -283,10 +246,7 @@ def parse_scenario_event_condition(
     path: str = "condition",
 ) -> ScenarioEventCondition:
     if not isinstance(raw, dict):
-        raise ScenarioLoadError(
-            f"{path} must be a condition object "
-            f"(got {type(raw).__name__})"
-        )
+        raise ScenarioLoadError(f"{path} must be a condition object (got {type(raw).__name__})")
     # ---- 糖衣記法を従来形に正規化 ----
     # `all_of: [...]` / `any_of: [...]` / `not_: <cond>` の
     # いずれかが存在すれば `condition_type` + `children` 形に変換する。
@@ -295,14 +255,10 @@ def parse_scenario_event_condition(
     if sugar_keys:
         if len(sugar_keys) > 1:
             raise ScenarioLoadError(
-                f"{path}: multiple composite shortcuts found "
-                f"({sorted(sugar_keys)}); use only one of all_of/any_of/not_"
+                f"{path}: multiple composite shortcuts found ({sorted(sugar_keys)}); use only one of all_of/any_of/not_"
             )
         if "condition_type" in raw:
-            raise ScenarioLoadError(
-                f"{path}: cannot mix 'condition_type' with composite "
-                f"shortcut '{sugar_keys[0]}'"
-            )
+            raise ScenarioLoadError(f"{path}: cannot mix 'condition_type' with composite shortcut '{sugar_keys[0]}'")
         shortcut = sugar_keys[0]
         reject_unknown_keys(raw, (shortcut,), where=path)
         target_type = _COMPOSITE_SUGAR[shortcut]
@@ -312,29 +268,26 @@ def parse_scenario_event_condition(
             # 迷うところだが、AST が 1 child 想定なので明確に dict 限定。
             if not isinstance(payload, dict):
                 raise ScenarioLoadError(
-                    f"{path}: not_ must be a single condition object "
-                    f"(got {type(payload).__name__})"
+                    f"{path}: not_ must be a single condition object (got {type(payload).__name__})"
                 )
             children_list = [payload]
         else:
             if not isinstance(payload, list):
-                raise ScenarioLoadError(
-                    f"{path}: {shortcut} must be a list "
-                    f"(got {type(payload).__name__})"
-                )
+                raise ScenarioLoadError(f"{path}: {shortcut} must be a list (got {type(payload).__name__})")
             # list 内の各要素も dict であることを保証する。null や文字列が
             # 紛れ込むと再帰呼び出し先で raw KeyError になりエラーが
             # 不親切になるため、ここで早期に shortcut の path 付きで弾く。
             for i, item in enumerate(payload):
                 if not isinstance(item, dict):
                     raise ScenarioLoadError(
-                        f"{path}.{shortcut}[{i}] must be a condition object "
-                        f"(got {type(item).__name__})"
+                        f"{path}.{shortcut}[{i}] must be a condition object (got {type(item).__name__})"
                     )
             children_list = payload
         children = tuple(
             parse_scenario_event_condition(
-                c, mapper, path=f"{path}.{shortcut}[{i}]",
+                c,
+                mapper,
+                path=f"{path}.{shortcut}[{i}]",
             )
             for i, c in enumerate(children_list)
         )
@@ -348,9 +301,7 @@ def parse_scenario_event_condition(
 
     ctype = raw.get("condition_type")
     if not isinstance(ctype, str):
-        raise ScenarioLoadError(
-            f"{path}.condition_type must be a string, got {ctype!r}"
-        )
+        raise ScenarioLoadError(f"{path}.condition_type must be a string, got {ctype!r}")
     # 綴り間違いはここで落とす。**通すと永久に発火しない出来事になる。**
     #
     # 評価器は知らない種類を False に落とすので、読み込みが通った時点で
@@ -358,8 +309,7 @@ def parse_scenario_event_condition(
     # 違いが「なぜか何も起きない」になる。
     if ctype not in SUPPORTED_CONDITION_TYPES:
         raise ScenarioLoadError(
-            f"{path}: unknown condition_type {ctype!r}; valid values: "
-            f"{sorted(SUPPORTED_CONDITION_TYPES)}"
+            f"{path}: unknown condition_type {ctype!r}; valid values: {sorted(SUPPORTED_CONDITION_TYPES)}"
         )
     reject_unknown_keys(
         raw,
@@ -370,40 +320,28 @@ def parse_scenario_event_condition(
         game_phase = raw.get("game_phase")
         known_phases = {phase.value for phase in GamePhase}
         if not isinstance(game_phase, str) or game_phase not in known_phases:
-            raise ScenarioLoadError(
-                f"{path}.game_phase must be one of "
-                f"{', '.join(sorted(known_phases))}"
-            )
+            raise ScenarioLoadError(f"{path}.game_phase must be one of {', '.join(sorted(known_phases))}")
     if ctype == "WEATHER_IS":
         weather_type = raw.get("weather_type")
         if weather_type is None:
-            raise ScenarioLoadError(
-                f"{path}.weather_type is required for WEATHER_IS"
-            )
+            raise ScenarioLoadError(f"{path}.weather_type is required for WEATHER_IS")
         if not isinstance(weather_type, str):
-            raise ScenarioLoadError(
-                f"{path}.weather_type must be a string, got {weather_type!r}"
-            )
+            raise ScenarioLoadError(f"{path}.weather_type must be a string, got {weather_type!r}")
         known_weather_types = {weather.value for weather in WeatherTypeEnum}
         if weather_type not in known_weather_types:
             raise ScenarioLoadError(
-                f"{path}.weather_type has unknown value {weather_type!r}; "
-                f"valid values: {sorted(known_weather_types)}"
+                f"{path}.weather_type has unknown value {weather_type!r}; valid values: {sorted(known_weather_types)}"
             )
     if ctype == "PLAYERS_AT_SPOT":
         if not raw.get("target_spot"):
-            raise ScenarioLoadError(
-                f"{path}.target_spot is required for PLAYERS_AT_SPOT"
-            )
+            raise ScenarioLoadError(f"{path}.target_spot is required for PLAYERS_AT_SPOT")
         required_player_count = raw.get("required_player_count")
         if required_player_count is not None and (
             isinstance(required_player_count, bool)
             or not isinstance(required_player_count, int)
             or required_player_count <= 0
         ):
-            raise ScenarioLoadError(
-                f"{path}.required_player_count must be a positive integer"
-            )
+            raise ScenarioLoadError(f"{path}.required_player_count must be a positive integer")
     if ctype == "OBJECT_STATE_INT_GREATER_THAN_OTHER":
         # 2 オブジェクトの比較は 4 フィールドが揃って初めて意味を持つ。
         # 欠けたまま通すと評価器が常に不成立を返し、判定イベントが静かに
@@ -411,21 +349,19 @@ def parse_scenario_event_condition(
         for field_name in ("target_object", "state_key", "other_object", "other_state_key"):
             value = raw.get(field_name)
             if not isinstance(value, str) or not value.strip():
-                raise ScenarioLoadError(
-                    f"{path}.{field_name} is required for "
-                    "OBJECT_STATE_INT_GREATER_THAN_OTHER"
-                )
+                raise ScenarioLoadError(f"{path}.{field_name} is required for OBJECT_STATE_INT_GREATER_THAN_OTHER")
     # 合成条件 (NOT / AND / OR): children を再帰パース
     if ctype in {"NOT", "AND", "OR"}:
         children_raw = raw.get("children", [])
         if not isinstance(children_raw, list):
             raise ScenarioLoadError(
-                f"{path}: {ctype} condition.children must be a list "
-                f"(got {type(children_raw).__name__})"
+                f"{path}: {ctype} condition.children must be a list (got {type(children_raw).__name__})"
             )
         children = tuple(
             parse_scenario_event_condition(
-                c, mapper, path=f"{path}.children[{i}]",
+                c,
+                mapper,
+                path=f"{path}.children[{i}]",
             )
             for i, c in enumerate(children_raw)
         )
@@ -476,11 +412,7 @@ def parse_scenario_event_condition(
             ),
             # None 許容で他 condition_type では無視される。範囲チェックは
             # ScenarioEventCondition.__post_init__ に任せる。
-            probability=(
-                float(raw["probability"])
-                if raw.get("probability") is not None
-                else None
-            ),
+            probability=(float(raw["probability"]) if raw.get("probability") is not None else None),
         )
     except ScenarioLoadError:
         raise

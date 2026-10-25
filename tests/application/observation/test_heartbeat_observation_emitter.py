@@ -61,9 +61,7 @@ class _RecordingTurnTrigger(ILlmTurnTrigger):
 
 
 def _isolating(recorder: CollectingTraceRecorder) -> WorldTickFailureIsolator:
-    return WorldTickFailureIsolator(
-        policy=WorldTickFailurePolicy.ISOLATE, trace_recorder_provider=lambda: recorder
-    )
+    return WorldTickFailureIsolator(policy=WorldTickFailurePolicy.ISOLATE, trace_recorder_provider=lambda: recorder)
 
 
 def _failed_stages(recorder: CollectingTraceRecorder) -> list[str]:
@@ -131,9 +129,7 @@ class TestHeartbeatObservationEmitter:
 
     def test_time_label_provider_is_required(self) -> None:
         """heartbeat の記録境界は世界時刻 provider の明示を必須にする。"""
-        parameter = inspect.signature(HeartbeatObservationEmitter).parameters[
-            "time_label_provider"
-        ]
+        parameter = inspect.signature(HeartbeatObservationEmitter).parameters["time_label_provider"]
         assert parameter.default is inspect.Parameter.empty
         buffer = DefaultObservationContextBuffer()
         with pytest.raises(TypeError, match="time_label_provider"):
@@ -151,10 +147,7 @@ class TestHeartbeatObservationEmitter:
             emitter.run(WorldTick(tick))
 
         # tick=1: anchor, 3,5,7 で発行 → 3 回
-        ticks = [
-            o.output.structured["tick"]
-            for o in buffer.get_observations(PlayerId(1))
-        ]
+        ticks = [o.output.structured["tick"] for o in buffer.get_observations(PlayerId(1))]
         assert ticks == [3, 5, 7]
         assert trigger.scheduled == [1, 1, 1]
 

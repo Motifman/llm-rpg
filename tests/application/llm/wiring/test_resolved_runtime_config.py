@@ -8,6 +8,7 @@ PR #439 / #446 で発覚した「同 env を 2 経路で別解釈する silent f
 3. trace 用の dict 表現で API key が必ずマスクされる (= 漏洩防止)
 4. test 用 safe default factory (`for_tests`) で test fixture を簡潔化できる
 """
+
 from __future__ import annotations
 
 import pytest
@@ -21,50 +22,53 @@ class TestFromEnvDefaults:
     def test_empty_config_default_resolve(self) -> None:
         """空設定で default に resolve。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.llm_client_kind == 'stub'
+        assert cfg.llm_client_kind == "stub"
         assert cfg.llm_model is None
         assert cfg.llm_api_key is None
         assert cfg.llm_api_base is None
         assert cfg.llm_request_timeout_seconds == 90.0
-        assert cfg.llm_reasoning_effort == 'minimal'
+        assert cfg.llm_reasoning_effort == "minimal"
         assert cfg.llm_wall_time_cap_seconds is None
         assert cfg.llm_rate_limit_retry_attempts == 3
         assert cfg.llm_rate_limit_retry_base_sleep == 2.0
         assert cfg.openrouter_provider is None
         assert cfg.openrouter_quantization is None
         assert cfg.scenario_random_seed is None
-        assert cfg.prompt_dataset_capture_failure_policy == 'fail'
+        assert cfg.prompt_dataset_capture_failure_policy == "fail"
         assert cfg.reason_first_two_step_enabled is True
+
 
 class TestPromptDatasetCaptureConfig:
     """prompt dataset の保存に失敗したときの方針を解決する。"""
 
     def test_failure_policy_resolves_to_warn(self) -> None:
         """PROMPT_DATASET_CAPTURE_FAILURE_POLICY に warn を書くと、保存失敗時の方針が warn になる。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'PROMPT_DATASET_CAPTURE_FAILURE_POLICY': 'warn'})
-        assert cfg.prompt_dataset_capture_failure_policy == 'warn'
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={"PROMPT_DATASET_CAPTURE_FAILURE_POLICY": "warn"})
+        assert cfg.prompt_dataset_capture_failure_policy == "warn"
+
 
 class TestWorldTickFailurePolicyConfig:
     """WORLD_TICK_FAILURE_POLICY が実 run では取りやめ、試験の既定では止める方針に解決されること。"""
 
     def test_from_mapping_defaults_to_isolate(self) -> None:
         """runtime_config に書かなければ isolate に解決され、キーを書き忘れた実験設定でも run が止まらない。"""
-        assert ResolvedLlmRuntimeConfig.from_mapping().world_tick_failure_policy == 'isolate'
+        assert ResolvedLlmRuntimeConfig.from_mapping().world_tick_failure_policy == "isolate"
 
     def test_fail_fast_can_be_selected(self) -> None:
         """fail_fast と書けば、例外で止める方針に解決される。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'WORLD_TICK_FAILURE_POLICY': 'fail_fast'})
-        assert cfg.world_tick_failure_policy == 'fail_fast'
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={"WORLD_TICK_FAILURE_POLICY": "fail_fast"})
+        assert cfg.world_tick_failure_policy == "fail_fast"
 
     def test_unknown_value_fails_fast(self) -> None:
         """知らない値は既定へ倒さず、キー名を含む ValueError で止める。"""
-        with pytest.raises(ValueError, match='WORLD_TICK_FAILURE_POLICY'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'WORLD_TICK_FAILURE_POLICY': 'skip'})
+        with pytest.raises(ValueError, match="WORLD_TICK_FAILURE_POLICY"):
+            ResolvedLlmRuntimeConfig.from_mapping(values={"WORLD_TICK_FAILURE_POLICY": "skip"})
 
     def test_direct_construction_rejects_unknown_value(self) -> None:
         """from_mapping を通らない構築でも、知らない値は ValueError で止める。"""
-        with pytest.raises(ValueError, match='fail_fast'):
-            ResolvedLlmRuntimeConfig.for_tests(world_tick_failure_policy='skip')
+        with pytest.raises(ValueError, match="fail_fast"):
+            ResolvedLlmRuntimeConfig.for_tests(world_tick_failure_policy="skip")
+
 
 class TestReasoningEffortDefault:
     """LLM_REASONING_EFFORT の既定は minimal で、明示した値はそのまま使う。"""
@@ -72,12 +76,13 @@ class TestReasoningEffortDefault:
     def test_unset_resolves_to_minimal(self) -> None:
         """LLM_REASONING_EFFORT を書かないと minimal になる。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.llm_reasoning_effort == 'minimal'
+        assert cfg.llm_reasoning_effort == "minimal"
 
     def test_explicit_none_stays_none(self) -> None:
         """LLM_REASONING_EFFORT に none と書けば、既定の minimal ではなく none のまま。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_REASONING_EFFORT': 'none'})
-        assert cfg.llm_reasoning_effort == 'none'
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_REASONING_EFFORT": "none"})
+        assert cfg.llm_reasoning_effort == "none"
+
 
 class TestReasonFirstTwoStepConfig:
     """reason-first 2段階ターンを使うかを、設定のキーではなく tool_choice から決める。"""
@@ -90,12 +95,13 @@ class TestReasonFirstTwoStepConfig:
     def test_for_tests_follows_the_tool_choice(self) -> None:
         """for_tests も本番と同じく、tool_choice が auto なら使わず、required なら使う。"""
         assert ResolvedLlmRuntimeConfig.for_tests().reason_first_two_step_enabled is True
-        assert ResolvedLlmRuntimeConfig.for_tests(llm_tool_choice='auto').reason_first_two_step_enabled is False
+        assert ResolvedLlmRuntimeConfig.for_tests(llm_tool_choice="auto").reason_first_two_step_enabled is False
 
     def test_trace_dict_includes_flag(self) -> None:
         """run_start / manifest から reason-first を使ったかを後で確認できる。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.to_trace_dict()['reason_first_two_step_enabled'] is True
+        assert cfg.to_trace_dict()["reason_first_two_step_enabled"] is True
+
 
 class TestRemovedShortTermMemoryTurnWindowKeys:
     """短期記憶のターン数の設定のキーは消した。書かれていたら、実験を始める前に理由を添えて止めることを保証する (design_decisions D1824-9)。"""
@@ -106,54 +112,71 @@ class TestRemovedShortTermMemoryTurnWindowKeys:
         with pytest.raises(ValueError, match=f"removed runtime_config key.*{key}.*RECENT_TURNS / FOLD_TURNS"):
             ResolvedLlmRuntimeConfig.from_mapping(values={key: "20"})
 
+
 class TestFromEnvExplicit:
     """設定値明示で全フィールドが正しく resolve される。"""
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'low', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'SCENARIO_RANDOM_SEED': '42'})
-        assert cfg.llm_client_kind == 'litellm'
-        assert cfg.llm_model == 'openrouter/google/gemma-4-31b-it'
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values={
+                "LLM_CLIENT": "litellm",
+                "LLM_MODEL": "openrouter/google/gemma-4-31b-it",
+                "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
+                "LLM_REQUEST_TIMEOUT_SECONDS": "60",
+                "LLM_REASONING_EFFORT": "low",
+                "LLM_WALL_TIME_CAP_SECONDS": "65",
+                "LLM_RATE_LIMIT_RETRY_ATTEMPTS": "2",
+                "LLM_RATE_LIMIT_RETRY_BASE_SLEEP": "1.5",
+                "OPENROUTER_PROVIDER": "Parasail",
+                "OPENROUTER_QUANTIZATION": "fp8",
+                "SCENARIO_RANDOM_SEED": "42",
+            }
+        )
+        assert cfg.llm_client_kind == "litellm"
+        assert cfg.llm_model == "openrouter/google/gemma-4-31b-it"
         assert cfg.llm_api_key is None
-        assert cfg.llm_api_base == 'https://openrouter.ai/api/v1'
+        assert cfg.llm_api_base == "https://openrouter.ai/api/v1"
         assert cfg.llm_request_timeout_seconds == 60.0
-        assert cfg.llm_reasoning_effort == 'low'
+        assert cfg.llm_reasoning_effort == "low"
         assert cfg.llm_wall_time_cap_seconds == 65.0
         assert cfg.llm_rate_limit_retry_attempts == 2
         assert cfg.llm_rate_limit_retry_base_sleep == 1.5
-        assert cfg.openrouter_provider == 'Parasail'
-        assert cfg.openrouter_quantization == 'fp8'
+        assert cfg.openrouter_provider == "Parasail"
+        assert cfg.openrouter_quantization == "fp8"
         assert cfg.scenario_random_seed == 42
 
     def test_empty_string_env_default(self) -> None:
         """空文字は「未設定」と等価 (PR #434 ポリシー)。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_MODEL': '', 'OPENROUTER_PROVIDER': ''})
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_MODEL": "", "OPENROUTER_PROVIDER": ""})
         assert cfg.llm_model is None
         assert cfg.llm_api_key is None
         assert cfg.openrouter_provider is None
+
 
 class TestFromEnvFailFast:
     """typo / 不正値 → ValueError (= PR #434 ポリシー継承)。"""
 
     def test_runtime_config_unknown_raises_value_error(self) -> None:
         """profile の typo は既定値への縮退ではなく起動時に止まる。"""
-        with pytest.raises(ValueError, match='unknown runtime_config key'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPOSODIC_ENABLED': '1'})
+        with pytest.raises(ValueError, match="unknown runtime_config key"):
+            ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_EPOSODIC_ENABLED": "1"})
 
     def test_runtime_config_api_key_raises_value_error(self) -> None:
         """秘密情報は profile ではなく process environment だけに置く。"""
-        with pytest.raises(ValueError, match='secret key'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'OPENAI_API_KEY': 'sk-secret'})
+        with pytest.raises(ValueError, match="secret key"):
+            ResolvedLlmRuntimeConfig.from_mapping(values={"OPENAI_API_KEY": "sk-secret"})
 
     def test_llm_client_unknown_raises_value_error(self) -> None:
         """llm client 未知の値は ValueError。"""
-        with pytest.raises(ValueError, match='LLM_CLIENT'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_CLIENT': 'ollama'})
+        with pytest.raises(ValueError, match="LLM_CLIENT"):
+            ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_CLIENT": "ollama"})
 
     def test_timeout_raises_value_error(self) -> None:
         """timeout 非数値は ValueError。"""
-        with pytest.raises(ValueError, match='LLM_REQUEST_TIMEOUT_SECONDS'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_REQUEST_TIMEOUT_SECONDS': 'ten'})
+        with pytest.raises(ValueError, match="LLM_REQUEST_TIMEOUT_SECONDS"):
+            ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_REQUEST_TIMEOUT_SECONDS": "ten"})
+
 
 class TestTheRemovedMemoryPartKeysAreRejected:
     """消した記憶の部品 (#1631) のキーを profile に書くと、未知のキーとして起動前に落ちることを保証する。
@@ -249,9 +272,10 @@ class TestFromMappingIgnoresOsEnviron:
 
     def test_values_os_environ(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """values 省略時も os environ を読まない。"""
-        monkeypatch.setenv('LLM_MODEL', 'openrouter/google/gemma-4-31b-it')
+        monkeypatch.setenv("LLM_MODEL", "openrouter/google/gemma-4-31b-it")
         cfg = ResolvedLlmRuntimeConfig.from_mapping()
         assert cfg.llm_model is None
+
 
 class TestImmutability:
     """frozen dataclass: 構築後の改変を防ぐ (= hash 可能 / 共有 safe)。"""
@@ -259,14 +283,16 @@ class TestImmutability:
     def test_field_set_frozen_instance_error(self) -> None:
         """field の set は FrozenInstanceError。"""
         from dataclasses import FrozenInstanceError
+
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
         with pytest.raises(FrozenInstanceError):
-            cfg.llm_client_kind = 'litellm'
+            cfg.llm_client_kind = "litellm"
 
     def test_hash(self) -> None:
         """frozen=True なので hash できる (= set / dict key に使える)。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
         _ = hash(cfg)
+
 
 class TestForTestsFactory:
     """test fixture の肥大化を防ぐ safe default factory。"""
@@ -279,34 +305,37 @@ class TestForTestsFactory:
 
     def test_override_keyword(self) -> None:
         """override だけ keyword で指定できる。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(llm_client_kind='litellm')
-        assert cfg.llm_client_kind == 'litellm'
+        cfg = ResolvedLlmRuntimeConfig.for_tests(llm_client_kind="litellm")
+        assert cfg.llm_client_kind == "litellm"
 
     def test_unknown_override_key_raises_type_error(self) -> None:
         """typo を発見する fail-fast。"""
-        with pytest.raises(TypeError, match='Unknown override keys'):
-            ResolvedLlmRuntimeConfig.for_tests(short_term_memory='rolling_summary')
+        with pytest.raises(TypeError, match="Unknown override keys"):
+            ResolvedLlmRuntimeConfig.for_tests(short_term_memory="rolling_summary")
+
 
 class TestToTraceDict:
     """run_start trace 用の dict 表現。API key 必ずマスク。"""
 
     def test_all_dict_rendered(self) -> None:
         """全フィールドが dict に出る。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(llm_client_kind='litellm', llm_model='openrouter/google/gemma-4-31b-it')
+        cfg = ResolvedLlmRuntimeConfig.for_tests(
+            llm_client_kind="litellm", llm_model="openrouter/google/gemma-4-31b-it"
+        )
         d = cfg.to_trace_dict()
-        assert d['llm_client_kind'] == 'litellm'
-        assert d['llm_model'] == 'openrouter/google/gemma-4-31b-it'
-        assert 'typed_judgment_provider' in d
+        assert d["llm_client_kind"] == "litellm"
+        assert d["llm_model"] == "openrouter/google/gemma-4-31b-it"
+        assert "typed_judgment_provider" in d
 
     def test_api_key(self) -> None:
         """API key の生値は絶対に trace に出さない (漏洩防止)。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(llm_api_key='sk-or-secret-12345')
+        cfg = ResolvedLlmRuntimeConfig.for_tests(llm_api_key="sk-or-secret-12345")
         d = cfg.to_trace_dict()
-        assert d['llm_api_key'] == '***'
-        assert 'sk-or-secret-12345' not in str(d)
+        assert d["llm_api_key"] == "***"
+        assert "sk-or-secret-12345" not in str(d)
 
     def test_api_key_none(self) -> None:
         """api key None の場合 None のまま。"""
         cfg = ResolvedLlmRuntimeConfig.for_tests(llm_api_key=None)
         d = cfg.to_trace_dict()
-        assert d['llm_api_key'] is None
+        assert d["llm_api_key"] is None

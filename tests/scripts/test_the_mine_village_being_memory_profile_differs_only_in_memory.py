@@ -29,6 +29,7 @@ _PROFILES = _ROOT / "data" / "experiment_profiles"
 
 _BEING_MEMORY = "memory_jev_mine_v1_v41_thinking_capped_being_memory"
 
+
 def _load(name: str) -> dict:
     return json.loads((_PROFILES / f"{name}.json").read_text(encoding="utf-8"))
 
@@ -62,9 +63,7 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
         """make experiment と同じ経路で解決すると起動時の検査に通り、目次は比べた件数 (10 件、一度に 3 件) で入る。"""
         being = _load(_BEING_MEMORY)
 
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(
-            values=_runtime_config_mapping_from_source(being)
-        )
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values=_runtime_config_mapping_from_source(being))
 
         assert cfg.being_episode_index_limit == 10
         assert cfg.being_episode_recall_max_handles == 3

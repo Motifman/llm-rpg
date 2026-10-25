@@ -1,6 +1,7 @@
 """
 SNSユーザー検索関連例外のテスト
 """
+
 import pytest
 
 from ai_rpg_world.application.social.exceptions.query.user_query_exception import (
@@ -27,11 +28,7 @@ class TestUserQueryException:
 
     def test_create_query_exception_with_context(self):
         """コンテキスト付きのクエリ例外作成テスト"""
-        exception = UserQueryException(
-            "クエリエラー",
-            user_id=1,
-            target_user_id=2
-        )
+        exception = UserQueryException("クエリエラー", user_id=1, target_user_id=2)
 
         assert str(exception) == "クエリエラー"
         assert exception.error_code == "USERQUERYEXCEPTION"
@@ -111,11 +108,7 @@ class TestProfileQueryException:
 
     def test_create_profile_query_exception_with_context(self):
         """コンテキスト付きのプロフィールクエリ例外作成テスト"""
-        exception = ProfileQueryException(
-            "プロフィールクエリエラー",
-            user_id=1,
-            target_user_id=2
-        )
+        exception = ProfileQueryException("プロフィールクエリエラー", user_id=1, target_user_id=2)
 
         assert str(exception) == "プロフィールクエリエラー"
         assert exception.error_code == "PROFILE_QUERY_ERROR"
@@ -136,11 +129,7 @@ class TestRelationshipQueryException:
 
     def test_create_relationship_query_exception(self):
         """関係性クエリ例外の作成テスト"""
-        exception = RelationshipQueryException(
-            "関係性クエリエラー",
-            "follow",
-            1
-        )
+        exception = RelationshipQueryException("関係性クエリエラー", "follow", 1)
 
         assert str(exception) == "関係性クエリエラー"
         assert exception.error_code == "RELATIONSHIP_QUERY_ERROR"

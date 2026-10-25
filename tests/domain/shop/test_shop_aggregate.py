@@ -1,4 +1,5 @@
 """ShopAggregateのテスト"""
+
 import pytest
 
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -126,9 +127,7 @@ class TestShopAggregate:
     class TestIsOwner:
         """is_ownerメソッドのテスト"""
 
-        def test_non_owner_returns_false(
-            self, shop: ShopAggregate, other_player_id: PlayerId
-        ):
+        def test_non_owner_returns_false(self, shop: ShopAggregate, other_player_id: PlayerId):
             """オーナー以外はFalseを返す"""
             assert shop.is_owner(other_player_id) is False
 

@@ -73,9 +73,9 @@ class _DepartInTurnAt:
             self.world.flags.add("lift_departed")
 
 
-def _service(*, departs_at: int, grace_expires_at: int) -> tuple[
-    SpotGraphSimulationApplicationService, PlayerOutcomeRegistry
-]:
+def _service(
+    *, departs_at: int, grace_expires_at: int
+) -> tuple[SpotGraphSimulationApplicationService, PlayerOutcomeRegistry]:
     world = _World(flags=set())
     registry = PlayerOutcomeRegistry.new_for_players([_PLAYER])
     time_provider = InMemoryGameTimeProvider()

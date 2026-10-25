@@ -32,17 +32,14 @@ class TestItemInstance:
             rarity=Rarity.COMMON,
             description="A test sword for testing",
             max_stack_size=max_stack,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
 
     @pytest.fixture
     def sample_item_instance(self, sample_item_spec):
         """テスト用のItemInstanceを作成"""
         item_id = ItemInstanceId(1)
-        return ItemInstance(
-            item_instance_id=item_id,
-            item_spec=sample_item_spec
-        )
+        return ItemInstance(item_instance_id=item_id, item_spec=sample_item_spec)
 
     @pytest.fixture
     def item_instance_with_durability(self):
@@ -58,14 +55,10 @@ class TestItemInstance:
             description="A durable sword for testing",
             max_stack_size=max_stack,
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         durability = Durability(max_value=100, current=50)
-        return ItemInstance(
-            item_instance_id=item_id,
-            item_spec=item_spec,
-            durability=durability
-        )
+        return ItemInstance(item_instance_id=item_id, item_spec=item_spec, durability=durability)
 
     def test_create_basic_item_instance(self, sample_item_instance):
         """基本的なItemInstance作成のテスト"""
@@ -82,7 +75,6 @@ class TestItemInstance:
         assert item_instance_with_durability.durability is not None
         assert item_instance_with_durability.durability.max_value == 100
         assert item_instance_with_durability.durability.current == 50
-
 
     def test_use_basic_item(self, sample_item_instance):
         """基本アイテムの使用テスト（数量1の消費で0になる）"""
@@ -120,14 +112,10 @@ class TestItemInstance:
             description="A broken sword",
             max_stack_size=max_stack,
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         durability = Durability(max_value=100, current=0)  # 破損済み
-        item = ItemInstance(
-            item_instance_id=item_id,
-            item_spec=spec,
-            durability=durability
-        )
+        item = ItemInstance(item_instance_id=item_id, item_spec=spec, durability=durability)
         success = item.use()
         assert success is False
         assert item.durability.current == 0
@@ -188,18 +176,12 @@ class TestItemInstance:
             item_type=ItemType.CONSUMABLE,
             rarity=Rarity.COMMON,
             description="An item with limited stack size",
-            max_stack_size=MaxStackSize(2)
+            max_stack_size=MaxStackSize(2),
         )
-        item = ItemInstance(
-            item_instance_id=ItemInstanceId(13),
-            item_spec=limited_spec
-        )
+        item = ItemInstance(item_instance_id=ItemInstanceId(13), item_spec=limited_spec)
         item.add_quantity(1)  # 最大まで追加
 
-        other = ItemInstance(
-            item_instance_id=ItemInstanceId(14),
-            item_spec=limited_spec
-        )
+        other = ItemInstance(item_instance_id=ItemInstanceId(14), item_spec=limited_spec)
         assert not item.can_stack_with(other)
 
     @pytest.mark.parametrize(
@@ -220,7 +202,7 @@ class TestItemInstance:
             description="A sword with durability",
             max_stack_size=MaxStackSize(1),  # 耐久度付きアイテムはmax_stack_size=1でなければならない
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
 
         item1 = ItemInstance(
@@ -257,15 +239,11 @@ class TestItemInstance:
             rarity=Rarity.COMMON,
             description="A test item",
             max_stack_size=max_stack,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         item_id = ItemInstanceId(100)
         with pytest.raises(QuantityValidationException):
-            ItemInstance(
-                item_instance_id=item_id,
-                item_spec=spec,
-                quantity=-1
-            )
+            ItemInstance(item_instance_id=item_id, item_spec=spec, quantity=-1)
 
     def test_invalid_durability_without_spec_max(self):
         """スペックに耐久度最大値がないのに耐久度を設定した場合のテスト"""
@@ -278,17 +256,13 @@ class TestItemInstance:
             rarity=Rarity.COMMON,
             description="An item without durability",
             max_stack_size=max_stack,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
             # durability_maxは設定しない
         )
         item_id = ItemInstanceId(101)
         durability = Durability(max_value=100, current=100)
         with pytest.raises(DurabilityValidationException):
-            ItemInstance(
-                item_instance_id=item_id,
-                item_spec=spec,
-                durability=durability
-            )
+            ItemInstance(item_instance_id=item_id, item_spec=spec, durability=durability)
 
     def test_invalid_durability_max_mismatch(self):
         """耐久度の最大値がスペックのdurability_maxと一致しない場合のテスト"""
@@ -302,16 +276,12 @@ class TestItemInstance:
             description="An item with durability",
             max_stack_size=max_stack,
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         item_id = ItemInstanceId(102)
         durability = Durability(max_value=200, current=200)  # スペックと一致しない
         with pytest.raises(DurabilityValidationException):
-            ItemInstance(
-                item_instance_id=item_id,
-                item_spec=spec,
-                durability=durability
-            )
+            ItemInstance(item_instance_id=item_id, item_spec=spec, durability=durability)
 
     def test_add_quantity_zero(self, sample_item_instance):
         """加算0は数量例外で拒否し、現在数量1を保持する。"""
@@ -353,11 +323,11 @@ class TestItemInstance:
         """同じ実体IDなら仕様や数量が違っても等しく、異なる実体IDは等しくない。"""
         same_id = ItemInstance(
             item_instance_id=ItemInstanceId(1),
-            item_spec=sample_item_spec  # 同じスペックでもIDが同じなら等価
+            item_spec=sample_item_spec,  # 同じスペックでもIDが同じなら等価
         )
         different_id = ItemInstance(
             item_instance_id=ItemInstanceId(2),
-            item_spec=sample_item_spec  # IDが異なるので非等価
+            item_spec=sample_item_spec,  # IDが異なるので非等価
         )
 
         assert sample_item_instance == same_id
@@ -372,10 +342,7 @@ class TestItemInstance:
 
     def test_hash(self, sample_item_instance, sample_item_spec):
         """同じ実体IDは数量が異なっても同じハッシュとなり、集合では1件にまとまる。"""
-        same_id = ItemInstance(
-            item_instance_id=ItemInstanceId(1),
-            item_spec=sample_item_spec
-        )
+        same_id = ItemInstance(item_instance_id=ItemInstanceId(1), item_spec=sample_item_spec)
 
         assert hash(sample_item_instance) == hash(same_id)
 
@@ -410,7 +377,7 @@ class TestItemInstance:
             item_type=ItemType.CONSUMABLE,
             rarity=Rarity.COMMON,
             description="An item with limited stack size",
-            max_stack_size=max_stack
+            max_stack_size=max_stack,
         )
         item_id = ItemInstanceId(103)
 
@@ -418,7 +385,7 @@ class TestItemInstance:
             ItemInstance(
                 item_instance_id=item_id,
                 item_spec=spec,
-                quantity=15  # max_stack_size(10)を超える
+                quantity=15,  # max_stack_size(10)を超える
             )
 
         # エラーメッセージに適切な情報が含まれていることを確認
@@ -435,14 +402,14 @@ class TestItemInstance:
             description="An item with durability and correct stack size",
             max_stack_size=MaxStackSize(1),  # 正しい
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
 
         # このspecでは正常に作成できるはず
         instance = ItemInstance(
             item_instance_id=ItemInstanceId(104),
             item_spec=valid_spec,
-            durability=Durability(max_value=100, current=100)
+            durability=Durability(max_value=100, current=100),
         )
         assert instance.durability is not None
         assert instance.max_stack_size.value == 1

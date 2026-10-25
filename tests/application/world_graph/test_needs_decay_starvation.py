@@ -34,6 +34,7 @@ def _build_status_with_hunger(hunger_value: int, hp: int = 100) -> PlayerStatusA
     from ai_rpg_world.domain.player.value_object.player_id import PlayerId
     from ai_rpg_world.domain.player.value_object.stamina import Stamina
     from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+
     exp_table = ExpTable(100, 1.5)
     status = PlayerStatusAggregate(
         player_id=PlayerId(1),

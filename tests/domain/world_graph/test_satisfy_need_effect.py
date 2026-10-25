@@ -29,8 +29,10 @@ class TestSatisfyNeedEffect:
             parameters={"need_type": need_type, "amount": amount},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.satisfy_need_specs) == 1
         spec = result.satisfy_need_specs[0]
@@ -45,8 +47,10 @@ class TestSatisfyNeedEffect:
             parameters={"need_type": "HUNGER", "amount": 0},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.satisfy_need_specs) == 0
 
@@ -58,8 +62,10 @@ class TestSatisfyNeedEffect:
             parameters={"need_type": "", "amount": 50},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
         )
         assert len(result.satisfy_need_specs) == 0
 
@@ -81,8 +87,10 @@ class TestSatisfyNeedEffect:
             ),
         ]
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=effects, world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=effects,
+            world_flags=frozenset(),
         )
         assert [(spec.need_type_name, spec.amount) for spec in result.satisfy_need_specs] == [
             ("HUNGER", 40),

@@ -88,11 +88,7 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
             # 倒れている間に自分が対象になった行為。prose だけだと trace で
             # 集計できないので構造化側にも残す。
             "incidents_while_down": list(incidents),
-            "caregiver_player_id": (
-                int(event.caregiver_player_id)
-                if event.caregiver_player_id is not None
-                else None
-            ),
+            "caregiver_player_id": (int(event.caregiver_player_id) if event.caregiver_player_id is not None else None),
             "hp_recovered": event.hp_recovered,
             "total_hp": event.total_hp,
         }
@@ -130,7 +126,8 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
             return self._downed_incident_log.drain(revived_pid)
         except Exception:
             self._logger.exception(
-                "downed incident drain failed for player_id=%s", int(revived_pid),
+                "downed incident drain failed for player_id=%s",
+                int(revived_pid),
             )
             return ()
 
@@ -145,7 +142,9 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
         return f"意識を失っている間の形跡がある: {body}。"
 
     def _build_prose(
-        self, revived_pid: PlayerId, event: PlayerRevivedEvent,
+        self,
+        revived_pid: PlayerId,
+        event: PlayerRevivedEvent,
     ) -> str:
         """post_hoc observation の prose を組み立てる。
 
@@ -171,10 +170,7 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
             "まだ体は弱っている。ここに脅威 (敵 / 危険地形 / 空腹 100 等) "
             "が残っているなら、travel_to で安全な場所へ移動を検討すること。"
         )
-        return (
-            f"{duration_phrase}{caregiver_phrase}意識が戻った。"
-            f"{hp_phrase} {warning_phrase}"
-        )
+        return f"{duration_phrase}{caregiver_phrase}意識が戻った。{hp_phrase} {warning_phrase}"
 
     def _build_duration_phrase(
         self,
@@ -191,16 +187,12 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
         try:
             current_tick = int(self._current_tick_provider())
         except Exception:
-            self._logger.exception(
-                "current_tick_provider raised; falling back to unknown duration"
-            )
+            self._logger.exception("current_tick_provider raised; falling back to unknown duration")
             return "数 tick の間、意識を失っていた。"
         ticks = max(0, current_tick - downed_at)
         return f"{ticks} tick の間、意識を失っていた。"
 
-    def _build_caregiver_phrase(
-        self, caregiver_player_id: PlayerId | None
-    ) -> str:
+    def _build_caregiver_phrase(self, caregiver_player_id: PlayerId | None) -> str:
         if caregiver_player_id is None:
             return ""
         resolved = self._caregiver_name_resolver(caregiver_player_id)

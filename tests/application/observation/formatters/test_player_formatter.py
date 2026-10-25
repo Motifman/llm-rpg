@@ -276,9 +276,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
             (None, False),
         ),
     )
-    def test_third_party_identity_follows_effective_lighting(
-        self, lighting, reveals_killer
-    ):
+    def test_third_party_identity_follows_effective_lighting(self, lighting, reveals_killer):
         """同室でも身元を出すのは BRIGHT / DIM だけで、不明を含む残りは伏せる。"""
         ctx = self._make_ctx_with_positions(
             recipient_spot=SpotId(5),
@@ -305,9 +303,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_lighting_resolution_failure_hides_the_killer(self):
         """実効照明の解決に失敗しても、例外を漏らさず加害者の身元を伏せる。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5))
         ctx.effective_lighting_resolver.resolve.side_effect = RuntimeError("broken")
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
@@ -325,9 +321,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_missing_lighting_resolver_hides_the_killer(self):
         """実効照明 resolver が未注入でも、同室の加害者の身元を伏せる。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5))
         ctx = replace(ctx, effective_lighting_resolver=None)
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
@@ -345,9 +339,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_third_party_same_spot_as_killer_includes_killer_name(self):
         """observer が killer と同 spot なら、加害者を主語にした能動態で伝える。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5))
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),  # victim
@@ -362,9 +354,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_third_party_different_spot_from_killer_hides_killer_name(self):
         """observer が killer と別 spot なら killer 名は prose に出ない。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(99), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(99), victim_spot=SpotId(5))
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
@@ -384,9 +374,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_third_party_position_unknown_hides_killer_name(self):
         """位置不明 (graph 未注入 等) は安全側に倒し、詳細でなく気配文にする。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=None, killer_spot=None
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=None, killer_spot=None)
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
@@ -403,9 +391,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_remote_player_downed_uses_distant_prose_without_actor_name(self):
         """別 spot の down 観測は詳細目撃でなく、名前を伏せた遠隔の気配文になる。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(9), killer_spot=None, victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(9), killer_spot=None, victim_spot=SpotId(5))
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
@@ -424,9 +410,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_third_party_killer_still_outputs_victim_prose(self):
         """killer 不明 (event.killer_player_id=None) は victim 名のみで prose 出す。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5))
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
@@ -441,9 +425,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_death_without_a_declared_witness_message_keeps_engine_prose(self):
         """宣言文を伴わない死では、同室の第三者へ engine の説明を残す。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5))
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),

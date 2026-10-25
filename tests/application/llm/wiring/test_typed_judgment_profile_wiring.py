@@ -59,9 +59,7 @@ class TestTheProfileDecidesWhetherTypedJudgmentIsOn:
         """接続先・モデル・timeout は書かなければ既定値になる。"""
         config = _config()
 
-        assert config.typed_judgment_endpoint == (
-            "https://openrouter.ai/api/alpha/decisions"
-        )
+        assert config.typed_judgment_endpoint == ("https://openrouter.ai/api/alpha/decisions")
         assert config.typed_judgment_model == "typesafe/jev-1.13"
         assert config.typed_judgment_timeout_seconds == 10.0
 
@@ -116,9 +114,7 @@ class TestTheFactoryBuildsWhatTheProfileAskedFor:
 
     def test_stub_builds_the_deterministic_port(self) -> None:
         """stub なら実 API を呼ばない決定論の実装が組まれる。キーは要らない。"""
-        port = create_typed_judgment_port_from_config(
-            _config(TYPED_JUDGMENT_PROVIDER="stub"), env={}
-        )
+        port = create_typed_judgment_port_from_config(_config(TYPED_JUDGMENT_PROVIDER="stub"), env={})
 
         assert isinstance(port, DeterministicTypedJudgmentPort)
 
@@ -134,9 +130,7 @@ class TestTheFactoryBuildsWhatTheProfileAskedFor:
     def test_jev_without_a_key_fails_before_the_run_starts(self) -> None:
         """jev でキーが無ければ ValueError。1 件目の判断まで進ませない。"""
         with pytest.raises(ValueError) as caught:
-            create_typed_judgment_port_from_config(
-                _config(TYPED_JUDGMENT_PROVIDER="jev"), env={}
-            )
+            create_typed_judgment_port_from_config(_config(TYPED_JUDGMENT_PROVIDER="jev"), env={})
 
         assert "OPENROUTER_API_KEY" in str(caught.value)
 

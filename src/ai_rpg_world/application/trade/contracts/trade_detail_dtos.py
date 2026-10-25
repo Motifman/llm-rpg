@@ -5,6 +5,7 @@ from datetime import datetime
 @dataclass(frozen=True)
 class TradeStatisticsDto:
     """取引統計DTO"""
+
     min_price: int | None
     max_price: int | None
     avg_price: float | None
@@ -17,6 +18,7 @@ class TradeStatisticsDto:
 @dataclass(frozen=True)
 class TradeDetailDto:
     """取引詳細DTO"""
+
     trade_id: int
     item_spec_id: int
     item_instance_id: int

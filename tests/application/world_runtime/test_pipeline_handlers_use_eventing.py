@@ -42,7 +42,8 @@ def wired(monkeypatch):
 
     monkeypatch.setattr(PipelineEventPublisher, "register_handler", register)
     runtime = create_world_runtime(
-        Path("data/scenarios/station_drill.json"), config=ResolvedLlmRuntimeConfig.for_tests(),
+        Path("data/scenarios/station_drill.json"),
+        config=ResolvedLlmRuntimeConfig.for_tests(),
     )
     monkeypatch.setattr(PipelineEventPublisher, "register_handler", original)
     timeline.clear()
@@ -78,11 +79,18 @@ def _event(index):
     common = dict(aggregate_id="world", aggregate_type="SpotGraph")
     if index == 2:
         return PlayerInteractedWithPlayerEvent.create(
-            **common, entity_id=EntityId.create(1), target_entity_id=EntityId.create(2),
-            spot_id=SpotId(1), action_name="tend", result_message="介抱した",
+            **common,
+            entity_id=EntityId.create(1),
+            target_entity_id=EntityId.create(2),
+            spot_id=SpotId(1),
+            action_name="tend",
+            result_message="介抱した",
         )
     return EntityEnteredSpotEvent.create(
-        **common, entity_id=EntityId.create(1), spot_id=SpotId(1), from_spot_id=None,
+        **common,
+        entity_id=EntityId.create(1),
+        spot_id=SpotId(1),
+        from_spot_id=None,
     )
 
 
@@ -103,7 +111,9 @@ def _publish(publisher, event, route):
     if route == "command":
         dispatcher = EventDispatcher(failure_observer=lambda *args: pytest.fail("配送の失敗"))
         dispatcher.register_after_commit(
-            DomainEvent, publisher.publish, channel=DeliveryChannel.OBSERVATION,
+            DomainEvent,
+            publisher.publish,
+            channel=DeliveryChannel.OBSERVATION,
             guarantee=DeliveryGuarantee.BEST_EFFORT,
         )
         transaction = _Transaction()
@@ -149,14 +159,19 @@ def test_failure_keeps_all_trace_fields_and_continues_delivery(wired, route) -> 
     assert failures[0].player_id == 1
     assert failures[0].tick == 0
     assert failures[0].payload == {
-        "handler": "FailingHandler", "event_type": "PlayerDownedEvent", "event_id": event.event_id,
-        "aggregate_type": "PlayerStatusAggregate", "aggregate_id": 1,
-        "error_type": "ValueError", "error_message": "受け手の失敗",
+        "handler": "FailingHandler",
+        "event_type": "PlayerDownedEvent",
+        "event_id": event.event_id,
+        "aggregate_type": "PlayerStatusAggregate",
+        "aggregate_id": 1,
+        "error_type": "ValueError",
+        "error_message": "受け手の失敗",
     }
 
 
 def test_subclass_event_reaches_the_registered_base_type(wired) -> None:
     """登録したイベントを継承するイベントでも、同じ受け手を観測より先に呼ぶ。"""
+
     class SpecialDownedEvent(PlayerDownedEvent):
         pass
 
@@ -171,20 +186,30 @@ def test_production_registration_uses_the_common_after_commit_dispatcher(monkeyp
     original = EventDispatcher.register_after_commit
 
     def register(dispatcher, event_type, handler, **options):
-        registrations.append((event_type.__name__, getattr(handler, "receiver", getattr(handler, "__self__", None)), options))
+        registrations.append(
+            (event_type.__name__, getattr(handler, "receiver", getattr(handler, "__self__", None)), options)
+        )
         original(dispatcher, event_type, handler, **options)
 
     monkeypatch.setattr(EventDispatcher, "register_after_commit", register)
     create_world_runtime(Path("data/scenarios/station_drill.json"), config=ResolvedLlmRuntimeConfig.for_tests())
     names = {name for _, name in _EXPECTED}
-    selected = [(event, type(handler).__name__, options) for event, handler, options in registrations if type(handler).__name__ in names]
+    selected = [
+        (event, type(handler).__name__, options)
+        for event, handler, options in registrations
+        if type(handler).__name__ in names
+    ]
     assert [(event, handler) for event, handler, _ in selected] == _EXPECTED
-    assert all(options == {"channel": DeliveryChannel.OBSERVATION, "guarantee": DeliveryGuarantee.BEST_EFFORT} for _, _, options in selected)
+    assert all(
+        options == {"channel": DeliveryChannel.OBSERVATION, "guarantee": DeliveryGuarantee.BEST_EFFORT}
+        for _, _, options in selected
+    )
 
 
 @pytest.mark.parametrize("as_attribute", [False, True])
 def test_failure_trace_keeps_receiver_name_without_a_bound_method(wired, as_attribute) -> None:
     """handle が静的メソッドや属性の関数でも、失敗の記録には元の受け手の型名を残す。"""
+
     def fail(event):
         raise RuntimeError("失敗")
 

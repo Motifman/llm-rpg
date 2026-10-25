@@ -31,6 +31,7 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
 @dataclass
 class _ResultStub:
     """``LlmCommandResultDto`` の最小スタブ。_account_result が必要なフィールドだけ。"""
+
     should_reschedule: bool = False
     was_no_op: bool = False
     error_code: str | None = None
@@ -46,6 +47,7 @@ def _make_trigger(max_streak: int = 5) -> _WorldLlmTurnTrigger:
 
     class _DummyRuntime:
         """_note_activity_after_turn が参照する runtime の最小スタブ。"""
+
         # _note_activity_after_turn は idle_timer attribute を見るだけ
 
     class _DummyWiring:

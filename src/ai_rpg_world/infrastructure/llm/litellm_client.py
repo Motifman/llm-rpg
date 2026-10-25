@@ -104,15 +104,17 @@ _DEFAULT_REASONING_EFFORT = "none"  # reasoning OFF が agent turn 用途の安�
 # (= 構築時の既定を使う)」と「override として None (= reasoning を inject しない)」
 # を区別するために object() を使う。
 _NO_REASONING_OVERRIDE = object()
-_VALID_REASONING_EFFORTS = frozenset({
-    "",          # 何も inject しない (旧 model 互換)
-    "none",      # 明示 OFF
-    "minimal",
-    "low",
-    "medium",
-    "high",
-    "xhigh",
-})
+_VALID_REASONING_EFFORTS = frozenset(
+    {
+        "",  # 何も inject しない (旧 model 互換)
+        "none",  # 明示 OFF
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+    }
+)
 
 # 選択的リトライ (PR #X): max_retries=0 (litellm/openai SDK の透過リトライ無効化) を
 # 維持しつつ、本クラスのアプリ層で「特定の一時失敗」だけを手動 backoff で retry する。
@@ -129,9 +131,9 @@ _VALID_REASONING_EFFORTS = frozenset({
 # retry しない (= 即失敗で turn_runner レベルに上げる)。
 _ENV_VAR_RATE_LIMIT_RETRY_ATTEMPTS = "LLM_RATE_LIMIT_RETRY_ATTEMPTS"
 _ENV_VAR_RATE_LIMIT_RETRY_BASE_SLEEP = "LLM_RATE_LIMIT_RETRY_BASE_SLEEP"
-_DEFAULT_RATE_LIMIT_RETRY_ATTEMPTS = 3       # 1 回目失敗後、最大 3 回再試行
-_DEFAULT_RATE_LIMIT_RETRY_BASE_SLEEP = 2.0   # 2s → 4s → 8s (exponential)
-_RATE_LIMIT_RETRY_MAX_SLEEP = 30.0           # 1 回あたりの上限 (秒)
+_DEFAULT_RATE_LIMIT_RETRY_ATTEMPTS = 3  # 1 回目失敗後、最大 3 回再試行
+_DEFAULT_RATE_LIMIT_RETRY_BASE_SLEEP = 2.0  # 2s → 4s → 8s (exponential)
+_RATE_LIMIT_RETRY_MAX_SLEEP = 30.0  # 1 回あたりの上限 (秒)
 
 
 def _is_retryable_transient_error(exc: BaseException) -> bool:
@@ -194,9 +196,7 @@ def _build_openrouter_routing(
     return {"provider": block}
 
 
-def _validate_reasoning_effort(
-    effort: str, *, source_label: str = "reasoning_effort"
-) -> str:
+def _validate_reasoning_effort(effort: str, *, source_label: str = "reasoning_effort") -> str:
     """effort 文字列を正規化し、未知値は ValueError で弾く (silent fallback 防止)。
 
     ``source_label`` はエラーメッセージ中の変数名 (env 経路では ``LLM_REASONING_EFFORT``、
@@ -204,10 +204,7 @@ def _validate_reasoning_effort(
     """
     normalized = effort.strip().lower()
     if normalized not in _VALID_REASONING_EFFORTS:
-        raise ValueError(
-            f"{source_label}={effort!r} is not recognized. "
-            f"valid: {sorted(_VALID_REASONING_EFFORTS)}"
-        )
+        raise ValueError(f"{source_label}={effort!r} is not recognized. valid: {sorted(_VALID_REASONING_EFFORTS)}")
     return normalized
 
 
@@ -281,6 +278,7 @@ def _load_dotenv_if_available() -> None:
     """python-dotenv が利用可能なら .env を読み込む。"""
     try:
         from dotenv import load_dotenv
+
         load_dotenv()
     except ImportError:
         pass
@@ -329,7 +327,7 @@ class LiteLLMClient(
         self._api_key_env_var = api_key_env_var
         if api_key is not None:
             # 明示的に渡されたとき（空文字含む）はその値を使う。カスタム base 無しかつ空なら invoke で LLM_API_KEY_MISSING。
-            self._api_key = (api_key.strip() if isinstance(api_key, str) else "")
+            self._api_key = api_key.strip() if isinstance(api_key, str) else ""
         else:
             self._api_key = (os.environ.get(api_key_env_var) or "").strip()
 
@@ -341,11 +339,7 @@ class LiteLLMClient(
         # PR #444: timeout を明示。設定引数 > default の優先で解決し、毎呼び
         # 出しの litellm.completion に渡す。これがないと litellm 既定 6000 秒
         # (= 100 分) で長期 hang を許容してしまう。
-        self._timeout_seconds = (
-            float(timeout_seconds)
-            if timeout_seconds is not None
-            else _DEFAULT_LLM_TIMEOUT_SECONDS
-        )
+        self._timeout_seconds = float(timeout_seconds) if timeout_seconds is not None else _DEFAULT_LLM_TIMEOUT_SECONDS
 
         self._openrouter_routing: dict[str, Any] | None = _build_openrouter_routing(
             provider=openrouter_provider,
@@ -356,9 +350,7 @@ class LiteLLMClient(
             reasoning_effort,
             source_label="reasoning_effort",
         )
-        self._reasoning_block: dict[str, Any] | None = _build_reasoning_block(
-            self._reasoning_effort
-        )
+        self._reasoning_block: dict[str, Any] | None = _build_reasoning_block(self._reasoning_effort)
         # thinking のトークン数も出力の上限に数えられる。OpenRouter の
         # reasoning.max_tokens は effort と同時に送れず、DeepSeek に効くかも
         # ドキュメントに無いので、どの provider でも効く top-level で抑える (#1595)。
@@ -477,7 +469,7 @@ class LiteLLMClient(
                 if attempt >= self._rate_limit_retry_attempts:
                     break
                 sleep_for = min(
-                    self._rate_limit_retry_base_sleep * (2 ** attempt),
+                    self._rate_limit_retry_base_sleep * (2**attempt),
                     _RATE_LIMIT_RETRY_MAX_SLEEP,
                 )
                 self._logger.warning(
@@ -492,9 +484,7 @@ class LiteLLMClient(
         assert last_exc is not None
         raise last_exc
 
-    def _build_extra_body(
-        self, reasoning_override: Any = _NO_REASONING_OVERRIDE
-    ) -> dict[str, Any] | None:
+    def _build_extra_body(self, reasoning_override: Any = _NO_REASONING_OVERRIDE) -> dict[str, Any] | None:
         """litellm.completion に渡す ``extra_body`` を組み立てる。
 
         - provider routing (OPENROUTER_PROVIDER 等の env が設定されているとき)
@@ -512,11 +502,7 @@ class LiteLLMClient(
             block.update(copy.deepcopy(self._openrouter_routing))
         if self._is_openrouter_base:
             block["usage"] = {"include": True}
-        reasoning = (
-            self._reasoning_block
-            if reasoning_override is _NO_REASONING_OVERRIDE
-            else reasoning_override
-        )
+        reasoning = self._reasoning_block if reasoning_override is _NO_REASONING_OVERRIDE else reasoning_override
         if reasoning is not None:
             block.update(copy.deepcopy(reasoning))
         return block or None
@@ -536,9 +522,7 @@ class LiteLLMClient(
             error_code="LLM_API_KEY_MISSING",
         )
 
-    def completion_base_kwargs(
-        self, *, reasoning_effort: str | None = None
-    ) -> dict[str, Any]:
+    def completion_base_kwargs(self, *, reasoning_effort: str | None = None) -> dict[str, Any]:
         """ツール無しの chat completion 用（Episode Encoder 等）。カスタム base 無しでは api_key が必須。
 
         OpenRouter provider routing env が設定されている場合、``extra_body`` を
@@ -552,9 +536,7 @@ class LiteLLMClient(
         """
         self._assert_can_call_litellm()
         effective_reasoning_effort = (
-            self._reasoning_effort
-            if reasoning_effort is None
-            else _validate_reasoning_effort(reasoning_effort)
+            self._reasoning_effort if reasoning_effort is None else _validate_reasoning_effort(reasoning_effort)
         )
         base: dict[str, Any] = {
             "model": self._model,
@@ -572,9 +554,7 @@ class LiteLLMClient(
         if self._api_base is not None:
             base["api_base"] = self._api_base
         reasoning_override = (
-            _NO_REASONING_OVERRIDE
-            if reasoning_effort is None
-            else _build_reasoning_block(effective_reasoning_effort)
+            _NO_REASONING_OVERRIDE if reasoning_effort is None else _build_reasoning_block(effective_reasoning_effort)
         )
         extra_body = self._build_extra_body(reasoning_override=reasoning_override)
         if extra_body is not None:
@@ -627,9 +607,7 @@ class LiteLLMClient(
             effective_reasoning_effort = _validate_reasoning_effort(reasoning_effort)
             reasoning_override = _build_reasoning_block(effective_reasoning_effort)
         recorded_reasoning_effort = (
-            effective_reasoning_effort
-            if effective_reasoning_effort not in {"", "none"}
-            else reasoning_effort
+            effective_reasoning_effort if effective_reasoning_effort not in {"", "none"} else reasoning_effort
         )
         start_monotonic = time.monotonic()
         try:
@@ -662,9 +640,7 @@ class LiteLLMClient(
                 completion_kw["extra_body"] = extra_body
             # SDK 透過 retry は max_retries=0 で無効化済み。RateLimit / 一時 5xx の
             # みアプリ層で短い backoff retry する。
-            response = self._call_with_selective_retry(
-                lambda: litellm.completion(**completion_kw)
-            )
+            response = self._call_with_selective_retry(lambda: litellm.completion(**completion_kw))
         except Exception as e:
             wall_latency_ms = int((time.monotonic() - start_monotonic) * 1000)
             error_code = "LLM_API_CALL_FAILED"
@@ -731,9 +707,7 @@ class LiteLLMClient(
         reasoning_tokens = self._extract_reasoning_tokens(response)
         cost_usd = self._extract_cost_usd(response)
         tool_call_combination = self._extract_tool_call_combination(response)
-        discarded_tool_calls = (
-            len(tool_call_combination) - 1 if tool_call_combination is not None else 0
-        )
+        discarded_tool_calls = len(tool_call_combination) - 1 if tool_call_combination is not None else 0
         if discarded_tool_calls:
             self._logger.warning(
                 "LLM returned multiple tool calls; executing the first and discarding %d",
@@ -776,11 +750,7 @@ class LiteLLMClient(
                 "tool_choice": tool_choice,
                 "phase": call_phase,
                 "discarded_tool_calls": discarded_tool_calls,
-                **(
-                    {"tool_call_combination": list(tool_call_combination)}
-                    if tool_call_combination is not None
-                    else {}
-                ),
+                **({"tool_call_combination": list(tool_call_combination)} if tool_call_combination is not None else {}),
             },
         )
         return tool_call
@@ -797,10 +767,7 @@ class LiteLLMClient(
             tool_calls = getattr(message, "tool_calls", None) or []
             if len(tool_calls) <= 1:
                 return None
-            return tuple(
-                str(getattr(getattr(call, "function", None), "name", ""))
-                for call in tool_calls
-            )
+            return tuple(str(getattr(getattr(call, "function", None), "name", "")) for call in tool_calls)
         except (TypeError, AttributeError):
             return None
 

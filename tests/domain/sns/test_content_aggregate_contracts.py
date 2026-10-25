@@ -36,8 +36,12 @@ def _create(kind, content=None, *, number=1, parent_post=1, parent_reply=None):
     if kind == "post":
         return PostAggregate.create(PostId(number), UserId(1), content)
     return ReplyAggregate.create(
-        ReplyId(number), None if parent_post is None else PostId(parent_post),
-        None if parent_reply is None else ReplyId(parent_reply), UserId(2), UserId(1), content,
+        ReplyId(number),
+        None if parent_post is None else PostId(parent_post),
+        None if parent_reply is None else ReplyId(parent_reply),
+        UserId(2),
+        UserId(1),
+        content,
     )
 
 
@@ -58,12 +62,21 @@ def _delete(aggregate, user):
 def _state(aggregate):
     """可変集合の参照を共有せず、公開状態を値へ写す。"""
     return (
-        aggregate.content_id, aggregate.author_user_id,
-        aggregate.content.content, tuple(aggregate.content.hashtags), aggregate.content.visibility,
+        aggregate.content_id,
+        aggregate.author_user_id,
+        aggregate.content.content,
+        tuple(aggregate.content.hashtags),
+        aggregate.content.visibility,
         frozenset((like.user_id, like.post_id, like.created_at) for like in aggregate.likes),
         frozenset((mention.mentioned_user_name, mention.post_id) for mention in aggregate.mentions),
-        frozenset(aggregate.reply_ids), aggregate.deleted, aggregate.parent_post_id, aggregate.parent_reply_id,
-        aggregate.created_at, aggregate.identity_token, aggregate.author_identity_token, aggregate.parent_identity_token,
+        frozenset(aggregate.reply_ids),
+        aggregate.deleted,
+        aggregate.parent_post_id,
+        aggregate.parent_reply_id,
+        aggregate.created_at,
+        aggregate.identity_token,
+        aggregate.author_identity_token,
+        aggregate.parent_identity_token,
     )
 
 
@@ -159,7 +172,9 @@ def test_creation_preserves_fields_mentions_and_ordered_events(kind, number, par
         assert mention.content_type == kind
 
 
-@pytest.mark.parametrize(("kind", "parent_post", "parent_reply"), [("post", None, None), ("reply", 1, None), ("reply", None, 2)])
+@pytest.mark.parametrize(
+    ("kind", "parent_post", "parent_reply"), [("post", None, None), ("reply", 1, None), ("reply", None, 2)]
+)
 def test_constructor_preserves_supplied_state(kind, parent_post, parent_reply):
     """直接構築でも、元の空集合・作者・本文と投稿親または返信親を保持する。"""
     content = PostContent("テスト投稿" if kind == "post" else "テスト返信")
@@ -167,7 +182,13 @@ def test_constructor_preserves_supplied_state(kind, parent_post, parent_reply):
         aggregate = PostAggregate(PostId(1), UserId(1), content, set(), set(), set())
     else:
         aggregate = ReplyAggregate(
-            ReplyId(1), UserId(1), content, set(), set(), set(), deleted=False,
+            ReplyId(1),
+            UserId(1),
+            content,
+            set(),
+            set(),
+            set(),
+            deleted=False,
             parent_post_id=None if parent_post is None else PostId(parent_post),
             parent_reply_id=None if parent_reply is None else ReplyId(parent_reply),
         )
@@ -184,11 +205,24 @@ def test_constructor_preserves_supplied_state(kind, parent_post, parent_reply):
 
 @pytest.mark.parametrize(
     ("kind", "populated", "legacy_target", "saved", "nested"),
-    [("post", False, False, False, False), ("reply", False, False, False, False),
-     ("post", True, False, False, False), ("reply", True, True, False, False),
-     ("post", True, False, True, False), ("reply", True, False, True, False),
-     ("reply", True, False, True, True)],
-    ids=["post-empty", "reply-empty", "post-original", "reply-original-post-id", "post-saved", "reply-saved-post-parent", "reply-saved-reply-parent"],
+    [
+        ("post", False, False, False, False),
+        ("reply", False, False, False, False),
+        ("post", True, False, False, False),
+        ("reply", True, True, False, False),
+        ("post", True, False, True, False),
+        ("reply", True, False, True, False),
+        ("reply", True, False, True, True),
+    ],
+    ids=[
+        "post-empty",
+        "reply-empty",
+        "post-original",
+        "reply-original-post-id",
+        "post-saved",
+        "reply-saved-post-parent",
+        "reply-saved-reply-parent",
+    ],
 )
 def test_restore_preserves_saved_state_without_events(kind, populated, legacy_target, saved, nested):
     """空集合と旧混在IDを含む元復元入力を保ち、保存時刻・各識別子を再発行せず復元する。"""
@@ -200,12 +234,22 @@ def test_restore_preserves_saved_state_without_events(kind, populated, legacy_ta
     children = {ReplyId(8), ReplyId(9)} if saved else set()
     extra = dict(created_at=SAVED_AT, identity_token=TARGET_TOKEN, author_identity_token=AUTHOR_TOKEN) if saved else {}
     if kind == "post":
-        aggregate = PostAggregate.create_from_db(PostId(1), UserId(1), content, likes, mentions, children, saved, **extra)
+        aggregate = PostAggregate.create_from_db(
+            PostId(1), UserId(1), content, likes, mentions, children, saved, **extra
+        )
     else:
         aggregate = ReplyAggregate.create_from_db(
-            ReplyId(1), None if nested else PostId(1), ReplyId(2) if nested else None,
-            UserId(1), content, likes, mentions, children, saved,
-            **extra, **({"parent_identity_token": PARENT_TOKEN} if saved else {}),
+            ReplyId(1),
+            None if nested else PostId(1),
+            ReplyId(2) if nested else None,
+            UserId(1),
+            content,
+            likes,
+            mentions,
+            children,
+            saved,
+            **extra,
+            **({"parent_identity_token": PARENT_TOKEN} if saved else {}),
         )
     assert aggregate.content_id == content_id
     assert aggregate.author_user_id == UserId(1)
@@ -222,10 +266,14 @@ def test_restore_preserves_saved_state_without_events(kind, populated, legacy_ta
         assert aggregate.identity_token == TARGET_TOKEN
         assert aggregate.author_identity_token == AUTHOR_TOKEN
         assert aggregate.parent_identity_token == (PARENT_TOKEN if kind == "reply" else None)
-        assert {(like.user_id, like.post_id, like.created_at) for like in aggregate.likes} == {(UserId(2), content_id, LIKED_AT)}
+        assert {(like.user_id, like.post_id, like.created_at) for like in aggregate.likes} == {
+            (UserId(2), content_id, LIKED_AT)
+        }
 
 
-@pytest.mark.parametrize(("attribute", "addition"), [("likes", "dummy"), ("mentions", "dummy"), ("reply_ids", ReplyId(1))])
+@pytest.mark.parametrize(
+    ("attribute", "addition"), [("likes", "dummy"), ("mentions", "dummy"), ("reply_ids", ReplyId(1))]
+)
 def test_collection_getters_do_not_expose_owned_state(attribute, addition):
     """空の返却集合へ元のdummyまたは返信IDを加えても、投稿の内部状態は変わらない。"""
     post = _create("post")
@@ -236,7 +284,10 @@ def test_collection_getters_do_not_expose_owned_state(attribute, addition):
     assert (_state(post), _events(post)) == before
 
 
-@pytest.mark.parametrize(("kind", "body", "initial_count"), [("post", "テスト投稿", 1), ("reply", "テスト返信", 1), ("post", "@testuser テスト投稿", 2)])
+@pytest.mark.parametrize(
+    ("kind", "body", "initial_count"),
+    [("post", "テスト投稿", 1), ("reply", "テスト返信", 1), ("post", "@testuser テスト投稿", 2)],
+)
 def test_like_toggle_preserves_actor_state_and_event_prefix(kind, body, initial_count):
     """同じ利用者の追加と解除で1→0となり、元の1件または2件のイベント列を残して各1件追加する。"""
     aggregate = _create(kind, PostContent(body))
@@ -321,15 +372,43 @@ def test_delete_preserves_existing_state_and_event_prefix(kind, with_like):
 
 @pytest.mark.parametrize(
     ("kind", "operation", "actor", "content_type", "already_deleted", "exception", "message"),
-    [("post", "like", 2, "invalid_type", False, InvalidContentTypeException, "コンテンツタイプは「post」または「reply」である必要があります"),
-     ("post", "delete", 1, "invalid_type", False, InvalidContentTypeException, "コンテンツタイプは「post」または「reply」である必要があります"),
-     ("reply", "delete", 1, "invalid_type", False, InvalidContentTypeException, "コンテンツタイプは「post」または「reply」である必要があります"),
-     ("post", "delete", 2, "post", False, OwnershipException, "ユーザーはこのpostを削除する権限がありません"),
-     ("reply", "delete", 2, "reply", False, OwnershipException, "ユーザーはこのreplyを削除する権限がありません"),
-     ("post", "delete", 1, "post", True, ContentAlreadyDeletedException, "すでに削除済みのpostは削除できません"),
-     ("reply", "delete", 1, "reply", True, ContentAlreadyDeletedException, "すでに削除済みのreplyは削除できません")],
+    [
+        (
+            "post",
+            "like",
+            2,
+            "invalid_type",
+            False,
+            InvalidContentTypeException,
+            "コンテンツタイプは「post」または「reply」である必要があります",
+        ),
+        (
+            "post",
+            "delete",
+            1,
+            "invalid_type",
+            False,
+            InvalidContentTypeException,
+            "コンテンツタイプは「post」または「reply」である必要があります",
+        ),
+        (
+            "reply",
+            "delete",
+            1,
+            "invalid_type",
+            False,
+            InvalidContentTypeException,
+            "コンテンツタイプは「post」または「reply」である必要があります",
+        ),
+        ("post", "delete", 2, "post", False, OwnershipException, "ユーザーはこのpostを削除する権限がありません"),
+        ("reply", "delete", 2, "reply", False, OwnershipException, "ユーザーはこのreplyを削除する権限がありません"),
+        ("post", "delete", 1, "post", True, ContentAlreadyDeletedException, "すでに削除済みのpostは削除できません"),
+        ("reply", "delete", 1, "reply", True, ContentAlreadyDeletedException, "すでに削除済みのreplyは削除できません"),
+    ],
 )
-def test_rejected_content_operation_preserves_state_and_events(kind, operation, actor, content_type, already_deleted, exception, message):
+def test_rejected_content_operation_preserves_state_and_events(
+    kind, operation, actor, content_type, already_deleted, exception, message
+):
     """正しい拒否ガードへ到達し、非空の別対象・子返信・メンション・既存イベントを変更しない。"""
     aggregate = _create(kind)
     _like(aggregate, UserId(4))
@@ -393,8 +472,12 @@ def test_public_mention_changes_preserve_other_entries():
 
 @pytest.mark.parametrize(
     ("kind", "body", "hashtags"),
-    [("post", "a" * 280, ()), ("reply", "あ" * 280, ()),
-     ("post", "content", tuple(["#tag"] * 10)), ("reply", "テスト", tuple(f"tag{i}" for i in range(10)))],
+    [
+        ("post", "a" * 280, ()),
+        ("reply", "あ" * 280, ()),
+        ("post", "content", tuple(["#tag"] * 10)),
+        ("reply", "テスト", tuple(f"tag{i}" for i in range(10))),
+    ],
     ids=["post-ascii280", "reply-japanese280", "post-duplicate-tags10", "reply-unprefixed-tags10"],
 )
 def test_creation_preserves_boundary_content(kind, body, hashtags):
@@ -405,11 +488,15 @@ def test_creation_preserves_boundary_content(kind, body, hashtags):
     assert len(aggregate.content.hashtags) == len(hashtags)
 
 
-@pytest.mark.parametrize(("parent_post", "parent_reply", "parent_author"), [(PostId(1), ReplyId(2), UserId(2)), (None, None, None)])
+@pytest.mark.parametrize(
+    ("parent_post", "parent_reply", "parent_author"), [(PostId(1), ReplyId(2), UserId(2)), (None, None, None)]
+)
 def test_creation_rejects_invalid_reply_parents(parent_post, parent_reply, parent_author):
     """元の両親あり・両親なしcreateは、無関係な例外ではなく親参照専用の例外で拒否する。"""
     with pytest.raises(InvalidParentReferenceException):
-        ReplyAggregate.create(ReplyId(1), parent_post, parent_reply, parent_author, UserId(1), PostContent("テスト返信"))
+        ReplyAggregate.create(
+            ReplyId(1), parent_post, parent_reply, parent_author, UserId(1), PostContent("テスト返信")
+        )
 
 
 @pytest.mark.parametrize("kind", ["post", "reply"])
@@ -418,13 +505,28 @@ def test_like_metadata_keeps_distinct_identity_bindings_and_provenance(kind):
     content = PostContent("出典付き")
     if kind == "post":
         aggregate = PostAggregate.create_from_db(
-            PostId(1), UserId(1), content, set(), set(), set(),
-            identity_token=TARGET_TOKEN, author_identity_token=AUTHOR_TOKEN,
+            PostId(1),
+            UserId(1),
+            content,
+            set(),
+            set(),
+            set(),
+            identity_token=TARGET_TOKEN,
+            author_identity_token=AUTHOR_TOKEN,
         )
     else:
         aggregate = ReplyAggregate.create_from_db(
-            ReplyId(1), PostId(2), None, UserId(1), content, set(), set(), set(),
-            identity_token=TARGET_TOKEN, author_identity_token=AUTHOR_TOKEN, parent_identity_token=PARENT_TOKEN,
+            ReplyId(1),
+            PostId(2),
+            None,
+            UserId(1),
+            content,
+            set(),
+            set(),
+            set(),
+            identity_token=TARGET_TOKEN,
+            author_identity_token=AUTHOR_TOKEN,
+            parent_identity_token=PARENT_TOKEN,
         )
     provenance = {"request_id": "aggregate-audit-request", "world_id": 7, "player_id": 8}
     assert aggregate.get_events() == []

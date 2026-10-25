@@ -109,20 +109,14 @@ class OccurrenceOrder:
 
     def __post_init__(self) -> None:
         require_text(self.environment, "environment")
-        if (
-            isinstance(self.value, bool)
-            or not isinstance(self.value, (int, float))
-            or not math.isfinite(self.value)
-        ):
+        if isinstance(self.value, bool) or not isinstance(self.value, (int, float)) or not math.isfinite(self.value):
             raise ContractViolation("value must be a finite number")
 
     def _require_same_environment(self, other: object) -> OccurrenceOrder:
         if not isinstance(other, OccurrenceOrder):
             raise ContractViolation("an occurrence order compares only with another occurrence order")
         if other.environment != self.environment:
-            raise ContractViolation(
-                f"orders of {self.environment!r} and {other.environment!r} are not comparable"
-            )
+            raise ContractViolation(f"orders of {self.environment!r} and {other.environment!r} are not comparable")
         return other
 
     def __lt__(self, other: object) -> bool:
@@ -186,23 +180,15 @@ class Observation:
         if self.body_if_subject_unknown is not None:
             require_text(self.body_if_subject_unknown, "body_if_subject_unknown")
             if self.subject_name is UNKNOWN or self.subject_is_self:
-                raise ContractViolation(
-                    "body_if_subject_unknown needs a known subject other than self"
-                )
+                raise ContractViolation("body_if_subject_unknown needs a known subject other than self")
         if self.order is not None and not isinstance(self.order, OccurrenceOrder):
             raise ContractViolation("order must be OccurrenceOrder or None")
         require_bool(self.withheld_if_subject_unknown, "withheld_if_subject_unknown")
         if self.withheld_if_subject_unknown:
             if self.subject_is_self:
-                raise ContractViolation(
-                    "withheld_if_subject_unknown needs a subject other than self"
-                )
+                raise ContractViolation("withheld_if_subject_unknown needs a subject other than self")
             if self.body_if_subject_unknown is not None:
-                raise ContractViolation(
-                    "withheld_if_subject_unknown and body_if_subject_unknown are exclusive"
-                )
+                raise ContractViolation("withheld_if_subject_unknown and body_if_subject_unknown are exclusive")
 
     def unknown_fields(self) -> tuple[str, ...]:
-        return tuple(
-            name for name in KNOWN_IF_POSSIBLE_FIELDS if getattr(self, name) is UNKNOWN
-        )
+        return tuple(name for name in KNOWN_IF_POSSIBLE_FIELDS if getattr(self, name) is UNKNOWN)

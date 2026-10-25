@@ -29,17 +29,27 @@ class CommandScopeTestStack:
         self.store = store
         self._transaction = InMemoryUnitOfWork(data_store=store)
         self.trace = CollectingTraceRecorder()
-        isolator = WorldTickFailureIsolator(policy=WorldTickFailurePolicy.ISOLATE, trace_recorder_provider=lambda: self.trace)
-        self.dispatcher = CommandEventDispatcher(failure_observer=isolator.after_commit_failure_observer(tick_provider=lambda: None))
+        isolator = WorldTickFailureIsolator(
+            policy=WorldTickFailurePolicy.ISOLATE, trace_recorder_provider=lambda: self.trace
+        )
+        self.dispatcher = CommandEventDispatcher(
+            failure_observer=isolator.after_commit_failure_observer(tick_provider=lambda: None)
+        )
         self._published: list[DomainEvent] = []
 
     def __enter__(self) -> CommandScopeTestStack:
-        self._scope = CommandScope(InMemoryUnitOfWorkTransactionAdapter(self._transaction), sync_dispatcher=self.dispatcher, after_commit_handoff=self)
+        self._scope = CommandScope(
+            InMemoryUnitOfWorkTransactionAdapter(self._transaction),
+            sync_dispatcher=self.dispatcher,
+            after_commit_handoff=self,
+        )
         self._context = self._scope.__enter__()
         self._facade = CommandContextUnitOfWorkFacade(self._transaction, self._context)
         return self
 
-    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None) -> None:
+    def __exit__(
+        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None
+    ) -> None:
         self._scope.__exit__(exc_type, exc, tb)
 
     def add_events_from_aggregate(self, aggregate: Any) -> None:

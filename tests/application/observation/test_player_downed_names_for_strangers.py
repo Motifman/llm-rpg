@@ -63,9 +63,7 @@ def _formatter(
             item_repository=None,
             spot_graph_repository=repo,
             effective_lighting_resolver=lighting_resolver,
-            death_semantics=MagicMock(
-                announce_globally=True, victim_learns_killer=victim_learns_killer
-            ),
+            death_semantics=MagicMock(announce_globally=True, victim_learns_killer=victim_learns_killer),
         )
     )
 

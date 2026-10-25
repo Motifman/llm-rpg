@@ -10,20 +10,29 @@ from ai_rpg_world.application.social.exceptions.base_exception import Applicatio
 class ReplyCommandException(ApplicationException):
     """リプライコマンド関連の例外"""
 
-    def __init__(self, message: str, error_code: str | None = None, user_id: int | None = None, reply_id: int | None = None, **context: Any) -> None:
+    def __init__(
+        self,
+        message: str,
+        error_code: str | None = None,
+        user_id: int | None = None,
+        reply_id: int | None = None,
+        **context: Any,
+    ) -> None:
         # 既存の動作を維持しつつ、新しい基底クラスに適合
         all_context = context.copy()
         if user_id is not None:
-            all_context['user_id'] = user_id
+            all_context["user_id"] = user_id
         if reply_id is not None:
-            all_context['reply_id'] = reply_id
+            all_context["reply_id"] = reply_id
         super().__init__(message, error_code, **all_context)
 
 
 class ReplyCreationException(ReplyCommandException):
     """リプライ作成関連の例外"""
 
-    def __init__(self, message: str, user_id: int, parent_post_id: int | None = None, parent_reply_id: int | None = None):
+    def __init__(
+        self, message: str, user_id: int, parent_post_id: int | None = None, parent_reply_id: int | None = None
+    ):
         self.parent_post_id = parent_post_id
         self.parent_reply_id = parent_reply_id
         super().__init__(message, "REPLY_CREATION_ERROR", user_id=user_id)

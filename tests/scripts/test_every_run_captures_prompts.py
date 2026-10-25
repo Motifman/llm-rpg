@@ -20,9 +20,13 @@ def test_stub_run_without_any_capture_setting_writes_the_prompt_dataset(tmp_path
 
     rc = main(
         [
-            "--experiment-config", str(config_path),
-            "--out", str(tmp_path / "run"),
-            "--no-html", "--no-progress-jsonl", "--no-stderr-progress",
+            "--experiment-config",
+            str(config_path),
+            "--out",
+            str(tmp_path / "run"),
+            "--no-html",
+            "--no-progress-jsonl",
+            "--no-stderr-progress",
         ]
     )
 

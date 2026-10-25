@@ -82,9 +82,7 @@ class WorldGraphEffectService:
         self._loot_table_repository = loot_table_repository
         # GIVE_FROM_LOOT_TABLE の抽選に使う乱数。None ならモジュール全体の乱数。
         self._random_source = random_source
-        self._ongoing_condition_resolutions = dict(
-            ongoing_condition_resolutions or {}
-        )
+        self._ongoing_condition_resolutions = dict(ongoing_condition_resolutions or {})
         self._handlers = build_effect_handlers()
 
     def _expand_ongoing_condition_resolutions(
@@ -96,27 +94,20 @@ class WorldGraphEffectService:
         """異常解除の参照を、シナリオが一箇所で宣言した flag 効果へ展開する。"""
         expanded: list[InteractionEffect] = []
         for effect in effects:
-            if (
-                effect.effect_type
-                is not InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION
-            ):
+            if effect.effect_type is not InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION:
                 expanded.append(effect)
                 continue
             flag = effect.parameters.get("flag")
             if not isinstance(flag, str) or not flag:
-                raise InteractionEffectValidationException(
-                    "RESOLVE_ONGOING_CONDITION requires parameters.flag"
-                )
+                raise InteractionEffectValidationException("RESOLVE_ONGOING_CONDITION requires parameters.flag")
             resolution = self._ongoing_condition_resolutions.get(flag)
             if not resolution:
                 raise InteractionEffectValidationException(
-                    "RESOLVE_ONGOING_CONDITION が参照する異常に resolution が"
-                    f"ありません: flag={flag!r}"
+                    f"RESOLVE_ONGOING_CONDITION が参照する異常に resolution がありません: flag={flag!r}"
                 )
             if flag in resolving:
                 raise InteractionEffectValidationException(
-                    "ongoing condition resolution が循環しています: "
-                    f"flag={flag!r}"
+                    f"ongoing condition resolution が循環しています: flag={flag!r}"
                 )
             expanded.extend(
                 self._expand_ongoing_condition_resolutions(
@@ -171,30 +162,15 @@ class WorldGraphEffectService:
         acting_player_display_name: str | None = None,
         owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
     ) -> WorldGraphEffectResult:
-        if (
-            acting_item_aggregate is not None
-            and acting_item_aggregate is target_item_aggregate
-        ):
+        if acting_item_aggregate is not None and acting_item_aggregate is target_item_aggregate:
             raise ValueError(
                 "acting_item_aggregate and target_item_aggregate must be distinct "
                 "instances; passing the same aggregate as both indicates a wiring bug"
             )
 
-        initial_item_state = (
-            dict(acting_item_aggregate.state)
-            if acting_item_aggregate is not None
-            else None
-        )
-        initial_target_item_state = (
-            dict(target_item_aggregate.state)
-            if target_item_aggregate is not None
-            else None
-        )
-        initial_player_state = (
-            dict(acting_player_status.state)
-            if acting_player_status is not None
-            else None
-        )
+        initial_item_state = dict(acting_item_aggregate.state) if acting_item_aggregate is not None else None
+        initial_target_item_state = dict(target_item_aggregate.state) if target_item_aggregate is not None else None
+        initial_player_state = dict(acting_player_status.state) if acting_player_status is not None else None
 
         ctx = EffectApplicationState(
             interior=interior,
@@ -216,37 +192,22 @@ class WorldGraphEffectService:
             dispatch_effect(self._handlers, effect, ctx)
 
         item_instance_state_changed = (
-            acting_item_aggregate is not None
-            and dict(acting_item_aggregate.state) != initial_item_state
+            acting_item_aggregate is not None and dict(acting_item_aggregate.state) != initial_item_state
         )
         target_item_instance_state_changed = (
-            target_item_aggregate is not None
-            and dict(target_item_aggregate.state) != initial_target_item_state
+            target_item_aggregate is not None and dict(target_item_aggregate.state) != initial_target_item_state
         )
         acting_player_state_changed = (
-            acting_player_status is not None
-            and dict(acting_player_status.state) != initial_player_state
+            acting_player_status is not None and dict(acting_player_status.state) != initial_player_state
         )
 
-        actor_direct = tuple(
-            s for s in ctx.summaries if s.visibility == EffectVisibility.ACTOR_DIRECT
-        )
-        public_observable = tuple(
-            s
-            for s in ctx.summaries
-            if s.visibility == EffectVisibility.PUBLIC_OBSERVABLE
-        )
-        hidden = tuple(
-            s for s in ctx.summaries if s.visibility == EffectVisibility.HIDDEN
-        )
+        actor_direct = tuple(s for s in ctx.summaries if s.visibility == EffectVisibility.ACTOR_DIRECT)
+        public_observable = tuple(s for s in ctx.summaries if s.visibility == EffectVisibility.PUBLIC_OBSERVABLE)
+        hidden = tuple(s for s in ctx.summaries if s.visibility == EffectVisibility.HIDDEN)
 
         return WorldGraphEffectResult(
             new_interior=ctx.interior,
-            updated_object_id=(
-                ctx.acting_object.object_id.value
-                if ctx.acting_object is not None
-                else None
-            ),
+            updated_object_id=(ctx.acting_object.object_id.value if ctx.acting_object is not None else None),
             new_flags=frozenset(ctx.flags),
             messages=tuple(ctx.messages),
             item_spec_ids_to_grant=tuple(ctx.grant),

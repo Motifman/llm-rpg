@@ -86,15 +86,21 @@ def test_stock_condition_and_consumption_use_the_declared_target(
     if target_id is not None:
         parameters["object_id"] = target_id.value
     action = InteractionDef(
-        action_name="draw", display_label="資源を取り出す",
+        action_name="draw",
+        display_label="資源を取り出す",
         preconditions=(condition,),
-        effects=(InteractionEffect(
-            effect_type=InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK,
-            parameters=parameters,
-        ),),
+        effects=(
+            InteractionEffect(
+                effect_type=InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK,
+                parameters=parameters,
+            ),
+        ),
     )
     interior = SpotInterior(
-        (), (_pool(actor_id, actor_stock, (action,)), _pool(resource_id, target_stock)), (), (),
+        (),
+        (_pool(actor_id, actor_stock, (action,)), _pool(resource_id, target_stock)),
+        (),
+        (),
     )
     before = {obj.object_id: dict(obj.state) for obj in interior.objects}
     service = SpotInteractionService()
@@ -102,10 +108,19 @@ def test_stock_condition_and_consumption_use_the_declared_target(
     def execute():
         if entrypoint == "declared":
             return service.execute_declared_interaction(
-                interior, action, frozenset(), frozenset(), current_tick=WorldTick(0),
+                interior,
+                action,
+                frozenset(),
+                frozenset(),
+                current_tick=WorldTick(0),
             )
         return service.execute_interaction(
-            interior, actor_id, "draw", frozenset(), frozenset(), current_tick=WorldTick(0),
+            interior,
+            actor_id,
+            "draw",
+            frozenset(),
+            frozenset(),
+            current_tick=WorldTick(0),
         )
 
     if remaining_stock is None:

@@ -69,10 +69,7 @@ class TestWorldRuntimeSpeechViaDomainEvent:
             e.output.structured.get("type") == "player_spoke"
             and "リン、近くにいるか" in e.output.structured.get("content", "")
             for e in rin_entries
-        ), (
-            f"BUG: 同スポットのリンに speech observation が届いていない. "
-            f"buffer entries={rin_entries}"
-        )
+        ), f"BUG: 同スポットのリンに speech observation が届いていない. buffer entries={rin_entries}"
 
     def test_say_does_not_reach_listener_two_hops_away(self) -> None:
         """SAY は max_hops=1。書架 A (4) → 閲覧室 (2) は 2 hop なので届かない。
@@ -92,10 +89,7 @@ class TestWorldRuntimeSpeechViaDomainEvent:
             if e.output.structured.get("type") == "player_spoke"
             and "ヴェル・ノクト" in e.output.structured.get("content", "")
         ]
-        assert leaked == [], (
-            f"BUG: 2 hop 先のリンに speech が漏れている. "
-            f"leaked={leaked} (max_hops=1 のはず)"
-        )
+        assert leaked == [], f"BUG: 2 hop 先のリンに speech が漏れている. leaked={leaked} (max_hops=1 のはず)"
 
     def test_say_does_not_reach_listener_five_hops_away(self) -> None:
         """館長書斎 (8) → 閲覧室 (2) は 5 hop。第13/14回実験で観測された
@@ -107,14 +101,9 @@ class TestWorldRuntimeSpeechViaDomainEvent:
         runtime.do_say(PlayerId(1), "館長書斎にたどり着いたぞ")
 
         rin_entries = runtime._obs_buffer.get_observations(PlayerId(2))
-        leaked = [
-            e
-            for e in rin_entries
-            if "館長書斎にたどり着いたぞ" in e.output.structured.get("content", "")
-        ]
+        leaked = [e for e in rin_entries if "館長書斎にたどり着いたぞ" in e.output.structured.get("content", "")]
         assert leaked == [], (
-            f"BUG: 5 hop 先まで speech が漏れている (旧 _append_agent_speech バグの再侵入). "
-            f"leaked={leaked}"
+            f"BUG: 5 hop 先まで speech が漏れている (旧 _append_agent_speech バグの再侵入). leaked={leaked}"
         )
 
     def test_speaker_buffer_does_not_receive_self_observation(self) -> None:
@@ -128,14 +117,9 @@ class TestWorldRuntimeSpeechViaDomainEvent:
         runtime.do_say(PlayerId(1), "私はカイトだ")
 
         kaito_entries = runtime._obs_buffer.get_observations(PlayerId(1))
-        self_entries = [
-            e
-            for e in kaito_entries
-            if e.output.structured.get("type") == "player_spoke"
-        ]
+        self_entries = [e for e in kaito_entries if e.output.structured.get("type") == "player_spoke"]
         assert self_entries == [], (
-            f"BUG: 話者自身の buffer に三人称 speech observation が積まれている. "
-            f"self_entries={self_entries}"
+            f"BUG: 話者自身の buffer に三人称 speech observation が積まれている. self_entries={self_entries}"
         )
 
     def test_whisper_delivers_only_to_target_player(self) -> None:
@@ -147,10 +131,9 @@ class TestWorldRuntimeSpeechViaDomainEvent:
         runtime.do_whisper(PlayerId(1), "秘密の話", PlayerId(2))
 
         rin_entries = runtime._obs_buffer.get_observations(PlayerId(2))
-        assert any(
-            "秘密の話" in e.output.structured.get("content", "")
-            for e in rin_entries
-        ), "whisper が宛先リンに届いていない"
+        assert any("秘密の話" in e.output.structured.get("content", "") for e in rin_entries), (
+            "whisper が宛先リンに届いていない"
+        )
 
     def test_whisper_to_dead_target_is_rejected_before_speech_event(
         self,
@@ -172,9 +155,7 @@ class TestWorldRuntimeSpeechViaDomainEvent:
         runtime = state.runtime
         reading_room_id = _name_to_spot_id(runtime, "閲覧室")
         _teleport(runtime, 1, reading_room_id)
-        runtime._player_outcome_registry.set_outcome(
-            PlayerId(2), PlayerOutcomeEnum.DEAD
-        )
+        runtime._player_outcome_registry.set_outcome(PlayerId(2), PlayerOutcomeEnum.DEAD)
 
         result = state.llm_wiring.run_turn(PlayerId(1))
 

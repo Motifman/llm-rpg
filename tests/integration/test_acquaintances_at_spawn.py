@@ -26,9 +26,7 @@ class TestAcquaintancesAtSpawn:
             others = sorted(n for n in names.values() if n != own_name)
             met = [runtime._player_acquaintances.find(pid, n) for n in others]
             assert all(m is not None for m in met), (own_name, met)
-            assert {(m.how_known, m.first_met_turn, m.met_count) for m in met} == {
-                (HowKnown.INTRODUCED, 0, 1)
-            }
+            assert {(m.how_known, m.first_met_turn, m.met_count) for m in met} == {(HowKnown.INTRODUCED, 0, 1)}
             assert runtime._player_acquaintances.find(pid, own_name) is None
 
     def test_players_spawned_apart_have_not_met(self) -> None:
@@ -55,9 +53,7 @@ class TestRestoreOverSpawnRecords:
         island = _SCENARIOS / "survival_island_v4_coop.json"
         source = create_world_runtime(island)
         ada = source.get_player_ids()[0]
-        being_id = source.aux_being_resolver.resolve_being_id(
-            source.aux_being_default_world_id, ada
-        )
+        being_id = source.aux_being_resolver.resolve_being_id(source.aux_being_default_world_id, ada)
         source._acquaintance_store.replace_all_by_being(being_id, [])
         source._player_acquaintances.record_meeting(ada, "ノア")
         source._player_acquaintances.record_meeting(ada, "ノア")

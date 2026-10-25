@@ -118,9 +118,7 @@ class TestFactionElimination:
 
     def test_ended_when_the_whole_faction_is_dead(self) -> None:
         """crew 全員が DEAD なら成立し、呼び手が渡した LOSE を返す。"""
-        result = _evaluate(
-            _condition(max_surviving=0), _outcomes(a=_CREW_A, b=_CREW_B)
-        )
+        result = _evaluate(_condition(max_surviving=0), _outcomes(a=_CREW_A, b=_CREW_B))
         assert result.is_ended is True
         assert result.result == GameResultEnum.LOSE
 
@@ -134,10 +132,13 @@ class TestFactionElimination:
         assert result.is_ended is False
 
     @pytest.mark.parametrize(
-        ("dead_crew", "is_ended"), [((), False), ((_CREW_A,), True)],
+        ("dead_crew", "is_ended"),
+        [((), False), ((_CREW_A,), True)],
     )
     def test_threshold_above_zero(
-        self, dead_crew: tuple[PlayerId, ...], is_ended: bool,
+        self,
+        dead_crew: tuple[PlayerId, ...],
+        is_ended: bool,
     ) -> None:
         """max_surviving=1 では残り 2 人なら続行し、残り 1 人になった時点で成立する。"""
         outcomes = _outcomes(**{str(i): pid for i, pid in enumerate(dead_crew)})
@@ -170,21 +171,29 @@ class TestMissingInputsFailLoudly:
         """
         with pytest.raises(GameEndConditionValidationException):
             GameEndConditionEvaluator().evaluate(
-                _graph(), _condition(), frozenset(), _ALL, None,
+                _graph(),
+                _condition(),
+                frozenset(),
+                _ALL,
+                None,
                 player_states=None,
                 player_outcomes=_outcomes(),
-        result_on_match=_SIDE,
-    )
+                result_on_match=_SIDE,
+            )
 
     def test_missing_outcomes_raises(self) -> None:
         """player_outcomes が渡っていなければ例外にする。"""
         with pytest.raises(GameEndConditionValidationException):
             GameEndConditionEvaluator().evaluate(
-                _graph(), _condition(), frozenset(), _ALL, None,
+                _graph(),
+                _condition(),
+                frozenset(),
+                _ALL,
+                None,
                 player_states=_ROLES,
                 player_outcomes=None,
-        result_on_match=_SIDE,
-    )
+                result_on_match=_SIDE,
+            )
 
 
 class TestConditionValidation:
@@ -194,9 +203,7 @@ class TestConditionValidation:
         """required_state が無いと、誰を数えるか決まらない。"""
         with pytest.raises(GameEndConditionValidationException):
             GameEndCondition(
-                condition_type=(
-                    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST
-                ),
+                condition_type=(GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST),
                 max_surviving=0,
             )
 
@@ -207,9 +214,7 @@ class TestConditionValidation:
         """
         with pytest.raises(GameEndConditionValidationException):
             GameEndCondition(
-                condition_type=(
-                    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST
-                ),
+                condition_type=(GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST),
                 required_state={"role": "crew"},
             )
 
@@ -217,9 +222,7 @@ class TestConditionValidation:
         """負の閾値は成立しえないので弾く。"""
         with pytest.raises(GameEndConditionValidationException):
             GameEndCondition(
-                condition_type=(
-                    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST
-                ),
+                condition_type=(GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST),
                 required_state={"role": "crew"},
                 max_surviving=-1,
             )
@@ -249,11 +252,13 @@ class TestRemovedOutcomeResolutionFormat:
         }
         scenario["game_end_conditions"] = {
             "win": [],
-            "lose": [{
-                "type": "SURVIVING_PLAYERS_WITH_STATE_AT_MOST",
-                "required_state": {"role": "crew"},
-                "max_surviving": 0,
-            }],
+            "lose": [
+                {
+                    "type": "SURVIVING_PLAYERS_WITH_STATE_AT_MOST",
+                    "required_state": {"role": "crew"},
+                    "max_surviving": 0,
+                }
+            ],
         }
 
         with pytest.raises(ScenarioLoadError) as exc_info:

@@ -42,6 +42,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 # 共通 serializer / deserializer
 # ----------------------------------------------------------------------------
 
+
 def _dt_to_iso(dt: datetime) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -87,9 +88,7 @@ def _dict_to_observation_entry(data: dict[str, Any]) -> Any:
     output = ObservationOutput(
         prose=str(out_d["prose"]),
         structured=dict(out_d.get("structured", {})),
-        observation_category=_as_observation_category(
-            out_d.get("observation_category", "self_only")
-        ),
+        observation_category=_as_observation_category(out_d.get("observation_category", "self_only")),
         schedules_turn=bool(out_d.get("schedules_turn", False)),
         breaks_movement=bool(out_d.get("breaks_movement", False)),
     )
@@ -139,21 +138,22 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         omit_result_in_prompt=bool(data.get("omit_result_in_prompt", False)),
         inner_thought=data.get("inner_thought"),
         occurred_tick=data.get("occurred_tick"),
-        execution_provenance=(ExecutionProvenance.from_dict(data["execution_provenance"]) if data.get("execution_provenance") else None),
+        execution_provenance=(
+            ExecutionProvenance.from_dict(data["execution_provenance"]) if data.get("execution_provenance") else None
+        ),
     )
 
 
 def _check_version(data: dict[str, Any], key: str, expected: int) -> None:
     version = data.get("schema_version")
     if version != expected:
-        raise ValueError(
-            f"{key} schema_version={version!r} unsupported (expected {expected})"
-        )
+        raise ValueError(f"{key} schema_version={version!r} unsupported (expected {expected})")
 
 
 # ----------------------------------------------------------------------------
 # L4 summary serializer (rolling_summary backend 専用)
 # ----------------------------------------------------------------------------
+
 
 def _l4_mid_summary_to_dict(s: L4MidSummary) -> dict[str, Any]:
     return {
@@ -248,24 +248,15 @@ def migrate_legacy_recent_event_subsystems(
     if not present:
         return subsystems
     if present != legacy_keys:
-        raise ValueError(
-            "legacy recent-event snapshot must contain all three subsystems: "
-            f"present={sorted(present)!r}"
-        )
+        raise ValueError(f"legacy recent-event snapshot must contain all three subsystems: present={sorted(present)!r}")
     if _RECENT_EVENT_SUBSYSTEM_KEY in subsystems:
-        raise ValueError(
-            "snapshot contains both legacy and unified recent-event subsystems"
-        )
+        raise ValueError("snapshot contains both legacy and unified recent-event subsystems")
 
     sw = subsystems[_SW_SUBSYSTEM_KEY]
     ob = subsystems[_OB_SUBSYSTEM_KEY]
     ar = subsystems[_AR_SUBSYSTEM_KEY]
     mode = sw.get("mode", _SW_MODE_SLIDING)
-    observation_groups = (
-        sw.get("raw_entries", [])
-        if mode == _SW_MODE_ROLLING
-        else sw.get("entries", [])
-    )
+    observation_groups = sw.get("raw_entries", []) if mode == _SW_MODE_ROLLING else sw.get("entries", [])
     events_by_player: dict[int, list[dict[str, Any]]] = {}
     for group in observation_groups:
         pid = int(group["player_id"])
@@ -342,18 +333,13 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
                 )
             sizes = store.completed_turn_sizes(player_id)
             if sizes:
-                completed_turn_sizes.append(
-                    {"player_id": pid, "sizes": list(sizes)}
-                )
+                completed_turn_sizes.append({"player_id": pid, "sizes": list(sizes)})
             pending_entries = store.get_pending_observations(player_id)
             if pending_entries:
                 pending.append(
                     {
                         "player_id": pid,
-                        "entries": [
-                            _observation_entry_to_dict(entry)
-                            for entry in pending_entries
-                        ],
+                        "entries": [_observation_entry_to_dict(entry) for entry in pending_entries],
                     }
                 )
         data: dict[str, Any] = {
@@ -379,9 +365,7 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
         return data
 
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
-        _check_version(
-            data, _RECENT_EVENT_SUBSYSTEM_KEY, _RECENT_EVENT_SCHEMA_VERSION
-        )
+        _check_version(data, _RECENT_EVENT_SUBSYSTEM_KEY, _RECENT_EVENT_SCHEMA_VERSION)
         store = getattr(runtime, "_recent_event_store", None)
         memory: Any = getattr(runtime, "_short_term_memory", None)
         if store is None:
@@ -402,10 +386,7 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
         for group in data.get("pending_observations", []):
             store.replace_pending_observations(
                 PlayerId(int(group["player_id"])),
-                [
-                    _dict_to_observation_entry(entry)
-                    for entry in group.get("entries", [])
-                ],
+                [_dict_to_observation_entry(entry) for entry in group.get("entries", [])],
             )
         if memory is None:
             return
@@ -413,8 +394,7 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
             memory._mid.clear()
             for group in data.get("mid_summaries", []):
                 memory._mid[int(group["player_id"])] = deque(
-                    _dict_to_l4_mid_summary(item)
-                    for item in group.get("summaries", [])
+                    _dict_to_l4_mid_summary(item) for item in group.get("summaries", [])
                 )
 
 
@@ -445,17 +425,12 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
     def _capture_raw_entries(sw: Any) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
         for pid in sorted(sw._event_store.player_ids()):
-            observations = sw._event_store.observations_in_storage_order(
-                PlayerId(pid)
-            )
+            observations = sw._event_store.observations_in_storage_order(PlayerId(pid))
             if observations:
                 entries.append(
                     {
                         "player_id": pid,
-                        "entries": [
-                            _observation_entry_to_dict(entry)
-                            for entry in observations
-                        ],
+                        "entries": [_observation_entry_to_dict(entry) for entry in observations],
                     }
                 )
         return entries
@@ -465,18 +440,14 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         # L1 (_raw) は main thread 専用なので lock 不要 (SummarizingShortTermMemory
         # の自己ドキュメント済の不変条件)。
         with sw._mid_lock:
-            mid_snapshot: dict[int, list[L4MidSummary]] = {
-                int(pid): list(dq) for pid, dq in sw._mid.items()
-            }
+            mid_snapshot: dict[int, list[L4MidSummary]] = {int(pid): list(dq) for pid, dq in sw._mid.items()}
         raw_entries = self._capture_raw_entries(sw)
         mid_groups: list[dict[str, Any]] = list(
-                {
-                    "player_id": int(pid),
-                    "summaries": [
-                        _l4_mid_summary_to_dict(s) for s in summaries
-                    ],
-                }
-                for pid, summaries in mid_snapshot.items()
+            {
+                "player_id": int(pid),
+                "summaries": [_l4_mid_summary_to_dict(s) for s in summaries],
+            }
+            for pid, summaries in mid_snapshot.items()
         )
         mid_summaries = sorted(mid_groups, key=lambda d: d["player_id"])
         return {
@@ -492,8 +463,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         version = data.get("schema_version")
         if version not in (1, _SW_SCHEMA_VERSION):
             raise ValueError(
-                f"{_SW_SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected 1 or {_SW_SCHEMA_VERSION})"
+                f"{_SW_SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected 1 or {_SW_SCHEMA_VERSION})"
             )
         sw = getattr(runtime, "_short_term_memory", None)
         if sw is None:
@@ -512,20 +482,14 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
             sw._event_store.replace_observations(PlayerId(pid), [])
         for player_entry in data.get("raw_entries", []):
             pid = int(player_entry["player_id"])
-            entries = [
-                _dict_to_observation_entry(d)
-                for d in player_entry.get("entries", [])
-            ]
+            entries = [_dict_to_observation_entry(d) for d in player_entry.get("entries", [])]
             sw._event_store.replace_observations(PlayerId(pid), entries)
         # L4 は lock 内で書き戻す (worker thread と race)
         with sw._mid_lock:
             sw._mid.clear()
             for player_entry in data.get("mid_summaries", []):
                 pid = int(player_entry["player_id"])
-                summaries = [
-                    _dict_to_l4_mid_summary(d)
-                    for d in player_entry.get("summaries", [])
-                ]
+                summaries = [_dict_to_l4_mid_summary(d) for d in player_entry.get("summaries", [])]
                 sw._mid[pid] = deque(summaries)
             # _raw に居て _mid に居ない player も _mid に空 deque を確保
             # (_ensure_player の不変条件と一致させる)
@@ -533,9 +497,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
                 if pid not in sw._mid:
                     sw._mid[pid] = deque()
 
-    def _restore_sliding_to_rolling(
-        self, sw: Any, entries_data: list[dict[str, Any]]
-    ) -> None:
+    def _restore_sliding_to_rolling(self, sw: Any, entries_data: list[dict[str, Any]]) -> None:
         self._restore_observations(sw, entries_data)
         with sw._mid_lock:
             sw._mid.clear()
@@ -549,10 +511,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         for player_entry in entries_data:
             sw._event_store.replace_observations(
                 PlayerId(int(player_entry["player_id"])),
-                [
-                    _dict_to_observation_entry(item)
-                    for item in player_entry.get("entries", [])
-                ],
+                [_dict_to_observation_entry(item) for item in player_entry.get("entries", [])],
             )
 
 
@@ -581,9 +540,7 @@ class ObservationBufferSubsystemCodec(WorldSubsystemCodec):
                     "player_id": pid,
                     "entries": [
                         _observation_entry_to_dict(entry)
-                        for entry in ob._event_store.get_pending_observations(
-                            PlayerId(pid)
-                        )
+                        for entry in ob._event_store.get_pending_observations(PlayerId(pid))
                     ],
                 }
                 for pid in sorted(ob._event_store.player_ids())
@@ -601,10 +558,7 @@ class ObservationBufferSubsystemCodec(WorldSubsystemCodec):
         for group in data.get("entries", []):
             ob._event_store.replace_pending_observations(
                 PlayerId(int(group["player_id"])),
-                [
-                    _dict_to_observation_entry(entry)
-                    for entry in group.get("entries", [])
-                ],
+                [_dict_to_observation_entry(entry) for entry in group.get("entries", [])],
             )
 
 
@@ -641,9 +595,7 @@ class ActionResultStoreSubsystemCodec(WorldSubsystemCodec):
                     "player_id": pid,
                     "entries": [
                         _action_result_entry_to_dict(entry)
-                        for entry in ar._event_store.action_results_in_storage_order(
-                            PlayerId(pid)
-                        )
+                        for entry in ar._event_store.action_results_in_storage_order(PlayerId(pid))
                     ],
                 }
                 for pid in sorted(ar._event_store.player_ids())
@@ -661,10 +613,7 @@ class ActionResultStoreSubsystemCodec(WorldSubsystemCodec):
         for group in data.get("entries", []):
             ar._event_store.replace_action_results(
                 PlayerId(int(group["player_id"])),
-                [
-                    _dict_to_action_result_entry(entry)
-                    for entry in group.get("entries", [])
-                ],
+                [_dict_to_action_result_entry(entry) for entry in group.get("entries", [])],
             )
 
 

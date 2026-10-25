@@ -58,22 +58,15 @@ class InMemoryPendingTradeOfferStore:
 
     def list_for_target(self, player_id: PlayerId) -> tuple[PendingTradeOffer, ...]:
         """その人に宛てられた提案を、古い順で返す。"""
-        return tuple(
-            offer for offer in self.list_all() if offer.target_player_id == player_id
-        )
+        return tuple(offer for offer in self.list_all() if offer.target_player_id == player_id)
 
     def list_from_offerer(self, player_id: PlayerId) -> tuple[PendingTradeOffer, ...]:
         """その人が出している提案を、古い順で返す。"""
-        return tuple(
-            offer for offer in self.list_all() if offer.offerer_player_id == player_id
-        )
+        return tuple(offer for offer in self.list_all() if offer.offerer_player_id == player_id)
 
     def has_offer_between(self, offerer: PlayerId, target: PlayerId) -> bool:
         """その向きの提案が既に生きているか (同一ペアの二重提案を弾くのに使う)。"""
-        return any(
-            offer.offerer_player_id == offerer and offer.target_player_id == target
-            for offer in self.list_all()
-        )
+        return any(offer.offerer_player_id == offerer and offer.target_player_id == target for offer in self.list_all())
 
     def committed_item_quantities(self, offerer: PlayerId) -> dict[int, int]:
         """その人が提案に出している品の合計数を item_spec_id ごとに返す。
@@ -96,9 +89,7 @@ class InMemoryPendingTradeOfferStore:
         状態遷移と観測の発火は呼び出し側 (tick stage) の仕事にする。store が
         観測を持つと、保存・復元のたびに「流れた」が二重に届きうる。
         """
-        return tuple(
-            offer for offer in self.list_all() if offer.is_expired_at(current_tick)
-        )
+        return tuple(offer for offer in self.list_all() if offer.is_expired_at(current_tick))
 
     def remove(self, offer_id: TradeOfferId) -> None:
         with self._lock:

@@ -4,7 +4,6 @@
 create_from_domain_exception には DomainException のサブクラスのみ渡すこと。
 """
 
-
 from typing import Any, ClassVar
 
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
@@ -60,7 +59,6 @@ class ApplicationExceptionFactory:
         "DisplayNameValidationException": UserCommandException,
         "BioValidationException": UserCommandException,
         "ProfileUpdateValidationException": UserCommandException,
-
         # 関係性関連例外
         "RelationshipQueryException": RelationshipQueryException,
         "FollowException": UserCommandException,
@@ -74,7 +72,6 @@ class ApplicationExceptionFactory:
         "CannotSubscribeBlockedUserException": UserCommandException,
         "CannotSubscribeNotFollowedUserException": UserCommandException,
         "CannotUnsubscribeNotSubscribedUserException": UserCommandException,
-
         # セルフ操作関連例外
         "SelfFollowException": UserCommandException,
         "SelfUnfollowException": UserCommandException,
@@ -82,7 +79,6 @@ class ApplicationExceptionFactory:
         "SelfUnblockException": UserCommandException,
         "SelfSubscribeException": UserCommandException,
         "SelfUnsubscribeException": UserCommandException,
-
         # ポスト関連例外
         "PostIdValidationException": PostQueryException,
         "InvalidParentReferenceException": PostQueryException,
@@ -91,7 +87,6 @@ class ApplicationExceptionFactory:
         "HashtagCountValidationException": PostCommandException,
         "VisibilityValidationException": PostCommandException,
         "ContentAlreadyDeletedException": PostCommandException,
-
         # 通知関連例外
         "NotificationIdValidationException": NotificationCommandException,
         "NotificationOwnershipException": NotificationCommandException,
@@ -106,7 +101,7 @@ class ApplicationExceptionFactory:
         user_id: int | None = None,
         target_user_id: int | None = None,
         post_id: int | None = None,
-        **additional_context: Any
+        **additional_context: Any,
     ) -> ApplicationException:
         """
         ドメイン例外から適切なアプリケーション例外を作成
@@ -125,10 +120,7 @@ class ApplicationExceptionFactory:
             TypeError: domain_exception が DomainException のインスタンスでない場合
         """
         if not isinstance(domain_exception, DomainException):
-            raise TypeError(
-                "domain_exception must be a DomainException, "
-                f"got {type(domain_exception).__name__}"
-            )
+            raise TypeError(f"domain_exception must be a DomainException, got {type(domain_exception).__name__}")
         # ドメイン例外から情報を抽出
         domain_class_name = domain_exception.__class__.__name__
 
@@ -144,22 +136,22 @@ class ApplicationExceptionFactory:
 
         # user_id, target_user_id, post_idをコンテキストに追加
         if user_id is not None:
-            context['user_id'] = user_id
+            context["user_id"] = user_id
         if target_user_id is not None:
-            context['target_user_id'] = target_user_id
+            context["target_user_id"] = target_user_id
         if post_id is not None:
-            context['post_id'] = post_id
+            context["post_id"] = post_id
 
         # ドメイン例外から特定のフィールドを抽出してコンテキストに追加
-        if hasattr(domain_exception, 'user_id'):
-            context['user_id'] = domain_exception.user_id
-        if hasattr(domain_exception, 'relationship_type'):
-            context['relationship_type'] = domain_exception.relationship_type
-        if hasattr(domain_exception, 'post_id'):
-            context['post_id'] = domain_exception.post_id
+        if hasattr(domain_exception, "user_id"):
+            context["user_id"] = domain_exception.user_id
+        if hasattr(domain_exception, "relationship_type"):
+            context["relationship_type"] = domain_exception.relationship_type
+        if hasattr(domain_exception, "post_id"):
+            context["post_id"] = domain_exception.post_id
 
         # ドメイン例外の他の属性もコンテキストに追加
-        domain_attrs = ['error_detail', 'target_user_id', 'follower_id', 'followee_id', 'content_id']
+        domain_attrs = ["error_detail", "target_user_id", "follower_id", "followee_id", "content_id"]
         for attr in domain_attrs:
             if hasattr(domain_exception, attr) and attr not in context:
                 context[attr] = getattr(domain_exception, attr)
@@ -168,17 +160,10 @@ class ApplicationExceptionFactory:
         # DomainException のサブクラスが error_code を定義していない場合のフォールバック
         error_code = getattr(domain_exception, "error_code", domain_class_name.upper())
         try:
-            app_exception = app_exception_class(
-                message=str(domain_exception),
-                error_code=error_code,
-                **context
-            )
+            app_exception = app_exception_class(message=str(domain_exception), error_code=error_code, **context)
         except TypeError:
             # コンストラクタが新しいシグネチャに対応していない場合のフォールバック
-            app_exception = app_exception_class(
-                message=str(domain_exception),
-                **context
-            )
+            app_exception = app_exception_class(message=str(domain_exception), **context)
 
         # 例外チェーニング
         app_exception.__cause__ = domain_exception

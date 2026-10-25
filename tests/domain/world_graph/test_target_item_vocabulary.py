@@ -55,9 +55,7 @@ FLINT = ItemSpecId.create(8)
 
 def _check(cond: InteractionCondition, *, target_owned=None, params=None, actor_owned=frozenset()):
     """condition 1 件だけの interaction を評価して (ok, message) を返す。"""
-    idef = InteractionDef(
-        action_name="take", display_label="奪う", preconditions=(cond,), effects=()
-    )
+    idef = InteractionDef(action_name="take", display_label="奪う", preconditions=(cond,), effects=())
     return SpotInteractionService().can_interact(
         idef,
         None,
@@ -72,7 +70,8 @@ class TestTargetHasItem:
     """``TARGET_HAS_ITEM`` は行為者ではなく対象の所持を見る。"""
 
     @pytest.mark.parametrize(
-        ("spec", "actor_owned"), [(DRIFTWOOD, frozenset()), (FLINT, frozenset({DRIFTWOOD}))],
+        ("spec", "actor_owned"),
+        [(DRIFTWOOD, frozenset()), (FLINT, frozenset({DRIFTWOOD}))],
     )
     def test_passes_when_target_owns_the_fixed_item(self, spec, actor_owned) -> None:
         """行為者が別品目を持つ場合も、対象が宣言された品目を持っていれば成立する。"""
@@ -91,7 +90,10 @@ class TestTargetHasItem:
             target_item_spec_id=DRIFTWOOD,
         )
         interaction = InteractionDef(
-            action_name="take", display_label="奪う", preconditions=(condition,), effects=(),
+            action_name="take",
+            display_label="奪う",
+            preconditions=(condition,),
+            effects=(),
         )
 
         ok, message = SpotInteractionService(predicate_evaluator=common).can_interact(
@@ -110,30 +112,42 @@ class TestTargetHasItem:
     @pytest.mark.parametrize("actor_owned", [frozenset(), frozenset({DRIFTWOOD})])
     def test_fails_with_a_learnable_message_when_target_lacks_it(self, actor_owned) -> None:
         """対象が持っていなければ、内部エラーではなく前提条件の不成立で返る。"""
-        ok, msg = _check(cond=InteractionCondition(
-            condition_type=InteractionConditionTypeEnum.TARGET_HAS_ITEM,
-            target_item_spec_id=DRIFTWOOD,
-        ), target_owned=frozenset({FLINT}), actor_owned=actor_owned)
+        ok, msg = _check(
+            cond=InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.TARGET_HAS_ITEM,
+                target_item_spec_id=DRIFTWOOD,
+            ),
+            target_owned=frozenset({FLINT}),
+            actor_owned=actor_owned,
+        )
         assert ok is False
         assert msg == "相手はそれを持っていない"
 
-    @pytest.mark.parametrize("condition_type", [
-        InteractionConditionTypeEnum.TARGET_HAS_ITEM, InteractionConditionTypeEnum.TARGET_HAS_NO_ITEM,
-    ])
+    @pytest.mark.parametrize(
+        "condition_type",
+        [
+            InteractionConditionTypeEnum.TARGET_HAS_ITEM,
+            InteractionConditionTypeEnum.TARGET_HAS_NO_ITEM,
+        ],
+    )
     def test_rejects_when_target_inventory_was_not_provided(self, condition_type) -> None:
         """対象の所持が渡っていないのに対象の条件が書かれていたら拒否する。
 
         渡し忘れを黙って成立させると、持っていない相手から奪えてしまう。
         provider 不在を silent pass させない既存規約に合わせる。
         """
-        ok, _ = _check(cond=InteractionCondition(
-            condition_type=condition_type,
-            target_item_spec_id=DRIFTWOOD,
-        ), target_owned=None)
+        ok, _ = _check(
+            cond=InteractionCondition(
+                condition_type=condition_type,
+                target_item_spec_id=DRIFTWOOD,
+            ),
+            target_owned=None,
+        )
         assert ok is False
 
     @pytest.mark.parametrize(
-        ("key", "spec", "fixed"), [("item_spec_id", DRIFTWOOD, None), ("chosen_item", FLINT, DRIFTWOOD)],
+        ("key", "spec", "fixed"),
+        [("item_spec_id", DRIFTWOOD, None), ("chosen_item", FLINT, DRIFTWOOD)],
     )
     def test_reads_the_spec_id_from_interaction_parameters(self, key, spec, fixed) -> None:
         """任意の参照キーと実行時の品目を読み、固定品目が併記されても実行時指定を優先する。"""
@@ -143,7 +157,9 @@ class TestTargetHasItem:
             item_spec_id_parameter_key=key,
         )
         assert _check(
-            cond, target_owned=frozenset({spec}), params={"item_spec_id": 7, key: spec.value},
+            cond,
+            target_owned=frozenset({spec}),
+            params={"item_spec_id": 7, key: spec.value},
         ) == (True, None)
 
     def test_fails_when_the_named_parameter_is_absent(self) -> None:
@@ -190,7 +206,10 @@ class TestTargetHasNoItem:
             target_item_spec_id=FLINT,
         )
         interaction = InteractionDef(
-            action_name="take", display_label="奪う", preconditions=(condition,), effects=(),
+            action_name="take",
+            display_label="奪う",
+            preconditions=(condition,),
+            effects=(),
         )
 
         with pytest.raises(ScenarioPredicateEvaluationException):
@@ -224,7 +243,9 @@ class TestRuntimeItemSelectionEffect:
             interaction_parameters=params,
         )
 
-    @pytest.mark.parametrize("effect_type", [InteractionEffectTypeEnum.GIVE_ITEM, InteractionEffectTypeEnum.REMOVE_ITEM])
+    @pytest.mark.parametrize(
+        "effect_type", [InteractionEffectTypeEnum.GIVE_ITEM, InteractionEffectTypeEnum.REMOVE_ITEM]
+    )
     @pytest.mark.parametrize(("key", "value", "fixed"), [("item_spec_id", 7, None), ("chosen_item", 8, 7)])
     def test_transfer_reads_spec_id_from_named_parameter(self, effect_type, key, value, fixed) -> None:
         """GIVE/REMOVEは宣言された任意キーの品目を選び、固定品目より実行時指定を優先する。"""
@@ -235,7 +256,9 @@ class TestRuntimeItemSelectionEffect:
         result = self._apply(effect, {"item_spec_id": 7, key: value})
         expected = (ItemSpecId.create(value),)
         assert result.item_spec_ids_to_grant == (expected if effect_type is InteractionEffectTypeEnum.GIVE_ITEM else ())
-        assert result.item_spec_ids_to_remove == (expected if effect_type is InteractionEffectTypeEnum.REMOVE_ITEM else ())
+        assert result.item_spec_ids_to_remove == (
+            expected if effect_type is InteractionEffectTypeEnum.REMOVE_ITEM else ()
+        )
 
     def test_fixed_item_spec_id_still_works(self) -> None:
         """``item_spec_id`` を直書きする既存の書き方は変わらない。"""
@@ -247,7 +270,9 @@ class TestRuntimeItemSelectionEffect:
         result = self._apply(effect, None)
         assert [s.value for s in result.item_spec_ids_to_grant] == [8]
 
-    @pytest.mark.parametrize("effect_type", [InteractionEffectTypeEnum.GIVE_ITEM, InteractionEffectTypeEnum.REMOVE_ITEM])
+    @pytest.mark.parametrize(
+        "effect_type", [InteractionEffectTypeEnum.GIVE_ITEM, InteractionEffectTypeEnum.REMOVE_ITEM]
+    )
     def test_missing_named_parameter_raises_instead_of_granting_nothing(self, effect_type) -> None:
         """参照するキーが無いのに黙って 0 個付与にしない。
 

@@ -36,9 +36,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_TOWN = (
-    pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
-)
+_TOWN = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _LENA = PlayerId(1)
 _TOM = PlayerId(2)
 _BREAD = "焼きたてのパン"
@@ -57,11 +55,16 @@ class _Town:
     ) -> None:
         raw = json.loads(_TOWN.read_text(encoding="utf-8"))
         spawn = raw["players"][0]["spawn_spot"]
-        raw["players"].append({
-            "id": "tom", "name": "トム", "spawn_spot": spawn,
-            "initial_items": [], "initial_gold": 300,
-            "persona_prompt": "あなたはトム、この町の荷運び。",
-        })
+        raw["players"].append(
+            {
+                "id": "tom",
+                "name": "トム",
+                "spawn_spot": spawn,
+                "initial_items": [],
+                "initial_gold": 300,
+                "persona_prompt": "あなたはトム、この町の荷運び。",
+            }
+        )
         # **「宣言が無い」は自分で作る。** 土台が reach を書き始めたら、
         # 既定を見ているつもりの試験が宣言済みの世界を見はじめる。
         raw.pop("market", None)
@@ -70,15 +73,15 @@ class _Town:
             if reach != "__unset__":
                 raw["market"]["reach"] = reach
         (directory / "market_town_v1.json").write_text(
-            json.dumps(raw, ensure_ascii=False), encoding="utf-8",
+            json.dumps(raw, ensure_ascii=False),
+            encoding="utf-8",
         )
         manager = GameRuntimeManager(
-            scenarios_dir=directory, characters_path=directory / "characters.json",
+            scenarios_dir=directory,
+            characters_path=directory / "characters.json",
         )
         character = manager.create_character(CharacterCreateRequest(name="レナ"))
-        summary = manager.create_session(
-            SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id])
-        )
+        summary = manager.create_session(SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id]))
         self._state = manager._sessions[summary.session_id]
 
     @property
@@ -162,9 +165,7 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
 
     graph = runtime._spot_graph_repo.find_graph()
     here = graph.get_entity_spot(EntityId.create(int(player_id)))
-    elsewhere = next(
-        spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here
-    )
+    elsewhere = next(spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here)
     graph.unplace_entity(EntityId.create(int(player_id)))
     graph.place_entity(EntityId.create(int(player_id)), elsewhere)
     runtime._spot_graph_repo.save(graph)
@@ -173,10 +174,16 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
 def _list_from_afar(town: _Town, player_id: PlayerId, price: int = 18):
     town.give(player_id, _BREAD, 1)
     _walk_away(town.runtime, player_id)
-    return town.call("market_list_item", {
-        "item_label": _BREAD, "quantity": 1, "unit_price": price,
-        "inner_thought": "出す",
-    }, player_id=player_id)
+    return town.call(
+        "market_list_item",
+        {
+            "item_label": _BREAD,
+            "quantity": 1,
+            "unit_price": price,
+            "inner_thought": "出す",
+        },
+        player_id=player_id,
+    )
 
 
 @pytest.fixture()
@@ -198,9 +205,7 @@ def far(tmp_path: pathlib.Path) -> _Town:
 class TestTheReachIsDeclaredByTheScenario:
     """届く範囲は宣言で決まり、書かなければ場所に縛られる。"""
 
-    def test_a_world_that_says_nothing_stays_tied_to_the_place(
-        self, near: _Town
-    ) -> None:
+    def test_a_world_that_says_nothing_stays_tied_to_the_place(self, near: _Town) -> None:
         """`reach` を書かない世界は、板の前でしか使えないままになる。
 
         既定を変えると、既存シナリオの挙動が黙って変わる。
@@ -217,9 +222,7 @@ class TestTheReachIsDeclaredByTheScenario:
         """`"global"` と書くと、板から離れていても使える。"""
         assert _list_from_afar(far, _LENA).success is True
 
-    def test_a_reach_the_world_does_not_have_is_refused_at_startup(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_a_reach_the_world_does_not_have_is_refused_at_startup(self, tmp_path: pathlib.Path) -> None:
         """知らない届く範囲を書くと、起動時に落ちる。
 
         黙って既定へ倒すと、`"nearby"` と書いた作者は場所に縛られたままの
@@ -232,9 +235,7 @@ class TestTheReachIsDeclaredByTheScenario:
         assert "at_spot" in str(caught.value)
         assert "global" in str(caught.value)
 
-    def test_a_world_without_a_market_has_no_board_either_way(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_a_world_without_a_market_has_no_board_either_way(self, tmp_path: pathlib.Path) -> None:
         """市場を宣言していない世界には、届く範囲に関係なく板が無い。"""
         plain = _Town(tmp_path, with_market=False)
 
@@ -249,10 +250,16 @@ class TestWhatIsRefusedNearAndAllowedFar:
     """
 
     def _bid(self, town: _Town, player_id: PlayerId, price: int = 12):
-        return town.call("market_bid", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": price,
-            "inner_thought": "買いたい",
-        }, player_id=player_id)
+        return town.call(
+            "market_bid",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": price,
+                "inner_thought": "買いたい",
+            },
+            player_id=player_id,
+        )
 
     def test_listing_is_refused_from_afar(self, near: _Town) -> None:
         """離れた場所からは出品できない。"""
@@ -268,31 +275,53 @@ class TestWhatIsRefusedNearAndAllowedFar:
     def test_buying_is_refused_from_afar(self, near: _Town) -> None:
         """離れた場所からは買えない。"""
         near.give(_TOM, _BREAD, 1)
-        near.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 18,
-            "inner_thought": "出す",
-        }, player_id=_TOM)
+        near.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 18,
+                "inner_thought": "出す",
+            },
+            player_id=_TOM,
+        )
         _walk_away(near.runtime, _LENA)
 
-        result = near.call("market_buy", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "買う",
-        })
+        result = near.call(
+            "market_buy",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "買う",
+            },
+        )
 
         assert result.error_code == _AWAY
 
     def test_buying_works_from_afar_when_it_reaches(self, far: _Town) -> None:
         """届く世界では、離れた場所から買える。品と gold がその場で動く。"""
         far.give(_TOM, _BREAD, 1)
-        far.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 18,
-            "inner_thought": "出す",
-        }, player_id=_TOM)
+        far.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 18,
+                "inner_thought": "出す",
+            },
+            player_id=_TOM,
+        )
         _walk_away(far.runtime, _LENA)
         before = far.gold(_LENA)
 
-        result = far.call("market_buy", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "買う",
-        })
+        result = far.call(
+            "market_buy",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "買う",
+            },
+        )
 
         assert result.success is True, result.message
         assert far.held(_LENA, _BREAD) == 1
@@ -317,9 +346,14 @@ class TestWhatIsRefusedNearAndAllowedFar:
         near.give(_LENA, _BREAD, 1)
         _walk_away(near.runtime, _LENA)
 
-        result = near.call("market_sell", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "売る",
-        })
+        result = near.call(
+            "market_sell",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "売る",
+            },
+        )
 
         assert result.error_code == _AWAY
 
@@ -331,9 +365,14 @@ class TestWhatIsRefusedNearAndAllowedFar:
         _walk_away(far.runtime, _LENA)
         before = far.gold(_LENA)
 
-        result = far.call("market_sell", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "売る",
-        })
+        result = far.call(
+            "market_sell",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "売る",
+            },
+        )
 
         assert result.success is True, result.message
         assert far.gold(_LENA) == before + 12
@@ -341,62 +380,102 @@ class TestWhatIsRefusedNearAndAllowedFar:
     def test_repricing_is_refused_from_afar(self, near: _Town) -> None:
         """離れた場所からは値を変えられない。"""
         near.give(_LENA, _BREAD, 1)
-        near.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 20,
-            "inner_thought": "出す",
-        })
+        near.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 20,
+                "inner_thought": "出す",
+            },
+        )
         _walk_away(near.runtime, _LENA)
 
-        result = near.call("market_reprice", {
-            "item_label": _BREAD, "side": "sell", "new_unit_price": 18,
-            "inner_thought": "下げる",
-        })
+        result = near.call(
+            "market_reprice",
+            {
+                "item_label": _BREAD,
+                "side": "sell",
+                "new_unit_price": 18,
+                "inner_thought": "下げる",
+            },
+        )
 
         assert result.error_code == _AWAY
 
     def test_repricing_works_from_afar_when_it_reaches(self, far: _Town) -> None:
         """届く世界では、離れた場所から値を変えられる。"""
         far.give(_LENA, _BREAD, 1)
-        far.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 20,
-            "inner_thought": "出す",
-        })
+        far.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 20,
+                "inner_thought": "出す",
+            },
+        )
         _walk_away(far.runtime, _LENA)
 
-        result = far.call("market_reprice", {
-            "item_label": _BREAD, "side": "sell", "new_unit_price": 18,
-            "inner_thought": "下げる",
-        })
+        result = far.call(
+            "market_reprice",
+            {
+                "item_label": _BREAD,
+                "side": "sell",
+                "new_unit_price": 18,
+                "inner_thought": "下げる",
+            },
+        )
 
         assert result.success is True, result.message
 
     def test_cancelling_is_refused_from_afar(self, near: _Town) -> None:
         """離れた場所からは取り下げられない。"""
         near.give(_LENA, _BREAD, 1)
-        near.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 20,
-            "inner_thought": "出す",
-        })
+        near.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 20,
+                "inner_thought": "出す",
+            },
+        )
         _walk_away(near.runtime, _LENA)
 
-        result = near.call("market_cancel", {
-            "item_label": _BREAD, "side": "sell", "inner_thought": "やめる",
-        })
+        result = near.call(
+            "market_cancel",
+            {
+                "item_label": _BREAD,
+                "side": "sell",
+                "inner_thought": "やめる",
+            },
+        )
 
         assert result.error_code == _AWAY
 
     def test_cancelling_works_from_afar_when_it_reaches(self, far: _Town) -> None:
         """届く世界では、離れた場所から取り下げて品を取り戻せる。"""
         far.give(_LENA, _BREAD, 1)
-        far.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 20,
-            "inner_thought": "出す",
-        })
+        far.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 20,
+                "inner_thought": "出す",
+            },
+        )
         _walk_away(far.runtime, _LENA)
 
-        result = far.call("market_cancel", {
-            "item_label": _BREAD, "side": "sell", "inner_thought": "やめる",
-        })
+        result = far.call(
+            "market_cancel",
+            {
+                "item_label": _BREAD,
+                "side": "sell",
+                "inner_thought": "やめる",
+            },
+        )
 
         assert result.success is True, result.message
         assert far.held(_LENA, _BREAD) == 1
@@ -412,10 +491,16 @@ class TestWhatIsRefusedNearAndAllowedFar:
     def test_reading_works_from_afar_when_it_reaches(self, far: _Town) -> None:
         """届く世界では、離れた場所から板を読める。"""
         far.give(_TOM, _BREAD, 1)
-        far.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 18,
-            "inner_thought": "出す",
-        }, player_id=_TOM)
+        far.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 18,
+                "inner_thought": "出す",
+            },
+            player_id=_TOM,
+        )
         _walk_away(far.runtime, _LENA)
 
         result = far.call("market_view", {"inner_thought": "見たい"})
@@ -455,32 +540,38 @@ class TestThePromptSaysHowFarItReachesAndWhereItStands:
 
         assert _board_spot_name(far.runtime) in line
 
-    def test_your_own_orders_follow_you_when_the_board_reaches(
-        self, far: _Town
-    ) -> None:
+    def test_your_own_orders_follow_you_when_the_board_reaches(self, far: _Town) -> None:
         """届く世界では、自分の注文が離れた場所でも常駐に出る。
 
         「預けた品がどこからも見えない」を避けるのが理由なので、届く範囲が
         広がれば常駐も広がる。
         """
         far.give(_LENA, _BREAD, 1)
-        far.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 20,
-            "inner_thought": "出す",
-        })
+        far.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 20,
+                "inner_thought": "出す",
+            },
+        )
         _walk_away(far.runtime, _LENA)
 
         assert "あなたの出品" in far.state_text(_LENA)
 
-    def test_your_own_orders_stay_at_the_board_when_it_does_not_reach(
-        self, near: _Town
-    ) -> None:
+    def test_your_own_orders_stay_at_the_board_when_it_does_not_reach(self, near: _Town) -> None:
         """場所に縛られた世界では、離れると自分の注文も出ない (**正の対照**)。"""
         near.give(_LENA, _BREAD, 1)
-        near.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 20,
-            "inner_thought": "出す",
-        })
+        near.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 20,
+                "inner_thought": "出す",
+            },
+        )
         _walk_away(near.runtime, _LENA)
 
         assert "あなたの出品" not in near.state_text(_LENA)
@@ -497,19 +588,30 @@ class TestGoodsYouCannotHoldSayWhereTheyWereLeft:
     def test_the_notice_names_the_place(self, far: _Town) -> None:
         """持ちきれずに板の足元へ置かれたことが、場所の名前つきで届く。"""
         far.give_gold(_LENA, 300)
-        far.call("market_bid", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 12,
-            "inner_thought": "買いたい",
-        })
+        far.call(
+            "market_bid",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 12,
+                "inner_thought": "買いたい",
+            },
+        )
         inventory = far.runtime._player_inventory_repo.find_by_id(_LENA)
         while not inventory.is_inventory_full():
             far.give(_LENA, _BREAD, 1)
             inventory = far.runtime._player_inventory_repo.find_by_id(_LENA)
         far.give(_TOM, _BREAD, 1)
         _walk_away(far.runtime, _TOM)
-        far.call("market_sell", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "売る",
-        }, player_id=_TOM)
+        far.call(
+            "market_sell",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "売る",
+            },
+            player_id=_TOM,
+        )
 
         line = _line_containing(far.state_text(_LENA), "足元に置かれた")
 

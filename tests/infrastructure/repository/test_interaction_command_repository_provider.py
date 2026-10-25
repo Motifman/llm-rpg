@@ -44,9 +44,7 @@ class _NoOpDispatcher:
 
 def _in_memory_factory() -> InMemoryInteractionCommandRepositoryProviderFactory:
     return InMemoryInteractionCommandRepositoryProviderFactory(
-        spot_graph=InMemorySpotGraphRepository(
-            SpotGraphAggregate.empty(SpotGraphId.create(1))
-        ),
+        spot_graph=InMemorySpotGraphRepository(SpotGraphAggregate.empty(SpotGraphId.create(1))),
         item_specs=InMemoryItemSpecRepository(),
     )
 

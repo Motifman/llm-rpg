@@ -27,9 +27,7 @@ class TestFallenBodySubsystemCodec:
 
         payload = FallenBodySubsystemCodec().capture(_runtime(registry))
 
-        assert payload["entries"] == [
-            {"player_id": 2, "spot_id": 7, "downed_at_tick": 13}
-        ]
+        assert payload["entries"] == [{"player_id": 2, "spot_id": 7, "downed_at_tick": 13}]
 
     def test_restore_replaces_the_registry(self) -> None:
         """復元 payload が空の既存 registry に同じ身体記録を戻す。"""
@@ -39,9 +37,7 @@ class TestFallenBodySubsystemCodec:
             _runtime(registry),
             {
                 "schema_version": 1,
-                "entries": [
-                    {"player_id": 2, "spot_id": 7, "downed_at_tick": 13}
-                ],
+                "entries": [{"player_id": 2, "spot_id": 7, "downed_at_tick": 13}],
             },
         )
 

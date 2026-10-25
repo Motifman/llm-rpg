@@ -68,28 +68,19 @@ class WorldStateSnapshotService:
         for codec in codecs:
             key = codec.subsystem_key
             if key in seen:
-                raise ValueError(
-                    f"duplicate subsystem_key in codecs: {key!r}"
-                )
+                raise ValueError(f"duplicate subsystem_key in codecs: {key!r}")
             seen.add(key)
         self._codecs: list[WorldSubsystemCodec] = codecs
         self._expected_subsystem_keys: tuple[str, ...] | None = (
-            tuple(expected_subsystem_keys)
-            if expected_subsystem_keys is not None
-            else None
+            tuple(expected_subsystem_keys) if expected_subsystem_keys is not None else None
         )
         if self._expected_subsystem_keys is not None:
             expected_seen: set[str] = set()
             for key in self._expected_subsystem_keys:
                 if not isinstance(key, str) or not key:
-                    raise ValueError(
-                        "expected_subsystem_keys must contain non-empty str "
-                        f"(got {key!r})"
-                    )
+                    raise ValueError(f"expected_subsystem_keys must contain non-empty str (got {key!r})")
                 if key in expected_seen:
-                    raise ValueError(
-                        f"duplicate expected subsystem_key: {key!r}"
-                    )
+                    raise ValueError(f"duplicate expected subsystem_key: {key!r}")
                 expected_seen.add(key)
             actual = tuple(c.subsystem_key for c in self._codecs)
             if actual != self._expected_subsystem_keys:
@@ -118,8 +109,7 @@ class WorldStateSnapshotService:
             data = codec.capture(runtime)
             if not isinstance(data, dict):
                 raise TypeError(
-                    f"subsystem {codec.subsystem_key!r} capture must return "
-                    f"dict, got {type(data).__name__}"
+                    f"subsystem {codec.subsystem_key!r} capture must return dict, got {type(data).__name__}"
                 )
             subsystems[codec.subsystem_key] = data
         return WorldStateSnapshot(
@@ -156,13 +146,9 @@ class WorldStateSnapshotService:
                 f"is not supported "
                 f"(supported: {sorted(SUPPORTED_WORLD_SNAPSHOT_VERSIONS)})"
             )
-        if (
-            strict_subsystems
-            and snapshot.schema_version != CURRENT_WORLD_SNAPSHOT_VERSION
-        ):
+        if strict_subsystems and snapshot.schema_version != CURRENT_WORLD_SNAPSHOT_VERSION:
             continuity_reason = (
-                " この版の snapshot には死亡・追放の確定が含まれていないため、"
-                "再開すると勝敗が狂います。"
+                " この版の snapshot には死亡・追放の確定が含まれていないため、再開すると勝敗が狂います。"
                 if snapshot.schema_version < 3
                 else (
                     " この版の snapshot には倒れた場所と時刻が含まれていないため、"
@@ -202,9 +188,7 @@ class WorldStateSnapshotService:
             raise WorldStateSnapshotCoverageError("公開SNSの内容と不変識別子がsnapshotにありません")
         if strict_subsystems:
             expected_keys = (
-                set(self._expected_subsystem_keys)
-                if self._expected_subsystem_keys is not None
-                else set(codec_by_key)
+                set(self._expected_subsystem_keys) if self._expected_subsystem_keys is not None else set(codec_by_key)
             )
             if not sns_enabled:
                 expected_keys.discard("public_sns")
@@ -213,8 +197,7 @@ class WorldStateSnapshotService:
             unknown = sorted(snapshot_keys - set(codec_by_key))
             if missing or unknown:
                 raise WorldStateSnapshotCoverageError(
-                    "world snapshot subsystem coverage mismatch: "
-                    f"missing={missing!r}, unknown={unknown!r}"
+                    f"world snapshot subsystem coverage mismatch: missing={missing!r}, unknown={unknown!r}"
                 )
 
         # 登録済 codec を順次呼ぶ。通常 mode で snapshot 側に登録外の
@@ -223,8 +206,7 @@ class WorldStateSnapshotService:
             codec = codec_by_key.get(key)
             if codec is None:
                 logger.info(
-                    "world snapshot has subsystem %r but no codec registered; "
-                    "skipping (= forward compatibility)",
+                    "world snapshot has subsystem %r but no codec registered; skipping (= forward compatibility)",
                     key,
                 )
                 continue

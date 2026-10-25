@@ -34,9 +34,7 @@ from pathlib import Path
 import pytest
 
 _SCENARIO_DIR = Path(__file__).resolve().parents[3] / "data" / "scenarios"
-_FIXTURE_SCENARIO_DIR = (
-    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
-)
+_FIXTURE_SCENARIO_DIR = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
 
 #: 切り出して作ったシナリオ → 元のシナリオ。
 #:
@@ -65,11 +63,7 @@ def _load(name: str) -> dict:
 
 
 def _spot_names(raw: dict) -> set[str]:
-    return {
-        s["name"]
-        for s in raw.get("spots", [])
-        if isinstance(s.get("name"), str) and len(s["name"]) >= 2
-    }
+    return {s["name"] for s in raw.get("spots", []) if isinstance(s.get("name"), str) and len(s["name"]) >= 2}
 
 
 def _object_names(raw: dict) -> set[str]:
@@ -114,10 +108,7 @@ def test_no_prose_points_at_removed_objects(child: str, parent: str) -> None:
     # 包含は「配電盤」から宣言済みの「主配電盤」への具体化だけを救う意図。
     # 親から短い名称が消えた場合は誤って免除しうるため、この判定を一般化しない。
     dangling = sorted(
-        name
-        for name in removed
-        if name in prose
-        and not any(name in declared_name for declared_name in child_names)
+        name for name in removed if name in prose and not any(name in declared_name for declared_name in child_names)
     )
 
     assert not dangling, f"{child} が、削ったはずの対象を指しています: {dangling}"

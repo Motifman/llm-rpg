@@ -1,4 +1,3 @@
-
 import pytest
 
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -44,8 +43,7 @@ def create_test_slot_id(value: int = 0) -> SlotId:
 
 
 def create_test_inventory_slots(
-    max_slots: int = 20,
-    occupied_slots: dict[int, int] | None = None
+    max_slots: int = 20, occupied_slots: dict[int, int] | None = None
 ) -> dict[SlotId, ItemInstanceId | None]:
     """テスト用のインベントリスロットを作成"""
     slots = {}
@@ -60,7 +58,7 @@ def create_test_inventory_slots(
 
 
 def create_test_equipment_slots(
-    occupied_slots: dict[EquipmentSlotType, int] | None = None
+    occupied_slots: dict[EquipmentSlotType, int] | None = None,
 ) -> dict[EquipmentSlotType, ItemInstanceId | None]:
     """テスト用の装備スロットを作成"""
     slots = {}
@@ -78,7 +76,7 @@ def create_test_inventory_aggregate(
     player_id: int = 1,
     max_slots: int = 20,
     inventory_slots: dict[int, int] | None = None,
-    equipment_slots: dict[EquipmentSlotType, int] | None = None
+    equipment_slots: dict[EquipmentSlotType, int] | None = None,
 ) -> PlayerInventoryAggregate:
     """テスト用のPlayerInventoryAggregateを作成"""
     inventory_slot_dict = create_test_inventory_slots(max_slots, inventory_slots)
@@ -88,7 +86,7 @@ def create_test_inventory_aggregate(
         player_id=PlayerId(player_id),
         max_slots=max_slots,
         inventory_slots=inventory_slot_dict,
-        equipment_slots=equipment_slot_dict
+        equipment_slots=equipment_slot_dict,
     )
 
 
@@ -100,10 +98,7 @@ class TestPlayerInventoryAggregate:
         player_id = create_test_player_id(1)
         max_slots = 20
 
-        aggregate = PlayerInventoryAggregate.create_new_inventory(
-            player_id=player_id,
-            max_slots=max_slots
-        )
+        aggregate = PlayerInventoryAggregate.create_new_inventory(player_id=player_id, max_slots=max_slots)
 
         assert aggregate.player_id == player_id
         assert aggregate.max_slots == max_slots
@@ -129,17 +124,12 @@ class TestPlayerInventoryAggregate:
         # テストデータを作成
         inventory_slots = create_test_inventory_slots(
             max_slots,
-            {0: 100, 5: 200}  # slot 0にitem 100, slot 5にitem 200
+            {0: 100, 5: 200},  # slot 0にitem 100, slot 5にitem 200
         )
-        equipment_slots = create_test_equipment_slots(
-            {EquipmentSlotType.WEAPON: 300, EquipmentSlotType.ARMOR: 400}
-        )
+        equipment_slots = create_test_equipment_slots({EquipmentSlotType.WEAPON: 300, EquipmentSlotType.ARMOR: 400})
 
         aggregate = PlayerInventoryAggregate.restore_from_data(
-            player_id=player_id,
-            max_slots=max_slots,
-            inventory_slots=inventory_slots,
-            equipment_slots=equipment_slots
+            player_id=player_id, max_slots=max_slots, inventory_slots=inventory_slots, equipment_slots=equipment_slots
         )
 
         assert aggregate.player_id == player_id
@@ -164,7 +154,8 @@ class TestPlayerInventoryAggregate:
         [
             pytest.param(10, {SlotId(i): None for i in range(15)}, id="beyond-capacity"),
             pytest.param(
-                5, {SlotId(0): ItemInstanceId(100), SlotId(5): ItemInstanceId(200)},
+                5,
+                {SlotId(0): ItemInstanceId(100), SlotId(5): ItemInstanceId(200)},
                 id="at-capacity",
             ),
         ],
@@ -197,14 +188,12 @@ class TestPlayerInventoryAggregate:
                 player_id=player_id,
                 max_slots=max_slots,
                 inventory_slots=inventory_slots,
-                equipment_slots=equipment_slots
+                equipment_slots=equipment_slots,
             )
 
     def test_get_item_instance_id_by_slot_normal(self):
         """スロットからアイテムIDを正しく取得できること"""
-        aggregate = create_test_inventory_aggregate(
-            inventory_slots={0: 100, 5: 200}
-        )
+        aggregate = create_test_inventory_aggregate(inventory_slots={0: 100, 5: 200})
 
         assert aggregate.get_item_instance_id_by_slot(SlotId(0)) == ItemInstanceId(100)
         assert aggregate.get_item_instance_id_by_slot(SlotId(5)) == ItemInstanceId(200)
@@ -220,10 +209,7 @@ class TestPlayerInventoryAggregate:
     def test_get_item_instance_id_by_equipment_slot(self):
         """装備スロットからアイテムIDを正しく取得できること"""
         aggregate = create_test_inventory_aggregate(
-            equipment_slots={
-                EquipmentSlotType.WEAPON: 100,
-                EquipmentSlotType.ARMOR: 200
-            }
+            equipment_slots={EquipmentSlotType.WEAPON: 100, EquipmentSlotType.ARMOR: 200}
         )
 
         assert aggregate.get_item_instance_id_by_equipment_slot(EquipmentSlotType.WEAPON) == ItemInstanceId(100)
@@ -251,10 +237,7 @@ class TestPlayerInventoryAggregate:
         """インベントリが満杯の場合、オーバーフローイベントが発行されること"""
         # 全てのスロットを埋めたインベントリを作成
         occupied_slots = {i: 100 + i for i in range(5)}
-        aggregate = create_test_inventory_aggregate(
-            max_slots=5,
-            inventory_slots=occupied_slots
-        )
+        aggregate = create_test_inventory_aggregate(max_slots=5, inventory_slots=occupied_slots)
         item_id = create_test_item_instance_id(200)
 
         # 例外が発生せず処理が完了すること
@@ -270,10 +253,7 @@ class TestPlayerInventoryAggregate:
 
     def test_move_item_normal(self):
         """アイテムを正常に移動できること"""
-        aggregate = create_test_inventory_aggregate(
-            max_slots=5,
-            inventory_slots={0: 100, 2: 200}
-        )
+        aggregate = create_test_inventory_aggregate(max_slots=5, inventory_slots={0: 100, 2: 200})
 
         # slot 0のアイテムをslot 3に移動
         aggregate.move_item(SlotId(0), SlotId(3))
@@ -289,9 +269,7 @@ class TestPlayerInventoryAggregate:
 
     def test_move_item_same_slot(self):
         """同じスロットへの移動で例外が発生すること"""
-        aggregate = create_test_inventory_aggregate(
-            inventory_slots={0: 100}
-        )
+        aggregate = create_test_inventory_aggregate(inventory_slots={0: 100})
 
         with pytest.raises(InvalidSlotException):
             aggregate.move_item(SlotId(0), SlotId(0))
@@ -305,18 +283,14 @@ class TestPlayerInventoryAggregate:
 
     def test_move_item_to_occupied_slot(self):
         """占有されているスロットへの移動で例外が発生すること"""
-        aggregate = create_test_inventory_aggregate(
-            inventory_slots={0: 100, 1: 200}
-        )
+        aggregate = create_test_inventory_aggregate(inventory_slots={0: 100, 1: 200})
 
         with pytest.raises(InvalidSlotException):
             aggregate.move_item(SlotId(0), SlotId(1))
 
     def test_drop_item_normal(self):
         """アイテムを正常に捨てられること"""
-        aggregate = create_test_inventory_aggregate(
-            inventory_slots={0: 100, 2: 200}
-        )
+        aggregate = create_test_inventory_aggregate(inventory_slots={0: 100, 2: 200})
 
         aggregate.drop_item(SlotId(0))
 
@@ -362,9 +336,7 @@ class TestPlayerInventoryAggregate:
 
     def test_request_equip_item_normal(self):
         """アイテム装備を正常に要求できること"""
-        aggregate = create_test_inventory_aggregate(
-            inventory_slots={0: 100}
-        )
+        aggregate = create_test_inventory_aggregate(inventory_slots={0: 100})
 
         aggregate.request_equip_item(SlotId(0), EquipmentSlotType.WEAPON)
 
@@ -386,15 +358,10 @@ class TestPlayerInventoryAggregate:
 
     def test_complete_equip_item_normal(self):
         """装備要求に対する実際の装備処理が正常に完了すること"""
-        aggregate = create_test_inventory_aggregate(
-            max_slots=5,
-            inventory_slots={0: 100}
-        )
+        aggregate = create_test_inventory_aggregate(max_slots=5, inventory_slots={0: 100})
 
         aggregate.complete_equip_item(
-            inventory_slot_id=SlotId(0),
-            equipment_slot=EquipmentSlotType.WEAPON,
-            item_instance_id=ItemInstanceId(100)
+            inventory_slot_id=SlotId(0), equipment_slot=EquipmentSlotType.WEAPON, item_instance_id=ItemInstanceId(100)
         )
 
         # インベントリスロットが空になり、装備スロットにアイテムが移動していることを確認
@@ -415,13 +382,11 @@ class TestPlayerInventoryAggregate:
         aggregate = create_test_inventory_aggregate(
             max_slots=5,
             inventory_slots={0: 100},
-            equipment_slots={EquipmentSlotType.WEAPON: 200}  # 既に装備あり
+            equipment_slots={EquipmentSlotType.WEAPON: 200},  # 既に装備あり
         )
 
         aggregate.complete_equip_item(
-            inventory_slot_id=SlotId(0),
-            equipment_slot=EquipmentSlotType.WEAPON,
-            item_instance_id=ItemInstanceId(100)
+            inventory_slot_id=SlotId(0), equipment_slot=EquipmentSlotType.WEAPON, item_instance_id=ItemInstanceId(100)
         )
 
         # インベントリスロットが空になり、装備スロットが置き換わっていることを確認
@@ -444,16 +409,12 @@ class TestPlayerInventoryAggregate:
         # インベントリを満杯にする
         occupied_slots = {i: 1000 + i for i in range(5)}
         aggregate = create_test_inventory_aggregate(
-            max_slots=5,
-            inventory_slots=occupied_slots,
-            equipment_slots={EquipmentSlotType.WEAPON: 200}
+            max_slots=5, inventory_slots=occupied_slots, equipment_slots={EquipmentSlotType.WEAPON: 200}
         )
 
         # 装備処理を実行（インベントリに空きがない）
         aggregate.complete_equip_item(
-            inventory_slot_id=SlotId(0),
-            equipment_slot=EquipmentSlotType.WEAPON,
-            item_instance_id=ItemInstanceId(1000)
+            inventory_slot_id=SlotId(0), equipment_slot=EquipmentSlotType.WEAPON, item_instance_id=ItemInstanceId(1000)
         )
 
         # 元の所持枠が空になり、実在した品が装備されることを確認
@@ -475,9 +436,7 @@ class TestPlayerInventoryAggregate:
 
     def test_unequip_item_normal(self):
         """装備アイテムを正常に外せること"""
-        aggregate = create_test_inventory_aggregate(
-            equipment_slots={EquipmentSlotType.WEAPON: 100}
-        )
+        aggregate = create_test_inventory_aggregate(equipment_slots={EquipmentSlotType.WEAPON: 100})
 
         aggregate.unequip_item(EquipmentSlotType.WEAPON)
 
@@ -506,9 +465,7 @@ class TestPlayerInventoryAggregate:
         # インベントリを満杯にする
         occupied_slots = {i: 1000 + i for i in range(5)}
         aggregate = create_test_inventory_aggregate(
-            max_slots=5,
-            inventory_slots=occupied_slots,
-            equipment_slots={EquipmentSlotType.WEAPON: 100}
+            max_slots=5, inventory_slots=occupied_slots, equipment_slots={EquipmentSlotType.WEAPON: 100}
         )
 
         aggregate.unequip_item(EquipmentSlotType.WEAPON)
@@ -539,10 +496,7 @@ class TestPlayerInventoryAggregate:
 
         # 満杯のインベントリ
         occupied_slots = {0: 100, 1: 200, 2: 300}
-        aggregate = create_test_inventory_aggregate(
-            max_slots=3,
-            inventory_slots=occupied_slots
-        )
+        aggregate = create_test_inventory_aggregate(max_slots=3, inventory_slots=occupied_slots)
         assert aggregate.is_inventory_full() == True
 
     def test_get_inventory_summary(self):
@@ -551,9 +505,7 @@ class TestPlayerInventoryAggregate:
         equipment_slots = {EquipmentSlotType.WEAPON: 300, EquipmentSlotType.ARMOR: 400}  # 2スロット使用
 
         aggregate = create_test_inventory_aggregate(
-            max_slots=5,
-            inventory_slots=occupied_slots,
-            equipment_slots=equipment_slots
+            max_slots=5, inventory_slots=occupied_slots, equipment_slots=equipment_slots
         )
 
         summary = aggregate.get_inventory_summary()
@@ -569,10 +521,7 @@ class TestPlayerInventoryAggregate:
     def test_get_inventory_summary_full_inventory(self):
         """満杯インベントリの統計情報が正しく取得できること"""
         occupied_slots = {i: 100 + i for i in range(5)}  # 全スロット使用
-        aggregate = create_test_inventory_aggregate(
-            max_slots=5,
-            inventory_slots=occupied_slots
-        )
+        aggregate = create_test_inventory_aggregate(max_slots=5, inventory_slots=occupied_slots)
 
         summary = aggregate.get_inventory_summary()
 
@@ -609,7 +558,8 @@ class TestPlayerInventoryAggregate:
     def test_complete_inventory_compaction(self):
         """整理済みの配置を反映すると、移動元の枠も空になり、イベントは出ない。"""
         aggregate = create_test_inventory_aggregate(
-            max_slots=5, inventory_slots={0: 200, 4: 100},
+            max_slots=5,
+            inventory_slots={0: 200, 4: 100},
         )
 
         # 整理後のスロット配置

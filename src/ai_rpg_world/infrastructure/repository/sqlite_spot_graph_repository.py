@@ -52,9 +52,7 @@ class SqliteSpotGraphRepository(ISpotGraphRepository):
             )
 
     def find_graph(self) -> SpotGraphAggregate:
-        row = self._conn.execute(
-            "SELECT payload_json FROM spot_graph_snapshot WHERE id = 1"
-        ).fetchone()
+        row = self._conn.execute("SELECT payload_json FROM spot_graph_snapshot WHERE id = 1").fetchone()
         if row is None:
             raise SpotGraphSnapshotNotInitializedError(
                 "spot_graph_snapshot が未初期化です（シードまたは save を先に実行）"
@@ -63,9 +61,7 @@ class SqliteSpotGraphRepository(ISpotGraphRepository):
         try:
             return loads_spot_graph_aggregate(payload)
         except (JSONDecodeError, KeyError, TypeError) as exc:
-            raise SpotGraphStateDecodeError(
-                "spot_graph_snapshot の payload_json を復元できません"
-            ) from exc
+            raise SpotGraphStateDecodeError("spot_graph_snapshot の payload_json を復元できません") from exc
 
     def save(self, graph: SpotGraphAggregate) -> None:
         self._assert_shared_transaction_active()

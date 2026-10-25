@@ -38,7 +38,8 @@ class TestActionResultRecorder:
         ActionResultRecorder(store).record(
             PlayerId(1),
             action_summary="a",
-            result_summary="r", game_time_label=None,
+            result_summary="r",
+            game_time_label=None,
             occurred_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
             tool_name="t",
             inner_thought="独白Y",
@@ -47,9 +48,7 @@ class TestActionResultRecorder:
 
     def test_game_time_label_is_required_and_passed_through(self) -> None:
         """記録境界は世界時刻の明示を必須とし、行動結果へそのまま焼き込む。"""
-        parameter = inspect.signature(ActionResultRecorder.record).parameters[
-            "game_time_label"
-        ]
+        parameter = inspect.signature(ActionResultRecorder.record).parameters["game_time_label"]
         assert parameter.default is inspect.Parameter.empty
         store = _StoreSpy([])
         recorder = ActionResultRecorder(store)
@@ -71,4 +70,3 @@ class TestActionResultRecorder:
         """store が None なら TypeError。"""
         with pytest.raises(TypeError, match="action_result_store must not be None"):
             ActionResultRecorder(None)  # type: ignore[arg-type]
-

@@ -2,6 +2,7 @@
 InMemoryUnitOfWork - インメモリ実装のUnit of Work
 実際のデータベーストランザクションは存在しないが、論理的なトランザクション境界を提供します。
 """
+
 from collections.abc import Callable, Sequence
 from types import TracebackType
 from typing import Any
@@ -90,11 +91,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             self._data_store.acquire_uow_transaction()
             self._transaction_lock_acquired = True
         try:
-            snapshot = (
-                self._data_store.take_snapshot()
-                if self._data_store is not None
-                else None
-            )
+            snapshot = self._data_store.take_snapshot() if self._data_store is not None else None
         except BaseException as snapshot_error:
             try:
                 self._release_transaction_lock()
@@ -228,7 +225,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         """集約からイベントを収集し、add_events 経由で追加する（イベント収集 1 本化）"""
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
-        if hasattr(aggregate, 'get_events') and hasattr(aggregate, 'clear_events'):
+        if hasattr(aggregate, "get_events") and hasattr(aggregate, "clear_events"):
             events = aggregate.get_events()
             if events:
                 self._pending_events.extend(events)

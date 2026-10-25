@@ -24,9 +24,7 @@ class PersonalTradeQueryService:
         self._repository = personal_trade_listing_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -38,10 +36,10 @@ class PersonalTradeQueryService:
             raise PersonalTradeQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(
+                f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra={"error_details": context}
+            )
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def get_personal_trades(self, player_id: int, limit: int = 20, cursor: str | None = None) -> PersonalTradeListDto:
         """プレイヤー宛の取引を取得（カーソルベースページング）
@@ -64,12 +62,7 @@ class PersonalTradeQueryService:
 
         return self._execute_with_error_handling(
             operation=lambda: self._get_personal_trades_impl(player_id, limit, cursor),
-            context={
-                "action": "get_personal_trades",
-                "player_id": player_id,
-                "limit": limit,
-                "cursor": cursor
-            }
+            context={"action": "get_personal_trades", "player_id": player_id, "limit": limit, "cursor": cursor},
         )
 
     def _get_personal_trades_impl(self, player_id: int, limit: int, cursor: str | None) -> PersonalTradeListDto:
@@ -89,10 +82,7 @@ class PersonalTradeQueryService:
         # next_cursorをencode
         next_cursor_encoded = CursorCodec.encode(next_cursor) if next_cursor else None
 
-        return PersonalTradeListDto(
-            listings=listing_dtos,
-            next_cursor=next_cursor_encoded
-        )
+        return PersonalTradeListDto(listings=listing_dtos, next_cursor=next_cursor_encoded)
 
     def _convert_to_listing_dto(self, read_model: Any) -> PersonalTradeListingDto:
         """PersonalTradeListingReadModelをPersonalTradeListingDtoに変換"""
@@ -109,5 +99,5 @@ class PersonalTradeQueryService:
             durability_max=read_model.durability_max,
             requested_gold=read_model.requested_gold,
             seller_name=read_model.seller_name,
-            created_at=read_model.created_at.isoformat()
+            created_at=read_model.created_at.isoformat(),
         )

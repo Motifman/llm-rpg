@@ -30,11 +30,10 @@ def parse_role_labels(raw: Any) -> dict[str, str]:
     labels: dict[str, str] = {}
     for key, label in value.items():
         if not isinstance(key, str) or not isinstance(label, str) or not label.strip():
-            raise ScenarioLoadError(
-                f"metadata.role_labels の要素は文字列で書いてください: {key!r}: {label!r}"
-            )
+            raise ScenarioLoadError(f"metadata.role_labels の要素は文字列で書いてください: {key!r}: {label!r}")
         labels[key] = label.strip()
     return labels
+
 
 def parse_show_world_map(raw: Any) -> bool:
     """``show_world_map`` を読む。省略時は False (載せない)。
@@ -46,10 +45,9 @@ def parse_show_world_map(raw: Any) -> bool:
     if value is None:
         return False
     if not isinstance(value, bool):
-        raise ScenarioLoadError(
-            f"metadata.show_world_map は true / false で書いてください: {value!r}"
-        )
+        raise ScenarioLoadError(f"metadata.show_world_map は true / false で書いてください: {value!r}")
     return value
+
 
 def parse_limits_actions(raw: Any) -> bool:
     """``limits_actions`` を読む。省略時は True (行動の制限の行を出す)。真偽値以外は拒否する。"""
@@ -57,18 +55,16 @@ def parse_limits_actions(raw: Any) -> bool:
     if value is None:
         return True
     if not isinstance(value, bool):
-        raise ScenarioLoadError(
-            f"metadata.limits_actions は true / false で書いてください: {value!r}"
-        )
+        raise ScenarioLoadError(f"metadata.limits_actions は true / false で書いてください: {value!r}")
     return value
+
 
 def parse_bool(value: Any, *, path: str) -> bool:
     """JSON の真偽値だけを受理し、文字列や整数の暗黙変換を拒否する。"""
     if not isinstance(value, bool):
-        raise ScenarioLoadError(
-            f"{path} must be a boolean, got {value!r}"
-        )
+        raise ScenarioLoadError(f"{path} must be a boolean, got {value!r}")
     return value
+
 
 def parse_player_outcome_messages(
     raw: Mapping[str, Any],
@@ -76,9 +72,7 @@ def parse_player_outcome_messages(
     """終局結果ごとの観測文型を読み、置換可能な項目を限定する。"""
     value = raw.get("player_outcome_messages", {})
     if not isinstance(value, dict):
-        raise ScenarioLoadError(
-            "metadata.player_outcome_messages must be an object"
-        )
+        raise ScenarioLoadError("metadata.player_outcome_messages must be an object")
 
     parsed: dict[PlayerOutcomeEnum, str] = {}
     for outcome_name, template_raw in value.items():
@@ -86,9 +80,7 @@ def parse_player_outcome_messages(
         try:
             outcome = PlayerOutcomeEnum(outcome_name)
         except (TypeError, ValueError) as exc:
-            raise ScenarioLoadError(
-                f"{path}: unknown player outcome {outcome_name!r}"
-            ) from exc
+            raise ScenarioLoadError(f"{path}: unknown player outcome {outcome_name!r}") from exc
         if outcome is PlayerOutcomeEnum.UNRESOLVED:
             raise ScenarioLoadError(f"{path}: UNRESOLVED cannot be announced")
         if not isinstance(template_raw, str) or not template_raw.strip():
@@ -98,32 +90,26 @@ def parse_player_outcome_messages(
         try:
             fields = [
                 (field_name, format_spec, conversion)
-                for _, field_name, format_spec, conversion in Formatter().parse(
-                    template
-                )
+                for _, field_name, format_spec, conversion in Formatter().parse(template)
                 if field_name is not None
             ]
         except ValueError as exc:
             raise ScenarioLoadError(f"{path}: invalid message template") from exc
         unknown = [name for name, _, _ in fields if name != "player_name"]
         if unknown:
-            raise ScenarioLoadError(
-                f"{path}: unknown placeholder {unknown[0]!r}; "
-                "only {player_name} is allowed"
-            )
+            raise ScenarioLoadError(f"{path}: unknown placeholder {unknown[0]!r}; only {{player_name}} is allowed")
         unsupported_format = [
             (name, format_spec, conversion)
             for name, format_spec, conversion in fields
             if format_spec or conversion is not None
         ]
         if unsupported_format:
-            raise ScenarioLoadError(
-                f"{path}: format specifiers and conversions are not allowed"
-            )
+            raise ScenarioLoadError(f"{path}: format specifiers and conversions are not allowed")
         if not any(name == "player_name" for name, _, _ in fields):
             raise ScenarioLoadError(f"{path} must contain {{player_name}}")
         parsed[outcome] = template
     return parsed
+
 
 def parse_object_state_display(
     raw: Mapping[str, Any],
@@ -149,18 +135,12 @@ def parse_object_state_display(
             raise ScenarioLoadError(f"{path}.key is required")
         if "text" not in item:
             raise ScenarioLoadError(f"{path}.text is required")
-        selectors = tuple(
-            name for name in ("value", "at_least", "within_ticks") if name in item
-        )
+        selectors = tuple(name for name in ("value", "at_least", "within_ticks") if name in item)
         if "within_ticks" in item and len(selectors) > 1:
             others = " and ".join(name for name in selectors if name != "within_ticks")
-            raise ScenarioLoadError(
-                f"{path} cannot specify both {others} and within_ticks"
-            )
+            raise ScenarioLoadError(f"{path} cannot specify both {others} and within_ticks")
         if "value" in item and "at_least" in item:
-            raise ScenarioLoadError(
-                f"{path} cannot specify both value and at_least"
-            )
+            raise ScenarioLoadError(f"{path} cannot specify both value and at_least")
         try:
             rule = StateDisplayRule(
                 key=item["key"],
@@ -173,13 +153,9 @@ def parse_object_state_display(
             )
         except StateDisplayRuleValidationException as exc:
             raise ScenarioLoadError(f"{path}: {exc}") from exc
-        if (
-            rule.within_ticks is not None
-            and rule.key not in recorded_tick_state_keys
-        ):
+        if rule.within_ticks is not None and rule.key not in recorded_tick_state_keys:
             raise ScenarioLoadError(
-                f"{path}.key={rule.key!r} must be written by this object's "
-                "RECORD_OBJECT_STATE_TICK effect"
+                f"{path}.key={rule.key!r} must be written by this object's RECORD_OBJECT_STATE_TICK effect"
             )
         duplicate_key = (
             (rule.key, "within_ticks", rule.within_ticks)
@@ -191,12 +167,11 @@ def parse_object_state_display(
             )
         )
         if duplicate_key in seen:
-            raise ScenarioLoadError(
-                f"{path} duplicates state_display rule for key={rule.key!r}"
-            )
+            raise ScenarioLoadError(f"{path} duplicates state_display rule for key={rule.key!r}")
         seen.add(duplicate_key)
         parsed.append(rule)
     return tuple(parsed)
+
 
 def parse_object_hidden_state_keys(raw: Mapping[str, Any]) -> frozenset[str]:
     """object.hidden_state_keys を文字列集合へ変換する。"""
@@ -210,15 +185,12 @@ def parse_object_hidden_state_keys(raw: Mapping[str, Any]) -> frozenset[str]:
     parsed: set[str] = set()
     for index, key in enumerate(raw_keys):
         if not isinstance(key, str) or not key.strip():
-            raise ScenarioLoadError(
-                f"object {object_id}.hidden_state_keys[{index}] must be a non-empty string"
-            )
+            raise ScenarioLoadError(f"object {object_id}.hidden_state_keys[{index}] must be a non-empty string")
         parsed.add(key)
     return frozenset(parsed)
 
-def recorded_tick_state_keys(
-    interactions: Any, own_object_id: int
-) -> frozenset[str]:
+
+def recorded_tick_state_keys(interactions: Any, own_object_id: int) -> frozenset[str]:
     """この物体の操作が**自分に**書き込む「手番を記録する key」を集める。
 
     ``tick`` は世界の中に無い語 (#892)。世界の中の人が手番を数えているはずが
@@ -248,10 +220,7 @@ def recorded_tick_state_keys(
     keys: set[str] = set()
     for interaction in interactions or ():
         for effect in getattr(interaction, "effects", ()) or ():
-            if (
-                getattr(effect, "effect_type", None)
-                is not InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK
-            ):
+            if getattr(effect, "effect_type", None) is not InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK:
                 continue
             params = getattr(effect, "parameters", None) or {}
             target = params.get("object_id")
@@ -261,6 +230,7 @@ def recorded_tick_state_keys(
             if isinstance(state_key, str) and state_key:
                 keys.add(state_key)
     return frozenset(keys)
+
 
 def remote_recorded_tick_state_keys(
     items_raw: Sequence[Mapping[str, Any]],
@@ -285,10 +255,8 @@ def remote_recorded_tick_state_keys(
                     continue
                 object_id = mapper.get_int("object", target)
                 collected.setdefault(object_id, set()).add(state_key)
-    return {
-        object_id: frozenset(keys)
-        for object_id, keys in collected.items()
-    }
+    return {object_id: frozenset(keys) for object_id, keys in collected.items()}
+
 
 def iter_mappings(value: Any) -> Iterable[Mapping[str, Any]]:
     """JSON内の全objectを、配置を手動列挙せず再帰的に返す。"""
@@ -300,7 +268,8 @@ def iter_mappings(value: Any) -> Iterable[Mapping[str, Any]]:
         for child in value:
             yield from iter_mappings(child)
 
-def parse_position_number( raw: Any, path: str) -> float:
+
+def parse_position_number(raw: Any, path: str) -> float:
     if not isinstance(raw, (int, float)) or isinstance(raw, bool):
         raise ScenarioLoadError(f"{path} must be a number")
     value = float(raw)
@@ -308,11 +277,13 @@ def parse_position_number( raw: Any, path: str) -> float:
         raise ScenarioLoadError(f"{path} must be a finite number")
     return value
 
-def parse_prominence( raw: Any, path: str) -> float:
+
+def parse_prominence(raw: Any, path: str) -> float:
     value = parse_position_number(raw, path)
     if not 0.0 <= value <= 1.0:
         raise ScenarioLoadError(f"{path} must be in [0.0, 1.0]")
     return value
+
 
 def is_json_primitive(value: Any) -> bool:
     if value is None or isinstance(value, (str, bool)):
@@ -320,6 +291,7 @@ def is_json_primitive(value: Any) -> bool:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return isfinite(value)
     return False
+
 
 def spot_positions_by_area(
     spots_raw: Any,
@@ -342,15 +314,14 @@ def spot_positions_by_area(
             raise ScenarioLoadError(f"{path} must be an object with numeric x/y")
         unknown_keys = set(position_raw) - {"x", "y"}
         if unknown_keys:
-            raise ScenarioLoadError(
-                f"{path} has unsupported keys: {sorted(unknown_keys)}"
-            )
+            raise ScenarioLoadError(f"{path} has unsupported keys: {sorted(unknown_keys)}")
         position = SpotPosition(
             x=parse_position_number(position_raw.get("x"), f"{path}.x"),
             y=parse_position_number(position_raw.get("y"), f"{path}.y"),
         )
         grouped.setdefault(area_id.strip(), []).append(position)
     return {area_id: tuple(positions) for area_id, positions in grouped.items()}
+
 
 def area_centroid(positions: Sequence[SpotPosition]) -> SpotPosition | None:
     if not positions:
@@ -360,11 +331,13 @@ def area_centroid(positions: Sequence[SpotPosition]) -> SpotPosition | None:
         y=sum(p.y for p in positions) / len(positions),
     )
 
+
 def parse_departed_agents_enabled(raw: dict[str, Any]) -> bool:
     value = raw.get("departed_agents_enabled", False)
     if not isinstance(value, bool):
         raise ScenarioLoadError("departed_agents_enabled は真偽値で書いてください")
     return value
+
 
 def parse_item_spec_id_parameter_key(raw: dict[str, Any]) -> str | None:
     """``item_spec_id_parameter_key`` を検証して返す。
@@ -376,10 +349,9 @@ def parse_item_spec_id_parameter_key(raw: dict[str, Any]) -> str | None:
     if key is None:
         return None
     if not isinstance(key, str) or not key.strip():
-        raise ScenarioLoadError(
-            "item_spec_id_parameter_key must be a non-empty string"
-        )
+        raise ScenarioLoadError("item_spec_id_parameter_key must be a non-empty string")
     return key.strip()
+
 
 def parse_need_type(raw: dict[str, Any]) -> str | None:
     """`need_type` が指定されていれば NeedType に存在する名前か load 時に検証する。
@@ -391,17 +363,14 @@ def parse_need_type(raw: dict[str, Any]) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ScenarioLoadError(
-            f"need_type must be a string (got {type(value).__name__})"
-        )
+        raise ScenarioLoadError(f"need_type must be a string (got {type(value).__name__})")
     try:
         NeedType(value)
     except ValueError as exc:
         valid = sorted(t.value for t in NeedType)
-        raise ScenarioLoadError(
-            f"need_type {value!r} is not a known NeedType. Valid values: {valid}"
-        ) from exc
+        raise ScenarioLoadError(f"need_type {value!r} is not a known NeedType. Valid values: {valid}") from exc
     return value
+
 
 def parse_hp_ratio(raw: dict[str, Any]) -> float | None:
     """`hp_ratio` を 0.0..1.0 の範囲で検証する。範囲外は load 時に拒否。"""
@@ -411,14 +380,11 @@ def parse_hp_ratio(raw: dict[str, Any]) -> float | None:
     try:
         f = float(value)
     except (TypeError, ValueError) as exc:
-        raise ScenarioLoadError(
-            f"hp_ratio must be a number (got {value!r})"
-        ) from exc
+        raise ScenarioLoadError(f"hp_ratio must be a number (got {value!r})") from exc
     if not (0.0 <= f <= 1.0):
-        raise ScenarioLoadError(
-            f"hp_ratio must be in [0.0, 1.0] (got {f})"
-        )
+        raise ScenarioLoadError(f"hp_ratio must be in [0.0, 1.0] (got {f})")
     return f
+
 
 def parse_required_quantity(raw: dict[str, Any]) -> int:
     """`required_quantity` を読みつつ `<= 0` は明確に拒否する。
@@ -436,15 +402,15 @@ def parse_required_quantity(raw: dict[str, Any]) -> int:
             f"required_quantity must be a positive integer (got {raw['required_quantity']!r})"
         ) from exc
     if value <= 0:
-        raise ScenarioLoadError(
-            f"required_quantity must be >= 1 (got {value})"
-        )
+        raise ScenarioLoadError(f"required_quantity must be >= 1 (got {value})")
     return value
 
-def optional_spot_id( value: Any, mapper: ScenarioIdMapper) -> int | None:
+
+def optional_spot_id(value: Any, mapper: ScenarioIdMapper) -> int | None:
     if not value:
         return None
     return mapper.get_int("spot", str(value))
+
 
 def declared_action_names(raw: dict[str, Any]) -> set[str]:
     """シナリオ生データから、宣言済みの `action_name` を全部集める。"""
@@ -472,9 +438,8 @@ def declared_action_names(raw: dict[str, Any]) -> set[str]:
     add_from(raw.get("player_interactions"))
     return names
 
-def reject_unknown_keys(
-    raw: Mapping[str, Any], allowed: Iterable[str], *, where: str
-) -> None:
+
+def reject_unknown_keys(raw: Mapping[str, Any], allowed: Iterable[str], *, where: str) -> None:
     """``allowed`` に無いキーがあれば ``ScenarioLoadError`` を投げる。
 
     知らないキーは読まれずに捨てられ、書いた決まりが黙って効かなくなる。

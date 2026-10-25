@@ -55,10 +55,7 @@ class SpotInteriorSubsystemCodec(WorldSubsystemCodec):
     def capture(self, runtime: Any) -> dict[str, Any]:
         repo = getattr(runtime, "_spot_interior_repo", None)
         if repo is None:
-            raise RuntimeError(
-                "runtime._spot_interior_repo not found; "
-                "SpotInteriorSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._spot_interior_repo not found; SpotInteriorSubsystemCodec requires it")
         entries: list[dict[str, Any]] = []
         # ``_data`` は ``InMemorySpotInteriorRepository`` の内部 dict。
         # ISpotInteriorRepository に enumerate API がないため private 経由。
@@ -92,9 +89,7 @@ class SpotInteriorSubsystemCodec(WorldSubsystemCodec):
                         "state": dict(obj.state),
                         "is_visible": bool(obj.is_visible),
                         "puzzle": puzzle_data,
-                        "detail_read_by": sorted(
-                            int(p) for p in obj.detail_read_by
-                        ),
+                        "detail_read_by": sorted(int(p) for p in obj.detail_read_by),
                     }
                 )
             discoverables = [
@@ -128,10 +123,7 @@ class SpotInteriorSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         from ai_rpg_world.domain.item.value_object.item_instance_id import (
             ItemInstanceId,
         )
@@ -146,10 +138,7 @@ class SpotInteriorSubsystemCodec(WorldSubsystemCodec):
 
         repo = getattr(runtime, "_spot_interior_repo", None)
         if repo is None:
-            raise RuntimeError(
-                "runtime._spot_interior_repo not found; "
-                "SpotInteriorSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._spot_interior_repo not found; SpotInteriorSubsystemCodec requires it")
 
         for entry in data.get("entries", []):
             spot_id = SpotId(int(entry["spot_id"]))
@@ -174,9 +163,7 @@ class SpotInteriorSubsystemCodec(WorldSubsystemCodec):
             )
 
             # objects: object_id keyed lookup で動的 field のみ merge
-            captured_objects_by_id = {
-                int(o["object_id"]): o for o in entry.get("objects", [])
-            }
+            captured_objects_by_id = {int(o["object_id"]): o for o in entry.get("objects", [])}
             new_objects = []
             for cur_obj in current_interior.objects:
                 cap = captured_objects_by_id.get(int(cur_obj.object_id.value))
@@ -206,16 +193,13 @@ class SpotInteriorSubsystemCodec(WorldSubsystemCodec):
                     state=dict(cap.get("state", {})),
                     is_visible=bool(cap["is_visible"]),
                     puzzle=new_puzzle,
-                    detail_read_by=frozenset(
-                        int(p) for p in cap.get("detail_read_by", [])
-                    ),
+                    detail_read_by=frozenset(int(p) for p in cap.get("detail_read_by", [])),
                 )
                 new_objects.append(new_obj)
 
             # discoverable_items: item_spec_id keyed で is_discovered 上書き
             captured_disc_by_spec = {
-                int(d["item_spec_id"]): bool(d["is_discovered"])
-                for d in entry.get("discoverable_items", [])
+                int(d["item_spec_id"]): bool(d["is_discovered"]) for d in entry.get("discoverable_items", [])
             }
             new_discoverables = []
             for cur_d in current_interior.discoverable_items:
@@ -227,8 +211,7 @@ class SpotInteriorSubsystemCodec(WorldSubsystemCodec):
 
             # sub_locations: sub_location_id keyed で is_hidden 上書き
             captured_sl_by_id = {
-                int(s["sub_location_id"]): bool(s["is_hidden"])
-                for s in entry.get("sub_locations", [])
+                int(s["sub_location_id"]): bool(s["is_hidden"]) for s in entry.get("sub_locations", [])
             }
             new_sub_locations = []
             for cur_sl in current_interior.sub_locations:

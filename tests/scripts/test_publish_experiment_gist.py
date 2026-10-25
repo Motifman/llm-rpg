@@ -205,9 +205,7 @@ class TestPublishWithMock:
         (run_dir / "report.md").write_text("# r")
 
         def fake_run(cmd, **kwargs):
-            raise subprocess.CalledProcessError(
-                returncode=1, cmd=cmd, stderr="auth required"
-            )
+            raise subprocess.CalledProcessError(returncode=1, cmd=cmd, stderr="auth required")
 
         with patch.object(subprocess, "run", side_effect=fake_run):
             with pytest.raises(GistPublishError, match="gh command failed"):
@@ -320,11 +318,10 @@ class TestEpisodicTimelinePreviewUrls:
             else:
                 stub.stdout = "Motifman\n"
             return stub
+
         return fake_run
 
-    def test_returns_episodic_html_episodic_preview_url(
-        self, tmp_path: Path
-    ) -> None:
+    def test_returns_episodic_html_episodic_preview_url(self, tmp_path: Path) -> None:
         """episodichtml があれば episodicpreviewurl が返る。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -333,7 +330,8 @@ class TestEpisodicTimelinePreviewUrls:
         (run_dir / "episodic.html").write_text("<html>ep</html>")
 
         with patch.object(
-            subprocess, "run",
+            subprocess,
+            "run",
             side_effect=self._fake_run("https://gist.github.com/Motifman/aaa"),
         ):
             result = publish(run_dir, secret=True, build_viewer=False)
@@ -342,9 +340,7 @@ class TestEpisodicTimelinePreviewUrls:
         assert "htmlpreview.github.io" in result["episodic_preview_url"]
         assert "episodic.html" in result["episodic_preview_url"]
 
-    def test_returns_timeline_html_timeline_preview_url(
-        self, tmp_path: Path
-    ) -> None:
+    def test_returns_timeline_html_timeline_preview_url(self, tmp_path: Path) -> None:
         """timelinehtml があれば timelinepreviewurl が返る。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -353,7 +349,8 @@ class TestEpisodicTimelinePreviewUrls:
         (run_dir / "timeline.html").write_text("<html>tl</html>")
 
         with patch.object(
-            subprocess, "run",
+            subprocess,
+            "run",
             side_effect=self._fake_run("https://gist.github.com/Motifman/bbb"),
         ):
             result = publish(run_dir, secret=True, build_viewer=False)
@@ -370,7 +367,8 @@ class TestEpisodicTimelinePreviewUrls:
         (run_dir / "viewer.html").write_text("<html>v</html>")
 
         with patch.object(
-            subprocess, "run",
+            subprocess,
+            "run",
             side_effect=self._fake_run("https://gist.github.com/Motifman/ccc"),
         ):
             result = publish(run_dir, secret=True, build_viewer=False)
@@ -378,9 +376,7 @@ class TestEpisodicTimelinePreviewUrls:
         assert result["episodic_preview_url"] is None
         assert result["timeline_preview_url"] is None
 
-    def test_build_viewer_true_trace_jsonl_viewer(
-        self, tmp_path: Path
-    ) -> None:
+    def test_build_viewer_true_trace_jsonl_viewer(self, tmp_path: Path) -> None:
         """build_viewer=True かつ trace.jsonl があれば publish 前に viewer.html を build。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()
@@ -395,6 +391,7 @@ class TestEpisodicTimelinePreviewUrls:
 
         # build_trace_viewer.fetch_cytoscape をモック
         from scripts._viewer_vendor import VendorAsset
+
         fake_asset = VendorAsset(
             name="cytoscape",
             version="0.0.0-test",
@@ -420,9 +417,7 @@ class TestEpisodicTimelinePreviewUrls:
         assert (run_dir / "viewer.html").exists()
         assert "06_viewer.html" in result["viewer_preview_url"]
 
-    def test_build_viewer_true_cytoscape_failure_publish_line(
-        self, tmp_path: Path
-    ) -> None:
+    def test_build_viewer_true_cytoscape_failure_publish_line(self, tmp_path: Path) -> None:
         """ネット越し取得が失敗しても publish 全体は止まらない (trace.html の代替がある想定)。"""
         run_dir = tmp_path / "run"
         run_dir.mkdir()

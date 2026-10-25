@@ -1,10 +1,12 @@
 """ショップコマンド定義"""
+
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class CreateShopCommand:
     """ショップ開設コマンド"""
+
     spot_id: int
     location_area_id: int
     owner_id: int
@@ -15,6 +17,7 @@ class CreateShopCommand:
 @dataclass(frozen=True)
 class ListShopItemCommand:
     """ショップ出品コマンド"""
+
     shop_id: int
     player_id: int  # オーナー
     slot_id: int  # 出品するインベントリスロット
@@ -24,6 +27,7 @@ class ListShopItemCommand:
 @dataclass(frozen=True)
 class UnlistShopItemCommand:
     """ショップ取り下げコマンド"""
+
     shop_id: int
     listing_id: int
     player_id: int  # オーナー
@@ -32,6 +36,7 @@ class UnlistShopItemCommand:
 @dataclass(frozen=True)
 class PurchaseFromShopCommand:
     """ショップ購入コマンド"""
+
     shop_id: int
     listing_id: int
     buyer_id: int
@@ -41,5 +46,6 @@ class PurchaseFromShopCommand:
 @dataclass(frozen=True)
 class CloseShopCommand:
     """ショップ閉鎖コマンド（オーナーのみ）"""
+
     shop_id: int
     player_id: int  # 閉鎖を実行するオーナー

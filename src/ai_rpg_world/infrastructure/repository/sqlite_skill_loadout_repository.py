@@ -166,8 +166,7 @@ class SqliteSkillLoadoutRepository(SkillLoadoutRepository):
             spec = spec_repo.find_by_id(SkillId(skill_id))
             if spec is None:
                 raise RuntimeError(
-                    "game_skill_loadout_slots が参照する skill_id に対応する "
-                    "game_skill_specs の定義が見つかりません"
+                    "game_skill_loadout_slots が参照する skill_id に対応する game_skill_specs の定義が見つかりません"
                 )
             skill_specs_by_id[skill_id] = spec
         return build_skill_loadout(

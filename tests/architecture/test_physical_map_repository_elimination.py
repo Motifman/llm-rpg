@@ -13,12 +13,15 @@ from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemory
 _ROOT = Path(__file__).resolve().parents[2] / "src/ai_rpg_world"
 
 
-@pytest.mark.parametrize("relative_path", [
-    "domain/world/repository/physical_map_repository.py",
-    "infrastructure/repository/in_memory_physical_map_repository.py",
-    "infrastructure/repository/sqlite_physical_map_repository.py",
-    "infrastructure/repository/sqlite_world_state_codec.py",
-])
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "domain/world/repository/physical_map_repository.py",
+        "infrastructure/repository/in_memory_physical_map_repository.py",
+        "infrastructure/repository/sqlite_physical_map_repository.py",
+        "infrastructure/repository/sqlite_world_state_codec.py",
+    ],
+)
 def test_physical_map_storage_modules_are_removed(relative_path: str) -> None:
     """物理マップ保存先の契約・実装・変換器のファイルは存在しない。"""
     assert not (_ROOT / relative_path).exists()

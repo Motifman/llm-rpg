@@ -36,6 +36,7 @@ def _make_executor(transfer_stub) -> Any:
     from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
         SpotGraphToolExecutor,
     )
+
     services = MagicMock()
     services.movement = MagicMock()
     services.world_flags = MagicMock()
@@ -145,11 +146,7 @@ class TestGiveItemTargetInventoryFull:
         assert "ノア" in result.message
         assert "野いちご" in result.message
         # 「満杯」または「drop」または「別の相手」の示唆がある
-        assert (
-            "満杯" in result.message
-            or "drop" in result.message
-            or "別の" in result.message
-        )
+        assert "満杯" in result.message or "drop" in result.message or "別の" in result.message
 
 
 class TestGiveItemSlotIsEmpty:
@@ -164,6 +161,7 @@ class TestGiveItemSlotIsEmpty:
         from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
             SlotIsEmptyError,
         )
+
         stub = MagicMock()
         stub.give_item.side_effect = SlotIsEmptyError(slot_id=5)
         executor = _make_executor(stub)
@@ -202,7 +200,7 @@ class TestGiveItemPartialSuccess:
         # 呼び出し順に成功 → 失敗 を返す
         stub.give_item.side_effect = [
             MagicMock(messages=("渡した。",)),  # 1 件目 OK
-            TargetIsSelfError(),                # 2 件目 NG
+            TargetIsSelfError(),  # 2 件目 NG
         ]
         executor = _make_executor(stub)
         executor._find_owned_slot_by_item_spec_id_and_spoilage = MagicMock(
@@ -251,8 +249,8 @@ class TestGiveItemAllFail:
         """全件失敗なら success False かつ first error code。"""
         stub = MagicMock()
         stub.give_item.side_effect = [
-            TargetInventoryFullError(),        # 1 件目 NG (最初なので error_code)
-            TargetNotInSameSpotError(),        # 2 件目 NG
+            TargetInventoryFullError(),  # 1 件目 NG (最初なので error_code)
+            TargetNotInSameSpotError(),  # 2 件目 NG
         ]
         executor = _make_executor(stub)
         executor._find_owned_slot_by_item_spec_id_and_spoilage = MagicMock(
@@ -291,7 +289,7 @@ class TestGiveItemGivesResolvedRequired:
                         "error_code": "INVALID_TARGET_KIND",
                         "message": (
                             "指定されたアイテム名は渡す対象として扱えません: 壊れた薬草。"
-                            "所持アイテム欄の \"\" 内の名前を指定してください。"
+                            '所持アイテム欄の "" 内の名前を指定してください。'
                         ),
                         "item_label": "壊れた薬草",
                         "target_player_label": "リン",
@@ -319,9 +317,7 @@ class TestGiveItemGivesResolvedRequired:
         """gives resolved 空 なら INVALID ARGUMENT。"""
         stub = MagicMock()
         executor = _make_executor(stub)
-        result = executor._give_item(
-            1, {"gives_resolved": [], "inner_thought": "test"}
-        )
+        result = executor._give_item(1, {"gives_resolved": [], "inner_thought": "test"})
         assert result.success is False
         assert result.error_code == "INVALID_ARGUMENT"
 

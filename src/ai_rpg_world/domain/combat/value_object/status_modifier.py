@@ -4,12 +4,14 @@ from enum import Enum, auto
 
 class ModifierType(Enum):
     """補正の適用タイプ"""
-    ADDITIVE = auto()       # 加算
+
+    ADDITIVE = auto()  # 加算
     MULTIPLICATIVE = auto()  # 乗算
 
 
 class StatTarget(Enum):
     """補正対象のステータス"""
+
     MAX_HP = auto()
     MAX_MP = auto()
     ATTACK = auto()
@@ -22,6 +24,7 @@ class StatTarget(Enum):
 @dataclass(frozen=True)
 class StatusModifier:
     """ステータス補正（バフ・デバフ）を表す値オブジェクト"""
+
     target: StatTarget
     modifier_type: ModifierType
     value: float  # 加算なら量、乗算なら倍率（例：1.2 = 20%アップ）
@@ -32,7 +35,7 @@ class StatusModifier:
         return cls(
             target=StatTarget.ATTACK,
             modifier_type=ModifierType.MULTIPLICATIVE if is_multiplier else ModifierType.ADDITIVE,
-            value=amount
+            value=amount,
         )
 
     @classmethod
@@ -41,5 +44,5 @@ class StatusModifier:
         return cls(
             target=StatTarget.DEFENSE,
             modifier_type=ModifierType.MULTIPLICATIVE if is_multiplier else ModifierType.ADDITIVE,
-            value=amount
+            value=amount,
         )

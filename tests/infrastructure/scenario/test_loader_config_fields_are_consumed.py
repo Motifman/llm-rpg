@@ -100,9 +100,7 @@ _ALLOWED_UNCONSUMED: dict[tuple[str, str], str] = {
         "loader 内部で文字列 id を int id へ写像するためのキー。写像後は"
         "int id だけで扱うので、runtime が読まないのが正しい"
     ),
-    ("ScenarioLootTableDefinition", "string_id"): (
-        "同上。loader 内部の id 写像専用"
-    ),
+    ("ScenarioLootTableDefinition", "string_id"): ("同上。loader 内部の id 写像専用"),
     ("ScenarioMerchantDefinition", "string_id"): (
         "同上。loader 内部の id 写像専用で、runtime は merchant_id だけを使う"
     ),
@@ -357,8 +355,7 @@ class TestLoaderConfigFieldsAreConsumed:
         assert not unconsumed, (
             "loader が読み取っているのに本番経路が使っていないフィールドがあります。\n"
             "シナリオに書いても効かない宣言になり、失敗文の裏に原因が隠れます "
-            "(#830 / #840 と同じ形)。\n\n  "
-            + "\n  ".join(unconsumed)
+            "(#830 / #840 と同じ形)。\n\n  " + "\n  ".join(unconsumed)
         )
 
     def test_pending_consumers_are_removed_once_wired(self) -> None:
@@ -368,18 +365,12 @@ class TestLoaderConfigFieldsAreConsumed:
         項目を消さないと緑にならない。消し忘れたまま次のフィールドを足すと、
         そちらの配線漏れが猶予の陰に隠れる。
         """
-        still_unconsumed = {
-            entry.split(" ", 1)[0]
-            for entry in _unconsumed_fields(exempt=set(_ALLOWED_UNCONSUMED))
-        }
+        still_unconsumed = {entry.split(" ", 1)[0] for entry in _unconsumed_fields(exempt=set(_ALLOWED_UNCONSUMED))}
         already_wired = [
-            f"{cls}.{field}"
-            for (cls, field) in _PENDING_CONSUMERS
-            if f"{cls}.{field}" not in still_unconsumed
+            f"{cls}.{field}" for (cls, field) in _PENDING_CONSUMERS if f"{cls}.{field}" not in still_unconsumed
         ]
         assert not already_wired, (
-            "配線が済んだフィールドが _PENDING_CONSUMERS に残っています。"
-            f"表から消してください: {already_wired}"
+            f"配線が済んだフィールドが _PENDING_CONSUMERS に残っています。表から消してください: {already_wired}"
         )
 
     def test_pending_entries_state_which_pr_will_consume_them(self) -> None:
@@ -390,10 +381,7 @@ class TestLoaderConfigFieldsAreConsumed:
             for (cls, field), reason in _PENDING_CONSUMERS.items()
             if field not in classes.get(cls, ()) or not reason.strip()
         ]
-        assert not broken, (
-            "配線待ちリストの項目が、存在しないフィールドを指しているか理由が空です: "
-            f"{broken}"
-        )
+        assert not broken, f"配線待ちリストの項目が、存在しないフィールドを指しているか理由が空です: {broken}"
 
     def test_allowlist_has_no_stale_entries(self) -> None:
         """許可リストに、既に存在しないフィールドが残っていない。
@@ -402,11 +390,7 @@ class TestLoaderConfigFieldsAreConsumed:
         見逃される。
         """
         classes = _loader_config_classes()
-        stale = [
-            f"{cls}.{field}"
-            for (cls, field) in _ALLOWED_UNCONSUMED
-            if field not in classes.get(cls, ())
-        ]
+        stale = [f"{cls}.{field}" for (cls, field) in _ALLOWED_UNCONSUMED if field not in classes.get(cls, ())]
         assert not stale, f"許可リストに存在しないフィールドが残っています: {stale}"
 
     def test_allowlist_entries_state_a_reason(self) -> None:
@@ -416,11 +400,7 @@ class TestLoaderConfigFieldsAreConsumed:
         できるなら「登録すれば無検査で通る」抜け道が残る。中身の妥当さは
         レビューが見るしかないが、空であることは機械で落とせる。
         """
-        blank = sorted(
-            f"{cls}.{field}"
-            for (cls, field), reason in _ALLOWED_UNCONSUMED.items()
-            if not reason.strip()
-        )
+        blank = sorted(f"{cls}.{field}" for (cls, field), reason in _ALLOWED_UNCONSUMED.items() if not reason.strip())
 
         assert not blank, f"許可の理由が書かれていません: {blank}"
 
@@ -567,8 +547,6 @@ class TestAccessCollectionRules:
         素の名前と同じ扱いにすると、同名フィールドの片方だけが読まれている
         状態を「読まれている」と誤認する (#840 を見逃した理由)。
         """
-        matching = [
-            cls for cls, hints in _RECEIVER_HINTS.items() if _UNNAMED_RECEIVER in hints
-        ]
+        matching = [cls for cls, hints in _RECEIVER_HINTS.items() if _UNNAMED_RECEIVER in hints]
 
         assert not matching, f"印がヒントに混入しています: {matching}"

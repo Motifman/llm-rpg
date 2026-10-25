@@ -21,6 +21,7 @@ from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtm
 def _atm(lighting: LightingEnum) -> SpotAtmosphere:
     """テスト用に lighting だけ指定した SpotAtmosphere を作る。"""
     from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
+
     return SpotAtmosphere(
         lighting=lighting,
         sound_ambient="",
@@ -36,8 +37,10 @@ class TestOutdoorNight:
         """屋外 BRIGHT は夜に DIM になる。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
-            _atm(LightingEnum.BRIGHT), False,
-            is_outdoor=True, time_of_day_is_dark=True,
+            _atm(LightingEnum.BRIGHT),
+            False,
+            is_outdoor=True,
+            time_of_day_is_dark=True,
         )
         assert result is LightingEnum.DIM
 
@@ -45,8 +48,10 @@ class TestOutdoorNight:
         """森の中など元から DIM な屋外スポットは夜で DARK に。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
-            _atm(LightingEnum.DIM), False,
-            is_outdoor=True, time_of_day_is_dark=True,
+            _atm(LightingEnum.DIM),
+            False,
+            is_outdoor=True,
+            time_of_day_is_dark=True,
         )
         assert result is LightingEnum.DARK
 
@@ -54,8 +59,10 @@ class TestOutdoorNight:
         """屋外 DARK は夜に PITCHBLACK になる。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
-            _atm(LightingEnum.DARK), False,
-            is_outdoor=True, time_of_day_is_dark=True,
+            _atm(LightingEnum.DARK),
+            False,
+            is_outdoor=True,
+            time_of_day_is_dark=True,
         )
         assert result is LightingEnum.PITCH_BLACK
 
@@ -67,8 +74,10 @@ class TestIndoorNight:
         """屋内で BRIGHT (例えば焚き火が点いている部屋) は夜でも明るい。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
-            _atm(LightingEnum.BRIGHT), False,
-            is_outdoor=False, time_of_day_is_dark=True,
+            _atm(LightingEnum.BRIGHT),
+            False,
+            is_outdoor=False,
+            time_of_day_is_dark=True,
         )
         assert result is LightingEnum.BRIGHT
 
@@ -76,8 +85,10 @@ class TestIndoorNight:
         """洞窟は元から DARK で、夜という概念に影響されない。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
-            _atm(LightingEnum.DARK), False,
-            is_outdoor=False, time_of_day_is_dark=True,
+            _atm(LightingEnum.DARK),
+            False,
+            is_outdoor=False,
+            time_of_day_is_dark=True,
         )
         assert result is LightingEnum.DARK
 
@@ -89,8 +100,10 @@ class TestWeatherObscuresVision:
         """屋外 嵐で BRIGHT は DIM になる。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
-            _atm(LightingEnum.BRIGHT), False,
-            is_outdoor=True, weather_obscures_vision=True,
+            _atm(LightingEnum.BRIGHT),
+            False,
+            is_outdoor=True,
+            weather_obscures_vision=True,
         )
         assert result is LightingEnum.DIM
 
@@ -98,8 +111,10 @@ class TestWeatherObscuresVision:
         """屋内は天候の影響を受けない。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
-            _atm(LightingEnum.BRIGHT), False,
-            is_outdoor=False, weather_obscures_vision=True,
+            _atm(LightingEnum.BRIGHT),
+            False,
+            is_outdoor=False,
+            weather_obscures_vision=True,
         )
         assert result is LightingEnum.BRIGHT
 
@@ -111,8 +126,11 @@ class TestNightAndWeatherCombo:
         """夜 and 嵐は 1 段だけ下がる。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
-            _atm(LightingEnum.BRIGHT), False,
-            is_outdoor=True, time_of_day_is_dark=True, weather_obscures_vision=True,
+            _atm(LightingEnum.BRIGHT),
+            False,
+            is_outdoor=True,
+            time_of_day_is_dark=True,
+            weather_obscures_vision=True,
         )
         # BRIGHT → DIM (1 段)。DARK にはならない
         assert result is LightingEnum.DIM
@@ -125,8 +143,10 @@ class TestLightBearerInteraction:
         """森が夜で DARK になっても、誰かが松明を持っていれば DIM (見える)。"""
         svc = SpotPerceptionService()
         result = svc.compute_effective_lighting(
-            _atm(LightingEnum.DIM), spot_has_any_light_bearer=True,
-            is_outdoor=True, time_of_day_is_dark=True,
+            _atm(LightingEnum.DIM),
+            spot_has_any_light_bearer=True,
+            is_outdoor=True,
+            time_of_day_is_dark=True,
         )
         # DIM → 夜 → DARK → 光源で → DIM
         assert result is LightingEnum.DIM

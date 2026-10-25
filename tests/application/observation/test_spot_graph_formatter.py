@@ -253,9 +253,7 @@ class TestEntityLeftSpot:
             connection_names={},
         )
         # 接続情報を空にする
-        ctx.spot_graph_repository.find_graph.return_value.iter_outgoing_connections_from.side_effect = (
-            lambda _sid: []
-        )
+        ctx.spot_graph_repository.find_graph.return_value.iter_outgoing_connections_from.side_effect = lambda _sid: []
         fmt = SpotGraphObservationFormatter(ctx)
         event = EntityLeftSpotEvent.create(
             aggregate_id=GRAPH_ID,
@@ -671,9 +669,7 @@ class TestSpotObjectStateChanged:
         # 内部 vocab "locked" は prose に出ない
         assert "locked" not in result.prose
         # 構造化 state_delta は残す (機械処理向け、LLM には届かない)
-        assert result.structured["state_delta"] == [
-            {"key": "locked", "before": True, "after": False}
-        ]
+        assert result.structured["state_delta"] == [{"key": "locked", "before": True, "after": False}]
 
 
 class TestSpotObjectStateChangedActorExclusion:
@@ -681,6 +677,7 @@ class TestSpotObjectStateChangedActorExclusion:
 
     def test_actor_self_returns_none(self, formatter):
         from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
         event = SpotObjectStateChangedEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -704,6 +701,7 @@ class TestSpotPlayerStateChangedInSpot:
             StateDeltaEntry,
         )
         from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
         event = SpotPlayerStateChangedInSpotEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -716,9 +714,7 @@ class TestSpotPlayerStateChangedInSpot:
         assert result is not None
         assert "変装が解けた" in result.prose
         assert result.observation_category == "social"
-        assert result.structured["state_delta"] == [
-            {"key": "disguised", "before": True, "after": False}
-        ]
+        assert result.structured["state_delta"] == [{"key": "disguised", "before": True, "after": False}]
 
     def test_renders_state_delta_when_message(self, formatter):
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
@@ -728,6 +724,7 @@ class TestSpotPlayerStateChangedInSpot:
             StateDeltaEntry,
         )
         from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
         event = SpotPlayerStateChangedInSpotEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -745,6 +742,7 @@ class TestSpotPlayerStateChangedInSpot:
             SpotPlayerStateChangedInSpotEvent,
         )
         from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
         event = SpotPlayerStateChangedInSpotEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",

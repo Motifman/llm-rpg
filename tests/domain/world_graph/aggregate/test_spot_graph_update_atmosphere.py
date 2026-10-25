@@ -63,12 +63,16 @@ class TestUpdateSpotAtmosphere:
                 lighting=LightingEnum.BRIGHT,
                 sound_ambient="機械の駆動音",
                 hazard_level=2,
-                **({
-                    "temperature": TemperatureEnum.COLD,
-                    "smell": "焦げた油",
-                    "hazard_description": "床が滑る",
-                    "sound_intensity": SoundIntensityEnum.LOUD,
-                } if with_other_fields else {}),
+                **(
+                    {
+                        "temperature": TemperatureEnum.COLD,
+                        "smell": "焦げた油",
+                        "hazard_description": "床が滑る",
+                        "sound_intensity": SoundIntensityEnum.LOUD,
+                    }
+                    if with_other_fields
+                    else {}
+                ),
             )
         )
 
@@ -96,9 +100,7 @@ class TestUpdateSpotAtmosphere:
         """hazard_level と hazard_description を渡すと危険度の表示が入れ替わる。"""
         graph = _graph(SpotAtmosphere(lighting=LightingEnum.BRIGHT))
 
-        graph.update_spot_atmosphere(
-            SpotId.create(1), hazard_level=3, hazard_description="有毒ガスが漏れている"
-        )
+        graph.update_spot_atmosphere(SpotId.create(1), hazard_level=3, hazard_description="有毒ガスが漏れている")
 
         atmosphere = graph.get_spot(SpotId.create(1)).atmosphere
         assert atmosphere.hazard_level == 3

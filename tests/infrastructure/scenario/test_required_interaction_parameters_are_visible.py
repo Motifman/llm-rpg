@@ -90,9 +90,7 @@ def test_all_required_parameters_are_rendered_in_action_candidates() -> None:
                     found[kind].append(f"{path.name}:{interaction['action_name']}")
             for key in expected_keys:
                 if f'"{key}" が要る' not in rendered:
-                    violations.append(
-                        f"{path.name}:{interaction['action_name']}: {rendered}"
-                    )
+                    violations.append(f"{path.name}:{interaction['action_name']}: {rendered}")
 
     assert all(found.values()), f"監査対象から消えた種類がある: {found}"
     assert not violations, "\n".join(violations)

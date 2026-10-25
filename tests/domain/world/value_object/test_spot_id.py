@@ -51,7 +51,7 @@ class TestSpotId:
     def test_immutability(self):
         """不変性が保たれていること"""
         spot_id = SpotId(505)
-        
+
         with pytest.raises(AttributeError):
             spot_id.value = 606
 

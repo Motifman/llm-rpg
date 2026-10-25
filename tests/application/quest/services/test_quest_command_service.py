@@ -73,7 +73,8 @@ from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
 
 
 def _create_player_status(
-    player_id: PlayerId, gold_amount: int = 0,
+    player_id: PlayerId,
+    gold_amount: int = 0,
     navigation_state: PlayerNavigationState | None = None,
 ) -> PlayerStatusAggregate:
     """テスト用の PlayerStatus を作成（ゴールド指定可）"""
@@ -221,9 +222,7 @@ class TestQuestCommandService:
         with pytest.raises(QuestNotFoundForCommandException):
             service.accept_quest(command)
 
-    def test_cancel_quest_when_completed_raises_quest_command_exception(
-        self, setup_service
-    ):
+    def test_cancel_quest_when_completed_raises_quest_command_exception(self, setup_service):
         """完了済みクエストをキャンセルすると DomainException が QuestCommandException にラップされる"""
         service, quest_repo, _ = setup_service
         quest_id = quest_repo.generate_quest_id()
@@ -256,9 +255,7 @@ class TestQuestCommandService:
         with pytest.raises(QuestCommandException) as exc_info:
             service.cancel_quest(command)
         assert exc_info.value.__cause__ is not None
-        assert isinstance(
-            exc_info.value.__cause__, InvalidQuestStatusException
-        )
+        assert isinstance(exc_info.value.__cause__, InvalidQuestStatusException)
 
     def test_accept_quest_direct_scope_wrong_player_raises(self, setup_service):
         service, quest_repo, uow = setup_service
@@ -350,9 +347,7 @@ class TestQuestCommandService:
         with pytest.raises(QuestNotFoundForCommandException):
             service.cancel_quest(command)
 
-    def test_accept_quest_unexpected_exception_wrapped_as_quest_system_error(
-        self, setup_service
-    ):
+    def test_accept_quest_unexpected_exception_wrapped_as_quest_system_error(self, setup_service):
         """リポジトリ等が想定外の例外を投げたとき QuestSystemErrorException にラップされる"""
         service, quest_repo, uow = setup_service
         original_error = RuntimeError("database connection failed")
@@ -472,9 +467,7 @@ class TestQuestCommandService:
             s["service"].issue_quest(command)
         assert "経験値報酬" in str(exc_info.value)
 
-    def test_issue_quest_player_issued_insufficient_gold_raises(
-        self, setup_service_with_player_repos
-    ):
+    def test_issue_quest_player_issued_insufficient_gold_raises(self, setup_service_with_player_repos):
         """プレイヤー発行クエストでゴールド不足のとき QuestCreationException"""
         s = setup_service_with_player_repos
         issuer_id = PlayerId(1)
@@ -491,9 +484,7 @@ class TestQuestCommandService:
             s["service"].issue_quest(command)
         assert "ゴールド" in str(exc_info.value)
 
-    def test_issue_quest_player_issued_issuer_not_found_raises(
-        self, setup_service_with_player_repos
-    ):
+    def test_issue_quest_player_issued_issuer_not_found_raises(self, setup_service_with_player_repos):
         """発行者が存在しないとき QuestCreationException"""
         s = setup_service_with_player_repos
         command = IssueQuestCommand(
@@ -505,9 +496,7 @@ class TestQuestCommandService:
             s["service"].issue_quest(command)
         assert "発行者" in str(exc_info.value)
 
-    def test_issue_quest_player_issued_with_items_success(
-        self, setup_service_with_player_repos
-    ):
+    def test_issue_quest_player_issued_with_items_success(self, setup_service_with_player_repos):
         """プレイヤー発行クエスト（アイテム報酬）が正常に発行され、予約アイテムが記録される"""
         s = setup_service_with_player_repos
         issuer_id = PlayerId(1)
@@ -547,9 +536,7 @@ class TestQuestCommandService:
         assert len(quest.reserved_item_instance_ids) == 1
         assert quest.reserved_item_instance_ids[0] == instance_id
 
-    def test_issue_quest_player_issued_insufficient_items_raises(
-        self, setup_service_with_player_repos
-    ):
+    def test_issue_quest_player_issued_insufficient_items_raises(self, setup_service_with_player_repos):
         """プレイヤー発行クエストで報酬アイテムが不足しているとき QuestCreationException"""
         s = setup_service_with_player_repos
         issuer_id = PlayerId(1)
@@ -567,9 +554,7 @@ class TestQuestCommandService:
             s["service"].issue_quest(command)
         assert "報酬アイテム" in str(exc_info.value)
 
-    def test_cancel_quest_player_issued_returns_gold_to_issuer(
-        self, setup_service_with_player_repos
-    ):
+    def test_cancel_quest_player_issued_returns_gold_to_issuer(self, setup_service_with_player_repos):
         """プレイヤー発行クエストをキャンセルすると確保済みゴールドが発行者に返却される"""
         s = setup_service_with_player_repos
         issuer_id = PlayerId(1)
@@ -599,6 +584,7 @@ class TestQuestCommandService:
         service, quest_repo, guild_repo, _ = setup_service_with_guild
         from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
@@ -628,6 +614,7 @@ class TestQuestCommandService:
         """オフィサー以上が承認すると status=OPEN になる"""
         service, quest_repo, guild_repo, _ = setup_service_with_guild
         from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
@@ -661,6 +648,7 @@ class TestQuestCommandService:
         """MEMBER は承認権限がない"""
         service, quest_repo, guild_repo, _ = setup_service_with_guild
         from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
@@ -693,6 +681,7 @@ class TestQuestCommandService:
         """ギルドスコープのクエストはギルドメンバーが受託可能"""
         service, quest_repo, guild_repo, _ = setup_service_with_guild
         from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
@@ -726,6 +715,7 @@ class TestQuestCommandService:
         """ギルドスコープのクエストは非メンバーは受託できない"""
         service, quest_repo, guild_repo, _ = setup_service_with_guild
         from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
@@ -836,19 +826,30 @@ class TestQuestCommandService:
 
     def _prepare_guild_issue(self, s, spot_id, coord):
         guild_id = s["guild_repo"].generate_guild_id()
-        s["guild_repo"].save(GuildAggregate.create_guild(
-            guild_id=guild_id, spot_id=SpotId(1), location_area_id=LocationAreaId(1),
-            name="依頼所", description="", creator_player_id=PlayerId(1),
-        ))
+        s["guild_repo"].save(
+            GuildAggregate.create_guild(
+                guild_id=guild_id,
+                spot_id=SpotId(1),
+                location_area_id=LocationAreaId(1),
+                name="依頼所",
+                description="",
+                creator_player_id=PlayerId(1),
+            )
+        )
         status = _create_player_status(
-            PlayerId(1), gold_amount=200,
+            PlayerId(1),
+            gold_amount=200,
             navigation_state=PlayerNavigationState.from_parts(
-                current_spot_id=SpotId(spot_id) if spot_id else None, current_coordinate=coord,
+                current_spot_id=SpotId(spot_id) if spot_id else None,
+                current_coordinate=coord,
             ),
         )
         s["status_repo"].save(status)
         s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(PlayerId(1)))
         return s, IssueQuestCommand(
-            objectives=[("kill_monster", 101, 2)], reward_gold=10, reward_exp=0,
-            issuer_player_id=1, guild_id=guild_id.value,
+            objectives=[("kill_monster", 101, 2)],
+            reward_gold=10,
+            reward_exp=0,
+            issuer_player_id=1,
+            guild_id=guild_id.value,
         )

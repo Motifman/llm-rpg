@@ -37,6 +37,7 @@ def test_target_self_error_item_transfer_exception_class(self=None) -> None:
         ItemTransferException,
         TargetIsSelfError,
     )
+
     assert issubclass(TargetIsSelfError, ItemTransferException)
 
 
@@ -46,6 +47,7 @@ def test_target_not_same_spot_error_item_transfer_exception_class() -> None:
         ItemTransferException,
         TargetNotInSameSpotError,
     )
+
     assert issubclass(TargetNotInSameSpotError, ItemTransferException)
 
 
@@ -55,6 +57,7 @@ def test_target_inventory_full_error_item_transfer_exception_class() -> None:
         ItemTransferException,
         TargetInventoryFullError,
     )
+
     assert issubclass(TargetInventoryFullError, ItemTransferException)
 
 
@@ -65,6 +68,7 @@ def test_target_dead_or_down_error_item_transfer_exception_class() -> None:
         TargetIsDeadError,
         TargetIsDownError,
     )
+
     assert issubclass(TargetIsDeadError, ItemTransferException)
     assert issubclass(TargetIsDownError, ItemTransferException)
 
@@ -79,15 +83,10 @@ def test_domain_error_llm_error_code() -> None:
         TargetIsSelfError,
         TargetNotInSameSpotError,
     )
+
     assert TargetIsSelfError.error_code == "GIVE_ITEM_TARGET_IS_SELF"
-    assert (
-        TargetNotInSameSpotError.error_code
-        == "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT"
-    )
-    assert (
-        TargetInventoryFullError.error_code
-        == "GIVE_ITEM_TARGET_INVENTORY_FULL"
-    )
+    assert TargetNotInSameSpotError.error_code == "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT"
+    assert TargetInventoryFullError.error_code == "GIVE_ITEM_TARGET_INVENTORY_FULL"
     assert TargetIsDeadError.error_code == "GIVE_ITEM_TARGET_DEAD"
     assert TargetIsDownError.error_code == "GIVE_ITEM_TARGET_DOWN"
 
@@ -97,6 +96,7 @@ def test_target_self_error_message_japanese_llm() -> None:
     from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
         TargetIsSelfError,
     )
+
     exc = TargetIsSelfError()
     msg = str(exc)
     assert "自分" in msg
@@ -110,6 +110,7 @@ def test_target_not_same_spot_error_message_target_current_spot_included() -> No
     from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
         TargetNotInSameSpotError,
     )
+
     exc = TargetNotInSameSpotError(
         target_name="ノア",
         sender_spot_name="森の広場",
@@ -127,16 +128,13 @@ def test_target_inventory_full_error_message_target_drop_included() -> None:
     from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
         TargetInventoryFullError,
     )
+
     exc = TargetInventoryFullError(target_name="ノア", item_name="流木")
     msg = str(exc)
     assert "ノア" in msg
     assert "流木" in msg
     # 満杯・drop・別の相手 のうち少なくとも 1 つを提案
-    assert (
-        "満杯" in msg
-        or "drop" in msg
-        or "別の" in msg
-    )
+    assert "満杯" in msg or "drop" in msg or "別の" in msg
 
 
 # ============================================================
@@ -161,6 +159,7 @@ def test_slot_empty_error_item_transfer_exception_class() -> None:
         ItemTransferException,
         SlotIsEmptyError,
     )
+
     assert issubclass(SlotIsEmptyError, ItemTransferException)
 
 
@@ -170,6 +169,7 @@ def test_ground_item_gone_error_item_transfer_exception_class() -> None:
         GroundItemGoneError,
         ItemTransferException,
     )
+
     assert issubclass(GroundItemGoneError, ItemTransferException)
 
 
@@ -179,6 +179,7 @@ def test_pickup_self_inventory_full_error_item_transfer_exception_class() -> Non
         ItemTransferException,
         PickupSelfInventoryFullError,
     )
+
     assert issubclass(PickupSelfInventoryFullError, ItemTransferException)
 
 
@@ -190,14 +191,10 @@ def test_drop_pickup_domain_error_llm_error_code() -> None:
         PickupSelfInventoryFullError,
         SlotIsEmptyError,
     )
+
     assert SlotIsEmptyError.error_code == "ITEM_TRANSFER_SLOT_IS_EMPTY"
-    assert (
-        GroundItemGoneError.error_code == "PICKUP_ITEM_GROUND_ITEM_GONE"
-    )
-    assert (
-        PickupSelfInventoryFullError.error_code
-        == "PICKUP_ITEM_SELF_INVENTORY_FULL"
-    )
+    assert GroundItemGoneError.error_code == "PICKUP_ITEM_GROUND_ITEM_GONE"
+    assert PickupSelfInventoryFullError.error_code == "PICKUP_ITEM_SELF_INVENTORY_FULL"
 
 
 def test_slot_empty_error_message_japanese() -> None:
@@ -205,6 +202,7 @@ def test_slot_empty_error_message_japanese() -> None:
     from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
         SlotIsEmptyError,
     )
+
     exc = SlotIsEmptyError(slot_id=3)
     msg = str(exc)
     # 何をすべきか (所持品確認) が読める
@@ -223,17 +221,12 @@ def test_ground_item_gone_error_message_other_player() -> None:
     from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
         GroundItemGoneError,
     )
+
     exc = GroundItemGoneError(item_name="流木")
     msg = str(exc)
     assert "流木" in msg
     # 他プレイヤー先取り or 別行動 の示唆
-    assert (
-        "他" in msg
-        or "先" in msg
-        or "拾" in msg
-        or "explore" in msg
-        or "別" in msg
-    )
+    assert "他" in msg or "先" in msg or "拾" in msg or "explore" in msg or "別" in msg
 
 
 def test_includes_pickup_self_inventory_full_error_message_drop() -> None:
@@ -242,13 +235,9 @@ def test_includes_pickup_self_inventory_full_error_message_drop() -> None:
     from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
         PickupSelfInventoryFullError,
     )
+
     exc = PickupSelfInventoryFullError(item_name="流木")
     msg = str(exc)
     assert "流木" in msg
     # drop / 満杯 / 空き のいずれかを含む
-    assert (
-        "drop" in msg
-        or "満杯" in msg
-        or "空き" in msg
-        or "捨て" in msg
-    )
+    assert "drop" in msg or "満杯" in msg or "空き" in msg or "捨て" in msg

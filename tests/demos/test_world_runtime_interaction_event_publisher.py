@@ -70,8 +70,7 @@ class TestWorldRuntimeInteractionEventPublisher:
         interaction_related = [
             e
             for e in rin_entries
-            if e.output.structured.get("type")
-            in {"spot_object_interacted", "spot_public_effect"}
+            if e.output.structured.get("type") in {"spot_object_interacted", "spot_public_effect"}
         ]
         assert len(interaction_related) > 0, (
             "BUG: 同スポットのリンに interaction の observation が届いていない. "
@@ -93,11 +92,5 @@ class TestWorldRuntimeInteractionEventPublisher:
 
         # 別スポットのリンに spot_object_interacted 観測は届かない
         rin_entries = runtime._obs_buffer.get_observations(PlayerId(2))
-        interacted = [
-            e
-            for e in rin_entries
-            if e.output.structured.get("type") == "spot_object_interacted"
-        ]
-        assert interacted == [], (
-            f"BUG: 別スポットのリンに interaction 観測が漏れている: {interacted}"
-        )
+        interacted = [e for e in rin_entries if e.output.structured.get("type") == "spot_object_interacted"]
+        assert interacted == [], f"BUG: 別スポットのリンに interaction 観測が漏れている: {interacted}"

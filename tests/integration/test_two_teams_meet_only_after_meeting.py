@@ -11,9 +11,7 @@ from ai_rpg_world.application.llm.services.action_result_store import (  # noqa:
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "two_teams_unaware.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "two_teams_unaware.json"
 _EAST = ("ミナト", "トウカ")
 _WEST = ("ゲンジ", "サヤ")
 
@@ -193,9 +191,7 @@ class TestNameLearnedTrace:
         runtime.do_speech(ids["ミナト"], "東から来たミナトだ", SpeechChannel.SAY)
 
         learned = [e for e in events if e[0] == "name_learned"]
-        assert sorted(e[2] for e in learned) == sorted(
-            int(ids[n].value) for n in ("ゲンジ", "サヤ")
-        )
+        assert sorted(e[2] for e in learned) == sorted(int(ids[n].value) for n in ("ゲンジ", "サヤ"))
         assert all(
             e[1] == runtime.current_tick()
             and e[3] == {"learned_name": "ミナト", "appearance": "青い外套の人", "how": "名乗り"}

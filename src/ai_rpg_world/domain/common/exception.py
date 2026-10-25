@@ -11,6 +11,7 @@ from enum import Enum
 
 class DomainErrorCategory(str, Enum):
     """ドメイン例外のカテゴリ"""
+
     VALIDATION = "validation"
     NOT_FOUND = "not_found"
     BUSINESS_RULE = "business_rule"
@@ -23,6 +24,7 @@ class DomainException(Exception):
     全てのドメイン例外はこのクラスを継承し、
     ドメイン名、エラーコード、カテゴリを持つべきです。
     """
+
     domain: str = "common"
     error_code: str = "DOMAIN_ERROR"
     category: DomainErrorCategory = DomainErrorCategory.STATE
@@ -42,12 +44,14 @@ class DomainException(Exception):
 
 # カテゴリ別の抽象例外クラス
 
+
 class ValidationException(DomainException):
     """バリデーション関連の例外
 
     値の検証に失敗した場合に使用します。
     エンティティや値オブジェクトの構築時、メソッド引数の検証などで発生します。
     """
+
     category = DomainErrorCategory.VALIDATION
 
 
@@ -56,6 +60,7 @@ class NotFoundException(DomainException):
 
     リポジトリからの検索などで対象が見つからない場合に使用します。
     """
+
     category = DomainErrorCategory.NOT_FOUND
 
 
@@ -65,6 +70,7 @@ class BusinessRuleException(DomainException):
     ドメインのビジネスルールに違反する場合に使用します。
     例: 材料不足、権限不足、状態制約など
     """
+
     category = DomainErrorCategory.BUSINESS_RULE
 
 
@@ -74,4 +80,5 @@ class StateException(DomainException):
     エンティティの状態遷移が無効な場合や、
     整合性の破壊を防ぐために使用します。
     """
+
     category = DomainErrorCategory.STATE

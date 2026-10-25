@@ -29,9 +29,7 @@ class TestBeingEpisodesCrossRuns:
         island = _SCENARIOS / "survival_island_v4_coop.json"
         source = create_world_runtime(island)
         ada = source.get_player_ids()[0]
-        being_id = source.aux_being_resolver.resolve_being_id(
-            source.aux_being_default_world_id, ada
-        )
+        being_id = source.aux_being_resolver.resolve_being_id(source.aux_being_default_world_id, ada)
         episode = Episode.write(
             being_id=being_id,
             episode_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",

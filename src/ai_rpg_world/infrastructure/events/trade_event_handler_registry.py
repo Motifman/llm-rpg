@@ -1,4 +1,3 @@
-
 from ai_rpg_world.application.common.event_delivery import (
     CommandEventHandlerRegistrarPort,
     DeliveryChannel,

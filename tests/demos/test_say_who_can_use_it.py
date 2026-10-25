@@ -112,9 +112,7 @@ def _town(
         action["display_label"] = extra.get("display_label", extra["action_name"])
         if extra.get("required_state") is None:
             action["preconditions"] = [
-                cond
-                for cond in action["preconditions"]
-                if cond["condition_type"] != "PLAYER_STATE_IS"
+                cond for cond in action["preconditions"] if cond["condition_type"] != "PLAYER_STATE_IS"
             ]
         else:
             action["preconditions"][0]["required_state"] = extra["required_state"]
@@ -132,17 +130,13 @@ def _oven_line(runtime: Any, player_id: PlayerId = _PICKER) -> str:
     for _ in range(2):
         runtime.advance_tick()
     text = runtime.build_llm_context(player_id).current_state_text
-    return next(
-        line for line in text.splitlines() if '"石窯"' in line
-    )
+    return next(line for line in text.splitlines() if '"石窯"' in line)
 
 
 def _prompt_hashes(runtime: Any) -> dict[int, str]:
     return {
         player_id: hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-        for player_id, prompt in (
-            runtime._world_llm_system_prompts_by_player_id.items()
-        )
+        for player_id, prompt in (runtime._world_llm_system_prompts_by_player_id.items())
     }
 
 
@@ -206,25 +200,25 @@ class TestOnlyWhatIsPermanentIsSaid:
 
         assert f"[{_OLD_NOTE}]" in _oven_line(runtime)
 
-    def test_only_the_permanent_half_of_a_mixed_requirement_is_said(
-        self, tmp_path: Path
-    ) -> None:
+    def test_only_the_permanent_half_of_a_mixed_requirement_is_said(self, tmp_path: Path) -> None:
         """変えられない要求と変えられる要求が混ざれば、前者だけを出す。"""
-        line = _oven_line(_town(
-            tmp_path,
-            "mixed",
-            attributes={
-                "trade": _TRADE_NAMED,
-                "mood": {
-                    "display_name": "機嫌",
-                    "visibility": "public",
-                    "mutable": True,
-                    "values": {"calm": "落ち着いた人", "angry": "苛立った人"},
+        line = _oven_line(
+            _town(
+                tmp_path,
+                "mixed",
+                attributes={
+                    "trade": _TRADE_NAMED,
+                    "mood": {
+                        "display_name": "機嫌",
+                        "visibility": "public",
+                        "mutable": True,
+                        "values": {"calm": "落ち着いた人", "angry": "苛立った人"},
+                    },
                 },
-            },
-            oven_required={"trade": "baker", "mood": "calm"},
-            initial_state={"mood": "angry"},
-        ))
+                oven_required={"trade": "baker", "mood": "calm"},
+                initial_state={"mood": "angry"},
+            )
+        )
 
         assert "[焼き手だけが扱える]" in line
         assert "落ち着いた人" not in line
@@ -251,38 +245,36 @@ class TestWhatIsHiddenStaysHidden:
         assert f"[{_OLD_NOTE}]" in _oven_line(runtime)
         assert "焼き手" not in _oven_line(runtime)
 
-    def test_the_public_half_survives_a_secret_neighbour(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_public_half_survives_a_secret_neighbour(self, tmp_path: Path) -> None:
         """公開された属性と伏せた属性が混ざっても、公開されたぶんは出す。
 
         混在を理由に全部伏せると、**公開側の出力が伏せた属性の有無で
         変わる**。そこから伏せた属性の存在が読めるので、伏せ方が伏せて
         いることを漏らす。
         """
-        line = _oven_line(_town(
-            tmp_path,
-            "mixed-visibility",
-            attributes={
-                "trade": _TRADE_NAMED,
-                "role": {
-                    "display_name": "役割",
-                    "visibility": "secret",
-                    "mutable": False,
-                    "values": {"werewolf": "人狼", "villager": "村人"},
+        line = _oven_line(
+            _town(
+                tmp_path,
+                "mixed-visibility",
+                attributes={
+                    "trade": _TRADE_NAMED,
+                    "role": {
+                        "display_name": "役割",
+                        "visibility": "secret",
+                        "mutable": False,
+                        "values": {"werewolf": "人狼", "villager": "村人"},
+                    },
                 },
-            },
-            oven_required={"trade": "baker", "role": "werewolf"},
-            initial_state={"role": "villager"},
-        ))
+                oven_required={"trade": "baker", "role": "werewolf"},
+                initial_state={"role": "villager"},
+            )
+        )
 
         assert "[焼き手だけが扱える]" in line
         assert "人狼" not in line
         assert "役割" not in line
 
-    def test_declaring_a_secret_attribute_changes_no_prompt(
-        self, tmp_path: Path
-    ) -> None:
+    def test_declaring_a_secret_attribute_changes_no_prompt(self, tmp_path: Path) -> None:
         """伏せた属性を宣言しても、全プレイヤーのプロンプトがバイト一致する。
 
         注記の実装を入れたあと、**伏せる分岐だけを壊しても緑になる**形では
@@ -308,45 +300,42 @@ class TestWhatIsHiddenStaysHidden:
 class TestManyReasonsAreSaidOnceAndInOrder:
     """複数の理由は、宣言順に、重複なく並ぶ。"""
 
-    def test_several_reasons_follow_the_declared_order(
-        self, tmp_path: Path
-    ) -> None:
+    def test_several_reasons_follow_the_declared_order(self, tmp_path: Path) -> None:
         """3 つの要求が、シナリオに書かれた順で並ぶ。
 
         **3 つ以上で、宣言順と辞書順が食い違う組み合わせで見る。** 2 つだと
         dict や set の反復順と偶然一致して、順序を見ているつもりで何も
         見ていない試験になる (ここでは辞書順なら race → standing → trade)。
         """
-        line = _oven_line(_town(
-            tmp_path,
-            "order",
-            attributes={
-                "trade": _TRADE_NAMED,
-                "standing": {
-                    "display_name": "身分",
-                    "visibility": "public",
-                    "mutable": False,
-                    "values": {"guild_member": "ギルド員", "townsfolk": "町の者"},
+        line = _oven_line(
+            _town(
+                tmp_path,
+                "order",
+                attributes={
+                    "trade": _TRADE_NAMED,
+                    "standing": {
+                        "display_name": "身分",
+                        "visibility": "public",
+                        "mutable": False,
+                        "values": {"guild_member": "ギルド員", "townsfolk": "町の者"},
+                    },
+                    "race": {
+                        "display_name": "種族",
+                        "visibility": "public",
+                        "mutable": False,
+                        "values": {"elf": "エルフ", "human": "人間"},
+                    },
                 },
-                "race": {
-                    "display_name": "種族",
-                    "visibility": "public",
-                    "mutable": False,
-                    "values": {"elf": "エルフ", "human": "人間"},
+                oven_required={
+                    "trade": "baker",
+                    "standing": "guild_member",
+                    "race": "elf",
                 },
-            },
-            oven_required={
-                "trade": "baker",
-                "standing": "guild_member",
-                "race": "elf",
-            },
-            initial_state={"standing": "townsfolk", "race": "human"},
-        ))
-
-        assert (
-            "[焼き手だけが扱える、ギルド員だけが扱える、エルフだけが扱える]"
-            in line
+                initial_state={"standing": "townsfolk", "race": "human"},
+            )
         )
+
+        assert "[焼き手だけが扱える、ギルド員だけが扱える、エルフだけが扱える]" in line
 
     def test_the_same_reason_is_not_repeated(self, tmp_path: Path) -> None:
         """同じ値を要求する操作が 2 つあっても、注記は 1 回だけ出る。
@@ -354,16 +343,20 @@ class TestManyReasonsAreSaidOnceAndInOrder:
         注記は物体単位なので、**何回要求されたかは読み手にとって情報では
         ない。**
         """
-        line = _oven_line(_town(
-            tmp_path,
-            "dedupe",
-            attributes={"trade": _TRADE_NAMED},
-            extra_oven_actions=[{
-                "action_name": "bake_flatbread",
-                "display_label": "平パンを焼く",
-                "required_state": {"trade": "baker"},
-            }],
-        ))
+        line = _oven_line(
+            _town(
+                tmp_path,
+                "dedupe",
+                attributes={"trade": _TRADE_NAMED},
+                extra_oven_actions=[
+                    {
+                        "action_name": "bake_flatbread",
+                        "display_label": "平パンを焼く",
+                        "required_state": {"trade": "baker"},
+                    }
+                ],
+            )
+        )
 
         assert line.count("焼き手だけが扱える") == 1
 
@@ -371,33 +364,33 @@ class TestManyReasonsAreSaidOnceAndInOrder:
 class TestTheNoteAppearsWhereItAlreadyDid:
     """注記が出る行を増やさない。"""
 
-    def test_an_object_with_something_left_to_do_gets_no_note(
-        self, tmp_path: Path
-    ) -> None:
+    def test_an_object_with_something_left_to_do_gets_no_note(self, tmp_path: Path) -> None:
         """使える操作が 1 つでも残っていれば、注記は出ない (従来どおり)。
 
         **この PR はこの穴を解いていない。** 注記は物体単位なので、使える
         操作が残ると、落ちた操作の存在自体が見えないままになる。摘み手は
         石窯に「パンを焼く」があることを知る道が無い。
         """
-        line = _oven_line(_town(
-            tmp_path,
-            "partial",
-            attributes={"trade": _TRADE_NAMED},
-            extra_oven_actions=[{
-                "action_name": "peek_into_oven",
-                "display_label": "窯を覗く",
-                "required_state": None,
-            }],
-        ))
+        line = _oven_line(
+            _town(
+                tmp_path,
+                "partial",
+                attributes={"trade": _TRADE_NAMED},
+                extra_oven_actions=[
+                    {
+                        "action_name": "peek_into_oven",
+                        "display_label": "窯を覗く",
+                        "required_state": None,
+                    }
+                ],
+            )
+        )
 
         assert "peek_into_oven" in line
         assert "焼き手だけが扱える" not in line
         assert _OLD_NOTE not in line
 
-    def test_a_world_without_the_declaration_is_untouched(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_world_without_the_declaration_is_untouched(self, tmp_path: Path) -> None:
         """属性を宣言していない世界の行は、従来の注記のまま (**正の対照**)。"""
         assert f"[{_OLD_NOTE}]" in _oven_line(_town(tmp_path, "plain"))
 
@@ -434,13 +427,18 @@ class TestTheDeclarationOfValueNames:
         assert spec.values == ("picker", "baker", "reaper")
         assert spec.display_name_of_value("baker") is None
 
-    @pytest.mark.parametrize("broken", [
-        {"baker": ""},
-        {"": "焼き手"},
-        {"baker": 1},
-    ])
+    @pytest.mark.parametrize(
+        "broken",
+        [
+            {"baker": ""},
+            {"": "焼き手"},
+            {"baker": 1},
+        ],
+    )
     def test_a_broken_value_name_stops_the_world(
-        self, tmp_path: Path, broken: Any,
+        self,
+        tmp_path: Path,
+        broken: Any,
     ) -> None:
         """呼び名が空や文字列でなければ起動時に落ちる。
 

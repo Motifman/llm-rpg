@@ -110,6 +110,7 @@ class TestDefaultVisibilityCoverage:
         with pytest.raises(AssertionError, match="SHOW_MESSAGE"):
             _validate_default_visibility_coverage()
 
+
 def _make_item(state: dict | None = None) -> ItemAggregate:
     spec = ItemSpec(
         item_spec_id=ItemSpecId(7),
@@ -173,10 +174,7 @@ class TestActorDirectDefaults:
         )
         assert len(result.public_observable_effects) == 1
         assert result.public_observable_effects[0].kind == AppliedEffectKind.DAMAGE
-        assert (
-            result.public_observable_effects[0].visibility
-            == EffectVisibility.PUBLIC_OBSERVABLE
-        )
+        assert result.public_observable_effects[0].visibility == EffectVisibility.PUBLIC_OBSERVABLE
         assert result.actor_direct_effects == ()
         assert result.hidden_effects == ()
         # DamageSpec にも visibility が伝播
@@ -430,9 +428,7 @@ class TestStateDeltaSemantics:
         )
         # 2 つの ACTING_ITEM_STATE_CHANGE summary が出るはず。
         item_summaries = [
-            s
-            for s in result.actor_direct_effects
-            if s.kind == AppliedEffectKind.ACTING_ITEM_STATE_CHANGE
+            s for s in result.actor_direct_effects if s.kind == AppliedEffectKind.ACTING_ITEM_STATE_CHANGE
         ]
         assert len(item_summaries) == 2
         first = item_summaries[0].state_delta[0]
@@ -483,10 +479,6 @@ class TestVisibilityBucketIsolation:
             world_flags=frozenset(),
             acting_player_status=status,
         )
-        assert [s.kind for s in result.actor_direct_effects] == [
-            AppliedEffectKind.SATISFY_NEED
-        ]
-        assert [s.kind for s in result.public_observable_effects] == [
-            AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE
-        ]
+        assert [s.kind for s in result.actor_direct_effects] == [AppliedEffectKind.SATISFY_NEED]
+        assert [s.kind for s in result.public_observable_effects] == [AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE]
         assert result.hidden_effects == ()

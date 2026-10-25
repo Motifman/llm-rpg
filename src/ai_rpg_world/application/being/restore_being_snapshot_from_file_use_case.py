@@ -63,20 +63,14 @@ class RestoreBeingSnapshotFromFileUseCase:
         file_gateway: BeingSnapshotFileGateway,
     ) -> None:
         if not isinstance(being_repository, BeingRepository):
-            raise TypeError(
-                "being_repository must be BeingRepository, "
-                f"got {type(being_repository).__name__}"
-            )
+            raise TypeError(f"being_repository must be BeingRepository, got {type(being_repository).__name__}")
         if not isinstance(memory_snapshot_service, BeingMemorySnapshotService):
             raise TypeError(
                 "memory_snapshot_service must be BeingMemorySnapshotService, "
                 f"got {type(memory_snapshot_service).__name__}"
             )
         if not isinstance(file_gateway, BeingSnapshotFileGateway):
-            raise TypeError(
-                "file_gateway must be BeingSnapshotFileGateway, "
-                f"got {type(file_gateway).__name__}"
-            )
+            raise TypeError(f"file_gateway must be BeingSnapshotFileGateway, got {type(file_gateway).__name__}")
         self._repo = being_repository
         self._memory = memory_snapshot_service
         self._gateway = file_gateway
@@ -86,9 +80,7 @@ class RestoreBeingSnapshotFromFileUseCase:
         input_path: Path,
     ) -> RestoreBeingSnapshotResult:
         if not isinstance(input_path, Path):
-            raise TypeError(
-                f"input_path must be Path, got {type(input_path).__name__}"
-            )
+            raise TypeError(f"input_path must be Path, got {type(input_path).__name__}")
 
         snapshot = self._gateway.read(input_path)
         # Phase 8: schema 進化 (a) 厳格モード — 未サポート ``snapshot_version``

@@ -31,7 +31,8 @@ from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 def _new_inv(player_id_val: int = 1, max_slots: int = 4) -> PlayerInventoryAggregate:
     return PlayerInventoryAggregate.create_new_inventory(
-        player_id=PlayerId(player_id_val), max_slots=max_slots,
+        player_id=PlayerId(player_id_val),
+        max_slots=max_slots,
     )
 
 
@@ -66,7 +67,9 @@ class TestIterSlots:
         inv = _new_inv(max_slots=3)
 
         assert list(inv.iter_slots()) == [
-            (SlotId(0), None), (SlotId(1), None), (SlotId(2), None),
+            (SlotId(0), None),
+            (SlotId(1), None),
+            (SlotId(2), None),
         ]
 
     def test_includes_empty_slot(self) -> None:
@@ -76,7 +79,9 @@ class TestIterSlots:
 
         assert list(inv.iter_slots()) == [
             (SlotId(0), ItemInstanceId(7001)),
-            (SlotId(1), None), (SlotId(2), None), (SlotId(3), None),
+            (SlotId(1), None),
+            (SlotId(2), None),
+            (SlotId(3), None),
         ]
 
 
@@ -134,10 +139,12 @@ class TestFindSlotByItemSpecId:
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         inv.acquire_item(item_instance_id=ItemInstanceId(7002))
-        appearances = _appearances({
-            ItemInstanceId(7001): ItemSpecId.create(101),
-            ItemInstanceId(7002): ItemSpecId.create(101),
-        })
+        appearances = _appearances(
+            {
+                ItemInstanceId(7001): ItemSpecId.create(101),
+                ItemInstanceId(7002): ItemSpecId.create(101),
+            }
+        )
         result = inv.find_slot_by_item_spec_id(ItemSpecId.create(101), appearances)
         assert result == (SlotId(0), ItemInstanceId(7001))
 
@@ -150,13 +157,17 @@ class TestFindSlotByItemSpecIdAndSpoilage:
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         inv.acquire_item(item_instance_id=ItemInstanceId(7002))
-        appearances = _appearances_with_state({
-            ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
-            ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
-        })
+        appearances = _appearances_with_state(
+            {
+                ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
+                ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
+            }
+        )
 
         result = inv.find_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), True, appearances,
+            ItemSpecId.create(101),
+            True,
+            appearances,
         )
 
         assert result == (SlotId(1), ItemInstanceId(7002))
@@ -166,13 +177,17 @@ class TestFindSlotByItemSpecIdAndSpoilage:
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         inv.acquire_item(item_instance_id=ItemInstanceId(7002))
-        appearances = _appearances_with_state({
-            ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
-            ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
-        })
+        appearances = _appearances_with_state(
+            {
+                ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
+                ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
+            }
+        )
 
         result = inv.find_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), False, appearances,
+            ItemSpecId.create(101),
+            False,
+            appearances,
         )
 
         assert result == (SlotId(0), ItemInstanceId(7001))
@@ -188,7 +203,9 @@ class TestFindAvailableSlotByItemSpecIdAndSpoilage:
         appearances = _appearances({ItemInstanceId(7001): ItemSpecId.create(101)})
 
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), False, appearances,
+            ItemSpecId.create(101),
+            False,
+            appearances,
         )
 
         assert found.found is True
@@ -204,7 +221,9 @@ class TestFindAvailableSlotByItemSpecIdAndSpoilage:
         appearances = _appearances({ItemInstanceId(7001): ItemSpecId.create(101)})
 
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), False, appearances,
+            ItemSpecId.create(101),
+            False,
+            appearances,
         )
 
         assert found.found is False
@@ -218,13 +237,17 @@ class TestFindAvailableSlotByItemSpecIdAndSpoilage:
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         inv.acquire_item(item_instance_id=ItemInstanceId(7002))
         inv.reserve_item(SlotId(0))
-        appearances = _appearances({
-            ItemInstanceId(7001): ItemSpecId.create(101),
-            ItemInstanceId(7002): ItemSpecId.create(101),
-        })
+        appearances = _appearances(
+            {
+                ItemInstanceId(7001): ItemSpecId.create(101),
+                ItemInstanceId(7002): ItemSpecId.create(101),
+            }
+        )
 
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), False, appearances,
+            ItemSpecId.create(101),
+            False,
+            appearances,
         )
 
         assert found.found is True
@@ -242,7 +265,10 @@ class TestFindAvailableSlotByItemSpecIdAndSpoilage:
         ],
     )
     def test_lookup_distinguishes_absence_from_spoilage(
-        self, item_spoiled: bool | None, requested_spoiled: bool, matches: bool,
+        self,
+        item_spoiled: bool | None,
+        requested_spoiled: bool,
+        matches: bool,
     ) -> None:
         """未所持や鮮度不一致を予約扱いせず、腐敗指定に一致する品だけを返す。"""
         inv = _new_inv(max_slots=4)
@@ -255,7 +281,9 @@ class TestFindAvailableSlotByItemSpecIdAndSpoilage:
             )
 
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), requested_spoiled, appearances,
+            ItemSpecId.create(101),
+            requested_spoiled,
+            appearances,
         )
 
         assert found.found is matches
@@ -271,14 +299,13 @@ class TestPrivateAccessRemoval:
     def test_executor_inv_inventory_slots(self) -> None:
         """executor が invinventoryslots を直接参照しない。"""
         from pathlib import Path
+
         executor_src = (
             Path(__file__).resolve().parents[4]
             / "src/ai_rpg_world/application/llm/services/executors/spot_graph_tool_executor.py"
         )
         text = executor_src.read_text(encoding="utf-8")
-        non_comment = "\n".join(
-            ln for ln in text.splitlines() if not ln.lstrip().startswith("#")
-        )
+        non_comment = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
         assert "inv._inventory_slots" not in non_comment, (
             "executor が aggregate の private dict `_inventory_slots` を "
             "まだ直接 iter している。`find_slot_by_item_spec_id` を使うべき"

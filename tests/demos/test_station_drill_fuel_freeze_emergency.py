@@ -35,9 +35,7 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI, _SENA, _KUZE = (PlayerId(i) for i in (1, 2, 3))
 _ALARM = (
     "観測所じゅうに警報が鳴った。燃料が凍りはじめている。"
@@ -60,9 +58,7 @@ def runtime():
 
 
 def _terminal_spec(runtime) -> ItemSpecId:
-    return ItemSpecId.create(
-        runtime.id_mapper.get_int("item_spec", "control_terminal")
-    )
+    return ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "control_terminal"))
 
 
 def _move(runtime, player_id: PlayerId, spot: str) -> None:
@@ -103,12 +99,8 @@ def _executor(runtime) -> SpotGraphToolExecutor:
         sync_action_groups=runtime.scenario.synchronized_action_groups,
         time_provider=runtime._time_provider,
         spot_graph_repository=runtime._spot_graph_repo,
-        sync_action_registry=(
-            runtime._simulation_service._sync_action_resolver_stage._registry
-        ),
-        prepare_action_command_scope_factory=(
-            runtime._prepare_action_command_scope_factory
-        ),
+        sync_action_registry=(runtime._simulation_service._sync_action_resolver_stage._registry),
+        prepare_action_command_scope_factory=(runtime._prepare_action_command_scope_factory),
     )
 
 
@@ -127,10 +119,7 @@ def _restore_fuel(runtime) -> None:
 
 
 def _prose(runtime, player_id: PlayerId) -> list[str]:
-    return [
-        entry.output.prose
-        for entry in runtime._obs_buffer.get_observations(player_id)
-    ]
+    return [entry.output.prose for entry in runtime._obs_buffer.get_observations(player_id)]
 
 
 def _fuel_alarm_prose(runtime, player_id: PlayerId) -> list[str]:
@@ -158,11 +147,7 @@ def test_alarm_minutes_match_the_declared_deadline_for_every_stage() -> None:
     """全警報の分表示は発火時点から締切までの残りtickを5分換算した値と一致する。"""
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
     events = {event["id"]: event for event in raw["scenario_events"]}
-    alarms = [
-        event
-        for event_id, event in events.items()
-        if event_id.startswith("fuel_freeze_alarm_")
-    ]
+    alarms = [event for event_id, event in events.items() if event_id.startswith("fuel_freeze_alarm_")]
     deadline = next(
         condition["ticks_offset"]
         for condition in events["fuel_freeze_deadline"]["conditions"]
@@ -226,9 +211,7 @@ def test_second_freeze_repeats_all_alarms_and_global_restoration_once(runtime) -
         for elapsed in range(1, 8):
             runtime.advance_tick()
             assert runtime.current_tick() == started_at + elapsed
-            expected = list(alarms) * cycle + [
-                message for offset, message in zip(offsets, alarms) if offset <= elapsed
-            ]
+            expected = list(alarms) * cycle + [message for offset, message in zip(offsets, alarms) if offset <= elapsed]
             for player_id in runtime.get_player_ids():
                 assert _fuel_alarm_prose(runtime, player_id) == expected
         _restore_fuel(runtime)
@@ -260,9 +243,7 @@ def test_ignoring_the_second_freeze_still_causes_the_declared_loss(runtime) -> N
 
 
 @pytest.mark.parametrize("terminal_flag", ["fuel_restored", "fuel_lost"])
-def test_resolved_or_lost_fuel_suppresses_future_countdown_alarms(
-    runtime, terminal_flag: str
-) -> None:
+def test_resolved_or_lost_fuel_suppresses_future_countdown_alarms(runtime, terminal_flag: str) -> None:
     """復旧済みまたは停止済みなら、まだ時刻を迎えていない段階警報は発火しない。"""
     _freeze(runtime)
     runtime.advance_tick()
@@ -289,9 +270,7 @@ def test_resolved_or_lost_fuel_suppresses_future_countdown_alarms(
         (_SENA, "machine_room", "open_oil_feed_valve"),
     ],
 )
-def test_valves_are_hidden_until_the_fuel_freezes(
-    runtime, player_id: PlayerId, spot: str, action_name: str
-) -> None:
+def test_valves_are_hidden_until_the_fuel_freezes(runtime, player_id: PlayerId, spot: str, action_name: str) -> None:
     """解氷操作は平常時には存在ごと隠れ、凍結後だけ各現地の物体行へ現れる。"""
     _move(runtime, player_id, spot)
     before = runtime.build_observation(player_id)
@@ -377,9 +356,7 @@ def test_partial_prepare_times_out_but_does_not_cancel_the_deadline(runtime) -> 
     _freeze(runtime)
     _move(runtime, _MORI, "fuel_bay")
     executor = _executor(runtime)
-    prepared = executor._prepare_action(
-        _MORI.value, {"action_name": "open_thaw_valve"}
-    )
+    prepared = executor._prepare_action(_MORI.value, {"action_name": "open_thaw_valve"})
     registry = runtime._simulation_service._sync_action_resolver_stage._registry
 
     for _ in range(3):
@@ -407,9 +384,7 @@ def test_ignored_freeze_reaches_the_deadline_and_loses(runtime) -> None:
     assert result.result.value == "LOSE"
     declared_loss = next(
         condition
-        for condition in json.loads(_DRILL.read_text(encoding="utf-8"))[
-            "game_end_conditions"
-        ]["lose"]
+        for condition in json.loads(_DRILL.read_text(encoding="utf-8"))["game_end_conditions"]["lose"]
         if condition.get("target_flag") == "fuel_lost"
     )
     assert result.reason == "フラグ成立: fuel_lost"
@@ -421,13 +396,9 @@ def test_valve_distance_matches_the_declared_three_tick_window() -> None:
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
     edges: dict[str, list[tuple[str, int]]] = {}
     for connection in raw["connections"]:
-        edges.setdefault(connection["from"], []).append(
-            (connection["to"], connection["travel_ticks"])
-        )
+        edges.setdefault(connection["from"], []).append((connection["to"], connection["travel_ticks"]))
         if connection.get("is_bidirectional", False):
-            edges.setdefault(connection["to"], []).append(
-                (connection["from"], connection["travel_ticks"])
-            )
+            edges.setdefault(connection["to"], []).append((connection["from"], connection["travel_ticks"]))
     costs = {"fuel_bay": 0}
     pending = [(0, "fuel_bay")]
     while pending:
@@ -441,11 +412,7 @@ def test_valve_distance_matches_the_declared_three_tick_window() -> None:
                 costs[neighbor] = candidate
                 pending.append((candidate, neighbor))
     distance = costs["machine_room"]
-    group = next(
-        group
-        for group in raw["synchronized_action_groups"]
-        if group["id"] == "restore_frozen_fuel"
-    )
+    group = next(group for group in raw["synchronized_action_groups"] if group["id"] == "restore_frozen_fuel")
 
     assert distance == group["window_ticks"] == 3
     assert len(group["required_action_names"]) == 2
@@ -456,12 +423,8 @@ def test_distinct_people_complete_on_the_third_counted_tick(runtime) -> None:
     _freeze(runtime)
     stage = runtime._simulation_service._sync_action_resolver_stage
     registry = stage._registry
-    registry.prepare(
-        action_id="open_thaw_valve", player_id=_MORI.value, current_tick=0
-    )
-    registry.prepare(
-        action_id="open_oil_feed_valve", player_id=_SENA.value, current_tick=2
-    )
+    registry.prepare(action_id="open_thaw_valve", player_id=_MORI.value, current_tick=0)
+    registry.prepare(action_id="open_oil_feed_valve", player_id=_SENA.value, current_tick=2)
 
     stage.run(WorldTick(2))
 
@@ -473,12 +436,8 @@ def test_distinct_people_miss_the_window_on_the_fourth_counted_tick(runtime) -> 
     _freeze(runtime)
     stage = runtime._simulation_service._sync_action_resolver_stage
     registry = stage._registry
-    registry.prepare(
-        action_id="open_thaw_valve", player_id=_MORI.value, current_tick=0
-    )
-    registry.prepare(
-        action_id="open_oil_feed_valve", player_id=_SENA.value, current_tick=3
-    )
+    registry.prepare(action_id="open_thaw_valve", player_id=_MORI.value, current_tick=0)
+    registry.prepare(action_id="open_oil_feed_valve", player_id=_SENA.value, current_tick=3)
 
     stage.run(WorldTick(3))
 
@@ -508,9 +467,7 @@ def test_pressure_gauge_shows_world_minutes_only_during_the_emergency(runtime) -
     machine_room = runtime._spot_interior_repo.find_by_spot_id(
         SpotId.create(runtime.id_mapper.get_int("spot", "machine_room"))
     )
-    assert "frozen_at_tick" in machine_room.get_object(
-        SpotObjectId.create(gauge_id)
-    ).hidden_state_keys
+    assert "frozen_at_tick" in machine_room.get_object(SpotObjectId.create(gauge_id)).hidden_state_keys
 
     runtime._world_flag_state.add(
         "fuel_restored",

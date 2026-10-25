@@ -51,7 +51,9 @@ class _Rescue:
     def rescue(self, written: str, *, candidates: Mapping[str, str], action_name: str) -> ItemNameRescueAnswer:
         self.calls.append(written)
         return ItemNameRescueAnswer(
-            chosen=self.chosen, accepted=self.accepted, confident_no_match=False,
+            chosen=self.chosen,
+            accepted=self.accepted,
+            confident_no_match=False,
             payload={"chosen": self.chosen, "accepted": self.accepted},
         )
 
@@ -75,8 +77,12 @@ def _place(rt, pid: PlayerId, spot: str) -> None:
 
 def _give(rt, pid: PlayerId, item: str) -> None:
     grant_item_specs_to_inventory(
-        pid, (ItemSpecId(rt.id_mapper.get_int("item_spec", item)),),
-        rt._item_repo, rt._item_spec_repo, rt._player_inventory_repo, overflow_sink=IGNORE_OVERFLOW,
+        pid,
+        (ItemSpecId(rt.id_mapper.get_int("item_spec", item)),),
+        rt._item_repo,
+        rt._item_spec_repo,
+        rt._player_inventory_repo,
+        overflow_sink=IGNORE_OVERFLOW,
     )
 
 
@@ -118,9 +124,16 @@ class TestAPartOfTheName:
         _pickpocket(runtime, "起動鍵")
 
         [event] = recorder.of(TraceEventKind.ITEM_NAME_RESOLUTION)
-        assert (event["player_id"], event["action_name"], event["target_player_id"]) == (int(_GEN), "pickpocket", int(_MIO))
+        assert (event["player_id"], event["action_name"], event["target_player_id"]) == (
+            int(_GEN),
+            "pickpocket",
+            int(_MIO),
+        )
         assert (event["written"], event["resolved_name"], event["method"], event["outcome"]) == (
-            "起動鍵", "昇降機の起動鍵", "partial", "resolved",
+            "起動鍵",
+            "昇降機の起動鍵",
+            "partial",
+            "resolved",
         )
 
     def test_the_official_name_leaves_no_rename_trace(self, runtime) -> None:

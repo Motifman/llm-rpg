@@ -48,6 +48,7 @@ class TestQuestProgressHandler:
             return InMemoryUnitOfWork(
                 data_store=data_store,
             )
+
         return create
 
     @pytest.fixture
@@ -144,9 +145,7 @@ class TestQuestProgressHandler:
         )
         handler.handle(event)
 
-    def test_handle_advances_objective_when_quest_accepted(
-        self, handler, quest_repository, data_store
-    ):
+    def test_handle_advances_objective_when_quest_accepted(self, handler, quest_repository, data_store):
         """受託中クエストの KILL_MONSTER 目標が進むこと"""
         quest_id = quest_repository.generate_quest_id()
         objectives = [
@@ -307,9 +306,7 @@ class TestQuestProgressHandler:
 
     def test_handle_domain_exception_re_raised(self, handler, quest_repository, data_store):
         """トランザクション内で DomainException が発生した場合はそのまま再送出される"""
-        quest_repository.find_accepted_quests_by_player = Mock(
-            side_effect=DomainException("domain rule violated")
-        )
+        quest_repository.find_accepted_quests_by_player = Mock(side_effect=DomainException("domain rule violated"))
         event = MonsterDiedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
@@ -322,13 +319,9 @@ class TestQuestProgressHandler:
         with pytest.raises(DomainException, match="domain rule violated"):
             handler.handle(event)
 
-    def test_handle_unexpected_exception_raises_system_error(
-        self, handler, quest_repository
-    ):
+    def test_handle_unexpected_exception_raises_system_error(self, handler, quest_repository):
         """トランザクション内で想定外の例外が発生した場合は SystemErrorException にラップされる"""
-        quest_repository.find_accepted_quests_by_player = Mock(
-            side_effect=RuntimeError("unexpected failure")
-        )
+        quest_repository.find_accepted_quests_by_player = Mock(side_effect=RuntimeError("unexpected failure"))
         event = MonsterDiedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
@@ -341,9 +334,7 @@ class TestQuestProgressHandler:
         with pytest.raises(SystemErrorException) as exc_info:
             handler.handle(event)
         assert exc_info.value.original_exception is not None
-        assert isinstance(
-            exc_info.value.original_exception, RuntimeError
-        )
+        assert isinstance(exc_info.value.original_exception, RuntimeError)
 
     def test_handle_reward_grant_failure_when_player_status_not_found(
         self,
@@ -429,6 +420,7 @@ class TestQuestProgressHandler:
         from ai_rpg_world.domain.item.value_object.item_instance_id import (
             ItemInstanceId,
         )
+
         quest = QuestAggregate(
             quest_id=quest_id,
             status=QuestStatus.ACCEPTED,
@@ -536,9 +528,7 @@ class TestQuestProgressHandler:
         handler.handle_player_downed(event)
         # 例外なく完了することのみ確認
 
-    def test_handle_player_downed_advances_objective_when_quest_accepted(
-        self, handler, quest_repository
-    ):
+    def test_handle_player_downed_advances_objective_when_quest_accepted(self, handler, quest_repository):
         """受託中クエストの KILL_PLAYER 目標が進むこと（キラー＝受託者、被害者＝目標）"""
         quest_id = quest_repository.generate_quest_id()
         victim_player_id_value = 2
@@ -627,9 +617,7 @@ class TestQuestProgressHandler:
         player_status_repository.save.assert_called_once()
         player_inventory_repository.save.assert_called_once()
 
-    def test_handle_player_downed_skips_when_no_matching_quest(
-        self, handler, quest_repository
-    ):
+    def test_handle_player_downed_skips_when_no_matching_quest(self, handler, quest_repository):
         """KILL_PLAYER 目標が一致しないクエストは進捗しない"""
         quest_id = quest_repository.generate_quest_id()
         # 目標は「プレイヤー3をキル」、イベントは「プレイヤー2がダウン」
@@ -825,7 +813,11 @@ class TestQuestProgressHandler:
         assert q.status.value == "accepted"
 
     def test_command_registration_updates_real_quest_after_commit(
-        self, reaction_service, uow_factory, quest_repository, data_store,
+        self,
+        reaction_service,
+        uow_factory,
+        quest_repository,
+        data_store,
     ) -> None:
         """実際の受け手を新登録で呼ぶと、保存の確定後にだけ受託済みクエストの討伐数が増える。"""
         from tests.support.command_scope_stack import CommandScopeTestStack
@@ -836,8 +828,10 @@ class TestQuestProgressHandler:
         quest = QuestAggregate.issue_quest(
             quest_id=quest_id,
             objectives=[QuestObjective(QuestObjectiveType.KILL_MONSTER, 101, 2, 0)],
-            reward=QuestReward.of(gold=100, exp=50), scope=QuestScope.public_scope(),
-            issuer_player_id=None, guild_id=None,
+            reward=QuestReward.of(gold=100, exp=50),
+            scope=QuestScope.public_scope(),
+            issuer_player_id=None,
+            guild_id=None,
         )
         quest.accept_by(PlayerId(1))
         quest_repository.save(quest)
@@ -848,8 +842,13 @@ class TestQuestProgressHandler:
             ItemAddedToInventoryQuestProgressHandler(reaction_service, uow_factory),
         ).register_command_handlers(stack.dispatcher)
         event = MonsterDiedEvent.create(
-            aggregate_id=MonsterId(1), aggregate_type="MonsterAggregate", respawn_tick=0,
-            exp=10, gold=5, template_id=101, killer_player_id=PlayerId(1),
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=0,
+            exp=10,
+            gold=5,
+            template_id=101,
+            killer_player_id=PlayerId(1),
         )
         with stack:
             stack.publish(event)

@@ -62,12 +62,14 @@ class TestPlayerStateRoundtrip:
     def test_save_and_reload_preserves_state(self, sqlite_conn) -> None:
         """非空 state を保存→再読込で state_json 経由で復元できる。"""
         repo = SqlitePlayerStatusWriteRepository.for_standalone_connection(sqlite_conn)
-        status = _build_status(state={
-            "alignment": "good",
-            "disguise": "noble",
-            "reputation": 5,
-            "fire_resist": True,
-        })
+        status = _build_status(
+            state={
+                "alignment": "good",
+                "disguise": "noble",
+                "reputation": 5,
+                "fire_resist": True,
+            }
+        )
 
         repo.save(status)
 

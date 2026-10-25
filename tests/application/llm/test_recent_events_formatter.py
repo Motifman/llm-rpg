@@ -66,9 +66,7 @@ class TestDefaultRecentEventsFormatter:
         text = formatter.format([entry_with_time], [])
         assert "[1年2月3日 12:30:45] 宝箱を開けました。" in text
 
-    def test_empty_observation_prose_keeps_structure_without_an_empty_bullet(
-        self, formatter
-    ):
+    def test_empty_observation_prose_keeps_structure_without_an_empty_bullet(self, formatter):
         """空 prose の観測は保持したまま、時刻だけの箇条書きを描画しない。"""
         hidden = ObservationEntry(
             occurred_at=datetime.now(),
@@ -124,9 +122,7 @@ class TestDefaultRecentEventsFormatter:
         assert "tool=foo_tool" in text
         assert "次tick再試行の可能性あり" in text
 
-    def test_format_merges_observations_and_action_results(
-        self, formatter, sample_observation, sample_action_result
-    ):
+    def test_format_merges_observations_and_action_results(self, formatter, sample_observation, sample_action_result):
         """観測と行動結果の両方があるときマージされて出力される"""
         text = formatter.format([sample_observation], [sample_action_result])
         assert "プレイヤーがスポットに到着しました。" in text
@@ -196,9 +192,7 @@ class TestDefaultRecentEventsFormatter:
 
     def test_renderer_uses_only_the_recorded_absolute_time(self) -> None:
         """描画器は時計を受け取らず、同じ entry を記録済み絶対時刻で同じ文字列にする。"""
-        assert "time_provider" not in inspect.signature(
-            DefaultRecentEventsFormatter
-        ).parameters
+        assert "time_provider" not in inspect.signature(DefaultRecentEventsFormatter).parameters
         occurred_at = datetime(2026, 8, 8, 0, 0, tzinfo=timezone.utc)
         formatter = DefaultRecentEventsFormatter()
         observation = ObservationEntry(
@@ -221,30 +215,22 @@ class TestDefaultRecentEventsFormatter:
         assert "[Day 2 朝 6:00] 足音を聞いた。" in first
         assert "[Day 2 朝 6:00] [行動] 周囲を調べた" in first
 
-    def test_observations_not_list_raises_type_error(
-        self, formatter, sample_action_result
-    ):
+    def test_observations_not_list_raises_type_error(self, formatter, sample_action_result):
         """observations が list でないとき TypeError"""
         with pytest.raises(TypeError, match="observations must be list"):
             formatter.format("not a list", [sample_action_result])  # type: ignore[arg-type]
 
-    def test_action_results_not_list_raises_type_error(
-        self, formatter, sample_observation
-    ):
+    def test_action_results_not_list_raises_type_error(self, formatter, sample_observation):
         """action_results が list でないとき TypeError"""
         with pytest.raises(TypeError, match="action_results must be list"):
             formatter.format([sample_observation], None)  # type: ignore[arg-type]
 
-    def test_observations_contain_non_entry_raises_type_error(
-        self, formatter, sample_action_result
-    ):
+    def test_observations_contain_non_entry_raises_type_error(self, formatter, sample_action_result):
         """observations の要素が ObservationEntry でないとき TypeError"""
         with pytest.raises(TypeError, match="observations must contain only ObservationEntry"):
             formatter.format(["invalid"], [sample_action_result])  # type: ignore[list-item]
 
-    def test_action_results_contain_non_entry_raises_type_error(
-        self, formatter, sample_observation
-    ):
+    def test_action_results_contain_non_entry_raises_type_error(self, formatter, sample_observation):
         """action_results の要素が ActionResultEntry でないとき TypeError"""
         with pytest.raises(TypeError, match="action_results must contain only ActionResultEntry"):
             formatter.format([sample_observation], ["invalid"])  # type: ignore[list-item]

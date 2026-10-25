@@ -118,15 +118,13 @@ class HeartbeatObservationEmitter:
         time_label: str | None = None
         for player_id in player_ids:
             if not isinstance(player_id, PlayerId):
-                logger.warning(
-                    "Skipping non-PlayerId entry from provider: %r", player_id
-                )
+                logger.warning("Skipping non-PlayerId entry from provider: %r", player_id)
                 continue
             if not self._should_emit(player_id, current_tick):
                 continue
             # #404 fix: 移動中なら heartbeat 自体を投入しない。schedules_turn
-                # で起こさない上に、観測 buffer にも残さない (LLM プロンプトに
-                # 「いま heartbeat が来た」と読まれて行動誘発するのを防ぐ)。
+            # で起こさない上に、観測 buffer にも残さない (LLM プロンプトに
+            # 「いま heartbeat が来た」と読まれて行動誘発するのを防ぐ)。
             if self._is_traveling_provider is not None:
                 try:
                     if self._is_traveling_provider(player_id):
@@ -150,9 +148,7 @@ class HeartbeatObservationEmitter:
                 schedules_turn=True,
             )
             try:
-                self._observation_appender.append(
-                    player_id, output, now, time_label
-                )
+                self._observation_appender.append(player_id, output, now, time_label)
             except Exception as exc:
                 # append 自体が失敗 → buffer に何も入っていないので next tick
                 # で再試行する (= _last_emitted_tick を更新しない)。
@@ -168,9 +164,7 @@ class HeartbeatObservationEmitter:
                 # heartbeat か他観測でリカバーされる。
                 self._record_player_failure(exc, "heartbeat.schedule_turn", current_tick, player_id)
 
-    def _record_player_failure(
-        self, exc: Exception, stage: str, current_tick: WorldTick, player_id: PlayerId
-    ) -> None:
+    def _record_player_failure(self, exc: Exception, stage: str, current_tick: WorldTick, player_id: PlayerId) -> None:
         self._failure_isolator.record_continued_failure(
             exc,
             stage=stage,
@@ -190,9 +184,7 @@ class HeartbeatObservationEmitter:
             return False
         return (current_tick.value - last) >= self._interval_ticks
 
-    def note_player_activity(
-        self, player_id: PlayerId, current_tick: WorldTick
-    ) -> None:
+    def note_player_activity(self, player_id: PlayerId, current_tick: WorldTick) -> None:
         """player が tick T で行動した、と emitter に伝える (#346 Step 3 本体)。
 
         per-agent idle timer の意味論を成立させるためのフック。LLM turn trigger

@@ -8,7 +8,6 @@
 SPEECH_DEFINITION 1 つを返す。
 """
 
-
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.services.availability_resolvers import (

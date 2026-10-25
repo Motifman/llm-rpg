@@ -27,9 +27,7 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ADA = BeingId("being-ada")
 SURE_BY_SELF = MemoProvenance(source=MemoSource.SELF, certainty=MemoCertainty.SURE)
-FROM_EPISODE = MemoProvenance(
-    source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33"
-)
+FROM_EPISODE = MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33")
 
 
 #: 試験をまたいで重ならない ID。メモ帳にある ID と重なると、別の決まりで外れて見える。

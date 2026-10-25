@@ -19,4 +19,8 @@ class TestWithoutRecorder:
         backstory = Backstory(flow="流れ", mood="", written_turn=11, until_turn=10)
 
         traces.fold_forced(FoldForced(event_id=1, occurred_at=_AT, being_id=ADA, turn=40, until_turn=10, dropped=()))
-        traces.backstory_discarded(StaleBackstoryDiscarded(event_id=2, occurred_at=_AT, being_id=ADA, backstory=backstory, latest_until_turn=10))
+        traces.backstory_discarded(
+            StaleBackstoryDiscarded(
+                event_id=2, occurred_at=_AT, being_id=ADA, backstory=backstory, latest_until_turn=10
+            )
+        )

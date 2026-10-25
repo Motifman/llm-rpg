@@ -1,4 +1,5 @@
 """Trade コマンド経路向けドメイン書き込みテーブル（`GAME_DB_PATH` 単一 DB に同居）。"""
+
 from __future__ import annotations
 
 import sqlite3
@@ -1770,9 +1771,7 @@ def _migration_v22(connection: sqlite3.Connection) -> None:
     storage 節約のため NULL に保存する。読み出し時に NULL は空 dict として
     復元される（旧 schema 由来の row も同じパスで処理される）。
     """
-    connection.execute(
-        "ALTER TABLE game_items ADD COLUMN state_json TEXT"
-    )
+    connection.execute("ALTER TABLE game_items ADD COLUMN state_json TEXT")
 
 
 def _migration_v23(connection: sqlite3.Connection) -> None:
@@ -1782,9 +1781,7 @@ def _migration_v23(connection: sqlite3.Connection) -> None:
     型固定フィールド (HP / needs / gold) が拾わない情報を JSON 文字列として保持する。
     空 dict は NULL で保存、読み出し時に空 dict 復元 (旧 schema 互換)。
     """
-    connection.execute(
-        "ALTER TABLE game_player_statuses ADD COLUMN state_json TEXT"
-    )
+    connection.execute("ALTER TABLE game_player_statuses ADD COLUMN state_json TEXT")
 
 
 def _migration_v24(connection: sqlite3.Connection) -> None:
@@ -1807,24 +1804,12 @@ def _migration_v24(connection: sqlite3.Connection) -> None:
     本 migration でカラムが追加される。これにより v1 と v24 で同じカラム
     定義が二重管理にならない (CREATE TABLE と ALTER TABLE が衝突しない)。
     """
-    connection.execute(
-        "ALTER TABLE game_monsters ADD COLUMN behavior_last_observed_target_spot_id INTEGER"
-    )
-    connection.execute(
-        "ALTER TABLE game_monsters ADD COLUMN behavior_flee_until_tick INTEGER"
-    )
-    connection.execute(
-        "ALTER TABLE game_monsters ADD COLUMN behavior_chase_attacker_ref_kind TEXT"
-    )
-    connection.execute(
-        "ALTER TABLE game_monsters ADD COLUMN behavior_chase_attacker_ref_player_id INTEGER"
-    )
-    connection.execute(
-        "ALTER TABLE game_monsters ADD COLUMN behavior_chase_attacker_ref_monster_id INTEGER"
-    )
-    connection.execute(
-        "ALTER TABLE game_monsters ADD COLUMN behavior_chase_started_at_tick INTEGER"
-    )
+    connection.execute("ALTER TABLE game_monsters ADD COLUMN behavior_last_observed_target_spot_id INTEGER")
+    connection.execute("ALTER TABLE game_monsters ADD COLUMN behavior_flee_until_tick INTEGER")
+    connection.execute("ALTER TABLE game_monsters ADD COLUMN behavior_chase_attacker_ref_kind TEXT")
+    connection.execute("ALTER TABLE game_monsters ADD COLUMN behavior_chase_attacker_ref_player_id INTEGER")
+    connection.execute("ALTER TABLE game_monsters ADD COLUMN behavior_chase_attacker_ref_monster_id INTEGER")
+    connection.execute("ALTER TABLE game_monsters ADD COLUMN behavior_chase_started_at_tick INTEGER")
 
 
 def _migration_v25(connection: sqlite3.Connection) -> None:
@@ -1839,12 +1824,10 @@ def _migration_v25(connection: sqlite3.Connection) -> None:
     (後方互換)。
     """
     connection.execute(
-        "ALTER TABLE game_monster_templates "
-        "ADD COLUMN min_comfortable_temperature TEXT NOT NULL DEFAULT 'FREEZING'"
+        "ALTER TABLE game_monster_templates ADD COLUMN min_comfortable_temperature TEXT NOT NULL DEFAULT 'FREEZING'"
     )
     connection.execute(
-        "ALTER TABLE game_monster_templates "
-        "ADD COLUMN max_comfortable_temperature TEXT NOT NULL DEFAULT 'HOT'"
+        "ALTER TABLE game_monster_templates ADD COLUMN max_comfortable_temperature TEXT NOT NULL DEFAULT 'HOT'"
     )
     connection.execute(
         "ALTER TABLE game_monster_templates "
@@ -1866,14 +1849,8 @@ def _migration_v26(connection: sqlite3.Connection) -> None:
     なる。default 2 にすると「migration 直後に既存 monster がいきなり pack
     援護を始める」予期しない挙動になるため避ける。
     """
-    connection.execute(
-        "ALTER TABLE game_monster_templates "
-        "ADD COLUMN pack_help_radius INTEGER NOT NULL DEFAULT 0"
-    )
-    connection.execute(
-        "ALTER TABLE game_monster_templates "
-        "ADD COLUMN max_pack_responders INTEGER NOT NULL DEFAULT 0"
-    )
+    connection.execute("ALTER TABLE game_monster_templates ADD COLUMN pack_help_radius INTEGER NOT NULL DEFAULT 0")
+    connection.execute("ALTER TABLE game_monster_templates ADD COLUMN max_pack_responders INTEGER NOT NULL DEFAULT 0")
 
 
 def _migration_v27(connection: sqlite3.Connection) -> None:
@@ -1889,13 +1866,9 @@ def _migration_v27(connection: sqlite3.Connection) -> None:
     の検証で「`follower=True` のとき `duration > 0` が必要」を強制するため、
     この組み合わせ (True + 0) は実行時には到達しない。
     """
+    connection.execute("ALTER TABLE game_monster_templates ADD COLUMN pack_flee_follower INTEGER NOT NULL DEFAULT 0")
     connection.execute(
-        "ALTER TABLE game_monster_templates "
-        "ADD COLUMN pack_flee_follower INTEGER NOT NULL DEFAULT 0"
-    )
-    connection.execute(
-        "ALTER TABLE game_monster_templates "
-        "ADD COLUMN pack_flee_follower_duration INTEGER NOT NULL DEFAULT 0"
+        "ALTER TABLE game_monster_templates ADD COLUMN pack_flee_follower_duration INTEGER NOT NULL DEFAULT 0"
     )
 
 
@@ -1907,10 +1880,7 @@ def _migration_v28(connection: sqlite3.Connection) -> None:
       自分が scout からこの hop 数以内なら同じ target を CHASE 開始する。
       0 で機能無効。
     """
-    connection.execute(
-        "ALTER TABLE game_monster_templates "
-        "ADD COLUMN pack_awareness_radius INTEGER NOT NULL DEFAULT 0"
-    )
+    connection.execute("ALTER TABLE game_monster_templates ADD COLUMN pack_awareness_radius INTEGER NOT NULL DEFAULT 0")
 
 
 def _migration_v29(connection: sqlite3.Connection) -> None:
@@ -1919,10 +1889,7 @@ def _migration_v29(connection: sqlite3.Connection) -> None:
     `name` / `item_type` と同じ静的定義なので、SQLite の静的マスタにも保存する。
     既存行は空文字にし、prompt 側では空文字を非表示として扱う。
     """
-    connection.execute(
-        "ALTER TABLE game_item_specs "
-        "ADD COLUMN usage_hint TEXT NOT NULL DEFAULT ''"
-    )
+    connection.execute("ALTER TABLE game_item_specs ADD COLUMN usage_hint TEXT NOT NULL DEFAULT ''")
 
 
 def _migration_v30(connection: sqlite3.Connection) -> None:
@@ -1931,10 +1898,7 @@ def _migration_v30(connection: sqlite3.Connection) -> None:
     category は ItemType と別軸の物語上の分類で、prompt の所持品表示に使う。
     既存行は空文字にし、表示側では item_type 由来文言へフォールバックする。
     """
-    connection.execute(
-        "ALTER TABLE game_item_specs "
-        "ADD COLUMN category TEXT NOT NULL DEFAULT ''"
-    )
+    connection.execute("ALTER TABLE game_item_specs ADD COLUMN category TEXT NOT NULL DEFAULT ''")
 
 
 def _migration_v31(connection: sqlite3.Connection) -> None:
@@ -1958,9 +1922,7 @@ def _migration_v31(connection: sqlite3.Connection) -> None:
 
 def _migration_v32(connection: sqlite3.Connection) -> None:
     """command確定イベントを再配送できるtransactional outboxを追加する。"""
-    legacy_rows = connection.execute(
-        "SELECT trade_id, created_at FROM trade_aggregates"
-    ).fetchall()
+    legacy_rows = connection.execute("SELECT trade_id, created_at FROM trade_aggregates").fetchall()
     for trade_id, raw_created_at in legacy_rows:
         try:
             created_at = datetime.fromisoformat(str(raw_created_at))
@@ -1997,9 +1959,7 @@ def _migration_v32(connection: sqlite3.Connection) -> None:
 
 def _migration_v33(connection: sqlite3.Connection) -> None:
     """outbox workerの試行結果と永続的失敗を保持する。"""
-    connection.execute(
-        "ALTER TABLE command_event_outbox RENAME TO command_event_outbox_v32"
-    )
+    connection.execute("ALTER TABLE command_event_outbox RENAME TO command_event_outbox_v32")
     connection.execute(
         """
         CREATE TABLE command_event_outbox (
@@ -2042,9 +2002,7 @@ def _migration_v33(connection: sqlite3.Connection) -> None:
 
 def _migration_v34(connection: sqlite3.Connection) -> None:
     """outbox一時失敗の次回試行時刻とdead letter隔離を追加する。"""
-    connection.execute(
-        "ALTER TABLE command_event_outbox RENAME TO command_event_outbox_v33"
-    )
+    connection.execute("ALTER TABLE command_event_outbox RENAME TO command_event_outbox_v33")
     connection.execute(
         """
         CREATE TABLE command_event_outbox (
@@ -2099,17 +2057,9 @@ def _migration_v35(connection: sqlite3.Connection) -> None:
     そのため SQLite 配線では、ランタンが光らず、食料が腐らず、疲労も回復しない
     状態へ黙って落ちる。既存行は ItemSpec の既定値 (無効) と同じ値にする。
     """
-    connection.execute(
-        "ALTER TABLE game_item_specs "
-        "ADD COLUMN is_light_source INTEGER NOT NULL DEFAULT 0"
-    )
-    connection.execute(
-        "ALTER TABLE game_item_specs ADD COLUMN spoils_after_ticks INTEGER"
-    )
-    connection.execute(
-        "ALTER TABLE game_item_specs "
-        "ADD COLUMN fatigue_recovery INTEGER NOT NULL DEFAULT 0"
-    )
+    connection.execute("ALTER TABLE game_item_specs ADD COLUMN is_light_source INTEGER NOT NULL DEFAULT 0")
+    connection.execute("ALTER TABLE game_item_specs ADD COLUMN spoils_after_ticks INTEGER")
+    connection.execute("ALTER TABLE game_item_specs ADD COLUMN fatigue_recovery INTEGER NOT NULL DEFAULT 0")
 
 
 def _migration_v36(connection: sqlite3.Connection) -> None:
@@ -2137,9 +2087,7 @@ def _migration_v36(connection: sqlite3.Connection) -> None:
             f"UPDATE {table} SET identity_token = ? WHERE {key} = ?",
             [(uuid4().hex, row[0]) for row in rows],
         )
-        connection.execute(
-            f"CREATE UNIQUE INDEX idx_{table}_identity_token ON {table}(identity_token)"
-        )
+        connection.execute(f"CREATE UNIQUE INDEX idx_{table}_identity_token ON {table}(identity_token)")
 
 
 def _migration_v37(connection: sqlite3.Connection) -> None:
@@ -2150,26 +2098,42 @@ def _migration_v37(connection: sqlite3.Connection) -> None:
     connection.execute("ALTER TABLE game_sns_replies ADD COLUMN author_identity_token TEXT")
     connection.execute("ALTER TABLE game_sns_replies ADD COLUMN parent_identity_token TEXT")
     for table in ("game_sns_posts", "game_sns_replies"):
-        connection.execute(f"UPDATE {table} SET author_identity_token = (SELECT identity_token FROM game_sns_users WHERE user_id = {table}.author_user_id)")
+        connection.execute(
+            f"UPDATE {table} SET author_identity_token = (SELECT identity_token FROM game_sns_users WHERE user_id = {table}.author_user_id)"
+        )
     connection.execute("""UPDATE game_sns_replies SET parent_identity_token = CASE
         WHEN parent_post_id IS NOT NULL AND parent_reply_id IS NULL THEN
             (SELECT identity_token FROM game_sns_posts WHERE post_id = game_sns_replies.parent_post_id)
         WHEN parent_reply_id IS NOT NULL AND parent_post_id IS NULL THEN
             (SELECT identity_token FROM game_sns_replies AS parent WHERE parent.reply_id = game_sns_replies.parent_reply_id)
         ELSE NULL END""")
-    for column in ("identity_token TEXT", "source_event_id TEXT", "recipient_identity_token TEXT",
-                   "related_target_id TEXT", "actor_identity_token TEXT", "execution_provenance TEXT",
-                   "observation_delivered INTEGER NOT NULL DEFAULT 0"):
+    for column in (
+        "identity_token TEXT",
+        "source_event_id TEXT",
+        "recipient_identity_token TEXT",
+        "related_target_id TEXT",
+        "actor_identity_token TEXT",
+        "execution_provenance TEXT",
+        "observation_delivered INTEGER NOT NULL DEFAULT 0",
+    ):
         connection.execute(f"ALTER TABLE game_sns_notifications ADD COLUMN {column}")
     # 古い通知は不変の宛先が不明なので、公開APIでは再束縛せず表示しない。
     for (notification_id,) in connection.execute("SELECT notification_id FROM game_sns_notifications").fetchall():
-        connection.execute("UPDATE game_sns_notifications SET identity_token=? WHERE notification_id=?", (uuid4().hex, notification_id))
+        connection.execute(
+            "UPDATE game_sns_notifications SET identity_token=? WHERE notification_id=?", (uuid4().hex, notification_id)
+        )
     connection.execute("CREATE UNIQUE INDEX idx_sns_notification_identity ON game_sns_notifications(identity_token)")
-    connection.execute("CREATE UNIQUE INDEX idx_sns_notification_event_recipient_kind ON game_sns_notifications(source_event_id, recipient_identity_token, notification_type) WHERE source_event_id IS NOT NULL")
-    connection.execute("CREATE INDEX idx_sns_notification_pending ON game_sns_notifications(observation_delivered, notification_id) WHERE source_event_id IS NOT NULL")
+    connection.execute(
+        "CREATE UNIQUE INDEX idx_sns_notification_event_recipient_kind ON game_sns_notifications(source_event_id, recipient_identity_token, notification_type) WHERE source_event_id IS NOT NULL"
+    )
+    connection.execute(
+        "CREATE INDEX idx_sns_notification_pending ON game_sns_notifications(observation_delivered, notification_id) WHERE source_event_id IS NOT NULL"
+    )
     connection.execute("CREATE INDEX idx_public_sns_reply_post ON game_sns_replies(parent_post_id, reply_id DESC)")
     connection.execute("CREATE INDEX idx_public_sns_reply_parent ON game_sns_replies(parent_reply_id, reply_id DESC)")
-    connection.execute("CREATE INDEX idx_public_sns_notification_user ON game_sns_notifications(user_id, notification_id DESC)")
+    connection.execute(
+        "CREATE INDEX idx_public_sns_notification_user ON game_sns_notifications(user_id, notification_id DESC)"
+    )
 
 
 _GAME_WRITE_MIGRATIONS = (
@@ -2252,9 +2216,7 @@ def allocate_sequence_value(
 
 def get_sns_public_namespace(connection: sqlite3.Connection) -> str:
     """初期化済みの保存領域の名前空間を読み、欠損時は再発行せず停止する。"""
-    row = connection.execute(
-        "SELECT namespace FROM game_sns_public_namespace WHERE singleton = 1"
-    ).fetchone()
+    row = connection.execute("SELECT namespace FROM game_sns_public_namespace WHERE singleton = 1").fetchone()
     if row is None:
         raise RuntimeError("SNS の公開参照用名前空間がありません")
     return str(row[0])

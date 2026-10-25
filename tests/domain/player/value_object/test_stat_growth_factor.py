@@ -18,7 +18,7 @@ class TestStatGrowthFactor:
             defense_factor=0.7,
             speed_factor=0.6,
             critical_rate_factor=0.1,
-            evasion_rate_factor=0.05
+            evasion_rate_factor=0.05,
         )
         assert growth_factor.hp_factor == 1.0
         assert growth_factor.mp_factor == 0.8
@@ -31,25 +31,60 @@ class TestStatGrowthFactor:
     @pytest.mark.parametrize(
         "field, invalid_value, message",
         [
-            pytest.param('hp_factor', -1.0, 'hp_factor must be greater than or equal to 0', id='test_create_with_negative_hp_factor_raises_error'),
-            pytest.param('mp_factor', -0.5, 'mp_factor must be greater than or equal to 0', id='test_create_with_negative_mp_factor_raises_error'),
-            pytest.param('attack_factor', -0.2, 'attack_factor must be greater than or equal to 0', id='test_create_with_negative_attack_factor_raises_error'),
-            pytest.param('defense_factor', -0.1, 'defense_factor must be greater than or equal to 0', id='test_create_with_negative_defense_factor_raises_error'),
-            pytest.param('speed_factor', -0.3, 'speed_factor must be greater than or equal to 0', id='test_create_with_negative_speed_factor_raises_error'),
-            pytest.param('critical_rate_factor', -0.1, 'critical_rate_factor must be greater than or equal to 0', id='test_create_with_negative_critical_rate_factor_raises_error'),
-            pytest.param('evasion_rate_factor', -0.05, 'evasion_rate_factor must be greater than or equal to 0', id='test_create_with_negative_evasion_rate_factor_raises_error'),
+            pytest.param(
+                "hp_factor",
+                -1.0,
+                "hp_factor must be greater than or equal to 0",
+                id="test_create_with_negative_hp_factor_raises_error",
+            ),
+            pytest.param(
+                "mp_factor",
+                -0.5,
+                "mp_factor must be greater than or equal to 0",
+                id="test_create_with_negative_mp_factor_raises_error",
+            ),
+            pytest.param(
+                "attack_factor",
+                -0.2,
+                "attack_factor must be greater than or equal to 0",
+                id="test_create_with_negative_attack_factor_raises_error",
+            ),
+            pytest.param(
+                "defense_factor",
+                -0.1,
+                "defense_factor must be greater than or equal to 0",
+                id="test_create_with_negative_defense_factor_raises_error",
+            ),
+            pytest.param(
+                "speed_factor",
+                -0.3,
+                "speed_factor must be greater than or equal to 0",
+                id="test_create_with_negative_speed_factor_raises_error",
+            ),
+            pytest.param(
+                "critical_rate_factor",
+                -0.1,
+                "critical_rate_factor must be greater than or equal to 0",
+                id="test_create_with_negative_critical_rate_factor_raises_error",
+            ),
+            pytest.param(
+                "evasion_rate_factor",
+                -0.05,
+                "evasion_rate_factor must be greater than or equal to 0",
+                id="test_create_with_negative_evasion_rate_factor_raises_error",
+            ),
         ],
     )
     def test_rejects_negative_growth_factor_fields(self, field, invalid_value, message):
         """他項目が正常な入力で、指定項目の不正値を固有例外と文言で拒否する。"""
         values = {
-            'hp_factor': 1.0,
-            'mp_factor': 0.8,
-            'attack_factor': 0.9,
-            'defense_factor': 0.7,
-            'speed_factor': 0.6,
-            'critical_rate_factor': 0.1,
-            'evasion_rate_factor': 0.05,
+            "hp_factor": 1.0,
+            "mp_factor": 0.8,
+            "attack_factor": 0.9,
+            "defense_factor": 0.7,
+            "speed_factor": 0.6,
+            "critical_rate_factor": 0.1,
+            "evasion_rate_factor": 0.05,
         }
         values[field] = invalid_value
         with pytest.raises(StatGrowthFactorValidationException, match=message):
@@ -64,7 +99,7 @@ class TestStatGrowthFactor:
             defense_factor=0.7,
             speed_factor=0.6,
             critical_rate_factor=0.1,
-            evasion_rate_factor=0.05
+            evasion_rate_factor=0.05,
         )
         assert growth_factor.hp_factor == 0.0
 
@@ -117,11 +152,14 @@ class TestStatGrowthFactor:
 
         assert growth_factor.hp_factor == pytest.approx(expected_growth, rel=1e-7)
         assert (
-            growth_factor.mp_factor, growth_factor.attack_factor,
-            growth_factor.defense_factor, growth_factor.speed_factor,
+            growth_factor.mp_factor,
+            growth_factor.attack_factor,
+            growth_factor.defense_factor,
+            growth_factor.speed_factor,
         ) == pytest.approx((expected_growth,) * 4, rel=1e-7)
         assert (
-            growth_factor.critical_rate_factor, growth_factor.evasion_rate_factor,
+            growth_factor.critical_rate_factor,
+            growth_factor.evasion_rate_factor,
         ) == pytest.approx((expected_rate, expected_rate), rel=1e-7)
 
     def test_for_level_zero_raises_error(self):
@@ -145,16 +183,31 @@ class TestStatGrowthFactor:
     def test_equality(self):
         """等価性比較が正しく動作すること"""
         factor1 = StatGrowthFactor(
-            hp_factor=1.0, mp_factor=0.8, attack_factor=0.9, defense_factor=0.7,
-            speed_factor=0.6, critical_rate_factor=0.1, evasion_rate_factor=0.05
+            hp_factor=1.0,
+            mp_factor=0.8,
+            attack_factor=0.9,
+            defense_factor=0.7,
+            speed_factor=0.6,
+            critical_rate_factor=0.1,
+            evasion_rate_factor=0.05,
         )
         factor2 = StatGrowthFactor(
-            hp_factor=1.0, mp_factor=0.8, attack_factor=0.9, defense_factor=0.7,
-            speed_factor=0.6, critical_rate_factor=0.1, evasion_rate_factor=0.05
+            hp_factor=1.0,
+            mp_factor=0.8,
+            attack_factor=0.9,
+            defense_factor=0.7,
+            speed_factor=0.6,
+            critical_rate_factor=0.1,
+            evasion_rate_factor=0.05,
         )
         factor3 = StatGrowthFactor(
-            hp_factor=1.5, mp_factor=0.8, attack_factor=0.9, defense_factor=0.7,
-            speed_factor=0.6, critical_rate_factor=0.1, evasion_rate_factor=0.05
+            hp_factor=1.5,
+            mp_factor=0.8,
+            attack_factor=0.9,
+            defense_factor=0.7,
+            speed_factor=0.6,
+            critical_rate_factor=0.1,
+            evasion_rate_factor=0.05,
         )
 
         assert factor1 == factor2
@@ -164,12 +217,22 @@ class TestStatGrowthFactor:
     def test_hash(self):
         """ハッシュ値が正しく生成されること"""
         factor1 = StatGrowthFactor(
-            hp_factor=1.0, mp_factor=0.8, attack_factor=0.9, defense_factor=0.7,
-            speed_factor=0.6, critical_rate_factor=0.1, evasion_rate_factor=0.05
+            hp_factor=1.0,
+            mp_factor=0.8,
+            attack_factor=0.9,
+            defense_factor=0.7,
+            speed_factor=0.6,
+            critical_rate_factor=0.1,
+            evasion_rate_factor=0.05,
         )
         factor2 = StatGrowthFactor(
-            hp_factor=1.0, mp_factor=0.8, attack_factor=0.9, defense_factor=0.7,
-            speed_factor=0.6, critical_rate_factor=0.1, evasion_rate_factor=0.05
+            hp_factor=1.0,
+            mp_factor=0.8,
+            attack_factor=0.9,
+            defense_factor=0.7,
+            speed_factor=0.6,
+            critical_rate_factor=0.1,
+            evasion_rate_factor=0.05,
         )
 
         assert hash(factor1) == hash(factor2)
@@ -181,8 +244,13 @@ class TestStatGrowthFactor:
     def test_immutability(self):
         """不変性が保たれていること"""
         growth_factor = StatGrowthFactor(
-            hp_factor=1.0, mp_factor=0.8, attack_factor=0.9, defense_factor=0.7,
-            speed_factor=0.6, critical_rate_factor=0.1, evasion_rate_factor=0.05
+            hp_factor=1.0,
+            mp_factor=0.8,
+            attack_factor=0.9,
+            defense_factor=0.7,
+            speed_factor=0.6,
+            critical_rate_factor=0.1,
+            evasion_rate_factor=0.05,
         )
         original_hp_factor = growth_factor.hp_factor
 

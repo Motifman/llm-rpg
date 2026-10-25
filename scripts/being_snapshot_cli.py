@@ -111,8 +111,7 @@ def cmd_save(args: argparse.Namespace) -> int:
     source_db: Path = args.being_db
     if not source_db.exists():
         logger.error(
-            "source being DB does not exist: %s (use 'load' to bootstrap "
-            "a new DB from a snapshot)",
+            "source being DB does not exist: %s (use 'load' to bootstrap a new DB from a snapshot)",
             source_db,
         )
         return 1
@@ -177,14 +176,12 @@ def cmd_load(args: argparse.Namespace) -> int:
         # partial state が DB に残る (= 設計判断 #15)。CLI の運用者には
         # 「同じ snapshot で再実行すれば idempotent に復元される」を案内。
         logger.error(
-            "snapshot load failed: %s (re-running with the same snapshot "
-            "is idempotent if the DB state is partial)",
+            "snapshot load failed: %s (re-running with the same snapshot is idempotent if the DB state is partial)",
             exc,
         )
         return 1
     logger.info(
-        "snapshot restored: being_id=%s input=%s version=%d memory_restored=%s "
-        "removed_memory_keys=%s",
+        "snapshot restored: being_id=%s input=%s version=%d memory_restored=%s removed_memory_keys=%s",
         result.being_id.value,
         result.input_path,
         result.snapshot_version,

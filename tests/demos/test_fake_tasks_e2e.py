@@ -29,14 +29,12 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
-_MORI = PlayerId(1)   # crew
-_SENA = PlayerId(2)   # crew
-_KUZE = PlayerId(3)   # keeper
-_AOI = PlayerId(4)    # crew
+_MORI = PlayerId(1)  # crew
+_SENA = PlayerId(2)  # crew
+_KUZE = PlayerId(3)  # keeper
+_AOI = PlayerId(4)  # crew
 
 
 @pytest.fixture()
@@ -137,7 +135,7 @@ class TestTheKeeperCanPretend:
 
         runtime.do_interact(_KUZE, "junction_box", "tighten_wiring_pretend")
         after = [p for p in _witness_prose(runtime, _SENA) if "配線箱" in p]
-        fake = after[len(real):]
+        fake = after[len(real) :]
 
         assert real and fake, (real, after)
         # 行為者の名前だけを差し替えれば一致するはず。

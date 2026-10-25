@@ -1,4 +1,5 @@
 """InMemoryLocationEstablishmentRepository のテスト"""
+
 import pytest
 
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
@@ -60,9 +61,7 @@ class TestInMemoryLocationEstablishmentRepository:
         assert found.establishment_type == EstablishmentType.SHOP
         assert found.establishment_id == 10
 
-    def test_find_by_spot_and_location_returns_none_when_missing(
-        self, repo, spot_id, location_area_id
-    ):
+    def test_find_by_spot_and_location_returns_none_when_missing(self, repo, spot_id, location_area_id):
         """存在しないロケーションは None"""
         found = repo.find_by_spot_and_location(spot_id, location_area_id)
         assert found is None
@@ -71,9 +70,7 @@ class TestInMemoryLocationEstablishmentRepository:
         """find_all で全件取得できる"""
         s1 = LocationEstablishmentAggregate.create(spot_id, location_area_id)
         repo.save(s1)
-        s2 = LocationEstablishmentAggregate.create(
-            SpotId.create(2), LocationAreaId.create(2)
-        )
+        s2 = LocationEstablishmentAggregate.create(SpotId.create(2), LocationAreaId.create(2))
         repo.save(s2)
         all_slots = repo.find_all()
         assert len(all_slots) == 2

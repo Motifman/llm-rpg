@@ -9,13 +9,12 @@ class ShopListingPrice:
 
     1以上の値を持ちます。
     """
+
     value: int
 
     def __post_init__(self) -> None:
         if self.value <= 0:
-            raise ShopListingPriceValidationException(
-                f"Shop listing price must be 1 or more. value: {self.value}"
-            )
+            raise ShopListingPriceValidationException(f"Shop listing price must be 1 or more. value: {self.value}")
 
     @classmethod
     def of(cls, value: int) -> "ShopListingPrice":

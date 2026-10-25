@@ -284,9 +284,7 @@ class TestTradeAggregate:
     class TestIsForPlayer:
         """is_for_playerメソッドのテスト"""
 
-        def test_global_trade_always_returns_false(
-            self, active_global_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_global_trade_always_returns_false(self, active_global_trade: TradeAggregate, buyer_id: PlayerId):
             """グローバル取引は常にFalseを返す"""
             # When & Then
             assert active_global_trade.is_for_player(buyer_id) is False
@@ -329,9 +327,7 @@ class TestTradeAggregate:
             # When & Then
             assert active_direct_trade.can_be_accepted_by(other_player_id) is False
 
-        def test_global_trade_other_player_can_accept(
-            self, active_global_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_global_trade_other_player_can_accept(self, active_global_trade: TradeAggregate, buyer_id: PlayerId):
             """グローバル取引は他のプレイヤーが受け入れられる"""
             # When & Then
             assert active_global_trade.can_be_accepted_by(buyer_id) is True
@@ -347,9 +343,7 @@ class TestTradeAggregate:
     class TestAcceptBy:
         """accept_byメソッドのテスト"""
 
-        def test_successful_acceptance_of_global_trade(
-            self, active_global_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_successful_acceptance_of_global_trade(self, active_global_trade: TradeAggregate, buyer_id: PlayerId):
             """グローバル取引の受託が成功する"""
             # When
             active_global_trade.accept_by(buyer_id, "Buyer", _trade_listing_projection())
@@ -442,9 +436,7 @@ class TestTradeAggregate:
     class TestDecline:
         """decline_by（取引拒否）のテスト"""
 
-        def test_decline_by_target_player_succeeds(
-            self, active_direct_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_decline_by_target_player_succeeds(self, active_direct_trade: TradeAggregate, buyer_id: PlayerId):
             """直接取引の宛先が断るとステータスがCANCELLEDになる"""
             # When
             active_direct_trade.decline_by(buyer_id)
@@ -453,9 +445,7 @@ class TestTradeAggregate:
             assert active_direct_trade.status == TradeStatus.CANCELLED
             assert not active_direct_trade.is_active()
 
-        def test_decline_by_seller_raises_exception(
-            self, active_direct_trade: TradeAggregate, seller_id: PlayerId
-        ):
+        def test_decline_by_seller_raises_exception(self, active_direct_trade: TradeAggregate, seller_id: PlayerId):
             """出品者が断ろうとするとCannotDeclineTradeExceptionが発生する"""
             # When & Then
             with pytest.raises(CannotDeclineTradeException):
@@ -469,17 +459,13 @@ class TestTradeAggregate:
             with pytest.raises(CannotDeclineTradeException):
                 active_direct_trade.decline_by(other_player_id)
 
-        def test_decline_global_trade_raises_exception(
-            self, active_global_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_decline_global_trade_raises_exception(self, active_global_trade: TradeAggregate, buyer_id: PlayerId):
             """グローバル取引を断ろうとするとCannotDeclineTradeExceptionが発生する"""
             # When & Then
             with pytest.raises(CannotDeclineTradeException):
                 active_global_trade.decline_by(buyer_id)
 
-        def test_decline_completed_trade_raises_exception(
-            self, completed_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_decline_completed_trade_raises_exception(self, completed_trade: TradeAggregate, buyer_id: PlayerId):
             """完了済み取引を断ろうとするとInvalidTradeStatusExceptionが発生する"""
             # When & Then
             with pytest.raises(InvalidTradeStatusException):
@@ -613,8 +599,8 @@ class TestTradeAggregate:
             assert event.listing_projection == _trade_listing_projection()
             assert event.trade_created_at == created_at
             # 基底クラスのフィールドも確認
-            assert hasattr(event, 'occurred_at')
-            assert hasattr(event, 'event_id')
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")
 
         def test_trade_accepted_event_contains_all_fields(
             self,
@@ -640,8 +626,8 @@ class TestTradeAggregate:
             assert event.trade_created_at == active_global_trade.created_at
             assert event.listing_projection == _trade_listing_projection()
             # 基底クラスのフィールドも確認
-            assert hasattr(event, 'occurred_at')
-            assert hasattr(event, 'event_id')
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")
 
         def test_trade_cancelled_event_contains_all_fields(self, active_global_trade: TradeAggregate):
             """出品者の取消は取引IDを持つTradeCancelledEventを1件だけ発行する。"""
@@ -659,6 +645,5 @@ class TestTradeAggregate:
             assert event.aggregate_id == active_global_trade.trade_id
             assert event.aggregate_type == "TradeAggregate"
             # 基底クラスのフィールドも確認
-            assert hasattr(event, 'occurred_at')
-            assert hasattr(event, 'event_id')
-
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")

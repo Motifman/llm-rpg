@@ -29,9 +29,7 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
 _KUZE = PlayerId(3)
 _AOI = PlayerId(4)
@@ -110,9 +108,7 @@ class TestTheHandlerDelegatesToTheRuntime:
     def test_an_invariant_failure_becomes_a_system_error_result(self) -> None:
         """身体記録の不整合が起きても、tool 境界で手番全体を例外終了させない。"""
         runtime = MagicMock()
-        runtime.report_body.side_effect = RuntimeError(
-            "reportable body has no fallen-body record"
-        )
+        runtime.report_body.side_effect = RuntimeError("reportable body has no fallen-body record")
         executor = _executor(runtime=runtime)
 
         result = executor._report_body(3, {"target_player_id": 4})
@@ -132,15 +128,9 @@ class TestReportingStartsAMeeting:
         status.clear_events()
         runtime._player_status_repo.save(status)
         current_tick = int(runtime.current_tick())
-        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
-            EntityId.create(int(player_id))
-        )
-        runtime._fallen_body_registry.record(
-            player_id, spot_id, WorldTick(current_tick)
-        )
-        runtime._death_grace_timer.register(
-            player_id, downed_at_tick=current_tick
-        )
+        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
+        runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(current_tick))
+        runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
         runtime._speech_event_publisher.publish_all(events)
 
     def test_a_meeting_begins(self, runtime) -> None:

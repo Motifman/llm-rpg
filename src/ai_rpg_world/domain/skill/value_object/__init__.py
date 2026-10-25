@@ -11,4 +11,3 @@ from .skill_proposal import (
     SkillProposalTableEntry,
 )
 from .skill_spec import SkillSpec
-

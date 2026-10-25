@@ -5,7 +5,6 @@ LLM ツール定義のカテゴリ別カタログ。
 register_default_tools がそれらを集約してレジストリへ登録する。
 """
 
-
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IAvailabilityResolver,
@@ -62,7 +61,6 @@ def register_default_tools(
     """
     if not isinstance(registry, IGameToolRegistry):
         raise TypeError("registry must be IGameToolRegistry")
-
 
     if speech_enabled:
         _register_specs(registry, get_speech_specs())

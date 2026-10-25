@@ -108,13 +108,17 @@ class TestChangePlayerStateEffect:
             parameters={"state_updates": {"poisoned": True, "intensity": "mild"}},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
             acting_player_status=status,
         )
         # 既存の alignment は保持、新規 2 キーが追加
         assert status.state == {
-            "alignment": "good", "poisoned": True, "intensity": "mild",
+            "alignment": "good",
+            "poisoned": True,
+            "intensity": "mild",
         }
         assert result.acting_player_state_changed is True
 
@@ -127,8 +131,10 @@ class TestChangePlayerStateEffect:
         )
         with caplog.at_level(logging.WARNING):
             result = svc.apply_effects(
-                interior=_empty_interior(), acting_object=None,
-                effects=[effect], world_flags=frozenset(),
+                interior=_empty_interior(),
+                acting_object=None,
+                effects=[effect],
+                world_flags=frozenset(),
                 # acting_player_status を渡さない
             )
         assert result.acting_player_state_changed is False
@@ -144,17 +150,17 @@ class TestChangePlayerStateEffect:
         )
         with caplog.at_level(logging.WARNING):
             result = svc.apply_effects(
-                interior=_empty_interior(), acting_object=None,
-                effects=[effect], world_flags=frozenset(),
+                interior=_empty_interior(),
+                acting_object=None,
+                effects=[effect],
+                world_flags=frozenset(),
                 acting_player_status=status,
             )
         # state は元のまま
         assert status.state == {"alignment": "good"}
         assert result.acting_player_state_changed is False
         assert any(
-            "CHANGE_PLAYER_STATE" in record.message
-            and "state_updates" in record.message
-            for record in caplog.records
+            "CHANGE_PLAYER_STATE" in record.message and "state_updates" in record.message for record in caplog.records
         )
 
 
@@ -170,8 +176,10 @@ class TestRecordPlayerStateTickEffect:
             parameters={"state_key": "poisoned_at_tick"},
         )
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=[effect], world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=[effect],
+            world_flags=frozenset(),
             current_tick=WorldTick(42),
             acting_player_status=status,
         )
@@ -187,20 +195,23 @@ class TestRecordPlayerStateTickEffect:
         )
         with caplog.at_level(logging.WARNING):
             result = svc.apply_effects(
-                interior=_empty_interior(), acting_object=None,
-                effects=[effect], world_flags=frozenset(),
+                interior=_empty_interior(),
+                acting_object=None,
+                effects=[effect],
+                world_flags=frozenset(),
                 current_tick=WorldTick(1),
             )
         assert result.acting_player_state_changed is False
         assert any(
-            "RECORD_PLAYER_STATE_TICK" in record.message
-            and "acting_player_status" in record.message
+            "RECORD_PLAYER_STATE_TICK" in record.message and "acting_player_status" in record.message
             for record in caplog.records
         )
 
     @pytest.mark.parametrize("initial_state", [None, {"alignment": "good"}])
     def test_no_op_when_current_tick_missing(
-        self, caplog, initial_state: dict | None,
+        self,
+        caplog,
+        initial_state: dict | None,
     ) -> None:
         """current_tick が None なら警告 + no-op。"""
         svc = WorldGraphEffectService()
@@ -211,21 +222,24 @@ class TestRecordPlayerStateTickEffect:
         )
         with caplog.at_level(logging.WARNING):
             result = svc.apply_effects(
-                interior=_empty_interior(), acting_object=None,
-                effects=[effect], world_flags=frozenset(),
+                interior=_empty_interior(),
+                acting_object=None,
+                effects=[effect],
+                world_flags=frozenset(),
                 acting_player_status=status,
             )
         assert status.state == (initial_state or {})
         assert result.acting_player_state_changed is False
         assert any(
-            "RECORD_PLAYER_STATE_TICK" in record.message
-            and "current_tick" in record.message
+            "RECORD_PLAYER_STATE_TICK" in record.message and "current_tick" in record.message
             for record in caplog.records
         )
 
     @pytest.mark.parametrize("initial_state", [None, {"alignment": "good"}])
     def test_no_op_when_state_key_missing(
-        self, caplog, initial_state: dict | None,
+        self,
+        caplog,
+        initial_state: dict | None,
     ) -> None:
         """state_key が無ければ警告 + no-op。"""
         svc = WorldGraphEffectService()
@@ -236,17 +250,17 @@ class TestRecordPlayerStateTickEffect:
         )
         with caplog.at_level(logging.WARNING):
             result = svc.apply_effects(
-                interior=_empty_interior(), acting_object=None,
-                effects=[effect], world_flags=frozenset(),
+                interior=_empty_interior(),
+                acting_object=None,
+                effects=[effect],
+                world_flags=frozenset(),
                 current_tick=WorldTick(1),
                 acting_player_status=status,
             )
         assert status.state == (initial_state or {})
         assert result.acting_player_state_changed is False
         assert any(
-            "RECORD_PLAYER_STATE_TICK" in record.message
-            and "state_key" in record.message
-            for record in caplog.records
+            "RECORD_PLAYER_STATE_TICK" in record.message and "state_key" in record.message for record in caplog.records
         )
 
 
@@ -262,7 +276,8 @@ class TestPlayerStateIsPrecondition:
             required_state={"disguise": "noble"},
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -279,7 +294,8 @@ class TestPlayerStateIsPrecondition:
             failure_message="貴族に変装していない",
         )
         ok, msg = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -295,7 +311,8 @@ class TestPlayerStateIsPrecondition:
             required_state={"disguise": "noble"},
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             # acting_player_status を渡さない
@@ -320,10 +337,13 @@ class TestPlayerStateIsPrecondition:
             required_state={"disguise": "thief", "fire_resist": True},
         )
         for cond, expected in (
-            (cond_pass, True), (cond_fail, False), (cond_first_key_differs, False),
+            (cond_pass, True),
+            (cond_fail, False),
+            (cond_first_key_differs, False),
         ):
             ok, _ = svc.can_interact(
-                _interaction_with(cond), _switch_object(),
+                _interaction_with(cond),
+                _switch_object(),
                 owned_item_spec_ids=frozenset(),
                 world_flags=frozenset(),
                 acting_player_status=status,
@@ -338,7 +358,8 @@ class TestPlayerStateIsPrecondition:
             condition_type=InteractionConditionTypeEnum.PLAYER_STATE_IS,
         )
         ok, _ = svc.can_interact(
-            _interaction_with(cond), _switch_object(),
+            _interaction_with(cond),
+            _switch_object(),
             owned_item_spec_ids=frozenset(),
             world_flags=frozenset(),
             acting_player_status=status,
@@ -365,8 +386,10 @@ class TestCombinedActingPlayerEffects:
             ),
         ]
         result = svc.apply_effects(
-            interior=_empty_interior(), acting_object=None,
-            effects=effects, world_flags=frozenset(),
+            interior=_empty_interior(),
+            acting_object=None,
+            effects=effects,
+            world_flags=frozenset(),
             current_tick=WorldTick(7),
             acting_player_status=status,
         )

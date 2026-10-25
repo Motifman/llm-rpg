@@ -147,9 +147,7 @@ def _make_pursuit_last_known(target_id: int, spot_id: int = 1) -> PursuitLastKno
     )
 
 
-def _make_pursuit_target_snapshot(
-    target_id: int, spot_id: int = 1
-) -> PursuitTargetSnapshot:
+def _make_pursuit_target_snapshot(target_id: int, spot_id: int = 1) -> PursuitTargetSnapshot:
     return PursuitTargetSnapshot(
         target_id=WorldObjectId.create(target_id),
         spot_id=SpotId(spot_id),
@@ -158,7 +156,6 @@ def _make_pursuit_target_snapshot(
 
 
 class TestObservationRecipientResolverExtendedEvents:
-
     @pytest.mark.parametrize("channel", list(SpeechChannel))
     def test_speech_without_graph_has_no_recipients(self, channel):
         """グラフを渡さない構築では、タイル距離にも囁き宛先にも発言を配信しない。"""
@@ -166,8 +163,11 @@ class TestObservationRecipientResolverExtendedEvents:
             player_status_repository=MagicMock(),
         )
         event = PlayerSpokeEvent.create(
-            aggregate_id=PlayerId(1), aggregate_type="PlayerStatusAggregate",
-            content="こんにちは", channel=channel, spot_id=SpotId(1),
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="こんにちは",
+            channel=channel,
+            spot_id=SpotId(1),
             target_player_id=PlayerId(2) if channel == SpeechChannel.WHISPER else None,
         )
         assert resolver.resolve(event) == []
@@ -389,10 +389,16 @@ class TestObservationRecipientResolverExtendedEvents:
         monster = MagicMock()
         monster.spot_id = SpotId(2)
         monster_repo.find_by_id.return_value = monster
-        resolver = ObservationRecipientResolver(strategies=[MonsterRecipientStrategy(
-            ObservedEventRegistry(), PlayerAudienceQueryService(status_repo),
-            MagicMock(resolve_player_id=MagicMock(return_value=PlayerId(1))), monster_repo,
-        )])
+        resolver = ObservationRecipientResolver(
+            strategies=[
+                MonsterRecipientStrategy(
+                    ObservedEventRegistry(),
+                    PlayerAudienceQueryService(status_repo),
+                    MagicMock(resolve_player_id=MagicMock(return_value=PlayerId(1))),
+                    monster_repo,
+                )
+            ]
+        )
         event = MonsterDamagedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
@@ -492,9 +498,14 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_pursuit_started_delivers_actor_only_when_target_is_not_player(self):
         players = {WorldObjectId(1): PlayerId(1)}
         object_resolver = MagicMock(resolve_player_id=MagicMock(side_effect=players.get))
-        resolver = ObservationRecipientResolver(strategies=[PursuitRecipientStrategy(
-            ObservedEventRegistry(), object_resolver,
-        )])
+        resolver = ObservationRecipientResolver(
+            strategies=[
+                PursuitRecipientStrategy(
+                    ObservedEventRegistry(),
+                    object_resolver,
+                )
+            ]
+        )
         event = PursuitStartedEvent.create(
             aggregate_id=WorldObjectId.create(1),
             aggregate_type="PlayerStatusAggregate",
@@ -546,17 +557,27 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_pursuit_lifecycle_events_deliver_actor_and_target_players(self, event):
         players = {WorldObjectId(1): PlayerId(1), WorldObjectId(2): PlayerId(2)}
         object_resolver = MagicMock(resolve_player_id=MagicMock(side_effect=players.get))
-        resolver = ObservationRecipientResolver(strategies=[PursuitRecipientStrategy(
-            ObservedEventRegistry(), object_resolver,
-        )])
+        resolver = ObservationRecipientResolver(
+            strategies=[
+                PursuitRecipientStrategy(
+                    ObservedEventRegistry(),
+                    object_resolver,
+                )
+            ]
+        )
         assert {p.value for p in resolver.resolve(event)} == {1, 2}
 
     def test_pursuit_updated_deduplicates_when_actor_and_target_are_same_player(self):
         players = {WorldObjectId(1): PlayerId(1)}
         object_resolver = MagicMock(resolve_player_id=MagicMock(side_effect=players.get))
-        resolver = ObservationRecipientResolver(strategies=[PursuitRecipientStrategy(
-            ObservedEventRegistry(), object_resolver,
-        )])
+        resolver = ObservationRecipientResolver(
+            strategies=[
+                PursuitRecipientStrategy(
+                    ObservedEventRegistry(),
+                    object_resolver,
+                )
+            ]
+        )
         event = PursuitUpdatedEvent.create(
             aggregate_id=WorldObjectId.create(1),
             aggregate_type="PlayerStatusAggregate",
@@ -600,9 +621,14 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_pursuit_events_keep_visibility_actor_only_when_target_is_not_player(self, event):
         players = {WorldObjectId(1): PlayerId(1)}
         object_resolver = MagicMock(resolve_player_id=MagicMock(side_effect=players.get))
-        resolver = ObservationRecipientResolver(strategies=[PursuitRecipientStrategy(
-            ObservedEventRegistry(), object_resolver,
-        )])
+        resolver = ObservationRecipientResolver(
+            strategies=[
+                PursuitRecipientStrategy(
+                    ObservedEventRegistry(),
+                    object_resolver,
+                )
+            ]
+        )
         assert [p.value for p in resolver.resolve(event)] == [1]
 
     def test_public_quest_resolution_propagates_status_repository_error(self):

@@ -47,9 +47,7 @@ class PlayerSpeechApplicationService:
         self._departed_spot_provider = departed_spot_provider
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         try:
             return operation()
         except SpeechApplicationException:
@@ -100,17 +98,11 @@ class PlayerSpeechApplicationService:
                 raise SpeechCommandException("囁きの場合は宛先プレイヤーを指定してください")
             target_player_id = PlayerId(command.target_player_id)
 
-        if (
-            status.is_down
-            and self._departed_speaker_checker is not None
-            and self._departed_speaker_checker(speaker_id)
-        ):
+        if status.is_down and self._departed_speaker_checker is not None and self._departed_speaker_checker(speaker_id):
             if not command.content or not command.content.strip():
                 raise SpeechValidationException("発言内容を空にできません")
             departed_spot = (
-                self._departed_spot_provider(speaker_id)
-                if self._departed_spot_provider is not None
-                else None
+                self._departed_spot_provider(speaker_id) if self._departed_spot_provider is not None else None
             )
             if departed_spot is None:
                 raise PlayerLocationNotSetException(command.speaker_player_id)

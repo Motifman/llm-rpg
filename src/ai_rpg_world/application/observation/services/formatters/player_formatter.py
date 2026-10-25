@@ -55,9 +55,7 @@ def _without_speaker(prose: str, structured: dict[str, Any]) -> SubjectUnknownVi
 
 
 def _without_actor(prose: str, structured: dict[str, Any]) -> SubjectUnknownView:
-    return SubjectUnknownView(
-        prose=prose, structured={k: v for k, v in structured.items() if k != "actor"}
-    )
+    return SubjectUnknownView(prose=prose, structured={k: v for k, v in structured.items() if k != "actor"})
 
 
 def _overheard_fragment(content: str) -> str:
@@ -139,9 +137,7 @@ class PlayerObservationFormatter:
                 "spot_id_value": event.new_spot_id.value,
                 "role": "self",
             }
-            return ObservationOutput(
-                prose=prose, structured=structured, observation_category="self_only"
-            )
+            return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
         actor_name = self._context.name_resolver.player_name(event.aggregate_id)
         prose = f"{actor_name}がこのスポットにやってきました。"
         structured = {
@@ -150,30 +146,19 @@ class PlayerObservationFormatter:
             "spot_name": spot_name,
             "spot_id_value": event.new_spot_id.value,
         }
-        return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social"
-        )
+        return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
-    def _format_player_downed(
-        self, event: PlayerDownedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_player_downed(self, event: PlayerDownedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         is_self = event.aggregate_id.value == recipient_id.value
         killer_player_id = getattr(event, "killer_player_id", None)
         killer_name = (
-            self._context.name_resolver.player_name(killer_player_id)
-            if killer_player_id is not None
-            else None
+            self._context.name_resolver.player_name(killer_player_id) if killer_player_id is not None else None
         )
-        killer_id = (
-            getattr(killer_player_id, "value", None)
-            if killer_player_id is not None
-            else None
-        )
+        killer_id = getattr(killer_player_id, "value", None) if killer_player_id is not None else None
         if is_self:
             is_departed = self._context.is_departed_after_downed(recipient_id)
             prose = (
-                "死亡した後も移動できる。生きている者には姿が見えず、"
-                "声も届かない。"
+                "死亡した後も移動できる。生きている者には姿が見えず、声も届かない。"
                 if is_departed
                 else "倒れて動けなくなった。"
             )
@@ -185,10 +170,7 @@ class PlayerObservationFormatter:
             if killer_name and learns_killer:
                 prose = f"{killer_name}があなたを倒した。"
                 if is_departed:
-                    prose += (
-                        "死亡した後も移動できる。生きている者には姿が見えず、"
-                        "声も届かない。"
-                    )
+                    prose += "死亡した後も移動できる。生きている者には姿が見えず、声も届かない。"
             structured: dict[str, Any] = {"type": "player_downed", "role": "self"}
             # 宣言は prose と structured の両方に効かせる。
             #
@@ -237,13 +219,10 @@ class PlayerObservationFormatter:
         if killer_player_id is not None:
             recipient_spot = self._context.lookup_recipient_spot(recipient_id)
             killer_spot = self._context.lookup_recipient_spot(killer_player_id)
-            if (
-                recipient_spot is not None
-                and killer_spot is not None
-                and recipient_spot == killer_spot
-            ):
+            if recipient_spot is not None and killer_spot is not None and recipient_spot == killer_spot:
                 lighting = self._context.resolve_effective_lighting(recipient_spot)
                 killer_visible = self._lighting_reveals_killer_to_bystander(lighting)
+
         def downed_prose(victim: str) -> str:
             if killer_visible and killer_name:
                 return f"{killer_name}が{victim}を倒した。"
@@ -255,10 +234,7 @@ class PlayerObservationFormatter:
             event,
             "declared_witness_prose_replaces_bystander_prose",
             False,
-        ) and (
-            killer_player_id is None
-            or recipient_id.value != killer_player_id.value
-        ):
+        ) and (killer_player_id is None or recipient_id.value != killer_player_id.value):
             # 同じ一撃の宣言済み目撃文が第三者へ届く場合だけ、重複する汎用文を
             # 表示しない。行為者本人は目撃配信から除外されるので省かない。
             # structured は分析のため下で通常どおり組み立てる。
@@ -295,9 +271,7 @@ class PlayerObservationFormatter:
         """
         return lighting in (LightingEnum.BRIGHT, LightingEnum.DIM)
 
-    def _format_player_revived(
-        self, event: PlayerRevivedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_player_revived(self, event: PlayerRevivedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         is_self = event.aggregate_id.value == recipient_id.value
         if is_self:
             prose = "復帰しました。"
@@ -342,9 +316,7 @@ class PlayerObservationFormatter:
             if_subject_unknown=_without_actor(f"{_UNKNOWN_SPEAKER}が復帰しました。", structured),
         )
 
-    def _is_same_spot(
-        self, recipient_id: PlayerId, actor_id: PlayerId
-    ) -> bool | None:
+    def _is_same_spot(self, recipient_id: PlayerId, actor_id: PlayerId) -> bool | None:
         """recipient と actor が同じ spot にいるかを返す。位置不明なら None。"""
         recipient_spot = self._context.lookup_recipient_spot(recipient_id)
         actor_spot = self._context.lookup_recipient_spot(actor_id)
@@ -352,9 +324,7 @@ class PlayerObservationFormatter:
             return None
         return recipient_spot == actor_spot
 
-    def _format_player_level_up(
-        self, event: PlayerLevelUpEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_player_level_up(self, event: PlayerLevelUpEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         prose = f"レベルが上がりました（{event.old_level} → {event.new_level}）。"
         structured: dict[str, Any] = {"type": "level_up", "old_level": event.old_level, "new_level": event.new_level}
         return ObservationOutput(
@@ -378,9 +348,7 @@ class PlayerObservationFormatter:
             breaks_movement=False,
         )
 
-    def _format_player_gold_paid(
-        self, event: PlayerGoldPaidEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_player_gold_paid(self, event: PlayerGoldPaidEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         prose = f"{event.paid_amount}ゴールドを支払いました。"
         structured: dict[str, Any] = {"type": "gold_paid", "amount": event.paid_amount}
         return ObservationOutput(
@@ -391,9 +359,7 @@ class PlayerObservationFormatter:
             breaks_movement=False,
         )
 
-    def _format_player_spoke(
-        self, event: PlayerSpokeEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_player_spoke(self, event: PlayerSpokeEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         # Issue #188 第5回実験で観測された「自己三人称ループ」の修正。
         # 話者本人は自分の speech_say の結果を ``action_result_store`` 経由で
         # **一人称ベースの行動 summary** として既に受け取っており、追加で
@@ -445,16 +411,10 @@ class PlayerObservationFormatter:
                 if departed_store is not None
                 else None
             )
-            listener_departed_spot = (
-                departed_store.find(recipient_id)
-                if departed_store is not None
-                else None
-            )
+            listener_departed_spot = departed_store.find(recipient_id) if departed_store is not None else None
             try:
                 speaker_spot = (
-                    speaker_departed_spot
-                    if speaker_departed_spot is not None
-                    else graph.get_entity_spot(speaker_eid)
+                    speaker_departed_spot if speaker_departed_spot is not None else graph.get_entity_spot(speaker_eid)
                 )
                 listener_spot = (
                     listener_departed_spot
@@ -480,17 +440,10 @@ class PlayerObservationFormatter:
                     clarity = SoundClarityEnum.CLEAR
                 else:
                     volume = speech_channel_to_sound_volume(event.channel)
-                    if (
-                        speaker_departed_spot is not None
-                        or listener_departed_spot is not None
-                    ):
-                        outcome: Any = svc.outcome_between_spots(
-                            speaker_spot, listener_spot, volume, graph
-                        )
+                    if speaker_departed_spot is not None or listener_departed_spot is not None:
+                        outcome: Any = svc.outcome_between_spots(speaker_spot, listener_spot, volume, graph)
                     else:
-                        outcome = svc.outcome_for_listener(
-                            speaker_eid, listener_eid, volume, graph
-                        )
+                        outcome = svc.outcome_for_listener(speaker_eid, listener_eid, volume, graph)
                     if outcome is None:
                         return None
                     clarity = outcome.clarity
@@ -501,35 +454,22 @@ class PlayerObservationFormatter:
                     # graph の SpotNode.name を使う。
                     if outcome.source_adjacent_spot_id is not None:
                         try:
-                            source_adjacent_spot_name = graph.get_spot(
-                                outcome.source_adjacent_spot_id
-                            ).name
+                            source_adjacent_spot_name = graph.get_spot(outcome.source_adjacent_spot_id).name
                         except Exception:
                             source_adjacent_spot_name = None
 
                 # Issue #269: MUFFLED/FAINT で「どの接続から聞こえたか」を prose
                 # に含める (CLEAR は同 spot なので方向情報は冗長)。
                 direction_clause = ""
-                if (
-                    clarity != SoundClarityEnum.CLEAR
-                    and source_connection_name
-                ):
-                    direction_clause = (
-                        f"〈{source_connection_name}〉の向こうから、"
-                    )
+                if clarity != SoundClarityEnum.CLEAR and source_connection_name:
+                    direction_clause = f"〈{source_connection_name}〉の向こうから、"
 
                 def heard_as(name: str) -> str:
                     if clarity == SoundClarityEnum.CLEAR:
                         return f"{name}が{verb}: 「{event.content}」"
                     if clarity == SoundClarityEnum.MUFFLED:
-                        return (
-                            f"{direction_clause}{name}の遠くの声が聞こえる: "
-                            f"「{_overheard_fragment(event.content)}」"
-                        )
-                    return (
-                        f"{direction_clause}{name}の声がかすかに聞こえるが、"
-                        f"内容ははっきりしない。"
-                    )
+                        return f"{direction_clause}{name}の遠くの声が聞こえる: 「{_overheard_fragment(event.content)}」"
+                    return f"{direction_clause}{name}の声がかすかに聞こえるが、内容ははっきりしない。"
 
                 structured = dict(structured_base)
                 structured["sound_clarity"] = clarity.value
@@ -555,9 +495,7 @@ class PlayerObservationFormatter:
                     # ターンを再スケジュールする (返答や反応のため)。
                     schedules_turn=True,
                     subject_name=speaker_name,
-                    if_subject_unknown=_without_speaker(
-                        heard_as(_UNKNOWN_SPEAKER), structured
-                    ),
+                    if_subject_unknown=_without_speaker(heard_as(_UNKNOWN_SPEAKER), structured),
                 )
 
         return ObservationOutput(
@@ -567,9 +505,7 @@ class PlayerObservationFormatter:
             # 同上: 他者発話を聞いた recipient のターンを積む
             schedules_turn=True,
             subject_name=speaker_name,
-            if_subject_unknown=_without_speaker(
-                f"{_UNKNOWN_SPEAKER}が{verb}: 「{event.content}」", structured_base
-            ),
+            if_subject_unknown=_without_speaker(f"{_UNKNOWN_SPEAKER}が{verb}: 「{event.content}」", structured_base),
         )
 
     def _format_item_added_to_inventory(
@@ -587,9 +523,7 @@ class PlayerObservationFormatter:
         structured: dict[str, Any] = {"type": "item_added_to_inventory", "item_name": item_name}
         spec_val = event.item_spec_id_value
         if spec_val is None:
-            spec_val = resolve_item_spec_id_value_for_instance(
-                self._context.item_repository, event.item_instance_id
-            )
+            spec_val = resolve_item_spec_id_value_for_instance(self._context.item_repository, event.item_instance_id)
         if spec_val is not None:
             structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
@@ -605,21 +539,15 @@ class PlayerObservationFormatter:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"{item_name}を捨てました。"
         structured: dict[str, Any] = {"type": "item_dropped", "item_name": item_name}
-        spec_val = resolve_item_spec_id_value_for_instance(
-            self._context.item_repository, event.item_instance_id
-        )
+        spec_val = resolve_item_spec_id_value_for_instance(self._context.item_repository, event.item_instance_id)
         if spec_val is not None:
             structured["item_spec_id_value"] = spec_val
-        return ObservationOutput(
-            prose=prose, structured=structured, observation_category="self_only"
-        )
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_item_removed(self, event: ItemRemovedFromInventoryEvent) -> ObservationOutput:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         structured: dict[str, Any] = {"type": "item_removed", "item_name": item_name}
-        spec_val = resolve_item_spec_id_value_for_instance(
-            self._context.item_repository, event.item_instance_id
-        )
+        spec_val = resolve_item_spec_id_value_for_instance(self._context.item_repository, event.item_instance_id)
         if spec_val is not None:
             structured["item_spec_id_value"] = spec_val
         prose = (
@@ -633,37 +561,25 @@ class PlayerObservationFormatter:
             observation_category="self_only",
         )
 
-    def _format_item_equipped(
-        self, event: ItemEquippedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_item_equipped(self, event: ItemEquippedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"{item_name}を装備しました。"
         structured: dict[str, Any] = {"type": "item_equipped", "item_name": item_name}
-        return ObservationOutput(
-            prose=prose, structured=structured, observation_category="self_only"
-        )
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
-    def _format_item_unequipped(
-        self, event: ItemUnequippedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_item_unequipped(self, event: ItemUnequippedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"{item_name}を外しました。"
         structured: dict[str, Any] = {"type": "item_unequipped", "item_name": item_name}
-        spec_val = resolve_item_spec_id_value_for_instance(
-            self._context.item_repository, event.item_instance_id
-        )
+        spec_val = resolve_item_spec_id_value_for_instance(self._context.item_repository, event.item_instance_id)
         if spec_val is not None:
             structured["item_spec_id_value"] = spec_val
-        return ObservationOutput(
-            prose=prose, structured=structured, observation_category="self_only"
-        )
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_inventory_slot_overflow(
         self, event: InventorySlotOverflowEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
-        item_name = self._context.name_resolver.item_instance_name(
-            event.overflowed_item_instance_id
-        )
+        item_name = self._context.name_resolver.item_instance_name(event.overflowed_item_instance_id)
         prose = f"インベントリが満杯で{item_name}が溢れました。"
         structured: dict[str, Any] = {"type": "inventory_overflow", "item_name": item_name}
         spec_val = resolve_item_spec_id_value_for_instance(

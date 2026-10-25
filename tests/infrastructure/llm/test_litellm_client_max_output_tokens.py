@@ -38,7 +38,6 @@ def isolate_litellm_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-
 def _model_response():
     import litellm
 
@@ -73,9 +72,7 @@ class TestClientSendsTheOutputCap:
 
     def test_configured_cap_is_sent_as_max_tokens(self) -> None:
         """max_output_tokens=4096 で作ったクライアントは、主ターンの呼び出しに max_tokens=4096 を送る。"""
-        client = LiteLLMClient(
-            model=_MODEL, api_key="sk-x", reasoning_effort="minimal", max_output_tokens=4096
-        )
+        client = LiteLLMClient(model=_MODEL, api_key="sk-x", reasoning_effort="minimal", max_output_tokens=4096)
 
         kwargs = _sent_kwargs(client)
 
@@ -91,9 +88,7 @@ class TestClientSendsTheOutputCap:
 
     def test_cap_does_not_replace_the_reasoning_effort(self) -> None:
         """上限を送っても、reasoning の effort は extra_body にそのまま載る。effort と同時に送れない reasoning.max_tokens は使わない。"""
-        client = LiteLLMClient(
-            model=_MODEL, api_key="sk-x", reasoning_effort="minimal", max_output_tokens=4096
-        )
+        client = LiteLLMClient(model=_MODEL, api_key="sk-x", reasoning_effort="minimal", max_output_tokens=4096)
 
         kwargs = _sent_kwargs(client)
 
@@ -103,9 +98,7 @@ class TestClientSendsTheOutputCap:
         """LiteLLM のモデル表に無いモデルでも、max_tokens は送信前の引数検査を通り、送る値に残る。"""
         from litellm.utils import get_optional_params
 
-        client = LiteLLMClient(
-            model=_MODEL, api_key="sk-x", reasoning_effort="minimal", max_output_tokens=4096
-        )
+        client = LiteLLMClient(model=_MODEL, api_key="sk-x", reasoning_effort="minimal", max_output_tokens=4096)
         kwargs = _sent_kwargs(client)
 
         optional_params = get_optional_params(
@@ -141,18 +134,11 @@ class TestPromptDatasetKeepsTheCap:
             world_tick=1,
             phase="one_step",
         )
-        client = LiteLLMClient(
-            model=_MODEL, api_key="sk-x", reasoning_effort="minimal", max_output_tokens=4096
-        )
+        client = LiteLLMClient(model=_MODEL, api_key="sk-x", reasoning_effort="minimal", max_output_tokens=4096)
 
-        _sent_kwargs(
-            client, prompt_capture_context=SimpleNamespace(sink=sink, context=context)
-        )
+        _sent_kwargs(client, prompt_capture_context=SimpleNamespace(sink=sink, context=context))
 
-        rows = [
-            json.loads(line)
-            for line in (tmp_path / "prompt_dataset" / "calls.jsonl").read_text().splitlines()
-        ]
+        rows = [json.loads(line) for line in (tmp_path / "prompt_dataset" / "calls.jsonl").read_text().splitlines()]
         assert rows[0]["request"]["kwargs"]["max_tokens"] == 4096
 
 

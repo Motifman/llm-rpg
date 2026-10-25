@@ -25,9 +25,11 @@ class ToolHandlerConsistencyError(RuntimeError):
 #
 # 別ランタイム (= 通常 SpotGraph) で set_sub_location が必要になった場合は
 # このフィルタを呼ばないことで通せる (= ToolDefinitionDto 側に変更不要)。
-ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS: frozenset[str] = frozenset({
-    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
-})
+ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS: frozenset[str] = frozenset(
+    {
+        TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
+    }
+)
 
 
 def filter_definitions_for_escape_llm(definitions: Sequence[Any]) -> list[Any]:

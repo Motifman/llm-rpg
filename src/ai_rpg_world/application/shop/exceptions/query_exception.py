@@ -54,9 +54,7 @@ class ShopQueryApplicationException(ShopApplicationException):
         )
 
     @classmethod
-    def shop_not_found_at_location(
-        cls, spot_id: int, location_area_id: int
-    ) -> "ShopQueryApplicationException":
+    def shop_not_found_at_location(cls, spot_id: int, location_area_id: int) -> "ShopQueryApplicationException":
         """指定ロケーションにショップが存在しない場合の例外"""
         return cls(
             f"No shop at location (spot_id={spot_id}, location_area_id={location_area_id})",

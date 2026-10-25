@@ -67,9 +67,7 @@ def _is_actor_scoped_hidden(condition_type: Any) -> bool:
     return condition_type in _ACTOR_SCOPED_HIDDEN and is_hidden(condition_type)
 
 
-def is_hidden_from_state(
-    interaction: Any, actor_state: Mapping[str, Any] | None
-) -> bool:
+def is_hidden_from_state(interaction: Any, actor_state: Mapping[str, Any] | None) -> bool:
     """行為者の自由 state を直接渡す入口。
 
     ``ConditionVisibility.HIDDEN`` の条件が 1 つでも満たされていなければ
@@ -85,9 +83,7 @@ def is_hidden_from_state(
     return bool(_failed_actor_hidden_conditions(interaction, actor_state))
 
 
-def _failed_actor_hidden_conditions(
-    interaction: Any, actor_state: Mapping[str, Any] | None
-) -> list[Any]:
+def _failed_actor_hidden_conditions(interaction: Any, actor_state: Mapping[str, Any] | None) -> list[Any]:
     """行為者自身の state が満たしていない伏せた条件を返す。"""
     state = dict(actor_state or {})
     failed: list[Any] = []
@@ -119,9 +115,7 @@ def failed_actor_hidden_requirements(
     ]
 
 
-def hidden_failure_messages_from_state(
-    interaction: Any, actor_state: Mapping[str, Any] | None
-) -> list[str]:
+def hidden_failure_messages_from_state(interaction: Any, actor_state: Mapping[str, Any] | None) -> list[str]:
     """伏せた操作名を明かさず、宣言済みの不成立理由だけを返す。
 
     候補一覧から操作を落としても、対象物まで「存在しない」と扱ってはいけない。
@@ -154,16 +148,13 @@ def is_hidden_from_actor(
         return True
     if not _has_hidden_actor_state_precondition(interaction):
         return False
-    return is_hidden_from_state(
-        interaction, getattr(player, "state", None) if player is not None else None
-    )
+    return is_hidden_from_state(interaction, getattr(player, "state", None) if player is not None else None)
 
 
 def _has_hidden_actor_state_precondition(interaction: Any) -> bool:
     """伏せる条件を 1 つでも宣言しているか。"""
     return any(
-        _is_actor_scoped_hidden(getattr(cond, "condition_type", None))
-        and getattr(cond, "required_state", None)
+        _is_actor_scoped_hidden(getattr(cond, "condition_type", None)) and getattr(cond, "required_state", None)
         for cond in getattr(interaction, "preconditions", ()) or ()
     )
 
@@ -194,10 +185,7 @@ def visible_interactions(
     world_flags: frozenset[str] | None = None,
 ) -> list[Any]:
     """その行為者に見えている操作だけを、宣言順のまま返す。"""
-    return [
-        i for i in interactions
-        if not is_hidden_from_actor(i, player, world_flags)
-    ]
+    return [i for i in interactions if not is_hidden_from_actor(i, player, world_flags)]
 
 
 def visible_interactions_for_actor_plane(
@@ -238,25 +226,17 @@ def visible_action_names(
     return _names(visible_interactions(interactions, player, world_flags))
 
 
-def visible_action_names_for_state(
-    interactions: Sequence[Any], actor_state: Mapping[str, Any] | None
-) -> list[str]:
+def visible_action_names_for_state(interactions: Sequence[Any], actor_state: Mapping[str, Any] | None) -> list[str]:
     """行為者の自由 state から、見えている操作の名前だけを返す。
 
     対人行為の一覧はこちらを使う。``PlayerStatusAggregate`` を持たない
     経路 (domain service の内側) でも同じ判断を通せるようにするため。
     """
-    return _names(
-        i for i in interactions if not is_hidden_from_state(i, actor_state)
-    )
+    return _names(i for i in interactions if not is_hidden_from_state(i, actor_state))
 
 
 def _names(interactions: Iterable[Any]) -> list[str]:
-    return [
-        str(i.action_name)
-        for i in interactions
-        if getattr(i, "action_name", None)
-    ]
+    return [str(i.action_name) for i in interactions if getattr(i, "action_name", None)]
 
 
 __all__ = [

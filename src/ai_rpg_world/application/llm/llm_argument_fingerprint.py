@@ -22,11 +22,13 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 #
 # このセットに含まれる field は LLM が「自分の心情・推論を記述する」フィールドで、
 # 外界に対する効果 (どの object に / どの場所へ / どんな action を) には寄与しない。
-NARRATIVE_ARG_FIELDS: frozenset[str] = frozenset({
-    "inner_thought",      # 全 world-action tool 共通の subjective narrative
-    "reason",             # spot_graph_wait など
-    "memo",               # 環境の tool に添えるメモ帳への書き込み (#1628)
-})
+NARRATIVE_ARG_FIELDS: frozenset[str] = frozenset(
+    {
+        "inner_thought",  # 全 world-action tool 共通の subjective narrative
+        "reason",  # spot_graph_wait など
+        "memo",  # 環境の tool に添えるメモ帳への書き込み (#1628)
+    }
+)
 
 # 行動に添える発言。周りに届くので主観ではないが、同じ操作を言葉を変えて試すと
 # 毎回違う値になり、繰り返しが数えられなくなる (#1594)。speak の content は
@@ -57,9 +59,7 @@ def _with_resolved_identifiers(args: dict[str, Any]) -> dict[str, Any]:
     for key, value in args.items():
         if key == ACTION_HISTORY_PROJECTION_KEY:
             continue
-        is_identifier = (
-            ACTION_ARGUMENT_CLASSIFICATIONS.get(key) is ActionArgumentDisplayKind.IDENTIFIER_STRING
-        )
+        is_identifier = ACTION_ARGUMENT_CLASSIFICATIONS.get(key) is ActionArgumentDisplayKind.IDENTIFIER_STRING
         if is_identifier and isinstance(value, str):
             canonical = resolved.get(key)
             value = _symmetric_quotes_stripped(canonical if isinstance(canonical, str) else value)

@@ -186,16 +186,12 @@ class RestoreAllReport:
     # Phase 7 (Issue #470): 各 snapshot ファイルから読み取った metadata。
     # ``source_scenario`` が現 scenario と異なる場合は別シナリオへの
     # cross-transfer (= わざと許容、warning ログのみ)。
-    metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = field(
-        default_factory=dict
-    )
+    metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = field(default_factory=dict)
     cross_scenario_transfers: list[tuple[BeingId, str, str]] = field(
         default_factory=list
     )  # (being_id, source_scenario, current_scenario)
     # 消した部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない。
-    removed_memory_key_counts: dict[BeingId, dict[str, int]] = field(
-        default_factory=dict
-    )
+    removed_memory_key_counts: dict[BeingId, dict[str, int]] = field(default_factory=dict)
 
 
 def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
@@ -208,6 +204,7 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
     いるので順序非依存。
     """
     from ai_rpg_world.application.being.world_subsystems.public_sns_codec import PublicSnsSubsystemCodec
+
     return [
         PublicSnsSubsystemCodec(),
         # Phase 9-2
@@ -287,16 +284,9 @@ class ExperimentSnapshotSession:
             "memory_turn_clock",
             "being_short_term_memory_store",
         )
-        missing_required = [
-            name
-            for name in required_fields
-            if getattr(wiring_result, name, None) is None
-        ]
+        missing_required = [name for name in required_fields if getattr(wiring_result, name, None) is None]
         if missing_required:
-            raise RuntimeError(
-                "wiring_result is missing required handle(s) for snapshot: "
-                f"{missing_required}."
-            )
+            raise RuntimeError(f"wiring_result is missing required handle(s) for snapshot: {missing_required}.")
 
         self._memory_snapshot = BeingMemorySnapshotService(
             acquaintance_store=wiring_result.acquaintance_store,
@@ -387,17 +377,15 @@ class ExperimentSnapshotSession:
         if not self._world_gateway.exists_in(input_dir):
             if getattr(runtime, "_public_sns_data_store", None) is not None:
                 from ai_rpg_world.application.being.world_state_snapshot import WorldStateSnapshotCoverageError
+
                 raise WorldStateSnapshotCoverageError("公開SNSの再開には内容と不変識別子を持つworld.jsonが必要です")
             logger.info(
-                "no world.json in %s; skipping world state restore "
-                "(legacy snapshot directory)",
+                "no world.json in %s; skipping world state restore (legacy snapshot directory)",
                 input_dir,
             )
             return None
         snapshot = self._world_gateway.read(input_dir)
-        migrated_subsystems = migrate_legacy_recent_event_subsystems(
-            snapshot.subsystems
-        )
+        migrated_subsystems = migrate_legacy_recent_event_subsystems(snapshot.subsystems)
         if migrated_subsystems is not snapshot.subsystems:
             snapshot = WorldStateSnapshot(
                 source_scenario=snapshot.source_scenario,
@@ -424,9 +412,7 @@ class ExperimentSnapshotSession:
         """``being_id`` の snapshot file path を返す。"""
         return self._snapshot_dir / f"{being_id.value}.json"
 
-    def _resolve_player_being_ids(
-        self, player_ids: Sequence[PlayerId]
-    ) -> list[_PlayerSnapshotMapping]:
+    def _resolve_player_being_ids(self, player_ids: Sequence[PlayerId]) -> list[_PlayerSnapshotMapping]:
         """``player_ids`` を ``(player_id, being_id, file_path)`` に変換する。
 
         attach されていない player は warning ログを出してスキップ。
@@ -436,8 +422,7 @@ class ExperimentSnapshotSession:
             being_id = self._resolver.resolve_being_id(self._world_id, pid)
             if being_id is None:
                 logger.warning(
-                    "no being attached to player_id=%s in world=%s; "
-                    "skipping snapshot for this player",
+                    "no being attached to player_id=%s in world=%s; skipping snapshot for this player",
                     pid.value,
                     self._world_id.value,
                 )
@@ -482,9 +467,7 @@ class ExperimentSnapshotSession:
         )
         for m in mappings:
             try:
-                self._capture_use_case.execute(
-                    m.being_id, m.file_path, metadata=metadata
-                )
+                self._capture_use_case.execute(m.being_id, m.file_path, metadata=metadata)
                 succeeded.append(m.being_id)
                 logger.info(
                     "snapshot captured: being_id=%s file=%s",
@@ -532,20 +515,14 @@ class ExperimentSnapshotSession:
         転送する use case を許容)。
         """
         if not input_dir.exists():
-            raise FileNotFoundError(
-                f"snapshot dir does not exist: {input_dir}"
-            )
+            raise FileNotFoundError(f"snapshot dir does not exist: {input_dir}")
         if not input_dir.is_dir():
             raise NotADirectoryError(f"not a directory: {input_dir}")
 
         # ファイル名順で読み込む = 決定的な順序にする (= 復元が冪等)。
         # Phase 9-1: ``world.json`` は別 path (= WorldStateSnapshot) なので
         # Being restore のループからは除外する。
-        files = sorted(
-            p
-            for p in input_dir.iterdir()
-            if p.suffix == ".json" and p.name != "world.json"
-        )
+        files = sorted(p for p in input_dir.iterdir() if p.suffix == ".json" and p.name != "world.json")
         restored: list[BeingId] = []
         metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = {}
         cross_transfers: list[tuple[BeingId, str, str]] = []
@@ -567,9 +544,7 @@ class ExperimentSnapshotSession:
             result = self._restore_use_case.execute(path)
             restored.append(result.being_id)
             if result.removed_memory_key_counts:
-                removed_memory_key_counts[result.being_id] = (
-                    result.removed_memory_key_counts
-                )
+                removed_memory_key_counts[result.being_id] = result.removed_memory_key_counts
             metadata_by_being[result.being_id] = metadata
             logger.info(
                 "snapshot restored: being_id=%s file=%s memory_restored=%s",

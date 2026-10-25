@@ -8,7 +8,7 @@ from .relationship_domain_service import RelationshipDomainService
 from .trending_domain_service import TrendingDomainService
 
 __all__ = [
-    'RelationshipDomainService',
-    'PostVisibilityDomainService',
-    'TrendingDomainService',
+    "RelationshipDomainService",
+    "PostVisibilityDomainService",
+    "TrendingDomainService",
 ]

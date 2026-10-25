@@ -29,25 +29,15 @@ class ScenarioTeam:
 
     def __post_init__(self) -> None:
         if not isinstance(self.team_id, str) or not self.team_id.strip():
-            raise ScenarioTeamValidationException(
-                "ScenarioTeam.team_id は空でない文字列にしてください"
-            )
+            raise ScenarioTeamValidationException("ScenarioTeam.team_id は空でない文字列にしてください")
         if not isinstance(self.name, str) or not self.name.strip():
-            raise ScenarioTeamValidationException(
-                f"チーム {self.team_id} の name は空でない文字列にしてください"
-            )
+            raise ScenarioTeamValidationException(f"チーム {self.team_id} の name は空でない文字列にしてください")
         if not self.member_player_ids:
-            raise ScenarioTeamValidationException(
-                f"チーム {self.team_id} に所属する人がいません"
-            )
+            raise ScenarioTeamValidationException(f"チーム {self.team_id} に所属する人がいません")
         if len(set(self.member_player_ids)) != len(self.member_player_ids):
-            raise ScenarioTeamValidationException(
-                f"チーム {self.team_id} に同じ人が重複しています"
-            )
+            raise ScenarioTeamValidationException(f"チーム {self.team_id} に同じ人が重複しています")
         if not self.win_conditions:
-            raise ScenarioTeamValidationException(
-                f"チーム {self.team_id} に勝利条件がありません"
-            )
+            raise ScenarioTeamValidationException(f"チーム {self.team_id} に勝利条件がありません")
 
 
 def decide_team_results(
@@ -62,13 +52,6 @@ def decide_team_results(
     team_ids = [team.team_id for team in teams]
     unknown = satisfied_team_ids - set(team_ids)
     if unknown:
-        raise ScenarioTeamValidationException(
-            f"宣言に無いチームが成立したことになっています: {sorted(unknown)}"
-        )
-    on_match = (
-        GameResultEnum.WIN if len(satisfied_team_ids) == 1 else GameResultEnum.DRAW
-    )
-    return {
-        team_id: on_match if team_id in satisfied_team_ids else GameResultEnum.LOSE
-        for team_id in team_ids
-    }
+        raise ScenarioTeamValidationException(f"宣言に無いチームが成立したことになっています: {sorted(unknown)}")
+    on_match = GameResultEnum.WIN if len(satisfied_team_ids) == 1 else GameResultEnum.DRAW
+    return {team_id: on_match if team_id in satisfied_team_ids else GameResultEnum.LOSE for team_id in team_ids}

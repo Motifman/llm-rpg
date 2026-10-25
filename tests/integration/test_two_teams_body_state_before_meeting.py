@@ -14,9 +14,7 @@ from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "two_teams_unaware.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "two_teams_unaware.json"
 
 
 def _ids_by_name(runtime) -> dict[str, PlayerId]:
@@ -36,9 +34,7 @@ def _down(runtime, player_id: PlayerId) -> None:
     status.clear_events()
     runtime._player_status_repo.save(status)
     current_tick = int(runtime.current_tick())
-    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
-        EntityId.create(int(player_id))
-    )
+    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
     runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(current_tick))
     runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
     runtime._speech_event_publisher.publish_all(events)

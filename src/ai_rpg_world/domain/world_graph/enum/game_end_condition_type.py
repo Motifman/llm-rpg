@@ -18,9 +18,7 @@ class GameEndConditionTypeEnum(str, Enum):
     # ``required_state`` 側の生存者数が ``comparison_state`` 側以下なら成立。
     # 固定閾値では、片方が追放された後も古い人数で敗北してしまうため、現在の
     # 両陣営をその都度比較する条件を別に持つ。
-    SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE = (
-        "SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE"
-    )
+    SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE = "SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE"
     # 宣言した作業フラグのうち ``min_set_count`` 個以上が立ったら成立。
     #
     # FLAG_SET は 1 個ずつしか見られないので「8 個のうち 6 個」が書けない。

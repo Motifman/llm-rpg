@@ -133,9 +133,7 @@ class TestLiftDepartureInTurnIsJudgedInTheSameTick:
         """1 tick に 2 回判定しても、籠が上がった tick とその次の tick を通して、結果の知らせは 1 人につき 1 回だけ出る。"""
         runtime, ids, _ = _mine_with_sayo_walking_to_the_landing()
         announced: list[int] = []
-        runtime._player_outcome_registry.register_callback(
-            lambda player_id, old, new: announced.append(int(player_id))
-        )
+        runtime._player_outcome_registry.register_callback(lambda player_id, old, new: announced.append(int(player_id)))
 
         runtime.advance_tick()
         runtime.advance_tick()

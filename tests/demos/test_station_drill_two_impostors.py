@@ -13,17 +13,13 @@ from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
     GameEndConditionTypeEnum,
 )
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _ALLY_MARK = "あなたと同じ側"
 
 
 def _player_ids(runtime, role: str) -> tuple[PlayerId, ...]:
     return tuple(
-        PlayerId(spawn.player_id)
-        for spawn in runtime.scenario.player_spawns
-        if spawn.initial_state.get("role") == role
+        PlayerId(spawn.player_id) for spawn in runtime.scenario.player_spawns if spawn.initial_state.get("role") == role
     )
 
 
@@ -56,13 +52,10 @@ class TestStationDrillHeadcount:
         condition = next(
             condition
             for condition in runtime.scenario.lose_conditions
-            if condition.condition_type
-            is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
+            if condition.condition_type is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
         )
 
-        assert condition.condition_type is (
-            GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
-        )
+        assert condition.condition_type is (GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE)
         assert condition.required_state == {"role": "crew"}
         assert condition.comparison_state == {"role": "keeper"}
         assert condition.max_surviving is None
@@ -75,10 +68,7 @@ class TestMutuallyKnownImpostors:
         """インポスター二人の【知っている人】には、互いの表示名に仲間の印が付き、毎ターンのメッセージに出る。"""
         runtime = create_world_runtime(_DRILL)
         keepers = _player_ids(runtime, "keeper")
-        names = {
-            PlayerId(spawn.player_id): spawn.name
-            for spawn in runtime.scenario.player_spawns
-        }
+        names = {PlayerId(spawn.player_id): spawn.name for spawn in runtime.scenario.player_spawns}
 
         for viewer, ally in ((keepers[0], keepers[1]), (keepers[1], keepers[0])):
             assert f"- {names[ally]}（{_ALLY_MARK}）" in _known_people(runtime, viewer)
@@ -99,34 +89,21 @@ class TestMutuallyKnownImpostors:
         runtime = create_world_runtime(_DRILL)
 
         for keeper in _player_ids(runtime, "keeper"):
-            marked = next(
-                line for line in _known_people(runtime, keeper).splitlines()
-                if _ALLY_MARK in line
-            )
+            marked = next(line for line in _known_people(runtime, keeper).splitlines() if _ALLY_MARK in line)
             assert "keeper" not in marked
             assert "管理人" not in marked
 
-    def test_removing_the_declaration_removes_the_positive_mark(
-        self, tmp_path: Path
-    ) -> None:
+    def test_removing_the_declaration_removes_the_positive_mark(self, tmp_path: Path) -> None:
         """mutually_known_roles を空にすればインポスターの陽性表示が消える。"""
         runtime = create_world_runtime(_variant(tmp_path, []))
 
-        assert all(
-            _ALLY_MARK not in _known_people(runtime, pid)
-            for pid in _player_ids(runtime, "keeper")
-        )
+        assert all(_ALLY_MARK not in _known_people(runtime, pid) for pid in _player_ids(runtime, "keeper"))
 
-    def test_declaring_crew_would_mark_crew_and_break_the_negative_contract(
-        self, tmp_path: Path
-    ) -> None:
+    def test_declaring_crew_would_mark_crew_and_break_the_negative_contract(self, tmp_path: Path) -> None:
         """crew を宣言集合へ足せば印が現れる反例で、陰性試験の有効性を示す。"""
         runtime = create_world_runtime(_variant(tmp_path, ["keeper", "crew"]))
 
-        assert any(
-            _ALLY_MARK in _known_people(runtime, pid)
-            for pid in _player_ids(runtime, "crew")
-        )
+        assert any(_ALLY_MARK in _known_people(runtime, pid) for pid in _player_ids(runtime, "crew"))
 
     def test_both_impostor_personas_acknowledge_the_known_ally(self) -> None:
         """二人の persona は印と矛盾せず、味方を知らないとは説明しない。"""
@@ -141,9 +118,7 @@ class TestMutuallyKnownImpostors:
         """端末はインポスター二人が持ち、一人の追放で妨害手段を失わない。"""
         scenario = json.loads(_DRILL.read_text(encoding="utf-8"))
         holders = [
-            player["id"]
-            for player in scenario["players"]
-            if "control_terminal" in player.get("initial_items", [])
+            player["id"] for player in scenario["players"] if "control_terminal" in player.get("initial_items", [])
         ]
 
         assert holders == ["kuze", "jin"]
@@ -154,16 +129,11 @@ class TestMutuallyKnownImpostors:
         """相方だと表示済みの相手には、必ず拒否される襲撃操作を提示しない。"""
         runtime = create_world_runtime(_DRILL)
         keepers = _player_ids(runtime, "keeper")
-        names = {
-            PlayerId(spawn.player_id): spawn.name
-            for spawn in runtime.scenario.player_spawns
-        }
+        names = {PlayerId(spawn.player_id): spawn.name for spawn in runtime.scenario.player_spawns}
 
         for viewer, ally in ((keepers[0], keepers[1]), (keepers[1], keepers[0])):
             content = runtime.build_full_prompt(viewer)["messages"][1]["content"]
-            ally_line = next(
-                line for line in content.splitlines() if f'"{names[ally]}"' in line
-            )
+            ally_line = next(line for line in content.splitlines() if f'"{names[ally]}"' in line)
             assert "strike_down" not in ally_line
 
 
@@ -173,11 +143,7 @@ class TestTwoImpostorsCanAttack:
     def test_each_impostor_has_a_cutter_and_attacks_a_different_target(self) -> None:
         """同じ ItemSpec を別々に所持し、actor scope の待ち時間で二件とも成立する。"""
         scenario = json.loads(_DRILL.read_text(encoding="utf-8"))
-        strike = next(
-            action
-            for action in scenario["player_interactions"]
-            if action["action_name"] == "strike_down"
-        )
+        strike = next(action for action in scenario["player_interactions"] if action["action_name"] == "strike_down")
         assert "cooldown_scope" not in strike
         runtime = create_world_runtime(_DRILL)
         keepers = _player_ids(runtime, "keeper")

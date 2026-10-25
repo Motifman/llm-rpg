@@ -1,4 +1,5 @@
 """Trade コマンド用 SQLite 行とドメイン集約の変換（インフラ専用）。"""
+
 from __future__ import annotations
 
 import json
@@ -117,11 +118,7 @@ def item_aggregate_to_storage(item: ItemAggregate) -> tuple[int, int, str]:
     dur = inst.durability
     body: dict[str, Any] = {
         "quantity": int(inst.quantity),
-        "durability": (
-            None
-            if dur is None
-            else {"current": int(dur.current), "max": int(dur.max_value)}
-        ),
+        "durability": (None if dur is None else {"current": int(dur.current), "max": int(dur.max_value)}),
         "spec": spec_dict,
     }
     return int(inst.item_instance_id), int(inst.item_spec.item_spec_id), json.dumps(body)
@@ -330,15 +327,9 @@ def _dict_to_pursuit_state_core(data: dict[str, Any]) -> PursuitState:
         actor_id=WorldObjectId(int(data["actor_id"])),
         target_id=WorldObjectId(int(data["target_id"])),
         target_snapshot=(
-            _dict_to_pursuit_snapshot(_require_mapping(ts_raw, "target_snapshot"))
-            if ts_raw is not None
-            else None
+            _dict_to_pursuit_snapshot(_require_mapping(ts_raw, "target_snapshot")) if ts_raw is not None else None
         ),
-        last_known=(
-            _dict_to_last_known(_require_mapping(lk_raw, "last_known"))
-            if lk_raw is not None
-            else None
-        ),
+        last_known=(_dict_to_last_known(_require_mapping(lk_raw, "last_known")) if lk_raw is not None else None),
         failure_reason=failure_reason,
     )
 
@@ -447,9 +438,7 @@ def json_bytes_to_player_status(blob: bytes) -> PlayerStatusAggregate:
     effects_raw = data.get("active_effects") or []
     if not isinstance(effects_raw, list):
         raise ValueError("active_effects must be a list")
-    active_effects = [
-        _dict_to_status_effect(_require_mapping(x, "active_effects[]")) for x in effects_raw
-    ]
+    active_effects = [_dict_to_status_effect(_require_mapping(x, "active_effects[]")) for x in effects_raw]
 
     pursuit_raw = data.get("pursuit")
     if pursuit_raw is None:

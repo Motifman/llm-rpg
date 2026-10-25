@@ -87,12 +87,17 @@ class TestSpotInteractionService:
             failure_message="材料が足りない",
         )
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         result = service.evaluate_preconditions_result(
-            interaction, _door_object(), frozenset(), frozenset(),
+            interaction,
+            _door_object(),
+            frozenset(),
+            frozenset(),
         )
 
         assert not result.is_satisfied
@@ -106,7 +111,8 @@ class TestSpotInteractionService:
 
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
     def test_object_state_int_evaluation_failure_stops_interaction(
-        self, reason: str,
+        self,
+        reason: str,
     ) -> None:
         """整数state共通核の入力不足・未対応を通常の数量不足へ縮退させない。"""
         evaluator = MagicMock()
@@ -119,7 +125,8 @@ class TestSpotInteractionService:
             )
             if reason == "missing"
             else PredicateResult.unsupported(
-                failed_predicate=failed, failed_path=(),
+                failed_predicate=failed,
+                failed_path=(),
             )
         )
         condition = InteractionCondition(
@@ -128,20 +135,26 @@ class TestSpotInteractionService:
             required_quantity=3,
         )
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         with pytest.raises(ScenarioPredicateEvaluationException):
             SpotInteractionService(
                 predicate_evaluator=evaluator,
             ).evaluate_preconditions_result(
-                interaction, _door_object(), frozenset(), frozenset(),
+                interaction,
+                _door_object(),
+                frozenset(),
+                frozenset(),
             )
 
     @pytest.mark.parametrize("required_quantity", [0, -2])
     def test_object_state_int_direct_quantity_keeps_legacy_minimum_one(
-        self, required_quantity: int,
+        self,
+        required_quantity: int,
     ) -> None:
         """loaderを迂回した0・負の必要数は従来どおり1へ補正して共通核へ渡す。"""
         evaluator = MagicMock()
@@ -152,14 +165,19 @@ class TestSpotInteractionService:
             required_quantity=required_quantity,
         )
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         result = SpotInteractionService(
             predicate_evaluator=evaluator,
         ).evaluate_preconditions_result(
-            interaction, _door_object(), frozenset(), frozenset(),
+            interaction,
+            _door_object(),
+            frozenset(),
+            frozenset(),
         )
 
         assert result.is_satisfied
@@ -183,14 +201,19 @@ class TestSpotInteractionService:
             required_quantity=2,
         )
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         result = SpotInteractionService(
             predicate_evaluator=evaluator,
         ).evaluate_preconditions_result(
-            interaction, spot_object, frozenset(), frozenset(),
+            interaction,
+            spot_object,
+            frozenset(),
+            frozenset(),
         )
 
         assert not result.is_satisfied
@@ -223,8 +246,10 @@ class TestSpotInteractionService:
             required_quantity=3,
         )
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         result = SpotInteractionService(
@@ -259,17 +284,15 @@ class TestSpotInteractionService:
         item_spec_id = ItemSpecId.create(7)
         condition = InteractionCondition(
             condition_type=condition_type,
-            target_item_spec_id=(
-                item_spec_id
-                if condition_type is InteractionConditionTypeEnum.HAS_ITEM
-                else None
-            ),
+            target_item_spec_id=(item_spec_id if condition_type is InteractionConditionTypeEnum.HAS_ITEM else None),
             required_item_spec_ids=required_item_spec_ids,
             required_quantity=2,
         )
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         result = SpotInteractionService(
@@ -309,8 +332,10 @@ class TestSpotInteractionService:
             failure_message="材料が足りない",
         )
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         result = SpotInteractionService(
@@ -327,9 +352,7 @@ class TestSpotInteractionService:
         assert result.failed_predicate is condition
         assert result.failed_path == (0,)
         assert result.failure_message == "材料が足りない"
-        assert [
-            call.args[0].item_spec_id for call in evaluator.evaluate.call_args_list
-        ] == [first, second]
+        assert [call.args[0].item_spec_id for call in evaluator.evaluate.call_args_list] == [first, second]
 
     def test_has_items_keeps_duplicate_specs_as_independent_checks(self) -> None:
         """重複品目は個数を合算せず、従来どおり同じ必要数を二度判定する。"""
@@ -342,8 +365,10 @@ class TestSpotInteractionService:
             required_quantity=2,
         )
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         result = SpotInteractionService(
@@ -359,8 +384,7 @@ class TestSpotInteractionService:
         assert result.is_satisfied
         assert evaluator.evaluate.call_count == 2
         assert all(
-            call.args[0] == ItemSpecCountAtLeastPredicate(item_spec_id, 2)
-            for call in evaluator.evaluate.call_args_list
+            call.args[0] == ItemSpecCountAtLeastPredicate(item_spec_id, 2) for call in evaluator.evaluate.call_args_list
         )
 
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
@@ -385,25 +409,22 @@ class TestSpotInteractionService:
             )
             if reason == "missing"
             else PredicateResult.unsupported(
-                failed_predicate=failed, failed_path=(),
+                failed_predicate=failed,
+                failed_path=(),
             )
         )
         condition = InteractionCondition(
             condition_type=condition_type,
-            target_item_spec_id=(
-                item_spec_id
-                if condition_type is InteractionConditionTypeEnum.HAS_ITEM
-                else None
-            ),
+            target_item_spec_id=(item_spec_id if condition_type is InteractionConditionTypeEnum.HAS_ITEM else None),
             required_item_spec_ids=(
-                (item_spec_id,)
-                if condition_type is InteractionConditionTypeEnum.HAS_ITEMS
-                else None
+                (item_spec_id,) if condition_type is InteractionConditionTypeEnum.HAS_ITEMS else None
             ),
         )
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         with pytest.raises(ScenarioPredicateEvaluationException):
@@ -430,19 +451,25 @@ class TestSpotInteractionService:
         ],
     )
     def test_invalid_quantity_definition_does_not_call_shared_evaluator(
-        self, condition: InteractionCondition,
+        self,
+        condition: InteractionCondition,
     ) -> None:
         """参照品目がない旧DTOは従来文面で不成立となり、共通核へ渡さない。"""
         evaluator = MagicMock()
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         result = SpotInteractionService(
             predicate_evaluator=evaluator,
         ).evaluate_preconditions_result(
-            interaction, _door_object(), frozenset(), frozenset(),
+            interaction,
+            _door_object(),
+            frozenset(),
+            frozenset(),
         )
 
         assert not result.is_satisfied
@@ -470,13 +497,16 @@ class TestSpotInteractionService:
         ],
     )
     def test_quantity_one_without_counts_uses_owned_spec_fallback(
-        self, condition: InteractionCondition,
+        self,
+        condition: InteractionCondition,
     ) -> None:
         """数量1の両条件は個数mapping省略時も所持品目集合から各1個へ戻す。"""
         item_spec_id = ItemSpecId.create(7)
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         result = SpotInteractionService().evaluate_preconditions_result(
@@ -504,14 +534,17 @@ class TestSpotInteractionService:
         ],
     )
     def test_quantity_above_one_without_counts_fails_before_evaluation(
-        self, condition: InteractionCondition,
+        self,
+        condition: InteractionCondition,
     ) -> None:
         """数量2以上の両条件は個数mapping省略を推測せず、評価前に即時停止する。"""
         evaluator = MagicMock()
         evaluator.evaluate.return_value = PredicateResult.satisfied()
         interaction = InteractionDef(
-            action_name="craft", display_label="作る",
-            preconditions=(condition,), effects=(),
+            action_name="craft",
+            display_label="作る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         with pytest.raises(ValueError, match="owned_item_spec_counts is required"):
@@ -538,12 +571,17 @@ class TestSpotInteractionService:
             failure_message="まだ閉じている",
         )
         interaction = InteractionDef(
-            action_name="enter", display_label="入る",
-            preconditions=(condition,), effects=(),
+            action_name="enter",
+            display_label="入る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         result = service.evaluate_preconditions_result(
-            interaction, _door_object(), frozenset(), frozenset(),
+            interaction,
+            _door_object(),
+            frozenset(),
+            frozenset(),
         )
 
         assert result.is_satisfied is False
@@ -556,7 +594,8 @@ class TestSpotInteractionService:
 
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
     def test_object_state_evaluation_failure_stops_interaction(
-        self, reason: str,
+        self,
+        reason: str,
     ) -> None:
         """state共通核の入力不足・未対応を通常の操作不可へ縮退させない。"""
         evaluator = MagicMock()
@@ -569,7 +608,8 @@ class TestSpotInteractionService:
             )
             if reason == "missing"
             else PredicateResult.unsupported(
-                failed_predicate=failed, failed_path=(),
+                failed_predicate=failed,
+                failed_path=(),
             )
         )
         condition = InteractionCondition(
@@ -577,15 +617,20 @@ class TestSpotInteractionService:
             required_state={"open": True},
         )
         interaction = InteractionDef(
-            action_name="enter", display_label="入る",
-            preconditions=(condition,), effects=(),
+            action_name="enter",
+            display_label="入る",
+            preconditions=(condition,),
+            effects=(),
         )
 
         with pytest.raises(ScenarioPredicateEvaluationException):
             SpotInteractionService(
                 predicate_evaluator=evaluator,
             ).evaluate_preconditions_result(
-                interaction, _door_object(), frozenset(), frozenset(),
+                interaction,
+                _door_object(),
+                frozenset(),
+                frozenset(),
             )
 
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
@@ -621,7 +666,8 @@ class TestSpotInteractionService:
             )
             if reason == "missing"
             else PredicateResult.unsupported(
-                failed_predicate=failed, failed_path=(),
+                failed_predicate=failed,
+                failed_path=(),
             )
         )
         condition = InteractionCondition(
@@ -629,8 +675,10 @@ class TestSpotInteractionService:
             required_state={"ready": True},
         )
         interaction = InteractionDef(
-            action_name="use", display_label="使う",
-            preconditions=(condition,), effects=(),
+            action_name="use",
+            display_label="使う",
+            preconditions=(condition,),
+            effects=(),
         )
         scoped_aggregate = MagicMock(state={"ready": False})
 
@@ -704,18 +752,21 @@ class TestSpotInteractionService:
         interaction = InteractionDef(
             action_name="open",
             display_label="開ける",
-            preconditions=(InteractionCondition(
-                condition_type=InteractionConditionTypeEnum.FLAG_SET,
-                flag_name="power_on",
-            ),),
+            preconditions=(
+                InteractionCondition(
+                    condition_type=InteractionConditionTypeEnum.FLAG_SET,
+                    flag_name="power_on",
+                ),
+            ),
             effects=(),
         )
 
         with pytest.raises(ScenarioPredicateEvaluationException):
-            SpotInteractionService(
-                predicate_evaluator=evaluator
-            ).evaluate_preconditions_result(
-                interaction, None, frozenset(), frozenset(),
+            SpotInteractionService(predicate_evaluator=evaluator).evaluate_preconditions_result(
+                interaction,
+                None,
+                frozenset(),
+                frozenset(),
             )
 
     def test_execute_open_success(self):

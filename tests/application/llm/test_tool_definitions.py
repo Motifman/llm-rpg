@@ -29,7 +29,6 @@ from ai_rpg_world.application.llm.tool_constants import (
 class TestToolDefinitions:
     """ツール定義定数の内容"""
 
-
     def test_speech_definition_has_expected_name_and_params(self):
         """Issue #264 後続: 統合された SPEECH_DEFINITION は channel/content を持つ。
 
@@ -54,7 +53,6 @@ class TestToolDefinitions:
 class TestRegisterDefaultTools:
     """register_default_tools の正常・例外"""
 
-
     def test_register_default_tools_with_speech_enabled_adds_speech(self):
         """Issue #264 後続: 単一 speech_speak tool が登録される (SAY/WHISPER 統合後)。"""
         registry = DefaultGameToolRegistry()
@@ -62,7 +60,6 @@ class TestRegisterDefaultTools:
         entries = registry.get_definitions_with_resolvers()
         names = [e[0].name for e in entries]
         assert TOOL_NAME_SPEECH in names
-
 
     def test_register_default_tools_registry_not_registry_raises_type_error(self):
         """registry が IGameToolRegistry でないとき TypeError"""
@@ -86,9 +83,7 @@ class TestRegisterDefaultTools:
         )
 
         registry = DefaultGameToolRegistry()
-        register_default_tools(
-            registry, trade_enabled=True, trade_virtual_pages_enabled=True
-        )
+        register_default_tools(registry, trade_enabled=True, trade_virtual_pages_enabled=True)
         names = [e[0].name for e in registry.get_definitions_with_resolvers()]
         assert TOOL_NAME_TRADE_VIEW_CURRENT_PAGE in names
         assert TOOL_NAME_TRADE_OPEN_PAGE in names
@@ -102,7 +97,6 @@ class TestRegisterDefaultTools:
         names = [e[0].name for e in registry.get_definitions_with_resolvers()]
         assert TOOL_NAME_SNS_ENTER in names
         assert TOOL_NAME_TRADE_OFFER in names
-
 
     def test_trade_mutation_definitions_expose_trade_ref_only(self):
         """取引ミューテーションは trade_ref のみ（trade_label はスキーマに含めない）"""
@@ -138,9 +132,7 @@ class TestRegisterDefaultTools:
         """仮想画面 SNS の書き込み系ツールは raw ID ではなく ref を表に出す"""
         registry = DefaultGameToolRegistry()
         register_default_tools(registry, sns_enabled=True)
-        defs = {
-            entry[0].name: entry[0] for entry in registry.get_definitions_with_resolvers()
-        }
+        defs = {entry[0].name: entry[0] for entry in registry.get_definitions_with_resolvers()}
 
         create_reply = defs[TOOL_NAME_SNS_CREATE_REPLY].parameters
         assert "parent_post_ref" in create_reply["properties"]
@@ -163,9 +155,7 @@ class TestRegisterDefaultTools:
     def test_register_default_tools_sns_virtual_pages_adds_navigation_tools(self):
         """sns_enabled かつ sns_virtual_pages_enabled で仮想画面ナビツールが追加される"""
         registry = DefaultGameToolRegistry()
-        register_default_tools(
-            registry, sns_enabled=True, sns_virtual_pages_enabled=True
-        )
+        register_default_tools(registry, sns_enabled=True, sns_virtual_pages_enabled=True)
         names = [e[0].name for e in registry.get_definitions_with_resolvers()]
         assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE in names
 

@@ -115,12 +115,8 @@ class TestTheBoardNeverMatchesOnItsOwn:
         """
         board = (
             MarketBoard.empty()
-            .with_order(
-                _order(1, owner=_LENA, side=MarketOrderSide.SELL, unit_price_gold=20)
-            )
-            .with_order(
-                _order(2, owner=_TOM, side=MarketOrderSide.BUY, unit_price_gold=22)
-            )
+            .with_order(_order(1, owner=_LENA, side=MarketOrderSide.SELL, unit_price_gold=20))
+            .with_order(_order(2, owner=_TOM, side=MarketOrderSide.BUY, unit_price_gold=22))
         )
 
         assert len(board.orders) == 2
@@ -162,9 +158,7 @@ class TestOnlySomeoneElseCanTakeAnOrder:
     def test_taking_an_absent_order_is_refused(self) -> None:
         """板に無い注文は受けられない (先に売り切れていた場合)。"""
         with pytest.raises(MarketBoardStateException):
-            MarketBoard.empty().taken(
-                MarketOrderId(1), by=_TOM, quantity=1, at_tick=12
-            )
+            MarketBoard.empty().taken(MarketOrderId(1), by=_TOM, quantity=1, at_tick=12)
 
 
 class TestTheTradeRecordCarriesWhoMovedThePrice:
@@ -177,9 +171,7 @@ class TestTheTradeRecordCarriesWhoMovedThePrice:
         ため。売り注文が受けられたなら値は売り手が付けた値。これが無いと
         時系列は引けても「誰が値を動かしたか」が読めない。
         """
-        board = MarketBoard.empty().with_order(
-            _order(1, owner=_LENA, side=MarketOrderSide.SELL)
-        )
+        board = MarketBoard.empty().with_order(_order(1, owner=_LENA, side=MarketOrderSide.SELL))
 
         _, trade = board.taken(MarketOrderId(1), by=_TOM, quantity=1, at_tick=12)
 
@@ -192,9 +184,7 @@ class TestTheTradeRecordCarriesWhoMovedThePrice:
 
         売り手と買い手が入れ替わる。方向を取り違えると gold と品が逆に動く。
         """
-        board = MarketBoard.empty().with_order(
-            _order(1, owner=_TOM, side=MarketOrderSide.BUY)
-        )
+        board = MarketBoard.empty().with_order(_order(1, owner=_TOM, side=MarketOrderSide.BUY))
 
         _, trade = board.taken(MarketOrderId(1), by=_LENA, quantity=1, at_tick=12)
 
@@ -232,9 +222,7 @@ class TestExpiryIsReadWithoutChangingTheBoard:
 
     def test_live_orders_are_not_listed(self) -> None:
         """期限内の注文は取り出されない (正の対照)。"""
-        board = MarketBoard.empty().with_order(
-            _order(1, listed_at_tick=5, expires_in_ticks=10)
-        )
+        board = MarketBoard.empty().with_order(_order(1, listed_at_tick=5, expires_in_ticks=10))
 
         assert board.expired_orders(15) == ()
 
@@ -243,9 +231,7 @@ class TestExpiryIsReadWithoutChangingTheBoard:
 
         毎手番「流れた」が届き続けると、持ち主の観測が埋まる。
         """
-        board = MarketBoard.empty().with_order(
-            _order(1, listed_at_tick=5, expires_in_ticks=10)
-        )
+        board = MarketBoard.empty().with_order(_order(1, listed_at_tick=5, expires_in_ticks=10))
         board = board.awaiting_collection(MarketOrderId(1))
 
         assert board.expired_orders(16) == ()

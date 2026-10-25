@@ -306,7 +306,7 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
         MarketDeliveryLeftAtBoardEvent,
         PlayerOverflowedItemEvent,
         PlayerTradeOfferEvent,
-    PlayerTradedWithMerchantEvent,
+        PlayerTradedWithMerchantEvent,
         TimeOfDayChangedEvent,
         GamePhaseChangedEvent,
         MeetingVoteCastEvent,
@@ -336,9 +336,7 @@ class ObservedEventRegistry:
         Args:
             event_to_strategy: カスタムマッピング。None の場合はデフォルトを使用。
         """
-        self._event_to_strategy = (
-            event_to_strategy if event_to_strategy is not None else dict(_EVENT_TO_STRATEGY)
-        )
+        self._event_to_strategy = event_to_strategy if event_to_strategy is not None else dict(_EVENT_TO_STRATEGY)
 
     def is_observed(self, event: Any) -> bool:
         """イベントが観測対象の場合 True を返す。"""
@@ -360,9 +358,7 @@ class ObservedEventRegistry:
         指定 strategy が担当するイベント型のタプルを返す。
         テスト・デバッグ用。
         """
-        return tuple(
-            ev_type for ev_type, key in self._event_to_strategy.items() if key == strategy_key
-        )
+        return tuple(ev_type for ev_type, key in self._event_to_strategy.items() if key == strategy_key)
 
     def get_all_event_types(self) -> tuple[type[Any], ...]:
         """観測対象の全イベント型を返す。起動時検査・テスト・デバッグ用。"""

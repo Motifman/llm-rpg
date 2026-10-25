@@ -36,7 +36,7 @@ class ItemTradeStatisticsReadModel:
         median_price: int | None,
         total_trades: int,
         success_rate: float,
-        last_updated: datetime
+        last_updated: datetime,
     ) -> "ItemTradeStatisticsReadModel":
         """統計情報からReadModelを作成"""
         return cls(
@@ -47,7 +47,7 @@ class ItemTradeStatisticsReadModel:
             median_price=median_price,
             total_trades=total_trades,
             success_rate=success_rate,
-            last_updated=last_updated
+            last_updated=last_updated,
         )
 
     @property

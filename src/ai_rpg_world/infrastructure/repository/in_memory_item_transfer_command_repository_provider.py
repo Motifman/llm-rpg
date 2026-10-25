@@ -67,9 +67,7 @@ class InMemoryItemTransferCommandRepositoryProvider:
         store = unit_of_work.data_store
         self._player_inventories = cast(
             PlayerInventoryRepository,
-            ScopeBoundRepository(
-                InMemoryPlayerInventoryRepository(store, facade), guard
-            ),
+            ScopeBoundRepository(InMemoryPlayerInventoryRepository(store, facade), guard),
         )
         self._player_statuses = cast(
             PlayerStatusRepository,
@@ -79,9 +77,7 @@ class InMemoryItemTransferCommandRepositoryProvider:
             ItemRepository,
             ScopeBoundRepository(InMemoryItemRepository(store, facade), guard),
         )
-        self._spot_graph: SpotGraphReadRepositoryPort = (
-            ScopeBoundSpotGraphReadRepository(spot_graph, guard)
-        )
+        self._spot_graph: SpotGraphReadRepositoryPort = ScopeBoundSpotGraphReadRepository(spot_graph, guard)
         self._spot_interiors = cast(
             ISpotInteriorRepository,
             ScopeBoundRepository(
@@ -137,10 +133,7 @@ class InMemoryItemTransferCommandRepositoryProviderFactory:
     ) -> InMemoryItemTransferCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "インメモリアイテム受渡しproviderには"
-                "InMemoryUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("インメモリアイテム受渡しproviderにはInMemoryUnitOfWorkTransactionAdapterが必要です")
         return InMemoryItemTransferCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

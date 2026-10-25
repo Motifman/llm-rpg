@@ -87,9 +87,7 @@ def _scope_factory(
         InMemoryUnitOfWorkTransactionFactory(store),
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
-        repository_provider_factory=(
-            InMemoryFoodSpoilageCommandRepositoryProviderFactory()
-        ),
+        repository_provider_factory=(InMemoryFoodSpoilageCommandRepositoryProviderFactory()),
     )
 
 
@@ -121,16 +119,11 @@ def test_events_observe_all_items_after_commit() -> None:
 
     def states() -> tuple[bool, bool]:
         return tuple(
-            bool(repository.find_by_id(ItemInstanceId(value)).state[STATE_KEY_SPOILED])
-            for value in (7001, 7002)
+            bool(repository.find_by_id(ItemInstanceId(value)).state[STATE_KEY_SPOILED]) for value in (7001, 7002)
         )
 
     _store, repository, stage = _stage_with_two_items(
-        handlers=(
-            lambda event: observations.append(
-                (event.item_instance_id.value, states())
-            ),
-        ),
+        handlers=(lambda event: observations.append((event.item_instance_id.value, states())),),
     )
 
     stage.run(WorldTick(4))
@@ -179,9 +172,7 @@ def test_event_observer_failure_keeps_commit_and_continues_delivery(
     observed: list[int] = []
     _store, repository, stage = _stage_with_two_items(
         handlers=(
-            lambda _event: (_ for _ in ()).throw(
-                RuntimeError("food observation failed")
-            ),
+            lambda _event: (_ for _ in ()).throw(RuntimeError("food observation failed")),
             lambda event: observed.append(event.item_instance_id.value),
         ),
     )
@@ -191,10 +182,7 @@ def test_event_observer_failure_keeps_commit_and_continues_delivery(
 
     assert observed == [7001, 7002]
     assert "Best-effort after-commit handler failed" in caplog.text
-    assert all(
-        repository.find_by_id(ItemInstanceId(value)).state[STATE_KEY_SPOILED]
-        for value in (7001, 7002)
-    )
+    assert all(repository.find_by_id(ItemInstanceId(value)).state[STATE_KEY_SPOILED] for value in (7001, 7002))
 
 
 def test_post_commit_cleanup_failure_still_notifies_committed_items(
@@ -217,7 +205,4 @@ def test_post_commit_cleanup_failure_still_notifies_committed_items(
         stage.run(WorldTick(4))
 
     assert observed == [7001, 7002]
-    assert all(
-        repository.find_by_id(ItemInstanceId(value)).state[STATE_KEY_SPOILED]
-        for value in (7001, 7002)
-    )
+    assert all(repository.find_by_id(ItemInstanceId(value)).state[STATE_KEY_SPOILED] for value in (7001, 7002))

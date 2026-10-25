@@ -30,9 +30,7 @@ def create_llm_client_from_config(
     """
     value = config.llm_client_kind.strip().lower()
     if value not in _VALID_LLM_CLIENT_VALUES:
-        raise ValueError(
-            f"llm_client_kind must be one of {sorted(_VALID_LLM_CLIENT_VALUES)}, got: {value!r}"
-        )
+        raise ValueError(f"llm_client_kind must be one of {sorted(_VALID_LLM_CLIENT_VALUES)}, got: {value!r}")
     if value == "litellm":
         from ai_rpg_world.infrastructure.llm.litellm_client import (
             DEFAULT_LLM_MODEL,

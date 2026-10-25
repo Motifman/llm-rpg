@@ -24,9 +24,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """デモ規則は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
@@ -60,13 +60,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "tests"
-    / "fixtures"
-    / "scenarios"
-    / "info_asymmetry_demo.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "info_asymmetry_demo.json"
 
 
 @dataclass
@@ -185,9 +179,7 @@ class TestInfoAsymmetryDemoScenario:
             )
         assert "vault_unlocked" not in info_asymmetry.world_flags.as_frozen_set()
 
-    def test_wrong_code_emits_failure_observation_to_others(
-        self, info_asymmetry: _Harness
-    ) -> None:
+    def test_wrong_code_emits_failure_observation_to_others(self, info_asymmetry: _Harness) -> None:
         """誤入力時に SpotObjectInteractionFailedEvent が publish される。
 
         観測本文はシナリオの on_failure_observation のままで、actor 本人を
@@ -213,9 +205,7 @@ class TestInfoAsymmetryDemoScenario:
         assert failed_events[0].observation_message == "キーパッドの誤入力ブザーが小さく響いた。"
         assert failed_events[0].entity_id.value == pa_id
 
-    def test_no_failure_observation_when_action_does_not_exist(
-        self, info_asymmetry: _Harness
-    ) -> None:
+    def test_no_failure_observation_when_action_does_not_exist(self, info_asymmetry: _Harness) -> None:
         """InteractionNotFoundException は precondition 失敗ではないので failed event が出ない。
 
         on_failure_observation は precondition 経由の失敗にだけ反応する仕様

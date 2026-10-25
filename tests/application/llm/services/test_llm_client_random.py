@@ -44,7 +44,12 @@ _TOOLS = [
     _tool("travel_to", {"destination_label": {"type": "string"}, **_THOUGHT}, ["destination_label", "inner_thought"]),
     _tool(
         "interact",
-        {"target_label": {"type": "string"}, "action_name": {"type": "string"}, "parameters": {"type": "object"}, **_THOUGHT},
+        {
+            "target_label": {"type": "string"},
+            "action_name": {"type": "string"},
+            "parameters": {"type": "object"},
+            **_THOUGHT,
+        },
         ["target_label", "action_name", "inner_thought"],
     ),
     _tool(

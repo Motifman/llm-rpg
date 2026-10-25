@@ -95,9 +95,7 @@ class ReactiveObjectStateBinding:
             seen: set[str] = set()
             for k, _ in pairs:
                 if k in seen:
-                    raise ReactiveObjectStateBindingValidationException(
-                        f"duplicate key {k!r} in {side_name}"
-                    )
+                    raise ReactiveObjectStateBindingValidationException(f"duplicate key {k!r} in {side_name}")
                 seen.add(k)
         # Phase 2-A 以前の same-key-set 制約は撤廃。
         # asymmetric な lifecycle 表現（一方向書き換え）を許容するため。
@@ -113,9 +111,7 @@ class ReactiveObjectStateBinding:
         """
         true_keys = [k for k, _ in self.on_true_state_updates]
         true_set = set(true_keys)
-        only_false = [
-            k for k, _ in self.on_false_state_updates if k not in true_set
-        ]
+        only_false = [k for k, _ in self.on_false_state_updates if k not in true_set]
         return tuple(true_keys + only_false)
 
     def updates_for(self, predicate_value: bool) -> Mapping[str, Any]:

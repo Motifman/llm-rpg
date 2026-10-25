@@ -6,6 +6,7 @@ from ai_rpg_world.domain.world.exception.map_exception import WorldIdValidationE
 @dataclass(frozen=True)
 class WorldId:
     """世界の一意識別子"""
+
     value: int
 
     def __post_init__(self) -> None:

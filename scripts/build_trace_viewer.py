@@ -160,11 +160,13 @@ def collect_players(
 # Event timeline で表示しないノイズ系 kind (実験 #26 user フィードバック)。
 # prompt_section_breakdown と llm_call は性能計測用で人間視点では本筋を埋もれ
 # させるため、UI のイベントログからは除外する (trace.jsonl 自体には残る)。
-_EVENT_TIMELINE_HIDDEN_KINDS = frozenset({
-    "prompt_section_breakdown",
-    "llm_call",
-    "aux_llm_call",
-})
+_EVENT_TIMELINE_HIDDEN_KINDS = frozenset(
+    {
+        "prompt_section_breakdown",
+        "llm_call",
+        "aux_llm_call",
+    }
+)
 
 _EVENT_FILTER_CATEGORIES: tuple[tuple[str, str, bool], ...] = (
     ("speech", "発言", True),
@@ -246,10 +248,7 @@ def group_events_by_tick(
             continue
         obs_key = _player_spoke_observation_key(e)
         inline_observation_key = _player_spoke_speaker_content_key(e)
-        if (
-            inline_observation_key is not None
-            and inline_observation_key in inline_speech_keys
-        ):
+        if inline_observation_key is not None and inline_observation_key in inline_speech_keys:
             e = replace(
                 e,
                 payload={
@@ -284,20 +283,14 @@ def group_events_by_tick(
                     existing = by_tick[tick_key][row_idx]
                     existing_payload = dict(existing.payload)
                     recipients = list(existing_payload.get("_viewer_recipients") or [])
-                    if recipient_info is not None and not _speech_recipient_info_exists(
-                        recipients, recipient_info
-                    ):
+                    if recipient_info is not None and not _speech_recipient_info_exists(recipients, recipient_info):
                         recipients.append(recipient_info)
                     existing_payload["_viewer_recipients"] = recipients
-                    by_tick[tick_key][row_idx] = replace(
-                        existing, payload=existing_payload
-                    )
+                    by_tick[tick_key][row_idx] = replace(existing, payload=existing_payload)
                     continue
                 if speech_key is not None:
                     new_payload = dict(payload)
-                    new_payload["_viewer_recipients"] = (
-                        [recipient_info] if recipient_info is not None else []
-                    )
+                    new_payload["_viewer_recipients"] = [recipient_info] if recipient_info is not None else []
                     e = replace(e, payload=new_payload)
                     by_tick.setdefault(e.tick, []).append(e)
                     speech_obs_index[speech_key] = (e.tick, len(by_tick[e.tick]) - 1)
@@ -425,17 +418,9 @@ def build_speech_timeline(
             arguments = {}
 
         # speech 系ツール (公開発言)
-        is_speech = (
-            tool in ("say", "whisper")
-            or tool.startswith("speech_")
-        )
+        is_speech = tool in ("say", "whisper") or tool.startswith("speech_")
         if is_speech:
-            message = (
-                arguments.get("message")
-                or arguments.get("content")
-                or arguments.get("text")
-                or ""
-            )
+            message = arguments.get("message") or arguments.get("content") or arguments.get("text") or ""
             if message:
                 raw_bubbles.append(
                     {
@@ -472,9 +457,7 @@ def build_speech_timeline(
         for i, b in enumerate(bubbles):
             start = b["source_tick"]
             natural_end = start + bubble_persistence - 1
-            next_start = (
-                bubbles[i + 1]["source_tick"] - 1 if i + 1 < len(bubbles) else natural_end
-            )
+            next_start = bubbles[i + 1]["source_tick"] - 1 if i + 1 < len(bubbles) else natural_end
             end_tick = min(natural_end, next_start)
             for t in range(start, end_tick + 1):
                 timeline.setdefault(t, []).append(b)
@@ -1484,10 +1467,7 @@ def _build_event_log_html(
                 visible_row_count += 1
             pname = _event_player_label(e, name_by_pid)
             body = _format_event_body(e)
-            classes = (
-                f"event-row kind-{html.escape(kind)} "
-                f"category-{html.escape(category)}"
-            )
+            classes = f"event-row kind-{html.escape(kind)} category-{html.escape(category)}"
             if not default_visible:
                 classes += " filtered-hidden"
             if (
@@ -1504,9 +1484,7 @@ def _build_event_log_html(
                 f"</div>"
             )
         tick_attr = "" if tick is None else f' data-tick="{int(tick)}"'
-        tick_classes = "tick-block" + (
-            " all-filtered" if rows and visible_row_count == 0 else ""
-        )
+        tick_classes = "tick-block" + (" all-filtered" if rows and visible_row_count == 0 else "")
         parts.append(
             f'<div class="{tick_classes}"{tick_attr}>'
             f'<div class="tick-header">{html.escape(tick_label)}</div>'
@@ -1716,9 +1694,7 @@ def _player_spoke_recipient_info(e: TraceEvent) -> dict[str, Any] | None:
     }
 
 
-def _speech_recipient_info_exists(
-    recipients: list[dict[str, Any]], recipient_info: dict[str, Any]
-) -> bool:
+def _speech_recipient_info_exists(recipients: list[dict[str, Any]], recipient_info: dict[str, Any]) -> bool:
     """同じ受信者・聞こえ方・経路の recipient が既にあるかを返す。"""
     return any(
         isinstance(r, dict)
@@ -1742,7 +1718,7 @@ def _successful_speak_action_result_key(e: TraceEvent) -> tuple[Any, ...] | None
     prefix = "発言した:"
     if not summary.startswith(prefix):
         return None
-    content = summary[len(prefix):].strip()
+    content = summary[len(prefix) :].strip()
     # 「（あなたの声は...）」以降は delivery summary なので、action content との
     # 突き合わせから除外する。
     content = content.split("（あなたの声は", 1)[0].strip()
@@ -1773,10 +1749,7 @@ def _format_event_body(e: TraceEvent) -> str:
                 or "?"
             )
             channel = (
-                payload.get("_viewer_speech_source")
-                or structured.get("channel")
-                or payload.get("channel")
-                or "speak"
+                payload.get("_viewer_speech_source") or structured.get("channel") or payload.get("channel") or "speak"
             )
             content = structured.get("content") or payload.get("content") or payload.get("prose") or ""
             recipients = payload.get("_viewer_recipients")
@@ -1785,9 +1758,7 @@ def _format_event_body(e: TraceEvent) -> str:
                 labels = ", ".join(_format_speech_recipient(r) for r in recipients[:6])
                 if len(recipients) > 6:
                     labels += f", …(+{len(recipients) - 6})"
-                recipient_part = (
-                    f" <span class='speech-recipients'>届いた相手: {labels}</span>"
-                )
+                recipient_part = f" <span class='speech-recipients'>届いた相手: {labels}</span>"
             return (
                 f"発言 <span class='speech-channel'>[{esc(channel)}]</span> "
                 f"{esc(speaker)}: {esc(content)}{recipient_part}"
@@ -1807,30 +1778,15 @@ def _format_event_body(e: TraceEvent) -> str:
                 labels = ", ".join(_format_speech_recipient(r) for r in recipients[:6])
                 if len(recipients) > 6:
                     labels += f", …(+{len(recipients) - 6})"
-                recipient_part = (
-                    f" <span class='speech-recipients'>届いた相手: {labels}</span>"
-                )
-            inner_part = (
-                f" <span class='event-inner-thought'>内心: {esc(short(inner, 120))}</span>"
-                if inner
-                else ""
-            )
+                recipient_part = f" <span class='speech-recipients'>届いた相手: {labels}</span>"
+            inner_part = f" <span class='event-inner-thought'>内心: {esc(short(inner, 120))}</span>" if inner else ""
             return (
-                f"発言 <span class='speech-channel'>[{esc(channel)}]</span>: "
-                f"{esc(content)}{recipient_part}{inner_part}"
+                f"発言 <span class='speech-channel'>[{esc(channel)}]</span>: {esc(content)}{recipient_part}{inner_part}"
             )
         args_str = _compact_payload_summary(args) if isinstance(args, (dict, list)) else ""
         inner = args.get("inner_thought") if isinstance(args, dict) else None
-        inner_part = (
-            f" <span class='event-inner-thought'>内心: {esc(short(inner, 120))}</span>"
-            if inner
-            else ""
-        )
-        return (
-            f"<code>{esc(tool)}</code>"
-            + (f" {esc(args_str)}" if args_str else "")
-            + inner_part
-        )
+        inner_part = f" <span class='event-inner-thought'>内心: {esc(short(inner, 120))}</span>" if inner else ""
+        return f"<code>{esc(tool)}</code>" + (f" {esc(args_str)}" if args_str else "") + inner_part
     if e.kind == TraceEventKind.ACTION_RESULT:
         success = payload.get("success")
         mark = "OK" if success else "NG"
@@ -1838,7 +1794,9 @@ def _format_event_body(e: TraceEvent) -> str:
         return f"[{esc(mark)}] {esc(summary)}"
     if e.kind == TraceEventKind.MEMO_HINT:
         sim = payload.get("similarity")
-        return f"hint memo {esc(payload.get('memo_id', ''))} sim={esc(round(float(sim), 2)) if sim is not None else '?'}"
+        return (
+            f"hint memo {esc(payload.get('memo_id', ''))} sim={esc(round(float(sim), 2)) if sim is not None else '?'}"
+        )
     if e.kind == TraceEventKind.POSITION_CHANGE:
         from_id = payload.get("from_spot_id")
         to_name = payload.get("spot_name") or payload.get("to_spot_id") or ""
@@ -1851,14 +1809,9 @@ def _format_event_body(e: TraceEvent) -> str:
         reason = payload.get("boundary_reason") or "?"
         snippet = (payload.get("recall_text_snippet") or "")[:60]
         snippet_part = (
-            f" <span class='dim'>{esc(snippet)}</span>"
-            if snippet and "{" not in snippet and "}" not in snippet
-            else ""
+            f" <span class='dim'>{esc(snippet)}</span>" if snippet and "{" not in snippet and "}" not in snippet else ""
         )
-        return (
-            f"✎ chunk written id={esc(ep_short)}… "
-            f"reason={esc(reason)}{snippet_part}"
-        )
+        return f"✎ chunk written id={esc(ep_short)}… reason={esc(reason)}{snippet_part}"
     if e.kind == "episodic_recall":
         # 受動想起 (#1631 で消した) の 1 行サマリ。過去の run の trace を読むために残す。
         cand_count = int(payload.get("candidate_count") or 0)
@@ -1867,38 +1820,29 @@ def _format_event_body(e: TraceEvent) -> str:
         if candidates:
             first_ep_id = (candidates[0].get("episode_id") or "")[:6]
             first_snippet = (candidates[0].get("recall_text_snippet") or "")[:60]
-            first_ep = (
-                f" first={esc(first_ep_id)}…: "
-                f"<span class='dim'>{esc(first_snippet)}</span>"
-            )
+            first_ep = f" first={esc(first_ep_id)}…: <span class='dim'>{esc(first_snippet)}</span>"
         return f"⟲ recall {cand_count} candidates{first_ep}"
     kind = str(e.kind)
     if kind == "semantic_passive_recall":
         cand_count = int(payload.get("candidate_count") or len(payload.get("candidates") or []))
         top_k = payload.get("top_k")
         first = _first_text_from_candidates(payload.get("candidates"))
-        first_part = (
-            f" first: <span class='dim'>{esc(short(first, 90))}</span>"
-            if first
-            else ""
+        first_part = f" first: <span class='dim'>{esc(short(first, 90))}</span>" if first else ""
+        return (
+            f"semantic recall: {cand_count} candidates"
+            + (f" / top_k={esc(top_k)}" if top_k is not None else "")
+            + first_part
         )
-        return f"semantic recall: {cand_count} candidates" + (
-            f" / top_k={esc(top_k)}" if top_k is not None else ""
-        ) + first_part
     if kind == "situation_belief_recall":
         if payload.get("failed"):
             return f"situation recall failed: {esc(short(str(payload['failed']), 90))}"
         if payload.get("query") == "":
-            return (
-                "situation recall: empty situation, not searched"
-                f" / {esc(payload.get('candidate_count'))} candidates"
-            )
+            return f"situation recall: empty situation, not searched / {esc(payload.get('candidate_count'))} candidates"
         chosen = len(payload.get("chosen") or [])
         hits = payload.get("hits") or []
         first = hits[0].get("text") if hits and isinstance(hits[0], dict) else None
-        return (
-            f"situation recall: {chosen} chosen / {esc(payload.get('candidate_count'))} candidates"
-            + (f" first: <span class='dim'>{esc(short(str(first), 90))}</span>" if first else "")
+        return f"situation recall: {chosen} chosen / {esc(payload.get('candidate_count'))} candidates" + (
+            f" first: <span class='dim'>{esc(short(str(first), 90))}</span>" if first else ""
         )
     if kind == "prediction_outcome":
         outcome = (
@@ -1938,10 +1882,7 @@ def _format_event_body(e: TraceEvent) -> str:
         player_id = payload.get("player_id")
         err = payload.get("error_type") or "?"
         player_part = f" player=#{esc(player_id)}" if player_id is not None else ""
-        return (
-            f"side handler failed: {esc(handler)} / {esc(event_type)}"
-            f"{player_part} ({esc(err)})"
-        )
+        return f"side handler failed: {esc(handler)} / {esc(event_type)}{player_part} ({esc(err)})"
     return esc(_compact_payload_summary(payload))
 
 
@@ -2013,9 +1954,7 @@ def _compact_payload_summary(value: Any) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Build a self-contained trace viewer HTML (Phase 1d β)"
-    )
+    parser = argparse.ArgumentParser(description="Build a self-contained trace viewer HTML (Phase 1d β)")
     parser.add_argument(
         "run_dir",
         type=Path,
@@ -2055,7 +1994,7 @@ def main(argv: list[str] | None = None) -> int:
     topology = load_scenario_topology(scenario_path)
 
     asset = fetch_cytoscape(offline=args.offline)
-    print(f"[vendor] cytoscape@{asset.version} ({len(asset.content)//1024} KB)", flush=True)
+    print(f"[vendor] cytoscape@{asset.version} ({len(asset.content) // 1024} KB)", flush=True)
 
     out_path = args.output or (run_dir / "viewer.html")
     title = args.title or run_dir.name
@@ -2066,7 +2005,7 @@ def main(argv: list[str] | None = None) -> int:
         cytoscape_js_src=asset.content,
     )
     out_path.write_text(html_str, encoding="utf-8")
-    print(f"[viewer] {out_path} ({len(html_str)//1024} KB, {len(events)} events)")
+    print(f"[viewer] {out_path} ({len(html_str) // 1024} KB, {len(events)} events)")
     return 0
 
 

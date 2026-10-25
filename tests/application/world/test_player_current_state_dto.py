@@ -127,9 +127,7 @@ class TestPlayerCurrentStateSubDtos:
     def test_from_components_preserves_world_and_runtime_context(self):
         """部品から現在状態を組み立てて取り出すと、場所・エリア・時刻・取引情報が元の値と一致する。"""
         world = PlayerWorldStateDto(1, "本人", 10, [1, 2], "Day 1 08:00")
-        runtime = PlayerRuntimeContextDto(
-            available_trades=[AvailableTradeSummaryDto(5, "剣", 120)]
-        )
+        runtime = PlayerRuntimeContextDto(available_trades=[AvailableTradeSummaryDto(5, "剣", 120)])
 
         dto = PlayerCurrentStateDto.from_components(
             world_state=world,

@@ -49,9 +49,7 @@ class PuzzleEvaluationService:
             message=f"未知のパズルタイプ: {puzzle.puzzle_type}",
         )
 
-    def _evaluate_combination_lock(
-        self, puzzle: PuzzleState, input_value: str
-    ) -> PuzzleEvaluationResult:
+    def _evaluate_combination_lock(self, puzzle: PuzzleState, input_value: str) -> PuzzleEvaluationResult:
         """組み合わせ錠: 正解コードと一致すれば解除。"""
         expected = "".join(puzzle.solution)
         if input_value == expected:
@@ -74,9 +72,7 @@ class PuzzleEvaluationService:
             message="コードが違う。",
         )
 
-    def _evaluate_sequence(
-        self, puzzle: PuzzleState, input_value: str
-    ) -> PuzzleEvaluationResult:
+    def _evaluate_sequence(self, puzzle: PuzzleState, input_value: str) -> PuzzleEvaluationResult:
         """順序パズル: 正しい順番で入力すれば解除。間違えたらリセット。"""
         next_index = len(puzzle.current_input)
         if next_index >= len(puzzle.solution):

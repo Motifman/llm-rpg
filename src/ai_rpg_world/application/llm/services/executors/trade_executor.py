@@ -114,10 +114,7 @@ class TradeToolExecutor:
             TOOL_NAME_TRADE_ENTER: self._execute_trade_enter,
             TOOL_NAME_TRADE_EXIT: self._execute_trade_exit,
         }
-        if (
-            self._trade_page_query_service is not None
-            and self._trade_page_session is not None
-        ):
+        if self._trade_page_query_service is not None and self._trade_page_session is not None:
             handlers[TOOL_NAME_TRADE_VIEW_CURRENT_PAGE] = self._execute_view_current_page
             handlers[TOOL_NAME_TRADE_PAGE_REFRESH] = self._execute_page_refresh
             handlers[TOOL_NAME_TRADE_OPEN_PAGE] = self._execute_open_page
@@ -135,9 +132,7 @@ class TradeToolExecutor:
         )
         return handlers
 
-    def _execute_trade_enter(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_trade_enter(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._sns_mode_session is None:
             return unknown_tool("取引所モード状態が利用できません。")
         try:
@@ -154,21 +149,16 @@ class TradeToolExecutor:
             return LlmCommandResultDto(
                 success=False,
                 message=(
-                    f"既に別アプリ ({e.active_kind.value}) を開いています。"
-                    "取引所を開くには先にそちらを閉じてください。"
+                    f"既に別アプリ ({e.active_kind.value}) を開いています。取引所を開くには先にそちらを閉じてください。"
                 ),
                 error_code="ACTIVE_APP_CONFLICT",
-                remediation=(
-                    "現在開いている別アプリを exit してから enter してください。"
-                ),
+                remediation=("現在開いている別アプリを exit してから enter してください。"),
             )
         if self._trade_page_session is not None:
             self._trade_page_session.on_enter_trade(player_id)
         return LlmCommandResultDto(success=True, message="取引所を開きました。")
 
-    def _execute_trade_exit(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_trade_exit(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._sns_mode_session is None:
             return unknown_tool("取引所モード状態が利用できません。")
         self._sns_mode_session.exit_trade_mode(player_id)
@@ -181,9 +171,7 @@ class TradeToolExecutor:
         snapshot_json: str = self._trade_page_query_service.build_current_page_snapshot_json(player_id)
         return snapshot_json
 
-    def _execute_view_current_page(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_view_current_page(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_page_query_service is None:
             return unknown_tool("仮想取引所画面が利用できません。")
         try:
@@ -192,14 +180,10 @@ class TradeToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _execute_page_refresh(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_page_refresh(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         return self._execute_view_current_page(player_id, args)
 
-    def _execute_open_page(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_open_page(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_page_session is None or self._trade_page_query_service is None:
             return unknown_tool("仮想取引所画面が利用できません。")
         kind = _parse_trade_virtual_page_kind(args.get("page"))
@@ -236,16 +220,12 @@ class TradeToolExecutor:
                 return LlmCommandResultDto(success=True, message="検索画面へ遷移しました。")
             if kind == TradeVirtualPageKind.MY_TRADES:
                 raw_tab = args.get("my_trades_tab")
-                if raw_tab is None or (
-                    isinstance(raw_tab, str) and not raw_tab.strip()
-                ):
+                if raw_tab is None or (isinstance(raw_tab, str) and not raw_tab.strip()):
                     tab: MyTradesTab | None = MyTradesTab.SELLING
                 else:
                     tab = _parse_my_trades_tab_strict(raw_tab)
                     if tab is None:
-                        return invalid_arg_value_result(
-                            "my_trades_tab", "incoming|selling"
-                        )
+                        return invalid_arg_value_result("my_trades_tab", "incoming|selling")
                 sess.set_page_kind(player_id, TradeVirtualPageKind.MY_TRADES)
                 sess.set_my_trades_tab(player_id, tab)
                 sess.set_paging(player_id, offset=0)
@@ -259,9 +239,7 @@ class TradeToolExecutor:
             remediation=get_remediation("TRADE_PAGE_NOT_SUPPORTED"),
         )
 
-    def _execute_page_next(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_page_next(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_page_session is None:
             return unknown_tool("仮想取引所画面が利用できません。")
         try:
@@ -272,9 +250,7 @@ class TradeToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _execute_switch_tab(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_switch_tab(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_page_session is None:
             return unknown_tool("仮想取引所画面が利用できません。")
         raw_tab = args.get("tab")
@@ -301,16 +277,12 @@ class TradeToolExecutor:
     def _resolve_trade_id(self, player_id: int, args: dict[str, Any]) -> int | None:
         ref = args.get("trade_ref")
         if ref is not None and str(ref).strip() and self._trade_page_session is not None:
-            resolved = self._trade_page_session.resolve_trade_ref(
-                player_id, str(ref).strip()
-            )
+            resolved = self._trade_page_session.resolve_trade_ref(player_id, str(ref).strip())
             if resolved is not None:
                 return int(resolved)
         return None
 
-    def _execute_trade_offer(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_trade_offer(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_service is None:
             return unknown_tool("取引出品ツールはまだ利用できません。")
         for key in ("item_instance_id", "slot_id", "requested_gold"):
@@ -331,50 +303,38 @@ class TradeToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _execute_trade_accept(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_trade_accept(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_service is None:
             return unknown_tool("取引受諾ツールはまだ利用できません。")
         tid = self._resolve_trade_id(player_id, args)
         if tid is None:
             return invalid_arg_result("trade_ref")
         try:
-            result = self._trade_service.accept_trade(
-                AcceptTradeCommand(trade_id=tid, buyer_id=player_id)
-            )
+            result = self._trade_service.accept_trade(AcceptTradeCommand(trade_id=tid, buyer_id=player_id))
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
             return exception_result(e)
 
-    def _execute_trade_cancel(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_trade_cancel(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_service is None:
             return unknown_tool("取引キャンセルツールはまだ利用できません。")
         tid = self._resolve_trade_id(player_id, args)
         if tid is None:
             return invalid_arg_result("trade_ref")
         try:
-            result = self._trade_service.cancel_trade(
-                CancelTradeCommand(trade_id=tid, player_id=player_id)
-            )
+            result = self._trade_service.cancel_trade(CancelTradeCommand(trade_id=tid, player_id=player_id))
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
             return exception_result(e)
 
-    def _execute_trade_decline(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_trade_decline(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_service is None:
             return unknown_tool("取引拒否ツールはまだ利用できません。")
         tid = self._resolve_trade_id(player_id, args)
         if tid is None:
             return invalid_arg_result("trade_ref")
         try:
-            result = self._trade_service.decline_trade(
-                DeclineTradeCommand(trade_id=tid, decliner_id=player_id)
-            )
+            result = self._trade_service.decline_trade(DeclineTradeCommand(trade_id=tid, decliner_id=player_id))
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
             return exception_result(e)

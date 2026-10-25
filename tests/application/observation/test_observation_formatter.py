@@ -532,8 +532,10 @@ class TestObservationFormatter:
 
     def test_format_unknown_event_returns_none(self, formatter):
         """未知のイベントは None"""
+
         class UnknownEvent:
             pass
+
         out = formatter.format(UnknownEvent(), PlayerId(1))
         assert out is None
 

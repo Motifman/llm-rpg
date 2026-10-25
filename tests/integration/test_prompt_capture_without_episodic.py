@@ -18,12 +18,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.demos._world_runtime_helpers import create_world_runtime_session
 
-_SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "station_drill.json"
-)
+_SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 
 def _config() -> ResolvedLlmRuntimeConfig:
@@ -80,11 +75,7 @@ class TestPromptCaptureWithoutEpisodicMemory:
 
         state.llm_wiring.run_turn(player_id)
 
-        row = json.loads(
-            (tmp_path / "prompt_dataset" / "calls.jsonl")
-            .read_text(encoding="utf-8")
-            .splitlines()[0]
-        )
+        row = json.loads((tmp_path / "prompt_dataset" / "calls.jsonl").read_text(encoding="utf-8").splitlines()[0])
         expected = state.runtime.aux_being_resolver.resolve_being_id(
             state.runtime.aux_being_default_world_id,
             player_id,

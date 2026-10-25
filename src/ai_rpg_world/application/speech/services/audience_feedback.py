@@ -87,11 +87,7 @@ def audience_summary_text(
         )
 
     detail = f"明瞭={c_clear} / ぼんやり={c_muffled} / かすか={c_faint}"
-    note = (
-        " (かすか=声があったとしか分からず、内容は伝わっていない)"
-        if c_faint > 0
-        else ""
-    )
+    note = " (かすか=声があったとしか分からず、内容は伝わっていない)" if c_faint > 0 else ""
     return f"あなたの声は {n} 名に届きました。内訳: {detail}{note}。"
 
 

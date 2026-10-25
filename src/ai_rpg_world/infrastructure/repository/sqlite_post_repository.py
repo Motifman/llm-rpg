@@ -126,7 +126,9 @@ class SqlitePostRepository(PostRepository):
         return copy.deepcopy(
             build_post_aggregate(
                 identity_token=str(row["identity_token"]),
-                author_identity_token=None if row["author_identity_token"] is None else str(row["author_identity_token"]),
+                author_identity_token=None
+                if row["author_identity_token"] is None
+                else str(row["author_identity_token"]),
                 post_id=int(post_id),
                 author_user_id=int(row["author_user_id"]),
                 content=str(row["content"]),
@@ -203,10 +205,7 @@ class SqlitePostRepository(PostRepository):
                 INSERT INTO game_sns_post_likes (post_id, user_id, created_at)
                 VALUES (?, ?, ?)
                 """,
-                [
-                    (int(entity.post_id), int(like.user_id), like.created_at.isoformat())
-                    for like in entity.likes
-                ],
+                [(int(entity.post_id), int(like.user_id), like.created_at.isoformat()) for like in entity.likes],
             )
             self._conn.executemany(
                 "INSERT INTO game_sns_post_mentions (post_id, user_name) VALUES (?, ?)",

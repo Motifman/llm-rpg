@@ -1,4 +1,5 @@
 """取引集約の SQLite 実装（`GAME_DB_PATH` / UoW 共有接続）。"""
+
 from __future__ import annotations
 
 import copy

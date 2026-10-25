@@ -69,7 +69,9 @@ class MonsterAggregateFixtures:
         return RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True)
 
     @pytest.fixture
-    def monster_template(self, base_stats: BaseStats, reward_info: RewardInfo, respawn_info: RespawnInfo) -> MonsterTemplate:
+    def monster_template(
+        self, base_stats: BaseStats, reward_info: RewardInfo, respawn_info: RespawnInfo
+    ) -> MonsterTemplate:
         return MonsterTemplate(
             template_id=MonsterTemplateId.create(1),
             name="Slime",
@@ -137,8 +139,12 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             ids=["initial_position", "nonzero_spawn_tick"],
         )
         def test_spawn_success(
-            self, monster: MonsterAggregate, spot_id: SpotId,
-            coordinate, current_tick, expected_coordinate,
+            self,
+            monster: MonsterAggregate,
+            spot_id: SpotId,
+            coordinate,
+            current_tick,
+            expected_coordinate,
         ):
             """出現位置・時刻・満HP/MPを保存し、同じ地点と座標を通知する。"""
 
@@ -181,9 +187,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert monster.pack_id is None
             assert monster.is_pack_leader is False
 
-        def test_get_respawn_coordinate_after_respawn_unchanged(
-            self, monster: MonsterAggregate, spot_id: SpotId
-        ):
+        def test_get_respawn_coordinate_after_respawn_unchanged(self, monster: MonsterAggregate, spot_id: SpotId):
             """復活で出現時刻を更新し、復活先が違っても初回出現座標を保持する。"""
             initial = Coordinate(0, 0, 0)
             monster.spawn(initial, spot_id, WorldTick(0))
@@ -204,7 +208,6 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             monster.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
             assert monster.pack_id == pack_id
             assert monster.is_pack_leader is is_pack_leader
-
 
     class TestApplyDamage:
         def test_apply_damage_success(self, monster: MonsterAggregate, spot_id: SpotId):
@@ -261,18 +264,29 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             ("coordinate", "prior_damage", "expected_hp", "expected_coordinate"),
             [
                 pytest.param(
-                    Coordinate(2, 3, 0), 20, 80, {"x": 2, "y": 3, "z": 0},
+                    Coordinate(2, 3, 0),
+                    20,
+                    80,
+                    {"x": 2, "y": 3, "z": 0},
                     id="original-wounded",
                 ),
                 pytest.param(
-                    Coordinate(1, 1, 0), None, 100, {"x": 1, "y": 1, "z": 0},
+                    Coordinate(1, 1, 0),
+                    None,
+                    100,
+                    {"x": 1, "y": 1, "z": 0},
                     id="transferred-uninjured",
                 ),
             ],
         )
         def test_record_evasion_success(
-            self, monster: MonsterAggregate, spot_id: SpotId,
-            coordinate, prior_damage, expected_hp, expected_coordinate,
+            self,
+            monster: MonsterAggregate,
+            spot_id: SpotId,
+            coordinate,
+            prior_damage,
+            expected_hp,
+            expected_coordinate,
         ):
             """負傷時も無傷時も、回避は実HPを保ち、現在の座標とHPの通知を1件だけ追加する。"""
             # Given
@@ -329,9 +343,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             with pytest.raises(MonsterAlreadyDeadException):
                 monster.update_map_placement(SpotId(1), Coordinate(0, 0, 0))
 
-        def test_update_map_placement_after_death_raises_error(
-            self, monster: MonsterAggregate, spot_id: SpotId
-        ):
+        def test_update_map_placement_after_death_raises_error(self, monster: MonsterAggregate, spot_id: SpotId):
             """死亡済みのモンスターで update_map_placement すると MonsterAlreadyDeadException となること"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             monster.apply_damage(100, WorldTick(10))
@@ -340,7 +352,9 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
                 monster.update_map_placement(SpotId(2), Coordinate(1, 1, 0))
 
     class TestDeathAndRespawn:
-        def test_death_by_damage_adds_reward_event(self, monster: MonsterAggregate, monster_template: MonsterTemplate, spot_id: SpotId):
+        def test_death_by_damage_adds_reward_event(
+            self, monster: MonsterAggregate, monster_template: MonsterTemplate, spot_id: SpotId
+        ):
             # Given
             monster.spawn(Coordinate(1, 2, 3), spot_id, WorldTick(0))
             current_tick = WorldTick(100)
@@ -363,9 +377,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert die_event.killer_world_object_id == attacker_id
             assert die_event.cause == DeathCauseEnum.KILLED_BY_MONSTER
 
-        def test_death_by_player_sets_cause_killed_by_player(
-            self, monster: MonsterAggregate, spot_id: SpotId
-        ):
+        def test_death_by_player_sets_cause_killed_by_player(self, monster: MonsterAggregate, spot_id: SpotId):
             """プレイヤーが倒した場合 cause が KILLED_BY_PLAYER になること"""
             from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -414,15 +426,28 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             ids=["defaults", "starvation_disabled", "increase_disabled"],
         )
         def test_tick_hunger_returns_false_when_disabled(
-            self, monster_template: MonsterTemplate, skill_loadout: SkillLoadoutAggregate,
-            spot_id: SpotId, starvation_ticks: int | None, increase: float | None,
+            self,
+            monster_template: MonsterTemplate,
+            skill_loadout: SkillLoadoutAggregate,
+            spot_id: SpotId,
+            starvation_ticks: int | None,
+            increase: float | None,
         ):
             """既定設定または片方だけ無効な飢餓設定では、飢餓値を増やさずFalseを返す。"""
-            template = monster_template if starvation_ticks is None else replace(
-                monster_template, starvation_ticks=starvation_ticks, hunger_increase_per_tick=increase,
+            template = (
+                monster_template
+                if starvation_ticks is None
+                else replace(
+                    monster_template,
+                    starvation_ticks=starvation_ticks,
+                    hunger_increase_per_tick=increase,
+                )
             )
             monster = MonsterAggregate.create(
-                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout,
+                MonsterId.create(1),
+                template,
+                WorldObjectId.create(1001),
+                skill_loadout,
             )
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             result = monster.tick_hunger(WorldTick(1))
@@ -430,7 +455,11 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert monster.hunger == 0.0
 
         def test_tick_hunger_increases_hunger_and_returns_true_when_starving(
-            self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId
+            self,
+            monster_template: MonsterTemplate,
+            respawn_info: RespawnInfo,
+            skill_loadout: SkillLoadoutAggregate,
+            spot_id: SpotId,
         ):
             """飢餓有効で閾値超過持続で True、STARVATION 死亡"""
             template = MonsterTemplate(
@@ -446,9 +475,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
                 hunger_starvation_threshold=0.8,
                 starvation_ticks=2,
             )
-            monster = MonsterAggregate.create(
-                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
-            )
+            monster = MonsterAggregate.create(MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout)
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0), initial_hunger=0.0)
             assert monster.tick_hunger(WorldTick(1)) is False
             assert monster.hunger == 0.5
@@ -461,13 +488,22 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
 
         @pytest.mark.parametrize("hunger_enabled", [False, True], ids=["defaults", "enabled"])
         def test_tick_hunger_returns_false_when_not_spawned(
-            self, monster_template: MonsterTemplate, skill_loadout: SkillLoadoutAggregate,
+            self,
+            monster_template: MonsterTemplate,
+            skill_loadout: SkillLoadoutAggregate,
             hunger_enabled: bool,
         ):
             """未出現では飢餓が有効でも無効でも、飢餓値を増やさずFalseを返す。"""
-            template = replace(monster_template, starvation_ticks=2, hunger_increase_per_tick=0.5) if hunger_enabled else monster_template
+            template = (
+                replace(monster_template, starvation_ticks=2, hunger_increase_per_tick=0.5)
+                if hunger_enabled
+                else monster_template
+            )
             monster = MonsterAggregate.create(
-                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout,
+                MonsterId.create(1),
+                template,
+                WorldObjectId.create(1001),
+                skill_loadout,
             )
             assert monster.tick_hunger(WorldTick(1)) is False
             assert monster.hunger == 0.0
@@ -475,7 +511,13 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
     class TestRecordPreyKill:
         """record_prey_kill のテスト"""
 
-        def test_record_prey_kill_reduces_hunger(self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId):
+        def test_record_prey_kill_reduces_hunger(
+            self,
+            monster_template: MonsterTemplate,
+            respawn_info: RespawnInfo,
+            skill_loadout: SkillLoadoutAggregate,
+            spot_id: SpotId,
+        ):
             """獲物撃破で飢餓が減る"""
             template = MonsterTemplate(
                 template_id=monster_template.template_id,
@@ -489,14 +531,18 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
                 starvation_ticks=10,
                 hunger_decrease_on_prey_kill=0.3,
             )
-            monster = MonsterAggregate.create(
-                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
-            )
+            monster = MonsterAggregate.create(MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout)
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0), initial_hunger=0.8)
             monster.record_prey_kill(0.3)
             assert monster.hunger == pytest.approx(0.5)
 
-        def test_record_prey_kill_when_dead_raises(self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId):
+        def test_record_prey_kill_when_dead_raises(
+            self,
+            monster_template: MonsterTemplate,
+            respawn_info: RespawnInfo,
+            skill_loadout: SkillLoadoutAggregate,
+            spot_id: SpotId,
+        ):
             """死亡時は MonsterAlreadyDeadException"""
             template = MonsterTemplate(
                 template_id=monster_template.template_id,
@@ -509,9 +555,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
                 description=monster_template.description,
                 starvation_ticks=10,
             )
-            monster = MonsterAggregate.create(
-                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
-            )
+            monster = MonsterAggregate.create(MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout)
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             monster.apply_damage(999, WorldTick(10))
             with pytest.raises(MonsterAlreadyDeadException):
@@ -520,7 +564,13 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
     class TestRecordFeed:
         """record_feed（採食時の飢餓減少）のテスト"""
 
-        def test_record_feed_success(self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId):
+        def test_record_feed_success(
+            self,
+            monster_template: MonsterTemplate,
+            respawn_info: RespawnInfo,
+            skill_loadout: SkillLoadoutAggregate,
+            spot_id: SpotId,
+        ):
             """ALIVE 時に record_feed で飢餓が減少する"""
             template = MonsterTemplate(
                 template_id=monster_template.template_id,
@@ -534,32 +584,38 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
                 starvation_ticks=10,
                 hunger_decrease_on_feed=0.3,
             )
-            monster = MonsterAggregate.create(
-                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
-            )
+            monster = MonsterAggregate.create(MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout)
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0), initial_hunger=0.8)
             monster.record_feed(0.3)
             assert monster.hunger == pytest.approx(0.5)
 
         @pytest.mark.parametrize("spawned_then_killed", [True, False], ids=["dead", "unspawned"])
         def test_record_feed_when_dead_raises(
-            self, monster_template: MonsterTemplate, respawn_info: RespawnInfo,
-            skill_loadout: SkillLoadoutAggregate, spot_id: SpotId, spawned_then_killed: bool,
+            self,
+            monster_template: MonsterTemplate,
+            respawn_info: RespawnInfo,
+            skill_loadout: SkillLoadoutAggregate,
+            spot_id: SpotId,
+            spawned_then_killed: bool,
         ):
             """死亡済みと未出現の個体は、採食0.2をMonsterAlreadyDeadExceptionで拒否する。"""
             template = replace(
-                monster_template, respawn_info=respawn_info,
-                starvation_ticks=10, hunger_decrease_on_feed=0.3,
+                monster_template,
+                respawn_info=respawn_info,
+                starvation_ticks=10,
+                hunger_decrease_on_feed=0.3,
             )
             monster = MonsterAggregate.create(
-                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout,
+                MonsterId.create(1),
+                template,
+                WorldObjectId.create(1001),
+                skill_loadout,
             )
             if spawned_then_killed:
                 monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
                 monster.apply_damage(999, WorldTick(10))
             with pytest.raises(MonsterAlreadyDeadException):
                 monster.record_feed(0.2)
-
 
     class TestRememberFeed:
         """餌場記憶（remember_feed / behavior_last_known_feed）のテスト"""
@@ -597,7 +653,10 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
 
         @pytest.mark.parametrize("has_memory", [False, True], ids=["empty", "remembered"])
         def test_remember_feed_when_dead_does_nothing(
-            self, monster: MonsterAggregate, spot_id: SpotId, has_memory: bool,
+            self,
+            monster: MonsterAggregate,
+            spot_id: SpotId,
+            has_memory: bool,
         ):
             """死亡個体への記憶要求は、空または既存の餌場記憶をそのまま保つ。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
@@ -614,7 +673,9 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
 
             assert monster.behavior_last_known_feed == before
 
-        def test_behavior_last_known_feed_cleared_on_spawn(self, monster: MonsterAggregate, spot_id: SpotId, respawn_info: RespawnInfo):
+        def test_behavior_last_known_feed_cleared_on_spawn(
+            self, monster: MonsterAggregate, spot_id: SpotId, respawn_info: RespawnInfo
+        ):
             """spawn 時 _initialize_status で餌場記憶がクリアされる"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             monster.remember_feed(WorldObjectId.create(100), Coordinate(1, 0, 0))
@@ -625,7 +686,6 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             monster.respawn(Coordinate(5, 5, 0), WorldTick(respawn_tick), spot_id)
             assert monster.behavior_last_known_feed == []
 
-
     class TestDieFromOldAge:
         """die_from_old_age のテスト"""
 
@@ -635,8 +695,12 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             ids=["original_zero_origin", "nonzero_origin_boundary"],
         )
         def test_die_from_old_age_success(
-            self, monster_template: MonsterTemplate, spot_id: SpotId,
-            spawn_tick, before_tick, death_tick,
+            self,
+            monster_template: MonsterTemplate,
+            spot_id: SpotId,
+            spawn_tick,
+            before_tick,
+            death_tick,
         ):
             """出現から寿命50が経過する直前は生存し、丁度でNATURAL死亡する。"""
             template_with_age = MonsterTemplate(
@@ -897,7 +961,16 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert event.current_mp == 30
 
         @pytest.mark.parametrize(
-            ("regen_max_hp", "regen_max_mp", "regen_rate", "spent_mp", "expected_hp", "expected_mp", "healed", "recovered"),
+            (
+                "regen_max_hp",
+                "regen_max_mp",
+                "regen_rate",
+                "spent_mp",
+                "expected_hp",
+                "expected_mp",
+                "healed",
+                "recovered",
+            ),
             [
                 (100, 50, 0.01, 40, 51, 11, 1, 1),
                 (100, 50, 0.1, 0, 60, 50, 10, 0),
@@ -906,9 +979,17 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             ids=["one_percent_minimum", "custom_rate_full_mp", "distinct_supplied_stats"],
         )
         def test_on_tick_regeneration(
-            self, monster: MonsterAggregate, spot_id: SpotId,
-            regen_max_hp: int, regen_max_mp: int, regen_rate: float, spent_mp: int,
-            expected_hp: int, expected_mp: int, healed: int, recovered: int,
+            self,
+            monster: MonsterAggregate,
+            spot_id: SpotId,
+            regen_max_hp: int,
+            regen_max_mp: int,
+            regen_rate: float,
+            spent_mp: int,
+            expected_hp: int,
+            expected_mp: int,
+            healed: int,
+            recovered: int,
         ):
             """値で渡した回復率と最大値に従いHP/MPを回復し、実増分だけの未配信通知を1件ずつ積む。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
@@ -917,7 +998,9 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
                 monster.use_mp(spent_mp)
             monster.clear_events()
             regen_stats = replace(
-                monster.template.base_stats, max_hp=regen_max_hp, max_mp=regen_max_mp,
+                monster.template.base_stats,
+                max_hp=regen_max_hp,
+                max_mp=regen_max_mp,
             )
 
             monster.on_tick(WorldTick(11), regen_stats=regen_stats, regen_rate=regen_rate)
@@ -938,7 +1021,6 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             for event in events:
                 assert event.aggregate_id == monster.monster_id
                 assert event.aggregate_type == "MonsterAggregate"
-
 
         def test_on_tick_no_regen_when_rate_none(self, monster: MonsterAggregate, spot_id: SpotId):
             """regen_rate を渡さない場合は回復しないこと"""
@@ -981,6 +1063,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.2, WorldTick(100)))
 
@@ -997,6 +1080,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+
             expired_effect = StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5))
             active_effect = StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20))
             monster.add_status_effect(expired_effect)
@@ -1011,12 +1095,11 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert len(monster.active_effects) == 1
             assert monster.active_effects == [active_effect]
 
-        def test_buff_and_debuff_stacking_via_domain_service(
-            self, monster: MonsterAggregate, spot_id: SpotId
-        ):
+        def test_buff_and_debuff_stacking_via_domain_service(self, monster: MonsterAggregate, spot_id: SpotId):
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_DOWN, 0.5, WorldTick(100)))
 
@@ -1060,9 +1143,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
                 skill_loadout=skill_loadout,
             )
 
-        def test_get_current_growth_multiplier_before_spawn_returns_one(
-            self, monster_with_growth: MonsterAggregate
-        ):
+        def test_get_current_growth_multiplier_before_spawn_returns_one(self, monster_with_growth: MonsterAggregate):
             """未スポーン時は乗率 1.0 を返すこと"""
             assert monster_with_growth.get_current_growth_multiplier(WorldTick(0)) == 1.0
             assert monster_with_growth.get_current_growth_multiplier(WorldTick(200)) == 1.0
@@ -1124,9 +1205,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert monster_with_growth.get_effective_flee_threshold(WorldTick(50)) == 0.2
             assert monster_with_growth.get_allow_chase(WorldTick(50)) is True
 
-        def test_get_base_stats_with_growth_no_growth_stages_uses_one(
-            self, monster: MonsterAggregate, spot_id: SpotId
-        ):
+        def test_get_base_stats_with_growth_no_growth_stages_uses_one(self, monster: MonsterAggregate, spot_id: SpotId):
             """growth_stages が空のテンプレートでは乗率 1.0 であること"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             stats = monster.get_base_stats_with_growth(WorldTick(1000))
@@ -1164,6 +1243,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             """成長段階に flee_bias_multiplier がある場合に get_effective_flee_threshold がそれを反映すること"""
             # template_with_growth_stages は flee_bias なしなので、別 fixture で flee_bias ありのテンプレートを作る
             from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
+
             base_stats = BaseStats(100, 50, 20, 15, 10, 0.05, 0.03)
             template_flee = MonsterTemplate(
                 template_id=MonsterTemplateId.create(3),
@@ -1181,7 +1261,10 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             )
             from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
             from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-            loadout = SkillLoadoutAggregate.create(SkillLoadoutId(3), owner_id=3003, normal_capacity=10, awakened_capacity=10)
+
+            loadout = SkillLoadoutAggregate.create(
+                SkillLoadoutId(3), owner_id=3003, normal_capacity=10, awakened_capacity=10
+            )
             agg = MonsterAggregate.create(
                 monster_id=MonsterId.create(3),
                 template=template_flee,
@@ -1201,9 +1284,7 @@ class TestMonsterAggregateBehaviorState(MonsterAggregateFixtures):
     """共通の準備を使い、行動状態のスナップショット・遷移・意図通知を検証する。"""
 
     @pytest.fixture
-    def spawned_monster(
-        self, monster_template, skill_loadout, spot_id
-    ) -> MonsterAggregate:
+    def spawned_monster(self, monster_template, skill_loadout, spot_id) -> MonsterAggregate:
         agg = MonsterAggregate.create(
             monster_id=MonsterId.create(1),
             template=monster_template,
@@ -1212,7 +1293,6 @@ class TestMonsterAggregateBehaviorState(MonsterAggregateFixtures):
         )
         agg.spawn(Coordinate(5, 5, 0), spot_id, WorldTick(10))
         return agg
-
 
     def test_advance_patrol_index(self, spawned_monster):
         """advance_patrol_index がインデックスを進めること"""

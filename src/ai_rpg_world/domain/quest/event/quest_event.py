@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class QuestIssuedEvent(BaseDomainEvent[QuestId, "QuestAggregate"]):
     """クエスト発行イベント"""
+
     issuer_player_id: PlayerId | None
     scope: QuestScope
     reward: QuestReward
@@ -22,12 +23,14 @@ class QuestIssuedEvent(BaseDomainEvent[QuestId, "QuestAggregate"]):
 @dataclass(frozen=True)
 class QuestAcceptedEvent(BaseDomainEvent[QuestId, "QuestAggregate"]):
     """クエスト受託イベント"""
+
     acceptor_player_id: PlayerId
 
 
 @dataclass(frozen=True)
 class QuestCompletedEvent(BaseDomainEvent[QuestId, "QuestAggregate"]):
     """クエスト完了イベント"""
+
     acceptor_player_id: PlayerId
     reward: QuestReward
 
@@ -35,6 +38,7 @@ class QuestCompletedEvent(BaseDomainEvent[QuestId, "QuestAggregate"]):
 @dataclass(frozen=True)
 class QuestPendingApprovalEvent(BaseDomainEvent[QuestId, "QuestAggregate"]):
     """クエスト承認待ちイベント（ギルド掲示時）"""
+
     guild_id: int
     issuer_player_id: PlayerId | None
     scope: QuestScope
@@ -44,6 +48,7 @@ class QuestPendingApprovalEvent(BaseDomainEvent[QuestId, "QuestAggregate"]):
 @dataclass(frozen=True)
 class QuestApprovedEvent(BaseDomainEvent[QuestId, "QuestAggregate"]):
     """クエスト承認イベント（ギルド承認後 OPEN になる）"""
+
     approved_by: PlayerId
 
 

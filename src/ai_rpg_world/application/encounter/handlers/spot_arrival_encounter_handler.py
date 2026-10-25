@@ -61,9 +61,7 @@ class SpotArrivalEncounterHandler(EventHandler[EntityEnteredSpotEvent]):
         spot_str_id_resolver: SpotStrIdResolver,
     ) -> None:
         if not isinstance(memory, IEncounterMemory):
-            raise TypeError(
-                f"memory must be IEncounterMemory (got {type(memory)!r})"
-            )
+            raise TypeError(f"memory must be IEncounterMemory (got {type(memory)!r})")
         if not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable")
         if not callable(spot_str_id_resolver):
@@ -76,9 +74,7 @@ class SpotArrivalEncounterHandler(EventHandler[EntityEnteredSpotEvent]):
         try:
             self._handle_impl(event)
         except Exception:
-            _logger.exception(
-                "SpotArrivalEncounterHandler.handle failed (event=%r)", event
-            )
+            _logger.exception("SpotArrivalEncounterHandler.handle failed (event=%r)", event)
 
     def _handle_impl(self, event: EntityEnteredSpotEvent) -> None:
         entity_int = int(event.entity_id.value)
@@ -87,8 +83,7 @@ class SpotArrivalEncounterHandler(EventHandler[EntityEnteredSpotEvent]):
         except Exception:
             # PlayerId 構築が失敗する entity (= NPC 等の非 player) は skip。
             _logger.debug(
-                "SpotArrivalEncounterHandler: non-player entity skipped "
-                "(entity_id=%s)",
+                "SpotArrivalEncounterHandler: non-player entity skipped (entity_id=%s)",
                 entity_int,
             )
             return
@@ -98,8 +93,7 @@ class SpotArrivalEncounterHandler(EventHandler[EntityEnteredSpotEvent]):
             spot_str_id = self._spot_str_id_resolver(spot_int)
         except Exception:
             _logger.exception(
-                "SpotArrivalEncounterHandler: spot_str_id_resolver failed "
-                "(spot_id=%s); skipping",
+                "SpotArrivalEncounterHandler: spot_str_id_resolver failed (spot_id=%s); skipping",
                 spot_int,
             )
             return
@@ -107,8 +101,7 @@ class SpotArrivalEncounterHandler(EventHandler[EntityEnteredSpotEvent]):
         current_tick = self._safe_current_tick()
         if current_tick is None:
             _logger.debug(
-                "SpotArrivalEncounterHandler: current_tick unavailable; "
-                "skipping (player=%s, spot=%s)",
+                "SpotArrivalEncounterHandler: current_tick unavailable; skipping (player=%s, spot=%s)",
                 entity_int,
                 spot_str_id,
             )
@@ -121,9 +114,7 @@ class SpotArrivalEncounterHandler(EventHandler[EntityEnteredSpotEvent]):
         try:
             tick = self._current_tick_provider()
         except Exception:
-            _logger.exception(
-                "SpotArrivalEncounterHandler: current_tick_provider raised"
-            )
+            _logger.exception("SpotArrivalEncounterHandler: current_tick_provider raised")
             return None
         if not isinstance(tick, int) or isinstance(tick, bool):
             return None

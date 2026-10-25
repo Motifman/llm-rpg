@@ -9,6 +9,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 @dataclass(frozen=True)
 class SpotSpawnTable:
     """このスポットで出現しうるスポーンスロットの一覧。設定の入れ替えが可能な骨格用。"""
+
     spot_id: SpotId
     slots: list[SpawnSlot]
 
@@ -20,6 +21,5 @@ class SpotSpawnTable:
                 raise TypeError(f"slots[{i}] must be SpawnSlot, got {type(slot).__name__}")
             if slot.spot_id != self.spot_id:
                 raise ValueError(
-                    f"slots[{i}].spot_id must match SpotSpawnTable.spot_id: "
-                    f"{slot.spot_id} != {self.spot_id}"
+                    f"slots[{i}].spot_id must match SpotSpawnTable.spot_id: {slot.spot_id} != {self.spot_id}"
                 )

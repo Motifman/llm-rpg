@@ -137,9 +137,7 @@ class ObservationFormatterContext:
     def is_departed_after_downed(self, player_id: PlayerId) -> bool:
         return self.is_departed(player_id) or self.downed_self_becomes_departed
 
-    def lookup_recipient_spot(
-        self, recipient_player_id: PlayerId
-    ) -> SpotId | None:
+    def lookup_recipient_spot(self, recipient_player_id: PlayerId) -> SpotId | None:
         """observer (player) の現在 spot を引く。
 
         Issue #184 (軸 3) の位置ベース prose 分岐用。spot_graph_repository が

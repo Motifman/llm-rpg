@@ -44,12 +44,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 
-_FIXTURE = (
-    Path(__file__).resolve().parents[1]
-    / "fixtures"
-    / "scenarios"
-    / "object_cooldown_demo.json"
-)
+_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "object_cooldown_demo.json"
 #: 井戸は 6 手番おき。1 手番 5 分の既定なので 30 分。
 _COOLDOWN_TICKS = 6
 _A, _B = PlayerId(1), PlayerId(2)
@@ -162,9 +157,7 @@ class TestTheWellMakesYouWait:
 
         assert "水を汲み上げた" in " ".join(result.messages)
 
-    def test_an_object_without_the_declaration_is_never_limited(
-        self, runtime
-    ) -> None:
+    def test_an_object_without_the_declaration_is_never_limited(self, runtime) -> None:
         """待ち時間を宣言していない操作は、何度でも続けられる。
 
         **全部の操作を待たせる実装でも上の 2 つは通る。** 宣言した物だけが
@@ -177,9 +170,7 @@ class TestTheWellMakesYouWait:
 class TestEachObjectCountsItsOwnWait:
     """待ち時間は物体ごとに別々に数える。"""
 
-    def test_another_object_with_the_same_action_still_works(
-        self, runtime
-    ) -> None:
+    def test_another_object_with_the_same_action_still_works(self, runtime) -> None:
         """井戸を汲んだ直後でも、手押しポンプの同名の操作は使える。
 
         覚える単位が行為の名前だけだと、**無関係な物体が巻き添え**になる。
@@ -192,9 +183,7 @@ class TestEachObjectCountsItsOwnWait:
 
         assert "把手を押すと" in " ".join(result.messages)
 
-    def test_another_action_on_the_same_object_still_works(
-        self, runtime
-    ) -> None:
+    def test_another_action_on_the_same_object_still_works(self, runtime) -> None:
         """同じ井戸でも、別の操作は待たされない。
 
         物体ごとにまとめて封じると、**覗くこともできなくなる**。
@@ -261,9 +250,7 @@ class TestFailingDoesNotStartTheWait:
         空振りで待たされると、**前提条件を試すことが罰**になる。「暗くて
         見えなかった」で封じられると、条件を確かめる行動が取れない。
         """
-        with pytest.raises(
-            InteractionNotAllowedException, match="暗くて底が見えない"
-        ):
+        with pytest.raises(InteractionNotAllowedException, match="暗くて底が見えない"):
             runtime.do_interact(_A, "stone_well", "peer_inside")
 
         runtime.do_interact(_A, "yard_lantern", "light_lantern")
@@ -275,15 +262,14 @@ class TestFailingDoesNotStartTheWait:
 class TestAFailureAfterTheEffectsDoesNotStartTheWait:
     """効果を計算したあとで落ちた操作も、待ち時間の起点にならない。"""
 
-    def test_a_failure_while_saving_leaves_the_action_usable(
-        self, runtime, monkeypatch
-    ) -> None:
+    def test_a_failure_while_saving_leaves_the_action_usable(self, runtime, monkeypatch) -> None:
         """保存で落ちた操作のあと、同じ操作をすぐ試せる。
 
         前提条件の失敗だけを見ていると足りない。**効果計算より後の保存や配信で
         落ちた操作にも待ち時間が付いていた** (codex の指摘)。記録は適用と観測
         配信がすべて終わったあとに置く。
         """
+
         def _broken_save(self, *args, **kwargs):
             raise RuntimeError("保存が壊れている")
 
@@ -304,9 +290,7 @@ class TestAFailureAfterTheEffectsDoesNotStartTheWait:
 class TestTheReservedPrefixCannotBeClaimedByAScenario:
     """``object:`` で始まる行為名は読み込み時に落ちる。"""
 
-    def test_a_player_action_named_with_the_prefix_is_refused(
-        self, tmp_path
-    ) -> None:
+    def test_a_player_action_named_with_the_prefix_is_refused(self, tmp_path) -> None:
         """対人行為に予約接頭辞を付けると、読み込みが落ちる。
 
         接頭辞を片方に付けるだけでは**規約に頼った分離**にしかならない。対人
@@ -315,24 +299,18 @@ class TestTheReservedPrefixCannotBeClaimedByAScenario:
 
         snapshot のキー形式は変えないので、既存の保存データの移行が要らない。
         """
-        scenario = _with_player_action(
-            tmp_path, "object:1:draw_water", "reserved_player_action.json"
-        )
+        scenario = _with_player_action(tmp_path, "object:1:draw_water", "reserved_player_action.json")
 
         with pytest.raises(ScenarioLoadError, match="待ち時間の記録に使う接頭辞"):
             create_world_runtime(scenario)
 
-    def test_an_object_action_named_with_the_prefix_is_refused(
-        self, tmp_path
-    ) -> None:
+    def test_an_object_action_named_with_the_prefix_is_refused(self, tmp_path) -> None:
         """物体操作に予約接頭辞を付けても落ちる。
 
         検査は対人と物体が共通で通る 1 か所 (``_parse_interaction_def``) に
         置いてある。片方だけ守ると、もう片方から同じ衝突が入り込む。
         """
-        scenario = _with_object_action(
-            tmp_path, "object:9:sneak", "reserved_object_action.json"
-        )
+        scenario = _with_object_action(tmp_path, "object:9:sneak", "reserved_object_action.json")
 
         with pytest.raises(ScenarioLoadError, match="待ち時間の記録に使う接頭辞"):
             create_world_runtime(scenario)
@@ -344,12 +322,9 @@ class TestTheReservedPrefixCannotBeClaimedByAScenario:
         別の検査 (対人効果が無い) で落ちていたのを「接頭辞を弾いた」と読み違えて
         いた。落ちる理由まで揃える。
         """
-        scenario = _with_player_action(
-            tmp_path, "nudge_awake", "ordinary_player_action.json"
-        )
+        scenario = _with_player_action(tmp_path, "nudge_awake", "ordinary_player_action.json")
 
         create_world_runtime(scenario)
-
 
 
 class TestTheRowSaysHowLongToWait:

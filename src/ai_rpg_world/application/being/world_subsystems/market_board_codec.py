@@ -44,9 +44,7 @@ def _dict_to_owner(data: Any) -> MarketParticipant:
     try:
         kind = MarketParticipantKind(data["kind"])
     except (KeyError, ValueError) as exc:
-        raise ValueError(
-            f"{SUBSYSTEM_KEY} owner.kind unsupported: {data.get('kind')!r}"
-        ) from exc
+        raise ValueError(f"{SUBSYSTEM_KEY} owner.kind unsupported: {data.get('kind')!r}") from exc
     return MarketParticipant(kind=kind, entity_id=int(data["entity_id"]))
 
 
@@ -58,9 +56,7 @@ def _decode_last_trades(raw_trades: Any) -> tuple[MarketTrade, ...]:
     形が壊れているときだけ落とす — 壊れた板で再開しない。
     """
     if not isinstance(raw_trades, list):
-        raise ValueError(
-            f"{SUBSYSTEM_KEY} last_trades must be a list, got {type(raw_trades)}"
-        )
+        raise ValueError(f"{SUBSYSTEM_KEY} last_trades must be a list, got {type(raw_trades)}")
     trades = []
     for raw in raw_trades:
         if not isinstance(raw, dict):
@@ -68,10 +64,7 @@ def _decode_last_trades(raw_trades: Any) -> tuple[MarketTrade, ...]:
         try:
             taker_side = MarketOrderSide(raw["taker_side"])
         except (KeyError, ValueError) as exc:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} last_trade.taker_side unsupported: "
-                f"{raw.get('taker_side')!r}"
-            ) from exc
+            raise ValueError(f"{SUBSYSTEM_KEY} last_trade.taker_side unsupported: {raw.get('taker_side')!r}") from exc
         trades.append(
             MarketTrade(
                 resting_order_id=MarketOrderId(int(raw["resting_order_id"])),
@@ -132,18 +125,13 @@ class MarketBoardSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         store = getattr(runtime, "_market_board_store", None)
         if store is None:
             return
         raw_orders = data.get("orders", [])
         if not isinstance(raw_orders, list):
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} orders must be a list, got {type(raw_orders)}"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} orders must be a list, got {type(raw_orders)}")
         orders = []
         for raw in raw_orders:
             if not isinstance(raw, dict):
@@ -151,9 +139,7 @@ class MarketBoardSubsystemCodec(WorldSubsystemCodec):
             try:
                 side = MarketOrderSide(raw["side"])
             except (KeyError, ValueError) as exc:
-                raise ValueError(
-                    f"{SUBSYSTEM_KEY} order.side unsupported: {raw.get('side')!r}"
-                ) from exc
+                raise ValueError(f"{SUBSYSTEM_KEY} order.side unsupported: {raw.get('side')!r}") from exc
             orders.append(
                 MarketOrder(
                     order_id=MarketOrderId(int(raw["order_id"])),
@@ -167,9 +153,7 @@ class MarketBoardSubsystemCodec(WorldSubsystemCodec):
                     # listed + 既定期間で計算し直すと、シナリオの期間設定を
                     # 変えた後の再開で注文の寿命が伸び縮みする。
                     expires_at_tick=int(raw["expires_at_tick"]),
-                    is_awaiting_collection=bool(
-                        raw.get("is_awaiting_collection", False)
-                    ),
+                    is_awaiting_collection=bool(raw.get("is_awaiting_collection", False)),
                 )
             )
         store.replace_all(orders, _decode_last_trades(data.get("last_trades", [])))

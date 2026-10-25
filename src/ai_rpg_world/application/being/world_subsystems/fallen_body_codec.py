@@ -30,10 +30,7 @@ class FallenBodySubsystemCodec(WorldSubsystemCodec):
     def _registry(runtime: Any) -> FallenBodyRegistry:
         registry = getattr(runtime, "_fallen_body_registry", None)
         if not isinstance(registry, FallenBodyRegistry):
-            raise RuntimeError(
-                "runtime._fallen_body_registry not found; "
-                "FallenBodySubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._fallen_body_registry not found; FallenBodySubsystemCodec requires it")
         return registry
 
     def capture(self, runtime: Any) -> dict[str, Any]:
@@ -46,19 +43,14 @@ class FallenBodySubsystemCodec(WorldSubsystemCodec):
                     "spot_id": int(record.spot_id),
                     "downed_at_tick": record.downed_at_tick.value,
                 }
-                for _, record in sorted(
-                    records.items(), key=lambda item: int(item[0])
-                )
+                for _, record in sorted(records.items(), key=lambda item: int(item[0]))
             ],
         }
 
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         entries = data.get("entries")
         if not isinstance(entries, list):
             raise ValueError(f"{SUBSYSTEM_KEY} entries must be a list")
@@ -68,9 +60,7 @@ class FallenBodySubsystemCodec(WorldSubsystemCodec):
                 raise ValueError(f"{SUBSYSTEM_KEY} entry must be an object")
             player_id = PlayerId(int(entry["player_id"]))
             if player_id in restored:
-                raise ValueError(
-                    f"{SUBSYSTEM_KEY} duplicate player_id={int(player_id)}"
-                )
+                raise ValueError(f"{SUBSYSTEM_KEY} duplicate player_id={int(player_id)}")
             restored[player_id] = FallenBodyRecord(
                 player_id=player_id,
                 spot_id=SpotId.create(entry["spot_id"]),

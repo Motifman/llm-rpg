@@ -28,10 +28,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import (
     create_world_runtime,
 )
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "market_town_v3_board.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v3_board.json"
 
 
 def _refusal(tmp_path: Path, disabled: list) -> str:

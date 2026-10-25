@@ -181,12 +181,8 @@ class TestPr15ComponentIntegration:
         # 両プレイヤーに heartbeat 観測が届いている
         p1_obs = buffer.get_observations(PlayerId(1))
         p2_obs = buffer.get_observations(PlayerId(2))
-        assert any(
-            o.output.structured.get("type") == "heartbeat" for o in p1_obs
-        )
-        assert any(
-            o.output.structured.get("type") == "heartbeat" for o in p2_obs
-        )
+        assert any(o.output.structured.get("type") == "heartbeat" for o in p1_obs)
+        assert any(o.output.structured.get("type") == "heartbeat" for o in p2_obs)
         # turn も 2 体分積まれている
         assert sorted(set(scheduled)) == [1, 2]
 
@@ -205,11 +201,7 @@ class TestPr15ComponentIntegration:
         observations = buffer.get_observations(PlayerId(1))
         types = [o.output.structured.get("type") for o in observations]
         assert "action_failed" in types
-        failed = next(
-            o
-            for o in observations
-            if o.output.structured.get("type") == "action_failed"
-        )
+        failed = next(o for o in observations if o.output.structured.get("type") == "action_failed")
         assert failed.output.structured["error_code"] == "LOST_RACE"
         # should_reschedule=True なので turn も積まれる
         assert 1 in scheduled
@@ -244,6 +236,4 @@ class TestPr15ComponentIntegration:
         assert runtime.tick >= 4
         # tick 自走で heartbeat も走っているはず (interval_ticks=2 → tick 3 で emit)
         all_obs = buffer.get_observations(PlayerId(1))
-        assert any(
-            o.output.structured.get("type") == "heartbeat" for o in all_obs
-        )
+        assert any(o.output.structured.get("type") == "heartbeat" for o in all_obs)

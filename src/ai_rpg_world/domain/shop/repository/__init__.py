@@ -1,4 +1,5 @@
 """ショップリポジトリ"""
+
 from ai_rpg_world.domain.shop.repository.shop_listing_read_model_repository import (
     ShopListingReadModelRepository,
 )

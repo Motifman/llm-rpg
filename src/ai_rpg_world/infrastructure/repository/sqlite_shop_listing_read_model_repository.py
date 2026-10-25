@@ -42,15 +42,11 @@ class SqliteShopListingReadModelRepository(ShopListingReadModelRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteShopListingReadModelRepository:
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteShopListingReadModelRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteShopListingReadModelRepository:
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteShopListingReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
     def find_by_id(self, entity_id: ShopListingId) -> ShopListingReadModel | None:
@@ -104,9 +100,7 @@ class SqliteShopListingReadModelRepository(ShopListingReadModelRepository):
         return cur.rowcount > 0
 
     def find_all(self) -> list[ShopListingReadModel]:
-        cur = self._conn.execute(
-            "SELECT * FROM game_shop_listing_read_models ORDER BY listing_id ASC"
-        )
+        cur = self._conn.execute("SELECT * FROM game_shop_listing_read_models ORDER BY listing_id ASC")
         return [shop_listing_row_to_model(row) for row in cur.fetchall()]
 
     def find_by_shop_id(self, shop_id: ShopId) -> list[ShopListingReadModel]:

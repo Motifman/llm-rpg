@@ -75,9 +75,7 @@ def apply_memo_from_call(
     feedback: list[tuple[int | None, str]] = []
     added: frozenset[str] = frozenset()
     try:
-        read = read_memo_operations(
-            arguments, episode_source_offered=runtime.memo_episode_source_offered()
-        )
+        read = read_memo_operations(arguments, episode_source_offered=runtime.memo_episode_source_offered())
         if not read.present:
             return MemoCallOutcome()
         for rejected in read.rejected:
@@ -106,12 +104,8 @@ def apply_memo_from_call(
             known_episode_handles=_episode_handles(runtime, being_id),
         )
         store.save(book)
-        trace["applied"] = [
-            _applied_payload(a.index, a.operation, a.memo) for a in outcome.applied
-        ]
-        added = frozenset(
-            a.memo.memo_id for a in outcome.applied if isinstance(a.operation, AddMemo)
-        )
+        trace["applied"] = [_applied_payload(a.index, a.operation, a.memo) for a in outcome.applied]
+        added = frozenset(a.memo.memo_id for a in outcome.applied if isinstance(a.operation, AddMemo))
         for r in outcome.rejected:
             trace["rejected"].append(
                 {"index": r.index, "reason": r.reason, "raw": arguments[MEMO_FIELD_NAME][r.index], "detail": r.detail}

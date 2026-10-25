@@ -143,9 +143,7 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         for pid in self._player_audience_query.players_at_spot(event.new_spot_id):
             add(pid)
 
-    def _resolve_spot_weather_changed(
-        self, event: SpotWeatherChangedEvent, add: Callable[[PlayerId], None]
-    ) -> None:
+    def _resolve_spot_weather_changed(self, event: SpotWeatherChangedEvent, add: Callable[[PlayerId], None]) -> None:
         # 屋内スポットでは天候変化を観測させない（窓があるとは限らない・空が直接
         # 見えない前提）。SpotGraph 上で is_outdoor=False のスポットは配信先から外す。
         #
@@ -196,11 +194,9 @@ _RECIPIENT_RULES: RuleTable = {
     # --- 場所の出入り ---
     # 入った本人と、その場に居た全員。すれ違いが見えるように両方へ。
     PlayerLocationChangedEvent: DefaultRecipientStrategy._resolve_player_location_changed,
-
     # --- 重大な状態変化は位置に関わらず全員へ ---
     PlayerDownedEvent: DefaultRecipientStrategy._deliver_to_everyone_known,
     PlayerRevivedEvent: DefaultRecipientStrategy._deliver_to_everyone_known,
-
     # --- 本人だけ (他者から見えない内部状態) ---
     PlayerLevelUpEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     PlayerGoldEarnedEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
@@ -211,7 +207,6 @@ _RECIPIENT_RULES: RuleTable = {
     ItemEquippedEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     ItemUnequippedEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     InventorySlotOverflowEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
-
     # --- 天候 ---
     # 屋内は空が見えないので配らない (spot graph の is_outdoor で判定)。
     SpotWeatherChangedEvent: DefaultRecipientStrategy._resolve_spot_weather_changed,

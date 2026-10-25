@@ -23,6 +23,7 @@ def _scenario_with_item(item_dict: dict) -> dict:
     """consume_effect 検証用の最小シナリオ。既存テストの `_minimal_scenario` の
     item_specs だけを差し替える。"""
     from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
+
     scenario = copy.deepcopy(_minimal_scenario())
     scenario["item_specs"] = [item_dict]
     # GIVE_ITEM の参照は wood/water/fish などに合わせて消す (item_specs を
@@ -45,33 +46,43 @@ class TestConsumeEffectParsing:
 
     def test_consume_effect_unspecified_none(self) -> None:
         """consume effect 未指定なら None。"""
-        item_def = _load_first_item(_scenario_with_item(
-            {"id": "wood", "name": "木", "description": "ただの木", "category": "MATERIAL"}
-        ))
+        item_def = _load_first_item(
+            _scenario_with_item({"id": "wood", "name": "木", "description": "ただの木", "category": "MATERIAL"})
+        )
         assert item_def.consume_effect is None
 
     def test_single_dict_single_item_effect_resolved(self) -> None:
         """単一 dict は単一 ItemEffect に解決される。"""
-        item_def = _load_first_item(_scenario_with_item(
-            {
-                "id": "water", "name": "水", "description": "飲み水", "category": "FOOD",
-                "consume_effect": {"type": "heal_hp", "amount": 3},
-            }
-        ))
+        item_def = _load_first_item(
+            _scenario_with_item(
+                {
+                    "id": "water",
+                    "name": "水",
+                    "description": "飲み水",
+                    "category": "FOOD",
+                    "consume_effect": {"type": "heal_hp", "amount": 3},
+                }
+            )
+        )
         assert isinstance(item_def.consume_effect, HealEffect)
         assert item_def.consume_effect.amount == 3
 
     def test_list_composite_item_effect_resolved(self) -> None:
         """list は CompositeItemEffect に解決される。"""
-        item_def = _load_first_item(_scenario_with_item(
-            {
-                "id": "fish", "name": "魚", "description": "魚", "category": "FOOD",
-                "consume_effect": [
-                    {"type": "heal_hp", "amount": 5},
-                    {"type": "satisfy_need", "need_type": "HUNGER", "amount": 30},
-                ],
-            }
-        ))
+        item_def = _load_first_item(
+            _scenario_with_item(
+                {
+                    "id": "fish",
+                    "name": "魚",
+                    "description": "魚",
+                    "category": "FOOD",
+                    "consume_effect": [
+                        {"type": "heal_hp", "amount": 5},
+                        {"type": "satisfy_need", "need_type": "HUNGER", "amount": 30},
+                    ],
+                }
+            )
+        )
         eff = item_def.consume_effect
         assert isinstance(eff, CompositeItemEffect)
         assert len(eff.effects) == 2
@@ -82,12 +93,17 @@ class TestConsumeEffectParsing:
 
     def test_element_one_list_single_item_effect(self) -> None:
         """要素 1 個の list は単一 ItemEffect になる。"""
-        item_def = _load_first_item(_scenario_with_item(
-            {
-                "id": "berry", "name": "実", "description": "実", "category": "FOOD",
-                "consume_effect": [{"type": "heal_hp", "amount": 2}],
-            }
-        ))
+        item_def = _load_first_item(
+            _scenario_with_item(
+                {
+                    "id": "berry",
+                    "name": "実",
+                    "description": "実",
+                    "category": "FOOD",
+                    "consume_effect": [{"type": "heal_hp", "amount": 2}],
+                }
+            )
+        )
         # 要素1個は Composite ではなく単体で返す (冗長な wrap を避ける)
         assert isinstance(item_def.consume_effect, HealEffect)
 
@@ -98,32 +114,47 @@ class TestConsumeEffectValidation:
     def test_unknown_type_raises_value_error(self) -> None:
         """未知の type は ValueError。"""
         with pytest.raises(ValueError, match="unknown consume_effect type"):
-            _load_first_item(_scenario_with_item(
-                {
-                    "id": "x", "name": "x", "description": "x", "category": "FOOD",
-                    "consume_effect": {"type": "teleport", "amount": 1},
-                }
-            ))
+            _load_first_item(
+                _scenario_with_item(
+                    {
+                        "id": "x",
+                        "name": "x",
+                        "description": "x",
+                        "category": "FOOD",
+                        "consume_effect": {"type": "teleport", "amount": 1},
+                    }
+                )
+            )
 
     def test_satisfy_need_type_missing_raises_value_error(self) -> None:
         """satisfy need の need type 欠落で ValueError。"""
         with pytest.raises(ValueError, match="satisfy_need requires"):
-            _load_first_item(_scenario_with_item(
-                {
-                    "id": "x", "name": "x", "description": "x", "category": "FOOD",
-                    "consume_effect": {"type": "satisfy_need", "amount": 10},
-                }
-            ))
+            _load_first_item(
+                _scenario_with_item(
+                    {
+                        "id": "x",
+                        "name": "x",
+                        "description": "x",
+                        "category": "FOOD",
+                        "consume_effect": {"type": "satisfy_need", "amount": 10},
+                    }
+                )
+            )
 
     def test_type_missing_raises_value_error(self) -> None:
         """type 欠落で ValueError。"""
         with pytest.raises(ValueError, match="missing 'type'"):
-            _load_first_item(_scenario_with_item(
-                {
-                    "id": "x", "name": "x", "description": "x", "category": "FOOD",
-                    "consume_effect": {"amount": 5},
-                }
-            ))
+            _load_first_item(
+                _scenario_with_item(
+                    {
+                        "id": "x",
+                        "name": "x",
+                        "description": "x",
+                        "category": "FOOD",
+                        "consume_effect": {"amount": 5},
+                    }
+                )
+            )
 
 
 class TestReviveEffectParsing:
@@ -131,28 +162,36 @@ class TestReviveEffectParsing:
 
     def test_revive_single_dict_revive_effect_resolved(self) -> None:
         """revive 単一 dict で ReviveEffect に解決される。"""
-        item_def = _load_first_item(_scenario_with_item(
-            {
-                "id": "first_aid", "name": "救急用品",
-                "description": "蘇生薬", "category": "CONSUMABLE",
-                "consume_effect": {"type": "revive", "hp_rate": 0.4},
-            }
-        ))
+        item_def = _load_first_item(
+            _scenario_with_item(
+                {
+                    "id": "first_aid",
+                    "name": "救急用品",
+                    "description": "蘇生薬",
+                    "category": "CONSUMABLE",
+                    "consume_effect": {"type": "revive", "hp_rate": 0.4},
+                }
+            )
+        )
         assert isinstance(item_def.consume_effect, ReviveEffect)
         assert item_def.consume_effect.hp_rate == 0.4
 
     def test_revive_heal(self) -> None:
         """蘇生 + 追加 HP 回復のような composite。"""
-        item_def = _load_first_item(_scenario_with_item(
-            {
-                "id": "high_aid", "name": "高級救急用品",
-                "description": "蘇生+HP回復", "category": "CONSUMABLE",
-                "consume_effect": [
-                    {"type": "revive", "hp_rate": 0.4},
-                    {"type": "heal_hp", "amount": 20},
-                ],
-            }
-        ))
+        item_def = _load_first_item(
+            _scenario_with_item(
+                {
+                    "id": "high_aid",
+                    "name": "高級救急用品",
+                    "description": "蘇生+HP回復",
+                    "category": "CONSUMABLE",
+                    "consume_effect": [
+                        {"type": "revive", "hp_rate": 0.4},
+                        {"type": "heal_hp", "amount": 20},
+                    ],
+                }
+            )
+        )
         eff = item_def.consume_effect
         assert isinstance(eff, CompositeItemEffect)
         assert isinstance(eff.effects[0], ReviveEffect)
@@ -162,20 +201,31 @@ class TestReviveEffectParsing:
     def test_revive_hp_rate_raises_value_error(self) -> None:
         """revive の hp rate 未指定で ValueError。"""
         with pytest.raises((KeyError, ValueError)):
-            _load_first_item(_scenario_with_item(
-                {
-                    "id": "x", "name": "x", "description": "x", "category": "CONSUMABLE",
-                    "consume_effect": {"type": "revive"},
-                }
-            ))
+            _load_first_item(
+                _scenario_with_item(
+                    {
+                        "id": "x",
+                        "name": "x",
+                        "description": "x",
+                        "category": "CONSUMABLE",
+                        "consume_effect": {"type": "revive"},
+                    }
+                )
+            )
 
     def test_revive_hp_rate_raises_exception(self) -> None:
         """ReviveEffect の __post_init__ が ItemEffectValidationException を投げる。"""
         from ai_rpg_world.domain.item.exception import ItemEffectValidationException
+
         with pytest.raises(ItemEffectValidationException):
-            _load_first_item(_scenario_with_item(
-                {
-                    "id": "x", "name": "x", "description": "x", "category": "CONSUMABLE",
-                    "consume_effect": {"type": "revive", "hp_rate": 1.5},
-                }
-            ))
+            _load_first_item(
+                _scenario_with_item(
+                    {
+                        "id": "x",
+                        "name": "x",
+                        "description": "x",
+                        "category": "CONSUMABLE",
+                        "consume_effect": {"type": "revive", "hp_rate": 1.5},
+                    }
+                )
+            )

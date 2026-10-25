@@ -50,9 +50,7 @@ class WorldRuntimeQueryAdapter:
     def __init__(self, runtime: WorldRuntime) -> None:
         self._runtime = runtime
 
-    def get_player_current_state(
-        self, query: GetPlayerCurrentStateQuery
-    ) -> PlayerCurrentStateDto | None:
+    def get_player_current_state(self, query: GetPlayerCurrentStateQuery) -> PlayerCurrentStateDto | None:
         pid = PlayerId(query.player_id)
         snap = self._runtime._state_builder.build_snapshot(int(pid))
         if snap is None:
@@ -120,8 +118,6 @@ class WorldAvailableToolsProvider(IAvailableToolsProvider):
     で tools を再構築するため、ここでの値は不要)。
     """
 
-    def get_available_tools(
-        self, context: PlayerCurrentStateDto | None
-    ) -> list[dict[str, Any]]:
+    def get_available_tools(self, context: PlayerCurrentStateDto | None) -> list[dict[str, Any]]:
         del context
         return []

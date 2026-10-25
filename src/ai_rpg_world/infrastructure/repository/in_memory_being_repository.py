@@ -31,24 +31,18 @@ class InMemoryBeingRepository(BeingRepository):
 
     def save(self, being: Being) -> None:
         if not isinstance(being, Being):
-            raise TypeError(
-                f"being must be Being, got {type(being).__name__}"
-            )
+            raise TypeError(f"being must be Being, got {type(being).__name__}")
         # codec で encode して内部 snapshot store に統一。payload なし v2。
         self._snapshots[being.being_id] = BeingSnapshotCodec.encode(being)
 
     def save_snapshot(self, snapshot: BeingSnapshot) -> None:
         if not isinstance(snapshot, BeingSnapshot):
-            raise TypeError(
-                f"snapshot must be BeingSnapshot, got {type(snapshot).__name__}"
-            )
+            raise TypeError(f"snapshot must be BeingSnapshot, got {type(snapshot).__name__}")
         self._snapshots[BeingId(snapshot.being_id_value)] = snapshot
 
     def find_by_id(self, being_id: BeingId) -> Being | None:
         if not isinstance(being_id, BeingId):
-            raise TypeError(
-                f"being_id must be BeingId, got {type(being_id).__name__}"
-            )
+            raise TypeError(f"being_id must be BeingId, got {type(being_id).__name__}")
         snapshot = self._snapshots.get(being_id)
         if snapshot is None:
             return None
@@ -56,42 +50,27 @@ class InMemoryBeingRepository(BeingRepository):
 
     def find_snapshot_by_id(self, being_id: BeingId) -> BeingSnapshot | None:
         if not isinstance(being_id, BeingId):
-            raise TypeError(
-                f"being_id must be BeingId, got {type(being_id).__name__}"
-            )
+            raise TypeError(f"being_id must be BeingId, got {type(being_id).__name__}")
         return self._snapshots.get(being_id)
 
     def exists(self, being_id: BeingId) -> bool:
         if not isinstance(being_id, BeingId):
-            raise TypeError(
-                f"being_id must be BeingId, got {type(being_id).__name__}"
-            )
+            raise TypeError(f"being_id must be BeingId, got {type(being_id).__name__}")
         return being_id in self._snapshots
 
     def delete(self, being_id: BeingId) -> bool:
         if not isinstance(being_id, BeingId):
-            raise TypeError(
-                f"being_id must be BeingId, got {type(being_id).__name__}"
-            )
+            raise TypeError(f"being_id must be BeingId, got {type(being_id).__name__}")
         return self._snapshots.pop(being_id, None) is not None
 
-    def find_all_attached_to(
-        self, world_id: WorldId, player_id: PlayerId
-    ) -> list[Being]:
+    def find_all_attached_to(self, world_id: WorldId, player_id: PlayerId) -> list[Being]:
         if not isinstance(world_id, WorldId):
-            raise TypeError(
-                f"world_id must be WorldId, got {type(world_id).__name__}"
-            )
+            raise TypeError(f"world_id must be WorldId, got {type(world_id).__name__}")
         if not isinstance(player_id, PlayerId):
-            raise TypeError(
-                f"player_id must be PlayerId, got {type(player_id).__name__}"
-            )
+            raise TypeError(f"player_id must be PlayerId, got {type(player_id).__name__}")
         out: list[Being] = []
         for snapshot in self._snapshots.values():
-            if (
-                snapshot.attachment_world_id == world_id.value
-                and snapshot.attachment_player_id == player_id.value
-            ):
+            if snapshot.attachment_world_id == world_id.value and snapshot.attachment_player_id == player_id.value:
                 out.append(BeingSnapshotCodec.decode(snapshot))
         return out
 

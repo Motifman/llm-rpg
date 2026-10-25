@@ -38,10 +38,7 @@ class ScenarioPredicateRngSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
 
         state_version = data.get("state_version")
         internal_state = data.get("internal_state")
@@ -53,12 +50,9 @@ class ScenarioPredicateRngSubsystemCodec(WorldSubsystemCodec):
         if any(isinstance(value, bool) or not isinstance(value, int) for value in internal_state):
             raise ValueError(f"{SUBSYSTEM_KEY}.internal_state must contain only int")
         if gaussian_cache is not None and (
-            isinstance(gaussian_cache, bool)
-            or not isinstance(gaussian_cache, (int, float))
+            isinstance(gaussian_cache, bool) or not isinstance(gaussian_cache, (int, float))
         ):
-            raise ValueError(
-                f"{SUBSYSTEM_KEY}.gaussian_cache must be number or null"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY}.gaussian_cache must be number or null")
 
         restored_state = (state_version, tuple(internal_state), gaussian_cache)
         # 検証専用 instance に先に適用する。壊れた payload で本番の
@@ -75,8 +69,7 @@ class ScenarioPredicateRngSubsystemCodec(WorldSubsystemCodec):
         random_source = getattr(runtime, "_scenario_predicate_random", None)
         if not isinstance(random_source, random.Random):
             raise RuntimeError(
-                "runtime._scenario_predicate_random not found; "
-                "ScenarioPredicateRngSubsystemCodec requires it"
+                "runtime._scenario_predicate_random not found; ScenarioPredicateRngSubsystemCodec requires it"
             )
         return random_source
 

@@ -2,6 +2,7 @@
 
 outbox 実装で使用する。in-process では不使用（オブジェクト参照をそのまま渡す）。
 """
+
 from typing import Protocol
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent

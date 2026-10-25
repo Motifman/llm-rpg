@@ -90,9 +90,8 @@ class _StubWiring:
     from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
         _WorldLlmWiring,
     )
-    _validate_tool_handler_consistency = (
-        _WorldLlmWiring._validate_tool_handler_consistency
-    )
+
+    _validate_tool_handler_consistency = _WorldLlmWiring._validate_tool_handler_consistency
     # 検査は「どのフェーズでも露出しうる tool」を集めてから突き合わせる。
     # 集める側も本物を借りないと、フェーズ限定 tool を見落とす検査を
     # 「通った」と誤認する (vote がまさにその形で素通りしていた)。

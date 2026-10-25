@@ -1,4 +1,3 @@
-
 from ai_rpg_world.application.common.event_delivery import (
     CommandEventHandlerRegistrarPort,
     DeliveryChannel,
@@ -22,7 +21,7 @@ class SnsEventHandlerRegistry:
     def __init__(
         self,
         notification_event_handler: NotificationEventHandlerService,
-        relationship_event_handler: RelationshipEventHandlerService
+        relationship_event_handler: RelationshipEventHandlerService,
     ):
         self._notification_event_handler = notification_event_handler
         self._relationship_event_handler = relationship_event_handler
@@ -30,26 +29,38 @@ class SnsEventHandlerRegistry:
     def register_command_handlers(self, registrar: CommandEventHandlerRegistrarPort) -> None:
         """既存のイベント対応を、確定の前後を保って共通基盤へ登録する。"""
         registrar.register_after_commit(
-            SnsUserSubscribedEvent, self._notification_event_handler.handle_user_subscribed,
-            channel=DeliveryChannel.INTEGRATION, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            SnsUserSubscribedEvent,
+            self._notification_event_handler.handle_user_subscribed,
+            channel=DeliveryChannel.INTEGRATION,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
         registrar.register_after_commit(
-            SnsUserFollowedEvent, self._notification_event_handler.handle_user_followed,
-            channel=DeliveryChannel.INTEGRATION, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            SnsUserFollowedEvent,
+            self._notification_event_handler.handle_user_followed,
+            channel=DeliveryChannel.INTEGRATION,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
         registrar.register_after_commit(
-            SnsPostCreatedEvent, self._notification_event_handler.handle_post_created,
-            channel=DeliveryChannel.INTEGRATION, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            SnsPostCreatedEvent,
+            self._notification_event_handler.handle_post_created,
+            channel=DeliveryChannel.INTEGRATION,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
         registrar.register_after_commit(
-            SnsReplyCreatedEvent, self._notification_event_handler.handle_reply_created,
-            channel=DeliveryChannel.INTEGRATION, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            SnsReplyCreatedEvent,
+            self._notification_event_handler.handle_reply_created,
+            channel=DeliveryChannel.INTEGRATION,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
         registrar.register_after_commit(
-            SnsContentLikedEvent, self._notification_event_handler.handle_content_liked,
-            channel=DeliveryChannel.INTEGRATION, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            SnsContentLikedEvent,
+            self._notification_event_handler.handle_content_liked,
+            channel=DeliveryChannel.INTEGRATION,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
         registrar.register_after_commit(
-            SnsUserBlockedEvent, self._relationship_event_handler.handle_user_blocked,
-            channel=DeliveryChannel.INTEGRATION, guarantee=DeliveryGuarantee.DURABLE_RETRY,
+            SnsUserBlockedEvent,
+            self._relationship_event_handler.handle_user_blocked,
+            channel=DeliveryChannel.INTEGRATION,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )

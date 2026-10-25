@@ -38,18 +38,13 @@ def assess_situation_definition() -> ToolDefinitionDto:
     ここでは行動を実行せず、後続の行動 tool が実行を担う。
     """
     properties: dict[str, Any] = {
-        "inner_thought": deepcopy(
-            SUBJECTIVE_ACTION_FIELD_PROPERTIES["inner_thought"]
-        ),
+        "inner_thought": deepcopy(SUBJECTIVE_ACTION_FIELD_PROPERTIES["inner_thought"]),
     }
     required = ["inner_thought"]
 
     return ToolDefinitionDto(
         name=TOOL_NAME_ASSESS_SITUATION,
-        description=(
-            "行動 tool を呼ぶ前に、現在の状況・失敗履歴・次の方針を短く評価する。"
-            "ここでは行動を実行しない。"
-        ),
+        description=("行動 tool を呼ぶ前に、現在の状況・失敗履歴・次の方針を短く評価する。ここでは行動を実行しない。"),
         parameters={
             "type": "object",
             "properties": properties,

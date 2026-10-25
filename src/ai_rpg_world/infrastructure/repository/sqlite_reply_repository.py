@@ -127,8 +127,12 @@ class SqliteReplyRepository(ReplyRepository):
         return copy.deepcopy(
             build_reply_aggregate(
                 identity_token=str(row["identity_token"]),
-                author_identity_token=None if row["author_identity_token"] is None else str(row["author_identity_token"]),
-                parent_identity_token=None if row["parent_identity_token"] is None else str(row["parent_identity_token"]),
+                author_identity_token=None
+                if row["author_identity_token"] is None
+                else str(row["author_identity_token"]),
+                parent_identity_token=None
+                if row["parent_identity_token"] is None
+                else str(row["parent_identity_token"]),
                 reply_id=int(reply_id),
                 author_user_id=int(row["author_user_id"]),
                 parent_post_id=None if row["parent_post_id"] is None else int(row["parent_post_id"]),
@@ -160,9 +164,7 @@ class SqliteReplyRepository(ReplyRepository):
         return [x for entity_id in normalized for x in [self.find_by_id(entity_id)] if x is not None]
 
     def find_all(self) -> list[ReplyAggregate]:
-        cur = self._conn.execute(
-            "SELECT * FROM game_sns_replies WHERE deleted = 0 ORDER BY reply_id ASC"
-        )
+        cur = self._conn.execute("SELECT * FROM game_sns_replies WHERE deleted = 0 ORDER BY reply_id ASC")
         return [x for row in cur.fetchall() for x in [self._hydrate_reply(row)] if x is not None]
 
     def save(self, reply: ReplyAggregate) -> ReplyAggregate:
@@ -226,10 +228,7 @@ class SqliteReplyRepository(ReplyRepository):
                 INSERT INTO game_sns_reply_likes (reply_id, user_id, created_at)
                 VALUES (?, ?, ?)
                 """,
-                [
-                    (int(reply.reply_id), int(like.user_id), like.created_at.isoformat())
-                    for like in reply.likes
-                ],
+                [(int(reply.reply_id), int(like.user_id), like.created_at.isoformat()) for like in reply.likes],
             )
             self._conn.executemany(
                 "INSERT INTO game_sns_reply_mentions (reply_id, user_name) VALUES (?, ?)",
@@ -282,7 +281,9 @@ class SqliteReplyRepository(ReplyRepository):
             (int(post_id), limit, offset),
         )
 
-    def find_by_post_id_include_deleted(self, post_id: PostId, limit: int = 20, offset: int = 0) -> list[ReplyAggregate]:
+    def find_by_post_id_include_deleted(
+        self, post_id: PostId, limit: int = 20, offset: int = 0
+    ) -> list[ReplyAggregate]:
         return self._load_query(
             """
             SELECT *
@@ -389,7 +390,11 @@ class SqliteReplyRepository(ReplyRepository):
         if current_depth > max_depth:
             return
         if isinstance(parent_id, PostId):
-            replies = self.find_by_post_id_include_deleted(parent_id, limit=1000, offset=0) if include_deleted else self.find_by_post_id(parent_id, limit=1000, offset=0)
+            replies = (
+                self.find_by_post_id_include_deleted(parent_id, limit=1000, offset=0)
+                if include_deleted
+                else self.find_by_post_id(parent_id, limit=1000, offset=0)
+            )
         else:
             if include_deleted:
                 replies = self._load_query(

@@ -1,4 +1,5 @@
 """ShopCommandServiceのテスト"""
+
 import pytest
 from tests.support.command_scope_stack import CommandScopeTestStack
 
@@ -165,9 +166,7 @@ class TestShopCommandService:
         cmd = CreateShopCommand(spot_id=1, location_area_id=1, owner_id=1)
         s["service"].create_shop(cmd)
         with pytest.raises(ShopAlreadyExistsAtLocationException) as exc_info:
-            s["service"].create_shop(
-                CreateShopCommand(spot_id=1, location_area_id=1, owner_id=2)
-            )
+            s["service"].create_shop(CreateShopCommand(spot_id=1, location_area_id=1, owner_id=2))
         assert "1" in str(exc_info.value)
 
     def test_create_shop_invalid_spot_id_raises(self, setup_service):
@@ -215,9 +214,7 @@ class TestShopCommandService:
     def test_close_shop_non_owner_raises(self, setup_service):
         """非オーナーが閉鎖すると例外"""
         s = setup_service
-        create_result = s["service"].create_shop(
-            CreateShopCommand(spot_id=1, location_area_id=1, owner_id=1)
-        )
+        create_result = s["service"].create_shop(CreateShopCommand(spot_id=1, location_area_id=1, owner_id=1))
         shop_id = create_result.data["shop_id"]
         with pytest.raises(NotShopOwnerException) as exc_info:
             s["service"].close_shop(CloseShopCommand(shop_id=shop_id, player_id=2))
@@ -247,9 +244,7 @@ class TestShopCommandService:
 
         item_spec = _create_stackable_item_spec()
         item_id = s["item_repo"].generate_item_instance_id()
-        item = ItemAggregate.create(
-            item_instance_id=item_id, item_spec=item_spec, quantity=3
-        )
+        item = ItemAggregate.create(item_instance_id=item_id, item_spec=item_spec, quantity=3)
         s["item_repo"].save(item)
 
         inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(owner_id))
@@ -267,9 +262,7 @@ class TestShopCommandService:
         assert list_result.success is True
         assert s["inv_repo"].find_by_id(PlayerId(owner_id)).get_item_instance_id_by_slot(SlotId(0)) is None
 
-        result = s["service"].close_shop(
-            CloseShopCommand(shop_id=shop_id, player_id=owner_id)
-        )
+        result = s["service"].close_shop(CloseShopCommand(shop_id=shop_id, player_id=owner_id))
         assert result.success is True
         assert s["shop_repo"].find_by_id(ShopId(shop_id)) is None
 
@@ -780,4 +773,3 @@ class TestShopCommandService:
         with pytest.raises(ShopCommandException) as exc_info:
             s["service"].purchase_from_shop(cmd)
         assert "ゴールド" in str(exc_info.value) or "gold" in str(exc_info.value).lower()
-

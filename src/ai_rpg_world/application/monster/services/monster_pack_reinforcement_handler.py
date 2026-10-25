@@ -118,9 +118,7 @@ class MonsterPackReinforcementHandler:
         # pack member を 1 回だけ引いて、victim 探索 / responder 集計の
         # 両方で再利用する。tick service 側で渡された場合はそれを使う。
         if pack_members is None:
-            pack_members = self._monster_repository.find_by_pack_id(
-                monster.pack_id
-            )
+            pack_members = self._monster_repository.find_by_pack_id(monster.pack_id)
         victim = self._find_pack_victim_from(monster, pack_members, current_tick)
         if victim is None:
             return False
@@ -130,15 +128,13 @@ class MonsterPackReinforcementHandler:
         if victim_spot is None:
             return False
         # 通行可否フィルタ: 鍵フラグ等を world_flags_provider から解決
-        world_flags = (
-            self._world_flags_provider()
-            if self._world_flags_provider is not None
-            else frozenset()
-        )
+        world_flags = self._world_flags_provider() if self._world_flags_provider is not None else frozenset()
 
         def _is_passable(conn: Any) -> bool:
             return graph.can_traverse_connection(
-                conn.connection_id, frozenset(), world_flags,
+                conn.connection_id,
+                frozenset(),
+                world_flags,
             )
 
         distance = find_hop_distance(
@@ -154,9 +150,14 @@ class MonsterPackReinforcementHandler:
         # victim 側が指定する応答上限。victim の template が制限を持つ
         # (殴られた本人がどれだけ仲間を呼ぶかを決める)
         responder_cap = victim.template.max_pack_responders
-        if self._count_existing_responders_from(
-            monster, victim, pack_members,
-        ) >= responder_cap:
+        if (
+            self._count_existing_responders_from(
+                monster,
+                victim,
+                pack_members,
+            )
+            >= responder_cap
+        ):
             return False
 
         # CHASE 状態に遷移 (victim を殴った相手を追跡)
@@ -180,13 +181,9 @@ class MonsterPackReinforcementHandler:
                 responder_spot_id=spot_id,
                 spot_id=spot_id,
                 target_player_id=(
-                    EntityId.create(attacker_ref.player_id.value)
-                    if attacker_ref.player_id is not None else None
+                    EntityId.create(attacker_ref.player_id.value) if attacker_ref.player_id is not None else None
                 ),
-                target_monster_id=(
-                    attacker_ref.monster_id
-                    if attacker_ref.is_monster else None
-                ),
+                target_monster_id=(attacker_ref.monster_id if attacker_ref.is_monster else None),
             )
         )
         return True

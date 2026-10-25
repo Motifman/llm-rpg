@@ -69,15 +69,11 @@ class ObservationAppender:
         if observers is not None:
             for i, obs in enumerate(observers):
                 if not callable(obs):
-                    raise TypeError(
-                        f"observers[{i}] must be callable (got {type(obs)!r})"
-                    )
+                    raise TypeError(f"observers[{i}] must be callable (got {type(obs)!r})")
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
-        self._observers: tuple[ObservationObserver, ...] = (
-            tuple(observers) if observers else ()
-        )
+        self._observers: tuple[ObservationObserver, ...] = tuple(observers) if observers else ()
         if recipient_view is not None and not callable(recipient_view):
             raise TypeError("recipient_view must be callable or None")
         self._recipient_view = recipient_view
@@ -111,9 +107,7 @@ class ObservationAppender:
             return False
         view = output.if_subject_unknown
         hidden = (
-            isinstance(view, SubjectUnknownView)
-            and chosen.prose == view.prose
-            and chosen.structured == view.structured
+            isinstance(view, SubjectUnknownView) and chosen.prose == view.prose and chosen.structured == view.structured
         )
         hidden_subject_name = output.subject_name if hidden else None
         output = chosen
@@ -122,15 +116,9 @@ class ObservationAppender:
             output=output,
             game_time_label=game_time_label,
         )
-        rtc = (
-            self._runtime_context_provider(player_id)
-            if self._runtime_context_provider is not None
-            else None
-        )
+        rtc = self._runtime_context_provider(player_id) if self._runtime_context_provider is not None else None
         self._buffer.append(player_id, entry, runtime_context=rtc)
-        self._record_trace(
-            player_id, output, game_time_label, hidden_subject_name=hidden_subject_name
-        )
+        self._record_trace(player_id, output, game_time_label, hidden_subject_name=hidden_subject_name)
         # PR3: 各 observer に通知する。observer は副次的な観察 (encounter 抽出
         # / metrics / debug) を意図し、append の本流は止めない契約。例外は
         # observer 側で握ることを期待するが、念のためここでも握って続行する。
@@ -143,15 +131,12 @@ class ObservationAppender:
                 import logging
 
                 logging.getLogger(__name__).exception(
-                    "ObservationAppender observer raised; "
-                    "skipping (player_id=%s)",
+                    "ObservationAppender observer raised; skipping (player_id=%s)",
                     int(player_id.value),
                 )
         return True
 
-    def _choose_view(
-        self, player_id: PlayerId, output: ObservationOutput
-    ) -> ObservationOutput | None:
+    def _choose_view(self, player_id: PlayerId, output: ObservationOutput) -> ObservationOutput | None:
         """選ぶ口が無い、または選べないときは伏せる側へ倒す。名前は記録に入ったら消せない。"""
         if self._recipient_view is None:
             if output.if_subject_unknown is not None and not self._warned_without_view:
@@ -160,8 +145,7 @@ class ObservationAppender:
                 import logging
 
                 logging.getLogger(__name__).warning(
-                    "recipient_view is not wired; recording the subject-unknown view "
-                    "of %s for every recipient",
+                    "recipient_view is not wired; recording the subject-unknown view of %s for every recipient",
                     output.structured.get("type"),
                 )
             return output.as_subject_unknown()
@@ -171,8 +155,7 @@ class ObservationAppender:
             import logging
 
             logging.getLogger(__name__).exception(
-                "recipient_view raised; recording the subject-unknown view "
-                "(player_id=%s)",
+                "recipient_view raised; recording the subject-unknown view (player_id=%s)",
                 int(player_id.value),
             )
             return output.as_subject_unknown()

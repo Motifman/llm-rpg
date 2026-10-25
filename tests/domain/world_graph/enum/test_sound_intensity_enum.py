@@ -34,10 +34,7 @@ class TestAttenuate:
 
     def test_loud_1hop_moderate(self) -> None:
         """LOUD 1hop は MODERATE。"""
-        assert (
-            SoundIntensityEnum.LOUD.attenuate(1)
-            == SoundIntensityEnum.MODERATE
-        )
+        assert SoundIntensityEnum.LOUD.attenuate(1) == SoundIntensityEnum.MODERATE
 
     def test_loud_2hop_faint(self) -> None:
         """LOUD 2hop は FAINT。"""
@@ -53,10 +50,7 @@ class TestAttenuate:
 
     def test_silent_hop_silent(self) -> None:
         """SILENT は何 hop 減衰しても SILENT。"""
-        assert (
-            SoundIntensityEnum.SILENT.attenuate(5)
-            == SoundIntensityEnum.SILENT
-        )
+        assert SoundIntensityEnum.SILENT.attenuate(5) == SoundIntensityEnum.SILENT
 
     def test_hops_zero_less(self) -> None:
         """hops 0 以下は 減衰なし。"""
@@ -65,7 +59,4 @@ class TestAttenuate:
 
     def test_default_hops_is_one(self) -> None:
         """default hops は 1。"""
-        assert (
-            SoundIntensityEnum.LOUD.attenuate()
-            == SoundIntensityEnum.MODERATE
-        )
+        assert SoundIntensityEnum.LOUD.attenuate() == SoundIntensityEnum.MODERATE

@@ -14,9 +14,7 @@ def test_missing_snapshot_returns_none() -> None:
     runtime = Mock()
     runtime._state_builder.build_snapshot.return_value = None
 
-    result = WorldRuntimeQueryAdapter(runtime).get_player_current_state(
-        GetPlayerCurrentStateQuery(player_id=1)
-    )
+    result = WorldRuntimeQueryAdapter(runtime).get_player_current_state(GetPlayerCurrentStateQuery(player_id=1))
 
     assert result is None
     runtime._build_minimal_player_state_dto.assert_not_called()
@@ -27,9 +25,7 @@ def test_snapshot_is_passed_to_current_state_builder() -> None:
     runtime = Mock()
     snapshot = runtime._state_builder.build_snapshot.return_value
 
-    result = WorldRuntimeQueryAdapter(runtime).get_player_current_state(
-        GetPlayerCurrentStateQuery(player_id=1)
-    )
+    result = WorldRuntimeQueryAdapter(runtime).get_player_current_state(GetPlayerCurrentStateQuery(player_id=1))
 
     runtime._build_minimal_player_state_dto.assert_called_once_with(PlayerId(1), snapshot)
     assert result is runtime._build_minimal_player_state_dto.return_value

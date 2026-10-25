@@ -83,14 +83,13 @@ class ScenarioMetadata:
     #: objective が混入する silent failure になる)。
     llm_objective_text: str = ""
     #: 終局結果ごとの観測文型。世界固有の場所や語彙は runtime でなくここに置く。
-    player_outcome_messages: Mapping[PlayerOutcomeEnum, str] = field(
-        default_factory=dict
-    )
+    player_outcome_messages: Mapping[PlayerOutcomeEnum, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class ItemSpecDefinition:
     """シナリオ JSON で定義されたアイテム仕様。"""
+
     string_id: str
     spec_id: ItemSpecId
     name: str
@@ -137,6 +136,7 @@ class PlayerSpawnConfig:
     シナリオ JSON で `players[].initial_state` を省略すれば空 dict になり、
     PR 1 までの挙動と同じ。
     """
+
     string_id: str
     player_id: int
     name: str
@@ -266,6 +266,7 @@ class ScenarioLootTableDefinition:
     table_id: LootTableId として割り振った内部 id (mapper 経由)
     entries: (item_spec_id, weight, min_quantity, max_quantity) のタプル
     """
+
     string_id: str
     table_id: int
     name: str
@@ -275,6 +276,7 @@ class ScenarioLootTableDefinition:
 @dataclass(frozen=True)
 class ScenarioLootEntry:
     """LootTable の 1 エントリ。"""
+
     item_spec_id: int
     weight: int
     min_quantity: int = 1
@@ -381,8 +383,7 @@ class ScenarioNeedsConfig:
             or self.starvation_damage_per_tick < 0
         ):
             raise ValueError(
-                "starvation_damage_per_tick must be a non-negative integer, "
-                f"got {self.starvation_damage_per_tick!r}"
+                f"starvation_damage_per_tick must be a non-negative integer, got {self.starvation_damage_per_tick!r}"
             )
         # 空腹だけ 0 を弾く。**0 を通すと「空腹の無い世界」が黙って出来上がる。**
         # 空腹が要らない世界は needs 節ごと書かなければよい (既定は据え置き) ので、
@@ -398,9 +399,7 @@ def _require_int(value: object, *, name: str, minimum: int) -> None:
     「空腹が True ずつ進む世界」を作らせない。
     """
     if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-        raise ValueError(
-            f"{name} must be an integer >= {minimum}, got {value!r}"
-        )
+        raise ValueError(f"{name} must be an integer >= {minimum}, got {value!r}")
 
 
 @dataclass(frozen=True)
@@ -506,9 +505,7 @@ class ScenarioLoadResult:
     player_outcome_rules: tuple[PlayerOutcomeRule, ...] = ()
     needs_config: ScenarioNeedsConfig = field(default_factory=ScenarioNeedsConfig)
     #: 人が持つ属性の宣言。**書かないシナリオは空** = 従来どおりの扱い。
-    player_attribute_specs: PlayerAttributeSpecs = field(
-        default_factory=PlayerAttributeSpecs.empty
-    )
+    player_attribute_specs: PlayerAttributeSpecs = field(default_factory=PlayerAttributeSpecs.empty)
     weather_config: ScenarioWeatherConfig | None = None
     day_night_config: ScenarioDayNightConfig | None = None
     reactive_passage_bindings: tuple[ReactivePassageBinding, ...] = ()

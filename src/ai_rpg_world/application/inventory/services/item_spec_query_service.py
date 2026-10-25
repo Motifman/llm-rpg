@@ -24,9 +24,7 @@ class ItemSpecQueryService:
         self._item_spec_repository = item_spec_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -38,10 +36,10 @@ class ItemSpecQueryService:
             raise ItemInfoQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(
+                f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra={"error_details": context}
+            )
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def _convert_to_item_spec_dto(self, item_spec: ItemSpec) -> ItemSpecDto:
         """ItemSpec を ItemSpecDto に変換"""
@@ -53,17 +51,14 @@ class ItemSpecQueryService:
             description=item_spec.description,
             max_stack_size=item_spec.max_stack_size.value,
             durability_max=item_spec.durability_max,
-            equipment_type=item_spec.equipment_type
+            equipment_type=item_spec.equipment_type,
         )
 
     def get_item_spec(self, item_spec_id: int) -> ItemSpecDto:
         """アイテムスペックを取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_item_spec_impl(item_spec_id),
-            context={
-                "action": "get_item_spec",
-                "item_spec_id": item_spec_id
-            }
+            context={"action": "get_item_spec", "item_spec_id": item_spec_id},
         )
 
     def _get_item_spec_impl(self, item_spec_id: int) -> ItemSpecDto:
@@ -78,10 +73,7 @@ class ItemSpecQueryService:
         """アイテムタイプで検索"""
         return self._execute_with_error_handling(
             operation=lambda: self._search_items_by_type_impl(item_type),
-            context={
-                "action": "search_items_by_type",
-                "item_type": item_type.value
-            }
+            context={"action": "search_items_by_type", "item_type": item_type.value},
         )
 
     def _search_items_by_type_impl(self, item_type: ItemType) -> list[ItemSpecDto]:
@@ -93,10 +85,7 @@ class ItemSpecQueryService:
         """レアリティで検索"""
         return self._execute_with_error_handling(
             operation=lambda: self._search_items_by_rarity_impl(rarity),
-            context={
-                "action": "search_items_by_rarity",
-                "rarity": rarity.value
-            }
+            context={"action": "search_items_by_rarity", "rarity": rarity.value},
         )
 
     def _search_items_by_rarity_impl(self, rarity: Rarity) -> list[ItemSpecDto]:
@@ -107,10 +96,7 @@ class ItemSpecQueryService:
     def find_tradeable_items(self) -> list[ItemSpecDto]:
         """取引可能なアイテムを取得"""
         return self._execute_with_error_handling(
-            operation=lambda: self._find_tradeable_items_impl(),
-            context={
-                "action": "find_tradeable_items"
-            }
+            operation=lambda: self._find_tradeable_items_impl(), context={"action": "find_tradeable_items"}
         )
 
     def _find_tradeable_items_impl(self) -> list[ItemSpecDto]:
@@ -121,11 +107,7 @@ class ItemSpecQueryService:
     def find_item_by_name(self, name: str) -> ItemSpecDto | None:
         """名前で検索"""
         return self._execute_with_error_handling(
-            operation=lambda: self._find_item_by_name_impl(name),
-            context={
-                "action": "find_item_by_name",
-                "name": name
-            }
+            operation=lambda: self._find_item_by_name_impl(name), context={"action": "find_item_by_name", "name": name}
         )
 
     def _find_item_by_name_impl(self, name: str) -> ItemSpecDto | None:

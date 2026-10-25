@@ -69,9 +69,7 @@ class TestRecipientStrategy:
 
     def test_line(self) -> None:
         """attacker P1 は除外、bystander P2 のみ recipients。"""
-        registry = ObservedEventRegistry(
-            event_to_strategy={PlayerAttackedMonsterInSpotEvent: "spot_graph"}
-        )
+        registry = ObservedEventRegistry(event_to_strategy={PlayerAttackedMonsterInSpotEvent: "spot_graph"})
         graph = MagicMock()
         graph.entity_spot_mapping.return_value = {
             EntityId.create(PLAYER_ATTACKER.value): SPOT_A,
@@ -97,12 +95,10 @@ class TestRecipientStrategy:
 
 def _make_ctx() -> ObservationFormatterContext:
     name_resolver = MagicMock(spec=ObservationNameResolver)
-    name_resolver.monster_name_by_monster_id.side_effect = (
-        lambda mid: "灰色のオオカミ" if mid.value == MONSTER.value else "?"
+    name_resolver.monster_name_by_monster_id.side_effect = lambda mid: (
+        "灰色のオオカミ" if mid.value == MONSTER.value else "?"
     )
-    name_resolver.player_name.side_effect = (
-        lambda pid: {1: "勇者", 2: "魔法使い"}.get(pid.value, "?")
-    )
+    name_resolver.player_name.side_effect = lambda pid: {1: "勇者", 2: "魔法使い"}.get(pid.value, "?")
     repo = MagicMock()
     return ObservationFormatterContext(
         name_resolver=name_resolver,
@@ -132,9 +128,7 @@ class TestFormatter:
         """target_incapacitated=True で「倒した」suffix が付く。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
 
-        result = formatter.format(
-            _make_event(target_incapacitated=True), PLAYER_BYSTANDER
-        )
+        result = formatter.format(_make_event(target_incapacitated=True), PLAYER_BYSTANDER)
 
         assert result is not None
         assert "倒した" in result.prose

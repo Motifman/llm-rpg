@@ -146,11 +146,7 @@ def _build_service(publisher, *, players: tuple[PlayerId, ...] = (PLAYER_ID,)):
 
     item_spec = _make_item_spec()
     instance_id = item_repo.generate_item_instance_id()
-    item_repo.save(
-        ItemAggregate.create(
-            item_instance_id=instance_id, item_spec=item_spec, quantity=1
-        )
-    )
+    item_repo.save(ItemAggregate.create(item_instance_id=instance_id, item_spec=item_spec, quantity=1))
     inventory = PlayerInventoryAggregate.create_new_inventory(PLAYER_ID)
     inventory.acquire_item(instance_id, item_spec_id_value=item_spec.item_spec_id.value)
     inventory_repo.save(inventory)
@@ -175,9 +171,7 @@ def _build_service(publisher, *, players: tuple[PlayerId, ...] = (PLAYER_ID,)):
         InMemoryUnitOfWorkTransactionFactory(store),
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
-        repository_provider_factory=(
-            InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)
-        ),
+        repository_provider_factory=(InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)),
     )
 
     service = SpotGraphItemTransferService(
@@ -196,9 +190,7 @@ class TestPublishedEventSet:
         spy = _SpyPublisher()
         service, instance_id = _build_service(spy)
 
-        service.drop_item(
-            PLAYER_ID, SlotId(0), witness_policy=WitnessPolicy.ACTOR_ONLY
-        )
+        service.drop_item(PLAYER_ID, SlotId(0), witness_policy=WitnessPolicy.ACTOR_ONLY)
 
         # 境界で 1 度だけ dispatch、その batch に 1 件
         assert len(spy.batches) == 1
@@ -220,9 +212,7 @@ class TestPublishedEventSet:
         service.drop_item(PLAYER_ID, SlotId(0))
         spy.batches.clear()
 
-        service.pickup_item(
-            PLAYER_ID, instance_id, witness_policy=WitnessPolicy.ACTOR_ONLY
-        )
+        service.pickup_item(PLAYER_ID, instance_id, witness_policy=WitnessPolicy.ACTOR_ONLY)
 
         assert len(spy.batches) == 1
         assert len(spy.batches[0]) == 1

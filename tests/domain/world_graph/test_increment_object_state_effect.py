@@ -28,8 +28,12 @@ OBJ_ID = SpotObjectId.create(1)
 
 def _make_interior_with_state(state: dict) -> SpotInterior:
     obj = SpotObject(
-        object_id=OBJ_ID, name="test_obj", description="t",
-        object_type=ObjectTypeEnum.RESOURCE, state=state, interactions=(),
+        object_id=OBJ_ID,
+        name="test_obj",
+        description="t",
+        object_type=ObjectTypeEnum.RESOURCE,
+        state=state,
+        interactions=(),
     )
     return SpotInterior(sub_locations=(), objects=(obj,), ground_items=(), discoverable_items=())
 
@@ -61,7 +65,8 @@ class TestIncrementBasic:
         """明示 delta で指定量増える。"""
         interior = _make_interior_with_state({"harvest_count": 5})
         new_interior = _apply_effect(
-            interior, {"state_key": "harvest_count", "delta": 3},
+            interior,
+            {"state_key": "harvest_count", "delta": 3},
         )
         new_obj = new_interior.get_object(OBJ_ID)
         assert new_obj.state["harvest_count"] == 8
@@ -70,7 +75,8 @@ class TestIncrementBasic:
         """例: 食料消費で stock を 1 減らす等、汎用 accumulator。"""
         interior = _make_interior_with_state({"stock": 10})
         new_interior = _apply_effect(
-            interior, {"state_key": "stock", "delta": -2},
+            interior,
+            {"state_key": "stock", "delta": -2},
         )
         new_obj = new_interior.get_object(OBJ_ID)
         assert new_obj.state["stock"] == 8
@@ -83,13 +89,14 @@ class TestIncrementBasic:
         assert new_obj.state["harvest_count"] == 1
 
 
-
 class TestIncrementSilentFallbackWarning:
     """PR #1 follow-up: 黙って skip / 黙って再初期化 する経路は warning log で surface する。"""
 
     @pytest.mark.parametrize("initial_state", [{}, {"kept": "value"}])
     def test_emits_warning_for_state_key_missing_log(
-        self, caplog, initial_state: dict,
+        self,
+        caplog,
+        initial_state: dict,
     ) -> None:
         """state_key欠落なら警告し、空・既存値ありの両方で全状態を保持する。"""
         before_state = dict(initial_state)
@@ -97,10 +104,7 @@ class TestIncrementSilentFallbackWarning:
         with caplog.at_level("WARNING"):
             updated = _apply_effect(interior, {})
         assert updated.get_object(OBJ_ID).state == before_state
-        assert any(
-            "INCREMENT_OBJECT_STATE: state_key is required" in r.message
-            for r in caplog.records
-        )
+        assert any("INCREMENT_OBJECT_STATE: state_key is required" in r.message for r in caplog.records)
 
     def test_emits_warning_for_log(self, caplog) -> None:
         """非整数値は警告したうえで0へ戻し、既定の1を加える。"""
@@ -108,7 +112,4 @@ class TestIncrementSilentFallbackWarning:
         with caplog.at_level("WARNING"):
             updated = _apply_effect(interior, {"state_key": "harvest_count"})
         assert updated.get_object(OBJ_ID).state["harvest_count"] == 1
-        assert any(
-            "non-int" in r.message and "resetting to 0" in r.message
-            for r in caplog.records
-        )
+        assert any("non-int" in r.message and "resetting to 0" in r.message for r in caplog.records)

@@ -45,9 +45,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 #: モリ(気象) / セナ(通信) / クゼ(インポスター) / アオイ(給食衛生) /
 #: ハギ(機関) / ユラ(栽培) / ジン(インポスター) / サキ(記録)
 _MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _JIN, _SAKI = range(1, 9)
@@ -195,28 +193,20 @@ class TestTheHiddenReasonOnlyDescribesTheCurrentRoom:
         """
         oid = _object_id_with(runtime, "count_supplies")
 
-        reason = hidden_object_interaction_failure_reason(
-            runtime, oid, player_id=_MORI
-        )
+        reason = hidden_object_interaction_failure_reason(runtime, oid, player_id=_MORI)
 
         assert reason == ""
 
-    def test_repository_failure_is_not_downgraded_to_no_reason(
-        self, runtime, monkeypatch
-    ) -> None:
+    def test_repository_failure_is_not_downgraded_to_no_reason(self, runtime, monkeypatch) -> None:
         """配線障害は伝播し、既知の悪い「利用可能な操作: (なし)」へ退化しない。"""
 
         def _fail_to_load_graph():
             raise RuntimeError("graph wiring is broken")
 
-        monkeypatch.setattr(
-            runtime._spot_graph_repo, "find_graph", _fail_to_load_graph
-        )
+        monkeypatch.setattr(runtime._spot_graph_repo, "find_graph", _fail_to_load_graph)
 
         with pytest.raises(RuntimeError, match="graph wiring is broken"):
-            hidden_object_interaction_failure_reason(
-                runtime, 1, player_id=_MORI
-            )
+            hidden_object_interaction_failure_reason(runtime, 1, player_id=_MORI)
 
 
 class TestTheMessageTheAgentActuallyReads:
@@ -228,6 +218,7 @@ class TestTheMessageTheAgentActuallyReads:
         ヘルパ単体ではなく **executor が組む文面** を見る。ここを見ないと、
         絞ったのに文面を組む側が別経路で全部並べていても気づけない。
         """
+
         class _StubClient:
             """LLM は呼ばない。文面の組み立てだけを見る。"""
 
@@ -245,9 +236,7 @@ class TestTheMessageTheAgentActuallyReads:
             short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
-        label = next(
-            key for key, value in context.targets.items() if "棚卸し帳" in str(value)
-        )
+        label = next(key for key, value in context.targets.items() if "棚卸し帳" in str(value))
         result = wiring._execute_tool(
             PlayerId(_SAKI),
             "interact",
@@ -260,15 +249,11 @@ class TestTheMessageTheAgentActuallyReads:
         assert "count_supplies" in result.message
         assert result.remediation is not None
         assert "現在の状況" in result.remediation
-        assert not any(
-            name in result.remediation for name in ("gather", "search", "examine")
-        )
+        assert not any(name in result.remediation for name in ("gather", "search", "examine"))
         for hidden in _names_hidden_from(_SAKI):
             assert hidden not in result.message, hidden
 
-    def test_an_object_with_only_hidden_steps_returns_the_declared_reason(
-        self, runtime
-    ) -> None:
+    def test_an_object_with_only_hidden_steps_returns_the_declared_reason(self, runtime) -> None:
         """担当外でも物体は解決し、秘密を漏らさず誤った操作名を否定する。
 
         run 013 と同じく、担当外の者が目の前の作業物へ ``examine`` を試す。
@@ -279,6 +264,7 @@ class TestTheMessageTheAgentActuallyReads:
         「実在するが権限が無い」と誤解して再試行した。秘密の正解は伏せたまま、
         本人が送った名前だけは存在しないと明記する。
         """
+
         class _StubClient:
             """LLM は呼ばず、本番の引数解決と実行だけを見る。"""
 
@@ -301,9 +287,7 @@ class TestTheMessageTheAgentActuallyReads:
 
         assert '"棚卸し帳"' in ui.current_state_text
         object_targets = [
-            target
-            for target in ui.tool_runtime_context.targets.values()
-            if target.display_name == "棚卸し帳"
+            target for target in ui.tool_runtime_context.targets.values() if target.display_name == "棚卸し帳"
         ]
         assert len(object_targets) == 1
         assert object_targets[0].available_interactions == ()
@@ -330,6 +314,7 @@ class TestTheMessageTheAgentActuallyReads:
         暗所でも見える通気口と、灯りが要る風向風速計が同居する観測室で
         確かめる。見える物が一つあるだけで暗所案内が消える退行を防ぐ。
         """
+
         class _StubClient:
             """LLM は呼ばず、本番の引数解決と失敗文面だけを見る。"""
 
@@ -357,10 +342,7 @@ class TestTheMessageTheAgentActuallyReads:
         # **見えている物があっても、暗さが隠していることは伝わる**必要がある。
         assert "灯りがなければ" in ui.current_state_text
         assert '"風向風速計"' not in ui.current_state_text
-        assert not any(
-            target.display_name == "風向風速計"
-            for target in ui.tool_runtime_context.targets.values()
-        )
+        assert not any(target.display_name == "風向風速計" for target in ui.tool_runtime_context.targets.values())
         result = wiring._execute_tool(
             PlayerId(_SENA),
             "interact",
@@ -373,10 +355,9 @@ class TestTheMessageTheAgentActuallyReads:
         assert "暗くて見えない" in result.message
         assert "interactable なオブジェクトなし" not in result.message
 
-    def test_an_existing_object_action_is_not_denied_as_nonexistent(
-        self, runtime
-    ) -> None:
+    def test_an_existing_object_action_is_not_denied_as_nonexistent(self, runtime) -> None:
         """実在する操作の前提条件失敗には、名前が無いという誤情報を足さない。"""
+
         class _StubClient:
             """LLM は呼ばず、本番の物体操作結果だけを見る。"""
 
@@ -408,6 +389,7 @@ class TestTheMessageTheAgentActuallyReads:
 
     def test_dim_does_not_reject_the_unified_attack(self, runtime) -> None:
         """薄暗い場所でも一本化した襲撃を明るさの前提条件で拒否しない。"""
+
         class _StubClient:
             """LLM は呼ばず、本番の対人操作結果だけを見る。"""
 
@@ -528,11 +510,7 @@ class TestTheSameLeakOnThePersonSide:
             short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
-        label = next(
-            key
-            for key, value in ui.tool_runtime_context.targets.items()
-            if target in str(value)
-        )
+        label = next(key for key, value in ui.tool_runtime_context.targets.items() if target in str(value))
         return wiring._execute_tool(
             PlayerId(viewer),
             "interact",
@@ -599,19 +577,14 @@ class TestEveryHiddenConditionIsDeliberatelyClassified:
         )
 
         hidden = {
-            ctype
-            for ctype, visibility in CONDITION_VISIBILITY.items()
-            if visibility is ConditionVisibility.HIDDEN
+            ctype for ctype, visibility in CONDITION_VISIBILITY.items() if visibility is ConditionVisibility.HIDDEN
         }
         # 相手について訊く条件は名前で見分けられる。ここに漏れがあれば
         # 分類の見直しが要る。
         target_scoped = {c for c in hidden if c.value.startswith("TARGET_")}
 
         assert _ACTOR_SCOPED_HIDDEN <= hidden
-        assert not (_ACTOR_SCOPED_HIDDEN & target_scoped), (
-            "相手について訊く条件を、行為者の state で判定してはいけない"
-        )
+        assert not (_ACTOR_SCOPED_HIDDEN & target_scoped), "相手について訊く条件を、行為者の state で判定してはいけない"
         assert hidden - target_scoped == _ACTOR_SCOPED_HIDDEN, (
-            "行為者について訊く伏せた条件が増えている。"
-            f"未分類: {hidden - target_scoped - _ACTOR_SCOPED_HIDDEN}"
+            f"行為者について訊く伏せた条件が増えている。未分類: {hidden - target_scoped - _ACTOR_SCOPED_HIDDEN}"
         )

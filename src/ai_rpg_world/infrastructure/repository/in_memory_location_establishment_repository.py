@@ -22,9 +22,7 @@ from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
 
 
-class InMemoryLocationEstablishmentRepository(
-    LocationEstablishmentRepository, InMemoryRepositoryBase
-):
+class InMemoryLocationEstablishmentRepository(LocationEstablishmentRepository, InMemoryRepositoryBase):
     """LocationEstablishment リポジトリのインメモリ実装"""
 
     def __init__(
@@ -40,9 +38,7 @@ class InMemoryLocationEstablishmentRepository(
     ) -> dict[LocationSlotId, LocationEstablishmentAggregate]:
         return self._data_store.location_establishments
 
-    def find_by_id(
-        self, slot_id: LocationSlotId
-    ) -> LocationEstablishmentAggregate | None:
+    def find_by_id(self, slot_id: LocationSlotId) -> LocationEstablishmentAggregate | None:
         pending = self._get_pending_aggregate(slot_id)
         if pending is not None:
             cloned: LocationEstablishmentAggregate | None = self._clone(pending)
@@ -57,15 +53,8 @@ class InMemoryLocationEstablishmentRepository(
         slot_id = LocationSlotId(spot_id=spot_id, location_area_id=location_area_id)
         return self.find_by_id(slot_id)
 
-    def find_by_ids(
-        self, slot_ids: list[LocationSlotId]
-    ) -> list[LocationEstablishmentAggregate]:
-        return [
-            x
-            for sid in slot_ids
-            for x in [self.find_by_id(sid)]
-            if x is not None
-        ]
+    def find_by_ids(self, slot_ids: list[LocationSlotId]) -> list[LocationEstablishmentAggregate]:
+        return [x for sid in slot_ids for x in [self.find_by_id(sid)] if x is not None]
 
     def save(self, slot: LocationEstablishmentAggregate) -> LocationEstablishmentAggregate:
         cloned = self._clone(slot)

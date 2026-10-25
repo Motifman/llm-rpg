@@ -41,9 +41,7 @@ def _sample_template() -> MonsterTemplate:
 
 
 def _loadout(owner_id: int) -> SkillLoadoutAggregate:
-    return SkillLoadoutAggregate.create(
-        SkillLoadoutId(owner_id), owner_id, normal_capacity=10, awakened_capacity=10
-    )
+    return SkillLoadoutAggregate.create(SkillLoadoutId(owner_id), owner_id, normal_capacity=10, awakened_capacity=10)
 
 
 @pytest.fixture
@@ -54,9 +52,7 @@ def sqlite_conn() -> sqlite3.Connection:
 
 
 class TestSqliteMonsterAggregateRepository:
-    def test_shared_repository_requires_active_transaction_for_save(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_repository_requires_active_transaction_for_save(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(sqlite_conn)
         monster = MonsterAggregate.create(
             MonsterId(1), _sample_template(), WorldObjectId(1000), skill_loadout=_loadout(1)
@@ -65,13 +61,16 @@ class TestSqliteMonsterAggregateRepository:
             repo.save(monster)
 
     def test_flee_state_round_trip_persists_flee_until_tick(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """FLEE 状態の `flee_until_tick` が SQLite に正しく round-trip する。"""
         repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
         monster = MonsterAggregate.create(
-            MonsterId(301), _sample_template(),
-            WorldObjectId(4001), skill_loadout=_loadout(301),
+            MonsterId(301),
+            _sample_template(),
+            WorldObjectId(4001),
+            skill_loadout=_loadout(301),
         )
         monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
         # FLEE に遷移: current_tick=10、duration=50 → flee_until_tick=60
@@ -86,7 +85,8 @@ class TestSqliteMonsterAggregateRepository:
         assert loaded.is_fleeing(WorldTick(61)) is False
 
     def test_chase_to_idle_clears_all_phase4ab_fields(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """CHASE で保存 → IDLE クリア → 再保存で Phase 4a/4b フィールドが
         全て NULL に戻る (ON CONFLICT UPDATE が `excluded.*` で正しく
@@ -96,8 +96,10 @@ class TestSqliteMonsterAggregateRepository:
 
         repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
         monster = MonsterAggregate.create(
-            MonsterId(401), _sample_template(),
-            WorldObjectId(5001), skill_loadout=_loadout(401),
+            MonsterId(401),
+            _sample_template(),
+            WorldObjectId(5001),
+            skill_loadout=_loadout(401),
         )
         monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
         # 1) CHASE で保存
@@ -120,7 +122,8 @@ class TestSqliteMonsterAggregateRepository:
         assert loaded.persistence_flee_until_tick is None
 
     def test_find_by_pack_id_returns_only_same_pack_members(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """Phase 4-O C: pack_id で絞り込んだ monster だけが返る。
 
@@ -136,25 +139,33 @@ class TestSqliteMonsterAggregateRepository:
 
         # wolf_pack_1 に 2 匹 (spawn で pack_id を設定)
         m1 = MonsterAggregate.create(
-            MonsterId(501), _sample_template(),
-            WorldObjectId(7001), skill_loadout=_loadout(501),
+            MonsterId(501),
+            _sample_template(),
+            WorldObjectId(7001),
+            skill_loadout=_loadout(501),
         )
         m1.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), pack_id=wolf_pack)
         m2 = MonsterAggregate.create(
-            MonsterId(502), _sample_template(),
-            WorldObjectId(7002), skill_loadout=_loadout(502),
+            MonsterId(502),
+            _sample_template(),
+            WorldObjectId(7002),
+            skill_loadout=_loadout(502),
         )
         m2.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), pack_id=wolf_pack)
         # rabbit_pack に 1 匹
         m3 = MonsterAggregate.create(
-            MonsterId(503), _sample_template(),
-            WorldObjectId(7003), skill_loadout=_loadout(503),
+            MonsterId(503),
+            _sample_template(),
+            WorldObjectId(7003),
+            skill_loadout=_loadout(503),
         )
         m3.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), pack_id=rabbit_pack)
         # pack 未所属
         m4 = MonsterAggregate.create(
-            MonsterId(504), _sample_template(),
-            WorldObjectId(7004), skill_loadout=_loadout(504),
+            MonsterId(504),
+            _sample_template(),
+            WorldObjectId(7004),
+            skill_loadout=_loadout(504),
         )
         m4.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
 
@@ -167,7 +178,8 @@ class TestSqliteMonsterAggregateRepository:
         assert [m.monster_id for m in result] == [MonsterId(501), MonsterId(502)]
 
     def test_chase_state_round_trip_persists_phase4ab_fields(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """Phase 4a/4b で追加した spot graph 用 behavior_state フィールドが
         SQLite から正しく round-trip する (migration v24 の検証)。
@@ -183,8 +195,10 @@ class TestSqliteMonsterAggregateRepository:
         repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
         # 1) PLAYER attacker の CHASE 状態
         m_player_chase = MonsterAggregate.create(
-            MonsterId(101), _sample_template(),
-            WorldObjectId(2001), skill_loadout=_loadout(101),
+            MonsterId(101),
+            _sample_template(),
+            WorldObjectId(2001),
+            skill_loadout=_loadout(101),
         )
         m_player_chase.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
         m_player_chase.enter_chase_state(
@@ -196,8 +210,10 @@ class TestSqliteMonsterAggregateRepository:
 
         # 2) MONSTER attacker の CHASE 状態
         m_monster_chase = MonsterAggregate.create(
-            MonsterId(102), _sample_template(),
-            WorldObjectId(2002), skill_loadout=_loadout(102),
+            MonsterId(102),
+            _sample_template(),
+            WorldObjectId(2002),
+            skill_loadout=_loadout(102),
         )
         m_monster_chase.spawn(Coordinate(1, 1, 0), SpotId(1), WorldTick(0))
         m_monster_chase.enter_chase_state(
@@ -223,14 +239,17 @@ class TestSqliteMonsterAggregateRepository:
         assert loaded_m.chase_started_at_tick == WorldTick(50)
 
     def test_idle_state_persists_with_null_chase_fields(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """CHASE 状態でない (= IDLE) monster は新カラムが NULL で保存され、
         復元時も None になる。"""
         repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
         monster = MonsterAggregate.create(
-            MonsterId(201), _sample_template(),
-            WorldObjectId(3001), skill_loadout=_loadout(201),
+            MonsterId(201),
+            _sample_template(),
+            WorldObjectId(3001),
+            skill_loadout=_loadout(201),
         )
         monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
         repo.save(monster)
@@ -258,17 +277,11 @@ class TestSqliteMonsterAggregateRepository:
 
     def test_find_by_world_object_id_and_spot(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
-        m1 = MonsterAggregate.create(
-            MonsterId(1), _sample_template(), WorldObjectId(1001), skill_loadout=_loadout(11)
-        )
+        m1 = MonsterAggregate.create(MonsterId(1), _sample_template(), WorldObjectId(1001), skill_loadout=_loadout(11))
         m1.spawn(Coordinate(1, 1, 0), SpotId(1), WorldTick(0))
-        m2 = MonsterAggregate.create(
-            MonsterId(2), _sample_template(), WorldObjectId(1002), skill_loadout=_loadout(12)
-        )
+        m2 = MonsterAggregate.create(MonsterId(2), _sample_template(), WorldObjectId(1002), skill_loadout=_loadout(12))
         m2.spawn(Coordinate(2, 2, 0), SpotId(1), WorldTick(0))
-        m3 = MonsterAggregate.create(
-            MonsterId(3), _sample_template(), WorldObjectId(1003), skill_loadout=_loadout(13)
-        )
+        m3 = MonsterAggregate.create(MonsterId(3), _sample_template(), WorldObjectId(1003), skill_loadout=_loadout(13))
         m3.spawn(Coordinate(3, 3, 0), SpotId(2), WorldTick(0))
         m2.apply_damage(100, WorldTick(5))
         repo.save(m1)
@@ -290,9 +303,7 @@ class TestSqliteMonsterAggregateRepository:
         uow = SqliteUnitOfWork(connection=sqlite_conn)
         with uow:
             first_repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(uow.connection)
-            monster_repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(
-                uow.connection
-            )
+            monster_repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(uow.connection)
             first = first_repo.generate_world_object_id_for_npc()
             second = monster_repo.generate_world_object_id_for_npc()
 

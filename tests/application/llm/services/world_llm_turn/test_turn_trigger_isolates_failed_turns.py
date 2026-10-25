@@ -28,9 +28,7 @@ def _fail_for_player_1(player_id: PlayerId) -> LlmCommandResultDto:
     return _OK
 
 
-def _trigger(
-    policy: WorldTickFailurePolicy, recorder: CollectingTraceRecorder, *, workers: int
-) -> WorldLlmTurnTrigger:
+def _trigger(policy: WorldTickFailurePolicy, recorder: CollectingTraceRecorder, *, workers: int) -> WorldLlmTurnTrigger:
     wiring = MagicMock()
     wiring.runtime.check_game_end.return_value.is_ended = False
     wiring.runtime.current_tick.return_value = 5

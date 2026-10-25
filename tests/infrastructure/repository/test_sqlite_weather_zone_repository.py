@@ -35,9 +35,7 @@ def sqlite_conn() -> sqlite3.Connection:
 
 
 class TestSqliteWeatherZoneRepository:
-    def test_shared_repository_requires_active_transaction_for_save(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_repository_requires_active_transaction_for_save(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteWeatherZoneRepository.for_shared_unit_of_work(sqlite_conn)
         with pytest.raises(RuntimeError, match="for_shared_unit_of_work"):
             repo.save(_zone(1, "north", {1}, WeatherTypeEnum.RAIN))
@@ -86,14 +84,10 @@ class TestSqliteWeatherZoneRepository:
         assert repo.find_by_id(WeatherZoneId(1)) is None
         assert repo.find_by_spot_id(SpotId(1)) is None
 
-    def test_shared_uow_write_is_visible_inside_transaction(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_uow_write_is_visible_inside_transaction(self, sqlite_conn: sqlite3.Connection) -> None:
         uow = SqliteUnitOfWork(connection=sqlite_conn)
         with uow:
-            repo = SqliteWeatherZoneRepository.for_shared_unit_of_work(
-                uow.connection, event_sink=uow
-            )
+            repo = SqliteWeatherZoneRepository.for_shared_unit_of_work(uow.connection, event_sink=uow)
             zone = _zone(3, "mist", {7}, WeatherTypeEnum.FOG)
             repo.save(zone)
             loaded = repo.find_by_spot_id(SpotId(7))

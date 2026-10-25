@@ -151,9 +151,7 @@ class TestPursuitEvents:
             "target_snapshot": build_snapshot(),
         }
         if event_cls is PursuitFailedEvent:
-            kwargs["failure_reason"] = (
-                PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
-            )
+            kwargs["failure_reason"] = PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
         event = event_cls.create(
             aggregate_id=WorldObjectId(11),
             aggregate_type="Actor",

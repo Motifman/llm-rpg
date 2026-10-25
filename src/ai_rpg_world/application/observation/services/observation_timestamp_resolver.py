@@ -50,7 +50,5 @@ class ObservationTimestampResolver:
         ticks_per_day = self._world_time_config.get_ticks_per_day()
         days_per_month = self._world_time_config.get_days_per_month()
         months_per_year = self._world_time_config.get_months_per_year()
-        game_dt = game_date_time_from_tick(
-            tick.value, ticks_per_day, days_per_month, months_per_year
-        )
+        game_dt = game_date_time_from_tick(tick.value, ticks_per_day, days_per_month, months_per_year)
         return game_dt.format_for_display()

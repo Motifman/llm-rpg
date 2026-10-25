@@ -38,30 +38,19 @@ def _scenario_dir() -> Path:
 
 def _action_failed_observations(obs_buffer, player_id: PlayerId) -> list:
     entries = list(obs_buffer.get_observations(player_id))
-    return [
-        e
-        for e in entries
-        if (getattr(getattr(e, "output"), "structured") or {}).get("type")
-        == "action_failed"
-    ]
+    return [e for e in entries if (getattr(getattr(e, "output"), "structured") or {}).get("type") == "action_failed"]
 
 
-def _create_session_with_stub(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, stub: StubLlmClient
-):
+def _create_session_with_stub(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, stub: StubLlmClient):
     """tick loop を無効化し、StubLlmClient を使うセッションを作る。"""
     monkeypatch.setenv("SPOT_GRAPH_TICK_LOOP_ENABLED", "false")
     mgr = GameRuntimeManager(
         scenarios_dir=_scenario_dir(),
         characters_path=tmp_path / "characters.json",
     )
-    char = mgr.create_character(
-        CharacterCreateRequest(name="ActionFailed 配線確認用キャラクター")
-    )
+    char = mgr.create_character(CharacterCreateRequest(name="ActionFailed 配線確認用キャラクター"))
     summary = mgr.create_session(
-        SessionCreateRequest(
-            world_id="forbidden_library_demo", character_ids=[char.id]
-        ),
+        SessionCreateRequest(world_id="forbidden_library_demo", character_ids=[char.id]),
     )
     state = mgr._sessions[summary.session_id]
     # llm_wiring の LLM client を Stub に差し替え
@@ -78,9 +67,7 @@ class TestSessionActionFailedWiring:
         tmp_path: Path,
     ) -> None:
         """セッションの llm_wiring に emitter と id_generator が注入される。"""
-        state = _create_session_with_stub(
-            monkeypatch, tmp_path, StubLlmClient()
-        )
+        state = _create_session_with_stub(monkeypatch, tmp_path, StubLlmClient())
         wiring = state.llm_wiring
         assert wiring.action_failed_emitter is not None
         assert wiring.intent_id_generator is not None
@@ -140,9 +127,7 @@ class TestSessionActionFailedWiring:
 
         prompt = runtime.build_full_prompt(target_pid)
         user_content = "\n".join(
-            message.get("content", "")
-            for message in prompt.get("messages", [])
-            if message.get("role") == "user"
+            message.get("content", "") for message in prompt.get("messages", []) if message.get("role") == "user"
         )
 
         assert "【直近の出来事】" in user_content
@@ -197,13 +182,8 @@ class TestSessionActionFailedWiring:
         assert len(_action_failed_observations(runtime._obs_buffer, actor)) == 1
         # bystander: action_failed は届かない (noise は残る → 空 buffer の偽 pass を排除)
         assert _action_failed_observations(runtime._obs_buffer, bystander) == []
-        bystander_entries = list(
-            runtime._obs_buffer.get_observations(bystander)
-        )
-        assert any(
-            (e.output.structured or {}).get("type") == "noise"
-            for e in bystander_entries
-        )
+        bystander_entries = list(runtime._obs_buffer.get_observations(bystander))
+        assert any((e.output.structured or {}).get("type") == "noise" for e in bystander_entries)
 
     def test_no_tool_call_failure_is_not_emitted(
         self,
@@ -251,9 +231,7 @@ class TestSessionActionFailedWiring:
         result = state.llm_wiring.run_turn(target_pid)
         assert result.success is True
         # action_failed observation は届かない
-        assert (
-            _action_failed_observations(runtime._obs_buffer, target_pid) == []
-        )
+        assert _action_failed_observations(runtime._obs_buffer, target_pid) == []
 
     def test_empty_tool_name_skips_action_failed_emission(
         self,
@@ -266,9 +244,7 @@ class TestSessionActionFailedWiring:
         観測の tool_name が偽情報になるので、emission をスキップ + warning ログ
         の方針。
         """
-        stub = StubLlmClient(
-            tool_call_to_return={"name": "", "arguments": {}}
-        )
+        stub = StubLlmClient(tool_call_to_return={"name": "", "arguments": {}})
         state = _create_session_with_stub(monkeypatch, tmp_path, stub)
         runtime = state.runtime
         target_pid = runtime.get_player_ids()[0]
@@ -277,6 +253,4 @@ class TestSessionActionFailedWiring:
         # tool_name 空 → _execute_tool で「未対応のツール」DTO が返る
         assert result.success is False
         # action_failed は届かない (skip)
-        assert (
-            _action_failed_observations(runtime._obs_buffer, target_pid) == []
-        )
+        assert _action_failed_observations(runtime._obs_buffer, target_pid) == []

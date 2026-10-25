@@ -88,9 +88,7 @@ def _is_down(runtime, pid: PlayerId) -> bool:
 def _try_on(runtime, actor: PlayerId, target: PlayerId, action: str, **params: str) -> tuple[bool, str]:
     """人を対象にした操作を試し、(できたか, 返った文) を返す。"""
     try:
-        result = runtime.do_interact_with_player(
-            actor, target, action, interaction_parameters=params or None
-        )
+        result = runtime.do_interact_with_player(actor, target, action, interaction_parameters=params or None)
     except _REFUSED as exc:
         return False, str(exc)
     return True, "\n".join(getattr(result, "messages", ()) or ())
@@ -367,8 +365,12 @@ class TestTendingTheDowned:
 
 def _ready_the_lift(runtime) -> None:
     """ハルが鍵と温まった発電機をそろえる。"""
-    runtime.do_interact(_place_and(runtime, _HARU, "company_office"), "office_safe", "open_safe",
-                        interaction_parameters={"code": "1907"})
+    runtime.do_interact(
+        _place_and(runtime, _HARU, "company_office"),
+        "office_safe",
+        "open_safe",
+        interaction_parameters={"code": "1907"},
+    )
     runtime.do_interact(_place_and(runtime, _HARU, "machine_room"), "generator", "pour_fuel_can")
     _ticks(runtime, 1)
     runtime.do_interact(_place_and(runtime, _HARU, "machine_room"), "generator", "start_generator")
@@ -585,7 +587,7 @@ class TestTakingThings:
 
         assert done, message
         for pid in (_HARU, _SAYO):
-            heard = [line for line in _prose(runtime, pid)[before[pid]:] if "荷" in line]
+            heard = [line for line in _prose(runtime, pid)[before[pid] :] if "荷" in line]
             assert heard, pid
             assert [line for line in heard if "ゲン" in line] == [], pid
 
@@ -617,10 +619,7 @@ class TestHostileActsStayHidden:
         _place(runtime, _GEN, "smithy")
         apart = _prompt_text(runtime, _HARU)
 
-        assert any(
-            "煤けた坑夫の上着を着た初老の男" in line and "殴りかかる" in line
-            for line in together.splitlines()
-        )
+        assert any("煤けた坑夫の上着を着た初老の男" in line and "殴りかかる" in line for line in together.splitlines())
         assert "殴りかかる" not in apart
 
     def test_hostile_act_texts_mention_no_beast_or_sector(self) -> None:
@@ -632,9 +631,7 @@ class TestHostileActsStayHidden:
     def test_every_precondition_has_its_own_failure_message(self) -> None:
         """人を対象にした操作と籠の操作の前提条件には、すべて断られたときの文がある。"""
         raw = _raw()
-        lift = next(
-            o for s in raw["spots"] for o in s.get("interior", {}).get("objects", []) if o["id"] == "lift"
-        )
+        lift = next(o for s in raw["spots"] for o in s.get("interior", {}).get("objects", []) if o["id"] == "lift")
         interactions = raw["player_interactions"] + lift["interactions"]
 
         missing = [

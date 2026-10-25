@@ -37,17 +37,13 @@ class TestSqliteMigration:
             migrations=(
                 SqliteMigration(
                     version=1,
-                    apply=lambda c: c.execute(
-                        "CREATE TABLE IF NOT EXISTS demo_table (id INTEGER PRIMARY KEY)"
-                    ),
+                    apply=lambda c: c.execute("CREATE TABLE IF NOT EXISTS demo_table (id INTEGER PRIMARY KEY)"),
                 ),
             ),
         )
 
         assert get_applied_version(conn, "demo") == 1
-        cur = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'demo_table'"
-        )
+        cur = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'demo_table'")
         assert cur.fetchone() is not None
 
     def test_apply_migrations_is_idempotent(self) -> None:
@@ -86,9 +82,7 @@ class TestSqliteMigration:
             )
 
         assert get_applied_version(conn, "demo") == 0
-        cur = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('demo_ok', 'demo_ng')"
-        )
+        cur = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('demo_ok', 'demo_ng')")
         assert cur.fetchall() == []
 
     def test_apply_migrations_uses_savepoint_inside_outer_transaction(self) -> None:
@@ -110,9 +104,7 @@ class TestSqliteMigration:
 
         cur = conn.execute("SELECT id FROM outer_table")
         assert [row[0] for row in cur.fetchall()] == [1]
-        cur = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'nested_fail'"
-        )
+        cur = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'nested_fail'")
         assert cur.fetchone() is None
         conn.commit()
 
@@ -157,9 +149,7 @@ class TestInitGameDbSchema:
         assert "personal_trade_listing_read_models" in names
         assert "global_market_listing_read_models" in names
 
-        cur = conn.execute(
-            "SELECT namespace, version FROM schema_migrations ORDER BY namespace"
-        )
+        cur = conn.execute("SELECT namespace, version FROM schema_migrations ORDER BY namespace")
         applied = {row[0]: row[1] for row in cur.fetchall()}
         assert applied == {
             "game_write": 37,
@@ -194,9 +184,7 @@ class TestInitGameDbSchema:
 
         init_game_write_schema(conn)
 
-        row = conn.execute(
-            "SELECT created_at FROM trade_aggregates WHERE trade_id = 1"
-        ).fetchone()
+        row = conn.execute("SELECT created_at FROM trade_aggregates WHERE trade_id = 1").fetchone()
         assert row is not None
         assert row[0] == "2026-08-14T01:02:03+00:00"
         assert get_applied_version(conn, "game_write") == 37
@@ -229,8 +217,7 @@ class TestInitGameDbSchema:
 
         assert get_applied_version(conn, "game_write") == 31
         table = conn.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type = 'table' AND name = 'command_event_outbox'"
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'command_event_outbox'"
         ).fetchone()
         assert table is None
 

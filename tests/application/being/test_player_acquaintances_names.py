@@ -60,9 +60,7 @@ def _entered(actor: str) -> ObservationOutput:
     )
 
 
-def _spoke(
-    speaker: PlayerId, content: str, *, channel: str = "say"
-) -> ObservationOutput:
+def _spoke(speaker: PlayerId, content: str, *, channel: str = "say") -> ObservationOutput:
     name = NAMES[speaker.value]
     structured = {
         "type": "player_spoke",
@@ -219,7 +217,9 @@ class TestRenamingObservations:
         chosen = acquaintances.view_for(ADA, output)
 
         assert chosen is not None
-        assert chosen.prose == "背の高い男が看板を読んだ: 『ノアここに眠る』。背の高い男が言った: 「『ノア』と書いてある」"
+        assert (
+            chosen.prose == "背の高い男が看板を読んだ: 『ノアここに眠る』。背の高い男が言った: 「『ノア』と書いてある」"
+        )
 
     def test_name_absent_from_structured_is_left_alone(self) -> None:
         """structured に参加者として出ていない名前は、文の中で探して置き換えない。参加者は構造で分かる人に限る。"""

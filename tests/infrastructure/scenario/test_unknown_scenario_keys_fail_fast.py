@@ -68,12 +68,14 @@ def _load_with(tmp_path: Path, mutate: Callable[[dict[str, Any]], None]) -> None
 
 def _add_event(*, conditions: list[Any], effects: list[Any]):
     def mutate(raw: dict[str, Any]) -> None:
-        raw.setdefault("scenario_events", []).append({
-            "id": "probe_event",
-            "trigger": "ON_TICK",
-            "conditions": conditions,
-            "effects": effects,
-        })
+        raw.setdefault("scenario_events", []).append(
+            {
+                "id": "probe_event",
+                "trigger": "ON_TICK",
+                "conditions": conditions,
+                "effects": effects,
+            }
+        )
 
     return mutate
 
@@ -92,9 +94,7 @@ def _first_spot_interaction(raw: dict[str, Any]) -> dict[str, Any]:
 
 def _add_precondition(condition: dict[str, Any]):
     def mutate(raw: dict[str, Any]) -> None:
-        _first_spot_interaction(raw).setdefault("preconditions", []).append(
-            condition
-        )
+        _first_spot_interaction(raw).setdefault("preconditions", []).append(condition)
 
     return mutate
 
@@ -124,7 +124,8 @@ class TestAnUnknownKeyInAnEventConditionStopsTheLoad:
 
         with pytest.raises(ScenarioLoadError) as caught:
             _load_with(
-                tmp_path, _add_event(conditions=[condition], effects=[_FLAG]),
+                tmp_path,
+                _add_event(conditions=[condition], effects=[_FLAG]),
             )
 
         message = str(caught.value)
@@ -132,7 +133,8 @@ class TestAnUnknownKeyInAnEventConditionStopsTheLoad:
         assert "'spot_id'" in message
 
     def test_the_message_names_the_file_the_event_and_the_condition(
-        self, tmp_path,
+        self,
+        tmp_path,
     ) -> None:
         """エラーに、ファイル名、出来事の ID と条件の位置、キーの名前が出る。"""
         condition = {"condition_type": "FLAG_SET", "flag_name": "x", _UNKNOWN: 1}
@@ -158,7 +160,8 @@ class TestAnUnknownKeyInAnEventConditionStopsTheLoad:
 
         with pytest.raises(ScenarioLoadError, match="'flag_name'"):
             _load_with(
-                tmp_path, _add_event(conditions=[condition], effects=[_FLAG]),
+                tmp_path,
+                _add_event(conditions=[condition], effects=[_FLAG]),
             )
 
     def test_an_unknown_key_inside_a_composite_is_rejected(self, tmp_path) -> None:
@@ -170,7 +173,8 @@ class TestAnUnknownKeyInAnEventConditionStopsTheLoad:
 
         with pytest.raises(ScenarioLoadError) as caught:
             _load_with(
-                tmp_path, _add_event(conditions=[condition], effects=[_FLAG]),
+                tmp_path,
+                _add_event(conditions=[condition], effects=[_FLAG]),
             )
 
         assert "conditions[0].children[1]" in str(caught.value)
@@ -181,14 +185,17 @@ class TestAnUnknownKeyInAnEventConditionStopsTheLoad:
         ids=["all_of", "any_of", "not_"],
     )
     def test_a_key_beside_a_composite_shortcut_is_rejected(
-        self, tmp_path, shortcut: dict[str, Any],
+        self,
+        tmp_path,
+        shortcut: dict[str, Any],
     ) -> None:
         """all_of / any_of / not_ の横に並べたキーは読まれないので止まる。"""
         condition = {**shortcut, _UNKNOWN: 1}
 
         with pytest.raises(ScenarioLoadError, match=_UNKNOWN):
             _load_with(
-                tmp_path, _add_event(conditions=[condition], effects=[_FLAG]),
+                tmp_path,
+                _add_event(conditions=[condition], effects=[_FLAG]),
             )
 
 
@@ -196,7 +203,8 @@ class TestAnUnknownKeyInAPreconditionStopsTheLoad:
     """操作の前提条件に知らないキーがあると、読み込みが止まる。"""
 
     def test_the_message_names_the_file_the_action_and_the_key(
-        self, tmp_path,
+        self,
+        tmp_path,
     ) -> None:
         """エラーに、ファイル名、操作の名前、条件の種類、キーの名前が出る。"""
         condition = {"condition_type": "FLAG_SET", "flag_name": "x", _UNKNOWN: 1}
@@ -277,11 +285,14 @@ class TestAnUnknownKeyInAnEffectStopsTheLoad:
             _load_with(tmp_path, _add_event(conditions=[_TICK], effects=[effect]))
 
     @pytest.mark.parametrize(
-        "parameters", [None, [], ["flag_name", "x"], "flag_name"],
+        "parameters",
+        [None, [], ["flag_name", "x"], "flag_name"],
         ids=["null", "empty_list", "list", "string"],
     )
     def test_parameters_that_are_not_an_object_stop_the_load(
-        self, tmp_path, parameters: Any,
+        self,
+        tmp_path,
+        parameters: Any,
     ) -> None:
         """parameters がオブジェクトでないと、生の例外ではなく読み込みエラーになる。
 
@@ -298,7 +309,8 @@ class TestAnUnknownKeyInAnEffectStopsTheLoad:
         assert "parameters" in message
 
     def test_a_precondition_that_is_not_an_object_stops_the_load(
-        self, tmp_path,
+        self,
+        tmp_path,
     ) -> None:
         """前提条件がオブジェクトでないと、生の例外ではなく読み込みエラーになる。"""
         with pytest.raises(ScenarioLoadError, match="probe.json"):
@@ -394,7 +406,10 @@ class TestIslandEventsReadWhatTheyMean:
         ],
     )
     def test_the_discovery_condition_reads_the_place(
-        self, loaded, event_id: str, spot: str,
+        self,
+        loaded,
+        event_id: str,
+        spot: str,
     ) -> None:
         """発見の出来事の条件は、PLAYER_AT_SPOT として場所を持って読み込まれる。"""
         event = next(e for e in loaded.scenario_events if e.event_id == event_id)
@@ -412,7 +427,8 @@ class TestIslandEventsReadWhatTheyMean:
         flag_effects = [
             (e.effect_type, e.parameters.get("flag_name"))
             for e in event.effects
-            if e.effect_type in (
+            if e.effect_type
+            in (
                 InteractionEffectTypeEnum.SET_FLAG,
                 InteractionEffectTypeEnum.CLEAR_FLAG,
             )
@@ -430,9 +446,6 @@ class TestIslandEventsReadWhatTheyMean:
             if interaction.action_name == "duck_under"
         ]
 
-        [status] = [
-            e for e in interaction.effects
-            if e.effect_type is InteractionEffectTypeEnum.APPLY_STATUS_EFFECT
-        ]
+        [status] = [e for e in interaction.effects if e.effect_type is InteractionEffectTypeEnum.APPLY_STATUS_EFFECT]
 
         assert status.parameters.get("status_effect_type") == "bleeding"

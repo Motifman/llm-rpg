@@ -89,7 +89,9 @@ class TestTheRowsSummariseEachItem:
         下げないと売れない) を読む材料にもなる。
         """
         board = _board(
-            _order(1, quantity=2), _order(2, quantity=3), _order(3, quantity=4),
+            _order(1, quantity=2),
+            _order(2, quantity=3),
+            _order(3, quantity=4),
         )
 
         row = board.rows_for(_TOM).rows[0]

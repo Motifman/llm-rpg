@@ -8,7 +8,6 @@ runtime には存在しないので、observation pipeline 側で missing 扱い
 配信から除外される。
 """
 
-
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IWorldObjectToPlayerResolver,
 )

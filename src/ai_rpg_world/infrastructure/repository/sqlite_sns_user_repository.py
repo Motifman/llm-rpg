@@ -105,12 +105,8 @@ class SqliteSnsUserRepository(UserRepository):
                 user_name=str(row["user_name"]),
                 display_name=str(row["display_name"]),
                 bio=str(row["bio"]),
-                follows=self._relation_rows(
-                    "game_sns_follows", "follower_user_id", "followee_user_id", user_id
-                ),
-                blocks=self._relation_rows(
-                    "game_sns_blocks", "blocker_user_id", "blocked_user_id", user_id
-                ),
+                follows=self._relation_rows("game_sns_follows", "follower_user_id", "followee_user_id", user_id),
+                blocks=self._relation_rows("game_sns_blocks", "blocker_user_id", "blocked_user_id", user_id),
                 subscriptions=self._relation_rows(
                     "game_sns_subscriptions",
                     "subscriber_user_id",

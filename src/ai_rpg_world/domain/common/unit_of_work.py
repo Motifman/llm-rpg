@@ -2,6 +2,7 @@
 Unit of Workインターフェース
 DDDにおけるトランザクション管理の抽象化を提供します。
 """
+
 from abc import abstractmethod
 from collections.abc import Sequence
 from types import TracebackType

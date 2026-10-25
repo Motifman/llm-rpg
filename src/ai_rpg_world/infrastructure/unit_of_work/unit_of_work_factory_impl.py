@@ -1,6 +1,7 @@
 """
 Unit of Work Factory Implementation - Unit of Workファクトリの具体実装
 """
+
 import os
 from collections.abc import Mapping
 

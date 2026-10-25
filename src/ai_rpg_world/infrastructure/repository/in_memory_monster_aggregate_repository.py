@@ -1,4 +1,3 @@
-
 from typing import Any
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork

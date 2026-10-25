@@ -126,9 +126,7 @@ class TestGuildAggregate:
             assert guild.members == members_before
             assert guild.get_events() == events_before
 
-        def test_add_member_member_cannot_invite_raises(
-            self, guild_with_members, guild_id, player_2_id, player_3_id
-        ):
+        def test_add_member_member_cannot_invite_raises(self, guild_with_members, guild_id, player_2_id, player_3_id):
             """通常会員の招待を拒否し、既存会員と未発行イベントを変更しない。"""
             members_before = guild_with_members.members
             events_before = guild_with_members.get_events()
@@ -155,9 +153,7 @@ class TestGuildAggregate:
             guild.leave(creator_id)
             assert guild.is_member(creator_id) is False
 
-        def test_leave_leader_when_other_members_appoints_successor(
-            self, guild_with_members, creator_id, player_2_id
-        ):
+        def test_leave_leader_when_other_members_appoints_successor(self, guild_with_members, creator_id, player_2_id):
             """他にメンバーがいる場合リーダー脱退時は後継リーダーが任命され、脱退できる（Phase 5 仕様）"""
             guild_with_members.leave(creator_id)
             assert guild_with_members.is_member(creator_id) is False
@@ -165,19 +161,14 @@ class TestGuildAggregate:
             assert guild_with_members.get_member(player_2_id).role == GuildRole.LEADER
             events = guild_with_members.get_events()
             assert any(isinstance(e, GuildMemberLeftEvent) for e in events)
-            assert any(
-                isinstance(e, GuildRoleChangedEvent) and e.new_role == GuildRole.LEADER
-                for e in events
-            )
+            assert any(isinstance(e, GuildRoleChangedEvent) and e.new_role == GuildRole.LEADER for e in events)
 
         def test_leave_not_member_raises(self, guild, player_2_id):
             with pytest.raises(CannotLeaveGuildException):
                 guild.leave(player_2_id)
 
     class TestChangeRole:
-        def test_change_role_to_officer_success(
-            self, guild_with_members, creator_id, player_2_id
-        ):
+        def test_change_role_to_officer_success(self, guild_with_members, creator_id, player_2_id):
             guild_with_members.change_role(
                 changer_player_id=creator_id,
                 target_player_id=player_2_id,
@@ -187,9 +178,7 @@ class TestGuildAggregate:
             events = guild_with_members.get_events()
             assert any(isinstance(e, GuildRoleChangedEvent) for e in events)
 
-        def test_change_role_changer_not_officer_raises(
-            self, guild_with_members, creator_id, player_2_id, player_3_id
-        ):
+        def test_change_role_changer_not_officer_raises(self, guild_with_members, creator_id, player_2_id, player_3_id):
             """通常会員の役職変更を拒否し、会員情報と未発行イベントを変更しない。"""
             guild_with_members.add_member(
                 inviter_player_id=creator_id,
@@ -210,9 +199,7 @@ class TestGuildAggregate:
             assert guild_with_members.members == members_before
             assert guild_with_members.get_events() == events_before
 
-        def test_change_role_target_not_member_raises(
-            self, guild_with_members, creator_id, player_3_id
-        ):
+        def test_change_role_target_not_member_raises(self, guild_with_members, creator_id, player_3_id):
             with pytest.raises(NotGuildMemberException):
                 guild_with_members.change_role(
                     changer_player_id=creator_id,
@@ -220,9 +207,7 @@ class TestGuildAggregate:
                     new_role=GuildRole.MEMBER,
                 )
 
-        def test_change_role_leader_cannot_demote_self(
-            self, guild_with_members, creator_id, player_2_id
-        ):
+        def test_change_role_leader_cannot_demote_self(self, guild_with_members, creator_id, player_2_id):
             """リーダーの自己降格を拒否し、会員情報と未発行イベントを変更しない。"""
             members_before = guild_with_members.members
             events_before = guild_with_members.get_events()
@@ -242,9 +227,7 @@ class TestGuildAggregate:
         def test_leader_can_approve_quest(self, guild, creator_id):
             assert guild.can_approve_quest(creator_id) is True
 
-        def test_officer_can_approve_quest(
-            self, guild_with_members, creator_id, player_2_id
-        ):
+        def test_officer_can_approve_quest(self, guild_with_members, creator_id, player_2_id):
             guild_with_members.change_role(
                 changer_player_id=creator_id,
                 target_player_id=player_2_id,

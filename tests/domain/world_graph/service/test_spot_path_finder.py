@@ -137,7 +137,7 @@ class TestPassableFilter:
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
         for i in range(1, 4):
             g.add_spot(_node(i))
-        g.add_connection(_conn(10, 1, 2))   # 通行不能扱いにする
+        g.add_connection(_conn(10, 1, 2))  # 通行不能扱いにする
         g.add_connection(_conn(20, 1, 3))
         g.add_connection(_conn(30, 3, 2))
 
@@ -176,7 +176,11 @@ class TestMaxDistance:
         g.add_connection(_conn(40, 4, 5))
 
         result = find_next_hop(
-            g, SpotId.create(1), SpotId.create(5), _all_passable, max_distance=2,
+            g,
+            SpotId.create(1),
+            SpotId.create(5),
+            _all_passable,
+            max_distance=2,
         )
         assert result is None
 
@@ -191,7 +195,11 @@ class TestMaxDistance:
         g.add_connection(_conn(40, 4, 5))
 
         result = find_next_hop(
-            g, SpotId.create(1), SpotId.create(5), _all_passable, max_distance=4,
+            g,
+            SpotId.create(1),
+            SpotId.create(5),
+            _all_passable,
+            max_distance=4,
         )
         assert result == ConnectionId.create(10)
 
@@ -217,6 +225,9 @@ class TestDeterminism:
 
         for _ in range(5):
             result = find_next_hop(
-                g, SpotId.create(1), SpotId.create(4), _all_passable,
+                g,
+                SpotId.create(1),
+                SpotId.create(4),
+                _all_passable,
             )
             assert result == ConnectionId.create(20)

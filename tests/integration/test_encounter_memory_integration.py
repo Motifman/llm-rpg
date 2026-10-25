@@ -39,12 +39,7 @@ from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
 
-_SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "forbidden_library_demo.json"
-)
+_SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "forbidden_library_demo.json"
 
 
 def _create_runtime():
@@ -128,9 +123,7 @@ class TestRuntimeWiring:
 
         kaito_records = runtime._encounter_memory.get_records_for(kaito)
         rin_records = runtime._encounter_memory.get_records_for(rin)
-        assert set(kaito_records.keys()) == {
-            EncounterKey.spot("entrance_hall")
-        }
+        assert set(kaito_records.keys()) == {EncounterKey.spot("entrance_hall")}
         assert set(rin_records.keys()) == {EncounterKey.spot("reading_room")}
         # 両方とも初回 (is_first=True) かつ tick=0 で記録される
         assert kaito_records[EncounterKey.spot("entrance_hall")].is_first
@@ -157,9 +150,7 @@ class TestAppenderToEncounterEndToEnd:
             datetime.now(timezone.utc),
             None,
         )
-        assert runtime._encounter_memory.lookup(
-            rin, EncounterKey.player("カイト")
-        ) is None
+        assert runtime._encounter_memory.lookup(rin, EncounterKey.player("カイト")) is None
         acquaintances = runtime._player_acquaintances
         assert acquaintances.find(rin, "カイト") is not None
         assert acquaintances.find(kaito, "リン") is not None
@@ -176,9 +167,7 @@ class TestAppenderToEncounterEndToEnd:
             datetime.now(timezone.utc),
             None,
         )
-        record = runtime._encounter_memory.lookup(
-            kaito, EncounterKey.event("storm_arrives")
-        )
+        record = runtime._encounter_memory.lookup(kaito, EncounterKey.event("storm_arrives"))
         assert record is not None
         assert record.is_first is True
 
@@ -215,11 +204,7 @@ class TestSnapshotRoundTripViaRuntime:
             None,
         )
 
-        encounter_codec = next(
-            c
-            for c in _default_world_subsystem_codecs()
-            if c.subsystem_key == "encounter_memory"
-        )
+        encounter_codec = next(c for c in _default_world_subsystem_codecs() if c.subsystem_key == "encounter_memory")
         captured = encounter_codec.capture(runtime_a)
 
         runtime_b = _create_runtime()

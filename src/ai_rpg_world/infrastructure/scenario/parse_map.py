@@ -113,7 +113,8 @@ def parse_spots_and_graph(
     graph.clear_events()
     return graph, interiors
 
-def parse_spot_position( spot_id: str, raw: Any) -> SpotPosition | None:
+
+def parse_spot_position(spot_id: str, raw: Any) -> SpotPosition | None:
     if raw is None:
         return None
     path = f"spots[{spot_id}].position"
@@ -121,19 +122,19 @@ def parse_spot_position( spot_id: str, raw: Any) -> SpotPosition | None:
         raise ScenarioLoadError(f"{path} must be an object with numeric x/y")
     unknown_keys = set(raw) - {"x", "y"}
     if unknown_keys:
-        raise ScenarioLoadError(
-            f"{path} has unsupported keys: {sorted(unknown_keys)}"
-        )
+        raise ScenarioLoadError(f"{path} has unsupported keys: {sorted(unknown_keys)}")
     x = parse_position_number(raw.get("x"), f"{path}.x")
     y = parse_position_number(raw.get("y"), f"{path}.y")
     return SpotPosition(x=x, y=y)
 
-def parse_spot_area_id( spot_id: str, raw: Any) -> str | None:
+
+def parse_spot_area_id(spot_id: str, raw: Any) -> str | None:
     if raw is None:
         return None
     if not isinstance(raw, str) or not raw.strip():
         raise ScenarioLoadError(f"spots[{spot_id}].area_id must be a non-empty string")
     return raw.strip()
+
 
 def parse_areas(
     areas_raw: Any,
@@ -163,12 +164,8 @@ def parse_areas(
             raise ScenarioLoadError(f"areas[{area_id}].name must be a non-empty string")
         visible_name = raw_area.get("visible_name")
         if not isinstance(visible_name, str) or not visible_name.strip():
-            raise ScenarioLoadError(
-                f"areas[{area_id}].visible_name must be a non-empty string"
-            )
-        prominence = parse_prominence(
-            raw_area.get("prominence"), f"areas[{area_id}].prominence"
-        )
+            raise ScenarioLoadError(f"areas[{area_id}].visible_name must be a non-empty string")
+        prominence = parse_prominence(raw_area.get("prominence"), f"areas[{area_id}].prominence")
 
         declared_position = parse_area_position(area_id, raw_area.get("position"))
         position: SpotPosition | None
@@ -184,9 +181,7 @@ def parse_areas(
         if distant_descriptions is None:
             distant_descriptions = {}
         if not isinstance(distant_descriptions, Mapping):
-            raise ScenarioLoadError(
-                f"areas[{area_id}].distant_descriptions must be an object"
-            )
+            raise ScenarioLoadError(f"areas[{area_id}].distant_descriptions must be an object")
         out.append(
             AreaDef(
                 area_id=area_id,
@@ -196,14 +191,13 @@ def parse_areas(
                 position=position,
                 position_source=position_source,
                 description=str(raw_area.get("description", "") or ""),
-                distant_descriptions={
-                    str(k): str(v) for k, v in distant_descriptions.items()
-                },
+                distant_descriptions={str(k): str(v) for k, v in distant_descriptions.items()},
             )
         )
     return tuple(out)
 
-def parse_area_position( area_id: str, raw: Any) -> SpotPosition | None:
+
+def parse_area_position(area_id: str, raw: Any) -> SpotPosition | None:
     if raw is None:
         return None
     path = f"areas[{area_id}].position"
@@ -211,12 +205,11 @@ def parse_area_position( area_id: str, raw: Any) -> SpotPosition | None:
         raise ScenarioLoadError(f"{path} must be an object with numeric x/y")
     unknown_keys = set(raw) - {"x", "y"}
     if unknown_keys:
-        raise ScenarioLoadError(
-            f"{path} has unsupported keys: {sorted(unknown_keys)}"
-        )
+        raise ScenarioLoadError(f"{path} has unsupported keys: {sorted(unknown_keys)}")
     x = parse_position_number(raw.get("x"), f"{path}.x")
     y = parse_position_number(raw.get("y"), f"{path}.y")
     return SpotPosition(x=x, y=y)
+
 
 def parse_distant_cues(
     raw: Any,
@@ -235,37 +228,25 @@ def parse_distant_cues(
             raise ScenarioLoadError(f"distant_cues[{index}] must be an object")
         cue_id = raw_cue.get("id")
         if not isinstance(cue_id, str) or not cue_id.strip():
-            raise ScenarioLoadError(
-                f"distant_cues[{index}].id must be a non-empty string"
-            )
+            raise ScenarioLoadError(f"distant_cues[{index}].id must be a non-empty string")
         cue_id = cue_id.strip()
         if cue_id in seen:
             raise ScenarioLoadError(f"distant_cues[{cue_id}].id is duplicated")
         seen.add(cue_id)
 
         source = parse_distant_cue_source(cue_id, raw_cue.get("source"), mapper)
-        origin_area_id = parse_distant_cue_origin_area_id(
-            cue_id, raw_cue.get("origin"), area_ids
-        )
+        origin_area_id = parse_distant_cue_origin_area_id(cue_id, raw_cue.get("origin"), area_ids)
 
         visible_name = raw_cue.get("visible_name")
         if not isinstance(visible_name, str) or not visible_name.strip():
-            raise ScenarioLoadError(
-                f"distant_cues[{cue_id}].visible_name must be a non-empty string"
-            )
-        prominence = parse_prominence(
-            raw_cue.get("prominence"), f"distant_cues[{cue_id}].prominence"
-        )
+            raise ScenarioLoadError(f"distant_cues[{cue_id}].visible_name must be a non-empty string")
+        prominence = parse_prominence(raw_cue.get("prominence"), f"distant_cues[{cue_id}].prominence")
         ambient_descriptions = raw_cue.get("ambient_descriptions", {})
         if ambient_descriptions is None:
             ambient_descriptions = {}
         if not isinstance(ambient_descriptions, Mapping):
-            raise ScenarioLoadError(
-                f"distant_cues[{cue_id}].ambient_descriptions must be an object"
-            )
-        appear_event = parse_distant_cue_appear_event(
-            cue_id, raw_cue.get("appear_event")
-        )
+            raise ScenarioLoadError(f"distant_cues[{cue_id}].ambient_descriptions must be an object")
+        appear_event = parse_distant_cue_appear_event(cue_id, raw_cue.get("appear_event"))
 
         out.append(
             DistantCueDef(
@@ -274,13 +255,12 @@ def parse_distant_cues(
                 origin_area_id=origin_area_id,
                 visible_name=visible_name.strip(),
                 prominence=prominence,
-                ambient_descriptions={
-                    str(k): str(v) for k, v in ambient_descriptions.items()
-                },
+                ambient_descriptions={str(k): str(v) for k, v in ambient_descriptions.items()},
                 appear_event=appear_event,
             )
         )
     return tuple(out)
+
 
 def parse_distant_cue_appear_event(
     cue_id: str,
@@ -302,6 +282,7 @@ def parse_distant_cue_appear_event(
         schedules_turn=schedules_turn,
     )
 
+
 def parse_distant_cue_source(
     cue_id: str,
     raw: Any,
@@ -320,9 +301,7 @@ def parse_distant_cue_source(
     try:
         object_id = SpotObjectId.create(mapper.get_int("object", object_sid))
     except ScenarioIdMappingError as exc:
-        raise ScenarioLoadError(
-            f"{path}.object_id references unknown object: {object_sid}"
-        ) from exc
+        raise ScenarioLoadError(f"{path}.object_id references unknown object: {object_sid}") from exc
     state_key = raw.get("state_key")
     if not isinstance(state_key, str) or not state_key.strip():
         raise ScenarioLoadError(f"{path}.state_key must be a non-empty string")
@@ -337,6 +316,7 @@ def parse_distant_cue_source(
         state_key=state_key.strip(),
         equals=equals,
     )
+
 
 def parse_distant_cue_origin_area_id(
     cue_id: str,
@@ -354,7 +334,8 @@ def parse_distant_cue_origin_area_id(
         raise ScenarioLoadError(f"{path}.area_id references unknown area: {area_id}")
     return area_id
 
-def parse_atmosphere( raw: dict[str, Any] | None) -> SpotAtmosphere | None:
+
+def parse_atmosphere(raw: dict[str, Any] | None) -> SpotAtmosphere | None:
     if not raw:
         return None
     return SpotAtmosphere(
@@ -363,6 +344,7 @@ def parse_atmosphere( raw: dict[str, Any] | None) -> SpotAtmosphere | None:
         temperature=TemperatureEnum[raw.get("temperature", "NORMAL")],
         smell=raw.get("smell"),
     )
+
 
 def parse_interior(
     raw: dict[str, Any],
@@ -373,9 +355,7 @@ def parse_interior(
 ) -> SpotInterior:
     raw_objects = raw.get("objects", [])
     local_object_ids = {
-        object_id
-        for obj in raw_objects
-        if isinstance(obj, dict) and isinstance(object_id := obj.get("id"), str)
+        object_id for obj in raw_objects if isinstance(obj, dict) and isinstance(object_id := obj.get("id"), str)
     }
     sub_locs = tuple(
         parse_sub_location(
@@ -395,16 +375,14 @@ def parse_interior(
         for o in raw_objects
     )
     ground_items = ()  # ground_items は runtime で発生するため、シナリオ定義では空
-    discoverables = tuple(
-        parse_discoverable_item(d, mapper)
-        for d in raw.get("discoverable_items", [])
-    )
+    discoverables = tuple(parse_discoverable_item(d, mapper) for d in raw.get("discoverable_items", []))
     return SpotInterior(
         sub_locations=sub_locs,
         objects=objects,
         ground_items=ground_items,
         discoverable_items=discoverables,
     )
+
 
 def parse_sub_location(
     raw: dict[str, Any],
@@ -415,9 +393,7 @@ def parse_sub_location(
     sid = mapper.register("sub_location", raw["id"])
     raw_object_ids = raw.get("accessible_object_ids", [])
     if not isinstance(raw_object_ids, list):
-        raise ScenarioLoadError(
-            f"sub_location {raw.get('id')}.accessible_object_ids must be a list"
-        )
+        raise ScenarioLoadError(f"sub_location {raw.get('id')}.accessible_object_ids must be a list")
     for object_id in raw_object_ids:
         if (
             not isinstance(object_id, str)
@@ -429,10 +405,7 @@ def parse_sub_location(
                 f"an object outside the same interior or an unknown object: "
                 f"{object_id!r}"
             )
-    obj_ids = tuple(
-        SpotObjectId.create(mapper.get_int("object", oid))
-        for oid in raw_object_ids
-    )
+    obj_ids = tuple(SpotObjectId.create(mapper.get_int("object", oid)) for oid in raw_object_ids)
     dc = parse_discovery_condition(raw.get("discovery_condition"), mapper) if raw.get("discovery_condition") else None
     return SubLocation(
         sub_location_id=SubLocationId.create(sid),
@@ -446,6 +419,7 @@ def parse_sub_location(
         discovery_condition=dc,
     )
 
+
 def parse_spot_object(
     raw: dict[str, Any],
     mapper: ScenarioIdMapper,
@@ -456,9 +430,7 @@ def parse_spot_object(
     oid = mapper.register("object", raw["id"])
     with declaring(f"物体 {raw['id']!r} の"):
         interactions = tuple(
-            parse_interaction_def(
-                i, mapper, player_attribute_specs=player_attribute_specs
-            )
+            parse_interaction_def(i, mapper, player_attribute_specs=player_attribute_specs)
             for i in raw.get("interactions", [])
         )
     variants = tuple(
@@ -472,12 +444,9 @@ def parse_spot_object(
     unavailable_hint = raw.get("unavailable_hint")
     if unavailable_hint is not None:
         if not isinstance(unavailable_hint, str) or not unavailable_hint.strip():
-            raise ScenarioLoadError(
-                f"object {raw.get('id')}.unavailable_hint must be a non-empty string"
-            )
-    merged_recorded_tick_state_keys = (
-        recorded_tick_state_keys(interactions, oid)
-        | remote_recorded_tick_keys.get(oid, frozenset())
+            raise ScenarioLoadError(f"object {raw.get('id')}.unavailable_hint must be a non-empty string")
+    merged_recorded_tick_state_keys = recorded_tick_state_keys(interactions, oid) | remote_recorded_tick_keys.get(
+        oid, frozenset()
     )
     declared_hidden_state_keys = parse_object_hidden_state_keys(raw)
     state_display = parse_object_state_display(
@@ -508,7 +477,8 @@ def parse_spot_object(
         state_display=state_display,
     )
 
-def parse_discoverable_item( raw: dict[str, Any], mapper: ScenarioIdMapper) -> DiscoverableItem:
+
+def parse_discoverable_item(raw: dict[str, Any], mapper: ScenarioIdMapper) -> DiscoverableItem:
     item_sid = raw["item_spec"]
     dc = parse_discovery_condition(raw.get("discovery_condition", {}), mapper)
     return DiscoverableItem(
@@ -518,7 +488,8 @@ def parse_discoverable_item( raw: dict[str, Any], mapper: ScenarioIdMapper) -> D
         description=raw.get("description", ""),
     )
 
-def parse_discovery_condition( raw: dict[str, Any] | None, mapper: ScenarioIdMapper) -> DiscoveryCondition:
+
+def parse_discovery_condition(raw: dict[str, Any] | None, mapper: ScenarioIdMapper) -> DiscoveryCondition:
     if not raw:
         return DiscoveryCondition(condition_type=DiscoveryConditionTypeEnum.ALWAYS)
     item_sid = raw.get("required_item")
@@ -530,7 +501,8 @@ def parse_discovery_condition( raw: dict[str, Any] | None, mapper: ScenarioIdMap
         flag_name=raw.get("flag_name"),
     )
 
-def parse_passage_condition( raw: dict[str, Any], mapper: ScenarioIdMapper) -> PassageCondition:
+
+def parse_passage_condition(raw: dict[str, Any], mapper: ScenarioIdMapper) -> PassageCondition:
     item_sid = raw.get("required_item")
     item_spec_id = ItemSpecId.create(mapper.get_int("item_spec", item_sid)) if item_sid else None
     return PassageCondition(
@@ -544,7 +516,11 @@ def parse_passage_condition( raw: dict[str, Any], mapper: ScenarioIdMapper) -> P
         failure_message=raw.get("failure_message", ""),
     )
 
-def parse_connections( conns_raw: list[dict[str, Any]], graph: SpotGraphAggregate, mapper: ScenarioIdMapper,
+
+def parse_connections(
+    conns_raw: list[dict[str, Any]],
+    graph: SpotGraphAggregate,
+    mapper: ScenarioIdMapper,
 ) -> None:
     for c in conns_raw:
         cid = mapper.register("connection", c["id"])
@@ -561,8 +537,7 @@ def parse_connections( conns_raw: list[dict[str, Any]], graph: SpotGraphAggregat
         for legacy_key in ("initially_passable", "sound_permeability"):
             if legacy_key in c:
                 raise ScenarioLoadError(
-                    f"Connection '{c['id']}' uses obsolete key '{legacy_key}'. "
-                    f"Use `passage` block instead."
+                    f"Connection '{c['id']}' uses obsolete key '{legacy_key}'. Use `passage` block instead."
                 )
         passage = Passage.from_dict(c.get("passage"))
 

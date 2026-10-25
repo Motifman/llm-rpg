@@ -1,4 +1,5 @@
 """取引 outbox が使う EventPayloadSerializer の保存形式を保証する。"""
+
 import json
 from datetime import datetime
 from typing import Any
@@ -28,9 +29,7 @@ class JsonEventPayloadSerializer:
         }
         return json.dumps(body, sort_keys=True).encode("utf-8")
 
-    def deserialize(
-        self, payload: bytes, event_type: type[BaseDomainEvent]
-    ) -> BaseDomainEvent:
+    def deserialize(self, payload: bytes, event_type: type[BaseDomainEvent]) -> BaseDomainEvent:
         data = json.loads(payload.decode("utf-8"))
         tick_raw = data.get("occurred_tick")
         tick: WorldTick | None = WorldTick(int(tick_raw)) if tick_raw is not None else None

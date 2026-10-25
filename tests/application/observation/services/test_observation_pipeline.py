@@ -99,9 +99,7 @@ class TestObservationPipelineNormal:
             player_status_repository=status_repo,
         )
 
-    def test_returns_outputs_for_resolved_recipients(
-        self, pipeline, status_repo
-    ):
+    def test_returns_outputs_for_resolved_recipients(self, pipeline, status_repo):
         """resolver が返した配信先について formatter が output を返すとリストに含まれる（正常）"""
         status_repo.save(_make_status(1, spot_id=1))
         event = PlayerGoldEarnedEvent.create(
@@ -118,9 +116,7 @@ class TestObservationPipelineNormal:
         assert isinstance(result[0][1], ObservationOutput)
         assert "100" in result[0][1].prose
 
-    def test_returns_multiple_outputs_when_multiple_recipients(
-        self, pipeline, status_repo
-    ):
+    def test_returns_multiple_outputs_when_multiple_recipients(self, pipeline, status_repo):
         """複数配信先のとき、各プレイヤー向け出力が返る（正常）"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=1))
@@ -139,9 +135,7 @@ class TestObservationPipelineNormal:
         assert result[0][0] == PlayerId(1)
         assert "現在地" in result[0][1].prose
 
-    def test_player_downed_remote_recipient_gets_scheduled_observation(
-        self, pipeline, status_repo
-    ):
+    def test_player_downed_remote_recipient_gets_scheduled_observation(self, pipeline, status_repo):
         """別 spot の player が倒れても既知 player に届き、反応用に schedules_turn=True になる。"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=2))
@@ -202,9 +196,7 @@ class TestObservationPipelineBoundary:
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = [PlayerId(1)]
         mock_formatter = MagicMock()
-        mock_formatter.format.return_value = ObservationOutput(
-            "x", {}, schedules_turn=False, breaks_movement=False
-        )
+        mock_formatter.format.return_value = ObservationOutput("x", {}, schedules_turn=False, breaks_movement=False)
         pipeline = ObservationPipeline(
             resolver=mock_resolver,
             formatter=mock_formatter,
@@ -220,15 +212,11 @@ class TestObservationPipelineBoundary:
     def test_uses_status_attention_level_when_repository_returns_status(self):
         """リポジトリが status を返すとき、その attention_level で formatter を呼ぶ（正常）"""
         status_repo = MagicMock()
-        status_repo.find_by_id.return_value = _make_status(
-            1, spot_id=1, attention_level=AttentionLevel.FILTER_SOCIAL
-        )
+        status_repo.find_by_id.return_value = _make_status(1, spot_id=1, attention_level=AttentionLevel.FILTER_SOCIAL)
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = [PlayerId(1)]
         mock_formatter = MagicMock()
-        mock_formatter.format.return_value = ObservationOutput(
-            "x", {}, schedules_turn=False, breaks_movement=False
-        )
+        mock_formatter.format.return_value = ObservationOutput("x", {}, schedules_turn=False, breaks_movement=False)
         pipeline = ObservationPipeline(
             resolver=mock_resolver,
             formatter=mock_formatter,
@@ -247,9 +235,7 @@ class TestObservationPipelineBoundary:
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = [PlayerId(1)]
         mock_formatter = MagicMock()
-        mock_formatter.format.return_value = ObservationOutput(
-            "x", {}, schedules_turn=False, breaks_movement=False
-        )
+        mock_formatter.format.return_value = ObservationOutput("x", {}, schedules_turn=False, breaks_movement=False)
         pipeline = ObservationPipeline(
             resolver=mock_resolver,
             formatter=mock_formatter,
@@ -299,9 +285,7 @@ class TestObservationPipelineExceptions:
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = [PlayerId(1)]
         mock_formatter = MagicMock()
-        mock_formatter.format.return_value = ObservationOutput(
-            "x", {}, schedules_turn=False, breaks_movement=False
-        )
+        mock_formatter.format.return_value = ObservationOutput("x", {}, schedules_turn=False, breaks_movement=False)
         pipeline = ObservationPipeline(
             resolver=mock_resolver,
             formatter=mock_formatter,

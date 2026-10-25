@@ -58,12 +58,7 @@ def _run(scenario: Path) -> list[FuzzResult]:
 
 
 def _stranger_findings(results: list[FuzzResult]) -> list[str]:
-    return [
-        f"seed={r.seed} tick={f.tick} {f.detail}"
-        for r in results
-        for f in r.findings
-        if f.kind == "stranger_name"
-    ]
+    return [f"seed={r.seed} tick={f.tick} {f.detail}" for r in results for f in r.findings if f.kind == "stranger_name"]
 
 
 def _unidentified_turns(results: list[FuzzResult]) -> list[str]:
@@ -82,9 +77,7 @@ class TestUnknownNamesVanish:
         assert _stranger_findings(results) == []
         assert sum(r.strangers_seen for r in results) > 0
 
-    def test_check_catches_names_shown_in_the_list(
-        self, scenario: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_check_catches_names_shown_in_the_list(self, scenario: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """正の対照: 同じ場所の人の一覧 (と、それを鍵にする対象の候補) の呼び方を実名に戻すと、stranger_name の所見が出る。出なければ、上の試験は何も見ていない。"""
         monkeypatch.setattr(
             SpotGraphCurrentStateBuilder,
@@ -97,13 +90,9 @@ class TestUnknownNamesVanish:
 
         assert _stranger_findings([result]) != []
 
-    def test_check_catches_names_left_in_observations(
-        self, scenario: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_check_catches_names_left_in_observations(self, scenario: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """正の対照: 記録に入る観測で名前を見た目に置き換える処理を外すと、stranger_name の所見が出る。"""
-        monkeypatch.setattr(
-            PlayerAcquaintances, "_renamed_for", lambda self, recipient, output: output
-        )
+        monkeypatch.setattr(PlayerAcquaintances, "_renamed_for", lambda self, recipient, output: output)
 
         # 観測が生成され、後続のプロンプトへ届くところまで 2 tick 回す。
         result = run_random_agents(scenario, seed=0, max_world_ticks=2)

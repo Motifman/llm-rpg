@@ -11,9 +11,7 @@ from ai_rpg_world.domain.item.value_object.spoilage import STATE_KEY_ACQUIRED_AT
 
 def test_runtime_injects_food_spoilage_scope_from_shared_store() -> None:
     """腐る食料があるruntimeは共有store由来の専用scopeへstageを接続する。"""
-    runtime = create_world_runtime(
-        Path("data/scenarios/survival_island_v2_short.json")
-    )
+    runtime = create_world_runtime(Path("data/scenarios/survival_island_v2_short.json"))
 
     stage = runtime._simulation_service._food_spoilage_stage
     assert stage is not None
@@ -24,9 +22,7 @@ def test_runtime_injects_food_spoilage_scope_from_shared_store() -> None:
 
 def test_runtime_collects_spoiled_event_into_daily_buffer_after_commit() -> None:
     """本番専用dispatcherは腐敗eventを確定後に日次観測バッファへ渡す。"""
-    runtime = create_world_runtime(
-        Path("data/scenarios/survival_island_v2_short.json")
-    )
+    runtime = create_world_runtime(Path("data/scenarios/survival_island_v2_short.json"))
     stage = runtime._simulation_service._food_spoilage_stage
     assert stage is not None
     spec_id, threshold = stage._spoilable[0]

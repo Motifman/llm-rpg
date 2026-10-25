@@ -3,6 +3,7 @@ from enum import Enum
 
 class ObjectTypeEnum(Enum):
     """相互作用オブジェクトの種類"""
+
     CHEST = "CHEST"
     DOOR = "DOOR"
     GATE = "GATE"
@@ -16,6 +17,7 @@ class ObjectTypeEnum(Enum):
 
 class SpotCategoryEnum(Enum):
     """スポットのカテゴリ"""
+
     TOWN = "TOWN"
     VILLAGE = "VILLAGE"
     DUNGEON = "DUNGEON"
@@ -29,6 +31,7 @@ class SpotCategoryEnum(Enum):
 
 class DirectionEnum(Enum):
     """向きの種類"""
+
     NORTH = "NORTH"
     NORTHEAST = "NORTHEAST"
     SOUTH = "SOUTH"
@@ -54,6 +57,7 @@ class DirectionEnum(Enum):
 
 class EstablishmentType(Enum):
     """ロケーションに割り当て可能な施設の種類"""
+
     SHOP = "SHOP"
     GUILD = "GUILD"
     # 将来: WAREHOUSE = "WAREHOUSE", TAVERN = "TAVERN" 等
@@ -61,11 +65,12 @@ class EstablishmentType(Enum):
 
 class SpotTraitEnum(Enum):
     """スポット（マップ）が持つ環境・雰囲気の特性。複数選択可能（タグ）。"""
-    FOREST = "FOREST"           # 森
-    WATER_EDGE = "WATER_EDGE"   # 水辺
-    LAVA = "LAVA"               # 溶岩地帯
-    DANGEROUS = "DANGEROUS"     # 危険地帯
-    SAFE_ZONE = "SAFE_ZONE"     # 安全地帯
+
+    FOREST = "FOREST"  # 森
+    WATER_EDGE = "WATER_EDGE"  # 水辺
+    LAVA = "LAVA"  # 溶岩地帯
+    DANGEROUS = "DANGEROUS"  # 危険地帯
+    SAFE_ZONE = "SAFE_ZONE"  # 安全地帯
     DUNGEON_DEPTH = "DUNGEON_DEPTH"  # ダンジョン奥
-    OPEN_FIELD = "OPEN_FIELD"   # 開けた野原
-    OTHER = "OTHER"             # その他
+    OPEN_FIELD = "OPEN_FIELD"  # 開けた野原
+    OTHER = "OTHER"  # その他

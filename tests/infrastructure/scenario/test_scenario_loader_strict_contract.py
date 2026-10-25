@@ -28,9 +28,7 @@ class TestScenarioEventContract:
     def test_unknown_condition_type_is_rejected(self) -> None:
         """未知の condition_type は永久に未発火へ縮退せず、イベント位置つきで拒否する。"""
         raw = _minimal_scenario()
-        raw["scenario_events"][0]["conditions"][0]["condition_type"] = (
-            "TICK_AT_LEATS"
-        )
+        raw["scenario_events"][0]["conditions"][0]["condition_type"] = "TICK_AT_LEATS"
 
         with pytest.raises(ScenarioLoadError, match="TICK_AT_LEATS"):
             ScenarioLoader().load_from_dict(raw)
@@ -46,9 +44,7 @@ class TestScenarioEventContract:
     def test_non_string_recipient_is_rejected_as_scenario_error(self) -> None:
         """recipients が配列でも Python の TypeError を漏らさず読込エラーにする。"""
         raw = _minimal_scenario()
-        raw["scenario_events"][0]["observation"]["recipients"] = [
-            "players_at_spot"
-        ]
+        raw["scenario_events"][0]["observation"]["recipients"] = ["players_at_spot"]
 
         with pytest.raises(ScenarioLoadError, match="recipients"):
             ScenarioLoader().load_from_dict(raw)
@@ -394,9 +390,7 @@ class TestScenarioWeatherConditionContract:
 
         with pytest.raises(
             ScenarioLoadError,
-            match=(
-                r"player_outcome_rules\[0\]\.player_conditions\[0\]\.weather_type"
-            ),
+            match=(r"player_outcome_rules\[0\]\.player_conditions\[0\]\.weather_type"),
         ):
             ScenarioLoader().load_from_dict(raw)
 
@@ -408,9 +402,7 @@ class TestScenarioBooleanContract:
         ("mutate", "path"),
         [
             (
-                lambda raw: raw["connections"][0].__setitem__(
-                    "is_bidirectional", "false"
-                ),
+                lambda raw: raw["connections"][0].__setitem__("is_bidirectional", "false"),
                 "is_bidirectional",
             ),
             (
@@ -418,9 +410,7 @@ class TestScenarioBooleanContract:
                 "is_outdoor",
             ),
             (
-                lambda raw: raw["spots"][0]["interior"]["objects"][0].__setitem__(
-                    "is_visible", "false"
-                ),
+                lambda raw: raw["spots"][0]["interior"]["objects"][0].__setitem__("is_visible", "false"),
                 "is_visible",
             ),
             (
@@ -428,15 +418,11 @@ class TestScenarioBooleanContract:
                 "once",
             ),
             (
-                lambda raw: raw["scenario_events"][0]["observation"].__setitem__(
-                    "schedules_turn", "false"
-                ),
+                lambda raw: raw["scenario_events"][0]["observation"].__setitem__("schedules_turn", "false"),
                 "schedules_turn",
             ),
             (
-                lambda raw: raw["connections"][0]["passage_conditions"][0].__setitem__(
-                    "consume_item", "false"
-                ),
+                lambda raw: raw["connections"][0]["passage_conditions"][0].__setitem__("consume_item", "false"),
                 "consume_item",
             ),
         ],

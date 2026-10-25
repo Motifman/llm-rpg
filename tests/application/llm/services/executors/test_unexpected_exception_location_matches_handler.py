@@ -109,9 +109,7 @@ def _literal_keyword(call: ast.Call, name: str) -> object:
     for keyword in call.keywords:
         if keyword.arg != name:
             continue
-        if isinstance(keyword.value, ast.Constant) and isinstance(
-            keyword.value.value, str
-        ):
+        if isinstance(keyword.value, ast.Constant) and isinstance(keyword.value.value, str):
             return keyword.value.value
         return _NOT_A_LITERAL
     return None
@@ -196,9 +194,7 @@ def _collect_value_position_references() -> list[str]:
                 continue
             if id(node) in called_funcs:
                 continue
-            violations.append(
-                f"{path.relative_to(_SRC_DIR)}:{node.lineno}"
-            )
+            violations.append(f"{path.relative_to(_SRC_DIR)}:{node.lineno}")
     return violations
 
 
@@ -250,16 +246,12 @@ class TestTheGuardActuallyLooksAtSomething:
         パス構成や関数名が変わってヘルパを 1 件も拾えなくなると、以下の試験は
         全部「対象 0 件で成功」になる。空振りをここで止める。
         """
-        assert _CALL_SITES, (
-            f"{_HELPER_NAME} の呼び出しが 1 件も見つかりません。"
-            f" 走査先: {_SRC_DIR}"
-        )
+        assert _CALL_SITES, f"{_HELPER_NAME} の呼び出しが 1 件も見つかりません。 走査先: {_SRC_DIR}"
 
     def test_the_helper_is_defined_in_the_scanned_tree(self) -> None:
         """ヘルパの定義が走査対象のどこかにある (関数名の綴り違いを止める)。"""
         defined = any(
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == _HELPER_NAME
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == _HELPER_NAME
             for path in _SRC_DIR.rglob("*.py")
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
         )
@@ -271,9 +263,7 @@ class TestEveryCallSitePassesItsOwnHandlerName:
     """呼び出し箇所の location が、囲っている関数名と一致する。"""
 
     @pytest.mark.parametrize("site", _CALL_SITES, ids=repr)
-    def test_location_names_one_of_the_enclosing_functions(
-        self, site: _CallSite
-    ) -> None:
+    def test_location_names_one_of_the_enclosing_functions(self, site: _CallSite) -> None:
         """``location`` が、その呼び出しを囲む関数のどれかの名前と一致する。
 
         コピー元の名前を貼り替え忘れる (``_give_item`` の中で ``location=
@@ -285,9 +275,7 @@ class TestEveryCallSitePassesItsOwnHandlerName:
         探すハンドラ名が消える。どちらの名前も grep で辿れるので、嘘でないことだけ
         を要求する (レビュー指摘)。
         """
-        assert site.enclosing_functions, (
-            f"{site} は関数の外で呼ばれています。location の正しさを確認できません。"
-        )
+        assert site.enclosing_functions, f"{site} は関数の外で呼ばれています。location の正しさを確認できません。"
         assert site.location in site.enclosing_functions, (
             f"{site} の location={site.location!r} が、囲っている関数"
             f" {site.enclosing_functions} のどれとも一致しません。"
@@ -301,9 +289,7 @@ class TestEveryCallSitePassesItsOwnHandlerName:
         trace の値から呼び出し箇所へ逆に辿れなくなる。
         """
         assert site.stage is not None, f"{site} に stage が渡されていません。"
-        assert site.stage is not _NOT_A_LITERAL, (
-            f"{site} の stage が文字列リテラルではありません。"
-        )
+        assert site.stage is not _NOT_A_LITERAL, f"{site} の stage が文字列リテラルではありません。"
 
 
 class TestTheHelperIsOnlyEverCalledDirectly:
@@ -341,22 +327,17 @@ class TestTheGuardsDocumentationStaysTrue:
             path
             for path in _SRC_DIR.rglob("*.py")
             if any(
-                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and node.name == _HELPER_NAME
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == _HELPER_NAME
                 for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
             )
         )
         text = helper_source.read_text(encoding="utf-8")
         repo_root = _SRC_DIR.parent
         mentioned = [
-            token
-            for token in text.replace("``", " ").split()
-            if token.startswith("tests/") and token.endswith(".py")
+            token for token in text.replace("``", " ").split() if token.startswith("tests/") and token.endswith(".py")
         ]
 
-        assert mentioned, (
-            f"{helper_source} の docstring が見張りテストのパスを指していません。"
-        )
+        assert mentioned, f"{helper_source} の docstring が見張りテストのパスを指していません。"
         missing = [t for t in mentioned if not (repo_root / t).exists()]
         assert not missing, f"docstring が実在しないパスを指しています: {missing}"
 

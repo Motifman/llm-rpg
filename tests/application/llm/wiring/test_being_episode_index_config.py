@@ -41,11 +41,8 @@ class TestTheEpisodeIndexIsAlwaysOn:
         with pytest.raises(ValueError, match=key):
             _config(**{key: "0"})
 
-    @pytest.mark.parametrize(
-        "key", ["BEING_EPISODE_WRITING_ENABLED", "BEING_EPISODE_INDEX_ORDER"]
-    )
+    @pytest.mark.parametrize("key", ["BEING_EPISODE_WRITING_ENABLED", "BEING_EPISODE_INDEX_ORDER"])
     def test_the_removed_switches_are_rejected_as_unknown(self, key: str) -> None:
         """消したスイッチを書くと、黙って無視せず unknown runtime_config key の ValueError にする。"""
         with pytest.raises(ValueError, match=f"unknown runtime_config key.*{key}"):
             _config(**{key: "off"})
-

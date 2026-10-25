@@ -110,9 +110,7 @@ def _resolve_api_key(named_env: str, source: Mapping[str, str]) -> str:
     # 「置いていない」と「置いた値が使えない」を同じ文面にしない。後者は
     # 設定したのに読まれていないと誤読される。
     placeholders = [
-        name
-        for name, value in ((named_env, named), (_FALLBACK_KEY_ENV, fallback))
-        if value == _PLACEHOLDER_KEY
+        name for name, value in ((named_env, named), (_FALLBACK_KEY_ENV, fallback)) if value == _PLACEHOLDER_KEY
     ]
     detail = (
         f" {placeholders} hold the placeholder {_PLACEHOLDER_KEY!r}, which is not a "
@@ -120,10 +118,7 @@ def _resolve_api_key(named_env: str, source: Mapping[str, str]) -> str:
         if placeholders
         else ""
     )
-    raise ValueError(
-        f"TYPED_JUDGMENT_PROVIDER=jev needs an API key in {named_env} "
-        f"(or {_FALLBACK_KEY_ENV}).{detail}"
-    )
+    raise ValueError(f"TYPED_JUDGMENT_PROVIDER=jev needs an API key in {named_env} (or {_FALLBACK_KEY_ENV}).{detail}")
 
 
 __all__ = ["create_typed_judgment_port_from_config"]

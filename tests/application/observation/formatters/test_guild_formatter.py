@@ -295,8 +295,10 @@ class TestGuildObservationFormatterUnknownEvent:
 
     def test_returns_none_for_unknown_event(self, formatter):
         """対象外イベントは None。"""
+
         class UnknownEvent:
             pass
+
         out = formatter.format(UnknownEvent(), PlayerId(1))
         assert out is None
 

@@ -4,7 +4,6 @@ RuntimeTargetCollector: ToolRuntimeTargetDto を収集し、
 最終的な targets 辞書を構築する責務を担う。
 """
 
-
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeTargetDto
 
 

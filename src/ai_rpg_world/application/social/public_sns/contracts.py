@@ -1,4 +1,5 @@
 """公開SNSの本文と継続取得を、内部の整数IDを出さずに受け渡す。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

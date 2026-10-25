@@ -20,4 +20,3 @@ class SkillProposalType(Enum):
     REPLACE = "replace"
     DEGRADE = "degrade"
     FUSE = "fuse"
-

@@ -194,9 +194,7 @@ class TestSpeechForListenerWhoDoesNotKnowSpeaker:
     def test_muffled_voice_has_an_anonymous_view_with_direction(self) -> None:
         """隣の場所からのぼんやりした声は、話し手の名前と組で「〈接続〉の向こうから、誰かの遠くの声が聞こえる」版を持ち、伏せた structured に話し手の名前と番号が無い。"""
         formatter = ObservationFormatter(
-            spot_graph_repository=InMemorySpotGraphRepository(
-                _build_two_spot_graph(perm=0.5, conn_name="西の坂道")
-            )
+            spot_graph_repository=InMemorySpotGraphRepository(_build_two_spot_graph(perm=0.5, conn_name="西の坂道"))
         )
 
         out = formatter.format(_spoke(), PlayerId(2))
@@ -212,9 +210,7 @@ class TestSpeechForListenerWhoDoesNotKnowSpeaker:
     def test_faint_voice_has_an_anonymous_view(self) -> None:
         """かすかな声の伏せた版は「誰かの声がかすかに聞こえるが、内容ははっきりしない。」になる。"""
         formatter = ObservationFormatter(
-            spot_graph_repository=InMemorySpotGraphRepository(
-                _build_two_spot_graph(perm=0.2, conn_name="西の坂道")
-            )
+            spot_graph_repository=InMemorySpotGraphRepository(_build_two_spot_graph(perm=0.2, conn_name="西の坂道"))
         )
 
         out = formatter.format(_spoke(), PlayerId(2))

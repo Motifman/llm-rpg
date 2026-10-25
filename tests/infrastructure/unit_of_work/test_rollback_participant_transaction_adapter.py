@@ -55,9 +55,7 @@ class _Transaction:
             raise self._commit_error
         self._active = False
         if self._committed_cleanup_error is not None:
-            raise TransactionCommittedCleanupException(
-                cleanup_error=self._committed_cleanup_error
-            )
+            raise TransactionCommittedCleanupException(cleanup_error=self._committed_cleanup_error)
 
     def rollback(self) -> None:
         self._timeline.append("transaction.rollback")

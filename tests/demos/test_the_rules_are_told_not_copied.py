@@ -51,18 +51,12 @@ _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 _DRILL = _SCENARIOS / "station_drill.json"
 #: 話し合いの仕組みを宣言していない世界。
 _WITHOUT_MEETING = _SCENARIOS / "survival_island_v3_coop.json"
-_ABSTENTION_COST = (
-    "棄権が誰も追放しない結果につながれば、"
-    "襲う者には次に襲える機会が残る"
-)
+_ABSTENTION_COST = "棄権が誰も追放しない結果につながれば、襲う者には次に襲える機会が残る"
 
 
 def _system_prompt(path: Path, player_id: int = 1) -> str:
     runtime = create_world_runtime(path)
-    return (
-        runtime._world_llm_system_prompts_by_player_id.get(player_id)
-        or runtime._world_llm_system_prompt
-    )
+    return runtime._world_llm_system_prompts_by_player_id.get(player_id) or runtime._world_llm_system_prompt
 
 
 class TestTheVotingRulesReachEveryone:
@@ -119,9 +113,7 @@ class TestTheVotingRulesReachEveryone:
 
         result = resolve_vote({a: c, b: d})
 
-        assert "名指しが割れて最多が複数居るときも、誰も追放されない" in _system_prompt(
-            _DRILL
-        )
+        assert "名指しが割れて最多が複数居るときも、誰も追放されない" in _system_prompt(_DRILL)
         assert result.ejected_player_id is None
 
     def test_a_clear_majority_still_ejects(self) -> None:
@@ -165,9 +157,7 @@ class TestTheNumbersUseTheWorldsOwnClock:
         裸の数だけを置くと、個数にも識別子にも読める (#949 で地図が
         踏んだ形)。
         """
-        text = build_meeting_rules_text(
-            meeting_enabled=True, tick_limit=4, minutes_per_tick=None
-        )
+        text = build_meeting_rules_text(meeting_enabled=True, tick_limit=4, minutes_per_tick=None)
 
         assert "手番 4 回ぶん" in text
         assert "tick" not in text
@@ -223,9 +213,7 @@ class TestTheHandWrittenCopiesAreGone:
         人数はデータから数えて 1 か所で書く。
         """
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-        crew_count = sum(
-            1 for p in raw["players"] if p["initial_state"].get("role") == "crew"
-        )
+        crew_count = sum(1 for p in raw["players"] if p["initial_state"].get("role") == "crew")
 
         for player in raw["players"]:
             for value in player.values():

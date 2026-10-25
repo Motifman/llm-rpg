@@ -1,4 +1,5 @@
 """既存のSNS集約を、公開限定の単一CommandScopeで確定する。"""
+
 from __future__ import annotations
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
@@ -30,7 +31,12 @@ from ai_rpg_world.domain.sns.value_object.user_id import UserId
 class PublicSnsCommandService:
     """投稿、親の返信数、通知を一度に確定し、旧SNSコマンドを経由しない。"""
 
-    def __init__(self, scope_factory: CommandScopeFactoryPort[PublicSnsCommandRepositories], *, notification_handoff: PublicSnsAfterCommitHandoff | None = None) -> None:
+    def __init__(
+        self,
+        scope_factory: CommandScopeFactoryPort[PublicSnsCommandRepositories],
+        *,
+        notification_handoff: PublicSnsAfterCommitHandoff | None = None,
+    ) -> None:
         self._scope_factory = scope_factory
         self._notification_handoff = notification_handoff
 
@@ -39,6 +45,7 @@ class PublicSnsCommandService:
 
     def record_event(self, event: DomainEvent) -> None:
         from ai_rpg_world.application.social.public_sns.incoming_event_adapter import activity_from_domain_event
+
         with self._scope_factory.create() as context:
             activity = activity_from_domain_event(event, context.repositories.read.namespace)
             if activity is not None:
@@ -77,7 +84,9 @@ class PublicSnsCommandService:
                 kind: ContentKind
                 if parent is None:
                     aggregate = PostAggregate.create(
-                        repos.posts.generate_post_id(), actor.user_id, body,
+                        repos.posts.generate_post_id(),
+                        actor.user_id,
+                        body,
                         author_display_name=actor.profile.display_name,
                         author_identity_token=actor.identity_token,
                     )
@@ -113,9 +122,13 @@ class PublicSnsCommandService:
                     kind = "reply"
                 public_id = f"sns:{repos.read.namespace}:{kind}:{aggregate.identity_token}"
                 result = PublicSnsContentDto(
-                    target_id=public_id, kind=kind, author_display_name=actor.profile.display_name,
+                    target_id=public_id,
+                    kind=kind,
+                    author_display_name=actor.profile.display_name,
                     author_target_id=f"sns:{repos.read.namespace}:user:{actor.identity_token}",
-                    content=content, created_at=aggregate.created_at, parent_target_id=target_id,
+                    content=content,
+                    created_at=aggregate.created_at,
+                    parent_target_id=target_id,
                 )
                 bound_recipients = []
                 for recipient_id, notification_kind in sorted(recipients.items()):
@@ -124,12 +137,17 @@ class PublicSnsCommandService:
                     recipient = repos.users.find_by_id(UserId(recipient_id))
                     if recipient is not None:
                         bound_recipients.append((recipient_id, recipient.identity_token, notification_kind))
-                context.collect(PublicSnsActivityEvent.create(
-                    aggregate_id=public_id, aggregate_type="PublicSnsActivity",
-                    actor_user_id=viewer_user_id, actor_identity_token=actor.identity_token,
-                    target_id=public_id, recipients=tuple(bound_recipients),
-                    provenance=current_execution_provenance(),
-                ))
+                context.collect(
+                    PublicSnsActivityEvent.create(
+                        aggregate_id=public_id,
+                        aggregate_type="PublicSnsActivity",
+                        actor_user_id=viewer_user_id,
+                        actor_identity_token=actor.identity_token,
+                        target_id=public_id,
+                        recipients=tuple(bound_recipients),
+                        provenance=current_execution_provenance(),
+                    )
+                )
         except CommandPostCommitException as error:
             # 確定済み投稿を再実行させないため、境界の成功応答に必要な結果を残す。
             setattr(error, "result", result)

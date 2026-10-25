@@ -12,9 +12,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.infrastructure.scenario.models import ScenarioLoadResult
 
 
-def agent_move_from_tool_call(
-    tool_name: str, arguments: Mapping[str, Any], *, call_id: str
-) -> AgentMove:
+def agent_move_from_tool_call(tool_name: str, arguments: Mapping[str, Any], *, call_id: str) -> AgentMove:
     remaining = dict(arguments)
     expectation = _pop_text(remaining, "expected_result")
     inner_thought = _pop_text(remaining, "inner_thought")
@@ -27,12 +25,8 @@ def agent_move_from_tool_call(
     )
 
 
-def environment_entry_for_player(
-    scenario: ScenarioLoadResult, player_id: PlayerId
-) -> EnvironmentEntry:
-    spawn = next(
-        (s for s in scenario.player_spawns if s.player_id == player_id.value), None
-    )
+def environment_entry_for_player(scenario: ScenarioLoadResult, player_id: PlayerId) -> EnvironmentEntry:
+    spawn = next((s for s in scenario.player_spawns if s.player_id == player_id.value), None)
     if spawn is None:
         raise LookupError(f"player {player_id.value} is not in the scenario")
     goal = (spawn.objective or scenario.metadata.llm_objective_text or "").strip()
@@ -55,11 +49,7 @@ def _introductions_for(scenario: ScenarioLoadResult, spawn: Any) -> tuple[Introd
     return tuple(
         Introduction(
             name=other.name,
-            relation_note=(
-                _SAME_SIDE_NOTE
-                if reveals_allies and other.initial_state.get("role") == role
-                else None
-            ),
+            relation_note=(_SAME_SIDE_NOTE if reveals_allies and other.initial_state.get("role") == role else None),
         )
         for other in scenario.player_spawns
         if other is not spawn and (known is None or other.string_id in known)

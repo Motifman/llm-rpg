@@ -68,7 +68,9 @@ def _being_of(runtime, pid):
     return runtime.aux_being_resolver.resolve_being_id(runtime.aux_being_default_world_id, pid)
 
 
-def _write(runtime, pid, number: int, *, summary: str, written_turn: int = 0, environment_name: str | None = None) -> Episode:
+def _write(
+    runtime, pid, number: int, *, summary: str, written_turn: int = 0, environment_name: str | None = None
+) -> Episode:
     being_id = _being_of(runtime, pid)
     store = runtime._being_episode_store
     episode = Episode.write(
@@ -383,7 +385,4 @@ class TestTheIndexAlwaysAppears:
         system, user, tools = _first_turn(runtime, pid)
 
         whole = system + user + json.dumps(tools, ensure_ascii=False)
-        assert all(
-            name in whole
-            for name in (_HEADING, TOOL_NAME_EPISODE_RECALL, TOOL_NAME_EPISODE_REVISE_INDEX)
-        )
+        assert all(name in whole for name in (_HEADING, TOOL_NAME_EPISODE_RECALL, TOOL_NAME_EPISODE_REVISE_INDEX))

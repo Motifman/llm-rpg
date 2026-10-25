@@ -214,10 +214,7 @@ class SqliteQuestRepository(QuestRepository):
                 )
                 for objective_row in objective_rows
             ],
-            reward_rows=[
-                (int(reward_row["item_spec_id"]), int(reward_row["quantity"]))
-                for reward_row in reward_rows
-            ],
+            reward_rows=[(int(reward_row["item_spec_id"]), int(reward_row["quantity"])) for reward_row in reward_rows],
             reserved_item_rows=[int(reserved_row["item_instance_id"]) for reserved_row in reserved_rows],
         )
 

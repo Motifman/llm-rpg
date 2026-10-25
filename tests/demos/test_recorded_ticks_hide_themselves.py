@@ -135,11 +135,7 @@ def _object_row(observation: str, object_name: str) -> str:
     部屋の説明文にも同じ語が出る (「石を組んだ焚き火跡があり」)。行を絞らずに
     観測全文を見ると、**説明文のおかげで通るだけのテスト**になる。
     """
-    return next(
-        line.strip()
-        for line in observation.splitlines()
-        if line.strip().startswith(f'- "{object_name}"')
-    )
+    return next(line.strip() for line in observation.splitlines() if line.strip().startswith(f'- "{object_name}"'))
 
 
 def _observation_at(runtime, spot: str, player_id: PlayerId = PlayerId(1)) -> str:
@@ -220,9 +216,7 @@ class TestEveryScenarioKeepsItsRecordedTicksToItself:
     逆戻り**する。シナリオの宣言から key を集めて、その key を探す。
     """
 
-    @pytest.mark.parametrize(
-        "scenario_path", _ALL_SCENARIOS, ids=lambda p: p.stem
-    )
+    @pytest.mark.parametrize("scenario_path", _ALL_SCENARIOS, ids=lambda p: p.stem)
     def test_no_recorded_tick_key_reaches_any_prompt(self, scenario_path) -> None:
         """どの物体の行にも、手番を記録する key が現れない。
 
@@ -254,9 +248,7 @@ class TestTheOwnStateSectionKeepsItsRecordedTicksToItself:
     """
 
     def _pilgrim_after_recording(self, recorded: dict):
-        scenario = (
-            _REPO / "tests" / "fixtures" / "scenarios" / "blessed_pilgrim_demo.json"
-        )
+        scenario = _REPO / "tests" / "fixtures" / "scenarios" / "blessed_pilgrim_demo.json"
         runtime = create_world_runtime(scenario)
         status = runtime._player_status_repo.find_by_id(PlayerId(1))
         status.merge_state(recorded)
@@ -266,9 +258,7 @@ class TestTheOwnStateSectionKeepsItsRecordedTicksToItself:
 
     def _own_state_line(self, runtime) -> str:
         return next(
-            line
-            for line in runtime.build_observation(PlayerId(1)).splitlines()
-            if line.startswith("自分の状態:")
+            line for line in runtime.build_observation(PlayerId(1)).splitlines() if line.startswith("自分の状態:")
         )
 
     def test_the_pilgrim_does_not_see_the_tick_it_recorded(self) -> None:
@@ -277,9 +267,7 @@ class TestTheOwnStateSectionKeepsItsRecordedTicksToItself:
         修正前は ``自分の状態: prayed_at_tick=5, prayed_today=true`` と出て
         いた。``5`` は手番の番号で、読み手はその数字で何も判断できない (#892)。
         """
-        runtime = self._pilgrim_after_recording(
-            {"prayed_at_tick": 5, "prayed_today": True}
-        )
+        runtime = self._pilgrim_after_recording({"prayed_at_tick": 5, "prayed_today": True})
 
         assert "prayed_at_tick" not in self._own_state_line(runtime)
 
@@ -290,9 +278,7 @@ class TestTheOwnStateSectionKeepsItsRecordedTicksToItself:
         state は本人が自己認識するために載せているもので、消してよくない
         (``_render_own_state`` の既存の判断)。
         """
-        runtime = self._pilgrim_after_recording(
-            {"prayed_at_tick": 5, "prayed_today": True}
-        )
+        runtime = self._pilgrim_after_recording({"prayed_at_tick": 5, "prayed_today": True})
 
         assert "prayed_today" in self._own_state_line(runtime)
 
@@ -306,20 +292,14 @@ class TestTheOwnStateSectionKeepsItsRecordedTicksToItself:
         production の ``player_interactions`` 走査を外すと、この key だけが
         ``自分の状態`` に現れて試験が落ちる。
         """
-        runtime = self._pilgrim_after_recording(
-            {"shared_blessing_at_tick": 7, "visible_marker": True}
-        )
+        runtime = self._pilgrim_after_recording({"shared_blessing_at_tick": 7, "visible_marker": True})
 
         line = self._own_state_line(runtime)
         assert "shared_blessing_at_tick" not in line
         assert "visible_marker" in line
 
-    @pytest.mark.parametrize(
-        "scenario_path", _ALL_SCENARIOS, ids=lambda p: p.stem
-    )
-    def test_no_recorded_player_tick_key_reaches_any_prompt(
-        self, scenario_path
-    ) -> None:
+    @pytest.mark.parametrize("scenario_path", _ALL_SCENARIOS, ids=lambda p: p.stem)
+    def test_no_recorded_player_tick_key_reaches_any_prompt(self, scenario_path) -> None:
         """どのシナリオでも、本人の手番を記録する key がプロンプトに出ない。
 
         宣言から集めた key を実際に本人の state へ入れてから見る。初期状態を
@@ -343,9 +323,7 @@ class TestTheOwnStateSectionKeepsItsRecordedTicksToItself:
             for key in keys:
                 assert f"{key}=" not in text, (object_id, key)
 
-    def test_the_audit_collects_ticks_from_player_interactions(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_audit_collects_ticks_from_player_interactions(self, tmp_path: Path) -> None:
         """対人 interaction の走査を外すと、監査自身の試験が落ちる。"""
         scenario = {
             "spots": [],
@@ -364,9 +342,7 @@ class TestTheOwnStateSectionKeepsItsRecordedTicksToItself:
         path = tmp_path / "player_interaction_tick.json"
         path.write_text(json.dumps(scenario), encoding="utf-8")
 
-        assert _recorded_player_tick_keys(path) == {
-            "__player_interactions__": {"helped_at_tick"}
-        }
+        assert _recorded_player_tick_keys(path) == {"__player_interactions__": {"helped_at_tick"}}
 
 
 class TestEachLayerHoldsOnItsOwn:
@@ -383,19 +359,14 @@ class TestEachLayerHoldsOnItsOwn:
         ``target_object: herb_planter`` と書く形) でも拾う。「指定があれば
         他所行き」と決めつけると、実際に多いほうの書き方が漏れる。
         """
-        scenario = _REPO / "tests" / "fixtures" / "scenarios" / (
-            "herbal_tea_greenhouse_demo.json"
-        )
+        scenario = _REPO / "tests" / "fixtures" / "scenarios" / ("herbal_tea_greenhouse_demo.json")
         runtime = create_world_runtime(scenario)
 
         interior = runtime._spot_interior_repo.find_by_spot_id(
             SpotId.create(runtime.id_mapper.get_int("spot", "greenhouse"))
         )
         planter = next(
-            obj
-            for obj in interior.objects
-            if runtime.id_mapper.get_str("object", int(obj.object_id))
-            == "herb_planter"
+            obj for obj in interior.objects if runtime.id_mapper.get_str("object", int(obj.object_id)) == "herb_planter"
         )
 
         assert "last_harvest_tick" in planter.hidden_state_keys
@@ -455,11 +426,7 @@ class TestEachLayerHoldsOnItsOwn:
             current_tick=WorldTick(9),
         )
 
-        written = next(
-            obj
-            for obj in result.new_interior.objects
-            if int(obj.object_id) == 2
-        )
+        written = next(obj for obj in result.new_interior.objects if int(obj.object_id) == 2)
         assert written.state["started_at_tick"] == 9
         assert "started_at_tick" in written.hidden_state_keys
         assert written.visible_state() == {}

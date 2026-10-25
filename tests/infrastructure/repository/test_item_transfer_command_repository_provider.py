@@ -70,9 +70,7 @@ def test_in_memory_provider_rejects_repository_use_after_scope() -> None:
         after_commit_handoff=dispatcher,
         repository_provider_factory=(
             InMemoryItemTransferCommandRepositoryProviderFactory(
-                InMemorySpotGraphRepository(
-                    _make_graph_with_player(SPOT_ID, (PLAYER_ID,))
-                )
+                InMemorySpotGraphRepository(_make_graph_with_player(SPOT_ID, (PLAYER_ID,)))
             )
         ),
     )

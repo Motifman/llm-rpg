@@ -1,4 +1,5 @@
 """公開SNSの新規取得と操作に共通する、祖先を含む閲覧判定。"""
+
 from __future__ import annotations
 
 import logging
@@ -26,9 +27,7 @@ class PublicSnsAccessPolicy:
     def target_id(self, record: PublicSnsContentRecord) -> str:
         return f"sns:{self._repository.namespace}:{record.kind}:{record.identity_token}"
 
-    def require_visible_target(
-        self, viewer_user_id: int, target_id: str
-    ) -> PublicSnsContentRecord:
+    def require_visible_target(self, viewer_user_id: int, target_id: str) -> PublicSnsContentRecord:
         match = _TARGET.fullmatch(target_id) if isinstance(target_id, str) else None
         if match is None or match[1] != self._repository.namespace:
             raise PublicSnsUnavailableError()
@@ -66,7 +65,10 @@ class PublicSnsAccessPolicy:
         for _ in range(MAX_PUBLIC_SNS_ANCESTORS):
             key = (current.kind, current.local_id)
             if key in seen:
-                _logger.warning("公開SNSの祖先参照が循環しています", extra={"content_kind": current.kind, "local_id": current.local_id})
+                _logger.warning(
+                    "公開SNSの祖先参照が循環しています",
+                    extra={"content_kind": current.kind, "local_id": current.local_id},
+                )
                 return None
             seen.add(key)
             chain.append(current)
@@ -94,5 +96,7 @@ class PublicSnsAccessPolicy:
                 return None
             current = parent
         # 不正な循環や過剰な深さから、制限のない祖先取得へ進まない。
-        _logger.warning("公開SNSの祖先参照が取得上限を超えました", extra={"content_kind": record.kind, "local_id": record.local_id})
+        _logger.warning(
+            "公開SNSの祖先参照が取得上限を超えました", extra={"content_kind": record.kind, "local_id": record.local_id}
+        )
         return None

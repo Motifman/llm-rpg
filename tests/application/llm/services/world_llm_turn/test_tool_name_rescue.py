@@ -70,9 +70,7 @@ class _RecordingPort(ITypedJudgmentPort):
     ) -> Mapping[str, JudgmentResult]:
         self.calls.append((state, questions))
         if self._raises:
-            raise TypedJudgmentUnavailableException(
-                "timed out", error_code="TYPED_JUDGMENT_TRANSPORT_FAILED"
-            )
+            raise TypedJudgmentUnavailableException("timed out", error_code="TYPED_JUDGMENT_TRANSPORT_FAILED")
         return {
             QUESTION_NAME: JudgmentResult(
                 value=self._chosen,
@@ -267,7 +265,8 @@ class TestAnUnexpectedErrorFallsBack:
     def test_an_unexpected_error_falls_back_and_says_why(self) -> None:
         """判断ポートが ValueError を投げても例外を外へ出さず、UNEXPECTED_ERROR で類似度の提案に戻す。"""
         suggestion = _suggest(
-            _BrokenPort(), "pickup",
+            _BrokenPort(),
+            "pickup",
             offered=_OFFERED_WITH_PICKUP,
         )
 

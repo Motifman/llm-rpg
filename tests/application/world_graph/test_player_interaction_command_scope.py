@@ -27,12 +27,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repositor
     InMemoryPlayerInventoryRepository,
 )
 
-_FORBIDDEN_LIBRARY = (
-    Path(__file__).resolve().parents[3]
-    / "data"
-    / "scenarios"
-    / "forbidden_library_demo.json"
-)
+_FORBIDDEN_LIBRARY = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "forbidden_library_demo.json"
 _ACTOR = PlayerId(1)
 _TARGET = PlayerId(2)
 
@@ -97,12 +92,7 @@ def _dispatcher(runtime):
 def _owned_spec_ids(runtime, player_id: PlayerId) -> set[int]:
     inventory = runtime._player_inventory_repo.find_by_id(player_id)
     assert inventory is not None
-    return {
-        spec_id.value
-        for spec_id in collect_owned_item_spec_ids_from_inventory(
-            inventory, runtime._item_repo
-        )
-    }
+    return {spec_id.value for spec_id in collect_owned_item_spec_ids_from_inventory(inventory, runtime._item_repo)}
 
 
 def _knock_out(runtime, player_id: PlayerId) -> None:
@@ -114,9 +104,7 @@ def _knock_out(runtime, player_id: PlayerId) -> None:
     status.clear_events()
     runtime._player_status_repo.save(status)
     current_tick = int(runtime.current_tick())
-    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
-        EntityId.create(int(player_id))
-    )
+    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
     runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(current_tick))
     runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
     runtime._speech_event_publisher.publish_all(events)
@@ -131,9 +119,7 @@ def test_success_event_observes_committed_status_and_cooldown(tmp_path: Path) ->
         lambda _: observations.append(
             (
                 runtime._player_status_repo.find_by_id(_TARGET).is_down,
-                runtime._interaction_cooldown_store.last_success_tick(
-                    _ACTOR, "strike_down"
-                ),
+                runtime._interaction_cooldown_store.last_success_tick(_ACTOR, "strike_down"),
             )
         ),
         channel=DeliveryChannel.OBSERVATION,
@@ -157,9 +143,7 @@ def test_required_event_failure_rolls_back_status_cooldown_and_delivery(
     dispatcher = _dispatcher(runtime)
     dispatcher.register_required_before_commit(
         PlayerInteractedWithPlayerEvent,
-        lambda event, context: (_ for _ in ()).throw(
-            RuntimeError("player interaction sync failed")
-        ),
+        lambda event, context: (_ for _ in ()).throw(RuntimeError("player interaction sync failed")),
     )
     dispatcher.register_after_commit(
         PlayerInteractedWithPlayerEvent,
@@ -175,9 +159,7 @@ def test_required_event_failure_rolls_back_status_cooldown_and_delivery(
     assert after is not None
     assert after.hp.value == before_hp
     assert after.is_down is False
-    assert runtime._interaction_cooldown_store.last_success_tick(
-        _ACTOR, "strike_down"
-    ) is None
+    assert runtime._interaction_cooldown_store.last_success_tick(_ACTOR, "strike_down") is None
     assert runtime._death_grace_timer.is_pending(_TARGET) is False
     assert delivered == []
 

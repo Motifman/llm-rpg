@@ -63,9 +63,7 @@ def build_monster(
         search_timer=int(row["behavior_search_timer"]),
         failure_count=int(row["behavior_failure_count"]),
         # Phase 4a/4b: spot graph 用フィールド復元 (migration v24)
-        last_observed_target_spot_id=_optional_spot_id(
-            row, "behavior_last_observed_target_spot_id"
-        ),
+        last_observed_target_spot_id=_optional_spot_id(row, "behavior_last_observed_target_spot_id"),
         flee_until_tick=_optional_tick(row, "behavior_flee_until_tick"),
         chase_attacker_ref=_decode_attacker_ref(row),
         chase_started_at_tick=_optional_tick(row, "behavior_chase_started_at_tick"),
@@ -196,9 +194,7 @@ def _decode_attacker_ref(row: sqlite3.Row) -> AttackerRef | None:
     return AttackerRef.of_monster(MonsterId(int(monster_id_value)))
 
 
-def _coordinate_or_none(
-    x: int | None, y: int | None, z: int | None
-) -> Coordinate | None:
+def _coordinate_or_none(x: int | None, y: int | None, z: int | None) -> Coordinate | None:
     if x is None or y is None or z is None:
         return None
     return Coordinate(int(x), int(y), int(z))
@@ -252,9 +248,7 @@ def _build_pursuit_state(
             target_id=target_id,
             target_snapshot=target_snapshot,
             last_known=last_known,
-            failure_reason=(
-                None if failure_reason is None else PursuitFailureReason(str(failure_reason))
-            ),
+            failure_reason=(None if failure_reason is None else PursuitFailureReason(str(failure_reason))),
         )
     )
 

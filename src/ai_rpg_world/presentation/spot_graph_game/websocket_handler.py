@@ -65,9 +65,7 @@ async def game_event_websocket(websocket: WebSocket, session_id: str) -> None:
             try:
                 payload = json.loads(raw)
             except json.JSONDecodeError:
-                await websocket.send_json(
-                    {"type": "error", "detail": "Invalid JSON"}
-                )
+                await websocket.send_json({"type": "error", "detail": "Invalid JSON"})
                 continue
 
             action = payload.get("action", "")
@@ -77,13 +75,9 @@ async def game_event_websocket(websocket: WebSocket, session_id: str) -> None:
                 multiplier = payload.get("speed_multiplier", 1.0)
                 manager = get_runtime_manager()
                 manager.set_session_speed(session_id, float(multiplier))
-                await websocket.send_json(
-                    {"type": "speed_changed", "speed_multiplier": multiplier}
-                )
+                await websocket.send_json({"type": "speed_changed", "speed_multiplier": multiplier})
             else:
-                await websocket.send_json(
-                    {"type": "error", "detail": f"Unknown action: {action}"}
-                )
+                await websocket.send_json({"type": "error", "detail": f"Unknown action: {action}"})
     except WebSocketDisconnect:
         pass
     finally:

@@ -771,11 +771,11 @@ class MonsterStartedFleeingInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
 # Phase 4-O A: CHASE を諦める理由を表す Literal 型。formatter / handler /
 # test 全箇所で同じ型を共有することで typo を静的に検出可能にする。
 AbandonChaseReason = Literal[
-    "grace_expired",        # CHASE 中に flee_grace_ticks (被弾以来の反応 tick) が切れた
-    "max_ticks_exceeded",   # CHASE 累積 tick が chase_max_ticks を超えた
-    "target_lost",          # last_observed_target_spot_id が無く、target も graph 上に居ない
-    "search_expired",       # 探索フェーズの search_timer が満了 / chase_search_ticks=0
-    "no_path",              # passable な経路が無い (target / last_observed への到達不可)
+    "grace_expired",  # CHASE 中に flee_grace_ticks (被弾以来の反応 tick) が切れた
+    "max_ticks_exceeded",  # CHASE 累積 tick が chase_max_ticks を超えた
+    "target_lost",  # last_observed_target_spot_id が無く、target も graph 上に居ない
+    "search_expired",  # 探索フェーズの search_timer が満了 / chase_search_ticks=0
+    "no_path",  # passable な経路が無い (target / last_observed への到達不可)
 ]
 
 
@@ -803,13 +803,8 @@ class MonsterStartedChasingInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     def __post_init__(self) -> None:
         # discriminated union: 両方 None / 両方 non-None は不整合。
         # event 生成時点で弾く (formatter の防御 fallback には頼らない)。
-        both_none = (
-            self.target_player_id is None and self.target_monster_id is None
-        )
-        both_set = (
-            self.target_player_id is not None
-            and self.target_monster_id is not None
-        )
+        both_none = self.target_player_id is None and self.target_monster_id is None
+        both_set = self.target_player_id is not None and self.target_monster_id is not None
         if both_none or both_set:
             raise ValueError(
                 "MonsterStartedChasingInSpotEvent: target_player_id と "
@@ -896,13 +891,8 @@ class MonsterRespondedToPackHelpInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
 
     def __post_init__(self) -> None:
         # discriminated union: target は片方だけ非 None。
-        both_none = (
-            self.target_player_id is None and self.target_monster_id is None
-        )
-        both_set = (
-            self.target_player_id is not None
-            and self.target_monster_id is not None
-        )
+        both_none = self.target_player_id is None and self.target_monster_id is None
+        both_set = self.target_player_id is not None and self.target_monster_id is not None
         if both_none or both_set:
             raise ValueError(
                 "MonsterRespondedToPackHelpInSpotEvent: target_player_id と "
@@ -963,13 +953,8 @@ class MonsterAlertedByPackInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
 
     def __post_init__(self) -> None:
         # discriminated union: target は片方だけ非 None。
-        both_none = (
-            self.target_player_id is None and self.target_monster_id is None
-        )
-        both_set = (
-            self.target_player_id is not None
-            and self.target_monster_id is not None
-        )
+        both_none = self.target_player_id is None and self.target_monster_id is None
+        both_set = self.target_player_id is not None and self.target_monster_id is not None
         if both_none or both_set:
             raise ValueError(
                 "MonsterAlertedByPackInSpotEvent: target_player_id と "

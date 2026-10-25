@@ -142,7 +142,14 @@ class TestDetectsExceptions:
 
     @pytest.mark.parametrize(
         ("reason", "reported"),
-        [("unexpected_error", True), ("memory_rule", True), ("contract_violation", True), ("unpaired_result", True), ("being_inner_record", False), ("empty_body", False)],
+        [
+            ("unexpected_error", True),
+            ("memory_rule", True),
+            ("contract_violation", True),
+            ("unpaired_result", True),
+            ("being_inner_record", False),
+            ("empty_body", False),
+        ],
     )
     def test_broken_copy_to_the_being_short_term_memory_is_reported(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason: str, reported: bool
@@ -153,7 +160,12 @@ class TestDetectsExceptions:
         def advance_tick_that_fails_a_copy(self, *args, **kwargs):
             if self.current_tick() == 2:
                 self._trace_recorder.record(
-                    "being_short_term_memory_not_copied", tick=2, being_id="being_w1_p1", source="observation", reason=reason, event_kind=None
+                    "being_short_term_memory_not_copied",
+                    tick=2,
+                    being_id="being_w1_p1",
+                    source="observation",
+                    reason=reason,
+                    event_kind=None,
                 )
             return original(self, *args, **kwargs)
 
@@ -463,7 +475,9 @@ class TestFixedHolesStayFixed:
         """待つを何度も選ぶシードで回しても、待つの結果に tick の番号が出ない (#1562)。"""
         result = run_random_agents(_small_scenario(tmp_path), seed=0, max_world_ticks=20, known_holes=())
 
-        assert [a for a in result.actions if a.tool == "wait"], "このシードでは一度も待たなかった。シードを変えないと何も確かめていない"
+        assert [a for a in result.actions if a.tool == "wait"], (
+            "このシードでは一度も待たなかった。シードを変えないと何も確かめていない"
+        )
         assert [f for f in result.findings if f.kind == "leak"] == []
 
 
@@ -472,15 +486,20 @@ class TestUnreadableCandidates:
 
     def test_rows_after_a_malformed_row_are_reported(self) -> None:
         """表の途中に読めない行があると、その行から後ろを読めなかった行として返す。"""
-        text = "\n".join([
-            "【現在選べる対象引数】",
-            '- travel_to.destination_label: "集会所"',
+        text = "\n".join(
+            [
+                "【現在選べる対象引数】",
+                '- travel_to.destination_label: "集会所"',
+                "- interact.target_label: 金庫",
+                '- use_item.item_label: "カンテラ"',
+                "※ 一覧にあることは操作の成功を保証しない。",
+            ]
+        )
+
+        assert unreadable_candidate_lines(text) == [
             "- interact.target_label: 金庫",
             '- use_item.item_label: "カンテラ"',
-            "※ 一覧にあることは操作の成功を保証しない。",
-        ])
-
-        assert unreadable_candidate_lines(text) == ["- interact.target_label: 金庫", '- use_item.item_label: "カンテラ"']
+        ]
 
     def test_a_well_formed_table_has_no_unreadable_rows(self) -> None:
         """正しく描いた表なら、読めなかった行は無い。"""

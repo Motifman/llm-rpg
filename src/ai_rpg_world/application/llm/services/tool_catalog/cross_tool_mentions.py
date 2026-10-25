@@ -23,39 +23,47 @@ CROSS_TOOL_MENTIONS: dict[str, tuple[tuple[str, str, str], ...]] = {
     "drop_item": (("pickup_item", "同じスポットに居る他プレイヤーが後で pickup_item で拾える。", ""),),
     "buy_item": (("give_item", "**give_item と違って部分成功しない**", "**部分成功しない**"),),
     "sell_item": (("give_item", "**give_item と違って部分成功しない**", "**部分成功しない**"),),
-    "market_list_item": ((
-        "market_reprice",
-        "同じ品の出品は 1 件までで、値を変えたいときは market_reprice を使う。",
-        "同じ品の出品は 1 件まで。",
-    ),),
+    "market_list_item": (
+        (
+            "market_reprice",
+            "同じ品の出品は 1 件までで、値を変えたいときは market_reprice を使う。",
+            "同じ品の出品は 1 件まで。",
+        ),
+    ),
     "market_cancel": (("market_reprice", "値を変えたいだけなら market_reprice の方が確実。", ""),),
-    "market_bid": ((
-        "market_reprice",
-        "同じ品の買い注文は 1 件までで、値を変えたいときは market_reprice を使う。",
-        "同じ品の買い注文は 1 件まで。",
-    ),),
-    "attack": ((
-        "travel_to",
-        "連続被弾で HP を失うより、``travel_to`` で別の spot へ **逃走** する方が"
-        "安全なこともあり、状況で選ぶこと。",
-        "",
-    ),),
-    "listen": ((
-        "speak",
-        "- 他プレイヤーの発話 (speak の声) はこのツールでは聞こえない。",
-        "- 他プレイヤーの発話はこのツールでは聞こえない。",
-    ),),
-    "tend_to_player": ((
-        "speak",
-        "そうした相手にはまず ``speak`` で話しかけるか食料を与えること。",
-        "そうした相手には食料を与えること。",
-    ),),
+    "market_bid": (
+        (
+            "market_reprice",
+            "同じ品の買い注文は 1 件までで、値を変えたいときは market_reprice を使う。",
+            "同じ品の買い注文は 1 件まで。",
+        ),
+    ),
+    "attack": (
+        (
+            "travel_to",
+            "連続被弾で HP を失うより、``travel_to`` で別の spot へ **逃走** する方が"
+            "安全なこともあり、状況で選ぶこと。",
+            "",
+        ),
+    ),
+    "listen": (
+        (
+            "speak",
+            "- 他プレイヤーの発話 (speak の声) はこのツールでは聞こえない。",
+            "- 他プレイヤーの発話はこのツールでは聞こえない。",
+        ),
+    ),
+    "tend_to_player": (
+        (
+            "speak",
+            "そうした相手にはまず ``speak`` で話しかけるか食料を与えること。",
+            "そうした相手には食料を与えること。",
+        ),
+    ),
 }
 
 
-def without_absent_tool_mentions(
-    definition: ToolDefinitionDto, is_exposed: Callable[[str], bool]
-) -> ToolDefinitionDto:
+def without_absent_tool_mentions(definition: ToolDefinitionDto, is_exposed: Callable[[str], bool]) -> ToolDefinitionDto:
     """``is_exposed`` が無いと答えたツールに触れる文を、説明文から外した定義を返す。"""
     description = definition.description
     for mentioned, sentence, replacement in CROSS_TOOL_MENTIONS.get(definition.name, ()):

@@ -67,9 +67,7 @@ class TestDistantViewRuntimePrompt:
         assert "area_id" not in text
 
         lines = text.splitlines()
-        description_index = next(
-            i for i, line in enumerate(lines) if line.startswith("  嵐で打ち上げられた")
-        )
+        description_index = next(i for i, line in enumerate(lines) if line.startswith("  嵐で打ち上げられた"))
         assert lines[description_index + 1] == "  北東の遠くに切り立った山影が見える。"
 
     def test_v4_hidden_cove_renders_mountain_distant_view(self) -> None:
@@ -86,11 +84,7 @@ class TestDistantViewRuntimePrompt:
         text = runtime.build_llm_context(player_id).current_state_text
 
         assert "切り立った山影が見える" in text
-        skipped_payloads = [
-            payload
-            for kind, payload in recorder.events
-            if kind == TraceEventKind.DISTANT_VIEW_SKIPPED
-        ]
+        skipped_payloads = [payload for kind, payload in recorder.events if kind == TraceEventKind.DISTANT_VIEW_SKIPPED]
         assert not any("indoor" in payload["skipped_reasons"] for payload in skipped_payloads)
 
     def test_scenario_without_areas_keeps_distant_view_empty(self) -> None:
@@ -114,9 +108,7 @@ class TestDistantViewRuntimePrompt:
 
         assert distant_phrase in text
         recent_observations = runtime._obs_buffer.get_observations(player_id)
-        recent_observation_text = "\n".join(
-            getattr(entry.output, "prose", "") for entry in recent_observations
-        )
+        recent_observation_text = "\n".join(getattr(entry.output, "prose", "") for entry in recent_observations)
         assert distant_phrase not in recent_observation_text
 
     def test_v4_signal_smoke_replaces_mountain_area_after_object_state_lit(self) -> None:
@@ -157,9 +149,7 @@ class TestDistantViewRuntimePrompt:
 
         assert cue_phrase in text
         recent_observations = runtime._obs_buffer.get_observations(player_id)
-        recent_observation_text = "\n".join(
-            getattr(entry.output, "prose", "") for entry in recent_observations
-        )
+        recent_observation_text = "\n".join(getattr(entry.output, "prose", "") for entry in recent_observations)
         assert cue_phrase not in recent_observation_text
 
 
@@ -177,11 +167,7 @@ class TestDistantViewRuntimeTrace:
 
         runtime.build_llm_context(PlayerId(1))
 
-        events = [
-            payload
-            for kind, payload in recorder.events
-            if kind == TraceEventKind.DISTANT_VIEW_RENDERED
-        ]
+        events = [payload for kind, payload in recorder.events if kind == TraceEventKind.DISTANT_VIEW_RENDERED]
         assert len(events) == 1
         payload = events[0]
         assert payload["player_id"] == 1
@@ -203,11 +189,7 @@ class TestDistantViewRuntimeTrace:
 
         runtime.build_llm_context(PlayerId(1))
 
-        events = [
-            payload
-            for kind, payload in recorder.events
-            if kind == TraceEventKind.DISTANT_VIEW_RENDERED
-        ]
+        events = [payload for kind, payload in recorder.events if kind == TraceEventKind.DISTANT_VIEW_RENDERED]
         assert len(events) == 1
         payload = events[0]
         assert payload["rendered_area_ids"] == ["forest"]
@@ -232,9 +214,7 @@ class TestDistantViewRuntimeTrace:
             summit_id,
             type(interior)(
                 sub_locations=interior.sub_locations,
-                objects=tuple(
-                    obj for obj in interior.objects if obj.object_id != object_id
-                ),
+                objects=tuple(obj for obj in interior.objects if obj.object_id != object_id),
                 ground_items=interior.ground_items,
                 discoverable_items=interior.discoverable_items,
             ),
@@ -245,11 +225,7 @@ class TestDistantViewRuntimeTrace:
         with caplog.at_level(logging.WARNING):
             runtime.build_llm_context(PlayerId(1))
 
-        payload = next(
-            payload
-            for kind, payload in recorder.events
-            if kind == TraceEventKind.DISTANT_VIEW_RENDERED
-        )
+        payload = next(payload for kind, payload in recorder.events if kind == TraceEventKind.DISTANT_VIEW_RENDERED)
         assert "cue_source_object_missing" in payload["skipped_reasons"]
         assert "distant cue source object is missing" in caplog.text
 
@@ -343,10 +319,7 @@ class TestDistantCueAppearanceRuntime:
 
         assert "北東の山の方から白い煙が上がった。" in user_message
         recent = runtime._short_term_memory.get_recent(player_id, 20)
-        assert any(
-            entry.output.structured.get("type") == "distant_cue_appeared"
-            for entry in recent
-        )
+        assert any(entry.output.structured.get("type") == "distant_cue_appeared" for entry in recent)
 
     def test_restored_active_true_state_does_not_fire_again(self) -> None:
         """snapshot restore 後に active=true と復元された cue は同じ出現を再発火しない。"""
@@ -432,9 +405,7 @@ class TestDistantCueAppearanceRuntime:
             summit_id,
             type(interior)(
                 sub_locations=interior.sub_locations,
-                objects=tuple(
-                    obj for obj in interior.objects if obj.object_id != object_id
-                ),
+                objects=tuple(obj for obj in interior.objects if obj.object_id != object_id),
                 ground_items=interior.ground_items,
                 discoverable_items=interior.discoverable_items,
             ),
@@ -536,9 +507,5 @@ def _trace_payloads(recorder: _TraceRecorderSpy, kind: str) -> list[dict[str, An
 
 
 def _restore_distant_cue_state(runtime, data: dict[str, Any]) -> None:  # noqa: ANN001
-    codec = next(
-        codec
-        for codec in _default_world_subsystem_codecs()
-        if codec.subsystem_key == "distant_cue_state"
-    )
+    codec = next(codec for codec in _default_world_subsystem_codecs() if codec.subsystem_key == "distant_cue_state")
     codec.restore(runtime, data)

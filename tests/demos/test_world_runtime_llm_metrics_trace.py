@@ -33,36 +33,34 @@ class _FakeLlmClient:
     def __init__(self) -> None:
         self.last_sink: Any = None
 
-    def invoke(
-        self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None
-    ) -> dict:
+    def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None) -> dict:
         self.last_sink = metrics_sink
         if metrics_sink is not None:
-            metrics_sink.record(LlmCallMetrics(
-                model="fake/model",
-                wall_latency_ms=1234,
-                prompt_tokens=100,
-                completion_tokens=42,
-                reasoning_tokens=17,
-                tps=34.0,
-                success=True,
-                error_code=None,
-                error_detail="",
-                reasoning_effort="low",
-                tool_choice="required",
-                phase="assess_phase",
-                discarded_tool_calls=2,
-                tool_call_combination=("travel_to", "memo_add", "speak"),
-            ))
+            metrics_sink.record(
+                LlmCallMetrics(
+                    model="fake/model",
+                    wall_latency_ms=1234,
+                    prompt_tokens=100,
+                    completion_tokens=42,
+                    reasoning_tokens=17,
+                    tps=34.0,
+                    success=True,
+                    error_code=None,
+                    error_detail="",
+                    reasoning_effort="low",
+                    tool_choice="required",
+                    phase="assess_phase",
+                    discarded_tool_calls=2,
+                    tool_call_combination=("travel_to", "memo_add", "speak"),
+                )
+            )
         return {"name": "wait", "arguments": {"reason": "test"}}
 
 
 class TestPhaseAMetricsSink:
     """Phase A 経由で LLM_CALL trace event が記録される。"""
 
-    def test_trace_recorder_llm_call_event_recorded(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_trace_recorder_llm_call_event_recorded(self, monkeypatch, tmp_path: Path) -> None:
         """tracerecorder があると LLMCALLevent が記録される。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
@@ -76,13 +74,8 @@ class TestPhaseAMetricsSink:
         pid = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
         state.llm_wiring.run_phase_a(pid)
 
-        llm_call_records = [
-            (kind, payload) for kind, payload in rec.records
-            if kind == TraceEventKind.LLM_CALL
-        ]
-        assert len(llm_call_records) == 1, (
-            f"LLM_CALL trace event が記録されていない (記録: {rec.records})"
-        )
+        llm_call_records = [(kind, payload) for kind, payload in rec.records if kind == TraceEventKind.LLM_CALL]
+        assert len(llm_call_records) == 1, f"LLM_CALL trace event が記録されていない (記録: {rec.records})"
         _, payload = llm_call_records[0]
         assert payload["model"] == "fake/model"
         assert payload["wall_latency_ms"] == 1234
@@ -103,9 +96,7 @@ class TestPhaseAMetricsSink:
         assert payload["discarded_tool_calls"] == 2
         assert payload["tool_call_combination"] == ["travel_to", "memo_add", "speak"]
 
-    def test_tick_is_captured_when_sink_records_metric(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_tick_is_captured_when_sink_records_metric(self, monkeypatch, tmp_path: Path) -> None:
         """Review HIGH 2 対応: sink 構築時の固定 tick ではなく record 時の tick を使う。
 
         遅い LLM 呼び出しが tick 境界を跨いだ場合に stale tick で記録されない
@@ -117,19 +108,27 @@ class TestPhaseAMetricsSink:
             """invoke のたびに runtime の tick を 1 進める stub。
             sink construction が record より前なら、旧コードでは tick がずれる。
             """
+
             def __init__(self, runtime):
                 self.runtime = runtime
 
-            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None) -> dict:
+            def invoke(
+                self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None
+            ) -> dict:
                 # 呼び出し中に tick を 1 進める (= LLM call が tick boundary を跨ぐ)
                 self.runtime.advance_tick()
                 if metrics_sink is not None:
-                    metrics_sink.record(LlmCallMetrics(
-                        model="fake/model",
-                        wall_latency_ms=100,
-                        prompt_tokens=10, completion_tokens=5,
-                        tps=50.0, success=True, error_code=None,
-                    ))
+                    metrics_sink.record(
+                        LlmCallMetrics(
+                            model="fake/model",
+                            wall_latency_ms=100,
+                            prompt_tokens=10,
+                            completion_tokens=5,
+                            tps=50.0,
+                            success=True,
+                            error_code=None,
+                        )
+                    )
                 return {"name": "wait", "arguments": {"reason": "test"}}
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
@@ -141,10 +140,7 @@ class TestPhaseAMetricsSink:
         pid = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
         state.llm_wiring.run_phase_a(pid)
 
-        llm_call_records = [
-            (kind, payload) for kind, payload in rec.records
-            if kind == TraceEventKind.LLM_CALL
-        ]
+        llm_call_records = [(kind, payload) for kind, payload in rec.records if kind == TraceEventKind.LLM_CALL]
         assert len(llm_call_records) == 1
         _, payload = llm_call_records[0]
         # tick は invoke 後の値 (= tick_before + 1) になっているはず。
@@ -155,9 +151,7 @@ class TestPhaseAMetricsSink:
         )
         assert "tool_call_combination" not in payload
 
-    def test_trace_recorder_none_sink_none(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_trace_recorder_none_sink_none(self, monkeypatch, tmp_path: Path) -> None:
         """trace recorder が None なら sink は None。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 

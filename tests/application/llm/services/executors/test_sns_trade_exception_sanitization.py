@@ -70,10 +70,7 @@ class TestSnsEnterSanitization:
         assert "token=abcd1234" not in result.message
         assert "内部ID" not in result.message
         # サーバログには文脈が残る (観測性)
-        assert any(
-            "active=" in r.message and "requested=" in r.message
-            for r in caplog.records
-        )
+        assert any("active=" in r.message and "requested=" in r.message for r in caplog.records)
 
     def test_message_contains_structured_kind(self) -> None:
         """LLM への message には ``active_kind.value`` (= 安全な enum 値) が入る。"""
@@ -106,10 +103,7 @@ class TestTradeEnterSanitization:
         assert "/etc/passwd" not in result.message
         assert "攻撃" not in result.message
         # サーバログには文脈
-        assert any(
-            "active=" in r.message and "requested=" in r.message
-            for r in caplog.records
-        )
+        assert any("active=" in r.message and "requested=" in r.message for r in caplog.records)
 
     def test_message_contains_structured_kind(self) -> None:
         executor = _build_trade_executor_with_conflict("...")

@@ -18,7 +18,7 @@ class TestMessage:
             sender_name="Alice",
             recipient_id=20,
             content="Hello, World!",
-            timestamp=timestamp
+            timestamp=timestamp,
         )
 
         assert message.message_id == 1
@@ -37,7 +37,7 @@ class TestMessage:
             sender_name="  Alice  ",
             recipient_id=20,
             content="  Hello, World!  ",
-            timestamp=timestamp
+            timestamp=timestamp,
         )
 
         assert message.sender_name == "Alice"

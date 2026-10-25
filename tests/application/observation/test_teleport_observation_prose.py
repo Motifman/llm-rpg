@@ -97,27 +97,21 @@ class TestDeclaredTeleportProse:
 
     def test_declared_departure_message_replaces_the_default(self) -> None:
         """出発の宣言文がある転移では、「去った」ではなく宣言文が出る。"""
-        output = _handler().format(
-            _left("{actor}がベントを開けて中に入った。"), _WATCHER
-        )
+        output = _handler().format(_left("{actor}がベントを開けて中に入った。"), _WATCHER)
 
         assert output is not None
         assert output.prose == "クゼがベントを開けて中に入った。"
 
     def test_declared_arrival_message_replaces_the_default(self) -> None:
         """到着の宣言文がある転移では、「やってきた」ではなく宣言文が出る。"""
-        output = _handler().format(
-            _entered("ベントが開いて{actor}が中から出てきた。"), _WATCHER
-        )
+        output = _handler().format(_entered("ベントが開いて{actor}が中から出てきた。"), _WATCHER)
 
         assert output is not None
         assert output.prose == "ベントが開いてクゼが中から出てきた。"
 
     def test_declared_message_without_actor_placeholder_is_used_verbatim(self) -> None:
         """暗所の文のように行為者を伏せる宣言は、名前を足さずそのまま出る。"""
-        output = _handler().format(
-            _entered("ベントが開いて誰かが出てきた音がした。"), _WATCHER
-        )
+        output = _handler().format(_entered("ベントが開いて誰かが出てきた音がした。"), _WATCHER)
 
         assert output is not None
         assert output.prose == "ベントが開いて誰かが出てきた音がした。"

@@ -1,4 +1,5 @@
 """公開SNSの通知先と出典を操作時点で固定する、確定境界内のイベント。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

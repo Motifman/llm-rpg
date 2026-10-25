@@ -18,7 +18,8 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
 
 def _wrap(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     return PlayerCurrentStateDto(
-        player_id=1, player_name="P",
+        player_id=1,
+        player_name="P",
         current_spot_id=snap.current_spot_id,
         spot_graph_snapshot=snap,
     )

@@ -23,9 +23,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
@@ -160,9 +158,7 @@ class TestBodyReport:
         assert record.spot_id == body_spot
         assert record.downed_at_tick.value == int(runtime.current_tick())
 
-    def test_dead_player_position_starts_at_the_recorded_body_location(
-        self, runtime
-    ) -> None:
+    def test_dead_player_position_starts_at_the_recorded_body_location(self, runtime) -> None:
         """DEAD の別位置は、身体記録に固定された場所から始まる。
 
         この段階では別位置を読む実行経路がまだ無いため、物理グラフと合成しない
@@ -181,9 +177,7 @@ class TestBodyReport:
         self._put_body_next_to(runtime, _MORI, _SENA)
         graph = runtime._spot_graph_repo.find_graph()
         body_spot = _spot_of(runtime, _MORI)
-        another_spot = next(
-            node.spot_id for node in graph.iter_spot_nodes() if node.spot_id != body_spot
-        )
+        another_spot = next(node.spot_id for node in graph.iter_spot_nodes() if node.spot_id != body_spot)
         graph.unplace_entity(EntityId.create(int(_SENA)))
         graph.place_entity(EntityId.create(int(_SENA)), another_spot)
         runtime._spot_graph_repo.save(graph)

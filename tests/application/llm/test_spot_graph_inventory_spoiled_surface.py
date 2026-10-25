@@ -46,7 +46,10 @@ class TestInventorySpoiledSurface:
         snap = _empty_snapshot(
             inventory_items=(
                 SpotGraphInventoryItemEntry(
-                    item_spec_id=1, name="生の魚", quantity=1, is_spoiled=False,
+                    item_spec_id=1,
+                    name="生の魚",
+                    quantity=1,
+                    is_spoiled=False,
                 ),
             ),
         )
@@ -65,7 +68,10 @@ class TestInventorySpoiledSurface:
         snap = _empty_snapshot(
             inventory_items=(
                 SpotGraphInventoryItemEntry(
-                    item_spec_id=1, name="生の魚", quantity=1, is_spoiled=True,
+                    item_spec_id=1,
+                    name="生の魚",
+                    quantity=1,
+                    is_spoiled=True,
                 ),
             ),
         )
@@ -84,7 +90,10 @@ class TestInventorySpoiledSurface:
         snap = _empty_snapshot(
             inventory_items=(
                 SpotGraphInventoryItemEntry(
-                    item_spec_id=1, name="生の魚", quantity=3, is_spoiled=True,
+                    item_spec_id=1,
+                    name="生の魚",
+                    quantity=3,
+                    is_spoiled=True,
                 ),
             ),
         )
@@ -114,13 +123,9 @@ class TestInventorySpoiledSurface:
         )
         lines: list[str] = []
 
-        SpotGraphUiContextBuilder()._build_inventory_section(
-            snap, LabelAllocator(), RuntimeTargetCollector(), lines
-        )
+        SpotGraphUiContextBuilder()._build_inventory_section(snap, LabelAllocator(), RuntimeTargetCollector(), lines)
 
-        assert lines[-1] == (
-            '  - "制御端末" — 観測所の配電と隔壁を遠隔操作する古い端末。'
-        )
+        assert lines[-1] == ('  - "制御端末" — 観測所の配電と隔壁を遠隔操作する古い端末。')
         assert "そのままは食べられない" not in lines[-1]
 
     def test_missing_description_keeps_the_generic_item_type_copy(self) -> None:
@@ -138,9 +143,7 @@ class TestInventorySpoiledSurface:
         )
         lines: list[str] = []
 
-        SpotGraphUiContextBuilder()._build_inventory_section(
-            snap, LabelAllocator(), RuntimeTargetCollector(), lines
-        )
+        SpotGraphUiContextBuilder()._build_inventory_section(snap, LabelAllocator(), RuntimeTargetCollector(), lines)
 
         assert "道具・そのままは食べられない。近くのものに使う" in lines[-1]
 
@@ -160,9 +163,7 @@ class TestInventorySpoiledSurface:
         )
         lines: list[str] = []
 
-        SpotGraphUiContextBuilder()._build_inventory_section(
-            snap, LabelAllocator(), RuntimeTargetCollector(), lines
-        )
+        SpotGraphUiContextBuilder()._build_inventory_section(snap, LabelAllocator(), RuntimeTargetCollector(), lines)
 
         assert "枯れ葉に火を移すための火打ち石。" in lines[-1]
         assert "焚き火跡のような火を扱う場所で使う" in lines[-1]
@@ -184,16 +185,10 @@ class TestInventorySpoiledSurface:
         )
         lines: list[str] = []
 
-        SpotGraphUiContextBuilder()._build_inventory_section(
-            snap, LabelAllocator(), RuntimeTargetCollector(), lines
-        )
+        SpotGraphUiContextBuilder()._build_inventory_section(snap, LabelAllocator(), RuntimeTargetCollector(), lines)
 
-        assert lines[-1] == (
-            '  - "野いちご" — 酸味のある赤い実。生のまま食べられる。 (食料)'
-        )
-        assert "「食料」" in DEFAULT_REMEDIATION_BY_ERROR_CODE[
-            "ITEM_NOT_CONSUMABLE"
-        ]
+        assert lines[-1] == ('  - "野いちご" — 酸味のある赤い実。生のまま食べられる。 (食料)')
+        assert "「食料」" in DEFAULT_REMEDIATION_BY_ERROR_CODE["ITEM_NOT_CONSUMABLE"]
 
 
 class TestGroundItemSpoiledSurface:
@@ -204,7 +199,10 @@ class TestGroundItemSpoiledSurface:
         snap = _empty_snapshot(
             ground_items=(
                 SpotGraphGroundItemEntry(
-                    item_instance_id=100, item_spec_id=1, name="生の魚", is_spoiled=True,
+                    item_instance_id=100,
+                    item_spec_id=1,
+                    name="生の魚",
+                    is_spoiled=True,
                 ),
             ),
         )
@@ -222,7 +220,9 @@ class TestGroundItemSpoiledSurface:
         snap = _empty_snapshot(
             ground_items=(
                 SpotGraphGroundItemEntry(
-                    item_instance_id=100, item_spec_id=1, name="生の魚",
+                    item_instance_id=100,
+                    item_spec_id=1,
+                    name="生の魚",
                 ),
             ),
         )
@@ -285,7 +285,10 @@ class TestInventoryItemTypeTag:
         """consumable は食料タグ。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
-                item_spec_id=1, name="生の魚", quantity=1, item_type="consumable",
+                item_spec_id=1,
+                name="生の魚",
+                quantity=1,
+                item_type="consumable",
             )
         )
         assert "(食料)" in line
@@ -294,7 +297,10 @@ class TestInventoryItemTypeTag:
         """``material`` はそのまま食べず、interact の材料にすることを明示する。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
-                item_spec_id=2, name="流木", quantity=3, item_type="material",
+                item_spec_id=2,
+                name="流木",
+                quantity=3,
+                item_type="material",
             )
         )
         assert "(素材・そのままは食べられない。焚き火などの材料)" in line
@@ -304,7 +310,10 @@ class TestInventoryItemTypeTag:
         """tool は近くのものに使う用途を示す。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
-                item_spec_id=3, name="火打ち石", quantity=1, item_type="tool",
+                item_spec_id=3,
+                name="火打ち石",
+                quantity=1,
+                item_type="tool",
             )
         )
         assert "(道具・そのままは食べられない。近くのものに使う)" in line
@@ -314,7 +323,10 @@ class TestInventoryItemTypeTag:
         """keyitem は対応する場所やものに使う用途を示す。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
-                item_spec_id=4, name="骨のナイフ", quantity=1, item_type="key_item",
+                item_spec_id=4,
+                name="骨のナイフ",
+                quantity=1,
+                item_type="key_item",
             )
         )
         assert "(重要品・そのままは食べられない。対応する場所やものに使う)" in line
@@ -324,7 +336,10 @@ class TestInventoryItemTypeTag:
         """fallback 動作: 未知文字列でもクラッシュせずタグ非表示。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
-                item_spec_id=5, name="謎の物体", quantity=1, item_type="zzz_unknown",
+                item_spec_id=5,
+                name="謎の物体",
+                quantity=1,
+                item_type="zzz_unknown",
             )
         )
         # 「(食料)」「(素材)」等のいずれも出ない
@@ -335,7 +350,10 @@ class TestInventoryItemTypeTag:
         """``other`` は全否定にせず、食べ物ではないことと確認先を示す。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
-                item_spec_id=6, name="布切れ", quantity=1, item_type="other",
+                item_spec_id=6,
+                name="布切れ",
+                quantity=1,
+                item_type="other",
             )
         )
         assert "(食べ物ではない。用途は周囲のオブジェクトや行動で確認)" in line
@@ -382,9 +400,7 @@ class TestInventoryCategoryTag:
             ("DOCUMENT", " (記録・読んで手がかりを得る)"),
         ],
     )
-    def test_declared_category_controls_inventory_tag(
-        self, category: str, expected: str
-    ) -> None:
+    def test_declared_category_controls_inventory_tag(self, category: str, expected: str) -> None:
         """6 種の item category は ItemType 由来ではなく category 由来の文言で表示される。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
@@ -558,15 +574,15 @@ class TestInventoryUsageHint:
         """usage_hint 未設定なら所持品行は既存の種別タグ表示だけに留まる。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
-                item_spec_id=901, name="火打ち石", quantity=1, item_type="quest",
+                item_spec_id=901,
+                name="火打ち石",
+                quantity=1,
+                item_type="quest",
             )
         )
 
         assert "用途:" not in line
-        assert line == (
-            '  - "火打ち石" '
-            "(任務品・そのままは食べられない。対応する場所やものに使う)"
-        )
+        assert line == ('  - "火打ち石" (任務品・そのままは食べられない。対応する場所やものに使う)')
 
     def test_usage_hint_does_not_render_internal_ids(self) -> None:
         """用途ヒント付きでも item_spec_id / object_id / spot_id は prompt に漏れない。"""

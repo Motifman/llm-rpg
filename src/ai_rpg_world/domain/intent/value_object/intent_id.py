@@ -24,10 +24,6 @@ class IntentId:
 
     def __post_init__(self) -> None:
         if not isinstance(self.value, int) or isinstance(self.value, bool):
-            raise IntentIdValidationException(
-                "IntentId.value must be int (got %r)" % (type(self.value),)
-            )
+            raise IntentIdValidationException("IntentId.value must be int (got %r)" % (type(self.value),))
         if self.value < 0:
-            raise IntentIdValidationException(
-                f"IntentId.value must be >= 0 (got {self.value})"
-            )
+            raise IntentIdValidationException(f"IntentId.value must be >= 0 (got {self.value})")

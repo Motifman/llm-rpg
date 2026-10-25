@@ -95,7 +95,9 @@ class TestRevisingTheIndex:
         """呼び名と新しい目次を渡すと目次が替わり、前の目次が直したターンと一緒に履歴に入り、本文は変わらない。"""
         executor, repository, _, episode = _executor(turn=6)
 
-        result = _run(executor, {"handle": episode.handle, "about": "金庫を開けた", "recall_when": "鍵の掛かった箱を見たとき"})
+        result = _run(
+            executor, {"handle": episode.handle, "about": "金庫を開けた", "recall_when": "鍵の掛かった箱を見たとき"}
+        )
 
         assert result.success is True
         stored = repository.find_by_handle(ADA, episode.handle)

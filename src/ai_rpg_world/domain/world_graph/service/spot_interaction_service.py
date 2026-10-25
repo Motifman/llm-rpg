@@ -66,9 +66,7 @@ from ai_rpg_world.domain.world_graph.value_object.unresolved_item_name import (
 )
 
 
-def _lacks_puzzle_input(
-    cond: InteractionCondition, interaction_parameters: dict[str, Any] | None
-) -> bool:
+def _lacks_puzzle_input(cond: InteractionCondition, interaction_parameters: dict[str, Any] | None) -> bool:
     if cond.condition_type != InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH:
         return False
     input_key = (cond.puzzle_input_key or "").strip()
@@ -84,8 +82,7 @@ def _precondition_refusal(
     cond = result.failed_predicate
     refusal_type = (
         InteractionParameterMissingException
-        if isinstance(cond, InteractionCondition)
-        and _lacks_puzzle_input(cond, interaction_parameters)
+        if isinstance(cond, InteractionCondition) and _lacks_puzzle_input(cond, interaction_parameters)
         else InteractionNotAllowedException
     )
     return refusal_type(
@@ -211,10 +208,7 @@ class SpotInteractionService:
         """前提条件を宣言順に評価し、最初の不成立を構造化して返す。"""
         # Phase 4-B: 同一 instance を acting / target 両方として渡すのは
         # wiring バグ。precondition 段階で弾く（apply_effects と同じガード）。
-        if (
-            acting_item_aggregate is not None
-            and acting_item_aggregate is target_item_aggregate
-        ):
+        if acting_item_aggregate is not None and acting_item_aggregate is target_item_aggregate:
             raise ValueError(
                 "acting_item_aggregate and target_item_aggregate must be distinct "
                 "instances; passing the same aggregate as both indicates a wiring bug"
@@ -233,8 +227,7 @@ class SpotInteractionService:
                 InteractionConditionTypeEnum.HAS_ITEMS,
             )
             needs_counts = any(
-                c.required_quantity > 1
-                and c.condition_type in _item_count_conditions
+                c.required_quantity > 1 and c.condition_type in _item_count_conditions
                 for c in interaction.preconditions
             )
             if needs_counts:
@@ -247,7 +240,9 @@ class SpotInteractionService:
             counts = owned_item_spec_counts
         for index, cond in enumerate(interaction.preconditions):
             ok, msg = self._evaluate_condition(
-                cond, spot_object, world_flags,
+                cond,
+                spot_object,
+                world_flags,
                 spot_presence_count=spot_presence_count,
                 interaction_parameters=interaction_parameters,
                 owned_item_spec_counts=counts,
@@ -348,9 +343,7 @@ class SpotInteractionService:
             if target_owned_item_spec_ids is None:
                 # 対象の所持が渡っていないのに対象の所持条件が書かれている。
                 # 黙って成立させると、持っていない相手から奪えてしまう。
-                return False, (
-                    cond.failure_message or "この行為には対象プレイヤーが必要です"
-                )
+                return False, (cond.failure_message or "この行為には対象プレイヤーが必要です")
             spec_id = self._condition_item_spec_id(cond, interaction_parameters)
             if spec_id is None:
                 # 実行時指定なのに参照キーが無い = 「相手の持ち物にその名前が
@@ -360,9 +353,7 @@ class SpotInteractionService:
                     if t == InteractionConditionTypeEnum.TARGET_HAS_ITEM
                     else None
                 )
-                return False, (
-                    unresolved or cond.failure_message or "相手はそれを持っていない"
-                )
+                return False, (unresolved or cond.failure_message or "相手はそれを持っていない")
             common_result = self._predicate_evaluator.evaluate(
                 ItemSpecOwnedPredicate(spec_id),
                 OwnedItemSpecsPredicateContext(target_owned_item_spec_ids),
@@ -371,8 +362,7 @@ class SpotInteractionService:
             wants_owned = t == InteractionConditionTypeEnum.TARGET_HAS_ITEM
             if owns is not wants_owned:
                 return False, cond.failure_message or (
-                    "相手はそれを持っていない" if wants_owned
-                    else "相手はそれを持っている"
+                    "相手はそれを持っていない" if wants_owned else "相手はそれを持っている"
                 )
             return True, None
         if t == InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED:
@@ -384,24 +374,15 @@ class SpotInteractionService:
             if target_player_status is None:
                 # 対象が渡っていないのに対象の条件が書かれている。provider 不在を
                 # silent pass せず拒否する既存規約に合わせる。
-                return False, (
-                    cond.failure_message
-                    or "この行為には対象プレイヤーが必要です"
-                )
+                return False, (cond.failure_message or "この行為には対象プレイヤーが必要です")
             if not target_player_status.is_down:
-                return False, (
-                    cond.failure_message
-                    or "相手は動いている。この行為はできない"
-                )
+                return False, (cond.failure_message or "相手は動いている。この行為はできない")
             return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STATE:
             if condition_object is None:
                 # 対人 interaction のように対象オブジェクトを持たない文脈。
                 # 黙って True にすると「条件を書いたのに素通り」になるので拒否する。
-                return False, (
-                    cond.failure_message
-                    or "この行為には対象オブジェクトが必要な条件が書かれています"
-                )
+                return False, (cond.failure_message or "この行為には対象オブジェクトが必要な条件が書かれています")
             if cond.required_state is None:
                 return False, cond.failure_message or "OBJECT_STATE に required_state がありません"
             common_result = self._predicate_evaluator.evaluate(
@@ -413,15 +394,9 @@ class SpotInteractionService:
             return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST:
             if condition_object is None:
-                return False, (
-                    cond.failure_message
-                    or "この行為には対象オブジェクトが必要な条件が書かれています"
-                )
+                return False, (cond.failure_message or "この行為には対象オブジェクトが必要な条件が書かれています")
             if not cond.state_key:
-                return False, (
-                    cond.failure_message
-                    or "OBJECT_STATE_INT_AT_LEAST に state_key がありません"
-                )
+                return False, (cond.failure_message or "OBJECT_STATE_INT_AT_LEAST に state_key がありません")
             required = max(1, int(cond.required_quantity))
             current = condition_object.state.get(cond.state_key, 0)
             if not isinstance(current, int):
@@ -431,25 +406,18 @@ class SpotInteractionService:
                 StateValuesPredicateContext(condition_object.state),
             )
             if not ScenarioPredicateEvaluator.require_satisfaction(common_result):
-                return False, cond.failure_message or (
-                    f"必要な量が足りません (必要: {required}, いま: {current})"
-                )
+                return False, cond.failure_message or (f"必要な量が足りません (必要: {required}, いま: {current})")
             return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST:
             if condition_object is None:
-                return False, (
-                    cond.failure_message
-                    or "この行為には対象オブジェクトが必要な条件が書かれています"
-                )
+                return False, (cond.failure_message or "この行為には対象オブジェクトが必要な条件が書かれています")
             # 備蓄プールの現在量を lazy に算出し、required_quantity 以上あるか判定。
             # 備蓄設定は object.state に持つ (stock / stock_capacity / stock_tick /
             # stock_refill_interval)。current_tick 未提供時は再生なし (記録済み
             # stock をそのまま) にフォールバックする。
             required = max(1, int(cond.required_quantity))
             state = condition_object.state
-            now = int(current_tick.value) if current_tick is not None else int(
-                state.get("stock_tick", 0)
-            )
+            now = int(current_tick.value) if current_tick is not None else int(state.get("stock_tick", 0))
             stock_result = compute_stock_regen(
                 stock=int(state.get("stock", 0)),
                 capacity=int(state.get("stock_capacity", 0)),
@@ -490,8 +458,7 @@ class SpotInteractionService:
             )
             if not players_result.is_satisfied:
                 return False, cond.failure_message or (
-                    f"このアクションには"
-                    f"{players_result.required_player_count}人以上が必要です"
+                    f"このアクションには{players_result.required_player_count}人以上が必要です"
                 )
             return True, None
 
@@ -517,8 +484,7 @@ class SpotInteractionService:
                 # 番号違いの failure_message は「入力して試した」場面を書いている。
                 # キーが無いのは呼び方の誤りなので、直すのに要るキーを名指す (D1591)。
                 return False, (
-                    f"何を入れるか、parameters の {json.dumps(input_key, ensure_ascii=False)} "
-                    "で指定してください。"
+                    f"何を入れるか、parameters の {json.dumps(input_key, ensure_ascii=False)} で指定してください。"
                 )
             expected_value = expected["answer"]
             if str(user_input) != str(expected_value):
@@ -552,8 +518,7 @@ class SpotInteractionService:
                 return False, cond.failure_message or "TARGET_ITEM_INSTANCE_STATE に required_state がありません"
             if target_item_aggregate is None:
                 return False, (
-                    cond.failure_message
-                    or "TARGET_ITEM_INSTANCE_STATE は target item instance を必要とします"
+                    cond.failure_message or "TARGET_ITEM_INSTANCE_STATE は target item instance を必要とします"
                 )
             common_result = self._predicate_evaluator.evaluate(
                 StateValuesMatchPredicate(cond.required_state),
@@ -587,16 +552,11 @@ class SpotInteractionService:
                     "PLAYER_NEED_AT_LEAST には need_type と need_threshold が必要です"
                 )
             if acting_player_status is None:
-                return False, (
-                    cond.failure_message
-                    or "PLAYER_NEED_AT_LEAST は acting player status を必要とします"
-                )
+                return False, (cond.failure_message or "PLAYER_NEED_AT_LEAST は acting player status を必要とします")
             try:
                 need_type = NeedType(cond.need_type)
             except ValueError:
-                return False, cond.failure_message or (
-                    f"PLAYER_NEED_AT_LEAST の need_type が不正: {cond.need_type!r}"
-                )
+                return False, cond.failure_message or (f"PLAYER_NEED_AT_LEAST の need_type が不正: {cond.need_type!r}")
             need = acting_player_status.needs.get(need_type)
             if need is None:
                 # プレイヤーがその need を持たない (= 0 とみなす)
@@ -611,18 +571,11 @@ class SpotInteractionService:
             # 凍結 (取引に出している額) はここでは見えない — application 層が
             # 永続化の前にもう一段のガードを持つ。
             if cond.gold_threshold is None:
-                return False, cond.failure_message or (
-                    "PLAYER_GOLD_AT_LEAST には gold_threshold が必要です"
-                )
+                return False, cond.failure_message or ("PLAYER_GOLD_AT_LEAST には gold_threshold が必要です")
             if acting_player_status is None:
-                return False, (
-                    cond.failure_message
-                    or "PLAYER_GOLD_AT_LEAST は acting player status を必要とします"
-                )
+                return False, (cond.failure_message or "PLAYER_GOLD_AT_LEAST は acting player status を必要とします")
             if acting_player_status.gold.value < int(cond.gold_threshold):
-                return False, cond.failure_message or (
-                    f"所持金が足りません ({int(cond.gold_threshold)}G 必要)"
-                )
+                return False, cond.failure_message or (f"所持金が足りません ({int(cond.gold_threshold)}G 必要)")
             return True, None
 
         if t == InteractionConditionTypeEnum.PLAYER_HP_RATIO_BELOW:
@@ -631,10 +584,7 @@ class SpotInteractionService:
             if cond.hp_ratio is None:
                 return False, cond.failure_message or "PLAYER_HP_RATIO_BELOW には hp_ratio が必要です"
             if acting_player_status is None:
-                return False, (
-                    cond.failure_message
-                    or "PLAYER_HP_RATIO_BELOW は acting player status を必要とします"
-                )
+                return False, (cond.failure_message or "PLAYER_HP_RATIO_BELOW は acting player status を必要とします")
             # `Hp.get_percentage()` は max_hp==0 で 0.0 を返す。本 precondition は
             # 「HP 不足を確認する」用途なので、max_hp==0 のときは「条件を満たさない
             # (=拒否)」が安全側。0.0 < hp_ratio で実際に True 判定されるとマズい
@@ -653,8 +603,7 @@ class SpotInteractionService:
                 return False, cond.failure_message or "PLAYER_HP_RATIO_AT_LEAST には hp_ratio が必要です"
             if acting_player_status is None:
                 return False, (
-                    cond.failure_message
-                    or "PLAYER_HP_RATIO_AT_LEAST は acting player status を必要とします"
+                    cond.failure_message or "PLAYER_HP_RATIO_AT_LEAST は acting player status を必要とします"
                 )
             if acting_player_status.hp.max_hp <= 0:
                 return False, cond.failure_message or "プレイヤーの HP 条件を満たしません (max_hp 不正)"
@@ -670,10 +619,7 @@ class SpotInteractionService:
             if cond.required_state is None:
                 return False, cond.failure_message or "PLAYER_STATE_IS に required_state がありません"
             if acting_player_status is None:
-                return False, (
-                    cond.failure_message
-                    or "PLAYER_STATE_IS は acting player status を必要とします"
-                )
+                return False, (cond.failure_message or "PLAYER_STATE_IS は acting player status を必要とします")
             common_result = self._predicate_evaluator.evaluate(
                 StateValuesMatchPredicate(cond.required_state),
                 StateValuesPredicateContext(acting_player_status.state),
@@ -692,19 +638,11 @@ class SpotInteractionService:
             # を避けて拒否する。シナリオが TIME_OF_DAY 条件を書いたのに
             # day_night 宣言が無いケースを早期に surface するため。
             if not cond.required_time_of_day_phase:
-                return False, cond.failure_message or (
-                    f"{t.value} に required_time_of_day_phase がありません"
-                )
+                return False, cond.failure_message or (f"{t.value} に required_time_of_day_phase がありません")
             if current_time_of_day_phase is None:
-                return False, cond.failure_message or (
-                    f"{t.value} は day_night provider を必要とします"
-                )
+                return False, cond.failure_message or (f"{t.value} は day_night provider を必要とします")
             matches = current_time_of_day_phase == cond.required_time_of_day_phase
-            ok = (
-                matches
-                if t == InteractionConditionTypeEnum.TIME_OF_DAY_IS
-                else not matches
-            )
+            ok = matches if t == InteractionConditionTypeEnum.TIME_OF_DAY_IS else not matches
             if not ok:
                 return False, cond.failure_message or (
                     f"現在の時刻帯ではこの行動はできない (要求: {cond.required_time_of_day_phase})"
@@ -718,13 +656,9 @@ class SpotInteractionService:
             # PR4: 天候による行動制限。required_weather_type が現在 weather と
             # 一致するか (_IS) / 一致しないか (_IS_NOT) を判定。
             if not cond.required_weather_type:
-                return False, cond.failure_message or (
-                    f"{t.value} に required_weather_type がありません"
-                )
+                return False, cond.failure_message or (f"{t.value} に required_weather_type がありません")
             if current_weather_type is None:
-                return False, cond.failure_message or (
-                    f"{t.value} は weather provider を必要とします"
-                )
+                return False, cond.failure_message or (f"{t.value} は weather provider を必要とします")
             try:
                 required_weather = WeatherTypeEnum(cond.required_weather_type)
                 current_weather = WeatherTypeEnum(current_weather_type)
@@ -736,14 +670,8 @@ class SpotInteractionService:
                     WeatherTypeIsPredicate(required_weather),
                     WeatherTypePredicateContext(current_weather),
                 )
-                matches = ScenarioPredicateEvaluator.require_satisfaction(
-                    common_result
-                )
-            ok = (
-                matches
-                if t == InteractionConditionTypeEnum.WEATHER_IS
-                else not matches
-            )
+                matches = ScenarioPredicateEvaluator.require_satisfaction(common_result)
+            ok = matches if t == InteractionConditionTypeEnum.WEATHER_IS else not matches
             if not ok:
                 return False, cond.failure_message or (
                     f"現在の天候ではこの行動はできない (要求: {cond.required_weather_type})"
@@ -754,14 +682,9 @@ class SpotInteractionService:
             # PR 3: 対象プレイヤーの自由 state を判定する。PLAYER_STATE_IS の
             # 対象版で、「crew だけ殺せる」「まだ印が無い相手だけ」を書く。
             if cond.required_state is None:
-                return False, cond.failure_message or (
-                    "TARGET_PLAYER_STATE_IS に required_state がありません"
-                )
+                return False, cond.failure_message or ("TARGET_PLAYER_STATE_IS に required_state がありません")
             if target_player_status is None:
-                return False, (
-                    cond.failure_message
-                    or "TARGET_PLAYER_STATE_IS は対象プレイヤーを必要とします"
-                )
+                return False, (cond.failure_message or "TARGET_PLAYER_STATE_IS は対象プレイヤーを必要とします")
             common_result = self._predicate_evaluator.evaluate(
                 StateValuesMatchPredicate(cond.required_state),
                 StateValuesPredicateContext(target_player_status.state),
@@ -779,19 +702,11 @@ class SpotInteractionService:
             # (spot の静的 atmosphere ではない)。未配線 (None) は silent pass を
             # 避けて拒否する — 明るい場所で暗所限定の行為が通るほうが害が大きい。
             if not cond.required_lighting:
-                return False, cond.failure_message or (
-                    f"{t.value} に required_lighting がありません"
-                )
+                return False, cond.failure_message or (f"{t.value} に required_lighting がありません")
             if current_effective_lighting is None:
-                return False, cond.failure_message or (
-                    f"{t.value} は実効照明の解決を必要とします"
-                )
+                return False, cond.failure_message or (f"{t.value} は実効照明の解決を必要とします")
             matches = current_effective_lighting.value == cond.required_lighting
-            ok = (
-                matches
-                if t == InteractionConditionTypeEnum.SPOT_LIGHTING_IS
-                else not matches
-            )
+            ok = matches if t == InteractionConditionTypeEnum.SPOT_LIGHTING_IS else not matches
             if not ok:
                 return False, cond.failure_message or (
                     f"ここの明るさではこの行動はできない (要求: {cond.required_lighting})"
@@ -804,19 +719,11 @@ class SpotInteractionService:
         ):
             # PR 3: 行為者の現在地による制限。
             if cond.required_spot_id is None:
-                return False, cond.failure_message or (
-                    f"{t.value} に required_spot がありません"
-                )
+                return False, cond.failure_message or (f"{t.value} に required_spot がありません")
             if current_spot_id is None:
-                return False, cond.failure_message or (
-                    f"{t.value} は行為者の現在地を必要とします"
-                )
+                return False, cond.failure_message or (f"{t.value} は行為者の現在地を必要とします")
             matches = current_spot_id == cond.required_spot_id
-            ok = (
-                matches
-                if t == InteractionConditionTypeEnum.AT_SPOT_IS
-                else not matches
-            )
+            ok = matches if t == InteractionConditionTypeEnum.AT_SPOT_IS else not matches
             if not ok:
                 return False, cond.failure_message or "ここではこの行動はできない"
             return True, None
@@ -854,7 +761,10 @@ class SpotInteractionService:
         if idef is None:
             raise InteractionNotFoundException(f"{action_name} on {object_id}")
         precondition_result = self.evaluate_preconditions_result(
-            idef, obj, owned_item_spec_ids, world_flags,
+            idef,
+            obj,
+            owned_item_spec_ids,
+            world_flags,
             spot_presence_count=spot_presence_count,
             interaction_parameters=interaction_parameters,
             owned_item_spec_counts=owned_item_spec_counts,
@@ -1042,10 +952,5 @@ class SpotInteractionService:
             owned_item_spec_counts=owned_item_spec_counts,
         )
         required = Counter(requirements.actor_item_spec_ids)
-        if any(
-            counts.get(item_spec_id, 0) < quantity
-            for item_spec_id, quantity in required.items()
-        ):
-            raise InsufficientEffectItemsException(
-                "必要な未予約アイテムが足りないため、この行動は実行できない"
-            )
+        if any(counts.get(item_spec_id, 0) < quantity for item_spec_id, quantity in required.items()):
+            raise InsufficientEffectItemsException("必要な未予約アイテムが足りないため、この行動は実行できない")

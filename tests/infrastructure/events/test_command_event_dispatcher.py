@@ -88,29 +88,21 @@ def test_required_and_after_commit_handlers_run_on_their_side_in_order() -> None
     dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_required_before_commit(
         BaseDomainEvent,
-        lambda event, context: calls.append(
-            ("required-1", transaction.is_active, transaction.committed)
-        ),
+        lambda event, context: calls.append(("required-1", transaction.is_active, transaction.committed)),
     )
     dispatcher.register_required_before_commit(
         BaseDomainEvent,
-        lambda event, context: calls.append(
-            ("required-2", transaction.is_active, transaction.committed)
-        ),
+        lambda event, context: calls.append(("required-2", transaction.is_active, transaction.committed)),
     )
     dispatcher.register_after_commit(
         BaseDomainEvent,
-        lambda event: calls.append(
-            ("observation", transaction.is_active, transaction.committed)
-        ),
+        lambda event: calls.append(("observation", transaction.is_active, transaction.committed)),
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
     dispatcher.register_after_commit(
         BaseDomainEvent,
-        lambda event: calls.append(
-            ("read-model", transaction.is_active, transaction.committed)
-        ),
+        lambda event: calls.append(("read-model", transaction.is_active, transaction.committed)),
         channel=DeliveryChannel.READ_MODEL,
         guarantee=DeliveryGuarantee.DURABLE_RETRY,
     )
@@ -136,8 +128,8 @@ def test_best_effort_failure_is_observed_and_later_delivery_continues() -> None:
     calls: list[str] = []
     failures: list[tuple[str, str, str]] = []
     dispatcher = CommandEventDispatcher(
-        failure_observer=lambda channel, guarantee, event, handler, error: (
-            failures.append((channel.value, guarantee.value, str(error)))
+        failure_observer=lambda channel, guarantee, event, handler, error: failures.append(
+            (channel.value, guarantee.value, str(error))
         )
     )
     dispatcher.register_after_commit(

@@ -18,11 +18,7 @@ def _workflow() -> dict:
 
 
 def _run_commands(job: dict) -> tuple[str, ...]:
-    return tuple(
-        str(step["run"])
-        for step in job["steps"]
-        if isinstance(step, dict) and "run" in step
-    )
+    return tuple(str(step["run"]) for step in job["steps"] if isinstance(step, dict) and "run" in step)
 
 
 def test_secret_leak_job_runs_for_main_pushes_and_every_pull_request() -> None:
@@ -47,11 +43,7 @@ def test_test_and_quality_jobs_use_python_lower_bound_and_frozen_uv_lock() -> No
 
     for job_name in ("test", "quality-goldens"):
         job = jobs[job_name]
-        setup_python = next(
-            step
-            for step in job["steps"]
-            if step.get("uses") == "actions/setup-python@v5"
-        )
+        setup_python = next(step for step in job["steps"] if step.get("uses") == "actions/setup-python@v5")
         assert setup_python["with"]["python-version"] == "3.10"
         commands = _run_commands(job)
         assert "uv sync --locked --extra export" in commands
@@ -63,9 +55,7 @@ _PINNED_UV_FROM_PYPI = re.compile(r"python -m pip install uv==\d+\.\d+\.\d+")
 
 # 行頭だけを見ると、`cd x && uv run ...` や `FOO=1 uv sync ...` の形で書かれた
 # uv が拾えず、その job の検査が黙って飛ばされる。
-_UV_INVOCATION = re.compile(
-    r"(?:^|&&|\|\||;|\||\bthen\b|\bdo\b)\s*(?:\w+=\S+\s+)*(uv\s[^;&|]*)"
-)
+_UV_INVOCATION = re.compile(r"(?:^|&&|\|\||;|\||\bthen\b|\bdo\b)\s*(?:\w+=\S+\s+)*(uv\s[^;&|]*)")
 
 
 def _uv_command_lines(job: dict) -> list[tuple[int, str]]:
@@ -90,10 +80,7 @@ def test_every_job_that_runs_uv_installs_the_same_pinned_uv_from_pypi() -> None:
         uv_lines = _uv_command_lines(job)
         if not uv_lines:
             continue
-        assert not any(
-            str(step.get("uses", "")).startswith("astral-sh/setup-uv@")
-            for step in job["steps"]
-        ), name
+        assert not any(str(step.get("uses", "")).startswith("astral-sh/setup-uv@") for step in job["steps"]), name
         installs = [
             (index, str(step["run"]).strip())
             for index, step in enumerate(job["steps"])
@@ -155,9 +142,7 @@ def test_every_split_group_has_its_own_matrix_job() -> None:
 
     splits = int(_option_value(arguments, "--splits"))
     assert _option_value(arguments, "--group") == "${{ matrix.group }}"
-    assert job["strategy"]["matrix"]["group"] == [
-        str(group) for group in range(1, splits + 1)
-    ]
+    assert job["strategy"]["matrix"]["group"] == [str(group) for group in range(1, splits + 1)]
     assert job["strategy"]["fail-fast"] == "false"
     assert (_REPO_ROOT / ".test_durations").is_file()
 
@@ -175,9 +160,7 @@ def test_the_quality_job_regenerates_goldens_without_parallel_workers() -> None:
     assert pytest_commands, "品質検査が pytest を実行していない"
     assert all(
         not any(
-            argument.startswith("-n")
-            or argument == "--numprocesses"
-            or argument.startswith("--numprocesses=")
+            argument.startswith("-n") or argument == "--numprocesses" or argument.startswith("--numprocesses=")
             for argument in shlex.split(command)
         )
         for command in pytest_commands

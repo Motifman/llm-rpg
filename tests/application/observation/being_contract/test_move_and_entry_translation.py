@@ -39,9 +39,7 @@ class TestAgentMoveFromToolCall:
     @pytest.mark.parametrize("blank", [None, "", "   "])
     def test_blank_subjective_argument_becomes_absent(self, blank: Any) -> None:
         """主観の引数が null や空文字なら、1 手の欄は None になる。"""
-        move = agent_move_from_tool_call(
-            "wait", {"expected_result": blank, "inner_thought": blank}, call_id="call-1"
-        )
+        move = agent_move_from_tool_call("wait", {"expected_result": blank, "inner_thought": blank}, call_id="call-1")
 
         assert move.expectation is None
         assert move.inner_thought is None
@@ -55,9 +53,7 @@ class TestAgentMoveFromToolCall:
 
 def _scenario(*, objective: str | None, shared_objective: str) -> Any:
     return SimpleNamespace(
-        metadata=SimpleNamespace(
-            title="無人島サバイバル", llm_objective_text=shared_objective
-        ),
+        metadata=SimpleNamespace(title="無人島サバイバル", llm_objective_text=shared_objective),
         player_spawns=(
             _spawn(1, "エイダ", objective=objective),
             _spawn(2, "リオ"),
@@ -84,9 +80,7 @@ def _spawn(
     )
 
 
-def _team_scenario(
-    *, knows_at_start: tuple[str, ...] | None, mutually_known_roles: tuple[str, ...] = ()
-) -> Any:
+def _team_scenario(*, knows_at_start: tuple[str, ...] | None, mutually_known_roles: tuple[str, ...] = ()) -> Any:
     return SimpleNamespace(
         metadata=SimpleNamespace(title="山村", llm_objective_text=""),
         player_spawns=(
@@ -127,18 +121,14 @@ class TestEnvironmentEntryForPlayer:
 
     def test_no_objective_means_no_imposed_goal(self) -> None:
         """個別の目的も共通の目的も無ければ、環境は目的を課さない。"""
-        entry = environment_entry_for_player(
-            _scenario(objective=None, shared_objective=""), PlayerId.create(2)
-        )
+        entry = environment_entry_for_player(_scenario(objective=None, shared_objective=""), PlayerId.create(2))
 
         assert entry.imposed_goal is None
 
     def test_unknown_player_is_rejected(self) -> None:
         """シナリオに居ないプレイヤーを渡すと LookupError を投げる。"""
         with pytest.raises(LookupError):
-            environment_entry_for_player(
-                _scenario(objective=None, shared_objective=""), PlayerId.create(9)
-            )
+            environment_entry_for_player(_scenario(objective=None, shared_objective=""), PlayerId.create(9))
 
 
 class TestIntroductionsForPlayer:
@@ -146,25 +136,19 @@ class TestIntroductionsForPlayer:
 
     def test_without_declaration_everyone_else_is_introduced(self) -> None:
         """knows_at_start を書かないプレイヤーには、自分以外の全員をシナリオの順に注記なしで紹介する。"""
-        entry = environment_entry_for_player(
-            _team_scenario(knows_at_start=None), PlayerId.create(1)
-        )
+        entry = environment_entry_for_player(_team_scenario(knows_at_start=None), PlayerId.create(1))
 
         assert entry.introductions == (Introduction(name="ノア"), Introduction(name="カイ"))
 
     def test_declared_list_limits_who_is_introduced(self) -> None:
         """knows_at_start に p2 だけを書くと、紹介されるのはノアだけになる。"""
-        entry = environment_entry_for_player(
-            _team_scenario(knows_at_start=("p2",)), PlayerId.create(1)
-        )
+        entry = environment_entry_for_player(_team_scenario(knows_at_start=("p2",)), PlayerId.create(1))
 
         assert entry.introductions == (Introduction(name="ノア"),)
 
     def test_empty_declaration_introduces_nobody(self) -> None:
         """knows_at_start を空の配列にすると、誰も紹介しない。"""
-        entry = environment_entry_for_player(
-            _team_scenario(knows_at_start=()), PlayerId.create(1)
-        )
+        entry = environment_entry_for_player(_team_scenario(knows_at_start=()), PlayerId.create(1))
 
         assert entry.introductions == ()
 

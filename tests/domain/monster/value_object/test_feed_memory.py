@@ -145,8 +145,7 @@ class TestFeedMemoryValidation:
     def test_rejects_more_than_max_entries_direct_construction(self):
         """直接構築で MAX 超えると例外"""
         entries = tuple(
-            FeedMemoryEntry(WorldObjectId(6000 + i), Coordinate(i, i, 0))
-            for i in range(MAX_FEED_MEMORIES + 1)
+            FeedMemoryEntry(WorldObjectId(6000 + i), Coordinate(i, i, 0)) for i in range(MAX_FEED_MEMORIES + 1)
         )
         with pytest.raises(MonsterStatsValidationException) as exc_info:
             FeedMemory(_entries=entries)
@@ -154,10 +153,7 @@ class TestFeedMemoryValidation:
 
     def test_accepts_max_entries_direct_construction(self):
         """直接構築でちょうど MAX 件は OK"""
-        entries = tuple(
-            FeedMemoryEntry(WorldObjectId(7000 + i), Coordinate(i, i, 0))
-            for i in range(MAX_FEED_MEMORIES)
-        )
+        entries = tuple(FeedMemoryEntry(WorldObjectId(7000 + i), Coordinate(i, i, 0)) for i in range(MAX_FEED_MEMORIES))
         mem = FeedMemory(_entries=entries)
         assert len(mem.entries) == MAX_FEED_MEMORIES
 

@@ -47,10 +47,7 @@ class TestDoMoveNoNestedAdvanceTick:
         runtime.do_move(player_id, "reading_room")
 
         tick_after = runtime.current_tick()
-        assert tick_after == tick_before, (
-            f"do_move でネスト advance_tick が走った: "
-            f"{tick_before} → {tick_after}"
-        )
+        assert tick_after == tick_before, f"do_move でネスト advance_tick が走った: {tick_before} → {tick_after}"
 
     def test_do_move_after_traveling_true(self, runtime) -> None:
         """travel state が立ち、後続 tick で advance される下準備ができる。"""

@@ -44,18 +44,23 @@ class TestReplyQueryService:
         """テスト対象のサービス"""
         return ReplyQueryService(post_repository, user_repository, reply_repository)
 
-    def create_test_reply(self, reply_id: int, author_user_id: int, parent_post_id: int, parent_reply_id: int | None = None, content: str = "テストリプライ", visibility: PostVisibility = PostVisibility.PUBLIC) -> ReplyAggregate:
+    def create_test_reply(
+        self,
+        reply_id: int,
+        author_user_id: int,
+        parent_post_id: int,
+        parent_reply_id: int | None = None,
+        content: str = "テストリプライ",
+        visibility: PostVisibility = PostVisibility.PUBLIC,
+    ) -> ReplyAggregate:
         """テスト用のリプライを作成"""
         # contentからハッシュタグを抽出（#で始まる単語）
         import re
-        hashtags_in_content = re.findall(r'#(\w+)', content)
+
+        hashtags_in_content = re.findall(r"#(\w+)", content)
         hashtags = tuple(hashtags_in_content) if hashtags_in_content else ("test", "reply")
 
-        reply_content = PostContent(
-            content=content,
-            hashtags=hashtags,
-            visibility=visibility
-        )
+        reply_content = PostContent(content=content, hashtags=hashtags, visibility=visibility)
 
         # テスト用の parent_author_id を決定
         # parent_post_id が 2001 の場合はユーザーID 1、parent_reply_id が 2001 の場合はユーザーID 2
@@ -71,7 +76,7 @@ class TestReplyQueryService:
             parent_reply_id=ReplyId(parent_reply_id) if parent_reply_id else None,
             parent_author_id=parent_author_id,
             author_user_id=UserId(author_user_id),
-            content=reply_content
+            content=reply_content,
         )
 
     def setup_test_data(self, post_repository, reply_repository, user_repository):
@@ -81,15 +86,9 @@ class TestReplyQueryService:
 
         # テスト用のポストを追加（ポストID 2001）
         test_post_content = PostContent(
-            content="これはテストポストです",
-            hashtags=("test", "post"),
-            visibility=PostVisibility.PUBLIC
+            content="これはテストポストです", hashtags=("test", "post"), visibility=PostVisibility.PUBLIC
         )
-        test_post = PostAggregate.create(
-            post_id=PostId(2001),
-            author_user_id=UserId(1),
-            post_content=test_post_content
-        )
+        test_post = PostAggregate.create(post_id=PostId(2001), author_user_id=UserId(1), post_content=test_post_content)
         post_repository._posts[PostId(2001)] = test_post
 
         # テスト用のリプライを追加
@@ -104,14 +103,20 @@ class TestReplyQueryService:
         reply_repository._replies[ReplyId(2003)] = reply3
 
         # プライベートリプライ
-        private_reply = self.create_test_reply(2004, 1, 2001, content="これはプライベートリプライです", visibility=PostVisibility.PRIVATE)
+        private_reply = self.create_test_reply(
+            2004, 1, 2001, content="これはプライベートリプライです", visibility=PostVisibility.PRIVATE
+        )
         reply_repository._replies[ReplyId(2004)] = private_reply
 
         # フォロワー限定リプライ
-        followers_reply = self.create_test_reply(2005, 2, 2001, content="これはフォロワー限定リプライです", visibility=PostVisibility.FOLLOWERS_ONLY)
+        followers_reply = self.create_test_reply(
+            2005, 2, 2001, content="これはフォロワー限定リプライです", visibility=PostVisibility.FOLLOWERS_ONLY
+        )
         reply_repository._replies[ReplyId(2005)] = followers_reply
 
-    def test_get_replies_by_post_id_success(self, reply_query_service, post_repository, reply_repository, user_repository):
+    def test_get_replies_by_post_id_success(
+        self, reply_query_service, post_repository, reply_repository, user_repository
+    ):
         """get_replies_by_post_idの正常系テスト"""
         # テストデータをセットアップ
         self.setup_test_data(post_repository, reply_repository, user_repository)
@@ -137,7 +142,9 @@ class TestReplyQueryService:
         assert "これはテストリプライ2です" in reply_contents
         assert "これはフォロワー限定リプライです" in reply_contents
 
-    def test_get_replies_by_post_id_with_limit_offset(self, reply_query_service, post_repository, reply_repository, user_repository):
+    def test_get_replies_by_post_id_with_limit_offset(
+        self, reply_query_service, post_repository, reply_repository, user_repository
+    ):
         """get_replies_by_post_idのlimit/offsetテスト"""
         # テストデータをセットアップ
         self.setup_test_data(post_repository, reply_repository, user_repository)
@@ -148,7 +155,9 @@ class TestReplyQueryService:
         # 検証
         assert len(result) == 1
 
-    def test_get_replies_by_post_id_post_not_found(self, reply_query_service, post_repository, reply_repository, user_repository):
+    def test_get_replies_by_post_id_post_not_found(
+        self, reply_query_service, post_repository, reply_repository, user_repository
+    ):
         """ポストが見つからない場合のテスト"""
         # テストデータをセットアップ（ポストなし）
         self.setup_test_data(post_repository, reply_repository, user_repository)
@@ -184,7 +193,9 @@ class TestReplyQueryService:
         nested_reply = next(reply for reply in result.replies if reply.reply_id == 2003)
         assert nested_reply.depth == 1  # 親リプライがあるのでdepth=1
 
-    def test_get_reply_thread_post_not_found(self, reply_query_service, post_repository, reply_repository, user_repository):
+    def test_get_reply_thread_post_not_found(
+        self, reply_query_service, post_repository, reply_repository, user_repository
+    ):
         """ポストが見つからない場合のget_reply_threadテスト"""
         # テストデータをセットアップ
         self.setup_test_data(post_repository, reply_repository, user_repository)
@@ -232,7 +243,9 @@ class TestReplyQueryService:
         # 作成日時でソートされていることを確認（新しい順）
         assert result[0].created_at >= result[1].created_at
 
-    def test_get_user_replies_with_limit_offset(self, reply_query_service, post_repository, reply_repository, user_repository):
+    def test_get_user_replies_with_limit_offset(
+        self, reply_query_service, post_repository, reply_repository, user_repository
+    ):
         """get_user_repliesのlimit/offsetテスト"""
         # テストデータをセットアップ
         self.setup_test_data(post_repository, reply_repository, user_repository)
@@ -243,7 +256,9 @@ class TestReplyQueryService:
         # 検証
         assert len(result) == 1
 
-    def test_visibility_filtering_public_reply(self, reply_query_service, post_repository, reply_repository, user_repository):
+    def test_visibility_filtering_public_reply(
+        self, reply_query_service, post_repository, reply_repository, user_repository
+    ):
         """パブリックリプライの可視性テスト"""
         # テストデータをセットアップ
         self.setup_test_data(post_repository, reply_repository, user_repository)
@@ -255,7 +270,9 @@ class TestReplyQueryService:
         reply_ids = [reply.reply_id for reply in result]
         assert 1004 not in reply_ids  # プライベートリプライは見えない
 
-    def test_visibility_filtering_followers_only_reply(self, reply_query_service, post_repository, reply_repository, user_repository):
+    def test_visibility_filtering_followers_only_reply(
+        self, reply_query_service, post_repository, reply_repository, user_repository
+    ):
         """フォロワー限定リプライの可視性テスト"""
         # テストデータをセットアップ
         self.setup_test_data(post_repository, reply_repository, user_repository)
@@ -285,7 +302,9 @@ class TestReplyQueryService:
         assert 0 in depths  # ルートレベルのリプライ
         assert 1 in depths  # ネストされたリプライ
 
-    def test_deleted_reply_visible_with_message(self, reply_query_service, post_repository, reply_repository, user_repository):
+    def test_deleted_reply_visible_with_message(
+        self, reply_query_service, post_repository, reply_repository, user_repository
+    ):
         """削除済みリプライがメッセージ付きで表示されることをテスト"""
         # テストデータをセットアップ
         self.setup_test_data(post_repository, reply_repository, user_repository)
@@ -310,7 +329,9 @@ class TestReplyQueryService:
         assert deleted_reply.content == ""
         assert deleted_reply.like_count == 0
 
-    def test_deleted_post_reply_thread_shows_deletion_message(self, reply_query_service, post_repository, reply_repository, user_repository):
+    def test_deleted_post_reply_thread_shows_deletion_message(
+        self, reply_query_service, post_repository, reply_repository, user_repository
+    ):
         """削除済みポストへのリプライツリーが削除メッセージ付きで表示されることをテスト"""
         # テストデータをセットアップ
         self.setup_test_data(post_repository, reply_repository, user_repository)
@@ -335,7 +356,9 @@ class TestReplyQueryService:
         # リプライは通常通り表示される
         assert len(result.replies) > 0
 
-    def test_deleted_reply_in_thread_shows_deletion_message(self, reply_query_service, post_repository, reply_repository, user_repository):
+    def test_deleted_reply_in_thread_shows_deletion_message(
+        self, reply_query_service, post_repository, reply_repository, user_repository
+    ):
         """リプライツリー内の削除済みリプライがメッセージ付きで表示されることをテスト"""
         # テストデータをセットアップ
         self.setup_test_data(post_repository, reply_repository, user_repository)

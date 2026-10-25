@@ -55,15 +55,11 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("error_code must be str or None")
         if tool_name is not None and not isinstance(tool_name, str):
             raise TypeError("tool_name must be str or None")
-        if identifier_arguments is not None and not isinstance(
-            identifier_arguments, Mapping
-        ):
+        if identifier_arguments is not None and not isinstance(identifier_arguments, Mapping):
             raise TypeError("identifier_arguments must be Mapping[str, str] or None")
         if not isinstance(free_text_argument_names, tuple):
             raise TypeError("free_text_argument_names must be tuple[str, ...]")
-        if argument_fingerprint is not None and not isinstance(
-            argument_fingerprint, str
-        ):
+        if argument_fingerprint is not None and not isinstance(argument_fingerprint, str):
             raise TypeError("argument_fingerprint must be str or None")
         if not isinstance(should_reschedule, bool):
             raise TypeError("should_reschedule must be bool")
@@ -73,9 +69,7 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("omit_result_in_prompt must be bool")
         if inner_thought is not None and not isinstance(inner_thought, str):
             raise TypeError("inner_thought must be str or None")
-        if occurred_tick is not None and (
-            not isinstance(occurred_tick, int) or isinstance(occurred_tick, bool)
-        ):
+        if occurred_tick is not None and (not isinstance(occurred_tick, int) or isinstance(occurred_tick, bool)):
             raise TypeError("occurred_tick must be int or None")
         # Issue #311 後続: フォールバックを tz-aware UTC に統一。
         # world_runtime は明示的に渡すが、それ以外の caller の取りこぼし防止。

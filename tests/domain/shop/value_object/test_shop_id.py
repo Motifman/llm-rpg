@@ -1,4 +1,5 @@
 """ShopId値オブジェクトのテスト"""
+
 import pytest
 
 from ai_rpg_world.domain.shop.exception.shop_exception import ShopIdValidationException

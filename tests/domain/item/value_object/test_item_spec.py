@@ -23,7 +23,7 @@ class TestItemSpec:
             rarity=Rarity.COMMON,
             description="A test sword for testing",
             max_stack_size=max_stack,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
 
     def test_create_basic_item_spec(self, sample_item_spec):
@@ -93,7 +93,7 @@ class TestItemSpec:
             description="A durable sword",
             max_stack_size=max_stack,
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         assert spec.durability_max == 100
         assert spec.can_create_durability()
@@ -214,7 +214,7 @@ class TestItemSpec:
                 rarity=Rarity.UNCOMMON,
                 description="A durable sword",
                 max_stack_size=max_stack,
-                durability_max=100
+                durability_max=100,
             )
 
         # エラーメッセージに適切な理由が含まれていることを確認
@@ -231,7 +231,7 @@ class TestItemSpec:
                 item_type=ItemType.EQUIPMENT,
                 rarity=Rarity.COMMON,
                 description="A sword",
-                max_stack_size=max_stack
+                max_stack_size=max_stack,
                 # equipment_type=None (デフォルト値)
             )
 
@@ -249,7 +249,7 @@ class TestItemSpec:
                 rarity=Rarity.COMMON,
                 description="A potion",
                 max_stack_size=max_stack,
-                equipment_type=EquipmentType.WEAPON  # 誤って指定
+                equipment_type=EquipmentType.WEAPON,  # 誤って指定
             )
 
         assert "non-equipment items must not have equipment_type" in str(exc_info.value)
@@ -264,7 +264,7 @@ class TestItemSpec:
             item_type=ItemType.CONSUMABLE,
             rarity=Rarity.COMMON,
             description="Restores health",
-            max_stack_size=max_stack
+            max_stack_size=max_stack,
             # equipment_type=None (デフォルト値)
         )
         assert spec.item_type == ItemType.CONSUMABLE
@@ -315,7 +315,7 @@ class TestItemSpec:
             rarity=Rarity.COMMON,
             description="Protects the head",
             max_stack_size=MaxStackSize(1),
-            equipment_type=EquipmentType.HELMET
+            equipment_type=EquipmentType.HELMET,
         )
         assert helmet_spec.equipment_type == EquipmentType.HELMET
         assert helmet_spec.is_equipment()
@@ -328,7 +328,7 @@ class TestItemSpec:
             rarity=Rarity.COMMON,
             description="Protects the body",
             max_stack_size=MaxStackSize(1),
-            equipment_type=EquipmentType.ARMOR
+            equipment_type=EquipmentType.ARMOR,
         )
         assert armor_spec.equipment_type == EquipmentType.ARMOR
         assert armor_spec.is_equipment()
@@ -342,7 +342,7 @@ class TestItemSpec:
             rarity=Rarity.COMMON,
             description="A test sword for testing",
             max_stack_size=MaxStackSize(64),
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         assert sample_item_spec != different_spec
 
@@ -354,7 +354,7 @@ class TestItemSpec:
             item_type=ItemType.CONSUMABLE,
             rarity=Rarity.RARE,
             description="Different description",
-            max_stack_size=MaxStackSize(32)
+            max_stack_size=MaxStackSize(32),
             # equipment_type=None (デフォルト値) - CONSUMABLEなのでNoneでOK
         )
 

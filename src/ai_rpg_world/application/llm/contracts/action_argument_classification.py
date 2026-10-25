@@ -126,11 +126,7 @@ def format_action_call_for_history(
     arguments: list[str] = []
     for name, value in identifier_arguments.items():
         kind = ACTION_ARGUMENT_CLASSIFICATIONS.get(name)
-        rendered = (
-            value
-            if kind == ActionArgumentDisplayKind.IDENTIFIER_JSON
-            else json.dumps(value, ensure_ascii=False)
-        )
+        rendered = value if kind == ActionArgumentDisplayKind.IDENTIFIER_JSON else json.dumps(value, ensure_ascii=False)
         arguments.append(f"{name}={rendered}")
     for name in free_text_argument_names:
         placeholder = _FREE_TEXT_ARGUMENT_PLACEHOLDERS.get(name, "本文")

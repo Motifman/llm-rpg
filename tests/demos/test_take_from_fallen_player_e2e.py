@@ -143,12 +143,8 @@ def _knock_out(rt, player_id: PlayerId) -> None:
     status.clear_events()
     rt._player_status_repo.save(status)
     current_tick = int(rt.current_tick())
-    spot_id = rt._spot_graph_repo.find_graph().get_entity_spot(
-        EntityId.create(int(player_id))
-    )
-    rt._fallen_body_registry.record(
-        player_id, spot_id, WorldTick(current_tick)
-    )
+    spot_id = rt._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
+    rt._fallen_body_registry.record(player_id, spot_id, WorldTick(current_tick))
     rt._death_grace_timer.register(player_id, downed_at_tick=current_tick)
     rt._speech_event_publisher.publish_all(events)
 
@@ -159,10 +155,7 @@ def _owned_spec_ids(rt, player_id: PlayerId) -> set[int]:
     )
 
     inv = rt._player_inventory_repo.find_by_id(player_id)
-    return {
-        s.value
-        for s in collect_owned_item_spec_ids_from_inventory(inv, rt._item_repo)
-    }
+    return {s.value for s in collect_owned_item_spec_ids_from_inventory(inv, rt._item_repo)}
 
 
 class TestTakeFromFallenPlayer:
@@ -174,7 +167,9 @@ class TestTakeFromFallenPlayer:
         _knock_out(runtime, _VICTIM)
 
         runtime.do_interact_with_player(
-            _ACTOR, _VICTIM, "loot_from_downed",
+            _ACTOR,
+            _VICTIM,
+            "loot_from_downed",
             interaction_parameters={"item": item_name},
         )
 
@@ -187,9 +182,7 @@ class TestTakeFromFallenPlayer:
         _knock_out(runtime, _VICTIM)
         graph = runtime._spot_graph_repo.find_graph()
         body_spot = graph.get_entity_spot(EntityId.create(int(_ACTOR)))
-        another_spot = next(
-            node.spot_id for node in graph.iter_spot_nodes() if node.spot_id != body_spot
-        )
+        another_spot = next(node.spot_id for node in graph.iter_spot_nodes() if node.spot_id != body_spot)
         graph.unplace_entity(EntityId.create(int(_VICTIM)))
         graph.place_entity(EntityId.create(int(_VICTIM)), another_spot)
         runtime._spot_graph_repo.save(graph)
@@ -208,18 +201,13 @@ class TestTakeFromFallenPlayer:
         _knock_out(runtime, _VICTIM)
         graph = runtime._spot_graph_repo.find_graph()
         body_spot = graph.get_entity_spot(EntityId.create(int(_ACTOR)))
-        another_spot = next(
-            node.spot_id for node in graph.iter_spot_nodes() if node.spot_id != body_spot
-        )
+        another_spot = next(node.spot_id for node in graph.iter_spot_nodes() if node.spot_id != body_spot)
         graph.unplace_entity(EntityId.create(int(_VICTIM)))
         graph.place_entity(EntityId.create(int(_VICTIM)), another_spot)
         runtime._spot_graph_repo.save(graph)
 
         snapshot = runtime._state_builder.build_snapshot(int(_ACTOR))
-        body_rows = [
-            entry for entry in snapshot.nearby_entities
-            if entry.entity_id == int(_VICTIM)
-        ]
+        body_rows = [entry for entry in snapshot.nearby_entities if entry.entity_id == int(_VICTIM)]
 
         assert len(body_rows) == 1
         assert body_rows[0].is_down is True
@@ -232,11 +220,7 @@ class TestTakeFromFallenPlayer:
         _knock_out(runtime, _VICTIM)
 
         snapshot = runtime._state_builder.build_snapshot(int(_ACTOR))
-        body_rows = [
-            entry
-            for entry in snapshot.nearby_entities
-            if entry.entity_id == int(_VICTIM)
-        ]
+        body_rows = [entry for entry in snapshot.nearby_entities if entry.entity_id == int(_VICTIM)]
 
         assert len(body_rows) == 1
         assert body_rows[0].is_down is True
@@ -267,14 +251,14 @@ class TestTakeFromFallenPlayer:
 
         with pytest.raises(InteractionNotAllowedException):
             runtime.do_interact_with_player(
-                _ACTOR, _VICTIM, "loot_from_downed",
+                _ACTOR,
+                _VICTIM,
+                "loot_from_downed",
                 interaction_parameters={"item": item_name},
             )
         assert spec_id not in _owned_spec_ids(runtime, _ACTOR)
 
-    def test_taking_something_the_target_lacks_fails_as_a_precondition(
-        self, runtime
-    ) -> None:
+    def test_taking_something_the_target_lacks_fails_as_a_precondition(self, runtime) -> None:
         """相手が持っていない品目を指定しても、内部エラーではなく前提条件で落ちる。
 
         「相手はそれを持っていない」は普通に起きる状況で、LLM が次の手を
@@ -285,7 +269,9 @@ class TestTakeFromFallenPlayer:
 
         with pytest.raises(InteractionNotAllowedException):
             runtime.do_interact_with_player(
-                _ACTOR, _VICTIM, "loot_from_downed",
+                _ACTOR,
+                _VICTIM,
+                "loot_from_downed",
                 interaction_parameters={"item": "存在しない架空の道具"},
             )
 
@@ -301,11 +287,7 @@ class TestActorInventoryFull:
 
         inv = rt._player_inventory_repo.find_by_id(player_id)
         spec = list(rt._item_spec_repo.find_all())[0]
-        free = sum(
-            1
-            for i in range(inv.max_slots)
-            if inv.get_item_instance_id_by_slot(SlotId(i)) is None
-        )
+        free = sum(1 for i in range(inv.max_slots) if inv.get_item_instance_id_by_slot(SlotId(i)) is None)
         grant_item_specs_to_inventory(
             player_id,
             (spec.item_spec_id,) * free,
@@ -329,7 +311,9 @@ class TestActorInventoryFull:
 
         with pytest.raises(InteractionNotAllowedException):
             runtime.do_interact_with_player(
-                _ACTOR, _VICTIM, "loot_from_downed",
+                _ACTOR,
+                _VICTIM,
+                "loot_from_downed",
                 interaction_parameters={"item": item_name},
             )
         # 対象の持ち物は減っていない
@@ -359,50 +343,48 @@ class TestTheftIsObserved:
             if e.output.structured.get("type") == "player_interacted_with_player"
         ]
 
-    def test_a_standing_bystander_observes_the_theft(
-        self, runtime_with_bystander
-    ) -> None:
+    def test_a_standing_bystander_observes_the_theft(self, runtime_with_bystander) -> None:
         """同席して起きている第三者に、奪う行為が 1 件届く。"""
         rt = runtime_with_bystander
         _, item_name = _give_victim_an_item(rt)
         _knock_out(rt, _VICTIM)
 
         rt.do_interact_with_player(
-            _ACTOR, _VICTIM, "loot_from_downed",
+            _ACTOR,
+            _VICTIM,
+            "loot_from_downed",
             interaction_parameters={"item": item_name},
         )
 
         observed = self._theft_observations(rt, _BYSTANDER)
         assert len(observed) == 1
-        assert observed[0].output.schedules_turn is True, (
-            "目撃しても turn が回らないと、反応する機会そのものが無い"
-        )
+        assert observed[0].output.schedules_turn is True, "目撃しても turn が回らないと、反応する機会そのものが無い"
 
-    def test_the_actor_does_not_observe_their_own_theft(
-        self, runtime_with_bystander
-    ) -> None:
+    def test_the_actor_does_not_observe_their_own_theft(self, runtime_with_bystander) -> None:
         """行為者本人には目撃観測を返さない (tool 結果で既に受け取っている)。"""
         rt = runtime_with_bystander
         _, item_name = _give_victim_an_item(rt)
         _knock_out(rt, _VICTIM)
 
         rt.do_interact_with_player(
-            _ACTOR, _VICTIM, "loot_from_downed",
+            _ACTOR,
+            _VICTIM,
+            "loot_from_downed",
             interaction_parameters={"item": item_name},
         )
 
         assert self._theft_observations(rt, _ACTOR) == []
 
-    def test_the_bystander_prose_names_both_sides(
-        self, runtime_with_bystander
-    ) -> None:
+    def test_the_bystander_prose_names_both_sides(self, runtime_with_bystander) -> None:
         """目撃 prose に、誰が誰に何をしたかが出る。"""
         rt = runtime_with_bystander
         _, item_name = _give_victim_an_item(rt)
         _knock_out(rt, _VICTIM)
 
         rt.do_interact_with_player(
-            _ACTOR, _VICTIM, "loot_from_downed",
+            _ACTOR,
+            _VICTIM,
+            "loot_from_downed",
             interaction_parameters={"item": item_name},
         )
 
@@ -443,7 +425,9 @@ class TestVictimLearnsOnWaking:
         _, item_name = _give_victim_an_item(runtime)
         _knock_out(runtime, _VICTIM)
         runtime.do_interact_with_player(
-            _ACTOR, _VICTIM, "loot_from_downed",
+            _ACTOR,
+            _VICTIM,
+            "loot_from_downed",
             interaction_parameters={"item": item_name},
         )
 
@@ -471,8 +455,5 @@ class TestVictimLearnsOnWaking:
 
         assert runtime._fallen_body_registry.find(_VICTIM) is None
         snapshot = runtime._state_builder.build_snapshot(int(_ACTOR))
-        victim = next(
-            entry for entry in snapshot.nearby_entities
-            if entry.entity_id == int(_VICTIM)
-        )
+        victim = next(entry for entry in snapshot.nearby_entities if entry.entity_id == int(_VICTIM))
         assert victim.is_down is False

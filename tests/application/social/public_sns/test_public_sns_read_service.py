@@ -1,4 +1,5 @@
 """公開SNSの祖先検査・有限取得・参照先全文を保証する。"""
+
 import base64
 import json
 from dataclasses import replace
@@ -30,10 +31,7 @@ NOW = datetime(2026, 1, 1)
 class ReadRepository:
     def __init__(self):
         self.namespace = uuid4().hex
-        self.users = {
-            i: UserAggregate.create_new_user(UserId(i), f"user{i}", f"人物{i}", "")
-            for i in range(1, 5)
-        }
+        self.users = {i: UserAggregate.create_new_user(UserId(i), f"user{i}", f"人物{i}", "") for i in range(1, 5)}
         self.records = {}
         self.notifications = []
         self.scans = []
@@ -56,10 +54,15 @@ class ReadRepository:
     def _scan(self, kind, before_id, limit, parent=None):
         self.scans.append((kind, before_id, limit))
         return sorted(
-            (r for r in self.records.values() if r.kind == kind
-             and (before_id is None or r.local_id < before_id)
-             and (parent is None or (r.parent_kind, r.parent_id) == parent)),
-            key=lambda r: r.local_id, reverse=True,
+            (
+                r
+                for r in self.records.values()
+                if r.kind == kind
+                and (before_id is None or r.local_id < before_id)
+                and (parent is None or (r.parent_kind, r.parent_id) == parent)
+            ),
+            key=lambda r: r.local_id,
+            reverse=True,
         )[:limit]
 
     def scan_posts(self, before_id, limit):
@@ -69,22 +72,46 @@ class ReadRepository:
         return self._scan("reply", before_id, limit, (parent_kind, parent_id))
 
     def scan_notifications(self, viewer_user_id, before_id, limit):
-        return sorted((n for n in self.notifications if n.user_id.value == viewer_user_id
-                       and (before_id is None or n.notification_id.value < before_id)),
-                      key=lambda n: n.notification_id.value, reverse=True)[:limit]
+        return sorted(
+            (
+                n
+                for n in self.notifications
+                if n.user_id.value == viewer_user_id and (before_id is None or n.notification_id.value < before_id)
+            ),
+            key=lambda n: n.notification_id.value,
+            reverse=True,
+        )[:limit]
 
     def post(self, local_id=1, author=2, visibility=PostVisibility.PUBLIC):
-        record = PublicSnsContentRecord("post", local_id, uuid4().hex, author, "本文" * 130,
-                                        visibility, False, NOW,
-                                        author_identity_token=self.users[author].identity_token)
+        record = PublicSnsContentRecord(
+            "post",
+            local_id,
+            uuid4().hex,
+            author,
+            "本文" * 130,
+            visibility,
+            False,
+            NOW,
+            author_identity_token=self.users[author].identity_token,
+        )
         self.records[("post", local_id)] = record
         return record
 
     def reply(self, local_id, parent, author=3):
-        record = PublicSnsContentRecord("reply", local_id, uuid4().hex, author, "返信" * 135,
-                                        PostVisibility.PUBLIC, False, NOW, parent.kind, parent.local_id,
-                                        author_identity_token=self.users[author].identity_token,
-                                        parent_identity_token=parent.identity_token)
+        record = PublicSnsContentRecord(
+            "reply",
+            local_id,
+            uuid4().hex,
+            author,
+            "返信" * 135,
+            PostVisibility.PUBLIC,
+            False,
+            NOW,
+            parent.kind,
+            parent.local_id,
+            author_identity_token=self.users[author].identity_token,
+            parent_identity_token=parent.identity_token,
+        )
         self.records[("reply", local_id)] = record
         return record
 
@@ -96,17 +123,39 @@ class ReadRepository:
     def target(self, record):
         return PublicSnsAccessPolicy(self).target_id(record)
 
-    def notification(self, kind=NotificationType.REPLY, *, related_post_id=None, related_reply_id=None,
-                     actor=3, viewer=1, expires_at=None):
-        value = Notification(NotificationId(len(self.notifications) + 1), UserId(viewer), kind,
-                             NotificationContent("保存時題名", "保存時の秘密", UserId(actor), "昔の作者名",
-                                                 related_post_id=PostId(related_post_id) if related_post_id else None,
-                                                 related_reply_id=ReplyId(related_reply_id) if related_reply_id else None,
-                                                 content_text="保存時の秘密",
-                                                 actor_identity_token=self.users[actor].identity_token,
-                                                 related_target_id=self.target(self.records[("reply", related_reply_id)]) if related_reply_id else
-                                                     self.target(self.records[("post", related_post_id)]) if related_post_id else None),
-                             NOW, expires_at=expires_at, recipient_identity_token=self.users[viewer].identity_token)
+    def notification(
+        self,
+        kind=NotificationType.REPLY,
+        *,
+        related_post_id=None,
+        related_reply_id=None,
+        actor=3,
+        viewer=1,
+        expires_at=None,
+    ):
+        value = Notification(
+            NotificationId(len(self.notifications) + 1),
+            UserId(viewer),
+            kind,
+            NotificationContent(
+                "保存時題名",
+                "保存時の秘密",
+                UserId(actor),
+                "昔の作者名",
+                related_post_id=PostId(related_post_id) if related_post_id else None,
+                related_reply_id=ReplyId(related_reply_id) if related_reply_id else None,
+                content_text="保存時の秘密",
+                actor_identity_token=self.users[actor].identity_token,
+                related_target_id=self.target(self.records[("reply", related_reply_id)])
+                if related_reply_id
+                else self.target(self.records[("post", related_post_id)])
+                if related_post_id
+                else None,
+            ),
+            NOW,
+            expires_at=expires_at,
+            recipient_identity_token=self.users[viewer].identity_token,
+        )
         self.notifications.append(value)
         return value
 
@@ -301,13 +350,18 @@ def test_notice_disappears_after_ancestor_becomes_private(source, reader):
     assert reader.read_notifications(1).items == ()
 
 
-@pytest.mark.parametrize("reason", ["actor_block", "viewer_block", "missing_actor", "missing_target", "expired", "wrong_owner"])
+@pytest.mark.parametrize(
+    "reason", ["actor_block", "viewer_block", "missing_actor", "missing_target", "expired", "wrong_owner"]
+)
 def test_unsafe_notifications_are_omitted(source, reader, reason):
     """期限・所有者・双方のブロック・対象欠落の通知を本文も件数も含めず除外する。"""
     root = source.post()
     source.reply(1, root)
-    notice = source.notification(related_reply_id=1, viewer=2 if reason == "wrong_owner" else 1,
-                                expires_at=NOW - timedelta(seconds=1) if reason == "expired" else None)
+    notice = source.notification(
+        related_reply_id=1,
+        viewer=2 if reason == "wrong_owner" else 1,
+        expires_at=NOW - timedelta(seconds=1) if reason == "expired" else None,
+    )
     if reason == "actor_block":
         source.users[3].block(UserId(1))
     elif reason == "viewer_block":
@@ -348,10 +402,15 @@ def test_reused_content_integer_does_not_rebind_old_notice(source, reader):
 
 def test_legacy_notification_without_immutable_identity_is_not_exposed(source, reader):
     """旧整数だけの通知は旧画面へ残し、新しい公開入口からは除外する。"""
-    source.notifications.append(Notification(
-        NotificationId(1), UserId(1), NotificationType.FOLLOW,
-        NotificationContent.create_follow_notification(UserId(2), "人物2"), NOW,
-    ))
+    source.notifications.append(
+        Notification(
+            NotificationId(1),
+            UserId(1),
+            NotificationType.FOLLOW,
+            NotificationContent.create_follow_notification(UserId(2), "人物2"),
+            NOW,
+        )
+    )
     assert reader.read_notifications(1).items == ()
 
 

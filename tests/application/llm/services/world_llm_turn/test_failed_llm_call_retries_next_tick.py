@@ -22,9 +22,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[5] / "data" / "scenarios" / "mine_village_v1.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[5] / "data" / "scenarios" / "mine_village_v1.json"
 _HARU = PlayerId(1)
 
 _TIMEOUT = "timeout"
@@ -43,9 +41,7 @@ class _ScriptedClient:
         self.calls += 1
         step = self._script.pop(0) if self._script else _WAIT
         if step == _TIMEOUT:
-            raise litellm.Timeout(
-                message="Request timed out", model="stub", llm_provider="openrouter"
-            )
+            raise litellm.Timeout(message="Request timed out", model="stub", llm_provider="openrouter")
         if step == _NO_TOOL:
             return None
         return {"name": "wait", "arguments": {"inner_thought": "様子を見る"}}
@@ -146,9 +142,11 @@ class TestConsecutiveFailuresStopAtTheLimit:
 
         _run_ticks(wiring, 5)
 
-        assert [
-            (e["consecutive_failures"], e["rescheduled"]) for e in _retry_events(recorder)
-        ] == [(1, True), (2, True), (3, False)]
+        assert [(e["consecutive_failures"], e["rescheduled"]) for e in _retry_events(recorder)] == [
+            (1, True),
+            (2, True),
+            (3, False),
+        ]
 
     def test_success_between_failures_resets_the_streak(self) -> None:
         """失敗・失敗・成功・失敗・失敗の順では、成功で連続が切れるので、最後の失敗も次の wave に回る。"""

@@ -36,9 +36,7 @@ def _build_intent(
         arguments=arguments if arguments is not None else {"destination": "spot_2"},
         phase=phase,
         submitted_at_tick=WorldTick(submitted_tick),
-        complete_at_tick=WorldTick(
-            complete_tick if complete_tick is not None else submitted_tick
-        ),
+        complete_at_tick=WorldTick(complete_tick if complete_tick is not None else submitted_tick),
         priority=IntentPriority(priority),
         target_descriptor=target_descriptor,
     )

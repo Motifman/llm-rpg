@@ -1,4 +1,5 @@
 """公開SNSの投稿・親更新・通知が両保存方式で一度に確定することを検査する。"""
+
 import sqlite3
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -51,23 +52,50 @@ def h(request, tmp_path):
     connection = None
     if request.param == "memory":
         store = InMemoryDataStore()
-        store.sns_users.clear(); store.sns_username_to_user_id.clear()
-        store.posts.clear(); store.replies.clear(); store.sns_notifications.clear()
+        store.sns_users.clear()
+        store.sns_username_to_user_id.clear()
+        store.posts.clear()
+        store.replies.clear()
+        store.sns_notifications.clear()
         store.next_post_id = store.next_reply_id = store.next_sns_notification_id = 1
-        repos = [cls(store) for cls in (InMemoryPostRepository, InMemoryReplyRepository, InMemorySnsUserRepository, InMemorySnsNotificationRepository)]
+        repos = [
+            cls(store)
+            for cls in (
+                InMemoryPostRepository,
+                InMemoryReplyRepository,
+                InMemorySnsUserRepository,
+                InMemorySnsNotificationRepository,
+            )
+        ]
         read = InMemoryPublicSnsReadRepository(store)
         create = lambda deliver: create_in_memory_public_sns_command_service(store, deliver_notification=deliver)
     else:
         path = tmp_path / "game.sqlite3"
         connection = sqlite3.connect(path)
-        repos = [cls.for_standalone_connection(connection) for cls in (SqlitePostRepository, SqliteReplyRepository, SqliteSnsUserRepository, SqliteSnsNotificationRepository)]
+        repos = [
+            cls.for_standalone_connection(connection)
+            for cls in (
+                SqlitePostRepository,
+                SqliteReplyRepository,
+                SqliteSnsUserRepository,
+                SqliteSnsNotificationRepository,
+            )
+        ]
         read = SqlitePublicSnsReadRepository(connection)
         create = lambda deliver: create_sqlite_public_sns_command_service(path, deliver_notification=deliver)
     posts, replies, users, notifications = repos
     for number in (1, 2, 3, 4):
         users.save(UserAggregate.create_new_user(UserId(number), f"user{number}", f"User{number}", ""))
-    result = SimpleNamespace(posts=posts, replies=replies, users=users, notifications=notifications,
-                             read=read, create=create, deliveries=deliveries, connection=connection)
+    result = SimpleNamespace(
+        posts=posts,
+        replies=replies,
+        users=users,
+        notifications=notifications,
+        read=read,
+        create=create,
+        deliveries=deliveries,
+        connection=connection,
+    )
     result.service = create(lambda *args: deliveries.append(args))
     yield result
     if connection is not None:
@@ -93,7 +121,9 @@ def test_public_post_reply_nested_reply_and_notifications_are_committed(h):
     assert get_reply(h, reply).get_reply_count() == 1
     assert get_reply(h, nested).content.visibility is PostVisibility.PUBLIC
     assert [(recipient, dto.content, dto.target_id) for recipient, dto, _ in h.deliveries] == [
-        (1, "返信全文", reply.target_id), (2, "孫返信全文", nested.target_id)]
+        (1, "返信全文", reply.target_id),
+        (2, "孫返信全文", nested.target_id),
+    ]
     assert len(h.notifications.find_all()) == 2
     assert all(n.observation_delivered for n in h.notifications.find_all())
 
@@ -127,7 +157,9 @@ def test_blocked_ancestor_rejects_nested_reply_in_both_directions(h, blocker, bl
     """直接の親と交流できても、祖先の作者との双方向ブロックがあれば返信できない。"""
     post = h.service.publish(1, "根")
     reply = h.service.publish(2, "親", post.target_id)
-    user = h.users.find_by_id(UserId(blocker)); user.block(UserId(blocked)); h.users.save(user)
+    user = h.users.find_by_id(UserId(blocker))
+    user.block(UserId(blocked))
+    h.users.save(user)
     with pytest.raises(PublicSnsUnavailableError):
         h.service.publish(3, "漏らさない", reply.target_id)
     assert get_reply(h, reply).get_reply_count() == 0
@@ -137,7 +169,9 @@ def test_mention_recipient_must_see_every_ancestor(h):
     """投稿者には見える返信でもメンション先が祖先にブロックされていれば通知本文を漏らさない。"""
     post = h.service.publish(1, "根")
     reply = h.service.publish(2, "親", post.target_id)
-    user = h.users.find_by_id(UserId(1)); user.block(UserId(4)); h.users.save(user)
+    user = h.users.find_by_id(UserId(1))
+    user.block(UserId(4))
+    h.users.save(user)
     h.service.publish(3, "@user4 宛先が読めない返信", reply.target_id)
     assert all(recipient != 4 for recipient, _, _ in h.deliveries)
     assert not h.notifications.find_by_user_id(UserId(4))
@@ -148,10 +182,12 @@ def test_sync_failure_rolls_back_reply_parent_count_notification_and_delivery(h)
     post = h.service.publish(1, "根")
     dispatcher = h.service._scope_factory._sync_dispatcher
     original = dispatcher.dispatch
+
     def fail_after_notice(event, context):
         original(event, context)
         if isinstance(event, PublicSnsNotificationReadyEvent):
             raise RuntimeError("通知後の失敗")
+
     dispatcher.dispatch = fail_after_notice
     with pytest.raises(RuntimeError, match="通知後"):
         h.service.publish(2, "応答", post.target_id)
@@ -166,11 +202,16 @@ def test_commit_failure_never_delivers_and_rolls_back_all_state(h):
     post = h.service.publish(1, "根")
     factory = h.service._scope_factory._transaction_factory
     original = factory.create
+
     def create_failed():
         transaction = original()
-        def fail(): raise RuntimeError("commit失敗")
+
+        def fail():
+            raise RuntimeError("commit失敗")
+
         transaction.commit = fail
         return transaction
+
     factory.create = create_failed
     with pytest.raises(RuntimeError, match="commit失敗"):
         h.service.publish(2, "応答", post.target_id)
@@ -184,11 +225,13 @@ def test_callback_sees_committed_reply_and_notice(h):
     """外部配送を呼ぶ時点では返信と親更新と永続通知がすべて読める。"""
     post = h.service.publish(1, "根")
     checked = []
+
     def deliver(recipient, dto, provenance):
         assert get_post(h, post).get_reply_count() == 1
         assert h.read.find_content("reply", dto.target_id.rsplit(":", 1)[1]) is not None
         assert len(h.notifications.find_all()) == 1
         checked.append(dto)
+
     h.create(deliver).publish(2, "確定後", post.target_id)
     assert len(checked) == 1
 
@@ -197,7 +240,10 @@ def test_delivery_failure_is_committed_and_retries_with_original_provenance(h):
     """配送失敗を投稿失敗と誤認させず、再作成したサービスでも保存済み出典で再送できる。"""
     post = h.service.publish(1, "根")
     provenance = ExecutionProvenance("request-one", 2, 9, "call-one", "llm-one")
-    def fail(*args): raise RuntimeError("配送先停止")
+
+    def fail(*args):
+        raise RuntimeError("配送先停止")
+
     with execution_provenance_scope(provenance):
         with pytest.raises(CommandPostCommitException) as error:
             h.create(fail).publish(2, "保留中の全文", post.target_id)
@@ -216,7 +262,9 @@ def test_visibility_is_rechecked_before_delayed_delivery(h):
     post = h.service.publish(1, "根")
     no_delivery = h.create(None)
     no_delivery.publish(2, "後から秘密", post.target_id)
-    aggregate = get_post(h, post); aggregate._content = PostContent.create("秘密", PostVisibility.PRIVATE); h.posts.save(aggregate)
+    aggregate = get_post(h, post)
+    aggregate._content = PostContent.create("秘密", PostVisibility.PRIVATE)
+    h.posts.save(aggregate)
     assert h.service.retry_pending_notifications() == 0
     assert not h.deliveries
 
@@ -224,27 +272,38 @@ def test_visibility_is_rechecked_before_delayed_delivery(h):
 def test_replayed_event_cannot_duplicate_notification(h):
     """同じ受信イベントを別の確定境界へ再投入しても通知は一件だけである。"""
     post = h.service.publish(1, "根")
-    actor = h.users.find_by_id(UserId(2)); recipient = h.users.find_by_id(UserId(1))
-    event = PublicSnsActivityEvent.create(aggregate_id=post.target_id, aggregate_type="PublicSnsActivity",
-        actor_user_id=2, actor_identity_token=actor.identity_token, target_id=post.target_id,
-        recipients=((1, recipient.identity_token, "like"),))
-    h.service.record_activity(event); h.service.record_activity(event)
+    actor = h.users.find_by_id(UserId(2))
+    recipient = h.users.find_by_id(UserId(1))
+    event = PublicSnsActivityEvent.create(
+        aggregate_id=post.target_id,
+        aggregate_type="PublicSnsActivity",
+        actor_user_id=2,
+        actor_identity_token=actor.identity_token,
+        target_id=post.target_id,
+        recipients=((1, recipient.identity_token, "like"),),
+    )
+    h.service.record_activity(event)
+    h.service.record_activity(event)
     assert len(h.notifications.find_all()) == len(h.deliveries) == 1
 
 
 def test_domain_follow_and_like_events_create_incoming_notifications(h):
     """実際の集約から発生したフォローといいねを既存イベント型のまま受信できる。"""
     post = h.service.publish(1, "根")
-    actor = h.users.find_by_id(UserId(2)); recipient = h.users.find_by_id(UserId(1))
+    actor = h.users.find_by_id(UserId(2))
+    recipient = h.users.find_by_id(UserId(1))
     actor.follow(recipient.user_id, followee_identity_token=recipient.identity_token)
     follow = next(e for e in actor.get_events() if isinstance(e, SnsUserFollowedEvent))
     aggregate = get_post(h, post)
     aggregate.like_post(actor.user_id, liker_identity_token=actor.identity_token)
     like = next(e for e in aggregate.get_events() if isinstance(e, SnsContentLikedEvent))
-    h.service.record_event(follow); h.service.record_event(like); h.service.record_event(like)
+    h.service.record_event(follow)
+    h.service.record_event(like)
+    h.service.record_event(like)
     assert [dto.kind for _, dto, _ in h.deliveries] == ["follow", "like"]
     assert h.deliveries[1][1].target_id == post.target_id
-    aggregate.clear_events(); aggregate.like_post(actor.user_id, liker_identity_token=actor.identity_token)
+    aggregate.clear_events()
+    aggregate.like_post(actor.user_id, liker_identity_token=actor.identity_token)
     h.service.record_event(aggregate.get_events()[0])
     assert len(h.deliveries) == 2
 
@@ -253,12 +312,20 @@ def test_domain_follow_and_like_events_create_incoming_notifications(h):
 def test_actual_domain_event_cannot_rebind_reused_identifiers(h, replacement):
     """発生後に人または投稿が同じ整数IDで置き換わっても旧いいねを新しい対象へ通知しない。"""
     post = h.service.publish(1, "根")
-    actor = h.users.find_by_id(UserId(2)); aggregate = get_post(h, post)
+    actor = h.users.find_by_id(UserId(2))
+    aggregate = get_post(h, post)
     aggregate.like_post(actor.user_id, liker_identity_token=actor.identity_token)
     event = next(e for e in aggregate.get_events() if isinstance(e, SnsContentLikedEvent))
     if replacement == "target":
         author = h.users.find_by_id(UserId(1))
-        h.posts.save(PostAggregate.create(aggregate.post_id, author.user_id, PostContent.create("別物"), author_identity_token=author.identity_token))
+        h.posts.save(
+            PostAggregate.create(
+                aggregate.post_id,
+                author.user_id,
+                PostContent.create("別物"),
+                author_identity_token=author.identity_token,
+            )
+        )
     else:
         number = 2 if replacement == "actor" else 1
         h.users.save(UserAggregate.create_new_user(UserId(number), f"other{number}", f"Other{number}", ""))
@@ -271,14 +338,17 @@ def test_closed_scoped_repositories_reject_reads_and_writes(h):
     """閉じた確定境界のリポジトリは採番も保存も読取も許さない。"""
     with h.service._scope_factory.create() as context:
         repos = context.repositories
-    with pytest.raises(CommandScopeStateException): repos.posts.generate_post_id()
-    with pytest.raises(CommandScopeStateException): repos.read.find_user(1)
+    with pytest.raises(CommandScopeStateException):
+        repos.posts.generate_post_id()
+    with pytest.raises(CommandScopeStateException):
+        repos.read.find_user(1)
 
 
 @pytest.mark.parametrize("body", ["", "   ", "x" * 281, 3, " ".join(f"#tag{i}" for i in range(11))])
 def test_invalid_content_does_not_create_state(h, body):
     """空や長過ぎる本文、文字列でない入力は確定境界を開かずに拒否する。"""
-    with pytest.raises(PublicSnsInvalidRequestError): h.service.publish(1, body)
+    with pytest.raises(PublicSnsInvalidRequestError):
+        h.service.publish(1, body)
     assert not h.posts.find_all()
 
 
@@ -296,15 +366,17 @@ def test_duplicate_display_names_do_not_misdirect_mentions(h):
 
 def test_tokenless_legacy_incoming_event_is_not_bound_at_delivery_time(h):
     """古い通知元が整数IDしか持たない場合、今の人物へ結び直して本文を漏らさない。"""
-    event = SnsUserFollowedEvent.create(aggregate_id=2, aggregate_type="UserAggregate",
-        follower_user_id=UserId(2), followee_user_id=UserId(1))
+    event = SnsUserFollowedEvent.create(
+        aggregate_id=2, aggregate_type="UserAggregate", follower_user_id=UserId(2), followee_user_id=UserId(1)
+    )
     h.service.record_event(event)
     assert not h.notifications.find_all()
 
 
 def test_unknown_source_provenance_is_not_filled_from_later_request(h):
     """出典なしで生まれたイベントを別要求中に受け取っても、その要求の手番を借りない。"""
-    actor = h.users.find_by_id(UserId(2)); recipient = h.users.find_by_id(UserId(1))
+    actor = h.users.find_by_id(UserId(2))
+    recipient = h.users.find_by_id(UserId(1))
     actor.follow(recipient.user_id, followee_identity_token=recipient.identity_token)
     event = next(e for e in actor.get_events() if isinstance(e, SnsUserFollowedEvent))
     with execution_provenance_scope(ExecutionProvenance("unrelated", 3, 91)):
@@ -315,20 +387,24 @@ def test_unknown_source_provenance_is_not_filled_from_later_request(h):
 def test_reply_at_ancestor_limit_is_rejected_before_creating_unreadable_child(h, monkeypatch):
     """読取上限の深さに達した親へ返信して、作成直後から見えない投稿を残さない。"""
     import ai_rpg_world.application.social.public_sns.command_service as module
+
     monkeypatch.setattr(module, "MAX_PUBLIC_SNS_ANCESTORS", 2)
     post = h.service.publish(1, "根")
     parent = h.service.publish(1, "親", post.target_id)
-    with pytest.raises(PublicSnsUnavailableError): h.service.publish(1, "上限外", parent.target_id)
+    with pytest.raises(PublicSnsUnavailableError):
+        h.service.publish(1, "上限外", parent.target_id)
     assert get_reply(h, parent).get_reply_count() == 0
 
 
 def test_incoming_like_of_private_content_never_creates_notice(h):
     """実際に発生したいいねでも対象が非公開になれば通知を保存も配送もしない。"""
     post = h.service.publish(1, "根")
-    actor = h.users.find_by_id(UserId(2)); aggregate = get_post(h, post)
+    actor = h.users.find_by_id(UserId(2))
+    aggregate = get_post(h, post)
     aggregate.like_post(actor.user_id, liker_identity_token=actor.identity_token)
     event = next(e for e in aggregate.get_events() if isinstance(e, SnsContentLikedEvent))
-    aggregate._content = PostContent.create("秘密", PostVisibility.PRIVATE); h.posts.save(aggregate)
+    aggregate._content = PostContent.create("秘密", PostVisibility.PRIVATE)
+    h.posts.save(aggregate)
     h.service.record_event(event)
     assert not h.notifications.find_all()
 
@@ -336,9 +412,11 @@ def test_incoming_like_of_private_content_never_creates_notice(h):
 def test_foreign_namespace_target_does_not_create_a_reply(h):
     """同じ本文の不変IDでも保存領域の名前空間が違えば別世界として拒否する。"""
     from uuid import uuid4
+
     post = h.service.publish(1, "根")
     foreign = post.target_id.replace(h.read.namespace, uuid4().hex)
-    with pytest.raises(PublicSnsUnavailableError): h.service.publish(2, "別世界", foreign)
+    with pytest.raises(PublicSnsUnavailableError):
+        h.service.publish(2, "別世界", foreign)
     assert not h.replies.find_all()
 
 
@@ -349,8 +427,12 @@ def test_existing_command_emitters_supply_identity_and_source_metadata():
     from ai_rpg_world.application.social.contracts.commands import CreatePostCommand, FollowUserCommand, LikePostCommand
     from ai_rpg_world.application.social.services.post_command_service import PostCommandService
     from ai_rpg_world.application.social.services.user_command_service import UserCommandService
+
     store = InMemoryDataStore()
-    store.sns_users.clear(); store.sns_username_to_user_id.clear(); store.posts.clear(); store.replies.clear()
+    store.sns_users.clear()
+    store.sns_username_to_user_id.clear()
+    store.posts.clear()
+    store.replies.clear()
     unit_of_work = publisher = CommandScopeTestStack(store)
     users = InMemorySnsUserRepository(store, unit_of_work)
     posts = InMemoryPostRepository(store, unit_of_work)
@@ -358,17 +440,24 @@ def test_existing_command_emitters_supply_identity_and_source_metadata():
         users.save(UserAggregate.create_new_user(UserId(number), f"user{number}", f"User{number}", ""))
     post_service = PostCommandService(posts, users, publisher, unit_of_work)
     user_service = UserCommandService(users, publisher, unit_of_work)
-    result = post_service.create_post(CreatePostCommand(user_id=1, content="旧入口からの公開投稿", visibility=PostVisibility.PUBLIC))
+    result = post_service.create_post(
+        CreatePostCommand(user_id=1, content="旧入口からの公開投稿", visibility=PostVisibility.PUBLIC)
+    )
     post_id = result.data["post_id"]
     provenance = ExecutionProvenance("legacy-request", 2, 3)
     with execution_provenance_scope(provenance):
         post_service.like_post(LikePostCommand(user_id=2, post_id=post_id))
         user_service.follow_user(FollowUserCommand(follower_user_id=2, followee_user_id=1))
-    emitted = [e for e in publisher.get_published_events() if isinstance(e, (SnsContentLikedEvent, SnsUserFollowedEvent))]
+    emitted = [
+        e for e in publisher.get_published_events() if isinstance(e, (SnsContentLikedEvent, SnsUserFollowedEvent))
+    ]
     assert len(emitted) == 2
     delivered = []
-    current = create_in_memory_public_sns_command_service(store, deliver_notification=lambda *args: delivered.append(args))
-    for event in emitted: current.record_event(event)
+    current = create_in_memory_public_sns_command_service(
+        store, deliver_notification=lambda *args: delivered.append(args)
+    )
+    for event in emitted:
+        current.record_event(event)
     assert [dto.kind for _, dto, _ in delivered] == ["like", "follow"]
     assert all(source == provenance for _, _, source in delivered)
 
@@ -401,7 +490,10 @@ def test_retry_delivery_failure_does_not_block_other_recipients_or_duplicate_suc
     assert str(error.value.failures[0][1]) == "配送先停止"
     assert error.value.__cause__ is error.value.failures[0][1]
     assert [recipient for recipient, _ in delivered] == [4]
-    assert sorted((n.user_id.value, n.observation_delivered) for n in h.notifications.find_all()) == [(1, False), (4, True)]
+    assert sorted((n.user_id.value, n.observation_delivered) for n in h.notifications.find_all()) == [
+        (1, False),
+        (4, True),
+    ]
     unavailable.clear()
     assert service.retry_pending_notifications() == 1
     assert service.retry_pending_notifications() == 0
@@ -428,7 +520,10 @@ def test_initial_handoff_attempts_later_recipients_before_reporting_committed_fa
     assert len(error.value.handoff_error.failures) == 1
     assert len(delivered) == 1
     assert len(h.posts.find_all()) == 1
-    assert sorted((n.user_id.value, n.observation_delivered) for n in h.notifications.find_all()) == [(1, False), (4, True)]
+    assert sorted((n.user_id.value, n.observation_delivered) for n in h.notifications.find_all()) == [
+        (1, False),
+        (4, True),
+    ]
     unavailable.clear()
     assert service.retry_pending_notifications() == 1
     assert service.retry_pending_notifications() == 0

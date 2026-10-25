@@ -72,9 +72,7 @@ class InMemoryEpisodeRepository(EpisodeRepository):
         if known is None:
             raise EpisodeNotFoundException(f"no episode {episode.episode_id!r} for {being_id}")
         if not episode.follows(known):
-            raise EpisodeConflictException(
-                f"{episode.episode_id!r} is not a later version of the saved episode"
-            )
+            raise EpisodeConflictException(f"{episode.episode_id!r} is not a later version of the saved episode")
 
         def store() -> None:
             book[episode.episode_id] = _copy(episode)

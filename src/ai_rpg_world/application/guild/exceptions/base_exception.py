@@ -2,8 +2,6 @@
 ギルドアプリケーション層の基底例外定義
 """
 
-
-
 from typing import Any
 
 

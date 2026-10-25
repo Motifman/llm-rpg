@@ -56,11 +56,7 @@ def _create_panel_session(
         characters_path=tmp_path / "characters.json",
     )
     char = mgr.create_character(CharacterCreateRequest(name="failure msg テスト"))
-    summary = mgr.create_session(
-        SessionCreateRequest(
-            world_id="control_panel_toggle", character_ids=[char.id]
-        )
-    )
+    summary = mgr.create_session(SessionCreateRequest(world_id="control_panel_toggle", character_ids=[char.id]))
     state = mgr._sessions[summary.session_id]
     state.llm_wiring.llm_client = stub
     return state

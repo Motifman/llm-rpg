@@ -33,7 +33,9 @@ class _Failing(EpisodeWritingCompletion):
         raise RuntimeError("api down")
 
 
-def _item(about: str = "金庫を開けた", recall_when: str = "金庫の話が出たとき", body: str = "紙の番号で金庫が開いた。") -> dict[str, str]:
+def _item(
+    about: str = "金庫を開けた", recall_when: str = "金庫の話が出たとき", body: str = "紙の番号で金庫が開いた。"
+) -> dict[str, str]:
     return {"about": about, "recall_when": recall_when, "body": body}
 
 
@@ -97,8 +99,14 @@ class TestLlmEpisodeWriterContents:
 
         assert contents == EpisodeContents(
             contents=(
-                EpisodeContent(index=EpisodeIndex(summary="棚の紙", recall_when="金庫の話が出たとき"), body="紙の番号で金庫が開いた。"),
-                EpisodeContent(index=EpisodeIndex(summary="金庫が開いた", recall_when="金庫の話が出たとき"), body="紙の番号で金庫が開いた。"),
+                EpisodeContent(
+                    index=EpisodeIndex(summary="棚の紙", recall_when="金庫の話が出たとき"),
+                    body="紙の番号で金庫が開いた。",
+                ),
+                EpisodeContent(
+                    index=EpisodeIndex(summary="金庫が開いた", recall_when="金庫の話が出たとき"),
+                    body="紙の番号で金庫が開いた。",
+                ),
             ),
             dropped_count=0,
         )
@@ -114,7 +122,10 @@ class TestLlmEpisodeWriterContents:
         contents = _write(_Completion({"episodes": items}))
 
         assert MAX_EPISODES_PER_WRITING == 3
-        assert ([d.index.summary for d in contents.contents], contents.dropped_count) == (["記憶0", "記憶1", "記憶2"], 2)
+        assert ([d.index.summary for d in contents.contents], contents.dropped_count) == (
+            ["記憶0", "記憶1", "記憶2"],
+            2,
+        )
 
     def test_surrounding_whitespace_is_stripped(self) -> None:
         """各文の前後の空白は落とす。"""

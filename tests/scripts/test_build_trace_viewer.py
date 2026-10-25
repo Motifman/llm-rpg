@@ -242,8 +242,14 @@ class TestGroupEventsByTick:
         """同 tick / 同 prose / 同 structured.type の observation は 1 件に。
         (4 player broadcast で同じ prose が 4 連続並ぶのを抑制)"""
         events = [
-            TraceEvent(seq=i, timestamp="t", kind="observation", tick=0, player_id=i,
-                       payload={"prose": "雨が降ってきた", "structured": {"type": "weather_changed"}})
+            TraceEvent(
+                seq=i,
+                timestamp="t",
+                kind="observation",
+                tick=0,
+                player_id=i,
+                payload={"prose": "雨が降ってきた", "structured": {"type": "weather_changed"}},
+            )
             for i in range(1, 5)
         ]
         grouped = group_events_by_tick(events)
@@ -253,10 +259,22 @@ class TestGroupEventsByTick:
     def test_different_prose_observation_remains(self) -> None:
         """prose が違えば別 event として両方残す。"""
         events = [
-            TraceEvent(seq=1, timestamp="t", kind="observation", tick=0, player_id=1,
-                       payload={"prose": "A が起きた", "structured": {"type": "x"}}),
-            TraceEvent(seq=2, timestamp="t", kind="observation", tick=0, player_id=2,
-                       payload={"prose": "B が起きた", "structured": {"type": "x"}}),
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind="observation",
+                tick=0,
+                player_id=1,
+                payload={"prose": "A が起きた", "structured": {"type": "x"}},
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind="observation",
+                tick=0,
+                player_id=2,
+                payload={"prose": "B が起きた", "structured": {"type": "x"}},
+            ),
         ]
         grouped = group_events_by_tick(events)
         obs = [e for e in grouped[0] if e.kind == "observation"]
@@ -891,7 +909,7 @@ class TestRenderViewerHtml:
                 tick=1,
                 player_id=1,
                 payload={"tool": "examine", "arguments": {"target": "浜"}},
-            )
+            ),
         ]
         out = render_viewer_html(
             title="x",
@@ -933,7 +951,7 @@ class TestRenderViewerHtml:
         assert 'id="trace-nav-section"' not in out
         assert 'id="moment-rail"' not in out
         assert 'id="heatmap"' not in out
-        assert 'memo-panel' not in out
+        assert "memo-panel" not in out
 
 
 class TestMainCli:
@@ -968,9 +986,7 @@ class TestMainCli:
             encoding="utf-8",
         )
 
-        with patch.object(
-            build_trace_viewer, "fetch_cytoscape", return_value=_fake_asset()
-        ):
+        with patch.object(build_trace_viewer, "fetch_cytoscape", return_value=_fake_asset()):
             rc = build_trace_viewer.main([str(tmp_path)])
 
         assert rc == 0
@@ -998,9 +1014,7 @@ class TestPositionTimeline:
     def test_returns_tick(self) -> None:
         """各 position_change tick のスナップショットが順に積まれる。"""
         events = _sample_events()
-        timeline = build_position_timeline(
-            events, spot_name_to_id={"制御室": "s1", "廊下": "s2", "金庫室": "s3"}
-        )
+        timeline = build_position_timeline(events, spot_name_to_id={"制御室": "s1", "廊下": "s2", "金庫室": "s3"})
         # tick 0: カイト=s1, リン=s2 (初期配置)
         assert timeline[0] == {1: "s1", 2: "s2"}
         # tick 2: リンが移動 → カイトはまだ s1, リン=s3
@@ -1171,9 +1185,7 @@ class TestSpeechTimeline:
 
     def test_finds_inner_thought_kind_thought(self) -> None:
         """arguments.inner_thought は kind="thought" として別ものとして拾う。"""
-        events = [
-            self._evt(1, 5, 1, "examine", {"target": "x", "inner_thought": "考えごと"})
-        ]
+        events = [self._evt(1, 5, 1, "examine", {"target": "x", "inner_thought": "考えごと"})]
         tl = build_speech_timeline(events)
         # speech は無く thought のみ
         kinds = [b["kind"] for b in tl[5]]
@@ -1182,9 +1194,7 @@ class TestSpeechTimeline:
 
     def test_finds_say_inner_thought_action(self) -> None:
         """同一 action に message と inner_thought 両方あれば bubble 2 件。"""
-        events = [
-            self._evt(1, 3, 1, "speech_say", {"message": "公開", "inner_thought": "心声"})
-        ]
+        events = [self._evt(1, 3, 1, "speech_say", {"message": "公開", "inner_thought": "心声"})]
         tl = build_speech_timeline(events)
         kinds = sorted([b["kind"] for b in tl[3]])
         assert kinds == ["speech", "thought"]

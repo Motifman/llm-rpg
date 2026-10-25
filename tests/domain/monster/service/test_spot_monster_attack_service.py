@@ -69,9 +69,7 @@ class TestNotHostile:
         monster = _make_monster(faction=MonsterFactionEnum.NEUTRAL)
         player = _make_player()
 
-        outcome = svc.try_attack(
-            monster, player, LightingEnum.BRIGHT, WorldTick(10)
-        )
+        outcome = svc.try_attack(monster, player, LightingEnum.BRIGHT, WorldTick(10))
 
         assert outcome.executed is False
         assert outcome.reason == "not_hostile"
@@ -88,9 +86,7 @@ class TestCannotAttack:
         monster = _make_monster(can_attack=False)
         player = _make_player()
 
-        outcome = svc.try_attack(
-            monster, player, LightingEnum.BRIGHT, WorldTick(10)
-        )
+        outcome = svc.try_attack(monster, player, LightingEnum.BRIGHT, WorldTick(10))
 
         assert outcome.executed is False
         assert outcome.reason == "cannot_attack"
@@ -107,9 +103,7 @@ class TestVisibility:
         monster = _make_monster(has_dark_vision=False)
         player = _make_player()
 
-        outcome = svc.try_attack(
-            monster, player, LightingEnum.DARK, WorldTick(10)
-        )
+        outcome = svc.try_attack(monster, player, LightingEnum.DARK, WorldTick(10))
 
         assert outcome.executed is False
         assert outcome.reason == "not_visible"
@@ -122,9 +116,7 @@ class TestVisibility:
         monster = _make_monster(has_dark_vision=True, attack=12)
         player = _make_player()
 
-        outcome = svc.try_attack(
-            monster, player, LightingEnum.DARK, WorldTick(10)
-        )
+        outcome = svc.try_attack(monster, player, LightingEnum.DARK, WorldTick(10))
 
         assert outcome.executed is True
         assert outcome.damage == 12
@@ -139,9 +131,7 @@ class TestTargetAlreadyDown:
         monster = _make_monster()
         player = _make_player(is_down_before=True)
 
-        outcome = svc.try_attack(
-            monster, player, LightingEnum.BRIGHT, WorldTick(10)
-        )
+        outcome = svc.try_attack(monster, player, LightingEnum.BRIGHT, WorldTick(10))
 
         assert outcome.executed is False
         assert outcome.reason == "target_down"
@@ -158,9 +148,7 @@ class TestSuccessfulAttack:
         monster = _make_monster(attack=8)
         player = _make_player()
 
-        outcome = svc.try_attack(
-            monster, player, LightingEnum.BRIGHT, WorldTick(20)
-        )
+        outcome = svc.try_attack(monster, player, LightingEnum.BRIGHT, WorldTick(20))
 
         assert outcome.executed is True
         assert outcome.damage == 8
@@ -174,9 +162,7 @@ class TestSuccessfulAttack:
         monster = _make_monster(attack=0)
         player = _make_player()
 
-        outcome = svc.try_attack(
-            monster, player, LightingEnum.BRIGHT, WorldTick(10)
-        )
+        outcome = svc.try_attack(monster, player, LightingEnum.BRIGHT, WorldTick(10))
 
         assert outcome.executed is False
         assert outcome.reason == "zero_damage"
@@ -190,9 +176,7 @@ class TestSuccessfulAttack:
         # apply_damage 後にダウンする player
         player = _make_player(is_down_before=False, is_down_after=True)
 
-        outcome = svc.try_attack(
-            monster, player, LightingEnum.BRIGHT, WorldTick(20)
-        )
+        outcome = svc.try_attack(monster, player, LightingEnum.BRIGHT, WorldTick(20))
 
         assert outcome.executed is True
         assert outcome.target_incapacitated is True

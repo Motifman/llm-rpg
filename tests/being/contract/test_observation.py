@@ -70,12 +70,8 @@ class TestRequiredFields:
 class TestKnownIfPossibleFields:
     """「分かるなら書く」の欄が「不明」を受け付け、空と区別されることを保証する。"""
 
-    @pytest.mark.parametrize(
-        "name", ["subject_name", "source", "place", "addressed_to_self"]
-    )
-    def test_omitting_known_if_possible_field_cannot_be_constructed(
-        self, name: str
-    ) -> None:
+    @pytest.mark.parametrize("name", ["subject_name", "source", "place", "addressed_to_self"])
+    def test_omitting_known_if_possible_field_cannot_be_constructed(self, name: str) -> None:
         """「分かるなら書く」の欄を省くと TypeError になる。書かないときは「不明」を明示する。"""
         fields = _fields()
         del fields[name]
@@ -93,9 +89,7 @@ class TestKnownIfPossibleFields:
 
     @pytest.mark.parametrize("name", ["subject_name", "source", "place"])
     @pytest.mark.parametrize("blank", ["", "  "])
-    def test_blank_name_is_rejected_instead_of_meaning_unknown(
-        self, name: str, blank: str
-    ) -> None:
+    def test_blank_name_is_rejected_instead_of_meaning_unknown(self, name: str, blank: str) -> None:
         """名前の欄に空文字を渡すと拒む。空を「不明」の代わりに使えない。"""
         with pytest.raises(ContractViolation):
             Observation(**_fields(**{name: blank}))
@@ -168,17 +162,13 @@ class TestOwnActionResultRoute:
 
     def test_observation_carries_call_id_and_success_through_route(self) -> None:
         """「自分の行動の結果」の観測は、経路から呼び出しの ID と成否を読める。"""
-        observation = Observation(
-            **_fields(route=OwnActionResult(call_id="call-7", succeeded=False))
-        )
+        observation = Observation(**_fields(route=OwnActionResult(call_id="call-7", succeeded=False)))
 
         assert isinstance(observation.route, OwnActionResult)
         assert observation.route.call_id == "call-7"
         assert observation.route.succeeded is False
 
-    @pytest.mark.parametrize(
-        "route", [SeenOrHeard(), ToldOrWritten(), OwnBodyState(), EnvironmentNotice()]
-    )
+    @pytest.mark.parametrize("route", [SeenOrHeard(), ToldOrWritten(), OwnBodyState(), EnvironmentNotice()])
     def test_other_routes_have_no_call_id(self, route: object) -> None:
         """「自分の行動の結果」以外の経路は、呼び出しの ID を持たない。"""
         assert not hasattr(route, "call_id")
@@ -212,9 +202,17 @@ class TestClosedContract:
         names = {f.name for f in dataclasses.fields(Observation)}
 
         assert names == {
-            "body", "route", "time", "subject_is_self",
-            "subject_name", "source", "place", "addressed_to_self",
-            "wants_wake", "body_if_subject_unknown", "withheld_if_subject_unknown",
+            "body",
+            "route",
+            "time",
+            "subject_is_self",
+            "subject_name",
+            "source",
+            "place",
+            "addressed_to_self",
+            "wants_wake",
+            "body_if_subject_unknown",
+            "withheld_if_subject_unknown",
             "order",
         }
 

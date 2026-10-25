@@ -87,9 +87,7 @@ class _TableDrivenStrategy:
 
     def nobody_types(self) -> tuple:
         """「誰にも配らない」型を公開アクセサ経由で取る (無い strategy は空)。"""
-        accessor = getattr(
-            self.strategy_class, "event_types_delivered_to_nobody", None
-        )
+        accessor = getattr(self.strategy_class, "event_types_delivered_to_nobody", None)
         return tuple(accessor()) if accessor is not None else ()
 
     def build(self, registry: ObservedEventRegistry):
@@ -208,18 +206,14 @@ def target(request: pytest.FixtureRequest) -> _TableDrivenStrategy:
 class TestDispatchCoversTheRegistry:
     """レジストリが割り当てた全イベント型に、規則か「配らない」宣言がある。"""
 
-    def test_every_registered_event_type_is_accounted_for(
-        self, target: _TableDrivenStrategy
-    ) -> None:
+    def test_every_registered_event_type_is_accounted_for(self, target: _TableDrivenStrategy) -> None:
         """担当と登録された全イベント型が、規則の表か例外表に載っている。
 
         どちらにも無い型は ``supports()`` が True を返すのに配信先が空になり、
         観測が誰にも届かないまま気づけない。
         """
         registered = ObservedEventRegistry().get_event_types_for_strategy(target.key)
-        declared = set(target.strategy_class.handled_event_types()) | set(
-            target.nobody_types()
-        )
+        declared = set(target.strategy_class.handled_event_types()) | set(target.nobody_types())
         missing = sorted(t.__name__ for t in registered if t not in declared)
 
         assert not missing, (
@@ -227,28 +221,21 @@ class TestDispatchCoversTheRegistry:
             "イベント型があります: " + ", ".join(missing)
         )
 
-    def test_no_rule_points_at_an_unregistered_event_type(
-        self, target: _TableDrivenStrategy
-    ) -> None:
+    def test_no_rule_points_at_an_unregistered_event_type(self, target: _TableDrivenStrategy) -> None:
         """表に、レジストリが割り当てていない型が残っていない。
 
         余った規則は決して呼ばれない。担当が別 strategy へ移ったのに規則だけ
         残っていると、読んだ人はここで配信されていると誤解する。
         """
         registered = set(ObservedEventRegistry().get_event_types_for_strategy(target.key))
-        declared = set(target.strategy_class.handled_event_types()) | set(
-            target.nobody_types()
-        )
+        declared = set(target.strategy_class.handled_event_types()) | set(target.nobody_types())
         stale = sorted(t.__name__ for t in declared if t not in registered)
 
-        assert not stale, (
-            f"[{target.key}] レジストリが割り当てていないイベント型の宣言が"
-            "残っています: " + ", ".join(stale)
+        assert not stale, f"[{target.key}] レジストリが割り当てていないイベント型の宣言が残っています: " + ", ".join(
+            stale
         )
 
-    def test_reasons_for_delivering_to_nobody_are_written(
-        self, target: _TableDrivenStrategy
-    ) -> None:
+    def test_reasons_for_delivering_to_nobody_are_written(self, target: _TableDrivenStrategy) -> None:
         """「誰にも配らない」理由が空文字列でない。
 
         理由欄があっても空で登録できるなら「登録すれば無検査で通る」抜け道が
@@ -262,9 +249,7 @@ class TestDispatchCoversTheRegistry:
 class TestEachEventKeepsItsRule:
     """どのイベントにどの規則を当てるかが、意図した対応から変わっていない。"""
 
-    def test_expected_table_matches_production(
-        self, target: _TableDrivenStrategy
-    ) -> None:
+    def test_expected_table_matches_production(self, target: _TableDrivenStrategy) -> None:
         """production の規則表と期待表のキーが一致している。
 
         片方だけ増えると、増えた側の対応が誰にも確認されないまま通る。
@@ -273,13 +258,10 @@ class TestEachEventKeepsItsRule:
         expected = set(target.expected_rules)
 
         assert actual == expected, (
-            f"[{target.key}] production のみ: {sorted(actual - expected)} / "
-            f"期待表のみ: {sorted(expected - actual)}"
+            f"[{target.key}] production のみ: {sorted(actual - expected)} / 期待表のみ: {sorted(expected - actual)}"
         )
 
-    def test_every_event_is_delivered_by_the_expected_rule(
-        self, target: _TableDrivenStrategy
-    ) -> None:
+    def test_every_event_is_delivered_by_the_expected_rule(self, target: _TableDrivenStrategy) -> None:
         """各イベント型が、意図した配信規則に紐付いている。
 
         規則を取り違えると配信先が別物になる (例: 同席者全員 → 本人だけ)。
@@ -305,9 +287,7 @@ class TestWiringGapIsRefusedBeforeTheRunStarts:
     存在理由なのに、3 つのうち 2 つで固定されていなかった。
     """
 
-    def test_constructing_with_an_unruled_event_type_raises(
-        self, target: _TableDrivenStrategy
-    ) -> None:
+    def test_constructing_with_an_unruled_event_type_raises(self, target: _TableDrivenStrategy) -> None:
         """規則の無い型を担当と宣言したレジストリでは strategy を構築できない。
 
         run 中に落とすのでは遅い。LLM ツール経路は ``_execute_tool`` を広い
@@ -322,15 +302,11 @@ class TestWiringGapIsRefusedBeforeTheRunStarts:
             """どの配信規則にも載っていないイベントの代役。"""
 
         with pytest.raises(RecipientRuleWiringError) as exc:
-            target.build(
-                ObservedEventRegistry(event_to_strategy={_UnruledEvent: target.key})
-            )
+            target.build(ObservedEventRegistry(event_to_strategy={_UnruledEvent: target.key}))
 
         assert "_UnruledEvent" in str(exc.value)
 
-    def test_the_default_registry_constructs_cleanly(
-        self, target: _TableDrivenStrategy
-    ) -> None:
+    def test_the_default_registry_constructs_cleanly(self, target: _TableDrivenStrategy) -> None:
         """既定のレジストリでは構築が通る (検査が常に落ちる形になっていない)。
 
         正の対照。上の検査が何でも落とすだけなら、配線が正しいことを主張
@@ -345,7 +321,8 @@ class TestEventsDeliveredToNobodyReturnNoRecipients:
     """「誰にも配らない」と宣言した型が、実際に空リストを返す。"""
 
     @pytest.mark.parametrize(
-        "event_type", sorted(_MONSTER_NOBODY, key=lambda t: t.__name__),
+        "event_type",
+        sorted(_MONSTER_NOBODY, key=lambda t: t.__name__),
         ids=lambda t: t.__name__,
     )
     def test_resolving_returns_no_recipients(self, event_type: type) -> None:
@@ -358,9 +335,7 @@ class TestEventsDeliveredToNobodyReturnNoRecipients:
         """
         audience = MagicMock()
         audience.players_at_spot.return_value = [PlayerId(1), PlayerId(2)]
-        strategy = MonsterRecipientStrategy(
-            ObservedEventRegistry(), audience, MagicMock()
-        )
+        strategy = MonsterRecipientStrategy(ObservedEventRegistry(), audience, MagicMock())
 
         recipients = strategy.resolve(event_type.__new__(event_type))
 
@@ -372,12 +347,8 @@ class TestMonsterRulesComputeRealRecipients:
 
     def _strategy(self, audience, monster_spot=None):
         monster_repo = MagicMock()
-        monster_repo.find_by_id.return_value = (
-            MagicMock(spot_id=monster_spot) if monster_spot is not None else None
-        )
-        return MonsterRecipientStrategy(
-            ObservedEventRegistry(), audience, MagicMock(), monster_repo
-        )
+        monster_repo.find_by_id.return_value = MagicMock(spot_id=monster_spot) if monster_spot is not None else None
+        return MonsterRecipientStrategy(ObservedEventRegistry(), audience, MagicMock(), monster_repo)
 
     def test_spawn_uses_the_spot_on_the_event(self) -> None:
         """出現はイベントの ``spot_id`` に居る全員へ届く (monster を引き直さない)。"""

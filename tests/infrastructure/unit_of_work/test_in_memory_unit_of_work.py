@@ -1,6 +1,7 @@
 """
 InMemoryUnitOfWorkのテスト
 """
+
 from unittest.mock import Mock
 
 import pytest
@@ -95,7 +96,6 @@ class TestInMemoryUnitOfWork:
         with pytest.raises(RuntimeError, match="No transaction in progress"):
             self.unit_of_work.add_events([event])
 
-
     def test_no_event_publishing_without_event_publisher(self):
         """イベントパブリッシャーが設定されていない場合のテスト"""
         event = Mock(spec=DomainEvent)
@@ -139,7 +139,6 @@ class TestInMemoryUnitOfWork:
         assert len(self.unit_of_work._pending_operations) == 0
         assert self.unit_of_work.get_pending_events() == []
 
-
     def test_add_events_from_aggregate_collects_events(self):
         """add_events_from_aggregate が集約からイベントを収集し pending_events に追加するテスト"""
         # モック集約の作成
@@ -151,13 +150,12 @@ class TestInMemoryUnitOfWork:
         with self.unit_of_work:
             # 集約からイベントを収集・追加
             self.unit_of_work.add_events_from_aggregate(mock_aggregate)
-            
+
             # 即座に pending_events に反映される
             assert self.unit_of_work.get_pending_events() == [mock_event]
-            
+
         mock_aggregate.get_events.assert_called_once()
         mock_aggregate.clear_events.assert_called_once()
-
 
     def test_register_pending_aggregate_and_get_pending_aggregate(self):
         """同一トランザクション内で保留集約を登録・取得できること。コミット/ロールバックでクリアされること。"""

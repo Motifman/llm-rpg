@@ -1,4 +1,3 @@
-
 import itertools
 from datetime import datetime
 
@@ -110,7 +109,6 @@ class _TestPostRepositoryInterface:
         assert isinstance(posts, list)
         for post in posts:
             assert "魔法" in post.content.content
-
 
     def test_generate_post_id(self, repository):
         """ポストID生成テスト"""

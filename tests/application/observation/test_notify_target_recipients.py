@@ -52,10 +52,7 @@ class _StubGraph:
         return self._presence
 
     def entity_spot_mapping(self):
-        return {
-            EntityId.create(int(eid)): SpotId.create(_SPOT)
-            for eid in self._presence.present_entity_ids
-        }
+        return {EntityId.create(int(eid)): SpotId.create(_SPOT) for eid in self._presence.present_entity_ids}
 
 
 class _StubGraphRepository:
@@ -82,10 +79,7 @@ class _StubStatusRepository:
         return _StubStatus(int(player_id) in self._downed, int(player_id))
 
     def find_all(self):
-        return [
-            _StubStatus(pid in self._downed, pid)
-            for pid in (_ACTOR, _TARGET, _BYSTANDER)
-        ]
+        return [_StubStatus(pid in self._downed, pid) for pid in (_ACTOR, _TARGET, _BYSTANDER)]
 
 
 def _strategy(*, downed=()) -> SpotGraphRecipientStrategy:
@@ -154,10 +148,13 @@ class TestCovertActionWithoutNotifyStaysSilent:
 
     def test_nobody_receives_it(self) -> None:
         """気づかれずに盗む行為は、対象にも届かない。"""
-        assert _recipients(
-            _strategy(),
-            _event(witness_policy=WitnessPolicy.ACTOR_ONLY, notify_target=False),
-        ) == []
+        assert (
+            _recipients(
+                _strategy(),
+                _event(witness_policy=WitnessPolicy.ACTOR_ONLY, notify_target=False),
+            )
+            == []
+        )
 
 
 class TestPublicActionIsUnaffected:
@@ -172,9 +169,7 @@ class TestPublicActionIsUnaffected:
         """対象と第三者の両方に届き、行為者だけが外れる。"""
         assert _recipients(
             _strategy(),
-            _event(
-                witness_policy=WitnessPolicy.SAME_SPOT, notify_target=notify_target
-            ),
+            _event(witness_policy=WitnessPolicy.SAME_SPOT, notify_target=notify_target),
         ) == [_TARGET, _BYSTANDER]
 
 
@@ -205,12 +200,8 @@ class TestDownedTargetIsStillExcluded:
         )
 
         repository = MagicMock()
-        repository.find_by_id.side_effect = lambda pid: MagicMock(
-            is_down=int(pid) == int(_TARGET)
-        )
-        resolver = ObservationRecipientResolver(
-            strategies=[_strategy()], player_status_repository=repository
-        )
+        repository.find_by_id.side_effect = lambda pid: MagicMock(is_down=int(pid) == int(_TARGET))
+        resolver = ObservationRecipientResolver(strategies=[_strategy()], player_status_repository=repository)
 
         recipients = resolver.resolve(
             _event(

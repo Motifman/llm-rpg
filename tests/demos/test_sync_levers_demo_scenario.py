@@ -49,13 +49,7 @@ from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "tests"
-    / "fixtures"
-    / "scenarios"
-    / "sync_levers_demo.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "sync_levers_demo.json"
 
 
 @dataclass
@@ -221,9 +215,7 @@ def _runtime_executor(runtime) -> SpotGraphToolExecutor:
         time_provider=runtime._time_provider,
         spot_graph_repository=runtime._spot_graph_repo,
         sync_action_registry=runtime._simulation_service._sync_action_resolver_stage._registry,
-        prepare_action_command_scope_factory=(
-            runtime._prepare_action_command_scope_factory
-        ),
+        prepare_action_command_scope_factory=(runtime._prepare_action_command_scope_factory),
     )
 
 
@@ -243,9 +235,7 @@ class TestPrepareActionValidatesParticipantsAndTheDeclaredInteraction:
         assert right.success is True
         assert "vault_unlocked" in runtime._world_flag_state.as_frozen_set()
 
-    def test_second_registry_failure_rolls_back_both_prepare_flags(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_second_registry_failure_rolls_back_both_prepare_flags(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """tick付き登録が失敗すると、先に付けた互換flagも開始前へ戻す。"""
         runtime = create_world_runtime(SCENARIO_PATH)
         executor = _runtime_executor(runtime)
@@ -269,9 +259,7 @@ class TestPrepareActionValidatesParticipantsAndTheDeclaredInteraction:
         assert "prepared:pull_lever_left:1" not in flags
         assert not any(flag.startswith("sync_prep:pull_lever_left:1:") for flag in flags)
 
-    def test_prepare_observation_reads_both_committed_flags(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_prepare_observation_reads_both_committed_flags(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """準備観測は互換flagとtick付きflagの両方が確定した後に配送する。"""
         runtime = create_world_runtime(SCENARIO_PATH)
         executor = _runtime_executor(runtime)
@@ -294,14 +282,9 @@ class TestPrepareActionValidatesParticipantsAndTheDeclaredInteraction:
         assert result.success is True
         assert len(observed_flags) == 1
         assert "prepared:pull_lever_left:1" in observed_flags[0]
-        assert any(
-            flag.startswith("sync_prep:pull_lever_left:1:")
-            for flag in observed_flags[0]
-        )
+        assert any(flag.startswith("sync_prep:pull_lever_left:1:") for flag in observed_flags[0])
 
-    def test_commit_failure_rolls_back_flags_without_prepare_observation(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_commit_failure_rolls_back_flags_without_prepare_observation(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """event生成後にcommitが失敗しても、準備状態と観測を残さない。"""
         runtime = create_world_runtime(SCENARIO_PATH)
         executor = _runtime_executor(runtime)
@@ -310,11 +293,7 @@ class TestPrepareActionValidatesParticipantsAndTheDeclaredInteraction:
 
         def observe(events) -> None:
             events = tuple(events)
-            delivered.extend(
-                event
-                for event in events
-                if isinstance(event, SpotPlayerPreparedActionEvent)
-            )
+            delivered.extend(event for event in events if isinstance(event, SpotPlayerPreparedActionEvent))
             original_publish_all(events)
 
         monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
@@ -382,9 +361,7 @@ class TestPrepareActionValidatesParticipantsAndTheDeclaredInteraction:
                 discoverable_items=vault_interior.discoverable_items,
             ),
         )
-        runtime._spot_graph_repo.find_graph().teleport_entity(
-            EntityId.create(1), vault_id
-        )
+        runtime._spot_graph_repo.find_graph().teleport_entity(EntityId.create(1), vault_id)
         executor = _runtime_executor(runtime)
 
         result = executor._prepare_action(1, {"action_name": "pull_lever_left"})

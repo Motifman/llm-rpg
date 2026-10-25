@@ -175,15 +175,9 @@ def test_public_mutations_reject_missing_command_scope_before_repository_access(
     """確定区間が未配線なら5つの公開更新入口はrepositoryへ触れず拒否する。"""
     graph_repository = Mock()
     status_repository = Mock()
-    graph_repository.find_graph.side_effect = AssertionError(
-        "未配線時にgraphを読んではならない"
-    )
-    status_repository.find_by_id.side_effect = AssertionError(
-        "未配線時にstatusを読んではならない"
-    )
-    status_repository.save.side_effect = AssertionError(
-        "未配線時にstatusを保存してはならない"
-    )
+    graph_repository.find_graph.side_effect = AssertionError("未配線時にgraphを読んではならない")
+    status_repository.find_by_id.side_effect = AssertionError("未配線時にstatusを読んではならない")
+    status_repository.save.side_effect = AssertionError("未配線時にstatusを保存してはならない")
     service = SpotGraphMovementApplicationService(
         graph_repository,
         status_repository,
@@ -367,9 +361,7 @@ def test_required_event_failure_rolls_back_all_crossings() -> None:
     before_nav = statuses.find_by_id(_PLAYER_ID).spot_navigation_state
     dispatcher.register_required_before_commit(
         EntityEnteredSpotEvent,
-        lambda event, context: (_ for _ in ()).throw(
-            RuntimeError("arrival processing failed")
-        ),
+        lambda event, context: (_ for _ in ()).throw(RuntimeError("arrival processing failed")),
     )
 
     with pytest.raises(RuntimeError, match="arrival processing failed"):

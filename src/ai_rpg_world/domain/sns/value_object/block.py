@@ -10,6 +10,7 @@ from ai_rpg_world.domain.sns.value_object.user_id import UserId
 @dataclass(frozen=True)
 class BlockRelationShip:
     """ブロック関係性を表現する値オブジェクト"""
+
     blocker_user_id: UserId
     blocked_user_id: UserId
     created_at: datetime = field(default_factory=datetime.now)
@@ -18,8 +19,7 @@ class BlockRelationShip:
         """等価性比較（作成時間に関係なく、ブロック実行者とブロック対象のみで判定）"""
         if not isinstance(other, BlockRelationShip):
             return NotImplemented
-        return (self.blocker_user_id == other.blocker_user_id and
-                self.blocked_user_id == other.blocked_user_id)
+        return self.blocker_user_id == other.blocker_user_id and self.blocked_user_id == other.blocked_user_id
 
     def __hash__(self) -> int:
         """ハッシュ値（作成時間に関係なく、ブロック実行者とブロック対象のみで計算）"""

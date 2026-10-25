@@ -1,6 +1,5 @@
 """スポットグラフ用ツールの利用可否（PlayerCurrentStateDto にスナップショットがあるとき）"""
 
-
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 

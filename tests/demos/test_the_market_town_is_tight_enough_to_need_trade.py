@@ -38,10 +38,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
 )
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "market_town_v3_board.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v3_board.json"
 
 #: run の長さ。profile 側の設定なのでシナリオからは読めない。実験の標準値。
 _RUN_TICKS = 80
@@ -53,12 +50,14 @@ _HUNGER_LIMIT = 100
 #: 文字列で書くと、存在しない名前が混ざっても気づけない。実在しない名前は
 #: `disabled_tools` に入りようがない (`create_world_runtime` が落とす) ので、
 #: 表に 1 つ混ざるだけで**この検査は何を落としても緑になる**。
-_ESCAPES_FROM_A_FULL_BAG = frozenset({
-    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
-    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
-    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
-})
+_ESCAPES_FROM_A_FULL_BAG = frozenset(
+    {
+        TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+        TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+        TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+        TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+    }
+)
 
 
 @pytest.fixture(scope="module")
@@ -81,8 +80,7 @@ def _breads_needed(scenario: dict[str, Any]) -> int:
     1 人あたりの許容量は上限の 1 手前まで。そこを超えるぶんをパンで戻す。
     """
     accrued = _RUN_TICKS * _hunger_per_tick(scenario)
-    per_person = max(0, math.ceil((accrued - (_HUNGER_LIMIT - 1))
-                                  / _bread_restores(scenario)))
+    per_person = max(0, math.ceil((accrued - (_HUNGER_LIMIT - 1)) / _bread_restores(scenario)))
     return per_person * len(scenario["players"])
 
 
@@ -94,10 +92,7 @@ def _harvests(scenario: dict[str, Any], target: str) -> int:
     使う。「足りない」の判定を通しやすくする向きのバイアスであることは
     自覚して読む。
     """
-    binding = next(
-        b for b in scenario["reactive_bindings"]["objects"]
-        if b["target"] == target
-    )
+    binding = next(b for b in scenario["reactive_bindings"]["objects"] if b["target"] == target)
     return _RUN_TICKS // int(binding["predicate"]["ticks_offset"])
 
 
@@ -110,20 +105,18 @@ def _breads_producible(scenario: dict[str, Any]) -> int:
     換金とも取り合いになるので、**実際の生産量はこれより低い**。
     """
     oven = next(
-        obj for spot in scenario["spots"]
+        obj
+        for spot in scenario["spots"]
         for obj in spot.get("interior", {}).get("objects", [])
         if obj["id"] == "stone_oven"
     )
     consumed = {
-        e["parameters"]["item_spec"]
-        for e in oven["interactions"][0]["effects"]
-        if e["effect_type"] == "REMOVE_ITEM"
+        e["parameters"]["item_spec"] for e in oven["interactions"][0]["effects"] if e["effect_type"] == "REMOVE_ITEM"
     }
-    assert consumed == {"wheat", "herb"}, (
-        f"石窯の材料が設計表 (麦 + 薬草) とずれています: {sorted(consumed)}"
-    )
+    assert consumed == {"wheat", "herb"}, f"石窯の材料が設計表 (麦 + 薬草) とずれています: {sorted(consumed)}"
     loaves_per_batch = sum(
-        1 for e in oven["interactions"][0]["effects"]
+        1
+        for e in oven["interactions"][0]["effects"]
         if e["effect_type"] == "GIVE_ITEM" and e["parameters"]["item_spec"] == "bread"
     )
     batches = min(_harvests(scenario, "wheat_rows"), _harvests(scenario, "herb_patch"))
@@ -182,9 +175,7 @@ class TestButTheTownIsNotDoomed:
         「苦しいが死なない」から「死ぬ」に変わる。
         """
         ticks_to_limit = _HUNGER_LIMIT // _hunger_per_tick(scenario)
-        damage = (_RUN_TICKS - ticks_to_limit) * int(
-            scenario["needs"]["starvation_damage_per_tick"]
-        )
+        damage = (_RUN_TICKS - ticks_to_limit) * int(scenario["needs"]["starvation_damage_per_tick"])
 
         assert damage < 100
 
@@ -199,12 +190,10 @@ class TestTheBoardIsWorthUsing:
         使われたのは、板の方が 1G 高かったから。値をまとめて動かすときに
         いちばん壊れやすい関係なので、値そのものではなく**関係**を見る。
         """
-        stall = next(
-            b["price"] for b in scenario["merchants"][0]["buys"]
-            if b["item_spec"] == "herb"
-        )
+        stall = next(b["price"] for b in scenario["merchants"][0]["buys"] if b["item_spec"] == "herb")
         board = next(
-            o["unit_price"] for o in scenario["market"]["initial_orders"]
+            o["unit_price"]
+            for o in scenario["market"]["initial_orders"]
             if o["item_spec"] == "herb" and o["side"] == "buy"
         )
 
@@ -218,12 +207,10 @@ class TestTheBoardIsWorthUsing:
         初期注文の値は意図的に高い錨なので、そこと比べて成り立つなら、
         実勢 (実 run で 8〜17G) では確実に成り立つ。
         """
-        herb = next(
-            b["price"] for b in scenario["merchants"][0]["buys"]
-            if b["item_spec"] == "herb"
-        )
+        herb = next(b["price"] for b in scenario["merchants"][0]["buys"] if b["item_spec"] == "herb")
         dearest_bread = max(
-            o["unit_price"] for o in scenario["market"]["initial_orders"]
+            o["unit_price"]
+            for o in scenario["market"]["initial_orders"]
             if o["item_spec"] == "bread" and o["side"] == "sell"
         )
 
@@ -234,7 +221,8 @@ class TestTheWorldDoesNotLieAboutItsPrices:
     """世界の中の掲示 (木札) と、実際の値が一致している。"""
 
     def test_the_sign_shows_the_prices_the_merchant_actually_uses(
-        self, scenario,
+        self,
+        scenario,
     ) -> None:
         """木札に書かれた値が、商人の宣言と一致する。
 
@@ -253,17 +241,13 @@ class TestTheWorldDoesNotLieAboutItsPrices:
             for obj in spot.get("interior", {}).get("objects", [])
             for interaction in obj.get("interactions", [])
             for effect in interaction["effects"]
-            if effect["effect_type"] == "SHOW_MESSAGE"
-            and "木札" in effect["parameters"].get("message", "")
+            if effect["effect_type"] == "SHOW_MESSAGE" and "木札" in effect["parameters"].get("message", "")
         )
         names = {spec["id"]: spec["name"] for spec in scenario["item_specs"]}
         merchant = scenario["merchants"][0]
         posted = dict(re.findall(r"『(\S+?)\s*(?:買取|売値)\s*(\d+)G』", sign))
 
-        expected = {
-            names[entry["item_spec"]]: str(entry["price"])
-            for entry in merchant["buys"] + merchant["sells"]
-        }
+        expected = {names[entry["item_spec"]]: str(entry["price"]) for entry in merchant["buys"] + merchant["sells"]}
         assert posted == expected
 
 
@@ -280,9 +264,7 @@ class TestTheTownOnlyOffersToolsItCanUse:
         """
         assert {"listen", "explore"} <= set(scenario["disabled_tools"])
 
-    def test_buying_from_the_stall_is_disabled_but_selling_is_not(
-        self, scenario
-    ) -> None:
+    def test_buying_from_the_stall_is_disabled_but_selling_is_not(self, scenario) -> None:
         """`buy_item` を落とし、`sell_item` は残す。
 
         v3.7 で商人の売り物が無くなったので、`buy_item` は run 全域で
@@ -303,14 +285,12 @@ class TestTheTownOnlyOffersToolsItCanUse:
         ままにすると、**そこへ到達する手段が無い世界**ができる。
         """
         hidden = [
-            obj for spot in scenario["spots"]
+            obj
+            for spot in scenario["spots"]
             for obj in spot.get("interior", {}).get("objects", [])
             if not obj.get("is_visible", True)
         ]
-        sub_locations = [
-            sub for spot in scenario["spots"]
-            for sub in spot.get("interior", {}).get("sub_locations", [])
-        ]
+        sub_locations = [sub for spot in scenario["spots"] for sub in spot.get("interior", {}).get("sub_locations", [])]
 
         assert hidden == []
         assert sub_locations == []
@@ -356,9 +336,7 @@ class TestTheTownOnlyOffersToolsItCanUse:
         assert _ESCAPES_FROM_A_FULL_BAG <= known
         assert TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM in known
 
-    def test_what_the_board_hands_over_can_still_be_picked_up(
-        self, scenario
-    ) -> None:
+    def test_what_the_board_hands_over_can_still_be_picked_up(self, scenario) -> None:
         """`pickup_item` は落とさない。
 
         板の受け渡しは、買い手の鞄が満杯なら**品を板のある広場の地面へ
@@ -387,18 +365,13 @@ class TestThereIsRoomToPlaceABid:
         薬草を仕入れるには**それを上回る値を付けられる**必要がある。持ち金が
         下限以下だと、焼き手は初手から詰んでいて、buy 板は一生立たない。
         """
-        stall_floor = next(
-            b["price"] for b in scenario["merchants"][0]["buys"]
-            if b["item_spec"] == "herb"
-        )
+        stall_floor = next(b["price"] for b in scenario["merchants"][0]["buys"] if b["item_spec"] == "herb")
         board_floor = max(
-            o["unit_price"] for o in scenario["market"]["initial_orders"]
+            o["unit_price"]
+            for o in scenario["market"]["initial_orders"]
             if o["item_spec"] == "herb" and o["side"] == "buy"
         )
-        baker_gold = [
-            p["initial_gold"] for p in scenario["players"]
-            if p["initial_state"]["trade"] == "baker"
-        ]
+        baker_gold = [p["initial_gold"] for p in scenario["players"] if p["initial_state"]["trade"] == "baker"]
 
         assert baker_gold, "焼き手が 1 人も居ない (検査が空振りする)"
         assert all(g > max(stall_floor, board_floor) for g in baker_gold)
@@ -411,14 +384,8 @@ class TestThereIsRoomToPlaceABid:
         見積もる。ここが賄えないと、焼き手は売るものが作れず、**売って
         から仕入れる**という循環の入口が無い。
         """
-        stall_floor = next(
-            b["price"] for b in scenario["merchants"][0]["buys"]
-            if b["item_spec"] == "herb"
-        )
-        baker_gold = [
-            p["initial_gold"] for p in scenario["players"]
-            if p["initial_state"]["trade"] == "baker"
-        ]
+        stall_floor = next(b["price"] for b in scenario["merchants"][0]["buys"] if b["item_spec"] == "herb")
+        baker_gold = [p["initial_gold"] for p in scenario["players"] if p["initial_state"]["trade"] == "baker"]
 
         assert baker_gold, "焼き手が 1 人も居ない (検査が空振りする)"
         assert all(g >= stall_floor * 2 for g in baker_gold)
@@ -434,35 +401,25 @@ class TestBreadBuyersStartWithMoney:
 
     def test_no_bread_buyer_starts_broke(self, scenario) -> None:
         """焼き手以外の全員が、正の gold を持って始まる。"""
-        non_bakers = [
-            p for p in scenario["players"]
-            if p["initial_state"]["trade"] != "baker"
-        ]
+        non_bakers = [p for p in scenario["players"] if p["initial_state"]["trade"] != "baker"]
 
         assert non_bakers, "焼き手以外が 1 人も居ない (検査が空振りする)"
         assert all(p["initial_gold"] > 0 for p in non_bakers)
 
-    def test_a_picker_affords_the_cheaper_anchor_after_one_harvest(
-        self, scenario
-    ) -> None:
+    def test_a_picker_affords_the_cheaper_anchor_after_one_harvest(self, scenario) -> None:
         """摘み手は、1 収穫の稼ぎと手持ちを合わせれば安い方の錨が買える。
 
         摘み手の収入には宣言済みの下限 (商人買取) があるので、ここは
         実勢に頼らず関係で書ける。刈り手の収入 (麦) には宣言済みの値が
         無いので、刈り手側は上の「金ゼロでない」までしか守らない。
         """
-        stall_floor = next(
-            b["price"] for b in scenario["merchants"][0]["buys"]
-            if b["item_spec"] == "herb"
-        )
+        stall_floor = next(b["price"] for b in scenario["merchants"][0]["buys"] if b["item_spec"] == "herb")
         cheaper_bread = min(
-            o["unit_price"] for o in scenario["market"]["initial_orders"]
+            o["unit_price"]
+            for o in scenario["market"]["initial_orders"]
             if o["item_spec"] == "bread" and o["side"] == "sell"
         )
-        picker_gold = [
-            p["initial_gold"] for p in scenario["players"]
-            if p["initial_state"]["trade"] == "picker"
-        ]
+        picker_gold = [p["initial_gold"] for p in scenario["players"] if p["initial_state"]["trade"] == "picker"]
 
         assert picker_gold, "摘み手が 1 人も居ない (検査が空振りする)"
         assert all(g + stall_floor >= cheaper_bread for g in picker_gold)

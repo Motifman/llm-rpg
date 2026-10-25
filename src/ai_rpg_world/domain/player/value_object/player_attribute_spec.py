@@ -88,23 +88,19 @@ class PlayerAttributeSpec:
         if not str(self.name).strip():
             raise PlayerAttributeSpecValidationException("属性名は空にできません")
         if not str(self.display_name).strip():
-            raise PlayerAttributeSpecValidationException(
-                f"属性 {self.name} の表示名は空にできません"
-            )
+            raise PlayerAttributeSpecValidationException(f"属性 {self.name} の表示名は空にできません")
         if not isinstance(self.visibility, AttributeVisibility):
             raise PlayerAttributeSpecValidationException(
                 f"属性 {self.name} の visibility が不正です: {self.visibility!r}"
             )
         if not isinstance(self.mutable, bool):
             raise PlayerAttributeSpecValidationException(
-                f"属性 {self.name} の mutable は真偽値で指定してください: "
-                f"{self.mutable!r}"
+                f"属性 {self.name} の mutable は真偽値で指定してください: {self.mutable!r}"
             )
         for value, display in self.value_display_names.items():
             if not str(value).strip() or not str(display).strip():
                 raise PlayerAttributeSpecValidationException(
-                    f"属性 {self.name} の値の呼び名は空にできません: "
-                    f"{value!r} -> {display!r}"
+                    f"属性 {self.name} の値の呼び名は空にできません: {value!r} -> {display!r}"
                 )
 
     def display_name_of_value(self, value: Any) -> str | None:
@@ -163,11 +159,7 @@ class PlayerAttributeSpecs:
 
     def hidden_names(self) -> frozenset[str]:
         """本人の表示からも外す属性の名前。"""
-        return frozenset(
-            name
-            for name, spec in self.by_name.items()
-            if spec.visibility is AttributeVisibility.HIDDEN
-        )
+        return frozenset(name for name, spec in self.by_name.items() if spec.visibility is AttributeVisibility.HIDDEN)
 
     def satisfiability(
         self,
@@ -187,11 +179,7 @@ class PlayerAttributeSpecs:
         if actor_state is None:
             return ConditionSatisfiability.NOT_YET
 
-        unmet = {
-            key: wanted
-            for key, wanted in required_state.items()
-            if actor_state.get(key) != wanted
-        }
+        unmet = {key: wanted for key, wanted in required_state.items() if actor_state.get(key) != wanted}
         if not unmet:
             return ConditionSatisfiability.SATISFIED
         for key in unmet:
@@ -226,13 +214,15 @@ class PlayerAttributeSpecs:
             spec = self.by_name.get(key)
             if spec is None or spec.mutable:
                 continue
-            found.append(UnreachableRequirement(
-                name=key,
-                required_value=wanted,
-                attribute_display_name=spec.display_name,
-                value_display_name=spec.display_name_of_value(wanted),
-                visibility=spec.visibility,
-            ))
+            found.append(
+                UnreachableRequirement(
+                    name=key,
+                    required_value=wanted,
+                    attribute_display_name=spec.display_name,
+                    value_display_name=spec.display_name_of_value(wanted),
+                    visibility=spec.visibility,
+                )
+            )
         return tuple(found)
 
 

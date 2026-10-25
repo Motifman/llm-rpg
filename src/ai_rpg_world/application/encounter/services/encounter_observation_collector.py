@@ -63,9 +63,7 @@ class EncounterObservationCollector:
         current_tick_provider: Callable[[], int],
     ) -> None:
         if not isinstance(memory, IEncounterMemory):
-            raise TypeError(
-                f"memory must be IEncounterMemory (got {type(memory)!r})"
-            )
+            raise TypeError(f"memory must be IEncounterMemory (got {type(memory)!r})")
         if not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable")
         self._memory = memory
@@ -86,8 +84,7 @@ class EncounterObservationCollector:
             self._on_observation_impl(player_id, output)
         except Exception:
             _logger.exception(
-                "EncounterObservationCollector.on_observation failed "
-                "(player_id=%s, type=%r); skipping",
+                "EncounterObservationCollector.on_observation failed (player_id=%s, type=%r); skipping",
                 player_id.value,
                 (output.structured or {}).get("type"),
             )
@@ -123,8 +120,7 @@ class EncounterObservationCollector:
             # tick が取れない (= provider が None を返す等) なら encounter
             # 記録を諦める。silent skip。debug ログだけ残す。
             _logger.debug(
-                "EncounterObservationCollector: current_tick unavailable; "
-                "skipping observe(player=%s, key=%s)",
+                "EncounterObservationCollector: current_tick unavailable; skipping observe(player=%s, key=%s)",
                 player_id.value,
                 key.canonical,
             )
@@ -135,9 +131,7 @@ class EncounterObservationCollector:
         try:
             tick = self._current_tick_provider()
         except Exception:
-            _logger.exception(
-                "EncounterObservationCollector: current_tick_provider raised"
-            )
+            _logger.exception("EncounterObservationCollector: current_tick_provider raised")
             return None
         if not isinstance(tick, int) or isinstance(tick, bool):
             return None

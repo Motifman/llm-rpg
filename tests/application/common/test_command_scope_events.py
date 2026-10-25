@@ -158,9 +158,7 @@ class TestCommandScopeSyncEvents:
         """処理済みイベントをハンドラが再収集しても操作全体では再処理しない。"""
         transaction = _RecordingTransaction()
         event = _event(1)
-        dispatcher = _RecordingDispatcher(
-            lambda handled, context: context.collect(handled)
-        )
+        dispatcher = _RecordingDispatcher(lambda handled, context: context.collect(handled))
 
         with CommandScope(
             transaction,
@@ -175,9 +173,7 @@ class TestCommandScopeSyncEvents:
         """同期ハンドラの例外ではcommitせずrollbackし、handoffを開始しない。"""
         transaction = _RecordingTransaction()
         dispatch_error = RuntimeError("dispatch failed")
-        dispatcher = _RecordingDispatcher(
-            lambda _event, _context: (_ for _ in ()).throw(dispatch_error)
-        )
+        dispatcher = _RecordingDispatcher(lambda _event, _context: (_ for _ in ()).throw(dispatch_error))
         handoff = _RecordingHandoff()
 
         with pytest.raises(RuntimeError) as caught:
@@ -195,9 +191,7 @@ class TestCommandScopeSyncEvents:
     def test_event_limit_rolls_back_infinite_chain(self) -> None:
         """同期イベント連鎖が上限を超えると無限継続せずcommand全体をrollbackする。"""
         transaction = _RecordingTransaction()
-        dispatcher = _RecordingDispatcher(
-            lambda event, context: context.collect(_event(event.aggregate_id + 1))
-        )
+        dispatcher = _RecordingDispatcher(lambda event, context: context.collect(_event(event.aggregate_id + 1)))
 
         with pytest.raises(CommandEventDispatchLimitException):
             with CommandScope(
@@ -349,9 +343,7 @@ class TestCommandScopeAfterCommitHandoff:
             with CommandScope(
                 _RecordingTransaction(),
                 sync_dispatcher=_RecordingDispatcher(
-                    lambda _event, _context: (_ for _ in ()).throw(
-                        RuntimeError("sync failed")
-                    )
+                    lambda _event, _context: (_ for _ in ()).throw(RuntimeError("sync failed"))
                 ),
                 after_commit_handoff=_RecordingHandoff(),
                 transactional_outbox=outbox,
@@ -387,9 +379,7 @@ class TestCommandScopeAfterCommitHandoff:
         class _CommittedCleanupTransaction(_RecordingTransaction):
             def commit(self) -> None:
                 super().commit()
-                raise TransactionCommittedCleanupException(
-                    cleanup_error=cleanup_error
-                )
+                raise TransactionCommittedCleanupException(cleanup_error=cleanup_error)
 
         transaction = _CommittedCleanupTransaction()
         scope = CommandScope(

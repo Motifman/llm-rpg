@@ -39,9 +39,7 @@ class ObservationPipeline:
         result: list[tuple[PlayerId, ObservationOutput]] = []
         for player_id in recipients:
             attention_level = self._get_attention_level(player_id)
-            output = self._formatter.format(
-                event, player_id, attention_level=attention_level
-            )
+            output = self._formatter.format(event, player_id, attention_level=attention_level)
             if output is not None:
                 result.append((player_id, output))
         return result

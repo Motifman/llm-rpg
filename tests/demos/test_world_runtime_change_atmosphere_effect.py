@@ -25,9 +25,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadErr
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CONTROL_PANEL_TOGGLE = _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "control_panel_toggle.json"
-_ITEM_INTERACTION_DEMO = (
-    _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "item_interaction_demo.json"
-)
+_ITEM_INTERACTION_DEMO = _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "item_interaction_demo.json"
 
 _ACTOR = PlayerId(1)
 _OBSERVER = PlayerId(2)
@@ -59,10 +57,7 @@ def _atmosphere_of(runtime, spot_string_id: str):
 
 def _new_observation_types(runtime, player_id: PlayerId, since: int) -> list[str]:
     """指定位置以降の観測から構造化された種類だけを返す。"""
-    return [
-        entry.output.structured.get("type")
-        for entry in runtime._obs_buffer.get_observations(player_id)[since:]
-    ]
+    return [entry.output.structured.get("type") for entry in runtime._obs_buffer.get_observations(player_id)[since:]]
 
 
 def _move_player(runtime, player_id: PlayerId, spot_string_id: str) -> None:
@@ -181,8 +176,7 @@ class TestChangeAtmosphereEffect:
         runtime.do_interact(_ACTOR, "control_panel", "power_on")
 
         assert _atmosphere_of(runtime, "control_room").lighting is LightingEnum.DARK, (
-            "CHANGE_ATMOSPHERE を書いても spot の明るさが変わっていない "
-            "(spec が生成されるだけで消費されていない可能性)"
+            "CHANGE_ATMOSPHERE を書いても spot の明るさが変わっていない (spec が生成されるだけで消費されていない可能性)"
         )
 
     def test_other_spot_can_be_darkened_remotely(self, tmp_path: Path) -> None:
@@ -201,9 +195,7 @@ class TestChangeAtmosphereEffect:
 
         assert _atmosphere_of(runtime, "vault").lighting is LightingEnum.PITCH_BLACK
 
-    def test_unspecified_atmosphere_fields_survive_the_change(
-        self, tmp_path: Path
-    ) -> None:
+    def test_unspecified_atmosphere_fields_survive_the_change(self, tmp_path: Path) -> None:
         """明るさだけを変えたとき、その spot の環境音など他の項目は元のまま残る。"""
         path = _scenario_with_effect(
             tmp_path,
@@ -263,13 +255,9 @@ class TestChangeAtmosphereEffect:
 
         runtime.do_interact(_ACTOR, "control_panel", "power_on")
 
-        assert "spot_public_effect_observed" in _new_observation_types(
-            runtime, _OBSERVER, before
-        )
+        assert "spot_public_effect_observed" in _new_observation_types(runtime, _OBSERVER, before)
 
-    def test_remote_change_is_not_observed_in_the_actors_spot(
-        self, tmp_path: Path
-    ) -> None:
+    def test_remote_change_is_not_observed_in_the_actors_spot(self, tmp_path: Path) -> None:
         """別室を対象にした環境変化は、行為者の同席者へ漏れて居場所を明かさない。"""
         path = _scenario_with_effect(
             tmp_path,
@@ -285,29 +273,19 @@ class TestChangeAtmosphereEffect:
 
         runtime.do_interact(_ACTOR, "control_panel", "power_on")
 
-        assert "spot_public_effect_observed" not in _new_observation_types(
-            runtime, _OBSERVER, before
-        )
+        assert "spot_public_effect_observed" not in _new_observation_types(runtime, _OBSERVER, before)
 
-    def test_held_item_remote_change_reaches_the_affected_spot(
-        self, tmp_path: Path
-    ) -> None:
+    def test_held_item_remote_change_reaches_the_affected_spot(self, tmp_path: Path) -> None:
         """所持道具の遠隔効果も、影響を受けた部屋へ観測として届く。"""
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
-        runtime = create_world_runtime(
-            _item_scenario_with_remote_atmosphere_effect(tmp_path)
-        )
+        runtime = create_world_runtime(_item_scenario_with_remote_atmosphere_effect(tmp_path))
         before = len(runtime._obs_buffer.get_observations(_OBSERVER))
-        radio_id = ItemSpecId.create(
-            runtime.id_mapper.get_int("item_spec", "portable_radio")
-        )
+        radio_id = ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "portable_radio"))
 
         runtime.do_interact_with_item(_ACTOR, radio_id, "dim_remote_room")
 
-        assert "spot_public_effect_observed" in _new_observation_types(
-            runtime, _OBSERVER, before
-        )
+        assert "spot_public_effect_observed" in _new_observation_types(runtime, _OBSERVER, before)
 
 
 class TestChangeAtmosphereFromScenarioEvent:
@@ -342,14 +320,10 @@ class TestChangeAtmosphereFromScenarioEvent:
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
         runtime = create_world_runtime(path)
-        assert (
-            _atmosphere_of(runtime, "control_room").lighting
-            is not LightingEnum.PITCH_BLACK
-        )
+        assert _atmosphere_of(runtime, "control_room").lighting is not LightingEnum.PITCH_BLACK
 
         runtime.advance_tick()
 
-        assert (
-            _atmosphere_of(runtime, "control_room").lighting
-            is LightingEnum.PITCH_BLACK
-        ), "scenario_event の CHANGE_ATMOSPHERE が適用されていない"
+        assert _atmosphere_of(runtime, "control_room").lighting is LightingEnum.PITCH_BLACK, (
+            "scenario_event の CHANGE_ATMOSPHERE が適用されていない"
+        )

@@ -17,9 +17,7 @@ class TestBeingAttachmentValidation:
 
     def test_world_id_player_id_can_create(self) -> None:
         """正しい型の引数でインスタンス化される。"""
-        attachment = BeingAttachment(
-            world_id=WorldId(1), player_id=PlayerId(2)
-        )
+        attachment = BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
         assert attachment.world_id == WorldId(1)
         assert attachment.player_id == PlayerId(2)
 
@@ -44,9 +42,7 @@ class TestBeingAttachmentEquality:
         assert a == b
 
     @pytest.mark.parametrize("world, player", [(99, 2), (1, 99)])
-    def test_different_world_or_player_is_not_equal(
-        self, world: int, player: int
-    ) -> None:
+    def test_different_world_or_player_is_not_equal(self, world: int, player: int) -> None:
         """世界・プレイヤーの一方だけが違っても、接続先は同じではない。"""
         original = BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
         other = BeingAttachment(world_id=WorldId(world), player_id=PlayerId(player))

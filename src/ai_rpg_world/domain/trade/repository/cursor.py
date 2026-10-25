@@ -1,6 +1,7 @@
 """
 取引ページング用の汎用カーソル
 """
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +14,7 @@ class Cursor(ABC):
     ドメイン層でのカーソル表現。アプリケーション層でのエンコード/デコードは
     別途CursorCodecで行う。
     """
+
     created_at: datetime
 
     @property
@@ -25,6 +27,7 @@ class Cursor(ABC):
 @dataclass(frozen=True)
 class TradeCursor(Cursor):
     """取引ページング用のカーソル"""
+
     created_at: datetime
     trade_id: int
 
@@ -36,6 +39,7 @@ class TradeCursor(Cursor):
 @dataclass(frozen=True)
 class ListingCursor(Cursor):
     """出品ページング用のカーソル"""
+
     created_at: datetime
     listing_id: int  # trade_idと同じ
 

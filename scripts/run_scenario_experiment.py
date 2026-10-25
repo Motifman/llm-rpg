@@ -115,11 +115,7 @@ def _classify_llm_run_health(
     if not isinstance(trace_path, Path):
         return outcome, end_reason, 0, 0
 
-    calls = [
-        event
-        for event in load_trace_events(trace_path)
-        if event.kind == TraceEventKind.LLM_CALL
-    ]
+    calls = [event for event in load_trace_events(trace_path) if event.kind == TraceEventKind.LLM_CALL]
     total = len(calls)
     succeeded = sum(bool(event.payload.get("success")) for event in calls)
     if total == 0 or succeeded > 0 or outcome == "LLM_ABORTED":
@@ -131,13 +127,8 @@ def _classify_llm_run_health(
     for event in calls:
         error_code = str(event.payload.get("error_code") or "UNKNOWN")
         error_counts[error_code] = error_counts.get(error_code, 0) + 1
-    breakdown = ", ".join(
-        f"{code}: {count}" for code, count in sorted(error_counts.items())
-    )
-    reason = (
-        f"LLM 呼び出し {total} 件がすべて失敗したため実験結果を無効とする "
-        f"({breakdown})"
-    )
+    breakdown = ", ".join(f"{code}: {count}" for code, count in sorted(error_counts.items()))
+    reason = f"LLM 呼び出し {total} 件がすべて失敗したため実験結果を無効とする ({breakdown})"
     return "LLM_FAILURE", reason, total, succeeded
 
 
@@ -344,9 +335,7 @@ def _runtime_config_mapping_from_source(
     rendered_values: dict[str, str] = {}
     for key, value in values.items():
         if not isinstance(key, str) or not key.strip():
-            raise ValueError(
-                "experiment config runtime_config keys must be non-empty strings"
-            )
+            raise ValueError("experiment config runtime_config keys must be non-empty strings")
         rendered_values[key] = _json_config_value(value)
     return rendered_values
 
@@ -375,10 +364,7 @@ def _mask_secret_values(value: Any, *, key_name: str = "") -> Any:
     if any(fragment in normalized_key for fragment in _SECRET_KEY_FRAGMENTS):
         return "***"
     if isinstance(value, dict):
-        return {
-            k: _mask_secret_values(v, key_name=str(k))
-            for k, v in value.items()
-        }
+        return {k: _mask_secret_values(v, key_name=str(k)) for k, v in value.items()}
     if isinstance(value, list):
         return [_mask_secret_values(v) for v in value]
     return value
@@ -432,11 +418,7 @@ def _git_metadata() -> dict[str, Any]:
         "branch": _run_git(["branch", "--show-current"]),
         "dirty": bool(status),
         "dirty_files": dirty_files,
-        "dirty_diff_sha256": (
-            hashlib.sha256(combined_diff.encode("utf-8")).hexdigest()
-            if combined_diff
-            else None
-        ),
+        "dirty_diff_sha256": (hashlib.sha256(combined_diff.encode("utf-8")).hexdigest() if combined_diff else None),
     }
 
 
@@ -480,9 +462,7 @@ def _write_experiment_manifest(
         "max_world_ticks": int(max_world_ticks),
         "snapshot_save_dir": str(snapshot_save_dir) if snapshot_save_dir else None,
         "snapshot_load_dir": str(snapshot_load_dir) if snapshot_load_dir else None,
-        "runtime_config_source": _mask_secret_values(
-            dict(sorted(runtime_config_source.items()))
-        ),
+        "runtime_config_source": _mask_secret_values(dict(sorted(runtime_config_source.items()))),
         "runtime_config": resolved_config.to_trace_dict(),
         "git": _git_metadata(),
     }
@@ -571,12 +551,8 @@ def _drive_scenario(
             characters_path=chars,
             runtime_config=runtime_config,
         )
-        char = mgr.create_character(
-            CharacterCreateRequest(name=f"exp-{scenario_path.stem}")
-        )
-        summary = mgr.create_session(
-            SessionCreateRequest(world_id=world_id, character_ids=[char.id])
-        )
+        char = mgr.create_character(CharacterCreateRequest(name=f"exp-{scenario_path.stem}"))
+        summary = mgr.create_session(SessionCreateRequest(world_id=world_id, character_ids=[char.id]))
         state = mgr._sessions[summary.session_id]
         runtime = state.runtime
         cleanup.callback(runtime.shutdown_async_events)
@@ -653,16 +629,12 @@ def _drive_scenario(
             )
 
             if snapshot_load_dir is not None:
-                logger.info(
-                    "loading snapshots from %s ...", snapshot_load_dir
-                )
+                logger.info("loading snapshots from %s ...", snapshot_load_dir)
                 restore_report = snapshot_session.restore_all_from_dir(
                     snapshot_load_dir,
                     current_scenario=scenario_path.stem,
                 )
-                logger.info(
-                    "restored %d being snapshot(s)", len(restore_report.restored)
-                )
+                logger.info("restored %d being snapshot(s)", len(restore_report.restored))
                 runtime.note_being_memories_restored(restore_report.restored)
                 # Phase 7: trace に「どの run から続きを取ったか」を残す。
                 # cross-scenario transfer も明示的に payload に乗せる。
@@ -696,8 +668,7 @@ def _drive_scenario(
                 )
                 if world_snapshot is not None:
                     logger.info(
-                        "restored world snapshot: source_scenario=%s "
-                        "world_tick=%d subsystems=%s",
+                        "restored world snapshot: source_scenario=%s world_tick=%d subsystems=%s",
                         world_snapshot.source_scenario,
                         world_snapshot.world_tick,
                         sorted(world_snapshot.subsystems.keys()),
@@ -708,9 +679,7 @@ def _drive_scenario(
                         source_scenario=world_snapshot.source_scenario,
                         current_scenario=scenario_path.stem,
                         world_tick=world_snapshot.world_tick,
-                        restored_subsystems=sorted(
-                            world_snapshot.subsystems.keys()
-                        ),
+                        restored_subsystems=sorted(world_snapshot.subsystems.keys()),
                     )
 
         for pid in runtime.get_player_ids():
@@ -740,10 +709,7 @@ def _drive_scenario(
 
             def _handler(_signum: int, _frame: Any) -> None:
                 _interrupted["flag"] = True
-                logger.warning(
-                    "SIGINT received; will stop tick loop and capture "
-                    "snapshot before exit"
-                )
+                logger.warning("SIGINT received; will stop tick loop and capture snapshot before exit")
 
             old = _signal.signal(_signal.SIGINT, _handler)
             try:
@@ -752,14 +718,12 @@ def _drive_scenario(
                 try:
                     _signal.signal(_signal.SIGINT, old)
                 except Exception:
-                    logger.warning(
-                        "failed to restore SIGINT handler", exc_info=True
-                    )
+                    logger.warning("failed to restore SIGINT handler", exc_info=True)
+
         with _sigint_to_flag_guard():
             # 各 player の前 tick の spot を保持して差分検出に使う
             prev_spots: dict[int, str | None] = {
-                int(pid.value): runtime.get_player_spot_id(pid)
-                for pid in runtime.get_player_ids()
+                int(pid.value): runtime.get_player_spot_id(pid) for pid in runtime.get_player_ids()
             }
             # #404 P1: 外側ループを「world_tick が max_world_ticks に達するまで」に
             # 統一する。旧 ``for i in range(max_ticks)`` は外側 iteration 回数だった
@@ -769,11 +733,7 @@ def _drive_scenario(
             # world_tick が進まないバグが入ってもループが暴走しないようにする。
             max_iterations = max(1, max_world_ticks * 2)
             i = 0
-            while (
-                runtime.current_tick() < max_world_ticks
-                and i < max_iterations
-                and not _interrupted["flag"]
-            ):
+            while runtime.current_tick() < max_world_ticks and i < max_iterations and not _interrupted["flag"]:
                 w0 = runtime.current_tick()
                 # 旧 progress callable は legacy (start 通知)。新 reporter は
                 # tick 完了時に ETA / per-tick wall time を出す。
@@ -840,10 +800,7 @@ def _drive_scenario(
                 if abort_reason is not None:
                     outcome = "LLM_ABORTED"
                     end_reason = abort_reason
-                    message = (
-                        f"LLM 障害で実験を打ち切る world_tick={last_tick}: "
-                        f"{abort_reason}"
-                    )
+                    message = f"LLM 障害で実験を打ち切る world_tick={last_tick}: {abort_reason}"
                     if reporter is not None:
                         reporter.message(message)
                     else:
@@ -861,13 +818,9 @@ def _drive_scenario(
                             **team_result,
                         )
                     if reporter is not None:
-                        reporter.message(
-                            f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
-                        )
+                        reporter.message(f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}")
                     else:
-                        progress(
-                            f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
-                        )
+                        progress(f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}")
                     break
                 i += 1
             if _interrupted["flag"] and outcome != "LLM_ABORTED":
@@ -894,9 +847,7 @@ def _drive_scenario(
         # #1626: 環境を離れるので、まだ畳まれていない出来事からエピソードを書く。
         # 書いたエピソードを snapshot に入れるため、保存より前に置く。LLM が使えずに
         # 終わった run では、呼んでも失敗が並ぶだけなので書かずに理由を残す。
-        runtime.write_episodes_on_leaving(
-            skip_reason="llm_unusable" if outcome in _UNUSABLE_OUTCOMES else None
-        )
+        runtime.write_episodes_on_leaving(skip_reason="llm_unusable" if outcome in _UNUSABLE_OUTCOMES else None)
 
         runtime.shutdown_async_events()
 
@@ -931,10 +882,7 @@ def _drive_scenario(
                     failed_count=len(report.failed),
                     succeeded_being_ids=[b.value for b in report.succeeded],
                     memory_turns=snapshot_session.memory_turns(report.succeeded),
-                    failures=[
-                        {"being_id": b.value, "error": err}
-                        for (b, err) in report.failed
-                    ],
+                    failures=[{"being_id": b.value, "error": err} for (b, err) in report.failed],
                 )
             except Exception:
                 logger.warning(
@@ -969,9 +917,7 @@ def _drive_scenario(
                     world_tick=int(runtime.current_tick()),
                 )
                 # 公開アクセサで登録済 subsystem 名を取得 (= 観察用)。
-                captured_keys = (
-                    snapshot_session.world_snapshot_service.registered_subsystem_keys
-                )
+                captured_keys = snapshot_session.world_snapshot_service.registered_subsystem_keys
                 logger.info(
                     "world snapshot save: world_tick=%d subsystems=%s (dir=%s)",
                     int(runtime.current_tick()),
@@ -1008,15 +954,11 @@ def _drive_scenario(
 
         # 実験用の差し替え runtime は持っていないことがある。0 件と区別するため None で返す。
         failure_counts_getter = getattr(runtime, "world_tick_failure_counts", None)
-        world_tick_failure_counts = (
-            failure_counts_getter() if callable(failure_counts_getter) else None
-        )
-        outcome, end_reason, llm_call_count, llm_success_count = (
-            _classify_llm_run_health(
-                recorder,
-                outcome=outcome,
-                end_reason=end_reason,
-            )
+        world_tick_failure_counts = failure_counts_getter() if callable(failure_counts_getter) else None
+        outcome, end_reason, llm_call_count, llm_success_count = _classify_llm_run_health(
+            recorder,
+            outcome=outcome,
+            end_reason=end_reason,
         )
         return {
             "outcome": outcome,
@@ -1030,9 +972,7 @@ def _drive_scenario(
             "snapshot_load_dir": str(snapshot_load_dir) if snapshot_load_dir else None,
             "world_tick_failure_counts": world_tick_failure_counts,
             "world_tick_failure_total": (
-                sum(world_tick_failure_counts.values())
-                if world_tick_failure_counts is not None
-                else None
+                sum(world_tick_failure_counts.values()) if world_tick_failure_counts is not None else None
             ),
         }
 
@@ -1080,15 +1020,10 @@ def _llm_cost_row(label: str, calls: list[Any]) -> str:
     failures = sum(1 for p in payloads if not p.get("success"))
     latency_sec = sum(int(p.get("wall_latency_ms") or 0) for p in payloads) / 1000.0
     prompt, completion, cost = (
-        _sum_or_unavailable(
-            [p.get(key) for p in payloads if _billable(p, key)], money=key == "cost_usd"
-        )
+        _sum_or_unavailable([p.get(key) for p in payloads if _billable(p, key)], money=key == "cost_usd")
         for key in ("prompt_tokens", "completion_tokens", "cost_usd")
     )
-    return (
-        f"| {label} | {len(payloads)} | {failures} | {prompt} | {completion} | "
-        f"{cost} | {latency_sec:.1f} |"
-    )
+    return f"| {label} | {len(payloads)} | {failures} | {prompt} | {completion} | {cost} | {latency_sec:.1f} |"
 
 
 def _known_cost(calls: list[Any]) -> float:
@@ -1103,24 +1038,18 @@ def _llm_cost_header_line(llm_calls: list[Any], aux_calls: list[Any]) -> str:
         f"行動 ${action_cost:.4f} + 記憶の部品と Jev ${aux_cost:.4f}"
     )
     missing = sum(
-        1
-        for e in llm_calls + aux_calls
-        if e.payload.get("cost_usd") is None and _billable(e.payload, "cost_usd")
+        1 for e in llm_calls + aux_calls if e.payload.get("cost_usd") is None and _billable(e.payload, "cost_usd")
     )
     return f"{line}。費用が取れない呼び出し {missing} 回" if missing else line
 
 
-def _llm_cost_lines(
-    llm_calls: list[Any], aux_calls: list[Any], aux_record_failures: list[Any]
-) -> list[str]:
+def _llm_cost_lines(llm_calls: list[Any], aux_calls: list[Any], aux_record_failures: list[Any]) -> list[str]:
     """行動の呼び出しと、記憶の部品・Jev の呼び出しを部品ごとに分けた表 (#1617)。"""
     by_component: dict[str, list[Any]] = {}
     for event in aux_calls:
         by_component.setdefault(str(event.payload.get("component")), []).append(event)
     order = [c.value for c in AuxLlmComponent]
-    components = sorted(
-        by_component, key=lambda c: (order.index(c) if c in order else len(order), c)
-    )
+    components = sorted(by_component, key=lambda c: (order.index(c) if c in order else len(order), c))
     lines = [
         "## LLM 呼び出しの回数と費用",
         "",
@@ -1228,9 +1157,7 @@ def _build_report(
     lines.append(f"- outcome: **{summary['outcome']}**")
     if summary.get("end_reason"):
         lines.append(f"- end reason: {summary['end_reason']}")
-    lines.append(
-        f"- last tick: {summary['last_tick']} / max world ticks: {summary['max_world_ticks']}"
-    )
+    lines.append(f"- last tick: {summary['last_tick']} / max world ticks: {summary['max_world_ticks']}")
     lines.append(f"- elapsed: {summary['elapsed_sec']:.1f}s")
     lines.append(f"- total events: {len(events)}")
     # 層 3: 呼び出しの健全さは冒頭に出す。奥に置くと「outcome / 完走」だけを
@@ -1239,9 +1166,7 @@ def _build_report(
     if llm_calls:
         succeeded = len(llm_calls) - sum(llm_failures.values())
         rate = succeeded * 100.0 / len(llm_calls)
-        lines.append(
-            f"- llm calls: {len(llm_calls)} (成功 {succeeded} / {rate:.0f}%)"
-        )
+        lines.append(f"- llm calls: {len(llm_calls)} (成功 {succeeded} / {rate:.0f}%)")
     lines.append(_llm_cost_header_line(llm_calls, aux_calls))
     lines.extend(_world_tick_failure_lines(summary))
     lines.append("")
@@ -1271,10 +1196,7 @@ def _build_report(
         lines.append("|-----------|---------|-----------|----------|-------|")
         for pid in sorted(by_player):
             b = by_player[pid]
-            lines.append(
-                f"| {pid} | {b['actions']} | {b['successes']} | {b['failures']} | "
-                f"{b.get('moves', 0)} |"
-            )
+            lines.append(f"| {pid} | {b['actions']} | {b['successes']} | {b['failures']} | {b.get('moves', 0)} |")
         lines.append("")
     lines.append("## 成果物")
     lines.append("")
@@ -1356,9 +1278,7 @@ def _render_prompt_viewer_html(run_dir: Path) -> str:
     run_json = run_dir / "prompt_dataset" / "run.json"
     if run_json.exists():
         try:
-            profile = str(
-                json.loads(run_json.read_text(encoding="utf-8")).get("profile") or ""
-            )
+            profile = str(json.loads(run_json.read_text(encoding="utf-8")).get("profile") or "")
         except json.JSONDecodeError:
             profile = ""
     return render_prompt_html(calls, run_id=run_dir.name, profile=profile)
@@ -1466,10 +1386,7 @@ def main(argv: list[str] | None = None) -> int:
         "--max-world-ticks",
         type=int,
         default=None,
-        help=(
-            "Stop when world_tick reaches this value (default 30, "
-            "or experiment config max_world_ticks)"
-        ),
+        help=("Stop when world_tick reaches this value (default 30, or experiment config max_world_ticks)"),
     )
     parser.add_argument(
         "--out",
@@ -1557,9 +1474,7 @@ def main(argv: list[str] | None = None) -> int:
         if raw_scenario:
             scenario_arg = Path(str(raw_scenario))
     if scenario_arg is None:
-        parser.error(
-            "scenario is required. Pass --scenario or set 'scenario' in the experiment config."
-        )
+        parser.error("scenario is required. Pass --scenario or set 'scenario' in the experiment config.")
     args.scenario = scenario_arg
 
     if not args.scenario.exists():
@@ -1569,9 +1484,7 @@ def main(argv: list[str] | None = None) -> int:
         if config_source.get("max_world_ticks") is not None:
             args.max_world_ticks = int(config_source["max_world_ticks"])
         else:
-            args.max_world_ticks = int(
-                "30"
-            )
+            args.max_world_ticks = int("30")
 
     out_dir = args.out
     if out_dir is None:
@@ -1587,6 +1500,7 @@ def main(argv: list[str] | None = None) -> int:
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
         ResolvedLlmRuntimeConfig,
     )
+
     cfg = ResolvedLlmRuntimeConfig.from_mapping(values=runtime_config_source)
 
     print(
@@ -1667,18 +1581,14 @@ def main(argv: list[str] | None = None) -> int:
             max_world_ticks=args.max_world_ticks,
             stdout=sys.stdout,
             stderr=None if args.no_stderr_progress else sys.stderr,
-            progress_jsonl=(
-                None if args.no_progress_jsonl else (out_dir / "progress.jsonl")
-            ),
+            progress_jsonl=(None if args.no_progress_jsonl else (out_dir / "progress.jsonl")),
         )
 
         # Phase 6 (Issue #470): snapshot-load-dir が指定されていれば存在チェック。
         # 不在 dir で進めると "途中で読めない" が分かるのが load 後になり、
         # 既存 experiment data の汚染リスクが上がる。ここで早期 fail-fast。
         if args.snapshot_load_dir is not None and not args.snapshot_load_dir.exists():
-            parser.error(
-                f"snapshot-load-dir does not exist: {args.snapshot_load_dir}"
-            )
+            parser.error(f"snapshot-load-dir does not exist: {args.snapshot_load_dir}")
         if args.snapshot_save_dir is not None:
             args.snapshot_save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1732,8 +1642,7 @@ def main(argv: list[str] | None = None) -> int:
     # 層 3: 端末で最後に見る 1 行にも呼び出しの健全さを出す。report.md を
     # 開かずに閉じる人がいるし、閾値未満の「じわ荒れ」はここだけが砦になる。
     done_line = (
-        f"[done] outcome={summary['outcome']} last_tick={summary['last_tick']} "
-        f"elapsed={summary['elapsed_sec']:.1f}s"
+        f"[done] outcome={summary['outcome']} last_tick={summary['last_tick']} elapsed={summary['elapsed_sec']:.1f}s"
     )
     tick_failures = summary.get("world_tick_failure_total")
     if tick_failures:
@@ -1751,8 +1660,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         desc = args.publish_gist_desc or (
-            f"llm-rpg experiment: {args.scenario.stem} "
-            f"outcome={summary['outcome']} tick={summary['last_tick']}"
+            f"llm-rpg experiment: {args.scenario.stem} outcome={summary['outcome']} tick={summary['last_tick']}"
         )
         try:
             result = publish(

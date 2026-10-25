@@ -84,9 +84,7 @@ class TestBeingAttachDetach:
     def test_attach_raises_exception(self, world: int, player: int) -> None:
         """接続済みなら同じ対・別の対への接続を拒否し、元の接続を保持する。"""
         previous = _attachment(world=1, player=2)
-        being = Being(
-            being_id=BeingId("ada"), identity=_identity(), attachment=previous
-        )
+        being = Being(being_id=BeingId("ada"), identity=_identity(), attachment=previous)
         assert being.attachment == previous
         assert being.is_attached is True
 
@@ -100,9 +98,7 @@ class TestBeingAttachDetach:
     def test_attach_vo_raises_type_error(self, initially_attached: bool) -> None:
         """接続の型違反を拒否しても、未接続・既接続いずれの元状態も変えない。"""
         previous = _attachment() if initially_attached else None
-        being = Being(
-            being_id=BeingId("ada"), identity=_identity(), attachment=previous
-        )
+        being = Being(being_id=BeingId("ada"), identity=_identity(), attachment=previous)
         assert being.attachment == previous
         assert being.is_attached is initially_attached
 
@@ -115,9 +111,7 @@ class TestBeingAttachDetach:
     def test_detach_returns_previous_attachment_and_clears_state(self) -> None:
         """解除は直前の世界・プレイヤー対を返し、主体を未接続にする。"""
         previous = _attachment()
-        being = Being(
-            being_id=BeingId("ada"), identity=_identity(), attachment=previous
-        )
+        being = Being(being_id=BeingId("ada"), identity=_identity(), attachment=previous)
 
         assert being.detach() == previous
         assert being.attachment is None
@@ -129,9 +123,7 @@ class TestBeingAttachDetach:
         assert being.detach() is None
 
     @pytest.mark.parametrize("world, player", [(2, 2), (2, 99)])
-    def test_switching_attachments_preserves_identity_and_declarations(
-        self, world: int, player: int
-    ) -> None:
+    def test_switching_attachments_preserves_identity_and_declarations(self, world: int, player: int) -> None:
         """世界だけ替える場合も身体も替える場合も、解除中と接続後に主体情報が残る。"""
         being_id = BeingId("ada")
         identity = _identity()
@@ -215,13 +207,9 @@ class TestBeingDeclaredMemoryKinds:
             identity=_identity(),
             declared_memory_kinds=[MemoryKind.EPISODIC],
         )
-        updated = original.with_declared_memory_kinds(
-            [MemoryKind.EPISODIC, MemoryKind.SEMANTIC]
-        )
+        updated = original.with_declared_memory_kinds([MemoryKind.EPISODIC, MemoryKind.SEMANTIC])
         assert original.declared_memory_kinds == frozenset({MemoryKind.EPISODIC})
-        assert updated.declared_memory_kinds == frozenset(
-            {MemoryKind.EPISODIC, MemoryKind.SEMANTIC}
-        )
+        assert updated.declared_memory_kinds == frozenset({MemoryKind.EPISODIC, MemoryKind.SEMANTIC})
         assert updated.being_id == original.being_id
         assert updated.identity == original.identity
 

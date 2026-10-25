@@ -14,7 +14,4 @@ def test_runtime_wires_resolver_to_group_command_scope() -> None:
 
     assert stage._command_scope_factory is not None
     transaction_factory = stage._command_scope_factory._transaction_factory
-    assert (
-        transaction_factory._transaction_factory._data_store
-        is runtime._spot_interior_repo._data_store
-    )
+    assert transaction_factory._transaction_factory._data_store is runtime._spot_interior_repo._data_store

@@ -39,7 +39,8 @@ class AggregateRoot(EventAggregateRoot[BaseDomainEvent[Any, Any]]):
         counts = Counter(type(e).__name__ for e in pending)
         breakdown = ", ".join(f"{name}={n}" for name, n in counts.most_common())
         logger.warning(
-            "Aggregate has %d pending domain events at %s; publish_all() may "
-            "have been forgotten. event_types: %s",
-            len(pending), context, breakdown,
+            "Aggregate has %d pending domain events at %s; publish_all() may have been forgotten. event_types: %s",
+            len(pending),
+            context,
+            breakdown,
         )

@@ -21,17 +21,34 @@ def _ids() -> Iterator[str]:
 
 
 def _content(about: str = "金庫を開けた", *, truncated: dict[str, int] | None = None) -> EpisodeContent:
-    return EpisodeContent(index=EpisodeIndex(summary=about, recall_when="金庫の話が出たとき"), body="紙の番号で金庫が開いた。", truncated=truncated or {})
+    return EpisodeContent(
+        index=EpisodeIndex(summary=about, recall_when="金庫の話が出たとき"),
+        body="紙の番号で金庫が開いた。",
+        truncated=truncated or {},
+    )
 
 
-def _add_episodes(repository: InMemoryEpisodeRepository | None = None) -> tuple[AddEpisodesToMemory, InMemoryEpisodeRepository]:
+def _add_episodes(
+    repository: InMemoryEpisodeRepository | None = None,
+) -> tuple[AddEpisodesToMemory, InMemoryEpisodeRepository]:
     repository = repository if repository is not None else InMemoryEpisodeRepository()
     ids = _ids()
     return AddEpisodesToMemory(repository, new_episode_id=lambda: next(ids)), repository
 
 
-def _add(add_episodes: AddEpisodesToMemory, *contents: EpisodeContent, dropped_count: int = 0, environment_name: str = "地下の金庫室", written_turn: int = 12):
-    return add_episodes.add(EpisodeContents(contents=contents, dropped_count=dropped_count), being_id=ADA, environment_name=environment_name, written_turn=written_turn)
+def _add(
+    add_episodes: AddEpisodesToMemory,
+    *contents: EpisodeContent,
+    dropped_count: int = 0,
+    environment_name: str = "地下の金庫室",
+    written_turn: int = 12,
+):
+    return add_episodes.add(
+        EpisodeContents(contents=contents, dropped_count=dropped_count),
+        being_id=ADA,
+        environment_name=environment_name,
+        written_turn=written_turn,
+    )
 
 
 class TestAddEpisodesToMemory:

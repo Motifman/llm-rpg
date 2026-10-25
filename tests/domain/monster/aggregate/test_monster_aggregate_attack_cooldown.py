@@ -101,7 +101,8 @@ class TestCooldown:
         ("cooldown_ticks", "checks"),
         [
             pytest.param(
-                3, ((10, False), (11, False), (12, False), (13, True)),
+                3,
+                ((10, False), (11, False), (12, False), (13, True)),
                 id="three-tick-cooldown",
             ),
             pytest.param(1, ((10, False),), id="same-tick-with-minimum-cooldown"),
@@ -109,7 +110,9 @@ class TestCooldown:
         ],
     )
     def test_attack_availability_after_recording(
-        self, cooldown_ticks: int, checks: tuple[tuple[int, bool], ...],
+        self,
+        cooldown_ticks: int,
+        checks: tuple[tuple[int, bool], ...],
     ) -> None:
         """tick10の攻撃後は指定間隔に達するまで拒否し、境界ちょうどで許可する。"""
         agg = _aggregate(_template(attack_cooldown_ticks=cooldown_ticks))
@@ -162,7 +165,8 @@ class TestTemplateValidation:
 
     @pytest.mark.parametrize("cooldown_ticks", [0, -1])
     def test_nonpositive_attack_cooldown_ticks_raise_exception(
-        self, cooldown_ticks: int,
+        self,
+        cooldown_ticks: int,
     ) -> None:
         """攻撃間隔が0または負数なら、テンプレートの検証例外で拒否する。"""
         with pytest.raises(MonsterTemplateValidationException):

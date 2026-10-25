@@ -31,9 +31,7 @@ def _session_with_shout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         characters_path=tmp_path / "characters.json",
     )
     char = mgr.create_character(CharacterCreateRequest(name="倒れた話し手"))
-    summary = mgr.create_session(
-        SessionCreateRequest(world_id="control_panel_toggle", character_ids=[char.id])
-    )
+    summary = mgr.create_session(SessionCreateRequest(world_id="control_panel_toggle", character_ids=[char.id]))
     state = mgr._sessions[summary.session_id]
     state.llm_wiring.llm_client = StubLlmClient(
         tool_call_to_return={
@@ -80,6 +78,4 @@ class TestDownedSpeakerIsRefusedAsWorldFailure:
         wiring = SimpleNamespace(runtime=SimpleNamespace(do_speech=_raise_not_found))
 
         with pytest.raises(PlayerNotFoundException):
-            handle_speech(
-                wiring, PlayerId(1), {"channel": "shout", "content": "誰か来てくれ"}, None
-            )
+            handle_speech(wiring, PlayerId(1), {"channel": "shout", "content": "誰か来てくれ"}, None)

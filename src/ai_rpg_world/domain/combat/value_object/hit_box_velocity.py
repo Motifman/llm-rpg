@@ -7,6 +7,7 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 @dataclass(frozen=True)
 class HitBoxVelocity:
     """HitBoxの1ティックあたり移動量"""
+
     dx: float
     dy: float
     dz: float = 0.0
@@ -19,11 +20,7 @@ class HitBoxVelocity:
 
     @property
     def is_stationary(self) -> bool:
-        return (
-            abs(self.dx) < self.EPSILON
-            and abs(self.dy) < self.EPSILON
-            and abs(self.dz) < self.EPSILON
-        )
+        return abs(self.dx) < self.EPSILON and abs(self.dy) < self.EPSILON and abs(self.dz) < self.EPSILON
 
     def apply_to(self, coordinate: Coordinate, step_ratio: float = 1.0) -> Coordinate:
         return Coordinate(

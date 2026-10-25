@@ -45,9 +45,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI, _SENA, _KUZE, _AOI = (PlayerId(i) for i in (1, 2, 3, 4))
 
@@ -74,14 +72,15 @@ def _all_tool_identifiers() -> set[str]:
     import ai_rpg_world.application.llm.tool_constants as constants
 
     prefixes = [
-        value for key, value in vars(constants).items()
+        value
+        for key, value in vars(constants).items()
         if key.startswith("TOOL_NAME_PREFIX_") and isinstance(value, str) and value
     ]
     names: set[str] = set()
     for key, value in vars(constants).items():
         if key.startswith("TOOL_NAME_") and not key.startswith("TOOL_NAME_PREFIX_") and isinstance(value, str):
             names.add(value)
-            names.update(value[len(prefix):] for prefix in prefixes if value.startswith(prefix))
+            names.update(value[len(prefix) :] for prefix in prefixes if value.startswith(prefix))
     return names
 
 
@@ -187,9 +186,7 @@ class TestNoDisabledToolIsAdvertisedAnywhere:
             assert tool_name not in observation, observation
 
     @pytest.mark.parametrize("tool_name", _TOOL_NAMES)
-    def test_auto_instruction_names_exactly_the_tools_in_the_actual_payload(
-        self, tmp_path, tool_name
-    ) -> None:
+    def test_auto_instruction_names_exactly_the_tools_in_the_actual_payload(self, tmp_path, tool_name) -> None:
         """auto の末尾指示は実 payload から作り、無効化した名前を宣伝しない。"""
         runtime = create_world_runtime(
             _world_with_only(tmp_path, tool_name),
@@ -322,14 +319,8 @@ def _agent_facing_texts() -> list[tuple[str, str]]:
         DEFAULT_REMEDIATION_BY_ERROR_CODE,
     )
 
-    texts = [
-        (f"remediation:{code}", text)
-        for code, text in DEFAULT_REMEDIATION_BY_ERROR_CODE.items()
-    ]
-    texts += [
-        (f"tool_catalog:{defn.name}", str(defn.description))
-        for defn, _ in get_spot_graph_specs()
-    ]
+    texts = [(f"remediation:{code}", text) for code, text in DEFAULT_REMEDIATION_BY_ERROR_CODE.items()]
+    texts += [(f"tool_catalog:{defn.name}", str(defn.description)) for defn, _ in get_spot_graph_specs()]
     return texts
 
 
@@ -368,7 +359,8 @@ class TestAdviceDoesNotNameAToolThatMightNotExist:
         import re
 
         offenders = [
-            (where, text) for where, text in _agent_facing_texts()
+            (where, text)
+            for where, text in _agent_facing_texts()
             for verb in verbs
             if re.search(rf"(?<![A-Za-z_]){verb}(?![A-Za-z_])", text)
         ]
@@ -398,9 +390,7 @@ class TestTheExhaustedRefusalNamesNoTool:
             short_term_memory=runtime._short_term_memory,
             llm_client=StubLlmClient(None),
         )._spot_graph_executor
-        monkeypatch.setattr(
-            executor, "_get_status", lambda player_id: SimpleNamespace(is_exhausted=lambda: True)
-        )
+        monkeypatch.setattr(executor, "_get_status", lambda player_id: SimpleNamespace(is_exhausted=lambda: True))
 
         refusal = executor._is_exhausted_and_block(int(_MORI), TOOL_NAME_SPOT_GRAPH_TRAVEL_TO)
 

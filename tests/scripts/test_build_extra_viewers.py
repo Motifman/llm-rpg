@@ -8,27 +8,57 @@ from scripts.build_timeline_viewer import render_html as render_timeline
 
 def _make_events() -> list:
     return [
-        {"kind": "episodic_chunk_written", "tick": 3, "player_id": 1, "payload": {
-            "episode_id": "ep-1", "boundary_reason": "category_shift",
-            "cues": ["action:x", "outcome:success"],
-            "recall_text_snippet": "ada が漁った",
-            "action_count": 3, "observation_count": 10,
-        }},
-        {"kind": "episodic_subjective_filled", "tick": 6, "player_id": 1, "payload": {
-            "episode_id": "ep-1", "latency_ms": 1200,
-            "recall_text_snippet": "あの時 ada は浜辺で…",
-        }},
-        {"kind": "episodic_recall", "tick": 9, "player_id": 2, "payload": {
-            "candidate_count": 1,
-            "candidates": [{"episode_id": "ep-1", "recall_text_snippet": "snip"}],
-        }},
-        {"kind": "action", "tick": 1, "player_id": 1, "payload": {
-            "tool": "explore", "arguments": {"inner_thought": "see around"},
-        }},
+        {
+            "kind": "episodic_chunk_written",
+            "tick": 3,
+            "player_id": 1,
+            "payload": {
+                "episode_id": "ep-1",
+                "boundary_reason": "category_shift",
+                "cues": ["action:x", "outcome:success"],
+                "recall_text_snippet": "ada が漁った",
+                "action_count": 3,
+                "observation_count": 10,
+            },
+        },
+        {
+            "kind": "episodic_subjective_filled",
+            "tick": 6,
+            "player_id": 1,
+            "payload": {
+                "episode_id": "ep-1",
+                "latency_ms": 1200,
+                "recall_text_snippet": "あの時 ada は浜辺で…",
+            },
+        },
+        {
+            "kind": "episodic_recall",
+            "tick": 9,
+            "player_id": 2,
+            "payload": {
+                "candidate_count": 1,
+                "candidates": [{"episode_id": "ep-1", "recall_text_snippet": "snip"}],
+            },
+        },
+        {
+            "kind": "action",
+            "tick": 1,
+            "player_id": 1,
+            "payload": {
+                "tool": "explore",
+                "arguments": {"inner_thought": "see around"},
+            },
+        },
         {"kind": "observation", "tick": 2, "player_id": 1, "payload": {"prose": "hi"}},
-        {"kind": "position_change", "tick": 0, "player_id": 1, "payload": {
-            "spot_name": "beach", "player_name": "ada",
-        }},
+        {
+            "kind": "position_change",
+            "tick": 0,
+            "player_id": 1,
+            "payload": {
+                "spot_name": "beach",
+                "player_name": "ada",
+            },
+        },
     ]
 
 

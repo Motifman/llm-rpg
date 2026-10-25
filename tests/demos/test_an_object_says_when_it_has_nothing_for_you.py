@@ -37,10 +37,7 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "market_town_v3_board.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v3_board.json"
 
 #: 焼き手 (石窯を扱える) と摘み手 (扱えない)。
 _BAKER = 3
@@ -120,7 +117,8 @@ class TestTheRefusalDoesNotReadAsANameProblem:
     """拒否の文が、2 つの誤読をどちらも塞ぐ。"""
 
     def test_it_says_both_that_the_name_is_absent_and_that_names_do_not_help(
-        self, town,
+        self,
+        town,
     ) -> None:
         """「その名前は無い」と「名前を変えても通らない」を両方言う。
 
@@ -169,17 +167,18 @@ def _refusal_message(runtime: Any, player_id: int) -> str:
     )
     oven_id = runtime.id_mapper.get_int("object", "stone_oven")
     result = executor._interact(
-        player_id, {"object_id": oven_id, "action_name": "examine"},
+        player_id,
+        {"object_id": oven_id, "action_name": "examine"},
     )
     return result.message
-
 
 
 class TestTheNoteNeverLeaksWhyItIsHidden:
     """存在層で伏せた操作については、注記そのものを出さない。"""
 
     def test_an_object_hidden_only_by_plane_gets_no_note(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """存在層だけで操作が消えた物体には、注記を出さない。
 

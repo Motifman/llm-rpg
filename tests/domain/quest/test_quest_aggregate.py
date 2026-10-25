@@ -62,9 +62,7 @@ class TestQuestAggregate:
         return QuestScope.public_scope()
 
     @pytest.fixture
-    def open_quest(
-        self, quest_id, objectives, reward, scope
-    ) -> QuestAggregate:
+    def open_quest(self, quest_id, objectives, reward, scope) -> QuestAggregate:
         return QuestAggregate.issue_quest(
             quest_id=quest_id,
             objectives=objectives,
@@ -75,9 +73,7 @@ class TestQuestAggregate:
         )
 
     @pytest.fixture
-    def accepted_quest(
-        self, quest_id, objectives, reward, scope, player_id
-    ) -> QuestAggregate:
+    def accepted_quest(self, quest_id, objectives, reward, scope, player_id) -> QuestAggregate:
         q = QuestAggregate.issue_quest(
             quest_id=quest_id,
             objectives=objectives,
@@ -121,9 +117,7 @@ class TestQuestAggregate:
             assert isinstance(events[0], QuestIssuedEvent)
             assert events[0].aggregate_id == quest_id
 
-        def test_issue_quest_empty_objectives_raises(
-            self, quest_id, reward, scope
-        ):
+        def test_issue_quest_empty_objectives_raises(self, quest_id, reward, scope):
             with pytest.raises(ValueError):
                 QuestAggregate.issue_quest(
                     quest_id=quest_id,
@@ -134,9 +128,7 @@ class TestQuestAggregate:
                     guild_id=None,
                 )
 
-        def test_issue_quest_with_reserved_rewards_player_issued(
-            self, quest_id, objectives, reward, scope, player_id
-        ):
+        def test_issue_quest_with_reserved_rewards_player_issued(self, quest_id, objectives, reward, scope, player_id):
             """プレイヤー発行時は reserved_gold / reserved_item_instance_ids を保持する"""
             reserved_gold = 50
             reserved_ids = (ItemInstanceId(1001), ItemInstanceId(1002))
@@ -167,9 +159,7 @@ class TestQuestAggregate:
             assert q.reserved_gold == 0
             assert q.reserved_item_instance_ids == ()
 
-        def test_issue_quest_with_guild_id_sets_pending_approval(
-            self, quest_id, objectives, reward, player_id
-        ):
+        def test_issue_quest_with_guild_id_sets_pending_approval(self, quest_id, objectives, reward, player_id):
             """ギルド掲示時は status=PENDING_APPROVAL となり QuestPendingApprovalEvent を発行する"""
             scope = QuestScope.guild_scope(10)
             q = QuestAggregate.issue_quest(
@@ -256,9 +246,7 @@ class TestQuestAggregate:
             assert (q.status, q.acceptor_player_id, q.objectives) == state_before
             assert q.get_events() == events_before
 
-        def test_accept_direct_scope_correct_player_succeeds(
-            self, quest_id, objectives, reward, player_id
-        ):
+        def test_accept_direct_scope_correct_player_succeeds(self, quest_id, objectives, reward, player_id):
             scope = QuestScope.direct_scope(player_id)
             q = QuestAggregate.issue_quest(
                 quest_id=quest_id,
@@ -280,23 +268,15 @@ class TestQuestAggregate:
             assert q.objectives[0].current_count == 1
 
         def test_advance_objective_wrong_type_returns_false(self, accepted_quest):
-            r = accepted_quest.advance_objective(
-                QuestObjectiveType.REACH_SPOT, 101
-            )
+            r = accepted_quest.advance_objective(QuestObjectiveType.REACH_SPOT, 101)
             assert r is False
 
         def test_advance_objective_wrong_target_returns_false(self, accepted_quest):
-            r = accepted_quest.advance_objective(
-                QuestObjectiveType.KILL_MONSTER, 999
-            )
+            r = accepted_quest.advance_objective(QuestObjectiveType.KILL_MONSTER, 999)
             assert r is False
 
-        def test_advance_objective_when_not_accepted_returns_false(
-            self, open_quest
-        ):
-            r = open_quest.advance_objective(
-                QuestObjectiveType.KILL_MONSTER, 101
-            )
+        def test_advance_objective_when_not_accepted_returns_false(self, open_quest):
+            r = open_quest.advance_objective(QuestObjectiveType.KILL_MONSTER, 101)
             assert r is False
 
         def test_advance_objective_caps_at_required(self, accepted_quest):
@@ -307,9 +287,7 @@ class TestQuestAggregate:
             assert q.objectives[0].current_count == 2
             assert q.is_all_objectives_completed() is True
 
-        def test_advance_objective_take_from_chest_with_secondary_success(
-            self, quest_id, reward, scope, player_id
-        ):
+        def test_advance_objective_take_from_chest_with_secondary_success(self, quest_id, reward, scope, player_id):
             """TAKE_FROM_CHEST 目標で target_id と target_id_secondary が一致すると進捗する"""
             obj = QuestObjective(
                 objective_type=QuestObjectiveType.TAKE_FROM_CHEST,
@@ -325,9 +303,7 @@ class TestQuestAggregate:
                 scope=scope,
             )
             q.accept_by(player_id)
-            r = q.advance_objective(
-                QuestObjectiveType.TAKE_FROM_CHEST, 10, target_id_secondary=20
-            )
+            r = q.advance_objective(QuestObjectiveType.TAKE_FROM_CHEST, 10, target_id_secondary=20)
             assert r is True
             assert q.objectives[0].current_count == 1
             assert q.objectives[0].is_completed() is True
@@ -350,9 +326,7 @@ class TestQuestAggregate:
                 scope=scope,
             )
             q.accept_by(player_id)
-            r = q.advance_objective(
-                QuestObjectiveType.TAKE_FROM_CHEST, 10, target_id_secondary=99
-            )
+            r = q.advance_objective(QuestObjectiveType.TAKE_FROM_CHEST, 10, target_id_secondary=99)
             assert r is False
             assert q.objectives[0].current_count == 0
 
@@ -424,9 +398,7 @@ class TestQuestAggregate:
             events = accepted_quest.get_events()
             assert any(isinstance(e, QuestCancelledEvent) for e in events)
 
-        def test_cancel_by_issuer_success(
-            self, quest_id, objectives, reward, scope, player_id
-        ):
+        def test_cancel_by_issuer_success(self, quest_id, objectives, reward, scope, player_id):
             q = QuestAggregate.issue_quest(
                 quest_id=quest_id,
                 objectives=objectives,
@@ -438,9 +410,7 @@ class TestQuestAggregate:
             q.cancel_by(player_id)
             assert q.status == QuestStatus.CANCELLED
 
-        def test_cancel_by_other_player_raises(
-            self, accepted_quest, other_player_id
-        ):
+        def test_cancel_by_other_player_raises(self, accepted_quest, other_player_id):
             """第三者による取消を拒否し、受託者・進捗・未発行イベントを含む元の状態を保つ。"""
             q = accepted_quest
             state_before = (q.status, q.acceptor_player_id, q.objectives)
@@ -453,9 +423,7 @@ class TestQuestAggregate:
             assert (q.status, q.acceptor_player_id, q.objectives) == state_before
             assert q.get_events() == events_before
 
-        def test_cancel_when_completed_raises(
-            self, quest_id, objectives, reward, scope, player_id
-        ):
+        def test_cancel_when_completed_raises(self, quest_id, objectives, reward, scope, player_id):
             obj = QuestObjective(
                 objective_type=QuestObjectiveType.KILL_MONSTER,
                 target_id=101,
@@ -475,15 +443,11 @@ class TestQuestAggregate:
                 q.cancel_by(player_id)
 
     class TestCanBeAcceptedBy:
-        def test_open_public_can_be_accepted_by_any(
-            self, open_quest, player_id, other_player_id
-        ):
+        def test_open_public_can_be_accepted_by_any(self, open_quest, player_id, other_player_id):
             assert open_quest.can_be_accepted_by(player_id) is True
             assert open_quest.can_be_accepted_by(other_player_id) is True
 
-        def test_accepted_quest_cannot_be_accepted(
-            self, accepted_quest, other_player_id
-        ):
+        def test_accepted_quest_cannot_be_accepted(self, accepted_quest, other_player_id):
             assert accepted_quest.can_be_accepted_by(other_player_id) is False
 
         def test_open_guild_scope_can_be_accepted_by_any_player_aggregate_only(
@@ -507,9 +471,7 @@ class TestQuestAggregate:
             assert q.can_be_accepted_by(other_player_id) is True
 
     class TestIsIssuerOrAcceptor:
-        def test_issuer_is_included(
-            self, quest_id, objectives, reward, scope, player_id
-        ):
+        def test_issuer_is_included(self, quest_id, objectives, reward, scope, player_id):
             q = QuestAggregate.issue_quest(
                 quest_id=quest_id,
                 objectives=objectives,
@@ -523,7 +485,5 @@ class TestQuestAggregate:
         def test_acceptor_is_included(self, accepted_quest, player_id):
             assert accepted_quest.is_issuer_or_acceptor(player_id) is True
 
-        def test_other_player_not_included(
-            self, accepted_quest, other_player_id
-        ):
+        def test_other_player_not_included(self, accepted_quest, other_player_id):
             assert accepted_quest.is_issuer_or_acceptor(other_player_id) is False

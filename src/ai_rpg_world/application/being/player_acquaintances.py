@@ -57,17 +57,13 @@ class PlayerAcquaintances:
         names = list(names_by_player_id.values())
         duplicated = sorted({n for n in names if names.count(n) > 1})
         if duplicated:
-            raise ValueError(
-                f"participants share a name, so a name cannot tell who met whom: {duplicated}"
-            )
+            raise ValueError(f"participants share a name, so a name cannot tell who met whom: {duplicated}")
         self._store = store
         self._being_id_of = being_id_of
         self._turn_reader = turn_reader
         self._environment_name = environment_name
         self._names_by_player_id = dict(names_by_player_id)
-        self._player_id_by_name = {
-            name: pid for pid, name in self._names_by_player_id.items()
-        }
+        self._player_id_by_name = {name: pid for pid, name in self._names_by_player_id.items()}
         self._unresolved_warned: set[int] = set()
         self._appearances = dict(appearances_by_player_id or {})
         self._co_present = co_present
@@ -94,15 +90,12 @@ class PlayerAcquaintances:
         """紹介はプロンプトの前提なので、渡せないときは黙って捨てずに止める。"""
         if entry.environment_name != self._environment_name:
             raise ValueError(
-                f"entry is for {entry.environment_name!r}, "
-                f"but acquaintances are kept for {self._environment_name!r}"
+                f"entry is for {entry.environment_name!r}, but acquaintances are kept for {self._environment_name!r}"
             )
         being_id = self._resolve(player_id)
         if being_id is None:
             if entry.introductions:
-                raise ValueError(
-                    f"player_id={player_id.value} has no Being to receive introductions"
-                )
+                raise ValueError(f"player_id={player_id.value} has no Being to receive introductions")
             return
         turn = self._turn_reader.current_turn(being_id)
         for introduction in entry.introductions:
@@ -127,9 +120,7 @@ class PlayerAcquaintances:
         being_id = self._resolve(player_id)
         if being_id is None:
             return None
-        return self._store.find(
-            being_id, environment_name=self._environment_name, name=name
-        )
+        return self._store.find(being_id, environment_name=self._environment_name, name=name)
 
     def find_player(self, viewer: PlayerId, other: PlayerId) -> Acquaintance | None:
         name = self._names_by_player_id.get(other.value)
@@ -151,9 +142,7 @@ class PlayerAcquaintances:
             )
             return False
 
-    def view_for(
-        self, recipient: PlayerId, output: ObservationOutput
-    ) -> ObservationOutput | None:
+    def view_for(self, recipient: PlayerId, output: ObservationOutput) -> ObservationOutput | None:
         """受け手の記録に入れる版を選ぶ。None は記録しない。記録したあとで相手を知っても、記録は書き換えない。
 
         選んだ版の中の、名前を知らない参加者の名前は見た目に置き換える。
@@ -161,9 +150,7 @@ class PlayerAcquaintances:
         chosen = self._choose_version(recipient, output)
         return None if chosen is None else self._renamed_for(recipient, chosen)
 
-    def _choose_version(
-        self, recipient: PlayerId, output: ObservationOutput
-    ) -> ObservationOutput | None:
+    def _choose_version(self, recipient: PlayerId, output: ObservationOutput) -> ObservationOutput | None:
         view = output.if_subject_unknown
         if output.subject_name is None or view is None:
             return output
@@ -220,9 +207,7 @@ class PlayerAcquaintances:
         try:
             known = self.find(viewer, name)
         except Exception:
-            _logger.exception(
-                "知り合いの記録を引けず、相手を見た目で呼ぶ (viewer=%s)", viewer.value
-            )
+            _logger.exception("知り合いの記録を引けず、相手を見た目で呼ぶ (viewer=%s)", viewer.value)
             return appearance
         return name if known is not None and known.knows_name else appearance
 
@@ -232,9 +217,7 @@ class PlayerAcquaintances:
         being_id = self._resolve(recipient)
         if name is None or being_id is None or other.value == recipient.value:
             return
-        before = self._store.find(
-            being_id, environment_name=self._environment_name, name=name
-        )
+        before = self._store.find(being_id, environment_name=self._environment_name, name=name)
         if before is None or before.knows_name:
             return
         self._store.record_name_learned(
@@ -245,9 +228,7 @@ class PlayerAcquaintances:
         )
         self._trace_name_learned(recipient, name, how)
 
-    def _learn_names_from_speech(
-        self, recipient: PlayerId, structured: Mapping[str, Any]
-    ) -> None:
+    def _learn_names_from_speech(self, recipient: PlayerId, structured: Mapping[str, Any]) -> None:
         """名乗りは、話し手が分かる声 (伏せた版でない) でだけ聞き取れる。
 
         呼びかけは、呼ばれた人が受け手と同じ場所にいて、その声を聞き取れるときだけ
@@ -265,9 +246,7 @@ class PlayerAcquaintances:
             other = PlayerId(pid_value)
             if pid_value == speaker:
                 how = _HOW_SELF_INTRODUCTION
-            elif structured.get("channel") != _CHANNEL_WHISPER and self._is_co_present(
-                recipient, other
-            ):
+            elif structured.get("channel") != _CHANNEL_WHISPER and self._is_co_present(recipient, other):
                 how = _HOW_CALLED_BY_NAME
             else:
                 continue
@@ -292,9 +271,7 @@ class PlayerAcquaintances:
     def _trace_name_learned(self, recipient: PlayerId, name: str, how: str) -> None:
         """名前を知った記録はもう残っているので、trace の失敗は外へ出さない。"""
         try:
-            recorder = (
-                self._trace_recorder_provider() if self._trace_recorder_provider else None
-            )
+            recorder = self._trace_recorder_provider() if self._trace_recorder_provider else None
             if recorder is None:
                 return
             recorder.record(
@@ -315,22 +292,15 @@ class PlayerAcquaintances:
     def _player_id_by_appearance(self) -> dict[str, int]:
         return {look: pid for pid, look in self._appearances.items()}
 
-    def _renamed_for(
-        self, recipient: PlayerId, output: ObservationOutput
-    ) -> ObservationOutput:
+    def _renamed_for(self, recipient: PlayerId, output: ObservationOutput) -> ObservationOutput:
         """置き換えるのは、structured に参加者として出ている人の名前だけ。
 
         文の中から全員の名前を探すと、名前を含む別の語まで巻き込む。structured に
         出ていない名前は置き換えないので、新しい観測は参加者を structured に書く。
         """
-        mentioned = _names_in_structured(
-            output.structured, frozenset(self._player_id_by_name)
-        )
+        mentioned = _names_in_structured(output.structured, frozenset(self._player_id_by_name))
         try:
-            renames = {
-                name: self.call_name(recipient, PlayerId(self._player_id_by_name[name]))
-                for name in mentioned
-            }
+            renames = {name: self.call_name(recipient, PlayerId(self._player_id_by_name[name])) for name in mentioned}
         except Exception:
             # 引けないときは見た目へ倒す。名前は記録に入ったら消せない。
             _logger.exception(
@@ -338,9 +308,7 @@ class PlayerAcquaintances:
                 recipient.value,
             )
             own = self._names_by_player_id.get(recipient.value)
-            renames = {
-                name: self._appearance_of_name(name) for name in mentioned if name != own
-            }
+            renames = {name: self._appearance_of_name(name) for name in mentioned if name != own}
         renames = {name: call for name, call in renames.items() if call != name}
         if not renames:
             return output

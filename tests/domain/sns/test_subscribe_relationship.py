@@ -13,8 +13,7 @@ class TestSubscribeRelationShip:
 
     @pytest.mark.parametrize(
         ("actor", "target", "actor_text", "target_text"),
-        [(1, 2, "1", "2"), (999999, 2, "999999", "2"),
-         (1, 999999, "1", "999999"), (123, 456, "123", "456")],
+        [(1, 2, "1", "2"), (999999, 2, "999999", "2"), (1, 999999, "1", "999999"), (123, 456, "123", "456")],
     )
     def test_create_subscribe_relationship_success(self, actor, target, actor_text, target_text):
         """最小・大きなIDを各側に保持し、123/456の数値と文字列も取り違えない。"""

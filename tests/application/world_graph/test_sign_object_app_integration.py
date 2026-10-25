@@ -24,9 +24,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """看板規則は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
@@ -77,7 +77,8 @@ SIGN_OBJECT_ID = 20
 def _build_app(*, player_names: dict[int, str] | None = None):
     sign = SpotObject(
         object_id=SpotObjectId.create(SIGN_OBJECT_ID),
-        name="古い看板", description="d",
+        name="古い看板",
+        description="d",
         object_type=SpotObjectTypeEnum.SIGN,
         state={},
         interactions=(
@@ -106,8 +107,11 @@ def _build_app(*, player_names: dict[int, str] | None = None):
         ),
     )
     spot = SpotNode(
-        spot_id=SpotId.create(SPOT_ID), name="広場", description="d",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=SpotId.create(SPOT_ID),
+        name="広場",
+        description="d",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
     )
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
     graph.add_spot(spot)
@@ -163,7 +167,8 @@ class TestSignObjectAppIntegration:
         """player_display_name_resolver を渡さない構成でも書き込みは失敗しない。"""
         sign = SpotObject(
             object_id=SpotObjectId.create(SIGN_OBJECT_ID),
-            name="古い看板", description="d",
+            name="古い看板",
+            description="d",
             object_type=SpotObjectTypeEnum.SIGN,
             state={},
             interactions=(
@@ -181,8 +186,11 @@ class TestSignObjectAppIntegration:
             ),
         )
         spot = SpotNode(
-            spot_id=SpotId.create(SPOT_ID), name="広場", description="d",
-            category=SpotCategoryEnum.OTHER, parent_id=None,
+            spot_id=SpotId.create(SPOT_ID),
+            name="広場",
+            description="d",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
         )
         graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
         graph.add_spot(spot)

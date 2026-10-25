@@ -88,6 +88,7 @@ class TestMapFollowsTheSkeleton:
 
     def test_connections_join_the_same_spots_in_the_same_ticks(self, scenario, skeleton) -> None:
         """31 本の通路が、骨組みと同じ id・両端・移動 tick を持つ。"""
+
         def shape(raw: dict[str, Any]) -> dict[str, tuple[str, str, int]]:
             return {c["id"]: (c["from"], c["to"], int(c["travel_ticks"])) for c in raw["connections"]}
 
@@ -124,16 +125,16 @@ class TestMapFollowsTheSkeleton:
             if not (i.code == "TRAVEL_TICKS_DISTANCE_MISMATCH" and i.connection in vertical)
             and not (i.code == "ARTICULATION_SPOT" and i.spots == ("mid_junction",))
         ]
-        excused_mismatches = sorted(
-            i.connection for i in result.warnings if i.code == "TRAVEL_TICKS_DISTANCE_MISMATCH"
-        )
+        excused_mismatches = sorted(i.connection for i in result.warnings if i.code == "TRAVEL_TICKS_DISTANCE_MISMATCH")
         assert result.ok, result.errors
         assert unexpected == []
         assert excused_mismatches == sorted(vertical)
 
 
 def _map_check_script():
-    spec = importlib.util.spec_from_file_location("check_mine_village_map", _REPO / "scripts" / "check_mine_village_map.py")
+    spec = importlib.util.spec_from_file_location(
+        "check_mine_village_map", _REPO / "scripts" / "check_mine_village_map.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -154,7 +155,9 @@ class TestEachTeamCanWinWithinTheRunLimit:
     def test_counted_warm_up_matches_the_scenario(self, scenario) -> None:
         """数え方に入れた発電機を温める tick が、シナリオの「温まった」の出来事の tick と同じ。温める時間を延ばしたら、数え方も直さないと落ちる。"""
         warm = next(e for e in scenario["scenario_events"] if e["id"] == "generator_warms_up")
-        offset = next(c["ticks_offset"] for c in warm["conditions"] if c["condition_type"] == "OBJECT_STATE_TICK_AT_LEAST")
+        offset = next(
+            c["ticks_offset"] for c in warm["conditions"] if c["condition_type"] == "OBJECT_STATE_TICK_AT_LEAST"
+        )
 
         assert _map_check_script().WARM_TICKS == offset
 
@@ -194,7 +197,8 @@ class TestTeamsStartApartAndUnaware:
         for player in scenario["players"]:
             pid = _player_id(scenario, player["id"])
             known = {
-                n for sid, n in names.items()
+                n
+                for sid, n in names.items()
                 if sid != player["id"] and runtime._player_acquaintances.find(pid, n) is not None
             }
             mine = _team_of(player["id"])

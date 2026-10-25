@@ -32,6 +32,7 @@ class CharacterPromptInput:
     # LLM 行動上の自責ルール（短い箇条書き）。非空のときのみペルソナブロックに「行動ルール」として載る。
     behavioral_rules: tuple[str, ...] = ()
 
+
 # シナリオ metadata.description はネタバレを含み得るため、LLM 初期文脈では使わず
 # シナリオ JSON `metadata.llm_public_intro`（公開レイヤー）を渡す。未設定のときの既定はテーマ非固定。
 
@@ -124,9 +125,7 @@ def build_persona_block_from_character(
     if appearance:
         bg_parts.append(f"外見: {appearance[:500]}")
 
-    brules = [
-        s.strip() for s in character.behavioral_rules if isinstance(s, str) and s.strip()
-    ][:6]
+    brules = [s.strip() for s in character.behavioral_rules if isinstance(s, str) and s.strip()][:6]
 
     persona = AgentPersonaDto(
         character_id=character.character_id,
@@ -163,9 +162,7 @@ def _fallback_persona_block(display_name: str) -> str:
         behavioral_rules=(),
         relationship_hints=(),
     )
-    return PersonaPromptFragmentBuilder(
-        PersonaPromptPolicy(include_behavioral_rules=True)
-    ).build(persona)
+    return PersonaPromptFragmentBuilder(PersonaPromptPolicy(include_behavioral_rules=True)).build(persona)
 
 
 _PAST_EVENTS_RULE = (
@@ -180,9 +177,7 @@ def _episode_index_rule(*, shown: bool, recall_offered: bool) -> str:
     if not shown:
         return ""
     recall = (
-        f"本文は `{TOOL_NAME_EPISODE_RECALL}` で呼び名を指定して思い出したときだけ読める。"
-        if recall_offered
-        else ""
+        f"本文は `{TOOL_NAME_EPISODE_RECALL}` で呼び名を指定して思い出したときだけ読める。" if recall_offered else ""
     )
     return (
         "\n- 【思い出せる出来事】は、自分が昔の出来事を書き残した記憶の目次である。"
@@ -248,9 +243,7 @@ def build_world_system_prompt(
     if tool_schema_mode not in {"legacy", "reason_first"}:
         raise ValueError("tool_schema_mode must be 'legacy' or 'reason_first'")
     action_limit_line = (
-        f"\n- 行動の制限: {limited_action_and_time_pressure_text(has_goal=has_goal)}"
-        if limits_actions
-        else ""
+        f"\n- 行動の制限: {limited_action_and_time_pressure_text(has_goal=has_goal)}" if limits_actions else ""
     )
     # 層2: 目的の枠付け。has_goal=True は従来どおり「勝利条件 (最終目的)」前提。
     # has_goal=False (永続世界) は勝敗を否定し、【現在の目的】があれば参照する中立文に。
@@ -273,12 +266,9 @@ def build_world_system_prompt(
         "読者・観測者に見せるための演技や情景描写ではなく、いま頭の中で実際に考えている言葉そのものを書く。"
         "未発見の事実を知った体で書かない。"
         if tool_schema_mode == "reason_first"
-        else (
-            # **同じ規則を system prompt の中で 2 回書かない。** 書き方は
-            # 【独白と一言の書き方】にまとめてあるので、ここでは義務だけを言う。
-            "- 各ツール呼び出しでは `inner_thought` を必ず含める"
-            "（書き方は【独白と一言の書き方】）。"
-        )
+        # **同じ規則を system prompt の中で 2 回書かない。** 書き方は
+        # 【独白と一言の書き方】にまとめてあるので、ここでは義務だけを言う。
+        else ("- 各ツール呼び出しでは `inner_thought` を必ず含める（書き方は【独白と一言の書き方】）。")
     )
     persona_section = _persona_section(persona_block)
     body = f"""あなたは次のペルソナとして行動するキャラクターである。

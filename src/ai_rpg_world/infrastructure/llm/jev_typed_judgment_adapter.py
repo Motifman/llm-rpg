@@ -114,10 +114,7 @@ class JevTypedJudgmentAdapter(ITypedJudgmentPort):
         body = {
             "model": self._model,
             "state": state,
-            "questions": {
-                name: _as_wire_question(question)
-                for name, question in questions.items()
-            },
+            "questions": {name: _as_wire_question(question) for name, question in questions.items()},
         }
         started = time.perf_counter()
         payload: dict[str, Any] | None = None
@@ -282,17 +279,14 @@ def _as_results(
         expected = _EXPECTED_ANSWER_TYPE[type(question)]
         if answer.get("type") != expected:
             raise TypedJudgmentUnavailableException(
-                f"typed judgment answer for {name!r} was {answer.get('type')!r}, "
-                f"expected {expected!r}",
+                f"typed judgment answer for {name!r} was {answer.get('type')!r}, expected {expected!r}",
                 error_code="TYPED_JUDGMENT_SCHEMA_MISMATCH",
             )
         out[name] = _as_result(name, expected, answer, latency_ms)
     return out
 
 
-def _as_result(
-    name: str, expected: str, answer: Mapping[str, Any], latency_ms: float
-) -> JudgmentResult:
+def _as_result(name: str, expected: str, answer: Mapping[str, Any], latency_ms: float) -> JudgmentResult:
     probabilities = answer.get("probabilities") or {}
     if not isinstance(probabilities, dict):
         raise TypedJudgmentUnavailableException(

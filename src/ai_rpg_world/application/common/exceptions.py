@@ -5,7 +5,6 @@
 各サービスはこれを継承してサービス固有の例外クラスを作成します。
 """
 
-
 from typing import Any
 
 from ai_rpg_world.domain.common.exception import DomainException
@@ -43,11 +42,7 @@ class SystemErrorException(ApplicationException):
             message: エラーメッセージ
             original_exception: 元の例外
         """
-        super().__init__(
-            message,
-            cause=original_exception,
-            original_exception=original_exception
-        )
+        super().__init__(message, cause=original_exception, original_exception=original_exception)
         self.original_exception = original_exception
 
 
@@ -62,8 +57,7 @@ class CommandScopeStateException(CommandScopeException):
         self.current_state = current_state
         self.attempted_operation = attempted_operation
         super().__init__(
-            "CommandScopeの状態遷移が不正です: "
-            f"state={current_state}, operation={attempted_operation}",
+            f"CommandScopeの状態遷移が不正です: state={current_state}, operation={attempted_operation}",
             current_state=current_state,
             attempted_operation=attempted_operation,
         )
@@ -74,8 +68,7 @@ class NestedCommandScopeException(CommandScopeException):
 
     def __init__(self) -> None:
         super().__init__(
-            "有効なCommandScope内で別のCommandScopeは開始できません。"
-            "現在のCommandContextへ明示的に参加してください。"
+            "有効なCommandScope内で別のCommandScopeは開始できません。現在のCommandContextへ明示的に参加してください。"
         )
 
 
@@ -101,19 +94,14 @@ class DuplicateRollbackParticipantException(CommandScopeException):
     """同じ可変資源が一つのtransactionへ二重参加したことを表す。"""
 
     def __init__(self) -> None:
-        super().__init__(
-            "同じrollback資源を一つのCommandScopeへ二重登録できません。"
-        )
+        super().__init__("同じrollback資源を一つのCommandScopeへ二重登録できません。")
 
 
 class NestedRollbackParticipantTransactionException(CommandScopeException):
     """rollback参加transactionを多段に合成した構成誤りを表す。"""
 
     def __init__(self) -> None:
-        super().__init__(
-            "rollback参加transactionは多段に合成できません。"
-            "全参加資源を一つのadapterへ登録してください。"
-        )
+        super().__init__("rollback参加transactionは多段に合成できません。全参加資源を一つのadapterへ登録してください。")
 
 
 class PoisonedRollbackParticipantException(CommandScopeException):
@@ -169,8 +157,7 @@ class CommandEventDispatchLimitException(CommandScopeException):
     def __init__(self, *, max_sync_events: int) -> None:
         self.max_sync_events = max_sync_events
         super().__init__(
-            "CommandScopeの同期イベント処理件数が上限を超えました: "
-            f"max_sync_events={max_sync_events}",
+            f"CommandScopeの同期イベント処理件数が上限を超えました: max_sync_events={max_sync_events}",
             max_sync_events=max_sync_events,
         )
 

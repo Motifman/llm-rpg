@@ -70,9 +70,7 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         idx_current_state = text.index("【現在地と周囲】")
         for other in ["【現在の目的】", "【メモ】", "【直近の出来事】"]:
-            assert text.index(other) < idx_current_state, (
-                f"{other} は【現在地と周囲】より前に出るべき"
-            )
+            assert text.index(other) < idx_current_state, f"{other} は【現在地と周囲】より前に出るべき"
 
     def test_stable_volatile_order(self, strategy):
         """objective → recent_events → memos → current_state。
@@ -88,10 +86,10 @@ class TestSectionBasedContextFormatStrategyDefault:
             inventory_text="物証",
         )
         idx = {
-            "obj":      text.index("【現在の目的】"),
-            "events":   text.index("【直近の出来事】"),
-            "memos":    text.index("【メモ】"),
-            "current":  text.index("【現在地と周囲】"),
+            "obj": text.index("【現在の目的】"),
+            "events": text.index("【直近の出来事】"),
+            "memos": text.index("【メモ】"),
+            "current": text.index("【現在地と周囲】"),
         }
         assert "【所持・判明した物証】" not in text
         assert idx["obj"] < idx["events"] < idx["memos"] < idx["current"]

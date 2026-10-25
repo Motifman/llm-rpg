@@ -35,8 +35,12 @@ class TestSpotInterior:
             interactions=(),
         )
         other = SpotObject(
-            object_id=SpotObjectId.create(2), name="B", description="別の物体",
-            object_type=SpotObjectTypeEnum.OTHER, state={"untouched": True}, interactions=(),
+            object_id=SpotObjectId.create(2),
+            name="B",
+            description="別の物体",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={"untouched": True},
+            interactions=(),
         )
         sub = SubLocation(SubLocationId.create(1), "隅", "部屋の隅", (), False)
         ground = _ground(5, 100)
@@ -46,7 +50,8 @@ class TestSpotInterior:
         )
         interior = (
             SpotInterior((sub,), (other, o), (ground,), (discoverable,))
-            if with_other_contents else SpotInterior((), (o,), (), ())
+            if with_other_contents
+            else SpotInterior((), (o,), (), ())
         )
         o2 = o.with_state({"x": 1})
         ni = interior.replace_object(o2)

@@ -1,4 +1,5 @@
 """InMemoryShopSummaryReadModelRepositoryのテスト"""
+
 from datetime import datetime
 
 import pytest
@@ -103,9 +104,7 @@ class TestInMemoryShopSummaryReadModelRepository:
 
     def test_find_by_spot_and_location_returns_none_when_not_exists(self, repository):
         """該当ロケーションにショップが無いときはNone"""
-        assert repository.find_by_spot_and_location(
-            SpotId(1), LocationAreaId(1)
-        ) is None
+        assert repository.find_by_spot_and_location(SpotId(1), LocationAreaId(1)) is None
 
     def test_find_all_by_spot_id(self, repository, sample_summary):
         """find_all_by_spot_idで同一スポットのショップ一覧"""

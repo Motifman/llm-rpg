@@ -44,9 +44,7 @@ class TestCollectAndDrain:
     def test_add_all_preserves_order(self) -> None:
         """add_all は渡した iterable の順で収集する。"""
         collector = DomainEventCollector()
-        collector.add_all(
-            [_FakeEvent(event_id=1, name="a"), _FakeEvent(event_id=2, name="b")]
-        )
+        collector.add_all([_FakeEvent(event_id=1, name="a"), _FakeEvent(event_id=2, name="b")])
 
         assert [e.name for e in collector.drain()] == ["a", "b"]
 

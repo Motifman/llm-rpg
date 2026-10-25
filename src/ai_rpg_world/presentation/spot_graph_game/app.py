@@ -82,9 +82,7 @@ def _read_tick_loop_config() -> tuple[bool, float]:
     enabled_raw = os.getenv(_ENV_TICK_LOOP_ENABLED, "true").strip().lower()
     enabled = enabled_raw in ("1", "true", "yes", "on")
     try:
-        interval = float(
-            os.getenv(_ENV_TICK_INTERVAL, str(_DEFAULT_TICK_INTERVAL_SEC))
-        )
+        interval = float(os.getenv(_ENV_TICK_INTERVAL, str(_DEFAULT_TICK_INTERVAL_SEC)))
     except ValueError:
         logger.warning(
             "Invalid %s value; falling back to %.3fs",
@@ -97,8 +95,7 @@ def _read_tick_loop_config() -> tuple[bool, float]:
     # float("nan") < x は False になるため、明示的に isfinite チェックを噛ます。
     if not math.isfinite(interval) or interval < _MIN_SAFE_INTERVAL_SEC:
         logger.warning(
-            "%s=%s is invalid or below the safe minimum (%.3fs); "
-            "falling back to %.3fs",
+            "%s=%s is invalid or below the safe minimum (%.3fs); falling back to %.3fs",
             _ENV_TICK_INTERVAL,
             interval,
             _MIN_SAFE_INTERVAL_SEC,
@@ -150,9 +147,7 @@ def create_game_app(
                     interval_seconds=tick_interval,
                 )
                 tick_loop.start()
-                logger.info(
-                    "Spot graph tick loop enabled (interval=%.3fs)", tick_interval
-                )
+                logger.info("Spot graph tick loop enabled (interval=%.3fs)", tick_interval)
             else:
                 logger.info(
                     "Spot graph tick loop disabled via %s",

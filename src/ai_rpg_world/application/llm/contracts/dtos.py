@@ -11,31 +11,33 @@ from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 
 # 再スケジュール対象とする error_code（1起動1ツール前提で次tickで再試行する）
 # LLM_AUTHENTICATION_ERROR は恒久障害のため除外
-_RESCHEDULE_ERROR_CODES = frozenset({
-    "NO_TOOL_CALL",           # LLM がツールを返さなかった
-    "LLM_API_CALL_FAILED",    # 一時的 API 失敗
-    "LLM_RATE_LIMIT",         # レート制限
-    "INVALID_DESTINATION_LABEL",  # ラベル未解決（次 tick で解消の可能性）
-    # 隣接していない場所は、失敗文に並ぶ隣の場所から即座に選び直せる。
-    "DESTINATION_NOT_ADJACENT",
-    # 前提不足は失敗理由に必要品・状態が出るため、別の行動へ即座に切り替えられる。
-    "INTERACTION_PRECONDITION_FAILED",
-    # 対象名の未解決は移動先名の未解決と同質で、現在の候補一覧から選び直せる。
-    "INVALID_TARGET_LABEL",
-    # 未定義 action は失敗結果に利用可能な action 一覧が出るため、即座に修正できる。
-    "INTERACTION_ACTION_NOT_FOUND",
-    # PR-J: LLM の tool 名 typo (e.g. speech_speech / spot_graph_gather) を救済
-    # する。エラーメッセージに fuzzy suggestion + valid 一覧を載せて agent に
-    # 修正させるため、次 tick での起床が必須。5 連続 typo すれば PR-I の
-    # self-reschedule streak が soft cap として効いて chain は終わる。
-    # ※ PR-I で schedule_turn は streak を一切触らない設計なので、他者観測
-    #   経由の ping-pong が混ざっても streak はリセットされず、典型 typo loop
-    #   は確実に 5 wave で止まる。
-    "UNSUPPORTED_TOOL",
-    # prompt 作成後の位相変更で、提示時には選べた行動が適用時に使えなくなった。
-    # 本人の選択ミスではないが、変化後の一覧から選び直すため次 tick に起こす。
-    "TOOL_BECAME_UNAVAILABLE",
-})
+_RESCHEDULE_ERROR_CODES = frozenset(
+    {
+        "NO_TOOL_CALL",  # LLM がツールを返さなかった
+        "LLM_API_CALL_FAILED",  # 一時的 API 失敗
+        "LLM_RATE_LIMIT",  # レート制限
+        "INVALID_DESTINATION_LABEL",  # ラベル未解決（次 tick で解消の可能性）
+        # 隣接していない場所は、失敗文に並ぶ隣の場所から即座に選び直せる。
+        "DESTINATION_NOT_ADJACENT",
+        # 前提不足は失敗理由に必要品・状態が出るため、別の行動へ即座に切り替えられる。
+        "INTERACTION_PRECONDITION_FAILED",
+        # 対象名の未解決は移動先名の未解決と同質で、現在の候補一覧から選び直せる。
+        "INVALID_TARGET_LABEL",
+        # 未定義 action は失敗結果に利用可能な action 一覧が出るため、即座に修正できる。
+        "INTERACTION_ACTION_NOT_FOUND",
+        # PR-J: LLM の tool 名 typo (e.g. speech_speech / spot_graph_gather) を救済
+        # する。エラーメッセージに fuzzy suggestion + valid 一覧を載せて agent に
+        # 修正させるため、次 tick での起床が必須。5 連続 typo すれば PR-I の
+        # self-reschedule streak が soft cap として効いて chain は終わる。
+        # ※ PR-I で schedule_turn は streak を一切触らない設計なので、他者観測
+        #   経由の ping-pong が混ざっても streak はリセットされず、典型 typo loop
+        #   は確実に 5 wave で止まる。
+        "UNSUPPORTED_TOOL",
+        # prompt 作成後の位相変更で、提示時には選べた行動が適用時に使えなくなった。
+        # 本人の選択ミスではないが、変化後の一覧から選び直すため次 tick に起こす。
+        "TOOL_BECAME_UNAVAILABLE",
+    }
+)
 
 
 def should_reschedule_for_next_tick(dto: "LlmCommandResultDto") -> bool:
@@ -186,18 +188,12 @@ class ActionResultEntry:
             raise TypeError("free_text_argument_names must be tuple[str, ...]")
         for name in self.free_text_argument_names:
             if not isinstance(name, str) or not name:
-                raise TypeError(
-                    "free_text_argument_names entries must be non-empty str"
-                )
-        if self.argument_fingerprint is not None and not isinstance(
-            self.argument_fingerprint, str
-        ):
+                raise TypeError("free_text_argument_names entries must be non-empty str")
+        if self.argument_fingerprint is not None and not isinstance(self.argument_fingerprint, str):
             raise TypeError("argument_fingerprint must be str or None")
         if not isinstance(self.should_reschedule, bool):
             raise TypeError("should_reschedule must be bool")
-        if self.game_time_label is not None and not isinstance(
-            self.game_time_label, str
-        ):
+        if self.game_time_label is not None and not isinstance(self.game_time_label, str):
             raise TypeError("game_time_label must be str or None")
         if not isinstance(self.omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
@@ -210,7 +206,6 @@ class ActionResultEntry:
             raise TypeError("occurred_tick must not be bool")
         if self.execution_provenance is not None and not isinstance(self.execution_provenance, ExecutionProvenance):
             raise TypeError("execution_provenance must be ExecutionProvenance or None")
-
 
 
 @dataclass(frozen=True)
@@ -316,9 +311,7 @@ class ToolRuntimeTargetDto:
             raise TypeError("world_object_id must be int or None")
         if self.spot_id is not None and not isinstance(self.spot_id, int):
             raise TypeError("spot_id must be int or None")
-        if self.tile_location_area_id is not None and not isinstance(
-            self.tile_location_area_id, int
-        ):
+        if self.tile_location_area_id is not None and not isinstance(self.tile_location_area_id, int):
             raise TypeError("tile_location_area_id must be int or None")
         if self.sub_location_id is not None and not isinstance(self.sub_location_id, int):
             raise TypeError("sub_location_id must be int or None")
@@ -344,9 +337,7 @@ class ToolRuntimeTargetDto:
             raise TypeError("interaction_type must be str or None")
         if self.item_instance_id is not None and not isinstance(self.item_instance_id, int):
             raise TypeError("item_instance_id must be int or None")
-        if self.real_item_instance_id is not None and not isinstance(
-            self.real_item_instance_id, int
-        ):
+        if self.real_item_instance_id is not None and not isinstance(self.real_item_instance_id, int):
             raise TypeError("real_item_instance_id must be int or None")
         if self.inventory_slot_id is not None and not isinstance(self.inventory_slot_id, int):
             raise TypeError("inventory_slot_id must be int or None")
@@ -354,9 +345,7 @@ class ToolRuntimeTargetDto:
             raise TypeError("is_spoiled must be bool")
         if self.chest_world_object_id is not None and not isinstance(self.chest_world_object_id, int):
             raise TypeError("chest_world_object_id must be int or None")
-        if self.conversation_choice_index is not None and not isinstance(
-            self.conversation_choice_index, int
-        ):
+        if self.conversation_choice_index is not None and not isinstance(self.conversation_choice_index, int):
             raise TypeError("conversation_choice_index must be int or None")
         if self.skill_loadout_id is not None and not isinstance(self.skill_loadout_id, int):
             raise TypeError("skill_loadout_id must be int or None")
@@ -372,13 +361,9 @@ class ToolRuntimeTargetDto:
             raise TypeError("proposal_id must be int or None")
         if self.target_slot_index is not None and not isinstance(self.target_slot_index, int):
             raise TypeError("target_slot_index must be int or None")
-        if self.target_slot_display_name is not None and not isinstance(
-            self.target_slot_display_name, str
-        ):
+        if self.target_slot_display_name is not None and not isinstance(self.target_slot_display_name, str):
             raise TypeError("target_slot_display_name must be str or None")
-        if self.attention_level_value is not None and not isinstance(
-            self.attention_level_value, str
-        ):
+        if self.attention_level_value is not None and not isinstance(self.attention_level_value, str):
             raise TypeError("attention_level_value must be str or None")
         if self.quest_id is not None and not isinstance(self.quest_id, int):
             raise TypeError("quest_id must be int or None")
@@ -401,9 +386,7 @@ class ToolRuntimeTargetDto:
             raise TypeError("interaction_labels must be tuple")
         for pair in self.interaction_labels:
             if not isinstance(pair, tuple) or len(pair) != 2:
-                raise TypeError(
-                    "interaction_labels must contain (action_name, display_label) pairs"
-                )
+                raise TypeError("interaction_labels must contain (action_name, display_label) pairs")
             if not all(isinstance(x, str) for x in pair):
                 raise TypeError("interaction_labels pairs must contain only str")
         offered = set(self.available_interactions)
@@ -414,10 +397,7 @@ class ToolRuntimeTargetDto:
             # いうずれが起きる。ずれても誰も落ちないので、偽装版の名前が静かに
             # 運ばれる (tests/demos/test_hidden_actions_do_not_leak_through_errors
             # が案内文の側で塞いだのと同じ穴)。構築時に落とす。
-            raise ValueError(
-                "interaction_labels must only label offered actions: "
-                f"{sorted(unknown)}"
-            )
+            raise ValueError(f"interaction_labels must only label offered actions: {sorted(unknown)}")
 
 
 @dataclass(frozen=True)

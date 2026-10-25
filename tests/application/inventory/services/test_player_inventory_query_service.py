@@ -91,7 +91,8 @@ class TestPlayerInventoryQueryService:
     """この照会が所持スロットを公開 API で読み、spec_id だけで個数をまとめることを保証する。"""
 
     def test_empty_inventory_returns_empty_items(
-        self, repos: tuple[
+        self,
+        repos: tuple[
             InMemoryPlayerInventoryRepository,
             InMemoryItemRepository,
             PlayerInventoryQueryService,
@@ -122,7 +123,8 @@ class TestPlayerInventoryQueryService:
         assert view.items == ()
 
     def test_same_spec_in_multiple_slots_is_aggregated(
-        self, repos: tuple[
+        self,
+        repos: tuple[
             InMemoryPlayerInventoryRepository,
             InMemoryItemRepository,
             PlayerInventoryQueryService,
@@ -145,7 +147,8 @@ class TestPlayerInventoryQueryService:
         assert view.items[0].quantity == 2
 
     def test_different_specs_are_separate_rows_in_encounter_order(
-        self, repos: tuple[
+        self,
+        repos: tuple[
             InMemoryPlayerInventoryRepository,
             InMemoryItemRepository,
             PlayerInventoryQueryService,
@@ -170,7 +173,8 @@ class TestPlayerInventoryQueryService:
         assert view.items[1].name == "後"
 
     def test_spoiled_and_fresh_same_spec_are_one_row(
-        self, repos: tuple[
+        self,
+        repos: tuple[
             InMemoryPlayerInventoryRepository,
             InMemoryItemRepository,
             PlayerInventoryQueryService,
@@ -193,7 +197,8 @@ class TestPlayerInventoryQueryService:
         assert view.items[0].quantity == 2
 
     def test_empty_slots_are_not_listed(
-        self, repos: tuple[
+        self,
+        repos: tuple[
             InMemoryPlayerInventoryRepository,
             InMemoryItemRepository,
             PlayerInventoryQueryService,
@@ -213,7 +218,8 @@ class TestPlayerInventoryQueryService:
         assert view.items[0].quantity == 1
 
     def test_missing_item_instance_is_skipped(
-        self, repos: tuple[
+        self,
+        repos: tuple[
             InMemoryPlayerInventoryRepository,
             InMemoryItemRepository,
             PlayerInventoryQueryService,
@@ -236,7 +242,8 @@ class TestPlayerInventoryQueryService:
         assert view.items[0].quantity == 1
 
     def test_equipped_items_are_not_listed(
-        self, repos: tuple[
+        self,
+        repos: tuple[
             InMemoryPlayerInventoryRepository,
             InMemoryItemRepository,
             PlayerInventoryQueryService,

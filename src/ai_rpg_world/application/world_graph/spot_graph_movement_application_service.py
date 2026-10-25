@@ -92,9 +92,7 @@ class SpotGraphMovementApplicationService:
         navigation_service: SpotGraphNavigationService | None = None,
         departed_position_store: DepartedPositionStore | None = None,
         player_perception_policy: PlayerPerceptionPolicy | None = None,
-        command_scope_factory: (
-            CommandScopeFactoryPort[MovementCommandRepositoryProviderPort] | None
-        ) = None,
+        command_scope_factory: (CommandScopeFactoryPort[MovementCommandRepositoryProviderPort] | None) = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_status_repository = player_status_repository
@@ -120,8 +118,7 @@ class SpotGraphMovementApplicationService:
 
     def _is_departed(self, player_id: PlayerId) -> bool:
         return bool(
-            self._player_perception_policy is not None
-            and self._player_perception_policy.is_departed(player_id)
+            self._player_perception_policy is not None and self._player_perception_policy.is_departed(player_id)
         )
 
     def _current_spot(
@@ -174,9 +171,7 @@ class SpotGraphMovementApplicationService:
         nav = player.spot_navigation_state
         assert nav is not None
         if nav.current_spot_id != spot_on_graph:
-            player.set_spot_navigation_state(
-                PlayerSpotNavigationState.at_rest(spot_on_graph)
-            )
+            player.set_spot_navigation_state(PlayerSpotNavigationState.at_rest(spot_on_graph))
         player.set_spot_sub_location(sub_location_id)
         player_status_repository.save(player)
 
@@ -230,9 +225,7 @@ class SpotGraphMovementApplicationService:
             player_status_repository.save(player)
             return
 
-        route = self._navigation.calculate_route(
-            graph, nav.current_spot_id, destination_spot_id
-        )
+        route = self._navigation.calculate_route(graph, nav.current_spot_id, destination_spot_id)
         if not route:
             logger.info(
                 "移動の経路がありません: player_id=%s from=%s to=%s",
@@ -325,8 +318,7 @@ class SpotGraphMovementApplicationService:
                 # にも同じ区間を踏み続ける。
                 new_nav = PlayerSpotNavigationState.at_rest(connection.from_spot_id)
                 logger.info(
-                    "travel blocked: player=%s connection=%s %s->%s destination=%s "
-                    "reason=%s passage=%s/%s",
+                    "travel blocked: player=%s connection=%s %s->%s destination=%s reason=%s passage=%s/%s",
                     player_id.value,
                     cid.value,
                     connection.from_spot_id.value,
@@ -352,7 +344,7 @@ class SpotGraphMovementApplicationService:
         new_events: tuple[DomainEvent, ...] = ()
         if context is not None:
             all_events = tuple(graph.get_events())
-            new_events = all_events[len(existing_events):]
+            new_events = all_events[len(existing_events) :]
             graph.clear_events()
             for event in existing_events:
                 graph.add_event(event)
@@ -373,9 +365,7 @@ class SpotGraphMovementApplicationService:
         owned_item_spec_ids: frozenset[ItemSpecId],
         world_flags: frozenset[str],
     ) -> SpotTravelBlocked | None:
-        ok, message = self._navigation.can_pass(
-            connection, owned_item_spec_ids, world_flags
-        )
+        ok, message = self._navigation.can_pass(connection, owned_item_spec_ids, world_flags)
         if ok:
             return None
         closed = not connection.passage.traversable
@@ -387,11 +377,7 @@ class SpotGraphMovementApplicationService:
             destination_spot_id=destination_spot_id,
             passage_kind=connection.passage.kind.value,
             passage_state=connection.passage.state,
-            reason=(
-                SpotTravelBlockedReason.PASSAGE_CLOSED
-                if closed
-                else SpotTravelBlockedReason.PASSAGE_CONDITION
-            ),
+            reason=(SpotTravelBlockedReason.PASSAGE_CLOSED if closed else SpotTravelBlockedReason.PASSAGE_CONDITION),
             condition_message=None if closed else message,
         )
 
@@ -417,9 +403,7 @@ class SpotGraphMovementApplicationService:
         nav = player.spot_navigation_state
         if nav is None or not nav.is_traveling:
             return None
-        player.set_spot_navigation_state(
-            PlayerSpotNavigationState.at_rest(nav.current_spot_id)
-        )
+        player.set_spot_navigation_state(PlayerSpotNavigationState.at_rest(nav.current_spot_id))
         player_status_repository.save(player)
         return nav
 

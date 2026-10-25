@@ -34,9 +34,7 @@ class TestEffectHandlerRegistryCoverage:
         handlers = build_effect_handlers()
         validate_handler_coverage(handlers)
         expected = {
-            et
-            for et in InteractionEffectTypeEnum
-            if et is not InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION
+            et for et in InteractionEffectTypeEnum if et is not InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION
         }
         assert set(handlers.keys()) == expected
 

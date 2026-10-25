@@ -79,9 +79,7 @@ class PlayerDeathGraceTickStage:
         if not isinstance(grace_timer, PlayerDeathGraceTimer):
             raise TypeError("grace_timer must be PlayerDeathGraceTimer")
         if not isinstance(grace_ticks, int) or grace_ticks < 0:
-            raise ValueError(
-                f"grace_ticks must be non-negative int, got {grace_ticks!r}"
-            )
+            raise ValueError(f"grace_ticks must be non-negative int, got {grace_ticks!r}")
         if fallen_body_registry is not None and not isinstance(
             fallen_body_registry,
             FallenBodyRegistry,
@@ -91,14 +89,9 @@ class PlayerDeathGraceTickStage:
             departed_position_store,
             DepartedPositionStore,
         ):
-            raise TypeError(
-                "departed_position_store must be DepartedPositionStore"
-            )
+            raise TypeError("departed_position_store must be DepartedPositionStore")
         if (fallen_body_registry is None) != (departed_position_store is None):
-            raise ValueError(
-                "fallen_body_registry and departed_position_store must be "
-                "configured together"
-            )
+            raise ValueError("fallen_body_registry and departed_position_store must be configured together")
         self._outcome_registry = outcome_registry
         self._grace_timer = grace_timer
         self._grace_ticks = grace_ticks
@@ -111,9 +104,7 @@ class PlayerDeathGraceTickStage:
 
     def set_command_scope_factory(
         self,
-        factory: (
-            CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]
-        ),
+        factory: (CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]),
     ) -> None:
         """本番stageを期限超過player一人単位の確定境界へ接続する。"""
         self._require_scope_dependencies()
@@ -132,9 +123,7 @@ class PlayerDeathGraceTickStage:
         """
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            raise RuntimeError(
-                "death grace用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("death grace用CommandScopeFactoryが未配線です。")
         tick_value = current_tick.value
         overdue = self._grace_timer.overdue_players(
             current_tick=tick_value,
@@ -154,9 +143,7 @@ class PlayerDeathGraceTickStage:
         self,
         player_id: PlayerId,
         tick_value: int,
-        scope_factory: (
-            CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]
-        ),
+        scope_factory: (CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]),
     ) -> None:
         """playerのDEAD・pending削除・退場位置を一緒に確定する。"""
         changed = False
@@ -174,10 +161,7 @@ class PlayerDeathGraceTickStage:
                     return
                 status = scope.repositories.player_statuses.find_by_id(player_id)
                 if status is None:
-                    raise RuntimeError(
-                        "death grace player status is missing: "
-                        f"player_id={int(player_id)}"
-                    )
+                    raise RuntimeError(f"death grace player status is missing: player_id={int(player_id)}")
                 if not status.is_down:
                     # PlayerRevivedEventの個別handler失敗でtimer/bodyだけ残った場合も、
                     # 生存状態を正本として古い猶予状態を修復する。
@@ -229,8 +213,7 @@ class PlayerDeathGraceTickStage:
         """確定した状態にだけ警告・outcome callback・成功ログを追随させる。"""
         if missing_body:
             self._logger.warning(
-                "DEAD outcome has no fallen-body record; departed position "
-                "was not initialized: player_id=%s",
+                "DEAD outcome has no fallen-body record; departed position was not initialized: player_id=%s",
                 int(player_id),
             )
         if changed:
@@ -251,39 +234,31 @@ class PlayerDeathGraceTickStage:
         if changed:
             self._logger.info(
                 "Player %s outcome confirmed as DEAD after grace period (tick=%d)",
-                player_id, tick_value,
+                player_id,
+                tick_value,
             )
         else:
             self._logger.debug(
                 "Player %s already resolved as %s, cleared grace pending only",
-                player_id, self._outcome_registry.get_outcome(player_id),
+                player_id,
+                self._outcome_registry.get_outcome(player_id),
             )
 
     @property
     def _fallen_bodies(self) -> FallenBodyRegistry:
         registry = self._fallen_body_registry
         if registry is None:
-            raise RuntimeError(
-                "death grace CommandScope requires fallen body store"
-            )
+            raise RuntimeError("death grace CommandScope requires fallen body store")
         return registry
 
     @property
     def _departed_positions(self) -> DepartedPositionStore:
         store = self._departed_position_store
         if store is None:
-            raise RuntimeError(
-                "death grace CommandScope requires departed position store"
-            )
+            raise RuntimeError("death grace CommandScope requires departed position store")
         return store
 
     def _require_scope_dependencies(self) -> None:
         """scope経路に必要な退場状態の配線漏れを開始前に止める。"""
-        if (
-            self._fallen_body_registry is None
-            or self._departed_position_store is None
-        ):
-            raise RuntimeError(
-                "death grace CommandScope requires fallen body and departed "
-                "position stores"
-            )
+        if self._fallen_body_registry is None or self._departed_position_store is None:
+            raise RuntimeError("death grace CommandScope requires fallen body and departed position stores")

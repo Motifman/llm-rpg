@@ -43,8 +43,7 @@ def action_result_extra_trace_payload(
     safe = {
         key: value
         for key, value in raw.items()
-        if key not in ACTION_RESULT_TRACE_RESERVED_KEYS
-        and key != "tool_trace_payload"
+        if key not in ACTION_RESULT_TRACE_RESERVED_KEYS and key != "tool_trace_payload"
     }
     safe["tool_trace_payload"] = raw
     return safe
@@ -57,6 +56,7 @@ class LlmPhaseAResult:
     Phase B (tool 実行) の入力として保持する。LLM 呼び出し例外を捕まえた場合は
     ``exception`` に詰め、Phase B 側で LlmCommandResultDto を組み立てる。
     """
+
     player_id: PlayerId
     prompt: dict[str, Any]
     tools_payload: list[Any]

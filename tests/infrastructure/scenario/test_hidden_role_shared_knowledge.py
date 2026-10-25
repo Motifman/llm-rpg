@@ -43,9 +43,7 @@ from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
     GameEndConditionTypeEnum,
 )
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 
 _CREW = PlayerId(1)
 _IMPOSTOR = PlayerId(3)
@@ -83,7 +81,7 @@ class TestBothSidesKnowTheGame:
         # 手書きの見出しを見ていたが、その行には古い数字 (3 つすべて) が
         # 並んでいて、**テストが誤った記述を守っていた**。いまは勝ち筋の
         # 数字をデータから組み立てるので、意味のほうを見る。
-        assert "終えれば" in text and "勝ち" in text     # クルー側
+        assert "終えれば" in text and "勝ち" in text  # クルー側
         assert "インポスターの勝利" in text
 
     @pytest.mark.parametrize("player_id", [_CREW, _IMPOSTOR])
@@ -101,9 +99,7 @@ class TestBothSidesKnowTheGame:
         assert "参加者は 8 人" in text
 
     @pytest.mark.parametrize("player_id", [_CREW, _IMPOSTOR])
-    def test_both_sides_of_the_ejection_tradeoff_are_stated_together(
-        self, prompts, player_id
-    ) -> None:
+    def test_both_sides_of_the_ejection_tradeoff_are_stated_together(self, prompts, player_id) -> None:
         """誤追放と追放しない場合の代償が、公開導入で隣り合っている。
 
         run 014 では誤追放の代償だけが書かれ、棄権によって襲撃可能な状態を
@@ -111,9 +107,7 @@ class TestBothSidesKnowTheGame:
         事実を同じ位置で読めるようにする。
         """
         wrong_ejection = "- 無実の者を追放すると、クルーの人数だけが減る。"
-        no_ejection = (
-            "- インポスターが追放されなければ、時間を置いて襲撃できる状態が続く。"
-        )
+        no_ejection = "- インポスターが追放されなければ、時間を置いて襲撃できる状態が続く。"
         lines = prompts[int(player_id)].splitlines()
 
         assert wrong_ejection in lines
@@ -187,13 +181,10 @@ class TestWinConditionsMatchTheGenre:
         lose = next(
             condition
             for condition in result.lose_conditions
-            if condition.condition_type
-            is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
+            if condition.condition_type is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
         )
 
-        assert lose.condition_type is (
-            GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
-        )
+        assert lose.condition_type is (GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE)
         assert lose.required_state == {"role": "crew"}
         assert lose.comparison_state == {"role": "keeper"}
         assert lose.max_surviving is None
@@ -204,13 +195,7 @@ class TestWinConditionsMatchTheGenre:
         2 手かかると、襲撃の途中で逃げられて成立しにくい。本家は一撃。
         """
         result = create_world_runtime(_SCENARIO).scenario
-        strike = next(
-            i for i in result.player_interactions if i.action_name == "strike_down"
-        )
-        damage = next(
-            e.parameters["damage"]
-            for e in strike.effects
-            if e.effect_type.value == "APPLY_DAMAGE"
-        )
+        strike = next(i for i in result.player_interactions if i.action_name == "strike_down")
+        damage = next(e.parameters["damage"] for e in strike.effects if e.effect_type.value == "APPLY_DAMAGE")
 
         assert damage >= 100

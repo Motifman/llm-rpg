@@ -68,9 +68,7 @@ def _session(runtime: Any, snapshot_dir: Path) -> ExperimentSnapshotSession:
 
 
 def _being_id(runtime: Any, player_id: PlayerId) -> BeingId:
-    being_id = runtime.aux_being_resolver.resolve_being_id(
-        DEFAULT_SINGLE_WORLD_ID, player_id
-    )
+    being_id = runtime.aux_being_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, player_id)
     assert being_id is not None
     return being_id
 
@@ -189,9 +187,7 @@ def _world_snapshot_payload(runtime: Any, session: ExperimentSnapshotSession) ->
     ).to_dict()
 
 
-def _memory_payloads_by_being(
-    runtime: Any, session: ExperimentSnapshotSession
-) -> dict[str, dict[str, Any]]:
+def _memory_payloads_by_being(runtime: Any, session: ExperimentSnapshotSession) -> dict[str, dict[str, Any]]:
     payloads: dict[str, dict[str, Any]] = {}
     for player_id in runtime.get_player_ids():
         being_id = _being_id(runtime, player_id)
@@ -269,16 +265,9 @@ def test_experiment_snapshot_session_restores_state_across_real_world_runtimes(
         {"item_instance_id": 9002, "item_spec_id": 9}
     ]
     recent_player = player_world["recent_event_store"]["entries"][0]
-    action_payload = next(
-        entry["payload"]
-        for entry in recent_player["entries"]
-        if entry["kind"] == "action_result"
-    )
+    action_payload = next(entry["payload"] for entry in recent_player["entries"] if entry["kind"] == "action_result")
     assert "prediction_context_id" not in action_payload
-    assert (
-        player_world["encounter_memory"]["entries"][0]["records"][0]["key"]
-        == "spot:ancient_archive"
-    )
+    assert player_world["encounter_memory"]["entries"][0]["records"][0]["key"] == "spot:ancient_archive"
 
     being_payload = expected_memory["being_w1_p1"]
     assert being_payload["being_memo_book"][0]["text"] == "再開後も忘れてはいけない作業"

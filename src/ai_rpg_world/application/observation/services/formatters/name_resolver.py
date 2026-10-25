@@ -76,6 +76,7 @@ class ObservationNameResolver:
             return FALLBACK_ITEM_LABEL
         try:
             from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+
             spec_id = ItemSpecId(item_spec_id_value)
         except (ItemInstanceIdValidationException, TypeError):
             return FALLBACK_ITEM_LABEL
@@ -97,6 +98,7 @@ class ObservationNameResolver:
             return FALLBACK_NPC_LABEL
         try:
             from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+
             npc_object_id = WorldObjectId(npc_id_value)
         except (WorldObjectIdValidationException, TypeError):
             return FALLBACK_NPC_LABEL
@@ -143,6 +145,7 @@ class ObservationNameResolver:
             return FALLBACK_SNS_USER_LABEL
         try:
             from ai_rpg_world.domain.sns.value_object.user_id import UserId
+
             uid = UserId(user_id) if not isinstance(user_id, UserId) else user_id
         except (UserIdValidationException, TypeError):
             return FALLBACK_SNS_USER_LABEL

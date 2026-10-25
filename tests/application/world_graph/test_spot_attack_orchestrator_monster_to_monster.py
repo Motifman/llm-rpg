@@ -67,8 +67,13 @@ def _template(*, attack: int = 5, max_hp: int = 30) -> MonsterTemplate:
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=max_hp, max_mp=0, attack=attack,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=max_hp,
+            max_mp=0,
+            attack=attack,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -84,8 +89,10 @@ def _make_monster(template: MonsterTemplate, monster_id: int) -> MonsterAggregat
         template=template,
         world_object_id=WorldObjectId.create(9000 + monster_id),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(monster_id), owner_id=monster_id,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(monster_id),
+            owner_id=monster_id,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -117,9 +124,7 @@ def _make_orchestrator(graph, attacker, target):
     spot_repo.find_graph.return_value = graph
     monster_repo = MagicMock()
     monster_repo.find_by_id.side_effect = lambda mid: (
-        attacker if mid == attacker.monster_id
-        else target if mid == target.monster_id
-        else None
+        attacker if mid == attacker.monster_id else target if mid == target.monster_id else None
     )
     player_repo = MagicMock()
     return (
@@ -157,10 +162,7 @@ class TestRetaliationSuccess:
         assert outcome.executed is True
         assert outcome.damage == 5
         assert outcome.target_incapacitated is False
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterPredatedMonsterInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterPredatedMonsterInSpotEvent)]
         assert len(events) == 1
 
         # 反撃連鎖の前提: target 側が attacker を覚えている

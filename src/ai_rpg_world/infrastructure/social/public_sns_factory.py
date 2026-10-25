@@ -1,4 +1,5 @@
 """公開SNSの確定境界と確定後配送を、一箇所で組み立てる。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -34,23 +35,41 @@ def _build(
 ) -> PublicSnsCommandService:
     handoff = PublicSnsAfterCommitHandoff(deliver_notification)
     scope_factory = CommandScopeFactory(
-        transaction_factory, repository_provider_factory=repositories,
-        sync_dispatcher=PublicSnsNotificationDispatcher(), after_commit_handoff=handoff,
+        transaction_factory,
+        repository_provider_factory=repositories,
+        sync_dispatcher=PublicSnsNotificationDispatcher(),
+        after_commit_handoff=handoff,
     )
     handoff.bind_scope_factory(scope_factory)
     return PublicSnsCommandService(scope_factory, notification_handoff=handoff)
 
 
 def create_in_memory_public_sns_command_service(
-    data_store: InMemoryDataStore, *, deliver_notification: NotificationDelivery | None = None,
+    data_store: InMemoryDataStore,
+    *,
+    deliver_notification: NotificationDelivery | None = None,
 ) -> PublicSnsCommandService:
-    return _build(InMemoryUnitOfWorkTransactionFactory(data_store),
-                  cast(RepositoryProviderFactoryPort[PublicSnsCommandRepositories], InMemoryPublicSnsCommandRepositoryProviderFactory()), deliver_notification)
+    return _build(
+        InMemoryUnitOfWorkTransactionFactory(data_store),
+        cast(
+            RepositoryProviderFactoryPort[PublicSnsCommandRepositories],
+            InMemoryPublicSnsCommandRepositoryProviderFactory(),
+        ),
+        deliver_notification,
+    )
 
 
 def create_sqlite_public_sns_command_service(
-    database: str | Path, *, deliver_notification: NotificationDelivery | None = None,
+    database: str | Path,
+    *,
+    deliver_notification: NotificationDelivery | None = None,
 ) -> PublicSnsCommandService:
     # schemaはここで初期化済みであること。providerは操作中のDDLを行わない。
-    return _build(SqliteUnitOfWorkTransactionFactory(database),
-                  cast(RepositoryProviderFactoryPort[PublicSnsCommandRepositories], SqlitePublicSnsCommandRepositoryProviderFactory()), deliver_notification)
+    return _build(
+        SqliteUnitOfWorkTransactionFactory(database),
+        cast(
+            RepositoryProviderFactoryPort[PublicSnsCommandRepositories],
+            SqlitePublicSnsCommandRepositoryProviderFactory(),
+        ),
+        deliver_notification,
+    )

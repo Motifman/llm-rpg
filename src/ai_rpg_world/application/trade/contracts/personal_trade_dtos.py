@@ -4,6 +4,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class PersonalTradeListingDto:
     """個別取引出品DTO"""
+
     trade_id: int
     item_spec_id: int
     item_instance_id: int
@@ -22,5 +23,6 @@ class PersonalTradeListingDto:
 @dataclass(frozen=True)
 class PersonalTradeListDto:
     """個別取引出品一覧DTO"""
+
     listings: list[PersonalTradeListingDto]
     next_cursor: str | None

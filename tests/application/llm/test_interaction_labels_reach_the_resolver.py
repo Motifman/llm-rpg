@@ -90,12 +90,8 @@ class TestInteractionLabelsReachTheResolver:
     def test_public_interaction_label_is_carried_to_the_target(self) -> None:
         """表示に display_label が出た操作は、同じ action_name との対が target の interaction_labels に載る。"""
         snap = _wheat_field(
-            SpotGraphInteractionEntry(
-                action_name="reap_wheat", display_label="麦を刈り取る"
-            ),
-            SpotGraphInteractionEntry(
-                action_name="water_field", display_label="水をやる"
-            ),
+            SpotGraphInteractionEntry(action_name="reap_wheat", display_label="麦を刈り取る"),
+            SpotGraphInteractionEntry(action_name="water_field", display_label="水をやる"),
         )
 
         text, targets = _build(snap)
@@ -163,11 +159,7 @@ class TestInteractionLabelsReachTheResolver:
                     name="鎌",
                     description="",
                     quantity=1,
-                    interactions=(
-                        SpotGraphInteractionEntry(
-                            action_name="sharpen_scythe", display_label="刃を研ぐ"
-                        ),
-                    ),
+                    interactions=(SpotGraphInteractionEntry(action_name="sharpen_scythe", display_label="刃を研ぐ"),),
                 ),
             ),
         )
@@ -202,9 +194,7 @@ class TestInteractionLabelsReachTheResolver:
                     entity_id=2,
                     display_name="ハル",
                     action_entries=(
-                        SpotGraphInteractionEntry(
-                            action_name="tend_to_player", display_label="介抱して起こす"
-                        ),
+                        SpotGraphInteractionEntry(action_name="tend_to_player", display_label="介抱して起こす"),
                     ),
                 ),
             ),

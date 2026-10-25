@@ -9,18 +9,22 @@ from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 @dataclass(frozen=True)
 class UpdateOperation:
     """更新操作"""
+
     item_instance_id: ItemInstanceId
     new_quantity: int
 
     def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.new_quantity <= 0:
-            raise QuantityValidationException(f"Update operation: new_quantity must be positive, got {self.new_quantity}")
+            raise QuantityValidationException(
+                f"Update operation: new_quantity must be positive, got {self.new_quantity}"
+            )
 
 
 @dataclass(frozen=True)
 class CreateOperation:
     """作成操作"""
+
     item_spec: ItemSpec
     quantity: int
     durability: Durability | None = None
@@ -34,6 +38,7 @@ class CreateOperation:
 @dataclass(frozen=True)
 class DeleteOperation:
     """削除操作"""
+
     item_instance_id: ItemInstanceId
 
 
@@ -43,6 +48,7 @@ class MergePlan:
 
     アイテムマージのための操作計画を表す値オブジェクト。
     """
+
     update_operations: list[UpdateOperation]
     create_operations: list[CreateOperation]
     delete_operations: list[DeleteOperation]
@@ -54,6 +60,7 @@ class ConsumedItem:
 
     クラフトで消費されたアイテムの情報を保持する。
     """
+
     item_instance_id: ItemInstanceId
     consumed_quantity: int
     remaining_quantity: int
@@ -61,9 +68,13 @@ class ConsumedItem:
     def __post_init__(self) -> None:
         """バリデーション"""
         if self.consumed_quantity <= 0:
-            raise QuantityValidationException(f"Consumed item: consumed_quantity must be positive, got {self.consumed_quantity}")
+            raise QuantityValidationException(
+                f"Consumed item: consumed_quantity must be positive, got {self.consumed_quantity}"
+            )
         if self.remaining_quantity < 0:
-            raise QuantityValidationException(f"Consumed item: remaining_quantity must be non-negative, got {self.remaining_quantity}")
+            raise QuantityValidationException(
+                f"Consumed item: remaining_quantity must be non-negative, got {self.remaining_quantity}"
+            )
 
 
 @dataclass(frozen=True)
@@ -72,6 +83,7 @@ class CraftingConsumptionPlan:
 
     レシピの材料消費を実行するための計画。
     """
+
     consumed_items: list[ConsumedItem]
     update_operations: list[UpdateOperation]
     delete_operations: list[DeleteOperation]

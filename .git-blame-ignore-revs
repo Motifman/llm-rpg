@@ -1,0 +1,6 @@
+# 書式だけを変えたコミット。git blame で飛ばすには次を一度だけ実行する:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub の blame 画面は、このファイルを自動で読む。
+
+# ruff format で src・tests・scripts の書式をそろえた
+e5df369d35fb07d48cf4eeba4d86c3d934e56b9c

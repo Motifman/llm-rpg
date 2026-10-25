@@ -85,7 +85,7 @@ class TestOtherToolsKeepTheirCallLine:
         """
         line = _line(
             "interact",
-            action_summary='「石窯」でパンを焼く',
+            action_summary="「石窯」でパンを焼く",
             result_summary="焼きたてのパンがふたつできた。",
             identifier_arguments={"action_name": "bake_bread", "target_label": "石窯"},
             free_text_argument_names=(),

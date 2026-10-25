@@ -37,31 +37,25 @@ class NotificationContent:
     actor_identity_token: str | None = None
 
     @classmethod
-    def create_follow_notification(
-        cls,
-        follower_user_id: UserId,
-        follower_user_name: str
-    ) -> "NotificationContent":
+    def create_follow_notification(cls, follower_user_id: UserId, follower_user_name: str) -> "NotificationContent":
         """フォロー通知の作成"""
         return cls(
             title="新しいフォロワー",
             message=f"{follower_user_name}さんがあなたをフォローしました",
             actor_user_id=follower_user_id,
-            actor_user_name=follower_user_name
+            actor_user_name=follower_user_name,
         )
 
     @classmethod
     def create_subscribe_notification(
-        cls,
-        subscriber_user_id: UserId,
-        subscriber_user_name: str
+        cls, subscriber_user_id: UserId, subscriber_user_name: str
     ) -> "NotificationContent":
         """サブスクライブ通知の作成"""
         return cls(
             title="新しい購読者",
             message=f"{subscriber_user_name}さんがあなたの投稿を購読しました",
             actor_user_id=subscriber_user_id,
-            actor_user_name=subscriber_user_name
+            actor_user_name=subscriber_user_name,
         )
 
     @classmethod
@@ -71,7 +65,7 @@ class NotificationContent:
         liker_user_name: str,
         content_type: str,
         content_id: int,
-        content_text: str | None = None
+        content_text: str | None = None,
     ) -> "NotificationContent":
         """いいね通知の作成"""
         if content_type not in ["post", "reply"]:
@@ -87,9 +81,7 @@ class NotificationContent:
             else:
                 related_reply_id = ReplyId(content_id)
         except (PostIdValidationException, ReplyIdValidationException) as e:
-            raise NotificationContentValidationException(
-                f"無効なcontent_idです: {content_id}"
-            ) from e
+            raise NotificationContentValidationException(f"無効なcontent_idです: {content_id}") from e
 
         return cls(
             title="いいね",
@@ -99,7 +91,7 @@ class NotificationContent:
             related_post_id=related_post_id,
             related_reply_id=related_reply_id,
             content_type=content_type,
-            content_text=content_text
+            content_text=content_text,
         )
 
     @classmethod
@@ -109,7 +101,7 @@ class NotificationContent:
         mentioner_user_name: str,
         content_type: str,
         content_id: int,
-        content_text: str | None = None
+        content_text: str | None = None,
     ) -> "NotificationContent":
         """メンション通知の作成"""
         if content_type not in ["post", "reply"]:
@@ -125,9 +117,7 @@ class NotificationContent:
             else:
                 related_reply_id = ReplyId(content_id)
         except (PostIdValidationException, ReplyIdValidationException) as e:
-            raise NotificationContentValidationException(
-                f"無効なcontent_idです: {content_id}"
-            ) from e
+            raise NotificationContentValidationException(f"無効なcontent_idです: {content_id}") from e
 
         return cls(
             title="メンション",
@@ -137,7 +127,7 @@ class NotificationContent:
             related_post_id=related_post_id,
             related_reply_id=related_reply_id,
             content_type=content_type,
-            content_text=content_text
+            content_text=content_text,
         )
 
     @classmethod
@@ -147,7 +137,7 @@ class NotificationContent:
         replier_user_name: str,
         content_type: str,
         content_id: int,
-        content_text: str | None = None
+        content_text: str | None = None,
     ) -> "NotificationContent":
         """返信通知の作成"""
         if content_type not in ["post", "reply"]:
@@ -163,9 +153,7 @@ class NotificationContent:
             else:
                 related_reply_id = ReplyId(content_id)
         except (PostIdValidationException, ReplyIdValidationException) as e:
-            raise NotificationContentValidationException(
-                f"無効なcontent_idです: {content_id}"
-            ) from e
+            raise NotificationContentValidationException(f"無効なcontent_idです: {content_id}") from e
 
         return cls(
             title="新しい返信",
@@ -175,15 +163,12 @@ class NotificationContent:
             related_post_id=related_post_id,
             related_reply_id=related_reply_id,
             content_type=content_type,
-            content_text=content_text
+            content_text=content_text,
         )
 
     @classmethod
     def create_post_notification(
-        cls,
-        author_user_id: UserId,
-        author_user_name: str,
-        content_text: str
+        cls, author_user_id: UserId, author_user_name: str, content_text: str
     ) -> "NotificationContent":
         """投稿通知の作成"""
         return cls(
@@ -191,5 +176,5 @@ class NotificationContent:
             message=f"{author_user_name}さんがポストしました",
             actor_user_id=author_user_id,
             actor_user_name=author_user_name,
-            content_text=content_text
+            content_text=content_text,
         )

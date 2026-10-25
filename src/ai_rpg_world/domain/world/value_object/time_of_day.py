@@ -12,10 +12,11 @@ if TYPE_CHECKING:
 
 class TimeOfDay(Enum):
     """1日の中の時間帯"""
-    MORNING = "MORNING"   # 朝
-    DAY = "DAY"           # 昼
-    EVENING = "EVENING"   # 夕
-    NIGHT = "NIGHT"       # 夜
+
+    MORNING = "MORNING"  # 朝
+    DAY = "DAY"  # 昼
+    EVENING = "EVENING"  # 夕
+    NIGHT = "NIGHT"  # 夜
 
 
 def time_of_day_from_tick(tick_value: int, ticks_per_day: int) -> TimeOfDay:
@@ -59,6 +60,7 @@ def is_active_at_time(active_time: "ActiveTimeType", time_of_day: TimeOfDay) -> 
         活動する場合は True
     """
     from ai_rpg_world.domain.monster.enum.monster_enum import ActiveTimeType
+
     if active_time == ActiveTimeType.ALWAYS:
         return True
     if active_time == ActiveTimeType.DIURNAL:

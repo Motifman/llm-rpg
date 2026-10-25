@@ -1,4 +1,3 @@
-
 from typing import Any
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -16,10 +15,12 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 
 class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositoryBase):
     """プレイヤープロフィールリポジトリのインメモリ実装"""
-    
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
+
+    def __init__(
+        self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None
+    ):
         super().__init__(data_store, unit_of_work)
-    
+
     @property
     def _profiles(self) -> dict[PlayerId, PlayerProfileAggregate]:
         return self._data_store.player_profiles
@@ -30,10 +31,10 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
             cloned: PlayerProfileAggregate | None = self._clone(pending)
             return cloned
         return self._profiles.get(player_id)
-    
+
     def find_by_ids(self, player_ids: list[PlayerId]) -> list[PlayerProfileAggregate]:
         return [self._profiles[pid] for pid in player_ids if pid in self._profiles]
-    
+
     def find_by_name(self, name: PlayerName) -> PlayerProfileAggregate | None:
         for profile in self._profiles.values():
             if profile.name == name:
@@ -45,24 +46,25 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
 
     def save(self, profile: PlayerProfileAggregate) -> PlayerProfileAggregate:
         cloned_profile = self._clone(profile)
+
         def operation() -> Any:
             self._profiles[cloned_profile.player_id] = cloned_profile
             return cloned_profile
-            
+
         self._register_aggregate(profile)
         self._register_pending_if_uow(profile.player_id, profile)
         result_value: PlayerProfileAggregate = self._execute_operation(operation)
         return result_value
-    
+
     def delete(self, player_id: PlayerId) -> bool:
         def operation() -> bool:
             if player_id in self._profiles:
                 del self._profiles[player_id]
                 return True
             return False
-            
+
         return self._execute_operation(operation)
-    
+
     def find_all(self) -> list[PlayerProfileAggregate]:
         return list(self._profiles.values())
 

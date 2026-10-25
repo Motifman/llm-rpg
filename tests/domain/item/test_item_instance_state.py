@@ -166,7 +166,8 @@ class TestStackingForbidsStatefulInstances:
     def test_one_side_with_state_disallows_stacking(self) -> None:
         """片方が state を持つだけでもスタック不可（混じると state が失われる）。"""
         a = ItemInstance(
-            item_instance_id=ItemInstanceId(1), item_spec=_spec(),
+            item_instance_id=ItemInstanceId(1),
+            item_spec=_spec(),
             state={"lit": True},
         )
         b = ItemInstance(item_instance_id=ItemInstanceId(2), item_spec=_spec())
@@ -176,11 +177,13 @@ class TestStackingForbidsStatefulInstances:
     def test_both_with_state_disallows_stacking_even_when_equal(self) -> None:
         """同じ state でもスタック不可（量子化された個別 instance を保つ）。"""
         a = ItemInstance(
-            item_instance_id=ItemInstanceId(1), item_spec=_spec(),
+            item_instance_id=ItemInstanceId(1),
+            item_spec=_spec(),
             state={"lit": True},
         )
         b = ItemInstance(
-            item_instance_id=ItemInstanceId(2), item_spec=_spec(),
+            item_instance_id=ItemInstanceId(2),
+            item_spec=_spec(),
             state={"lit": True},
         )
         assert a.can_stack_with(b) is False
@@ -197,9 +200,7 @@ class TestStateValueTypeValidation:
             ItemInstanceStateValidationException,
         )
 
-        with pytest.raises(
-            ItemInstanceStateValidationException, match="not JSON-serializable"
-        ):
+        with pytest.raises(ItemInstanceStateValidationException, match="not JSON-serializable"):
             ItemInstance(
                 item_instance_id=ItemInstanceId(1),
                 item_spec=_spec(),
@@ -214,7 +215,9 @@ class TestStateValueTypeValidation:
         )
 
         inst = ItemInstance(
-            item_instance_id=ItemInstanceId(1), item_spec=_spec(), state=initial_state,
+            item_instance_id=ItemInstanceId(1),
+            item_spec=_spec(),
+            state=initial_state,
         )
         with pytest.raises(ItemInstanceStateValidationException):
             inst.replace_state({"obj": object()})
@@ -234,7 +237,8 @@ class TestStateValueTypeValidation:
         )
 
         inst = ItemInstance(
-            item_instance_id=ItemInstanceId(1), item_spec=_spec(),
+            item_instance_id=ItemInstanceId(1),
+            item_spec=_spec(),
             state={"lit": True},
         )
         with pytest.raises(ItemInstanceStateValidationException):
@@ -255,9 +259,15 @@ class TestStateValueTypeValidation:
     def test_all_primitive_types_accepted(self) -> None:
         """str / int / float / bool / None は全て通る。"""
         inst = ItemInstance(item_instance_id=ItemInstanceId(1), item_spec=_spec())
-        inst.merge_state({
-            "s": "x", "i": 42, "f": 1.5, "b": True, "n": None,
-        })
+        inst.merge_state(
+            {
+                "s": "x",
+                "i": 42,
+                "f": 1.5,
+                "b": True,
+                "n": None,
+            }
+        )
         assert inst.state == {"s": "x", "i": 42, "f": 1.5, "b": True, "n": None}
 
 
@@ -267,7 +277,8 @@ class TestStateClearedReenablesStacking:
     def test_replace_state_with_empty_dict_makes_stackable_again(self) -> None:
         """`replace_state({})` で state が空に戻れば、空 state 同士はスタック可能になる。"""
         a = ItemInstance(
-            item_instance_id=ItemInstanceId(1), item_spec=_spec(),
+            item_instance_id=ItemInstanceId(1),
+            item_spec=_spec(),
             state={"lit": True},
         )
         b = ItemInstance(item_instance_id=ItemInstanceId(2), item_spec=_spec())

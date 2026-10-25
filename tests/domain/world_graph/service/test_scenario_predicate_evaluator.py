@@ -72,7 +72,8 @@ class TestScenarioPredicateEvaluatorFlagSet:
 
     @pytest.mark.parametrize("world_flags", [set(), [], frozenset({""}), frozenset({1})])
     def test_context_rejects_mutable_or_invalid_flag_collections(
-        self, world_flags: object,
+        self,
+        world_flags: object,
     ) -> None:
         """可変集合や不正な要素を受け入れず、評価中の意味変化を防ぐ。"""
         with pytest.raises(PredicateContextValidationException):
@@ -87,7 +88,10 @@ class TestScenarioPredicateEvaluatorTickAtLeast:
         [(9, 10, False), (10, 10, True), (11, 10, True), (0, 0, True)],
     )
     def test_matches_at_or_after_threshold(
-        self, current: int, threshold: int, expected: bool,
+        self,
+        current: int,
+        threshold: int,
+        expected: bool,
     ) -> None:
         """現在tickが閾値と等しい時点から成立し、それより前は成立しない。"""
         result = ScenarioPredicateEvaluator().evaluate(
@@ -131,27 +135,31 @@ class TestScenarioPredicateEvaluatorLocation:
         """本人は一致時だけ成立し、別spotと未配置は通常不成立とする。"""
         entity_id = EntityId.create(1)
         target = SpotId.create(10)
-        context = EntityPlacementPredicateContext(
-            {entity_id: target, EntityId.create(2): SpotId.create(20)}
-        )
+        context = EntityPlacementPredicateContext({entity_id: target, EntityId.create(2): SpotId.create(20)})
         evaluator = ScenarioPredicateEvaluator()
 
         assert evaluator.evaluate(
-            EntityAtSpotPredicate(entity_id, target), context,
+            EntityAtSpotPredicate(entity_id, target),
+            context,
         ).is_satisfied
         assert not evaluator.evaluate(
-            EntityAtSpotPredicate(EntityId.create(2), target), context,
+            EntityAtSpotPredicate(EntityId.create(2), target),
+            context,
         ).is_satisfied
         result = evaluator.evaluate(
-            EntityAtSpotPredicate(EntityId.create(3), target), context,
+            EntityAtSpotPredicate(EntityId.create(3), target),
+            context,
         )
         assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
 
     @pytest.mark.parametrize(
-        ("required", "expected"), [(1, True), (2, True), (3, False)],
+        ("required", "expected"),
+        [(1, True), (2, True), (3, False)],
     )
     def test_entity_count_matches_at_threshold(
-        self, required: int, expected: bool,
+        self,
+        required: int,
+        expected: bool,
     ) -> None:
         """同じspotの通常entity数が閾値以上のときだけ成立する。"""
         target = SpotId.create(10)
@@ -164,7 +172,8 @@ class TestScenarioPredicateEvaluatorLocation:
         )
 
         result = ScenarioPredicateEvaluator().evaluate(
-            EntityCountAtSpotAtLeastPredicate(target, required), context,
+            EntityCountAtSpotAtLeastPredicate(target, required),
+            context,
         )
 
         assert result.is_satisfied is expected
@@ -177,18 +186,22 @@ class TestScenarioPredicateEvaluatorLocation:
         ],
     )
     def test_location_predicates_distinguish_empty_and_missing_context(
-        self, predicate: object,
+        self,
+        predicate: object,
     ) -> None:
         """空配置は通常未成立、未配線と異種contextは文脈不足として返す。"""
         evaluator = ScenarioPredicateEvaluator()
         empty = evaluator.evaluate(  # type: ignore[arg-type]
-            predicate, EntityPlacementPredicateContext({}),
+            predicate,
+            EntityPlacementPredicateContext({}),
         )
         missing = evaluator.evaluate(  # type: ignore[arg-type]
-            predicate, EntityPlacementPredicateContext(None),
+            predicate,
+            EntityPlacementPredicateContext(None),
         )
         wrong = evaluator.evaluate(  # type: ignore[arg-type]
-            predicate, TickPredicateContext(WorldTick(0)),
+            predicate,
+            TickPredicateContext(WorldTick(0)),
         )
 
         assert empty.reason_code is PredicateReasonCode.NOT_SATISFIED
@@ -217,7 +230,8 @@ class TestScenarioPredicateEvaluatorItemOwnership:
 
         assert evaluator.evaluate(ItemSpecOwnedPredicate(owned), context).is_satisfied
         result = evaluator.evaluate(
-            ItemSpecOwnedPredicate(ItemSpecId.create(2)), context,
+            ItemSpecOwnedPredicate(ItemSpecId.create(2)),
+            context,
         )
         assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
 
@@ -236,10 +250,12 @@ class TestScenarioPredicateEvaluatorItemOwnership:
         predicate = ItemSpecOwnedPredicate(ItemSpecId.create(1))
         evaluator = ScenarioPredicateEvaluator()
         missing = evaluator.evaluate(
-            predicate, OwnedItemSpecsPredicateContext(None),
+            predicate,
+            OwnedItemSpecsPredicateContext(None),
         )
         wrong = evaluator.evaluate(
-            predicate, WorldFlagPredicateContext(frozenset()),
+            predicate,
+            WorldFlagPredicateContext(frozenset()),
         )
 
         assert missing.reason_code is PredicateReasonCode.MISSING_CONTEXT
@@ -251,7 +267,8 @@ class TestScenarioPredicateEvaluatorItemOwnership:
         [set(), frozenset({1}), frozenset({"1"})],
     )
     def test_context_rejects_mutable_or_untyped_collections(
-        self, owned_item_spec_ids: object,
+        self,
+        owned_item_spec_ids: object,
     ) -> None:
         """可変集合とItemSpecId以外の要素を拒否し、評価中の意味変化を防ぐ。"""
         with pytest.raises(PredicateContextValidationException):
@@ -297,12 +314,14 @@ class TestScenarioPredicateEvaluatorItemSpecCount:
 
     @pytest.mark.parametrize("required_count", [True, 0, -1, 1.5, "1"])
     def test_predicate_rejects_invalid_required_count(
-        self, required_count: object,
+        self,
+        required_count: object,
     ) -> None:
         """必要数はboolを除く正整数だけを受け入れ、不正定義を構築時に拒否する。"""
         with pytest.raises(ScenarioPredicateValidationException):
             ItemSpecCountAtLeastPredicate(  # type: ignore[arg-type]
-                ItemSpecId.create(1), required_count,
+                ItemSpecId.create(1),
+                required_count,
             )
 
     def test_predicate_rejects_untyped_item_spec_id(self) -> None:
@@ -336,14 +355,10 @@ class TestScenarioPredicateEvaluatorStateValues:
     def test_matches_required_entries_and_ignores_extra_state(self) -> None:
         """全要求値が一致すれば余分な現在値があっても成立し、1件違えば不成立になる。"""
         evaluator = ScenarioPredicateEvaluator()
-        context = StateValuesPredicateContext(
-            {"phase": "open", "nested": {"items": [1, 2]}, "extra": True}
-        )
+        context = StateValuesPredicateContext({"phase": "open", "nested": {"items": [1, 2]}, "extra": True})
 
         assert evaluator.evaluate(
-            StateValuesMatchPredicate(
-                {"phase": "open", "nested": {"items": [1, 2]}}
-            ),
+            StateValuesMatchPredicate({"phase": "open", "nested": {"items": [1, 2]}}),
             context,
         ).is_satisfied
         for required in (
@@ -378,7 +393,8 @@ class TestScenarioPredicateEvaluatorStateValues:
         evaluator = ScenarioPredicateEvaluator()
         missing = evaluator.evaluate(predicate, StateValuesPredicateContext(None))
         wrong = evaluator.evaluate(
-            predicate, WorldFlagPredicateContext(frozenset()),
+            predicate,
+            WorldFlagPredicateContext(frozenset()),
         )
 
         assert missing.reason_code is PredicateReasonCode.MISSING_CONTEXT
@@ -414,7 +430,10 @@ class TestScenarioPredicateEvaluatorStateIntAtLeast:
         [(2, 3, False), (3, 3, True), (4, 3, True)],
     )
     def test_matches_at_or_above_threshold(
-        self, current: int, threshold: int, expected: bool,
+        self,
+        current: int,
+        threshold: int,
+        expected: bool,
     ) -> None:
         """現在値が閾値と等しい時点から成立し、それ未満では成立しない。"""
         result = ScenarioPredicateEvaluator().evaluate(
@@ -426,7 +445,8 @@ class TestScenarioPredicateEvaluatorStateIntAtLeast:
 
     @pytest.mark.parametrize("state", [{}, {"count": "3"}, {"count": None}])
     def test_missing_or_non_int_state_is_zero(
-        self, state: dict[str, object],
+        self,
+        state: dict[str, object],
     ) -> None:
         """キー欠落と整数以外の現在値は、文脈不足でなく既知の0として比較する。"""
         result = ScenarioPredicateEvaluator().evaluate(
@@ -462,7 +482,8 @@ class TestScenarioPredicateEvaluatorStateIntAtLeast:
         evaluator = ScenarioPredicateEvaluator()
         missing = evaluator.evaluate(predicate, StateValuesPredicateContext(None))
         wrong = evaluator.evaluate(
-            predicate, WorldFlagPredicateContext(frozenset()),
+            predicate,
+            WorldFlagPredicateContext(frozenset()),
         )
 
         assert missing.reason_code is PredicateReasonCode.MISSING_CONTEXT
@@ -477,7 +498,8 @@ class TestScenarioPredicateEvaluatorStateIntAtLeast:
 
     @pytest.mark.parametrize("threshold", [True, 1.5, "1"])
     def test_predicate_rejects_non_integer_threshold(
-        self, threshold: object,
+        self,
+        threshold: object,
     ) -> None:
         """閾値はboolを除く整数だけを受け入れる。"""
         with pytest.raises(ScenarioPredicateValidationException):

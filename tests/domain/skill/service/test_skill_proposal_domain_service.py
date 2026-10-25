@@ -26,40 +26,52 @@ class TestSkillProposalDomainService:
                 pytest.param({"player_level": 21}, {}, [], False, id="above-max-level"),
                 pytest.param({}, {"required_race": Race.HUMAN}, [10], False, id="matching-race"),
                 pytest.param(
-                    {"player_race": Race.GHOST}, {"required_race": Race.HUMAN}, [], False,
+                    {"player_race": Race.GHOST},
+                    {"required_race": Race.HUMAN},
+                    [],
+                    False,
                     id="wrong-race",
                 ),
                 pytest.param({}, {"required_role": Role.ADVENTURER}, [10], False, id="matching-role"),
                 pytest.param(
-                    {"player_role": Role.MERCHANT}, {"required_role": Role.ADVENTURER}, [], False,
+                    {"player_role": Role.MERCHANT},
+                    {"required_role": Role.ADVENTURER},
+                    [],
+                    False,
                     id="wrong-role",
                 ),
                 pytest.param(
                     {"free_capacity_ratio": 0.19},
-                    {"min_free_capacity_ratio": 0.2, "max_free_capacity_ratio": 0.8}, [], False,
+                    {"min_free_capacity_ratio": 0.2, "max_free_capacity_ratio": 0.8},
+                    [],
+                    False,
                     id="below-min-capacity",
                 ),
                 pytest.param(
                     {"free_capacity_ratio": 0.2},
-                    {"min_free_capacity_ratio": 0.2, "max_free_capacity_ratio": 0.8}, [10], False,
+                    {"min_free_capacity_ratio": 0.2, "max_free_capacity_ratio": 0.8},
+                    [10],
+                    False,
                     id="at-min-capacity",
                 ),
                 pytest.param(
                     {"free_capacity_ratio": 0.8},
-                    {"min_free_capacity_ratio": 0.2, "max_free_capacity_ratio": 0.8}, [10], False,
+                    {"min_free_capacity_ratio": 0.2, "max_free_capacity_ratio": 0.8},
+                    [10],
+                    False,
                     id="at-max-capacity",
                 ),
                 pytest.param(
                     {"free_capacity_ratio": 0.81},
-                    {"min_free_capacity_ratio": 0.2, "max_free_capacity_ratio": 0.8}, [], False,
+                    {"min_free_capacity_ratio": 0.2, "max_free_capacity_ratio": 0.8},
+                    [],
+                    False,
                     id="above-max-capacity",
                 ),
                 pytest.param({}, {}, [99], True, id="moved-registration-input"),
             ],
         )
-        def test_generate_respects_context_filters(
-            self, context_changes, entry_changes, expected_ids, legacy_single
-        ):
+        def test_generate_respects_context_filters(self, context_changes, entry_changes, expected_ids, legacy_single):
             """条件を満たす候補だけを返し、レベル・空き容量の両端を含め、最初の空枠を示す。"""
             service = SkillProposalDomainService(rng=random.Random(0))
             context = SkillProposalContext(
@@ -111,7 +123,8 @@ class TestSkillProposalDomainService:
                 max_proposals = 1
 
             proposals = service.generate(
-                context=context, table=SkillProposalTable(table_id=1, entries=entries),
+                context=context,
+                table=SkillProposalTable(table_id=1, entries=entries),
                 max_proposals=max_proposals,
             )
 

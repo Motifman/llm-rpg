@@ -95,9 +95,7 @@ class TestObservationRecipientResolver:
             player_status_repository=status_repo,
         )
 
-    def test_resolve_player_location_changed_includes_actor_and_players_at_target_spot(
-        self, resolver, status_repo
-    ):
+    def test_resolve_player_location_changed_includes_actor_and_players_at_target_spot(self, resolver, status_repo):
         """PlayerLocationChangedEvent: 本人と new_spot にいるプレイヤーが配信先"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=2))
@@ -193,8 +191,10 @@ class TestObservationRecipientResolver:
 
     def test_resolve_unknown_event_returns_empty_list(self, resolver):
         """観測対象外・未知のイベントは空リスト"""
+
         class UnknownEvent:
             pass
+
         ids = resolver.resolve(UnknownEvent())
         assert ids == []
 
@@ -211,9 +211,7 @@ class TestObservationRecipientResolver:
         ids = resolver.resolve(event)
         assert ids == []
 
-    def test_resolve_player_location_changed_includes_self_and_players_at_new_spot(
-        self, resolver, status_repo
-    ):
+    def test_resolve_player_location_changed_includes_self_and_players_at_new_spot(self, resolver, status_repo):
         """PlayerLocationChangedEvent: 本人と new_spot_id にいるプレイヤー"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=2))
@@ -234,9 +232,7 @@ class TestObservationRecipientResolver:
 
     # --- 例外ケース（リポジトリが例外を投げた場合は伝播）---
 
-    def test_resolve_when_player_audience_query_raises_propagates(
-        self, data_store
-    ):
+    def test_resolve_when_player_audience_query_raises_propagates(self, data_store):
         """PlayerAudienceQuery.players_at_spot が例外を投げた場合、その例外が伝播する"""
         audience_query = MagicMock()
         audience_query.players_at_spot.side_effect = RuntimeError("find_all failed")
@@ -304,8 +300,10 @@ class TestDefaultRecipientStrategy:
 
     def test_supports_returns_false_for_unknown_event(self, strategy):
         """未知のイベントでは supports が False"""
+
         class UnknownEvent:
             pass
+
         assert strategy.supports(UnknownEvent()) is False
 
     def test_resolve_player_level_up_returns_aggregate_id(self, strategy):
@@ -321,9 +319,7 @@ class TestDefaultRecipientStrategy:
         assert len(ids) == 1
         assert ids[0].value == 7
 
-    def test_player_downed_event_self_spot_other_player_broadcast(
-        self, strategy, status_repo
-    ):
+    def test_player_downed_event_self_spot_other_player_broadcast(self, strategy, status_repo):
         """ダウンは位置に関わらず全 known player に届く。
 
         同 spot 目撃者だけに限定すると、単独で倒れた player の異常を誰も
@@ -347,9 +343,7 @@ class TestDefaultRecipientStrategy:
         assert 3 in id_values  # 目撃者
         assert 4 in id_values  # 遠隔者にも気配として届く
 
-    def test_player_downed_event_unknown_status_still_reaches_known_players(
-        self, strategy, status_repo
-    ):
+    def test_player_downed_event_unknown_status_still_reaches_known_players(self, strategy, status_repo):
         """downed 本人が status_repo に居なくても、既知 player には異変を共有する。
 
         P1-E 後半では down を全 being 共有するため、位置不明でも本人だけに
@@ -366,9 +360,7 @@ class TestDefaultRecipientStrategy:
         id_values = {pid.value for pid in ids}
         assert id_values == {99, 1, 2}
 
-    def test_player_revived_event_reaches_all_known_players(
-        self, strategy, status_repo
-    ):
+    def test_player_revived_event_reaches_all_known_players(self, strategy, status_repo):
         """復帰も位置に関わらず全 known player に届く。"""
         status_repo.save(_make_status(1, spot_id=10))
         status_repo.save(_make_status(2, spot_id=20))
@@ -384,9 +376,7 @@ class TestDefaultRecipientStrategy:
 
         assert {pid.value for pid in ids} == {1, 2, 3}
 
-    def test_create_resolver_delivers_downed_to_all_known_players_with_spot_graph(
-        self, status_repo
-    ):
+    def test_create_resolver_delivers_downed_to_all_known_players_with_spot_graph(self, status_repo):
         """spot_graph 注入時も downed は全 known player に共有される。"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=1))
@@ -430,9 +420,7 @@ class TestObservationRecipientResolverPerceptionPlane:
         strategy.supports.return_value = True
         strategy.resolve.return_value = [PlayerId(1), PlayerId(2)]
         life_query = MagicMock()
-        life_query.can_receive_world_observation.side_effect = (
-            lambda player_id: player_id.value != dead_player_id
-        )
+        life_query.can_receive_world_observation.side_effect = lambda player_id: player_id.value != dead_player_id
         return ObservationRecipientResolver(
             strategies=[strategy],
             player_life_query=life_query,

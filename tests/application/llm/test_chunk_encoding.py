@@ -49,9 +49,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         )
         observations = [obs_newest, obs_oldest]
         action_results = [action_middle]
-        timeline = merge_observations_and_action_results_to_unified_timeline(
-            observations, action_results
-        )
+        timeline = merge_observations_and_action_results_to_unified_timeline(observations, action_results)
         formatter = DefaultRecentEventsFormatter()
         text_from_formatter = formatter.format(observations, action_results)
         text_from_timeline = format_unified_timeline_as_recent_events_bullets(timeline)
@@ -90,9 +88,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         )
         timeline = merge_observations_and_action_results_to_unified_timeline([], [failed])
         fmt = DefaultRecentEventsFormatter()
-        assert fmt.format([], [failed]) == format_unified_timeline_as_recent_events_bullets(
-            timeline
-        )
+        assert fmt.format([], [failed]) == format_unified_timeline_as_recent_events_bullets(timeline)
         assert "[失敗]" in timeline[0].text
         assert "error_code=BAD_ARG" in timeline[0].text
 
@@ -164,7 +160,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
 
         entry = ActionResultEntry(
             occurred_at=datetime.now(),
-            action_summary='speech_say を実行しました。',
+            action_summary="speech_say を実行しました。",
             result_summary="失敗。content は必須",
             success=False,
             error_code="INVALID_ARGUMENT",
@@ -187,10 +183,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
 
         text = format_action_result_line_for_recent_events(entry)
 
-        assert text == (
-            "[行動] 一瞬の空白 → [失敗] | "
-            "意識が途切れ、この間の自分の行動を思い出せない。"
-        )
+        assert text == ("[行動] 一瞬の空白 → [失敗] | 意識が途切れ、この間の自分の行動を思い出せない。")
         assert "error_code=" not in text
         assert "tool=" not in text
 
@@ -212,9 +205,6 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         text = format_action_result_line_for_recent_events(entry)
         assert text.startswith("[0:30] [行動] ")
         assert "→ [結果]" not in text
-
-
-
 
     def test_inner_thought_is_rendered_once_as_own_line(self) -> None:
         """inner_thought は action_summary の JSON ではなく「心の声:」行に 1 回だけ出る。"""
@@ -268,10 +258,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
 
         text = format_action_result_line_for_recent_events(entry)
 
-        assert (
-            '呼び出し: interact(target_label="当番表", '
-            'action_name="write_note", parameters=本文)'
-        ) in text
+        assert ('呼び出し: interact(target_label="当番表", action_name="write_note", parameters=本文)') in text
         assert '"本文"' not in text
 
     def test_call_line_preserves_quotes_inside_identifier_arrays(self) -> None:
@@ -290,10 +277,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
 
         text = format_action_result_line_for_recent_events(entry)
 
-        assert (
-            '呼び出し: give_item(gives=["火打ち石","流木"], '
-            'target_player_label="セナ")'
-        ) in text
+        assert ('呼び出し: give_item(gives=["火打ち石","流木"], target_player_label="セナ")') in text
 
     def test_call_line_is_present_even_when_the_action_has_no_arguments(self) -> None:
         """成功した行動なら、引数が無くても呼び出し行を必ず出す。"""
@@ -400,9 +384,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
                 observation_category="environment",
             ),
         )
-        timeline = merge_observations_and_action_results_to_unified_timeline(
-            [obs_utc, obs_naive], ()
-        )
+        timeline = merge_observations_and_action_results_to_unified_timeline([obs_utc, obs_naive], ())
         assert len(timeline) == 2
         stamps = tuple(line.occurred_at.timestamp() for line in timeline)
         assert stamps == tuple(sorted(stamps))

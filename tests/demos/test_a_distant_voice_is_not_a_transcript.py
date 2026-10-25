@@ -105,9 +105,7 @@ class TestTheFragmentReachesTheListener:
         )
 
         formatter = ObservationFormatter(
-            spot_graph_repository=InMemorySpotGraphRepository(
-                _build_two_spot_graph(perm=0.5)
-            )
+            spot_graph_repository=InMemorySpotGraphRepository(_build_two_spot_graph(perm=0.5))
         )
         event = PlayerSpokeEvent.create(
             aggregate_id=PlayerId(1),

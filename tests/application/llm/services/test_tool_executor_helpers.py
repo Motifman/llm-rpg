@@ -50,9 +50,7 @@ class TestExceptionResult:
 
     def test_post_commit_exception_reports_committed_success_without_retry(self):
         """commit後処理だけが失敗した操作は成功として伝え、同じ操作の再実行を促さない。"""
-        exc = CommandPostCommitException(
-            handoff_error=RuntimeError("delivery failed")
-        )
+        exc = CommandPostCommitException(handoff_error=RuntimeError("delivery failed"))
 
         result = exception_result(exc)
 

@@ -20,9 +20,7 @@ from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from tests.runtime_config_helpers import runtime_config
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "two_teams_lift.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "two_teams_lift.json"
 _FLAG_CONTEXT = WorldFlagMutationContext(
     source=WorldFlagMutationSource.SCENARIO_EVENT,
     actor_player_id=None,
@@ -34,10 +32,7 @@ def _runtime():
 
 
 def _ids(runtime) -> dict[str, object]:
-    return {
-        runtime.id_mapper.get_str("player", int(pid)): pid
-        for pid in runtime.get_player_ids()
-    }
+    return {runtime.id_mapper.get_str("player", int(pid)): pid for pid in runtime.get_player_ids()}
 
 
 def _move_to_lift(runtime, *string_ids: str) -> None:
@@ -280,9 +275,7 @@ class TestTeamsStayHidden:
         graph = runtime._spot_graph_repo.find_graph()
         entity_id = EntityId.create(int(ids["north_1"]))
         graph.unplace_entity(entity_id)
-        graph.place_entity(
-            entity_id, SpotId.create(runtime.id_mapper.get_int("spot", "camp_south"))
-        )
+        graph.place_entity(entity_id, SpotId.create(runtime.id_mapper.get_int("spot", "camp_south")))
         runtime._spot_graph_repo.save(graph)
         runtime.advance_tick()
 

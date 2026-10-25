@@ -17,10 +17,7 @@ from pathlib import Path
 
 import pytest
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "survival_island_v2.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 class TestObservationFormatterMonsterNameWiring:
@@ -60,6 +57,7 @@ class TestObservationFormatterMonsterNameWiring:
         from ai_rpg_world.application.observation.services.formatters.name_resolver import (
             FALLBACK_MONSTER_LABEL,
         )
+
         for mid in all_monster_ids:
             name = resolver.monster_name_by_monster_id(mid)
             assert name != FALLBACK_MONSTER_LABEL, (

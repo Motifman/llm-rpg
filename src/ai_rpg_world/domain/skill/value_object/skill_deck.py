@@ -14,17 +14,13 @@ from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 class SkillDeck:
     capacity: int
     deck_tier: DeckTier
-    slots: tuple[SkillSpec | None, ...] = field(
-        default_factory=lambda: tuple(None for _ in range(MAX_SKILL_SLOTS))
-    )
+    slots: tuple[SkillSpec | None, ...] = field(default_factory=lambda: tuple(None for _ in range(MAX_SKILL_SLOTS)))
 
     def __post_init__(self) -> None:
         if self.capacity < 0:
             raise SkillDeckValidationException(f"capacity cannot be negative: {self.capacity}")
         if len(self.slots) != MAX_SKILL_SLOTS:
-            raise SkillDeckValidationException(
-                f"slots length must be {MAX_SKILL_SLOTS}: {len(self.slots)}"
-            )
+            raise SkillDeckValidationException(f"slots length must be {MAX_SKILL_SLOTS}: {len(self.slots)}")
 
         for skill in self.slots:
             if skill and skill.is_awakened_deck_only and self.deck_tier != DeckTier.AWAKENED:
@@ -61,9 +57,7 @@ class SkillDeck:
             # すでに装備されているスロットが現在のスロットでない場合のみエラー
             existing_skill = self.get_skill(slot_index)
             if existing_skill is None or existing_skill.skill_id != skill.skill_id:
-                raise SkillAlreadyEquippedException(
-                    f"skill {skill.skill_id.value} is already equipped in another slot"
-                )
+                raise SkillAlreadyEquippedException(f"skill {skill.skill_id.value} is already equipped in another slot")
 
         next_slots = list(self.slots)
         next_slots[slot_index] = skill
@@ -81,7 +75,4 @@ class SkillDeck:
     @staticmethod
     def _validate_slot_index(slot_index: int) -> None:
         if slot_index < 0 or slot_index >= MAX_SKILL_SLOTS:
-            raise SkillDeckValidationException(
-                f"slot_index must be in range 0..{MAX_SKILL_SLOTS - 1}: {slot_index}"
-            )
-
+            raise SkillDeckValidationException(f"slot_index must be in range 0..{MAX_SKILL_SLOTS - 1}: {slot_index}")

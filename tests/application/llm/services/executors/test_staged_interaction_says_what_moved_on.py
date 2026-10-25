@@ -120,9 +120,7 @@ class TestTheLaterHandIsToldWhatIsOpenNow:
 
         result = _interact(runtime, executor, _AOI, "verify_cable_labels")
 
-        assert result.remediation == REMEDIATION_BY_KIND[
-            PreconditionFailureKind.STATE_MOVED_ON
-        ]
+        assert result.remediation == REMEDIATION_BY_KIND[PreconditionFailureKind.STATE_MOVED_ON]
         assert result.trace_payload == {"precondition_failure_kind": "state_moved_on"}
 
     def test_does_not_leak_the_keepers_pretend_action(self, runtime) -> None:
@@ -172,18 +170,14 @@ class TestOnlyAStateConditionCanHaveMovedOn:
             open_now=open_now,
         )
 
-        assert result.trace_payload == {
-            "precondition_failure_kind": "missing_prerequisite"
-        }
+        assert result.trace_payload == {"precondition_failure_kind": "missing_prerequisite"}
         assert "いまできるのは" not in result.message
 
 
 def _make_dead(runtime, player_id: PlayerId, spot: str) -> None:
     _move(runtime, player_id, spot)
     spot_id = SpotId.create(runtime.id_mapper.get_int("spot", spot))
-    runtime._fallen_body_registry.record(
-        player_id, spot_id, WorldTick(runtime.current_tick())
-    )
+    runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(runtime.current_tick()))
     status = runtime._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
     runtime._player_status_repo.save(status)
@@ -208,9 +202,7 @@ class TestOpenNowFollowsWhatTheActorCanSee:
         """生者は、生者専用で前提条件の無い配電盤の復旧を、いま通る手順として受け取る。"""
         _move(runtime, _AOI, "machine_room")
 
-        assert _open_action_names(runtime, _AOI, "main_distribution_panel") == [
-            "restore_power"
-        ]
+        assert _open_action_names(runtime, _AOI, "main_distribution_panel") == ["restore_power"]
 
     def test_a_departed_actor_is_not_offered_a_living_only_action(self, runtime) -> None:
         """死者には、前提条件を満たしていても生者専用の操作をいま通る手順として返さない。"""
@@ -222,9 +214,7 @@ class TestOpenNowFollowsWhatTheActorCanSee:
 class TestTheRefusalSurvivesABrokenLookup:
     """いま通る手順を調べる処理が壊れても、元の拒否はそのまま返る。"""
 
-    def test_a_failing_lookup_falls_back_to_the_plain_refusal(
-        self, runtime, monkeypatch
-    ) -> None:
+    def test_a_failing_lookup_falls_back_to_the_plain_refusal(self, runtime, monkeypatch) -> None:
         """いま通る手順の問い合わせが例外を投げても、拒否文と区分は案内なしの従来どおりになり、例外は外へ出ない。"""
         executor = _executor(runtime)
         _interact(runtime, executor, _MORI, "verify_cable_labels")
@@ -232,16 +222,13 @@ class TestTheRefusalSurvivesABrokenLookup:
         def broken(*_args, **_kwargs):
             raise RuntimeError("壊れた問い合わせ")
 
-        monkeypatch.setattr(
-            runtime._interaction_service, "interactions_open_now", broken
-        )
+        monkeypatch.setattr(runtime._interaction_service, "interactions_open_now", broken)
 
         result = _interact(runtime, executor, _AOI, "verify_cable_labels")
 
         assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
         assert result.trace_payload == {"precondition_failure_kind": "permanent"}
         assert result.message == "行動が拒否された: いまその手順に取りかかる段ではない。"
-
 
 
 class TestOnlyAForwardStepCountsAsMovedOn:
@@ -285,9 +272,7 @@ class TestOnlyAForwardStepCountsAsMovedOn:
         monkeypatch.setattr(
             service,
             "remaining_cooldown_ticks",
-            lambda _player, _object, idef, _tick: (
-                3 if idef.action_name == "verify_cable_labels_2" else 0
-            ),
+            lambda _player, _object, idef, _tick: 3 if idef.action_name == "verify_cable_labels_2" else 0,
         )
 
         result = _interact(runtime, executor, _AOI, "verify_cable_labels")
@@ -300,9 +285,7 @@ def _rewrite_second_step_effect(runtime, **parameters) -> None:
     """配線番号表の第二段階の増分効果の引数を書き換える。"""
     spot_id = SpotId.create(runtime.id_mapper.get_int("spot", "corridor"))
     interior = runtime._spot_interior_repo.find_by_spot_id(spot_id)
-    chart = interior.get_object(
-        SpotObjectId.create(runtime.id_mapper.get_int("object", _CHART))
-    )
+    chart = interior.get_object(SpotObjectId.create(runtime.id_mapper.get_int("object", _CHART)))
     interactions = tuple(
         replace(
             interaction,
@@ -317,9 +300,7 @@ def _rewrite_second_step_effect(runtime, **parameters) -> None:
         else interaction
         for interaction in chart.interactions
     )
-    runtime._spot_interior_repo.save(
-        spot_id, interior.replace_object(replace(chart, interactions=interactions))
-    )
+    runtime._spot_interior_repo.save(spot_id, interior.replace_object(replace(chart, interactions=interactions)))
 
 
 class TestTheNextStepMustMoveThisObjectForward:
@@ -362,9 +343,7 @@ class TestARecoveringKindIsNotOverridden:
         )
         from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-        loaded = ScenarioLoader().load_from_file(
-            str(_SCENARIOS / "survival_island_v4_coop.json")
-        )
+        loaded = ScenarioLoader().load_from_file(str(_SCENARIOS / "survival_island_v4_coop.json"))
         bindings = loaded.reactive_object_state_bindings
         interactions = [
             interaction
@@ -377,8 +356,7 @@ class TestARecoveringKindIsNotOverridden:
             for interaction in interactions
             for c in interaction.preconditions
             if c.condition_type is InteractionConditionTypeEnum.OBJECT_STATE
-            and classify_precondition_failure(c, bindings=bindings)
-            is PreconditionFailureKind.TIME_RECOVERING
+            and classify_precondition_failure(c, bindings=bindings) is PreconditionFailureKind.TIME_RECOVERING
         )
         executor = SpotGraphToolExecutor(
             spot_graph_world_services=MagicMock(),

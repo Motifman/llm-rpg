@@ -167,19 +167,9 @@ class TestPlayerProfileAggregate:
 
     def test_update_profile_multiple_fields(self):
         """複数フィールドの一括更新が正しく動作すること"""
-        profile = create_test_profile(
-            name="OldName",
-            role=Role.CITIZEN,
-            race=Race.HUMAN,
-            element=Element.NEUTRAL
-        )
+        profile = create_test_profile(name="OldName", role=Role.CITIZEN, race=Race.HUMAN, element=Element.NEUTRAL)
 
-        profile.update_profile(
-            name=PlayerName("NewName"),
-            role=Role.ADVENTURER,
-            race=Race.GOBLIN,
-            element=Element.FIRE
-        )
+        profile.update_profile(name=PlayerName("NewName"), role=Role.ADVENTURER, race=Race.GOBLIN, element=Element.FIRE)
 
         assert profile.name.value == "NewName"
         assert profile.role == Role.ADVENTURER
@@ -207,7 +197,7 @@ class TestPlayerProfileAggregate:
             name=PlayerName("TestPlayer"),  # 同じ値
             role=Role.CITIZEN,  # 同じ値
             race=Race.HUMAN,  # 同じ値
-            element=Element.NEUTRAL  # 同じ値
+            element=Element.NEUTRAL,  # 同じ値
         )
 
         events = profile.get_events()
@@ -229,7 +219,7 @@ class TestPlayerProfileAggregate:
         profile.update_profile(
             name=PlayerName("NewName"),
             # roleは変更なし
-            race=Race.GOBLIN  # raceのみ変更
+            race=Race.GOBLIN,  # raceのみ変更
         )
 
         assert profile.name.value == "NewName"
@@ -247,7 +237,6 @@ class TestPlayerProfileAggregate:
         assert event.new_race == Race.GOBLIN
         assert event.old_role is None  # roleは変更なし
         assert event.new_role is None
-
 
     def test_can_change_name_true(self):
         """名前変更可能チェックが正しく動作すること（変更可能）"""

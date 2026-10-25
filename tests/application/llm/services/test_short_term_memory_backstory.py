@@ -89,9 +89,7 @@ class TestTheBackstoryHoldsOnlyFlowAndMood:
         received: list[list[str]] = []
         memory = SummarizingShortTermMemory(
             summary_service=ShortTermMemorySummaryService(_Port()),
-            on_compacted=lambda pid, entries: received.append(
-                [entry.payload.output.prose for entry in entries]
-            ),
+            on_compacted=lambda pid, entries: received.append([entry.payload.output.prose for entry in entries]),
         )
 
         _run_turns(memory, 20)
@@ -154,8 +152,7 @@ class TestOldSnapshotsWithUnresolved:
             {
                 **group,
                 "summaries": [
-                    {**summary, "unresolved": ["崩れた坑道の先を確かめる"]}
-                    for summary in group["summaries"]
+                    {**summary, "unresolved": ["崩れた坑道の先を確かめる"]} for summary in group["summaries"]
                 ],
             }
             for group in captured["mid_summaries"]
@@ -168,8 +165,4 @@ class TestOldSnapshotsWithUnresolved:
         assert restored.compressed_activity == "見張り台でノアと合流し、北の坑道を調べた"
         assert restored.emotional_summary == "少し不安"
         assert not hasattr(restored, "unresolved")
-        assert all(
-            "unresolved" not in summary
-            for group in captured["mid_summaries"]
-            for summary in group["summaries"]
-        )
+        assert all("unresolved" not in summary for group in captured["mid_summaries"] for summary in group["summaries"])

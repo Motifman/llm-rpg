@@ -57,6 +57,6 @@ class TestWorldId:
     def test_immutability(self):
         """不変性が保たれていること"""
         world_id = WorldId(505)
-        
+
         with pytest.raises(AttributeError):
             world_id.value = 606

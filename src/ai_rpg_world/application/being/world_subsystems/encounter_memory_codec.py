@@ -98,9 +98,7 @@ class EncounterMemorySubsystemCodec(WorldSubsystemCodec):
                         "last_seen_tick": int(record.last_seen_tick),
                         "count": int(record.count),
                     }
-                    for canonical, record in sorted(
-                        records_by_canonical.items()
-                    )
+                    for canonical, record in sorted(records_by_canonical.items())
                 ],
             }
             for pid_value, records_by_canonical in sorted(store.items())
@@ -117,10 +115,7 @@ class EncounterMemorySubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         memory = self._require_in_memory(runtime)
         # InMemoryEncounterMemory._store: Dict[int, Dict[str, EncounterRecord]]。
         # 全消ししてから書き戻す (= 部分復元による不整合を防ぐ)。
@@ -154,10 +149,7 @@ class EncounterMemorySubsystemCodec(WorldSubsystemCodec):
         """
         memory = getattr(runtime, "_encounter_memory", None)
         if memory is None:
-            raise RuntimeError(
-                "runtime._encounter_memory not found; "
-                "EncounterMemorySubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._encounter_memory not found; EncounterMemorySubsystemCodec requires it")
         if not isinstance(memory, InMemoryEncounterMemory):
             raise NotImplementedError(
                 f"EncounterMemorySubsystemCodec currently supports only "

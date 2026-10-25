@@ -38,7 +38,13 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
-def build_player_inventory(*, row: sqlite3.Row, inventory_slot_rows: list[sqlite3.Row], equipment_slot_rows: list[sqlite3.Row], reserved_item_rows: list[sqlite3.Row]) -> PlayerInventoryAggregate:
+def build_player_inventory(
+    *,
+    row: sqlite3.Row,
+    inventory_slot_rows: list[sqlite3.Row],
+    equipment_slot_rows: list[sqlite3.Row],
+    reserved_item_rows: list[sqlite3.Row],
+) -> PlayerInventoryAggregate:
     inventory_slots = {
         SlotId(int(slot_row["slot_id"])): (
             None if slot_row["item_instance_id"] is None else ItemInstanceId(int(slot_row["item_instance_id"]))
@@ -51,10 +57,7 @@ def build_player_inventory(*, row: sqlite3.Row, inventory_slot_rows: list[sqlite
         )
         for slot_row in equipment_slot_rows
     }
-    reserved = {
-        ItemInstanceId(int(reserved_row["item_instance_id"]))
-        for reserved_row in reserved_item_rows
-    }
+    reserved = {ItemInstanceId(int(reserved_row["item_instance_id"])) for reserved_row in reserved_item_rows}
     return PlayerInventoryAggregate.restore_from_data(
         player_id=PlayerId(int(row["player_id"])),
         max_slots=int(row["max_slots"]),
@@ -64,7 +67,15 @@ def build_player_inventory(*, row: sqlite3.Row, inventory_slot_rows: list[sqlite
     )
 
 
-def build_player_status(*, row: sqlite3.Row, path_rows: list[sqlite3.Row], active_effect_rows: list[sqlite3.Row], pursuit_target_row: sqlite3.Row | None, pursuit_last_known_row: sqlite3.Row | None, need_rows: list[sqlite3.Row] | None = None) -> PlayerStatusAggregate:
+def build_player_status(
+    *,
+    row: sqlite3.Row,
+    path_rows: list[sqlite3.Row],
+    active_effect_rows: list[sqlite3.Row],
+    pursuit_target_row: sqlite3.Row | None,
+    pursuit_last_known_row: sqlite3.Row | None,
+    need_rows: list[sqlite3.Row] | None = None,
+) -> PlayerStatusAggregate:
     exp_table = ExpTable(
         base_exp=float(row["exp_table_base_exp"]),
         exponent=float(row["exp_table_exponent"]),
@@ -77,15 +88,21 @@ def build_player_status(*, row: sqlite3.Row, path_rows: list[sqlite3.Row], activ
             target_snapshot = PursuitTargetSnapshot(
                 target_id=WorldObjectId(int(pursuit_target_row["target_id"])),
                 spot_id=SpotId(int(pursuit_target_row["spot_id"])),
-                coordinate=Coordinate(int(pursuit_target_row["x"]), int(pursuit_target_row["y"]), int(pursuit_target_row["z"])),
+                coordinate=Coordinate(
+                    int(pursuit_target_row["x"]), int(pursuit_target_row["y"]), int(pursuit_target_row["z"])
+                ),
             )
         last_known = None
         if pursuit_last_known_row is not None:
             last_known = PursuitLastKnownState(
                 target_id=WorldObjectId(int(pursuit_last_known_row["target_id"])),
                 spot_id=SpotId(int(pursuit_last_known_row["spot_id"])),
-                coordinate=Coordinate(int(pursuit_last_known_row["x"]), int(pursuit_last_known_row["y"]), int(pursuit_last_known_row["z"])),
-                observed_at_tick=None if pursuit_last_known_row["observed_at_tick"] is None else WorldTick(int(pursuit_last_known_row["observed_at_tick"])),
+                coordinate=Coordinate(
+                    int(pursuit_last_known_row["x"]), int(pursuit_last_known_row["y"]), int(pursuit_last_known_row["z"])
+                ),
+                observed_at_tick=None
+                if pursuit_last_known_row["observed_at_tick"] is None
+                else WorldTick(int(pursuit_last_known_row["observed_at_tick"])),
             )
         # 外側の or が「どちらかは在る」を保証している
         if target_snapshot is not None:
@@ -99,7 +116,9 @@ def build_player_status(*, row: sqlite3.Row, path_rows: list[sqlite3.Row], activ
                 target_id=target_id,
                 target_snapshot=target_snapshot,
                 last_known=last_known,
-                failure_reason=None if row["pursuit_failure_reason"] is None else PursuitFailureReason[str(row["pursuit_failure_reason"])],
+                failure_reason=None
+                if row["pursuit_failure_reason"] is None
+                else PursuitFailureReason[str(row["pursuit_failure_reason"])],
             )
         )
     return PlayerStatusAggregate(
@@ -134,13 +153,23 @@ def build_player_status(*, row: sqlite3.Row, path_rows: list[sqlite3.Row], activ
         stamina=Stamina.create(int(row["stamina_value"]), int(row["stamina_max"])),
         navigation_state=PlayerNavigationState.from_parts(
             current_spot_id=None if row["current_spot_id"] is None else SpotId(int(row["current_spot_id"])),
-            current_coordinate=_coord_or_none(row["current_coordinate_x"], row["current_coordinate_y"], row["current_coordinate_z"]),
-            current_destination=_coord_or_none(row["current_destination_x"], row["current_destination_y"], row["current_destination_z"]),
-            planned_path=[Coordinate(int(path_row["x"]), int(path_row["y"]), int(path_row["z"])) for path_row in path_rows],
+            current_coordinate=_coord_or_none(
+                row["current_coordinate_x"], row["current_coordinate_y"], row["current_coordinate_z"]
+            ),
+            current_destination=_coord_or_none(
+                row["current_destination_x"], row["current_destination_y"], row["current_destination_z"]
+            ),
+            planned_path=[
+                Coordinate(int(path_row["x"]), int(path_row["y"]), int(path_row["z"])) for path_row in path_rows
+            ],
             goal_destination_type=row["goal_destination_type"],
             goal_spot_id=None if row["goal_spot_id"] is None else SpotId(int(row["goal_spot_id"])),
-            goal_location_area_id=None if row["goal_location_area_id"] is None else LocationAreaId(int(row["goal_location_area_id"])),
-            goal_world_object_id=None if row["goal_world_object_id"] is None else WorldObjectId(int(row["goal_world_object_id"])),
+            goal_location_area_id=None
+            if row["goal_location_area_id"] is None
+            else LocationAreaId(int(row["goal_location_area_id"])),
+            goal_world_object_id=None
+            if row["goal_world_object_id"] is None
+            else WorldObjectId(int(row["goal_world_object_id"])),
         ),
         is_down=bool(row["is_down"]),
         active_effects=[

@@ -87,12 +87,8 @@ def _load(tmp_path: Path, mutate: Callable[[dict[str, Any]], None]) -> Any:
 class TestWritingWhatCannotChangeStopsTheWorld:
     """変えられない属性を書く効果は、起動時に落ちる。"""
 
-    @pytest.mark.parametrize(
-        "effect", [_WRITE_IT, _STAMP_IT], ids=["change", "record_tick"]
-    )
-    def test_both_writers_are_refused(
-        self, tmp_path: Path, effect: dict[str, Any]
-    ) -> None:
+    @pytest.mark.parametrize("effect", [_WRITE_IT, _STAMP_IT], ids=["change", "record_tick"])
+    def test_both_writers_are_refused(self, tmp_path: Path, effect: dict[str, Any]) -> None:
         """本人 state を書く 2 つの効果が、どちらも落ちる。
 
         `RECORD_PLAYER_STATE_TICK` は書き込むのが tick の数値なので、
@@ -141,16 +137,19 @@ class TestWhatIsStillAllowed:
 
         これが無いと、上の検査は「効果を足すと必ず落ちる」でも緑になる。
         """
+
         def mutate(raw: dict[str, Any]) -> None:
             raw["player_attributes"]["mood"] = {
                 "display_name": "機嫌",
                 "visibility": "public",
                 "mutable": True,
             }
-            _oven(raw)["interactions"][0]["effects"].append({
-                "effect_type": "CHANGE_PLAYER_STATE",
-                "parameters": {"state_updates": {"mood": "calm"}},
-            })
+            _oven(raw)["interactions"][0]["effects"].append(
+                {
+                    "effect_type": "CHANGE_PLAYER_STATE",
+                    "parameters": {"state_updates": {"mood": "calm"}},
+                }
+            )
 
         assert _load(tmp_path, mutate).scenario is not None
 
@@ -160,11 +159,14 @@ class TestWhatIsStillAllowed:
         **新しい規則を既定にしない。** 既定を変えると、過去の run と
         比べられなくなる。
         """
+
         def mutate(raw: dict[str, Any]) -> None:
-            _oven(raw)["interactions"][0]["effects"].append({
-                "effect_type": "CHANGE_PLAYER_STATE",
-                "parameters": {"state_updates": {"whatever": "x"}},
-            })
+            _oven(raw)["interactions"][0]["effects"].append(
+                {
+                    "effect_type": "CHANGE_PLAYER_STATE",
+                    "parameters": {"state_updates": {"whatever": "x"}},
+                }
+            )
 
         assert _load(tmp_path, mutate).scenario is not None
 
@@ -177,10 +179,7 @@ class TestWhatIsStillAllowed:
         """
         runtime = _load(tmp_path, lambda raw: None)
 
-        assert all(
-            _UNCHANGEABLE in spawn.initial_state
-            for spawn in runtime.scenario.player_spawns
-        )
+        assert all(_UNCHANGEABLE in spawn.initial_state for spawn in runtime.scenario.player_spawns)
 
     def test_a_condition_on_it_is_fine(self, tmp_path: Path) -> None:
         """その属性を**条件**にする宣言は通る。
@@ -188,12 +187,15 @@ class TestWhatIsStillAllowed:
         条件であって効果ではない。市場町の全作業がこの形なので、落ちたら
         シナリオが読めない (**正の対照**)。
         """
+
         def mutate(raw: dict[str, Any]) -> None:
-            _oven(raw)["interactions"][0]["preconditions"].append({
-                "condition_type": "PLAYER_STATE_IS",
-                "required_state": {_UNCHANGEABLE: "baker"},
-                "failure_message": "焼き手にしか扱えない。",
-            })
+            _oven(raw)["interactions"][0]["preconditions"].append(
+                {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {_UNCHANGEABLE: "baker"},
+                    "failure_message": "焼き手にしか扱えない。",
+                }
+            )
 
         assert _load(tmp_path, mutate).scenario is not None
 
@@ -219,12 +221,15 @@ class TestEveryEntryPointRefusesIt:
 
     def test_a_player_interaction_is_refused(self, tmp_path: Path) -> None:
         """対人 action で落ちる。"""
+
         def mutate(raw: dict[str, Any]) -> None:
-            raw["player_interactions"] = [{
-                "action_name": "teach_baking",
-                "display_label": "焼き方を教える",
-                "effects": [dict(_WRITE_IT, target="TARGET_PLAYER")],
-            }]
+            raw["player_interactions"] = [
+                {
+                    "action_name": "teach_baking",
+                    "display_label": "焼き方を教える",
+                    "effects": [dict(_WRITE_IT, target="TARGET_PLAYER")],
+                }
+            ]
 
         with pytest.raises(ScenarioLoadError) as caught:
             _load(tmp_path, mutate)
@@ -233,13 +238,16 @@ class TestEveryEntryPointRefusesIt:
 
     def test_an_item_interaction_is_refused(self, tmp_path: Path) -> None:
         """アイテムの操作で落ちる。"""
+
         def mutate(raw: dict[str, Any]) -> None:
             bread = next(i for i in raw["item_specs"] if i["id"] == "bread")
-            bread["interactions"] = [{
-                "action_name": "study_the_loaf",
-                "display_label": "パンを調べる",
-                "effects": [_WRITE_IT],
-            }]
+            bread["interactions"] = [
+                {
+                    "action_name": "study_the_loaf",
+                    "display_label": "パンを調べる",
+                    "effects": [_WRITE_IT],
+                }
+            ]
 
         with pytest.raises(ScenarioLoadError) as caught:
             _load(tmp_path, mutate)
@@ -251,12 +259,15 @@ class TestEveryEntryPointRefusesIt:
 
         イベントには spot も物体も無いので、**イベント id** が位置になる。
         """
+
         def mutate(raw: dict[str, Any]) -> None:
-            raw["scenario_events"] = [{
-                "id": "the_calling",
-                "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 10}],
-                "effects": [_WRITE_IT],
-            }]
+            raw["scenario_events"] = [
+                {
+                    "id": "the_calling",
+                    "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 10}],
+                    "effects": [_WRITE_IT],
+                }
+            ]
 
         with pytest.raises(ScenarioLoadError) as caught:
             _load(tmp_path, mutate)

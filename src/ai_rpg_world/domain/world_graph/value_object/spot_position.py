@@ -19,13 +19,9 @@ class SpotPosition:
 
     def __post_init__(self) -> None:
         if not _is_valid_number(self.x):
-            raise SpotPositionValidationException(
-                f"SpotPosition.x must be finite number: {self.x!r}"
-            )
+            raise SpotPositionValidationException(f"SpotPosition.x must be finite number: {self.x!r}")
         if not _is_valid_number(self.y):
-            raise SpotPositionValidationException(
-                f"SpotPosition.y must be finite number: {self.y!r}"
-            )
+            raise SpotPositionValidationException(f"SpotPosition.y must be finite number: {self.y!r}")
 
 
 def _is_valid_number(value: object) -> bool:

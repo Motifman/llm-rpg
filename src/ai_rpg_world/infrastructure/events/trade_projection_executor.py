@@ -88,9 +88,7 @@ class SqliteTradeProjectionExecutor:
             )
             if cursor.rowcount == 0:
                 return False
-            repository = SqliteTradeReadModelRepository.for_shared_unit_of_work(
-                connection
-            )
+            repository = SqliteTradeReadModelRepository.for_shared_unit_of_work(connection)
             projection(repository)
             return True
 

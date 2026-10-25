@@ -117,13 +117,9 @@ def _run_gh(cmd: Sequence[str]) -> str:
             text=True,
         )
     except FileNotFoundError as e:
-        raise GistPublishError(
-            "gh CLI not found. Install: https://cli.github.com/"
-        ) from e
+        raise GistPublishError("gh CLI not found. Install: https://cli.github.com/") from e
     except subprocess.CalledProcessError as e:
-        raise GistPublishError(
-            f"gh command failed (exit {e.returncode}): {e.stderr.strip()}"
-        ) from e
+        raise GistPublishError(f"gh command failed (exit {e.returncode}): {e.stderr.strip()}") from e
     return result.stdout.strip()
 
 
@@ -198,9 +194,7 @@ def _maybe_build_viewer(run_dir: Path) -> Path | None:
         asset = fetch_cytoscape()
     except Exception as e:
         # Cytoscape 取得 (ネット) 失敗。trace.html だけで諦める
-        logger.warning(
-            "skipping viewer.html build (Cytoscape fetch failed): %s", e
-        )
+        logger.warning("skipping viewer.html build (Cytoscape fetch failed): %s", e)
         return None
     try:
         events = list(load_trace_events(trace_path))
@@ -223,9 +217,11 @@ def _maybe_build_viewer(run_dir: Path) -> Path | None:
             load_events as _load_timeline_events,
         )
         from scripts.build_timeline_viewer import render_html as _render_timeline
+
         timeline_events = _load_timeline_events(trace_path)
         (run_dir / "timeline.html").write_text(
-            _render_timeline(timeline_events, run_dir.name), encoding="utf-8",
+            _render_timeline(timeline_events, run_dir.name),
+            encoding="utf-8",
         )
     except Exception as e:
         logger.warning("failed to build timeline.html: %s", e)
@@ -282,21 +278,11 @@ def publish(
     legacy_files = [n for n in html_files if "viewer" not in n]
     primary_html = (viewer_files or legacy_files or [None])[0]
     legacy_html = (legacy_files or [None])[0] if viewer_files else None
-    html_preview_url = (
-        _html_preview_url(gist_id, user, primary_html)
-        if gist_id and user and primary_html
-        else None
-    )
+    html_preview_url = _html_preview_url(gist_id, user, primary_html) if gist_id and user and primary_html else None
     viewer_preview_url = (
-        _html_preview_url(gist_id, user, viewer_files[0])
-        if gist_id and user and viewer_files
-        else None
+        _html_preview_url(gist_id, user, viewer_files[0]) if gist_id and user and viewer_files else None
     )
-    legacy_preview_url = (
-        _html_preview_url(gist_id, user, legacy_html)
-        if gist_id and user and legacy_html
-        else None
-    )
+    legacy_preview_url = _html_preview_url(gist_id, user, legacy_html) if gist_id and user and legacy_html else None
     # 実験 #29 後続: episodic.html / timeline.html も htmlpreview wrap 付き
     # で出すようにする。旧実装ではこれらが gist raw URL のままだと
     # text/plain 配信になり、ブラウザでソースコードとして表示されてしまった
@@ -304,14 +290,10 @@ def publish(
     episodic_files = [n for n in html_files if "episodic" in n]
     timeline_files = [n for n in html_files if "timeline" in n]
     episodic_preview_url = (
-        _html_preview_url(gist_id, user, episodic_files[0])
-        if gist_id and user and episodic_files
-        else None
+        _html_preview_url(gist_id, user, episodic_files[0]) if gist_id and user and episodic_files else None
     )
     timeline_preview_url = (
-        _html_preview_url(gist_id, user, timeline_files[0])
-        if gist_id and user and timeline_files
-        else None
+        _html_preview_url(gist_id, user, timeline_files[0]) if gist_id and user and timeline_files else None
     )
     return {
         "gist_url": gist_url,
@@ -330,9 +312,7 @@ def publish(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Publish an experiment run directory to a secret gist"
-    )
+    parser = argparse.ArgumentParser(description="Publish an experiment run directory to a secret gist")
     parser.add_argument(
         "run_dir",
         type=Path,

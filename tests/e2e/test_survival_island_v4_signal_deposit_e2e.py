@@ -22,12 +22,7 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
-SCENARIO = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "survival_island_v4_coop.json"
-)
+SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v4_coop.json"
 
 
 def _player_id(runtime, string_id: str) -> PlayerId:
@@ -87,18 +82,10 @@ class TestDistributedSignalDeposit:
         _grant(runtime, ada, "driftwood", "driftwood", "flint")
         _grant(runtime, noah, "driftwood", "dry_leaves", "dry_leaves")
 
-        runtime._interaction_service.execute_interaction(
-            ada, _pit_id(runtime), "add_driftwood"
-        )
-        runtime._interaction_service.execute_interaction(
-            noah, _pit_id(runtime), "add_driftwood"
-        )
-        runtime._interaction_service.execute_interaction(
-            noah, _pit_id(runtime), "add_dry_leaves"
-        )
-        result = runtime._interaction_service.execute_interaction(
-            ada, _pit_id(runtime), "light_signal"
-        )
+        runtime._interaction_service.execute_interaction(ada, _pit_id(runtime), "add_driftwood")
+        runtime._interaction_service.execute_interaction(noah, _pit_id(runtime), "add_driftwood")
+        runtime._interaction_service.execute_interaction(noah, _pit_id(runtime), "add_dry_leaves")
+        result = runtime._interaction_service.execute_interaction(ada, _pit_id(runtime), "light_signal")
 
         assert _owned_count(runtime, ada, "driftwood") == 0
         assert _owned_count(runtime, noah, "driftwood") == 0
@@ -126,9 +113,7 @@ class TestDistributedSignalDeposit:
         )
 
         with pytest.raises(InteractionNotAllowedException, match="流木が足りない"):
-            runtime._interaction_service.execute_interaction(
-                ada, _pit_id(runtime), "light_signal"
-            )
+            runtime._interaction_service.execute_interaction(ada, _pit_id(runtime), "light_signal")
 
         assert _pit(runtime).state["lit"] is False
         assert _owned_count(runtime, ada, "driftwood") == 3
@@ -142,20 +127,14 @@ class TestDistributedSignalDeposit:
         _grant(runtime, ada, "driftwood")
         runtime._obs_buffer.drain(noah)
 
-        runtime._interaction_service.execute_interaction(
-            ada, _pit_id(runtime), "add_driftwood"
-        )
+        runtime._interaction_service.execute_interaction(ada, _pit_id(runtime), "add_driftwood")
 
         outputs = [entry.output for entry in runtime._obs_buffer.get_observations(noah)]
-        witnessed = next(
-            output for output in outputs if "狼煙台に流木を積み上げた" in output.prose
-        )
+        witnessed = next(output for output in outputs if "狼煙台に流木を積み上げた" in output.prose)
         assert witnessed.prose == "エイダが狼煙台に流木を積み上げた。"
         assert witnessed.schedules_turn is True
 
-    def test_fixed_three_with_two_owned_keeps_inventory_and_state_in_sync(
-        self, tmp_path: Path
-    ) -> None:
+    def test_fixed_three_with_two_owned_keeps_inventory_and_state_in_sync(self, tmp_path: Path) -> None:
         """quantity=3 に対して所持2個なら、実インベントリ減算と state 加算はともに2になる。"""
         scenario = json.loads(SCENARIO.read_text(encoding="utf-8"))
         pit = next(
@@ -165,11 +144,7 @@ class TestDistributedSignalDeposit:
             for obj in spot["interior"]["objects"]
             if obj["id"] == "signal_fire_pit"
         )
-        deposit = next(
-            action
-            for action in pit["interactions"]
-            if action["action_name"] == "add_driftwood"
-        )
+        deposit = next(action for action in pit["interactions"] if action["action_name"] == "add_driftwood")
         deposit["effects"][0]["parameters"]["quantity"] = 3
         path = tmp_path / "fixed_quantity_deposit.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
@@ -178,9 +153,7 @@ class TestDistributedSignalDeposit:
         _move_to_summit(runtime, ada)
         _grant(runtime, ada, "driftwood", "driftwood")
 
-        runtime._interaction_service.execute_interaction(
-            ada, _pit_id(runtime), "add_driftwood"
-        )
+        runtime._interaction_service.execute_interaction(ada, _pit_id(runtime), "add_driftwood")
 
         assert _owned_count(runtime, ada, "driftwood") == 0
         assert _pit(runtime).state["driftwood_stacked"] == 2

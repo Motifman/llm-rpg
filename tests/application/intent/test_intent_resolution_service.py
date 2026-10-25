@@ -72,9 +72,7 @@ class TestSubmitAndResolveImmediately:
     def test_unknown_tool_returns_failure_dto(self) -> None:
         """handler_map に無いツールは UNKNOWN_TOOL の失敗 DTO。"""
         service, _, _ = _build({})
-        result = service.submit_and_resolve_immediately(
-            player_id=1, tool_name="nonexistent", arguments={}
-        )
+        result = service.submit_and_resolve_immediately(player_id=1, tool_name="nonexistent", arguments={})
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
 
@@ -85,9 +83,7 @@ class TestSubmitAndResolveImmediately:
             raise RuntimeError("oops")
 
         service, _, _ = _build({"crash": boom})
-        result = service.submit_and_resolve_immediately(
-            player_id=1, tool_name="crash", arguments={}
-        )
+        result = service.submit_and_resolve_immediately(player_id=1, tool_name="crash", arguments={})
         assert result.success is False
         assert result.error_code == "INTENT_HANDLER_RAISED"
 
@@ -96,15 +92,11 @@ class TestSubmitAndResolveImmediately:
 
         def handler(player_id: int, args: Mapping[str, Any]) -> LlmCommandResultDto:
             # handler が受け取った args の中身を結果に乗せる
-            return LlmCommandResultDto(
-                success=True, message=str(dict(args))
-            )
+            return LlmCommandResultDto(success=True, message=str(dict(args)))
 
         service, _, _ = _build({"say": handler})
         original = {"content": "hello"}
-        result = service.submit_and_resolve_immediately(
-            player_id=1, tool_name="say", arguments=original
-        )
+        result = service.submit_and_resolve_immediately(player_id=1, tool_name="say", arguments=original)
         # handler はオリジナルの content を受け取った
         assert "hello" in result.message
         # submit 後にオリジナルを mutate しても (検査不可能だが) 安全に呼べる
@@ -130,13 +122,9 @@ class TestResolveDrained:
 
         service, queue, _ = _build({"tool_a": handler_a, "tool_b": handler_b})
         # 直接 queue に submit して drain して _resolve_drained に渡す
-        service.submit_and_resolve_immediately(
-            player_id=1, tool_name="tool_a", arguments={}
-        )
+        service.submit_and_resolve_immediately(player_id=1, tool_name="tool_a", arguments={})
         # 再 submit で別 player の intent を入れる
-        service.submit_and_resolve_immediately(
-            player_id=2, tool_name="tool_b", arguments={}
-        )
+        service.submit_and_resolve_immediately(player_id=2, tool_name="tool_b", arguments={})
 
         # submit_and_resolve_immediately は即 resolve するので順序は呼び出し順
         assert order == ["a", "b"]
@@ -185,9 +173,7 @@ class TestResolveDrained:
             tick_provider=lambda: WorldTick(1),
         )
         # Agent A が submit
-        service.submit_and_resolve_immediately(
-            player_id=1, tool_name="tool_a", arguments={}
-        )
+        service.submit_and_resolve_immediately(player_id=1, tool_name="tool_a", arguments={})
 
         # handler は A だけ呼ばれている
         assert called == [1]

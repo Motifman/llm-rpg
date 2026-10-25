@@ -38,9 +38,7 @@ _DIRECTIVES = ("別の行動", "以外の行動", "選ぶこと", "してはい�
 
 
 class _FixedPort(ITypedJudgmentPort):
-    def __init__(
-        self, value: str, *, probability: float = 0.9, confidence: float | None = 0.9
-    ) -> None:
+    def __init__(self, value: str, *, probability: float = 0.9, confidence: float | None = 0.9) -> None:
         self.value = value
         self.probability = probability
         self.confidence = confidence
@@ -69,9 +67,7 @@ class _RaisingPort(ITypedJudgmentPort):
 
     def judge(self, state, questions):  # type: ignore[no-untyped-def]
         self.calls += 1
-        raise TypedJudgmentUnavailableException(
-            "timeout", error_code="TYPED_JUDGMENT_TIMEOUT"
-        )
+        raise TypedJudgmentUnavailableException("timeout", error_code="TYPED_JUDGMENT_TIMEOUT")
 
 
 class _BrokenPort(ITypedJudgmentPort):
@@ -114,17 +110,13 @@ def _guard(
         clock=lambda: datetime(2026, 1, 1),
         trace_recorder=recorder,
         current_tick_provider=tick if tick is not None else _Tick(),
-        loop_diagnosis=(
-            LoopDiagnosis(port=port) if port is not None else None
-        ),
+        loop_diagnosis=(LoopDiagnosis(port=port) if port is not None else None),
         location_provider=lambda pid: location,
     )
 
 
 def _travel_twice(guard: ToolCallLoopGuardService) -> None:
-    guard.record_and_check(
-        _PID, "travel_to", _TRAVEL, success=True, result_summary="薬草の土手へ移動しました。"
-    )
+    guard.record_and_check(_PID, "travel_to", _TRAVEL, success=True, result_summary="薬草の土手へ移動しました。")
     guard.record_and_check(
         _PID,
         "travel_to",
@@ -136,11 +128,7 @@ def _travel_twice(guard: ToolCallLoopGuardService) -> None:
 
 
 def _warnings(buffer: DefaultObservationContextBuffer) -> list[str]:
-    return [
-        e.output.prose
-        for e in buffer.get_observations(_PID)
-        if (e.output.structured or {}).get("loop_guard")
-    ]
+    return [e.output.prose for e in buffer.get_observations(_PID) if (e.output.structured or {}).get("loop_guard")]
 
 
 class TestWordingFollowsTheDiagnosedReason:
@@ -219,9 +207,7 @@ class TestFallingBackToTheCurrentWording:
         ],
         ids=["none_applicable", "unavailable"],
     )
-    def test_fallback_uses_the_same_prose_as_without_diagnosis(
-        self, port: ITypedJudgmentPort
-    ) -> None:
+    def test_fallback_uses_the_same_prose_as_without_diagnosis(self, port: ITypedJudgmentPort) -> None:
         """該当なしでも例外でも、観測の文面は理由を問わないときと一致する。"""
         buffer = DefaultObservationContextBuffer()
 
@@ -389,14 +375,10 @@ class TestTheStateCarriesWhatWasSaid:
         offer = {"channel": "say", "content": "ユノ、麦束と薬草を交換しないか？"}
 
         for _ in range(2):
-            guard.record_and_check(
-                _PID, "speak", offer, success=True, result_summary="（2 名に届いた）"
-            )
+            guard.record_and_check(_PID, "speak", offer, success=True, result_summary="（2 名に届いた）")
 
         [state] = port.states
-        assert [a.get("said") for a in state["recent_actions"]] == [
-            "ユノ、麦束と薬草を交換しないか？"
-        ] * 2
+        assert [a.get("said") for a in state["recent_actions"]] == ["ユノ、麦束と薬草を交換しないか？"] * 2
 
     def test_unanswered_request_counts_the_same_words_even_when_the_addressee_was_dropped(
         self,
@@ -407,13 +389,19 @@ class TestTheStateCarriesWhatWasSaid:
         words = "ユノ、麦束と薬草を交換しないか？"
 
         guard.record_and_check(
-            _PID, "speak", {"channel": "say", "content": words, "target_label": "ユノ"},
-            success=True, result_summary="（2 名に届いた）",
+            _PID,
+            "speak",
+            {"channel": "say", "content": words, "target_label": "ユノ"},
+            success=True,
+            result_summary="（2 名に届いた）",
         )
         for _ in range(2):
             guard.record_and_check(
-                _PID, "speak", {"channel": "say", "content": words},
-                success=True, result_summary="（2 名に届いた）",
+                _PID,
+                "speak",
+                {"channel": "say", "content": words},
+                success=True,
+                result_summary="（2 名に届いた）",
             )
 
         [prose] = _warnings(buffer)
@@ -511,7 +499,8 @@ class TestAFailureAroundTheDiagnosisKeepsTheWarning:
         buffer = DefaultObservationContextBuffer()
         guard = _guard(
             _FixedPort(RepeatReason.STATE_MISTAKEN.value),
-            buffer=buffer, recorder=_FailingTypedJudgmentTrace(),
+            buffer=buffer,
+            recorder=_FailingTypedJudgmentTrace(),
         )
 
         with caplog.at_level("ERROR"):

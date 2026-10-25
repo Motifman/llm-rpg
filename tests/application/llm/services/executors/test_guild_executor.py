@@ -56,9 +56,7 @@ class TestGuildToolExecutorCreate:
     """guild_create の実行"""
 
     def test_create_success_returns_dto(self, executor_with_service, guild_service):
-        guild_service.create_guild.return_value = MagicMock(
-            success=True, message="ギルドを作成しました。"
-        )
+        guild_service.create_guild.return_value = MagicMock(success=True, message="ギルドを作成しました。")
         result = executor_with_service._execute_guild_create(
             1,
             {"spot_id": 1, "location_area_id": 10, "name": "冒険者ギルド", "description": "一緒に冒険"},
@@ -95,12 +93,8 @@ class TestGuildToolExecutorAddMember:
     """guild_add_member の実行"""
 
     def test_add_member_success_returns_dto(self, executor_with_service, guild_service):
-        guild_service.add_member.return_value = MagicMock(
-            success=True, message="招待しました。"
-        )
-        result = executor_with_service._execute_guild_add_member(
-            1, {"guild_id": 10, "new_member_player_id": 2}
-        )
+        guild_service.add_member.return_value = MagicMock(success=True, message="招待しました。")
+        result = executor_with_service._execute_guild_add_member(1, {"guild_id": 10, "new_member_player_id": 2})
         assert result.success is True
         guild_service.add_member.assert_called_once()
         cmd = guild_service.add_member.call_args[0][0]
@@ -108,12 +102,8 @@ class TestGuildToolExecutorAddMember:
         assert cmd.inviter_player_id == 1
         assert cmd.new_member_player_id == 2
 
-    def test_add_member_without_service_returns_unknown_tool(
-        self, executor_without_service
-    ):
-        result = executor_without_service._execute_guild_add_member(
-            1, {"guild_id": 10, "new_member_player_id": 2}
-        )
+    def test_add_member_without_service_returns_unknown_tool(self, executor_without_service):
+        result = executor_without_service._execute_guild_add_member(1, {"guild_id": 10, "new_member_player_id": 2})
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
 
@@ -122,21 +112,15 @@ class TestGuildToolExecutorDisband:
     """guild_disband の実行"""
 
     def test_disband_success_returns_dto(self, executor_with_service, guild_service):
-        guild_service.disband_guild.return_value = MagicMock(
-            success=True, message="ギルドを解散しました。"
-        )
-        result = executor_with_service._execute_guild_disband(
-            1, {"guild_id": 10}
-        )
+        guild_service.disband_guild.return_value = MagicMock(success=True, message="ギルドを解散しました。")
+        result = executor_with_service._execute_guild_disband(1, {"guild_id": 10})
         assert result.success is True
         guild_service.disband_guild.assert_called_once()
         cmd = guild_service.disband_guild.call_args[0][0]
         assert cmd.guild_id == 10
         assert cmd.player_id == 1
 
-    def test_disband_without_service_returns_unknown_tool(
-        self, executor_without_service
-    ):
+    def test_disband_without_service_returns_unknown_tool(self, executor_without_service):
         result = executor_without_service._execute_guild_disband(1, {"guild_id": 10})
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
@@ -145,13 +129,9 @@ class TestGuildToolExecutorDisband:
 class TestGuildToolExecutorIntegrationWithMapper:
     """ToolCommandMapper 経由での統合（get_handlers のマージ動作確認）"""
 
-    def test_handlers_are_callable_with_correct_signature(
-        self, executor_with_service, guild_service
-    ):
+    def test_handlers_are_callable_with_correct_signature(self, executor_with_service, guild_service):
         """get_handlers() で返るハンドラが (player_id, args) で呼び出せる"""
-        guild_service.create_guild.return_value = MagicMock(
-            success=True, message="作成しました。"
-        )
+        guild_service.create_guild.return_value = MagicMock(success=True, message="作成しました。")
         handlers = executor_with_service.get_handlers()
         result = handlers[TOOL_NAME_GUILD_CREATE](
             1,

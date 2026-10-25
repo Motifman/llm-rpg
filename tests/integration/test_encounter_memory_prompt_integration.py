@@ -19,12 +19,7 @@ from ai_rpg_world.application.llm.services.action_result_store import (  # noqa:
     DefaultActionResultStore,
 )
 
-_SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "forbidden_library_demo.json"
-)
+_SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "forbidden_library_demo.json"
 
 
 def _create_runtime():
@@ -162,4 +157,3 @@ class TestPromptRegressionForViewer:
         assert len(prompt["messages"]) == 2
         assert prompt["messages"][0]["role"] == "system"
         assert prompt["messages"][1]["role"] == "user"
-

@@ -89,9 +89,7 @@ class TestObservationBufferCodec:
 class TestActionResultStoreCodec:
     def test_capture_restore_round_trip_3(self) -> None:
         src = DefaultActionResultStore()
-        src._event_store.replace_action_results(
-            PlayerId(1), [_action_entry("walk"), _action_entry("attack")]
-        )
+        src._event_store.replace_action_results(PlayerId(1), [_action_entry("walk"), _action_entry("attack")])
         src_runtime = SimpleNamespace(_action_result_store=src)
         captured = ActionResultStoreSubsystemCodec().capture(src_runtime)
         assert captured["schema_version"] == 5
@@ -147,6 +145,7 @@ class TestActionResultStoreCodec:
         captured = ActionResultStoreSubsystemCodec().capture(runtime)
         assert captured["entries"] == []
 
+
 class TestSlidingWindowCodecRollingSummaryBackend:
     """``SummarizingShortTermMemory`` backend での
     capture / restore を検証する (#471 後続)。L4 が失われると直近 20 ターンより前の
@@ -164,6 +163,7 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
             L4MidSummary,
         )
+
         src = self._make_rolling()
         # L1 raw に 3 件 (= soft_cap 未満なので畳まれない)
         src.append(PlayerId(1), _obs_entry("raw-1"))
@@ -256,9 +256,7 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         dst = self._make_rolling()
         dst.append(PlayerId(99), _obs_entry("stale"))
 
-        ShortTermMemorySubsystemCodec().restore(
-            SimpleNamespace(_short_term_memory=dst), v2_data
-        )
+        ShortTermMemorySubsystemCodec().restore(SimpleNamespace(_short_term_memory=dst), v2_data)
 
         assert dst.get_recent(PlayerId(99), limit=10) == []
         recent = dst.get_recent(PlayerId(1), limit=5)

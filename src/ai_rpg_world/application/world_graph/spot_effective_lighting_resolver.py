@@ -80,8 +80,7 @@ class SpotEffectiveLightingResolver:
             )
             return None
         has_light_bearer = any(
-            self._entity_has_light_source(int(eid))
-            for eid in graph.presence_at(spot_id).present_entity_ids
+            self._entity_has_light_source(int(eid)) for eid in graph.presence_at(spot_id).present_entity_ids
         )
         return self._perception.compute_effective_lighting(
             node.atmosphere,
@@ -109,9 +108,7 @@ class SpotEffectiveLightingResolver:
             ws = self._weather_provider()
             if ws is None:
                 return False
-            weather_type = getattr(ws.weather_type, "value", None) or str(
-                ws.weather_type
-            )
+            weather_type = getattr(ws.weather_type, "value", None) or str(ws.weather_type)
             return weather_type in _VISION_OBSCURING_WEATHER
         except Exception:
             return False

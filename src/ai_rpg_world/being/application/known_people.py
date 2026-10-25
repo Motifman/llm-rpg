@@ -7,9 +7,7 @@ from collections.abc import Iterable
 from ai_rpg_world.being.domain.acquaintance import Acquaintance
 
 
-def render_known_people(
-    acquaintances: Iterable[Acquaintance], *, environment_name: str
-) -> str:
+def render_known_people(acquaintances: Iterable[Acquaintance], *, environment_name: str) -> str:
     """描くのは、知ったときに決まって変わらない名前と関係の注記だけ。
 
     会った回数のように会うたびに変わるものを描くと、毎ターンのメッセージの

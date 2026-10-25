@@ -30,18 +30,14 @@ class MonsterSpotPresence:
 
     def add(self, monster_id: MonsterId) -> MonsterSpotPresence:
         if monster_id in self.present_monster_ids:
-            raise MonsterPresenceInvariantException(
-                f"Monster {monster_id} is already present at spot {self.spot_id}"
-            )
+            raise MonsterPresenceInvariantException(f"Monster {monster_id} is already present at spot {self.spot_id}")
         new_ids = set(self.present_monster_ids)
         new_ids.add(monster_id)
         return MonsterSpotPresence(self.spot_id, frozenset(new_ids))
 
     def remove(self, monster_id: MonsterId) -> MonsterSpotPresence:
         if monster_id not in self.present_monster_ids:
-            raise MonsterPresenceInvariantException(
-                f"Monster {monster_id} is not present at spot {self.spot_id}"
-            )
+            raise MonsterPresenceInvariantException(f"Monster {monster_id} is not present at spot {self.spot_id}")
         new_ids = set(self.present_monster_ids)
         new_ids.remove(monster_id)
         return MonsterSpotPresence(self.spot_id, frozenset(new_ids))

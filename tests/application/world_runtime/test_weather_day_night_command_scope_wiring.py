@@ -26,14 +26,8 @@ def test_runtime_wires_weather_and_day_night_to_separate_command_scopes() -> Non
     assert weather._command_scope_factory is not day_night._command_scope_factory
     weather_transaction = weather._command_scope_factory._transaction_factory
     day_night_transaction = day_night._command_scope_factory._transaction_factory
-    assert (
-        weather_transaction._transaction_factory._data_store
-        is runtime._spot_interior_repo._data_store
-    )
-    assert (
-        day_night_transaction._transaction_factory._data_store
-        is runtime._spot_interior_repo._data_store
-    )
+    assert weather_transaction._transaction_factory._data_store is runtime._spot_interior_repo._data_store
+    assert day_night_transaction._transaction_factory._data_store is runtime._spot_interior_repo._data_store
 
 
 def test_same_scenario_seed_creates_same_weather_random_stream() -> None:
@@ -43,14 +37,8 @@ def test_same_scenario_seed_creates_same_weather_random_stream() -> None:
     first = create_world_runtime(SCENARIO, config=config)
     second = create_world_runtime(SCENARIO, config=config)
 
-    assert (
-        first._environment_stage.random_state()
-        == second._environment_stage.random_state()
-    )
-    assert (
-        first._environment_stage.random_state()
-        != first._scenario_predicate_random.getstate()
-    )
+    assert first._environment_stage.random_state() == second._environment_stage.random_state()
+    assert first._environment_stage.random_state() != first._scenario_predicate_random.getstate()
 
 
 def test_runtime_weather_dispatcher_observes_committed_transition(monkeypatch) -> None:

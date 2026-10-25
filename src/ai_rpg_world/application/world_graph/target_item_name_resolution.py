@@ -40,9 +40,7 @@ class ItemNameRescueAnswer:
 
 
 class ItemNameRescuer(Protocol):
-    def rescue(
-        self, written: str, *, candidates: Mapping[str, str], action_name: str
-    ) -> ItemNameRescueAnswer: ...
+    def rescue(self, written: str, *, candidates: Mapping[str, str], action_name: str) -> ItemNameRescueAnswer: ...
 
 
 @dataclass(frozen=True)
@@ -90,7 +88,10 @@ def resolve_target_item_name(
         # 正式な名前が書かれたなら、その品を指している。「カンテラ」で
         # 「カンテラの油」を奪うと、本人の意図と違う物を動かす。
         return TargetItemNameResolution(
-            written, ItemNameOutcome.ABSENT, "official_name_of_other_item", rescue_wired=wired,
+            written,
+            ItemNameOutcome.ABSENT,
+            "official_name_of_other_item",
+            rescue_wired=wired,
         )
     partial = exact or _distinct(
         [h for h in held if key and _normalized(h.name) and (key in _normalized(h.name) or _normalized(h.name) in key)]
@@ -98,13 +99,21 @@ def resolve_target_item_name(
     method = "exact" if exact else "partial"
     if len(partial) == 1:
         return TargetItemNameResolution(
-            written, ItemNameOutcome.RESOLVED, method, partial[0].spec_id, partial[0].name,
-            matched_names=(partial[0].name,), rescue_wired=wired,
+            written,
+            ItemNameOutcome.RESOLVED,
+            method,
+            partial[0].spec_id,
+            partial[0].name,
+            matched_names=(partial[0].name,),
+            rescue_wired=wired,
         )
     if len(partial) > 1:
         return TargetItemNameResolution(
-            written, ItemNameOutcome.AMBIGUOUS, method,
-            matched_names=tuple(h.name for h in partial), rescue_wired=wired,
+            written,
+            ItemNameOutcome.AMBIGUOUS,
+            method,
+            matched_names=tuple(h.name for h in partial),
+            rescue_wired=wired,
         )
     candidates = {h.name: h.description for h in _distinct(list(held))}
     if not candidates:
@@ -115,24 +124,36 @@ def resolve_target_item_name(
     chosen_items = _distinct([h for h in held if answer.accepted and h.name == answer.chosen])
     if len(chosen_items) > 1:
         return TargetItemNameResolution(
-            written, ItemNameOutcome.AMBIGUOUS, "judgment",
-            matched_names=tuple(h.name for h in chosen_items), rescue_wired=True, judgment=answer.payload,
+            written,
+            ItemNameOutcome.AMBIGUOUS,
+            "judgment",
+            matched_names=tuple(h.name for h in chosen_items),
+            rescue_wired=True,
+            judgment=answer.payload,
         )
     if chosen_items:
         chosen = chosen_items[0]
         return TargetItemNameResolution(
-            written, ItemNameOutcome.RESOLVED, "judgment", chosen.spec_id, chosen.name,
-            matched_names=(chosen.name,), rescue_wired=True, judgment=answer.payload,
+            written,
+            ItemNameOutcome.RESOLVED,
+            "judgment",
+            chosen.spec_id,
+            chosen.name,
+            matched_names=(chosen.name,),
+            rescue_wired=True,
+            judgment=answer.payload,
         )
     # 確信をもって「どれでもない」と言えたときだけ、持っていないと言い切る。
     # 判断が得られなかったときに言い切ると、持っている相手を嘘つきにする。
     outcome = (
-        ItemNameOutcome.ABSENT
-        if answer.chosen is None and answer.confident_no_match
-        else ItemNameOutcome.UNRECOGNIZED
+        ItemNameOutcome.ABSENT if answer.chosen is None and answer.confident_no_match else ItemNameOutcome.UNRECOGNIZED
     )
     return TargetItemNameResolution(
-        written, outcome, "judgment", rescue_wired=True, judgment=answer.payload,
+        written,
+        outcome,
+        "judgment",
+        rescue_wired=True,
+        judgment=answer.payload,
     )
 
 

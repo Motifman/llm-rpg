@@ -40,7 +40,8 @@ class TestAttackStatusEffectChance:
 
     @pytest.mark.parametrize("duration_ticks", [0, -1, True, 1.5])
     def test_rejects_non_positive_integer_duration(
-        self, duration_ticks: object,
+        self,
+        duration_ticks: object,
     ) -> None:
         """継続tickが正の整数でなければ、テンプレート検証例外を投げる。"""
         with pytest.raises(MonsterTemplateValidationException, match="duration_ticks"):

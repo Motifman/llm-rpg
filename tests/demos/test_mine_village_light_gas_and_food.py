@@ -390,9 +390,7 @@ class TestGasAndTheCanary:
         """抽選が外れた tick はガスが出ず、当たると溜まり、7 tick 後はまだあり、8 tick 後に抜ける。再発したガスも、その発生から同じ時間で抜ける。"""
         # 再現実験用の設定で「外れ→当たり」を2回通す。発生・時刻記録・
         # 消散はシナリオの実際の出来事に任せ、フラグや時計は書き換えない。
-        config = ResolvedLlmRuntimeConfig.from_mapping(
-            values={"SCENARIO_RANDOM_SEED": "560"}
-        )
+        config = ResolvedLlmRuntimeConfig.from_mapping(values={"SCENARIO_RANDOM_SEED": "560"})
         runtime = create_world_runtime(_SCENARIO, config=config)
         assert "gas_present" not in _flags(runtime)
 
@@ -464,7 +462,9 @@ class TestWaterAndFood:
             ("storehouse", "food_box", "take_food", _FOOD, _FOOD_REFILL_TICKS),
         ],
     )
-    def test_taking_runs_it_dry_and_it_comes_back_one_at_a_time(self, runtime, spot, obj, action, stock, refill) -> None:
+    def test_taking_runs_it_dry_and_it_comes_back_one_at_a_time(
+        self, runtime, spot, obj, action, stock, refill
+    ) -> None:
         """在庫の数だけ取ると次は断られ、補充の間隔 - 1 tick ではまだ取れず、間隔が経つと 1 つだけ取れる。断る文は「空」と言う。"""
         taken = [_act(runtime, _GEN, spot, obj, action)[0] for _ in range(stock)]
         empty, _ = _act(runtime, _GEN, spot, obj, action)

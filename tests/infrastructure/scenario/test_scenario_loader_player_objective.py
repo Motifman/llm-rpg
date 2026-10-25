@@ -17,6 +17,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 def _scenario_with_player(player_dict: dict) -> dict:
     """既存テストの最小シナリオを使って players だけ差し替える。"""
     from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
+
     scenario = copy.deepcopy(_minimal_scenario())
     scenario["players"] = [player_dict]
     return scenario
@@ -43,16 +44,12 @@ class TestPlayerObjectiveParsing:
 
     def test_objective_string_is_carried_through(self) -> None:
         """objective に書いた文字列がそのまま PlayerSpawnConfig に載る。"""
-        spawn = _load_first_spawn(_scenario_with_player(
-            _player(objective="救助ボートの席を確保する")
-        ))
+        spawn = _load_first_spawn(_scenario_with_player(_player(objective="救助ボートの席を確保する")))
         assert spawn.objective == "救助ボートの席を確保する"
 
     def test_objective_inner_newlines_are_preserved(self) -> None:
         """前後の空白だけが削られ、箇条書きの内側の改行は保持される。"""
-        spawn = _load_first_spawn(_scenario_with_player(
-            _player(objective="\n- 狼煙を上げる\n- 仲間を見捨てない\n")
-        ))
+        spawn = _load_first_spawn(_scenario_with_player(_player(objective="\n- 狼煙を上げる\n- 仲間を見捨てない\n")))
         assert spawn.objective == "- 狼煙を上げる\n- 仲間を見捨てない"
 
     def test_objective_blank_string_becomes_none(self) -> None:
@@ -60,9 +57,7 @@ class TestPlayerObjectiveParsing:
         spawn = _load_first_spawn(_scenario_with_player(_player(objective="   \n ")))
         assert spawn.objective is None
 
-    def test_objective_blank_string_is_warned(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_objective_blank_string_is_warned(self, caplog: pytest.LogCaptureFixture) -> None:
         """空白のみの objective は None に畳まれる際に警告が出て、痕跡が残る。"""
         with caplog.at_level("WARNING"):
             _load_first_spawn(_scenario_with_player(_player(objective="   \n ")))

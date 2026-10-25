@@ -45,10 +45,7 @@ class EquipmentDomainService:
             )
 
     @staticmethod
-    def validate_equipment_slot_compatibility(
-        item_spec: "ItemSpec",
-        target_slot: EquipmentSlotType
-    ) -> None:
+    def validate_equipment_slot_compatibility(item_spec: "ItemSpec", target_slot: EquipmentSlotType) -> None:
         """装備スロットの適合性を検証
 
         Args:
@@ -68,8 +65,7 @@ class EquipmentDomainService:
             # is_equipment() は item_type しか見ない。装備品なのに
             # equipment_type が無い spec はスロットを決められない。
             raise InvalidEquipmentItemException(
-                f"Equipment item has no equipment_type. "
-                f"item_spec_id: {item_spec.item_spec_id.value}"
+                f"Equipment item has no equipment_type. item_spec_id: {item_spec.item_spec_id.value}"
             )
         if equipment_type not in compatible_equipment_types:
             raise EquipmentSlotMismatchException(

@@ -48,9 +48,7 @@ class TestProgressReporterStdout:
         """tickend で stdout に進捗行が出る。"""
         out = io.StringIO()
         err = io.StringIO()
-        reporter = _ExperimentProgressReporter(
-            max_world_ticks=10, stdout=out, stderr=err, progress_jsonl=None
-        )
+        reporter = _ExperimentProgressReporter(max_world_ticks=10, stdout=out, stderr=err, progress_jsonl=None)
         reporter.tick_end(i=0, world_tick=1)
         stdout = out.getvalue()
         assert "駆動 1/10" in stdout
@@ -66,9 +64,7 @@ class TestProgressReporterStderr:
         """非 ttystderr は改行で書く。"""
         out = io.StringIO()
         err = io.StringIO()  # StringIO は isatty() を持たない (= False)
-        reporter = _ExperimentProgressReporter(
-            max_world_ticks=5, stdout=out, stderr=err, progress_jsonl=None
-        )
+        reporter = _ExperimentProgressReporter(max_world_ticks=5, stdout=out, stderr=err, progress_jsonl=None)
         reporter.tick_end(i=0, world_tick=42)
         stderr_value = err.getvalue()
         assert "[  1/5]" in stderr_value
@@ -80,9 +76,7 @@ class TestProgressReporterStderr:
     def test_stderr_none_not_output(self) -> None:
         """stderr None なら 出力されない。"""
         out = io.StringIO()
-        reporter = _ExperimentProgressReporter(
-            max_world_ticks=5, stdout=out, stderr=None, progress_jsonl=None
-        )
+        reporter = _ExperimentProgressReporter(max_world_ticks=5, stdout=out, stderr=None, progress_jsonl=None)
         reporter.tick_end(i=0, world_tick=1)
         # stdout はあるが stderr 文字列は存在しない (None 渡しで)
         assert out.getvalue()  # stdout は出る
@@ -95,9 +89,7 @@ class TestProgressJsonl:
         """tickend で 1 行 jsonl に書かれる。"""
         out = io.StringIO()
         progress_path = tmp_path / "progress.jsonl"
-        reporter = _ExperimentProgressReporter(
-            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
-        )
+        reporter = _ExperimentProgressReporter(max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path)
         reporter.tick_end(i=0, world_tick=10)
         reporter.tick_end(i=1, world_tick=11)
         reporter.finalize()
@@ -114,17 +106,13 @@ class TestProgressJsonl:
     def test_jsonl_none(self, tmp_path: Path) -> None:
         """jsonl None なら 書かない。"""
         out = io.StringIO()
-        reporter = _ExperimentProgressReporter(
-            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=None
-        )
+        reporter = _ExperimentProgressReporter(max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=None)
         reporter.tick_end(i=0, world_tick=1)
         reporter.finalize()
         # tmp_path に progress.jsonl が無いことを確認
         assert not (tmp_path / "progress.jsonl").exists()
 
-    def test_progress_report_includes_observability_fields(
-        self, tmp_path: Path
-    ) -> None:
+    def test_progress_report_includes_observability_fields(self, tmp_path: Path) -> None:
         """``#404`` P2 で追加した内訳フィールドが progress.jsonl に出る。
 
         - ``world_tick_start`` + ``nested_world_ticks`` で 1 driver iteration
@@ -136,9 +124,7 @@ class TestProgressJsonl:
         """
         out = io.StringIO()
         progress_path = tmp_path / "progress.jsonl"
-        reporter = _ExperimentProgressReporter(
-            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
-        )
+        reporter = _ExperimentProgressReporter(max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path)
         reporter.tick_end(
             i=0,
             world_tick=10,
@@ -159,9 +145,7 @@ class TestProgressJsonl:
         """後方互換: optional パラメータを渡さなければ従来通り。"""
         out = io.StringIO()
         progress_path = tmp_path / "progress.jsonl"
-        reporter = _ExperimentProgressReporter(
-            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
-        )
+        reporter = _ExperimentProgressReporter(max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path)
         reporter.tick_end(i=0, world_tick=10)
         reporter.finalize()
 
@@ -179,9 +163,7 @@ class TestFinalize:
         """finalize 後の finalize は no op。"""
         out = io.StringIO()
         progress_path = tmp_path / "progress.jsonl"
-        reporter = _ExperimentProgressReporter(
-            max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path
-        )
+        reporter = _ExperimentProgressReporter(max_world_ticks=3, stdout=out, stderr=None, progress_jsonl=progress_path)
         reporter.tick_end(i=0, world_tick=1)
         reporter.finalize()
         reporter.finalize()  # 2 回呼んでも例外にならない

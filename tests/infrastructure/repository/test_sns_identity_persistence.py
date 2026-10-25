@@ -23,18 +23,20 @@ def _post(number: int = 1) -> PostAggregate:
 
 
 def _reply(number: int = 1) -> ReplyAggregate:
-    return ReplyAggregate.create(
-        ReplyId(number), PostId(1), None, UserId(1), UserId(2), PostContent("返信")
-    )
+    return ReplyAggregate.create(ReplyId(number), PostId(1), None, UserId(1), UserId(2), PostContent("返信"))
 
 
 def _user(number: int = 1) -> UserAggregate:
     return UserAggregate.create_new_user(UserId(number), f"hero_{number}", "勇者", "")
 
 
-@pytest.mark.parametrize("repository_type,create", [
-    (SqlitePostRepository, _post), (SqliteReplyRepository, _reply),
-])
+@pytest.mark.parametrize(
+    "repository_type,create",
+    [
+        (SqlitePostRepository, _post),
+        (SqliteReplyRepository, _reply),
+    ],
+)
 def test_sqlite_identity_survives_reopen_and_state_changes(tmp_path, repository_type, create) -> None:
     """接続を開き直していいねや削除を保存しても、投稿と返信の識別子は変わらない。"""
     path = tmp_path / "social.sqlite"
@@ -99,23 +101,33 @@ def test_legacy_rows_receive_stable_distinct_identity_during_migration() -> None
     with sqlite3.connect(":memory:") as connection:
         apply_migrations(connection, namespace="game_write", migrations=schema._GAME_WRITE_MIGRATIONS[:35])
         connection.execute("INSERT INTO game_sns_posts VALUES (1, 1, '旧投稿', 'public', 1, '2026-01-01T00:00:00')")
-        connection.execute("INSERT INTO game_sns_replies VALUES (1, 2, 1, NULL, '旧返信', 'public', 0, '2026-01-01T00:00:00')")
+        connection.execute(
+            "INSERT INTO game_sns_replies VALUES (1, 2, 1, NULL, '旧返信', 'public', 0, '2026-01-01T00:00:00')"
+        )
         connection.execute("INSERT INTO game_sns_users VALUES (1, 'hero', '勇者', '')")
         connection.commit()
         schema.init_game_write_schema(connection)
-        tokens = [connection.execute(f"SELECT identity_token FROM {table}").fetchone()[0]
-                  for table in ("game_sns_posts", "game_sns_replies", "game_sns_users")]
+        tokens = [
+            connection.execute(f"SELECT identity_token FROM {table}").fetchone()[0]
+            for table in ("game_sns_posts", "game_sns_replies", "game_sns_users")
+        ]
         assert len(set(tokens)) == 3
         assert all(UUID(hex=token).version == 4 for token in tokens)
         schema.init_game_write_schema(connection)
-        assert tokens == [connection.execute(f"SELECT identity_token FROM {table}").fetchone()[0]
-                          for table in ("game_sns_posts", "game_sns_replies", "game_sns_users")]
+        assert tokens == [
+            connection.execute(f"SELECT identity_token FROM {table}").fetchone()[0]
+            for table in ("game_sns_posts", "game_sns_replies", "game_sns_users")
+        ]
         assert not connection.in_transaction
 
 
-@pytest.mark.parametrize("repository_type,create", [
-    (SqlitePostRepository, _post), (SqliteReplyRepository, _reply),
-])
+@pytest.mark.parametrize(
+    "repository_type,create",
+    [
+        (SqlitePostRepository, _post),
+        (SqliteReplyRepository, _reply),
+    ],
+)
 def test_replacement_using_same_integer_does_not_inherit_deleted_identity(repository_type, create) -> None:
     """削除済み行の整数を再利用しても、置き換えた集約に過去の識別子を引き継がせない。"""
     with sqlite3.connect(":memory:") as connection:
@@ -128,11 +140,14 @@ def test_replacement_using_same_integer_does_not_inherit_deleted_identity(reposi
         assert restored.identity_token != old.identity_token
 
 
-@pytest.mark.parametrize("table,key,repository_type,create", [
-    ("game_sns_posts", "post_id", SqlitePostRepository, _post),
-    ("game_sns_replies", "reply_id", SqliteReplyRepository, _reply),
-    ("game_sns_users", "user_id", SqliteSnsUserRepository, _user),
-])
+@pytest.mark.parametrize(
+    "table,key,repository_type,create",
+    [
+        ("game_sns_posts", "post_id", SqlitePostRepository, _post),
+        ("game_sns_replies", "reply_id", SqliteReplyRepository, _reply),
+        ("game_sns_users", "user_id", SqliteSnsUserRepository, _user),
+    ],
+)
 def test_identity_lookup_uses_unique_index(table, key, repository_type, create) -> None:
     """識別子からの検索は全走査にならず、同一種類の別行への識別子の重複も拒否する。"""
     with sqlite3.connect(":memory:") as connection:
@@ -185,6 +200,9 @@ def test_identity_migration_does_not_commit_an_existing_transaction() -> None:
         schema.init_game_write_schema(connection)
         assert schema.get_sns_public_namespace(connection)
         connection.rollback()
-        assert connection.execute("SELECT version FROM schema_migrations WHERE namespace = 'game_write'").fetchone()[0] == 35
+        assert (
+            connection.execute("SELECT version FROM schema_migrations WHERE namespace = 'game_write'").fetchone()[0]
+            == 35
+        )
         columns = connection.execute("PRAGMA table_info(game_sns_posts)").fetchall()
         assert "identity_token" not in {row[1] for row in columns}

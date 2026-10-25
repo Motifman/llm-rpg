@@ -41,9 +41,7 @@ class TestOutcomeMessageDeclaration:
         """STRANDED を使う島4本は従来の文面をシナリオデータに保持する。"""
         raw = json.loads((_SCENARIOS / scenario_name).read_text(encoding="utf-8"))
 
-        assert raw["metadata"]["player_outcome_messages"]["STRANDED"] == (
-            "{player_name}は島に取り残されたままだ。"
-        )
+        assert raw["metadata"]["player_outcome_messages"]["STRANDED"] == ("{player_name}は島に取り残されたままだ。")
 
 
 class TestOutcomeMessageWiring:
@@ -60,9 +58,7 @@ class TestOutcomeMessageWiring:
         )
 
         entry = _outcome_entry(runtime, recipient)
-        assert entry.output.prose == (
-            f"{runtime.get_player_name(actor)}は島に取り残されたままだ。"
-        )
+        assert entry.output.prose == (f"{runtime.get_player_name(actor)}は島に取り残されたままだ。")
         assert entry.output.structured["new_outcome"] == "STRANDED"
         assert entry.output.schedules_turn is True
 

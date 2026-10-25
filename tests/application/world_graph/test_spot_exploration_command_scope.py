@@ -98,7 +98,9 @@ class _ItemSpecRepository:
         )
 
 
-def _build_service(*, inventory_slots: int = 20) -> tuple[
+def _build_service(
+    *, inventory_slots: int = 20
+) -> tuple[
     SpotExplorationApplicationService,
     InMemoryDataStore,
     InMemorySpotExplorationProgressStore,
@@ -233,9 +235,7 @@ def test_inventory_save_failure_rolls_back_every_exploration_change(
 
 def test_full_inventory_places_reward_on_ground_and_observes_after_commit() -> None:
     """満杯時は報酬を足元へ残し、溢れ観測も同じcommit後に一度だけ配送する。"""
-    service, store, _progress, interiors, observed = _build_service(
-        inventory_slots=0
-    )
+    service, store, _progress, interiors, observed = _build_service(inventory_slots=0)
 
     service.explore_once(PLAYER_ID)
 
@@ -264,9 +264,7 @@ def test_world_runtime_delivers_one_exploration_event_without_graph_queue(
     original_publish_all = runtime._speech_event_publisher.publish_all
 
     def capture(events):
-        delivered.extend(
-            event for event in events if isinstance(event, SpotExploredEvent)
-        )
+        delivered.extend(event for event in events if isinstance(event, SpotExploredEvent))
         return original_publish_all(events)
 
     monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", capture)
@@ -278,7 +276,4 @@ def test_world_runtime_delivers_one_exploration_event_without_graph_queue(
     assert delivered[0].spot_id == runtime._spot_graph_repo.find_graph().get_entity_spot(
         EntityId.create(int(player_id))
     )
-    assert not any(
-        isinstance(event, SpotExploredEvent)
-        for event in runtime._spot_graph_repo.find_graph().get_events()
-    )
+    assert not any(isinstance(event, SpotExploredEvent) for event in runtime._spot_graph_repo.find_graph().get_events())

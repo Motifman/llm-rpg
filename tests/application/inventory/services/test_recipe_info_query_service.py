@@ -1,6 +1,7 @@
 """
 RecipeInfoQueryServiceのテスト
 """
+
 from unittest.mock import Mock
 
 import pytest
@@ -70,7 +71,7 @@ class TestRecipeInfoQueryService:
 
         # ドメイン例外がアプリケーション例外に変換されていることを確認
         assert exc_info.value.cause is not None
-        assert hasattr(exc_info.value.cause, 'error_code')
+        assert hasattr(exc_info.value.cause, "error_code")
         assert "Domain error in RecipeInfoQuery usecase" in str(exc_info.value)
 
     def test_get_recipe_zero_id(self):
@@ -84,7 +85,7 @@ class TestRecipeInfoQueryService:
 
         # ドメイン例外がアプリケーション例外に変換されていることを確認
         assert exc_info.value.cause is not None
-        assert hasattr(exc_info.value.cause, 'error_code')
+        assert hasattr(exc_info.value.cause, "error_code")
         assert "Domain error in RecipeInfoQuery usecase" in str(exc_info.value)
 
     def test_find_recipes_by_result_item_success(self):
@@ -131,7 +132,7 @@ class TestRecipeInfoQueryService:
 
         # ドメイン例外がアプリケーション例外に変換されていることを確認
         assert exc_info.value.cause is not None
-        assert hasattr(exc_info.value.cause, 'error_code')
+        assert hasattr(exc_info.value.cause, "error_code")
         assert "Domain error in RecipeInfoQuery usecase" in str(exc_info.value)
 
     def test_find_recipes_by_ingredient_success(self):
@@ -174,7 +175,7 @@ class TestRecipeInfoQueryService:
 
         # ドメイン例外がアプリケーション例外に変換されていることを確認
         assert exc_info.value.cause is not None
-        assert hasattr(exc_info.value.cause, 'error_code')
+        assert hasattr(exc_info.value.cause, "error_code")
         assert "Domain error in RecipeInfoQuery usecase" in str(exc_info.value)
 
     def test_get_all_recipes_success(self):
@@ -270,7 +271,8 @@ class TestRecipeInfoQueryService:
 
         # RecipeIdの作成時にドメイン例外が発生するようにする
         from unittest.mock import patch
-        with patch('ai_rpg_world.domain.item.value_object.recipe_id.RecipeId') as mock_recipe_id:
+
+        with patch("ai_rpg_world.domain.item.value_object.recipe_id.RecipeId") as mock_recipe_id:
             mock_recipe_id.side_effect = ItemInstanceIdValidationException()
             mock_repo.find_by_id.side_effect = ItemInstanceIdValidationException()
 
@@ -280,7 +282,7 @@ class TestRecipeInfoQueryService:
 
             # ドメイン例外がアプリケーション例外に変換されていることを確認
             assert exc_info.value.cause is not None
-            assert hasattr(exc_info.value.cause, 'error_code')
+            assert hasattr(exc_info.value.cause, "error_code")
             assert "Domain error in RecipeInfoQuery usecase" in str(exc_info.value)
 
     def test_get_recipe_logging_on_error(self, caplog):

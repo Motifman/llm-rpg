@@ -64,6 +64,7 @@ class LlmCallMetrics:
         tool_call_combination: 複数 tool_call が返った場合だけ、全 tool 名を返却順で
             保持する。引数は実行済みと誤読されるため記録しない。
     """
+
     model: str
     wall_latency_ms: int
     prompt_tokens: int

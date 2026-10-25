@@ -30,9 +30,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_TOWN = (
-    pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
-)
+_TOWN = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _LENA = PlayerId(1)
 _TOM = PlayerId(2)
 _MINA = PlayerId(3)
@@ -70,15 +68,15 @@ class _Town:
         )
         raw["player_trade"] = {"enabled": True}
         (directory / "market_town_v1.json").write_text(
-            json.dumps(raw, ensure_ascii=False), encoding="utf-8",
+            json.dumps(raw, ensure_ascii=False),
+            encoding="utf-8",
         )
         manager = GameRuntimeManager(
-            scenarios_dir=directory, characters_path=directory / "characters.json",
+            scenarios_dir=directory,
+            characters_path=directory / "characters.json",
         )
         character = manager.create_character(CharacterCreateRequest(name="レナ"))
-        summary = manager.create_session(
-            SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id])
-        )
+        summary = manager.create_session(SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id]))
         self._state = manager._sessions[summary.session_id]
 
     @property
@@ -121,9 +119,7 @@ class _Town:
         return sum(
             1
             for _, item_instance_id in inventory.iter_occupied_slots()
-            if self.runtime._item_repo.find_by_id(item_instance_id)
-            .item_spec.item_spec_id.value
-            == wanted
+            if self.runtime._item_repo.find_by_id(item_instance_id).item_spec.item_spec_id.value == wanted
         )
 
     def move_away(self, player_id: PlayerId) -> None:
@@ -250,7 +246,8 @@ class TestWhatIsOfferedIsFrozenUntilAnswered:
         """持ちかけに出した gold は、返事を待っている間は買い物に使えない。"""
         town.grant(_TOM, _BREAD, 1)
         town.offer_via_tool(
-            gives={"gold": 10}, asks={"items": [{"item_label": _BREAD, "quantity": 1}]},
+            gives={"gold": 10},
+            asks={"items": [{"item_label": _BREAD, "quantity": 1}]},
         )
 
         # 初期 12G のうち 10G を出しているので、10G のパンは商人から買えない
@@ -263,7 +260,8 @@ class TestWhatIsOfferedIsFrozenUntilAnswered:
         town.runtime._spot_graph_repo.save(graph)
 
         result = town.call(
-            "buy_item", {"item_label": _BREAD, "quantity": 1, "inner_thought": "買う"},
+            "buy_item",
+            {"item_label": _BREAD, "quantity": 1, "inner_thought": "買う"},
         )
 
         assert result.success is False
@@ -307,7 +305,8 @@ class TestAnOfferThatCannotStandIsRefused:
     def test_gold_beyond_the_purse_cannot_be_offered(self, town: _Town) -> None:
         """所持額を超える gold は差し出せない。"""
         result = town.offer_via_tool(
-            gives={"gold": 999}, asks={"items": [{"item_label": _BREAD, "quantity": 1}]},
+            gives={"gold": 999},
+            asks={"items": [{"item_label": _BREAD, "quantity": 1}]},
         )
 
         assert result.success is False
@@ -408,7 +407,9 @@ class TestAnAnswerThatCannotStandIsRefused:
         town.offer_via_tool()
 
         result = town.call(
-            "trade_accept", {"offerer_player_label": "レナ", "inner_thought": "受ける"}, _TOM,
+            "trade_accept",
+            {"offerer_player_label": "レナ", "inner_thought": "受ける"},
+            _TOM,
         )
 
         assert result.success is True
@@ -420,7 +421,9 @@ class TestAnAnswerThatCannotStandIsRefused:
         town.offer_via_tool()
 
         result = town.call(
-            "trade_accept", {"offerer_player_label": "ミナ", "inner_thought": "受ける"}, _TOM,
+            "trade_accept",
+            {"offerer_player_label": "ミナ", "inner_thought": "受ける"},
+            _TOM,
         )
 
         assert result.success is False
@@ -430,9 +433,7 @@ class TestAnAnswerThatCannotStandIsRefused:
 class TestTheOfferIsVisibleToItsTarget:
     """自分宛ての申し出は、返事をする前に prompt から見える。"""
 
-    def test_the_incoming_offer_appears_with_its_remaining_time(
-        self, town: _Town
-    ) -> None:
+    def test_the_incoming_offer_appears_with_its_remaining_time(self, town: _Town) -> None:
         """受ける側の prompt に、誰から・何と何を・あと何手番かが出る。
 
         見えなければ「返事をしない」しか選べず、辞退と沈黙が区別できない。
@@ -515,9 +516,7 @@ class TestWhatOthersSee:
 
         town.call("trade_accept", {"inner_thought": "受ける"}, _TOM)
 
-        assert "成立" in " ".join(
-            e.output.prose for e in town.drain_observations(_LENA)
-        )
+        assert "成立" in " ".join(e.output.prose for e in town.drain_observations(_LENA))
 
     def test_the_one_who_answered_is_not_told_twice(self, town: _Town) -> None:
         """返事をした本人には観測が届かない (行動結果と二重になる)。"""
@@ -527,9 +526,7 @@ class TestWhatOthersSee:
 
         town.call("trade_accept", {"inner_thought": "受ける"}, _TOM)
 
-        assert "成立" not in " ".join(
-            e.output.prose for e in town.drain_observations(_TOM)
-        )
+        assert "成立" not in " ".join(e.output.prose for e in town.drain_observations(_TOM))
 
     def test_a_decline_reaches_only_the_two_parties(self, town: _Town) -> None:
         """断りは当事者だけに届き、その場の第三者には流れない。
@@ -543,9 +540,7 @@ class TestWhatOthersSee:
 
         town.call("trade_decline", {"inner_thought": "断る"}, _TOM)
 
-        assert "断" in " ".join(
-            entry.output.prose for entry in town.drain_observations(_LENA)
-        )
+        assert "断" in " ".join(entry.output.prose for entry in town.drain_observations(_LENA))
         assert town.drain_observations(_MINA) == []
 
     def test_an_offer_wakes_the_person_it_is_made_to(self, town: _Town) -> None:

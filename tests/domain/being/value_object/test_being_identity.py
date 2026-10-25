@@ -62,20 +62,12 @@ class TestBeingIdentityEquality:
 
     def test_same_equals(self) -> None:
         """name / first_person 同値なら ``==`` が True。"""
-        assert BeingIdentity(name="アダ", first_person="わたし") == BeingIdentity(
-            name="アダ", first_person="わたし"
-        )
+        assert BeingIdentity(name="アダ", first_person="わたし") == BeingIdentity(name="アダ", first_person="わたし")
 
-    @pytest.mark.parametrize(
-        "name, first_person", [("ベン", "わたし"), ("アダ", "俺")]
-    )
-    def test_different_identity_field_is_not_equal(
-        self, name: str, first_person: str
-    ) -> None:
+    @pytest.mark.parametrize("name, first_person", [("ベン", "わたし"), ("アダ", "俺")])
+    def test_different_identity_field_is_not_equal(self, name: str, first_person: str) -> None:
         """名前・一人称の一方だけが違っても、同じ人格核ではない。"""
-        assert BeingIdentity(name="アダ", first_person="わたし") != BeingIdentity(
-            name=name, first_person=first_person
-        )
+        assert BeingIdentity(name="アダ", first_person="わたし") != BeingIdentity(name=name, first_person=first_person)
 
 
 class TestBeingIdentityImmutability:

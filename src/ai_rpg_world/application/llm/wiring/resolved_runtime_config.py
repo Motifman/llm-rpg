@@ -61,44 +61,46 @@ from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
 _DEFAULT_BEING_EPISODE_INDEX_LIMIT = 10
 _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES = 3
 
-SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
-    "ASYNC_EVENT_WORKERS",
-    "ASYNC_EVENT_MAX_PENDING",
-    "ASYNC_EVENT_SHUTDOWN_TIMEOUT_SECONDS",
-    "BEING_EPISODE_INDEX_LIMIT",
-    "BEING_EPISODE_RECALL_MAX_HANDLES",
-    "LLM_CLIENT",
-    "LLM_FAILURE_STREAK_ABORT",
-    "LLM_IDLE_TIMEOUT_TICKS",
-    "LLM_MAX_OUTPUT_TOKENS",
-    "LLM_MODEL",
-    "LLM_RATE_LIMIT_RETRY_ATTEMPTS",
-    "LLM_RATE_LIMIT_RETRY_BASE_SLEEP",
-    "LLM_REASONING_EFFORT",
-    "LLM_REQUEST_TIMEOUT_SECONDS",
-    "LLM_SESSION_ID_ENABLED",
-    "LLM_TOOL_CHOICE",
-    "LLM_TURN_PARALLEL_WORKERS",
-    "LLM_WALL_TIME_CAP_SECONDS",
-    "OPENAI_API_BASE",
-    "OPENROUTER_PROVIDER",
-    "OPENROUTER_QUANTIZATION",
-    "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
-    "SCENARIO_RANDOM_SEED",
-    "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
-    "TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE",
-    "TYPED_JUDGMENT_API_KEY_ENV",
-    "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
-    "TYPED_JUDGMENT_ENDPOINT",
-    "TYPED_JUDGMENT_MODEL",
-    "TYPED_JUDGMENT_PROVIDER",
-    "TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED",
-    "TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY",
-    "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW",
-    "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED",
-    "TYPED_JUDGMENT_TIMEOUT_SECONDS",
-    "WORLD_TICK_FAILURE_POLICY",
-})
+SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset(
+    {
+        "ASYNC_EVENT_WORKERS",
+        "ASYNC_EVENT_MAX_PENDING",
+        "ASYNC_EVENT_SHUTDOWN_TIMEOUT_SECONDS",
+        "BEING_EPISODE_INDEX_LIMIT",
+        "BEING_EPISODE_RECALL_MAX_HANDLES",
+        "LLM_CLIENT",
+        "LLM_FAILURE_STREAK_ABORT",
+        "LLM_IDLE_TIMEOUT_TICKS",
+        "LLM_MAX_OUTPUT_TOKENS",
+        "LLM_MODEL",
+        "LLM_RATE_LIMIT_RETRY_ATTEMPTS",
+        "LLM_RATE_LIMIT_RETRY_BASE_SLEEP",
+        "LLM_REASONING_EFFORT",
+        "LLM_REQUEST_TIMEOUT_SECONDS",
+        "LLM_SESSION_ID_ENABLED",
+        "LLM_TOOL_CHOICE",
+        "LLM_TURN_PARALLEL_WORKERS",
+        "LLM_WALL_TIME_CAP_SECONDS",
+        "OPENAI_API_BASE",
+        "OPENROUTER_PROVIDER",
+        "OPENROUTER_QUANTIZATION",
+        "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
+        "SCENARIO_RANDOM_SEED",
+        "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
+        "TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE",
+        "TYPED_JUDGMENT_API_KEY_ENV",
+        "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
+        "TYPED_JUDGMENT_ENDPOINT",
+        "TYPED_JUDGMENT_MODEL",
+        "TYPED_JUDGMENT_PROVIDER",
+        "TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED",
+        "TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY",
+        "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW",
+        "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED",
+        "TYPED_JUDGMENT_TIMEOUT_SECONDS",
+        "WORLD_TICK_FAILURE_POLICY",
+    }
+)
 
 #: 消した設定のキーと、消した理由。書かれていたら、知らないキーとしてではなく理由を添えて止める。
 _REMOVED_RUNTIME_CONFIG_KEYS: dict[str, str] = {
@@ -194,7 +196,6 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_semantic_repeat_min_probability: float
     typed_judgment_semantic_repeat_window: int
 
-
     # #1623: 目次に載せる件数 N と、1 回に呼び出せる件数 M。
     being_episode_index_limit: int = _DEFAULT_BEING_EPISODE_INDEX_LIMIT
     being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
@@ -233,15 +234,19 @@ class ResolvedLlmRuntimeConfig:
             )
         if self.llm_tool_choice not in _VALID_TOOL_CHOICES:
             raise ValueError(
-                f"llm_tool_choice={self.llm_tool_choice!r} is not recognized. "
-                f"valid: {sorted(_VALID_TOOL_CHOICES)}"
+                f"llm_tool_choice={self.llm_tool_choice!r} is not recognized. valid: {sorted(_VALID_TOOL_CHOICES)}"
             )
         for name in ("async_event_workers", "async_event_max_pending"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name}は1以上の整数である必要があります")
         timeout = self.async_event_shutdown_timeout_seconds
-        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout < 0:
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not math.isfinite(timeout)
+            or timeout < 0
+        ):
             raise ValueError("async_event_shutdown_timeout_secondsは0以上の有限の秒数である必要があります")
         WorldTickFailurePolicy.parse(self.world_tick_failure_policy)
         if self.prompt_dataset_capture_failure_policy not in {"fail", "warn"}:
@@ -281,24 +286,14 @@ class ResolvedLlmRuntimeConfig:
         llm_api_base = _strip_or_none(source.get("OPENAI_API_BASE"))
         llm_request_timeout_seconds = _resolve_timeout_seconds(source)
         llm_reasoning_effort = _resolve_reasoning_effort(source)
-        llm_max_output_tokens = _resolve_optional_positive_int(
-            source, "LLM_MAX_OUTPUT_TOKENS"
-        )
-        llm_wall_time_cap_seconds = _resolve_optional_positive_float(
-            source, "LLM_WALL_TIME_CAP_SECONDS"
-        )
-        llm_rate_limit_retry_attempts = _resolve_non_negative_int(
-            source, "LLM_RATE_LIMIT_RETRY_ATTEMPTS", default=3
-        )
+        llm_max_output_tokens = _resolve_optional_positive_int(source, "LLM_MAX_OUTPUT_TOKENS")
+        llm_wall_time_cap_seconds = _resolve_optional_positive_float(source, "LLM_WALL_TIME_CAP_SECONDS")
+        llm_rate_limit_retry_attempts = _resolve_non_negative_int(source, "LLM_RATE_LIMIT_RETRY_ATTEMPTS", default=3)
         llm_rate_limit_retry_base_sleep = _resolve_non_negative_float(
             source, "LLM_RATE_LIMIT_RETRY_BASE_SLEEP", default=2.0
         )
-        llm_turn_parallel_workers = _resolve_non_negative_int(
-            source, "LLM_TURN_PARALLEL_WORKERS", default=0
-        )
-        llm_idle_timeout_ticks = _resolve_positive_int(
-            source, "LLM_IDLE_TIMEOUT_TICKS", default=6
-        )
+        llm_turn_parallel_workers = _resolve_non_negative_int(source, "LLM_TURN_PARALLEL_WORKERS", default=0)
+        llm_idle_timeout_ticks = _resolve_positive_int(source, "LLM_IDLE_TIMEOUT_TICKS", default=6)
         # 連続失敗で run を止める閾値。0 で無効。既定 8 の根拠は
         # LlmFailureStreakMonitor の試験に書いた (履歴 68 run の校正)。
         llm_failure_streak_abort = _resolve_non_negative_int(
@@ -308,30 +303,23 @@ class ResolvedLlmRuntimeConfig:
         )
         llm_tool_choice = _resolve_tool_choice(source)
         try:
-            llm_session_id_enabled = _parse_truthy(
-                source.get("LLM_SESSION_ID_ENABLED"), default=True
-            )
+            llm_session_id_enabled = _parse_truthy(source.get("LLM_SESSION_ID_ENABLED"), default=True)
         except ValueError as exc:
             raise ValueError(f"LLM_SESSION_ID_ENABLED: {exc}") from exc
 
         # 型付き判断 (#1319)
         typed_judgment_provider = _resolve_typed_judgment_provider(source)
         typed_judgment_endpoint = (
-            _strip_or_none(source.get("TYPED_JUDGMENT_ENDPOINT"))
-            or _DEFAULT_TYPED_JUDGMENT_ENDPOINT
+            _strip_or_none(source.get("TYPED_JUDGMENT_ENDPOINT")) or _DEFAULT_TYPED_JUDGMENT_ENDPOINT
         )
-        typed_judgment_model = (
-            _strip_or_none(source.get("TYPED_JUDGMENT_MODEL"))
-            or _DEFAULT_TYPED_JUDGMENT_MODEL
-        )
+        typed_judgment_model = _strip_or_none(source.get("TYPED_JUDGMENT_MODEL")) or _DEFAULT_TYPED_JUDGMENT_MODEL
         typed_judgment_timeout_seconds = _resolve_positive_float_with_default(
             source,
             "TYPED_JUDGMENT_TIMEOUT_SECONDS",
             default=_DEFAULT_TYPED_JUDGMENT_TIMEOUT_SECONDS,
         )
         typed_judgment_api_key_env = (
-            _strip_or_none(source.get("TYPED_JUDGMENT_API_KEY_ENV"))
-            or _DEFAULT_TYPED_JUDGMENT_API_KEY_ENV
+            _strip_or_none(source.get("TYPED_JUDGMENT_API_KEY_ENV")) or _DEFAULT_TYPED_JUDGMENT_API_KEY_ENV
         )
         typed_judgment_action_name_min_confidence = _resolve_ratio_with_default(
             source,
@@ -371,16 +359,12 @@ class ResolvedLlmRuntimeConfig:
             default=_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW,
         )
         if typed_judgment_semantic_repeat_window < 2:
-            raise ValueError(
-                "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW must be 2 or greater"
-            )
+            raise ValueError("TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW must be 2 or greater")
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
         openrouter_quantization = _strip_or_none(source.get("OPENROUTER_QUANTIZATION"))
 
         # Prediction (#526 / U3): エピソード再解釈 on/off
-
-
 
         being_episode_index_limit = _resolve_positive_int(
             source, "BEING_EPISODE_INDEX_LIMIT", default=_DEFAULT_BEING_EPISODE_INDEX_LIMIT
@@ -392,11 +376,9 @@ class ResolvedLlmRuntimeConfig:
         )
         scenario_random_seed = _resolve_optional_int(source, "SCENARIO_RANDOM_SEED")
         prompt_dataset_capture_failure_policy = (
-            source.get("PROMPT_DATASET_CAPTURE_FAILURE_POLICY") or "fail"
-        ).strip().lower()
-        reason_first_two_step_enabled = _reason_first_two_step_enabled_for(
-            llm_tool_choice
+            (source.get("PROMPT_DATASET_CAPTURE_FAILURE_POLICY") or "fail").strip().lower()
         )
+        reason_first_two_step_enabled = _reason_first_two_step_enabled_for(llm_tool_choice)
         try:
             world_tick_failure_policy = WorldTickFailurePolicy.parse(
                 source.get("WORLD_TICK_FAILURE_POLICY") or WorldTickFailurePolicy.ISOLATE.value
@@ -427,18 +409,12 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_model=typed_judgment_model,
             typed_judgment_timeout_seconds=typed_judgment_timeout_seconds,
             typed_judgment_api_key_env=typed_judgment_api_key_env,
-            typed_judgment_action_name_min_confidence=(
-                typed_judgment_action_name_min_confidence
-            ),
-            typed_judgment_target_label_min_confidence=(
-                typed_judgment_target_label_min_confidence
-            ),
+            typed_judgment_action_name_min_confidence=(typed_judgment_action_name_min_confidence),
+            typed_judgment_target_label_min_confidence=(typed_judgment_target_label_min_confidence),
             typed_judgment_memo_min_probability=typed_judgment_memo_min_probability,
             typed_judgment_loop_diagnosis_enabled=typed_judgment_loop_diagnosis_enabled,
             typed_judgment_semantic_repeat_enabled=typed_judgment_semantic_repeat_enabled,
-            typed_judgment_semantic_repeat_min_probability=(
-                typed_judgment_semantic_repeat_min_probability
-            ),
+            typed_judgment_semantic_repeat_min_probability=(typed_judgment_semantic_repeat_min_probability),
             typed_judgment_semantic_repeat_window=typed_judgment_semantic_repeat_window,
             being_episode_index_limit=being_episode_index_limit,
             being_episode_recall_max_handles=being_episode_recall_max_handles,
@@ -492,23 +468,13 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_model=_DEFAULT_TYPED_JUDGMENT_MODEL,
             typed_judgment_timeout_seconds=_DEFAULT_TYPED_JUDGMENT_TIMEOUT_SECONDS,
             typed_judgment_api_key_env=_DEFAULT_TYPED_JUDGMENT_API_KEY_ENV,
-            typed_judgment_action_name_min_confidence=(
-                _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE
-            ),
-            typed_judgment_target_label_min_confidence=(
-                _DEFAULT_TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE
-            ),
-            typed_judgment_memo_min_probability=(
-                _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY
-            ),
+            typed_judgment_action_name_min_confidence=(_DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE),
+            typed_judgment_target_label_min_confidence=(_DEFAULT_TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE),
+            typed_judgment_memo_min_probability=(_DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY),
             typed_judgment_loop_diagnosis_enabled=False,
             typed_judgment_semantic_repeat_enabled=False,
-            typed_judgment_semantic_repeat_min_probability=(
-                _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY
-            ),
-            typed_judgment_semantic_repeat_window=(
-                _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW
-            ),
+            typed_judgment_semantic_repeat_min_probability=(_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY),
+            typed_judgment_semantic_repeat_window=(_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW),
             being_episode_index_limit=_DEFAULT_BEING_EPISODE_INDEX_LIMIT,
             being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
             scenario_random_seed=None,
@@ -521,15 +487,10 @@ class ResolvedLlmRuntimeConfig:
         )
         unknown = set(overrides) - set(defaults)
         if unknown:
-            raise TypeError(
-                f"Unknown override keys: {sorted(unknown)}. "
-                f"valid: {sorted(defaults)}"
-            )
+            raise TypeError(f"Unknown override keys: {sorted(unknown)}. valid: {sorted(defaults)}")
         defaults.update(overrides)
         if "reason_first_two_step_enabled" not in overrides:
-            defaults["reason_first_two_step_enabled"] = (
-                _reason_first_two_step_enabled_for(defaults["llm_tool_choice"])
-            )
+            defaults["reason_first_two_step_enabled"] = _reason_first_two_step_enabled_for(defaults["llm_tool_choice"])
         return cls(**defaults)
 
     # ──────────────────────────────────────────────────────────────
@@ -604,7 +565,6 @@ _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY = 0.8
 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW = 4
 
 
-
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 _FALSY = frozenset({"0", "false", "no", "off"})
 
@@ -618,15 +578,11 @@ def _validate_runtime_config_keys(source: Mapping[str, str]) -> None:
     env_only = sorted(set(source) & _SECRET_ENV_ONLY_KEYS)
     if env_only:
         raise ValueError(
-            "secret key(s) are not allowed in runtime_config: "
-            f"{env_only}. Set them via process environment instead."
+            f"secret key(s) are not allowed in runtime_config: {env_only}. Set them via process environment instead."
         )
     unknown = sorted(set(source) - SUPPORTED_RUNTIME_CONFIG_KEYS)
     if unknown:
-        raise ValueError(
-            f"unknown runtime_config key(s): {unknown}. "
-            f"valid: {sorted(SUPPORTED_RUNTIME_CONFIG_KEYS)}"
-        )
+        raise ValueError(f"unknown runtime_config key(s): {unknown}. valid: {sorted(SUPPORTED_RUNTIME_CONFIG_KEYS)}")
 
 
 def _strip_or_none(value: str | None) -> str | None:
@@ -651,27 +607,24 @@ def _parse_truthy(value: str | None, *, default: bool) -> bool:
         return True
     if raw in _FALSY:
         return False
-    raise ValueError(
-        f"{value!r} is not a recognized boolean. "
-        f"truthy: {sorted(_TRUTHY)}, falsy: {sorted(_FALSY)}"
-    )
+    raise ValueError(f"{value!r} is not a recognized boolean. truthy: {sorted(_TRUTHY)}, falsy: {sorted(_FALSY)}")
 
 
 _VALID_TOOL_CHOICES = frozenset({"required", "auto"})
-_VALID_REASONING_EFFORTS = frozenset({
-    "",
-    "none",
-    "minimal",
-    "low",
-    "medium",
-    "high",
-    "xhigh",
-})
+_VALID_REASONING_EFFORTS = frozenset(
+    {
+        "",
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+    }
+)
 
 
-def _resolve_ratio_with_default(
-    source: Mapping[str, str], key: str, *, default: float
-) -> float:
+def _resolve_ratio_with_default(source: Mapping[str, str], key: str, *, default: float) -> float:
     """0 より大きく 1 以下の比率を解決する。範囲外は起動前に拒否する。
 
     確率と比べる閾値なので、1 を超える値や 0 以下は意味を持たない。黙って
@@ -698,15 +651,12 @@ def _resolve_typed_judgment_provider(source: Mapping[str, str]) -> str:
     raw = (source.get("TYPED_JUDGMENT_PROVIDER") or "off").strip().lower()
     if raw not in _VALID_TYPED_JUDGMENT_PROVIDERS:
         raise ValueError(
-            f"TYPED_JUDGMENT_PROVIDER={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_TYPED_JUDGMENT_PROVIDERS)}"
+            f"TYPED_JUDGMENT_PROVIDER={raw!r} is not recognized. valid: {sorted(_VALID_TYPED_JUDGMENT_PROVIDERS)}"
         )
     return raw
 
 
-def _resolve_positive_float_with_default(
-    source: Mapping[str, str], key: str, *, default: float
-) -> float:
+def _resolve_positive_float_with_default(source: Mapping[str, str], key: str, *, default: float) -> float:
     raw = (source.get(key) or "").strip()
     if not raw:
         return default
@@ -724,10 +674,7 @@ def _resolve_tool_choice(source: Mapping[str, str]) -> str:
 
     raw = (source.get("LLM_TOOL_CHOICE") or "required").strip().lower()
     if raw not in _VALID_TOOL_CHOICES:
-        raise ValueError(
-            f"LLM_TOOL_CHOICE={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_TOOL_CHOICES)}"
-        )
+        raise ValueError(f"LLM_TOOL_CHOICE={raw!r} is not recognized. valid: {sorted(_VALID_TOOL_CHOICES)}")
     return raw
 
 
@@ -742,10 +689,7 @@ def _resolve_reasoning_effort(source: Mapping[str, str]) -> str:
     raw = source.get("LLM_REASONING_EFFORT")
     value = "minimal" if raw is None else raw.strip().lower()
     if value not in _VALID_REASONING_EFFORTS:
-        raise ValueError(
-            f"LLM_REASONING_EFFORT={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_REASONING_EFFORTS)}"
-        )
+        raise ValueError(f"LLM_REASONING_EFFORT={raw!r} is not recognized. valid: {sorted(_VALID_REASONING_EFFORTS)}")
     return value
 
 
@@ -762,9 +706,7 @@ def _resolve_optional_int(
         raise ValueError(f"{env_name}={raw!r} must be an integer")
 
 
-def _resolve_non_negative_int(
-    source: Mapping[str, str], key: str, *, default: int
-) -> int:
+def _resolve_non_negative_int(source: Mapping[str, str], key: str, *, default: int) -> int:
     """``key`` を 0 以上の整数として解決。未設定 / 空文字 → ``default``。
 
     負値・非数値は ``ValueError`` で fail-fast。
@@ -781,9 +723,7 @@ def _resolve_non_negative_int(
     return value
 
 
-def _resolve_positive_int(
-    source: Mapping[str, str], key: str, *, default: int
-) -> int:
+def _resolve_positive_int(source: Mapping[str, str], key: str, *, default: int) -> int:
     raw = (source.get(key) or "").strip()
     if not raw:
         return default
@@ -796,9 +736,7 @@ def _resolve_positive_int(
     return value
 
 
-def _resolve_non_negative_float(
-    source: Mapping[str, str], key: str, *, default: float
-) -> float:
+def _resolve_non_negative_float(source: Mapping[str, str], key: str, *, default: float) -> float:
     raw = (source.get(key) or "").strip()
     if not raw:
         return default
@@ -811,18 +749,14 @@ def _resolve_non_negative_float(
     return value
 
 
-def _resolve_optional_positive_int(
-    source: Mapping[str, str], key: str
-) -> int | None:
+def _resolve_optional_positive_int(source: Mapping[str, str], key: str) -> int | None:
     raw = (source.get(key) or "").strip()
     if not raw:
         return None
     return _resolve_positive_int(source, key, default=0)
 
 
-def _resolve_optional_positive_float(
-    source: Mapping[str, str], key: str
-) -> float | None:
+def _resolve_optional_positive_float(source: Mapping[str, str], key: str) -> float | None:
     raw = (source.get(key) or "").strip()
     if not raw:
         return None
@@ -842,10 +776,7 @@ def _resolve_llm_client_kind(source: Mapping[str, str]) -> str:
     """``LLM_CLIENT`` を解決 (factory と同じロジック / PR #434 fail-fast 継承)。"""
     raw = (source.get("LLM_CLIENT") or "stub").strip().lower()
     if raw not in _VALID_LLM_CLIENT_KINDS:
-        raise ValueError(
-            f"LLM_CLIENT={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_LLM_CLIENT_KINDS)}"
-        )
+        raise ValueError(f"LLM_CLIENT={raw!r} is not recognized. valid: {sorted(_VALID_LLM_CLIENT_KINDS)}")
     return raw
 
 
@@ -860,9 +791,7 @@ def _resolve_timeout_seconds(source: Mapping[str, str]) -> float:
     try:
         return float(raw)
     except ValueError:
-        raise ValueError(
-            f"LLM_REQUEST_TIMEOUT_SECONDS={raw!r} must be a number (seconds)"
-        )
+        raise ValueError(f"LLM_REQUEST_TIMEOUT_SECONDS={raw!r} must be a number (seconds)")
 
 
 __all__ = ["ResolvedLlmRuntimeConfig", "SUPPORTED_RUNTIME_CONFIG_KEYS"]

@@ -22,19 +22,12 @@ class TestTrendingDomainService:
         """テスト用のポストを作成"""
         # contentからハッシュタグを抽出（#で始まる単語）
         import re
-        if hashtags is None:
-            hashtags = tuple(re.findall(r'#(\w+)', content))
 
-        post_content = PostContent(
-            content=content,
-            hashtags=hashtags,
-            visibility=PostVisibility.PUBLIC
-        )
-        post = PostAggregate.create(
-            post_id=PostId(post_id),
-            author_user_id=UserId(user_id),
-            post_content=post_content
-        )
+        if hashtags is None:
+            hashtags = tuple(re.findall(r"#(\w+)", content))
+
+        post_content = PostContent(content=content, hashtags=hashtags, visibility=PostVisibility.PUBLIC)
+        post = PostAggregate.create(post_id=PostId(post_id), author_user_id=UserId(user_id), post_content=post_content)
         # 作成時刻を設定
         post._created_at = created_at
         return post
@@ -51,11 +44,7 @@ class TestTrendingDomainService:
         ]
 
         result = TrendingDomainService.calculate_trending_hashtags(
-            posts=posts,
-            now=now,
-            decay_lambda=0.1,
-            recent_window_hours=1.0,
-            max_results=10
+            posts=posts, now=now, decay_lambda=0.1, recent_window_hours=1.0, max_results=10
         )
 
         # 結果の検証
@@ -74,12 +63,14 @@ class TestTrendingDomainService:
 
         # 1h / 0.5h / 0h の各投稿が寄与する既知の得点。
         # 対象の計算関数を期待値の生成に使わない。
-        assert dict(result) == pytest.approx({
-            "人気": 4.078195683600,
-            "トレンド": 0.627185505177,
-            "話題": 0.659341993658,
-            "おすすめ": 0.693147180560,
-        })
+        assert dict(result) == pytest.approx(
+            {
+                "人気": 4.078195683600,
+                "トレンド": 0.627185505177,
+                "話題": 0.659341993658,
+                "おすすめ": 0.693147180560,
+            }
+        )
 
     def test_calculate_trending_hashtags_hybrid_score(self):
         """直近の出現数と時間減衰に従い、異なる得点を持つ4タグを欠落なく返す。"""
@@ -93,11 +84,7 @@ class TestTrendingDomainService:
         ]
 
         result = TrendingDomainService.calculate_trending_hashtags(
-            posts=posts,
-            now=now,
-            decay_lambda=0.1,
-            recent_window_hours=1.0,
-            max_results=10
+            posts=posts, now=now, decay_lambda=0.1, recent_window_hours=1.0, max_results=10
         )
 
         # 期待される順位を確認
@@ -124,7 +111,7 @@ class TestTrendingDomainService:
             now=now,
             decay_lambda=0.1,
             recent_window_hours=1.0,  # 1時間を直近とする
-            max_results=10
+            max_results=10,
         )
 
         # #古いトレンド: 総数=2, 直近=0, 成長率=0/(2-0+1)=0
@@ -143,11 +130,7 @@ class TestTrendingDomainService:
         now = datetime.now()
 
         result = TrendingDomainService.calculate_trending_hashtags(
-            posts=[],
-            now=now,
-            decay_lambda=0.1,
-            recent_window_hours=1.0,
-            max_results=10
+            posts=[], now=now, decay_lambda=0.1, recent_window_hours=1.0, max_results=10
         )
 
         assert result == []
@@ -168,11 +151,7 @@ class TestTrendingDomainService:
         ]
 
         result = TrendingDomainService.calculate_trending_hashtags(
-            posts=posts,
-            now=now,
-            decay_lambda=0.1,
-            recent_window_hours=1.0,
-            max_results=10
+            posts=posts, now=now, decay_lambda=0.1, recent_window_hours=1.0, max_results=10
         )
 
         # 同点のタグ同士に順位の約束を追加しない。
@@ -189,11 +168,7 @@ class TestTrendingDomainService:
         posts.append(self.create_test_post(1, 1, content, now))
 
         result = TrendingDomainService.calculate_trending_hashtags(
-            posts=posts,
-            now=now,
-            decay_lambda=0.1,
-            recent_window_hours=1.0,
-            max_results=3
+            posts=posts, now=now, decay_lambda=0.1, recent_window_hours=1.0, max_results=3
         )
 
         assert len(result) == 3

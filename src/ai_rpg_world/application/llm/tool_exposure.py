@@ -60,11 +60,17 @@ _PLAYER_TRADE_TOOLS = frozenset({"trade_offer", "trade_accept", "trade_decline"}
 #: 出したり消したりすると、エージェントから見て世界の可能性が揺れる。板の
 #: 手前まで来ているのに選択肢に無い、という形も生まれる。同席は実行時の失敗
 #: (`MARKET_BOARD_NOT_HERE`) として返す — 商人と同じ流儀。
-_MARKET_TOOLS = frozenset({
-    "market_view",
-    "market_list_item", "market_buy", "market_reprice", "market_cancel",
-    "market_bid", "market_sell",
-})
+_MARKET_TOOLS = frozenset(
+    {
+        "market_view",
+        "market_list_item",
+        "market_buy",
+        "market_reprice",
+        "market_cancel",
+        "market_bid",
+        "market_sell",
+    }
+)
 
 #: 会議機構を宣言したシナリオでだけ出すツール。
 #:
@@ -187,16 +193,13 @@ class ToolExposure:
             # 緑のまま通る**。「宣言したつもりが効いていない」を作るのは
             # この PR が直している穴そのもの。
             raise TypeError(
-                "scenario.disabled_tools は tuple / list / set で渡してください: "
-                f"{type(disabled).__name__}"
+                f"scenario.disabled_tools は tuple / list / set で渡してください: {type(disabled).__name__}"
             )
         return cls(
             disabled_by_scenario=frozenset(disabled),
             meeting_declared=bool(meeting_declared),
             merchants_declared=bool(getattr(scenario, "merchants", ()) or ()),
-            player_trade_declared=bool(
-                getattr(scenario, "player_trade_enabled", False)
-            ),
+            player_trade_declared=bool(getattr(scenario, "player_trade_enabled", False)),
             market_declared=getattr(scenario, "market", None) is not None,
             public_sns_declared=bool(getattr(scenario, "public_sns_enabled", False)),
         )
@@ -253,18 +256,14 @@ class ToolExposure:
         既定の入口はこちら。
         """
         exposed = [
-            name
-            for name in names
-            if self.is_exposed(name)
-            and (not departed or self.is_available_to_departed(name))
+            name for name in names if self.is_exposed(name) and (not departed or self.is_available_to_departed(name))
         ]
         return (
             tuple(n for n in exposed if self.is_phase_common(n)),
             tuple(
                 n
                 for n in exposed
-                if self.is_available_in_phase(n, in_meeting=in_meeting)
-                and not (n == "vote" and voting_completed)
+                if self.is_available_in_phase(n, in_meeting=in_meeting) and not (n == "vote" and voting_completed)
             ),
         )
 
@@ -281,8 +280,7 @@ class ToolExposure:
         死者の書き分けに使うための問いなので。
         """
         return cls.is_available_to_departed(tool_name) and (
-            cls.is_phase_common(tool_name)
-            or cls.is_available_in_phase(tool_name, in_meeting=in_meeting)
+            cls.is_phase_common(tool_name) or cls.is_available_in_phase(tool_name, in_meeting=in_meeting)
         )
 
     @staticmethod

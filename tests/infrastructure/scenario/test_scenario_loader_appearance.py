@@ -45,9 +45,7 @@ class TestAppearanceDeclaration:
 
     def test_declared_appearance_is_kept_stripped(self) -> None:
         """appearance に書いた句は、前後の空白を落として保持される。"""
-        result = ScenarioLoader().load_from_dict(
-            _two_strangers(p1={"appearance": "  外套の女 "})
-        )
+        result = ScenarioLoader().load_from_dict(_two_strangers(p1={"appearance": "  外套の女 "}))
 
         assert result.player_spawns[0].appearance == "外套の女"
 

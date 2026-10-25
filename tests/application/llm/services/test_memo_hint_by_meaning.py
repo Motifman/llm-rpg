@@ -47,10 +47,7 @@ _BEING = BeingId("being_w1_p1")
 
 
 def _todos(contents: Sequence[str]) -> list[PendingTodo]:
-    return [
-        PendingTodo(id=f"memo-{i}", content=content, handle=f"m_{i}")
-        for i, content in enumerate(contents)
-    ]
+    return [PendingTodo(id=f"memo-{i}", content=content, handle=f"m_{i}") for i, content in enumerate(contents)]
 
 
 class _RecordingPort(ITypedJudgmentPort):
@@ -73,9 +70,7 @@ class _RecordingPort(ITypedJudgmentPort):
     ) -> Mapping[str, JudgmentResult]:
         self.calls.append((state, questions))
         if self._raises:
-            raise TypedJudgmentUnavailableException(
-                "down", error_code="TYPED_JUDGMENT_RATE_LIMITED"
-            )
+            raise TypedJudgmentUnavailableException("down", error_code="TYPED_JUDGMENT_RATE_LIMITED")
         answers = {}
         for name, question in questions.items():
             assert isinstance(question, NoulQuestion)
@@ -114,9 +109,7 @@ class TestMeaningCatchesWhatCharacterOverlapMisses:
 
     def test_a_paraphrased_memo_is_hinted(self) -> None:
         """文字が重ならない言い換えでも、意味で達成と判断されれば hint が出る。"""
-        service, _ = _service(
-            ["夕食の材料を集める"], _RecordingPort({"夕食の材料を集める": 0.88})
-        )
+        service, _ = _service(["夕食の材料を集める"], _RecordingPort({"夕食の材料を集める": 0.88}))
 
         detection = service.detect(_BEING, "麦畑で麦を刈り取った", "小麦 3 束を得た")
 
@@ -135,9 +128,7 @@ class TestMeaningCatchesWhatCharacterOverlapMisses:
         """語が重なっても、達成していない行動では hint が出ない。"""
         service, _ = _service(["水を汲む"], _RecordingPort({"水を汲む": 0.05}))
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.hint is None
 
@@ -148,9 +139,7 @@ class TestMeaningCatchesWhatCharacterOverlapMisses:
         """
         service, _ = _service(["水を汲む"], None)
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.hint is not None
 
@@ -290,9 +279,7 @@ class TestAMissingAnswerIsNotReadAsUnfulfilled:
         """
         service, _ = _service(["水を汲む", "鎌を研ぐ"], _PartialAnswerPort())
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.unavailable_reason == "TYPED_JUDGMENT_ANSWER_MISSING"
         assert detection.hint is not None
@@ -306,9 +293,7 @@ class TestAnUnavailablePortFallsBackToOverlap:
         """ポートが落ちたら、従来の重なり判定で hint を出す。"""
         service, _ = _service(["水を汲む"], _RecordingPort(raises=True))
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.hint is not None
         assert detection.hint.source == "overlap"
@@ -317,9 +302,7 @@ class TestAnUnavailablePortFallsBackToOverlap:
         """縮退したことが理由つきで残る。hint が減った理由を後から追える。"""
         service, _ = _service(["水を汲む"], _RecordingPort(raises=True))
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.unavailable_reason == "TYPED_JUDGMENT_RATE_LIMITED"
 
@@ -327,9 +310,7 @@ class TestAnUnavailablePortFallsBackToOverlap:
         """ポートを持たない run は縮退ではない。理由を残さない (**正の対照**)。"""
         service, _ = _service(["水を汲む"], None)
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.unavailable_reason is None
         assert detection.judgments == ()
@@ -342,9 +323,7 @@ class TestTheHintTextKeepsItsShape:
         """判断を使わない run の hint 文は現行のまま (「類似度」)。"""
         service, _ = _service(["水を汲む"], None)
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.hint is not None
         text = detection.hint.to_hint_text()
@@ -354,9 +333,7 @@ class TestTheHintTextKeepsItsShape:
 
     def test_the_judged_hint_text_says_it_is_a_probability(self) -> None:
         """判断由来の数は「類似度」と呼ばない。意味が違うものを同じ語で呼ばない。"""
-        service, _ = _service(
-            ["小麦を集める"], _RecordingPort({"小麦を集める": 0.93})
-        )
+        service, _ = _service(["小麦を集める"], _RecordingPort({"小麦を集める": 0.93}))
 
         detection = service.detect(_BEING, "麦を刈った", "小麦を得た")
 

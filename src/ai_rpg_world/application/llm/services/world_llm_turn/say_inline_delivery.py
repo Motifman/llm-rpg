@@ -27,7 +27,9 @@ def wrap_with_say_inline(handler: ToolHandler, speak: SayInlineSpeaker) -> ToolH
     """handler が返った後に ``say_inline`` を出し、出せなかったら結果文に書き足す。"""
 
     def _handler(
-        player_id: PlayerId, arguments: dict[str, Any], runtime_context: Any,
+        player_id: PlayerId,
+        arguments: dict[str, Any],
+        runtime_context: Any,
     ) -> LlmCommandResultDto:
         try:
             result = handler(player_id, arguments, runtime_context)
@@ -43,7 +45,8 @@ def wrap_with_say_inline(handler: ToolHandler, speak: SayInlineSpeaker) -> ToolH
 
 
 def with_say_inline_delivery(
-    result: LlmCommandResultDto, delivery: SayInlineDelivery,
+    result: LlmCommandResultDto,
+    delivery: SayInlineDelivery,
 ) -> LlmCommandResultDto:
     """発言を出した結果を、本人の結果文と trace に書き足す。"""
     if delivery is SayInlineDelivery.NOTHING_TO_SAY:
@@ -52,13 +55,16 @@ def with_say_inline_delivery(
     payload["say_inline_spoken"] = delivery is SayInlineDelivery.SPOKEN
     if delivery is SayInlineDelivery.NOT_DELIVERED:
         return replace(
-            result, message=result.message + NOT_DELIVERED_NOTE, trace_payload=payload,
+            result,
+            message=result.message + NOT_DELIVERED_NOTE,
+            trace_payload=payload,
         )
     return replace(result, trace_payload=payload)
 
 
 def with_delivery_carried_by(
-    result: LlmCommandResultDto, exc: BaseException,
+    result: LlmCommandResultDto,
+    exc: BaseException,
 ) -> LlmCommandResultDto:
     """handler の例外に載った発言の結果を、例外から作った失敗の結果に書き足す。"""
     delivery = getattr(exc, "say_inline_delivery", None)
@@ -68,7 +74,8 @@ def with_delivery_carried_by(
 
 
 def with_unspoken_say_inline(
-    result: LlmCommandResultDto, arguments: dict[str, Any],
+    result: LlmCommandResultDto,
+    arguments: dict[str, Any],
 ) -> LlmCommandResultDto:
     """handler まで届かずに断られた行動の ``say_inline`` は出さず、出さなかったと書き足す。"""
     raw = arguments.get("say_inline")

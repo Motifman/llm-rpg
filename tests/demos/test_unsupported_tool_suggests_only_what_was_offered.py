@@ -37,9 +37,7 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
     _WorldLlmWiring,
 )
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI = PlayerId(1)
 
@@ -76,15 +74,11 @@ def in_a_meeting():
 class TestTheFailureListsOnlyTheOfferedTools:
     """UNSUPPORTED_TOOL の失敗文が、そのターンに送った tool だけから作られることを保証する。"""
 
-    def test_the_listed_tools_are_exactly_the_offered_ones_during_a_meeting(
-        self, in_a_meeting
-    ) -> None:
+    def test_the_listed_tools_are_exactly_the_offered_ones_during_a_meeting(self, in_a_meeting) -> None:
         """会議中に存在しない名前を呼ぶと、一覧は送った tool と一致し、interact は載らない。"""
         wiring, offered = in_a_meeting
 
-        result = wiring._execute_tool(
-            _MORI, "gather", {}, None, offered_tools_at_prompt=offered
-        )
+        result = wiring._execute_tool(_MORI, "gather", {}, None, offered_tools_at_prompt=offered)
 
         assert result.error_code == "UNSUPPORTED_TOOL"
         assert _listed_tools(result.message) == set(offered)
@@ -96,9 +90,7 @@ class TestTheFailureListsOnlyTheOfferedTools:
         """
         wiring, offered = in_a_meeting
 
-        result = wiring._execute_tool(
-            _MORI, "spot_graph_interact", {}, None, offered_tools_at_prompt=offered
-        )
+        result = wiring._execute_tool(_MORI, "spot_graph_interact", {}, None, offered_tools_at_prompt=offered)
 
         assert "もしかして" not in result.message
 
@@ -108,9 +100,7 @@ class TestTheFailureListsOnlyTheOfferedTools:
         wiring = _wiring(runtime)
         offered = offered_tools_from_payload(wiring._build_tools_payload(_MORI))
 
-        result = wiring._execute_tool(
-            _MORI, "spot_graph_interact", {}, None, offered_tools_at_prompt=offered
-        )
+        result = wiring._execute_tool(_MORI, "spot_graph_interact", {}, None, offered_tools_at_prompt=offered)
 
         assert "もしかして 'interact' ですか?" in result.message
 
@@ -122,7 +112,7 @@ class _PicksSpeak(ITypedJudgmentPort):
         self.questions: list[ChoiceQuestion] = []
 
     def judge(self, state, questions):
-        (name, question), = questions.items()
+        ((name, question),) = questions.items()
         assert isinstance(question, ChoiceQuestion)
         self.questions.append(question)
         return {
@@ -235,14 +225,14 @@ class TestAJudgmentFailureKeepsTheUnsupportedToolFailure:
     @pytest.mark.parametrize(
         ("exc", "reason"),
         [
-            (TypedJudgmentUnavailableException("down", error_code="TYPED_JUDGMENT_TRANSPORT_FAILED"),
-             "TYPED_JUDGMENT_TRANSPORT_FAILED"),
+            (
+                TypedJudgmentUnavailableException("down", error_code="TYPED_JUDGMENT_TRANSPORT_FAILED"),
+                "TYPED_JUDGMENT_TRANSPORT_FAILED",
+            ),
             (ValueError("probability is not a number"), "UNEXPECTED_ERROR"),
         ],
     )
-    def test_the_failure_and_the_wake_up_survive_and_the_reason_is_traced(
-        self, exc: Exception, reason: str
-    ) -> None:
+    def test_the_failure_and_the_wake_up_survive_and_the_reason_is_traced(self, exc: Exception, reason: str) -> None:
         """判断ポートがどんな例外を投げても、UNSUPPORTED_TOOL と次 tick の起床が保たれ、trace に理由が残る。"""
         result, trace, offered = _phase_b_calling("say", port=_Raises(exc))
 

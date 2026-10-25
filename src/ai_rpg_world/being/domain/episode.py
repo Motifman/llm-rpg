@@ -24,9 +24,7 @@ def _require_text(value: object, field_name: str, *, max_length: int | None = No
     if not isinstance(value, str) or not value.strip():
         raise EpisodeValidationException(f"{field_name} must be non-blank str")
     if max_length is not None and len(value) > max_length:
-        raise EpisodeValidationException(
-            f"{field_name} must be at most {max_length} characters, got {len(value)}"
-        )
+        raise EpisodeValidationException(f"{field_name} must be at most {max_length} characters, got {len(value)}")
 
 
 def _require_turn(value: object, field_name: str) -> None:
@@ -42,9 +40,7 @@ def _id_hex(episode_id: object) -> str:
     except ValueError as exc:
         raise EpisodeValidationException(f"episode_id must be a UUID: {episode_id!r}") from exc
     if str(parsed) != episode_id:
-        raise EpisodeValidationException(
-            f"episode_id must be a lowercase hyphenated UUID: {episode_id!r}"
-        )
+        raise EpisodeValidationException(f"episode_id must be a lowercase hyphenated UUID: {episode_id!r}")
     return parsed.hex
 
 
@@ -135,9 +131,7 @@ def _require_history(index: object, index_history: object, written_turn: int) ->
         if not isinstance(revision, IndexRevision):
             raise EpisodeValidationException("index_history must hold IndexRevision")
         if revision.revised_turn < floor:
-            raise EpisodeValidationException(
-                "index_history must be ordered by revised_turn from written_turn"
-            )
+            raise EpisodeValidationException("index_history must be ordered by revised_turn from written_turn")
         floor = revision.revised_turn
 
 
@@ -175,9 +169,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
             or len(id_part) < HANDLE_MIN_ID_LENGTH
             or not hex_id.startswith(id_part)
         ):
-            raise EpisodeValidationException(
-                f"handle {handle!r} does not come from episode_id {episode_id!r}"
-            )
+            raise EpisodeValidationException(f"handle {handle!r} does not come from episode_id {episode_id!r}")
         _require_text(environment_name, "environment_name")
         _require_turn(written_turn, "written_turn")
         _require_text(body, "body", max_length=BODY_MAX_LENGTH)
@@ -306,8 +298,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
         else:
             index_kept = self.index_history[kept].previous == earlier.index
         recall_kept = earlier.last_recalled_turn is None or (
-            self.last_recalled_turn is not None
-            and self.last_recalled_turn >= earlier.last_recalled_turn
+            self.last_recalled_turn is not None and self.last_recalled_turn >= earlier.last_recalled_turn
         )
         return (
             index_kept

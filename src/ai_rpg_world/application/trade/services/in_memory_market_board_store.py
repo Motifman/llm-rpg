@@ -77,9 +77,12 @@ class InMemoryMarketBoardStore:
         with self._lock:
             self._board = MarketBoard.empty()
             self._next_id = 1
-            self.save(MarketBoard(
-                orders=tuple(orders), last_trades=tuple(last_trades),
-            ))
+            self.save(
+                MarketBoard(
+                    orders=tuple(orders),
+                    last_trades=tuple(last_trades),
+                )
+            )
 
 
 __all__ = ["InMemoryMarketBoardStore"]

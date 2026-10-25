@@ -25,7 +25,16 @@ ADA = BeingId("being_p1")
 
 
 def _seen(body: str) -> Observation:
-    return Observation(body=body, route=SeenOrHeard(), time=ObservedTime(display="1日目 朝"), subject_is_self=False, subject_name=UNKNOWN, source=UNKNOWN, place=UNKNOWN, addressed_to_self=UNKNOWN)
+    return Observation(
+        body=body,
+        route=SeenOrHeard(),
+        time=ObservedTime(display="1日目 朝"),
+        subject_is_self=False,
+        subject_name=UNKNOWN,
+        source=UNKNOWN,
+        place=UNKNOWN,
+        addressed_to_self=UNKNOWN,
+    )
 
 
 class _Recorder(NullTraceRecorder):
@@ -42,8 +51,19 @@ class _Writer(BackstoryWriter):
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
 
-    def write(self, *, self_name: str, persona: str, experiences: tuple[Experience, ...], previous: Backstory | None, until_turn: int, written_turn: int) -> Backstory:
-        self.calls.append({"self_name": self_name, "persona": persona, "experiences": experiences, "previous": previous})
+    def write(
+        self,
+        *,
+        self_name: str,
+        persona: str,
+        experiences: tuple[Experience, ...],
+        previous: Backstory | None,
+        until_turn: int,
+        written_turn: int,
+    ) -> Backstory:
+        self.calls.append(
+            {"self_name": self_name, "persona": persona, "experiences": experiences, "previous": previous}
+        )
         return Backstory(flow=f"{len(experiences)} 件の流れ", mood="", written_turn=written_turn, until_turn=until_turn)
 
 
@@ -109,8 +129,15 @@ class TestWrite:
         written = world.writing.write(world._noted(event))
 
         (call,) = world.writer.calls
-        assert (call["self_name"], call["persona"], len(call["experiences"]), call["previous"]) == ("エイダ", "慎重", 10, previous)
-        assert written == WrittenBackstory(being_id=ADA, backstory=Backstory(flow="10 件の流れ", mood="", written_turn=20, until_turn=10))
+        assert (call["self_name"], call["persona"], len(call["experiences"]), call["previous"]) == (
+            "エイダ",
+            "慎重",
+            10,
+            previous,
+        )
+        assert written == WrittenBackstory(
+            being_id=ADA, backstory=Backstory(flow="10 件の流れ", mood="", written_turn=20, until_turn=10)
+        )
         assert world.store.get(ADA).request is not None
 
     def test_writer_failure_propagates(self) -> None:
@@ -141,7 +168,12 @@ class TestApply:
         assert ([b.until_turn for b in memory.backstories], memory.recent_from, memory.request) == ([10], 11, None)
         ((kind, payload),) = world.recorder.events  # type: ignore[union-attr]
         assert kind == TraceEventKind.BEING_BACKSTORY_WRITTEN
-        assert (payload["being_id"], payload["until_turn"], payload["written_turn"], payload["flow"]) == ("being_p1", 10, 20, "10 件の流れ")
+        assert (payload["being_id"], payload["until_turn"], payload["written_turn"], payload["flow"]) == (
+            "being_p1",
+            10,
+            20,
+            "10 件の流れ",
+        )
 
     def test_late_backstory_for_the_same_range_is_discarded_through_the_store(self) -> None:
         """同じ範囲のいきさつが 2 度届くと、2 度目は入らず、保存するときに StaleBackstoryDiscarded が配り手に渡る。"""
@@ -170,7 +202,11 @@ class TestStubCompletion:
 
     def test_first_event_becomes_the_flow(self) -> None:
         """最初の「- 」で始まる行を、(スタブ) を付けた流れにして返す。"""
-        response = stub_backstory_completion([{"role": "system", "content": "指示"}, {"role": "user", "content": "あなた = エイダ\n- [1日目 朝] 鐘が鳴った\n- [1日目 朝] 扉が開いた"}])
+        response = stub_backstory_completion(
+            [
+                {"role": "system", "content": "指示"},
+                {"role": "user", "content": "あなた = エイダ\n- [1日目 朝] 鐘が鳴った\n- [1日目 朝] 扉が開いた"},
+            ]
+        )
 
         assert response == {"compressed_activity": "(スタブ) [1日目 朝] 鐘が鳴った", "emotional_summary": ""}
-

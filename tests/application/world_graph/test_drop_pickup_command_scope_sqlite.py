@@ -49,17 +49,13 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
 def _build_service(database, *, item_on_ground: bool = False):
     connection = sqlite3.connect(database)
     connection.row_factory = sqlite3.Row
-    inventories = SqlitePlayerInventoryWriteRepository.for_standalone_connection(
-        connection
-    )
+    inventories = SqlitePlayerInventoryWriteRepository.for_standalone_connection(connection)
     items = SqliteItemWriteRepository.for_standalone_connection(connection)
     graph = SqliteSpotGraphRepository.for_standalone_connection(connection)
     interiors = SqliteSpotInteriorRepository.for_standalone_connection(connection)
     graph.save(_make_graph_with_player(SPOT_ID, (PLAYER_ID,)))
 
-    item = ItemAggregate.create(
-        items.generate_item_instance_id(), _make_item_spec(), quantity=1
-    )
+    item = ItemAggregate.create(items.generate_item_instance_id(), _make_item_spec(), quantity=1)
     items.save(item)
     inventory = PlayerInventoryAggregate.create_new_inventory(PLAYER_ID)
     if not item_on_ground:
@@ -70,9 +66,7 @@ def _build_service(database, *, item_on_ground: bool = False):
     inventories.save(inventory)
     interior = SpotInterior.empty()
     if item_on_ground:
-        interior = interior.with_ground_item(
-            GroundItem(item.item_instance_id, item.item_spec.item_spec_id)
-        )
+        interior = interior.with_ground_item(GroundItem(item.item_instance_id, item.item_spec.item_spec_id))
     interiors.save(SPOT_ID, interior)
 
     dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
@@ -105,9 +99,7 @@ def _reject_interior_write(connection: sqlite3.Connection) -> None:
 
 def test_sqlite_drop_and_pickup_commit_both_resources(tmp_path) -> None:
     """正常なdropとpickupはSQLite上の所持品と地面を同時に往復させる。"""
-    service, _, inventories, interiors, item_id = _build_service(
-        tmp_path / "game.db"
-    )
+    service, _, inventories, interiors, item_id = _build_service(tmp_path / "game.db")
 
     service.drop_item(PLAYER_ID, SlotId(0))
     assert inventories.find_by_id(PLAYER_ID).get_item_instance_id_by_slot(SlotId(0)) is None
@@ -120,9 +112,7 @@ def test_sqlite_drop_and_pickup_commit_both_resources(tmp_path) -> None:
 
 def test_sqlite_drop_interior_failure_rolls_back_inventory(tmp_path) -> None:
     """dropの地面SQL失敗時は先行したinventory更新もrollbackする。"""
-    service, connection, inventories, interiors, item_id = _build_service(
-        tmp_path / "game.db"
-    )
+    service, connection, inventories, interiors, item_id = _build_service(tmp_path / "game.db")
     _reject_interior_write(connection)
 
     with pytest.raises(sqlite3.IntegrityError, match="interior save failed"):
@@ -134,9 +124,7 @@ def test_sqlite_drop_interior_failure_rolls_back_inventory(tmp_path) -> None:
 
 def test_sqlite_pickup_interior_failure_rolls_back_inventory(tmp_path) -> None:
     """pickupの地面SQL失敗時は先行した取得もrollbackする。"""
-    service, connection, inventories, interiors, item_id = _build_service(
-        tmp_path / "game.db", item_on_ground=True
-    )
+    service, connection, inventories, interiors, item_id = _build_service(tmp_path / "game.db", item_on_ground=True)
     _reject_interior_write(connection)
 
     with pytest.raises(sqlite3.IntegrityError, match="interior save failed"):

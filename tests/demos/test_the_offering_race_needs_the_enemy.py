@@ -24,10 +24,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_RACE = (
-    pathlib.Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "offering_race_v1.json"
-)
+_RACE = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "offering_race_v1.json"
 
 _GAREN, _DONA, _SERA, _YUNO = (PlayerId(i) for i in range(1, 5))
 _NAME_TO_ID = {"ガレン": _GAREN, "ドナ": _DONA, "セラ": _SERA, "ユノ": _YUNO}
@@ -35,9 +32,9 @@ _NAME_TO_ID = {"ガレン": _GAREN, "ドナ": _DONA, "セラ": _SERA, "ユノ": 
 #: 組の設計表。行 = 人、列 = できる採取。
 _TEAM_MATRIX: dict[str, dict[str, bool]] = {
     "ガレン": {"reap_wheat": True, "gather_herb": False},
-    "ドナ":   {"reap_wheat": True, "gather_herb": False},
-    "セラ":   {"reap_wheat": False, "gather_herb": True},
-    "ユノ":   {"reap_wheat": False, "gather_herb": True},
+    "ドナ": {"reap_wheat": True, "gather_herb": False},
+    "セラ": {"reap_wheat": False, "gather_herb": True},
+    "ユノ": {"reap_wheat": False, "gather_herb": True},
 }
 
 _WORK = {
@@ -100,9 +97,7 @@ class _Race:
             result = self.interact(player_id, object_id, action)
         except InteractionNotAllowedException as exc:
             return False, str(exc)
-        return bool(getattr(result, "success", True)), str(
-            getattr(result, "message", "")
-        )
+        return bool(getattr(result, "success", True)), str(getattr(result, "message", ""))
 
     def interact(self, player_id: PlayerId, object_id: str, action: str):
         from ai_rpg_world.domain.common.value_object import WorldTick
@@ -158,8 +153,7 @@ class TestOnlyYourTeamCanHarvestItsField:
         did, message = race.try_work(player_id, target, job)
 
         assert did is _TEAM_MATRIX[who][job], (
-            f"{who} が {job} を {'できる' if _TEAM_MATRIX[who][job] else 'できない'} "
-            f"はずだが、結果は {did} ({message})"
+            f"{who} が {job} を {'できる' if _TEAM_MATRIX[who][job] else 'できない'} はずだが、結果は {did} ({message})"
         )
 
 
@@ -190,9 +184,7 @@ class TestOnlyYourTeamCanUseYourAltar:
             SpotObjectId,
         )
 
-        altar = interior.get_object(
-            SpotObjectId.create(race.runtime.id_mapper.get_int("object", "east_altar"))
-        )
+        altar = interior.get_object(SpotObjectId.create(race.runtime.id_mapper.get_int("object", "east_altar")))
         assert altar.state["wheat_offered"] == 2
 
 
@@ -220,10 +212,7 @@ class TestGoldIsAZeroSumWeapon:
         assert len(east) == _TEAM_SIZE
 
         for side in ("east", "west"):
-            complete = next(
-                e for e in race.raw["scenario_events"]
-                if e["id"] == f"{side}_offering_complete"
-            )
+            complete = next(e for e in race.raw["scenario_events"] if e["id"] == f"{side}_offering_complete")
             declared = {
                 (c["target_object"], c["state_key"]): c["ticks_offset"]
                 for c in complete["conditions"]
@@ -236,9 +225,7 @@ class TestGoldIsAZeroSumWeapon:
                 (altar, "gold_offered"): _OFFER_GOLD,
             }, side
 
-    def test_the_judgment_events_compare_enemy_produce_at_the_deadline(
-        self, race: _Race
-    ) -> None:
+    def test_the_judgment_events_compare_enemy_produce_at_the_deadline(self, race: _Race) -> None:
         """判定イベント 2 本が、刻限 (79 tick) に敵の産物どうしを比べている。
 
         比較の向き (東=herb vs 西=wheat) と刻限が黙って動くと、run が
@@ -246,31 +233,25 @@ class TestGoldIsAZeroSumWeapon:
         """
         expected = {
             "east_judged_win": (
-                ("east_altar", "herb_offered"), ("west_altar", "wheat_offered"),
+                ("east_altar", "herb_offered"),
+                ("west_altar", "wheat_offered"),
             ),
             "west_judged_win": (
-                ("west_altar", "wheat_offered"), ("east_altar", "herb_offered"),
+                ("west_altar", "wheat_offered"),
+                ("east_altar", "herb_offered"),
             ),
         }
         for event_id, (left, right) in expected.items():
-            event = next(
-                e for e in race.raw["scenario_events"] if e["id"] == event_id
-            )
-            tick = next(
-                c["tick"] for c in event["conditions"]
-                if c["condition_type"] == "TICK_AT_LEAST"
-            )
+            event = next(e for e in race.raw["scenario_events"] if e["id"] == event_id)
+            tick = next(c["tick"] for c in event["conditions"] if c["condition_type"] == "TICK_AT_LEAST")
             assert tick == 79, event_id
             compare = next(
-                c for c in event["conditions"]
-                if c["condition_type"] == "OBJECT_STATE_INT_GREATER_THAN_OTHER"
+                c for c in event["conditions"] if c["condition_type"] == "OBJECT_STATE_INT_GREATER_THAN_OTHER"
             )
             assert (compare["target_object"], compare["state_key"]) == left
             assert (compare["other_object"], compare["other_state_key"]) == right
 
-    def test_both_teams_cannot_complete_on_the_world_supply(
-        self, race: _Race
-    ) -> None:
+    def test_both_teams_cannot_complete_on_the_world_supply(self, race: _Race) -> None:
         """必要額の合計が、世界の gold 総量を上回る。
 
         これが崩れると、両組が取引なしで gold 条件を満たせてしまう。
@@ -303,18 +284,11 @@ class TestGoldIsAZeroSumWeapon:
         賽銭箱の音 (目撃情報) が終盤まで消える。
         """
         altar = next(
-            o
-            for s in race.raw["spots"]
-            for o in s.get("interior", {}).get("objects", [])
-            if o["id"] == "east_altar"
+            o for s in race.raw["spots"] for o in s.get("interior", {}).get("objects", []) if o["id"] == "east_altar"
         )
-        gold_action = next(
-            i for i in altar["interactions"] if i["action_name"] == "offer_gold"
-        )
+        gold_action = next(i for i in altar["interactions"] if i["action_name"] == "offer_gold")
         amount = next(
-            e["parameters"]["amount"]
-            for e in gold_action["effects"]
-            if e["effect_type"] == "DEPOSIT_GOLD_TO_OBJECT"
+            e["parameters"]["amount"] for e in gold_action["effects"] if e["effect_type"] == "DEPOSIT_GOLD_TO_OBJECT"
         )
 
         assert amount <= _INITIAL_GOLD
@@ -404,9 +378,7 @@ class TestTheOnlyIntelligenceChannelWorks:
 
         race.interact(_GAREN, "east_altar", "offer_wheat")
 
-        seen = " ".join(
-            e.output.prose for e in race.runtime._obs_buffer.drain(_SERA)
-        )
+        seen = " ".join(e.output.prose for e in race.runtime._obs_buffer.drain(_SERA))
         assert "麦束を納めた" in seen
         assert "2" not in seen, "納めた個数は目撃文に漏れない"
 
@@ -431,10 +403,7 @@ class TestTheAnalystCanReadTheCurtainedCounters:
 
         result = race.interact(_GAREN, "east_altar", "offer_wheat")
 
-        changes = {
-            (c["object"], c["state_key"]): (c["before"], c["after"])
-            for c in result.object_state_changes
-        }
+        changes = {(c["object"], c["state_key"]): (c["before"], c["after"]) for c in result.object_state_changes}
         assert changes[("東の祭壇", "wheat_offered")] == (0, 2)
 
 
@@ -527,5 +496,12 @@ class TestTheToolsOfTradeAreOffered:
         wiring.run_phase_a(_GAREN)
         names = {tool["function"]["name"] for tool in client.tools}
 
-        assert {"give_item", "trade_offer", "trade_accept", "trade_decline",
-                "market_view", "market_list_item", "market_bid"} <= names
+        assert {
+            "give_item",
+            "trade_offer",
+            "trade_accept",
+            "trade_decline",
+            "market_view",
+            "market_list_item",
+            "market_bid",
+        } <= names

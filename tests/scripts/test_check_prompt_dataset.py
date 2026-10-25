@@ -65,9 +65,7 @@ class TestCheckPromptDataset:
         assert any("missing turn_result" in error for error in result.errors)
         assert any("orphan turn_result" in error for error in result.errors)
 
-    def test_system_prompt_and_toolset_reference_mismatch_fails(
-        self, tmp_path: Path
-    ) -> None:
+    def test_system_prompt_and_toolset_reference_mismatch_fails(self, tmp_path: Path) -> None:
         """call が参照する system_prompt_id / toolset_id の sidecar が無い run は失敗する。"""
 
         run_dir = _create_run(tmp_path, run_id="run-a", llm_call_id="call-a")
@@ -166,11 +164,7 @@ def _create_run(tmp_path: Path, *, run_id: str, llm_call_id: str) -> Path:
             "id": llm_call_id,
             "choices": [
                 {
-                    "message": {
-                        "tool_calls": [
-                            {"function": {"name": "speak", "arguments": "{}"}}
-                        ]
-                    },
+                    "message": {"tool_calls": [{"function": {"name": "speak", "arguments": "{}"}}]},
                     "finish_reason": "tool_calls",
                 }
             ],

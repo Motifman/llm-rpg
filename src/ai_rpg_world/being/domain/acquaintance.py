@@ -60,11 +60,7 @@ class Acquaintance:
         _require_turn(self.known_since_turn, "known_since_turn")
         if self.relation_note is not None:
             _require_text(self.relation_note, "relation_note")
-        if (
-            not isinstance(self.met_count, int)
-            or isinstance(self.met_count, bool)
-            or self.met_count < 0
-        ):
+        if not isinstance(self.met_count, int) or isinstance(self.met_count, bool) or self.met_count < 0:
             raise AcquaintanceInvalid("met_count must be int >= 0")
         if self.name_learned_turn is not None:
             _require_turn(self.name_learned_turn, "name_learned_turn")
@@ -94,9 +90,7 @@ class Acquaintance:
             raise AcquaintanceInvalid("a name is learned only after meeting")
 
     @classmethod
-    def first_meeting(
-        cls, *, environment_name: str, name: str, turn: int, knows_name: bool = True
-    ) -> Acquaintance:
+    def first_meeting(cls, *, environment_name: str, name: str, turn: int, knows_name: bool = True) -> Acquaintance:
         return cls(
             environment_name=environment_name,
             name=name,
@@ -188,18 +182,14 @@ class AcquaintanceRepository(ABC):
         """知らない相手なら紹介された記録を作る。すでに知っている相手は、名前を知らなければ名前を知った記録にして返し、ほかは変えない。"""
 
     @abstractmethod
-    def find(
-        self, being_id: BeingId, *, environment_name: str, name: str
-    ) -> Acquaintance | None: ...
+    def find(self, being_id: BeingId, *, environment_name: str, name: str) -> Acquaintance | None: ...
 
     @abstractmethod
     def list_by_being(self, being_id: BeingId) -> tuple[Acquaintance, ...]:
         """知った順に返す。"""
 
     @abstractmethod
-    def replace_all_by_being(
-        self, being_id: BeingId, acquaintances: Sequence[Acquaintance]
-    ) -> None: ...
+    def replace_all_by_being(self, being_id: BeingId, acquaintances: Sequence[Acquaintance]) -> None: ...
 
 
 __all__ = ["Acquaintance", "AcquaintanceInvalid", "AcquaintanceRepository", "HowKnown"]

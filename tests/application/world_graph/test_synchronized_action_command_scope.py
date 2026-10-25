@@ -104,12 +104,8 @@ def test_groups_require_scope_before_registry_access() -> None:
     """groupがある公開runはregistryへ触れる前にscope未配線を拒否する。"""
     registry = Mock()
     flags = Mock()
-    registry.find_oldest_for_action.side_effect = AssertionError(
-        "scope確認前にregistryへ触れてはいけない"
-    )
-    flags.as_frozen_set.side_effect = AssertionError(
-        "scope確認前にworld flagへ触れてはいけない"
-    )
+    registry.find_oldest_for_action.side_effect = AssertionError("scope確認前にregistryへ触れてはいけない")
+    flags.as_frozen_set.side_effect = AssertionError("scope確認前にworld flagへ触れてはいけない")
     stage = SynchronizedActionResolverStageService(
         groups=(_group("alpha", ("left", "right"), connection_id=10),),
         registry=registry,
@@ -183,9 +179,7 @@ def _build_world(
     flags = MutableWorldFlagState()
     registry = SynchronizedActionRegistry(flags)
     delivered_events: list[tuple[str, frozenset[str], tuple[str, str]]] = []
-    delivered_messages: list[
-        tuple[str, str, tuple[int, ...], str, frozenset[str], tuple[str, str]]
-    ] = []
+    delivered_messages: list[tuple[str, str, tuple[int, ...], str, frozenset[str], tuple[str, str]]] = []
     dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def committed_state() -> tuple[frozenset[str], tuple[str, str]]:
@@ -258,12 +252,8 @@ def _prepare(
     *,
     first_player_id: int = 1,
 ) -> None:
-    registry.prepare(
-        action_id=action_names[0], player_id=first_player_id, current_tick=5
-    )
-    registry.prepare(
-        action_id=action_names[1], player_id=first_player_id + 1, current_tick=5
-    )
+    registry.prepare(action_id=action_names[0], player_id=first_player_id, current_tick=5)
+    registry.prepare(action_id=action_names[1], player_id=first_player_id + 1, current_tick=5)
 
 
 def _preexisting_event(graph: InMemorySpotGraphRepository):
@@ -383,9 +373,7 @@ def test_message_handler_failure_does_not_turn_commit_into_command_failure() -> 
     group = _group("alpha", ("left", "right"), connection_id=10)
     stage, registry, graph, flags, _, messages = _build_world(
         (group,),
-        message_handler=lambda _event: (_ for _ in ()).throw(
-            RuntimeError("message delivery failed")
-        ),
+        message_handler=lambda _event: (_ for _ in ()).throw(RuntimeError("message delivery failed")),
     )
     _prepare(registry, group.required_action_names)
 

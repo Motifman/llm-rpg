@@ -50,9 +50,7 @@ def _spawn(seq: int, player_id: int, name: str, spot: str) -> dict[str, Any]:
     return _event(seq, "position_change", 0, player_id, player_name=name, spot_name=spot)
 
 
-def test_counts_unknown_fields_per_route_and_pairs_action_results(
-    report: ModuleType, tmp_path: Path
-) -> None:
+def test_counts_unknown_fields_per_route_and_pairs_action_results(report: ModuleType, tmp_path: Path) -> None:
     """発言とツールの結果を組み直し、発言の「自分宛てか」だけが「不明」として数えられる。"""
     trace = _write_trace(
         tmp_path,
@@ -73,9 +71,7 @@ def test_counts_unknown_fields_per_route_and_pairs_action_results(
     assert not tally.skipped
 
 
-def test_not_representable_observations_are_counted_by_reason(
-    report: ModuleType, tmp_path: Path
-) -> None:
+def test_not_representable_observations_are_counted_by_reason(report: ModuleType, tmp_path: Path) -> None:
     """本文が空の観測は変換されず、理由と種類つきで写せなかった観測に数えられる。"""
     trace = _write_trace(
         tmp_path,
@@ -92,16 +88,17 @@ def test_not_representable_observations_are_counted_by_reason(
     assert dict(tally.not_representable) == {"empty_body: player_spoke": 1}
 
 
-def test_loop_guard_warning_is_counted_as_an_environment_notice(
-    report: ModuleType, tmp_path: Path
-) -> None:
+def test_loop_guard_warning_is_counted_as_an_environment_notice(report: ModuleType, tmp_path: Path) -> None:
     """同じ行動の繰り返しへの警告は、環境からの知らせとして変換された件数に数えられる (design_decisions D1824-10)。"""
     trace = _write_trace(
         tmp_path,
         [
             _spawn(1, 2, "ノア", "浜辺"),
             _observation(
-                2, 1, 2, "深夜 0:05",
+                2,
+                1,
+                2,
+                "深夜 0:05",
                 prose="同じ行動を繰り返している。",
                 structured={"loop_guard": True, "tool_name": "wait"},
                 observation_category="self_only",
@@ -116,9 +113,7 @@ def test_loop_guard_warning_is_counted_as_an_environment_notice(
     assert dict(tally.not_representable) == {}
 
 
-def test_memo_tool_result_is_counted_as_not_representable(
-    report: ModuleType, tmp_path: Path
-) -> None:
+def test_memo_tool_result_is_counted_as_not_representable(report: ModuleType, tmp_path: Path) -> None:
     """メモ機能の結果は、止まらずに、Being 自身の記録として写せなかった件数に数え、そのあとの道具の結果は数え続ける。"""
     trace = _write_trace(
         tmp_path,
@@ -139,9 +134,7 @@ def test_memo_tool_result_is_counted_as_not_representable(
     assert tally.converted["OwnActionResult"] == 1
 
 
-def test_action_result_without_matching_action_is_skipped(
-    report: ModuleType, tmp_path: Path
-) -> None:
+def test_action_result_without_matching_action_is_skipped(report: ModuleType, tmp_path: Path) -> None:
     """対応する action が無いツールの結果は、呼び出しの ID を作れないので数えずに理由を残す。"""
     trace = _write_trace(
         tmp_path,
@@ -203,9 +196,7 @@ def test_action_results_are_paired_with_oldest_action_of_same_tool(
     assert call_ids == ["call-4", "call-3"]
 
 
-def test_action_result_without_same_tick_observation_uses_placeholder_label(
-    report: ModuleType, tmp_path: Path
-) -> None:
+def test_action_result_without_same_tick_observation_uses_placeholder_label(report: ModuleType, tmp_path: Path) -> None:
     """同じ tick の観測が無いツールの結果は、時刻の文を仮置きして数え、仮置きの件数に入る。"""
     trace = _write_trace(
         tmp_path,
@@ -223,9 +214,7 @@ def test_action_result_without_same_tick_observation_uses_placeholder_label(
     assert tally.placeholder_labels == 1
 
 
-def test_render_markdown_reports_unknown_percentage_per_field_and_route(
-    report: ModuleType, tmp_path: Path
-) -> None:
+def test_render_markdown_reports_unknown_percentage_per_field_and_route(report: ModuleType, tmp_path: Path) -> None:
     """発言 1 件とツールの結果 1 件なら、自分宛てかの「不明」は全体 50%、言われた 100%、行動の結果 0% と出る。"""
     trace = _write_trace(
         tmp_path,

@@ -27,9 +27,7 @@ def _validate_state_dict(state: Mapping[str, Any]) -> None:
     """ItemInstance.state に入る dict が JSON シリアライズ可能であることを確認する。"""
     for key, value in state.items():
         if not isinstance(key, str):
-            raise ItemInstanceStateValidationException(
-                f"state key must be str, got {type(key).__name__}: {key!r}"
-            )
+            raise ItemInstanceStateValidationException(f"state key must be str, got {type(key).__name__}: {key!r}")
         # bool は int の subclass。`isinstance(True, int)` が True なので
         # tuple に bool を含めれば bool も通るが、明示している。
         if not isinstance(value, _ALLOWED_STATE_VALUE_TYPES):
@@ -70,19 +68,22 @@ class ItemInstance:
     def _validate(self) -> None:
         """バリデーション"""
         if self._quantity < 0:
-            raise QuantityValidationException(
-                quantity=self._quantity,
-                reason="quantity must be >= 0"
-            )
+            raise QuantityValidationException(quantity=self._quantity, reason="quantity must be >= 0")
         if self._quantity > self._item_spec.max_stack_size.value:
-            raise StackSizeExceededException(f"Stack size exceeded: current {self._quantity}, max {self._item_spec.max_stack_size.value}")
+            raise StackSizeExceededException(
+                f"Stack size exceeded: current {self._quantity}, max {self._item_spec.max_stack_size.value}"
+            )
         # 耐久度が存在する場合、max_stack_sizeは1でなければならない
         if self._durability is not None and self._item_spec.max_stack_size.value != 1:
-            raise DurabilityValidationException(f"Items with durability must have max_stack_size of 1, but spec has {self._item_spec.max_stack_size.value}")
+            raise DurabilityValidationException(
+                f"Items with durability must have max_stack_size of 1, but spec has {self._item_spec.max_stack_size.value}"
+            )
         if self._durability is not None and self._item_spec.durability_max is None:
             raise DurabilityValidationException(f"Cannot have durability for item without durability_max in spec")
         if self._durability is not None and self._durability.max_value != self._item_spec.durability_max:
-            raise DurabilityValidationException(f"Durability max_value ({self._durability.max_value}) must match spec durability_max ({self._item_spec.durability_max})")
+            raise DurabilityValidationException(
+                f"Durability max_value ({self._durability.max_value}) must match spec durability_max ({self._item_spec.durability_max})"
+            )
 
     @property
     def item_instance_id(self) -> ItemInstanceId:
@@ -202,10 +203,7 @@ class ItemInstance:
         if self._state or other._state:
             return False
 
-        return (
-            self._item_spec == other._item_spec and
-            self._quantity < self._item_spec.max_stack_size.value
-        )
+        return self._item_spec == other._item_spec and self._quantity < self._item_spec.max_stack_size.value
 
     def add_quantity(self, amount: int) -> None:
         """数量を追加する
@@ -217,14 +215,13 @@ class ItemInstance:
             StackSizeExceededException: 最大スタックサイズを超える場合
         """
         if amount <= 0:
-            raise QuantityValidationException(
-                quantity=amount,
-                reason="amount must be positive"
-            )
+            raise QuantityValidationException(quantity=amount, reason="amount must be positive")
 
         new_quantity = self._quantity + amount
         if new_quantity > self._item_spec.max_stack_size.value:
-            raise StackSizeExceededException(f"Adding {amount} would exceed stack size: current {self._quantity}, max {self._item_spec.max_stack_size.value}")
+            raise StackSizeExceededException(
+                f"Adding {amount} would exceed stack size: current {self._quantity}, max {self._item_spec.max_stack_size.value}"
+            )
 
         self._quantity = new_quantity
 
@@ -238,16 +235,10 @@ class ItemInstance:
             InsufficientQuantityException: 数量が不足する場合
         """
         if amount <= 0:
-            raise QuantityValidationException(
-                quantity=amount,
-                reason="amount must be positive"
-            )
+            raise QuantityValidationException(quantity=amount, reason="amount must be positive")
 
         if amount > self._quantity:
-            raise InsufficientQuantityException(
-                requested=amount,
-                available=self._quantity
-            )
+            raise InsufficientQuantityException(requested=amount, available=self._quantity)
 
         self._quantity -= amount
 
@@ -261,10 +252,7 @@ class ItemInstance:
             StackSizeExceededException: 最大スタックサイズを超える場合
         """
         if quantity <= 0:
-            raise QuantityValidationException(
-                quantity=quantity,
-                reason="quantity must be positive"
-            )
+            raise QuantityValidationException(quantity=quantity, reason="quantity must be positive")
 
         if quantity > self._item_spec.max_stack_size.value:
             raise StackSizeExceededException(

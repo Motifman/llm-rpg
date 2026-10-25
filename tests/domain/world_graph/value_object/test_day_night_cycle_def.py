@@ -20,16 +20,11 @@ from ai_rpg_world.domain.world_graph.value_object.time_of_day import TimeOfDay
 
 def _make_phases() -> tuple[DayNightPhaseDef, ...]:
     return (
-        DayNightPhaseDef(name="dawn", start_ratio=0.0, display_text="夜明け",
-                         ambient_light=0.4, is_dark=False),
-        DayNightPhaseDef(name="morning", start_ratio=0.1, display_text="朝",
-                         ambient_light=0.9, is_dark=False),
-        DayNightPhaseDef(name="noon", start_ratio=0.25, display_text="昼",
-                         ambient_light=1.0, is_dark=False),
-        DayNightPhaseDef(name="evening", start_ratio=0.65, display_text="夕暮れ",
-                         ambient_light=0.5, is_dark=False),
-        DayNightPhaseDef(name="night", start_ratio=0.8, display_text="夜",
-                         ambient_light=0.1, is_dark=True),
+        DayNightPhaseDef(name="dawn", start_ratio=0.0, display_text="夜明け", ambient_light=0.4, is_dark=False),
+        DayNightPhaseDef(name="morning", start_ratio=0.1, display_text="朝", ambient_light=0.9, is_dark=False),
+        DayNightPhaseDef(name="noon", start_ratio=0.25, display_text="昼", ambient_light=1.0, is_dark=False),
+        DayNightPhaseDef(name="evening", start_ratio=0.65, display_text="夕暮れ", ambient_light=0.5, is_dark=False),
+        DayNightPhaseDef(name="night", start_ratio=0.8, display_text="夜", ambient_light=0.1, is_dark=True),
     )
 
 
@@ -39,22 +34,19 @@ class TestDayNightPhaseDefValidation:
     def test_empty_name_is_rejected(self) -> None:
         """フェーズ名が空文字列の場合は ValidationException を投げる。"""
         with pytest.raises(DayNightPhaseValidationException, match="name"):
-            DayNightPhaseDef(name="", start_ratio=0.0, display_text="X",
-                             ambient_light=0.5, is_dark=False)
+            DayNightPhaseDef(name="", start_ratio=0.0, display_text="X", ambient_light=0.5, is_dark=False)
 
     @pytest.mark.parametrize("ratio", [-0.01, 1.0, 1.5])
     def test_start_ratio_out_of_range_rejected(self, ratio: float) -> None:
         """start_ratio が [0.0, 1.0) の範囲外なら ValidationException を投げる。"""
         with pytest.raises(DayNightPhaseValidationException, match="start_ratio"):
-            DayNightPhaseDef(name="x", start_ratio=ratio, display_text="X",
-                             ambient_light=0.5, is_dark=False)
+            DayNightPhaseDef(name="x", start_ratio=ratio, display_text="X", ambient_light=0.5, is_dark=False)
 
     @pytest.mark.parametrize("light", [-0.1, 1.01])
     def test_ambient_light_out_of_range_rejected(self, light: float) -> None:
         """ambient_light が [0.0, 1.0] の範囲外なら ValidationException を投げる。"""
         with pytest.raises(DayNightPhaseValidationException, match="ambient_light"):
-            DayNightPhaseDef(name="x", start_ratio=0.0, display_text="X",
-                             ambient_light=light, is_dark=False)
+            DayNightPhaseDef(name="x", start_ratio=0.0, display_text="X", ambient_light=light, is_dark=False)
 
 
 class TestDayNightCycleDefValidation:
@@ -63,14 +55,12 @@ class TestDayNightCycleDefValidation:
     def test_ticks_per_day_must_be_positive(self) -> None:
         """ticks_per_day が 0 以下なら ValidationException を投げる。"""
         with pytest.raises(DayNightCycleValidationException, match="ticks_per_day"):
-            DayNightCycleDef(ticks_per_day=0, starting_tick_in_day=0,
-                             phases=_make_phases())
+            DayNightCycleDef(ticks_per_day=0, starting_tick_in_day=0, phases=_make_phases())
 
     def test_starting_tick_in_day_within_range(self) -> None:
         """starting_tick_in_day が ticks_per_day 以上なら ValidationException を投げる。"""
         with pytest.raises(DayNightCycleValidationException, match="starting_tick_in_day"):
-            DayNightCycleDef(ticks_per_day=240, starting_tick_in_day=240,
-                             phases=_make_phases())
+            DayNightCycleDef(ticks_per_day=240, starting_tick_in_day=240, phases=_make_phases())
 
     def test_phases_must_not_be_empty(self) -> None:
         """phases が空タプルなら ValidationException を投げる。"""
@@ -80,8 +70,7 @@ class TestDayNightCycleDefValidation:
     def test_first_phase_must_start_at_zero(self) -> None:
         """先頭フェーズの start_ratio が 0.0 でなければ ValidationException を投げる。"""
         phases = (
-            DayNightPhaseDef(name="dawn", start_ratio=0.1, display_text="夜明け",
-                             ambient_light=0.4, is_dark=False),
+            DayNightPhaseDef(name="dawn", start_ratio=0.1, display_text="夜明け", ambient_light=0.4, is_dark=False),
         )
         with pytest.raises(DayNightCycleValidationException, match="start_ratio must be 0.0"):
             DayNightCycleDef(ticks_per_day=240, starting_tick_in_day=0, phases=phases)
@@ -89,10 +78,8 @@ class TestDayNightCycleDefValidation:
     def test_phases_must_be_sorted_strictly_ascending(self) -> None:
         """phases が start_ratio の昇順に並んでいなければ ValidationException を投げる。"""
         phases = (
-            DayNightPhaseDef(name="a", start_ratio=0.0, display_text="A",
-                             ambient_light=0.5, is_dark=False),
-            DayNightPhaseDef(name="b", start_ratio=0.0, display_text="B",
-                             ambient_light=0.5, is_dark=False),
+            DayNightPhaseDef(name="a", start_ratio=0.0, display_text="A", ambient_light=0.5, is_dark=False),
+            DayNightPhaseDef(name="b", start_ratio=0.0, display_text="B", ambient_light=0.5, is_dark=False),
         )
         with pytest.raises(DayNightCycleValidationException, match="sorted"):
             DayNightCycleDef(ticks_per_day=240, starting_tick_in_day=0, phases=phases)
@@ -100,10 +87,8 @@ class TestDayNightCycleDefValidation:
     def test_duplicate_phase_names_rejected(self) -> None:
         """フェーズ名が重複している場合は ValidationException を投げる。"""
         phases = (
-            DayNightPhaseDef(name="a", start_ratio=0.0, display_text="A",
-                             ambient_light=0.5, is_dark=False),
-            DayNightPhaseDef(name="a", start_ratio=0.5, display_text="A2",
-                             ambient_light=0.5, is_dark=False),
+            DayNightPhaseDef(name="a", start_ratio=0.0, display_text="A", ambient_light=0.5, is_dark=False),
+            DayNightPhaseDef(name="a", start_ratio=0.5, display_text="A2", ambient_light=0.5, is_dark=False),
         )
         with pytest.raises(DayNightCycleValidationException, match="Duplicate phase name"):
             DayNightCycleDef(ticks_per_day=240, starting_tick_in_day=0, phases=phases)

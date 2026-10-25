@@ -10,6 +10,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 logger = logging.getLogger(__name__)
 
+
 class LlmMetricsTraceSink:
     """Phase A の LLM 呼び出し metrics を trace に流す sink (PR #358)。
 

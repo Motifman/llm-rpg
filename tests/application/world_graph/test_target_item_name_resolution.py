@@ -46,7 +46,11 @@ _WORLD_NAMES = frozenset({"昇降機の起動鍵", "燃料の缶", "物置の鍵
 
 def _resolve(written: str, held: tuple[HeldItem, ...], rescue: _Rescue | None = None):
     return resolve_target_item_name(
-        written, held, rescue=rescue, action_name="pickpocket", world_item_names=_WORLD_NAMES,
+        written,
+        held,
+        rescue=rescue,
+        action_name="pickpocket",
+        world_item_names=_WORLD_NAMES,
     )
 
 
@@ -65,7 +69,9 @@ class TestExactAndPartialNames:
         result = _resolve("起動鍵", (_LIFT_KEY, _FUEL_CAN))
 
         assert (result.outcome, result.spec_id, result.resolved_name) == (
-            ItemNameOutcome.RESOLVED, _LIFT_KEY.spec_id, "昇降機の起動鍵",
+            ItemNameOutcome.RESOLVED,
+            _LIFT_KEY.spec_id,
+            "昇降機の起動鍵",
         )
 
     def test_partial_rename_is_traced_with_the_written_and_resolved_names(self) -> None:
@@ -74,7 +80,10 @@ class TestExactAndPartialNames:
 
         assert payload is not None
         assert (payload["written"], payload["resolved_name"], payload["method"], payload["outcome"]) == (
-            "起動鍵", "昇降機の起動鍵", "partial", "resolved",
+            "起動鍵",
+            "昇降機の起動鍵",
+            "partial",
+            "resolved",
         )
 
     def test_spacing_and_width_differences_do_not_block_an_exact_match(self) -> None:
@@ -116,7 +125,11 @@ class TestOfficialNamesOfOtherItems:
 
         result = _resolve("カンテラ", (oil,))
 
-        assert (result.outcome, result.spec_id, result.method) == (ItemNameOutcome.ABSENT, None, "official_name_of_other_item")
+        assert (result.outcome, result.spec_id, result.method) == (
+            ItemNameOutcome.ABSENT,
+            None,
+            "official_name_of_other_item",
+        )
 
     def test_the_official_name_of_another_item_is_not_judged(self) -> None:
         """正式な名前が書かれたときは、その品を指していると読み、意味の判断を問わない。"""
@@ -150,7 +163,11 @@ class TestNoMatchingItem:
 
         result = _resolve("鉄の鍵", (_LIFT_KEY, _FUEL_CAN), rescue)
 
-        assert (result.outcome, result.spec_id, result.method) == (ItemNameOutcome.RESOLVED, _LIFT_KEY.spec_id, "judgment")
+        assert (result.outcome, result.spec_id, result.method) == (
+            ItemNameOutcome.RESOLVED,
+            _LIFT_KEY.spec_id,
+            "judgment",
+        )
 
     def test_the_judge_sees_the_held_names_with_their_descriptions(self) -> None:
         """判断には、書かれた名前と、相手の所持品の名前と説明を候補として渡す。"""
@@ -192,7 +209,9 @@ class TestNoMatchingItem:
 
         assert payload is not None
         assert (payload["outcome"], payload["rescue_wired"], payload["judgment"]) == (
-            "unrecognized", True, {"chosen": "昇降機の起動鍵", "accepted": False},
+            "unrecognized",
+            True,
+            {"chosen": "昇降機の起動鍵", "accepted": False},
         )
 
     def test_a_judged_name_shared_by_two_items_picks_neither(self) -> None:

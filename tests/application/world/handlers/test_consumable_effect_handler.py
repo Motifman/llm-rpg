@@ -56,10 +56,14 @@ class _FakeItemEffect(ItemEffect):
 def _create_handler_with_mocks():
     item_spec_repo = MagicMock()
     player_status_repo = MagicMock()
-    return ConsumableEffectHandler(
-        item_spec_repository=item_spec_repo,
-        player_status_repository=player_status_repo,
-    ), item_spec_repo, player_status_repo
+    return (
+        ConsumableEffectHandler(
+            item_spec_repository=item_spec_repo,
+            player_status_repository=player_status_repo,
+        ),
+        item_spec_repo,
+        player_status_repo,
+    )
 
 
 def _create_player_status(
@@ -236,9 +240,7 @@ class TestConsumableEffectHandler:
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(904)
-        composite = CompositeItemEffect(
-            effects=(HealEffect(amount=10), GoldEffect(amount=50))
-        )
+        composite = CompositeItemEffect(effects=(HealEffect(amount=10), GoldEffect(amount=50)))
         spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="複合ポーション",
@@ -337,10 +339,12 @@ class TestConsumableEffectHandler:
             consume_effect=SatisfyNeedEffect(need_type_name="HUNGER", amount=50),
         )
         item_spec_repo.find_by_id.return_value = spec
-        needs = AgentNeeds((
-            AgentNeed.create(NeedType.HUNGER, 80, 100),
-            AgentNeed.create(NeedType.FATIGUE, 0, 100),
-        ))
+        needs = AgentNeeds(
+            (
+                AgentNeed.create(NeedType.HUNGER, 80, 100),
+                AgentNeed.create(NeedType.FATIGUE, 0, 100),
+            )
+        )
         player_status = _create_player_status()
         player_status._needs = needs
         player_status_repo.find_by_id.return_value = player_status
@@ -372,10 +376,12 @@ class TestConsumableEffectHandler:
             consume_effect=SatisfyNeedEffect(need_type_name="FATIGUE", amount=40),
         )
         item_spec_repo.find_by_id.return_value = spec
-        needs = AgentNeeds((
-            AgentNeed.create(NeedType.HUNGER, 0, 100),
-            AgentNeed.create(NeedType.FATIGUE, 60, 100),
-        ))
+        needs = AgentNeeds(
+            (
+                AgentNeed.create(NeedType.HUNGER, 0, 100),
+                AgentNeed.create(NeedType.FATIGUE, 60, 100),
+            )
+        )
         player_status = _create_player_status()
         player_status._needs = needs
         player_status_repo.find_by_id.return_value = player_status
@@ -437,10 +443,12 @@ class TestConsumableEffectHandler:
             consume_effect=composite,
         )
         item_spec_repo.find_by_id.return_value = spec
-        needs = AgentNeeds((
-            AgentNeed.create(NeedType.HUNGER, 70, 100),
-            AgentNeed.create(NeedType.FATIGUE, 0, 100),
-        ))
+        needs = AgentNeeds(
+            (
+                AgentNeed.create(NeedType.HUNGER, 70, 100),
+                AgentNeed.create(NeedType.FATIGUE, 0, 100),
+            )
+        )
         player_status = _create_player_status(hp_current=50, hp_max=100)
         player_status._needs = needs
         player_status_repo.find_by_id.return_value = player_status
@@ -564,9 +572,7 @@ class TestReviveEffect:
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(923)
-        composite = CompositeItemEffect(
-            effects=(ReviveEffect(hp_rate=0.4), HealEffect(amount=20))
-        )
+        composite = CompositeItemEffect(effects=(ReviveEffect(hp_rate=0.4), HealEffect(amount=20)))
         spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="高級救急用品",

@@ -72,28 +72,34 @@ _RECENT_EVENTS_PREAMBLE = "観測（世界から届いた事象）と、あな�
 
 def _emit_objective(sections: list[str], objective_text: str) -> None:
     if objective_text.strip():
-        sections.extend([
-            "【現在の目的】",
-            objective_text.strip(),
-            "",
-        ])
+        sections.extend(
+            [
+                "【現在の目的】",
+                objective_text.strip(),
+                "",
+            ]
+        )
 
 
 def _emit_known_people(sections: list[str], known_people_text: str) -> None:
     """目的の次に変わりにくい。新しい人を知ったときだけ、この節から後ろが変わる。"""
     if known_people_text.strip():
-        sections.extend([
-            "【知っている人】",
-            known_people_text.strip(),
-            "",
-        ])
+        sections.extend(
+            [
+                "【知っている人】",
+                known_people_text.strip(),
+                "",
+            ]
+        )
 
 
 def _emit_current_state(sections: list[str], current_state_text: str) -> None:
-    sections.extend([
-        "【現在地と周囲】",
-        current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
-    ])
+    sections.extend(
+        [
+            "【現在地と周囲】",
+            current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
+        ]
+    )
 
 
 def _emit_episode_index(sections: list[str], episode_index_text: str) -> None:
@@ -107,22 +113,26 @@ def _emit_being_memo(sections: list[str], being_memo_text: str) -> None:
 
 
 def _emit_recent_events(sections: list[str], recent_events_text: str) -> None:
-    sections.extend([
-        "",
-        "【直近の出来事】",
-        _RECENT_EVENTS_PREAMBLE,
-        recent_events_text.strip() or _PLACEHOLDER_RECENT_EVENTS,
-    ])
+    sections.extend(
+        [
+            "",
+            "【直近の出来事】",
+            _RECENT_EVENTS_PREAMBLE,
+            recent_events_text.strip() or _PLACEHOLDER_RECENT_EVENTS,
+        ]
+    )
 
 
 def _emit_mid_summary(sections: list[str], mid_summary_text: str) -> None:
     """``【ここまでのいきさつ】`` (L4 mid summary) を呼び出し位置へ挿入する。"""
     if mid_summary_text.strip():
-        sections.extend([
-            "",
-            "【ここまでのいきさつ】",
-            mid_summary_text.strip(),
-        ])
+        sections.extend(
+            [
+                "",
+                "【ここまでのいきさつ】",
+                mid_summary_text.strip(),
+            ]
+        )
 
 
 def _format_stable_to_volatile(
@@ -173,11 +183,13 @@ def _format_stable_to_volatile(
 
     # 3. ここまでのいきさつ (L4 mid summary、空なら省略)
     if mid_summary_text.strip():
-        sections.extend([
-            "【ここまでのいきさつ】",
-            mid_summary_text.strip(),
-            "",
-        ])
+        sections.extend(
+            [
+                "【ここまでのいきさつ】",
+                mid_summary_text.strip(),
+                "",
+            ]
+        )
 
     # 4. 直近の出来事 (常に出す。空なら「（なし）」)
     # 末尾 append 中心で **head は完全安定** (一度 append された行は決して
@@ -185,12 +197,14 @@ def _format_stable_to_volatile(
     # recent_events の head」までを stable prefix として cache hit
     # させる。memos を上に置くと、その変動で
     # recent_events の head 安定 cache が破壊される。
-    sections.extend([
-        "【直近の出来事】",
-        _RECENT_EVENTS_PREAMBLE,
-        recent_events_text.strip() or _PLACEHOLDER_RECENT_EVENTS,
-        "",
-    ])
+    sections.extend(
+        [
+            "【直近の出来事】",
+            _RECENT_EVENTS_PREAMBLE,
+            recent_events_text.strip() or _PLACEHOLDER_RECENT_EVENTS,
+            "",
+        ]
+    )
 
     # 5b. 思い出せる出来事 (エピソードの目次、#1623)。書き起こしと呼び出しのときだけ
     # 変わるので、毎ターン伸びる直近の出来事より後ろ、メモより前に置く。
@@ -199,15 +213,19 @@ def _format_stable_to_volatile(
 
     # 6. メモ帳 (#1628、high-volatile、空なら省略)
     if being_memo_text.strip():
-        sections.extend([
-            "【メモ】",
-            being_memo_text.rstrip(),
-            "",
-        ])
+        sections.extend(
+            [
+                "【メモ】",
+                being_memo_text.rstrip(),
+                "",
+            ]
+        )
 
     # 7. 現在地と周囲 (必須、最 volatile なので末尾)
-    sections.extend([
-        "【現在地と周囲】",
-        current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
-    ])
+    sections.extend(
+        [
+            "【現在地と周囲】",
+            current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
+        ]
+    )
     return "\n".join(sections)

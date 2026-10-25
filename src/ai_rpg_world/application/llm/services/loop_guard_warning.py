@@ -209,11 +209,7 @@ def _reason_facts(
         return here + last
     if reason is RepeatReason.MISSING_PRECONDITION:
         failure = next((r for r in reversed(same) if r.succeeded is False and r.result), None)
-        return (
-            f"直近の失敗: {_quote(failure.result)}。"
-            if failure
-            else ""
-        )
+        return f"直近の失敗: {_quote(failure.result)}。" if failure else ""
     if reason is RepeatReason.WAITING:
         return here + f"いま届いている観測は {observation_count} 件。"
     if reason is RepeatReason.UNANSWERED_REQUEST:
@@ -348,9 +344,7 @@ class LoopWarningEmitter:
         warn_index = self._cross_tick_warn_count.get(key, 0)
         self._cross_tick_warn_count[key] = warn_index + 1
         game_time_label = self._time_label_provider()
-        template = _CROSS_TICK_WARNING_TEMPLATES[
-            warn_index % len(_CROSS_TICK_WARNING_TEMPLATES)
-        ]
+        template = _CROSS_TICK_WARNING_TEMPLATES[warn_index % len(_CROSS_TICK_WARNING_TEMPLATES)]
         default_prose = template.format(
             action_summary=build_action_summary(signal.tool_name, signal.fingerprint),
             tool_name=signal.tool_name,
@@ -359,9 +353,7 @@ class LoopWarningEmitter:
             window=signal.window,
             remediation=get_remediation(signal.error_code),
         )
-        prose, wording = self._word(
-            player_id, signal, "cross_tick_failure", default_prose, recent
-        )
+        prose, wording = self._word(player_id, signal, "cross_tick_failure", default_prose, recent)
         self._observation_buffer.append(
             player_id,
             self._entry(
@@ -410,9 +402,7 @@ class LoopWarningEmitter:
         action = build_action_summary(signal.tool_name, signal.fingerprint)
         # 完全一致の警告と違い、引き継ぐ命令調の文面が無い。事実だけを伝える。
         default_prose = _repetition_fact(signal, action) + "どの回も結果は変わっていない。"
-        prose, wording = self._word(
-            player_id, signal, "semantic_repeat", default_prose, recent
-        )
+        prose, wording = self._word(player_id, signal, "semantic_repeat", default_prose, recent)
         self._observation_buffer.append(
             player_id,
             self._entry(
@@ -463,9 +453,7 @@ class LoopWarningEmitter:
         if diagnosis is None:
             return default_prose, {}
         try:
-            return self._word_by_diagnosis(
-                diagnosis, player_id, signal, pattern, default_prose, recent
-            )
+            return self._word_by_diagnosis(diagnosis, player_id, signal, pattern, default_prose, recent)
         except Exception:
             # ここで漏れると警告も gate signal も出ず、離れた tick の失敗は発火を
             # 記録済みなので窓の間は二度と鳴らない。
@@ -483,11 +471,9 @@ class LoopWarningEmitter:
     ) -> tuple[str, dict[str, str]]:
         action = build_action_summary(signal.tool_name, signal.fingerprint)
         location = self._location(player_id)
-        observations = [
-            e.output.prose
-            for e in self._observation_buffer.get_observations(player_id)
-            if e.output.prose
-        ][-_OBSERVATION_LIMIT:]
+        observations = [e.output.prose for e in self._observation_buffer.get_observations(player_id) if e.output.prose][
+            -_OBSERVATION_LIMIT:
+        ]
         state = self._state(signal, action, recent, location, observations)
         judgment = diagnosis.diagnose(state)
         self._record_judgment(player_id, signal, pattern, state, judgment)
@@ -527,10 +513,7 @@ class LoopWarningEmitter:
         elif isinstance(signal, SemanticRepeat):
             repetition = f"言い回しや呼び名を変えた同じ試みが、直近 {signal.count} 回"
         else:
-            repetition = (
-                f"直近 {signal.window} tick 以内に、同じ失敗 ({signal.error_code}) で "
-                f"{signal.count} 回"
-            )
+            repetition = f"直近 {signal.window} tick 以内に、同じ失敗 ({signal.error_code}) で {signal.count} 回"
         state: dict[str, Any] = {
             "repeated_action": action,
             "repetition": repetition,

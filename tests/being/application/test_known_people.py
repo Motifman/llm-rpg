@@ -44,13 +44,9 @@ class TestRenderKnownPeople:
 
     def test_people_whose_names_are_unknown_are_not_listed(self) -> None:
         """名前を知らずに会った相手は【知っている人】に並べず、名前を知ったあとは知った順の末尾に名前で並べる (#1581)。"""
-        stranger = Acquaintance.first_meeting(
-            environment_name="山村", name="ノア", turn=1, knows_name=False
-        )
+        stranger = Acquaintance.first_meeting(environment_name="山村", name="ノア", turn=1, knows_name=False)
 
         before = render_known_people([_introduced("カイ"), stranger], environment_name="山村")
-        after = render_known_people(
-            [_introduced("カイ"), stranger.learned_name(turn=2)], environment_name="山村"
-        )
+        after = render_known_people([_introduced("カイ"), stranger.learned_name(turn=2)], environment_name="山村")
 
         assert (before, after) == ("- カイ", "- カイ\n- ノア")

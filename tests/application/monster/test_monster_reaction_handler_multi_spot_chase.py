@@ -67,11 +67,16 @@ SPOT_C = SpotId.create(3)
 
 def _node(spot_id: SpotId) -> SpotNode:
     return SpotNode(
-        spot_id=spot_id, name=f"spot{spot_id.value}", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=spot_id,
+        name=f"spot{spot_id.value}",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
-            lighting=LightingEnum.BRIGHT, sound_ambient=None,
-            temperature=TemperatureEnum.NORMAL, smell=None,
+            lighting=LightingEnum.BRIGHT,
+            sound_ambient=None,
+            temperature=TemperatureEnum.NORMAL,
+            smell=None,
         ),
     )
 
@@ -79,9 +84,13 @@ def _node(spot_id: SpotId) -> SpotNode:
 def _conn(connection_id: int, from_id: SpotId, to_id: SpotId) -> SpotConnection:
     return SpotConnection(
         connection_id=ConnectionId.create(connection_id),
-        from_spot_id=from_id, to_spot_id=to_id,
-        name="edge", description="", travel_ticks=1,
-        is_bidirectional=False, passage=Passage.open(),
+        from_spot_id=from_id,
+        to_spot_id=to_id,
+        name="edge",
+        description="",
+        travel_ticks=1,
+        is_bidirectional=False,
+        passage=Passage.open(),
     )
 
 
@@ -111,8 +120,13 @@ def _template(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -131,8 +145,10 @@ def _monster() -> MonsterAggregate:
         template=_template(),
         world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -178,7 +194,8 @@ class TestMultiSpotChasePlayer:
         monster = _monster()
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
@@ -205,7 +222,8 @@ class TestMultiSpotChasePlayer:
         monster = _monster()
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
@@ -226,7 +244,8 @@ class TestMultiSpotChasePlayer:
         monster = _monster()
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
@@ -255,7 +274,8 @@ class TestMultiSpotChaseLastKnownUpdate:
         monster = _monster()
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
@@ -283,8 +303,13 @@ class TestMultiSpotChaseAttackOnSameSpot:
                 template_id=MonsterTemplateId.create(1),
                 name="Wolf",
                 base_stats=BaseStats(
-                    max_hp=20, max_mp=0, attack=4,
-                    defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+                    max_hp=20,
+                    max_mp=0,
+                    attack=4,
+                    defense=0,
+                    speed=1,
+                    critical_rate=0.0,
+                    evasion_rate=0.0,
                 ),
                 reward_info=RewardInfo(exp=1, gold=1),
                 respawn_info=RespawnInfo(100, True),
@@ -296,15 +321,18 @@ class TestMultiSpotChaseAttackOnSameSpot:
             ),
             world_object_id=WorldObjectId.create(9001),
             skill_loadout=SkillLoadoutAggregate.create(
-                SkillLoadoutId(1), owner_id=101,
-                normal_capacity=4, awakened_capacity=2,
+                SkillLoadoutId(1),
+                owner_id=101,
+                normal_capacity=4,
+                awakened_capacity=2,
             ),
             status=MonsterStatusEnum.ALIVE,
             spawned_at_tick=WorldTick(0),
         )
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
@@ -317,12 +345,10 @@ class TestMultiSpotChaseAttackOnSameSpot:
 
         assert result is not None
         # 攻撃 event が発火、monster は同 spot に留まる
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAttackedPlayerInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
         assert len(events) == 1
         assert graph.get_monster_spot(monster.monster_id) == SPOT_A
+
 
 class TestMultiSpotChaseMonster:
     """target が monster (player ではなく) でも multi-spot 追跡できる。"""
@@ -337,15 +363,18 @@ class TestMultiSpotChaseMonster:
             template=_template(),
             world_object_id=WorldObjectId.create(9202),
             skill_loadout=SkillLoadoutAggregate.create(
-                SkillLoadoutId(202), owner_id=202,
-                normal_capacity=4, awakened_capacity=2,
+                SkillLoadoutId(202),
+                owner_id=202,
+                normal_capacity=4,
+                awakened_capacity=2,
             ),
             status=MonsterStatusEnum.ALIVE,
             spawned_at_tick=WorldTick(0),
         )
         ref = AttackerRef.of_monster(target.monster_id)
         attacker.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         attacker.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 
@@ -368,7 +397,8 @@ class TestMultiSpotChaseMonster:
         attacker = _monster()
         ref = AttackerRef.of_monster(MonsterId.create(999))  # 居ない monster
         attacker.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         attacker.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
 

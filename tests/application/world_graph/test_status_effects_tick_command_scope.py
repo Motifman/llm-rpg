@@ -85,9 +85,7 @@ def _build_stage(
         InMemoryUnitOfWorkTransactionFactory(store),
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
-        repository_provider_factory=(
-            InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
-        ),
+        repository_provider_factory=(InMemoryPlayerStatusTickCommandRepositoryProviderFactory()),
     )
     stage = StatusEffectsTickStageService(
         command_scope_factory=scope_factory,
@@ -156,11 +154,14 @@ class TestStatusEffectsTickCommandScope:
             original_save_all(self, statuses)
             raise RuntimeError("status save failed")
 
-        with patch.object(
-            InMemoryPlayerStatusRepository,
-            "save_all",
-            fail_after_staging,
-        ), pytest.raises(RuntimeError, match="status save failed"):
+        with (
+            patch.object(
+                InMemoryPlayerStatusRepository,
+                "save_all",
+                fail_after_staging,
+            ),
+            pytest.raises(RuntimeError, match="status save failed"),
+        ):
             stage.run(WorldTick(1))
 
         persisted = repository.find_by_id(PlayerId(1))

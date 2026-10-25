@@ -26,17 +26,31 @@ class TestExpTable:
     @pytest.mark.parametrize(
         "field, invalid_value, message",
         [
-            pytest.param('base_exp', -1.0, 'base_exp must be greater than 0', id='test_create_with_negative_base_exp_raises_error'),
-            pytest.param('base_exp', 0.0, 'base_exp must be greater than 0', id='test_create_with_zero_base_exp_raises_error'),
-            pytest.param('exponent', -1.0, 'exponent must be greater than 0', id='test_create_with_negative_exponent_raises_error'),
-            pytest.param('exponent', 0.0, 'exponent must be greater than 0', id='test_create_with_zero_exponent_raises_error'),
+            pytest.param(
+                "base_exp",
+                -1.0,
+                "base_exp must be greater than 0",
+                id="test_create_with_negative_base_exp_raises_error",
+            ),
+            pytest.param(
+                "base_exp", 0.0, "base_exp must be greater than 0", id="test_create_with_zero_base_exp_raises_error"
+            ),
+            pytest.param(
+                "exponent",
+                -1.0,
+                "exponent must be greater than 0",
+                id="test_create_with_negative_exponent_raises_error",
+            ),
+            pytest.param(
+                "exponent", 0.0, "exponent must be greater than 0", id="test_create_with_zero_exponent_raises_error"
+            ),
         ],
     )
     def test_rejects_nonpositive_curve_parameters(self, field, invalid_value, message):
         """他項目が正常な入力で、指定項目の不正値を固有例外と文言で拒否する。"""
         values = {
-            'base_exp': 100.0,
-            'exponent': 1.5,
+            "base_exp": 100.0,
+            "exponent": 1.5,
         }
         values[field] = invalid_value
         with pytest.raises(ExpTableValidationException, match=message):
@@ -64,7 +78,7 @@ class TestExpTable:
         """level_offsetを考慮した経験値計算が正しいこと"""
         exp_table = ExpTable(base_exp=100.0, exponent=2.0, level_offset=1.0)
         # レベル2の場合: 100 * ((2-1+1)^2) = 100 * (2^2) = 400
-        expected = int(100.0 * math.pow(2-1+1.0, 2.0))
+        expected = int(100.0 * math.pow(2 - 1 + 1.0, 2.0))
         assert exp_table.get_required_exp_for_level(2) == expected
 
     def test_get_level_from_exp_zero(self):

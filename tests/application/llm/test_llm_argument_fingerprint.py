@@ -29,12 +29,8 @@ def test_fingerprint_strips_narrative_fields_by_default() -> None:
     これにより「同じ wait を違う inner_thought で連打」が同一 fingerprint と判定され、
     loop_guard が機能する。
     """
-    a = build_argument_fingerprint(
-        {"inner_thought": "心が躍る", "destination_label": "S1"}
-    )
-    b = build_argument_fingerprint(
-        {"inner_thought": "心が沈む", "destination_label": "S1"}
-    )
+    a = build_argument_fingerprint({"inner_thought": "心が躍る", "destination_label": "S1"})
+    b = build_argument_fingerprint({"inner_thought": "心が沈む", "destination_label": "S1"})
     assert a == b == '{"destination_label": "S1"}'
 
 
@@ -88,9 +84,7 @@ class TestSameActionWithDifferentWordsOrQuotes:
 
     def test_quoted_and_unquoted_identifiers_share_a_fingerprint(self) -> None:
         """target_label と action_name を引用符つきで渡した呼び出しは、引用符なしと同じ fingerprint になる。"""
-        quoted = build_argument_fingerprint(
-            {"target_label": '"金庫"', "action_name": "'open_safe'"}
-        )
+        quoted = build_argument_fingerprint({"target_label": '"金庫"', "action_name": "'open_safe'"})
         plain = build_argument_fingerprint({"target_label": "金庫", "action_name": "open_safe"})
 
         assert quoted == plain

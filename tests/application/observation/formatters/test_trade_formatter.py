@@ -134,9 +134,7 @@ class TestTradeObservationFormatterTradeOffered:
         agg = MagicMock()
         agg.item_spec.item_spec_id.value = 901
         item_repo.find_by_id.return_value = agg
-        ctx = _make_context(
-            player_profile_repository=profile_repo, item_repository=item_repo
-        )
+        ctx = _make_context(player_profile_repository=profile_repo, item_repository=item_repo)
         formatter = TradeObservationFormatter(ctx)
 
         event = TradeOfferedEvent.create(
@@ -273,8 +271,10 @@ class TestTradeObservationFormatterUnknownEvent:
 
     def test_returns_none_for_unknown_event(self, formatter):
         """対象外イベントは None。"""
+
         class UnknownEvent:
             pass
+
         out = formatter.format(UnknownEvent(), PlayerId(1))
         assert out is None
 

@@ -29,9 +29,7 @@ def test_eventing_imports_only_itself() -> None:
         "import ai_rpg_world.being.contract\n",
         "from ai_rpg_world import application\n",
         "from ..infrastructure import events\n",
-        "from typing import TYPE_CHECKING\n"
-        "if TYPE_CHECKING:\n"
-        "    from ai_rpg_world.domain.common import DomainEvent\n",
+        "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from ai_rpg_world.domain.common import DomainEvent\n",
         "def f():\n    from ai_rpg_world.presentation import app\n",
         "from ai_rpg_world.eventings import x\n",
     ],

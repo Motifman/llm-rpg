@@ -7,6 +7,7 @@ ReadModel 等は `Sqlite*Repository.for_shared_unit_of_work(connection)` で共�
 
 イベント収集の口は `UnitOfWork` との互換性のため維持する。配送は `CommandScope` が担う。
 """
+
 from __future__ import annotations
 
 import sqlite3

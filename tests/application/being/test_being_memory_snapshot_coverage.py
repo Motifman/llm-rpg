@@ -5,6 +5,7 @@ PR-G で Recall Slot / Afterglow / Habituation を snapshot に追加すると�
 「EXPECTED_PAYLOAD_KEYS に追加したのに capture() の dict 生成を忘れた」
 「restore() の payload 検証から漏らした」を起動時に検出できることを保証する。
 """
+
 import pytest
 
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
@@ -24,34 +25,51 @@ class TestValidateSnapshotPayloadCoverage:
     def test_raises_when_emitted_misses_expected_key(self):
         """expected にあるのに emitted に無いキーがあれば SnapshotCoverageError。"""
         with pytest.raises(SnapshotCoverageError):
-            _validate_snapshot_payload_coverage(emitted_keys={'acquaintances'}, expected_keys={'acquaintances', 'recall_slot'})
+            _validate_snapshot_payload_coverage(
+                emitted_keys={"acquaintances"}, expected_keys={"acquaintances", "recall_slot"}
+            )
 
     def test_error_message_lists_missing_keys(self):
         """エラーメッセージに不足キーが含まれ、運用者がどの codec を足せば
         いいか一目で分かる。"""
         with pytest.raises(SnapshotCoverageError) as exc_info:
-            _validate_snapshot_payload_coverage(emitted_keys={'acquaintances'}, expected_keys={'acquaintances', 'recall_slot', 'afterglow'})
+            _validate_snapshot_payload_coverage(
+                emitted_keys={"acquaintances"}, expected_keys={"acquaintances", "recall_slot", "afterglow"}
+            )
         message = str(exc_info.value)
-        assert 'recall_slot' in message
-        assert 'afterglow' in message
+        assert "recall_slot" in message
+        assert "afterglow" in message
 
     def test_passes_when_emitted_covers_expected(self):
         """expected ⊆ emitted なら例外を投げない。"""
-        _validate_snapshot_payload_coverage(emitted_keys={'acquaintances', 'recall_slot'}, expected_keys={'acquaintances', 'recall_slot'})
+        _validate_snapshot_payload_coverage(
+            emitted_keys={"acquaintances", "recall_slot"}, expected_keys={"acquaintances", "recall_slot"}
+        )
 
     def test_allows_extra_emitted_keys(self):
         """emitted が expected の超集合 (= 余分なキーがある) でも許容する。
         schema_version など meta 情報のため。"""
-        _validate_snapshot_payload_coverage(emitted_keys={'acquaintances', 'schema_version'}, expected_keys={'acquaintances'})
+        _validate_snapshot_payload_coverage(
+            emitted_keys={"acquaintances", "schema_version"}, expected_keys={"acquaintances"}
+        )
 
     def test_empty_inputs_are_safe(self):
         """両集合が空でも例外を投げない (= minimal wiring セーフ)。"""
         _validate_snapshot_payload_coverage(emitted_keys=set(), expected_keys=set())
 
+
 def _make_service(memory_turn_clock=None):
     """既存テストと同じ in-memory store を使って service を作る。"""
     from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
-    return BeingMemorySnapshotService(acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=memory_turn_clock or InMemoryMemoryTurnClock(), being_short_term_memory_store=InMemoryShortTermMemoryRepository())
+
+    return BeingMemorySnapshotService(
+        acquaintance_store=InMemoryAcquaintanceRepository(),
+        being_episode_store=InMemoryEpisodeRepository(),
+        being_memo_store=InMemoryMemoBookRepository(),
+        memory_turn_clock=memory_turn_clock or InMemoryMemoryTurnClock(),
+        being_short_term_memory_store=InMemoryShortTermMemoryRepository(),
+    )
+
 
 class TestBeingMemorySnapshotServiceCoverage:
     """``BeingMemorySnapshotService`` 本体の網羅性 fail-fast の挙動。
@@ -64,21 +82,25 @@ class TestBeingMemorySnapshotServiceCoverage:
         """既存 5 store + 既定の EXPECTED_PAYLOAD_KEYS で capture が成功する
         (= 後方互換)。"""
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
         service = _make_service()
-        payload_json = service.capture(BeingId('being-test'))
-        assert 'being_memo_book' in payload_json
+        payload_json = service.capture(BeingId("being-test"))
+        assert "being_memo_book" in payload_json
 
     def test_capture_raises_when_expected_key_is_not_emitted(self, monkeypatch):
         """EXPECTED に key を足したが capture() の生成 dict にその key が
         無い場合、capture() 呼び出し時に SnapshotCoverageError。"""
         from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
-        monkeypatch.setattr(BeingMemorySnapshotService, 'EXPECTED_PAYLOAD_KEYS', original | frozenset({'fictional_new_store'}))
+        monkeypatch.setattr(
+            BeingMemorySnapshotService, "EXPECTED_PAYLOAD_KEYS", original | frozenset({"fictional_new_store"})
+        )
         service = _make_service()
         with pytest.raises(SnapshotCoverageError) as exc_info:
-            service.capture(BeingId('being-test'))
-        assert 'fictional_new_store' in str(exc_info.value)
+            service.capture(BeingId("being-test"))
+        assert "fictional_new_store" in str(exc_info.value)
 
     def test_restore_raises_when_payload_misses_expected_key(self, monkeypatch):
         """EXPECTED に新 key を足した状態で、その key が無い payload を
@@ -91,13 +113,23 @@ class TestBeingMemorySnapshotServiceCoverage:
             BeingMemorySnapshotService,
         )
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
-        monkeypatch.setattr(BeingMemorySnapshotService, 'EXPECTED_PAYLOAD_KEYS', original | frozenset({'fictional_new_store'}))
+        monkeypatch.setattr(
+            BeingMemorySnapshotService, "EXPECTED_PAYLOAD_KEYS", original | frozenset({"fictional_new_store"})
+        )
         service = _make_service()
-        payload_without_new_key = {'schema_version': 1, 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []}
+        payload_without_new_key = {
+            "schema_version": 1,
+            "memory_turn": [],
+            "acquaintances": [],
+            "being_episodes": [],
+            "being_memo_book": [],
+        }
         with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
-            service.restore(BeingId('being-test'), json.dumps(payload_without_new_key))
-        assert 'fictional_new_store' in str(exc_info.value)
+            service.restore(BeingId("being-test"), json.dumps(payload_without_new_key))
+        assert "fictional_new_store" in str(exc_info.value)
+
 
 class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
     """``ExperimentSnapshotSession.capture_all_to_dir`` の ``except Exception`` が
@@ -116,13 +148,24 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
         from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
+
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
-        monkeypatch.setattr(BeingMemorySnapshotService, 'EXPECTED_PAYLOAD_KEYS', original | frozenset({'fictional_new_store'}))
+        monkeypatch.setattr(
+            BeingMemorySnapshotService, "EXPECTED_PAYLOAD_KEYS", original | frozenset({"fictional_new_store"})
+        )
         repo = InMemoryBeingRepository()
         resolver = BeingAttachmentResolver(repo)
         provisioning = BeingProvisioningService(repo)
-        wiring = SimpleNamespace(being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock(), being_short_term_memory_store=InMemoryShortTermMemoryRepository())
+        wiring = SimpleNamespace(
+            being_repository=repo,
+            being_attachment_resolver=resolver,
+            acquaintance_store=InMemoryAcquaintanceRepository(),
+            being_episode_store=InMemoryEpisodeRepository(),
+            being_memo_store=InMemoryMemoBookRepository(),
+            memory_turn_clock=InMemoryMemoryTurnClock(),
+            being_short_term_memory_store=InMemoryShortTermMemoryRepository(),
+        )
         provisioning.ensure_attached(PlayerId(1))
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
         with pytest.raises(SnapshotCoverageError):
             session.capture_all([PlayerId(1)])

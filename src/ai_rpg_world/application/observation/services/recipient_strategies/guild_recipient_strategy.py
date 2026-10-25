@@ -44,9 +44,7 @@ class GuildRecipientStrategy(IRecipientResolutionStrategy):
 
     def resolve(self, event: Any) -> list[PlayerId]:
         if isinstance(event, GuildCreatedEvent):
-            return [event.creator_player_id] + self._player_audience_query.players_at_spot(
-                event.spot_id
-            )
+            return [event.creator_player_id] + self._player_audience_query.players_at_spot(event.spot_id)
 
         if isinstance(event, GuildMemberJoinedEvent):
             # 参加者 + 既存メンバー（取得できる場合）
@@ -88,4 +86,3 @@ class GuildRecipientStrategy(IRecipientResolutionStrategy):
         if guild is None:
             return []
         return list(guild.members.keys())
-

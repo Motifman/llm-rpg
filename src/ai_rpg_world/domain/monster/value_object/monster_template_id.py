@@ -7,6 +7,7 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemp
 @dataclass(frozen=True)
 class MonsterTemplateId:
     """モンスターテンプレートID値オブジェクト"""
+
     value: int
 
     def __post_init__(self) -> None:

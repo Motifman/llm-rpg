@@ -16,7 +16,10 @@ _PLAYERS = ("p1", "p2", "p3", "p4")
 
 def _spot(spot_id: str) -> dict[str, Any]:
     return {
-        "id": spot_id, "name": spot_id, "description": "d", "category": "OTHER",
+        "id": spot_id,
+        "name": spot_id,
+        "description": "d",
+        "category": "OTHER",
         "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
         "interior": {"objects": []},
     }
@@ -35,23 +38,34 @@ def _scenario(round_assignment: Any) -> dict[str, Any]:
     raw: dict[str, Any] = {
         "scenario_format_version": "1.0",
         "metadata": {
-            "id": "x", "title": "x", "description": "x",
-            "theme": "x", "difficulty": "easy", "estimated_ticks": 1,
-            "author": "x", "tags": [],
+            "id": "x",
+            "title": "x",
+            "description": "x",
+            "theme": "x",
+            "difficulty": "easy",
+            "estimated_ticks": 1,
+            "author": "x",
+            "tags": [],
         },
         "item_specs": [],
         "environment": {
             "weather": {
                 "enabled": False,
                 "initial": {"weather_type": "CLEAR", "intensity": 0.0},
-                "update_interval_ticks": 100, "announce_changes": False,
+                "update_interval_ticks": 100,
+                "announce_changes": False,
             },
         },
         "spots": [_spot("village"), _spot("north"), _spot("south")],
         "connections": [],
         "players": [
-            {"id": pid, "name": pid.upper(), "spawn_spot": "village", "initial_items": [],
-             "initial_state": {"lamp_lit": False}}
+            {
+                "id": pid,
+                "name": pid.upper(),
+                "spawn_spot": "village",
+                "initial_items": [],
+                "initial_state": {"lamp_lit": False},
+            }
             for pid in _PLAYERS
         ],
         "game_end_conditions": {"win": [], "lose": []},
@@ -141,18 +155,26 @@ class TestRoundAssignmentApplied:
 
     def test_groups_are_shuffled_separately(self) -> None:
         """group ごとに、その group の枠だけを並べ替え、group の番号を記録する。"""
-        groups = {"groups": [
-            {"players": ["p1", "p2"], "slots": _slots()[:2]},
-            {"players": ["p3", "p4"], "slots": _slots()[2:]},
-        ]}
+        groups = {
+            "groups": [
+                {"players": ["p1", "p2"], "slots": _slots()[:2]},
+                {"players": ["p3", "p4"], "slots": _slots()[2:]},
+            ]
+        }
 
         result = _load(_scenario(groups))
 
         assert {p: role for p, (role, _) in _roles_and_spots(result).items()} == {
-            "p1": "north", "p2": "north", "p3": "south", "p4": "south",
+            "p1": "north",
+            "p2": "north",
+            "p3": "south",
+            "p4": "south",
         }
         assert {a.player_string_id: a.group_index for a in result.round_assignments} == {
-            "p1": 0, "p2": 0, "p3": 1, "p4": 1,
+            "p1": 0,
+            "p2": 0,
+            "p3": 1,
+            "p4": 1,
         }
 
     def test_slot_without_spawn_spot_keeps_the_declared_spot(self) -> None:
@@ -162,7 +184,10 @@ class TestRoundAssignmentApplied:
         result = _load(_scenario({"groups": [{"players": ["p1", "p2"], "slots": slots}]}))
 
         assert {p: spot for p, (_, spot) in _roles_and_spots(result).items()}["p1"] == "village"
-        assert {a.player_string_id: a.spawn_spot for a in result.round_assignments} == {"p1": "village", "p2": "village"}
+        assert {a.player_string_id: a.spawn_spot for a in result.round_assignments} == {
+            "p1": "village",
+            "p2": "village",
+        }
 
     def test_loading_does_not_change_the_given_dict(self) -> None:
         """渡したシナリオの dict は書き換えず、同じ dict を別の回で読み直せる。"""
@@ -207,24 +232,54 @@ class TestRoundAssignmentRejected:
             pytest.param({"groups": [{"players": ["p1"], "slots": []}]}, "枠", id="slot-count"),
             pytest.param({"groups": [{"players": [], "slots": []}]}, "枠", id="empty-group"),
             pytest.param({"groups": [{"players": ["p1"], "slots": "north"}]}, "枠", id="slots-not-list"),
-            pytest.param({"groups": [{"players": [1], "slots": _slots()[:1]}]}, "player id の配列", id="player-not-str"),
-            pytest.param({"groups": [{"players": ["p1", "nobody"], "slots": _slots()[:2]}]}, "知らない player があります: nobody", id="unknown-player"),
-            pytest.param({"groups": [{"players": ["p1", "p1"], "slots": _slots()[:2]}]}, "2 度割り当て.*p1", id="same-group-twice"),
             pytest.param(
-                {"groups": [
-                    {"players": ["p1", "p2"], "slots": _slots()[:2]},
-                    {"players": ["p2", "p3"], "slots": _slots()[2:]},
-                ]},
+                {"groups": [{"players": [1], "slots": _slots()[:1]}]}, "player id の配列", id="player-not-str"
+            ),
+            pytest.param(
+                {"groups": [{"players": ["p1", "nobody"], "slots": _slots()[:2]}]},
+                "知らない player があります: nobody",
+                id="unknown-player",
+            ),
+            pytest.param(
+                {"groups": [{"players": ["p1", "p1"], "slots": _slots()[:2]}]},
+                "2 度割り当て.*p1",
+                id="same-group-twice",
+            ),
+            pytest.param(
+                {
+                    "groups": [
+                        {"players": ["p1", "p2"], "slots": _slots()[:2]},
+                        {"players": ["p2", "p3"], "slots": _slots()[2:]},
+                    ]
+                },
                 "2 度割り当て.*p2",
                 id="two-groups",
             ),
-            pytest.param({"groups": [{"players": ["p1"], "slots": [{"spawn": "north"}]}]}, "spawn", id="unknown-slot-key"),
+            pytest.param(
+                {"groups": [{"players": ["p1"], "slots": [{"spawn": "north"}]}]}, "spawn", id="unknown-slot-key"
+            ),
             pytest.param({"groups": [{"players": ["p1"], "slots": [{}]}]}, "spawn_spot", id="empty-slot"),
-            pytest.param({"groups": [{"players": ["p1"], "slots": [{"spawn_spot": 3}]}]}, "場所の id", id="spawn-spot-not-str"),
-            pytest.param({"groups": [{"players": ["p1"], "slots": [{"initial_state": "north"}]}]}, "initial_state", id="state-not-object"),
-            pytest.param({"groups": [{"players": ["p1"], "slots": [{"initial_state": {"role": ["a"]}}]}]}, r"slots\[0\]\.initial_state\.role", id="state-value-not-primitive"),
-            pytest.param({"groups": [{"players": ["p1"], "slots": _slots()[:1], "order": "rotate"}]}, "order", id="unknown-group-key"),
-            pytest.param({"groups": [{"players": ["p1"], "slots": _slots()[:1]}], "mode": "x"}, "mode", id="unknown-top-key"),
+            pytest.param(
+                {"groups": [{"players": ["p1"], "slots": [{"spawn_spot": 3}]}]}, "場所の id", id="spawn-spot-not-str"
+            ),
+            pytest.param(
+                {"groups": [{"players": ["p1"], "slots": [{"initial_state": "north"}]}]},
+                "initial_state",
+                id="state-not-object",
+            ),
+            pytest.param(
+                {"groups": [{"players": ["p1"], "slots": [{"initial_state": {"role": ["a"]}}]}]},
+                r"slots\[0\]\.initial_state\.role",
+                id="state-value-not-primitive",
+            ),
+            pytest.param(
+                {"groups": [{"players": ["p1"], "slots": _slots()[:1], "order": "rotate"}]},
+                "order",
+                id="unknown-group-key",
+            ),
+            pytest.param(
+                {"groups": [{"players": ["p1"], "slots": _slots()[:1]}], "mode": "x"}, "mode", id="unknown-top-key"
+            ),
             pytest.param([], "object", id="not-object"),
         ],
     )

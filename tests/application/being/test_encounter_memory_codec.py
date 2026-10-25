@@ -118,9 +118,7 @@ class TestCaptureRestoreRoundTrip:
         # player 1
         noa = dst.lookup(PlayerId(1), EncounterKey.player("noa"))
         assert noa is not None and noa.count == 2 and noa.first_seen_tick == 5
-        clearing = dst.lookup(
-            PlayerId(1), EncounterKey.spot("forest_clearing")
-        )
+        clearing = dst.lookup(PlayerId(1), EncounterKey.spot("forest_clearing"))
         assert clearing is not None and clearing.count == 1
         # player 2
         storm = dst.lookup(PlayerId(2), EncounterKey.event("storm_arrives"))
@@ -205,9 +203,7 @@ class TestRestoreSchemaCompatibility:
         with pytest.raises(NotImplementedError, match="InMemoryEncounterMemory"):
             EncounterMemorySubsystemCodec().capture(runtime)
         with pytest.raises(NotImplementedError, match="InMemoryEncounterMemory"):
-            EncounterMemorySubsystemCodec().restore(
-                runtime, {"schema_version": 1, "entries": []}
-            )
+            EncounterMemorySubsystemCodec().restore(runtime, {"schema_version": 1, "entries": []})
 
 
 class TestRestoreInvalidPayloadSurfacesDomainException:
@@ -254,9 +250,7 @@ class TestRestoreInvalidPayloadSurfacesDomainException:
         )
 
         memory = InMemoryEncounterMemory()
-        with pytest.raises(
-            EncounterRecordValidationException, match="last_seen_tick"
-        ):
+        with pytest.raises(EncounterRecordValidationException, match="last_seen_tick"):
             EncounterMemorySubsystemCodec().restore(
                 _runtime_with(memory),
                 {
