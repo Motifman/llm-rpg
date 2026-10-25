@@ -450,7 +450,7 @@ class WorldQueryService:
             weather_intensity=0.0,
             current_terrain_type=None,
             visible_objects=[],
-            view_distance=query.view_distance,
+            view_distance=5,
             available_moves=available_moves,
             total_available_moves=total_available_moves,
             attention_level=getattr(player_status, "attention_level", AttentionLevel.FULL),

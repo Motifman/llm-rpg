@@ -1,5 +1,7 @@
 """Step 6: スポットグラフ用フォーマッタ・ツールカタログ・UiContextBuilder のスモークテスト"""
 
+import pytest
+
 from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
     SpotGraphCurrentStateFormatter,
 )
@@ -293,7 +295,8 @@ def test_spot_graph_formatter_omits_weather_for_indoor() -> None:
     assert "天候" not in text
 
 
-def test_spot_graph_formatter_falls_back_without_snapshot() -> None:
+def test_spot_graph_formatter_rejects_missing_snapshot() -> None:
+    """スポットの状態が無い DTO を渡すと ValueError で止まり、タイルの文面を出さない。"""
     dto = PlayerCurrentStateDto(
         player_id=1,
         player_name="P",
@@ -317,6 +320,5 @@ def test_spot_graph_formatter_falls_back_without_snapshot() -> None:
         attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=None,
     )
-    text = SpotGraphCurrentStateFormatter().format(dto)
-    assert "広場" in text
-    assert "座標" in text
+    with pytest.raises(ValueError, match="spot_graph_snapshot is required"):
+        SpotGraphCurrentStateFormatter().format(dto)

@@ -3,7 +3,6 @@
 from typing import Any
 
 from ai_rpg_world.application.llm.contracts.interfaces import ICurrentStateFormatter
-from ai_rpg_world.application.llm.services.current_state_formatter import DefaultCurrentStateFormatter
 from ai_rpg_world.application.llm.services.world_vocabulary import (
     lighting_display,
     temperature_display,
@@ -17,14 +16,14 @@ from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
 
 
 class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
-    """spot_graph_snapshot があればスポットグラフ向けに整形し、なければデフォルトにフォールバック。"""
+    """スポットの状態を整形し、状態の無い DTO は入口で拒否する。"""
 
     def format(self, dto: PlayerCurrentStateDto) -> str:
         if not isinstance(dto, PlayerCurrentStateDto):
             raise TypeError("dto must be PlayerCurrentStateDto")
         snap = dto.spot_graph_snapshot
         if snap is None:
-            return DefaultCurrentStateFormatter().format(dto)
+            raise ValueError("spot_graph_snapshot is required")
 
         lines: list[str] = []
         lines.append(f"現在地: {snap.current_spot_name}")

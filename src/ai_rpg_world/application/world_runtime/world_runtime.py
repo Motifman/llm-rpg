@@ -2295,7 +2295,6 @@ class WorldRuntime:
             ),
         )
         limits = PromptLimits(
-            tile_map_enabled=False,
             default_action_instruction=self._ESCAPE_GAME_ACTION_INSTRUCTION,
         )
         builder = DefaultPromptBuilder(

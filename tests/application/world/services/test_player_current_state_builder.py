@@ -621,10 +621,10 @@ class TestPlayerCurrentStateBuilder:
         )
         assert result.available_location_areas is None
 
-    def test_build_player_current_state_include_tile_map_true_sets_visible_tile_map(
+    def test_build_player_current_state_sets_visible_tile_map(
         self, setup_builder
     ):
-        """include_tile_map=True のとき visible_tile_map が設定される"""
+        """旧タイル用の現在状態を組み立てると、既定距離のタイルマップが設定される。"""
         builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
         profile_repo.save(_make_profile(1, "Alice"))
         status = _make_status(1, 1, 0, 0)
@@ -637,7 +637,7 @@ class TestPlayerCurrentStateBuilder:
         )
         physical_map = _make_map(1, [actor])
         result = builder.build_player_current_state(
-            query=GetPlayerCurrentStateQuery(player_id=1, include_tile_map=True),
+            query=GetPlayerCurrentStateQuery(player_id=1),
             player_status=status,
             player_name="Alice",
             spot=spot_repo.find_by_id(SpotId(1)),
@@ -657,38 +657,6 @@ class TestPlayerCurrentStateBuilder:
         assert result.visible_tile_map.center_y == 0
         assert len(result.visible_tile_map.rows) > 0
         assert "草" in result.visible_tile_map.legend.get(".", "")
-
-    def test_build_player_current_state_include_tile_map_false_omits_visible_tile_map(
-        self, setup_builder
-    ):
-        """include_tile_map=False のとき visible_tile_map が None"""
-        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
-        profile_repo.save(_make_profile(1, "Alice"))
-        status = _make_status(1, 1, 0, 0)
-        status_repo.save(status)
-        actor = WorldObject(
-            object_id=WorldObjectId.create(1),
-            coordinate=Coordinate(0, 0, 0),
-            object_type=ObjectTypeEnum.PLAYER,
-            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
-        )
-        physical_map = _make_map(1, [actor])
-        result = builder.build_player_current_state(
-            query=GetPlayerCurrentStateQuery(player_id=1, include_tile_map=False),
-            player_status=status,
-            player_name="Alice",
-            spot=spot_repo.find_by_id(SpotId(1)),
-            physical_map=physical_map,
-            available_moves_result=PlayerMovementOptionsDto(
-                player_id=1,
-                player_name="Alice",
-                current_spot_id=1,
-                current_spot_name="Town",
-                available_moves=[],
-                total_available_moves=0,
-            ),
-        )
-        assert result.visible_tile_map is None
 
     def test_build_player_current_state_raises_value_error_when_current_coordinate_is_none(
         self, setup_builder
