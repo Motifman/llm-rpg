@@ -9,12 +9,12 @@ from ai_rpg_world.application.quest.exceptions import QuestApplicationException
 from ai_rpg_world.application.quest.services.quest_progress_reaction_service import (
     QuestProgressReactionService,
 )
-from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+from ai_rpg_world.eventing import EventHandler
 
 
 class _AsyncQuestProgressHandler:

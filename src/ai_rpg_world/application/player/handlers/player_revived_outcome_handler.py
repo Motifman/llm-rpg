@@ -16,9 +16,9 @@ from ai_rpg_world.application.common.exceptions import (
 from ai_rpg_world.application.player.services.player_death_grace_timer import (
     PlayerDeathGraceTimer,
 )
-from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
+from ai_rpg_world.eventing import EventHandler
 
 
 class PlayerRevivedOutcomeHandler(EventHandler[PlayerRevivedEvent]):
