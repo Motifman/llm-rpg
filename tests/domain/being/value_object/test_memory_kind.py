@@ -8,13 +8,12 @@ from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
 class TestMemoryKindValues:
     """MemoryKind の各メンバーが期待値を持つ。"""
 
-    def test_four(self) -> None:
-        """Phase 2 PR3 時点で SHORT_TERM / EPISODIC / SEMANTIC / MEMO の 4 種類。"""
+    def test_three(self) -> None:
+        """SHORT_TERM / EPISODIC / MEMO の3種類を宣言できる。"""
         kinds = {k for k in MemoryKind}
         assert kinds == {
             MemoryKind.SHORT_TERM,
             MemoryKind.EPISODIC,
-            MemoryKind.SEMANTIC,
             MemoryKind.MEMO,
         }
 
@@ -22,7 +21,6 @@ class TestMemoryKindValues:
         """シリアライズ用に各 enum value は snake_case 文字列。"""
         assert MemoryKind.SHORT_TERM.value == "short_term"
         assert MemoryKind.EPISODIC.value == "episodic"
-        assert MemoryKind.SEMANTIC.value == "semantic"
         assert MemoryKind.MEMO.value == "memo"
 
     def test_str(self) -> None:

@@ -192,6 +192,7 @@ class RestoreAllReport:
     )  # (being_id, source_scenario, current_scenario)
     # 消した部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない。
     removed_memory_key_counts: dict[BeingId, dict[str, int]] = field(default_factory=dict)
+    removed_declared_memory_kind_counts: dict[BeingId, dict[str, int]] = field(default_factory=dict)
 
 
 def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
@@ -527,6 +528,7 @@ class ExperimentSnapshotSession:
         metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = {}
         cross_transfers: list[tuple[BeingId, str, str]] = []
         removed_memory_key_counts: dict[BeingId, dict[str, int]] = {}
+        removed_declared_memory_kind_counts: dict[BeingId, dict[str, int]] = {}
         for path in files:
             # metadata は restore_use_case の中では読まないので、別途 gateway
             # から読む (= 失敗しても restore 本体は続行 = silent failure 防止
@@ -545,6 +547,8 @@ class ExperimentSnapshotSession:
             restored.append(result.being_id)
             if result.removed_memory_key_counts:
                 removed_memory_key_counts[result.being_id] = result.removed_memory_key_counts
+            if result.removed_declared_memory_kind_counts:
+                removed_declared_memory_kind_counts[result.being_id] = result.removed_declared_memory_kind_counts
             metadata_by_being[result.being_id] = metadata
             logger.info(
                 "snapshot restored: being_id=%s file=%s memory_restored=%s",
@@ -580,6 +584,7 @@ class ExperimentSnapshotSession:
             metadata_by_being=metadata_by_being,
             cross_scenario_transfers=cross_transfers,
             removed_memory_key_counts=removed_memory_key_counts,
+            removed_declared_memory_kind_counts=removed_declared_memory_kind_counts,
         )
 
 

@@ -19,7 +19,7 @@ atomicity 制約:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
@@ -50,6 +50,7 @@ class RestoreBeingSnapshotResult:
     snapshot_version: int
     memory_restored: bool
     removed_memory_key_counts: dict[str, int] = field(default_factory=dict)
+    removed_declared_memory_kind_counts: dict[str, int] = field(default_factory=dict)
 
 
 class RestoreBeingSnapshotFromFileUseCase:
@@ -93,7 +94,15 @@ class RestoreBeingSnapshotFromFileUseCase:
                 f"(supported: {sorted(BeingSnapshotCodec.SUPPORTED_VERSIONS)}). "
                 f"file={input_path}"
             )
-        being_id = BeingId(snapshot.being_id_value)
+        # 保存前に未知の宣言を拒否し、廃止済みの宣言だけを正規化する。
+        being = BeingSnapshotCodec.decode(snapshot)
+        being_id = being.being_id
+        removed_declared_memory_kind_counts = BeingSnapshotCodec.removed_declared_memory_kind_counts(snapshot)
+        if removed_declared_memory_kind_counts:
+            snapshot = replace(
+                snapshot,
+                declared_memory_kinds=BeingSnapshotCodec.encode(being).declared_memory_kinds,
+            )
 
         payload: str | None = None
         removed_memory_key_counts: dict[str, int] = {}
@@ -127,6 +136,7 @@ class RestoreBeingSnapshotFromFileUseCase:
             snapshot_version=snapshot.snapshot_version,
             memory_restored=memory_restored,
             removed_memory_key_counts=removed_memory_key_counts,
+            removed_declared_memory_kind_counts=removed_declared_memory_kind_counts,
         )
 
 

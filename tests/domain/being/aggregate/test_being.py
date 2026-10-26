@@ -173,14 +173,14 @@ class TestBeingDeclaredMemoryKinds:
         assert being.declared_memory_kinds == expected
         assert being.declares(MemoryKind.EPISODIC) is True
         assert being.declares(MemoryKind.MEMO) is True
-        assert being.declares(MemoryKind.SEMANTIC) is False
+        assert being.declares(MemoryKind.SHORT_TERM) is False
 
         source.clear()
         assert being.declared_memory_kinds == expected
         exposed = being.declared_memory_kinds
-        exposed |= {MemoryKind.SEMANTIC}
+        exposed |= {MemoryKind.SHORT_TERM}
         assert being.declared_memory_kinds == expected
-        assert being.declares(MemoryKind.SEMANTIC) is False
+        assert being.declares(MemoryKind.SHORT_TERM) is False
 
     def test_duplicate_kind_frozenset(self) -> None:
         """同じ kind を 2 回渡しても集合化される。"""
@@ -207,9 +207,9 @@ class TestBeingDeclaredMemoryKinds:
             identity=_identity(),
             declared_memory_kinds=[MemoryKind.EPISODIC],
         )
-        updated = original.with_declared_memory_kinds([MemoryKind.EPISODIC, MemoryKind.SEMANTIC])
+        updated = original.with_declared_memory_kinds([MemoryKind.EPISODIC, MemoryKind.SHORT_TERM])
         assert original.declared_memory_kinds == frozenset({MemoryKind.EPISODIC})
-        assert updated.declared_memory_kinds == frozenset({MemoryKind.EPISODIC, MemoryKind.SEMANTIC})
+        assert updated.declared_memory_kinds == frozenset({MemoryKind.EPISODIC, MemoryKind.SHORT_TERM})
         assert updated.being_id == original.being_id
         assert updated.identity == original.identity
 
@@ -221,5 +221,5 @@ class TestBeingDeclaredMemoryKinds:
             attachment=_attachment(),
             declared_memory_kinds=[MemoryKind.MEMO],
         )
-        updated = original.with_declared_memory_kinds([MemoryKind.MEMO, MemoryKind.SEMANTIC])
+        updated = original.with_declared_memory_kinds([MemoryKind.MEMO, MemoryKind.SHORT_TERM])
         assert updated.attachment == _attachment()
