@@ -315,7 +315,7 @@ def json_bytes_to_player_status(blob: bytes) -> PlayerStatusAggregate:
         mp=Mp.create(int(mp_d["value"]), int(mp_d["max_mp"])),
         stamina=Stamina.create(int(st_d["value"]), int(st_d["max_stamina"])),
         current_spot_id=_optional_spot_id(
-            data.get("current_spot_id", data.get("navigation_state", {}).get("current_spot_id"))
+            data["current_spot_id"] if "current_spot_id" in data else data["navigation_state"].get("current_spot_id")
         ),
         is_down=bool(data["is_down"]),
         active_effects=active_effects,

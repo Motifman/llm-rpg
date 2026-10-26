@@ -1,5 +1,7 @@
 """PlayerStatusAggregate の JSON コーデック round-trip 検証。"""
 
+import pytest
+
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -113,3 +115,13 @@ def test_old_json_discards_tile_navigation_and_pursuit():
     stored = json.loads(player_status_to_json_bytes(restored))
     assert "navigation_state" not in stored and "pursuit" not in stored
     assert not hasattr(restored, "_navigation_state") and not hasattr(restored, "_pursuit_state")
+
+
+def test_json_rejects_missing_current_and_legacy_location():
+    """新旧両方の現在地項目が欠けたJSONはKeyErrorで拒否し、現在地なしとして復元しない。"""
+    import json
+
+    data = json.loads(player_status_to_json_bytes(_minimal_status()))
+    data.pop("current_spot_id")
+    with pytest.raises(KeyError, match="navigation_state"):
+        json_bytes_to_player_status(json.dumps(data).encode())
