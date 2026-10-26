@@ -652,6 +652,10 @@ def _drive_scenario(
                         }
                         for (b, src, cur) in restore_report.cross_scenario_transfers
                     ],
+                    removed_declared_memory_kinds=[
+                        {"being_id": b.value, "counts": counts}
+                        for b, counts in restore_report.removed_declared_memory_kind_counts.items()
+                    ],
                     removed_memory_keys=[
                         {"being_id": b.value, "counts": counts}
                         for b, counts in restore_report.removed_memory_key_counts.items()
