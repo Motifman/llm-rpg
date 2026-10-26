@@ -10,9 +10,7 @@ from ai_rpg_world.application.shop.contracts.commands import (
     PurchaseFromShopCommand,
     UnlistShopItemCommand,
 )
-from ai_rpg_world.application.shop.contracts.dtos import ShopCommandResultDto
 from ai_rpg_world.application.shop.exceptions.command_exception import (
-    CannotPartiallyPurchaseException,
     InsufficientStockForPurchaseException,
     ListingNotFoundForCommandException,
     NotAtShopLocationException,
@@ -37,13 +35,11 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
-from ai_rpg_world.domain.shop.value_object.shop_listing_id import ShopListingId
 from ai_rpg_world.domain.shop.value_object.shop_listing_price import ShopListingPrice
 from ai_rpg_world.domain.shop.value_object.shop_listing_projection import ShopListingProjection
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -86,10 +82,7 @@ def _create_player_status(player_id: int, gold: int = 1000, spot_id: int | None 
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=SpotId(spot_id) if spot_id is not None else None,
-            current_coordinate=coord,
-        ),
+        current_spot_id=SpotId(spot_id) if spot_id is not None else None,
     )
 
 

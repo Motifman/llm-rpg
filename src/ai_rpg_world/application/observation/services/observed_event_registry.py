@@ -47,14 +47,7 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
     PlayerLevelUpEvent,
-    PlayerLocationChangedEvent,
     PlayerRevivedEvent,
-)
-from ai_rpg_world.domain.pursuit.event.pursuit_events import (
-    PursuitCancelledEvent,
-    PursuitFailedEvent,
-    PursuitStartedEvent,
-    PursuitUpdatedEvent,
 )
 from ai_rpg_world.domain.quest.event.quest_event import (
     QuestAcceptedEvent,
@@ -202,15 +195,6 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
     ):
         mapping[ev] = "guild"
 
-    # pursuit
-    for ev in (
-        PursuitStartedEvent,
-        PursuitUpdatedEvent,
-        PursuitFailedEvent,
-        PursuitCancelledEvent,
-    ):
-        mapping[ev] = "pursuit"
-
     # monster
     for ev in (
         MonsterCreatedEvent,
@@ -250,7 +234,6 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
 
     # default (天候・プレイヤー状態・所持品)
     for ev in (
-        PlayerLocationChangedEvent,
         PlayerDownedEvent,
         PlayerRevivedEvent,
         PlayerLevelUpEvent,

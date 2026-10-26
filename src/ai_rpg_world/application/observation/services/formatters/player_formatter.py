@@ -27,7 +27,6 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
     PlayerLevelUpEvent,
-    PlayerLocationChangedEvent,
     PlayerRevivedEvent,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -75,7 +74,7 @@ def _overheard_fragment(content: str) -> str:
 
 
 class PlayerObservationFormatter:
-    """PlayerLocationChangedEvent / ItemAddedToInventoryEvent / PlayerSpokeEvent 等を処理する。"""
+    """ItemAddedToInventoryEvent / PlayerSpokeEvent 等を処理する。"""
 
     def __init__(self, context: ObservationFormatterContext) -> None:
         self._context = context
@@ -96,8 +95,6 @@ class PlayerObservationFormatter:
         event: Any,
         recipient_player_id: PlayerId,
     ) -> ObservationOutput | None:
-        if isinstance(event, PlayerLocationChangedEvent):
-            return self._format_player_location_changed(event, recipient_player_id)
         if isinstance(event, PlayerDownedEvent):
             return self._format_player_downed(event, recipient_player_id)
         if isinstance(event, PlayerRevivedEvent):
@@ -124,29 +121,6 @@ class PlayerObservationFormatter:
             return self._format_player_spoke(event, recipient_player_id)
         return None
 
-    def _format_player_location_changed(
-        self, event: PlayerLocationChangedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
-        spot_name = self._context.name_resolver.spot_name(event.new_spot_id)
-        is_self = event.aggregate_id.value == recipient_id.value
-        if is_self:
-            prose = f"現在地: {spot_name}"
-            structured: dict[str, Any] = {
-                "type": "current_location",
-                "spot_name": spot_name,
-                "spot_id_value": event.new_spot_id.value,
-                "role": "self",
-            }
-            return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
-        actor_name = self._context.name_resolver.player_name(event.aggregate_id)
-        prose = f"{actor_name}がこのスポットにやってきました。"
-        structured = {
-            "type": "player_entered_spot",
-            "actor": actor_name,
-            "spot_name": spot_name,
-            "spot_id_value": event.new_spot_id.value,
-        }
-        return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_player_downed(self, event: PlayerDownedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         is_self = event.aggregate_id.value == recipient_id.value

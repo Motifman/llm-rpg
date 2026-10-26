@@ -90,6 +90,15 @@ class WorldStateSnapshot:
         if self.captured_at is not None and not isinstance(self.captured_at, str):
             raise ValueError(f"captured_at must be str or None (got {type(self.captured_at).__name__})")
 
+    @property
+    def removed_subsystem_counts(self) -> dict[str, int]:
+        """削除済みの旧追跡キーについて、読み捨てるプレイヤー行数を返す。"""
+        return {
+            key: len(data.get("entries", []))
+            for key, data in self.subsystems.items()
+            if key == "player_pursuit_state"
+        }
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,

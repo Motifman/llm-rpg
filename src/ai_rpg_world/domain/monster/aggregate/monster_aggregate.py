@@ -26,7 +26,7 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterNotSpawnedException,
     MonsterRespawnIntervalNotMetException,
 )
-from ai_rpg_world.domain.monster.value_object.feed_memory import MAX_FEED_MEMORIES, FeedMemory
+from ai_rpg_world.domain.monster.value_object.feed_memory import FeedMemory
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
 from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
@@ -34,17 +34,9 @@ from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import MonsterLifecycleState
 from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
-from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
-    PursuitLastKnownState,
-)
-from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
-from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
-    PursuitTargetSnapshot,
-)
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -77,7 +69,6 @@ class MonsterAggregate(AggregateRoot):
         spawned_at_tick: WorldTick | None = None,
         behavior_state: MonsterBehaviorState | None = None,
         feed_memory: FeedMemory | None = None,
-        pursuit_state: MonsterPursuitState | None = None,
         hunger: float = 0.0,
         starvation_timer: int = 0,
         last_attack_tick: WorldTick | None = None,
@@ -125,7 +116,6 @@ class MonsterAggregate(AggregateRoot):
                 hunger=_hunger,
                 starvation_timer=_starvation_timer,
             )
-        self._pursuit_state = pursuit_state if pursuit_state is not None else MonsterPursuitState()
 
     @classmethod
     def create(
@@ -164,7 +154,6 @@ class MonsterAggregate(AggregateRoot):
         *,
         behavior_state: MonsterBehaviorState | None = None,
         feed_memory: FeedMemory | None = None,
-        pursuit_state: MonsterPursuitState | None = None,
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
         initial_hunger: float = 0.0,
@@ -172,7 +161,7 @@ class MonsterAggregate(AggregateRoot):
     ) -> "MonsterAggregate":
         """
         スポーン済みの状態でモンスターを再構成する（永続化層・テスト用）。
-        create() + spawn() と同等の初期状態を構築し、任意で behavior_state / feed_memory / pursuit_state を指定可能。
+        create() + spawn() と同等の初期状態を構築し、任意で behavior_state / feed_memory を指定可能。
         """
         base = template.base_stats
         lifecycle = MonsterLifecycleState.create_for_spawned(
@@ -197,7 +186,6 @@ class MonsterAggregate(AggregateRoot):
             spawned_at_tick=current_tick,
             behavior_state=behavior_state or MonsterBehaviorState.create_idle(coordinate),
             feed_memory=feed_memory or FeedMemory.empty(),
-            pursuit_state=pursuit_state or MonsterPursuitState(),
             hunger=initial_hunger,
             **kwargs,
         )
@@ -379,29 +367,6 @@ class MonsterAggregate(AggregateRoot):
         """[永続化専用] state にあればそのまま返す。"""
         return self._behavior_state.chase_started_at_tick
 
-    @property
-    def pursuit_state(self) -> PursuitState | None:
-        if isinstance(self._pursuit_state, MonsterPursuitState):
-            return self._pursuit_state.pursuit
-        return self._pursuit_state
-
-    @property
-    def has_active_pursuit(self) -> bool:
-        if isinstance(self._pursuit_state, MonsterPursuitState):
-            return self._pursuit_state.has_active_pursuit
-        return self._pursuit_state is not None
-
-    @property
-    def pursuit_target_id(self) -> WorldObjectId | None:
-        return self._pursuit_state.target_id
-
-    @property
-    def pursuit_target_snapshot(self) -> PursuitTargetSnapshot | None:
-        return self._pursuit_state.target_snapshot
-
-    @property
-    def pursuit_last_known(self) -> PursuitLastKnownState | None:
-        return self._pursuit_state.last_known
 
     @property
     def behavior_last_known_feed(self) -> list[FeedMemoryEntry]:
@@ -428,7 +393,6 @@ class MonsterAggregate(AggregateRoot):
         if old_state == state:
             return
         self._behavior_state = self._behavior_state.with_passive_state(state)
-        self._clear_pursuit_state()
         self.add_event(
             ActorStateChangedEvent.create(
                 aggregate_id=self._world_object_id,
@@ -462,7 +426,6 @@ class MonsterAggregate(AggregateRoot):
         )
         self._behavior_state = self._behavior_state.with_spawn_reset(coordinate)
         self._feed_memory = self._feed_memory.cleared()
-        self._pursuit_state = self._pursuit_state.cleared()
 
     @property
     def hunger(self) -> float:
@@ -899,7 +862,6 @@ class MonsterAggregate(AggregateRoot):
         self._lifecycle_state = self._lifecycle_state.with_death(current_tick)
         spot_id_for_event = self._spot_id
         self._behavior_state = self._behavior_state.with_target_cleared()
-        self._clear_pursuit_state()
         self._coordinate = None  # 死亡時は座標をクリア（spot_id はリスポーン判定のため保持）
 
         respawn_tick = current_tick.value + self._template.respawn_info.respawn_interval_ticks
@@ -1051,11 +1013,6 @@ class MonsterAggregate(AggregateRoot):
         if self._spot_id is None:
             raise MonsterNotSpawnedException(f"Monster {self._monster_id} has no spot_id, cannot perform behavior")
 
-    def _clear_pursuit_state(self) -> None:
-        if isinstance(self._pursuit_state, MonsterPursuitState):
-            self._pursuit_state = self._pursuit_state.cleared()
-        else:
-            self._pursuit_state = MonsterPursuitState()
 
     def respawn(self, coordinate: Coordinate, current_tick: WorldTick, spot_id: SpotId) -> None:
         """リスポーンさせる"""

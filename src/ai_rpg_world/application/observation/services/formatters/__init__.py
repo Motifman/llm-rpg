@@ -15,9 +15,6 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
 from ai_rpg_world.application.observation.services.formatters.player_formatter import (
     PlayerObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters.pursuit_formatter import (
-    PursuitObservationFormatter,
-)
 from ai_rpg_world.application.observation.services.formatters.quest_formatter import (
     QuestObservationFormatter,
 )
@@ -49,5 +46,4 @@ __all__ = [
     "SkillObservationFormatter",
     "WorldObservationFormatter",
     "PlayerObservationFormatter",
-    "PursuitObservationFormatter",
 ]

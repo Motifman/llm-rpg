@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
-from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildBankDepositedEvent,
@@ -41,24 +40,10 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
     PlayerLevelUpEvent,
-    PlayerLocationChangedEvent,
 )
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
-from ai_rpg_world.domain.pursuit.event.pursuit_events import (
-    PursuitCancelledEvent,
-    PursuitFailedEvent,
-    PursuitStartedEvent,
-    PursuitUpdatedEvent,
-)
-from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
-    PursuitLastKnownState,
-)
-from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
-    PursuitTargetSnapshot,
-)
 from ai_rpg_world.domain.quest.event.quest_event import (
     QuestApprovedEvent,
     QuestCancelledEvent,
@@ -98,23 +83,9 @@ from ai_rpg_world.domain.world.value_object.location_area_id import LocationArea
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-
-
-def build_pursuit_snapshot(target_id_value: int = 2) -> PursuitTargetSnapshot:
-    return PursuitTargetSnapshot(
-        target_id=WorldObjectId(target_id_value),
-        spot_id=SpotId(20),
-        coordinate=Coordinate(5, 6, 0),
-    )
-
-
-def build_pursuit_last_known(target_id_value: int = 2) -> PursuitLastKnownState:
-    return PursuitLastKnownState(
-        target_id=WorldObjectId(target_id_value),
-        spot_id=SpotId(21),
-        coordinate=Coordinate(7, 8, 0),
-        observed_at_tick=WorldTick(42),
-    )
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import EntityEnteredSpotEvent
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
 
 class TestObservationFormatter:
@@ -125,51 +96,6 @@ class TestObservationFormatter:
         """リポジトリなし（フォールバック名のみ）"""
         return ObservationFormatter(spot_repository=None, player_profile_repository=None)
 
-    def test_format_player_location_changed_self_returns_prose_and_structured(self, formatter):
-        """PlayerLocationChangedEvent 本人向け: 現在地更新のプローズと構造化"""
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "現在地" in out.prose
-        assert out.structured.get("type") == "current_location"
-        assert "spot_name" in out.structured
-
-    def test_format_player_location_changed_other_returns_entered_message(self, formatter):
-        """PlayerLocationChangedEvent 他プレイヤー向け: 誰かがやってきた"""
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
-        )
-        out = formatter.format(event, PlayerId(2))
-        assert out is not None
-        assert "やってきました" in out.prose
-        assert out.structured.get("type") == "player_entered_spot"
-        assert out.schedules_turn is False and out.breaks_movement is False
-
-    def test_format_player_location_changed_self_does_not_cause_interrupt(self, formatter):
-        """PlayerLocationChangedEvent 本人向けは schedules_turn/breaks_movement=False"""
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert out.schedules_turn is False and out.breaks_movement is False
 
     # --- LocationEnteredEvent（L1 description 露出）---
 
@@ -185,34 +111,6 @@ class TestObservationFormatter:
         assert "戦闘不能" not in out.prose
         assert out.breaks_movement is True
 
-    def test_format_movement_interruption_stays_distinct_from_pursuit_lifecycle_end(self, formatter):
-        movement_event = PlayerDownedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-        )
-        pursuit_event = PursuitFailedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="PlayerStatusAggregate",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            failure_reason=PursuitFailureReason.TARGET_MISSING,
-            target_snapshot=build_pursuit_snapshot(),
-            last_known=build_pursuit_last_known(),
-        )
-
-        movement_out = formatter.format(movement_event, PlayerId(1))
-        pursuit_out = formatter.format(pursuit_event, PlayerId(1))
-
-        assert movement_out is not None
-        assert pursuit_out is not None
-        assert movement_out.breaks_movement is True
-        assert movement_out.structured["type"] == "player_downed"
-        assert "pursuit_status_after_event" not in movement_out.structured
-        assert movement_out.structured.get("interruption_scope") is None
-        assert pursuit_out.breaks_movement is False
-        assert pursuit_out.structured["event_type"] == "pursuit_failed"
-        assert pursuit_out.structured["pursuit_status_after_event"] == "ended"
-        assert pursuit_out.structured["interruption_scope"] == "pursuit"
 
     def test_format_player_downed_with_killer_includes_killer_name_or_fallback(self, formatter):
         """killer_player_id があると加害者主語の能動態になり、ID は露出しない。"""
@@ -239,171 +137,6 @@ class TestObservationFormatter:
         assert out.schedules_turn is True
         assert out.breaks_movement is False
 
-    def test_format_pursuit_started_returns_basic_lifecycle_fields(self, formatter):
-        event = PursuitStartedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="PlayerStatusAggregate",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            target_snapshot=build_pursuit_snapshot(),
-            last_known=build_pursuit_last_known(),
-        )
-
-        out = formatter.format(event, PlayerId(1))
-
-        assert out is not None
-        assert "追跡を開始" in out.prose
-        assert out.structured["event_type"] == "pursuit_started"
-        assert out.structured["actor_id"] == 1
-        assert out.structured["target_id"] == 2
-        assert out.structured["pursuit_status_after_event"] == "active"
-
-    def test_format_pursuit_updated_returns_basic_lifecycle_fields(self, formatter):
-        event = PursuitUpdatedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="PlayerStatusAggregate",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            target_snapshot=build_pursuit_snapshot(),
-            last_known=build_pursuit_last_known(),
-        )
-
-        out = formatter.format(event, PlayerId(1))
-
-        assert out is not None
-        assert "追跡状況を更新" in out.prose
-        assert out.structured["event_type"] == "pursuit_updated"
-        assert out.structured["pursuit_status_after_event"] == "active"
-
-    def test_format_pursuit_failed_returns_basic_outcome_fields(self, formatter):
-        event = PursuitFailedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="PlayerStatusAggregate",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            failure_reason=PursuitFailureReason.PATH_UNREACHABLE,
-            target_snapshot=build_pursuit_snapshot(),
-            last_known=build_pursuit_last_known(),
-        )
-
-        out = formatter.format(event, PlayerId(1))
-
-        assert out is not None
-        assert "追跡に失敗" in out.prose
-        assert out.structured["event_type"] == "pursuit_failed"
-        assert out.structured["pursuit_status_after_event"] == "ended"
-        assert out.structured["interruption_scope"] == "pursuit"
-
-    def test_format_pursuit_cancelled_returns_basic_outcome_fields(self, formatter):
-        event = PursuitCancelledEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="PlayerStatusAggregate",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            target_snapshot=build_pursuit_snapshot(),
-            last_known=build_pursuit_last_known(),
-        )
-
-        out = formatter.format(event, PlayerId(1))
-
-        assert out is not None
-        assert "追跡を中断" in out.prose
-        assert out.structured["event_type"] == "pursuit_cancelled"
-        assert out.structured["pursuit_status_after_event"] == "ended"
-        assert out.structured["interruption_scope"] == "pursuit"
-
-    def test_format_pursuit_failed_includes_failure_reason_and_last_known_metadata(self, formatter):
-        event = PursuitFailedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="PlayerStatusAggregate",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            failure_reason=PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN,
-            target_snapshot=build_pursuit_snapshot(),
-            last_known=build_pursuit_last_known(),
-        )
-
-        out = formatter.format(event, PlayerId(1))
-
-        assert out is not None
-        assert out.structured["failure_reason"] == "vision_lost_at_last_known"
-        assert out.structured["interruption_scope"] == "pursuit"
-        assert out.structured["pursuit_status_after_event"] == "ended"
-        assert out.structured["spot_id_value"] == 21
-        assert out.structured["last_known"] == {
-            "target_id": 2,
-            "spot_id_value": 21,
-            "coordinate": {"x": 7, "y": 8, "z": 0},
-            "observed_at_tick": 42,
-        }
-
-    def test_format_pursuit_failed_omits_snapshot_metadata_when_missing(self, formatter):
-        event = PursuitFailedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="PlayerStatusAggregate",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            failure_reason=PursuitFailureReason.TARGET_MISSING,
-            target_snapshot=None,
-            last_known=build_pursuit_last_known(),
-        )
-
-        out = formatter.format(event, PlayerId(1))
-
-        assert out is not None
-        assert out.structured["target_snapshot"] is None
-
-    def test_format_pursuit_started_includes_target_snapshot_metadata(self, formatter):
-        event = PursuitStartedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="PlayerStatusAggregate",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            target_snapshot=build_pursuit_snapshot(),
-            last_known=build_pursuit_last_known(),
-        )
-
-        out = formatter.format(event, PlayerId(1))
-
-        assert out is not None
-        assert out.structured["target_snapshot"] == {
-            "target_id": 2,
-            "spot_id_value": 20,
-            "coordinate": {"x": 5, "y": 6, "z": 0},
-        }
-
-    def test_format_pursuit_failed_schedules_turn_without_breaking_movement(self, formatter):
-        event = PursuitFailedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="PlayerStatusAggregate",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            failure_reason=PursuitFailureReason.PATH_UNREACHABLE,
-            target_snapshot=build_pursuit_snapshot(),
-            last_known=build_pursuit_last_known(),
-        )
-
-        out = formatter.format(event, PlayerId(1))
-
-        assert out is not None
-        assert out.schedules_turn is True
-        assert out.breaks_movement is False
-
-    def test_format_pursuit_cancelled_schedules_turn_without_breaking_movement(self, formatter):
-        event = PursuitCancelledEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="PlayerStatusAggregate",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            target_snapshot=build_pursuit_snapshot(),
-            last_known=build_pursuit_last_known(),
-        )
-
-        out = formatter.format(event, PlayerId(1))
-
-        assert out is not None
-        assert out.schedules_turn is True
-        assert out.breaks_movement is False
 
     def test_format_player_level_up_returns_prose_and_structured(self, formatter):
         """PlayerLevelUpEvent: レベルアップ文と構造化"""
@@ -610,73 +343,57 @@ class TestObservationFormatter:
     # --- スポット名・プレイヤー名のリポジトリ有無・フォールバック ---
 
     def test_format_spot_name_returns_fallback_when_repository_none(self, formatter):
-        """spot_repository が None のとき、スポット名は「不明なスポット」になる（ID非露出）"""
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
+        """spot_graph_repository が None のとき、スポット名は「不明なスポット」になる（ID非露出）"""
+        event = EntityEnteredSpotEvent.create(
+            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
         )
-        out = formatter.format(event, PlayerId(1))
+        out = formatter.format(event, PlayerId(2))
         assert out is not None
         assert out.structured.get("spot_name") == "不明なスポット"
         assert "不明なスポット" in out.prose
         assert "スポット2" not in out.prose  # ID 非露出
 
     def test_format_spot_name_uses_repository_when_available(self):
-        """spot_repository でスポットが取得できるとき、その名前が観測に含まれる"""
+        """spot_graph_repository でスポットが取得できるとき、その名前が観測に含まれる"""
         spot_repo = MagicMock()
         spot = MagicMock()
         spot.name = "町の広場"
-        spot_repo.find_by_id.return_value = spot
+        spot_repo.find_graph.return_value.get_spot.return_value = spot
         formatter = ObservationFormatter(
-            spot_repository=spot_repo,
+            spot_graph_repository=spot_repo,
             player_profile_repository=None,
         )
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
+        event = EntityEnteredSpotEvent.create(
+            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
         )
-        out = formatter.format(event, PlayerId(1))
+        out = formatter.format(event, PlayerId(2))
         assert out is not None
         assert out.structured.get("spot_name") == "町の広場"
         assert "町の広場" in out.prose
 
     def test_format_spot_name_returns_fallback_when_repository_returns_none(self):
-        """spot_repository が設定されていても find_by_id が None を返すときは「不明なスポット」"""
+        """spot_graph_repository が設定されていても get_spot が見つからないときは「不明なスポット」"""
         spot_repo = MagicMock()
-        spot_repo.find_by_id.return_value = None
+        spot_repo.find_graph.return_value.get_spot.side_effect = KeyError(2)
         formatter = ObservationFormatter(
-            spot_repository=spot_repo,
+            spot_graph_repository=spot_repo,
             player_profile_repository=None,
         )
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
+        event = EntityEnteredSpotEvent.create(
+            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
         )
-        out = formatter.format(event, PlayerId(1))
+        out = formatter.format(event, PlayerId(2))
         assert out is not None
         assert out.structured.get("spot_name") == "不明なスポット"
 
     def test_format_player_name_returns_fallback_when_repository_none(self, formatter):
         """player_profile_repository が None のとき、他プレイヤー名は「不明なプレイヤー」になる（ID非露出）"""
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
+        event = EntityEnteredSpotEvent.create(
+            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -694,13 +411,9 @@ class TestObservationFormatter:
             spot_repository=None,
             player_profile_repository=profile_repo,
         )
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
+        event = EntityEnteredSpotEvent.create(
+            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -715,13 +428,9 @@ class TestObservationFormatter:
             spot_repository=None,
             player_profile_repository=profile_repo,
         )
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
+        event = EntityEnteredSpotEvent.create(
+            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -745,13 +454,9 @@ class TestObservationFormatter:
         assert out_none is not None and out_none.observation_category == "self_only"
 
         # 他者向け（social）
-        event_gateway = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
+        event_gateway = EntityEnteredSpotEvent.create(
+            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
         )
         out_social = formatter.format(event_gateway, PlayerId(2), attention_level=AttentionLevel.FULL)
         assert out_social is not None and out_social.observation_category == "social"
@@ -770,13 +475,9 @@ class TestObservationFormatter:
     def test_format_with_filter_social_skips_social_category(self, formatter):
         """FILTER_SOCIAL のとき social カテゴリは None（スキップ）、self_only は返る（正常系）"""
         # 他者向け（social）→ スキップ
-        event_gateway = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
+        event_gateway = EntityEnteredSpotEvent.create(
+            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
         )
         out = formatter.format(event_gateway, PlayerId(2), attention_level=AttentionLevel.FILTER_SOCIAL)
         assert out is None
@@ -821,13 +522,9 @@ class TestObservationFormatter:
         assert out_self.observation_category == "self_only"
 
         # social → None
-        event_gateway = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
+        event_gateway = EntityEnteredSpotEvent.create(
+            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
         )
         out_social = formatter.format(event_gateway, PlayerId(2), attention_level=AttentionLevel.IGNORE)
         assert out_social is None

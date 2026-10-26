@@ -31,7 +31,6 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
     PlayerGoldEarnedEvent,
     PlayerLevelUpEvent,
-    PlayerLocationChangedEvent,
     PlayerRevivedEvent,
 )
 from ai_rpg_world.domain.player.service.player_outcome_registry import (
@@ -44,14 +43,12 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.event.map_events import (
     SpotWeatherChangedEvent,
 )
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -73,10 +70,7 @@ def _make_status(player_id: int, spot_id: int = 1) -> PlayerStatusAggregate:
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=SpotId(spot_id),
-            current_coordinate=Coordinate(0, 0, 0),
-        ),
+        current_spot_id=SpotId(spot_id),
     )
 
 
@@ -95,47 +89,6 @@ class TestObservationRecipientResolver:
             player_status_repository=status_repo,
         )
 
-    def test_resolve_player_location_changed_includes_actor_and_players_at_target_spot(self, resolver, status_repo):
-        """PlayerLocationChangedEvent: 本人と new_spot にいるプレイヤーが配信先"""
-        status_repo.save(_make_status(1, spot_id=1))
-        status_repo.save(_make_status(2, spot_id=2))
-        status_repo.save(_make_status(3, spot_id=2))
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(0, 0, 0),
-        )
-        ids = resolver.resolve(event)
-        assert len(ids) >= 1
-        values = [p.value for p in ids]
-        assert 1 in values
-        assert 2 in values
-        assert 3 in values
-
-    def test_resolve_player_location_changed_deduplicates_recipients_when_same_player_in_multiple_sources(
-        self, resolver, status_repo
-    ):
-        """同一プレイヤーが複数ソース（本人＋同一スポット）で含まれる場合、重複せず1回のみ配信先に含まれる"""
-        status_repo.save(_make_status(1, spot_id=2))
-        status_repo.save(_make_status(2, spot_id=2))
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(0, 0, 0),
-        )
-        ids = resolver.resolve(event)
-        values = [p.value for p in ids]
-        assert 1 in values
-        assert 2 in values
-        assert values.count(1) == 1
-        assert values.count(2) == 1
-        assert len(ids) == 2
 
     def test_resolve_player_level_up_returns_aggregate_player(self, resolver, status_repo):
         """PlayerLevelUpEvent: aggregate_id のプレイヤーが配信先"""
@@ -211,22 +164,6 @@ class TestObservationRecipientResolver:
         ids = resolver.resolve(event)
         assert ids == []
 
-    def test_resolve_player_location_changed_includes_self_and_players_at_new_spot(self, resolver, status_repo):
-        """PlayerLocationChangedEvent: 本人と new_spot_id にいるプレイヤー"""
-        status_repo.save(_make_status(1, spot_id=1))
-        status_repo.save(_make_status(2, spot_id=2))
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(0, 0, 0),
-        )
-        ids = resolver.resolve(event)
-        values = [p.value for p in ids]
-        assert 1 in values
-        assert 2 in values
 
     # --- WorldObjectId → PlayerId 解決（ResourceHarvested / LocationExited / WorldObjectInteracted）---
 
@@ -275,17 +212,6 @@ class TestDefaultRecipientStrategy:
             player_audience_query=audience_query,
         )
 
-    def test_supports_player_location_changed_event(self, strategy):
-        """PlayerLocationChangedEvent を supports する"""
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(0, 0, 0),
-        )
-        assert strategy.supports(event) is True
 
     def test_supports_player_level_up_event(self, strategy):
         """PlayerLevelUpEvent を supports する"""

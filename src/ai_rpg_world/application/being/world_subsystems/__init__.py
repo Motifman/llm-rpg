@@ -28,7 +28,6 @@ Phase 9-3b (= tier 1b 後半、戦略 C = selective dynamic-only):
 Phase 9-4a (本マイルストーン): PlayerStatusAggregate の残り 4 field
 - ``PlayerActiveEffectsSubsystemCodec`` — buffs/debuffs
 - ``PlayerAttentionLevelSubsystemCodec`` — 観測フィルタ
-- ``PlayerPursuitStateSubsystemCodec`` — 追跡 target
 - ``PlayerSpotNavigationStateSubsystemCodec`` — 移動中 route/leg/tick
 
 Phase 9-4b: world-side time/weather
@@ -90,7 +89,6 @@ from ai_rpg_world.application.being.world_subsystems.pending_trade_offer_codec i
 from ai_rpg_world.application.being.world_subsystems.player_combat_nav_codec import (
     PlayerActiveEffectsSubsystemCodec,
     PlayerAttentionLevelSubsystemCodec,
-    PlayerPursuitStateSubsystemCodec,
     PlayerSpotNavigationStateSubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems.player_growth_codec import (
@@ -164,7 +162,6 @@ __all__ = [
     # Phase 9-4a
     "PlayerActiveEffectsSubsystemCodec",
     "PlayerAttentionLevelSubsystemCodec",
-    "PlayerPursuitStateSubsystemCodec",
     "PlayerSpotNavigationStateSubsystemCodec",
     # Phase 9-4b
     "WeatherSubsystemCodec",

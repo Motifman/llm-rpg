@@ -338,3 +338,24 @@ class TestSqliteMonsterAggregateRepository:
             repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(uow.connection)
             generated2 = repo.generate_monster_id()
         assert generated2.value == 1
+
+
+def test_legacy_pursuit_rows_do_not_replace_live_chase(sqlite_conn):
+    """旧追跡行を持つDBもCHASEの相手と時刻を復元し、旧追跡の型なしで再保存できる。"""
+    from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
+    from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+    repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
+    monster = MonsterAggregate.create(MonsterId(1), _sample_template(), WorldObjectId(1000), skill_loadout=_loadout(1))
+    monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+    attacker = AttackerRef.of_player(PlayerId(7))
+    monster.enter_chase_state(attacker_ref=attacker, last_observed_target_spot_id=SpotId(5), current_tick=WorldTick(42))
+    repo.save(monster)
+    sqlite_conn.execute("INSERT INTO game_monster_pursuit_target_snapshots VALUES (1, 99, 3, 2, 2, 0)")
+    sqlite_conn.commit()
+    restored = repo.find_by_id(MonsterId(1))
+    assert restored.chase_attacker_ref() == attacker
+    assert restored.persistence_chase_started_at_tick == WorldTick(42)
+    assert not hasattr(restored, "_pursuit_state")
+    repo.save(restored)
+    assert repo.find_by_id(MonsterId(1)).chase_attacker_ref() == attacker

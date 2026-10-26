@@ -23,19 +23,10 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.value_object.player_pursuit_state import PlayerPursuitState
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
-from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import PursuitLastKnownState
-from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
-from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import PursuitTargetSnapshot
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def build_player_inventory(
@@ -70,10 +61,7 @@ def build_player_inventory(
 def build_player_status(
     *,
     row: sqlite3.Row,
-    path_rows: list[sqlite3.Row],
     active_effect_rows: list[sqlite3.Row],
-    pursuit_target_row: sqlite3.Row | None,
-    pursuit_last_known_row: sqlite3.Row | None,
     need_rows: list[sqlite3.Row] | None = None,
 ) -> PlayerStatusAggregate:
     exp_table = ExpTable(
@@ -81,46 +69,6 @@ def build_player_status(
         exponent=float(row["exp_table_exponent"]),
         level_offset=float(row["exp_table_level_offset"]),
     )
-    pursuit_state = PlayerPursuitState.empty()
-    if pursuit_target_row is not None or pursuit_last_known_row is not None:
-        target_snapshot = None
-        if pursuit_target_row is not None:
-            target_snapshot = PursuitTargetSnapshot(
-                target_id=WorldObjectId(int(pursuit_target_row["target_id"])),
-                spot_id=SpotId(int(pursuit_target_row["spot_id"])),
-                coordinate=Coordinate(
-                    int(pursuit_target_row["x"]), int(pursuit_target_row["y"]), int(pursuit_target_row["z"])
-                ),
-            )
-        last_known = None
-        if pursuit_last_known_row is not None:
-            last_known = PursuitLastKnownState(
-                target_id=WorldObjectId(int(pursuit_last_known_row["target_id"])),
-                spot_id=SpotId(int(pursuit_last_known_row["spot_id"])),
-                coordinate=Coordinate(
-                    int(pursuit_last_known_row["x"]), int(pursuit_last_known_row["y"]), int(pursuit_last_known_row["z"])
-                ),
-                observed_at_tick=None
-                if pursuit_last_known_row["observed_at_tick"] is None
-                else WorldTick(int(pursuit_last_known_row["observed_at_tick"])),
-            )
-        # 外側の or が「どちらかは在る」を保証している
-        if target_snapshot is not None:
-            target_id = target_snapshot.target_id
-        else:
-            assert last_known is not None
-            target_id = last_known.target_id
-        pursuit_state = PlayerPursuitState.from_parts(
-            pursuit=PursuitState(
-                actor_id=WorldObjectId.create(int(row["player_id"])),
-                target_id=target_id,
-                target_snapshot=target_snapshot,
-                last_known=last_known,
-                failure_reason=None
-                if row["pursuit_failure_reason"] is None
-                else PursuitFailureReason[str(row["pursuit_failure_reason"])],
-            )
-        )
     return PlayerStatusAggregate(
         player_id=PlayerId(int(row["player_id"])),
         base_stats=BaseStats(
@@ -151,26 +99,7 @@ def build_player_status(
         hp=Hp.create(int(row["hp_value"]), int(row["hp_max"])),
         mp=Mp.create(int(row["mp_value"]), int(row["mp_max"])),
         stamina=Stamina.create(int(row["stamina_value"]), int(row["stamina_max"])),
-        navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=None if row["current_spot_id"] is None else SpotId(int(row["current_spot_id"])),
-            current_coordinate=_coord_or_none(
-                row["current_coordinate_x"], row["current_coordinate_y"], row["current_coordinate_z"]
-            ),
-            current_destination=_coord_or_none(
-                row["current_destination_x"], row["current_destination_y"], row["current_destination_z"]
-            ),
-            planned_path=[
-                Coordinate(int(path_row["x"]), int(path_row["y"]), int(path_row["z"])) for path_row in path_rows
-            ],
-            goal_destination_type=row["goal_destination_type"],
-            goal_spot_id=None if row["goal_spot_id"] is None else SpotId(int(row["goal_spot_id"])),
-            goal_location_area_id=None
-            if row["goal_location_area_id"] is None
-            else LocationAreaId(int(row["goal_location_area_id"])),
-            goal_world_object_id=None
-            if row["goal_world_object_id"] is None
-            else WorldObjectId(int(row["goal_world_object_id"])),
-        ),
+        current_spot_id=None if row["current_spot_id"] is None else SpotId(int(row["current_spot_id"])),
         is_down=bool(row["is_down"]),
         active_effects=[
             StatusEffect(
@@ -181,7 +110,6 @@ def build_player_status(
             for effect_row in active_effect_rows
         ],
         attention_level=AttentionLevel(str(row["attention_level"])),
-        pursuit_state=pursuit_state,
         needs=_build_needs(need_rows or []),
         # Phase 4-D-2: state_json 列が存在し非 NULL なら JSON 復元、
         # それ以外 (旧 schema 由来 / NULL) は空 dict として扱う。
@@ -219,12 +147,6 @@ def _build_needs(need_rows: list[sqlite3.Row]) -> AgentNeeds:
         except (ValueError, KeyError):
             continue
     return AgentNeeds(tuple(needs)) if needs else AgentNeeds.default()
-
-
-def _coord_or_none(x: int | None, y: int | None, z: int | None) -> Coordinate | None:
-    if x is None or y is None or z is None:
-        return None
-    return Coordinate(int(x), int(y), int(z))
 
 
 __all__ = ["build_player_inventory", "build_player_status"]

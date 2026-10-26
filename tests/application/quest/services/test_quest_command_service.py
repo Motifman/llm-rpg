@@ -36,7 +36,6 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
@@ -75,7 +74,7 @@ from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
 def _create_player_status(
     player_id: PlayerId,
     gold_amount: int = 0,
-    navigation_state: PlayerNavigationState | None = None,
+    current_spot_id: SpotId | None = None,
 ) -> PlayerStatusAggregate:
     """テスト用の PlayerStatus を作成（ゴールド指定可）"""
     base_stats = BaseStats(
@@ -97,7 +96,7 @@ def _create_player_status(
         hp=Hp.create(100, 100),
         mp=Mp.create(100, 100),
         stamina=Stamina.create(100, 100),
-        navigation_state=navigation_state,
+        current_spot_id=current_spot_id,
     )
 
 
@@ -839,10 +838,7 @@ class TestQuestCommandService:
         status = _create_player_status(
             PlayerId(1),
             gold_amount=200,
-            navigation_state=PlayerNavigationState.from_parts(
-                current_spot_id=SpotId(spot_id) if spot_id else None,
-                current_coordinate=coord,
-            ),
+            current_spot_id=SpotId(spot_id) if spot_id else None,
         )
         s["status_repo"].save(status)
         s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(PlayerId(1)))

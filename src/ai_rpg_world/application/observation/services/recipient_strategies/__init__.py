@@ -9,9 +9,6 @@ from ai_rpg_world.application.observation.services.recipient_strategies.guild_re
 from ai_rpg_world.application.observation.services.recipient_strategies.monster_recipient_strategy import (
     MonsterRecipientStrategy,
 )
-from ai_rpg_world.application.observation.services.recipient_strategies.pursuit_recipient_strategy import (
-    PursuitRecipientStrategy,
-)
 from ai_rpg_world.application.observation.services.recipient_strategies.quest_recipient_strategy import (
     QuestRecipientStrategy,
 )
@@ -34,7 +31,6 @@ from ai_rpg_world.application.observation.services.recipient_strategies.trade_re
 __all__ = [
     "DefaultRecipientStrategy",
     "QuestRecipientStrategy",
-    "PursuitRecipientStrategy",
     "ShopRecipientStrategy",
     "TradeRecipientStrategy",
     "GuildRecipientStrategy",

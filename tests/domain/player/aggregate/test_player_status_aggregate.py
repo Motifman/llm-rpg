@@ -17,16 +17,12 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerStaminaHealedEvent,
 )
 from ai_rpg_world.domain.player.exception import (
-    CannotSwitchPursuitTargetException,
     InsufficientGoldException,
     InsufficientHpException,
     InsufficientMpException,
     InsufficientStaminaException,
-    NoActivePursuitException,
     PlayerDownedException,
     PlayerNotDownedException,
-    PursuitLastKnownMismatchException,
-    PursuitTargetMismatchException,
     SpeechValidationException,
 )
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
@@ -36,27 +32,10 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
-)
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
-from ai_rpg_world.domain.pursuit.event.pursuit_events import (
-    PursuitCancelledEvent,
-    PursuitFailedEvent,
-    PursuitStartedEvent,
-    PursuitUpdatedEvent,
-)
-from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
-    PursuitLastKnownState,
-)
-from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
-    PursuitTargetSnapshot,
-)
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 # テスト用のヘルパー関数
@@ -126,7 +105,6 @@ def create_test_status_aggregate(
     stamina: int = 100,
     is_down: bool = False,
     current_spot_id=None,
-    current_coordinate=None,
 ) -> PlayerStatusAggregate:
     """テスト用のPlayerStatusAggregateを作成"""
     if base_stats is None:
@@ -137,15 +115,6 @@ def create_test_status_aggregate(
         growth = create_test_growth()
 
     exp_table = create_test_exp_table()
-
-    navigation_state = (
-        PlayerNavigationState.from_parts(
-            current_spot_id=current_spot_id,
-            current_coordinate=current_coordinate,
-        )
-        if current_spot_id is not None or current_coordinate is not None
-        else None
-    )
 
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
@@ -158,33 +127,7 @@ def create_test_status_aggregate(
         mp=Mp.create(mp, base_stats.max_mp),
         stamina=Stamina.create(stamina, stamina),  # max_stamina = stamina
         is_down=is_down,
-        navigation_state=navigation_state,
-    )
-
-
-def create_test_pursuit_snapshot(
-    target_id: int = 99,
-    spot_id: int = 1,
-    coordinate: Coordinate = None,
-) -> PursuitTargetSnapshot:
-    """テスト用の追跡対象スナップショットを作成"""
-    return PursuitTargetSnapshot(
-        target_id=WorldObjectId.create(target_id),
-        spot_id=SpotId(spot_id),
-        coordinate=coordinate or Coordinate(3, 4, 0),
-    )
-
-
-def create_test_last_known_state(
-    target_id: int = 99,
-    spot_id: int = 1,
-    coordinate: Coordinate = None,
-) -> PursuitLastKnownState:
-    """テスト用の最後の既知状態を作成"""
-    return PursuitLastKnownState(
-        target_id=WorldObjectId.create(target_id),
-        spot_id=SpotId(spot_id),
-        coordinate=coordinate or Coordinate(3, 4, 0),
+        current_spot_id=current_spot_id,
     )
 
 
@@ -654,285 +597,6 @@ class TestPlayerStatusAggregate:
         assert aggregate.can_receive_healing() == False
         assert aggregate.can_consume_resources() == False
 
-    def test_location_updates(self):
-        """現在地の更新値を1件の通知へ転記し、1歩進めた後は現在地と未通過の目的地を残して経路を消去できる。"""
-        from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent
-        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-
-        aggregate = create_test_status_aggregate()
-        spot1 = SpotId(1)
-        coord1 = Coordinate(0, 0, 0)
-
-        # 1. 位置の更新
-        aggregate.update_location(spot1, coord1)
-        assert aggregate.current_spot_id == spot1
-        assert aggregate.current_coordinate == coord1
-
-        events = aggregate.get_events()
-        assert any(isinstance(e, PlayerLocationChangedEvent) for e in events)
-        assert len(events) == 1
-        changed = events[0]
-        assert changed.aggregate_id == PlayerId(1)
-        assert changed.aggregate_type == "PlayerStatusAggregate"
-        assert changed.old_spot_id is None
-        assert changed.old_coordinate is None
-        assert changed.new_spot_id == spot1
-        assert changed.new_coordinate == coord1
-        assert changed.occurred_tick is None
-
-        # 2. 経路の設定
-        dest = Coordinate(5, 5, 0)
-        path = [coord1, Coordinate(1, 0, 0), dest]
-        aggregate.set_destination(dest, path)
-
-        assert aggregate.current_destination == dest
-        assert aggregate.planned_path == path
-
-        # 3. 経路を1ステップ進める
-        next_coord = aggregate.advance_path()
-        assert next_coord == Coordinate(1, 0, 0)
-        # 現在地（[0]）と、まだ進んでいない目的地が残る
-        assert len(aggregate.planned_path) == 2
-        assert aggregate.planned_path == [coord1, dest]
-
-        # 4. 経路のクリア
-        aggregate.clear_path()
-        assert aggregate.current_destination is None
-        assert aggregate.planned_path == []
-
-    def test_advance_path_exhaustion(self):
-        """経路を最後まで進めた時の挙動"""
-        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-
-        aggregate = create_test_status_aggregate()
-
-        path = [Coordinate(0, 0), Coordinate(0, 1)]
-        aggregate.set_destination(Coordinate(0, 1), path)
-
-        next_coord = aggregate.advance_path()
-        assert next_coord == Coordinate(0, 1)
-        # 残り1要素以下になったらクリアされる仕様
-        assert aggregate.planned_path == []
-        assert aggregate.current_destination is None
-
-    def test_start_pursuit_stores_separate_state_and_emits_started_event(self):
-        """追跡開始が静的移動とは別状態で保持され、開始イベントを発行すること"""
-        aggregate = create_test_status_aggregate()
-        snapshot = create_test_pursuit_snapshot()
-
-        aggregate.start_pursuit(snapshot)
-
-        assert aggregate.has_active_pursuit is True
-        assert aggregate.pursuit_state is not None
-        assert aggregate.pursuit_state.target_id == snapshot.target_id
-        assert aggregate.pursuit_state.target_snapshot == snapshot
-        assert aggregate.current_destination is None
-        assert aggregate.planned_path == []
-
-        events = aggregate.get_events()
-        started = next(e for e in events if isinstance(e, PursuitStartedEvent))
-        assert started.actor_id == WorldObjectId.create(aggregate.player_id.value)
-        assert started.target_id == snapshot.target_id
-        assert started.target_snapshot == snapshot
-        assert started.last_known.coordinate == snapshot.coordinate
-
-    def test_update_pursuit_emits_only_for_meaningful_changes(self):
-        """追跡が同値なら通知せず、対象位置が変わると更新値と追跡者・対象を1件で通知する。"""
-        aggregate = create_test_status_aggregate()
-        snapshot = create_test_pursuit_snapshot()
-        aggregate.start_pursuit(snapshot)
-        aggregate.clear_events()
-
-        assert aggregate.update_pursuit(target_snapshot=snapshot) is False
-        assert aggregate.get_events() == []
-
-        new_snapshot = create_test_pursuit_snapshot(coordinate=Coordinate(4, 4, 0))
-        new_last_known = create_test_last_known_state(coordinate=Coordinate(4, 4, 0))
-
-        assert aggregate.update_pursuit(target_snapshot=new_snapshot, last_known=new_last_known) is True
-        assert aggregate.pursuit_state.target_snapshot == new_snapshot
-        assert aggregate.pursuit_state.last_known == new_last_known
-
-        events = aggregate.get_events()
-        updated = next(e for e in events if isinstance(e, PursuitUpdatedEvent))
-        assert updated.target_snapshot == new_snapshot
-        assert updated.last_known == new_last_known
-        assert len(events) == 1
-        assert updated.aggregate_id == WorldObjectId(1)
-        assert updated.aggregate_type == "PlayerStatusAggregate"
-        assert updated.actor_id == WorldObjectId(1)
-        assert updated.target_id == WorldObjectId(99)
-
-    def test_update_pursuit_is_noop_when_snapshot_and_last_known_are_unchanged(self):
-        """追跡継続が同じ snapshot/last_known を渡しても更新イベントを出さないこと"""
-        aggregate = create_test_status_aggregate()
-        snapshot = create_test_pursuit_snapshot()
-        aggregate.start_pursuit(snapshot)
-        aggregate.clear_events()
-
-        unchanged_last_known = create_test_last_known_state(coordinate=snapshot.coordinate)
-
-        assert (
-            aggregate.update_pursuit(
-                target_snapshot=snapshot,
-                last_known=unchanged_last_known,
-            )
-            is False
-        )
-        assert aggregate.get_events() == []
-
-    def test_fail_pursuit_clears_only_pursuit_state_and_emits_failed_event(self):
-        """追跡失敗は追跡だけを終了し、静的移動状態は維持すること"""
-        aggregate = create_test_status_aggregate(current_spot_id=SpotId(1), current_coordinate=Coordinate(0, 0, 0))
-        path = [Coordinate(0, 0, 0), Coordinate(1, 0, 0), Coordinate(2, 0, 0)]
-        aggregate.set_destination(Coordinate(2, 0, 0), path)
-        aggregate.start_pursuit(create_test_pursuit_snapshot())
-        aggregate.clear_events()
-
-        aggregate.fail_pursuit(PursuitFailureReason.PATH_UNREACHABLE)
-
-        assert aggregate.pursuit_state is None
-        assert aggregate.current_destination == Coordinate(2, 0, 0)
-        assert aggregate.planned_path == path
-
-        events = aggregate.get_events()
-        failed = next(e for e in events if isinstance(e, PursuitFailedEvent))
-        assert failed.failure_reason == PursuitFailureReason.PATH_UNREACHABLE
-        assert failed.target_id == WorldObjectId.create(99)
-
-    def test_clear_path_does_not_cancel_active_pursuit(self):
-        """静的移動の経路クリアでは追跡状態が消えないこと"""
-        aggregate = create_test_status_aggregate(current_spot_id=SpotId(1), current_coordinate=Coordinate(0, 0, 0))
-        aggregate.set_destination(
-            Coordinate(2, 0, 0),
-            [Coordinate(0, 0, 0), Coordinate(1, 0, 0), Coordinate(2, 0, 0)],
-        )
-        snapshot = create_test_pursuit_snapshot()
-        aggregate.start_pursuit(snapshot)
-        aggregate.clear_events()
-
-        aggregate.clear_path()
-
-        assert aggregate.current_destination is None
-        assert aggregate.planned_path == []
-        assert aggregate.pursuit_state is not None
-        assert aggregate.pursuit_state.target_snapshot == snapshot
-        assert aggregate.get_events() == []
-
-    def test_cancel_pursuit_emits_cancelled_event_and_clears_state(self):
-        """明示中断で追跡を終了し、追跡者・対象と最終位置情報を1件で通知する。"""
-        aggregate = create_test_status_aggregate()
-        snapshot = create_test_pursuit_snapshot()
-        aggregate.start_pursuit(snapshot)
-        aggregate.clear_events()
-
-        aggregate.cancel_pursuit()
-
-        assert aggregate.pursuit_state is None
-        events = aggregate.get_events()
-        cancelled = next(e for e in events if isinstance(e, PursuitCancelledEvent))
-        assert cancelled.target_id == WorldObjectId.create(99)
-        assert len(events) == 1
-        assert cancelled.aggregate_id == WorldObjectId(1)
-        assert cancelled.aggregate_type == "PlayerStatusAggregate"
-        assert cancelled.actor_id == WorldObjectId(1)
-        assert cancelled.target_snapshot == snapshot
-        assert cancelled.last_known == create_test_last_known_state()
-
-    class TestPursuitExceptions:
-        """追跡関連の例外ケース"""
-
-        def test_update_pursuit_when_no_active_pursuit_raises_no_active_pursuit_exception(self):
-            """追跡中でないときに update_pursuit を呼ぶと NoActivePursuitException"""
-            aggregate = create_test_status_aggregate()
-            snapshot = create_test_pursuit_snapshot()
-            last_known = create_test_last_known_state()
-
-            with pytest.raises(NoActivePursuitException, match="追跡中でない"):
-                aggregate.update_pursuit(target_snapshot=snapshot, last_known=last_known)
-
-            assert aggregate.has_active_pursuit is False
-
-        def test_fail_pursuit_when_no_active_pursuit_raises_no_active_pursuit_exception(self):
-            """追跡中でないときに fail_pursuit を呼ぶと NoActivePursuitException"""
-            aggregate = create_test_status_aggregate()
-
-            with pytest.raises(NoActivePursuitException, match="追跡中でない"):
-                aggregate.fail_pursuit(PursuitFailureReason.PATH_UNREACHABLE)
-
-        def test_cancel_pursuit_when_no_active_pursuit_raises_no_active_pursuit_exception(self):
-            """追跡中でないときに cancel_pursuit を呼ぶと NoActivePursuitException"""
-            aggregate = create_test_status_aggregate()
-
-            with pytest.raises(NoActivePursuitException, match="追跡中でない"):
-                aggregate.cancel_pursuit()
-
-        def test_start_pursuit_with_different_target_while_active_raises_cannot_switch(self):
-            """追跡中の別対象への開始を専用例外で拒否し、元の追跡値と未発行通知を保持する。"""
-            aggregate = create_test_status_aggregate()
-            snapshot1 = create_test_pursuit_snapshot(target_id=99)
-            aggregate.start_pursuit(snapshot1)
-
-            snapshot2 = create_test_pursuit_snapshot(target_id=88)  # 別の対象
-
-            before_pursuit = aggregate.pursuit_state
-            before_events = aggregate.get_events()
-
-            with pytest.raises(
-                CannotSwitchPursuitTargetException,
-                match="切り替え.*先に.*終了",
-            ):
-                aggregate.start_pursuit(snapshot2)
-
-            assert aggregate.pursuit_state is not None
-            assert aggregate.pursuit_state.target_id == WorldObjectId.create(99)
-
-            assert aggregate.pursuit_state == before_pursuit
-            assert aggregate.get_events() == before_events
-
-        def test_update_pursuit_with_different_target_snapshot_raises_pursuit_target_mismatch(self):
-            """現行対象と異なる更新を専用例外で拒否し、元の追跡値と未発行通知を保持する。"""
-            aggregate = create_test_status_aggregate()
-            snapshot1 = create_test_pursuit_snapshot(target_id=99)
-            aggregate.start_pursuit(snapshot1)
-            last_known = create_test_last_known_state(target_id=99)
-
-            wrong_snapshot = create_test_pursuit_snapshot(target_id=88)
-
-            before_pursuit = aggregate.pursuit_state
-            before_events = aggregate.get_events()
-
-            with pytest.raises(
-                PursuitTargetMismatchException,
-                match="target_id.*一致",
-            ):
-                aggregate.update_pursuit(target_snapshot=wrong_snapshot, last_known=last_known)
-
-            assert aggregate.pursuit_state == before_pursuit
-            assert aggregate.get_events() == before_events
-
-        def test_start_pursuit_with_last_known_target_id_mismatch_raises_pursuit_last_known_mismatch(
-            self,
-        ):
-            """対象と最後の既知位置のIDが異なる開始を専用例外で拒否し、追跡も通知も作らない。"""
-            aggregate = create_test_status_aggregate()
-            snapshot = create_test_pursuit_snapshot(target_id=99)
-            wrong_last_known = PursuitLastKnownState(
-                target_id=WorldObjectId.create(88),
-                spot_id=SpotId(1),
-                coordinate=Coordinate(0, 0, 0),
-                observed_at_tick=None,
-            )
-
-            with pytest.raises(
-                PursuitLastKnownMismatchException,
-                match="target_id.*一致",
-            ):
-                aggregate.start_pursuit(snapshot, last_known=wrong_last_known)
-
-            assert aggregate.pursuit_state is None
-            assert aggregate.get_events() == []
 
     def test_consume_resources_zero_costs(self):
         """ゼロコストでの消費が正常に終了すること"""
@@ -1072,7 +736,6 @@ class TestPlayerStatusAggregate:
         aggregate = create_test_status_aggregate(
             player_id=1,
             current_spot_id=spot_id,
-            current_coordinate=coord,
         )
         aggregate.speak(
             content="こんにちは",
@@ -1096,7 +759,6 @@ class TestPlayerStatusAggregate:
         aggregate = create_test_status_aggregate(
             player_id=2,
             current_spot_id=spot_id,
-            current_coordinate=coord,
         )
         aggregate.speak(
             content="助けて！",
@@ -1121,7 +783,6 @@ class TestPlayerStatusAggregate:
         aggregate = create_test_status_aggregate(
             player_id=1,
             current_spot_id=spot_id,
-            current_coordinate=coord,
         )
         aggregate.speak(
             content="内緒だよ",
@@ -1144,7 +805,6 @@ class TestPlayerStatusAggregate:
         aggregate = create_test_status_aggregate(
             player_id=1,
             current_spot_id=spot_id,
-            current_coordinate=coord,
         )
         with pytest.raises(SpeechValidationException, match="宛先プレイヤーを指定してください"):
             aggregate.speak(
@@ -1163,7 +823,6 @@ class TestPlayerStatusAggregate:
         aggregate = create_test_status_aggregate(
             player_id=1,
             current_spot_id=spot_id,
-            current_coordinate=coord,
         )
         with pytest.raises(SpeechValidationException, match="発言内容を空にできません"):
             aggregate.speak(
@@ -1188,7 +847,6 @@ class TestPlayerStatusAggregate:
             player_id=1,
             is_down=True,
             current_spot_id=spot_id,
-            current_coordinate=coord,
         )
         with pytest.raises(PlayerDownedException, match="ダウン状態のプレイヤーは発言できません"):
             aggregate.speak(
@@ -1206,7 +864,6 @@ class TestPlayerStatusAggregate:
         aggregate = create_test_status_aggregate(
             player_id=1,
             current_spot_id=spot_id,
-            current_coordinate=coord,
         )
         aggregate.speak(
             content="  hello  ",

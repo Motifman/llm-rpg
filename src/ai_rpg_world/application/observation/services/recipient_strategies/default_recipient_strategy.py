@@ -32,7 +32,6 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
     PlayerLevelUpEvent,
-    PlayerLocationChangedEvent,
     PlayerRevivedEvent,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -136,12 +135,6 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         for player_id in self._player_audience_query.all_known_players():
             add(player_id)
 
-    def _resolve_player_location_changed(
-        self, event: PlayerLocationChangedEvent, add: Callable[[PlayerId], None]
-    ) -> None:
-        add(event.aggregate_id)
-        for pid in self._player_audience_query.players_at_spot(event.new_spot_id):
-            add(pid)
 
     def _resolve_spot_weather_changed(self, event: SpotWeatherChangedEvent, add: Callable[[PlayerId], None]) -> None:
         # 屋内スポットでは天候変化を観測させない（窓があるとは限らない・空が直接
@@ -193,7 +186,6 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
 _RECIPIENT_RULES: RuleTable = {
     # --- 場所の出入り ---
     # 入った本人と、その場に居た全員。すれ違いが見えるように両方へ。
-    PlayerLocationChangedEvent: DefaultRecipientStrategy._resolve_player_location_changed,
     # --- 重大な状態変化は位置に関わらず全員へ ---
     PlayerDownedEvent: DefaultRecipientStrategy._deliver_to_everyone_known,
     PlayerRevivedEvent: DefaultRecipientStrategy._deliver_to_everyone_known,
