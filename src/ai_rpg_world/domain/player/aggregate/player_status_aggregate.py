@@ -316,12 +316,10 @@ class PlayerStatusAggregate(AggregateRoot):
         """現在のスポットID"""
         return self._current_spot_id
 
-
     @property
     def spot_navigation_state(self) -> PlayerSpotNavigationState | None:
         """スポットグラフ上の移動状態（未使用のワールドでは None）。"""
         return self._spot_navigation_state
-
 
     def set_spot_navigation_state(self, state: PlayerSpotNavigationState | None) -> None:
         """スポットグラフ用の移動状態を設定する（None で未使用に戻す）。"""
@@ -337,7 +335,6 @@ class PlayerStatusAggregate(AggregateRoot):
         if self._spot_navigation_state is None:
             raise SpotNavigationStateInvalidException("スポットグラフ上の位置が未初期化です")
         self._spot_navigation_state = self._spot_navigation_state.with_sub_location(sub_location_id)
-
 
     def can_act(self) -> bool:
         """戦闘行動が可能かどうか

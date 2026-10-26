@@ -457,7 +457,6 @@ class TestObservationRecipientResolverExtendedEvents:
         )
         assert resolver.resolve(event) == []
 
-
     def test_public_quest_resolution_propagates_status_repository_error(self):
         status_repo = MagicMock()
         status_repo.find_all.side_effect = RuntimeError("find_all failed")

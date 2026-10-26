@@ -123,11 +123,12 @@ class TestSpotNavigationStateCodec:
         assert dst_agg._spot_navigation_state.current_spot_id == SpotId(1)
         assert dst_agg._spot_navigation_state.is_traveling is False
 
-    @pytest.mark.parametrize('legacy', [False, True])
+    @pytest.mark.parametrize("legacy", [False, True])
     def test_traveling_state_round_trips(self, legacy) -> None:
         """旧追跡キーの有無によらず、移動途中の経路と残りtickをstrict読込で保持する。"""
         from ai_rpg_world.application.being.world_state_snapshot import WorldStateSnapshot
         from ai_rpg_world.application.being.world_state_snapshot_service import WorldStateSnapshotService
+
         sn = PlayerSpotNavigationState(
             current_spot_id=SpotId(1),
             current_sub_location_id=None,
@@ -146,13 +147,14 @@ class TestSpotNavigationStateCodec:
 
         dst_agg = _make_status_agg()
         dst_repo = _repo_stub({PlayerId(1): dst_agg})
-        subsystems = {'player_spot_navigation_state': captured}
+        subsystems = {"player_spot_navigation_state": captured}
         if legacy:
-            subsystems['player_pursuit_state'] = {'schema_version': 1, 'entries': [{'player_id': 1, 'pursuit': None}]}
+            subsystems["player_pursuit_state"] = {"schema_version": 1, "entries": [{"player_id": 1, "pursuit": None}]}
         WorldStateSnapshotService(subsystem_codecs=[PlayerSpotNavigationStateSubsystemCodec()]).restore(
             _runtime_for_player(dst_repo),
-            WorldStateSnapshot(source_scenario='demo', world_tick=8, subsystems=subsystems),
-            current_scenario='demo', strict_subsystems=True,
+            WorldStateSnapshot(source_scenario="demo", world_tick=8, subsystems=subsystems),
+            current_scenario="demo",
+            strict_subsystems=True,
         )
         restored = dst_agg._spot_navigation_state
         assert restored.is_traveling is True

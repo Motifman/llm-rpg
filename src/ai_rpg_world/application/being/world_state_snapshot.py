@@ -94,9 +94,7 @@ class WorldStateSnapshot:
     def removed_subsystem_counts(self) -> dict[str, int]:
         """削除済みの旧追跡キーについて、読み捨てるプレイヤー行数を返す。"""
         return {
-            key: len(data.get("entries", []))
-            for key, data in self.subsystems.items()
-            if key == "player_pursuit_state"
+            key: len(data.get("entries", [])) for key, data in self.subsystems.items() if key == "player_pursuit_state"
         }
 
     def to_dict(self) -> dict[str, Any]:

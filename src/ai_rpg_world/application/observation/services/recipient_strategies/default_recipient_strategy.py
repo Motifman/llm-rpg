@@ -135,7 +135,6 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         for player_id in self._player_audience_query.all_known_players():
             add(player_id)
 
-
     def _resolve_spot_weather_changed(self, event: SpotWeatherChangedEvent, add: Callable[[PlayerId], None]) -> None:
         # 屋内スポットでは天候変化を観測させない（窓があるとは限らない・空が直接
         # 見えない前提）。SpotGraph 上で is_outdoor=False のスポットは配信先から外す。

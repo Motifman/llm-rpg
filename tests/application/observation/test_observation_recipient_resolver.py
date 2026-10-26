@@ -89,7 +89,6 @@ class TestObservationRecipientResolver:
             player_status_repository=status_repo,
         )
 
-
     def test_resolve_player_level_up_returns_aggregate_player(self, resolver, status_repo):
         """PlayerLevelUpEvent: aggregate_id のプレイヤーが配信先"""
         status_repo.save(_make_status(1))
@@ -164,7 +163,6 @@ class TestObservationRecipientResolver:
         ids = resolver.resolve(event)
         assert ids == []
 
-
     # --- WorldObjectId → PlayerId 解決（ResourceHarvested / LocationExited / WorldObjectInteracted）---
 
     # --- 例外ケース（リポジトリが例外を投げた場合は伝播）---
@@ -211,7 +209,6 @@ class TestDefaultRecipientStrategy:
             observed_event_registry=registry,
             player_audience_query=audience_query,
         )
-
 
     def test_supports_player_level_up_event(self, strategy):
         """PlayerLevelUpEvent を supports する"""

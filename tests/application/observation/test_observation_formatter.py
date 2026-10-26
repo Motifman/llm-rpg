@@ -96,7 +96,6 @@ class TestObservationFormatter:
         """リポジトリなし（フォールバック名のみ）"""
         return ObservationFormatter(spot_repository=None, player_profile_repository=None)
 
-
     # --- LocationEnteredEvent（L1 description 露出）---
 
     def test_format_player_downed_self_breaks_movement(self, formatter):
@@ -110,7 +109,6 @@ class TestObservationFormatter:
         assert out.prose == "倒れて動けなくなった。"
         assert "戦闘不能" not in out.prose
         assert out.breaks_movement is True
-
 
     def test_format_player_downed_with_killer_includes_killer_name_or_fallback(self, formatter):
         """killer_player_id があると加害者主語の能動態になり、ID は露出しない。"""
@@ -136,7 +134,6 @@ class TestObservationFormatter:
         assert "入手" in out.prose
         assert out.schedules_turn is True
         assert out.breaks_movement is False
-
 
     def test_format_player_level_up_returns_prose_and_structured(self, formatter):
         """PlayerLevelUpEvent: レベルアップ文と構造化"""
@@ -345,8 +342,11 @@ class TestObservationFormatter:
     def test_format_spot_name_returns_fallback_when_repository_none(self, formatter):
         """spot_graph_repository が None のとき、スポット名は「不明なスポット」になる（ID非露出）"""
         event = EntityEnteredSpotEvent.create(
-            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
-            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1),
+            spot_id=SpotId(2),
+            from_spot_id=None,
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -365,8 +365,11 @@ class TestObservationFormatter:
             player_profile_repository=None,
         )
         event = EntityEnteredSpotEvent.create(
-            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
-            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1),
+            spot_id=SpotId(2),
+            from_spot_id=None,
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -382,8 +385,11 @@ class TestObservationFormatter:
             player_profile_repository=None,
         )
         event = EntityEnteredSpotEvent.create(
-            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
-            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1),
+            spot_id=SpotId(2),
+            from_spot_id=None,
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -392,8 +398,11 @@ class TestObservationFormatter:
     def test_format_player_name_returns_fallback_when_repository_none(self, formatter):
         """player_profile_repository が None のとき、他プレイヤー名は「不明なプレイヤー」になる（ID非露出）"""
         event = EntityEnteredSpotEvent.create(
-            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
-            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1),
+            spot_id=SpotId(2),
+            from_spot_id=None,
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -412,8 +421,11 @@ class TestObservationFormatter:
             player_profile_repository=profile_repo,
         )
         event = EntityEnteredSpotEvent.create(
-            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
-            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1),
+            spot_id=SpotId(2),
+            from_spot_id=None,
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -429,8 +441,11 @@ class TestObservationFormatter:
             player_profile_repository=profile_repo,
         )
         event = EntityEnteredSpotEvent.create(
-            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
-            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1),
+            spot_id=SpotId(2),
+            from_spot_id=None,
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -455,8 +470,11 @@ class TestObservationFormatter:
 
         # 他者向け（social）
         event_gateway = EntityEnteredSpotEvent.create(
-            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
-            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1),
+            spot_id=SpotId(2),
+            from_spot_id=None,
         )
         out_social = formatter.format(event_gateway, PlayerId(2), attention_level=AttentionLevel.FULL)
         assert out_social is not None and out_social.observation_category == "social"
@@ -476,8 +494,11 @@ class TestObservationFormatter:
         """FILTER_SOCIAL のとき social カテゴリは None（スキップ）、self_only は返る（正常系）"""
         # 他者向け（social）→ スキップ
         event_gateway = EntityEnteredSpotEvent.create(
-            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
-            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1),
+            spot_id=SpotId(2),
+            from_spot_id=None,
         )
         out = formatter.format(event_gateway, PlayerId(2), attention_level=AttentionLevel.FILTER_SOCIAL)
         assert out is None
@@ -523,8 +544,11 @@ class TestObservationFormatter:
 
         # social → None
         event_gateway = EntityEnteredSpotEvent.create(
-            aggregate_id=SpotGraphId(1), aggregate_type="SpotGraphAggregate",
-            entity_id=EntityId(1), spot_id=SpotId(2), from_spot_id=None,
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId(1),
+            spot_id=SpotId(2),
+            from_spot_id=None,
         )
         out_social = formatter.format(event_gateway, PlayerId(2), attention_level=AttentionLevel.IGNORE)
         assert out_social is None

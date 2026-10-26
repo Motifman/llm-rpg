@@ -121,7 +121,6 @@ class PlayerObservationFormatter:
             return self._format_player_spoke(event, recipient_player_id)
         return None
 
-
     def _format_player_downed(self, event: PlayerDownedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         is_self = event.aggregate_id.value == recipient_id.value
         killer_player_id = getattr(event, "killer_player_id", None)

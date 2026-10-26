@@ -597,7 +597,6 @@ class TestPlayerStatusAggregate:
         assert aggregate.can_receive_healing() == False
         assert aggregate.can_consume_resources() == False
 
-
     def test_consume_resources_zero_costs(self):
         """ゼロコストでの消費が正常に終了すること"""
         aggregate = create_test_status_aggregate(hp=100, mp=50, stamina=100)

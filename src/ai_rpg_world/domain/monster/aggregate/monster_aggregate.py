@@ -367,7 +367,6 @@ class MonsterAggregate(AggregateRoot):
         """[永続化専用] state にあればそのまま返す。"""
         return self._behavior_state.chase_started_at_tick
 
-
     @property
     def behavior_last_known_feed(self) -> list[FeedMemoryEntry]:
         """餌場の記憶（最大 MAX_FEED_MEMORIES 件、古い順）。適用時は距離が近い順に使う。"""
@@ -1012,7 +1011,6 @@ class MonsterAggregate(AggregateRoot):
             raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet, cannot perform behavior")
         if self._spot_id is None:
             raise MonsterNotSpawnedException(f"Monster {self._monster_id} has no spot_id, cannot perform behavior")
-
 
     def respawn(self, coordinate: Coordinate, current_tick: WorldTick, spot_id: SpotId) -> None:
         """リスポーンさせる"""
