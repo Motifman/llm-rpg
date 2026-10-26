@@ -41,7 +41,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
     SkillLoadoutAggregate,
 )
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _make_monster(*, hp_max: int = 30, attack: int = 5, alive: bool = True) -> MonsterAggregate:
@@ -66,7 +65,6 @@ def _make_monster(*, hp_max: int = 30, attack: int = 5, alive: bool = True) -> M
     return MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=template,
-        world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
             SkillLoadoutId(1),
             owner_id=101,

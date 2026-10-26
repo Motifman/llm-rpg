@@ -36,7 +36,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -92,7 +91,6 @@ def _make_monster(template: MonsterTemplate, monster_id: int) -> MonsterAggregat
     return MonsterAggregate(
         monster_id=MonsterId.create(monster_id),
         template=template,
-        world_object_id=WorldObjectId.create(9000 + monster_id),
         skill_loadout=SkillLoadoutAggregate.create(
             SkillLoadoutId(monster_id),
             owner_id=monster_id,

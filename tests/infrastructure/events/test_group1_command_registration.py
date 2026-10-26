@@ -144,16 +144,16 @@ def test_same_batch_runs_required_effect_before_after_commit_events() -> None:
 def test_effect_failure_rolls_back_and_skips_after_commit() -> None:
     """消耗品効果が失敗すると状態を元に戻し、同じ区切りのショップとSNSは呼ばない。"""
     store, scope, publisher, handlers = _stack()
-    original = store.next_world_object_id
+    original = store.next_monster_id
     handlers["consumable"].handle.side_effect = RuntimeError("効果の失敗")
     event = ConsumableUsedEvent.create(
         aggregate_id=PlayerId(1), aggregate_type="PlayerStatusAggregate", item_spec_id=ItemSpecId(1)
     )
     with pytest.raises(RuntimeError, match="効果の失敗"):
         with scope:
-            store.next_world_object_id = original + 1
+            store.next_monster_id = original + 1
             publisher.publish_all([event, _event(ShopCreatedEvent, 2), _event(SnsUserFollowedEvent, 3)])
-    assert store.next_world_object_id == original
+    assert store.next_monster_id == original
     assert not handlers["shop"].mock_calls and not handlers["notification"].mock_calls
 
 
@@ -172,12 +172,12 @@ def test_after_commit_failure_is_traced_and_other_deliveries_continue(event_type
         DomainEvent, delivered.append, channel=DeliveryChannel.AUXILIARY, guarantee=DeliveryGuarantee.BEST_EFFORT
     )
     events = [_event(event_type), BaseDomainEvent.create(aggregate_id=1, aggregate_type="Unrelated")]
-    changed = store.next_world_object_id + 1
+    changed = store.next_monster_id + 1
     with pytest.raises(CommandPostCommitException) as caught:
         with scope:
-            store.next_world_object_id = changed
+            store.next_monster_id = changed
             publisher.publish_all(events)
-    assert store.next_world_object_id == changed
+    assert store.next_monster_id == changed
     assert delivered == events
     assert caught.value.handoff_error is failure
     failures = scope.trace.of_kind("world_tick_unit_failed")

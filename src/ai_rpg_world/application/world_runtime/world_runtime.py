@@ -352,7 +352,6 @@ from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowt
 from ai_rpg_world.domain.trade.value_object.market_reach import (
     MarketReach,
 )
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
@@ -4382,10 +4381,6 @@ def create_world_runtime(
     monster_template_repo = InMemoryMonsterTemplateRepository()
     skill_loadout_repo = InMemorySkillLoadoutRepository(data_store)
     if scenario.monster_templates or scenario.monster_placements:
-        # NOTE: Coordinate / WorldTick はモジュールトップで import 済 (player
-        # setup でも使われている)。ここでローカル import すると Python の
-        # 関数スコープ規則で「local variable referenced before assignment」
-        # になり、上の player 初期化を壊す。
         from ai_rpg_world.domain.common.value_object import WorldTick
         from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
             MonsterAggregate,
@@ -4397,14 +4392,11 @@ def create_world_runtime(
         from ai_rpg_world.domain.skill.value_object.skill_loadout_id import (
             SkillLoadoutId,
         )
-        from ai_rpg_world.domain.world.value_object.world_object_id import (
-            WorldObjectId,
-        )
 
         for st in scenario.monster_templates:
             monster_template_repo.save(st.template)
 
-        # MonsterId / WorldObjectId / SkillLoadoutId の単純な incrementing
+        # MonsterId / SkillLoadoutId の単純な incrementing
         # 採番。本サービスはシナリオ起動時の 1 回だけしか呼ばれないので
         # in-memory counter で十分。
         monster_counter = 1
@@ -4424,7 +4416,6 @@ def create_world_runtime(
             spot_int = scenario.id_mapper.get_int("spot", placement.spot_string_id)
             spot_id = SpotId.create(spot_int)
             monster_id = MonsterId(monster_counter)
-            world_object_id = WorldObjectId(1_000_000 + monster_counter)
             loadout = SkillLoadoutAggregate.create(
                 loadout_id=SkillLoadoutId(loadout_counter),
                 owner_id=monster_counter,
@@ -4435,13 +4426,7 @@ def create_world_runtime(
             monster = MonsterAggregate.reconstitute(
                 monster_id=monster_id,
                 template=template,
-                world_object_id=world_object_id,
                 skill_loadout=loadout,
-                coordinate=Coordinate(
-                    x=placement.coordinate_x,
-                    y=placement.coordinate_y,
-                    z=placement.coordinate_z,
-                ),
                 spot_id=spot_id,
                 current_tick=WorldTick(0),
             )
@@ -5528,11 +5513,6 @@ def create_world_runtime(
                         slot_key=slot_key,
                         template=template,
                         spot_id=SpotId.create(spot_int),
-                        coordinate=Coordinate(
-                            x=placement.coordinate_x,
-                            y=placement.coordinate_y,
-                            z=placement.coordinate_z,
-                        ),
                         day_night_phase_names=(
                             spawn_condition.day_night_phase_names if spawn_condition is not None else ()
                         ),

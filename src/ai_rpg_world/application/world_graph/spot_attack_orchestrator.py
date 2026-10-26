@@ -380,7 +380,6 @@ class SpotAttackOrchestrator:
         prey_monster.apply_damage(
             final_damage=damage,
             current_tick=current_tick,
-            attacker_id=attacker_monster.world_object_id,
         )
         attacker_monster.record_attack(current_tick)
 
@@ -465,7 +464,6 @@ class SpotAttackOrchestrator:
         target_monster.apply_damage(
             final_damage=damage,
             current_tick=current_tick,
-            attacker_id=attacker_monster.world_object_id,
         )
         attacker_monster.record_attack(current_tick)
         target_incapacitated = target_monster.status != MonsterStatusEnum.ALIVE

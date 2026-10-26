@@ -14,9 +14,7 @@ from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
     InMemoryMonsterAggregateRepository,
@@ -57,14 +55,6 @@ class TestInMemoryMonsterAggregateRepository:
         assert isinstance(id1, MonsterId)
         assert isinstance(id2, MonsterId)
 
-    def test_generate_world_object_id_for_npc_returns_unique_ids(self, repo: InMemoryMonsterAggregateRepository):
-        """generate_world_object_id_for_npc は一意の ID を返す"""
-        id1 = repo.generate_world_object_id_for_npc()
-        id2 = repo.generate_world_object_id_for_npc()
-        assert id1 != id2
-        assert isinstance(id1, WorldObjectId)
-        assert isinstance(id2, WorldObjectId)
-
     def test_find_by_spot_id_returns_empty_when_none(self, repo: InMemoryMonsterAggregateRepository):
         """該当スポットにモンスターがいないときは空リスト"""
         result = repo.find_by_spot_id(SpotId(1))
@@ -74,14 +64,14 @@ class TestInMemoryMonsterAggregateRepository:
         """find_by_spot_id は指定スポットに紐づくモンスターのみ返す"""
         template = _sample_template()
         loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10)
-        m1 = MonsterAggregate.create(MonsterId(1), template, WorldObjectId(1001), skill_loadout=loadout)
-        m1.spawn(Coordinate(1, 1, 0), SpotId(1), WorldTick(0))
+        m1 = MonsterAggregate.create(MonsterId(1), template, skill_loadout=loadout)
+        m1.spawn(SpotId(1), WorldTick(0))
         loadout2 = SkillLoadoutAggregate.create(SkillLoadoutId(1002), 1002, normal_capacity=10, awakened_capacity=10)
-        m2 = MonsterAggregate.create(MonsterId(2), template, WorldObjectId(1002), skill_loadout=loadout2)
-        m2.spawn(Coordinate(2, 2, 0), SpotId(1), WorldTick(0))
+        m2 = MonsterAggregate.create(MonsterId(2), template, skill_loadout=loadout2)
+        m2.spawn(SpotId(1), WorldTick(0))
         loadout3 = SkillLoadoutAggregate.create(SkillLoadoutId(1003), 1003, normal_capacity=10, awakened_capacity=10)
-        m3 = MonsterAggregate.create(MonsterId(3), template, WorldObjectId(1003), skill_loadout=loadout3)
-        m3.spawn(Coordinate(3, 3, 0), SpotId(2), WorldTick(0))
+        m3 = MonsterAggregate.create(MonsterId(3), template, skill_loadout=loadout3)
+        m3.spawn(SpotId(2), WorldTick(0))
         repo.save(m1)
         repo.save(m2)
         repo.save(m3)
@@ -97,8 +87,8 @@ class TestInMemoryMonsterAggregateRepository:
         """find_by_spot_id は DEAD のモンスターも含む"""
         template = _sample_template()
         loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10)
-        m = MonsterAggregate.create(MonsterId(1), template, WorldObjectId(1001), skill_loadout=loadout)
-        m.spawn(Coordinate(1, 1, 0), SpotId(1), WorldTick(0))
+        m = MonsterAggregate.create(MonsterId(1), template, skill_loadout=loadout)
+        m.spawn(SpotId(1), WorldTick(0))
         m.apply_damage(100, WorldTick(10))
         repo.save(m)
         result = repo.find_by_spot_id(SpotId(1))
@@ -110,29 +100,10 @@ class TestInMemoryMonsterAggregateRepository:
         template = _sample_template()
         loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10)
         monster_id = MonsterId(1)
-        world_object_id = WorldObjectId(1001)
-        m = MonsterAggregate.create(monster_id, template, world_object_id, skill_loadout=loadout)
-        m.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+        m = MonsterAggregate.create(monster_id, template, skill_loadout=loadout)
+        m.spawn(SpotId(1), WorldTick(0))
         repo.save(m)
         found = repo.find_by_id(monster_id)
         assert found is not None
         assert found.monster_id == monster_id
-        assert found.world_object_id == world_object_id
         assert found.status == MonsterStatusEnum.ALIVE
-        assert found.coordinate == Coordinate(0, 0, 0)
-
-    def test_save_then_find_by_world_object_id_returns_same_aggregate(self, repo: InMemoryMonsterAggregateRepository):
-        """save 後に find_by_world_object_id で同一集約を取得できる"""
-        template = _sample_template()
-        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1001), 1001, normal_capacity=10, awakened_capacity=10)
-        monster_id = MonsterId(1)
-        world_object_id = WorldObjectId(1001)
-        m = MonsterAggregate.create(monster_id, template, world_object_id, skill_loadout=loadout)
-        m.spawn(Coordinate(2, 3, 0), SpotId(1), WorldTick(0))
-        repo.save(m)
-        found = repo.find_by_world_object_id(world_object_id)
-        assert found is not None
-        assert found.monster_id == monster_id
-        assert found.world_object_id == world_object_id
-        assert found.spot_id == SpotId(1)
-        assert found.coordinate == Coordinate(2, 3, 0)

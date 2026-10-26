@@ -28,7 +28,6 @@ from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
@@ -82,7 +81,6 @@ def _slot(key: str, *, template_id: int = 1) -> MonsterSpawnSlot:
         slot_key=key,
         template=_template(template_id),
         spot_id=SPOT_ID,
-        coordinate=Coordinate(0, 0, 0),
         day_night_phase_names=(),
         required_flags=(),
         forbidden_flags=(),
@@ -252,7 +250,6 @@ def test_despawn_failure_restores_graph_slot_and_observation() -> None:
         slot_key=slot.slot_key,
         template=slot.template,
         spot_id=slot.spot_id,
-        coordinate=slot.coordinate,
         day_night_phase_names=(),
         required_flags=("enabled",),
         forbidden_flags=(),

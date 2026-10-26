@@ -21,7 +21,6 @@ class MonsterCreatedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 
 @dataclass(frozen=True)
 class MonsterSpawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
-    coordinate: dict[str, int]
     spot_id: SpotId
 
 
@@ -47,14 +46,7 @@ class MonsterDiedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 
 @dataclass(frozen=True)
 class MonsterRespawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
-    coordinate: dict[str, int]
     spot_id: SpotId
-
-
-@dataclass(frozen=True)
-class MonsterEvadedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
-    coordinate: dict[str, int]
-    current_hp: int
 
 
 @dataclass(frozen=True)
@@ -67,16 +59,6 @@ class MonsterHealedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 class MonsterMpRecoveredEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     amount: int
     current_mp: int
-
-
-# モンスターの行動状態変化イベント（Monster 集約から発行）
-@dataclass(frozen=True)
-class ActorStateChangedEvent(BaseDomainEvent[WorldObjectId, str]):
-    """アクターの行動状態が変化したイベント"""
-
-    actor_id: WorldObjectId
-    old_state: BehaviorStateEnum
-    new_state: BehaviorStateEnum
 
 
 @dataclass(frozen=True)

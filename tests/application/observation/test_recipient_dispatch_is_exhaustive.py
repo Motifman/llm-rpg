@@ -62,7 +62,6 @@ from ai_rpg_world.application.observation.services.recipient_strategies.spot_gra
 )
 from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterDiedEvent,
-    MonsterEvadedEvent,
     MonsterHealedEvent,
     MonsterSpawnedEvent,
 )
@@ -162,7 +161,6 @@ _MONSTER_EXPECTED = {
     "MonsterRespawnedEvent": "_deliver_to_everyone_at_the_declared_spot",
     "MonsterDiedEvent": "_deliver_death_to_the_spot_and_the_killer",
     "MonsterDamagedEvent": "_deliver_damage_to_the_spot_and_the_attacker",
-    "MonsterEvadedEvent": "_deliver_to_everyone_at_the_monsters_spot",
     "MonsterHealedEvent": "_deliver_to_everyone_at_the_monsters_spot",
 }
 
@@ -361,12 +359,12 @@ class TestMonsterRulesComputeRealRecipients:
         assert [p.value for p in recipients] == [1, 2]
         audience.players_at_spot.assert_called_once_with(SpotId(7))
 
-    def test_evade_looks_the_spot_up_from_the_monster(self) -> None:
-        """回避はイベントに spot が無いので monster を引いて場所を決める。"""
+    def test_heal_looks_the_spot_up_from_the_monster(self) -> None:
+        """回復はイベントに spot が無いので monster を引いて場所を決める。"""
         audience = MagicMock()
         audience.players_at_spot.return_value = [PlayerId(3)]
         strategy = self._strategy(audience, monster_spot=SpotId(9))
-        event = MonsterEvadedEvent.__new__(MonsterEvadedEvent)
+        event = MonsterHealedEvent.__new__(MonsterHealedEvent)
         object.__setattr__(event, "aggregate_id", MagicMock())
 
         recipients = strategy.resolve(event)

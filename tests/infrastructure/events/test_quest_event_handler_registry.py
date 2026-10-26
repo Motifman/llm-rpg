@@ -90,7 +90,7 @@ def test_batch_is_delivered_in_collection_order() -> None:
 def test_before_commit_failure_rolls_back_without_quest_delivery() -> None:
     """試験用の確定前処理が失敗すると状態を戻し、クエストの確定後処理を一つも呼ばない。"""
     store, scope, publisher, handlers = _stack()
-    original = store.next_world_object_id
+    original = store.next_monster_id
 
     def fail(event, context=None):
         raise RuntimeError("確定前の失敗")
@@ -98,9 +98,9 @@ def test_before_commit_failure_rolls_back_without_quest_delivery() -> None:
     scope.dispatcher.register_required_before_commit(MonsterDiedEvent, fail)
     with pytest.raises(RuntimeError, match="確定前の失敗"):
         with scope:
-            store.next_world_object_id = original + 1
+            store.next_monster_id = original + 1
             publisher.publish_all(_events())
-    assert store.next_world_object_id == original
+    assert store.next_monster_id == original
     assert all(not handler.mock_calls for handler in handlers.values())
 
 
@@ -118,12 +118,12 @@ def test_failure_is_traced_without_rollback_and_later_delivery_continues(index) 
         DomainEvent, delivered.append, channel=DeliveryChannel.AUXILIARY, guarantee=DeliveryGuarantee.BEST_EFFORT
     )
     events = _events()
-    changed = store.next_world_object_id + 1
+    changed = store.next_monster_id + 1
     with pytest.raises(CommandPostCommitException) as caught:
         with scope:
-            store.next_world_object_id = changed
+            store.next_monster_id = changed
             publisher.publish_all(events)
-    assert store.next_world_object_id == changed
+    assert store.next_monster_id == changed
     assert delivered == events
     assert all(handler.handle.call_count == 1 for handler in handlers.values())
     assert caught.value.handoff_error is failure

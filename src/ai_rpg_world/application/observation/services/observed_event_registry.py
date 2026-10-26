@@ -20,12 +20,10 @@ from ai_rpg_world.domain.guild.event.guild_event import (
 )
 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.monster.event.monster_events import (
-    ActorStateChangedEvent,
     BehaviorStuckEvent,
     MonsterCreatedEvent,
     MonsterDamagedEvent,
     MonsterDiedEvent,
-    MonsterEvadedEvent,
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
@@ -199,10 +197,8 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
         MonsterDamagedEvent,
         MonsterDiedEvent,
         MonsterRespawnedEvent,
-        MonsterEvadedEvent,
         MonsterHealedEvent,
         MonsterMpRecoveredEvent,
-        ActorStateChangedEvent,
         TargetSpottedEvent,
         TargetLostEvent,
         BehaviorStuckEvent,

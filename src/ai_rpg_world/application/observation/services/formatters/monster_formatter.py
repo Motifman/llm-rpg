@@ -7,12 +7,10 @@ from ai_rpg_world.application.observation.services.formatters._formatter_context
     ObservationFormatterContext,
 )
 from ai_rpg_world.domain.monster.event.monster_events import (
-    ActorStateChangedEvent,
     BehaviorStuckEvent,
     MonsterCreatedEvent,
     MonsterDamagedEvent,
     MonsterDiedEvent,
-    MonsterEvadedEvent,
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
@@ -44,14 +42,10 @@ class MonsterObservationFormatter:
             return self._format_monster_damaged(event, recipient_player_id)
         if isinstance(event, MonsterDiedEvent):
             return self._format_monster_died(event, recipient_player_id)
-        if isinstance(event, MonsterEvadedEvent):
-            return self._format_monster_evaded(event, recipient_player_id)
         if isinstance(event, MonsterHealedEvent):
             return self._format_monster_healed(event, recipient_player_id)
         if isinstance(event, MonsterMpRecoveredEvent):
             return self._format_monster_mp_recovered(event, recipient_player_id)
-        if isinstance(event, ActorStateChangedEvent):
-            return self._format_actor_state_changed(event, recipient_player_id)
         if isinstance(event, TargetSpottedEvent):
             return self._format_target_spotted(event, recipient_player_id)
         if isinstance(event, TargetLostEvent):
@@ -119,11 +113,6 @@ class MonsterObservationFormatter:
             schedules_turn=True,
         )
 
-    def _format_monster_evaded(self, event: MonsterEvadedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
-        prose = "モンスターが回避しました。"
-        structured: dict[str, Any] = {"type": "monster_evaded"}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
-
     def _format_monster_healed(self, event: MonsterHealedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         prose = f"モンスターが回復しました（+{event.amount}）。"
         structured: dict[str, Any] = {"type": "monster_healed", "amount": event.amount, "current_hp": event.current_hp}
@@ -133,17 +122,6 @@ class MonsterObservationFormatter:
         self, event: MonsterMpRecoveredEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         return None
-
-    def _format_actor_state_changed(
-        self, event: ActorStateChangedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
-        prose = f"モンスターの状態が{event.old_state.value}から{event.new_state.value}に変化しました。"
-        structured: dict[str, Any] = {
-            "type": "monster_state_changed",
-            "old": event.old_state.value,
-            "new": event.new_state.value,
-        }
-        return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     def _format_target_spotted(self, event: TargetSpottedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         return None

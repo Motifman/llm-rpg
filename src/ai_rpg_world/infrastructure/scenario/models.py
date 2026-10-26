@@ -467,12 +467,6 @@ class ScenarioMonsterPlacement:
 
     template_string_id: str
     spot_string_id: str
-    # 同じ spot に複数体置きたい時用に座標を分けられるよう保持。シナリオが省略
-    # していれば (0, 0, 0)。spot-graph では座標は behavior の参照点として
-    # 使われる程度。
-    coordinate_x: int = 0
-    coordinate_y: int = 0
-    coordinate_z: int = 0
     # spawn_condition が None / is_always なら static 配置。それ以外は動的。
     spawn_condition: ScenarioMonsterSpawnCondition | None = None
 

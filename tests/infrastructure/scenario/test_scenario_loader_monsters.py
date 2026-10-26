@@ -188,21 +188,6 @@ class TestParseMonsterPlacements:
         assert isinstance(p, ScenarioMonsterPlacement)
         assert p.template_string_id == "wild_dog"
         assert p.spot_string_id == "deep_forest"
-        assert p.coordinate_x == 0
-
-    def test_coordinate_xyz_zero(self) -> None:
-        """coordinate を渡さなくても (0,0,0) で構築できる。"""
-        loader = ScenarioLoader()
-        _, placements = parse_monsters_block(
-            {
-                "templates": [_minimal_template()],
-                "initial_placements": [{"template": "wild_dog", "spot": "deep_forest"}],
-            },
-            ScenarioIdMapper(),
-        )
-        assert placements[0].coordinate_x == 0
-        assert placements[0].coordinate_y == 0
-        assert placements[0].coordinate_z == 0
 
     def test_template_empty_string_scenario_load_error(self) -> None:
         """template が空文字なら ScenarioLoadError。"""

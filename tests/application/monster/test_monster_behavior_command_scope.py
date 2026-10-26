@@ -39,9 +39,7 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 )
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -152,12 +150,10 @@ def _build():
     monster = MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=_template(),
-        world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
             SkillLoadoutId(1), owner_id=101, normal_capacity=0, awakened_capacity=0
         ),
         status=MonsterStatusEnum.ALIVE,
-        coordinate=Coordinate(0, 0, 0),
         spot_id=SPOT_ID,
         spawned_at_tick=WorldTick(0),
     )
@@ -314,12 +310,10 @@ def test_later_monster_failure_keeps_earlier_monster_commit() -> None:
     second = MonsterAggregate(
         monster_id=MonsterId.create(102),
         template=_template(),
-        world_object_id=WorldObjectId.create(9002),
         skill_loadout=SkillLoadoutAggregate.create(
             SkillLoadoutId(2), owner_id=102, normal_capacity=0, awakened_capacity=0
         ),
         status=MonsterStatusEnum.ALIVE,
-        coordinate=Coordinate(0, 0, 0),
         spot_id=SPOT_ID,
         spawned_at_tick=WorldTick(0),
     )

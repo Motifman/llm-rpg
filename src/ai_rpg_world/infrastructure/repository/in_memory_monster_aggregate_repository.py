@@ -6,7 +6,6 @@ from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRep
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
     InMemoryRepositoryBase,
@@ -28,10 +27,6 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
     def _monsters(self) -> dict[MonsterId, MonsterAggregate]:
         return self._data_store.monsters
 
-    @property
-    def _world_object_to_monster_id(self) -> dict[WorldObjectId, MonsterId]:
-        return self._data_store.world_object_to_monster_id
-
     def find_by_id(self, entity_id: MonsterId) -> MonsterAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
@@ -42,12 +37,6 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
     def find_by_ids(self, entity_ids: list[MonsterId]) -> list[MonsterAggregate]:
         return [x for eid in entity_ids for x in [self.find_by_id(eid)] if x is not None]
 
-    def find_by_world_object_id(self, world_object_id: WorldObjectId) -> MonsterAggregate | None:
-        monster_id = self._world_object_to_monster_id.get(world_object_id)
-        if monster_id:
-            return self.find_by_id(monster_id)
-        return None
-
     def generate_monster_id(self) -> MonsterId:
         """ID発行はリポジトリの責務。"""
 
@@ -57,17 +46,6 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
             return mid
 
         result_value: MonsterId = self._execute_operation(operation)
-        return result_value
-
-    def generate_world_object_id_for_npc(self) -> WorldObjectId:
-        """NPC用の WorldObjectId を発行する（プレイヤーIDと衝突しない範囲）。"""
-
-        def operation() -> Any:
-            wid = WorldObjectId(self._data_store.next_world_object_id)
-            self._data_store.next_world_object_id += 1
-            return wid
-
-        result_value: WorldObjectId = self._execute_operation(operation)
         return result_value
 
     def find_by_spot_id(self, spot_id: SpotId) -> list[MonsterAggregate]:
@@ -93,14 +71,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
         cloned = self._clone(entity)
 
         def operation() -> Any:
-            # 古いインデックスがあれば削除（world_object_idが変更される可能性を考慮）
-            if cloned.monster_id in self._monsters:
-                old_monster = self._monsters[cloned.monster_id]
-                if old_monster.world_object_id in self._world_object_to_monster_id:
-                    del self._world_object_to_monster_id[old_monster.world_object_id]
-
             self._monsters[cloned.monster_id] = cloned
-            self._world_object_to_monster_id[cloned.world_object_id] = cloned.monster_id
             return cloned
 
         self._register_aggregate(entity)
@@ -111,9 +82,6 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
     def delete(self, entity_id: MonsterId) -> bool:
         def operation() -> bool:
             if entity_id in self._monsters:
-                monster = self._monsters[entity_id]
-                if monster.world_object_id in self._world_object_to_monster_id:
-                    del self._world_object_to_monster_id[monster.world_object_id]
                 del self._monsters[entity_id]
                 return True
             return False
