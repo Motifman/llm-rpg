@@ -61,7 +61,7 @@ Being/world snapshotには今回削除する型・フィールド・保存キー
 ### grepの例外
 
 削除型の識別子・専用モジュール名はsrcから消えた。AST不在保証はimport、宣言、参照、再公開、動的import用文字列を検査し、pyprojectの旧指定も検査する。
-`rg`の対象はsrc/tests/scripts/docs/pyproject、検索語は `HitBoxShape|RelativeCoordinate|HitBoxVelocity|HitEffect|SkillHitPattern|SkillHitTimelineSegment|hit_pattern|hit_effects|SkillRotationAngleUnsupportedException|combat_exceptions`。
+`rg`の対象はsrc/tests/scripts/docs/pyproject。型名だけでなくモジュール名も含め、検索語は `HitBoxShape|RelativeCoordinate|HitBoxVelocity|HitEffect|SkillHitPattern|SkillHitTimelineSegment|hit_pattern|hit_effects|SkillRotationAngleUnsupportedException|combat_exceptions|hit_box_shape|hit_box_velocity|hit_effect|skill_hit_pattern`。
 残るヒットを次に分類した。本番の旧型の読者や呼出は残っていない。
 
 | 残る場所 | 理由 |
@@ -72,7 +72,7 @@ Being/world snapshotには今回削除する型・フィールド・保存キー
 | 新しい構造試験、既存の未使用例外不在試験 | 削除対象を再導入させないための文字列 |
 | `D1862-9.md`、`D1862-13.md`、`D1862-23.md` | 当時の保持判断。#1893が削除を上書きしたが履歴は残す |
 | `tile_hit_box_removal.md`、`tile_map_harvest_skill_removal.md`、`unused_combat_exceptions_cleanup.md` | 過去PRの検証記録 |
-| `docs/test_audits/combat_calculation_contracts.md`、`hitbox_lifetime_contracts.md` | 過去のテスト監査記録 |
+| `docs/test_audits/combat_calculation_contracts.md`、`hitbox_lifetime_contracts.md`、`hitbox_collision_contracts.md` | 過去のテスト監査記録 |
 | 本文と `D1893-3.md` | 今回の削除対象と保存互換の説明 |
 
 質感については、同じseedの観測・記録・行動件数が一致し、変更を認めなかった。実LLMによる主観的な質感比較はこの削除PRでは行わない。
@@ -80,3 +80,7 @@ Being/world snapshotには今回削除する型・フィールド・保存キー
 ## PR作成前の独立レビュー
 
 code-reviewerはApprove。CRITICAL 0 / HIGH 0 / MEDIUM 0 / LOW 0で、指摘対応・不採用ともになし。保存互換・削除範囲・再公開と動的参照・試験と本文の整合性を確認し、別途関連97件を実行して成功した。レビュー時点の残ブロッキングはCI全7項目の結果確認のみ。
+
+初回CIでは、以前の `test_hitbox_removal.py` が旧形・速度・効果の3モジュールを残す期待のままだったため1件失敗した。該当試験で手元でもRedを確認し、状態異常の2モジュールだけを残す期待へ更新してGreenにした。型名検索だけでは拾わないモジュール名文字列もrgの点検へ含めた。本番コードの変更は追加していない。
+
+この修正も同じcode-reviewerが独立に再点検し、Approve（CRITICAL / HIGH / MEDIUM / LOW各0件）。関連5件を再実行し成功した。初回322件に加え、旧当たり判定の構造試験2件も確認対象に含めた。
