@@ -64,13 +64,11 @@ def build_monster(
     monster = MonsterAggregate(
         monster_id=MonsterId(int(row["monster_id"])),
         template=template,
-        world_object_id=WorldObjectId(int(row["world_object_id"])),
         skill_loadout=skill_loadout,
         hp=MonsterHp(int(row["hp_value"]), int(row["hp_max"])),
         mp=MonsterMp(int(row["mp_value"]), int(row["mp_max"])),
         status=MonsterStatusEnum(str(row["status"])),
         last_death_tick=None if row["last_death_tick"] is None else WorldTick(int(row["last_death_tick"])),
-        coordinate=_coordinate_or_none(row["coordinate_x"], row["coordinate_y"], row["coordinate_z"]),
         spot_id=None if row["spot_id"] is None else SpotId(int(row["spot_id"])),
         active_effects=[
             StatusEffect(
@@ -82,11 +80,6 @@ def build_monster(
         ],
         pack_id=None if row["pack_id"] is None else PackId.create(str(row["pack_id"])),
         is_pack_leader=bool(row["is_pack_leader"]),
-        initial_spawn_coordinate=_coordinate_or_none(
-            row["initial_spawn_x"],
-            row["initial_spawn_y"],
-            row["initial_spawn_z"],
-        ),
         spawned_at_tick=None if row["spawned_at_tick"] is None else WorldTick(int(row["spawned_at_tick"])),
         behavior_state=behavior_state,
         feed_memory=FeedMemory(

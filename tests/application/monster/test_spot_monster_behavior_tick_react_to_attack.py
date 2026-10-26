@@ -142,7 +142,6 @@ def _make_monster(
     return MonsterAggregate(
         monster_id=MonsterId.create(monster_id),
         template=template,
-        world_object_id=WorldObjectId.create(9000 + monster_id),
         skill_loadout=SkillLoadoutAggregate.create(
             SkillLoadoutId(monster_id),
             owner_id=monster_id,

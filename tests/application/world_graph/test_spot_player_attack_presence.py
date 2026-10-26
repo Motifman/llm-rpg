@@ -18,7 +18,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoa
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
@@ -51,7 +50,6 @@ def test_killing_blow_preserves_monster_presence() -> None:
     monster = MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=template,
-        world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
             SkillLoadoutId(1),
             owner_id=101,

@@ -13,15 +13,19 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.enum.monster_enum import (
+    DeathCauseEnum,
     MonsterFactionEnum,
     MonsterStatusEnum,
 )
+from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.monster.value_object.attacker_ref import (
     AttackerKind,
 )
@@ -43,7 +47,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -87,7 +90,6 @@ def _make_monster(template: MonsterTemplate, monster_id: int) -> MonsterAggregat
     return MonsterAggregate(
         monster_id=MonsterId.create(monster_id),
         template=template,
-        world_object_id=WorldObjectId.create(9000 + monster_id),
         skill_loadout=SkillLoadoutAggregate.create(
             SkillLoadoutId(monster_id),
             owner_id=monster_id,
@@ -178,6 +180,36 @@ class TestRetaliationSuccess:
 
 class TestRetaliationKill:
     """致命攻撃。predation と異なり hunger は回復しない。"""
+
+    @pytest.mark.parametrize("predation", [True, False], ids=["predation", "retaliation"])
+    def test_lethal_monster_attack_preserves_death_cause(self, predation: bool) -> None:
+        """捕食・反撃で相手を倒すと、旧世界物体IDがなくても死亡原因はKILLED_BY_MONSTERになる。"""
+        attacker = _make_monster(_template(attack=999), 1)
+        target = _make_monster(_template(max_hp=10), 2)
+        graph = _make_graph()
+        graph.place_monster(attacker.monster_id, SPOT_A)
+        graph.place_monster(target.monster_id, SPOT_A)
+        orch, *_ = _make_orchestrator(graph, attacker, target)
+
+        if predation:
+            orch.execute_predation_attack(
+                attacker_monster=attacker,
+                prey_monster=target,
+                graph=graph,
+                spot_id=SPOT_A,
+                current_tick=WorldTick(20),
+            )
+        else:
+            orch.execute_monster_to_monster_attack(
+                attacker_monster=attacker,
+                target_monster=target,
+                graph=graph,
+                spot_id=SPOT_A,
+                current_tick=WorldTick(20),
+            )
+
+        deaths = [event for event in target.get_events() if isinstance(event, MonsterDiedEvent)]
+        assert [event.cause for event in deaths] == [DeathCauseEnum.KILLED_BY_MONSTER]
 
     def test_target_dead_hunger(self) -> None:
         """attacker.attack >= target.hp で致命、attacker の hunger は変化しない。"""

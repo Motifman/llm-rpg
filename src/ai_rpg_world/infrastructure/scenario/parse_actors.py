@@ -123,7 +123,7 @@ def parse_monsters_block(
         }
       ],
       "initial_placements": [
-        {"template": "wild_dog", "spot": "deep_forest", "coordinate": {"x": 0, "y": 0}}
+        {"template": "wild_dog", "spot": "deep_forest"}
       ]
     }
     ```
@@ -270,9 +270,6 @@ def parse_monster_placement(
         raise ScenarioLoadError(f"monsters.initial_placements[{index}].template must be a non-empty string")
     if not isinstance(spot_id, str) or not spot_id:
         raise ScenarioLoadError(f"monsters.initial_placements[{index}].spot must be a non-empty string")
-    coord = raw.get("coordinate", {})
-    if not isinstance(coord, dict):
-        coord = {}
     spawn_condition = parse_monster_spawn_condition(
         raw.get("spawn_condition"),
         index,
@@ -280,9 +277,6 @@ def parse_monster_placement(
     return ScenarioMonsterPlacement(
         template_string_id=template_id,
         spot_string_id=spot_id,
-        coordinate_x=int(coord.get("x", 0)),
-        coordinate_y=int(coord.get("y", 0)),
-        coordinate_z=int(coord.get("z", 0)),
         spawn_condition=spawn_condition,
     )
 

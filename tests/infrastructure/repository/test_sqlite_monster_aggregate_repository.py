@@ -18,9 +18,7 @@ from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.sqlite_monster_aggregate_repository import (
     SqliteMonsterAggregateRepository,
 )
@@ -51,12 +49,64 @@ def sqlite_conn() -> sqlite3.Connection:
     return conn
 
 
+def test_old_coordinates_are_ignored_and_legacy_id_is_preserved(sqlite_conn):
+    """旧行の座標を復元せず、HP更新後も旧必須IDと旧座標列を上書きしない。"""
+    repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
+    monster = MonsterAggregate.create(MonsterId(1), _sample_template(), _loadout(1))
+    monster.spawn(SpotId(7), WorldTick(3))
+    repo.save(monster)
+    sqlite_conn.execute(
+        "UPDATE game_monsters SET world_object_id=2000001, coordinate_x=1, coordinate_y=2, "
+        "coordinate_z=3, initial_spawn_x=4, initial_spawn_y=5, initial_spawn_z=6"
+    )
+    sqlite_conn.commit()
+    restored = repo.find_by_id(MonsterId(1))
+    assert restored.spot_id == SpotId(7) and restored.spawned_at_tick == WorldTick(3)
+    assert not hasattr(restored, "coordinate") and not hasattr(restored, "world_object_id")
+    restored.apply_damage(9, WorldTick(4))
+    repo.save(restored)
+    row = sqlite_conn.execute("SELECT * FROM game_monsters WHERE monster_id=1").fetchone()
+    assert row["hp_value"] == 91 and row["world_object_id"] == 2000001
+    assert tuple(row[k] for k in ("coordinate_x", "coordinate_y", "coordinate_z")) == (1, 2, 3)
+    assert tuple(row[k] for k in ("initial_spawn_x", "initial_spawn_y", "initial_spawn_z")) == (4, 5, 6)
+
+
+def test_new_rows_do_not_collide_with_existing_legacy_ids(sqlite_conn):
+    """既存の大きな旧IDがあっても複数保存先で新規保存でき、再保存でIDを変えない。"""
+    repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
+    repo.save(MonsterAggregate.create(MonsterId(1), _sample_template(), _loadout(1)))
+    sqlite_conn.execute("UPDATE game_monsters SET world_object_id=2000001")
+    sqlite_conn.commit()
+    for mid in (2, 3):
+        other_repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
+        other_repo.save(MonsterAggregate.create(MonsterId(mid), _sample_template(), _loadout(mid)))
+    before = [tuple(r) for r in sqlite_conn.execute("SELECT monster_id, world_object_id FROM game_monsters")]
+    for monster in repo.find_all():
+        repo.save(monster)
+    after = [tuple(r) for r in sqlite_conn.execute("SELECT monster_id, world_object_id FROM game_monsters")]
+    assert before == after and len({wid for _, wid in after}) == 3
+    assert sqlite_conn.execute("SELECT coordinate_x FROM game_monsters WHERE monster_id=2").fetchone()[0] is None
+
+
+def test_legacy_id_allocation_rolls_back_with_the_new_monster(sqlite_conn):
+    """新規保存を中断すると旧必須列の採番も残らず、次の保存が成功する。"""
+    uow = SqliteUnitOfWork(connection=sqlite_conn)
+    repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(sqlite_conn)
+    monster = MonsterAggregate.create(MonsterId(1), _sample_template(), _loadout(1))
+    with pytest.raises(RuntimeError, match="abort"):
+        with uow:
+            repo.save(monster)
+            raise RuntimeError("abort")
+    assert repo.find_all() == []
+    with uow:
+        repo.save(monster)
+    assert repo.find_by_id(MonsterId(1)).monster_id == MonsterId(1)
+
+
 class TestSqliteMonsterAggregateRepository:
     def test_shared_repository_requires_active_transaction_for_save(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(sqlite_conn)
-        monster = MonsterAggregate.create(
-            MonsterId(1), _sample_template(), WorldObjectId(1000), skill_loadout=_loadout(1)
-        )
+        monster = MonsterAggregate.create(MonsterId(1), _sample_template(), skill_loadout=_loadout(1))
         with pytest.raises(RuntimeError, match="for_shared_unit_of_work"):
             repo.save(monster)
 
@@ -69,10 +119,9 @@ class TestSqliteMonsterAggregateRepository:
         monster = MonsterAggregate.create(
             MonsterId(301),
             _sample_template(),
-            WorldObjectId(4001),
             skill_loadout=_loadout(301),
         )
-        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+        monster.spawn(SpotId(1), WorldTick(0))
         # FLEE に遷移: current_tick=10、duration=50 → flee_until_tick=60
         monster.enter_flee_state(WorldTick(10), duration_ticks=50)
         repo.save(monster)
@@ -98,10 +147,9 @@ class TestSqliteMonsterAggregateRepository:
         monster = MonsterAggregate.create(
             MonsterId(401),
             _sample_template(),
-            WorldObjectId(5001),
             skill_loadout=_loadout(401),
         )
-        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+        monster.spawn(SpotId(1), WorldTick(0))
         # 1) CHASE で保存
         monster.enter_chase_state(
             attacker_ref=AttackerRef.of_player(PlayerId(7)),
@@ -141,33 +189,29 @@ class TestSqliteMonsterAggregateRepository:
         m1 = MonsterAggregate.create(
             MonsterId(501),
             _sample_template(),
-            WorldObjectId(7001),
             skill_loadout=_loadout(501),
         )
-        m1.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), pack_id=wolf_pack)
+        m1.spawn(SpotId(1), WorldTick(0), pack_id=wolf_pack)
         m2 = MonsterAggregate.create(
             MonsterId(502),
             _sample_template(),
-            WorldObjectId(7002),
             skill_loadout=_loadout(502),
         )
-        m2.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), pack_id=wolf_pack)
+        m2.spawn(SpotId(1), WorldTick(0), pack_id=wolf_pack)
         # rabbit_pack に 1 匹
         m3 = MonsterAggregate.create(
             MonsterId(503),
             _sample_template(),
-            WorldObjectId(7003),
             skill_loadout=_loadout(503),
         )
-        m3.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), pack_id=rabbit_pack)
+        m3.spawn(SpotId(1), WorldTick(0), pack_id=rabbit_pack)
         # pack 未所属
         m4 = MonsterAggregate.create(
             MonsterId(504),
             _sample_template(),
-            WorldObjectId(7004),
             skill_loadout=_loadout(504),
         )
-        m4.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+        m4.spawn(SpotId(1), WorldTick(0))
 
         for m in (m1, m2, m3, m4):
             repo.save(m)
@@ -197,10 +241,9 @@ class TestSqliteMonsterAggregateRepository:
         m_player_chase = MonsterAggregate.create(
             MonsterId(101),
             _sample_template(),
-            WorldObjectId(2001),
             skill_loadout=_loadout(101),
         )
-        m_player_chase.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+        m_player_chase.spawn(SpotId(1), WorldTick(0))
         m_player_chase.enter_chase_state(
             attacker_ref=AttackerRef.of_player(PlayerId(7)),
             last_observed_target_spot_id=SpotId(5),
@@ -212,10 +255,9 @@ class TestSqliteMonsterAggregateRepository:
         m_monster_chase = MonsterAggregate.create(
             MonsterId(102),
             _sample_template(),
-            WorldObjectId(2002),
             skill_loadout=_loadout(102),
         )
-        m_monster_chase.spawn(Coordinate(1, 1, 0), SpotId(1), WorldTick(0))
+        m_monster_chase.spawn(SpotId(1), WorldTick(0))
         m_monster_chase.enter_chase_state(
             attacker_ref=AttackerRef.of_monster(MonsterId(999)),
             last_observed_target_spot_id=SpotId(8),
@@ -248,10 +290,9 @@ class TestSqliteMonsterAggregateRepository:
         monster = MonsterAggregate.create(
             MonsterId(201),
             _sample_template(),
-            WorldObjectId(3001),
             skill_loadout=_loadout(201),
         )
-        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+        monster.spawn(SpotId(1), WorldTick(0))
         repo.save(monster)
 
         loaded = repo.find_by_id(MonsterId(201))
@@ -263,67 +304,29 @@ class TestSqliteMonsterAggregateRepository:
 
     def test_save_and_find_roundtrip(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
-        monster = MonsterAggregate.create(
-            MonsterId(1), _sample_template(), WorldObjectId(1000), skill_loadout=_loadout(1)
-        )
-        monster.spawn(Coordinate(1, 2, 0), SpotId(7), WorldTick(0))
+        monster = MonsterAggregate.create(MonsterId(1), _sample_template(), skill_loadout=_loadout(1))
+        monster.spawn(SpotId(7), WorldTick(0))
         repo.save(monster)
 
         loaded = repo.find_by_id(MonsterId(1))
         assert loaded is not None
         assert loaded.monster_id == MonsterId(1)
-        assert loaded.world_object_id == WorldObjectId(1000)
-        assert loaded.coordinate == Coordinate(1, 2, 0)
 
-    def test_find_by_world_object_id_and_spot(self, sqlite_conn: sqlite3.Connection) -> None:
+    def test_find_by_spot_includes_alive_and_dead(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
-        m1 = MonsterAggregate.create(MonsterId(1), _sample_template(), WorldObjectId(1001), skill_loadout=_loadout(11))
-        m1.spawn(Coordinate(1, 1, 0), SpotId(1), WorldTick(0))
-        m2 = MonsterAggregate.create(MonsterId(2), _sample_template(), WorldObjectId(1002), skill_loadout=_loadout(12))
-        m2.spawn(Coordinate(2, 2, 0), SpotId(1), WorldTick(0))
-        m3 = MonsterAggregate.create(MonsterId(3), _sample_template(), WorldObjectId(1003), skill_loadout=_loadout(13))
-        m3.spawn(Coordinate(3, 3, 0), SpotId(2), WorldTick(0))
+        m1 = MonsterAggregate.create(MonsterId(1), _sample_template(), skill_loadout=_loadout(11))
+        m1.spawn(SpotId(1), WorldTick(0))
+        m2 = MonsterAggregate.create(MonsterId(2), _sample_template(), skill_loadout=_loadout(12))
+        m2.spawn(SpotId(1), WorldTick(0))
+        m3 = MonsterAggregate.create(MonsterId(3), _sample_template(), skill_loadout=_loadout(13))
+        m3.spawn(SpotId(2), WorldTick(0))
         m2.apply_damage(100, WorldTick(5))
         repo.save(m1)
         repo.save(m2)
         repo.save(m3)
 
-        found = repo.find_by_world_object_id(WorldObjectId(1002))
-        assert found is not None
-        assert found.monster_id == MonsterId(2)
-        assert found.status == MonsterStatusEnum.DEAD
-
         spot1 = repo.find_by_spot_id(SpotId(1))
         assert {m.monster_id for m in spot1} == {MonsterId(1), MonsterId(2)}
-
-    def test_world_object_id_sequence_is_shared_between_repository_instances(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
-        """同じ接続の複数のモンスター保存先で採番しても、物体IDは重複しない。"""
-        uow = SqliteUnitOfWork(connection=sqlite_conn)
-        with uow:
-            first_repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(uow.connection)
-            monster_repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(uow.connection)
-            first = first_repo.generate_world_object_id_for_npc()
-            second = monster_repo.generate_world_object_id_for_npc()
-
-        assert first.value == 100000
-        assert second.value == 100001
-
-    def test_world_object_id_sequence_rolls_back(self, sqlite_conn: sqlite3.Connection) -> None:
-        """物体ID採番後に処理を中断すると、次の確定単位で同じIDを採番できる。"""
-        uow = SqliteUnitOfWork(connection=sqlite_conn)
-        with pytest.raises(RuntimeError, match="abort"):
-            with uow:
-                repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(uow.connection)
-                generated = repo.generate_world_object_id_for_npc()
-                assert generated.value == 100000
-                raise RuntimeError("abort")
-
-        with uow:
-            repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(uow.connection)
-            generated_after_rollback = repo.generate_world_object_id_for_npc()
-        assert generated_after_rollback.value == 100000
 
     def test_monster_id_sequence_rolls_back(self, sqlite_conn: sqlite3.Connection) -> None:
         uow = SqliteUnitOfWork(connection=sqlite_conn)
@@ -346,8 +349,8 @@ def test_legacy_pursuit_rows_do_not_replace_live_chase(sqlite_conn):
     from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
     repo = SqliteMonsterAggregateRepository.for_standalone_connection(sqlite_conn)
-    monster = MonsterAggregate.create(MonsterId(1), _sample_template(), WorldObjectId(1000), skill_loadout=_loadout(1))
-    monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0))
+    monster = MonsterAggregate.create(MonsterId(1), _sample_template(), skill_loadout=_loadout(1))
+    monster.spawn(SpotId(1), WorldTick(0))
     attacker = AttackerRef.of_player(PlayerId(7))
     monster.enter_chase_state(attacker_ref=attacker, last_observed_target_spot_id=SpotId(5), current_tick=WorldTick(42))
     repo.save(monster)

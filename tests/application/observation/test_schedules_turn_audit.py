@@ -109,7 +109,6 @@ class TestMonsterFormatterAudit:
         event = MonsterRespawnedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
-            coordinate={"x": 0, "y": 0, "z": 0},
             spot_id=SpotId.create(1),
         )
         out = formatter.format(event, PlayerId(1))

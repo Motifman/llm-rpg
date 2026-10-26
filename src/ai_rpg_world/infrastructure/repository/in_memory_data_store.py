@@ -54,7 +54,6 @@ from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 
 
@@ -118,9 +117,7 @@ class InMemoryDataStore:
         # World Domain
         self.weather_zones: dict[WeatherZoneId, WeatherZone] = {}
         self.monsters: dict[MonsterId, MonsterAggregate] = {}
-        self.world_object_to_monster_id: dict[WorldObjectId, MonsterId] = {}
         self.next_monster_id = 1
-        self.next_world_object_id = 100000  # NPC用。プレイヤーIDと衝突しない範囲
         self.spawn_tables: dict[SpotId, SpotSpawnTable] = {}
         self.spots: dict[SpotId, Spot] = {}
         self.location_establishments: dict[LocationSlotId, LocationEstablishmentAggregate] = {}
@@ -488,9 +485,7 @@ class InMemoryDataStore:
         self.next_item_instance_id = 1
         self.weather_zones.clear()
         self.monsters.clear()
-        self.world_object_to_monster_id.clear()
         self.next_monster_id = 1
-        self.next_world_object_id = 100000
         self.spawn_tables.clear()
         self.spots.clear()
         self.location_establishments.clear()

@@ -19,12 +19,10 @@ from ai_rpg_world.application.observation.services.recipient_strategies._dispatc
     verify_rules_cover_registry,
 )
 from ai_rpg_world.domain.monster.event.monster_events import (
-    ActorStateChangedEvent,
     BehaviorStuckEvent,
     MonsterCreatedEvent,
     MonsterDamagedEvent,
     MonsterDiedEvent,
-    MonsterEvadedEvent,
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
@@ -180,7 +178,6 @@ _RECIPIENT_RULES: RuleTable = {
     # 被弾は場所の全員 + 攻撃した本人。
     MonsterDamagedEvent: MonsterRecipientStrategy._deliver_damage_to_the_spot_and_the_attacker,
     # 回避・回復は monster を引いて場所を決める (イベントが spot を持たない)。
-    MonsterEvadedEvent: MonsterRecipientStrategy._deliver_to_everyone_at_the_monsters_spot,
     MonsterHealedEvent: MonsterRecipientStrategy._deliver_to_everyone_at_the_monsters_spot,
 }
 
@@ -190,9 +187,7 @@ _RECIPIENT_RULES: RuleTable = {
 #: 型」と「規則を書き忘れた型」が同じ見た目**だった。理由を書く場所を分けて、
 #: 書き忘れは構築時に落ちるようにした (`_ALLOWED_UNCONSUMED` と同じ判断)。
 #:
-#: 内部状態は観測させない。ActorStateChangedEvent は本番の未解決の配信先を維持する。
 _DELIVERS_TO_NOBODY: dict[type, str] = {
-    ActorStateChangedEvent: "本番では物理マップを持たず、物体の配信先は解決しない。状態変化の文面と登録は維持する",
     MonsterCreatedEvent: (
         "集約の生成そのもの。世界に現れる瞬間は MonsterSpawnedEvent が表すので、生成は誰の知覚にも対応しない"
     ),

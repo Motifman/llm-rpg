@@ -15,13 +15,10 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
 from ai_rpg_world.domain.guild.event.guild_event import GuildCreatedEvent
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
-from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.monster.event.monster_events import (
-    ActorStateChangedEvent,
     MonsterCreatedEvent,
     MonsterDamagedEvent,
     MonsterDiedEvent,
-    MonsterEvadedEvent,
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
@@ -100,7 +97,6 @@ class TestMonsterObservationFormatterMonsterSpawned:
         event = MonsterSpawnedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
-            coordinate={"x": 0, "y": 0, "z": 0},
             spot_id=SpotId(1),
         )
         out = formatter.format(event, PlayerId(1))
@@ -124,7 +120,6 @@ class TestMonsterObservationFormatterMonsterRespawned:
         event = MonsterRespawnedEvent.create(
             aggregate_id=MonsterId(2),
             aggregate_type="MonsterAggregate",
-            coordinate={"x": 1, "y": 0, "z": 0},
             spot_id=SpotId(2),
         )
         out = formatter.format(event, PlayerId(1))
@@ -216,25 +211,6 @@ class TestMonsterObservationFormatterMonsterDied:
         assert out.structured.get("spot_id_value") is None
 
 
-class TestMonsterObservationFormatterMonsterEvaded:
-    """MonsterEvadedEvent のフォーマットテスト"""
-
-    def test_returns_evaded_prose(self):
-        """回避は prose を返す。"""
-        ctx = _make_context()
-        formatter = MonsterObservationFormatter(ctx)
-        event = MonsterEvadedEvent.create(
-            aggregate_id=MonsterId(1),
-            aggregate_type="MonsterAggregate",
-            coordinate={"x": 0, "y": 0, "z": 0},
-            current_hp=100,
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "回避" in out.prose
-        assert out.structured.get("type") == "monster_evaded"
-
-
 class TestMonsterObservationFormatterMonsterHealed:
     """MonsterHealedEvent のフォーマットテスト"""
 
@@ -271,30 +247,6 @@ class TestMonsterObservationFormatterMonsterMpRecovered:
         )
         out = formatter.format(event, PlayerId(1))
         assert out is None
-
-
-class TestMonsterObservationFormatterActorStateChanged:
-    """ActorStateChangedEvent のフォーマットテスト"""
-
-    def test_includes_old_and_new_state(self):
-        """状態変化は old/new state を prose に含む。"""
-        ctx = _make_context()
-        formatter = MonsterObservationFormatter(ctx)
-        event = ActorStateChangedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="MonsterBehavior",
-            actor_id=WorldObjectId(1),
-            old_state=BehaviorStateEnum.IDLE,
-            new_state=BehaviorStateEnum.PATROL,
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "状態" in out.prose
-        assert "IDLE" in out.prose
-        assert "PATROL" in out.prose
-        assert out.structured.get("type") == "monster_state_changed"
-        assert out.structured.get("old") == "IDLE"
-        assert out.structured.get("new") == "PATROL"
 
 
 class TestMonsterObservationFormatterTargetSpotted:
@@ -357,7 +309,6 @@ class TestMonsterObservationFormatterRecipientIndependence:
         event = MonsterSpawnedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
-            coordinate={"x": 0, "y": 0, "z": 0},
             spot_id=SpotId(1),
         )
         out1 = formatter.format(event, PlayerId(1))
