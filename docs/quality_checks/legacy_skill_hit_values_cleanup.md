@@ -14,7 +14,7 @@ Issue #1893 担当B。比較元は `f86d9fcde0ba4ada9d1e3124c13452dfa3b3aae2`。
 - [x] 変更前のsnapshotを変更後に読み、既存の復元・fail-fastを維持する。
 - [x] smoke_stubと2シナリオ×seed 0–2×40tickのfuzzを前後比較する。
 - [x] 変更Pythonのruff、mypy、空白検査。
-- [ ] 独立レビューと最新HEADのCI全7項目を確認する。
+- [x] 独立レビュー。CI全7項目はPRのChecksとIssue #1893の完了コメントに結果を残す。
 
 ## 削除前の参照調査
 
@@ -36,7 +36,7 @@ Being/world snapshotには今回削除する型・フィールド・保存キー
 旧型だけを検証していた3ファイルを退役した。現行SkillSpecを使う試験は旧引数だけを外して残した。
 以前の不在保証 `test_unused_combat_exceptions_removed.py` は、対象モジュール自体が消えても同じ3例外の不在を検査できる形にした。
 
-手元の関連試験はスキル・状態異常・SQLite定義/装備/モンスター・migration・本番モンスター生成/戦闘・snapshot復元とfail-fastを対象とし、並列数は4。
+手元の関連試験322件が成功した。スキル・状態異常・SQLite定義/装備/モンスター・migration・本番モンスター生成/戦闘・snapshot復元とfail-fastを対象とし、並列数は4。
 `uv run --no-sync mypy` は1,256ファイルで成功。触ったPythonだけruffを適用し、空白検査を行った。
 
 ### 前後の実験
@@ -76,3 +76,7 @@ Being/world snapshotには今回削除する型・フィールド・保存キー
 | 本文と `D1893-3.md` | 今回の削除対象と保存互換の説明 |
 
 質感については、同じseedの観測・記録・行動件数が一致し、変更を認めなかった。実LLMによる主観的な質感比較はこの削除PRでは行わない。
+
+## PR作成前の独立レビュー
+
+code-reviewerはApprove。CRITICAL 0 / HIGH 0 / MEDIUM 0 / LOW 0で、指摘対応・不採用ともになし。保存互換・削除範囲・再公開と動的参照・試験と本文の整合性を確認し、別途関連97件を実行して成功した。レビュー時点の残ブロッキングはCI全7項目の結果確認のみ。
