@@ -1,9 +1,8 @@
 import pytest
 
-from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
 from ai_rpg_world.domain.player.enum.player_enum import Element
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
-from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillHitPatternType
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 from ai_rpg_world.domain.skill.event.skill_events import (
     AwakenedModeActivatedEvent,
     AwakenedModeExpiredEvent,
@@ -24,7 +23,6 @@ from ai_rpg_world.domain.skill.exception.skill_exceptions import (
     SkillOwnerMismatchException,
     SkillPrerequisiteNotMetException,
 )
-from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
@@ -39,10 +37,6 @@ def _sample_skill(skill_id: int, deck_cost: int = 1, required_skill_ids=()) -> S
         cast_lock_ticks=1,
         cooldown_ticks=5,
         power_multiplier=1.2,
-        hit_pattern=SkillHitPattern.single_pulse(
-            pattern_type=SkillHitPatternType.MELEE,
-            shape=HitBoxShape.single_cell(),
-        ),
         required_skill_ids=tuple(SkillId(rid) for rid in required_skill_ids),
     )
 

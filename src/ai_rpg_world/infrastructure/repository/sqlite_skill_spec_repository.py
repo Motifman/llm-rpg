@@ -63,48 +63,10 @@ class SqliteSkillSpecRepository(SkillSpecRepository):
             """,
             (int(row["skill_id"]),),
         ).fetchall()
-        effect_rows = self._conn.execute(
-            """
-            SELECT effect_type, duration_ticks, intensity, chance
-            FROM game_skill_spec_hit_effects
-            WHERE skill_id = ?
-            ORDER BY effect_index ASC
-            """,
-            (int(row["skill_id"]),),
-        ).fetchall()
-        segment_rows = self._conn.execute(
-            """
-            SELECT *
-            FROM game_skill_spec_hit_pattern_segments
-            WHERE skill_id = ?
-            ORDER BY segment_index ASC
-            """,
-            (int(row["skill_id"]),),
-        ).fetchall()
-        coord_rows = self._conn.execute(
-            """
-            SELECT *
-            FROM game_skill_spec_hit_pattern_coords
-            WHERE skill_id = ?
-            ORDER BY segment_index ASC, coord_index ASC
-            """,
-            (int(row["skill_id"]),),
-        ).fetchall()
         return build_skill_spec(
             row=row,
             required_skill_rows=[int(required_row["required_skill_id"]) for required_row in required_rows],
             slayer_race_rows=[race_row["race"] for race_row in race_rows],
-            hit_effect_rows=[
-                (
-                    effect_row["effect_type"],
-                    int(effect_row["duration_ticks"]),
-                    float(effect_row["intensity"]),
-                    float(effect_row["chance"]),
-                )
-                for effect_row in effect_rows
-            ],
-            segment_rows=segment_rows,
-            coordinate_rows=coord_rows,
         )
 
 
@@ -139,13 +101,14 @@ class SqliteSkillSpecWriter(SkillSpecWriter):
 
     def replace_spec(self, spec: SkillSpec) -> None:
         self._assert_shared_transaction_active()
+        # 旧schemaのpattern_typeはNOT NULL。ドメインへ戻さず空文字で満たす (D1893-3)。
         self._conn.execute(
             """
             INSERT INTO game_skill_specs (
                 skill_id, name, element, deck_cost, cast_lock_ticks,
                 cooldown_ticks, power_multiplier, pattern_type, mp_cost,
                 stamina_cost, hp_cost, is_awakened_deck_only, targeting_range
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)
             ON CONFLICT(skill_id) DO UPDATE SET
                 name = excluded.name,
                 element = excluded.element,
@@ -168,7 +131,6 @@ class SqliteSkillSpecWriter(SkillSpecWriter):
                 spec.cast_lock_ticks,
                 spec.cooldown_ticks,
                 spec.power_multiplier,
-                spec.hit_pattern.pattern_type.value,
                 spec.mp_cost,
                 spec.stamina_cost,
                 spec.hp_cost,
@@ -202,68 +164,6 @@ class SqliteSkillSpecWriter(SkillSpecWriter):
             ) VALUES (?, ?, ?)
             """,
             [(int(spec.skill_id), index, race.value) for index, race in enumerate(spec.slayer_races)],
-        )
-        self._conn.executemany(
-            """
-            INSERT INTO game_skill_spec_hit_effects (
-                skill_id, effect_index, effect_type, duration_ticks, intensity, chance
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    int(spec.skill_id),
-                    index,
-                    effect.effect_type.value,
-                    effect.duration_ticks,
-                    effect.intensity,
-                    effect.chance,
-                )
-                for index, effect in enumerate(spec.hit_effects)
-            ],
-        )
-        self._conn.executemany(
-            """
-            INSERT INTO game_skill_spec_hit_pattern_segments (
-                skill_id, segment_index, start_offset_ticks, duration_ticks,
-                velocity_dx, velocity_dy, velocity_dz,
-                spawn_dx, spawn_dy, spawn_dz, segment_power_multiplier
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    int(spec.skill_id),
-                    segment_index,
-                    segment.start_offset_ticks,
-                    segment.duration_ticks,
-                    segment.velocity.dx,
-                    segment.velocity.dy,
-                    segment.velocity.dz,
-                    segment.spawn_offset.dx,
-                    segment.spawn_offset.dy,
-                    segment.spawn_offset.dz,
-                    segment.segment_power_multiplier,
-                )
-                for segment_index, segment in enumerate(spec.hit_pattern.timeline_segments)
-            ],
-        )
-        self._conn.executemany(
-            """
-            INSERT INTO game_skill_spec_hit_pattern_coords (
-                skill_id, segment_index, coord_index, dx, dy, dz
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    int(spec.skill_id),
-                    segment_index,
-                    coord_index,
-                    coordinate.dx,
-                    coordinate.dy,
-                    coordinate.dz,
-                )
-                for segment_index, segment in enumerate(spec.hit_pattern.timeline_segments)
-                for coord_index, coordinate in enumerate(segment.shape.relative_coordinates)
-            ],
         )
         self._finalize_write()
 

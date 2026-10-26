@@ -114,8 +114,6 @@ ignore = [
 # default_factory へ移すと「毎回作り直す必要がある」と読めてしまうので、
 # 不変であることをここに書く。
 extend-immutable-calls = [
-    "ai_rpg_world.domain.combat.value_object.hit_box_shape.RelativeCoordinate",
-    "ai_rpg_world.domain.combat.value_object.hit_box_velocity.HitBoxVelocity.zero",
 ]
 
 [tool.mypy]
