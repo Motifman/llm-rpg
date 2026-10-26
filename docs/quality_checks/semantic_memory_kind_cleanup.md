@@ -60,3 +60,5 @@ pr-selfreviewのpr-before-after / pr-decision-cardの観点と独立code-reviewe
 ## 検証結果
 
 関連252件成功。対象はdomain/being、Beingのファイル入出力・復元・記憶snapshot・実験session、InMemory/SQLiteのBeing保存先、snapshot CLIと実験スクリプト、不在保証と今回の通し試験。実行は専用venvの`uv run pytest`、並列4以下。mypyは1,261ファイル成功、変更したPythonのruff check / formatとgit diff --checkも成功。全体試験はCIに任せ、quality/live_apiは手元では実行していない。
+
+初回CIでは設計判断文書の見出し形式が構造検査で1件失敗した。見出しを`## D1893-5. 題名`へ直し、`tests/architecture/test_one_number_one_decision.py`の10件成功を確認した。ゲームのコードと前後比較の対象には変更なし。
