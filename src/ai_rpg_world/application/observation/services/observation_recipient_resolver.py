@@ -269,7 +269,6 @@ def create_observation_recipient_resolver(
         DefaultRecipientStrategy(
             observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
-            spot_graph_repository=spot_graph_repository,
         ),
     ]
     return ObservationRecipientResolver(

@@ -89,15 +89,12 @@ from ai_rpg_world.domain.skill.event.skill_events import (
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.world.event.map_events import (
-    SpotWeatherChangedEvent,
-)
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import TimeOfDayChangedEvent
+from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
 
 def build_pursuit_snapshot(target_id_value: int = 2) -> PursuitTargetSnapshot:
@@ -514,22 +511,6 @@ class TestObservationFormatter:
         out = formatter.format(event, PlayerId(1))
         assert out is None
 
-    def test_format_spot_weather_changed_returns_old_new_in_prose_and_schedules_turn(self, formatter):
-        """SpotWeatherChangedEvent: 天気変化のプローズ・構造化・schedules_turn（環境通知）"""
-        event = SpotWeatherChangedEvent.create(
-            aggregate_id=SpotId(1),
-            aggregate_type="Weather",
-            spot_id=SpotId(1),
-            old_weather_state=WeatherState.clear(),
-            new_weather_state=WeatherState(WeatherTypeEnum.RAIN, 0.5),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "天気" in out.prose
-        assert out.structured.get("type") == "weather_changed"
-        assert out.structured.get("spot_id_value") == 1
-        assert out.schedules_turn is True
-
     def test_format_unknown_event_returns_none(self, formatter):
         """未知のイベントは None"""
 
@@ -757,14 +738,15 @@ class TestObservationFormatter:
         assert out_social is not None and out_social.observation_category == "social"
 
         # 環境（environment）
-        event_weather = SpotWeatherChangedEvent.create(
-            aggregate_id=SpotId(1),
-            aggregate_type="Weather",
-            spot_id=SpotId(1),
-            old_weather_state=WeatherState.clear(),
-            new_weather_state=WeatherState(WeatherTypeEnum.RAIN, 0.5),
+        event_day_night = TimeOfDayChangedEvent.create(
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            old_phase_name="morning",
+            new_phase_name="noon",
+            new_display_text="昼",
+            new_is_dark=False,
         )
-        out_env = formatter.format(event_weather, PlayerId(1), attention_level=AttentionLevel.FULL)
+        out_env = formatter.format(event_day_night, PlayerId(1), attention_level=AttentionLevel.FULL)
         assert out_env is not None and out_env.observation_category == "environment"
 
     def test_format_with_filter_social_skips_social_category(self, formatter):
@@ -795,14 +777,15 @@ class TestObservationFormatter:
 
     def test_format_with_filter_social_returns_environment(self, formatter):
         """FILTER_SOCIAL のとき environment カテゴリはそのまま返す"""
-        event_weather = SpotWeatherChangedEvent.create(
-            aggregate_id=SpotId(1),
-            aggregate_type="Weather",
-            spot_id=SpotId(1),
-            old_weather_state=WeatherState.clear(),
-            new_weather_state=WeatherState(WeatherTypeEnum.RAIN, 0.5),
+        event_day_night = TimeOfDayChangedEvent.create(
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            old_phase_name="morning",
+            new_phase_name="noon",
+            new_display_text="昼",
+            new_is_dark=False,
         )
-        out = formatter.format(event_weather, PlayerId(1), attention_level=AttentionLevel.FILTER_SOCIAL)
+        out = formatter.format(event_day_night, PlayerId(1), attention_level=AttentionLevel.FILTER_SOCIAL)
         assert out is not None
         assert out.observation_category == "environment"
 
@@ -833,14 +816,15 @@ class TestObservationFormatter:
         assert out_social is None
 
         # environment → None
-        event_weather = SpotWeatherChangedEvent.create(
-            aggregate_id=SpotId(1),
-            aggregate_type="Weather",
-            spot_id=SpotId(1),
-            old_weather_state=WeatherState.clear(),
-            new_weather_state=WeatherState(WeatherTypeEnum.RAIN, 0.5),
+        event_day_night = TimeOfDayChangedEvent.create(
+            aggregate_id=SpotGraphId(1),
+            aggregate_type="SpotGraphAggregate",
+            old_phase_name="morning",
+            new_phase_name="noon",
+            new_display_text="昼",
+            new_is_dark=False,
         )
-        out_env = formatter.format(event_weather, PlayerId(1), attention_level=AttentionLevel.IGNORE)
+        out_env = formatter.format(event_day_night, PlayerId(1), attention_level=AttentionLevel.IGNORE)
         assert out_env is None
 
     # --- ResourceHarvestedEvent / WorldObjectInteracted / アイテム名フォールバック ---
