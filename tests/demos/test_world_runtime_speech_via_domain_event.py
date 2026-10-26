@@ -41,7 +41,7 @@ class TestWorldRuntimeSpeechViaDomainEvent:
         """本番の初期配置では仮座標を持たず、スポットから同席者へ発言の観測が届く。"""
         runtime = create_world_runtime(_FORBIDDEN_LIBRARY)
         speaker = runtime._player_status_repo.find_by_id(PlayerId(1))
-        assert speaker.current_coordinate is None
+        assert not hasattr(speaker, "current_coordinate")
         _teleport(runtime, 1, _name_to_spot_id(runtime, "閲覧室"))
 
         runtime.do_say(PlayerId(1), "座標がなくても聞こえる")
