@@ -245,3 +245,35 @@ class TestSqliteBeingRepositoryTypeGuards:
         """型違反は TypeError で弾く。"""
         with pytest.raises(TypeError):
             repo.find_by_id("ada")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_old_database_declaration_is_removed_on_read_and_resave(tmp_path: Path, version: int) -> None:
+    """旧DBのsemantic宣言を読み飛ばし、同一性・所属を保って現役の宣言だけを再保存できる。"""
+    database = tmp_path / "old.db"
+    repo = SqliteBeingRepository.connect(str(database))
+    original = _being(attached=True, kinds=[MemoryKind.MEMO])
+    repo.save(original)
+    row = repo.connection.execute("SELECT snapshot_json FROM beings").fetchone()
+    payload = json.loads(row[0])
+    payload["declared_memory_kinds"] = ["semantic", "memo"]
+    payload["snapshot_version"] = version
+    repo.connection.execute(
+        "UPDATE beings SET snapshot_version = ?, snapshot_json = ?",
+        (version, json.dumps(payload)),
+    )
+    repo.connection.commit()
+    repo.connection.close()
+
+    reopened = SqliteBeingRepository.connect(str(database))
+    try:
+        being = reopened.find_by_id(original.being_id)
+        assert being.identity == original.identity
+        assert being.attachment == original.attachment
+        assert being.declared_memory_kinds == original.declared_memory_kinds
+        attached = reopened.find_all_attached_to(WorldId(1), PlayerId(2))
+        assert attached[0].declared_memory_kinds == original.declared_memory_kinds
+        reopened.save(being)
+        assert reopened.find_snapshot_by_id(original.being_id).declared_memory_kinds == ("memo",)
+    finally:
+        reopened.connection.close()

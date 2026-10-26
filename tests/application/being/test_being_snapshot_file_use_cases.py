@@ -56,7 +56,7 @@ def _make_being() -> Being:
         being_id=BeingId("being_w1_p1"),
         identity=BeingIdentity(name="アダ", first_person="わたし"),
         attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)),
-        declared_memory_kinds=[MemoryKind.MEMO, MemoryKind.SEMANTIC],
+        declared_memory_kinds=[MemoryKind.MEMO, MemoryKind.SHORT_TERM],
     )
 
 
@@ -199,3 +199,39 @@ class TestRestoreUseCaseDropsRemovedMemoryKeys:
         result = dst["restore"].execute(path)
 
         assert result.removed_memory_key_counts == {}
+
+
+class TestRestoreRemovedDeclaration:
+    """ファイル復元で廃止済みの宣言と記憶本文を分けて扱う。"""
+
+    def test_removed_declarations_are_counted_without_changing_memory_payload(self, tmp_path: Path) -> None:
+        """semantic宣言2件を除去して報告し、記憶本文をそのまま保存・復元する。"""
+        path = _capture_old_snapshot(tmp_path, {})
+        gateway = BeingSnapshotFileGateway()
+        snapshot = dataclasses.replace(gateway.read(path), declared_memory_kinds=("memo", "semantic", "semantic"))
+        gateway.write(snapshot, path)
+        dst = _make_environment()
+        result = dst["restore"].execute(path)
+        assert result.removed_declared_memory_kind_counts == {"semantic": 2}
+        assert result.removed_memory_key_counts == {}
+        stored = dst["repo"].find_snapshot_by_id(result.being_id)
+        assert stored.declared_memory_kinds == ("memo",)
+        assert stored.memory_payload_json == snapshot.memory_payload_json
+        assert [a.name for a in dst["acquaintances"].list_by_being(result.being_id)] == ["カイト"]
+
+    def test_unknown_declaration_is_rejected_before_saving(self, tmp_path: Path) -> None:
+        """semanticと未知の宣言が混在するファイルは、保存先に書き込む前に拒否する。"""
+        from ai_rpg_world.domain.being.exception.being_exceptions import BeingSnapshotIncompleteException
+
+        path = _capture_old_snapshot(tmp_path, {})
+        gateway = BeingSnapshotFileGateway()
+        gateway.write(dataclasses.replace(gateway.read(path), declared_memory_kinds=("semantic", "unknown_kind")), path)
+        dst = _make_environment()
+        with pytest.raises(BeingSnapshotIncompleteException, match="unknown_kind"):
+            dst["restore"].execute(path)
+        assert dst["repo"].find_snapshot_by_id(BeingId("being_w1_p1")) is None
+
+    def test_current_snapshot_reports_no_removed_declarations(self, tmp_path: Path) -> None:
+        """現役の宣言だけのファイルでは、除去した宣言の件数を空で報告する。"""
+        path = _capture_old_snapshot(tmp_path, {})
+        assert _make_environment()["restore"].execute(path).removed_declared_memory_kind_counts == {}
