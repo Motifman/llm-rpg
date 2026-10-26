@@ -1,6 +1,5 @@
 """観測対象イベント全体を扱うデフォルト配信先解決戦略（既存ロジックを集約）"""
 
-import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -36,20 +35,12 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerRevivedEvent,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.event.map_events import (
-    SpotWeatherChangedEvent,
-)
-from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
-    ISpotGraphRepository,
-)
-
-logger = logging.getLogger(__name__)
 
 
 class DefaultRecipientStrategy(IRecipientResolutionStrategy):
     """
     既存の観測対象イベントすべてに対する配信先解決。
-    天候・プレイヤー状態・所持品の観測先を決める。
+    プレイヤー状態・所持品の観測先を決める。
     """
 
     _STRATEGY_KEY = "default"
@@ -58,11 +49,9 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         self,
         observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
-        spot_graph_repository: ISpotGraphRepository | None = None,
     ) -> None:
         self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
-        self._spot_graph_repository = spot_graph_repository
         self._verify_the_registry_and_the_rules_agree()
 
     def supports(self, event: Any) -> bool:
@@ -143,47 +132,6 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         for pid in self._player_audience_query.players_at_spot(event.new_spot_id):
             add(pid)
 
-    def _resolve_spot_weather_changed(self, event: SpotWeatherChangedEvent, add: Callable[[PlayerId], None]) -> None:
-        # 屋内スポットでは天候変化を観測させない（窓があるとは限らない・空が直接
-        # 見えない前提）。SpotGraph 上で is_outdoor=False のスポットは配信先から外す。
-        #
-        # ## 例外を握らない (#1035)
-        #
-        # 以前はこの判定を丸ごと ``except Exception: pass`` で囲み、「リポジトリ参照
-        # に失敗した場合は配信を抑制せず従来挙動を維持」していた。そのため
-        # ``find_graph`` / ``contains_spot`` / ``get_spot`` のどこで落ちても抑制の
-        # ``return`` に到達せず、**屋内にいる人へ屋外の天候が届いた**。trace にも
-        # log にも何も残らないので、**発火していないのか、発火して静かなのかを
-        # 区別できなかった**。
-        #
-        # その「従来挙動」は害が大きい。``is_outdoor`` の既定値は False (= 屋内) で、
-        # 実測すると abandoned_hospital は 16 spot 中 15 が屋内扱いかつ天候が有効
-        # である。握り潰しが発火すれば、ほぼ全スポットへ誤配信する。
-        #
-        # 上流 (`ObservationRecipientResolver.resolve` / `ObservationPipeline`) に
-        # 広い ``except`` は無いので、投げれば実際に見える。どのスポットで落ちたかは
-        # 例外だけでは分からないので warning に残す。
-        #
-        # **「登録されていない」は例外とは別の正当な分岐**として残す。宣言の無い
-        # スポットへ天候が来る形は、抑制の判断材料が無いだけで壊れてはいない。
-        spot_node = None
-        if self._spot_graph_repository is not None:
-            try:
-                graph = self._spot_graph_repository.find_graph()
-                is_registered = graph.contains_spot(event.spot_id)
-                spot_node = graph.get_spot(event.spot_id) if is_registered else None
-            except Exception:
-                logger.warning(
-                    "屋内判定に失敗したため天候の配信先を決められない: spot_id=%s",
-                    getattr(event.spot_id, "value", event.spot_id),
-                    exc_info=True,
-                )
-                raise
-            if spot_node is not None and not spot_node.is_outdoor:
-                return
-        for pid in self._player_audience_query.players_at_spot(event.spot_id):
-            add(pid)
-
 
 #: イベント型 → 配信規則。担当と登録された全型がここに載っていることを、構築時
 #: (`verify_rules_cover_registry`) とテストの両方が確かめる。
@@ -207,7 +155,4 @@ _RECIPIENT_RULES: RuleTable = {
     ItemEquippedEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     ItemUnequippedEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     InventorySlotOverflowEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
-    # --- 天候 ---
-    # 屋内は空が見えないので配らない (spot graph の is_outdoor で判定)。
-    SpotWeatherChangedEvent: DefaultRecipientStrategy._resolve_spot_weather_changed,
 }
