@@ -155,7 +155,6 @@ _DEFAULT_EXPECTED = {
     "ItemEquippedEvent": "_deliver_only_to_the_subject",
     "ItemUnequippedEvent": "_deliver_only_to_the_subject",
     "InventorySlotOverflowEvent": "_deliver_only_to_the_subject",
-    "SpotWeatherChangedEvent": "_resolve_spot_weather_changed",
 }
 
 _MONSTER_EXPECTED = {

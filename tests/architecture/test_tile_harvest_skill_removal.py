@@ -21,11 +21,11 @@ def test_skill_application_keeps_storage_and_awakened_defaults() -> None:
 
 
 def test_skill_domain_keeps_proposals_and_equipment_values() -> None:
-    """スキルのドメインサービスには進化提案だけが残り、装備と命中の値は存在する。"""
+    """スキルのドメインサービスには進化提案だけが残り、装備の値は存在する。"""
     services = _ROOT / "domain/skill/service"
     assert {path.name for path in services.glob("*.py")} == {
         "__init__.py",
         "skill_proposal_domain_service.py",
     }
-    for name in ("skill_spec", "skill_hit_pattern", "skill_deck"):
+    for name in ("skill_spec", "skill_deck"):
         assert (_ROOT / "domain/skill/value_object" / f"{name}.py").is_file()

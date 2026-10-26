@@ -1,9 +1,7 @@
 from dataclasses import dataclass
 
-from ai_rpg_world.domain.combat.value_object.hit_effect import HitEffect
 from ai_rpg_world.domain.player.enum.player_enum import Element, Race
 from ai_rpg_world.domain.skill.exception.skill_exceptions import SkillSpecValidationException
-from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 
 
@@ -16,12 +14,10 @@ class SkillSpec:
     cast_lock_ticks: int
     cooldown_ticks: int
     power_multiplier: float
-    hit_pattern: SkillHitPattern
     mp_cost: int | None = None
     stamina_cost: int | None = None
     hp_cost: int | None = None
     slayer_races: tuple[Race, ...] = ()
-    hit_effects: tuple[HitEffect, ...] = ()
     required_skill_ids: tuple[SkillId, ...] = ()
     is_awakened_deck_only: bool = False
     targeting_range: int = 1

@@ -30,9 +30,6 @@ from ai_rpg_world.application.observation.services.formatters.sns_formatter impo
 from ai_rpg_world.application.observation.services.formatters.trade_formatter import (
     TradeObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters.world_formatter import (
-    WorldObservationFormatter,
-)
 
 __all__ = [
     "ObservationFormatterContext",
@@ -44,6 +41,5 @@ __all__ = [
     "GuildObservationFormatter",
     "MonsterObservationFormatter",
     "SkillObservationFormatter",
-    "WorldObservationFormatter",
     "PlayerObservationFormatter",
 ]

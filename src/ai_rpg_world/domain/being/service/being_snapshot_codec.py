@@ -11,7 +11,7 @@ PR #462 §2.1 R1: 「all-or-nothing で復元の完全性を保証 (部分復元
   保持する。未指定なら v1 互換の snapshot (memory_payload_json=None) になる
 - ``decode(snapshot)``: BeingSnapshot から Being 集約を復元
   - snapshot version が現 codec で読めない値なら ``BeingSnapshotVersionException``
-  - memory_kind 文字列が認識できなければ ``BeingSnapshotIncompleteException``
+  - 廃止したsemantic宣言だけを除き、ほかのmemory_kind文字列が認識できなければ ``BeingSnapshotIncompleteException``
   - その他 VO レベルの形式エラーは VO 自身のドメイン例外 (BeingId 等) で検出
 
 Phase 4 Step 4-1: memory payload は本 codec ではオペーク扱い。実際の memory
@@ -37,6 +37,8 @@ from ai_rpg_world.domain.being.value_object.being_snapshot import (
 from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
+
+_REMOVED_MEMORY_KIND = "semantic"
 
 
 class BeingSnapshotCodec:
@@ -93,6 +95,12 @@ class BeingSnapshotCodec:
         )
 
     @staticmethod
+    def removed_declared_memory_kind_counts(snapshot: BeingSnapshot) -> dict[str, int]:
+        """廃止済みの宣言の出現数を返す。記憶本文の件数は扱わない。"""
+        count = snapshot.declared_memory_kinds.count(_REMOVED_MEMORY_KIND)
+        return {_REMOVED_MEMORY_KIND: count} if count else {}
+
+    @staticmethod
     def decode(snapshot: BeingSnapshot) -> Being:
         """BeingSnapshot から Being 集約を復元する (all-or-nothing)。
 
@@ -142,6 +150,9 @@ class BeingSnapshotCodec:
         kinds: list[MemoryKind] = []
         valid_values = {k.value for k in MemoryKind}
         for raw in snapshot.declared_memory_kinds:
+            # 記憶本文とは別の宣言だけを移行する。未知の値は引き続き拒否する。
+            if raw == _REMOVED_MEMORY_KIND:
+                continue
             if raw not in valid_values:
                 raise BeingSnapshotIncompleteException(
                     f"unknown memory_kind value in snapshot: {raw!r} (known: {sorted(valid_values)})"

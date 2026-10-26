@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
 from ai_rpg_world.domain.player.enum.player_enum import Element
 from ai_rpg_world.domain.skill.aggregate.skill_deck_progress_aggregate import (
     SkillDeckProgressAggregate,
 )
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
-from ai_rpg_world.domain.skill.enum.skill_enum import SkillHitPatternType
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import (
     SkillDeckProgressId,
 )
-from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
@@ -37,7 +34,6 @@ def _skill_spec(skill_id: int, name: str = "Slash") -> SkillSpec:
         cast_lock_ticks=1,
         cooldown_ticks=5,
         power_multiplier=1.0,
-        hit_pattern=SkillHitPattern.single_pulse(SkillHitPatternType.MELEE, HitBoxShape.single_cell()),
     )
 
 

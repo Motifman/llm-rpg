@@ -663,6 +663,10 @@ def _drive_scenario(
                     removed_world_subsystems=(
                         world_snapshot.removed_subsystem_counts if world_snapshot is not None else {}
                     ),
+                    removed_declared_memory_kinds=[
+                        {"being_id": b.value, "counts": counts}
+                        for b, counts in restore_report.removed_declared_memory_kind_counts.items()
+                    ],
                     removed_memory_keys=[
                         {"being_id": b.value, "counts": counts}
                         for b, counts in restore_report.removed_memory_key_counts.items()

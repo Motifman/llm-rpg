@@ -45,12 +45,7 @@ from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.world.event.map_events import (
-    SpotWeatherChangedEvent,
-)
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
@@ -115,21 +110,6 @@ class TestObservationRecipientResolver:
         assert len(ids) == 1
         assert ids[0].value == 5
 
-    def test_resolve_spot_weather_changed_returns_players_at_spot(self, resolver, status_repo):
-        """SpotWeatherChangedEvent: その spot にいるプレイヤーが配信先"""
-        status_repo.save(_make_status(1, spot_id=3))
-        status_repo.save(_make_status(2, spot_id=3))
-        event = SpotWeatherChangedEvent.create(
-            aggregate_id=SpotId(3),
-            aggregate_type="Weather",
-            spot_id=SpotId(3),
-            old_weather_state=WeatherState.clear(),
-            new_weather_state=WeatherState(WeatherTypeEnum.RAIN, 0.5),
-        )
-        ids = resolver.resolve(event)
-        assert len(ids) == 2
-        assert {p.value for p in ids} == {1, 2}
-
     def test_resolve_item_added_inventory_returns_aggregate_player(self, resolver):
         """ItemAddedToInventoryEvent: aggregate_id が配信先"""
         event = ItemAddedToInventoryEvent.create(
@@ -168,21 +148,18 @@ class TestObservationRecipientResolver:
     # --- 例外ケース（リポジトリが例外を投げた場合は伝播）---
 
     def test_resolve_when_player_audience_query_raises_propagates(self, data_store):
-        """PlayerAudienceQuery.players_at_spot が例外を投げた場合、その例外が伝播する"""
+        """戦闘不能の配信先取得が失敗すると、その例外が呼び出し元へ伝わる。"""
         audience_query = MagicMock()
-        audience_query.players_at_spot.side_effect = RuntimeError("find_all failed")
+        audience_query.all_known_players.side_effect = RuntimeError("find_all failed")
         registry = ObservedEventRegistry()
         default_strategy = DefaultRecipientStrategy(
             observed_event_registry=registry,
             player_audience_query=audience_query,
         )
         resolver = ObservationRecipientResolver(strategies=[default_strategy])
-        event = SpotWeatherChangedEvent.create(
-            aggregate_id=SpotId(1),
-            aggregate_type="Weather",
-            spot_id=SpotId(1),
-            old_weather_state=WeatherState.clear(),
-            new_weather_state=WeatherState(WeatherTypeEnum.RAIN, 0.5),
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
         )
         with pytest.raises(RuntimeError, match="find_all failed"):
             resolver.resolve(event)

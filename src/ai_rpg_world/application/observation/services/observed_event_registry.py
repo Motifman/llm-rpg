@@ -91,9 +91,6 @@ from ai_rpg_world.domain.trade.event.trade_event import (
     TradeDeclinedEvent,
     TradeOfferedEvent,
 )
-from ai_rpg_world.domain.world.event.map_events import (
-    SpotWeatherChangedEvent,
-)
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionCreatedEvent,
     ConnectionDestroyedEvent,
@@ -232,14 +229,13 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
     # speech
     mapping[PlayerSpokeEvent] = "speech"
 
-    # default (天候・プレイヤー状態・所持品)
+    # default (プレイヤー状態・所持品)
     for ev in (
         PlayerDownedEvent,
         PlayerRevivedEvent,
         PlayerLevelUpEvent,
         PlayerGoldEarnedEvent,
         PlayerGoldPaidEvent,
-        SpotWeatherChangedEvent,
         ItemAddedToInventoryEvent,
         ItemDroppedFromInventoryEvent,
         ItemRemovedFromInventoryEvent,
