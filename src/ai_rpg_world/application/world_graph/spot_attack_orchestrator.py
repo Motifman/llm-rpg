@@ -342,7 +342,7 @@ class SpotAttackOrchestrator:
         - damage > 0
 
         成立時:
-        - `prey.apply_damage(damage, current_tick, attacker_id=...)` で HP 減少
+        - `prey.apply_damage(damage, current_tick, killer_monster_id=...)` で HP 減少
           → 致命なら aggregate 内部で `_die` が発火し `MonsterDiedEvent` 追加
         - `attacker.record_attack(current_tick)` で cooldown 更新
         - 致命攻撃 (`target_incapacitated=True`) なら
@@ -380,6 +380,7 @@ class SpotAttackOrchestrator:
         prey_monster.apply_damage(
             final_damage=damage,
             current_tick=current_tick,
+            killer_monster_id=attacker_monster.monster_id,
         )
         attacker_monster.record_attack(current_tick)
 
@@ -464,6 +465,7 @@ class SpotAttackOrchestrator:
         target_monster.apply_damage(
             final_damage=damage,
             current_tick=current_tick,
+            killer_monster_id=attacker_monster.monster_id,
         )
         attacker_monster.record_attack(current_tick)
         target_incapacitated = target_monster.status != MonsterStatusEnum.ALIVE

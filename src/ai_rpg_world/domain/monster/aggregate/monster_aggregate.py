@@ -418,6 +418,7 @@ class MonsterAggregate(AggregateRoot):
         current_tick: WorldTick,
         attacker_id: WorldObjectId | None = None,
         killer_player_id: PlayerId | None = None,
+        killer_monster_id: MonsterId | None = None,
     ) -> None:
         """計算済みのダメージを適用する。
 
@@ -451,7 +452,7 @@ class MonsterAggregate(AggregateRoot):
                 current_tick,
                 killer_player_id=killer_player_id,
                 killer_world_object_id=attacker_id,
-                cause=cause if (killer_player_id or attacker_id) else None,
+                cause=cause if (killer_player_id or killer_monster_id or attacker_id) else None,
             )
 
     @property
@@ -770,7 +771,7 @@ class MonsterAggregate(AggregateRoot):
     ) -> None:
         """
         死亡する（内部用）。
-        cause が None になるのは、killer_player_id も attacker_id もない場合
+        cause が None になるのは、攻撃者を特定できない場合
         （例: 環境ダメージ等で原因が特定できないケース）。
         """
         if self._lifecycle_state.status == MonsterStatusEnum.DEAD:

@@ -6,6 +6,7 @@
 
 - [x] 集約・配置定義・配置サービスから旧座標と世界物体IDが消える。
 - [x] 旧SQLite行の読込・更新と複数個体の新規保存が成功し、旧必須列の値が衝突しない。
+- [x] 捕食・反撃で倒した相手の死亡原因がKILLED_BY_MONSTERのままになる。
 - [x] 保存失敗のrollback後も再保存できる。
 - [x] スポット上の配置・出退場・被弾・CHASE・逃走・群れ・生存・装備を維持する。
 - [x] 旧世界snapshotを読み込め、モンスター個体のcodecが無い既存の制限を変えない。
@@ -13,7 +14,7 @@
 
 ## 削除前の調査
 
-個体の座標と世界物体IDはruntimeの静的配置・条件付き配置から渡され、保存層と旧タイルの専用操作が読む。現行の配置と追跡はMonsterId、SpotId、AttackerRefを使う。旧IDによる検索の唯一の使い手npc_nameにも本番呼出はない。update_map_placement、record_evasion、transition_to_passive_stateは本番呼出がない。捕食・モンスター間攻撃は旧IDを被弾/死亡イベントにも渡すが、本番の配信先・文面・戦闘規則には使わない（D1893-2）。
+個体の座標と世界物体IDはruntimeの静的配置・条件付き配置から渡され、保存層と旧タイルの専用操作が読む。現行の配置と追跡はMonsterId、SpotId、AttackerRefを使う。旧IDによる検索の唯一の使い手npc_nameにも本番呼出はない。update_map_placement、record_evasion、transition_to_passive_stateは本番呼出がない。捕食・モンスター間攻撃は旧IDを被弾/死亡イベントにも渡すが、本番の配信先・文面には使わない。致命攻撃の死因判定にも使われていたため、その判定材料をMonsterIdへ替える（D1893-2）。
 
 ## 質感
 
@@ -33,13 +34,14 @@
 
 専用venvと固定PYTHONPATHを使い、dotenv.load_dotenvを無効化した。実LLM・.env読込・手動quality/live_apiは実行していない。出力は `/tmp/llm-rpg-1893-a2/`。
 
+- 独立レビューで死亡原因が未指定になる回帰を検出。捕食・反撃の回帰試験でRed→Greenを確認し、関連378件が成功。
 - 構造検査のRed→Greenを確認。モンスター・配置・保存397件、保存互換13件、シナリオ・構造19件、モンスター動作・観測・シナリオ読込等1,967件が成功。範囲は重複する。
 - 基準mainのコードで生成した実SQLiteの2個体を新コードで復元・HP更新・再保存でき、旧IDを保持した。
 - 基準mainのworld.jsonから実験再開が成功。snapshot_loadとworld_snapshot_loadに成功を確認し、今回の削除に伴う世界キーの読み捨ては無い。
 - smoke_stubは前後成功。profile、シナリオhash、2tick、基準commitを確認した。観測/行動0件なので起動・保存配線の確認に限定する。
 - 山村・避難訓練の各3seed・40tickは前後とも検出0件。全記録種別・観測種別・行動件数が一致し、合計1,990観測・1,205行動。詳細はcomparison.json。
 - 変更Pythonのruff check/format、mypy（1,242ファイル）、空白検査が成功。
-- ASTで現役の被弾・CHASE・逃走・生存・成長操作22件の本体が同一と確認した。全シナリオにinitial_placements[].coordinateの指定は無い。
+- ASTで現役のCHASE・逃走・生存・成長操作21件の本体が同一と確認した。全シナリオにinitial_placements[].coordinateの指定は無い。
 
 ## 残す検索一致と試験
 
