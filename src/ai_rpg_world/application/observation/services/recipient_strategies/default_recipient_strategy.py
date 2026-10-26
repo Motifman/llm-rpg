@@ -31,7 +31,6 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
     PlayerLevelUpEvent,
-    PlayerLocationChangedEvent,
     PlayerRevivedEvent,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -125,13 +124,6 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         for player_id in self._player_audience_query.all_known_players():
             add(player_id)
 
-    def _resolve_player_location_changed(
-        self, event: PlayerLocationChangedEvent, add: Callable[[PlayerId], None]
-    ) -> None:
-        add(event.aggregate_id)
-        for pid in self._player_audience_query.players_at_spot(event.new_spot_id):
-            add(pid)
-
 
 #: イベント型 → 配信規則。担当と登録された全型がここに載っていることを、構築時
 #: (`verify_rules_cover_registry`) とテストの両方が確かめる。
@@ -141,7 +133,6 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
 _RECIPIENT_RULES: RuleTable = {
     # --- 場所の出入り ---
     # 入った本人と、その場に居た全員。すれ違いが見えるように両方へ。
-    PlayerLocationChangedEvent: DefaultRecipientStrategy._resolve_player_location_changed,
     # --- 重大な状態変化は位置に関わらず全員へ ---
     PlayerDownedEvent: DefaultRecipientStrategy._deliver_to_everyone_known,
     PlayerRevivedEvent: DefaultRecipientStrategy._deliver_to_everyone_known,

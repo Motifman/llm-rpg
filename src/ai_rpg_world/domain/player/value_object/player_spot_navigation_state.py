@@ -1,7 +1,7 @@
 """
 PlayerSpotNavigationState: スポットグラフ上のプレイヤー移動状態（不変値オブジェクト）。
 
-2D タイル用の PlayerNavigationState と独立に保持し、PlayerStatusAggregate がオプションで持つ。
+PlayerStatusAggregate がオプションで持つ。
 """
 
 from __future__ import annotations

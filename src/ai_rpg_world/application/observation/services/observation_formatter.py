@@ -23,9 +23,6 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
 from ai_rpg_world.application.observation.services.formatters.player_formatter import (
     PlayerObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters.pursuit_formatter import (
-    PursuitObservationFormatter,
-)
 from ai_rpg_world.application.observation.services.formatters.quest_formatter import (
     QuestObservationFormatter,
 )
@@ -138,7 +135,6 @@ class ObservationFormatter(IObservationFormatter):
             SpotGraphObservationFormatter(self._context),
             ItemUseObservationFormatter(self._context),
             PlayerObservationFormatter(self._context),
-            PursuitObservationFormatter(self._context),
         ]
 
     def format(

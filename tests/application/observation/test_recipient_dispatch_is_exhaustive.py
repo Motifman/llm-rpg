@@ -144,7 +144,6 @@ _SPOT_GRAPH_EXPECTED = {
 }
 
 _DEFAULT_EXPECTED = {
-    "PlayerLocationChangedEvent": "_resolve_player_location_changed",
     "PlayerDownedEvent": "_deliver_to_everyone_known",
     "PlayerRevivedEvent": "_deliver_to_everyone_known",
     "PlayerLevelUpEvent": "_deliver_only_to_the_subject",

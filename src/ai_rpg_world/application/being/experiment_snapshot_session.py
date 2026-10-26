@@ -78,7 +78,6 @@ from ai_rpg_world.application.being.world_subsystems import (
     PlayerNeedsSubsystemCodec,
     PlayerOutcomeSubsystemCodec,
     PlayerPositionSubsystemCodec,
-    PlayerPursuitStateSubsystemCodec,
     PlayerSpotNavigationStateSubsystemCodec,
     PlayerStateDictSubsystemCodec,
     PlayerVitalsSubsystemCodec,
@@ -130,7 +129,6 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     # Phase 9-4a
     "player_active_effects",
     "player_attention_level",
-    "player_pursuit_state",
     "player_spot_navigation_state",
     # Phase 9-4b
     "weather",
@@ -231,7 +229,6 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         # Phase 9-4a (PlayerStatusAggregate combat/navigation sub-state)
         PlayerActiveEffectsSubsystemCodec(),
         PlayerAttentionLevelSubsystemCodec(),
-        PlayerPursuitStateSubsystemCodec(),
         PlayerSpotNavigationStateSubsystemCodec(),
         # Phase 9-4b (world-side time/weather; day_night は tick 復元後に再計算)
         WeatherSubsystemCodec(),

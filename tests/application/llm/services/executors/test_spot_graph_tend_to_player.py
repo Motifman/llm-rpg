@@ -13,8 +13,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
-
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
 )
@@ -33,12 +31,8 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
-)
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
@@ -51,10 +45,7 @@ def _build_player(
     hp_max: int = 100,
 ) -> PlayerStatusAggregate:
     exp_table = ExpTable(100, 1.5)
-    nav = PlayerNavigationState.from_parts(
-        current_spot_id=SpotId(spot_id),
-        current_coordinate=Coordinate(0, 0, 0),
-    )
+    nav = SpotId(spot_id)
     status = PlayerStatusAggregate(
         player_id=PlayerId(player_id),
         base_stats=BaseStats(hp_max, 50, 10, 10, 10, 0.05, 0.05),
@@ -65,7 +56,7 @@ def _build_player(
         hp=Hp.create(hp_current, hp_max),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        navigation_state=nav,
+        current_spot_id=nav,
         is_down=is_down,
     )
     return status

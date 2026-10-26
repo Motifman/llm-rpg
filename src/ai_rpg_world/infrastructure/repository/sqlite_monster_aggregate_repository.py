@@ -177,8 +177,8 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     behavior_chase_attacker_ref_player_id,
                     behavior_chase_attacker_ref_monster_id,
                     behavior_chase_started_at_tick,
-                    pursuit_failure_reason, hunger, starvation_timer
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    hunger, starvation_timer
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(monster_id) DO UPDATE SET
                     world_object_id = excluded.world_object_id,
                     spot_id = excluded.spot_id,
@@ -216,7 +216,6 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     behavior_chase_attacker_ref_player_id = excluded.behavior_chase_attacker_ref_player_id,
                     behavior_chase_attacker_ref_monster_id = excluded.behavior_chase_attacker_ref_monster_id,
                     behavior_chase_started_at_tick = excluded.behavior_chase_started_at_tick,
-                    pursuit_failure_reason = excluded.pursuit_failure_reason,
                     hunger = excluded.hunger,
                     starvation_timer = excluded.starvation_timer
                 """,
@@ -272,9 +271,6 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     None
                     if entity.persistence_chase_started_at_tick is None
                     else entity.persistence_chase_started_at_tick.value,
-                    None
-                    if entity.pursuit_state is None or entity.pursuit_state.failure_reason is None
-                    else entity.pursuit_state.failure_reason.value,
                     entity.hunger,
                     entity._lifecycle_state.starvation_timer,
                 ),
@@ -322,42 +318,6 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     for memory_index, entry in enumerate(entity.behavior_last_known_feed)
                 ],
             )
-            pursuit_state = entity.pursuit_state
-            if pursuit_state is not None and pursuit_state.target_snapshot is not None:
-                self._conn.execute(
-                    """
-                    INSERT INTO game_monster_pursuit_target_snapshots (
-                        monster_id, target_id, spot_id, x, y, z
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        monster_id,
-                        int(pursuit_state.target_snapshot.target_id),
-                        int(pursuit_state.target_snapshot.spot_id),
-                        pursuit_state.target_snapshot.coordinate.x,
-                        pursuit_state.target_snapshot.coordinate.y,
-                        pursuit_state.target_snapshot.coordinate.z,
-                    ),
-                )
-            if pursuit_state is not None and pursuit_state.last_known is not None:
-                self._conn.execute(
-                    """
-                    INSERT INTO game_monster_pursuit_last_known (
-                        monster_id, target_id, spot_id, x, y, z, observed_at_tick
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        monster_id,
-                        int(pursuit_state.last_known.target_id),
-                        int(pursuit_state.last_known.spot_id),
-                        pursuit_state.last_known.coordinate.x,
-                        pursuit_state.last_known.coordinate.y,
-                        pursuit_state.last_known.coordinate.z,
-                        None
-                        if pursuit_state.last_known.observed_at_tick is None
-                        else pursuit_state.last_known.observed_at_tick.value,
-                    ),
-                )
             if began_local_transaction:
                 self._conn.commit()
             else:
@@ -421,22 +381,12 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
             """,
             (monster_id,),
         ).fetchall()
-        pursuit_target_row = self._conn.execute(
-            "SELECT * FROM game_monster_pursuit_target_snapshots WHERE monster_id = ?",
-            (monster_id,),
-        ).fetchone()
-        pursuit_last_known_row = self._conn.execute(
-            "SELECT * FROM game_monster_pursuit_last_known WHERE monster_id = ?",
-            (monster_id,),
-        ).fetchone()
         return build_monster(
             row=row,
             template=template,
             skill_loadout=loadout,
             active_effect_rows=list(active_effect_rows),
             feed_memory_rows=list(feed_memory_rows),
-            pursuit_target_row=pursuit_target_row,
-            pursuit_last_known_row=pursuit_last_known_row,
         )
 
 

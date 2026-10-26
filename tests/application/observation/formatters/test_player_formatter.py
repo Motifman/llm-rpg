@@ -9,7 +9,6 @@ import pytest
 # observation formatter を直接 import する単体テストでは prompt_builder を先に初期化する。
 from ai_rpg_world.application.llm.services import prompt_builder as _prompt_builder  # noqa: F401
 from ai_rpg_world.application.observation.contracts.dtos import (
-    ObservationOutput,
     SubjectUnknownView,
     WithheldFromStrangers,
 )
@@ -23,33 +22,23 @@ from ai_rpg_world.application.observation.services.formatters.player_formatter i
     PlayerObservationFormatter,
 )
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.event.inventory_events import (
-    InventorySlotOverflowEvent,
     ItemAddedToInventoryEvent,
-    ItemDroppedFromInventoryEvent,
-    ItemEquippedEvent,
     ItemRemovedFromInventoryEvent,
-    ItemUnequippedEvent,
 )
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
-    PlayerGoldEarnedEvent,
-    PlayerGoldPaidEvent,
     PlayerLevelUpEvent,
-    PlayerLocationChangedEvent,
     PlayerRevivedEvent,
 )
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 from ai_rpg_world.domain.skill.event.skill_events import SkillEquippedEvent
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 
@@ -94,63 +83,6 @@ class TestPlayerObservationFormatterCreation:
         formatter = PlayerObservationFormatter(ctx)
         assert hasattr(formatter, "format")
         assert callable(formatter.format)
-
-
-class TestPlayerObservationFormatterPlayerLocationChanged:
-    """PlayerLocationChangedEvent のフォーマットテスト"""
-
-    def test_self_returns_current_location_prose(self):
-        """本人向けは「現在地: 〇〇」を返す。"""
-        spot_repo = MagicMock()
-        spot = MagicMock()
-        spot.name = "町の広場"
-        spot_repo.find_by_id.return_value = spot
-        ctx = _make_context(spot_repository=spot_repo)
-        formatter = PlayerObservationFormatter(ctx)
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "現在地" in out.prose
-        assert "町の広場" in out.prose
-        assert out.structured.get("type") == "current_location"
-        assert out.observation_category == "self_only"
-
-    def test_other_player_returns_entered_spot_prose(self):
-        """他プレイヤー向けは「〇〇がこのスポットにやってきました。」"""
-        spot_repo = MagicMock()
-        spot = MagicMock()
-        spot.name = "洞窟入口"
-        spot_repo.find_by_id.return_value = spot
-        profile_repo = MagicMock()
-        profile = MagicMock()
-        profile.name.value = "Bob"
-        profile_repo.find_by_id.return_value = profile
-        ctx = _make_context(
-            spot_repository=spot_repo,
-            player_profile_repository=profile_repo,
-        )
-        formatter = PlayerObservationFormatter(ctx)
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(2),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "Bob" in out.prose
-        assert "やってきました" in out.prose
-        assert out.structured.get("type") == "player_entered_spot"
-        assert out.observation_category == "social"
 
 
 class TestPlayerObservationFormatterPlayerDowned:

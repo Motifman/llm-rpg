@@ -194,3 +194,36 @@ class TestRoundAssignmentFromTheSeed:
         assert _run(config, tmp_path / "r1") == 0
 
         assert _events(tmp_path / "r1", "round_assignment") == []
+
+
+def test_old_world_pursuit_is_discarded_and_counted_in_trace(tmp_path: Path):
+    """旧world.jsonの追跡2行を捨てて再開し、世界の読込traceに件数を残し、再保存から除く。"""
+    config = _config(tmp_path)
+    assert _run(config, tmp_path / "r1") == 0
+    path = tmp_path / "r1/snapshots/world.json"
+    data = json.loads(path.read_text())
+    data["subsystems"]["player_pursuit_state"] = {
+        "schema_version": 1,
+        "entries": [
+            {"player_id": 1, "pursuit": None},
+            {
+                "player_id": 2,
+                "pursuit": {
+                    "actor_id": 2,
+                    "target_id": 99,
+                    "target_snapshot": None,
+                    "last_known": None,
+                    "failure_reason": None,
+                },
+            },
+        ],
+    }
+    path.write_text(json.dumps(data))
+    assert _run(config, tmp_path / "r2", load_from=tmp_path / "r1", ticks=4) == 0
+    (memory_loaded,) = _events(tmp_path / "r2", "snapshot_load")
+    assert memory_loaded["payload"]["removed_world_subsystems"] == {"player_pursuit_state": 2}
+    (loaded,) = _events(tmp_path / "r2", "world_snapshot_load")
+    assert loaded["payload"]["removed_subsystems"] == {"player_pursuit_state": 2}
+    assert "player_pursuit_state" not in loaded["payload"]["restored_subsystems"]
+    saved = json.loads((tmp_path / "r2/snapshots/world.json").read_text())
+    assert "player_pursuit_state" not in saved["subsystems"]

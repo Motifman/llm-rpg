@@ -192,7 +192,7 @@ class WorldStateSnapshotService:
             )
             if not sns_enabled:
                 expected_keys.discard("public_sns")
-            snapshot_keys = set(snapshot.subsystems)
+            snapshot_keys = set(snapshot.subsystems) - snapshot.removed_subsystem_counts.keys()
             missing = sorted(expected_keys - snapshot_keys)
             unknown = sorted(snapshot_keys - set(codec_by_key))
             if missing or unknown:
@@ -203,6 +203,8 @@ class WorldStateSnapshotService:
         # 登録済 codec を順次呼ぶ。通常 mode で snapshot 側に登録外の
         # subsystem がある場合は info ログを残して読み飛ばす (= 後方互換性)。
         for key, data in snapshot.subsystems.items():
+            if key in snapshot.removed_subsystem_counts:
+                continue
             codec = codec_by_key.get(key)
             if codec is None:
                 logger.info(

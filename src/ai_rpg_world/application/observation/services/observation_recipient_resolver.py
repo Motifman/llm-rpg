@@ -23,7 +23,6 @@ from ai_rpg_world.application.observation.services.recipient_strategies import (
     DefaultRecipientStrategy,
     GuildRecipientStrategy,
     MonsterRecipientStrategy,
-    PursuitRecipientStrategy,
     QuestRecipientStrategy,
     ShopRecipientStrategy,
     SkillRecipientStrategy,
@@ -226,10 +225,6 @@ def create_observation_recipient_resolver(
             observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
             guild_repository=guild_repository,
-        ),
-        PursuitRecipientStrategy(
-            observed_event_registry=observed_event_registry,
-            world_object_to_player_resolver=world_object_resolver,
         ),
         MonsterRecipientStrategy(
             observed_event_registry=observed_event_registry,

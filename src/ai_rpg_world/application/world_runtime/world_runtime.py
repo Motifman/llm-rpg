@@ -346,7 +346,6 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import PlayerSpotNavigationState
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -4329,9 +4328,7 @@ def create_world_runtime(
             hp=Hp(value=100, max_hp=100),
             mp=Mp(value=50, max_mp=50),
             stamina=Stamina(value=100, max_stamina=100),
-            navigation_state=PlayerNavigationState.from_parts(
-                current_spot_id=spawn.spawn_spot_id,
-            ),
+            current_spot_id=spawn.spawn_spot_id,
             spot_navigation_state=PlayerSpotNavigationState.at_rest(spawn.spawn_spot_id),
             # シナリオが宣言した初期 state (役割・印など) をそのまま載せる。
             #

@@ -2,11 +2,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
-from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
@@ -112,13 +109,3 @@ class PlayerGoldPaidEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
 
     paid_amount: int
     total_gold: int
-
-
-@dataclass(frozen=True)
-class PlayerLocationChangedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
-    """プレイヤー位置変更イベント"""
-
-    old_spot_id: SpotId | None
-    old_coordinate: Coordinate | None
-    new_spot_id: SpotId
-    new_coordinate: Coordinate

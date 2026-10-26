@@ -26,24 +26,15 @@ from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.value_object.player_pursuit_state import PlayerPursuitState
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
-from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import PursuitLastKnownState
-from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
-from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import PursuitTargetSnapshot
 from ai_rpg_world.domain.trade.aggregate.trade_aggregate import TradeAggregate
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus, TradeType
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.sqlite_item_spec_state_codec import (
     item_spec_to_payload,
     payload_to_item_spec,
@@ -189,66 +180,10 @@ def _require_mapping(raw: Any, label: str) -> dict[str, Any]:
     return raw
 
 
-def _coord_to_list(c: Coordinate) -> list[int]:
-    return [c.x, c.y, c.z]
-
-
-def _list_to_coord(raw: Any) -> Coordinate:
-    if not isinstance(raw, list) or len(raw) not in (2, 3):
-        raise ValueError("coordinate must be [x,y] or [x,y,z]")
-    x, y = int(raw[0]), int(raw[1])
-    z = int(raw[2]) if len(raw) > 2 else 0
-    return Coordinate(x, y, z)
-
-
 def _optional_spot_id(raw: Any) -> SpotId | None:
     if raw is None:
         return None
     return SpotId(int(raw))
-
-
-def _optional_location_area_id(raw: Any) -> LocationAreaId | None:
-    if raw is None:
-        return None
-    return LocationAreaId(int(raw))
-
-
-def _optional_world_object_id(raw: Any) -> WorldObjectId | None:
-    if raw is None:
-        return None
-    return WorldObjectId(int(raw))
-
-
-def _navigation_state_to_dict(nav: PlayerNavigationState) -> dict[str, Any]:
-    return {
-        "current_spot_id": int(nav.current_spot_id) if nav.current_spot_id is not None else None,
-        "current_coordinate": _coord_to_list(nav.current_coordinate) if nav.current_coordinate else None,
-        "current_destination": _coord_to_list(nav.current_destination) if nav.current_destination else None,
-        "planned_path": [_coord_to_list(c) for c in nav.planned_path],
-        "goal_destination_type": nav.goal_destination_type,
-        "goal_spot_id": int(nav.goal_spot_id) if nav.goal_spot_id is not None else None,
-        "goal_location_area_id": int(nav.goal_location_area_id) if nav.goal_location_area_id is not None else None,
-        "goal_world_object_id": int(nav.goal_world_object_id) if nav.goal_world_object_id is not None else None,
-    }
-
-
-def _dict_to_navigation_state(data: dict[str, Any]) -> PlayerNavigationState:
-    path_raw = data.get("planned_path") or []
-    if not isinstance(path_raw, list):
-        raise ValueError("planned_path must be a list")
-    path: tuple[Coordinate, ...] = tuple(_list_to_coord(x) for x in path_raw)
-    ccoord = data.get("current_coordinate")
-    cdest = data.get("current_destination")
-    return PlayerNavigationState.from_parts(
-        current_spot_id=_optional_spot_id(data.get("current_spot_id")),
-        current_coordinate=_list_to_coord(ccoord) if ccoord is not None else None,
-        current_destination=_list_to_coord(cdest) if cdest is not None else None,
-        planned_path=path,
-        goal_destination_type=data.get("goal_destination_type"),
-        goal_spot_id=_optional_spot_id(data.get("goal_spot_id")),
-        goal_location_area_id=_optional_location_area_id(data.get("goal_location_area_id")),
-        goal_world_object_id=_optional_world_object_id(data.get("goal_world_object_id")),
-    )
 
 
 def _status_effect_to_dict(effect: StatusEffect) -> dict[str, Any]:
@@ -265,72 +200,6 @@ def _dict_to_status_effect(data: dict[str, Any]) -> StatusEffect:
         effect_type=StatusEffectType[name],
         value=float(data["value"]),
         expiry_tick=WorldTick(int(data["expiry_tick"])),
-    )
-
-
-def _pursuit_snapshot_to_dict(s: PursuitTargetSnapshot) -> dict[str, Any]:
-    return {
-        "target_id": int(s.target_id),
-        "spot_id": int(s.spot_id),
-        "coordinate": _coord_to_list(s.coordinate),
-    }
-
-
-def _dict_to_pursuit_snapshot(data: dict[str, Any]) -> PursuitTargetSnapshot:
-    return PursuitTargetSnapshot(
-        target_id=WorldObjectId(int(data["target_id"])),
-        spot_id=SpotId(int(data["spot_id"])),
-        coordinate=_list_to_coord(data["coordinate"]),
-    )
-
-
-def _last_known_to_dict(lk: PursuitLastKnownState) -> dict[str, Any]:
-    tick = lk.observed_at_tick.value if lk.observed_at_tick is not None else None
-    return {
-        "target_id": int(lk.target_id),
-        "spot_id": int(lk.spot_id),
-        "coordinate": _coord_to_list(lk.coordinate),
-        "observed_at_tick": tick,
-    }
-
-
-def _dict_to_last_known(data: dict[str, Any]) -> PursuitLastKnownState:
-    tick_raw = data.get("observed_at_tick")
-    tick: WorldTick | None = WorldTick(int(tick_raw)) if tick_raw is not None else None
-    return PursuitLastKnownState(
-        target_id=WorldObjectId(int(data["target_id"])),
-        spot_id=SpotId(int(data["spot_id"])),
-        coordinate=_list_to_coord(data["coordinate"]),
-        observed_at_tick=tick,
-    )
-
-
-def _pursuit_state_core_to_dict(p: PursuitState) -> dict[str, Any]:
-    ts = p.target_snapshot
-    lk = p.last_known
-    fr = p.failure_reason
-    return {
-        "actor_id": int(p.actor_id),
-        "target_id": int(p.target_id),
-        "target_snapshot": _pursuit_snapshot_to_dict(ts) if ts is not None else None,
-        "last_known": _last_known_to_dict(lk) if lk is not None else None,
-        "failure_reason": fr.name if fr is not None else None,
-    }
-
-
-def _dict_to_pursuit_state_core(data: dict[str, Any]) -> PursuitState:
-    fr_raw = data.get("failure_reason")
-    failure_reason = PursuitFailureReason[str(fr_raw)] if fr_raw is not None else None
-    ts_raw = data.get("target_snapshot")
-    lk_raw = data.get("last_known")
-    return PursuitState(
-        actor_id=WorldObjectId(int(data["actor_id"])),
-        target_id=WorldObjectId(int(data["target_id"])),
-        target_snapshot=(
-            _dict_to_pursuit_snapshot(_require_mapping(ts_raw, "target_snapshot")) if ts_raw is not None else None
-        ),
-        last_known=(_dict_to_last_known(_require_mapping(lk_raw, "last_known")) if lk_raw is not None else None),
-        failure_reason=failure_reason,
     )
 
 
@@ -372,15 +241,10 @@ def player_status_to_json_bytes(status: PlayerStatusAggregate) -> bytes:
         "hp": {"value": status.hp.value, "max_hp": status.hp.max_hp},
         "mp": {"value": status.mp.value, "max_mp": status.mp.max_mp},
         "stamina": {"value": status.stamina.value, "max_stamina": status.stamina.max_stamina},
-        "navigation_state": _navigation_state_to_dict(status._navigation_state),
+        "current_spot_id": int(status.current_spot_id) if status.current_spot_id is not None else None,
         "is_down": status.is_down,
         "active_effects": [_status_effect_to_dict(e) for e in status._active_effects],
         "attention_level": status.attention_level.value,
-        "pursuit": (
-            None
-            if status._pursuit_state.pursuit is None
-            else _pursuit_state_core_to_dict(status._pursuit_state.pursuit)
-        ),
     }
     text = json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     return text.encode("utf-8")
@@ -440,14 +304,6 @@ def json_bytes_to_player_status(blob: bytes) -> PlayerStatusAggregate:
         raise ValueError("active_effects must be a list")
     active_effects = [_dict_to_status_effect(_require_mapping(x, "active_effects[]")) for x in effects_raw]
 
-    pursuit_raw = data.get("pursuit")
-    if pursuit_raw is None:
-        pursuit_vo = PlayerPursuitState.empty()
-    elif isinstance(pursuit_raw, dict):
-        pursuit_vo = PlayerPursuitState.from_parts(pursuit=_dict_to_pursuit_state_core(pursuit_raw))
-    else:
-        raise ValueError("pursuit must be a JSON object or null")
-
     return PlayerStatusAggregate(
         player_id=PlayerId(int(data["player_id"])),
         base_stats=base_stats,
@@ -458,11 +314,12 @@ def json_bytes_to_player_status(blob: bytes) -> PlayerStatusAggregate:
         hp=Hp.create(int(hp_d["value"]), int(hp_d["max_hp"])),
         mp=Mp.create(int(mp_d["value"]), int(mp_d["max_mp"])),
         stamina=Stamina.create(int(st_d["value"]), int(st_d["max_stamina"])),
-        navigation_state=_dict_to_navigation_state(_require_mapping(data["navigation_state"], "navigation_state")),
+        current_spot_id=_optional_spot_id(
+            data["current_spot_id"] if "current_spot_id" in data else data["navigation_state"].get("current_spot_id")
+        ),
         is_down=bool(data["is_down"]),
         active_effects=active_effects,
         attention_level=AttentionLevel(str(data["attention_level"])),
-        pursuit_state=pursuit_vo,
     )
 
 

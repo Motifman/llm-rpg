@@ -636,6 +636,14 @@ def _drive_scenario(
                 )
                 logger.info("restored %d being snapshot(s)", len(restore_report.restored))
                 runtime.note_being_memories_restored(restore_report.restored)
+                # Phase 9-1: world snapshot も load (= 旧 snapshot dir に
+                # world.json が無ければ no-op = 後方互換)。world snapshot は
+                # scenario fail-fast 方針なので例外は素通し。
+                world_snapshot = snapshot_session.restore_world_from_dir(
+                    runtime,
+                    snapshot_load_dir,
+                    current_scenario=scenario_path.stem,
+                )
                 # Phase 7: trace に「どの run から続きを取ったか」を残す。
                 # cross-scenario transfer も明示的に payload に乗せる。
                 recorder.record(
@@ -652,6 +660,9 @@ def _drive_scenario(
                         }
                         for (b, src, cur) in restore_report.cross_scenario_transfers
                     ],
+                    removed_world_subsystems=(
+                        world_snapshot.removed_subsystem_counts if world_snapshot is not None else {}
+                    ),
                     removed_declared_memory_kinds=[
                         {"being_id": b.value, "counts": counts}
                         for b, counts in restore_report.removed_declared_memory_kind_counts.items()
@@ -662,14 +673,6 @@ def _drive_scenario(
                     ],
                 )
 
-                # Phase 9-1: world snapshot も load (= 旧 snapshot dir に
-                # world.json が無ければ no-op = 後方互換)。world snapshot は
-                # scenario fail-fast 方針なので例外は素通し。
-                world_snapshot = snapshot_session.restore_world_from_dir(
-                    runtime,
-                    snapshot_load_dir,
-                    current_scenario=scenario_path.stem,
-                )
                 if world_snapshot is not None:
                     logger.info(
                         "restored world snapshot: source_scenario=%s world_tick=%d subsystems=%s",
@@ -683,7 +686,10 @@ def _drive_scenario(
                         source_scenario=world_snapshot.source_scenario,
                         current_scenario=scenario_path.stem,
                         world_tick=world_snapshot.world_tick,
-                        restored_subsystems=sorted(world_snapshot.subsystems.keys()),
+                        restored_subsystems=sorted(
+                            world_snapshot.subsystems.keys() - world_snapshot.removed_subsystem_counts.keys()
+                        ),
+                        removed_subsystems=world_snapshot.removed_subsystem_counts,
                     )
 
         for pid in runtime.get_player_ids():

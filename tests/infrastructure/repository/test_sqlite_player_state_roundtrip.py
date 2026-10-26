@@ -122,3 +122,20 @@ class TestPlayerStateRoundtrip:
 
         final = repo.find_by_id(PlayerId(1))
         assert final.state == {}
+
+
+def test_legacy_tile_rows_do_not_prevent_read_and_save(sqlite_conn):
+    """旧DBに座標・経路・追跡があってもHPと現在地を読め、旧概念なしで再保存できる。"""
+    repo = SqlitePlayerStatusWriteRepository.for_standalone_connection(sqlite_conn)
+    repo.save(_build_status())
+    sqlite_conn.execute(
+        "UPDATE game_player_statuses SET current_spot_id=3, current_coordinate_x=1, current_coordinate_y=2, current_coordinate_z=0"
+    )
+    sqlite_conn.execute("INSERT INTO game_player_navigation_path VALUES (1, 0, 2, 2, 0)")
+    sqlite_conn.execute("INSERT INTO game_player_pursuit_target_snapshots VALUES (1, 99, 3, 2, 2, 0)")
+    sqlite_conn.commit()
+    restored = repo.find_by_id(PlayerId(1))
+    assert int(restored.current_spot_id) == 3 and restored.hp == _build_status().hp
+    assert not hasattr(restored, "_navigation_state") and not hasattr(restored, "_pursuit_state")
+    repo.save(restored)
+    assert repo.find_by_id(PlayerId(1)).hp == restored.hp

@@ -15,26 +15,18 @@ from ai_rpg_world.application.observation.services.recipient_strategies.quest_re
 )
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
-from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
-)
-from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
-from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType, QuestStatus
 from ai_rpg_world.domain.quest.event.quest_event import (
     QuestAcceptedEvent,
     QuestApprovedEvent,
-    QuestCancelledEvent,
     QuestCompletedEvent,
     QuestIssuedEvent,
     QuestPendingApprovalEvent,
 )
 from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
-from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
 from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
@@ -45,9 +37,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_guild_repository import (
 )
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
-)
-from ai_rpg_world.infrastructure.repository.in_memory_quest_repository import (
-    InMemoryQuestRepository,
 )
 
 
@@ -114,7 +103,6 @@ class TestQuestRecipientStrategyNormal:
         from ai_rpg_world.domain.player.value_object.mp import Mp
         from ai_rpg_world.domain.player.value_object.stamina import Stamina
         from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
         exp_table = ExpTable(100, 1.5)
         status_repo.save(
@@ -128,10 +116,7 @@ class TestQuestRecipientStrategyNormal:
                 hp=Hp.create(100, 100),
                 mp=Mp.create(50, 50),
                 stamina=Stamina.create(100, 100),
-                navigation_state=PlayerNavigationState.from_parts(
-                    current_spot_id=SpotId(1),
-                    current_coordinate=Coordinate(0, 0, 0),
-                ),
+                current_spot_id=SpotId(1),
             )
         )
         status_repo.save(
@@ -145,10 +130,7 @@ class TestQuestRecipientStrategyNormal:
                 hp=Hp.create(100, 100),
                 mp=Mp.create(50, 50),
                 stamina=Stamina.create(100, 100),
-                navigation_state=PlayerNavigationState.from_parts(
-                    current_spot_id=SpotId(1),
-                    current_coordinate=Coordinate(0, 0, 0),
-                ),
+                current_spot_id=SpotId(1),
             )
         )
         event = QuestIssuedEvent.create(

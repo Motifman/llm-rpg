@@ -20,13 +20,8 @@ from ai_rpg_world.domain.monster.value_object.monster_behavior_state import Mons
 from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
-from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
-from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import PursuitLastKnownState
-from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
-from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import PursuitTargetSnapshot
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
@@ -43,8 +38,6 @@ def build_monster(
     skill_loadout: SkillLoadoutAggregate,
     active_effect_rows: list[sqlite3.Row],
     feed_memory_rows: list[sqlite3.Row],
-    pursuit_target_row: sqlite3.Row | None,
-    pursuit_last_known_row: sqlite3.Row | None,
 ) -> MonsterAggregate:
     behavior_state = MonsterBehaviorState.from_parts(
         state=BehaviorStateEnum(str(row["behavior_state"])),
@@ -67,12 +60,6 @@ def build_monster(
         flee_until_tick=_optional_tick(row, "behavior_flee_until_tick"),
         chase_attacker_ref=_decode_attacker_ref(row),
         chase_started_at_tick=_optional_tick(row, "behavior_chase_started_at_tick"),
-    )
-    pursuit_state = _build_pursuit_state(
-        world_object_id=int(row["world_object_id"]),
-        failure_reason=row["pursuit_failure_reason"],
-        pursuit_target_row=pursuit_target_row,
-        pursuit_last_known_row=pursuit_last_known_row,
     )
     monster = MonsterAggregate(
         monster_id=MonsterId(int(row["monster_id"])),
@@ -115,7 +102,6 @@ def build_monster(
                 for memory_row in feed_memory_rows
             )
         ),
-        pursuit_state=pursuit_state,
         hunger=float(row["hunger"]),
         starvation_timer=int(row["starvation_timer"]),
     )
@@ -198,59 +184,6 @@ def _coordinate_or_none(x: int | None, y: int | None, z: int | None) -> Coordina
     if x is None or y is None or z is None:
         return None
     return Coordinate(int(x), int(y), int(z))
-
-
-def _build_pursuit_state(
-    *,
-    world_object_id: int,
-    failure_reason: object,
-    pursuit_target_row: sqlite3.Row | None,
-    pursuit_last_known_row: sqlite3.Row | None,
-) -> MonsterPursuitState:
-    target_snapshot = None
-    if pursuit_target_row is not None:
-        target_snapshot = PursuitTargetSnapshot(
-            target_id=WorldObjectId(int(pursuit_target_row["target_id"])),
-            spot_id=SpotId(int(pursuit_target_row["spot_id"])),
-            coordinate=Coordinate(
-                int(pursuit_target_row["x"]),
-                int(pursuit_target_row["y"]),
-                int(pursuit_target_row["z"]),
-            ),
-        )
-    last_known = None
-    if pursuit_last_known_row is not None:
-        last_known = PursuitLastKnownState(
-            target_id=WorldObjectId(int(pursuit_last_known_row["target_id"])),
-            spot_id=SpotId(int(pursuit_last_known_row["spot_id"])),
-            coordinate=Coordinate(
-                int(pursuit_last_known_row["x"]),
-                int(pursuit_last_known_row["y"]),
-                int(pursuit_last_known_row["z"]),
-            ),
-            observed_at_tick=(
-                None
-                if pursuit_last_known_row["observed_at_tick"] is None
-                else WorldTick(int(pursuit_last_known_row["observed_at_tick"]))
-            ),
-        )
-    if target_snapshot is None and last_known is None:
-        return MonsterPursuitState()
-    if target_snapshot is not None:
-        target_id = target_snapshot.target_id
-    else:
-        # 直前の早期 return が「どちらかは在る」を保証している
-        assert last_known is not None
-        target_id = last_known.target_id
-    return MonsterPursuitState(
-        pursuit=PursuitState(
-            actor_id=WorldObjectId(world_object_id),
-            target_id=target_id,
-            target_snapshot=target_snapshot,
-            last_known=last_known,
-            failure_reason=(None if failure_reason is None else PursuitFailureReason(str(failure_reason))),
-        )
-    )
 
 
 __all__ = ["build_monster"]

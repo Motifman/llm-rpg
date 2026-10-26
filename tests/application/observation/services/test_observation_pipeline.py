@@ -21,7 +21,6 @@ from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
     PlayerGoldEarnedEvent,
-    PlayerLocationChangedEvent,
 )
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
@@ -30,12 +29,8 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
-)
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
     InMemoryDataStore,
@@ -62,10 +57,7 @@ def _make_status(
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=SpotId(spot_id),
-            current_coordinate=Coordinate(0, 0, 0),
-        ),
+        current_spot_id=SpotId(spot_id),
         attention_level=attention_level,
     )
 
@@ -120,20 +112,15 @@ class TestObservationPipelineNormal:
         """複数配信先のとき、各プレイヤー向け出力が返る（正常）"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=1))
-        event = PlayerLocationChangedEvent.create(
+        event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(0, 0, 0),
         )
 
         result = pipeline.run(event)
 
-        assert len(result) == 1
-        assert result[0][0] == PlayerId(1)
-        assert "現在地" in result[0][1].prose
+        assert len(result) == 2
+        assert {pid for pid, _ in result} == {PlayerId(1), PlayerId(2)}
 
     def test_player_downed_remote_recipient_gets_scheduled_observation(self, pipeline, status_repo):
         """別 spot の player が倒れても既知 player に届き、反応用に schedules_turn=True になる。"""
