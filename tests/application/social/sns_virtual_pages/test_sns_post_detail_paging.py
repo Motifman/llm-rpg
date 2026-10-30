@@ -16,28 +16,59 @@ from ai_rpg_world.application.social.sns_virtual_pages import (
 
 def _thread(reply_count: int) -> ReplyThreadDto:
     root = PostDto(
-        post_id=1, author_user_id=1, author_user_name="author", author_display_name="投稿者",
-        content="連絡", hashtags=[], visibility="public", created_at=datetime(2026, 1, 1),
-        like_count=0, reply_count=reply_count, is_liked_by_viewer=False,
-        is_replied_by_viewer=False, mentioned_users=[], is_deleted=False,
+        post_id=1,
+        author_user_id=1,
+        author_user_name="author",
+        author_display_name="投稿者",
+        content="連絡",
+        hashtags=[],
+        visibility="public",
+        created_at=datetime(2026, 1, 1),
+        like_count=0,
+        reply_count=reply_count,
+        is_liked_by_viewer=False,
+        is_replied_by_viewer=False,
+        mentioned_users=[],
+        is_deleted=False,
     )
     reply = ReplyDto(
-        reply_id=1, parent_post_id=1, parent_reply_id=None, author_user_id=2,
-        author_user_name="replier", author_display_name="返信者", content="あ" * 280,
-        hashtags=[], visibility="public", created_at=datetime(2026, 1, 1), like_count=0,
-        is_liked_by_viewer=False, mentioned_users=[], is_deleted=False, depth=1,
-        has_replies=False, reply_count=0,
+        reply_id=1,
+        parent_post_id=1,
+        parent_reply_id=None,
+        author_user_id=2,
+        author_user_name="replier",
+        author_display_name="返信者",
+        content="あ" * 280,
+        hashtags=[],
+        visibility="public",
+        created_at=datetime(2026, 1, 1),
+        like_count=0,
+        is_liked_by_viewer=False,
+        mentioned_users=[],
+        is_deleted=False,
+        depth=1,
+        has_replies=False,
+        reply_count=0,
     )
     return ReplyThreadDto(post=root, replies=[replace(reply, reply_id=i + 1) for i in range(reply_count)])
 
 
 @pytest.mark.parametrize(
     ("reply_count", "offset", "expected_ids", "has_more"),
-    [(0, 0, [], False), (3, 0, [1, 2, 3], False), (4, 0, [1, 2, 3], True),
-     (7, 3, [4, 5, 6], True), (7, 6, [7], False), (7, 9, [], False)],
+    [
+        (0, 0, [], False),
+        (3, 0, [1, 2, 3], False),
+        (4, 0, [1, 2, 3], True),
+        (7, 3, [4, 5, 6], True),
+        (7, 6, [7], False),
+        (7, 9, [], False),
+    ],
 )
 def test_detail_honors_reply_page_and_issues_only_visible_refs(
-    reply_count: int, offset: int, expected_ids: list[int], has_more: bool,
+    reply_count: int,
+    offset: int,
+    expected_ids: list[int],
+    has_more: bool,
 ) -> None:
     """投稿詳細は offset から limit 件の返信だけを表示し、続きの有無を正しく返す。"""
     session = SnsPageSessionService()
@@ -86,12 +117,15 @@ def test_detail_with_many_replies_keeps_only_one_page_and_invalidates_previous_r
 def test_detail_preserves_thread_order_and_depth_across_page_boundary() -> None:
     """親子をまたぐページでも、返信の表示順と深さをID順へ並べ替えずに保持する。"""
     thread = _thread(4)
-    thread = replace(thread, replies=[
-        replace(thread.replies[0], reply_id=40, depth=1),
-        replace(thread.replies[1], reply_id=3, parent_post_id=None, parent_reply_id=40, depth=2),
-        replace(thread.replies[2], reply_id=91, parent_post_id=None, parent_reply_id=3, depth=3),
-        replace(thread.replies[3], reply_id=2, depth=1),
-    ])
+    thread = replace(
+        thread,
+        replies=[
+            replace(thread.replies[0], reply_id=40, depth=1),
+            replace(thread.replies[1], reply_id=3, parent_post_id=None, parent_reply_id=40, depth=2),
+            replace(thread.replies[2], reply_id=91, parent_post_id=None, parent_reply_id=3, depth=3),
+            replace(thread.replies[3], reply_id=2, depth=1),
+        ],
+    )
     session = SnsPageSessionService()
     session.set_page_kind(1, SnsVirtualPageKind.POST_DETAIL)
     session.set_post_detail_root_post_id(1, 1)
