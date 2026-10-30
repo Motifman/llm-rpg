@@ -153,7 +153,11 @@ class AsyncEventExecutor:
                         self._ready[key].append((work, result))
 
     def apply_results(self, key: Hashable) -> None:
-        """本人の完了した結果だけを、呼び出したスレッドで反映する。"""
+        """本人の完了した結果だけを、呼び出したスレッドで反映する。
+
+        反映が失敗しても、知らせて残りの結果を続けて反映する。非同期の登録は失敗しても続けてよい保証
+        (``BEST_EFFORT``) しか受けないため (design_decisions D1824-15)。
+        """
         while True:
             with self._lock:
                 queue = self._ready.get(key)
@@ -166,7 +170,6 @@ class AsyncEventExecutor:
                 work.apply_result(result)
             except Exception as error:
                 self._notify(AsyncFailure("application_failed", key, work.event, work.handler, error))
-                raise
             finally:
                 with self._lock:
                     self._applying -= 1

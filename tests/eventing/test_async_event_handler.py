@@ -154,17 +154,30 @@ class TestFailures:
         )
         assert world.handler.applied == []
 
-    def test_apply_failure_is_reported_with_the_event_and_the_handler(self) -> None:
-        """apply が失敗すると、application_failed として元のドメインイベントとハンドラを知らせ、例外を反映した側へ伝える。"""
-        world = _World(_Doubling(fail_in="apply"))
-        event = _asked(1)
-        world.hand_off_and_finish(event)
+    def test_apply_failure_is_reported_and_the_rest_of_the_results_are_applied(self) -> None:
+        """apply が失敗すると、application_failed として元のドメインイベントとハンドラを知らせ、例外は反映した側へ投げず、同じ宛先の残りの結果も続けて反映する。"""
 
-        with pytest.raises(RuntimeError, match="apply failed"):
-            world.executor.apply_results("a")
+        class _FailsOnFirst(_Doubling):
+            def apply(self, result: int) -> None:
+                if result == 20:
+                    raise RuntimeError("apply failed")
+                super().apply(result)
+
+        world = _World(_FailsOnFirst())
+        first = _asked(1)
+        world.hand_off_and_finish(first, _asked(2))
+
+        world.executor.apply_results("a")
 
         (failure,) = world.failures
-        assert (failure.reason, failure.event, failure.handler) == ("application_failed", event, world.handler)
+        assert (failure.reason, failure.event, failure.handler, str(failure.error)) == (
+            "application_failed",
+            first,
+            world.handler,
+            "apply failed",
+        )
+        assert world.handler.applied == [40]
+        assert world.executor.pending_count == 0
 
     def test_durable_retry_is_rejected_at_registration(self) -> None:
         """非同期のハンドラと再送必須 (DURABLE_RETRY) の組み合わせは、受け付けただけで届いたと誤認しないよう、登録のときに断る。"""
