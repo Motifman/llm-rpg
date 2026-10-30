@@ -175,4 +175,3 @@ class SkillDeckProgressAggregate(AggregateRoot):
         proposals = proposal_service.generate(context=context, table=table, max_proposals=max_proposals)
         self.register_proposals(proposals)
         return proposals
-

@@ -63,6 +63,7 @@ def reject_unreachable_synchronized_action_names(
             f" 宣言済みの名前: {sorted(declared)}"
         )
 
+
 def parse_synchronized_action_groups(
     raw: Any,
     mapper: ScenarioIdMapper,
@@ -89,14 +90,10 @@ def parse_synchronized_action_groups(
     out: list[SynchronizedActionGroup] = []
     for i, g in enumerate(raw):
         if not isinstance(g, dict):
-            raise ScenarioLoadError(
-                f"synchronized_action_groups[{i}] must be an object"
-            )
+            raise ScenarioLoadError(f"synchronized_action_groups[{i}] must be an object")
         gid = g.get("id")
         if not gid:
-            raise ScenarioLoadError(
-                f"synchronized_action_groups[{i}].id is required"
-            )
+            raise ScenarioLoadError(f"synchronized_action_groups[{i}].id is required")
         # #853: 旧キー `required_action_ids` を黙って無視しない。
         #
         # 名前で指す方針 (design_decisions #3) に寄せて改称した。知らないキーを
@@ -110,9 +107,7 @@ def parse_synchronized_action_groups(
             )
         req = g.get("required_action_names", [])
         if not isinstance(req, list):
-            raise ScenarioLoadError(
-                f"synchronized_action_groups[{i}].required_action_names must be a list"
-            )
+            raise ScenarioLoadError(f"synchronized_action_groups[{i}].required_action_names must be a list")
         with declaring(f"synchronized_action_group {gid!r} の on_complete:"):
             on_complete = tuple(
                 parse_interaction_effect(

@@ -24,12 +24,12 @@ from ai_rpg_world.application.common.exceptions import (
 from ai_rpg_world.application.player.services.player_death_grace_timer import (
     PlayerDeathGraceTimer,
 )
-from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
 )
+from ai_rpg_world.eventing import EventHandler
 
 
 class PlayerDownedOutcomeHandler(EventHandler[PlayerDownedEvent]):
@@ -62,9 +62,7 @@ class PlayerDownedOutcomeHandler(EventHandler[PlayerDownedEvent]):
         except (ApplicationException, DomainException):
             raise
         except Exception as e:
-            self._logger.exception(
-                "Unexpected error in PlayerDownedOutcomeHandler: %s", e
-            )
+            self._logger.exception("Unexpected error in PlayerDownedOutcomeHandler: %s", e)
             raise SystemErrorException(
                 f"Player downed outcome handling failed: {e}",
                 original_exception=e,
@@ -84,5 +82,7 @@ class PlayerDownedOutcomeHandler(EventHandler[PlayerDownedEvent]):
         self._grace_timer.register(player_id, downed_at_tick=current_tick)
         self._logger.info(
             "Player %s downed at tick %d (grace timer started, killer=%s)",
-            player_id, current_tick, event.killer_player_id,
+            player_id,
+            current_tick,
+            event.killer_player_id,
         )

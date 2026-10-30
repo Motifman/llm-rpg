@@ -46,7 +46,6 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphInventoryItemEntry,
     SpotGraphPlayerSnapshotDto,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
@@ -54,23 +53,6 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
         player_id=1,
         player_name="P",
         current_spot_id=snap.current_spot_id,
-        current_spot_name=snap.current_spot_name,
-        current_spot_description=snap.current_spot_description,
-        x=None,
-        y=None,
-        z=None,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="晴れ",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=0,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=snap,
     )
 
@@ -117,19 +99,15 @@ class TestPromptQuotesInventoryItemName:
 
     def test_inventory_quotes_item_name(self) -> None:
         """inventory の item 名が クオートで囲まれる。"""
-        result = SpotGraphUiContextBuilder().build(
-            "現在地: 拠点", _make_dto(_snap_with_inventory())
-        )
+        result = SpotGraphUiContextBuilder().build("現在地: 拠点", _make_dto(_snap_with_inventory()))
         text = result.current_state_text
-        assert '"流木"' in text, "inventory item 名が \"\" で囲まれていない"
+        assert '"流木"' in text, 'inventory item 名が "" で囲まれていない'
         assert '"野いちご"' in text
 
     def test_inventory(self) -> None:
         """``x3`` / 素材タグ / ``(腐敗)`` は囲まない。
         ``""`` の有無で「渡すべき値」と「補足情報」を視覚的に区別する。"""
-        result = SpotGraphUiContextBuilder().build(
-            "現在地: 拠点", _make_dto(_snap_with_inventory())
-        )
+        result = SpotGraphUiContextBuilder().build("現在地: 拠点", _make_dto(_snap_with_inventory()))
         text = result.current_state_text
         assert '"x3"' not in text
         assert '"(素材・そのままは食べられない。焚き火などの材料)"' not in text
@@ -170,22 +148,12 @@ class TestPromptQuotesInventoryItemName:
             ),
         )
 
-        result = SpotGraphUiContextBuilder().build(
-            "現在地: 拠点", _make_dto(snap)
-        )
+        result = SpotGraphUiContextBuilder().build("現在地: 拠点", _make_dto(snap))
 
-        assert (
-            '- "携帯無線機" (用途: 古い無線機) '
-            '[応答を試す → "hail_the_mainland"]'
-        ) in result.current_state_text
-        assert (
-            'いまできない: 救難信号を送る → "send_beacon"（あと2手番）'
-            in result.current_state_text
-        )
+        assert ('- "携帯無線機" (用途: 古い無線機) [応答を試す → "hail_the_mainland"]') in result.current_state_text
+        assert 'いまできない: 救難信号を送る → "send_beacon"（あと2手番）' in result.current_state_text
         target = next(
-            target
-            for target in result.tool_runtime_context.targets.values()
-            if target.display_name == "携帯無線機"
+            target for target in result.tool_runtime_context.targets.values() if target.display_name == "携帯無線機"
         )
         assert target.available_interactions == (
             "hail_the_mainland",
@@ -198,11 +166,9 @@ class TestPromptQuotesGroundItemName:
 
     def test_ground_item_name(self) -> None:
         """grounditem の名前がクオートで囲まれる。"""
-        result = SpotGraphUiContextBuilder().build(
-            "現在地: 拠点", _make_dto(_snap_with_inventory())
-        )
+        result = SpotGraphUiContextBuilder().build("現在地: 拠点", _make_dto(_snap_with_inventory()))
         text = result.current_state_text
-        assert '"石ころ"' in text, "ground item 名が \"\" で囲まれていない"
+        assert '"石ころ"' in text, 'ground item 名が "" で囲まれていない'
 
 
 class TestUseItemDescriptionExplainsQuoteConvention:
@@ -215,10 +181,10 @@ class TestUseItemDescriptionExplainsQuoteConvention:
     def test_use_item_label_included(self) -> None:
         """useitem の itemlabel にクオート規約が含まれる。"""
         desc = self._item_label_desc(USE_ITEM_DEFINITION)
-        assert "\"" in desc
-        assert (
-            "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
-        ), "use_item の item_label に \"\" 規約が説明されていない"
+        assert '"' in desc
+        assert "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc, (
+            'use_item の item_label に "" 規約が説明されていない'
+        )
 
     def test_use_item_description_says_it_does_not_give_to_others(self) -> None:
         """use_item は自分が使う行為で、相手へ渡すには give_item が必要だと説明する。"""
@@ -230,7 +196,7 @@ class TestUseItemDescriptionExplainsQuoteConvention:
     def test_drop_item_label_included(self) -> None:
         """dropitem の itemlabel にクオート規約が含まれる。"""
         desc = self._item_label_desc(DROP_ITEM_DEFINITION)
-        assert "\"" in desc
+        assert '"' in desc
         assert "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
 
     # PR-α (Y_after_pr639_640 後続): give_item は top-level item_label を
@@ -240,25 +206,19 @@ class TestUseItemDescriptionExplainsQuoteConvention:
 
     def test_pickup_item_ground_item_label_included(self) -> None:
         """pickupitem の grounditemlabel にクオート規約が含まれる。"""
-        desc = PICKUP_ITEM_DEFINITION.parameters["properties"]["ground_item_label"][
-            "description"
-        ]
-        assert "\"" in desc
+        desc = PICKUP_ITEM_DEFINITION.parameters["properties"]["ground_item_label"]["description"]
+        assert '"' in desc
         assert "囲ま" in desc or "クオート" in desc or "ダブルクォート" in desc
 
     def test_give_item_gives_entry_item_label_included(self) -> None:
         """PR-α (Y_after_pr639_640 後続): give_item は batch-always
         (gives: [...]) に統合された。gives 配列内の item_label description
         にも quote 規約が伝達される。"""
-        item_label_desc = GIVE_ITEM_DEFINITION.parameters["properties"]["gives"][
-            "items"
-        ]["properties"]["item_label"]["description"]
-        assert "\"" in item_label_desc
-        assert (
-            "囲ま" in item_label_desc
-            or "クオート" in item_label_desc
-            or "ダブルクォート" in item_label_desc
-        )
+        item_label_desc = GIVE_ITEM_DEFINITION.parameters["properties"]["gives"]["items"]["properties"]["item_label"][
+            "description"
+        ]
+        assert '"' in item_label_desc
+        assert "囲ま" in item_label_desc or "クオート" in item_label_desc or "ダブルクォート" in item_label_desc
 
     def test_drop_pickup_descriptions_hide_internal_terms(self) -> None:
         """drop/pickup の LLM 向け説明文には内部用語や不自然な対象名を出さない。"""
@@ -267,9 +227,7 @@ class TestUseItemDescriptionExplainsQuoteConvention:
             DROP_ITEM_DEFINITION.parameters["properties"]["item_label"]["description"],
             DROP_ITEM_DEFINITION.parameters["properties"]["stealth"]["description"],
             PICKUP_ITEM_DEFINITION.description,
-            PICKUP_ITEM_DEFINITION.parameters["properties"]["ground_item_label"][
-                "description"
-            ],
+            PICKUP_ITEM_DEFINITION.parameters["properties"]["ground_item_label"]["description"],
             PICKUP_ITEM_DEFINITION.parameters["properties"]["stealth"]["description"],
         ]
         forbidden = (

@@ -54,7 +54,7 @@ class GlobalMarketListingReadModel:
         created_at: datetime,
         durability_current: int | None,
         durability_max: int | None,
-        requested_gold: int
+        requested_gold: int,
     ) -> "GlobalMarketListingReadModel":
         """取引情報からReadModelを作成"""
         return cls(
@@ -70,7 +70,7 @@ class GlobalMarketListingReadModel:
             created_at=created_at,
             durability_current=durability_current,
             durability_max=durability_max,
-            requested_gold=requested_gold
+            requested_gold=requested_gold,
         )
 
     @property

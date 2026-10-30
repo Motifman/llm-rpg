@@ -1,6 +1,7 @@
 """
 Personal / TradeDetail / GlobalMarket ReadModel の in-memory と SQLite の parity。
 """
+
 from __future__ import annotations
 
 import sqlite3

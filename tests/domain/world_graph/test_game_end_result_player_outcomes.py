@@ -25,7 +25,9 @@ class TestBackwardCompat:
         """per player モードの GameEndResult。"""
         snapshot = {1: PlayerOutcomeEnum.RESCUED, 2: PlayerOutcomeEnum.DEAD}
         result = GameEndResult(
-            is_ended=True, result=None, reason="全員 outcome 確定",
+            is_ended=True,
+            result=None,
+            reason="全員 outcome 確定",
             player_outcomes=snapshot,
         )
         assert result.is_ended is True

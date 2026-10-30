@@ -19,9 +19,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
 )
 
 
-class InMemorySkillDeckProgressRepository(
-    SkillDeckProgressRepository, InMemoryRepositoryBase
-):
+class InMemorySkillDeckProgressRepository(SkillDeckProgressRepository, InMemoryRepositoryBase):
     """スキルデッキ進行集約の InMemory 実装。"""
 
     def __init__(
@@ -35,18 +33,14 @@ class InMemorySkillDeckProgressRepository(
     def _progresses(self) -> dict[SkillDeckProgressId, SkillDeckProgressAggregate]:
         return self._data_store.skill_deck_progresses
 
-    def find_by_id(
-        self, entity_id: SkillDeckProgressId
-    ) -> SkillDeckProgressAggregate | None:
+    def find_by_id(self, entity_id: SkillDeckProgressId) -> SkillDeckProgressAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
             cloned: SkillDeckProgressAggregate | None = self._clone(pending)
             return cloned
         return self._clone(self._progresses.get(entity_id))
 
-    def find_by_ids(
-        self, entity_ids: list[SkillDeckProgressId]
-    ) -> list[SkillDeckProgressAggregate]:
+    def find_by_ids(self, entity_ids: list[SkillDeckProgressId]) -> list[SkillDeckProgressAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
     def find_all(self) -> list[SkillDeckProgressAggregate]:

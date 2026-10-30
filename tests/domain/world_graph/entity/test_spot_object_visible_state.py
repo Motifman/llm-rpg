@@ -90,9 +90,7 @@ class TestVisibleState:
             unavailable_hint="今は汲めない・時間を置けば戻る",
         )
 
-        assert obj.visible_state() == {
-            VISIBLE_STATE_TAGS_KEY: ("今は汲めない・時間を置けば戻る",)
-        }
+        assert obj.visible_state() == {VISIBLE_STATE_TAGS_KEY: ("今は汲めない・時間を置けば戻る",)}
 
     def test_hides_a_recorded_tick_key_listed_in_hidden_state_keys(self) -> None:
         """手番を記録する key は hidden_state_keys 経由で prompt 用 state から消える。
@@ -108,9 +106,7 @@ class TestVisibleState:
             hidden=frozenset({"last_harvest_tick"}),
         )
 
-        assert obj.visible_state() == {
-            VISIBLE_STATE_TAGS_KEY: ("今は採れない・時間を置けば戻る",)
-        }
+        assert obj.visible_state() == {VISIBLE_STATE_TAGS_KEY: ("今は採れない・時間を置けば戻る",)}
 
     def test_a_tick_looking_name_alone_does_not_hide_anything(self) -> None:
         """hidden_state_keys に無ければ、名前が tick らしくても表示する。
@@ -134,63 +130,50 @@ class TestVisibleState:
         """state_display に key/value が一致する rule があれば、生値ではなく作者文言だけを表示する。"""
         obj = _make(
             {"opened": False},
-            state_display=(
-                StateDisplayRule("opened", False, "蓋は閉じたまま"),
-            ),
+            state_display=(StateDisplayRule("opened", False, "蓋は閉じたまま"),),
         )
 
-        assert obj.visible_state() == {
-            VISIBLE_STATE_TAGS_KEY: ("蓋は閉じたまま",)
-        }
+        assert obj.visible_state() == {VISIBLE_STATE_TAGS_KEY: ("蓋は閉じたまま",)}
 
     def test_state_display_value_mismatch_remains_raw(self) -> None:
         """key に rule があっても現在値に対応する rule が無ければ、生値を残して宣言漏れを見える化する。"""
         obj = _make(
             {"opened": True},
-            state_display=(
-                StateDisplayRule("opened", False, "蓋は閉じたまま"),
-            ),
+            state_display=(StateDisplayRule("opened", False, "蓋は閉じたまま"),),
         )
 
         assert obj.visible_state() == {"opened": True}
 
-    def test_state_display_exact_match_wins_over_at_least_rule(self) -> None:
-        """完全一致と at_least が同時に該当する値は、具体的な完全一致文を表示する。"""
+    @pytest.mark.parametrize("threshold_first", [False, True])
+    def test_state_display_exact_match_wins_over_at_least_rule(self, threshold_first: bool) -> None:
+        """規則の登録順によらず、完全一致を整数下限の文より優先する。"""
+        exact = StateDisplayRule("count", 3, "ちょうど 3 個ある")
+        threshold = StateDisplayRule("count", None, "3 個以上ある", at_least=3)
         obj = _make(
             {"count": 3},
-            state_display=(
-                StateDisplayRule("count", 3, "ちょうど 3 個ある"),
-                StateDisplayRule(
-                    "count", None, "3 個以上ある", at_least=3
-                ),
-            ),
+            state_display=(threshold, exact) if threshold_first else (exact, threshold),
         )
 
-        assert obj.visible_state() == {
-            VISIBLE_STATE_TAGS_KEY: ("ちょうど 3 個ある",)
-        }
+        assert obj.visible_state() == {VISIBLE_STATE_TAGS_KEY: ("ちょうど 3 個ある",)}
 
-    def test_state_display_uses_largest_matching_at_least_threshold(self) -> None:
-        """完全一致が無い整数値は、該当する at_least のうち最大閾値の文を表示する。"""
+    @pytest.mark.parametrize("count", [6, 5])
+    @pytest.mark.parametrize("largest_first", [False, True])
+    def test_state_display_uses_largest_matching_at_least_threshold(self, count: int, largest_first: bool) -> None:
+        """下限ちょうどでも超過でも、登録順によらず該当する最大下限の文を選ぶ。"""
+        smaller = StateDisplayRule("count", None, "3 個以上ある", at_least=3)
+        larger = StateDisplayRule("count", None, "5 個以上ある", at_least=5)
         obj = _make(
-            {"count": 6},
-            state_display=(
-                StateDisplayRule("count", None, "3 個以上ある", at_least=3),
-                StateDisplayRule("count", None, "5 個以上ある", at_least=5),
-            ),
+            {"count": count},
+            state_display=(larger, smaller) if largest_first else (smaller, larger),
         )
 
-        assert obj.visible_state() == {
-            VISIBLE_STATE_TAGS_KEY: ("5 個以上ある",)
-        }
+        assert obj.visible_state() == {VISIBLE_STATE_TAGS_KEY: ("5 個以上ある",)}
 
     def test_state_display_without_matching_at_least_rule_remains_raw(self) -> None:
         """完全一致も at_least も該当しない値は、生値を残して宣言漏れを見える化する。"""
         obj = _make(
             {"count": -1},
-            state_display=(
-                StateDisplayRule("count", None, "3 個以上ある", at_least=3),
-            ),
+            state_display=(StateDisplayRule("count", None, "3 個以上ある", at_least=3),),
         )
 
         assert obj.visible_state() == {"count": -1}
@@ -199,9 +182,7 @@ class TestVisibleState:
         """bool state は int の一種として at_least に一致させず、生値で宣言漏れを示す。"""
         obj = _make(
             {"count": True},
-            state_display=(
-                StateDisplayRule("count", None, "1 個以上ある", at_least=1),
-            ),
+            state_display=(StateDisplayRule("count", None, "1 個以上ある", at_least=1),),
         )
 
         assert obj.visible_state() == {"count": True}
@@ -211,23 +192,17 @@ class TestVisibleState:
         obj = _make(
             {"available": False},
             unavailable_hint="今は採れない・時間を置けば戻る",
-            state_display=(
-                StateDisplayRule("available", False, "貝は採り尽くされている"),
-            ),
+            state_display=(StateDisplayRule("available", False, "貝は採り尽くされている"),),
         )
 
-        assert obj.visible_state() == {
-            VISIBLE_STATE_TAGS_KEY: ("貝は採り尽くされている",)
-        }
+        assert obj.visible_state() == {VISIBLE_STATE_TAGS_KEY: ("貝は採り尽くされている",)}
 
     def test_hidden_state_key_suppresses_state_display_rule(self) -> None:
         """hidden_state_keys に含まれる key は、state_display rule があっても第三者 prompt に出さない。"""
         obj = _make(
             {"read": False},
             hidden=frozenset({"read"}),
-            state_display=(
-                StateDisplayRule("read", False, "まだ読まれていない"),
-            ),
+            state_display=(StateDisplayRule("read", False, "まだ読まれていない"),),
         )
 
         assert obj.visible_state() == {}
@@ -250,9 +225,7 @@ class TestVisibleState:
         assert obj.visible_state(
             current_tick=12,
             effective_lighting=LightingEnum.BRIGHT,
-        ) == {
-            VISIBLE_STATE_TAGS_KEY: ("格子の縁の埃が乱れている",)
-        }
+        ) == {VISIBLE_STATE_TAGS_KEY: ("格子の縁の埃が乱れている",)}
 
     def test_recent_tick_disappears_after_the_declared_window(self) -> None:
         """記録から within_ticks を超えた痕跡は、生の手番も作者文言も表示しない。"""
@@ -269,10 +242,13 @@ class TestVisibleState:
             ),
         )
 
-        assert obj.visible_state(
-            current_tick=13,
-            effective_lighting=LightingEnum.BRIGHT,
-        ) == {}
+        assert (
+            obj.visible_state(
+                current_tick=13,
+                effective_lighting=LightingEnum.BRIGHT,
+            )
+            == {}
+        )
 
     def test_recent_tick_can_render_remaining_world_minutes(self) -> None:
         """残り時間の表示は記録手番を伏せ、世界の分数へ換算して差し込む。"""
@@ -309,20 +285,33 @@ class TestVisibleState:
             ),
         )
 
-        assert obj.visible_state(
-            current_tick=7,
-            minutes_per_tick=5,
-            world_flags=frozenset({"fuel_restored"}),
-        ) == {}
+        for flags in (frozenset(), frozenset({"unrelated"})):
+            assert obj.visible_state(
+                current_tick=7,
+                minutes_per_tick=5,
+                world_flags=flags,
+            ) == {VISIBLE_STATE_TAGS_KEY: ("燃料停止まであと 25 分",)}
+
+        assert (
+            obj.visible_state(
+                current_tick=7,
+                minutes_per_tick=5,
+                world_flags=frozenset({"fuel_restored"}),
+            )
+            == {}
+        )
 
     @pytest.mark.parametrize(
-        "lighting",
-        (LightingEnum.DARK, LightingEnum.PITCH_BLACK),
+        ("lighting", "expected"),
+        (
+            (LightingEnum.DARK, {}),
+            (LightingEnum.PITCH_BLACK, {}),
+            (LightingEnum.BRIGHT, {VISIBLE_STATE_TAGS_KEY: ("格子の縁の埃が乱れている",)}),
+            (LightingEnum.DIM, {VISIBLE_STATE_TAGS_KEY: ("格子の縁の埃が乱れている",)}),
+        ),
     )
-    def test_recent_visual_trace_is_hidden_without_light(
-        self, lighting: LightingEnum
-    ) -> None:
-        """requires_light の痕跡は、物体自体が暗所可視でも暗闇では表示しない。"""
+    def test_recent_visual_trace_is_only_shown_with_light(self, lighting: LightingEnum, expected: dict) -> None:
+        """同じ視覚的な痕跡はBRIGHT/DIMだけで表示し、DARK/PITCH_BLACKでは隠す。"""
         obj = _make(
             {"opened_at_tick": 7},
             hidden=frozenset({"opened_at_tick"}),
@@ -337,10 +326,13 @@ class TestVisibleState:
             ),
         )
 
-        assert obj.visible_state(
-            current_tick=8,
-            effective_lighting=lighting,
-        ) == {}
+        assert (
+            obj.visible_state(
+                current_tick=8,
+                effective_lighting=lighting,
+            )
+            == expected
+        )
 
     def test_recent_tick_rule_requires_the_current_tick(self) -> None:
         """within_ticks 規則へ現在手番を渡し忘れたら、証拠を黙って消さず例外にする。"""

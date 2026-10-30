@@ -1,7 +1,7 @@
 """NullWorldObjectToPlayerResolver の振る舞いテスト。
 
 Issue #227 chore (tile-map 依存除去) PR-1:
-    PhysicalMapRepository を持たない spot_graph 専用ランタイムで使う
+    物理マップの保存先を持たないスポットのグラフ専用の実行環境で使う
     NoOp resolver。任意の WorldObjectId に対して常に None を返すことを保証する。
 """
 

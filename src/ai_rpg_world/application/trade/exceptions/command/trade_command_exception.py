@@ -2,7 +2,6 @@
 取引コマンド関連の例外定義
 """
 
-
 from typing import Any
 
 from ai_rpg_world.application.trade.exceptions.base_exception import TradeApplicationException
@@ -21,9 +20,9 @@ class TradeCommandException(TradeApplicationException):
     ) -> None:
         all_context = context.copy()
         if user_id is not None:
-            all_context['user_id'] = user_id
+            all_context["user_id"] = user_id
         if trade_id is not None:
-            all_context['trade_id'] = trade_id
+            all_context["trade_id"] = trade_id
         super().__init__(message, error_code, **all_context)
 
 

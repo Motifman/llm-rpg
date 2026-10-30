@@ -22,6 +22,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
 def _scenario_with_interaction(action_overrides: dict) -> dict:
     """最小シナリオの 1 interaction を差し替える。"""
     from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
+
     scenario = copy.deepcopy(_minimal_scenario())
     base_action = scenario["spots"][0]["interior"]["objects"][0]["interactions"][0]
     base_action.update(action_overrides)
@@ -48,16 +49,24 @@ class TestWitnessPolicyExplicit:
 
     def test_actor_only_string(self) -> None:
         """ACTORONLY を文字列で宣言できる。"""
-        idef = _load_first_interaction(_scenario_with_interaction({
-            "witness_policy": "ACTOR_ONLY",
-        }))
+        idef = _load_first_interaction(
+            _scenario_with_interaction(
+                {
+                    "witness_policy": "ACTOR_ONLY",
+                }
+            )
+        )
         assert idef.witness_policy is WitnessPolicy.ACTOR_ONLY
 
     def test_same_spot_witness_policy_can_be_declared_explicitly(self) -> None:
         """明示しても default と同じ結果。"""
-        idef = _load_first_interaction(_scenario_with_interaction({
-            "witness_policy": "SAME_SPOT",
-        }))
+        idef = _load_first_interaction(
+            _scenario_with_interaction(
+                {
+                    "witness_policy": "SAME_SPOT",
+                }
+            )
+        )
         assert idef.witness_policy is WitnessPolicy.SAME_SPOT
 
 
@@ -67,16 +76,24 @@ class TestWitnessPolicyValidation:
     def test_unknown_value_scenario_load_error(self) -> None:
         """未知の値は ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match="witness_policy must be one of"):
-            _load_first_interaction(_scenario_with_interaction({
-                "witness_policy": "EVERYONE",
-            }))
+            _load_first_interaction(
+                _scenario_with_interaction(
+                    {
+                        "witness_policy": "EVERYONE",
+                    }
+                )
+            )
 
     def test_string_scenario_load_error(self) -> None:
         """文字列以外なら ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError, match="witness_policy must be a string"):
-            _load_first_interaction(_scenario_with_interaction({
-                "witness_policy": 1,
-            }))
+            _load_first_interaction(
+                _scenario_with_interaction(
+                    {
+                        "witness_policy": 1,
+                    }
+                )
+            )
 
 
 class TestWitnessObservationMessage:
@@ -89,9 +106,13 @@ class TestWitnessObservationMessage:
 
     def test_success_witness_message_string(self) -> None:
         """文字列で宣言した目撃者文面は InteractionDef に保存される。"""
-        idef = _load_first_interaction(_scenario_with_interaction({
-            "witness_observation_message": "{actor}が掲示を読んだ。",
-        }))
+        idef = _load_first_interaction(
+            _scenario_with_interaction(
+                {
+                    "witness_observation_message": "{actor}が掲示を読んだ。",
+                }
+            )
+        )
         assert idef.witness_observation_message == "{actor}が掲示を読んだ。"
 
     def test_success_witness_message_must_be_string(self) -> None:
@@ -100,9 +121,13 @@ class TestWitnessObservationMessage:
             ScenarioLoadError,
             match="witness_observation_message must be a string",
         ):
-            _load_first_interaction(_scenario_with_interaction({
-                "witness_observation_message": 123,
-            }))
+            _load_first_interaction(
+                _scenario_with_interaction(
+                    {
+                        "witness_observation_message": 123,
+                    }
+                )
+            )
 
     def test_dark_witness_message_is_optional(self) -> None:
         """暗所文を省略した既存 interaction は None のまま読み込める。"""
@@ -111,9 +136,13 @@ class TestWitnessObservationMessage:
 
     def test_dark_witness_message_string(self) -> None:
         """暗所の目撃者文面は InteractionDef に独立して保存される。"""
-        idef = _load_first_interaction(_scenario_with_interaction({
-            "witness_observation_message_in_dark": "暗がりで物音がした。",
-        }))
+        idef = _load_first_interaction(
+            _scenario_with_interaction(
+                {
+                    "witness_observation_message_in_dark": "暗がりで物音がした。",
+                }
+            )
+        )
         assert idef.witness_observation_message_in_dark == "暗がりで物音がした。"
 
     def test_dark_witness_message_must_be_string(self) -> None:
@@ -122,9 +151,13 @@ class TestWitnessObservationMessage:
             ScenarioLoadError,
             match="witness_observation_message_in_dark must be a string",
         ):
-            _load_first_interaction(_scenario_with_interaction({
-                "witness_observation_message_in_dark": 123,
-            }))
+            _load_first_interaction(
+                _scenario_with_interaction(
+                    {
+                        "witness_observation_message_in_dark": 123,
+                    }
+                )
+            )
 
 
 class TestSurvivalIslandWitnessObservationMessages:

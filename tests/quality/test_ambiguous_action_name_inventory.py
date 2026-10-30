@@ -27,6 +27,5 @@ def test_list_ambiguous_bare_action_names_in_all_scenarios() -> None:
         pytest.skip(
             "ambiguous bare action names remain; list with "
             "`uv run pytest tests/quality/test_ambiguous_action_name_inventory.py "
-            "-m quality -rs`:\n"
-            + _format_violations(violations)
+            "-m quality -rs`:\n" + _format_violations(violations)
         )

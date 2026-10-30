@@ -45,11 +45,7 @@ def _capture_events(runtime: Any, monkeypatch: pytest.MonkeyPatch):
     original = runtime._speech_event_publisher.publish_all
 
     def capture(events):
-        delivered.extend(
-            event
-            for event in events
-            if isinstance(event, PlayerTradedWithMerchantEvent)
-        )
+        delivered.extend(event for event in events if isinstance(event, PlayerTradedWithMerchantEvent))
         return original(events)
 
     monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", capture)

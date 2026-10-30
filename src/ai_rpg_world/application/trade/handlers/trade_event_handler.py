@@ -134,9 +134,7 @@ class TradeEventHandler:
             trade_id=event.aggregate_id.value,
         )
         if applied and created:
-            self._logger.info(
-                "ReadModel updated for trade offered: %s", event.aggregate_id.value
-            )
+            self._logger.info("ReadModel updated for trade offered: %s", event.aggregate_id.value)
 
     def handle_trade_accepted(self, event: TradeAcceptedEvent) -> None:
         """取引受諾を同じevent_idにつき一度だけ投影する。"""
@@ -181,9 +179,7 @@ class TradeEventHandler:
             nonlocal updated
             read_model = repository.find_by_id(event.aggregate_id)
             if read_model is None:
-                self._logger.warning(
-                    "ReadModel not found for trade: %s", event.aggregate_id.value
-                )
+                self._logger.warning("ReadModel not found for trade: %s", event.aggregate_id.value)
                 raise TradeProjectionPrerequisiteMissingException(
                     trade_id=event.aggregate_id.value,
                     event_name=type(event).__name__,
@@ -199,9 +195,7 @@ class TradeEventHandler:
             trade_id=event.aggregate_id.value,
         )
         if applied and updated:
-            self._logger.info(
-                "ReadModel updated for trade cancelled: %s", event.aggregate_id.value
-            )
+            self._logger.info("ReadModel updated for trade cancelled: %s", event.aggregate_id.value)
 
     def handle_trade_declined(self, event: TradeDeclinedEvent) -> None:
         """取引拒否を同じevent_idにつき一度だけ投影する。"""
@@ -211,9 +205,7 @@ class TradeEventHandler:
             nonlocal updated
             read_model = repository.find_by_id(event.aggregate_id)
             if read_model is None:
-                self._logger.warning(
-                    "ReadModel not found for trade: %s", event.aggregate_id.value
-                )
+                self._logger.warning("ReadModel not found for trade: %s", event.aggregate_id.value)
                 raise TradeProjectionPrerequisiteMissingException(
                     trade_id=event.aggregate_id.value,
                     event_name=type(event).__name__,
@@ -229,6 +221,4 @@ class TradeEventHandler:
             trade_id=event.aggregate_id.value,
         )
         if applied and updated:
-            self._logger.info(
-                "ReadModel updated for trade declined: %s", event.aggregate_id.value
-            )
+            self._logger.info("ReadModel updated for trade declined: %s", event.aggregate_id.value)

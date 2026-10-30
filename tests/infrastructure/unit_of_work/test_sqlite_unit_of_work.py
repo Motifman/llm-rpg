@@ -1,6 +1,7 @@
 """
 SqliteUnitOfWork — 接続共有・rollback・Trade ReadModel の UoW 共有接続（遅延 commit）
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -69,9 +70,7 @@ def shared_conn() -> sqlite3.Connection:
 
 
 class TestSqliteUnitOfWorkConnectionSharing:
-    def test_same_connection_sees_uncommitted_write_before_commit(
-        self, shared_conn: sqlite3.Connection
-    ) -> None:
+    def test_same_connection_sees_uncommitted_write_before_commit(self, shared_conn: sqlite3.Connection) -> None:
         """Phase 5: InMemory の pending aggregate と同目的の「同一論理 tx 内 save 直後の find」を、SQLite は同一接続の未コミット可視性で満たす。"""
         uow = SqliteUnitOfWork(connection=shared_conn)
         uow.begin()
@@ -84,17 +83,13 @@ class TestSqliteUnitOfWorkConnectionSharing:
         finally:
             uow.rollback()
 
-    def test_other_file_connection_does_not_see_uncommitted_row(
-        self, tmp_path: Path
-    ) -> None:
+    def test_other_file_connection_does_not_see_uncommitted_row(self, tmp_path: Path) -> None:
         """ファイル DB では、別接続は未コミットの INSERT を読めない（デフォルト分離）。"""
         db = tmp_path / "iso.db"
         fac = SqliteUnitOfWorkFactory(db)
         setup = fac.create()
         setup.begin()
-        setup.connection.execute(
-            "CREATE TABLE IF NOT EXISTS seam_iso (id INTEGER PRIMARY KEY, v TEXT NOT NULL)"
-        )
+        setup.connection.execute("CREATE TABLE IF NOT EXISTS seam_iso (id INTEGER PRIMARY KEY, v TEXT NOT NULL)")
         setup.commit()
 
         uow = fac.create()
@@ -124,9 +119,7 @@ class TestSqliteUnitOfWorkConnectionSharing:
         assert _count_rows(shared_conn, "uow_t1") == 1
         assert _count_rows(shared_conn, "uow_t2") == 1
 
-    def test_rollback_reverts_all_writes_on_shared_connection(
-        self, shared_conn: sqlite3.Connection
-    ) -> None:
+    def test_rollback_reverts_all_writes_on_shared_connection(self, shared_conn: sqlite3.Connection) -> None:
         uow = SqliteUnitOfWork(connection=shared_conn)
         try:
             with uow:
@@ -139,9 +132,7 @@ class TestSqliteUnitOfWorkConnectionSharing:
         assert _count_rows(shared_conn, "uow_t1") == 0
         assert _count_rows(shared_conn, "uow_t2") == 0
 
-    def test_factory_owned_file_commits_and_second_session_sees_data(
-        self, tmp_path: Path
-    ) -> None:
+    def test_factory_owned_file_commits_and_second_session_sees_data(self, tmp_path: Path) -> None:
         db = tmp_path / "game.db"
         fac = SqliteUnitOfWorkFactory(db)
         uow1 = fac.create()
@@ -223,9 +214,7 @@ class TestSqliteUnitOfWorkGuards:
         with pytest.raises(RuntimeError, match="No transaction in progress"):
             uow.rollback()
 
-    def test_after_owned_commit_connection_property_raises_until_next_begin(
-        self, tmp_path: Path
-    ) -> None:
+    def test_after_owned_commit_connection_property_raises_until_next_begin(self, tmp_path: Path) -> None:
         db = tmp_path / "lifecycle.db"
         uow = SqliteUnitOfWork(database=str(db))
         with uow:

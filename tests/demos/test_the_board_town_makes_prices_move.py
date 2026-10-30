@@ -29,21 +29,18 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_TOWN = (
-    pathlib.Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "market_town_v3_board.json"
-)
+_TOWN = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v3_board.json"
 
 _LENA, _KAI, _TOM, _NORA, _MINA = (PlayerId(i) for i in range(1, 6))
 
 #: 職能の設計表。**行 = 人、列 = 仕事、値 = できるか。**
 #: 表を写すので、実装を見ずに書ける。
 _JOB_MATRIX: dict[str, dict[str, bool]] = {
-    "レナ":  {"gather_herb": True,  "bake_bread": False, "reap_wheat": False},
-    "カイ":  {"gather_herb": True,  "bake_bread": False, "reap_wheat": False},
-    "トム":  {"gather_herb": False, "bake_bread": True,  "reap_wheat": False},
-    "ノラ":  {"gather_herb": False, "bake_bread": True,  "reap_wheat": False},
-    "ミナ":  {"gather_herb": False, "bake_bread": False, "reap_wheat": True},
+    "レナ": {"gather_herb": True, "bake_bread": False, "reap_wheat": False},
+    "カイ": {"gather_herb": True, "bake_bread": False, "reap_wheat": False},
+    "トム": {"gather_herb": False, "bake_bread": True, "reap_wheat": False},
+    "ノラ": {"gather_herb": False, "bake_bread": True, "reap_wheat": False},
+    "ミナ": {"gather_herb": False, "bake_bread": False, "reap_wheat": True},
 }
 
 #: 仕事ごとの (作業場, 対象オブジェクト)。
@@ -111,9 +108,7 @@ class _Town:
             result = self.interact(player_id, object_id, action)
         except InteractionNotAllowedException as exc:
             return False, str(exc)
-        return bool(getattr(result, "success", True)), str(
-            getattr(result, "message", "")
-        )
+        return bool(getattr(result, "success", True)), str(getattr(result, "message", ""))
 
     def interact(self, player_id: PlayerId, object_id: str, action: str):
         """作業場のオブジェクトへ働きかける (実サービス経由)。"""
@@ -136,15 +131,11 @@ class _Town:
         )
 
         inventory = self.runtime._player_inventory_repo.find_by_id(player_id)
-        counts = count_owned_item_instances_by_spec(
-            inventory, self.runtime._item_repo
-        )
+        counts = count_owned_item_instances_by_spec(inventory, self.runtime._item_repo)
         by_string: dict[str, int] = {}
         for string_id in ("bread", "herb", "wheat"):
             spec_int = self.runtime.id_mapper.get_int("item_spec", string_id)
-            by_string[string_id] = sum(
-                c for spec, c in counts.items() if spec.value == spec_int
-            )
+            by_string[string_id] = sum(c for spec, c in counts.items() if spec.value == spec_int)
         return by_string
 
     def tool_names_offered_to(self, player_id: PlayerId) -> list[str]:
@@ -183,8 +174,7 @@ class _Town:
     def has_direct_road(self, frm: str, to: str) -> bool:
         graph = self.runtime._spot_graph_repo.find_graph()
         return any(
-            conn.to_spot_id == self.spot_id(to)
-            for conn in graph.iter_outgoing_connections_from(self.spot_id(frm))
+            conn.to_spot_id == self.spot_id(to) for conn in graph.iter_outgoing_connections_from(self.spot_id(frm))
         )
 
 
@@ -215,8 +205,7 @@ class TestOnlyItsOwnerCanDoEachJob:
         did, message = town.try_work(player_id, target, job)
 
         assert did is _JOB_MATRIX[who][job], (
-            f"{who} が {job} を {'できる' if _JOB_MATRIX[who][job] else 'できない'} "
-            f"はずだが、結果は {did} ({message})"
+            f"{who} が {job} を {'できる' if _JOB_MATRIX[who][job] else 'できない'} はずだが、結果は {did} ({message})"
         )
 
     @pytest.mark.parametrize("who", ["トム", "ノラ", "ミナ"])
@@ -307,9 +296,7 @@ class TestLeavingItOnTheBoardIsCheaperThanWaiting:
 
         assert out + back == 4
 
-    def test_handing_over_in_person_needs_the_other_to_be_there(
-        self, town: _Town
-    ) -> None:
+    def test_handing_over_in_person_needs_the_other_to_be_there(self, town: _Town) -> None:
         """直接渡すには、相手が広場に居合わせる必要がある。
 
         作業場同士が繋がっていないので、畑の人が窯へ持って行くこともできない。
@@ -328,9 +315,7 @@ class TestTheBoardStartsWithTwoPricesForTheSameItem:
         **初手から値の比較が発生する**。1 件だけだと、比べる相手が居ない。
         """
         prices = sorted(
-            order.unit_price_gold
-            for order in town.runtime._market_service.board().orders
-            if order.side.value == "sell"
+            order.unit_price_gold for order in town.runtime._market_service.board().orders if order.side.value == "sell"
         )
 
         assert len(prices) == 2
@@ -345,20 +330,11 @@ class TestTheBoardStartsWithTwoPricesForTheSameItem:
         交易条件をまとめて動かしたときに、守りたい関係 (ずれていること) は
         保たれたまま落ちた。**値を書くと、値を動かすたびに落ちる。**
         """
-        stall_buys = {
-            entry["item_spec"]: entry["price"]
-            for entry in town.raw["merchants"][0]["buys"]
-        }
-        board_bids = [
-            order
-            for order in town.runtime._market_service.board().orders
-            if order.side.value == "buy"
-        ]
+        stall_buys = {entry["item_spec"]: entry["price"] for entry in town.raw["merchants"][0]["buys"]}
+        board_bids = [order for order in town.runtime._market_service.board().orders if order.side.value == "buy"]
 
         assert board_bids, "板に買い注文が 1 件も無い (ずれの検査が空振りする)"
-        assert all(
-            order.unit_price_gold != stall_buys["herb"] for order in board_bids
-        )
+        assert all(order.unit_price_gold != stall_buys["herb"] for order in board_bids)
 
     def test_the_stall_sells_nothing(self, town: _Town) -> None:
         """屋台は買い取り専門で、何も売らない。
@@ -389,10 +365,7 @@ class TestHowSoonThePriceCanMove:
 
     def _round_trip(self, town: _Town, workshop: str) -> int:
         """広場から作業場を往復する手番数 (実際に道をたどって測る)。"""
-        return (
-            town.travel_ticks("market_square", workshop)
-            + town.travel_ticks(workshop, "market_square")
-        )
+        return town.travel_ticks("market_square", workshop) + town.travel_ticks(workshop, "market_square")
 
     def test_the_guaranteed_path_is_two_ticks(self, town: _Town) -> None:
         """担保の経路は 2 手番。
@@ -401,9 +374,7 @@ class TestHowSoonThePriceCanMove:
         **買うだけ**で異なる単価の約定が 2 回起きる (1 回の買いが 1 手番)。
         """
         prices = sorted(
-            order.unit_price_gold
-            for order in town.runtime._market_service.board().orders
-            if order.side.value == "sell"
+            order.unit_price_gold for order in town.runtime._market_service.board().orders if order.side.value == "sell"
         )
         assert len(prices) == 2 and prices[0] != prices[1]
 
@@ -427,9 +398,7 @@ class TestHowSoonThePriceCanMove:
 
         main_ticks = gather_and_list + two_settlements
 
-        assert main_ticks <= 80, (
-            f"本命の経路が {main_ticks} 手番かかり、run 長 80 に収まらない"
-        )
+        assert main_ticks <= 80, f"本命の経路が {main_ticks} 手番かかり、run 長 80 に収まらない"
         # 見積もりを固定して、地図をいじったときに気づけるようにする。
         assert main_ticks == 8
 
@@ -441,7 +410,7 @@ class TestHowSoonThePriceCanMove:
         焼き手は薬草も仕入れる (摘み手の出品は麦の出品と並行に進むので、
         焼き手側の +1 手番だけが伸びる)。
         """
-        reap = self._round_trip(town, "wheat_field") + 2   # 刈る 1 + 出品 1
+        reap = self._round_trip(town, "wheat_field") + 2  # 刈る 1 + 出品 1
         buy_materials = 2  # 麦を買う 1 + 薬草を買う 1
         bake = buy_materials + self._round_trip(town, "bake_house") + 1  # + 往復 + 焼く 1
         sell_bread = 1

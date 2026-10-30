@@ -1,6 +1,7 @@
 """
 InMemoryTradeDetailReadModelRepositoryのテスト
 """
+
 from datetime import datetime
 
 import pytest
@@ -72,7 +73,7 @@ class TestInMemoryTradeDetailReadModelRepository:
             requested_gold=1000,
             seller_name="テスト出品者",
             buyer_name=None,
-            status=TradeStatus.ACTIVE.value
+            status=TradeStatus.ACTIVE.value,
         )
 
         # 保存
@@ -173,10 +174,7 @@ class TestInMemoryTradeDetailReadModelRepository:
         """サンプルデータに耐久度を持つ装備が含まれている"""
         all_details = self.repository.find_all()
 
-        equipment_with_durability = [
-            detail for detail in all_details
-            if detail.is_equipment and detail.has_durability
-        ]
+        equipment_with_durability = [detail for detail in all_details if detail.is_equipment and detail.has_durability]
         assert len(equipment_with_durability) > 0
 
         # 耐久度の割合計算が正しいことを確認
@@ -189,8 +187,7 @@ class TestInMemoryTradeDetailReadModelRepository:
         all_details = self.repository.find_all()
 
         consumables_without_durability = [
-            detail for detail in all_details
-            if detail.item_type == ItemType.CONSUMABLE and not detail.has_durability
+            detail for detail in all_details if detail.item_type == ItemType.CONSUMABLE and not detail.has_durability
         ]
         assert len(consumables_without_durability) > 0
 
@@ -199,8 +196,7 @@ class TestInMemoryTradeDetailReadModelRepository:
         all_details = self.repository.find_all()
 
         completed_trades_with_buyers = [
-            detail for detail in all_details
-            if detail.is_completed and detail.buyer_name is not None
+            detail for detail in all_details if detail.is_completed and detail.buyer_name is not None
         ]
         assert len(completed_trades_with_buyers) > 0
 
@@ -222,7 +218,7 @@ class TestInMemoryTradeDetailReadModelRepository:
             requested_gold=100,
             seller_name="テスト出品者",
             buyer_name=None,
-            status=TradeStatus.ACTIVE.value
+            status=TradeStatus.ACTIVE.value,
         )
 
         # 保存

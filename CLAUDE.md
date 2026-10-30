@@ -7,12 +7,15 @@
 新機能を実装する前に必ず参照してください。
 
 - **[docs/design_decisions.md](docs/design_decisions.md)** — 過去の実験で生まれた個別の設計判断 (プレフィックスキャッシュ不変 / 詰み回避 / ラベルから名前への切替 / 静かな失敗の構造的対処 / エージェントごとの待ち時間タイマー など)
-- **[docs/agent_design_principles.md](docs/agent_design_principles.md)** — 「ゲーム内で生きる AI エージェント」を作る上位方針 (疎結合 / 観測駆動 / 質感優先 / 自己の継続性 / 失敗の質感 / 静かな失敗の回避 / 他者からの可視性)
+- **[docs/agent_design_principles.md](docs/agent_design_principles.md)** — 「ゲーム内で生きる AI エージェント」を作る上位方針 (疎結合 / 観測駆動 / 質感優先 / 自己の継続性 / 失敗の質感 / 静かな失敗の回避 / 他者からの可視性 / 協調を促すと固まる圧力も上がる)
 - **[docs/working_habits_that_actually_hold.md](docs/working_habits_that_actually_hold.md)** — 対策が実際に機能する形 (判断を挟むと壊れる / 検査が狙ったものを見ていない / 一次情報に当たらない)。**同じ失敗を繰り返したときに読む**
-- **[docs/agents_reaching_past_the_world.md](docs/agents_reaching_past_the_world.md)** — エージェントが世界に無い行為を試みた記録 (提案の相互デッドロック / 教わることができない)。**直すかどうかの判断材料**で、直さない判断の理由も残す
-- **[docs/trace_observability_review.md](docs/trace_observability_review.md)** — 新しい実験機能を追加するときの観測性レビュー観点 (trace で人間が見えるか / 観測で世界の中の誰かが見えるか)
 
-「なぜこの形になっているか」を理解せずに変更すると過去に解決した問題が再発します。新しい判断を作ったら該当ファイルに追記してください。
+必要なときに読む資料:
+
+- [docs/agents_reaching_past_the_world.md](docs/agents_reaching_past_the_world.md) — エージェントが世界に無い行為を試みた run の記録。それを直すかどうかを決めるときに読み、直さないと決めたら理由をここに残す
+- [docs/trace_observability_review.md](docs/trace_observability_review.md) — 新しい実験機能を足すときの、trace の観測性の見方
+
+「なぜこの形になっているか」を理解せずに変更すると過去に解決した問題が再発します。新しい設計判断は `docs/design_decisions/D<issue番号>.md` に、1件1ファイルで作成してください。同じIssueで複数ある場合は `D1448-2.md` のように分け、見出しのIDもファイル名に合わせます。並行するPRが同じファイルの末尾へ追記して競合するのを防ぐため、共有索引の `docs/design_decisions.md` は新規追加時に変更しません。既存の判断を更新する場合はその個別ファイルを編集します。詳細は [設計判断の追加・更新方法](docs/design_decisions.md) を参照してください。
 
 ## 実験の進め方
 
@@ -22,33 +25,30 @@
 
 - run id: `var/runs/...` に使う名前
 - run の型: 探索 / 観察 / 比較
-- profile: `belief_goal_full` / `ablation_base` / `smoke_stub`
+- profile: `memory_jev_mine_v1_v41_thinking_capped_being_memory` / `smoke_stub`
 - モデルと provider: 新しい profile を作るときや前回の run から日が空いたときは、[docs/llm_provider_selection.md](docs/llm_provider_selection.md) の手順で `tool_choice=required` が通るかなどを使う直前に確かめる。provider の対応状況は予告なく変わる
 - scenario: profile 既定を使うか、`SCENARIO=...` で一時上書きするか
 - tick 数: profile 既定を使うか、`MAX_WORLD_TICKS=...` で短くするか
 - 見たい trace: 発火、効果判断に必要な値、未発火理由を確認できるか
 
-高コスト run の前には、必要に応じて `smoke_stub` や短い `MAX_WORLD_TICKS` で、profile 読み込み・fail-fast・trace 観測点だけを先に確認します。新しい実験機能を追加した PR では [docs/trace_observability_review.md](docs/trace_observability_review.md) を参照してください。
+高コスト run の前には、必要に応じて `smoke_stub` や短い `MAX_WORLD_TICKS` で、profile 読み込み・fail-fast・trace 観測点だけを先に確認します。新しいシナリオや仕掛けの組み合わせを初めて回す前は、`make fuzz-scenario SCENARIO=...` で、でたらめに行動するスタブを多数のシードで回し、例外と内部番号の漏れが無いことを先に見ます (`docs/design_decisions.md` の D1557)。新しい実験機能を追加した PR では [docs/trace_observability_review.md](docs/trace_observability_review.md) を参照してください。
 
 ### 標準コマンド
 
 ```bash
 # 普段の本命観察 run。profile 内の scenario / max_world_ticks を使う。
-make experiment EXPERIMENT_PROFILE=belief_goal_full OUT=var/runs/<run_id>
+make experiment EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory OUT=var/runs/<run_id>
 
 # 実 LLM を呼ばず、低コストで profile / fail-fast / trace 配線を確認する。
 make experiment EXPERIMENT_PROFILE=smoke_stub OUT=/tmp/llm-rpg-smoke
 
-# 比較土台。belief_goal_full から停滞 reasoning を落とした profile。
-make experiment EXPERIMENT_PROFILE=ablation_base OUT=var/runs/<run_id>
-
 # scenario だけ一時的に変える。profile ファイル自体は書き換えない。
-make experiment EXPERIMENT_PROFILE=belief_goal_full \
+make experiment EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory \
     SCENARIO=data/scenarios/survival_island_v3_coop.json \
     OUT=var/runs/<run_id>
 
 # tick 数だけ短くして低コスト確認する。
-make experiment EXPERIMENT_PROFILE=belief_goal_full \
+make experiment EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory \
     MAX_WORLD_TICKS=5 \
     OUT=var/runs/<run_id>
 
@@ -57,8 +57,8 @@ make experiment EXPERIMENT_PROFILE= EXPERIMENT_CONFIG=path/to/experiment.json \
     OUT=var/runs/<run_id>
 
 # snapshot を保存して、別 run で再開する。
-make experiment-with-snapshot EXPERIMENT_PROFILE=belief_goal_full OUT=var/runs/<run_id>
-make experiment-resume EXPERIMENT_PROFILE=belief_goal_full \
+make experiment-with-snapshot EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory OUT=var/runs/<run_id>
+make experiment-resume EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory \
     OUT=var/runs/<run_id>_resume \
     SNAPSHOT_LOAD_DIR=var/runs/<run_id>/snapshots
 ```
@@ -81,51 +81,13 @@ run 後はまず `experiment.config.resolved.json` を見て、意図した prof
 - `_metadata.source_scenario` が埋め込まれ、別シナリオへ読み込むと警告と trace イベント (`snapshot_load`) で見える
 - 保存・読み込みは `TraceEventKind.SNAPSHOT_SAVE` / `SNAPSHOT_LOAD` に必ず 1 件残る
 - 保存失敗は警告のみで実験は成功扱い (実験データを守る)。読み込み失敗は開始前に即終了 (壊れた状態で始めない)
+- 記憶の部品を消して snapshot のキーが無くなったら、`src/ai_rpg_world/application/being/removed_memory_payload_keys.py` の表に足す。古い snapshot に残るそのキーは読み込みで捨て、件数が `snapshot_load` の `removed_memory_keys` に残る (`docs/design_decisions.md` の D1631-5)
+- 世界の保存項目とBeingの記憶本文は別の入口で扱う。廃止した旧追跡の世界キーは世界snapshot側で除き、`snapshot_load.removed_world_subsystems`に件数を残す。廃止した`semantic`の所有宣言はBeingのcodecで除き、`removed_declared_memory_kinds`に記録する。未知キーや現役キー欠落を一律に無視しない（D1893 / D1893-5）。
 - 詳細は `docs/design_decisions.md` の #15-#18
 
-### LLM に出すツールを増やす / 出し分けるとき
+### プロンプトの本文にツールの名前を書くとき
 
-ツールを出すかどうかの判断は
-`src/ai_rpg_world/application/llm/tool_exposure.py` **だけ**にある。問いは
-2 つで、混ぜない。
-
-| 問い | 答える場所 | run 中の変化 |
-|---|---|---|
-| この世界に在るか | `ToolExposure.is_exposed` | 変わらない |
-| いまのフェーズでどのブロックに置くか | `is_phase_common` / `is_available_in_phase` | 会議境界で変わる |
-
-シナリオが個別に落としたいだけなら、engine を触らず
-`"disabled_tools": ["attack"]` と書く。実在しない名前は
-`create_world_runtime` の時点で落ちる。
-
-**プロンプト本文にツール名を書くときは、必ず露出判断を通すこと。** ツール
-定義の一覧から消しても本文が宣伝し続けると、エージェントは存在しない
-ツールを呼ぶ。無効化しないより悪い状態になる。実際 `tend_to_player` と
-`give_item` がその形だった。
-
-`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` が、全ツールを
-1 つずつ無効化してプロンプト全文に名前が残らないことを総当たりで見張る。
-ツールを足せば自動で対象になるので、この checklist を忘れても落ちる。
-
-### 新しい per-Being store を追加するとき
-
-per-Being scope の state を持つ store (= `BeingId` をキーに保持する store) を
-追加する PR は、その時点で `BeingMemorySnapshotService` への配線まで含めて
-1 PR にまとめる。「あとで足す」と後回しにすると、長走実験の終了 → 再開で
-連続性が静かに壊れる silent failure になる (PR #594 で 3 store ぶんの追従漏れ
-を一度に解消した直接の動機)。
-
-手順は `docs/design_decisions.md` の **#27** を参照。要点だけ:
-
-1. `BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS` に新 key を追加
-2. `BeingMemorySnapshotService.__init__` に新 store の引数を追加
-3. `capture()` の payload dict に新 key の生成ロジックを追加
-4. `restore()` のデコード + 書き戻しを追加 (= store interface に
-   `replace_all_by_being` を生やす)
-
-1 だけ足して 3 / 4 を忘れた状態は PR-F (#593) で導入した起動時 fail-fast が
-止めてくれる。1 を含めて完全に忘れた場合は構造で検出できないので、本
-checklist が最後の砦になる。
+そのツールがこの世界で使えるかを `ToolExposure.is_exposed` (`src/ai_rpg_world/application/llm/tool_exposure.py`) で確かめ、使えるときだけ書く。ツールの一覧から消したのに本文が勧め続けると、エージェントは無いツールを呼ぶ。`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` が、ツールを 1 つずつ無効にして、プロンプトに名前が残らないことを総当たりで見張る。
 
 ## セットアップとテスト実行
 
@@ -144,6 +106,7 @@ uv run pytest tests/domain/guild -v                # 一部だけ
 uv run pytest --cov=src --cov-report=term-missing  # カバレッジつき
 # マーカー: -m unit | integration | slow | asyncio
 # quality は通常の pytest / CI から除外される手動点検用。実行する場合は -m quality を明示する
+# live_api は実 endpoint を叩くプローブ。通常の pytest / CI / -m quality のどれでも選ばれず、-m live_api を明示したときだけ走る
 ```
 
 `make test` / `make test-cov` も同じ pytest を叩く薄いラッパーです。テスト駆動の
@@ -160,40 +123,37 @@ domain/         ← 集約、エンティティ、値オブジェクト、リポ
 infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM アダプタ
 ```
 
-### Bounded Context (`domain/` 配下)
+現在の実装への入口と、旧タイルマップから残した領域は [世界の現在の構成](docs/game/world_architecture.md) を参照してください。
 
-各 Bounded Context は自分の集約・値オブジェクト・例外・リポジトリインタフェースを持ちます。インフラ層はインメモリ実装と SQLite 実装の両方を提供します。
+### Bounded Context
 
-- `world_graph`: 空間グラフによる移動と部屋構造
-- `world`: 物理的なマップと天候、世界時刻
-- `player`: プロフィール、ステータス、所持品
-- `item`: アイテムの定義と所持
-- `monster`: 敵の定義とステータス
-- `combat`: 戦闘の進行
-- `skill`: スキルの定義と効果
-- `shop`: 売買
-- `trade`: プレイヤー間取引
-- `quest`: クエストの状態と進行
-- `guild`: ギルドの所属と進行
-- `sns`: 世界内の SNS、エージェント同士の発信
-- `conversation`: 会話セッション
-- `pursuit`: 追跡 (敵がエージェントを追う等)
-- `being`: 「経験を持つ AI 主体」の識別と継続性 (世界・実験を跨いで永続化される ID)
-- `persona`: エージェントの人格、固有名詞、口調
-- `intent`: エージェントが今やろうとしていること
-- `memory`: エピソード記憶、意味記憶、再解釈、想起
-- `common`: 横断的な値オブジェクトやイベント基盤
+Bounded Context として境界を守れているのは Being だけです。経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳・短期記憶を持ち、環境 (ゲーム) とやりとりするときは `being/contract` の型だけを使います。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは `domain/being` だけを一時的に許す)。
 
-エージェントの 1 ターンの流れ: 担当エージェント選定 → 現在状態と直近イベントの収集 → `prompt_builder.py` でシステム / ユーザプロンプト構築 → LLM がツール呼び出しを返す → 実行 → ドメインイベントが観測に変換されエピソード記憶へ流入 → WebSocket で観戦者に配信。詳細は `application/llm/llm_agent_turn_runner.py` と `application/llm/prompt_builder.py`。
+`BeingId` をキーに持つ保存先を足すときは、同じ PR で Being の snapshot (`BeingMemorySnapshotService`) まで配線します。配線を忘れると、run を止めて再開したときに記憶が静かに途切れます。キーを足すところまでやって読み書きを忘れた場合は起動時に止まりますが、キーごと忘れた場合はどの検査も気づきません (`docs/design_decisions.md` の #27)。足す前に保存した snapshot も読めるようにするなら、`ADDED_PAYLOAD_KEYS` にも足します (D1824-6)。
+
+ゲームの側は、`domain/` の下をフォルダ (`world_graph`、`player`、`monster` など) に分けていますが、Bounded Context としての境界はまだ守れていません。境界の引き直しは、シナリオエンジンのモデリング (#1339) で行います。
+
+エージェントの 1 ターンの流れ: 担当エージェント選定 → 現在状態と直近イベントの収集 → `prompt_builder.py` でシステム / ユーザプロンプト構築 → LLM がツール呼び出しを返す → 実行 → ドメインイベントが観測に変換され短期記憶へ入る (短期記憶を畳むときと環境を離れるときに、本人がエピソードを書き起こす) → WebSocket で観戦者に配信。詳細は `application/llm/services/world_llm_turn/` (Phase A / B とツールの実行) と `application/llm/services/prompt_builder.py`。
 
 ## コーディング規約
 
-- Python 3.10 以上、インデントはスペース 4 つ、関数とモジュールは `snake_case`、クラスは `PascalCase`
-- 公開 API には型注釈を必須とする
+- Python 3.10 以上
 - テストはパッケージ構造を `tests/` 配下に鏡写しで配置する (例: `tests/domain/shop/value_object/test_shop_id.py`)
-- コミットメッセージは Conventional Commits 形式 (`feat:`, `fix:`, `refactor:` など)
 - 秘密情報は `.env` のみに置く (`.env.example` からコピー)。コミット禁止
 - LLM クライアントは `litellm` 抽象を経由する
+
+### ドメインモデルは振る舞いで設計する (tell, don't ask)
+
+- 規則は、それを持つ集約・値オブジェクトのメソッドに置く。application 層は値を取り出して判断せず、頼むだけにする
+- application 層に次の形が出たら、ドメインに振る舞いが足りない目印として見直す: ドメインの値を取り出して分岐する、`isinstance` で型を見分ける、規則を自由関数で外から当てる
+- ドメインの状態を application のサービスの属性 (dict など) に持たない。持つなら集約に入れ、snapshot まで配線する
+- 新しく足す集約と、この節に沿って作り直す集約は、ID を持ち中身が変わるものとして作る:
+  - 集約は自分の ID を持ち、状態を変える操作で自分の中身を書き換える
+  - 状態を変える操作は値を返さない。外したもの・起きたことを伝えたいときは、返さずにドメインイベントとしてためる。読むだけの問い合わせとファクトリは値を返してよい
+  - ID を持つ集約を値の変わらない形 (frozen dataclass) で作らない。値オブジェクト・ドメインイベント・snapshot の中身は値の変わらない形でよい
+- 新しく足す型と、この節に沿って作り直す型は、ドメインの言葉で名前を付ける。このリポジトリで別の意味を持つ語 (Event はドメインイベントと trace が使っている。Entry、Record も同じ) と重ねない。修飾語で区別するより、中身を一語で言える名前を探す。処理の段階や番号 (phase_a など) で名前を付けない。既存の名前は、作り直すついででなければ改名しない
+- 新しく足す、またはこの節に沿って作り直す application 層 (`being/application` を含む) のユースケースは、ドメインでしていることを動詞句で名前にする (例: `AddEpisodesToMemory`。`FoodSpoilageStageService` を `SpoilAgedFood` に改める予定)。ユースケースは application 層で 1 つの操作を受け持つクラスで、ドメインサービス・リポジトリ・イベントハンドラは含まない。ユースケースの名前に Service・Manager・Keeper・StageService のような中身を言わない語を付けない。保存の言葉 (save、load) は、保存先 (リポジトリ、snapshot のファイル) への読み書きにだけ使う
+- 新しい集約・値オブジェクトを足す PR では、自己レビューでこの節を見る
 
 ### ドメイン層では組み込み例外ではなくドメイン例外を投げる
 
@@ -230,7 +190,7 @@ t_wada さんの研修で紹介されている手順を基本にします。「�
 
 - メソッド: 入力条件と期待される結果が分かる形で具体的に書く
   - 例: `"""ticks_per_day に 0 以下を渡すと ValidationException を投げ、設定値は更新されない。"""`
-  - 例: `"""recall_buffer が空のとき、想起セクションは prompt から完全に省略される。"""`
+  - 例: `"""エピソードが 1 件も無いとき、【思い出せる出来事】は見出しを残したまま「(まだ無い)」と prompt に出る。"""`
 - クラス: 対象クラスのうち、このクラスでテストする観点を 1 文で書く
   - 例: `"""SpotDarknessQueryService.is_dark が時刻・天候・室内補正を合成して暗さを決める挙動を保証する。"""`
 
@@ -247,37 +207,11 @@ t_wada さんの研修で紹介されている手順を基本にします。「�
 
 回答・ドキュメント・PR 本文・コミットメッセージなど人間に読ませる文章は日本語で書きます。
 
-### 日本語の中に英語を織り交ぜない
-
-概念や判断の説明文に英語をそのまま混ぜないでください。
-
-- **NG**: 「ambiguous な仕様」「stochastic な揺らぎ」「robust な実装」「test が flaky」
-- **OK**: 「曖昧な仕様」「確率的な揺らぎ」「壊れにくい実装」「テストが不安定」
-
-例外として以下はそのまま英語で残します。
-
-- コード上の識別子: 関数名・変数名・型名・enum 値・API パス (`ItemSpecId`, `apply_effects` など)。grep やコード参照との対応関係を保つため
-- 訳すと逆に分かりにくい既存技術用語: 初出に日本語の補足を添えれば使用可 (例: 「プレフィックスキャッシュ (prefix cache)」)
-
-書いたら必ず推敲し、英語混じりや依頼の範囲外の固有名詞が紛れていないか確認してください。
-
-### よく使う訳語
-
-| 英語表現 | 日本語訳 |
-|---|---|
-| primitive | 基盤機能 |
-| cross-instance interaction | 二者間の相互作用 |
-| acting / target | 使う側 / 使われる側 |
-| wiring | 配線 / 接続 |
-| silent failure | 静かな失敗 |
-| boundary | 入口 / 境界 |
-| guard | ガード |
-
 ## コミットメッセージ
 
 「なぜこの変更をしたか」を必ず本文に書きます。diff で分かる「何を変えたか」ではなく、「なぜ変えたか・なぜこの方法か」を残してください。
 
-- 件名: 50 文字以内、動詞始まり (例: `fix: Safari でログインリダイレクトが動くよう修正`)
+- 件名: Conventional Commits 形式 (`feat:`, `fix:`, `refactor:` など)。50 文字以内、動詞始まり (例: `fix: Safari でログインリダイレクトが動くよう修正`)
 - 本文: 解決したかった問題、検討した代替案と却下理由、副作用や注意点、関連 issue 番号
 - `update` / `fix bug` / `修正` のような情報量ゼロの件名は禁止
 
@@ -288,7 +222,7 @@ t_wada さんの研修で紹介されている手順を基本にします。「�
 - 目安: 200〜400 行、10 ファイル前後。レビュアーが 30 分で読み切れるサイズ
 - リファクタリングと機能追加、DB スキーマ変更とアプリコード変更は分けて積む
 - 本文にはテストの実施根拠 (通ったテスト名や件数) を載せる
-- エピソード記憶系は `docs/memory_system/memory_feature_workflow.md` の手順に従う (git worktree で並行作業)
+- 記憶まわりを並行して作るときは `docs/memory_system/memory_feature_workflow.md` の手順に従う (git worktree で並行作業)
 
 ### タイトル・本文の書き方
 

@@ -20,8 +20,7 @@ from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 
 def _run_rules(stage: SpotGraphNeedsDecayStageService, repo: MagicMock) -> None:
     """確定境界から独立した飢餓規則だけを検証する。"""
-    evidence_statuses = stage._run_with_repository(repo)
-    stage._sync_hunger_max_evidence_all(evidence_statuses)
+    stage._run_with_repository(repo)
 
 
 def _build_status_with_hunger(hunger_value: int, hp: int = 100) -> PlayerStatusAggregate:
@@ -35,6 +34,7 @@ def _build_status_with_hunger(hunger_value: int, hp: int = 100) -> PlayerStatusA
     from ai_rpg_world.domain.player.value_object.player_id import PlayerId
     from ai_rpg_world.domain.player.value_object.stamina import Stamina
     from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+
     exp_table = ExpTable(100, 1.5)
     status = PlayerStatusAggregate(
         player_id=PlayerId(1),

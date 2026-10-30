@@ -175,6 +175,7 @@ class TestSoundPropagationService:
         g.add_spot(_node(1))
         g.add_spot(_node(2))
         from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
+
         closed = SpotConnection(
             connection_id=ConnectionId.create(1),
             from_spot_id=SpotId.create(1),

@@ -145,10 +145,13 @@ class SqliteWeatherZoneRepository(WeatherZoneRepository):
         return self.find_by_id(WeatherZoneId(int(row["zone_id"])))
 
     def find_all(self) -> list[WeatherZone]:
-        cur = self._conn.execute(
-            "SELECT zone_id FROM game_weather_zones ORDER BY zone_id ASC"
-        )
-        return [zone for row in cur.fetchall() for zone in [self.find_by_id(WeatherZoneId(int(row["zone_id"])))] if zone is not None]
+        cur = self._conn.execute("SELECT zone_id FROM game_weather_zones ORDER BY zone_id ASC")
+        return [
+            zone
+            for row in cur.fetchall()
+            for zone in [self.find_by_id(WeatherZoneId(int(row["zone_id"])))]
+            if zone is not None
+        ]
 
     def delete(self, zone_id: WeatherZoneId) -> bool:
         self._assert_shared_transaction_active()

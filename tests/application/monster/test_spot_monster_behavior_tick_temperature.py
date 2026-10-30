@@ -41,7 +41,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -74,8 +73,10 @@ SPOT_A = SpotId.create(1)
 def _node_with_temperature(temp: TemperatureEnum) -> SpotNode:
     return SpotNode(
         spot_id=SPOT_A,
-        name="spot_a", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        name="spot_a",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
             lighting=LightingEnum.BRIGHT,
             sound_ambient=None,
@@ -102,8 +103,13 @@ def _template(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=max_hp, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=max_hp,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(100, True),
@@ -120,10 +126,11 @@ def _monster(template: MonsterTemplate) -> MonsterAggregate:
     return MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=template,
-        world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -168,7 +175,8 @@ class TestComfortableTemperature:
         svc.tick(WorldTick(1))
 
         events = _events_of_type(
-            graph, MonsterFeltTemperatureDiscomfortInSpotEvent,
+            graph,
+            MonsterFeltTemperatureDiscomfortInSpotEvent,
         )
         assert events == []
         # HP も減らない
@@ -189,7 +197,8 @@ class TestTooCold:
         svc.tick(WorldTick(1))
 
         events = _events_of_type(
-            graph, MonsterFeltTemperatureDiscomfortInSpotEvent,
+            graph,
+            MonsterFeltTemperatureDiscomfortInSpotEvent,
         )
         assert len(events) == 1
         assert events[0].kind == "too_cold"
@@ -211,7 +220,8 @@ class TestTooHot:
         svc.tick(WorldTick(1))
 
         events = _events_of_type(
-            graph, MonsterFeltTemperatureDiscomfortInSpotEvent,
+            graph,
+            MonsterFeltTemperatureDiscomfortInSpotEvent,
         )
         assert len(events) == 1
         assert events[0].kind == "too_hot"
@@ -235,7 +245,8 @@ class TestLethalDamage:
 
         # event は発火し、monster は DEAD
         events = _events_of_type(
-            graph, MonsterFeltTemperatureDiscomfortInSpotEvent,
+            graph,
+            MonsterFeltTemperatureDiscomfortInSpotEvent,
         )
         assert len(events) == 1
         assert monster.status != MonsterStatusEnum.ALIVE
@@ -262,7 +273,8 @@ class TestDisabled:
         svc.tick(WorldTick(1))
 
         events = _events_of_type(
-            graph, MonsterFeltTemperatureDiscomfortInSpotEvent,
+            graph,
+            MonsterFeltTemperatureDiscomfortInSpotEvent,
         )
         assert events == []
         assert monster.hp.value == 20

@@ -65,11 +65,14 @@ class TestWorldScopedEvaluation:
 
     def test_player_at_spot_matches_when_any_entity_is_there(self) -> None:
         """対象者未指定なら、従来どおり誰か一人が対象地にいれば成立する。"""
-        assert _evaluator().evaluate(
-            _player_at_target_condition(),
-            WorldTick(0),
-            _graph(),
-        ) is True
+        assert (
+            _evaluator().evaluate(
+                _player_at_target_condition(),
+                WorldTick(0),
+                _graph(),
+            )
+            is True
+        )
 
 
 class TestPlayerScopedEvaluation:
@@ -77,21 +80,27 @@ class TestPlayerScopedEvaluation:
 
     def test_player_at_spot_matches_the_requested_player(self) -> None:
         """指定した本人が対象地にいれば対象者条件は成立する。"""
-        assert _evaluator().evaluate_for_player(
-            _player_at_target_condition(),
-            WorldTick(0),
-            _graph(),
-            target_player_id=PlayerId(1),
-        ) is True
+        assert (
+            _evaluator().evaluate_for_player(
+                _player_at_target_condition(),
+                WorldTick(0),
+                _graph(),
+                target_player_id=PlayerId(1),
+            )
+            is True
+        )
 
     def test_single_condition_checks_the_requested_player(self) -> None:
         """単数入口でも、別人が対象地にいるだけなら本人の条件は成立しない。"""
-        assert _evaluator().evaluate_for_player(
-            _player_at_target_condition(),
-            WorldTick(0),
-            _graph(),
-            target_player_id=PlayerId(2),
-        ) is False
+        assert (
+            _evaluator().evaluate_for_player(
+                _player_at_target_condition(),
+                WorldTick(0),
+                _graph(),
+                target_player_id=PlayerId(2),
+            )
+            is False
+        )
 
     def test_single_condition_rejects_missing_target_player(self) -> None:
         """単数入口へ PlayerId を渡し忘れると世界条件へ縮退せず失敗する。"""
@@ -105,12 +114,15 @@ class TestPlayerScopedEvaluation:
 
     def test_player_at_spot_checks_the_requested_player(self) -> None:
         """別人が対象地にいても、指定した本人が別の場所なら成立しない。"""
-        assert _evaluator().evaluate_all_for_player(
-            (_player_at_target_condition(),),
-            WorldTick(0),
-            _graph(),
-            target_player_id=PlayerId(2),
-        ) is False
+        assert (
+            _evaluator().evaluate_all_for_player(
+                (_player_at_target_condition(),),
+                WorldTick(0),
+                _graph(),
+                target_player_id=PlayerId(2),
+            )
+            is False
+        )
 
     def test_missing_target_player_is_rejected(self) -> None:
         """対象者専用入口へ PlayerId を渡し忘れた場合は世界条件へ縮退せず失敗する。"""

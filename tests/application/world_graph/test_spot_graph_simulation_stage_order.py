@@ -9,6 +9,8 @@
 - needs_decay → status_effects: 空腹発の継続効果を同 tick で連鎖させる。
 - player_outcome_rule → death_grace: 同 tick で救助確定した player を DEAD で
   上書きしない (grace 期限判定を後に置く)。
+- llm_turn_trigger → player_outcome_rule: 手番の中で立ったフラグを、その tick の
+  うちに、そのときの位置で判定する (design_decisions D1618)。
 - graph_event_flusher → heartbeat → llm_turn_trigger: tick stage が graph に積んだ
   events を観測に流してから heartbeat/turn を走らせないと、turn 実行までに観測が
   buffer に届かない静かな失敗になる。
@@ -23,6 +25,9 @@ from dataclasses import dataclass, field
 import pytest
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.application.world_graph.exceptions import (
+    SpotGraphPostTickHookFailedException,
+)
 from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
     SpotGraphSimulationApplicationService,
 )
@@ -45,6 +50,14 @@ class _RecordingStage:
 
 
 @dataclass
+class _RecordingOutcomeRuleStage(_RecordingStage):
+    """世界の段の判定と、手番のあとの判定を、別の名前で記録する個人結果規則の stage spy。"""
+
+    def run_after_turns(self, current_tick: WorldTick) -> None:
+        self.recorder.append(f"{self.name}_after_turns")
+
+
+@dataclass
 class _FailingStage:
     """呼出しを記録してから失敗するstage spy。"""
 
@@ -54,6 +67,20 @@ class _FailingStage:
     def run(self, current_tick: WorldTick) -> None:
         self.recorder.append(self.name)
         raise RuntimeError(f"{self.name} failed")
+
+
+@dataclass
+class _FailingTrigger:
+    """手番の途中で失敗する llm_turn_trigger spy。"""
+
+    recorder: list[str]
+
+    def schedule_turn(self, player_id: PlayerId) -> None:  # 本経路では未使用
+        pass
+
+    def run_scheduled_turns(self) -> None:
+        self.recorder.append("llm_turn_trigger")
+        raise RuntimeError("llm_turn_trigger failed")
 
 
 @dataclass
@@ -79,7 +106,7 @@ class _RecordingTrigger:
         self.recorder.append("llm_turn_trigger")
 
 
-# _tick_impl の 16 stage + 確定後の 3 hook を並べた期待順序。
+# _tick_impl の 16 stage + 確定後の 3 hook + 手番のあとの個人結果規則を並べた期待順序。
 _EXPECTED_ORDER = [
     "travel",
     "scenario_event",
@@ -101,6 +128,7 @@ _EXPECTED_ORDER = [
     "graph_event_flusher",
     "heartbeat",
     "llm_turn_trigger",
+    "player_outcome_rule_after_turns",
 ]
 
 
@@ -128,7 +156,7 @@ def _build_service_with_all_stages(
         food_spoilage_stage=stage("food_spoilage"),
         trade_offer_expiry_stage=stage("trade_offer_expiry"),
         market_order_expiry_stage=stage("market_order_expiry"),
-        player_outcome_rule_stage=stage("player_outcome_rule"),
+        player_outcome_rule_stage=_RecordingOutcomeRuleStage(name="player_outcome_rule", recorder=recorder),
         death_grace_stage=stage("death_grace"),
         heartbeat_emitter=_RecordingHeartbeat(recorder=recorder),
         llm_turn_trigger=_RecordingTrigger(recorder=recorder),
@@ -140,7 +168,7 @@ class TestSpotGraphSimulationStageOrder:
     """1 tick 内の全 stage と post-tick hook が固定順序で実行される。"""
 
     def test_full_tick_executes_stages_and_hooks_in_fixed_order(self) -> None:
-        """全stage注入時、16 stageから3つのpost-tick hookまで宣言順に走る。"""
+        """全stage注入時、16 stageから3つのpost-tick hook、手番のあとの個人結果規則まで宣言順に走る。"""
         recorder: list[str] = []
         service = _build_service_with_all_stages(recorder)
 
@@ -165,6 +193,34 @@ class TestSpotGraphSimulationStageOrder:
         service.tick()
 
         assert recorder.index("player_outcome_rule") < recorder.index("death_grace")
+
+    def test_player_outcome_rule_runs_again_after_turns(self) -> None:
+        """手番の中で立ったフラグを同じ tick に判定するため、個人結果規則は llm_turn_trigger のあとにもう一度走る。"""
+        recorder: list[str] = []
+        service = _build_service_with_all_stages(recorder)
+
+        service.tick()
+
+        turns = recorder.index("llm_turn_trigger")
+        assert recorder[turns + 1 :] == ["player_outcome_rule_after_turns"]
+
+    def test_player_outcome_rule_after_turns_runs_even_if_turn_trigger_fails(self) -> None:
+        """手番が途中で失敗しても、それまでの手番で立ったフラグを判定するため、手番のあとの個人結果規則は走り、tick は失敗として報告される。"""
+        recorder: list[str] = []
+        service = SpotGraphSimulationApplicationService(
+            time_provider=InMemoryGameTimeProvider(),
+            player_outcome_rule_stage=_RecordingOutcomeRuleStage("player_outcome_rule", recorder),
+            llm_turn_trigger=_FailingTrigger(recorder),
+        )
+
+        with pytest.raises(SpotGraphPostTickHookFailedException):
+            service.tick()
+
+        assert recorder == [
+            "player_outcome_rule",
+            "llm_turn_trigger",
+            "player_outcome_rule_after_turns",
+        ]
 
     def test_graph_event_flusher_runs_before_heartbeat_and_turn_trigger(self) -> None:
         """観測が turn 実行までに buffer へ届くよう、graph_event_flusher は heartbeat と llm_turn_trigger より先に走る。"""

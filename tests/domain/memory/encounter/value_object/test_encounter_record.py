@@ -25,16 +25,12 @@ class TestEncounterRecordConstruction:
 
     def test_first_seen_validation_raises_validation_exception(self) -> None:
         """firstseen が負なら validation 例外を投げる。"""
-        with pytest.raises(
-            EncounterRecordValidationException, match="first_seen_tick"
-        ):
+        with pytest.raises(EncounterRecordValidationException, match="first_seen_tick"):
             EncounterRecord(first_seen_tick=-1, last_seen_tick=0, count=1)
 
     def test_last_seen_first_seen_validation_raises_validation_exception(self) -> None:
         """時系列が逆転している record は許容しない。"""
-        with pytest.raises(
-            EncounterRecordValidationException, match="last_seen_tick"
-        ):
+        with pytest.raises(EncounterRecordValidationException, match="last_seen_tick"):
             EncounterRecord(first_seen_tick=10, last_seen_tick=5, count=2)
 
     def test_count_zero_validation_raises_validation_exception(self) -> None:
@@ -51,9 +47,7 @@ class TestEncounterRecordConstruction:
         """python の bool は int サブクラスなので isinstance(x, int) で漏れる。
         明示的に弾く (= silent failure 防止)。
         """
-        with pytest.raises(
-            EncounterRecordValidationException, match="first_seen_tick"
-        ):
+        with pytest.raises(EncounterRecordValidationException, match="first_seen_tick"):
             EncounterRecord(
                 first_seen_tick=True,  # type: ignore[arg-type]
                 last_seen_tick=1,

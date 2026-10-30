@@ -54,28 +54,19 @@ class WeatherSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version not in (1, SCHEMA_VERSION):
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected 1 or {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected 1 or {SCHEMA_VERSION})")
         restored_random_state = None
         if version == SCHEMA_VERSION:
             stage = getattr(runtime, "_environment_stage", None)
-            supports_random_restore = stage is not None and hasattr(
-                stage, "restore_random_state"
-            )
+            supports_random_restore = stage is not None and hasattr(stage, "restore_random_state")
             raw_random_state = data.get("random_state")
             if supports_random_restore and raw_random_state is None:
-                raise ValueError(
-                    f"{SUBSYSTEM_KEY}.random_state is required for schema v2"
-                )
+                raise ValueError(f"{SUBSYSTEM_KEY}.random_state is required for schema v2")
             restored_random_state = self._decode_random_state(raw_random_state)
         if restored_random_state is not None:
             stage = getattr(runtime, "_environment_stage", None)
             if stage is None or not hasattr(stage, "restore_random_state"):
-                raise RuntimeError(
-                    "runtime._environment_stage does not support weather random restore"
-                )
+                raise RuntimeError("runtime._environment_stage does not support weather random restore")
         holder = getattr(runtime, "_current_weather", None)
         if holder is None or not isinstance(holder, dict):
             # scenario 側で weather を使わない構成: skip
@@ -121,31 +112,19 @@ class WeatherSubsystemCodec(WorldSubsystemCodec):
         if isinstance(state_version, bool) or not isinstance(state_version, int):
             raise ValueError(f"{SUBSYSTEM_KEY}.random_state.state_version must be int")
         if not isinstance(internal_state, list) or not internal_state:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY}.random_state.internal_state must be non-empty list"
-            )
-        if any(
-            isinstance(value, bool) or not isinstance(value, int)
-            for value in internal_state
-        ):
-            raise ValueError(
-                f"{SUBSYSTEM_KEY}.random_state.internal_state must contain only int"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY}.random_state.internal_state must be non-empty list")
+        if any(isinstance(value, bool) or not isinstance(value, int) for value in internal_state):
+            raise ValueError(f"{SUBSYSTEM_KEY}.random_state.internal_state must contain only int")
         if gaussian_cache is not None and (
-            isinstance(gaussian_cache, bool)
-            or not isinstance(gaussian_cache, (int, float))
+            isinstance(gaussian_cache, bool) or not isinstance(gaussian_cache, (int, float))
         ):
-            raise ValueError(
-                f"{SUBSYSTEM_KEY}.random_state.gaussian_cache must be number or null"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY}.random_state.gaussian_cache must be number or null")
         restored_state = (state_version, tuple(internal_state), gaussian_cache)
         validator = random.Random()
         try:
             validator.setstate(restored_state)
         except (OverflowError, TypeError, ValueError) as exc:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY}.random_state is invalid: {exc}"
-            ) from exc
+            raise ValueError(f"{SUBSYSTEM_KEY}.random_state is invalid: {exc}") from exc
         return validator.getstate()
 
     @staticmethod
@@ -154,9 +133,7 @@ class WeatherSubsystemCodec(WorldSubsystemCodec):
             return
         stage = getattr(runtime, "_environment_stage", None)
         if stage is None or not hasattr(stage, "restore_random_state"):
-            raise RuntimeError(
-                "runtime._environment_stage does not support weather random restore"
-            )
+            raise RuntimeError("runtime._environment_stage does not support weather random restore")
         stage.restore_random_state(state)
 
 

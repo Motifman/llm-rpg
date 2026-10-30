@@ -205,22 +205,21 @@ def main() -> int:
         rows.append(row)
         with results_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        print(f"[{index}/{len(cases)}] {case['cohort']} {call['character_name']} -> {row['candidate_evaluation']}", flush=True)
+        print(
+            f"[{index}/{len(cases)}] {case['cohort']} {call['character_name']} -> {row['candidate_evaluation']}",
+            flush=True,
+        )
 
     summary = {
         "total": len(rows),
         "api_errors": sum(row["error"] is not None for row in rows),
         "failure_cases": sum(row["cohort"] == "failure" for row in rows),
         "failure_cases_valid_after_intervention": sum(
-            row["cohort"] == "failure"
-            and (row["candidate_evaluation"] or {}).get("status") == "valid"
-            for row in rows
+            row["cohort"] == "failure" and (row["candidate_evaluation"] or {}).get("status") == "valid" for row in rows
         ),
         "valid_cases": sum(row["cohort"] == "valid" for row in rows),
         "valid_cases_still_valid": sum(
-            row["cohort"] == "valid"
-            and (row["candidate_evaluation"] or {}).get("status") == "valid"
-            for row in rows
+            row["cohort"] == "valid" and (row["candidate_evaluation"] or {}).get("status") == "valid" for row in rows
         ),
         "status_counts": {
             status: sum((row["candidate_evaluation"] or {}).get("status") == status for row in rows)
@@ -230,9 +229,7 @@ def main() -> int:
         "prompt_tokens": sum(row["prompt_tokens"] for row in rows),
         "completion_tokens": sum(row["completion_tokens"] for row in rows),
     }
-    (args.out_dir / "summary.json").write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    (args.out_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 

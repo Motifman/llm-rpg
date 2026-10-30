@@ -1,6 +1,5 @@
 """観測コンテキストバッファのデフォルト実装（in-memory）"""
 
-
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
@@ -30,9 +29,7 @@ class DefaultObservationContextBuffer(IObservationContextBuffer):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(entry, ObservationEntry):
             raise TypeError("entry must be ObservationEntry")
-        if runtime_context is not None and not isinstance(
-            runtime_context, ToolRuntimeContextDto
-        ):
+        if runtime_context is not None and not isinstance(runtime_context, ToolRuntimeContextDto):
             raise TypeError("runtime_context must be ToolRuntimeContextDto or None")
         self._event_store.append_pending_observation(player_id, entry)
 

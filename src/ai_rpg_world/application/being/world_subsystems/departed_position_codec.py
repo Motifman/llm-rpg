@@ -24,10 +24,7 @@ class DepartedPositionSubsystemCodec(WorldSubsystemCodec):
     def _store(runtime: Any) -> DepartedPositionStore:
         store = getattr(runtime, "_departed_position_store", None)
         if not isinstance(store, DepartedPositionStore):
-            raise RuntimeError(
-                "runtime._departed_position_store not found; "
-                "DepartedPositionSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._departed_position_store not found; DepartedPositionSubsystemCodec requires it")
         return store
 
     def capture(self, runtime: Any) -> dict[str, Any]:
@@ -36,19 +33,14 @@ class DepartedPositionSubsystemCodec(WorldSubsystemCodec):
             "schema_version": SCHEMA_VERSION,
             "entries": [
                 {"player_id": int(player_id), "spot_id": int(spot_id)}
-                for player_id, spot_id in sorted(
-                    positions.items(), key=lambda item: int(item[0])
-                )
+                for player_id, spot_id in sorted(positions.items(), key=lambda item: int(item[0]))
             ],
         }
 
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         entries = data.get("entries")
         if not isinstance(entries, list):
             raise ValueError(f"{SUBSYSTEM_KEY} entries must be a list")
@@ -58,9 +50,7 @@ class DepartedPositionSubsystemCodec(WorldSubsystemCodec):
                 raise ValueError(f"{SUBSYSTEM_KEY} entry must be an object")
             player_id = PlayerId(int(entry["player_id"]))
             if player_id in restored:
-                raise ValueError(
-                    f"{SUBSYSTEM_KEY} duplicate player_id={int(player_id)}"
-                )
+                raise ValueError(f"{SUBSYSTEM_KEY} duplicate player_id={int(player_id)}")
             restored[player_id] = SpotId.create(entry["spot_id"])
         self._store(runtime).replace_all(restored)
 

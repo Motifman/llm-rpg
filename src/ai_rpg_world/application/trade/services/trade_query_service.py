@@ -22,9 +22,7 @@ class TradeQueryService:
         self._trade_read_model_repository = trade_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -36,19 +34,16 @@ class TradeQueryService:
             raise TradeQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(
+                f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra={"error_details": context}
+            )
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def get_trade_details(self, trade_id: int) -> TradeDto:
         """取引詳細を取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_trade_details_impl(trade_id),
-            context={
-                "action": "get_trade_details",
-                "trade_id": trade_id
-            }
+            context={"action": "get_trade_details", "trade_id": trade_id},
         )
 
     def _get_trade_details_impl(self, trade_id: int) -> TradeDto:
@@ -63,11 +58,7 @@ class TradeQueryService:
         """最新の取引を取得（カーソルベースページング）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_recent_trades_impl(limit, cursor),
-            context={
-                "action": "get_recent_trades",
-                "limit": limit,
-                "cursor": cursor
-            }
+            context={"action": "get_recent_trades", "limit": limit, "cursor": cursor},
         )
 
     def _get_recent_trades_impl(self, limit: int, cursor: str | None) -> TradeListDto:
@@ -81,21 +72,13 @@ class TradeQueryService:
         # next_cursorをencode
         next_cursor_encoded = TradeCursorCodec.encode(next_cursor) if next_cursor else None
 
-        return TradeListDto(
-            trades=trades,
-            next_cursor=next_cursor_encoded
-        )
+        return TradeListDto(trades=trades, next_cursor=next_cursor_encoded)
 
     def get_trades_for_player(self, player_id: int, limit: int = 10, cursor: str | None = None) -> TradeListDto:
         """プレイヤー宛の取引を取得（カーソルベースページング）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_trades_for_player_impl(player_id, limit, cursor),
-            context={
-                "action": "get_trades_for_player",
-                "player_id": player_id,
-                "limit": limit,
-                "cursor": cursor
-            }
+            context={"action": "get_trades_for_player", "player_id": player_id, "limit": limit, "cursor": cursor},
         )
 
     def _get_trades_for_player_impl(self, player_id: int, limit: int, cursor: str | None) -> TradeListDto:
@@ -103,29 +86,24 @@ class TradeQueryService:
         # カーソルをデコード
         domain_cursor = TradeCursorCodec.decode(cursor) if cursor else None
 
-        trade_read_models, next_cursor = self._trade_read_model_repository.find_trades_for_player(PlayerId(player_id), limit, domain_cursor)
+        trade_read_models, next_cursor = self._trade_read_model_repository.find_trades_for_player(
+            PlayerId(player_id), limit, domain_cursor
+        )
         trades = [self._convert_to_dto(model) for model in trade_read_models]
 
         # next_cursorをencode
         next_cursor_encoded = TradeCursorCodec.encode(next_cursor) if next_cursor else None
 
-        return TradeListDto(
-            trades=trades,
-            next_cursor=next_cursor_encoded
-        )
+        return TradeListDto(trades=trades, next_cursor=next_cursor_encoded)
 
-    def get_active_trades_as_seller(
-        self, player_id: int, limit: int = 10, cursor: str | None = None
-    ) -> TradeListDto:
+    def get_active_trades_as_seller(self, player_id: int, limit: int = 10, cursor: str | None = None) -> TradeListDto:
         """出品中（ACTIVE）の取引のみを取得（カーソルベースページング）
 
         `my_trades.selling` 用。`get_trades_for_player` の混合ストリームとは独立した
         カーソル位置を返す。
         """
         return self._execute_with_error_handling(
-            operation=lambda: self._get_active_trades_as_seller_impl(
-                player_id, limit, cursor
-            ),
+            operation=lambda: self._get_active_trades_as_seller_impl(player_id, limit, cursor),
             context={
                 "action": "get_active_trades_as_seller",
                 "player_id": player_id,
@@ -134,38 +112,27 @@ class TradeQueryService:
             },
         )
 
-    def _get_active_trades_as_seller_impl(
-        self, player_id: int, limit: int, cursor: str | None
-    ) -> TradeListDto:
+    def _get_active_trades_as_seller_impl(self, player_id: int, limit: int, cursor: str | None) -> TradeListDto:
         domain_cursor = TradeCursorCodec.decode(cursor) if cursor else None
 
-        trade_read_models, next_cursor = (
-            self._trade_read_model_repository.find_active_trades_as_seller(
-                PlayerId(player_id), limit, domain_cursor
-            )
+        trade_read_models, next_cursor = self._trade_read_model_repository.find_active_trades_as_seller(
+            PlayerId(player_id), limit, domain_cursor
         )
         trades = [self._convert_to_dto(model) for model in trade_read_models]
-        next_cursor_encoded = (
-            TradeCursorCodec.encode(next_cursor) if next_cursor else None
-        )
+        next_cursor_encoded = TradeCursorCodec.encode(next_cursor) if next_cursor else None
 
         return TradeListDto(trades=trades, next_cursor=next_cursor_encoded)
 
-    def search_trades(self, filter_dto: TradeSearchFilterDto, limit: int = 20,
-                     cursor: str | None = None) -> TradeListDto:
+    def search_trades(
+        self, filter_dto: TradeSearchFilterDto, limit: int = 20, cursor: str | None = None
+    ) -> TradeListDto:
         """フィルタ条件で取引を検索"""
         return self._execute_with_error_handling(
             operation=lambda: self._search_trades_impl(filter_dto, limit, cursor),
-            context={
-                "action": "search_trades",
-                "filter": filter_dto,
-                "limit": limit,
-                "cursor": cursor
-            }
+            context={"action": "search_trades", "filter": filter_dto, "limit": limit, "cursor": cursor},
         )
 
-    def _search_trades_impl(self, filter_dto: TradeSearchFilterDto, limit: int,
-                           cursor: str | None) -> TradeListDto:
+    def _search_trades_impl(self, filter_dto: TradeSearchFilterDto, limit: int, cursor: str | None) -> TradeListDto:
         """フィルタ検索の実装"""
         # DTOからドメインValue Objectを作成（従来パターン維持）
         domain_filter = TradeSearchFilter.from_primitives(
@@ -175,7 +142,7 @@ class TradeQueryService:
             equipment_types=filter_dto.equipment_types,
             min_price=filter_dto.min_price,
             max_price=filter_dto.max_price,
-            statuses=filter_dto.statuses
+            statuses=filter_dto.statuses,
         )
 
         domain_cursor = TradeCursorCodec.decode(cursor) if cursor else None
@@ -188,10 +155,7 @@ class TradeQueryService:
         trades = [self._convert_to_dto(model) for model in trade_read_models]
         next_cursor_encoded = TradeCursorCodec.encode(next_cursor) if next_cursor else None
 
-        return TradeListDto(
-            trades=trades,
-            next_cursor=next_cursor_encoded
-        )
+        return TradeListDto(trades=trades, next_cursor=next_cursor_encoded)
 
     def _convert_to_dto(self, read_model: Any) -> TradeDto:
         """TradeReadModelをTradeDtoに変換"""
@@ -212,5 +176,5 @@ class TradeQueryService:
             item_description=read_model.item_description,
             item_equipment_type=read_model.item_equipment_type,
             durability_current=read_model.durability_current,
-            durability_max=read_model.durability_max
+            durability_max=read_model.durability_max,
         )

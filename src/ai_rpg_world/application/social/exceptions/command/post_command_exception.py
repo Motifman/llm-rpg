@@ -10,13 +10,20 @@ from ai_rpg_world.application.social.exceptions.base_exception import Applicatio
 class PostCommandException(ApplicationException):
     """ポストコマンド関連の例外"""
 
-    def __init__(self, message: str, error_code: str | None = None, user_id: int | None = None, post_id: int | None = None, **context: Any) -> None:
+    def __init__(
+        self,
+        message: str,
+        error_code: str | None = None,
+        user_id: int | None = None,
+        post_id: int | None = None,
+        **context: Any,
+    ) -> None:
         # 既存の動作を維持しつつ、新しい基底クラスに適合
         all_context = context.copy()
         if user_id is not None:
-            all_context['user_id'] = user_id
+            all_context["user_id"] = user_id
         if post_id is not None:
-            all_context['post_id'] = post_id
+            all_context["post_id"] = post_id
         super().__init__(message, error_code, **all_context)
 
 

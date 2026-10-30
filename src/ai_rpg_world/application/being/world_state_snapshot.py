@@ -76,36 +76,26 @@ class WorldStateSnapshot:
 
     def __post_init__(self) -> None:
         if not isinstance(self.source_scenario, str) or not self.source_scenario:
-            raise ValueError(
-                "source_scenario must be non-empty str "
-                f"(got {self.source_scenario!r})"
-            )
-        if (
-            isinstance(self.world_tick, bool)
-            or not isinstance(self.world_tick, int)
-            or self.world_tick < 0
-        ):
-            raise ValueError(
-                f"world_tick must be non-negative int (got {self.world_tick!r})"
-            )
+            raise ValueError(f"source_scenario must be non-empty str (got {self.source_scenario!r})")
+        if isinstance(self.world_tick, bool) or not isinstance(self.world_tick, int) or self.world_tick < 0:
+            raise ValueError(f"world_tick must be non-negative int (got {self.world_tick!r})")
         if not isinstance(self.subsystems, dict):
-            raise ValueError(
-                f"subsystems must be dict (got {type(self.subsystems).__name__})"
-            )
+            raise ValueError(f"subsystems must be dict (got {type(self.subsystems).__name__})")
         if (
             isinstance(self.schema_version, bool)
             or not isinstance(self.schema_version, int)
             or self.schema_version <= 0
         ):
-            raise ValueError(
-                f"schema_version must be positive int "
-                f"(got {self.schema_version!r})"
-            )
+            raise ValueError(f"schema_version must be positive int (got {self.schema_version!r})")
         if self.captured_at is not None and not isinstance(self.captured_at, str):
-            raise ValueError(
-                f"captured_at must be str or None "
-                f"(got {type(self.captured_at).__name__})"
-            )
+            raise ValueError(f"captured_at must be str or None (got {type(self.captured_at).__name__})")
+
+    @property
+    def removed_subsystem_counts(self) -> dict[str, int]:
+        """削除済みの旧追跡キーについて、読み捨てるプレイヤー行数を返す。"""
+        return {
+            key: len(data.get("entries", [])) for key, data in self.subsystems.items() if key == "player_pursuit_state"
+        }
 
     def to_dict(self) -> dict[str, Any]:
         return {

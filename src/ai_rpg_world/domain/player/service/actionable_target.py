@@ -84,32 +84,22 @@ def validate_actionable_target(
 
     # 同席していない相手の状態は、そもそも知り得ない。状態を見る前に弾く。
     if not same_spot:
-        return TargetRejection(
-            "NOT_IN_SAME_SPOT", f"{target_display_name}はここには居ない。"
-        )
+        return TargetRejection("NOT_IN_SAME_SPOT", f"{target_display_name}はここには居ない。")
 
     if actor_status is not None and getattr(actor_status, "is_down", False):
-        return TargetRejection(
-            "ACTOR_IS_DOWN", "自分が倒れているので、何もできない。"
-        )
+        return TargetRejection("ACTOR_IS_DOWN", "自分が倒れているので、何もできない。")
 
     # 退場が確定した相手は、倒れているかどうかに関わらず対象外。
     #
     # 倒れているかだけを見ると、蘇生の猶予が切れた相手を起こせてしまい
     # **死が確定しなくなる**。
     if target_outcome is not None and target_outcome.is_eliminated:
-        return TargetRejection(
-            "TARGET_IS_ELIMINATED", f"{target_display_name}はもう息をしていない。"
-        )
+        return TargetRejection("TARGET_IS_ELIMINATED", f"{target_display_name}はもう息をしていない。")
 
     target_is_down = bool(getattr(target_status, "is_down", False))
 
     if requirement is TargetRequirement.ACTIVE and target_is_down:
-        return TargetRejection(
-            "TARGET_IS_DOWN", f"{target_display_name}は倒れていて応じられない。"
-        )
+        return TargetRejection("TARGET_IS_DOWN", f"{target_display_name}は倒れていて応じられない。")
     if requirement is TargetRequirement.INCAPACITATED and not target_is_down:
-        return TargetRejection(
-            "TARGET_IS_NOT_DOWN", f"{target_display_name}は倒れていない。"
-        )
+        return TargetRejection("TARGET_IS_NOT_DOWN", f"{target_display_name}は倒れていない。")
     return None

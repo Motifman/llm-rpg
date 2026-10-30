@@ -29,16 +29,20 @@ def _scenario_with_condition(cond: dict) -> dict:
     from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
     scenario = copy.deepcopy(_minimal_scenario())
-    scenario["player_interactions"] = [{
-        "action_name": "strike_down",
-        "display_label": "背後から襲う",
-        "preconditions": [cond],
-        "effects": [{
-            "effect_type": "APPLY_DAMAGE",
-            "target": "TARGET_PLAYER",
-            "parameters": {"damage": 999},
-        }],
-    }]
+    scenario["player_interactions"] = [
+        {
+            "action_name": "strike_down",
+            "display_label": "背後から襲う",
+            "preconditions": [cond],
+            "effects": [
+                {
+                    "effect_type": "APPLY_DAMAGE",
+                    "target": "TARGET_PLAYER",
+                    "parameters": {"damage": 999},
+                }
+            ],
+        }
+    ]
     return scenario
 
 
@@ -52,11 +56,13 @@ class TestSpotLightingCondition:
 
     def test_lighting_value_is_parsed(self) -> None:
         """required_lighting がそのまま条件に載る。"""
-        cond = _load_condition({
-            "condition_type": "SPOT_LIGHTING_IS",
-            "required_lighting": "DARK",
-            "failure_message": "明るすぎる。",
-        })
+        cond = _load_condition(
+            {
+                "condition_type": "SPOT_LIGHTING_IS",
+                "required_lighting": "DARK",
+                "failure_message": "明るすぎる。",
+            }
+        )
         assert cond.condition_type is InteractionConditionTypeEnum.SPOT_LIGHTING_IS
         assert cond.required_lighting == "DARK"
 
@@ -67,10 +73,12 @@ class TestSpotLightingCondition:
         タイポが失敗文の裏に隠れる。
         """
         with pytest.raises(ScenarioLoadError) as exc_info:
-            _load_condition({
-                "condition_type": "SPOT_LIGHTING_IS",
-                "required_lighting": "PITCH_DARK",  # 正しくは PITCH_BLACK
-            })
+            _load_condition(
+                {
+                    "condition_type": "SPOT_LIGHTING_IS",
+                    "required_lighting": "PITCH_DARK",  # 正しくは PITCH_BLACK
+                }
+            )
         assert "PITCH_DARK" in str(exc_info.value)
 
     def test_missing_lighting_value_fails_to_load(self) -> None:
@@ -84,10 +92,12 @@ class TestSpotLightingCondition:
         黙って無視すると「暗所限定にしたつもりの行為」がどこでも通る。
         """
         with pytest.raises(ScenarioLoadError):
-            _load_condition({
-                "condition_type": "TARGET_PLAYER_IS_INCAPACITATED",
-                "required_lighting": "DARK",
-            })
+            _load_condition(
+                {
+                    "condition_type": "TARGET_PLAYER_IS_INCAPACITATED",
+                    "required_lighting": "DARK",
+                }
+            )
 
 
 class TestAtSpotCondition:
@@ -95,11 +105,13 @@ class TestAtSpotCondition:
 
     def test_spot_reference_is_resolved_to_spot_id(self) -> None:
         """required_spot の文字列 ID が SpotId に解決される。"""
-        cond = _load_condition({
-            "condition_type": "AT_SPOT_IS",
-            "required_spot": "room_a",
-            "failure_message": "ここではできない。",
-        })
+        cond = _load_condition(
+            {
+                "condition_type": "AT_SPOT_IS",
+                "required_spot": "room_a",
+                "failure_message": "ここではできない。",
+            }
+        )
         assert cond.condition_type is InteractionConditionTypeEnum.AT_SPOT_IS
         assert cond.required_spot_id is not None
         assert int(cond.required_spot_id.value) > 0
@@ -111,10 +123,12 @@ class TestAtSpotCondition:
         呼び出し側の except が漏れる。
         """
         with pytest.raises(ScenarioLoadError) as exc_info:
-            _load_condition({
-                "condition_type": "AT_SPOT_IS",
-                "required_spot": "room_zzz",
-            })
+            _load_condition(
+                {
+                    "condition_type": "AT_SPOT_IS",
+                    "required_spot": "room_zzz",
+                }
+            )
         assert "room_zzz" in str(exc_info.value)
 
     def test_missing_spot_reference_fails_to_load(self) -> None:
@@ -125,10 +139,12 @@ class TestAtSpotCondition:
     def test_spot_on_unrelated_condition_fails_to_load(self) -> None:
         """関係ない条件に required_spot を書いたら落とす。"""
         with pytest.raises(ScenarioLoadError):
-            _load_condition({
-                "condition_type": "TARGET_PLAYER_IS_INCAPACITATED",
-                "required_spot": "room_a",
-            })
+            _load_condition(
+                {
+                    "condition_type": "TARGET_PLAYER_IS_INCAPACITATED",
+                    "required_spot": "room_a",
+                }
+            )
 
 
 class TestTargetPlayerStateCondition:
@@ -136,10 +152,12 @@ class TestTargetPlayerStateCondition:
 
     def test_required_state_is_parsed(self) -> None:
         """required_state がそのまま条件に載る。"""
-        cond = _load_condition({
-            "condition_type": "TARGET_PLAYER_STATE_IS",
-            "required_state": {"role": "crew"},
-        })
+        cond = _load_condition(
+            {
+                "condition_type": "TARGET_PLAYER_STATE_IS",
+                "required_state": {"role": "crew"},
+            }
+        )
         assert cond.required_state == {"role": "crew"}
 
     def test_missing_required_state_fails_to_load(self) -> None:

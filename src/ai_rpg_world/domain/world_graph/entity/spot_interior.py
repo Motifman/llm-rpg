@@ -45,9 +45,7 @@ class SpotInterior:
     def replace_sub_location(self, sub: SubLocation) -> SpotInterior:
         if not any(s.sub_location_id == sub.sub_location_id for s in self.sub_locations):
             raise ValueError(f"SubLocation not in interior: {sub.sub_location_id}")
-        new_subs = tuple(
-            s if s.sub_location_id != sub.sub_location_id else sub for s in self.sub_locations
-        )
+        new_subs = tuple(s if s.sub_location_id != sub.sub_location_id else sub for s in self.sub_locations)
         return SpotInterior(
             sub_locations=new_subs,
             objects=self.objects,
@@ -70,9 +68,7 @@ class SpotInterior:
         消えた等のシナリオで使う。指定 instance が存在しない場合は変更
         なしの新インスタンスを返す（黙って no-op）。
         """
-        new_items = tuple(
-            g for g in self.ground_items if g.item_instance_id != item_instance_id
-        )
+        new_items = tuple(g for g in self.ground_items if g.item_instance_id != item_instance_id)
         return SpotInterior(
             sub_locations=self.sub_locations,
             objects=self.objects,
@@ -89,9 +85,7 @@ class SpotInterior:
         retry や eventual consistency 経路で同じ drop が二重実行された
         場合に geometry が壊れないようにするための保険。
         """
-        if any(
-            g.item_instance_id == ground_item.item_instance_id for g in self.ground_items
-        ):
+        if any(g.item_instance_id == ground_item.item_instance_id for g in self.ground_items):
             return SpotInterior(
                 sub_locations=self.sub_locations,
                 objects=self.objects,
@@ -106,9 +100,7 @@ class SpotInterior:
             discoverable_items=self.discoverable_items,
         )
 
-    def find_ground_item(
-        self, item_instance_id: ItemInstanceId
-    ) -> GroundItem | None:
+    def find_ground_item(self, item_instance_id: ItemInstanceId) -> GroundItem | None:
         """指定 instance の地面アイテムを返す。なければ None。"""
         for g in self.ground_items:
             if g.item_instance_id == item_instance_id:

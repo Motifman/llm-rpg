@@ -34,12 +34,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_SCENARIO = (
-    pathlib.Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "market_town_v2_trade.json"
-)
+_SCENARIO = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v2_trade.json"
 _BREAD = "焼きたてのパン"
 _HERB = "薬草"
 _WHEAT = "麦束"
@@ -56,15 +51,17 @@ class _Town:
     def __init__(self, directory: pathlib.Path) -> None:
         shutil.copy(_SCENARIO, directory / _SCENARIO.name)
         manager = GameRuntimeManager(
-            scenarios_dir=directory, characters_path=directory / "characters.json",
+            scenarios_dir=directory,
+            characters_path=directory / "characters.json",
         )
         character = manager.create_character(CharacterCreateRequest(name="レナ"))
         summary = manager.create_session(
-            SessionCreateRequest(
-                world_id="market_town_v2_trade", character_ids=[character.id]
-            )
+            SessionCreateRequest(world_id="market_town_v2_trade", character_ids=[character.id])
         )
         self._state = manager._sessions[summary.session_id]
+        # ツールを直に叩く道具立てなので、同じ失敗が続いても reason-first の
+        # 1 段目を挟ませない。台本どおりに答える代役は 1 段目に答えられない。
+        self._state.runtime.reason_first_two_step_enabled = False
 
     @property
     def runtime(self) -> Any:
@@ -78,7 +75,9 @@ class _Town:
 
     def go(self, who: PlayerId, place: str):
         return self.call(
-            "travel_to", {"destination_label": place, "inner_thought": "向かう"}, who,
+            "travel_to",
+            {"destination_label": place, "inner_thought": "向かう"},
+            who,
         )
 
     #: 市場の広場からの道順。``travel_to`` は隣接 spot しか受け付けない。
@@ -123,9 +122,7 @@ class _Town:
         return sum(
             1
             for _, item_instance_id in inventory.iter_occupied_slots()
-            if self.runtime._item_repo.find_by_id(item_instance_id)
-            .item_spec.item_spec_id.value
-            == wanted
+            if self.runtime._item_repo.find_by_id(item_instance_id).item_spec.item_spec_id.value == wanted
         )
 
     def tool_names_for(self, who: PlayerId) -> list[str]:
@@ -160,9 +157,9 @@ def town(tmp_path: pathlib.Path) -> _Town:
 #: 書くと、実装が表とずれていても緑になる。
 _JOB_MATRIX = {
     #        摘む   刈る   焼く
-    "レナ":  (True, False, False),
-    "トム":  (False, False, True),
-    "ミナ":  (False, True, False),
+    "レナ": (True, False, False),
+    "トム": (False, False, True),
+    "ミナ": (False, True, False),
 }
 
 #: 仕事 → (場所, 対象, action_name, その仕事に要る資源)
@@ -198,14 +195,11 @@ class TestOnlyItsOwnerCanDoEachJob:
         result = town.do(who, target, action)
 
         assert result.success is expected, (
-            f"{person} が「{job}」を "
-            f"{'できない' if expected else 'できてしまう'}: {result.message}"
+            f"{person} が「{job}」を {'できない' if expected else 'できてしまう'}: {result.message}"
         )
 
     @pytest.mark.parametrize("person", ["レナ", "ミナ"])
-    def test_the_refusal_names_the_trade_not_the_resource(
-        self, town: _Town, person: str
-    ) -> None:
+    def test_the_refusal_names_the_trade_not_the_resource(self, town: _Town, person: str) -> None:
         """断り文は「材料が無い」ではなく「自分の仕事ではない」と伝える。
 
         資源不足の文面で断ると、材料さえ集めればできると読める。**集めても
@@ -263,7 +257,9 @@ class TestNobodyCanFeedThemselvesAlone:
         丸ごと空振りする。
         """
         result = town.call(
-            "buy_item", {"item_label": _BREAD, "quantity": 1, "inner_thought": "買う"}, _LENA,
+            "buy_item",
+            {"item_label": _BREAD, "quantity": 1, "inner_thought": "買う"},
+            _LENA,
         )
 
         assert result.success is False
@@ -285,7 +281,9 @@ class TestNobodyCanFeedThemselvesAlone:
         town.let_time_pass(3)
 
         result = town.call(
-            "sell_item", {"item_label": _WHEAT, "quantity": 1, "inner_thought": "売る"}, _MINA,
+            "sell_item",
+            {"item_label": _WHEAT, "quantity": 1, "inner_thought": "売る"},
+            _MINA,
         )
 
         assert result.success is False
@@ -322,7 +320,9 @@ class TestTradingLetsEveryoneEat:
         """摘み手は、薬草を売った金でパンを買える (gold を挟む取引)。"""
         _gather_and_return(town, _LENA)
         sold = town.call(
-            "sell_item", {"item_label": _HERB, "quantity": 1, "inner_thought": "売る"}, _LENA,
+            "sell_item",
+            {"item_label": _HERB, "quantity": 1, "inner_thought": "売る"},
+            _LENA,
         )
         _bake_and_return(town, _TOM)
 
@@ -385,7 +385,9 @@ class TestEveryoneHasAFirstMove:
         _gather_and_return(town, _LENA)
 
         sold = town.call(
-            "sell_item", {"item_label": _HERB, "quantity": 1, "inner_thought": "売る"}, _LENA,
+            "sell_item",
+            {"item_label": _HERB, "quantity": 1, "inner_thought": "売る"},
+            _LENA,
         )
 
         assert sold.success is True
@@ -474,9 +476,7 @@ class TestTheOfferWindowOutlastsTheErrand:
     #: いた (98 行動 / 3 人 / 80 手番)。最短往復の 2 倍を下限にする。
     _MARGIN = 2
 
-    def test_the_declared_window_covers_a_bread_errand_with_margin(
-        self, town: _Town
-    ) -> None:
+    def test_the_declared_window_covers_a_bread_errand_with_margin(self, town: _Town) -> None:
         """広場で受けた注文を、焼いて持ち帰るまでの往復の 2 倍以上を期限にする。
 
         期限の値を直接書かない。**実際に歩かせて測った往復と比べる**ので、

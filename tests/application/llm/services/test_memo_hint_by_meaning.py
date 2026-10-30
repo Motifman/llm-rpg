@@ -25,7 +25,6 @@ Noul なら意味で判定できる。
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone
 from typing import Any, Union
 
 import pytest
@@ -40,55 +39,15 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
 )
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
+    PendingTodo,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 
 _BEING = BeingId("being_w1_p1")
 
 
-class _MemoStore(MemoRepository):
-    """未完了 memo を返すだけの store。書き込みは記録して見張る。"""
-
-    def __init__(self, contents: Sequence[str]) -> None:
-        self._memos = [
-            MemoEntry(
-                id=f"memo-{i}",
-                content=content,
-                added_at=datetime(2026, 9, 20, tzinfo=timezone.utc),
-                added_at_tick=1,
-            )
-            for i, content in enumerate(contents)
-        ]
-        self.completed: list[str] = []
-
-    def list_uncompleted_by_being(self, being_id: BeingId) -> list[MemoEntry]:
-        return list(self._memos)
-
-    def list_all_by_being(self, being_id: BeingId) -> list[MemoEntry]:
-        return list(self._memos)
-
-    def add_by_being(
-        self, being_id: BeingId, content: str, *, added_at_tick: int | None = None
-    ) -> MemoEntry:  # pragma: no cover
-        raise AssertionError("hint の検出で memo を追加してはいけない")
-
-    def complete_by_being(
-        self, being_id: BeingId, memo_id: str, **kwargs: Any
-    ) -> bool:
-        self.completed.append(memo_id)
-        return True
-
-    def remove_by_being(
-        self, being_id: BeingId, memo_id: str
-    ) -> bool:  # pragma: no cover
-        raise AssertionError("hint の検出で memo を消してはいけない")
-
-    def replace_all_by_being(
-        self, being_id: BeingId, memos: Sequence[MemoEntry]
-    ) -> None:  # pragma: no cover
-        raise AssertionError("hint の検出で memo を書き換えてはいけない")
+def _todos(contents: Sequence[str]) -> list[PendingTodo]:
+    return [PendingTodo(id=f"memo-{i}", content=content, handle=f"m_{i}") for i, content in enumerate(contents)]
 
 
 class _RecordingPort(ITypedJudgmentPort):
@@ -111,9 +70,7 @@ class _RecordingPort(ITypedJudgmentPort):
     ) -> Mapping[str, JudgmentResult]:
         self.calls.append((state, questions))
         if self._raises:
-            raise TypedJudgmentUnavailableException(
-                "down", error_code="TYPED_JUDGMENT_RATE_LIMITED"
-            )
+            raise TypedJudgmentUnavailableException("down", error_code="TYPED_JUDGMENT_RATE_LIMITED")
         answers = {}
         for name, question in questions.items():
             assert isinstance(question, NoulQuestion)
@@ -137,14 +94,14 @@ def _service(
     port: ITypedJudgmentPort | None,
     *,
     min_probability: float = 0.7,
-) -> tuple[MemoCompletionHintService, _MemoStore]:
-    store = _MemoStore(contents)
+) -> tuple[MemoCompletionHintService, list[PendingTodo]]:
+    todos = _todos(contents)
     service = MemoCompletionHintService(
-        memo_store=store,
+        pending_todos=lambda being_id: todos,
         judgment_port=port,
         min_probability=min_probability,
     )
-    return service, store
+    return service, todos
 
 
 class TestMeaningCatchesWhatCharacterOverlapMisses:
@@ -152,9 +109,7 @@ class TestMeaningCatchesWhatCharacterOverlapMisses:
 
     def test_a_paraphrased_memo_is_hinted(self) -> None:
         """文字が重ならない言い換えでも、意味で達成と判断されれば hint が出る。"""
-        service, _ = _service(
-            ["夕食の材料を集める"], _RecordingPort({"夕食の材料を集める": 0.88})
-        )
+        service, _ = _service(["夕食の材料を集める"], _RecordingPort({"夕食の材料を集める": 0.88}))
 
         detection = service.detect(_BEING, "麦畑で麦を刈り取った", "小麦 3 束を得た")
 
@@ -173,9 +128,7 @@ class TestMeaningCatchesWhatCharacterOverlapMisses:
         """語が重なっても、達成していない行動では hint が出ない。"""
         service, _ = _service(["水を汲む"], _RecordingPort({"水を汲む": 0.05}))
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.hint is None
 
@@ -186,9 +139,7 @@ class TestMeaningCatchesWhatCharacterOverlapMisses:
         """
         service, _ = _service(["水を汲む"], None)
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.hint is not None
 
@@ -296,16 +247,6 @@ class TestOnlyAConfidentJudgmentBecomesAHint:
         assert verdicts == {"memo-0": False, "memo-1": True}
         assert all(j.min_probability == 0.7 for j in detection.judgments)
 
-    def test_the_hint_does_not_complete_the_memo(self) -> None:
-        """hint を出しても memo を完了させない。完了は当人が記録する。"""
-        service, store = _service(
-            ["小麦を集める"], _RecordingPort({"小麦を集める": 0.93})
-        )
-
-        service.detect(_BEING, "麦を刈った", "小麦を得た")
-
-        assert store.completed == []
-
 
 class _PartialAnswerPort(ITypedJudgmentPort):
     """先頭の質問にだけ答え、残りを返さないポート (契約違反)。"""
@@ -338,9 +279,7 @@ class TestAMissingAnswerIsNotReadAsUnfulfilled:
         """
         service, _ = _service(["水を汲む", "鎌を研ぐ"], _PartialAnswerPort())
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.unavailable_reason == "TYPED_JUDGMENT_ANSWER_MISSING"
         assert detection.hint is not None
@@ -354,9 +293,7 @@ class TestAnUnavailablePortFallsBackToOverlap:
         """ポートが落ちたら、従来の重なり判定で hint を出す。"""
         service, _ = _service(["水を汲む"], _RecordingPort(raises=True))
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.hint is not None
         assert detection.hint.source == "overlap"
@@ -365,9 +302,7 @@ class TestAnUnavailablePortFallsBackToOverlap:
         """縮退したことが理由つきで残る。hint が減った理由を後から追える。"""
         service, _ = _service(["水を汲む"], _RecordingPort(raises=True))
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.unavailable_reason == "TYPED_JUDGMENT_RATE_LIMITED"
 
@@ -375,9 +310,7 @@ class TestAnUnavailablePortFallsBackToOverlap:
         """ポートを持たない run は縮退ではない。理由を残さない (**正の対照**)。"""
         service, _ = _service(["水を汲む"], None)
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.unavailable_reason is None
         assert detection.judgments == ()
@@ -390,26 +323,22 @@ class TestTheHintTextKeepsItsShape:
         """判断を使わない run の hint 文は現行のまま (「類似度」)。"""
         service, _ = _service(["水を汲む"], None)
 
-        detection = service.detect(
-            _BEING, "井戸で水を汲もうとした", "桶が見つからない"
-        )
+        detection = service.detect(_BEING, "井戸で水を汲もうとした", "桶が見つからない")
 
         assert detection.hint is not None
         text = detection.hint.to_hint_text()
-        assert "[hint] memo「水を汲む」" in text
+        assert "[hint] やること「水を汲む」" in text
         assert "類似度" in text
-        assert "memo_done で記録してください" in text
+        assert "memo の remove で消してください" in text
 
     def test_the_judged_hint_text_says_it_is_a_probability(self) -> None:
         """判断由来の数は「類似度」と呼ばない。意味が違うものを同じ語で呼ばない。"""
-        service, _ = _service(
-            ["小麦を集める"], _RecordingPort({"小麦を集める": 0.93})
-        )
+        service, _ = _service(["小麦を集める"], _RecordingPort({"小麦を集める": 0.93}))
 
         detection = service.detect(_BEING, "麦を刈った", "小麦を得た")
 
         assert detection.hint is not None
         text = detection.hint.to_hint_text()
-        assert "[hint] memo「小麦を集める」" in text
+        assert "[hint] やること「小麦を集める」" in text
         assert "類似度" not in text
         assert "0.93" in text

@@ -10,4 +10,3 @@ from .skill_events import (
     SkillUnequippedEvent,
     SkillUsedEvent,
 )
-

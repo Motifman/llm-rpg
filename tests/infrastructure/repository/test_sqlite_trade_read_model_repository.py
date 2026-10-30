@@ -1,6 +1,7 @@
 """
 SqliteTradeReadModelRepository のテスト
 """
+
 import sqlite3
 from datetime import datetime, timedelta
 
@@ -68,19 +69,21 @@ class TestSqliteTradeReadModelRepository:
         assert got.trade_id == 1
         assert got.seller_id == 1
 
-    def test_find_active_trades_as_seller_only_active_listings(self, sqlite_repo: SqliteTradeReadModelRepository) -> None:
+    def test_find_active_trades_as_seller_only_active_listings(
+        self, sqlite_repo: SqliteTradeReadModelRepository
+    ) -> None:
         base = datetime(2025, 6, 1, 10, 0, 0)
         sqlite_repo.save(_make_trade(1, 1, status=TradeStatus.ACTIVE, created_at=base))
-        sqlite_repo.save(
-            _make_trade(2, 1, status=TradeStatus.COMPLETED, created_at=base + timedelta(hours=1))
-        )
+        sqlite_repo.save(_make_trade(2, 1, status=TradeStatus.COMPLETED, created_at=base + timedelta(hours=1)))
         sqlite_repo.save(_make_trade(3, 2, status=TradeStatus.ACTIVE, created_at=base + timedelta(hours=2)))
 
         trades, cursor = sqlite_repo.find_active_trades_as_seller(PlayerId(1), limit=20)
         ids = {x.trade_id for x in trades}
         assert ids == {1}
 
-    def test_find_active_trades_as_seller_orders_newest_first(self, sqlite_repo: SqliteTradeReadModelRepository) -> None:
+    def test_find_active_trades_as_seller_orders_newest_first(
+        self, sqlite_repo: SqliteTradeReadModelRepository
+    ) -> None:
         base = datetime(2025, 6, 1, 10, 0, 0)
         sqlite_repo.save(_make_trade(1, 1, created_at=base))
         sqlite_repo.save(_make_trade(2, 1, created_at=base + timedelta(hours=1)))
@@ -88,7 +91,9 @@ class TestSqliteTradeReadModelRepository:
         trades, _ = sqlite_repo.find_active_trades_as_seller(PlayerId(1), limit=10)
         assert [t.trade_id for t in trades] == [2, 1]
 
-    def test_find_active_trades_as_seller_same_created_at_tie_break(self, sqlite_repo: SqliteTradeReadModelRepository) -> None:
+    def test_find_active_trades_as_seller_same_created_at_tie_break(
+        self, sqlite_repo: SqliteTradeReadModelRepository
+    ) -> None:
         same = datetime(2025, 6, 1, 10, 0, 0)
         sqlite_repo.save(_make_trade(1, 1, created_at=same))
         sqlite_repo.save(_make_trade(11, 1, created_at=same))

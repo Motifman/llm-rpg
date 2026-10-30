@@ -1,6 +1,5 @@
 """取引系ツールの定義。"""
 
-
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.services.availability_resolvers import (
@@ -146,8 +145,16 @@ TRADE_OPEN_PAGE_PARAMETERS = {
         "item_name": {"type": "string", "description": "page が search のとき: アイテム名の部分一致。"},
         "min_price": {"type": "integer", "description": "page が search のとき: 最低価格。"},
         "max_price": {"type": "integer", "description": "page が search のとき: 最高価格。"},
-        "item_types": {"type": "array", "items": {"type": "string"}, "description": "page が search のとき: アイテム種別。"},
-        "rarities": {"type": "array", "items": {"type": "string"}, "description": "page が search のとき: レアリティ。"},
+        "item_types": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "page が search のとき: アイテム種別。",
+        },
+        "rarities": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "page が search のとき: レアリティ。",
+        },
         "equipment_types": {
             "type": "array",
             "items": {"type": "string"},

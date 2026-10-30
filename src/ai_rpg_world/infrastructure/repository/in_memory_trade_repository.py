@@ -18,10 +18,12 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 
 class InMemoryTradeRepository(TradeRepository, InMemoryRepositoryBase):
     """取引リポジトリのインメモリ実装"""
-    
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
+
+    def __init__(
+        self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None
+    ):
         super().__init__(data_store, unit_of_work)
-    
+
     @property
     def _trades(self) -> dict[TradeId, TradeAggregate]:
         return self._data_store.trades
@@ -38,6 +40,7 @@ class InMemoryTradeRepository(TradeRepository, InMemoryRepositoryBase):
 
     def save(self, trade: TradeAggregate) -> TradeAggregate:
         cloned_trade = self._clone(trade)
+
         def operation() -> Any:
             self._trades[cloned_trade.trade_id] = cloned_trade
             return cloned_trade
@@ -46,19 +49,19 @@ class InMemoryTradeRepository(TradeRepository, InMemoryRepositoryBase):
         self._register_pending_if_uow(trade.trade_id, trade)
         result_value: TradeAggregate = self._execute_operation(operation)
         return result_value
-    
+
     def delete(self, trade_id: TradeId) -> bool:
         def operation() -> bool:
             if trade_id in self._trades:
                 del self._trades[trade_id]
                 return True
             return False
-            
+
         return self._execute_operation(operation)
-    
+
     def find_all(self) -> list[TradeAggregate]:
         return list(self._trades.values())
-    
+
     def generate_trade_id(self) -> TradeId:
         trade_id = self._data_store.next_trade_id
         self._data_store.next_trade_id += 1

@@ -36,9 +36,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_TOWN = (
-    pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
-)
+_TOWN = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _LENA = PlayerId(1)
 _TOM = PlayerId(2)
 _MINA = PlayerId(3)
@@ -53,30 +51,40 @@ class _Town:
     def __init__(self, directory: pathlib.Path, *, with_market: bool = True) -> None:
         raw = json.loads(_TOWN.read_text(encoding="utf-8"))
         spawn = raw["players"][0]["spawn_spot"]
-        raw["players"].append({
-            "id": "tom", "name": "トム", "spawn_spot": spawn,
-            "initial_items": [], "initial_gold": 300,
-            "persona_prompt": "あなたはトム、この町の荷運び。",
-        })
+        raw["players"].append(
+            {
+                "id": "tom",
+                "name": "トム",
+                "spawn_spot": spawn,
+                "initial_items": [],
+                "initial_gold": 300,
+                "persona_prompt": "あなたはトム、この町の荷運び。",
+            }
+        )
         # 板の厚みを見るには**同じ品を出す人が 2 人**要る。同じ人は同じ品の
         # 売り注文を 2 件出せない (値を変えるなら値の付け直しを使う)。
-        raw["players"].append({
-            "id": "mina", "name": "ミナ", "spawn_spot": spawn,
-            "initial_items": [], "initial_gold": 300,
-            "persona_prompt": "あなたはミナ、この町の粉屋。",
-        })
+        raw["players"].append(
+            {
+                "id": "mina",
+                "name": "ミナ",
+                "spawn_spot": spawn,
+                "initial_items": [],
+                "initial_gold": 300,
+                "persona_prompt": "あなたはミナ、この町の粉屋。",
+            }
+        )
         if with_market:
             raw["market"] = {"board_spot": "market_square"}
         (directory / "market_town_v1.json").write_text(
-            json.dumps(raw, ensure_ascii=False), encoding="utf-8",
+            json.dumps(raw, ensure_ascii=False),
+            encoding="utf-8",
         )
         manager = GameRuntimeManager(
-            scenarios_dir=directory, characters_path=directory / "characters.json",
+            scenarios_dir=directory,
+            characters_path=directory / "characters.json",
         )
         character = manager.create_character(CharacterCreateRequest(name="レナ"))
-        summary = manager.create_session(
-            SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id])
-        )
+        summary = manager.create_session(SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id]))
         self._state = manager._sessions[summary.session_id]
 
     @property
@@ -119,23 +127,31 @@ class _Town:
         status.earn_gold(amount)
         self.runtime._player_status_repo.save(status)
 
-    def list_item(
-        self, player_id: PlayerId, label: str, price: int, quantity: int = 1
-    ) -> None:
+    def list_item(self, player_id: PlayerId, label: str, price: int, quantity: int = 1) -> None:
         self.give(player_id, label, quantity)
-        result = self.call("market_list_item", {
-            "item_label": label, "quantity": quantity, "unit_price": price,
-            "inner_thought": "出す",
-        }, player_id=player_id)
+        result = self.call(
+            "market_list_item",
+            {
+                "item_label": label,
+                "quantity": quantity,
+                "unit_price": price,
+                "inner_thought": "出す",
+            },
+            player_id=player_id,
+        )
         assert result.success is True, result.message
 
-    def bid(
-        self, player_id: PlayerId, label: str, price: int, quantity: int = 1
-    ) -> None:
-        result = self.call("market_bid", {
-            "item_label": label, "quantity": quantity, "unit_price": price,
-            "inner_thought": "買いたい",
-        }, player_id=player_id)
+    def bid(self, player_id: PlayerId, label: str, price: int, quantity: int = 1) -> None:
+        result = self.call(
+            "market_bid",
+            {
+                "item_label": label,
+                "quantity": quantity,
+                "unit_price": price,
+                "inner_thought": "買いたい",
+            },
+            player_id=player_id,
+        )
         assert result.success is True, result.message
 
 
@@ -162,9 +178,7 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
 
     graph = runtime._spot_graph_repo.find_graph()
     here = graph.get_entity_spot(EntityId.create(int(player_id)))
-    elsewhere = next(
-        spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here
-    )
+    elsewhere = next(spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here)
     graph.unplace_entity(EntityId.create(int(player_id)))
     graph.place_entity(EntityId.create(int(player_id)), elsewhere)
     runtime._spot_graph_repo.save(graph)
@@ -173,9 +187,7 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
 class TestWhatOneLookAtTheBoardTellsYou:
     """1 回引けば、値を付けるのに要るものが揃っている。"""
 
-    def test_it_shows_the_best_price_on_each_side_and_how_deep_it_is(
-        self, town: _Town
-    ) -> None:
+    def test_it_shows_the_best_price_on_each_side_and_how_deep_it_is(self, town: _Town) -> None:
         """買える単価・売れる単価・それぞれの件数が、品目ごとに 1 行で出る。"""
         town.list_item(_TOM, _BREAD, 18)
         town.list_item(_MINA, _BREAD, 22)
@@ -195,18 +207,21 @@ class TestWhatOneLookAtTheBoardTellsYou:
         値が、値を付けるときの唯一の確かな手がかりになる。
         """
         town.list_item(_TOM, _BREAD, 18)
-        town.call("market_buy", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "買う",
-        })
+        town.call(
+            "market_buy",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "買う",
+            },
+        )
 
         shown = town.view()
 
         assert "18G" in shown
         assert "成立" in shown
 
-    def test_an_item_that_never_traded_shows_no_settled_price(
-        self, town: _Town
-    ) -> None:
+    def test_an_item_that_never_traded_shows_no_settled_price(self, town: _Town) -> None:
         """一度も約定していない品目に、成立した値の欄は出ない。
 
         0G と書くと「0G で成立した」と読める。**無いことは無いと言う。**
@@ -218,9 +233,7 @@ class TestWhatOneLookAtTheBoardTellsYou:
         assert "0G" not in shown
         assert "成立" not in shown
 
-    def test_your_own_orders_do_not_count_as_the_going_rate(
-        self, town: _Town
-    ) -> None:
+    def test_your_own_orders_do_not_count_as_the_going_rate(self, town: _Town) -> None:
         """自分の注文は需給の集約に数えない。自分では受けられないため。"""
         town.list_item(_LENA, _BREAD, 18)
 
@@ -228,9 +241,7 @@ class TestWhatOneLookAtTheBoardTellsYou:
 
         assert "18G で買える" not in shown
 
-    def test_your_own_orders_are_still_named_when_nothing_else_is_there(
-        self, town: _Town
-    ) -> None:
+    def test_your_own_orders_are_still_named_when_nothing_else_is_there(self, town: _Town) -> None:
         """自分の出品しか無くても、「他に無い」と「自分は出している」が両方分かる。
 
         集約から外すだけだと「いま出ているものは無い」としか出ず、預けた品が
@@ -244,9 +255,7 @@ class TestWhatOneLookAtTheBoardTellsYou:
         assert "あなたの出品" in shown
         assert _BREAD in shown
 
-    def test_an_order_awaiting_collection_is_hidden_from_others(
-        self, town: _Town
-    ) -> None:
+    def test_an_order_awaiting_collection_is_hidden_from_others(self, town: _Town) -> None:
         """引き取り待ちの注文は、他人が引いた板には出ない。誰にも買えないため。"""
         town.list_item(_TOM, _BREAD, 18)
         order = town.runtime._market_service.board().orders[0]
@@ -328,9 +337,7 @@ class TestTheBoardIsNoLongerFreeToSee:
 class TestWhatYouReadIsStillThereNextTurn:
     """引いた値は、次の手番のプロンプトに残っている。"""
 
-    def test_the_board_you_read_survives_into_the_next_prompt(
-        self, town: _Town
-    ) -> None:
+    def test_the_board_you_read_survives_into_the_next_prompt(self, town: _Town) -> None:
         """引いた内容が本人の直近の出来事に残る。
 
         **これが無いと払った手番に意味が無い。** 引くのに 1 手番、出品にもう
@@ -352,9 +359,7 @@ class TestReadingTheBoardIsNotAnEventForAnyoneElse:
     その場で言える**ので、可視性の道は残っている。
     """
 
-    def test_listing_an_item_is_visible_to_someone_standing_there(
-        self, town: _Town
-    ) -> None:
+    def test_listing_an_item_is_visible_to_someone_standing_there(self, town: _Town) -> None:
         """**正の対照**。板に出すのは同席者から見える。"""
         town.list_item(_LENA, _BREAD, 18)
 

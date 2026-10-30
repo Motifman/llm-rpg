@@ -65,15 +65,16 @@ class _Port(ITypedJudgmentPort):
     ) -> Mapping[str, JudgmentResult]:
         self.asked.extend(questions)
         if self.fail:
-            raise TypedJudgmentUnavailableException(
-                "timeout", error_code="TYPED_JUDGMENT_TIMEOUT"
-            )
+            raise TypedJudgmentUnavailableException("timeout", error_code="TYPED_JUDGMENT_TIMEOUT")
         answers: dict[str, JudgmentResult] = {}
         for name in questions:
             if name == SEMANTIC_REPEAT_QUESTION:
                 answers[name] = JudgmentResult(
-                    value=self.repeat_probability, probabilities={}, confidence=None,
-                    source=JudgmentSource.STUB, latency_ms=2.0,
+                    value=self.repeat_probability,
+                    probabilities={},
+                    confidence=None,
+                    source=JudgmentSource.STUB,
+                    latency_ms=2.0,
                 )
             elif name == LOOP_DIAGNOSIS_QUESTION and self.reason is not None:
                 answers[name] = JudgmentResult(
@@ -96,10 +97,7 @@ class _Recorder(NullTraceRecorder):
         return super().record(kind, tick=tick, player_id=player_id, **payload)
 
     def of(self, kind: str, **match: Any) -> list[dict[str, Any]]:
-        return [
-            p for k, p in self.calls
-            if k == kind and all(p.get(f) == v for f, v in match.items())
-        ]
+        return [p for k, p in self.calls if k == kind and all(p.get(f) == v for f, v in match.items())]
 
 
 def _guard(
@@ -137,17 +135,16 @@ def _rephrase(guard: ToolCallLoopGuardService, times: int) -> None:
     )
     for i in range(times):
         guard.record_and_check(
-            _GAREN, "speak", variants[i % len(variants)],
-            success=True, result_summary="（2 名に届いた）",
+            _GAREN,
+            "speak",
+            variants[i % len(variants)],
+            success=True,
+            result_summary="（2 名に届いた）",
         )
 
 
 def _warnings(buffer: DefaultObservationContextBuffer) -> list[Any]:
-    return [
-        e.output
-        for e in buffer.get_observations(_GAREN)
-        if (e.output.structured or {}).get("loop_guard")
-    ]
+    return [e.output for e in buffer.get_observations(_GAREN) if (e.output.structured or {}).get("loop_guard")]
 
 
 class TestARephrasedRequestIsWarned:
@@ -238,9 +235,33 @@ class TestAnExactMatchOnTheSameActionIsNotDoubled:
         assert judgment["accepted"] is True
         assert judgment["exact_match_fired"] is True
         assert [
-            e["pattern"] if "pattern" in e else "streak"
-            for e in recorder.of(TraceEventKind.LOOP_GUARD_WARNING)
+            e["pattern"] if "pattern" in e else "streak" for e in recorder.of(TraceEventKind.LOOP_GUARD_WARNING)
         ] == ["streak"]
+
+
+class TestAnActionRetriedWithNewWordsIsAnExactMatch:
+    """発言だけを変えた同じ操作は完全一致の検出が数え、意味上の検出と警告を重ねないことを保証する (#1594)。"""
+
+    def test_the_same_interaction_with_new_say_inline_is_warned_once_as_an_exact_match(self) -> None:
+        """同じ金庫を say_inline だけ変えて 3 回試し同じ理由で断られると、警告は離れた tick の失敗の 1 件だけで、意味上の判断は exact_match_fired=True で残る。"""
+        buffer = DefaultObservationContextBuffer()
+        recorder = _Recorder()
+        guard = _guard(_Port(repeat_probability=0.95), buffer=buffer, recorder=recorder)
+
+        for said in ("この番号で合わせてみる", "渡し方を変えて試す", "もう一度 1907 だ"):
+            guard.record_and_check(
+                _GAREN,
+                "interact",
+                {"target_label": "金庫", "action_name": "open_safe", "say_inline": said},
+                success=False,
+                error_code="INTERACTION_PRECONDITION_FAILED",
+                result_summary="扉はびくともしない",
+            )
+
+        [warning] = _warnings(buffer)
+        [judgment] = recorder.of(TraceEventKind.TYPED_JUDGMENT, question=SEMANTIC_REPEAT_QUESTION)
+        assert warning.structured["pattern"] == "cross_tick_failure"
+        assert judgment["exact_match_fired"] is True
 
 
 class TestTheDiagnosisAppliesToSemanticRepeats:
@@ -308,22 +329,22 @@ class TestTheSameRepetitionIsNotWarnedOnNeighbouringTurns:
 class TestOneRecordGivesOneWarning:
     """同じ行動で連続と離れた tick の失敗の両方が発火しても、観測を 1 件にまとめることを保証する。"""
 
-    def _fail_travel_twice(self, buffer: DefaultObservationContextBuffer) -> tuple[Any, Any]:
+    def _fail_travel_twice(self, buffer: DefaultObservationContextBuffer) -> None:
         guard = ToolCallLoopGuardService(
             buffer,
             time_label_provider=lambda: "夕方 5:00",
             current_tick_provider=lambda: 53,
             cross_tick_failure_threshold=2,
         )
-        results = [
+        for _ in range(2):
             guard.record_and_check(
-                _GAREN, "travel_to", {"destination_label": "祭壇"},
-                success=False, error_code="INVALID_DESTINATION_LABEL",
+                _GAREN,
+                "travel_to",
+                {"destination_label": "祭壇"},
+                success=False,
+                error_code="INVALID_DESTINATION_LABEL",
                 result_summary="移動先が見つかりません",
             )
-            for _ in range(2)
-        ]
-        return guard, results[-1]
 
     def test_only_the_cross_tick_failure_warning_is_emitted(self) -> None:
         """travel_to の同じ失敗が 2 回で両方の閾値に届いても、観測は失敗の理由を持つ 1 件だけ。"""
@@ -333,15 +354,6 @@ class TestOneRecordGivesOneWarning:
 
         [warning] = _warnings(buffer)
         assert warning.structured["pattern"] == "cross_tick_failure"
-
-    def test_the_cross_tick_trigger_is_still_returned(self) -> None:
-        """まとめても、belief への転記に使う CrossTickFailureTrigger は返る。"""
-        buffer = DefaultObservationContextBuffer()
-
-        _, trigger = self._fail_travel_twice(buffer)
-
-        assert trigger is not None
-        assert trigger.error_code == "INVALID_DESTINATION_LABEL"
 
 
 class TestAnUnexpectedErrorKeepsTheExactWarning:

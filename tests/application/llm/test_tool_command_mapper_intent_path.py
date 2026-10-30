@@ -26,9 +26,7 @@ from ai_rpg_world.domain.intent.aggregate.intent_queue import IntentQueue
 
 
 def _handler(player_id: int, args: Mapping[str, Any]) -> LlmCommandResultDto:
-    return LlmCommandResultDto(
-        success=True, message=f"called with {dict(args)}"
-    )
+    return LlmCommandResultDto(success=True, message=f"called with {dict(args)}")
 
 
 class TestToolCommandMapperIntentPath:

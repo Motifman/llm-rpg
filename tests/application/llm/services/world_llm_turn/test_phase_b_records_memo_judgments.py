@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -21,11 +20,11 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHint,
     MemoCompletionJudgment,
     MemoHintDetection,
+    PendingTodo,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn import phase_b
 from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
 from ai_rpg_world.application.trace.events import TraceEventKind
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -48,13 +47,8 @@ class _RecordingTrace:
         return [event for event in self.events if event["kind"] == kind]
 
 
-def _memo(memo_id: str, content: str) -> MemoEntry:
-    return MemoEntry(
-        id=memo_id,
-        content=content,
-        added_at=datetime(2026, 9, 20, tzinfo=timezone.utc),
-        added_at_tick=1,
-    )
+def _memo(memo_id: str, content: str) -> PendingTodo:
+    return PendingTodo(id=memo_id, content=content, handle=f"m_{memo_id}")
 
 
 def _run(detection: MemoHintDetection, monkeypatch: pytest.MonkeyPatch):
@@ -64,9 +58,7 @@ def _run(detection: MemoHintDetection, monkeypatch: pytest.MonkeyPatch):
         "execute_tool",
         MagicMock(return_value=LlmCommandResultDto(success=True, message="押した")),
     )
-    monkeypatch.setattr(
-        phase_b, "maybe_interrupt_busy", MagicMock(return_value=(False, None))
-    )
+    monkeypatch.setattr(phase_b, "maybe_interrupt_busy", MagicMock(return_value=(False, None)))
     monkeypatch.setattr(phase_b, "record_prompt_dataset_turn_result", MagicMock())
 
     wiring = MagicMock()
@@ -89,9 +81,7 @@ def _run(detection: MemoHintDetection, monkeypatch: pytest.MonkeyPatch):
 class TestEveryMemoJudgmentIsTraced:
     """問うた memo ごとの判断が、採否つきで残ることを保証する。"""
 
-    def test_each_asked_memo_leaves_one_event(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_each_asked_memo_leaves_one_event(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """memo 2 件を問えば、判断も 2 件残る。"""
         detection = MemoHintDetection(
             hint=None,
@@ -125,13 +115,9 @@ class TestEveryMemoJudgmentIsTraced:
         assert all(event["question"] == "memo_completed" for event in events)
         assert all(event["player_id"] == 4 for event in events)
 
-    def test_a_fallback_leaves_its_reason(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_fallback_leaves_its_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """重なり判定へ縮退したときは、理由つきの 1 件が残る。"""
-        detection = MemoHintDetection(
-            hint=None, unavailable_reason="TYPED_JUDGMENT_RATE_LIMITED"
-        )
+        detection = MemoHintDetection(hint=None, unavailable_reason="TYPED_JUDGMENT_RATE_LIMITED")
 
         trace = _run(detection, monkeypatch)
 
@@ -140,9 +126,7 @@ class TestEveryMemoJudgmentIsTraced:
         assert events[0]["unavailable_reason"] == "TYPED_JUDGMENT_RATE_LIMITED"
         assert events[0]["accepted"] is False
 
-    def test_a_hint_records_which_measure_fired_it(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_hint_records_which_measure_fired_it(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """hint には、重なり由来か判断由来かが残る。
 
         混ぜて数えると、意味判定に替えた効果が見えない。
@@ -163,9 +147,7 @@ class TestEveryMemoJudgmentIsTraced:
         assert hints[0]["hint_source"] == "judgment"
         assert hints[0]["memo_id"] == "m2"
 
-    def test_nothing_is_traced_when_no_memo_was_asked(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_nothing_is_traced_when_no_memo_was_asked(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """問わなかった turn では判断が残らない (**正の対照**)。"""
         trace = _run(MemoHintDetection(hint=None), monkeypatch)
 

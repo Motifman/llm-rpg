@@ -72,22 +72,16 @@ def parse_loot_tables(
     for raw in raw_list:
         string_id = raw.get("id")
         if not isinstance(string_id, str) or not string_id:
-            raise ScenarioLoadError(
-                f"loot_tables[*].id is required (got {string_id!r})"
-            )
+            raise ScenarioLoadError(f"loot_tables[*].id is required (got {string_id!r})")
         table_id = mapper.register("loot_table", string_id)
         entries_raw = raw.get("entries", [])
         if not entries_raw:
-            raise ScenarioLoadError(
-                f"loot_tables[{string_id!r}].entries must be non-empty"
-            )
+            raise ScenarioLoadError(f"loot_tables[{string_id!r}].entries must be non-empty")
         entries: list[ScenarioLootEntry] = []
         for index, e in enumerate(entries_raw):
             item_sid = e.get("item_spec")
             if not isinstance(item_sid, str):
-                raise ScenarioLoadError(
-                    f"loot_tables[{string_id!r}].entries[{index}].item_spec required"
-                )
+                raise ScenarioLoadError(f"loot_tables[{string_id!r}].entries[{index}].item_spec required")
             # PR #1 follow-up: 数値変換失敗 (例: weight="abc") は Python の
             # ValueError として落ちると場所が分からない。シナリオ作家が
             # 直すべき項目を ScenarioLoadError に包んで surface する。
@@ -97,37 +91,39 @@ def parse_loot_tables(
                 max_q = int(e.get("max_quantity", 1))
             except (TypeError, ValueError) as exc:
                 raise ScenarioLoadError(
-                    f"loot_tables[{string_id!r}].entries[{index}] has "
-                    f"non-integer weight/quantity: {e!r}"
+                    f"loot_tables[{string_id!r}].entries[{index}] has non-integer weight/quantity: {e!r}"
                 ) from exc
             if weight < 0:
                 raise ScenarioLoadError(
-                    f"loot_tables[{string_id!r}].entries[{index}].weight "
-                    f"must be >= 0 (got {weight})"
+                    f"loot_tables[{string_id!r}].entries[{index}].weight must be >= 0 (got {weight})"
                 )
             if min_q < 1:
                 raise ScenarioLoadError(
-                    f"loot_tables[{string_id!r}].entries[{index}].min_quantity "
-                    f"must be >= 1 (got {min_q})"
+                    f"loot_tables[{string_id!r}].entries[{index}].min_quantity must be >= 1 (got {min_q})"
                 )
             if max_q < min_q:
                 raise ScenarioLoadError(
                     f"loot_tables[{string_id!r}].entries[{index}].max_quantity "
                     f"({max_q}) must be >= min_quantity ({min_q})"
                 )
-            entries.append(ScenarioLootEntry(
-                item_spec_id=mapper.get_int("item_spec", item_sid),
-                weight=weight,
-                min_quantity=min_q,
-                max_quantity=max_q,
-            ))
-        out.append(ScenarioLootTableDefinition(
-            string_id=string_id,
-            table_id=table_id,
-            name=raw.get("name", ""),
-            entries=tuple(entries),
-        ))
+            entries.append(
+                ScenarioLootEntry(
+                    item_spec_id=mapper.get_int("item_spec", item_sid),
+                    weight=weight,
+                    min_quantity=min_q,
+                    max_quantity=max_q,
+                )
+            )
+        out.append(
+            ScenarioLootTableDefinition(
+                string_id=string_id,
+                table_id=table_id,
+                name=raw.get("name", ""),
+                entries=tuple(entries),
+            )
+        )
     return tuple(out)
+
 
 def parse_merchants(
     raw_block: Any,
@@ -153,43 +149,42 @@ def parse_merchants(
     if raw_block is None:
         return ()
     if not isinstance(raw_block, list):
-        raise ScenarioLoadError(
-            f"merchants は配列で宣言してください (got {type(raw_block).__name__})"
-        )
+        raise ScenarioLoadError(f"merchants は配列で宣言してください (got {type(raw_block).__name__})")
 
     merchants: list[ScenarioMerchantDefinition] = []
     seen_ids: set[str] = set()
     seen_names: set[str] = set()
     for index, raw in enumerate(raw_block):
         if not isinstance(raw, dict):
-            raise ScenarioLoadError(
-                f"merchants[{index}] はオブジェクトで宣言してください "
-                f"(got {type(raw).__name__})"
-            )
+            raise ScenarioLoadError(f"merchants[{index}] はオブジェクトで宣言してください (got {type(raw).__name__})")
         string_id = parse_merchant_id(raw.get("id"), index=index)
         if string_id in seen_ids:
-            raise ScenarioLoadError(
-                f"merchants[{index}].id が重複しています: {string_id!r}"
-            )
+            raise ScenarioLoadError(f"merchants[{index}].id が重複しています: {string_id!r}")
         seen_ids.add(string_id)
 
         name = parse_merchant_name(raw.get("name"), string_id=string_id)
         if name in seen_names:
             # 名前が重なると、将来 LLM が名前で商人を指すときに
             # どちらの商人か決まらない。宣言の時点で潰す。
-            raise ScenarioLoadError(
-                f"merchants[{string_id!r}].name がほかの商人と重複しています: {name!r}"
-            )
+            raise ScenarioLoadError(f"merchants[{string_id!r}].name がほかの商人と重複しています: {name!r}")
         seen_names.add(name)
 
         spot_id = parse_merchant_spot(
-            raw.get("spot"), mapper, string_id=string_id,
+            raw.get("spot"),
+            mapper,
+            string_id=string_id,
         )
         sells = parse_merchant_price_list(
-            raw.get("sells"), mapper, string_id=string_id, section="sells",
+            raw.get("sells"),
+            mapper,
+            string_id=string_id,
+            section="sells",
         )
         buys = parse_merchant_price_list(
-            raw.get("buys"), mapper, string_id=string_id, section="buys",
+            raw.get("buys"),
+            mapper,
+            string_id=string_id,
+            section="buys",
         )
         if not sells and not buys:
             raise ScenarioLoadError(
@@ -197,47 +192,46 @@ def parse_merchants(
                 "売る品か買い取る品のどちらかを宣言してください"
             )
 
-        merchants.append(ScenarioMerchantDefinition(
-            string_id=string_id,
-            merchant_id=mapper.register("merchant", string_id),
-            name=name,
-            spot_id=spot_id,
-            sells=sells,
-            buys=buys,
-        ))
+        merchants.append(
+            ScenarioMerchantDefinition(
+                string_id=string_id,
+                merchant_id=mapper.register("merchant", string_id),
+                name=name,
+                spot_id=spot_id,
+                sells=sells,
+                buys=buys,
+            )
+        )
     return tuple(merchants)
+
 
 def parse_merchant_id(raw: Any, *, index: int) -> str:
     """`merchants[].id` を検証する。"""
     if not isinstance(raw, str) or not raw:
-        raise ScenarioLoadError(
-            f"merchants[{index}].id は空でない文字列で宣言してください (got {raw!r})"
-        )
+        raise ScenarioLoadError(f"merchants[{index}].id は空でない文字列で宣言してください (got {raw!r})")
     return raw
+
 
 def parse_merchant_name(raw: Any, *, string_id: str) -> str:
     """`merchants[].name` を検証する (表示名なので空白のみも弾く)。"""
     if not isinstance(raw, str) or not raw.strip():
-        raise ScenarioLoadError(
-            f"merchants[{string_id!r}].name は空でない文字列で宣言してください "
-            f"(got {raw!r})"
-        )
+        raise ScenarioLoadError(f"merchants[{string_id!r}].name は空でない文字列で宣言してください (got {raw!r})")
     return raw.strip()
 
+
 def parse_merchant_spot(
-    raw: Any, mapper: ScenarioIdMapper, *, string_id: str,
+    raw: Any,
+    mapper: ScenarioIdMapper,
+    *,
+    string_id: str,
 ) -> SpotId:
     """`merchants[].spot` を検証し、実在する spot への参照へ解決する。"""
     if not isinstance(raw, str) or not raw:
-        raise ScenarioLoadError(
-            f"merchants[{string_id!r}].spot は空でない文字列で宣言してください "
-            f"(got {raw!r})"
-        )
+        raise ScenarioLoadError(f"merchants[{string_id!r}].spot は空でない文字列で宣言してください (got {raw!r})")
     if not mapper.contains("spot", raw):
-        raise ScenarioLoadError(
-            f"merchants[{string_id!r}].spot が実在しない spot を参照しています: {raw!r}"
-        )
+        raise ScenarioLoadError(f"merchants[{string_id!r}].spot が実在しない spot を参照しています: {raw!r}")
     return SpotId.create(mapper.get_int("spot", raw))
+
 
 def parse_merchant_price_list(
     raw_list: Any,
@@ -256,8 +250,7 @@ def parse_merchant_price_list(
         return ()
     if not isinstance(raw_list, list):
         raise ScenarioLoadError(
-            f"merchants[{string_id!r}].{section} は配列で宣言してください "
-            f"(got {type(raw_list).__name__})"
+            f"merchants[{string_id!r}].{section} は配列で宣言してください (got {type(raw_list).__name__})"
         )
 
     entries: list[ScenarioMerchantPriceEntry] = []
@@ -281,8 +274,7 @@ def parse_merchant_price_list(
             )
         if item_spec in seen_item_specs:
             raise ScenarioLoadError(
-                f"merchants[{string_id!r}].{section} に同じ item_spec が"
-                f"二度宣言されています: {item_spec!r}"
+                f"merchants[{string_id!r}].{section} に同じ item_spec が二度宣言されています: {item_spec!r}"
             )
         seen_item_specs.add(item_spec)
 
@@ -291,19 +283,20 @@ def parse_merchant_price_list(
         # 見分けが付かなくなるため。
         if isinstance(price, bool) or not isinstance(price, int):
             raise ScenarioLoadError(
-                f"merchants[{string_id!r}].{section}[{index}].price は"
-                f"整数で宣言してください (got {price!r})"
+                f"merchants[{string_id!r}].{section}[{index}].price は整数で宣言してください (got {price!r})"
             )
         if price <= 0:
             raise ScenarioLoadError(
-                f"merchants[{string_id!r}].{section}[{index}].price は"
-                f"1 以上で宣言してください (got {price})"
+                f"merchants[{string_id!r}].{section}[{index}].price は1 以上で宣言してください (got {price})"
             )
-        entries.append(ScenarioMerchantPriceEntry(
-            item_spec_id=mapper.get_int("item_spec", item_spec),
-            price=price,
-        ))
+        entries.append(
+            ScenarioMerchantPriceEntry(
+                item_spec_id=mapper.get_int("item_spec", item_spec),
+                price=price,
+            )
+        )
     return tuple(entries)
+
 
 def parse_item_interaction_registry(
     items_raw: list[dict[str, Any]],
@@ -343,38 +336,29 @@ def parse_item_interaction_registry(
     for item in items_raw:
         with declaring(f"item_spec {item.get('id')!r} の"):
             interactions = tuple(
-                parse_interaction_def(
-                    raw, mapper, player_attribute_specs=player_attribute_specs
-                )
+                parse_interaction_def(raw, mapper, player_attribute_specs=player_attribute_specs)
                 for raw in item.get("interactions", [])
             )
         action_names = [interaction.action_name for interaction in interactions]
         if len(set(action_names)) != len(action_names):
-            duplicated = next(
-                name for name in action_names if action_names.count(name) > 1
-            )
-            raise ScenarioLoadError(
-                f"item '{item['id']}' interaction action_name "
-                f"'{duplicated}' が重複しています"
-            )
+            duplicated = next(name for name in action_names if action_names.count(name) > 1)
+            raise ScenarioLoadError(f"item '{item['id']}' interaction action_name '{duplicated}' が重複しています")
         for interaction in interactions:
             for effect in interaction.effects:
-                if (
-                    effect.effect_type in implicit_object_effects
-                    and "object_id" not in effect.parameters
-                ):
+                if effect.effect_type in implicit_object_effects and "object_id" not in effect.parameters:
                     raise ScenarioLoadError(
                         f"item '{item['id']}' interaction "
                         f"'{interaction.action_name}': {effect.effect_type.value} "
                         "requires parameters.target_object"
                     )
         if interactions:
-            entries[ItemSpecId.create(mapper.get_int("item_spec", item["id"]))] = (
-                interactions
-            )
+            entries[ItemSpecId.create(mapper.get_int("item_spec", item["id"]))] = interactions
     return ItemInteractionRegistry(entries)
 
-def parse_consume_effect( raw: Any, sid: str,
+
+def parse_consume_effect(
+    raw: Any,
+    sid: str,
 ) -> ItemEffect | None:
     """JSON の consume_effect (単一 dict or list) を ItemEffect に変換する。
 
@@ -395,13 +379,14 @@ def parse_consume_effect( raw: Any, sid: str,
         return parsed[0]
     return CompositeItemEffect(effects=tuple(parsed))
 
-def parse_single_consume_effect( entry: dict[str, Any], sid: str,
+
+def parse_single_consume_effect(
+    entry: dict[str, Any],
+    sid: str,
 ) -> ItemEffect:
     """1 つの effect dict を ItemEffect サブクラスに変換する。"""
     if not isinstance(entry, dict):
-        raise ValueError(
-            f"item '{sid}': consume_effect entry must be a dict, got {type(entry).__name__}"
-        )
+        raise ValueError(f"item '{sid}': consume_effect entry must be a dict, got {type(entry).__name__}")
     etype = entry.get("type")
     if not etype:
         raise ValueError(f"item '{sid}': consume_effect entry missing 'type'")
@@ -418,27 +403,27 @@ def parse_single_consume_effect( entry: dict[str, Any], sid: str,
     if etype == "satisfy_need":
         need = entry.get("need_type") or entry.get("need_type_name")
         if not need:
-            raise ValueError(
-                f"item '{sid}': satisfy_need requires 'need_type' (e.g. 'HUNGER')"
-            )
+            raise ValueError(f"item '{sid}': satisfy_need requires 'need_type' (e.g. 'HUNGER')")
         return SatisfyNeedEffect(
-            need_type_name=str(need), amount=int(entry["amount"]),
+            need_type_name=str(need),
+            amount=int(entry["amount"]),
         )
     if etype == "revive":
         # Issue #621 Phase 3a: ダウン player を蘇生する効果。
         # hp_rate は max_hp に対する比率 (0.0-1.0)。範囲 validation は
         # ReviveEffect.__post_init__ が ItemEffectValidationException で行う。
         if "hp_rate" not in entry:
-            raise ValueError(
-                f"item '{sid}': revive requires 'hp_rate' (e.g. 0.4)"
-            )
+            raise ValueError(f"item '{sid}': revive requires 'hp_rate' (e.g. 0.4)")
         return ReviveEffect(hp_rate=float(entry["hp_rate"]))
     raise ValueError(
         f"item '{sid}': unknown consume_effect type '{etype}' "
         "(expected: heal_hp / damage_hp / recover_mp / gold / exp / satisfy_need / revive)"
     )
 
-def parse_item_specs( items_raw: list[dict[str, Any]], mapper: ScenarioIdMapper,
+
+def parse_item_specs(
+    items_raw: list[dict[str, Any]],
+    mapper: ScenarioIdMapper,
 ) -> list[ItemSpecDefinition]:
     defs: list[ItemSpecDefinition] = []
     for item in items_raw:
@@ -452,47 +437,50 @@ def parse_item_specs( items_raw: list[dict[str, Any]], mapper: ScenarioIdMapper,
             # 早期 fail し、エラー位置が JSON 単位で分かりやすい。
             spoils_after_ticks = int(spoils_raw)
             if spoils_after_ticks <= 0:
-                raise ValueError(
-                    f"item '{sid}': spoils_after_ticks must be positive, got {spoils_after_ticks}"
-                )
+                raise ValueError(f"item '{sid}': spoils_after_ticks must be positive, got {spoils_after_ticks}")
         consume_effect = parse_consume_effect(
-            item.get("consume_effect"), sid,
+            item.get("consume_effect"),
+            sid,
         )
         fatigue_recovery_raw = item.get("fatigue_recovery", 0)
         try:
             fatigue_recovery = int(fatigue_recovery_raw)
         except (TypeError, ValueError):
-            raise ValueError(
-                f"item '{sid}': fatigue_recovery must be int, got {fatigue_recovery_raw!r}"
-            )
+            raise ValueError(f"item '{sid}': fatigue_recovery must be int, got {fatigue_recovery_raw!r}")
         if fatigue_recovery < 0:
-            raise ValueError(
-                f"item '{sid}': fatigue_recovery must be non-negative, got {fatigue_recovery}"
-            )
+            raise ValueError(f"item '{sid}': fatigue_recovery must be non-negative, got {fatigue_recovery}")
         usage_hint_raw = item.get("usage_hint", "")
         if not isinstance(usage_hint_raw, str):
-            raise ValueError(
-                f"item '{sid}': usage_hint must be string, got {usage_hint_raw!r}"
-            )
+            raise ValueError(f"item '{sid}': usage_hint must be string, got {usage_hint_raw!r}")
         usage_hint = usage_hint_raw.strip()
         if "usage_hint" in item and not usage_hint:
             raise ValueError(f"item '{sid}': usage_hint must not be blank")
-        defs.append(ItemSpecDefinition(
-            string_id=sid,
-            spec_id=ItemSpecId.create(numeric),
-            name=item["name"],
-            description=item.get("description", ""),
-            category=item.get("category", "GENERAL"),
-            is_light_source=parse_bool(
-                item.get("is_light_source", False),
-                path=f"item {sid}.is_light_source",
-            ),
-            spoils_after_ticks=spoils_after_ticks,
-            consume_effect=consume_effect,
-            fatigue_recovery=fatigue_recovery,
-            usage_hint=usage_hint,
-        ))
+        event_removal_message_raw = item.get("event_removal_message", "")
+        if not isinstance(event_removal_message_raw, str):
+            raise ValueError(f"item '{sid}': event_removal_message must be string, got {event_removal_message_raw!r}")
+        event_removal_message = event_removal_message_raw.strip()
+        if "event_removal_message" in item and not event_removal_message:
+            raise ValueError(f"item '{sid}': event_removal_message must not be blank")
+        defs.append(
+            ItemSpecDefinition(
+                string_id=sid,
+                spec_id=ItemSpecId.create(numeric),
+                name=item["name"],
+                description=item.get("description", ""),
+                category=item.get("category", "GENERAL"),
+                is_light_source=parse_bool(
+                    item.get("is_light_source", False),
+                    path=f"item {sid}.is_light_source",
+                ),
+                spoils_after_ticks=spoils_after_ticks,
+                consume_effect=consume_effect,
+                fatigue_recovery=fatigue_recovery,
+                usage_hint=usage_hint,
+                event_removal_message=event_removal_message,
+            )
+        )
     return defs
+
 
 def parse_initial_item(
     raw: Any,
@@ -513,22 +501,18 @@ def parse_initial_item(
     if isinstance(raw, dict):
         spec_string = raw.get("spec")
         if not isinstance(spec_string, str) or not spec_string:
-            raise ScenarioLoadError(
-                f"players[{owner_id}].initial_items[*].spec is required "
-                f"(got {spec_string!r})"
-            )
+            raise ScenarioLoadError(f"players[{owner_id}].initial_items[*].spec is required (got {spec_string!r})")
         spec_id = ItemSpecId.create(mapper.get_int("item_spec", spec_string))
         state_raw = raw.get("state", {})
         if not isinstance(state_raw, dict):
             raise ScenarioLoadError(
-                f"players[{owner_id}].initial_items[*].state must be an object "
-                f"(got {type(state_raw).__name__})"
+                f"players[{owner_id}].initial_items[*].state must be an object (got {type(state_raw).__name__})"
             )
         return InitialItemSpec(spec_id=spec_id, state=dict(state_raw))
     raise ScenarioLoadError(
-        f"players[{owner_id}].initial_items[*] must be a string or object "
-        f"(got {type(raw).__name__})"
+        f"players[{owner_id}].initial_items[*] must be a string or object (got {type(raw).__name__})"
     )
+
 
 def parse_needs_config(raw: Any) -> ScenarioNeedsConfig:
     """needs 機構の調整値を読み、無宣言なら飢餓ダメージを無効にする。"""
@@ -537,14 +521,8 @@ def parse_needs_config(raw: Any) -> ScenarioNeedsConfig:
     if not isinstance(raw, dict):
         raise ScenarioLoadError("needs must be an object")
     starvation_damage = raw.get("starvation_damage_per_tick", 0)
-    if (
-        isinstance(starvation_damage, bool)
-        or not isinstance(starvation_damage, int)
-        or starvation_damage < 0
-    ):
-        raise ScenarioLoadError(
-            "needs.starvation_damage_per_tick must be a non-negative integer"
-        )
+    if isinstance(starvation_damage, bool) or not isinstance(starvation_damage, int) or starvation_damage < 0:
+        raise ScenarioLoadError("needs.starvation_damage_per_tick must be a non-negative integer")
     try:
         return ScenarioNeedsConfig(
             starvation_damage_per_tick=starvation_damage,
@@ -555,7 +533,6 @@ def parse_needs_config(raw: Any) -> ScenarioNeedsConfig:
         # シナリオ読み込みの失敗として surface する。組み込み例外のまま抜けると、
         # 起動時の案内が「どのシナリオのどの節か」を失う。
         raise ScenarioLoadError(f"needs.{exc}") from exc
-
 
 
 #: 初期注文で書ける向き。板の売り買いと同じ語彙にする。
@@ -569,15 +546,9 @@ def _parse_market_positive_int(raw: Any, *, field: str, index: int) -> int:
     「薬草を True 個」という注文が板に載るので、先に弾く。
     """
     if isinstance(raw, bool) or not isinstance(raw, int):
-        raise ScenarioLoadError(
-            f"market.initial_orders[{index}].{field} は整数で宣言してください "
-            f"(got {raw!r})"
-        )
+        raise ScenarioLoadError(f"market.initial_orders[{index}].{field} は整数で宣言してください (got {raw!r})")
     if raw < 1:
-        raise ScenarioLoadError(
-            f"market.initial_orders[{index}].{field} は 1 以上で宣言してください "
-            f"(got {raw})"
-        )
+        raise ScenarioLoadError(f"market.initial_orders[{index}].{field} は 1 以上で宣言してください (got {raw})")
     return raw
 
 
@@ -593,23 +564,18 @@ def _parse_market_initial_orders(
     if raw_list is None:
         return ()
     if not isinstance(raw_list, list):
-        raise ScenarioLoadError(
-            f"market.initial_orders は配列で宣言してください "
-            f"(got {type(raw_list).__name__})"
-        )
+        raise ScenarioLoadError(f"market.initial_orders は配列で宣言してください (got {type(raw_list).__name__})")
     by_string_id = {m.string_id: m for m in merchants}
     orders: list[ScenarioMarketInitialOrder] = []
     for index, raw in enumerate(raw_list):
         if not isinstance(raw, dict):
             raise ScenarioLoadError(
-                f"market.initial_orders[{index}] はオブジェクトで宣言してください "
-                f"(got {type(raw).__name__})"
+                f"market.initial_orders[{index}] はオブジェクトで宣言してください (got {type(raw).__name__})"
             )
         merchant_sid = raw.get("merchant")
         if merchant_sid not in by_string_id:
             raise ScenarioLoadError(
-                f"market.initial_orders[{index}].merchant が実在しない商人を"
-                f"参照しています: {merchant_sid!r}"
+                f"market.initial_orders[{index}].merchant が実在しない商人を参照しています: {merchant_sid!r}"
             )
         side = raw.get("side")
         if side not in _MARKET_SIDES:
@@ -621,8 +587,7 @@ def _parse_market_initial_orders(
         item_sid = raw.get("item_spec")
         if not isinstance(item_sid, str) or not mapper.contains("item_spec", item_sid):
             raise ScenarioLoadError(
-                f"market.initial_orders[{index}].item_spec が実在しない品を"
-                f"参照しています: {item_sid!r}"
+                f"market.initial_orders[{index}].item_spec が実在しない品を参照しています: {item_sid!r}"
             )
         orders.append(
             ScenarioMarketInitialOrder(
@@ -630,17 +595,22 @@ def _parse_market_initial_orders(
                 side=side,
                 item_spec_id=mapper.get_int("item_spec", item_sid),
                 quantity=_parse_market_positive_int(
-                    raw.get("quantity"), field="quantity", index=index,
+                    raw.get("quantity"),
+                    field="quantity",
+                    index=index,
                 ),
                 unit_price=_parse_market_positive_int(
-                    raw.get("unit_price"), field="unit_price", index=index,
+                    raw.get("unit_price"),
+                    field="unit_price",
+                    index=index,
                 ),
                 expires_in_ticks=(
                     None
                     if raw.get("expires_in_ticks") is None
                     else _parse_market_positive_int(
                         raw.get("expires_in_ticks"),
-                        field="expires_in_ticks", index=index,
+                        field="expires_in_ticks",
+                        index=index,
                     )
                 ),
             )
@@ -675,9 +645,7 @@ def parse_market(
     if block is None:
         return None
     if not isinstance(block, dict):
-        raise ScenarioLoadError(
-            f"market は object で宣言してください (got {type(block).__name__})"
-        )
+        raise ScenarioLoadError(f"market は object で宣言してください (got {type(block).__name__})")
     board_spot = block.get("board_spot")
     if not isinstance(board_spot, str) or not board_spot:
         raise ScenarioLoadError(
@@ -685,31 +653,25 @@ def parse_market(
             "(板は物理的に置かれる物なので、置き場所の無い板は作れません)"
         )
     if not mapper.contains("spot", board_spot):
-        raise ScenarioLoadError(
-            f"market.board_spot が実在しない spot を参照しています: {board_spot!r}"
-        )
+        raise ScenarioLoadError(f"market.board_spot が実在しない spot を参照しています: {board_spot!r}")
 
     reach = _parse_market_reach(block.get("reach"))
 
     expires = block.get("order_expires_in_ticks")
     if expires is not None:
         if isinstance(expires, bool) or not isinstance(expires, int):
-            raise ScenarioLoadError(
-                f"market.order_expires_in_ticks は整数で宣言してください "
-                f"(got {expires!r})"
-            )
+            raise ScenarioLoadError(f"market.order_expires_in_ticks は整数で宣言してください (got {expires!r})")
         if expires < 1:
-            raise ScenarioLoadError(
-                f"market.order_expires_in_ticks は 1 以上で宣言してください "
-                f"(got {expires})"
-            )
+            raise ScenarioLoadError(f"market.order_expires_in_ticks は 1 以上で宣言してください (got {expires})")
 
     return ScenarioMarketConfig(
         board_spot_id=SpotId.create(mapper.get_int("spot", board_spot)),
         order_expires_in_ticks=expires,
         reach=reach,
         initial_orders=_parse_market_initial_orders(
-            block.get("initial_orders"), mapper, merchants,
+            block.get("initial_orders"),
+            mapper,
+            merchants,
         ),
     )
 
@@ -746,21 +708,16 @@ def parse_player_attribute_specs(raw: Any) -> PlayerAttributeSpecs:
     specs = {}
     for name, body in raw.items():
         if not isinstance(body, dict):
-            raise ScenarioLoadError(
-                f"player_attributes.{name} must be an object"
-            )
+            raise ScenarioLoadError(f"player_attributes.{name} must be an object")
         visibility = body.get("visibility")
-        if visibility not in ("public", "secret"):
+        if visibility not in ("public", "secret", "hidden"):
             raise ScenarioLoadError(
-                f"player_attributes.{name}.visibility は public / secret の"
-                f"どちらかで指定してください (got {visibility!r})"
+                f"player_attributes.{name}.visibility は public / secret / "
+                f"hidden のどれかで指定してください (got {visibility!r})"
             )
         mutable = body.get("mutable")
         if not isinstance(mutable, bool):
-            raise ScenarioLoadError(
-                f"player_attributes.{name}.mutable は真偽値で指定してください "
-                f"(got {mutable!r})"
-            )
+            raise ScenarioLoadError(f"player_attributes.{name}.mutable は真偽値で指定してください (got {mutable!r})")
         # values は 2 つの形を取る。配列は「取りうる値」だけの宣言、
         # オブジェクトは値ごとの呼び名つきの宣言 (``baker`` → ``焼き手``)。
         # **配列を残すのは後方互換のためだけではない。** 数値や時刻の
@@ -768,10 +725,7 @@ def parse_player_attribute_specs(raw: Any) -> PlayerAttributeSpecs:
         values = body.get("values")
         value_display_names: dict[str, str] = {}
         if isinstance(values, dict):
-            if not all(
-                isinstance(k, str) and k and isinstance(v, str) and v
-                for k, v in values.items()
-            ):
+            if not all(isinstance(k, str) and k and isinstance(v, str) and v for k, v in values.items()):
                 raise ScenarioLoadError(
                     f"player_attributes.{name}.values をオブジェクトで書く"
                     f"ときは、値と呼び名の両方を非空の文字列にしてください "
@@ -779,10 +733,7 @@ def parse_player_attribute_specs(raw: Any) -> PlayerAttributeSpecs:
                 )
             value_display_names = dict(values)
             values = list(values.keys())
-        elif values is not None and (
-            not isinstance(values, list)
-            or not all(isinstance(v, str) and v for v in values)
-        ):
+        elif values is not None and (not isinstance(values, list) or not all(isinstance(v, str) and v for v in values)):
             raise ScenarioLoadError(
                 f"player_attributes.{name}.values は非空の文字列の配列、"
                 f"または値と呼び名のオブジェクトで指定してください "

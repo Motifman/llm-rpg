@@ -6,7 +6,6 @@ LLM ツール sns_enter / sns_logout と PlayerCurrentStateDto の is_sns_mode_a
 真実の状態は ActiveGameAppSessionService の単一スロットに保持し、本クラスは SNS 向け API を提供する。
 """
 
-
 from __future__ import annotations
 
 from ai_rpg_world.application.social.services.active_game_app_session_service import (

@@ -46,9 +46,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI, _SENA, _KUZE, _AOI = (PlayerId(i) for i in (1, 2, 3, 4))
 
@@ -66,11 +64,7 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
 
 
 def _new_findings(runtime, player_id: PlayerId, since: int) -> list:
-    return [
-        e
-        for e in runtime._obs_buffer.get_observations(player_id)[since:]
-        if _FOUND in e.output.prose
-    ]
+    return [e for e in runtime._obs_buffer.get_observations(player_id)[since:] if _FOUND in e.output.prose]
 
 
 def _look(runtime, player_id: PlayerId) -> None:
@@ -203,11 +197,7 @@ class TestWhoDoesNotGetIt:
 
         _look(runtime, _SENA)
 
-        assert [
-            e
-            for e in runtime._obs_buffer.get_observations(_SENA)
-            if _FOUND in e.output.prose
-        ] == []
+        assert [e for e in runtime._obs_buffer.get_observations(_SENA) if _FOUND in e.output.prose] == []
 
     def test_players_elsewhere_learn_nothing(self, world_with_a_body) -> None:
         """別の部屋に居る人には届かない。

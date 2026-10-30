@@ -40,7 +40,7 @@ class WorldRuntimeQueryAdapter:
     """get_player_current_state 1 メソッドだけを満たす duck-type adapter。
 
     DefaultPromptBuilder は world_query_service の 1 メソッドしか呼ばないため、
-    WorldQueryService 本体を構築する代わりにこの adapter を渡す
+    タイル用の問い合わせ本体を構築する代わりにこの adapter を渡す
     (Issue #227 HIGH-3 Part 2 で isinstance チェックを hasattr に緩めたため)。
 
     内部では runtime._build_minimal_player_state_dto を呼び、world_runtime 固有の
@@ -50,9 +50,7 @@ class WorldRuntimeQueryAdapter:
     def __init__(self, runtime: WorldRuntime) -> None:
         self._runtime = runtime
 
-    def get_player_current_state(
-        self, query: GetPlayerCurrentStateQuery
-    ) -> PlayerCurrentStateDto | None:
+    def get_player_current_state(self, query: GetPlayerCurrentStateQuery) -> PlayerCurrentStateDto | None:
         pid = PlayerId(query.player_id)
         snap = self._runtime._state_builder.build_snapshot(int(pid))
         if snap is None:
@@ -120,8 +118,6 @@ class WorldAvailableToolsProvider(IAvailableToolsProvider):
     で tools を再構築するため、ここでの値は不要)。
     """
 
-    def get_available_tools(
-        self, context: PlayerCurrentStateDto | None
-    ) -> list[dict[str, Any]]:
+    def get_available_tools(self, context: PlayerCurrentStateDto | None) -> list[dict[str, Any]]:
         del context
         return []

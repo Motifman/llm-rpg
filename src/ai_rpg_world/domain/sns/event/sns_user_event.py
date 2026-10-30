@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class SnsUserCreatedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     """ユーザー作成イベント"""
+
     user_id: UserId
     user_name: str
     display_name: str
@@ -21,14 +22,19 @@ class SnsUserCreatedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
 @dataclass(frozen=True)
 class SnsUserFollowedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     """フォローイベント"""
+
     follower_user_id: UserId
     followee_user_id: UserId
     follower_display_name: str = ""
+    actor_identity_token: str | None = None
+    recipient_identity_token: str | None = None
+    execution_provenance: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
 class SnsUserUnfollowedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     """フォロー解除イベント"""
+
     follower_user_id: UserId
     followee_user_id: UserId
 
@@ -36,6 +42,7 @@ class SnsUserUnfollowedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
 @dataclass(frozen=True)
 class SnsUserBlockedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     """ブロックイベント"""
+
     blocker_user_id: UserId
     blocked_user_id: UserId
 
@@ -43,6 +50,7 @@ class SnsUserBlockedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
 @dataclass(frozen=True)
 class SnsUserUnblockedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     """ブロック解除イベント"""
+
     blocker_user_id: UserId
     blocked_user_id: UserId
 
@@ -50,6 +58,7 @@ class SnsUserUnblockedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
 @dataclass(frozen=True)
 class SnsUserProfileUpdatedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     """プロフィール更新イベント"""
+
     user_id: UserId
     new_bio: str | None
     new_display_name: str | None
@@ -58,6 +67,7 @@ class SnsUserProfileUpdatedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
 @dataclass(frozen=True)
 class SnsUserSubscribedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     """ユーザーサブスクライブイベント"""
+
     subscriber_user_id: UserId
     subscribed_user_id: UserId
     subscriber_display_name: str = ""
@@ -66,5 +76,6 @@ class SnsUserSubscribedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
 @dataclass(frozen=True)
 class SnsUserUnsubscribedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     """ユーザーアンサブスクライブイベント"""
+
     subscriber_user_id: UserId
     subscribed_user_id: UserId

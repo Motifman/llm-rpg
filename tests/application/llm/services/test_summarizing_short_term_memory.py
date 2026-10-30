@@ -20,10 +20,6 @@ import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
-    ShortTermMemoryLongSummaryService,
-    _ParsedLongSummary,
-)
 from ai_rpg_world.application.llm.services.short_term_memory_schedulers import (
     InlineShortTermMemoryScheduler,
     ThreadPoolShortTermMemoryScheduler,
@@ -47,12 +43,10 @@ from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
 )
-from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
-    L5LongSummary,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _SUMMARY_INPUT_COUNT = 15
+
 
 def _obs(prose: str = "p", seq: int = 0) -> ObservationEntry:
     return ObservationEntry(
@@ -121,11 +115,7 @@ def test_compaction_records_tick_turn_count_and_entry_counts() -> None:
     memory.complete_turn(_PID)
     memory.complete_turn(_PID)
 
-    compacted = [
-        payload
-        for kind, payload in recorder.records
-        if kind == TraceEventKind.SHORT_TERM_MEMORY_COMPACTED
-    ]
+    compacted = [payload for kind, payload in recorder.records if kind == TraceEventKind.SHORT_TERM_MEMORY_COMPACTED]
     assert compacted == [
         {
             "tick": 17,
@@ -159,9 +149,8 @@ class TestRollingSummaryBasicQueue:
     def test_append_all_order_append(self) -> None:
         """appendall は順番に append する。"""
         mem = SummarizingShortTermMemory(summary_service=None)
-        evicted = mem.append_all(_PID, [_obs("p1", seq=1), _obs("p2", seq=2)])
-        # rolling 実装は evict せず L4 に畳むので overflow は空
-        assert evicted == []
+        mem.append_all(_PID, [_obs("p1", seq=1), _obs("p2", seq=2)])
+
         assert len(mem.get_recent(_PID, limit=10)) == 2
 
     def test_actions_are_not_included_in_the_l4_summary_input(
@@ -219,11 +208,7 @@ class TestRollingSummaryTrigger:
 
     def test_turn_cap_summarizes_only_oldest_compacted_turns(self) -> None:
         """cap 到達時は古い K ターンの観測だけを L4 にし、残りを L1 に保つ。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary="", unresolved=()
-            )
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(
             summary_service=stub,
             turn_cap=4,
@@ -254,7 +239,6 @@ class TestRollingSummaryTrigger:
                 return _ParsedSummary(
                     compressed_activity="ok",
                     emotional_summary="",
-                    unresolved=(),
                 )
 
         store = UnifiedRecentEventStore()
@@ -295,7 +279,6 @@ class TestRollingSummaryTrigger:
                 return _ParsedSummary(
                     compressed_activity="ok",
                     emotional_summary="",
-                    unresolved=(),
                 )
 
         store = UnifiedRecentEventStore()
@@ -323,9 +306,7 @@ class TestRollingSummaryTrigger:
 
     def test_observations_alone_do_not_create_l4(self) -> None:
         """観測を追加しただけでは、件数にかかわらず L4 は生成されない。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(summary_service=stub)
         for i in range(_SUMMARY_INPUT_COUNT - 1):
             mem.append(_PID, _obs(f"p{i}", seq=i))
@@ -339,7 +320,6 @@ class TestRollingSummaryTrigger:
             result=_ParsedSummary(
                 compressed_activity="北東を探索",
                 emotional_summary="疲労",
-                unresolved=("水源",),
             )
         )
         mem = SummarizingShortTermMemory(summary_service=stub)
@@ -356,11 +336,7 @@ class TestRollingSummaryTrigger:
 
     def test_l4_three(self) -> None:
         """L4 は 3世代までで 最古を破棄。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary="", unresolved=()
-            )
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(summary_service=stub)
         # 4 世代分積む (= 15 * 4 = 60 件)
         for batch in range(4):
@@ -375,11 +351,7 @@ class TestRollingSummaryTrigger:
 
     def test_l4_append_left(self) -> None:
         """L4 は新しい順に appendleft される。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary="", unresolved=()
-            )
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(summary_service=stub)
         for batch in range(2):
             for i in range(_SUMMARY_INPUT_COUNT):
@@ -412,13 +384,9 @@ class TestRollingSummaryServiceNone:
 class TestRollingSummaryLLMFailure:
     """LLM 失敗時は template fallback + warning ログを出す。"""
 
-    def test_llm_exception_uses_template_fallback(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_llm_exception_uses_template_fallback(self, caplog: pytest.LogCaptureFixture) -> None:
         """LLM 例外なら templatefallback に縮退。"""
-        stub = _StubSummaryService.make(
-            exc=LlmApiCallException("sim", error_code="LLM_API_CALL_FAILED")
-        )
+        stub = _StubSummaryService.make(exc=LlmApiCallException("sim", error_code="LLM_API_CALL_FAILED"))
         mem = SummarizingShortTermMemory(summary_service=stub)
         with caplog.at_level(
             logging.WARNING,
@@ -444,11 +412,7 @@ class TestRollingSummaryLLMFailure:
 
     def test_observation_count_alone_does_not_trigger_summary(self) -> None:
         """観測件数が多くても、自分のターン境界までは L4 を生成しない。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary="", unresolved=()
-            )
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(
             summary_service=stub,
             turn_cap=3,
@@ -480,7 +444,6 @@ class TestRollingSummaryMidSummaryText:
             result=_ParsedSummary(
                 compressed_activity="今日の動き",
                 emotional_summary="気分1",
-                unresolved=("X",),
             )
         )
         mem = SummarizingShortTermMemory(summary_service=stub)
@@ -491,15 +454,12 @@ class TestRollingSummaryMidSummaryText:
         assert "[最新]" in text
         assert "今日の動き" in text
         assert "気分1" in text
-        assert "X" in text
 
 
 class TestRollingSummaryPersonaResolver:
     """persona_resolver が失敗しても prompt 構築を止めない。"""
 
-    def test_resolver_exception_falls_back_to_default(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_resolver_exception_falls_back_to_default(self, caplog: pytest.LogCaptureFixture) -> None:
         """resolver の例外は default に縮退する。"""
         called_with_args: dict = {}
 
@@ -518,7 +478,7 @@ class TestRollingSummaryPersonaResolver:
             ):  # type: ignore[override]
                 called_with_args["player_name"] = player_name
                 called_with_args["persona_block"] = persona_block
-                return _ParsedSummary(compressed_activity="x", emotional_summary="", unresolved=())
+                return _ParsedSummary(compressed_activity="x", emotional_summary="")
 
         def broken(pid: int):
             raise RuntimeError("oops")
@@ -555,7 +515,7 @@ class TestRollingSummaryPersonaResolver:
                 previous_l4=None,
             ):  # type: ignore[override]
                 called["name"] = player_name
-                return _ParsedSummary(compressed_activity="x", emotional_summary="", unresolved=())
+                return _ParsedSummary(compressed_activity="x", emotional_summary="")
 
         mem = SummarizingShortTermMemory(summary_service=_RecordingService())
         for i in range(_SUMMARY_INPUT_COUNT):
@@ -615,7 +575,6 @@ class TestFormatMidSummaryBlock:
                 generated_at=datetime(2026, 6, 1, 12, i, tzinfo=timezone.utc),
                 compressed_activity=f"動き{i}",
                 emotional_summary=f"気分{i}",
-                unresolved=(f"item{i}",),
             )
             for i in range(2)
         ]
@@ -624,8 +583,8 @@ class TestFormatMidSummaryBlock:
         # 2 世代目には [2 世代前] ラベル
         assert "[2 世代前]" in text
 
-    def test_returns_empty_when_emotional_summary_unresolved(self) -> None:
-        """emotionalsummary と unresolved が空なら該当行が出ない。"""
+    def test_returns_empty_when_emotional_summary_empty(self) -> None:
+        """emotional_summary が空なら気分の行が出ず、片付いていないことの行も無い。"""
         gen = L4MidSummary(
             summary_id="l4-1",
             player_id=1,
@@ -633,7 +592,6 @@ class TestFormatMidSummaryBlock:
             generated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
             compressed_activity="動き",
             emotional_summary="",
-            unresolved=(),
         )
         text = format_mid_summary_block([gen])
         assert "気分" not in text
@@ -656,9 +614,7 @@ class TestRollingSummarySchedulerIntegration:
 
     def test_inline_scheduler_works(self) -> None:
         """明示 Inline scheduler でも 動く。"""
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(
             summary_service=stub,
             scheduler=InlineShortTermMemoryScheduler(),
@@ -685,7 +641,6 @@ class TestRollingSummarySchedulerIntegration:
                 return _ParsedSummary(
                     compressed_activity="slow result",
                     emotional_summary="",
-                    unresolved=(),
                 )
 
         scheduler = ThreadPoolShortTermMemoryScheduler(max_workers=1)
@@ -716,9 +671,7 @@ class TestRollingSummarySchedulerIntegration:
         with pytest.raises(TypeError, match="scheduler"):
             SummarizingShortTermMemory(scheduler="not-a-scheduler")  # type: ignore[arg-type]
 
-    def test_emits_warning_for_scheduler_drop_log(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_emits_warning_for_scheduler_drop_log(self, caplog: pytest.LogCaptureFixture) -> None:
         """review HIGH #1: scheduler.submit が False を返すと observations は
         L1 / L4 から消える silent data loss になる。consumed 件数を WARNING
         ログに残して可観測化する。"""
@@ -727,9 +680,7 @@ class TestRollingSummarySchedulerIntegration:
             def submit(self, player_id, task):  # type: ignore[override]
                 return False  # 常に drop
 
-        stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
-        )
+        stub = _StubSummaryService.make(result=_ParsedSummary(compressed_activity="ok", emotional_summary=""))
         mem = SummarizingShortTermMemory(
             summary_service=stub,
             scheduler=_DroppingScheduler(),
@@ -745,9 +696,7 @@ class TestRollingSummarySchedulerIntegration:
         assert mem._raw_queue_len(_PID.value) == 0
         assert mem._mid_generations(_PID.value) == []
         # WARNING ログに件数が含まれる
-        assert any(
-            "drop" in rec.message and "15" in rec.message for rec in caplog.records
-        )
+        assert any("drop" in rec.message and "15" in rec.message for rec in caplog.records)
 
     def test_shutdown_scheduler(self) -> None:
         """shutdown は scheduler に委譲。"""
@@ -762,222 +711,6 @@ class TestRollingSummarySchedulerIntegration:
         assert called["n"] == 1
 
 
-# ──────────────────────────────────────────────────────────────────
-# Phase 3: L5 long summary 統合
-# ──────────────────────────────────────────────────────────────────
-
-
-@dataclass
-class _StubLongService(ShortTermMemoryLongSummaryService):
-    """ShortTermMemoryLongSummaryService の generate を stub する。"""
-
-    result: _ParsedLongSummary | None = None
-    exc: Exception | None = None
-    call_count: int = 0
-    captured_previous_l5: L5LongSummary | None = None
-    captured_evicted_l4: L4MidSummary | None = None
-
-    @classmethod
-    def make(cls, *, result=None, exc=None):
-        inst = object.__new__(cls)
-        inst.result = result
-        inst.exc = exc
-        inst.call_count = 0
-        inst.captured_previous_l5 = None
-        inst.captured_evicted_l4 = None
-        return inst
-
-    def generate(self, *, player_name, persona_block, previous_l5, evicted_l4):  # type: ignore[override]
-        self.call_count += 1
-        self.captured_previous_l5 = previous_l5
-        self.captured_evicted_l4 = evicted_l4
-        if self.exc is not None:
-            raise self.exc
-        assert self.result is not None
-        return self.result
-
-
-class TestRollingSummaryL5Trigger:
-    """L4 が keep_gen+1 世代目に達したら L5 統合 task が発火する (Phase 3)。"""
-
-    def test_l4_three_less_l5(self) -> None:
-        """L4 が 3 世代以下なら L5 は生成されない。"""
-        mid_stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
-        )
-        long_stub = _StubLongService.make(
-            result=_ParsedLongSummary(self_image="self", world_view="world")
-        )
-        mem = SummarizingShortTermMemory(
-            summary_service=mid_stub,
-            long_summary_service=long_stub,
-        )
-        # 3 世代分積む (= 15 * 3 = 45 件)
-        for batch in range(3):
-            for i in range(_SUMMARY_INPUT_COUNT):
-                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
-            _complete_window(mem)
-        # L4 は 3 世代まで、L5 はまだ生成されない (= eviction なし)
-        assert len(mem._mid_generations(_PID.value)) == 3
-        assert long_stub.call_count == 0
-        assert mem._long_summary(_PID.value) is None
-
-    def test_l4_four_l5_trigger_l4_evict(self) -> None:
-        """L4 が 4 世代目で L5 統合が発火最古 L4 が evict。"""
-        mid_stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
-        )
-        long_stub = _StubLongService.make(
-            result=_ParsedLongSummary(
-                self_image="統合された自己像",
-                world_view="統合された世界観",
-            )
-        )
-        mem = SummarizingShortTermMemory(
-            summary_service=mid_stub,
-            long_summary_service=long_stub,
-        )
-        # 4 世代分積む (= 15 * 4 = 60 件)
-        for batch in range(4):
-            for i in range(_SUMMARY_INPUT_COUNT):
-                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
-            _complete_window(mem)
-        # L4 は 3 世代まで保持、最古は evict されて L5 になる
-        assert len(mem._mid_generations(_PID.value)) == 3
-        assert long_stub.call_count == 1
-        l5 = mem._long_summary(_PID.value)
-        assert l5 is not None
-        assert l5.self_image == "統合された自己像"
-        assert l5.world_view == "統合された世界観"
-        assert l5.generation_index == 1
-        assert l5.is_fallback is False
-
-    def test_returns_l5_generation_index_l4_evict_when(self) -> None:
-        """L4evict を繰り返すと L5 の generationindex が増える。"""
-        mid_stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
-        )
-        long_stub = _StubLongService.make(
-            result=_ParsedLongSummary(self_image="self", world_view="world")
-        )
-        mem = SummarizingShortTermMemory(
-            summary_service=mid_stub,
-            long_summary_service=long_stub,
-        )
-        # 5 世代分積む (= 75 件)。L4 evict が 2 回発火
-        for batch in range(5):
-            for i in range(_SUMMARY_INPUT_COUNT):
-                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
-            _complete_window(mem)
-        assert long_stub.call_count == 2
-        l5 = mem._long_summary(_PID.value)
-        assert l5 is not None
-        assert l5.generation_index == 2
-
-    def test_long_service_none_template_fallback(self) -> None:
-        """previous_l5 が None で long_service も None なら placeholder L5。"""
-        mid_stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="北を歩いた", emotional_summary="", unresolved=())
-        )
-        mem = SummarizingShortTermMemory(
-            summary_service=mid_stub,
-            long_summary_service=None,
-        )
-        for batch in range(4):
-            for i in range(_SUMMARY_INPUT_COUNT):
-                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
-            _complete_window(mem)
-        l5 = mem._long_summary(_PID.value)
-        assert l5 is not None
-        assert l5.is_fallback is True
-        # 初回 L5 で previous_l5 が無いので placeholder
-        assert "未生成" in l5.self_image
-
-    def test_llm_failure_previous_l5(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """L5 LLM が落ちても previous_l5 で延命される (persona drift 防止)。"""
-        mid_stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
-        )
-        # 最初の L5 は成功
-        long_stub_first = _StubLongService.make(
-            result=_ParsedLongSummary(
-                self_image="安定した自己像",
-                world_view="安定した世界観",
-            )
-        )
-        mem = SummarizingShortTermMemory(
-            summary_service=mid_stub,
-            long_summary_service=long_stub_first,
-        )
-        # 4 世代分積んで L5 を 1 つ作る
-        for batch in range(4):
-            for i in range(_SUMMARY_INPUT_COUNT):
-                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
-            _complete_window(mem)
-        first_l5 = mem._long_summary(_PID.value)
-        assert first_l5 is not None
-
-        # service を例外を返すものに差し替えて 5 世代目を追加
-        mem._long_service = _StubLongService.make(
-            exc=LlmApiCallException("sim", error_code="LLM_API_CALL_FAILED")
-        )
-        with caplog.at_level(
-            logging.WARNING,
-            logger="ai_rpg_world.application.llm.services.summarizing_short_term_memory",
-        ):
-            for i in range(_SUMMARY_INPUT_COUNT):
-                mem.append(_PID, _obs(f"b5-{i}", seq=500 + i))
-            _complete_window(mem)
-
-        l5 = mem._long_summary(_PID.value)
-        assert l5 is not None
-        # previous_l5 が延命される
-        assert l5.self_image == "安定した自己像"
-        assert l5.world_view == "安定した世界観"
-        assert l5.is_fallback is True
-        assert l5.generation_index == 2
-        assert any("L5 LLM 生成失敗" in rec.message for rec in caplog.records)
-
-    def test_get_long_summary_text_self_image_world_view(self) -> None:
-        """getlongsummarytext が selfimage と worldview を整形。"""
-        long_stub = _StubLongService.make(
-            result=_ParsedLongSummary(
-                self_image="寡黙な漁師",
-                world_view="島は穏やか",
-            )
-        )
-        mid_stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
-        )
-        mem = SummarizingShortTermMemory(
-            summary_service=mid_stub,
-            long_summary_service=long_stub,
-        )
-        for batch in range(4):
-            for i in range(_SUMMARY_INPUT_COUNT):
-                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
-            _complete_window(mem)
-        text = mem.get_long_summary_text(_PID)
-        assert "私について" in text
-        assert "寡黙な漁師" in text
-        assert "この世界について" in text
-        assert "島は穏やか" in text
-
-    def test_get_long_summary_text_l5_empty_string(self) -> None:
-        """get long summary text は L5 未生成なら 空文字。"""
-        mem = SummarizingShortTermMemory(summary_service=None)
-        assert mem.get_long_summary_text(_PID) == ""
-
-    def test_long_summary_service_non_service_type_error(self) -> None:
-        """longsummaryservice が非 service なら typeerror。"""
-        with pytest.raises(TypeError, match="long_summary_service"):
-            SummarizingShortTermMemory(
-                long_summary_service="not-a-service",  # type: ignore[arg-type]
-            )
-
-
 class _RecordingRecorder:
     """trace recorder の test 用 fake。`record(kind, **payload)` を全部保持する。"""
 
@@ -989,7 +722,7 @@ class _RecordingRecorder:
 
 
 class TestShortTermSummaryGeneratedTrace:
-    """PR #435: L4 / L5 が install された瞬間の trace 出力 (成功 / fallback 両方)。
+    """PR #435: L4 が install された瞬間の trace 出力 (成功 / fallback 両方)。
 
     成功時の生成内容は従来 trace に出ず、'rolling が何を圧縮したか' が事後追え
     なかった。実験 #30 前準備でギャップとして発覚し、本トレースで埋める。
@@ -1001,7 +734,6 @@ class TestShortTermSummaryGeneratedTrace:
         parsed = _ParsedSummary(
             compressed_activity="森でキノコを採集した",
             emotional_summary="やや疲れた",
-            unresolved=("キノコの種類不明",),
         )
         mem = SummarizingShortTermMemory(
             summary_service=_StubSummaryService.make(result=parsed),
@@ -1020,7 +752,7 @@ class TestShortTermSummaryGeneratedTrace:
         assert ev["raw_count"] == _SUMMARY_INPUT_COUNT
         assert ev["compressed_activity"] == "森でキノコを採集した"
         assert ev["emotional_summary"] == "やや疲れた"
-        assert ev["unresolved"] == ["キノコの種類不明"]
+        assert "unresolved" not in ev
         assert ev["is_fallback"] is False
         assert ev["summary_id"].startswith("l4-")
 
@@ -1050,6 +782,7 @@ class TestShortTermSummaryGeneratedTrace:
 
     def test_recorder_provider_exception_does_not_stop_summary(self) -> None:
         """trace recorder の I/O 失敗が L4 install を倒さないこと (best-effort)。"""
+
         def boom() -> object:
             raise RuntimeError("recorder broken")
 
@@ -1075,41 +808,6 @@ class TestShortTermSummaryGeneratedTrace:
         _complete_window(mem)
         l4_events = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
         assert l4_events[0]["tick"] is None
-
-    def test_l5_install_short_term_long_summary_generated_emit(self) -> None:
-        """L4 が keep_gen=3 を超えて evict されると L5 が install され、trace に 1 件出る。"""
-        rec = _RecordingRecorder()
-        # 4 generation 分 L4 を生成して L5 を発火させる (DEFAULT_L4_KEEP_GENERATIONS=3)
-        long_stub = _StubLongService.make(
-            result=_ParsedLongSummary(
-                self_image="私は寡黙な観察者",
-                world_view="この島は不気味",
-            )
-        )
-        mid_stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
-        )
-        mem = SummarizingShortTermMemory(
-            summary_service=mid_stub,
-            long_summary_service=long_stub,
-            trace_recorder_provider=lambda: rec,
-            current_tick_provider=lambda: 99,
-        )
-        for batch in range(4):
-            for i in range(_SUMMARY_INPUT_COUNT):
-                mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
-            _complete_window(mem)
-
-        l5_events = [e for e in rec.events if e["kind"] == "short_term_long_summary_generated"]
-        assert len(l5_events) == 1
-        ev = l5_events[0]
-        assert ev["player_id"] == _PID.value
-        assert ev["tick"] == 99
-        assert ev["generation_index"] == 1
-        assert ev["self_image"] == "私は寡黙な観察者"
-        assert ev["world_view"] == "この島は不気味"
-        assert ev["is_fallback"] is False
-        assert ev["summary_id"].startswith("l5-")
 
 
 class TestPostHocSetters:
@@ -1178,6 +876,7 @@ class TestTraceRecorderNullObjectNormalization:
 
     def test_provider_null_trace_recorder_raises_exception(self) -> None:
         """provider 自体が raise するケースでも本体は止まらない。"""
+
         def boom() -> object:
             raise RuntimeError("recorder broken")
 
@@ -1217,37 +916,77 @@ class TestTraceRecorderNullObjectNormalization:
         assert len(mem._mid_generations(_PID.value)) == 1
 
 
-class TestGetOldestEntryDatetimeMixedTimezones:
-    """raw queue に naive と aware の datetime が混在しても crash しない。
+class TestRollingSummaryCompactionListener:
+    """SummarizingShortTermMemory が畳んだ範囲を、要約とは別に聞き手へ渡すことを保証する。"""
 
-    本来 ObservationEntry の occurred_at は upstream で aware に揃えられる
-    建前だが、シナリオファイル由来の observation や snapshot 再生経路で
-    naive な datetime が混入してくることがある。ここで min() が
-    ``TypeError: can't compare offset-naive and offset-aware datetimes`` で
-    落ちると、その tick 以降の prompt 構築が全て失敗し、実験が落ちる。
-    そのため raw 内で混在していても UTC として揃えて比較する。
-    """
-
-    def _obs_at(self, prose: str, occurred_at: datetime) -> ObservationEntry:
-        return ObservationEntry(
-            occurred_at=occurred_at,
-            output=ObservationOutput(prose=prose, structured={}),
+    def test_listener_receives_exactly_the_compacted_entries(self) -> None:
+        """畳むとき、聞き手には畳んだ古いターンの出来事だけが、要約に渡すものと同じ並びで渡る。"""
+        received: list[tuple[PlayerId, list[str]]] = []
+        mem = SummarizingShortTermMemory(
+            turn_cap=4,
+            compact_turn_count=2,
+            on_compacted=lambda pid, entries: received.append((pid, [e.payload.output.prose for e in entries])),
         )
 
-    def test_returns_oldest_when_naive_and_aware_entries_are_mixed(self) -> None:
-        """naive datetime と aware datetime が混在しても crash せず、
-        UTC として比較した最古を返す。"""
-        mem = SummarizingShortTermMemory(summary_service=None)
-        # naive (= 古い): 2026-06-01 00:00 (UTC 相当)
-        mem.append(_PID, self._obs_at("old_naive", datetime(2026, 6, 1)))
-        # aware (= 新しい): 2026-06-01 12:00 UTC
-        mem.append(
-            _PID,
-            self._obs_at(
-                "newer_aware", datetime(2026, 6, 1, 12, tzinfo=timezone.utc)
-            ),
+        for turn in range(4):
+            mem.append(_PID, _obs(f"turn-{turn}", seq=turn))
+            mem.complete_turn(_PID)
+
+        assert received == [(_PID, ["turn-0", "turn-1"])]
+
+    def test_listener_is_not_called_before_the_cap(self) -> None:
+        """ターン数が上限に届くまでは、聞き手を呼ばない。"""
+        received: list[object] = []
+        mem = SummarizingShortTermMemory(
+            turn_cap=4, compact_turn_count=2, on_compacted=lambda pid, entries: received.append(entries)
         )
-        oldest = mem.get_oldest_entry_datetime(_PID)
-        assert oldest is not None
-        # UTC として比較した最古 (= naive 側を UTC 扱いした 06-01 00:00)
-        assert oldest.replace(tzinfo=None) == datetime(2026, 6, 1)
+
+        for turn in range(3):
+            mem.append(_PID, _obs(f"turn-{turn}", seq=turn))
+            mem.complete_turn(_PID)
+
+        assert received == []
+
+    def test_listener_failure_does_not_stop_the_summary(self) -> None:
+        """聞き手が例外を投げても、要約は作られ、complete_turn は例外を出さない。"""
+
+        def _broken(pid: PlayerId, entries: object) -> None:
+            raise RuntimeError("boom")
+
+        mem = SummarizingShortTermMemory(turn_cap=2, compact_turn_count=1, on_compacted=_broken)
+        mem.append(_PID, _obs("turn-0"))
+        mem.complete_turn(_PID)
+        mem.complete_turn(_PID)
+
+        assert len(mem._mid_generations(_PID.value)) == 1
+
+    def test_listener_still_receives_the_range_when_the_summary_submit_fails(self) -> None:
+        """要約の送信が例外を投げても、短期記憶から外れた範囲は聞き手に渡る。"""
+        received: list[object] = []
+
+        class _BrokenScheduler(InlineShortTermMemoryScheduler):
+            def submit(self, pid, task):  # type: ignore[override]
+                raise RuntimeError("scheduler down")
+
+        mem = SummarizingShortTermMemory(
+            turn_cap=2,
+            compact_turn_count=1,
+            scheduler=_BrokenScheduler(),
+            on_compacted=lambda pid, entries: received.append(entries),
+        )
+        mem.append(_PID, _obs("turn-0"))
+        mem.complete_turn(_PID)
+
+        with pytest.raises(RuntimeError):
+            mem.complete_turn(_PID)
+
+        assert len(received) == 1
+
+    def test_uncompacted_entries_include_the_open_turn(self) -> None:
+        """まだ畳んでいない分は、閉じたターンと、まだ閉じていないターンの出来事を古い順に含む。"""
+        mem = SummarizingShortTermMemory(turn_cap=4, compact_turn_count=2)
+        mem.append(_PID, _obs("closed"))
+        mem.complete_turn(_PID)
+        mem.append(_PID, _obs("open"))
+
+        assert [e.payload.output.prose for e in mem.uncompacted_entries(_PID)] == ["closed", "open"]

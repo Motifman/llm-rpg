@@ -23,15 +23,13 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
 # シナリオの players 宣言順に 1 から振られる。
-_MORI = PlayerId(1)   # crew, ランタン持ち
-_SENA = PlayerId(2)   # crew
-_KUZE = PlayerId(3)   # keeper (襲える側)
-_AOI = PlayerId(4)    # crew, 灯りを持たない
+_MORI = PlayerId(1)  # crew, ランタン持ち
+_SENA = PlayerId(2)  # crew
+_KUZE = PlayerId(3)  # keeper (襲える側)
+_AOI = PlayerId(4)  # crew, 灯りを持たない
 
 
 @pytest.fixture()
@@ -124,13 +122,9 @@ class TestDarknessGate:
         _gather_cutter(runtime, _KUZE)
         _move(runtime, _SENA, "storage")
 
-        assert _strike_until_down(runtime, _KUZE, _SENA) > 1, (
-            "一撃で倒れると、被害者に何も届かないまま終わる"
-        )
+        assert _strike_until_down(runtime, _KUZE, _SENA) > 1, "一撃で倒れると、被害者に何も届かないまま終わる"
 
-    def test_a_lantern_bearer_makes_the_room_unsafe_for_the_killer(
-        self, runtime
-    ) -> None:
+    def test_a_lantern_bearer_makes_the_room_unsafe_for_the_killer(self, runtime) -> None:
         """ランタンを持った第三者が同席すると、暗所でも襲えなくなる。
 
         「灯りを絶やさないこと」がそのまま身の安全になる、という
@@ -317,7 +311,5 @@ def _owns(runtime, player_id: PlayerId, item_string_id: str) -> bool:
 
     spec_int = runtime.id_mapper.get_int("item_spec", item_string_id)
     inventory = runtime._player_inventory_repo.find_by_id(player_id)
-    owned = collect_owned_item_spec_ids_from_inventory(
-        inventory, runtime._item_repo
-    )
+    owned = collect_owned_item_spec_ids_from_inventory(inventory, runtime._item_repo)
     return any(int(spec_id) == spec_int for spec_id in owned)

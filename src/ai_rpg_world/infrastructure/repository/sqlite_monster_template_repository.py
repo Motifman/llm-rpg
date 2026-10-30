@@ -29,14 +29,10 @@ class SqliteMonsterTemplateRepository(MonsterTemplateRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_connection(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteMonsterTemplateRepository:
+    def for_connection(cls, connection: sqlite3.Connection) -> SqliteMonsterTemplateRepository:
         return cls(connection)
 
-    def find_by_id(
-        self, template_id: MonsterTemplateId
-    ) -> MonsterTemplate | None:
+    def find_by_id(self, template_id: MonsterTemplateId) -> MonsterTemplate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_monster_templates WHERE template_id = ?",
             (int(template_id),),
@@ -46,9 +42,7 @@ class SqliteMonsterTemplateRepository(MonsterTemplateRepository):
             return None
         return self._build_template_from_row(row)
 
-    def find_by_ids(
-        self, template_ids: list[MonsterTemplateId]
-    ) -> list[MonsterTemplate]:
+    def find_by_ids(self, template_ids: list[MonsterTemplateId]) -> list[MonsterTemplate]:
         return [x for template_id in template_ids for x in [self.find_by_id(template_id)] if x is not None]
 
     def find_by_name(self, name: str) -> MonsterTemplate | None:
@@ -68,19 +62,13 @@ class SqliteMonsterTemplateRepository(MonsterTemplateRepository):
         return self._build_template_from_row(row)
 
     def save(self, template: MonsterTemplate) -> MonsterTemplate:
-        raise NotImplementedError(
-            "SqliteMonsterTemplateRepository is read-only. Use SqliteMonsterTemplateWriter."
-        )
+        raise NotImplementedError("SqliteMonsterTemplateRepository is read-only. Use SqliteMonsterTemplateWriter.")
 
     def delete(self, template_id: MonsterTemplateId) -> bool:
-        raise NotImplementedError(
-            "SqliteMonsterTemplateRepository is read-only. Use SqliteMonsterTemplateWriter."
-        )
+        raise NotImplementedError("SqliteMonsterTemplateRepository is read-only. Use SqliteMonsterTemplateWriter.")
 
     def find_all(self) -> list[MonsterTemplate]:
-        cur = self._conn.execute(
-            "SELECT * FROM game_monster_templates ORDER BY template_id ASC"
-        )
+        cur = self._conn.execute("SELECT * FROM game_monster_templates ORDER BY template_id ASC")
         return [self._build_template_from_row(row) for row in cur.fetchall()]
 
     def _build_template_from_row(self, row: sqlite3.Row) -> MonsterTemplate:
@@ -149,15 +137,11 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteMonsterTemplateWriter:
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteMonsterTemplateWriter:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteMonsterTemplateWriter:
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteMonsterTemplateWriter:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
@@ -309,18 +293,14 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
             "INSERT INTO game_monster_template_threat_races (template_id, race_index, race) VALUES (?, ?, ?)",
             [
                 (int(template.template_id), index, race.value)
-                for index, race in enumerate(
-                    sorted(template.threat_races or [], key=lambda r: r.value)
-                )
+                for index, race in enumerate(sorted(template.threat_races or [], key=lambda r: r.value))
             ],
         )
         self._conn.executemany(
             "INSERT INTO game_monster_template_prey_races (template_id, race_index, race) VALUES (?, ?, ?)",
             [
                 (int(template.template_id), index, race.value)
-                for index, race in enumerate(
-                    sorted(template.prey_races or [], key=lambda r: r.value)
-                )
+                for index, race in enumerate(sorted(template.prey_races or [], key=lambda r: r.value))
             ],
         )
         self._conn.executemany(
@@ -348,20 +328,30 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
                 for index, item_spec_id in enumerate(sorted(template.preferred_feed_item_spec_ids or [], key=int))
             ],
         )
-        if template.respawn_info.condition is not None and template.respawn_info.condition.preferred_weather is not None:
+        if (
+            template.respawn_info.condition is not None
+            and template.respawn_info.condition.preferred_weather is not None
+        ):
             self._conn.executemany(
                 "INSERT INTO game_monster_template_respawn_preferred_weather (template_id, weather_index, weather_type) VALUES (?, ?, ?)",
                 [
                     (int(template.template_id), index, value.value)
-                    for index, value in enumerate(sorted(template.respawn_info.condition.preferred_weather, key=lambda item: item.value))
+                    for index, value in enumerate(
+                        sorted(template.respawn_info.condition.preferred_weather, key=lambda item: item.value)
+                    )
                 ],
             )
-        if template.respawn_info.condition is not None and template.respawn_info.condition.required_area_traits is not None:
+        if (
+            template.respawn_info.condition is not None
+            and template.respawn_info.condition.required_area_traits is not None
+        ):
             self._conn.executemany(
                 "INSERT INTO game_monster_template_respawn_required_area_traits (template_id, trait_index, trait) VALUES (?, ?, ?)",
                 [
                     (int(template.template_id), index, value.value)
-                    for index, value in enumerate(sorted(template.respawn_info.condition.required_area_traits, key=lambda item: item.value))
+                    for index, value in enumerate(
+                        sorted(template.respawn_info.condition.required_area_traits, key=lambda item: item.value)
+                    )
                 ],
             )
         self._conn.executemany(
@@ -388,14 +378,24 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
             "DELETE FROM game_monster_template_skill_ids WHERE template_id = ?",
             (int(template_id),),
         )
-        self._conn.execute("DELETE FROM game_monster_template_phase_thresholds WHERE template_id = ?", (int(template_id),))
+        self._conn.execute(
+            "DELETE FROM game_monster_template_phase_thresholds WHERE template_id = ?", (int(template_id),)
+        )
         self._conn.execute("DELETE FROM game_monster_template_threat_races WHERE template_id = ?", (int(template_id),))
         self._conn.execute("DELETE FROM game_monster_template_prey_races WHERE template_id = ?", (int(template_id),))
         self._conn.execute("DELETE FROM game_monster_template_growth_stages WHERE template_id = ?", (int(template_id),))
-        self._conn.execute("DELETE FROM game_monster_template_preferred_feed_items WHERE template_id = ?", (int(template_id),))
-        self._conn.execute("DELETE FROM game_monster_template_respawn_preferred_weather WHERE template_id = ?", (int(template_id),))
-        self._conn.execute("DELETE FROM game_monster_template_respawn_required_area_traits WHERE template_id = ?", (int(template_id),))
-        self._conn.execute("DELETE FROM game_monster_template_attack_status_effects WHERE template_id = ?", (int(template_id),))
+        self._conn.execute(
+            "DELETE FROM game_monster_template_preferred_feed_items WHERE template_id = ?", (int(template_id),)
+        )
+        self._conn.execute(
+            "DELETE FROM game_monster_template_respawn_preferred_weather WHERE template_id = ?", (int(template_id),)
+        )
+        self._conn.execute(
+            "DELETE FROM game_monster_template_respawn_required_area_traits WHERE template_id = ?", (int(template_id),)
+        )
+        self._conn.execute(
+            "DELETE FROM game_monster_template_attack_status_effects WHERE template_id = ?", (int(template_id),)
+        )
         cur = self._conn.execute(
             "DELETE FROM game_monster_templates WHERE template_id = ?",
             (int(template_id),),

@@ -134,9 +134,7 @@ class TradePageQueryService:
         *,
         filter_for_search: bool,
     ) -> tuple[list[dict[str, Any]], str | None]:
-        filt: GlobalMarketFilterDto | None = (
-            _state_to_global_filter(st) if filter_for_search else None
-        )
+        filt: GlobalMarketFilterDto | None = _state_to_global_filter(st) if filter_for_search else None
 
         def fetch(cursor: str | None, batch_limit: int) -> tuple[list[GlobalMarketListingDto], str | None]:
             r = self._global_market.get_market_listings(
@@ -182,9 +180,7 @@ class TradePageQueryService:
         """出品一覧: ACTIVE のみを `get_active_trades_as_seller` の専用ストリームでページングする。"""
 
         def fetch(cur: str | None, batch_limit: int) -> tuple[list[TradeDto], str | None]:
-            r = self._trade_query.get_active_trades_as_seller(
-                player_id, limit=batch_limit, cursor=cur
-            )
+            r = self._trade_query.get_active_trades_as_seller(player_id, limit=batch_limit, cursor=cur)
             return r.trades, r.next_cursor
 
         trades, next_c = _cursor_stream_slice(fetch, st.offset, st.limit)

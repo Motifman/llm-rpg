@@ -32,7 +32,6 @@ _SCENARIO_PATH = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.jso
 
 @pytest.fixture
 def runtime(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
     monkeypatch.setenv("SPOT_GRAPH_TICK_LOOP_ENABLED", "false")
     return create_world_runtime(_SCENARIO_PATH)
 
@@ -48,10 +47,7 @@ class TestDoMoveNoNestedAdvanceTick:
         runtime.do_move(player_id, "reading_room")
 
         tick_after = runtime.current_tick()
-        assert tick_after == tick_before, (
-            f"do_move でネスト advance_tick が走った: "
-            f"{tick_before} → {tick_after}"
-        )
+        assert tick_after == tick_before, f"do_move でネスト advance_tick が走った: {tick_before} → {tick_after}"
 
     def test_do_move_after_traveling_true(self, runtime) -> None:
         """travel state が立ち、後続 tick で advance される下準備ができる。"""

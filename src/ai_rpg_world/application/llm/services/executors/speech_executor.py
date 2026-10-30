@@ -137,8 +137,7 @@ class SpeechToolExecutor:
             return build_invalid_arg_failure(
                 arg_name="channel",
                 detail=(
-                    f"channel は {list(SPEECH_CHANNEL_VALUES)!r} のいずれかを指定してください "
-                    f"(現在: {channel_str!r})"
+                    f"channel は {list(SPEECH_CHANNEL_VALUES)!r} のいずれかを指定してください (現在: {channel_str!r})"
                 ),
             )
         channel_enum = _CHANNEL_STRING_TO_ENUM[channel_str]
@@ -161,9 +160,7 @@ class SpeechToolExecutor:
                 # target_player_id に入る前提なので、ここでは目に見える誤りのみ catch
                 return build_invalid_arg_failure(
                     arg_name="target_player_id",
-                    detail=(
-                        "channel=whisper のときは囁き先プレイヤーの id (or label) が必須です"
-                    ),
+                    detail=("channel=whisper のときは囁き先プレイヤーの id (or label) が必須です"),
                 )
             if not isinstance(raw_target, (int, float)):
                 return build_invalid_arg_failure(
@@ -179,9 +176,7 @@ class SpeechToolExecutor:
         content_to_speak = content
         if self._player_status_repository is not None:
             try:
-                status = self._player_status_repository.find_by_id(
-                    PlayerId(player_id)
-                )
+                status = self._player_status_repository.find_by_id(PlayerId(player_id))
                 if status is not None and status.is_severely_fatigued():
                     content_to_speak = _apply_speech_blur(content, rng=self._rng)
             except Exception:
@@ -202,8 +197,7 @@ class SpeechToolExecutor:
             return build_sanitized_exception_failure(
                 exc=e,
                 log_context=(
-                    f"speech failure player_id={player_id} channel={channel_str} "
-                    f"target_player_id={target_player_id}"
+                    f"speech failure player_id={player_id} channel={channel_str} target_player_id={target_player_id}"
                 ),
                 public_message=(
                     "囁きの送信に失敗しました。宛先プレイヤーの存在と状況を確認してください。"

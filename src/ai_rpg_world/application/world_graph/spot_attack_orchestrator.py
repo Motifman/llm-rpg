@@ -108,17 +108,15 @@ class SpotAttackOrchestrator:
         # 直接 instance を持つ。`SpotMonsterAttackService` の private フィールド
         # への参照を避ける（PR #133 レビュー HIGH 指摘）。
         self._visibility = visibility_service or MonsterVisibilityService()
-        self._monster_attack_service = (
-            monster_attack_service
-            or SpotMonsterAttackService(visibility_service=self._visibility)
+        self._monster_attack_service = monster_attack_service or SpotMonsterAttackService(
+            visibility_service=self._visibility
         )
-        self._player_attack_service = (
-            player_attack_service or SpotPlayerAttackService()
-        )
+        self._player_attack_service = player_attack_service or SpotPlayerAttackService()
         self._perception = perception_service or SpotPerceptionService()
         # テスト容易性: random.Random instance を注入できる。seed 固定の確率
         # 評価を流せる。default は module-level random (実走用)。
         import random as _random
+
         self._random = random_source or _random.random
         # PR-K: 攻撃で player aggregate に積まれる PlayerDownedEvent 等を
         # 世界に流すための publisher。未注入時は publish しない (後方互換)。
@@ -250,19 +248,20 @@ class SpotAttackOrchestrator:
         from ai_rpg_world.domain.combat.value_object.status_effect import (
             StatusEffect,
         )
+
         for c in chances:
             if c.chance <= 0.0:
                 continue
             if self._random() >= c.chance:
                 continue
-            expiry_tick = WorldTick(
-                current_tick.value + c.duration_ticks
+            expiry_tick = WorldTick(current_tick.value + c.duration_ticks)
+            target_player.add_status_effect(
+                StatusEffect(
+                    effect_type=c.effect_type,
+                    value=float(c.value),
+                    expiry_tick=expiry_tick,
+                )
             )
-            target_player.add_status_effect(StatusEffect(
-                effect_type=c.effect_type,
-                value=float(c.value),
-                expiry_tick=expiry_tick,
-            ))
 
     # ------------------------------------------------------------------
     # プレイヤー → モンスター攻撃
@@ -343,7 +342,7 @@ class SpotAttackOrchestrator:
         - damage > 0
 
         成立時:
-        - `prey.apply_damage(damage, current_tick, attacker_id=...)` で HP 減少
+        - `prey.apply_damage(damage, current_tick, killer_monster_id=...)` で HP 減少
           → 致命なら aggregate 内部で `_die` が発火し `MonsterDiedEvent` 追加
         - `attacker.record_attack(current_tick)` で cooldown 更新
         - 致命攻撃 (`target_incapacitated=True`) なら
@@ -370,9 +369,7 @@ class SpotAttackOrchestrator:
         # 視認: monster_attack の視認チェックと同じロジック（環境光量 +
         # attacker の dark_vision）。dark_vision 無し + 暗闇では狩らない。
         effective_lighting = self._compute_lighting(graph, spot_id)
-        if not self._visibility.can_see_target(
-            attacker_monster.template, effective_lighting
-        ):
+        if not self._visibility.can_see_target(attacker_monster.template, effective_lighting):
             return AttackOutcome(executed=False, reason="not_visible")
 
         damage = max(0, attacker_monster.template.base_stats.attack)
@@ -383,7 +380,7 @@ class SpotAttackOrchestrator:
         prey_monster.apply_damage(
             final_damage=damage,
             current_tick=current_tick,
-            attacker_id=attacker_monster.world_object_id,
+            killer_monster_id=attacker_monster.monster_id,
         )
         attacker_monster.record_attack(current_tick)
 
@@ -392,9 +389,7 @@ class SpotAttackOrchestrator:
             # 致命攻撃なら hunger 回復。`record_prey_kill` 内部で
             # starvation_ticks <= 0 や hunger_decrease <= 0 を no-op で
             # 抜けるので、設定が無いテンプレでも安全に呼べる。
-            attacker_monster.record_prey_kill(
-                attacker_monster.template.hunger_decrease_on_prey_kill
-            )
+            attacker_monster.record_prey_kill(attacker_monster.template.hunger_decrease_on_prey_kill)
 
         # Phase 4 用フック: 最後に攻撃された tick を prey 側に残す。
         # 致命攻撃で死んだ後の no-op は aggregate 側でガードされる。
@@ -460,9 +455,7 @@ class SpotAttackOrchestrator:
             return AttackOutcome(executed=False, reason="target_dead")
 
         effective_lighting = self._compute_lighting(graph, spot_id)
-        if not self._visibility.can_see_target(
-            attacker_monster.template, effective_lighting
-        ):
+        if not self._visibility.can_see_target(attacker_monster.template, effective_lighting):
             return AttackOutcome(executed=False, reason="not_visible")
 
         damage = max(0, attacker_monster.template.base_stats.attack)
@@ -472,7 +465,7 @@ class SpotAttackOrchestrator:
         target_monster.apply_damage(
             final_damage=damage,
             current_tick=current_tick,
-            attacker_id=attacker_monster.world_object_id,
+            killer_monster_id=attacker_monster.monster_id,
         )
         attacker_monster.record_attack(current_tick)
         target_incapacitated = target_monster.status != MonsterStatusEnum.ALIVE
@@ -510,9 +503,7 @@ class SpotAttackOrchestrator:
     # 内部
     # ------------------------------------------------------------------
 
-    def _compute_lighting(
-        self, graph: SpotGraphAggregate, spot_id: SpotId
-    ) -> LightingEnum:
+    def _compute_lighting(self, graph: SpotGraphAggregate, spot_id: SpotId) -> LightingEnum:
         """スポットの実効照明。光源所持判定は最小実装では行わない。
 
         TODO: SpotGraphCurrentStateBuilder と同じく光源持ちエンティティの
@@ -521,6 +512,4 @@ class SpotAttackOrchestrator:
         """
         node = graph.get_spot(spot_id)
         atmosphere: SpotAtmosphere | None = node.atmosphere
-        return self._perception.compute_effective_lighting(
-            atmosphere, spot_has_any_light_bearer=False
-        )
+        return self._perception.compute_effective_lighting(atmosphere, spot_has_any_light_bearer=False)

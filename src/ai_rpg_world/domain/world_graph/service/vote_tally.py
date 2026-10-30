@@ -52,9 +52,7 @@ class VoteResult:
     ballots: dict[PlayerId, PlayerId | None]
 
 
-def resolve_vote(
-    ballots: Mapping[PlayerId, PlayerId | None]
-) -> VoteResult:
+def resolve_vote(ballots: Mapping[PlayerId, PlayerId | None]) -> VoteResult:
     """投じられた票から追放先を決める。
 
     Args:

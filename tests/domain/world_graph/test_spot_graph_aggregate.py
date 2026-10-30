@@ -272,6 +272,7 @@ class TestSpotGraphAggregateMove:
 
 class TestConnectionState:
     def test_set_passable_emits_once(self):
+        """LOCKED→OPENで通知を1件発行し、未指定の行為者はNoneを保つ（#183互換）。"""
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
         g.add_spot(_node(1))
         g.add_spot(_node(2))
@@ -284,7 +285,7 @@ class TestConnectionState:
                 description="",
                 travel_ticks=0,
                 is_bidirectional=False,
-            passage=Passage.door(DoorStateEnum.LOCKED),
+                passage=Passage.door(DoorStateEnum.LOCKED),
             )
         )
         g.clear_events()
@@ -293,6 +294,7 @@ class TestConnectionState:
         assert len(evs) == 1
         assert isinstance(evs[0], ConnectionStateChangedEvent)
         assert evs[0].traversable is True
+        assert evs[0].original_actor_entity_id is None
 
     def test_set_passable_same_no_event(self):
         """既に通行可な接続を OPEN へ遷移しても通行可否は変わらずイベントは出ない。"""
@@ -344,20 +346,14 @@ class TestConnectionStateChangedActor:
         g.clear_events()
         return g
 
-    def test_default_actor_is_none(self) -> None:
-        """actor_entity_id 未指定なら event には None が乗る (後方互換)。"""
-        g = self._build_graph()
-        g.set_connection_passage_state(ConnectionId.create(1), "OPEN")
-        evs = g.get_events()
-        assert len(evs) == 1
-        assert evs[0].original_actor_entity_id is None
-
     def test_actor_is_propagated_to_event(self) -> None:
         """``actor_entity_id`` を渡すと event の ``original_actor_entity_id`` に伝播。"""
         g = self._build_graph()
         actor = EntityId.create(42)
         g.set_connection_passage_state(
-            ConnectionId.create(1), "OPEN", actor_entity_id=actor,
+            ConnectionId.create(1),
+            "OPEN",
+            actor_entity_id=actor,
         )
         evs = g.get_events()
         assert len(evs) == 1
@@ -417,7 +413,7 @@ class TestConnectionRecords:
                 description="",
                 travel_ticks=1,
                 is_bidirectional=False,
-            passage=Passage.door(DoorStateEnum.LOCKED),
+                passage=Passage.door(DoorStateEnum.LOCKED),
             )
         )
         g.add_connection(
@@ -435,7 +431,10 @@ class TestConnectionRecords:
 
         records = g.iter_connection_records()
 
-        assert [(int(r.connection.connection_id.value), r.reverse_connection_id.value if r.reverse_connection_id else None) for r in records] == [
+        assert [
+            (int(r.connection.connection_id.value), r.reverse_connection_id.value if r.reverse_connection_id else None)
+            for r in records
+        ] == [
             (1, 2),
             (3, None),
             (4, 5),

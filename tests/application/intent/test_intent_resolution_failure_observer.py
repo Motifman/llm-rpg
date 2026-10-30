@@ -77,9 +77,7 @@ class TestFailureObserverHook:
             failure_observer=lambda intent, dto: captured.append((intent, dto)),
         )
 
-        service.submit_and_resolve_immediately(
-            player_id=5, tool_name="travel_to", arguments={}
-        )
+        service.submit_and_resolve_immediately(player_id=5, tool_name="travel_to", arguments={})
 
         assert len(captured) == 1
         intent, dto = captured[0]
@@ -100,9 +98,7 @@ class TestFailureObserverHook:
             tick_provider=lambda: WorldTick(1),
             failure_observer=lambda intent, dto: captured.append((intent, dto)),
         )
-        service.submit_and_resolve_immediately(
-            player_id=1, tool_name="tool", arguments={}
-        )
+        service.submit_and_resolve_immediately(player_id=1, tool_name="tool", arguments={})
         assert captured == []
 
     def test_observer_exception_does_not_propagate(self, caplog) -> None:
@@ -110,9 +106,7 @@ class TestFailureObserverHook:
         import logging
 
         def handler(player_id: int, args: Mapping[str, Any]) -> LlmCommandResultDto:
-            return LlmCommandResultDto(
-                success=False, message="x", error_code="LOST_RACE"
-            )
+            return LlmCommandResultDto(success=False, message="x", error_code="LOST_RACE")
 
         def boom(intent, dto):
             raise RuntimeError("observer crashed")
@@ -128,16 +122,11 @@ class TestFailureObserverHook:
             logging.ERROR,
             logger="ai_rpg_world.application.intent.intent_resolution_service",
         ):
-            result = service.submit_and_resolve_immediately(
-                player_id=1, tool_name="tool", arguments={}
-            )
+            result = service.submit_and_resolve_immediately(player_id=1, tool_name="tool", arguments={})
         assert result.success is False
         assert result.error_code == "LOST_RACE"
         # observer 例外が ERROR レベルでログに残ること (observability 回帰防止)
-        assert any(
-            "failure_observer raised" in record.message
-            for record in caplog.records
-        )
+        assert any("failure_observer raised" in record.message for record in caplog.records)
 
 
 class TestEndToEndWithActionFailedEmitter:
@@ -186,7 +175,5 @@ class TestEndToEndWithActionFailedEmitter:
         observations = buffer.get_observations(PlayerId(11))
         assert len(observations) == 1
         assert observations[0].output.structured["type"] == "action_failed"
-        assert observations[0].output.structured["error_code"] == (
-            "TARGET_NO_LONGER_EXISTS"
-        )
+        assert observations[0].output.structured["error_code"] == ("TARGET_NO_LONGER_EXISTS")
         assert trigger.scheduled == [11]

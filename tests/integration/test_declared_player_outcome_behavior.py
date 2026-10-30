@@ -58,10 +58,7 @@ class TestDeclaredPlayerOutcomeBehavior:
 
         _advance_from(runtime, 143)
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(player_id)
-            is PlayerOutcomeEnum.RESCUED
-        )
+        assert runtime._player_outcome_registry.get_outcome(player_id) is PlayerOutcomeEnum.RESCUED
 
     def test_rescue_tick_requires_signal_fire(self) -> None:
         """救助 tick でも狼煙が上がっていなければ山頂の未確定者を救助しない。"""
@@ -71,10 +68,7 @@ class TestDeclaredPlayerOutcomeBehavior:
 
         _advance_from(runtime, 143)
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(player_id)
-            is PlayerOutcomeEnum.UNRESOLVED
-        )
+        assert runtime._player_outcome_registry.get_outcome(player_id) is PlayerOutcomeEnum.UNRESOLVED
 
     def test_rescue_tick_requires_player_at_summit(self) -> None:
         """狼煙が上がっていても山頂にいない未確定者を救助しない。"""
@@ -84,10 +78,7 @@ class TestDeclaredPlayerOutcomeBehavior:
 
         _advance_from(runtime, 143)
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(player_id)
-            is PlayerOutcomeEnum.UNRESOLVED
-        )
+        assert runtime._player_outcome_registry.get_outcome(player_id) is PlayerOutcomeEnum.UNRESOLVED
 
     def test_skipped_rescue_tick_is_caught_up(self) -> None:
         """時刻復元で tick 144 を飛び越えても、次の tick で救助判定を補完する。"""
@@ -98,10 +89,7 @@ class TestDeclaredPlayerOutcomeBehavior:
 
         _advance_from(runtime, 150)
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(player_id)
-            is PlayerOutcomeEnum.RESCUED
-        )
+        assert runtime._player_outcome_registry.get_outcome(player_id) is PlayerOutcomeEnum.RESCUED
 
     def test_missed_rescue_ship_cannot_be_used_later(self) -> None:
         """救助 tick で条件未達なら、後から狼煙を上げても通過済みの船では救助しない。"""
@@ -113,10 +101,7 @@ class TestDeclaredPlayerOutcomeBehavior:
         runtime._world_flag_state.add(_SIGNAL_FIRE_FLAG, context=_SETUP_FLAG_CONTEXT)
         _advance_from(runtime, 150)
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(player_id)
-            is PlayerOutcomeEnum.UNRESOLVED
-        )
+        assert runtime._player_outcome_registry.get_outcome(player_id) is PlayerOutcomeEnum.UNRESOLVED
 
     def test_stranded_tick_resolves_only_unresolved_players(self) -> None:
         """tick 240 では未確定者を STRANDED にし、確定済み結果を上書きしない。"""
@@ -129,11 +114,5 @@ class TestDeclaredPlayerOutcomeBehavior:
 
         _advance_from(runtime, 239)
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(resolved)
-            is PlayerOutcomeEnum.RESCUED
-        )
-        assert (
-            runtime._player_outcome_registry.get_outcome(unresolved)
-            is PlayerOutcomeEnum.STRANDED
-        )
+        assert runtime._player_outcome_registry.get_outcome(resolved) is PlayerOutcomeEnum.RESCUED
+        assert runtime._player_outcome_registry.get_outcome(unresolved) is PlayerOutcomeEnum.STRANDED

@@ -1,4 +1,3 @@
-
 import pytest
 
 from ai_rpg_world.domain.sns.repository.reply_repository import ReplyRepository
@@ -72,7 +71,6 @@ class _TestReplyRepositoryInterface:
         assert isinstance(replies, list)
         for reply in replies:
             assert "魔法" in reply.content.content
-
 
     def test_generate_reply_id(self, repository):
         """リプライID生成テスト"""

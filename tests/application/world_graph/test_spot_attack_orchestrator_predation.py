@@ -36,7 +36,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -68,8 +67,13 @@ def _make_template(
         template_id=MonsterTemplateId.create(1),
         name=name,
         base_stats=BaseStats(
-            max_hp=max_hp, max_mp=0, attack=attack,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=max_hp,
+            max_mp=0,
+            attack=attack,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -87,10 +91,11 @@ def _make_monster(template: MonsterTemplate, monster_id: int) -> MonsterAggregat
     return MonsterAggregate(
         monster_id=MonsterId.create(monster_id),
         template=template,
-        world_object_id=WorldObjectId.create(9000 + monster_id),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(monster_id), owner_id=monster_id,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(monster_id),
+            owner_id=monster_id,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -169,10 +174,7 @@ class TestPredationSuccess:
         assert outcome.executed is True
         assert outcome.damage == 5
         assert outcome.target_incapacitated is False
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterPredatedMonsterInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterPredatedMonsterInSpotEvent)]
         assert len(events) == 1
         assert events[0].damage == 5
 

@@ -46,11 +46,7 @@ _OBSERVATION_MODULES = [
     "ai_rpg_world.application.observation.services.observation_pipeline",
     "ai_rpg_world.application.observation.services.observation_recipient_resolver",
     "ai_rpg_world.application.observation.services.observed_event_registry",
-    (
-        "ai_rpg_world.application.observation.services.recipient_strategies"
-        ".spot_graph_recipient_strategy"
-    ),
-    "ai_rpg_world.application.observation.services.formatters.combat_formatter",
+    ("ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_recipient_strategy"),
 ]
 
 #: 単独 import で落ちるが、**この試験の対象外**にするモジュールと理由。
@@ -112,17 +108,14 @@ def _assert_imports_alone(module_name: str) -> None:
     assert completed.returncode == 0, (
         f"{module_name} を単独で import できません。\n"
         "循環 import の疑いがあります (層をまたぐ辺を TYPE_CHECKING 下へ "
-        "移すか、依存の向きを直してください)。\n\n"
-        + completed.stderr[-2000:]
+        "移すか、依存の向きを直してください)。\n\n" + completed.stderr[-2000:]
     )
 
 
 class TestObservationModulesImportOnTheirOwn:
     """観測層の入口モジュールが、他を先に読み込まなくても import できる。"""
 
-    @pytest.mark.parametrize(
-        "module_name", _OBSERVATION_MODULES, ids=_module_id
-    )
+    @pytest.mark.parametrize("module_name", _OBSERVATION_MODULES, ids=_module_id)
     def test_module_imports_in_a_fresh_interpreter(self, module_name: str) -> None:
         """新しいインタプリタで import しても ImportError にならない。
 
@@ -140,12 +133,8 @@ class TestContractModulesImportOnTheirOwn:
     モジュールを一括で見張り、同じ形が別の文脈で生まれたら落とす。
     """
 
-    @pytest.mark.parametrize(
-        "module_name", _contract_modules(), ids=_module_id
-    )
-    def test_contract_module_imports_in_a_fresh_interpreter(
-        self, module_name: str
-    ) -> None:
+    @pytest.mark.parametrize("module_name", _contract_modules(), ids=_module_id)
+    def test_contract_module_imports_in_a_fresh_interpreter(self, module_name: str) -> None:
         """contracts / interfaces のモジュールが単独で import できる。"""
         _assert_imports_alone(module_name)
 
@@ -193,9 +182,8 @@ class TestKnownBrokenModulesAreStillBroken:
             if completed.returncode == 0:
                 fixed.append(f"{module_name} (登録理由: {reason})")
 
-        assert not fixed, (
-            "import できるようになった項目が _KNOWN_BROKEN に残っています。"
-            "消してください: " + " / ".join(fixed)
+        assert not fixed, "import できるようになった項目が _KNOWN_BROKEN に残っています。消してください: " + " / ".join(
+            fixed
         )
 
     def test_every_entry_states_a_reason(self) -> None:
@@ -204,9 +192,7 @@ class TestKnownBrokenModulesAreStillBroken:
         理由欄があっても空で登録できるなら「登録すれば無検査で通る」抜け道が
         残る。**一覧が空の間は自明に成立する。**
         """
-        blank = sorted(
-            name for name, reason in _KNOWN_BROKEN.items() if not reason.strip()
-        )
+        blank = sorted(name for name, reason in _KNOWN_BROKEN.items() if not reason.strip())
 
         assert not blank, f"対象外にした理由が書かれていません: {blank}"
 
@@ -236,10 +222,7 @@ class TestTheGuardedPopulationIsNotEmpty:
 
         件数だけ見ていると、別の 40 件を拾って本命が漏れていても気づけない。
         """
-        assert (
-            "ai_rpg_world.application.observation.contracts.interfaces"
-            in _contract_modules()
-        )
+        assert "ai_rpg_world.application.observation.contracts.interfaces" in _contract_modules()
 
 
 #: パッケージごとに「軽い submodule を 1 つ import したときに読み込まれる
@@ -259,8 +242,6 @@ class TestTheGuardedPopulationIsNotEmpty:
 _MAX_MODULES_ON_IMPORT: dict[str, int] = {
     # world_graph: 238 → 4
     "ai_rpg_world.application.world_graph.distant_view_service": 20,
-    # harvest: 160 → 6
-    "ai_rpg_world.application.harvest.contracts.commands": 20,
     # guild: 144 → 6
     "ai_rpg_world.application.guild.contracts.commands": 20,
     # speech: 121 → 13
@@ -274,10 +255,7 @@ _MAX_MODULES_ON_IMPORT: dict[str, int] = {
     "ai_rpg_world.application.llm.contracts.dtos": 110,
 }
 
-_COUNT_MODULES = (
-    "import sys, {module};"
-    " print(len([m for m in sys.modules if m.startswith('ai_rpg_world')]))"
-)
+_COUNT_MODULES = "import sys, {module}; print(len([m for m in sys.modules if m.startswith('ai_rpg_world')]))"
 
 
 class TestPackageInitDoesNotDragInImplementations:
@@ -294,9 +272,7 @@ class TestPackageInitDoesNotDragInImplementations:
         sorted(_MAX_MODULES_ON_IMPORT.items()),
         ids=lambda v: _module_id(v) if isinstance(v, str) else str(v),
     )
-    def test_importing_a_light_submodule_stays_light(
-        self, module_name: str, limit: int
-    ) -> None:
+    def test_importing_a_light_submodule_stays_light(self, module_name: str, limit: int) -> None:
         """軽い submodule を 1 つ import しても、読み込みが上限を超えない。
 
         新しいインタプリタで数える。同じプロセスだと先に読み込まれた分が
@@ -308,9 +284,7 @@ class TestPackageInitDoesNotDragInImplementations:
             text=True,
         )
 
-        assert completed.returncode == 0, (
-            f"{module_name} を import できません:\n{completed.stderr[-1000:]}"
-        )
+        assert completed.returncode == 0, f"{module_name} を import できません:\n{completed.stderr[-1000:]}"
         loaded = int(completed.stdout.strip())
         assert loaded <= limit, (
             f"{module_name} を 1 つ import しただけで ai_rpg_world モジュールが "

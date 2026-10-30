@@ -14,11 +14,7 @@ if TYPE_CHECKING:
 class RelationshipEventHandlerService:
     """関係管理イベントハンドラサービス"""
 
-    def __init__(
-        self,
-        user_repository: "UserRepository",
-        unit_of_work_factory: UnitOfWorkFactory
-    ):
+    def __init__(self, user_repository: "UserRepository", unit_of_work_factory: UnitOfWorkFactory):
         self._user_repository = user_repository
         self._unit_of_work_factory = unit_of_work_factory
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -42,10 +38,12 @@ class RelationshipEventHandlerService:
                 f"Relationship event handling failed in {context.get('handler', 'unknown')}: {e}",
                 original_exception=e,
             ) from e
-            
+
     def handle_user_blocked(self, event: SnsUserBlockedEvent) -> None:
         """ユーザーブロック時の関係解除処理"""
-        self._logger.info(f"Processing user blocked event: blocker={event.blocker_user_id}, blocked={event.blocked_user_id}")
+        self._logger.info(
+            f"Processing user blocked event: blocker={event.blocker_user_id}, blocked={event.blocked_user_id}"
+        )
 
         def operation() -> None:
             # ブロックされたユーザー（blocked_user）がブロックしたユーザー（blocker_user）を
@@ -72,17 +70,24 @@ class RelationshipEventHandlerService:
             if blocked_user.is_subscribed(event.blocker_user_id):
                 blocked_user.unsubscribe(event.blocker_user_id)
                 relations_removed += 1
-                self._logger.debug(f"Removed subscribe relationship: {event.blocked_user_id} -> {event.blocker_user_id}")
+                self._logger.debug(
+                    f"Removed subscribe relationship: {event.blocked_user_id} -> {event.blocker_user_id}"
+                )
 
             # 関係が変更された場合のみ保存
             if relations_removed > 0:
                 self._user_repository.save(blocked_user)
-                self._logger.info(f"Successfully removed {relations_removed} relationships due to user block: {event.blocked_user_id} -> {event.blocker_user_id}")
+                self._logger.info(
+                    f"Successfully removed {relations_removed} relationships due to user block: {event.blocked_user_id} -> {event.blocker_user_id}"
+                )
             else:
                 self._logger.debug(f"No relationships to remove for blocked user: {event.blocked_user_id}")
 
-        self._execute_in_separate_transaction(operation, {
-            "handler": "handle_user_blocked",
-            "blocker_id": event.blocker_user_id,
-            "blocked_id": event.blocked_user_id
-        })
+        self._execute_in_separate_transaction(
+            operation,
+            {
+                "handler": "handle_user_blocked",
+                "blocker_id": event.blocker_user_id,
+                "blocked_id": event.blocked_user_id,
+            },
+        )

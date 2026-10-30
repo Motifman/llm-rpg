@@ -1,6 +1,7 @@
 """
 GlobalMarketQueryServiceのテスト
 """
+
 import base64
 import json
 from datetime import datetime, timedelta
@@ -118,8 +119,8 @@ class TestGlobalMarketQueryService:
         """必須フィールドが欠けているカーソルを指定するとSystemErrorExceptionが発生"""
         # 必須フィールド(created_at)が欠けているJSON
         invalid_data = {"entity_id": 123}
-        json_str = json.dumps(invalid_data, separators=(',', ':'))
-        invalid_cursor = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
+        json_str = json.dumps(invalid_data, separators=(",", ":"))
+        invalid_cursor = base64.b64encode(json_str.encode("utf-8")).decode("utf-8")
 
         with pytest.raises(SystemErrorException) as exc_info:
             self.service.get_market_listings(cursor=invalid_cursor)
@@ -245,7 +246,7 @@ class TestGlobalMarketQueryService:
             rarities=["common", "uncommon"],
             equipment_types=["weapon"],
             min_price=100,
-            max_price=1500
+            max_price=1500,
         )
         result = self.service.get_market_listings(filter_dto=filter_dto)
 
@@ -258,10 +259,7 @@ class TestGlobalMarketQueryService:
 
     def test_get_market_listings_empty_result_no_matching_filters(self):
         """フィルタ条件に一致する出品がない場合、空のリストが返る"""
-        filter_dto = GlobalMarketFilterDto(
-            item_name="存在しないアイテム名12345",
-            min_price=999999
-        )
+        filter_dto = GlobalMarketFilterDto(item_name="存在しないアイテム名12345", min_price=999999)
         result = self.service.get_market_listings(filter_dto=filter_dto)
 
         assert isinstance(result, GlobalMarketListDto)
@@ -272,7 +270,7 @@ class TestGlobalMarketQueryService:
         """装備タイプを指定したが装備品でないアイテムの場合、空の結果が返る"""
         filter_dto = GlobalMarketFilterDto(
             item_types=["consumable"],
-            equipment_types=["weapon"]  # 消費アイテムに武器タイプは存在しない
+            equipment_types=["weapon"],  # 消費アイテムに武器タイプは存在しない
         )
         result = self.service.get_market_listings(filter_dto=filter_dto)
 
@@ -290,10 +288,7 @@ class TestGlobalMarketQueryService:
         mock_operation = Mock(side_effect=StateException("Test domain error"))
 
         with pytest.raises(GlobalMarketQueryApplicationException) as exc_info:
-            self.service._execute_with_error_handling(
-                operation=mock_operation,
-                context={"action": "test"}
-            )
+            self.service._execute_with_error_handling(operation=mock_operation, context={"action": "test"})
 
         assert "Domain error in GlobalMarketQuery usecase: DOMAIN_ERROR" in str(exc_info.value)
 
@@ -306,10 +301,7 @@ class TestGlobalMarketQueryService:
         mock_operation = Mock(side_effect=app_exception)
 
         with pytest.raises(GlobalMarketQueryApplicationException) as exc_info:
-            self.service._execute_with_error_handling(
-                operation=mock_operation,
-                context={"action": "test"}
-            )
+            self.service._execute_with_error_handling(operation=mock_operation, context={"action": "test"})
 
         assert exc_info.value is app_exception
 
@@ -320,10 +312,7 @@ class TestGlobalMarketQueryService:
         mock_operation = Mock(side_effect=ValueError("Unexpected error"))
 
         with pytest.raises(SystemErrorException) as exc_info:
-            self.service._execute_with_error_handling(
-                operation=mock_operation,
-                context={"action": "test_action"}
-            )
+            self.service._execute_with_error_handling(operation=mock_operation, context={"action": "test_action"})
 
         assert "test_action failed: Unexpected error" in str(exc_info.value)
         assert isinstance(exc_info.value.original_exception, ValueError)
@@ -348,7 +337,7 @@ class TestGlobalMarketQueryService:
             rarities=["common", "rare"],
             equipment_types=["weapon", "armor"],
             min_price=100,
-            max_price=1000
+            max_price=1000,
         )
 
         result = self.service._convert_to_filter(filter_dto)

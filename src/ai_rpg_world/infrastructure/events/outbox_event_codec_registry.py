@@ -41,9 +41,7 @@ class OutboxEventCodecRegistry:
         """保存名とschema versionが一致するcodecでpayloadを復元する。"""
         registration = self._registrations.get(message.event_type)
         if registration is None:
-            raise PermanentOutboxMessageException(
-                f"未登録のoutbox event typeです: {message.event_type}"
-            )
+            raise PermanentOutboxMessageException(f"未登録のoutbox event typeです: {message.event_type}")
         event_type, serializer = registration
         if message.payload_schema_version != serializer.schema_version:
             raise PermanentOutboxMessageException(
@@ -56,19 +54,16 @@ class OutboxEventCodecRegistry:
             restored = serializer.deserialize(message.payload, event_type)
         except Exception as error:
             raise PermanentOutboxMessageException(
-                "outbox payloadを復元できません: "
-                f"event_type={message.event_type}",
+                f"outbox payloadを復元できません: event_type={message.event_type}",
                 cause=error,
             ) from error
         if not isinstance(restored, event_type):
             raise PermanentOutboxMessageException(
-                "outbox codecが登録型と異なるイベントを返しました: "
-                f"event_type={message.event_type}"
+                f"outbox codecが登録型と異なるイベントを返しました: event_type={message.event_type}"
             )
         if str(restored.event_id) != message.event_id:
             raise PermanentOutboxMessageException(
-                "outbox行とpayloadのevent_idが一致しません: "
-                f"stored={message.event_id}, payload={restored.event_id}"
+                f"outbox行とpayloadのevent_idが一致しません: stored={message.event_id}, payload={restored.event_id}"
             )
         return restored
 

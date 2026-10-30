@@ -16,10 +16,10 @@ from enum import Enum
 class SoundIntensityEnum(Enum):
     """spot の音の強さ。`level` で順序付け可能。"""
 
-    SILENT = "SILENT"        # 完全な静寂
-    FAINT = "FAINT"          # かすかな音 (虫の声、風など)
-    MODERATE = "MODERATE"    # 通常の環境音 (川のせせらぎ、人の話し声)
-    LOUD = "LOUD"            # はっきりした音 (戦闘音、咆哮、機械音)
+    SILENT = "SILENT"  # 完全な静寂
+    FAINT = "FAINT"  # かすかな音 (虫の声、風など)
+    MODERATE = "MODERATE"  # 通常の環境音 (川のせせらぎ、人の話し声)
+    LOUD = "LOUD"  # はっきりした音 (戦闘音、咆哮、機械音)
 
     @property
     def level(self) -> int:
@@ -51,6 +51,4 @@ _LEVEL: dict[SoundIntensityEnum, int] = {
     SoundIntensityEnum.LOUD: 3,
 }
 
-_BY_LEVEL: dict[int, SoundIntensityEnum] = {
-    v: k for k, v in _LEVEL.items()
-}
+_BY_LEVEL: dict[int, SoundIntensityEnum] = {v: k for k, v in _LEVEL.items()}

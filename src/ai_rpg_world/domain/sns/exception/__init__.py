@@ -74,7 +74,6 @@ __all__ = [
     "ContentValidationException",
     "ContentTypeException",
     "OwnershipException",
-
     # ユーザープロファイル関連例外
     "UserNotFoundException",
     "UserIdValidationException",
@@ -82,7 +81,6 @@ __all__ = [
     "DisplayNameValidationException",
     "BioValidationException",
     "ProfileUpdateValidationException",
-
     # 関係性関連例外
     "FollowException",
     "CannotFollowBlockedUserException",
@@ -104,7 +102,6 @@ __all__ = [
     "SelfUnblockException",
     "SelfSubscribeException",
     "SelfUnsubscribeException",
-
     # コンテンツ関連例外
     "InvalidContentTypeException",
     "InvalidParentReferenceException",

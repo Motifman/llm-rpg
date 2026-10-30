@@ -7,6 +7,7 @@ class EquipmentSlotType(Enum):
     プレイヤーが装備できるスロットの種類を定義する。
     各スロットは特定の装備アイテムタイプを受け入れる。
     """
+
     WEAPON = "weapon"
     HELMET = "helmet"
     ARMOR = "armor"

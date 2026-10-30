@@ -20,6 +20,7 @@ from ai_rpg_world.application.player.services.departed_position_store import (
 )
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
+    SpotTravelBlockedReason,
 )
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -38,9 +39,6 @@ from ai_rpg_world.domain.world_graph.enum.passage_condition_type import (
 )
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     EntityEnteredSpotEvent,
-)
-from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-    ConnectionNotPassableException,
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -137,7 +135,7 @@ def _service(*, departed: bool = False, required_flag: str | None = None):
     departed_positions = DepartedPositionStore()
     if departed:
         departed_positions.place(_PLAYER_ID, _FIRST)
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
@@ -177,15 +175,9 @@ def test_public_mutations_reject_missing_command_scope_before_repository_access(
     """確定区間が未配線なら5つの公開更新入口はrepositoryへ触れず拒否する。"""
     graph_repository = Mock()
     status_repository = Mock()
-    graph_repository.find_graph.side_effect = AssertionError(
-        "未配線時にgraphを読んではならない"
-    )
-    status_repository.find_by_id.side_effect = AssertionError(
-        "未配線時にstatusを読んではならない"
-    )
-    status_repository.save.side_effect = AssertionError(
-        "未配線時にstatusを保存してはならない"
-    )
+    graph_repository.find_graph.side_effect = AssertionError("未配線時にgraphを読んではならない")
+    status_repository.find_by_id.side_effect = AssertionError("未配線時にstatusを読んではならない")
+    status_repository.save.side_effect = AssertionError("未配線時にstatusを保存してはならない")
     service = SpotGraphMovementApplicationService(
         graph_repository,
         status_repository,
@@ -369,9 +361,7 @@ def test_required_event_failure_rolls_back_all_crossings() -> None:
     before_nav = statuses.find_by_id(_PLAYER_ID).spot_navigation_state
     dispatcher.register_required_before_commit(
         EntityEnteredSpotEvent,
-        lambda event, context: (_ for _ in ()).throw(
-            RuntimeError("arrival processing failed")
-        ),
+        lambda event, context: (_ for _ in ()).throw(RuntimeError("arrival processing failed")),
     )
 
     with pytest.raises(RuntimeError, match="arrival processing failed"):
@@ -415,8 +405,8 @@ def test_departed_multi_crossing_failure_restores_position_and_navigation(
     assert statuses.find_by_id(_PLAYER_ID).spot_navigation_state == before_nav
 
 
-def test_departed_crossing_rechecks_passage_without_moving() -> None:
-    """開始後に通行条件が失われた退場者は位置とnavigationを進めない。"""
+def test_departed_crossing_rechecks_passage_and_abandons_travel() -> None:
+    """開始後に通行条件が失われた退場者は、例外にならず位置を進めずに移動を取りやめる (#1559)。"""
     service, statuses, _, departed_positions, _ = _service(
         departed=True,
         required_flag="door_open",
@@ -427,17 +417,21 @@ def test_departed_crossing_rechecks_passage_without_moving() -> None:
         frozenset(),
         frozenset({"door_open"}),
     )
-    before_nav = statuses.find_by_id(_PLAYER_ID).spot_navigation_state
 
-    with pytest.raises(ConnectionNotPassableException, match="条件を満たしていません"):
-        service.advance_spot_travel_one_tick(
-            _PLAYER_ID,
-            frozenset(),
-            frozenset(),
-        )
+    result = service.advance_spot_travel_one_tick(
+        _PLAYER_ID,
+        frozenset(),
+        frozenset(),
+    )
 
     assert departed_positions.find(_PLAYER_ID) == _FIRST
-    assert statuses.find_by_id(_PLAYER_ID).spot_navigation_state == before_nav
+    nav = statuses.find_by_id(_PLAYER_ID).spot_navigation_state
+    assert not nav.is_traveling
+    assert nav.current_spot_id == _FIRST
+    assert result is not None
+    assert result.blocked is not None
+    assert result.blocked.reason is SpotTravelBlockedReason.PASSAGE_CONDITION
+    assert result.blocked.condition_message == "条件を満たしていません"
 
 
 def test_cancel_save_failure_preserves_the_travel_reservation(

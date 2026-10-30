@@ -28,33 +28,21 @@ class PlayerOutcomeRule:
 
     def __post_init__(self) -> None:
         if not isinstance(self.rule_id, str) or not self.rule_id.strip():
-            raise PlayerOutcomeRuleValidationException(
-                "PlayerOutcomeRule.rule_id must be a non-empty string"
-            )
+            raise PlayerOutcomeRuleValidationException("PlayerOutcomeRule.rule_id must be a non-empty string")
         if not isinstance(self.trigger, ScenarioEventCondition):
-            raise PlayerOutcomeRuleValidationException(
-                "PlayerOutcomeRule.trigger must be ScenarioEventCondition"
-            )
+            raise PlayerOutcomeRuleValidationException("PlayerOutcomeRule.trigger must be ScenarioEventCondition")
         if not isinstance(self.player_conditions, tuple) or not all(
-            isinstance(condition, ScenarioEventCondition)
-            for condition in self.player_conditions
+            isinstance(condition, ScenarioEventCondition) for condition in self.player_conditions
         ):
             raise PlayerOutcomeRuleValidationException(
-                "PlayerOutcomeRule.player_conditions must be a tuple of "
-                "ScenarioEventCondition"
+                "PlayerOutcomeRule.player_conditions must be a tuple of ScenarioEventCondition"
             )
         if not isinstance(self.outcome, PlayerOutcomeEnum):
-            raise PlayerOutcomeRuleValidationException(
-                "PlayerOutcomeRule.outcome must be PlayerOutcomeEnum"
-            )
+            raise PlayerOutcomeRuleValidationException("PlayerOutcomeRule.outcome must be PlayerOutcomeEnum")
         if self.outcome not in (
             PlayerOutcomeEnum.RESCUED,
             PlayerOutcomeEnum.STRANDED,
         ):
-            raise PlayerOutcomeRuleValidationException(
-                "PlayerOutcomeRule.outcome must be RESCUED or STRANDED"
-            )
+            raise PlayerOutcomeRuleValidationException("PlayerOutcomeRule.outcome must be RESCUED or STRANDED")
         if not isinstance(self.once, bool):
-            raise PlayerOutcomeRuleValidationException(
-                "PlayerOutcomeRule.once must be bool"
-            )
+            raise PlayerOutcomeRuleValidationException("PlayerOutcomeRule.once must be bool")

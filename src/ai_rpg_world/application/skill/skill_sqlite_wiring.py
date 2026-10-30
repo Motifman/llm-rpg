@@ -48,9 +48,7 @@ def attach_skill_sqlite_repositories(
     return SkillSqliteRepositories(
         runtime=SkillRuntimeSqliteRepositories(
             loadouts=SqliteSkillLoadoutRepository.for_shared_unit_of_work(connection),
-            deck_progresses=SqliteSkillDeckProgressRepository.for_shared_unit_of_work(
-                connection
-            ),
+            deck_progresses=SqliteSkillDeckProgressRepository.for_shared_unit_of_work(connection),
         ),
         master=SkillMasterSqliteRepositories(
             specs=SqliteSkillSpecRepository.for_connection(connection),

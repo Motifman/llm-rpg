@@ -119,9 +119,7 @@ class TestExecutorOffload:
         # 進めるのは概ね 10 回前後。offload 実装では 30 回前後進めるはず。
         # 中間値 20 を最低ラインに置けば、CI スケジューラ揺らぎを許容しつつ
         # blocking 検出として有効。
-        assert n >= 20, (
-            f"event loop appears blocked; heartbeat progressed only {n} times"
-        )
+        assert n >= 20, f"event loop appears blocked; heartbeat progressed only {n} times"
         # tick が少なくとも 1 回は走った
         assert runtime.calls > ticks_before
 
@@ -151,6 +149,4 @@ class TestExecutorOffload:
         asyncio.run(scenario())
         assert runtime.calls >= 2
         # 並列に走った瞬間が観測されなかったこと (max_active が常に 1)
-        assert runtime._max_active == 1, (
-            f"advance_tick was invoked in parallel (max_active={runtime._max_active})"
-        )
+        assert runtime._max_active == 1, f"advance_tick was invoked in parallel (max_active={runtime._max_active})"

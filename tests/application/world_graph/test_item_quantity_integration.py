@@ -28,9 +28,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """数量規則は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     apply_item_removal_plan,
     count_owned_item_instances_by_spec,
@@ -185,8 +185,11 @@ def _build_app(initial_items: tuple[ItemSpecId, ...]):
     inventory_repo.save(PlayerInventoryAggregate(player_id=PlayerId(PLAYER_ID)))
     if initial_items:
         grant_item_specs_to_inventory(
-            PlayerId(PLAYER_ID), initial_items,
-            item_repo, item_spec_repo, inventory_repo,
+            PlayerId(PLAYER_ID),
+            initial_items,
+            item_repo,
+            item_spec_repo,
+            inventory_repo,
             overflow_sink=IGNORE_OVERFLOW,
         )
 
@@ -334,9 +337,7 @@ class TestQuantityIntegration:
         inv = inventory_repo.find_by_id(PlayerId(PLAYER_ID))
         reserved_id = inv.reserve_item(SlotId(0))
 
-        removed = remove_items_of_specs_from_inventory(
-            inv, (ORE_SPEC_ID,), item_repo
-        )
+        removed = remove_items_of_specs_from_inventory(inv, (ORE_SPEC_ID,), item_repo)
 
         assert removed is True
         assert inv.get_item_instance_id_by_slot(SlotId(0)) == reserved_id
@@ -353,9 +354,7 @@ class TestQuantityIntegration:
         before = tuple(inv.iter_slots())
         inv.reserve_item(SlotId(0))
 
-        removed = remove_items_of_specs_from_inventory(
-            inv, (ORE_SPEC_ID, ORE_SPEC_ID), item_repo
-        )
+        removed = remove_items_of_specs_from_inventory(inv, (ORE_SPEC_ID, ORE_SPEC_ID), item_repo)
 
         assert removed is False
         assert tuple(inv.iter_slots()) == before
@@ -368,9 +367,7 @@ class TestQuantityIntegration:
             initial_items=(ORE_SPEC_ID, COAL_SPEC_ID),
         )
         inv = inventory_repo.find_by_id(PlayerId(PLAYER_ID))
-        plan = plan_item_removals_from_inventory(
-            inv, (ORE_SPEC_ID, COAL_SPEC_ID), item_repo
-        )
+        plan = plan_item_removals_from_inventory(inv, (ORE_SPEC_ID, COAL_SPEC_ID), item_repo)
         assert plan is not None
         inv.reserve_item(SlotId(1))
 
@@ -391,17 +388,13 @@ class TestQuantityIntegration:
         inv._inventory_slots[SlotId(1)] = duplicate_id
 
         counts = count_owned_item_instances_by_spec(inv, item_repo)
-        plan = plan_item_removals_from_inventory(
-            inv, (ORE_SPEC_ID, ORE_SPEC_ID), item_repo
-        )
+        plan = plan_item_removals_from_inventory(inv, (ORE_SPEC_ID, ORE_SPEC_ID), item_repo)
 
         assert counts == {ORE_SPEC_ID: 1}
         assert plan is None
 
     @pytest.mark.parametrize("duplicate_axis", ["slot", "instance"])
-    def test_duplicate_removal_plan_is_rejected_without_mutation(
-        self, duplicate_axis: str
-    ) -> None:
+    def test_duplicate_removal_plan_is_rejected_without_mutation(self, duplicate_axis: str) -> None:
         """重複slotまたはinstanceを含む不正計画は、1件も削除せず拒否する。"""
         from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
@@ -463,13 +456,18 @@ class TestQuantityIntegration:
         )
         forge = SpotObject(
             object_id=SpotObjectId.create(FORGE_OBJECT_ID),
-            name="forge", description="d",
+            name="forge",
+            description="d",
             object_type=SpotObjectTypeEnum.OTHER,
-            state={}, interactions=(forge_recipe,),
+            state={},
+            interactions=(forge_recipe,),
         )
         spot = SpotNode(
-            spot_id=SpotId.create(SPOT_ID), name="smithy", description="d",
-            category=SpotCategoryEnum.OTHER, parent_id=None,
+            spot_id=SpotId.create(SPOT_ID),
+            name="smithy",
+            description="d",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
         )
         graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
         graph.add_spot(spot)
@@ -484,15 +482,23 @@ class TestQuantityIntegration:
         inventory_repo = InMemoryPlayerInventoryRepository(data_store)
         item_repo = InMemoryItemRepository(data_store)
         item_spec_repo = InMemoryItemSpecRepository()
-        item_spec_repo.save(ItemSpec(
-            item_spec_id=ORE_SPEC_ID, name="鉄鉱石",
-            item_type=ItemType.MATERIAL, rarity=Rarity.COMMON,
-            description="d", max_stack_size=MaxStackSize(99),
-        ))
+        item_spec_repo.save(
+            ItemSpec(
+                item_spec_id=ORE_SPEC_ID,
+                name="鉄鉱石",
+                item_type=ItemType.MATERIAL,
+                rarity=Rarity.COMMON,
+                description="d",
+                max_stack_size=MaxStackSize(99),
+            )
+        )
         inventory_repo.save(PlayerInventoryAggregate(player_id=PlayerId(PLAYER_ID)))
         grant_item_specs_to_inventory(
-            PlayerId(PLAYER_ID), (ORE_SPEC_ID,),  # 鉱石 1 個だけ
-            item_repo, item_spec_repo, inventory_repo,
+            PlayerId(PLAYER_ID),
+            (ORE_SPEC_ID,),  # 鉱石 1 個だけ
+            item_repo,
+            item_spec_repo,
+            inventory_repo,
             overflow_sink=IGNORE_OVERFLOW,
         )
         flags = MutableWorldFlagState()
@@ -515,8 +521,6 @@ class TestQuantityIntegration:
         assert flags.as_frozen_set() == frozenset()
         saved_interior = interior_repo.find_by_spot_id(SpotId.create(SPOT_ID))
         assert saved_interior is not None
-        saved_forge = saved_interior.get_object(
-            SpotObjectId.create(FORGE_OBJECT_ID)
-        )
+        saved_forge = saved_interior.get_object(SpotObjectId.create(FORGE_OBJECT_ID))
         assert saved_forge is not None
         assert saved_forge.state == {}

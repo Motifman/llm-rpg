@@ -75,12 +75,8 @@ def unreachable_attribute_notes(
         return ()
     notes: list[str] = []
     for interaction in interactions or ():
-        for required_state in failed_actor_hidden_requirements(
-            interaction, actor_state
-        ):
-            for requirement in specs.unreachable_requirements(
-                required_state, actor_state
-            ):
+        for required_state in failed_actor_hidden_requirements(interaction, actor_state):
+            for requirement in specs.unreachable_requirements(required_state, actor_state):
                 if not requirement.is_public:
                     continue
                 note = _note_for(requirement)

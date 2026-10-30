@@ -2,6 +2,7 @@
 
 インメモリリポジトリを使用して実際の動作をテストする
 """
+
 import logging
 from datetime import datetime, timedelta
 from unittest.mock import patch
@@ -58,7 +59,7 @@ class TestNotificationEventHandlerService:
         return NotificationEventHandlerService(
             user_repository=user_repository,
             notification_repository=notification_repository,
-            unit_of_work_factory=unit_of_work_factory
+            unit_of_work_factory=unit_of_work_factory,
         )
 
     @pytest.fixture
@@ -111,7 +112,7 @@ class TestNotificationEventHandlerService:
             aggregate_id=UserId(999),
             aggregate_type="UserAggregate",
             subscriber_user_id=UserId(999),  # 存在しないユーザー
-            subscribed_user_id=UserId(1)
+            subscribed_user_id=UserId(1),
         )
 
         # 実行前の通知数を確認
@@ -124,14 +125,16 @@ class TestNotificationEventHandlerService:
         notifications = notification_repository.find_by_user_id(UserId(1))
         assert len(notifications) == initial_count
 
-    def test_handle_user_subscribed_subscribed_user_not_found(self, service, user_repository, notification_repository, user1):
+    def test_handle_user_subscribed_subscribed_user_not_found(
+        self, service, user_repository, notification_repository, user1
+    ):
         """ユーザーサブスクライブ時の通知処理 - サブスクライブ対象者が見つからない場合"""
         # 存在しないユーザーIDを使用
         event = SnsUserSubscribedEvent.create(
             aggregate_id=UserId(999),
             aggregate_type="UserAggregate",
             subscriber_user_id=user1.user_id,
-            subscribed_user_id=UserId(999)  # 存在しないユーザー
+            subscribed_user_id=UserId(999),  # 存在しないユーザー
         )
 
         # 実行前の通知数を確認（存在しないユーザーなので0）
@@ -178,7 +181,7 @@ class TestNotificationEventHandlerService:
             target_id=PostId(1),
             user_id=user1.user_id,  # いいねしたユーザー
             content_author_id=user2.user_id,  # コンテンツ作成者
-            content_type="post"
+            content_type="post",
         )
 
         # 実行前の通知数を確認
@@ -205,7 +208,7 @@ class TestNotificationEventHandlerService:
             target_id=PostId(1),
             user_id=user1.user_id,  # いいねしたユーザー
             content_author_id=user1.user_id,  # 同じユーザー
-            content_type="post"
+            content_type="post",
         )
 
         # 実行前の通知数を確認
@@ -226,7 +229,7 @@ class TestNotificationEventHandlerService:
             target_id=PostId(1),
             user_id=UserId(999),  # 存在しないユーザー
             content_author_id=UserId(1),
-            content_type="post"
+            content_type="post",
         )
 
         # 実行前の通知数を確認
@@ -340,7 +343,7 @@ class TestNotificationEventHandlerService:
             aggregate_id=user2.user_id,
             aggregate_type="UserAggregate",
             subscriber_user_id=user1.user_id,
-            subscribed_user_id=user2.user_id
+            subscribed_user_id=user2.user_id,
         )
         service.handle_user_subscribed(subscribe_event)
 
@@ -363,14 +366,16 @@ class TestNotificationEventHandlerService:
         assert NotificationType.SUBSCRIBE in notification_types
         assert NotificationType.FOLLOW in notification_types
 
-    def test_notification_persistence_and_retrieval(self, service, user_repository, notification_repository, user1, user2):
+    def test_notification_persistence_and_retrieval(
+        self, service, user_repository, notification_repository, user1, user2
+    ):
         """通知の永続化と取得のテスト"""
         # 通知を作成
         event = SnsUserSubscribedEvent.create(
             aggregate_id=user2.user_id,
             aggregate_type="UserAggregate",
             subscriber_user_id=user1.user_id,
-            subscribed_user_id=user2.user_id
+            subscribed_user_id=user2.user_id,
         )
         service.handle_user_subscribed(event)
 
@@ -393,7 +398,7 @@ class TestNotificationEventHandlerService:
             aggregate_id=user2.user_id,
             aggregate_type="UserAggregate",
             subscriber_user_id=user1.user_id,
-            subscribed_user_id=user2.user_id
+            subscribed_user_id=user2.user_id,
         )
         service.handle_user_subscribed(event)
 
@@ -425,7 +430,7 @@ class TestNotificationEventHandlerService:
             user_id=UserId(1),
             notification_type=NotificationType.FOLLOW,
             content=NotificationContent.create_follow_notification(UserId(2), "test"),
-            expires_at=datetime.now() - timedelta(hours=1)  # 既に期限切れ
+            expires_at=datetime.now() - timedelta(hours=1),  # 既に期限切れ
         )
         notification_repository.save(expired_notification)
 
@@ -435,7 +440,7 @@ class TestNotificationEventHandlerService:
             user_id=UserId(1),
             notification_type=NotificationType.FOLLOW,
             content=NotificationContent.create_follow_notification(UserId(2), "test"),
-            expires_at=datetime.now() + timedelta(hours=1)  # 有効
+            expires_at=datetime.now() + timedelta(hours=1),  # 有効
         )
         notification_repository.save(valid_notification)
 
@@ -463,7 +468,7 @@ class TestNotificationEventHandlerService:
             aggregate_id=UserId(1),
             aggregate_type="UserAggregate",
             subscriber_user_id=UserId(1),
-            subscribed_user_id=UserId(2)
+            subscribed_user_id=UserId(2),
         )
 
         # 実行（例外が発生しない）
@@ -473,7 +478,9 @@ class TestNotificationEventHandlerService:
         except Exception:
             pytest.fail("イベント処理で予期せぬ例外が発生しました")
 
-    def test_handle_reply_created_with_mentions_and_reply_notification(self, service, user_repository, notification_repository, user1, user2):
+    def test_handle_reply_created_with_mentions_and_reply_notification(
+        self, service, user_repository, notification_repository, user1, user2
+    ):
         """リプライ作成時のメンション通知と返信通知処理テスト"""
         reply_content_text = f"テスト @{user2.profile.display_name}"
         mentions = {Mention(mentioned_user_name=user2.profile.display_name, post_id=PostId(1))}
@@ -511,7 +518,9 @@ class TestNotificationEventHandlerService:
         reply_notification = reply_notifications[0]
         assert reply_notification.content.content_text == reply_content_text  # リプライの内容が表示されるべき
 
-    def test_handle_reply_created_self_reply_no_notification(self, service, user_repository, notification_repository, user1):
+    def test_handle_reply_created_self_reply_no_notification(
+        self, service, user_repository, notification_repository, user1
+    ):
         """自分自身のコンテンツへの返信は通知しないテスト"""
         event = SnsReplyCreatedEvent.create(
             aggregate_id=ReplyId(1),
@@ -567,7 +576,7 @@ class TestNotificationEventHandlerServiceImprovements:
         return NotificationEventHandlerService(
             user_repository=user_repository,
             notification_repository=notification_repository,
-            unit_of_work_factory=unit_of_work_factory
+            unit_of_work_factory=unit_of_work_factory,
         )
 
     @pytest.fixture
@@ -584,7 +593,9 @@ class TestNotificationEventHandlerServiceImprovements:
         assert user is not None
         return user
 
-    def test_exception_handling_in_event_handler(self, service, user_repository, notification_repository, user1, user2, caplog):
+    def test_exception_handling_in_event_handler(
+        self, service, user_repository, notification_repository, user1, user2, caplog
+    ):
         """イベントハンドラで例外発生時に SystemErrorException が送出され、ログにエラーが記録されることを確認"""
         caplog.set_level(logging.ERROR, logger="NotificationEventHandlerService")
 
@@ -593,13 +604,15 @@ class TestNotificationEventHandlerServiceImprovements:
             aggregate_id=user2.user_id,
             aggregate_type="UserAggregate",
             subscriber_user_id=user1.user_id,
-            subscribed_user_id=user2.user_id
+            subscribed_user_id=user2.user_id,
         )
 
         # 通知リポジトリのsaveメソッドをモックして例外を投げるようにする
         original_save = notification_repository.save
+
         def mock_save(notification):
             raise Exception("Mock save exception")
+
         notification_repository.save = mock_save
 
         try:
@@ -614,7 +627,9 @@ class TestNotificationEventHandlerServiceImprovements:
         assert any("Failed to handle event" in record.message for record in caplog.records)
         assert any(record.levelname == "ERROR" for record in caplog.records)
 
-    def test_unit_of_work_integration(self, service, user_repository, notification_repository, unit_of_work_factory, user1, user2):
+    def test_unit_of_work_integration(
+        self, service, user_repository, notification_repository, unit_of_work_factory, user1, user2
+    ):
         """イベントハンドラーが別トランザクションで実行されることを確認"""
         unit_of_work = unit_of_work_factory.create()
         # 初期状態ではUnit of Workはトランザクション内ではない
@@ -624,7 +639,7 @@ class TestNotificationEventHandlerServiceImprovements:
             aggregate_id=user2.user_id,
             aggregate_type="UserAggregate",
             subscriber_user_id=user1.user_id,
-            subscribed_user_id=user2.user_id
+            subscribed_user_id=user2.user_id,
         )
 
         # 実行前の通知数を確認
@@ -642,13 +657,14 @@ class TestNotificationEventHandlerServiceImprovements:
     def test_logging_in_event_handlers(self, service, user_repository, notification_repository, user1, user2, caplog):
         """イベントハンドラでのログ記録が正しく動作することを確認"""
         import logging
+
         caplog.set_level(logging.INFO, logger="NotificationEventHandlerService")
 
         event = SnsUserSubscribedEvent.create(
             aggregate_id=user2.user_id,
             aggregate_type="UserAggregate",
             subscriber_user_id=user1.user_id,
-            subscribed_user_id=user2.user_id
+            subscribed_user_id=user2.user_id,
         )
 
         # 実行
@@ -661,13 +677,14 @@ class TestNotificationEventHandlerServiceImprovements:
     def test_logging_with_missing_user(self, service, user_repository, notification_repository, caplog):
         """存在しないユーザーに対するログ記録を確認"""
         import logging
+
         caplog.set_level(logging.WARNING, logger="NotificationEventHandlerService")
 
         event = SnsUserSubscribedEvent.create(
             aggregate_id=UserId(999),
             aggregate_type="UserAggregate",
             subscriber_user_id=UserId(999),  # 存在しないユーザー
-            subscribed_user_id=UserId(1)
+            subscribed_user_id=UserId(1),
         )
 
         # 実行
@@ -677,7 +694,9 @@ class TestNotificationEventHandlerServiceImprovements:
         log_messages = [record.message for record in caplog.records]
         assert any("Subscriber not found" in msg for msg in log_messages)
 
-    def test_event_handler_error_handling(self, service, user_repository, notification_repository, unit_of_work_factory, user1, user2):
+    def test_event_handler_error_handling(
+        self, service, user_repository, notification_repository, unit_of_work_factory, user1, user2
+    ):
         """イベントハンドラーでのエラーハンドリングが正しく動作することを確認"""
         # イベントハンドラーは別トランザクションで実行されるため、
         # メインのUnit of Workはコミット済みになる
@@ -686,7 +705,7 @@ class TestNotificationEventHandlerServiceImprovements:
             aggregate_id=user2.user_id,
             aggregate_type="UserAggregate",
             subscriber_user_id=user1.user_id,
-            subscribed_user_id=user2.user_id
+            subscribed_user_id=user2.user_id,
         )
 
         # 実行前の通知数を確認
@@ -701,7 +720,9 @@ class TestNotificationEventHandlerServiceImprovements:
 
         # イベントハンドラーが別トランザクションで実行されたため、通知が作成されていることを確認済み
 
-    def test_multiple_event_handlers_with_uow(self, service, user_repository, notification_repository, unit_of_work_factory, user1, user2):
+    def test_multiple_event_handlers_with_uow(
+        self, service, user_repository, notification_repository, unit_of_work_factory, user1, user2
+    ):
         """複数のイベントハンドラがUnit of Workを正しく使用することを確認"""
         # 実行前の通知数を確認
         initial_count_user2 = len(notification_repository.find_by_user_id(user2.user_id))
@@ -712,7 +733,7 @@ class TestNotificationEventHandlerServiceImprovements:
                 aggregate_id=user2.user_id,
                 aggregate_type="UserAggregate",
                 subscriber_user_id=user1.user_id,
-                subscribed_user_id=user2.user_id
+                subscribed_user_id=user2.user_id,
             ),
             SnsUserFollowedEvent.create(
                 aggregate_id=user2.user_id,
@@ -720,7 +741,7 @@ class TestNotificationEventHandlerServiceImprovements:
                 follower_user_id=user1.user_id,
                 followee_user_id=user2.user_id,
                 follower_display_name=user1.profile.display_name,
-            )
+            ),
         ]
 
         # 順次実行

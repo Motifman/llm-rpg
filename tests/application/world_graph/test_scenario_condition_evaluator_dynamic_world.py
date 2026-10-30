@@ -69,13 +69,15 @@ def _build_evaluator(weather: _FakeWeatherState | None = None):
 
 def _build_graph_with_object(state: dict) -> tuple[SpotGraphAggregate, InMemorySpotInteriorRepository, int]:
     g = SpotGraphAggregate.empty(SpotGraphId.create(1))
-    g.add_spot(SpotNode(
-        spot_id=SpotId.create(1),
-        name="S1",
-        description="d",
-        category=SpotCategoryEnum.OTHER,
-        parent_id=None,
-    ))
+    g.add_spot(
+        SpotNode(
+            spot_id=SpotId.create(1),
+            name="S1",
+            description="d",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+        )
+    )
     obj = SpotObject(
         object_id=SpotObjectId.create(7),
         name="berry_bush",

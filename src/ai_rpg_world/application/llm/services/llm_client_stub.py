@@ -65,9 +65,7 @@ class StubLlmClient(ILLMClient):
                 error=self._exception_to_raise,
                 output=None,
                 success=False,
-                error_code=getattr(
-                    self._exception_to_raise, "error_code", "STUB_LLM_EXCEPTION"
-                ),
+                error_code=getattr(self._exception_to_raise, "error_code", "STUB_LLM_EXCEPTION"),
                 call_phase=call_phase,
             )
             raise self._exception_to_raise

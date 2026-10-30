@@ -1,6 +1,5 @@
 """消費アイテム効果ハンドラ関連の例外定義"""
 
-
 from typing import Any
 
 from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException

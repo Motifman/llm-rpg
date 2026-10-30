@@ -46,9 +46,7 @@ class ShopToolExecutor:
             TOOL_NAME_SHOP_UNLIST_ITEM: self._execute_shop_unlist_item,
         }
 
-    def _execute_shop_purchase(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_shop_purchase(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._shop_service is None:
             return unknown_tool("ショップ購入ツールはまだ利用できません。")
         if args.get("shop_id") is None:
@@ -68,9 +66,7 @@ class ShopToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _execute_shop_list_item(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_shop_list_item(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._shop_service is None:
             return unknown_tool("ショップ出品ツールはまだ利用できません。")
         for key in ("shop_id", "slot_id", "price_per_unit"):
@@ -89,9 +85,7 @@ class ShopToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _execute_shop_unlist_item(
-        self, player_id: int, args: dict[str, Any]
-    ) -> LlmCommandResultDto:
+    def _execute_shop_unlist_item(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._shop_service is None:
             return unknown_tool("ショップ取り下げツールはまだ利用できません。")
         if args.get("shop_id") is None:

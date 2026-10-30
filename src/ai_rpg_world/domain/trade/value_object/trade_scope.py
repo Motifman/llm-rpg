@@ -11,6 +11,7 @@ class TradeScope:
 
     取引の種類（グローバル/ダイレクト）と対象プレイヤーを表現します。
     """
+
     trade_type: TradeType
     target_player_id: PlayerId | None
 

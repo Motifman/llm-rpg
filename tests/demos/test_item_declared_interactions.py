@@ -27,12 +27,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[1]
-    / "fixtures"
-    / "scenarios"
-    / "item_interaction_demo.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "item_interaction_demo.json"
 _OWNER, _OTHER = PlayerId(1), PlayerId(2)
 
 
@@ -83,9 +78,7 @@ def test_owner_prompt_offers_item_actions_in_the_inventory_row(runtime) -> None:
 
 def test_item_action_applies_its_declared_effect(runtime) -> None:
     """所持道具の操作を実行すると宣言した結果文と世界フラグが適用される。"""
-    result = runtime.do_interact_with_item(
-        _OWNER, _radio_spec(runtime), "hail_the_mainland"
-    )
+    result = runtime.do_interact_with_item(_OWNER, _radio_spec(runtime), "hail_the_mainland")
 
     assert result.messages == ("雑音の向こうで短い応答が返った。",)
     assert "radio_hailed" in runtime._world_flag_state.as_frozen_set()
@@ -132,7 +125,6 @@ def test_llm_handler_resolves_and_executes_the_held_item_target(
                 "target_label": "携帯無線機",
                 "action_name": "hail_the_mainland",
                 "inner_thought": "遠くへ呼びかける。",
-                "expected_result": "応答が返る。",
             },
         }
     )
@@ -173,9 +165,7 @@ def test_non_owner_neither_sees_nor_can_call_the_item_action(runtime) -> None:
     inventory = user.split("所持アイテム:", 1)[-1].split("\n\n", 1)[0]
     assert '"携帯無線機"' not in inventory
     with pytest.raises(InteractionNotAllowedException, match="持っていない"):
-        runtime.do_interact_with_item(
-            _OTHER, _radio_spec(runtime), "hail_the_mainland"
-        )
+        runtime.do_interact_with_item(_OTHER, _radio_spec(runtime), "hail_the_mainland")
 
 
 def test_cooldown_is_independent_per_action_name(runtime) -> None:
@@ -204,10 +194,7 @@ def test_unmet_item_precondition_stays_visible_with_its_reason(runtime) -> None:
     """前提を満たさない道具操作も、物体操作と同じ断り付きで所持品行に残る。"""
     user = runtime.build_full_prompt(_OWNER)["messages"][1]["content"]
 
-    assert (
-        'いまできない: 観測記録を送る → "send_weather_report"'
-        "（送る観測記録がまだ無い。）" in user
-    )
+    assert 'いまできない: 観測記録を送る → "send_weather_report"（送る観測記録がまだ無い。）' in user
 
 
 def test_hidden_item_action_is_neither_named_nor_executable(runtime) -> None:
@@ -217,9 +204,7 @@ def test_hidden_item_action_is_neither_named_nor_executable(runtime) -> None:
     assert "open_service_channel" not in user
     assert "保守回線を開く" not in user
     with pytest.raises(InteractionNotAllowedException, match="権限は無い"):
-        runtime.do_interact_with_item(
-            _OWNER, _radio_spec(runtime), "open_service_channel"
-        )
+        runtime.do_interact_with_item(_OWNER, _radio_spec(runtime), "open_service_channel")
 
 
 def test_living_inventory_stays_private_but_fallen_inventory_is_visible(runtime) -> None:

@@ -40,12 +40,16 @@ _HERB = "薬草"
 def town(tmp_path: Path) -> Any:
     """市場町に 2 人。薬草を摘める。"""
     raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
-    raw["players"].append({
-        "id": "tom", "name": "トム",
-        "spawn_spot": raw["players"][0]["spawn_spot"],
-        "initial_items": [], "initial_gold": 50,
-        "persona_prompt": "あなたはトム。",
-    })
+    raw["players"].append(
+        {
+            "id": "tom",
+            "name": "トム",
+            "spawn_spot": raw["players"][0]["spawn_spot"],
+            "initial_items": [],
+            "initial_gold": 50,
+            "persona_prompt": "あなたはトム。",
+        }
+    )
     path = tmp_path / "market_town_v1.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     return create_world_runtime(str(path))
@@ -67,11 +71,7 @@ def _on_the_ground(runtime: Any, player_id: PlayerId, label: str) -> int:
     graph = runtime._spot_graph_repo.find_graph()
     spot_id = graph.get_entity_spot(EntityId.create(int(player_id)))
     interior = runtime._spot_interior_repo.find_by_spot_id(spot_id)
-    return sum(
-        1
-        for item in interior.ground_items
-        if item.item_spec_id.value == _spec_id(runtime, label)
-    )
+    return sum(1 for item in interior.ground_items if item.item_spec_id.value == _spec_id(runtime, label))
 
 
 def _give(runtime: Any, player_id: PlayerId, label: str, count: int = 1) -> None:
@@ -108,11 +108,7 @@ def _drain(runtime: Any, player_id: PlayerId) -> list[Any]:
 
 
 def _overflow_observations(runtime: Any, player_id: PlayerId) -> list[Any]:
-    return [
-        o
-        for o in _drain(runtime, player_id)
-        if (o.structured or {}).get("type") == "player_overflowed_item"
-    ]
+    return [o for o in _drain(runtime, player_id) if (o.structured or {}).get("type") == "player_overflowed_item"]
 
 
 class TestNothingIsLostWhenYourHandsAreFull:
@@ -226,7 +222,8 @@ class TestWhatFellIsAnOrdinaryGroundItem:
         interior_before = _on_the_ground(town, _LENA, _HERB)
 
         town._item_transfer_service.pickup_item(
-            _TOM, _ground_instance_id(town, _LENA, _HERB),
+            _TOM,
+            _ground_instance_id(town, _LENA, _HERB),
         )
 
         assert _held(town, _TOM, _HERB) == 1
@@ -239,7 +236,8 @@ class TestWhatFellIsAnOrdinaryGroundItem:
         town._item_transfer_service.drop_item(_LENA, _first_occupied_slot(town, _LENA))
 
         town._item_transfer_service.pickup_item(
-            _LENA, _ground_instance_id(town, _LENA, _HERB),
+            _LENA,
+            _ground_instance_id(town, _LENA, _HERB),
         )
 
         assert _on_the_ground(town, _LENA, _HERB) >= 1
@@ -286,9 +284,7 @@ def _ground_instance_id(runtime: Any, player_id: PlayerId, label: str):
     spot_id = graph.get_entity_spot(EntityId.create(int(player_id)))
     interior = runtime._spot_interior_repo.find_by_spot_id(spot_id)
     return next(
-        item.item_instance_id
-        for item in interior.ground_items
-        if item.item_spec_id.value == _spec_id(runtime, label)
+        item.item_instance_id for item in interior.ground_items if item.item_spec_id.value == _spec_id(runtime, label)
     )
 
 

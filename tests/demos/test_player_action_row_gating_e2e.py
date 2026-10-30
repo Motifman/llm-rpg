@@ -37,10 +37,9 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DARKENED_STATION = _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
-_MORI = PlayerId(1)   # crew
-_SENA = PlayerId(2)   # crew
-_KUZE = PlayerId(3)   # keeper
-
+_MORI = PlayerId(1)  # crew
+_SENA = PlayerId(2)  # crew
+_KUZE = PlayerId(3)  # keeper
 
 
 def _with_two_keepers(tmp_path: Path) -> Path:
@@ -70,18 +69,14 @@ def _row_for(runtime, viewer: PlayerId, target_name: str) -> str:
 
     snapshot = runtime._state_builder.build_snapshot(int(viewer))
     lines: list[str] = []
-    SpotGraphUiContextBuilder()._build_entity_section(
-        snapshot, LabelAllocator(), RuntimeTargetCollector(), lines
-    )
+    SpotGraphUiContextBuilder()._build_entity_section(snapshot, LabelAllocator(), RuntimeTargetCollector(), lines)
     row_index = next(
         (i for i, line in enumerate(lines) if target_name in line),
         None,
     )
     assert row_index is not None, f"{target_name} の行が見つからない: {lines}"
     row = [lines[row_index]]
-    if row_index + 1 < len(lines) and lines[row_index + 1].startswith(
-        "      いまできない:"
-    ):
+    if row_index + 1 < len(lines) and lines[row_index + 1].startswith("      いまできない:"):
         row.append(lines[row_index + 1])
     return "\n".join(row)
 
@@ -111,12 +106,8 @@ def _knock_down(runtime, player_id: PlayerId) -> None:
     status.clear_events()
     runtime._player_status_repo.save(status)
     current_tick = int(runtime.current_tick())
-    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
-        EntityId.create(int(player_id))
-    )
-    runtime._fallen_body_registry.record(
-        player_id, spot_id, WorldTick(current_tick)
-    )
+    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
+    runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(current_tick))
     runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
     runtime._speech_event_publisher.publish_all(events)
 
@@ -176,7 +167,7 @@ class TestHiddenStateIsNotUsedForGating:
         """
         runtime = create_world_runtime(_with_two_keepers(tmp_path))
 
-        crew_row = _row_for(runtime, _KUZE, "セナ")      # 対象 role=crew
+        crew_row = _row_for(runtime, _KUZE, "セナ")  # 対象 role=crew
         keeper_row = _row_for(runtime, _KUZE, "アオイ")  # 対象 role=keeper
 
         # 「両方に出ている」ことまで見る。等価だけを見ると、**両方から消えても

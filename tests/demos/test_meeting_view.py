@@ -43,9 +43,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI, _SENA, _AOI, _HAGI = PlayerId(1), PlayerId(2), PlayerId(4), PlayerId(5)
 _YURA, _SAKI = PlayerId(6), PlayerId(8)
@@ -68,9 +66,7 @@ def free_roam():
 def _player_rows(text: str, heading: str) -> list[str]:
     """所持品や物体ではなく、指定した人物節の行だけを返す。"""
     lines = text.splitlines()
-    start = next(
-        index for index, line in enumerate(lines) if line.startswith(heading)
-    ) + 1
+    start = next(index for index, line in enumerate(lines) if line.startswith(heading)) + 1
     rows: list[str] = []
     for line in lines[start:]:
         if not line.startswith('  - "'):
@@ -82,14 +78,15 @@ def _player_rows(text: str, heading: str) -> list[str]:
 class TestTheMeetingHidesWhatCannotBeChosen:
     """会議中は、その場で選べない対象が出ない。"""
 
-    @pytest.mark.parametrize(
-        "marker", ["接続先:", "オブジェクト:", "give_item"]
-    )
+    @pytest.mark.parametrize("marker", ["接続先:", "オブジェクト:", "give_item"])
     def test_the_unusable_sections_are_gone(self, in_a_meeting, marker) -> None:
         """移動先・オブジェクト・受け渡しの案内が消える。"""
         assert marker not in in_a_meeting.build_observation(_MORI)
 
-    def test_they_are_still_there_during_free_roam(self, free_roam, ) -> None:
+    def test_they_are_still_there_during_free_roam(
+        self,
+        free_roam,
+    ) -> None:
         """自由時間では今までどおり出る。
 
         **消しすぎていないか**を必ず一緒に見る。全部消えてもテストは通る。
@@ -106,14 +103,9 @@ class TestTheMeetingHidesWhatCannotBeChosen:
         #948 で実行は塞いだが、読めてしまう状態は残したくない。
         """
         text = in_a_meeting.build_observation(_MORI)
-        offered = {
-            d.name
-            for d in in_a_meeting.get_tool_definitions(player_id=_MORI)
-        }
+        offered = {d.name for d in in_a_meeting.get_tool_definitions(player_id=_MORI)}
         names = ("interact", "travel_to", "give_item")
-        assert any(name not in offered for name in names), (
-            "この節が何も確かめていない"
-        )
+        assert any(name not in offered for name in names), "この節が何も確かめていない"
 
         for name in names:
             if name not in offered:
@@ -146,21 +138,13 @@ class TestWhatTheMeetingKeeps:
         status.clear_events()
         runtime._player_status_repo.save(status)
         current_tick = int(runtime.current_tick())
-        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
-            EntityId.create(int(_SENA))
-        )
-        runtime._fallen_body_registry.record(
-            _SENA, spot_id, WorldTick(current_tick)
-        )
-        runtime._death_grace_timer.register(
-            _SENA, downed_at_tick=current_tick
-        )
+        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(_SENA)))
+        runtime._fallen_body_registry.record(_SENA, spot_id, WorldTick(current_tick))
+        runtime._death_grace_timer.register(_SENA, downed_at_tick=current_tick)
         runtime._speech_event_publisher.publish_all(events)
         runtime.call_emergency_meeting(_MORI)
 
-        row = next(
-            l for l in runtime.build_observation(_MORI).splitlines() if "セナ" in l
-        )
+        row = next(l for l in runtime.build_observation(_MORI).splitlines() if "セナ" in l)
 
         assert "倒れて" in row or "死亡" in row
 
@@ -174,9 +158,7 @@ class TestWhatTheMeetingKeeps:
         自由時間ならこの視点で `[背後から襲う …]` が付く。会議中に付けると
         選べない手を並べることになる。
         """
-        rows = _player_rows(
-            in_a_meeting.build_observation(_KUZE), "この場に居る人:"
-        )
+        rows = _player_rows(in_a_meeting.build_observation(_KUZE), "この場に居る人:")
 
         assert rows
         assert all("[" not in r for r in rows)
@@ -208,10 +190,7 @@ class TestTheAnnouncementAtTheStart:
 
         runtime.call_emergency_meeting(_MORI)
 
-        prose = " ".join(
-            e.output.prose
-            for e in runtime._obs_buffer.get_observations(_SENA)[before:]
-        )
+        prose = " ".join(e.output.prose for e in runtime._obs_buffer.get_observations(_SENA)[before:])
         assert "話すことと投票だけ" in prose
 
     def test_it_does_not_name_any_tool(self) -> None:
@@ -224,10 +203,7 @@ class TestTheAnnouncementAtTheStart:
         before = len(runtime._obs_buffer.get_observations(_SENA))
         runtime.call_emergency_meeting(_MORI)
 
-        prose = " ".join(
-            e.output.prose
-            for e in runtime._obs_buffer.get_observations(_SENA)[before:]
-        )
+        prose = " ".join(e.output.prose for e in runtime._obs_buffer.get_observations(_SENA)[before:])
         for name in ("vote", "speak", "report_body"):
             assert name not in prose
 
@@ -307,10 +283,7 @@ class TestEngineWordsAreGone:
 
         地図で直したのと同じ形が、状態行に残っていた。
         """
-        line = next(
-            l for l in in_a_meeting.build_observation(_MORI).splitlines()
-            if "話し合い" in l
-        )
+        line = next(l for l in in_a_meeting.build_observation(_MORI).splitlines() if "話し合い" in l)
 
         assert "分" in line
         assert "tick" not in line
@@ -321,10 +294,7 @@ class TestEngineWordsAreGone:
         run 009 は 6 tick を使い切って 24 回喋り、**投票は 1 票だけ**だった。
         残り回数は出ていたが、**それが何を意味するかが書かれていなかった。**
         """
-        line = next(
-            l for l in in_a_meeting.build_observation(_MORI).splitlines()
-            if "話し合い" in l
-        )
+        line = next(l for l in in_a_meeting.build_observation(_MORI).splitlines() if "話し合い" in l)
 
         assert "誰も追放されない" in line
 
@@ -384,16 +354,13 @@ class TestEngineWordsAreGone:
         探せない。途中段や偽装名ではなく、進捗に依存しない入口名を二件とも
         示すことで、最初の一件だけへ縮める後戻りを防ぐ。
         """
-        line = next(
-            l for l in free_roam.build_observation(player_id).splitlines()
-            if l.startswith("自分の状態")
-        )
+        line = next(l for l in free_roam.build_observation(player_id).splitlines() if l.startswith("自分の状態"))
 
         assert line.count(" → ") == 2
         assert all(expected in line for expected in expected_entries)
         assert "立場: クルー" in line
         assert "duty=" not in line and "role=" not in line
-        assert not any(suffix in line for suffix in ("_2\"", "_3\"", "_pretend\""))
+        assert not any(suffix in line for suffix in ('_2"', '_3"', '_pretend"'))
 
     def test_undeclared_state_is_still_shown(self) -> None:
         """呼び名の宣言が無い state は今までどおり出る。
@@ -410,10 +377,7 @@ class TestEngineWordsAreGone:
 
     def test_the_atmosphere_line_has_no_enum(self, free_roam) -> None:
         """明るさが enum のまま出ない。"""
-        line = next(
-            l for l in free_roam.build_observation(_MORI).splitlines()
-            if l.startswith("雰囲気")
-        )
+        line = next(l for l in free_roam.build_observation(_MORI).splitlines() if l.startswith("雰囲気"))
 
         assert "明るい" in line
         for raw in ("BRIGHT", "DARK", "DIM"):
@@ -489,10 +453,7 @@ class TestEveryEnumValueHasAName:
         )
 
         runtime = create_world_runtime(_DRILL)
-        line = next(
-            l for l in runtime.build_observation(_MORI).splitlines()
-            if l.startswith("雰囲気")
-        )
+        line = next(l for l in runtime.build_observation(_MORI).splitlines() if l.startswith("雰囲気"))
 
         for enum_cls, _table in DISPLAY_TABLES:
             for member in enum_cls:
@@ -509,10 +470,7 @@ class TestTheDeadlineSaysHowManyTurnsAreLeft:
         9 回 `wait` が出たのは「待てば次がある」と読んだから。30 分と言われても、
         自分があと何回動けるかは分からない (claude の指摘)。
         """
-        line = next(
-            l for l in in_a_meeting.build_observation(_MORI).splitlines()
-            if "話し合い" in l
-        )
+        line = next(l for l in in_a_meeting.build_observation(_MORI).splitlines() if "話し合い" in l)
 
         assert "分" in line
         assert "回ぶん" in line

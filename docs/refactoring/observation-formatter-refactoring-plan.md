@@ -1,5 +1,8 @@
 # ObservationFormatter リファクタリング計画
 
+> 一部失効した計画・記録（2026-10-25、Issue #1862）。会話・採集・当たり判定の整形処理は削除済み。完了欄は当時の分割結果を示す。
+> 以下の本文は当時の記録として保存する。現行構成は[世界の現在の構成](../game/world_architecture.md)を参照。
+
 `observation_formatter.py` のモノリス解消のための段階的リファクタリング計画。
 親ロードマップ: [llm-agent-refactoring-roadmap.md](./llm-agent-refactoring-roadmap.md) 1.3
 

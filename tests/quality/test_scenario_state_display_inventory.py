@@ -35,14 +35,12 @@ def test_list_raw_visible_state_values_in_all_scenarios() -> None:
                 raw_keys = [key for key in visible if key != VISIBLE_STATE_TAGS_KEY]
                 for key in raw_keys:
                     leaks.append(
-                        f"{path.name}: object={obj.name!r} id={obj.object_id.value} "
-                        f"key={key!r} visible={visible!r}"
+                        f"{path.name}: object={obj.name!r} id={obj.object_id.value} key={key!r} visible={visible!r}"
                     )
 
     if leaks:
         pytest.skip(
             "raw visible state values remain; list with "
             "`uv run pytest tests/quality/test_scenario_state_display_inventory.py "
-            "-m quality -rs`:\n"
-            + "\n".join(leaks)
+            "-m quality -rs`:\n" + "\n".join(leaks)
         )

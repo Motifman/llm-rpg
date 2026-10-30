@@ -1,6 +1,5 @@
 """スポーン定義（スポット単位のスポーンテーブル）のインメモリリポジトリ。"""
 
-
 from ai_rpg_world.domain.monster.repository.spawn_table_repository import (
     SpawnTableRepository,
     SpawnTableWriter,

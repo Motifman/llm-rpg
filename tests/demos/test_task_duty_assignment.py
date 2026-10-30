@@ -46,9 +46,7 @@ from pathlib import Path
 
 import pytest
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 #: 偽装用の行動。インポスターは全部の点検を装えるので、担当では縛らない。
 _PRETEND_SUFFIX = "_pretend"
@@ -123,11 +121,7 @@ def _task_steps(scenario: dict):
 
 
 def _player_state_conditions(interaction: dict):
-    return [
-        c
-        for c in interaction.get("preconditions", [])
-        if c["condition_type"] == "PLAYER_STATE_IS"
-    ]
+    return [c for c in interaction.get("preconditions", []) if c["condition_type"] == "PLAYER_STATE_IS"]
 
 
 def _crew(scenario: dict):
@@ -158,10 +152,7 @@ class TestAssignedCrewMembersHaveExactlyOneDuty:
 
     def test_each_crew_members_duty_names_the_assigned_work(self, scenario) -> None:
         """内部の duty 値も作業名と一致し、旧配置の名前で誤読させない。"""
-        actual = {
-            player["name"]: player["initial_state"]["duty"]
-            for player in _assigned_crew(scenario)
-        }
+        actual = {player["name"]: player["initial_state"]["duty"] for player in _assigned_crew(scenario)}
 
         assert actual == _PLAYER_DUTIES
 
@@ -189,28 +180,20 @@ class TestEveryTaskStepIsGatedByDuty:
             prefix = next(p for p in _TASK_PREFIXES if action.startswith(p))
             if prefix not in _ASSIGNED_TASK_DUTIES:
                 continue
-            duties = [
-                c["required_state"].get("duty")
-                for c in _player_state_conditions(interaction)
-            ]
+            duties = [c["required_state"].get("duty") for c in _player_state_conditions(interaction)]
             assert any(duties), f"{object_id}/{interaction['action_name']}"
 
     def test_assigned_tasks_require_the_declared_duties(self, scenario) -> None:
         """担当の割り当ては12系列すべてで一致し、旧配置を1件も残さない。"""
         actual: dict[str, set[str]] = {}
         for _, interaction in _task_steps(scenario):
-            prefix = next(
-                p for p in _TASK_PREFIXES
-                if interaction["action_name"].startswith(p)
-            )
+            prefix = next(p for p in _TASK_PREFIXES if interaction["action_name"].startswith(p))
             for condition in _player_state_conditions(interaction):
                 duty = condition["required_state"].get("duty")
                 if duty:
                     actual.setdefault(prefix, set()).add(duty)
 
-        assert actual == {
-            prefix: {duty} for prefix, duty in _ASSIGNED_TASK_DUTIES.items()
-        }
+        assert actual == {prefix: {duty} for prefix, duty in _ASSIGNED_TASK_DUTIES.items()}
 
     def test_all_steps_of_one_task_share_the_same_duty(self, scenario) -> None:
         """1 つの点検の全段が、同じ担当を要求する。
@@ -254,11 +237,7 @@ class TestCommonTasksCanBeTakenOver:
         """共通4件は全段で role=crew だけを要求し、duty を要求しない。"""
         by_prefix: dict[str, list[dict]] = {}
         for _, interaction in _task_steps(scenario):
-            prefix = next(
-                p
-                for p in _TASK_PREFIXES
-                if interaction["action_name"].startswith(p)
-            )
+            prefix = next(p for p in _TASK_PREFIXES if interaction["action_name"].startswith(p))
             by_prefix.setdefault(prefix, []).append(interaction)
 
         common = {
@@ -275,10 +254,7 @@ class TestCommonTasksCanBeTakenOver:
         for prefix, steps in common.items():
             assert len(steps) == 3, prefix
             for step in steps:
-                states = [
-                    condition["required_state"]
-                    for condition in _player_state_conditions(step)
-                ]
+                states = [condition["required_state"] for condition in _player_state_conditions(step)]
                 assert {"role": "crew"} in states, (prefix, step["action_name"])
 
     def test_declared_common_tasks_require_only_the_crew_role(self, scenario) -> None:
@@ -296,20 +272,10 @@ class TestCommonTasksCanBeTakenOver:
                     prefix = next((p for p in _TASK_PREFIXES if action.startswith(p)), None)
                     if action.endswith(_PRETEND_SUFFIX) or (spot["id"], prefix) not in common:
                         continue
-                    states = [
-                        condition["required_state"]
-                        for condition in _player_state_conditions(interaction)
-                    ]
-                    assert states == [{"role": "crew"}], (
-                        spot["id"], obj["id"], action, states
-                    )
-                    failures = [
-                        condition["failure_message"]
-                        for condition in _player_state_conditions(interaction)
-                    ]
-                    assert failures == ["その作業を行える立場ではない。"], (
-                        spot["id"], obj["id"], action, failures
-                    )
+                    states = [condition["required_state"] for condition in _player_state_conditions(interaction)]
+                    assert states == [{"role": "crew"}], (spot["id"], obj["id"], action, states)
+                    failures = [condition["failure_message"] for condition in _player_state_conditions(interaction)]
+                    assert failures == ["その作業を行える立場ではない。"], (spot["id"], obj["id"], action, failures)
 
     def test_all_nine_rooms_contain_the_selected_task_count(self, scenario) -> None:
         """16件は全九区画を覆い、指定した室あたり件数を変えない。"""
@@ -336,9 +302,7 @@ class TestCommonTasksCanBeTakenOver:
             "machine_room": 2,
         }
 
-    def test_declared_task_flags_exactly_match_the_win_condition(
-        self, scenario
-    ) -> None:
+    def test_declared_task_flags_exactly_match_the_win_condition(self, scenario) -> None:
         """実在する16点検と勝利条件のフラグ集合が完全に一致する。
 
         作業だけ、または終了条件だけを増やすと、完了しても数えられない作業か、
@@ -348,8 +312,7 @@ class TestCommonTasksCanBeTakenOver:
             effect["parameters"]["flag_name"]
             for _, interaction in _task_steps(scenario)
             for effect in interaction.get("effects", [])
-            if effect["effect_type"] == "SET_FLAG"
-            and effect["parameters"]["flag_name"].startswith("task_")
+            if effect["effect_type"] == "SET_FLAG" and effect["parameters"]["flag_name"].startswith("task_")
         }
         task_end = next(
             condition
@@ -421,9 +384,7 @@ class TestTheDutyBoardMatchesReality:
             if player["initial_state"].get("role") != "crew":
                 assert player["name"] not in board, player["name"]
 
-    def test_the_board_prepares_for_a_blackout_without_claiming_one_exists(
-        self, scenario
-    ) -> None:
+    def test_the_board_prepares_for_a_blackout_without_claiming_one_exists(self, scenario) -> None:
         """当番表は停電への備えを伝え、初期状態を故障中とは書かない。"""
         board = self._board_message(scenario)
 
@@ -452,9 +413,7 @@ class TestTheBoardHasRoomForASecondMeeting:
 
     def _counts(self, scenario: dict):
         crew = _crew(scenario)
-        impostors = [
-            p for p in scenario["players"] if p["initial_state"].get("role") != "crew"
-        ]
+        impostors = [p for p in scenario["players"] if p["initial_state"].get("role") != "crew"]
         return len(crew), len(impostors)
 
     def test_four_tasks_may_remain_unfinished(self, scenario) -> None:
@@ -465,9 +424,7 @@ class TestTheBoardHasRoomForASecondMeeting:
             if condition["type"] == "FLAGS_SET_AT_LEAST"
         )
         required = next(
-            w["min_set_count"]
-            for w in scenario["game_end_conditions"]["win"]
-            if w["type"] == "FLAGS_SET_AT_LEAST"
+            w["min_set_count"] for w in scenario["game_end_conditions"]["win"] if w["type"] == "FLAGS_SET_AT_LEAST"
         )
 
         assert len(task_end["required_flags"]) - required == 4
@@ -495,11 +452,7 @@ class TestTheBoardHasRoomForASecondMeeting:
 
     def test_every_task_is_visible_before_a_blackout(self, scenario) -> None:
         """全担当の入口は明るく始まり、停電前から作業できる。"""
-        bright_spots = {
-            s["id"]
-            for s in scenario["spots"]
-            if (s.get("atmosphere") or {}).get("lighting") == "BRIGHT"
-        }
+        bright_spots = {s["id"] for s in scenario["spots"] if (s.get("atmosphere") or {}).get("lighting") == "BRIGHT"}
         task_spots = [
             s["id"]
             for s in scenario["spots"]
@@ -534,10 +487,7 @@ class TestLanternsRemainBlackoutEquipment:
 
     def test_crew_start_without_personal_lanterns(self, scenario) -> None:
         """停電前から守られず、必要になれば物資庫へ取りに行く。"""
-        assert all(
-            "lantern" not in (player.get("initial_items") or [])
-            for player in _crew(scenario)
-        )
+        assert all("lantern" not in (player.get("initial_items") or []) for player in _crew(scenario))
 
     def test_blackout_lanterns_are_fewer_than_crew_members(self, scenario) -> None:
         """停電時の灯りは全員分なく、貸し借りや同行の余地を残す。"""
@@ -550,9 +500,7 @@ class TestTheImpostorNeedsTimeButNotTooMuch:
     """殺害の間隔が、run の長さと噛み合っている。"""
 
     def _cooldown(self, scenario) -> int:
-        return max(
-            int(i.get("cooldown_ticks", 0)) for i in scenario["player_interactions"]
-        )
+        return max(int(i.get("cooldown_ticks", 0)) for i in scenario["player_interactions"])
 
     def _kills_to_win(self, scenario) -> int:
         crew = len(_crew(scenario))
@@ -579,10 +527,7 @@ class TestTheImpostorNeedsTimeButNotTooMuch:
 
         profile = json.loads(
             (
-                Path(__file__).resolve().parents[2]
-                / "data"
-                / "experiment_profiles"
-                / "station_drill_lean.json"
+                Path(__file__).resolve().parents[2] / "data" / "experiment_profiles" / "station_drill_lean.json"
             ).read_text(encoding="utf-8")
         )
         ticks = int(profile["max_world_ticks"])
@@ -627,8 +572,6 @@ class TestToolsThatWouldAlwaysComeBackEmpty:
         「置いたのに誰も見つけられない」という静かな失敗になる。
         """
         loaded = self._loaded()
-        found = sum(
-            len(interior.discoverable_items) for interior in loaded.interiors.values()
-        )
+        found = sum(len(interior.discoverable_items) for interior in loaded.interiors.values())
 
         assert found == 0

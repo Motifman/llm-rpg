@@ -31,9 +31,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI, _SENA, _KUZE, _AOI, _HAGI = (PlayerId(i) for i in range(1, 6))
 
@@ -56,10 +54,7 @@ def _someone_without_a_light() -> PlayerId:
     for index, player in enumerate(raw["players"], start=1):
         if "lantern" not in (player.get("initial_items") or []):
             return PlayerId(index)
-    raise AssertionError(
-        "全員が灯りを持っている。暗い部屋を見る人が居ないので、この節は"
-        "何も保証できない"
-    )
+    raise AssertionError("全員が灯りを持っている。暗い部屋を見る人が居ないので、この節は何も保証できない")
 
 
 def _someone_takes_a_light(runtime, *, exclude: PlayerId) -> PlayerId:
@@ -102,10 +97,7 @@ def _object_section(runtime, player_id: PlayerId) -> str:
 
 def _object_line(runtime, player_id: PlayerId) -> str:
     return next(
-        (
-            l for l in runtime.build_observation(player_id).splitlines()
-            if l.startswith("オブジェクト")
-        ),
+        (l for l in runtime.build_observation(player_id).splitlines() if l.startswith("オブジェクト")),
         "",
     )
 
@@ -175,9 +167,7 @@ class TestDarkRoomsSaySo:
 
         lines: list[str] = []
         snap = MagicMock(objects=(), atmosphere=MagicMock(lighting="BRIGHT"))
-        SpotGraphUiContextBuilder()._build_object_section(
-            snap, MagicMock(), MagicMock(), lines
-        )
+        SpotGraphUiContextBuilder()._build_object_section(snap, MagicMock(), MagicMock(), lines)
 
         assert lines == ["オブジェクト: (ここには何も無い)"]
 
@@ -208,15 +198,10 @@ class TestTheKillerIsNotToldWhatTheyDid:
         runtime = create_world_runtime(_DRILL)
         _move(runtime, _KUZE, "storage")
         runtime.do_interact(_KUZE, "supply_shelf", "find_cutter")
-        for player_id, spot in (
-            (_SENA, "corridor"), (_KUZE, "corridor"), (_MORI, "hall")
-        ):
+        for player_id, spot in ((_SENA, "corridor"), (_KUZE, "corridor"), (_MORI, "hall")):
             _move(runtime, player_id, spot)
         darken_spot(runtime, "corridor")
-        before = {
-            int(p): len(runtime._obs_buffer.get_observations(p))
-            for p in (_KUZE, _MORI)
-        }
+        before = {int(p): len(runtime._obs_buffer.get_observations(p)) for p in (_KUZE, _MORI)}
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
         runtime.advance_tick()
         return runtime, before
@@ -224,9 +209,7 @@ class TestTheKillerIsNotToldWhatTheyDid:
     def _findings(self, runtime, player_id, before) -> list:
         return [
             e.output.prose
-            for e in runtime._obs_buffer.get_observations(player_id)[
-                before[int(player_id)] :
-            ]
+            for e in runtime._obs_buffer.get_observations(player_id)[before[int(player_id)] :]
             if "見つけた" in e.output.prose
         ]
 
@@ -266,21 +249,13 @@ class TestTheKillerIsNotToldWhatTheyDid:
         status.clear_events()
         runtime._player_status_repo.save(status)
         current_tick = int(runtime.current_tick())
-        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
-            EntityId.create(int(_SENA))
-        )
-        runtime._fallen_body_registry.record(
-            _SENA, spot_id, WorldTick(current_tick)
-        )
-        runtime._death_grace_timer.register(
-            _SENA, downed_at_tick=current_tick
-        )
+        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(_SENA)))
+        runtime._fallen_body_registry.record(_SENA, spot_id, WorldTick(current_tick))
+        runtime._death_grace_timer.register(_SENA, downed_at_tick=current_tick)
         runtime._speech_event_publisher.publish_all(events)
         runtime.advance_tick()
         runtime.build_observation(_MORI)
 
         assert [
-            e.output.prose
-            for e in runtime._obs_buffer.get_observations(_MORI)[before:]
-            if "見つけた" in e.output.prose
+            e.output.prose for e in runtime._obs_buffer.get_observations(_MORI)[before:] if "見つけた" in e.output.prose
         ]

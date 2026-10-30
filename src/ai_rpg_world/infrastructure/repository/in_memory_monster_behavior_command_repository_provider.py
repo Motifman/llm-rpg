@@ -60,9 +60,7 @@ class InMemoryMonsterBehaviorCommandRepositoryProvider:
         store = unit_of_work.data_store
         self._monsters = cast(
             MonsterRepository,
-            ScopeBoundRepository(
-                InMemoryMonsterAggregateRepository(store, facade), guard
-            ),
+            ScopeBoundRepository(InMemoryMonsterAggregateRepository(store, facade), guard),
         )
         self._player_statuses = cast(
             PlayerStatusRepository,
@@ -70,9 +68,7 @@ class InMemoryMonsterBehaviorCommandRepositoryProvider:
         )
         self._spot_interiors = cast(
             ISpotInteriorRepository,
-            ScopeBoundRepository(
-                InMemorySpotInteriorRepository(data_store=store), guard
-            ),
+            ScopeBoundRepository(InMemorySpotInteriorRepository(data_store=store), guard),
         )
         self._spot_graph = cast(
             ISpotGraphRepository,
@@ -121,10 +117,7 @@ class InMemoryMonsterBehaviorCommandRepositoryProviderFactory:
     ) -> InMemoryMonsterBehaviorCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "インメモリmonster behavior providerには"
-                "InMemoryUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("インメモリmonster behavior providerにはInMemoryUnitOfWorkTransactionAdapterが必要です")
         return InMemoryMonsterBehaviorCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

@@ -1,4 +1,5 @@
 """ショップコマンドサービス"""
+
 import logging
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -51,7 +52,6 @@ from ai_rpg_world.domain.world.exception.map_exception import (
 from ai_rpg_world.domain.world.repository.location_establishment_repository import (
     LocationEstablishmentRepository,
 )
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
@@ -67,7 +67,6 @@ class ShopCommandService:
         player_inventory_repository: PlayerInventoryRepository,
         player_status_repository: PlayerStatusRepository,
         item_repository: ItemRepository,
-        physical_map_repository: PhysicalMapRepository,
         location_establishment_repository: LocationEstablishmentRepository,
         unit_of_work: UnitOfWork,
     ):
@@ -75,14 +74,11 @@ class ShopCommandService:
         self._player_inventory_repository = player_inventory_repository
         self._player_status_repository = player_status_repository
         self._item_repository = item_repository
-        self._physical_map_repository = physical_map_repository
         self._location_establishment_repository = location_establishment_repository
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -109,21 +105,10 @@ class ShopCommandService:
         self,
         player_id: PlayerId,
         spot_id: SpotId,
-        location_area_id: LocationAreaId,
     ) -> bool:
-        """プレイヤーが指定ロケーションにいるか判定"""
+        """プレイヤーの現在スポットがショップのスポットと一致するか判定する。"""
         status = self._player_status_repository.find_by_id(player_id)
-        if status is None:
-            return False
-        if status.current_spot_id is None or status.current_coordinate is None:
-            return False
-        if status.current_spot_id != spot_id:
-            return False
-        physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
-        if physical_map is None:
-            return False
-        areas = physical_map.get_location_areas_at(status.current_coordinate)
-        return any(la.location_id == location_area_id for la in areas)
+        return status is not None and status.current_spot_id == spot_id
 
     def create_shop(self, command: CreateShopCommand) -> ShopCommandResultDto:
         """ショップを開設する"""
@@ -139,9 +124,7 @@ class ShopCommandService:
             owner_id = PlayerId(command.owner_id)
 
             shop_id = self._shop_repository.generate_shop_id()
-            slot = self._location_establishment_repository.find_by_spot_and_location(
-                spot_id, location_area_id
-            )
+            slot = self._location_establishment_repository.find_by_spot_and_location(spot_id, location_area_id)
             if slot is None:
                 slot = LocationEstablishmentAggregate.create(
                     spot_id=spot_id,
@@ -150,9 +133,7 @@ class ShopCommandService:
             try:
                 slot.claim(EstablishmentType.SHOP, shop_id.value)
             except LocationAlreadyOccupiedException:
-                raise ShopAlreadyExistsAtLocationException(
-                    command.spot_id, command.location_area_id
-                ) from None
+                raise ShopAlreadyExistsAtLocationException(command.spot_id, command.location_area_id) from None
 
             shop = ShopAggregate.create(
                 shop_id=shop_id,
@@ -164,9 +145,7 @@ class ShopCommandService:
             )
             self._shop_repository.save(shop)
             self._location_establishment_repository.save(slot)
-            self._logger.info(
-                f"Shop created: shop_id={shop_id.value}, owner_id={command.owner_id}"
-            )
+            self._logger.info(f"Shop created: shop_id={shop_id.value}, owner_id={command.owner_id}")
             return ShopCommandResultDto(
                 success=True,
                 message="ショップを開設しました",
@@ -184,9 +163,7 @@ class ShopCommandService:
             },
         )
 
-    def _list_shop_item_impl(
-        self, command: ListShopItemCommand
-    ) -> ShopCommandResultDto:
+    def _list_shop_item_impl(self, command: ListShopItemCommand) -> ShopCommandResultDto:
         with self._unit_of_work:
             shop_id = ShopId.create(command.shop_id)
             player_id = PlayerId(command.player_id)
@@ -195,9 +172,7 @@ class ShopCommandService:
             if shop is None:
                 raise ShopNotFoundForCommandException(command.shop_id, "list_shop_item")
             if not shop.is_owner(player_id):
-                raise AppNotShopOwnerException(
-                    command.player_id, command.shop_id, "list_shop_item"
-                )
+                raise AppNotShopOwnerException(command.player_id, command.shop_id, "list_shop_item")
 
             owner_inventory = self._player_inventory_repository.find_by_id(player_id)
             if owner_inventory is None:
@@ -206,9 +181,7 @@ class ShopCommandService:
                     user_id=command.player_id,
                 )
 
-            item_instance_id = owner_inventory.remove_item_for_placement(
-                SlotId(command.slot_id)
-            )
+            item_instance_id = owner_inventory.remove_item_for_placement(SlotId(command.slot_id))
 
             item = self._item_repository.find_by_id(item_instance_id)
             if item is None:
@@ -232,9 +205,7 @@ class ShopCommandService:
             self._shop_repository.save(shop)
             self._player_inventory_repository.save(owner_inventory)
 
-            self._logger.info(
-                f"Shop item listed: shop_id={command.shop_id}, listing_id={listing_id.value}"
-            )
+            self._logger.info(f"Shop item listed: shop_id={command.shop_id}, listing_id={listing_id.value}")
             return ShopCommandResultDto(
                 success=True,
                 message="出品しました",
@@ -253,9 +224,7 @@ class ShopCommandService:
             },
         )
 
-    def _unlist_shop_item_impl(
-        self, command: UnlistShopItemCommand
-    ) -> ShopCommandResultDto:
+    def _unlist_shop_item_impl(self, command: UnlistShopItemCommand) -> ShopCommandResultDto:
         with self._unit_of_work:
             shop_id = ShopId.create(command.shop_id)
             listing_id = ShopListingId.create(command.listing_id)
@@ -263,19 +232,13 @@ class ShopCommandService:
 
             shop = self._shop_repository.find_by_id(shop_id)
             if shop is None:
-                raise ShopNotFoundForCommandException(
-                    command.shop_id, "unlist_shop_item"
-                )
+                raise ShopNotFoundForCommandException(command.shop_id, "unlist_shop_item")
             if not shop.is_owner(player_id):
-                raise AppNotShopOwnerException(
-                    command.player_id, command.shop_id, "unlist_shop_item"
-                )
+                raise AppNotShopOwnerException(command.player_id, command.shop_id, "unlist_shop_item")
 
             listing = shop.get_listing(listing_id)
             if listing is None:
-                raise ListingNotFoundForCommandException(
-                    command.shop_id, command.listing_id, "unlist_shop_item"
-                )
+                raise ListingNotFoundForCommandException(command.shop_id, command.listing_id, "unlist_shop_item")
 
             item_instance_id = listing.item_instance_id
             shop.unlist_item(listing_id, player_id)
@@ -290,28 +253,22 @@ class ShopCommandService:
             owner_inventory.acquire_item(
                 item_instance_id,
                 item_spec_id_value=(
-                    item_aggregate.item_spec.item_spec_id.value
-                    if item_aggregate is not None
-                    else None
+                    item_aggregate.item_spec.item_spec_id.value if item_aggregate is not None else None
                 ),
             )
 
             self._shop_repository.save(shop)
             self._player_inventory_repository.save(owner_inventory)
 
-            self._logger.info(
-                f"Shop item unlisted: shop_id={command.shop_id}, listing_id={command.listing_id}"
-            )
+            self._logger.info(f"Shop item unlisted: shop_id={command.shop_id}, listing_id={command.listing_id}")
             return ShopCommandResultDto(
                 success=True,
                 message="取り下げました",
                 data={"shop_id": command.shop_id, "listing_id": command.listing_id},
             )
 
-    def purchase_from_shop(
-        self, command: PurchaseFromShopCommand
-    ) -> ShopCommandResultDto:
-        """ショップから購入する（購入者はそのロケーションにいる必要あり）"""
+    def purchase_from_shop(self, command: PurchaseFromShopCommand) -> ShopCommandResultDto:
+        """ショップから購入する（購入者は同じスポットにいる必要あり）"""
         return self._execute_with_error_handling(
             operation=lambda: self._purchase_from_shop_impl(command),
             context={
@@ -322,9 +279,7 @@ class ShopCommandService:
             },
         )
 
-    def _purchase_from_shop_impl(
-        self, command: PurchaseFromShopCommand
-    ) -> ShopCommandResultDto:
+    def _purchase_from_shop_impl(self, command: PurchaseFromShopCommand) -> ShopCommandResultDto:
         with self._unit_of_work:
             shop_id = ShopId.create(command.shop_id)
             listing_id = ShopListingId.create(command.listing_id)
@@ -339,32 +294,22 @@ class ShopCommandService:
 
             shop = self._shop_repository.find_by_id(shop_id)
             if shop is None:
-                raise ShopNotFoundForCommandException(
-                    command.shop_id, "purchase_from_shop"
-                )
+                raise ShopNotFoundForCommandException(command.shop_id, "purchase_from_shop")
 
-            if not self._is_player_at_shop_location(
-                buyer_id, shop.spot_id, shop.location_area_id
-            ):
+            if not self._is_player_at_shop_location(buyer_id, shop.spot_id):
                 raise NotAtShopLocationException(command.buyer_id, command.shop_id)
 
             listing = shop.get_listing(listing_id)
             if listing is None:
-                raise ListingNotFoundForCommandException(
-                    command.shop_id, command.listing_id, "purchase_from_shop"
-                )
+                raise ListingNotFoundForCommandException(command.shop_id, command.listing_id, "purchase_from_shop")
 
             item_aggregate = self._item_repository.find_by_id(listing.item_instance_id)
             if item_aggregate is None:
-                raise ListingNotFoundForCommandException(
-                    command.shop_id, command.listing_id, "purchase_from_shop"
-                )
+                raise ListingNotFoundForCommandException(command.shop_id, command.listing_id, "purchase_from_shop")
 
             available = item_aggregate.quantity
             if command.quantity > available:
-                raise InsufficientStockForPurchaseException(
-                    command.listing_id, command.quantity, available
-                )
+                raise InsufficientStockForPurchaseException(command.listing_id, command.quantity, available)
 
             total_gold = listing.price_per_unit.value * command.quantity
             buyer_status = self._player_status_repository.find_by_id(buyer_id)
@@ -478,30 +423,20 @@ class ShopCommandService:
             player_id = PlayerId(command.player_id)
             shop = self._shop_repository.find_by_id(shop_id)
             if shop is None:
-                raise ShopNotFoundForCommandException(
-                    command.shop_id, "close_shop"
-                )
+                raise ShopNotFoundForCommandException(command.shop_id, "close_shop")
             if not shop.is_owner(player_id):
-                raise AppNotShopOwnerException(
-                    command.player_id, command.shop_id, "close_shop"
-                )
+                raise AppNotShopOwnerException(command.player_id, command.shop_id, "close_shop")
             shop.close(player_id)
 
             # 閉鎖時: 全リストを取り下げ、在庫を各オーナーに返却（仕様 3.3）
             for listing_id, listing in list(shop.listings.items()):
-                owner_inventory = self._player_inventory_repository.find_by_id(
-                    listing.listed_by
-                )
+                owner_inventory = self._player_inventory_repository.find_by_id(listing.listed_by)
                 if owner_inventory is not None:
-                    item_aggregate = self._item_repository.find_by_id(
-                        listing.item_instance_id
-                    )
+                    item_aggregate = self._item_repository.find_by_id(listing.item_instance_id)
                     owner_inventory.acquire_item(
                         listing.item_instance_id,
                         item_spec_id_value=(
-                            item_aggregate.item_spec.item_spec_id.value
-                            if item_aggregate is not None
-                            else None
+                            item_aggregate.item_spec.item_spec_id.value if item_aggregate is not None else None
                         ),
                     )
                     self._player_inventory_repository.save(owner_inventory)
@@ -519,9 +454,7 @@ class ShopCommandService:
                 self._location_establishment_repository.save(slot)
 
             self._shop_repository.delete(shop_id)
-            self._logger.info(
-                f"Shop closed: shop_id={command.shop_id}, closed_by={command.player_id}"
-            )
+            self._logger.info(f"Shop closed: shop_id={command.shop_id}, closed_by={command.player_id}")
             return ShopCommandResultDto(
                 success=True,
                 message="ショップを閉鎖しました",

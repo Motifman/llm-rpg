@@ -78,11 +78,7 @@ class InMemoryGuildRepository(GuildRepository, InMemoryRepositoryBase):
         return None
 
     def find_guilds_by_player_id(self, player_id: PlayerId) -> list[GuildAggregate]:
-        return [
-            self._clone(g)
-            for g in self._guilds.values()
-            if g.is_member(player_id)
-        ]
+        return [self._clone(g) for g in self._guilds.values() if g.is_member(player_id)]
 
     def generate_guild_id(self) -> GuildId:
         gid = self._data_store.next_guild_id

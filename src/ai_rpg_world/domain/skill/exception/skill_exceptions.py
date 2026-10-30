@@ -32,10 +32,6 @@ class SkillSpecValidationException(SkillDomainException, ValidationException):
     error_code = "SKILL.SPEC_VALIDATION"
 
 
-class SkillHitPatternValidationException(SkillDomainException, ValidationException):
-    error_code = "SKILL.HIT_PATTERN_VALIDATION"
-
-
 class SkillDeckValidationException(SkillDomainException, ValidationException):
     error_code = "SKILL.DECK_VALIDATION"
 
@@ -78,10 +74,5 @@ class SkillProposalNotFoundException(SkillDomainException, StateException):
 
 class SkillAlreadyEquippedException(SkillDomainException, BusinessRuleException):
     """スキルが既に装備されている場合の例外"""
+
     error_code = "SKILL.ALREADY_EQUIPPED"
-
-
-
-class SkillRotationAngleUnsupportedException(SkillDomainException, ValidationException):
-    """ヒットボックスを回転できない場合の例外 (回転角を持たない向き / 対応表に無い角度)"""
-    error_code = "SKILL.ROTATION_ANGLE_UNSUPPORTED"

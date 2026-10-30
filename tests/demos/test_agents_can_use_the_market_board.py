@@ -32,9 +32,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_TOWN = (
-    pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
-)
+_TOWN = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _LENA = PlayerId(1)
 _TOM = PlayerId(2)
 _BREAD = "焼きたてのパン"
@@ -47,23 +45,28 @@ class _Town:
     def __init__(self, directory: pathlib.Path, *, with_market: bool = True) -> None:
         raw = json.loads(_TOWN.read_text(encoding="utf-8"))
         spawn = raw["players"][0]["spawn_spot"]
-        raw["players"].append({
-            "id": "tom", "name": "トム", "spawn_spot": spawn,
-            "initial_items": [], "initial_gold": 300,
-            "persona_prompt": "あなたはトム、この町の荷運び。",
-        })
+        raw["players"].append(
+            {
+                "id": "tom",
+                "name": "トム",
+                "spawn_spot": spawn,
+                "initial_items": [],
+                "initial_gold": 300,
+                "persona_prompt": "あなたはトム、この町の荷運び。",
+            }
+        )
         if with_market:
             raw["market"] = {"board_spot": "market_square"}
         (directory / "market_town_v1.json").write_text(
-            json.dumps(raw, ensure_ascii=False), encoding="utf-8",
+            json.dumps(raw, ensure_ascii=False),
+            encoding="utf-8",
         )
         manager = GameRuntimeManager(
-            scenarios_dir=directory, characters_path=directory / "characters.json",
+            scenarios_dir=directory,
+            characters_path=directory / "characters.json",
         )
         character = manager.create_character(CharacterCreateRequest(name="レナ"))
-        summary = manager.create_session(
-            SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id])
-        )
+        summary = manager.create_session(SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id]))
         self._state = manager._sessions[summary.session_id]
 
     @property
@@ -144,7 +147,11 @@ def town(tmp_path: pathlib.Path) -> _Town:
 
 _VIEW = "market_view"
 _MARKET_TOOLS = (
-    _VIEW, "market_list_item", "market_buy", "market_reprice", "market_cancel",
+    _VIEW,
+    "market_list_item",
+    "market_buy",
+    "market_reprice",
+    "market_cancel",
 )
 
 
@@ -186,10 +193,15 @@ class TestTheMarketToolsAppearOnlyWhereThereIsAMarket:
         town.give(_LENA, _BREAD, 1)
         _walk_away(town.runtime, _LENA)
 
-        result = town.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 18,
-            "inner_thought": "出しておこう",
-        })
+        result = town.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 18,
+                "inner_thought": "出しておこう",
+            },
+        )
 
         assert result.success is False
         assert result.error_code == "MARKET_BOARD_NOT_HERE"
@@ -203,10 +215,15 @@ class TestTheArgumentsCanBeBuiltFromWhatIsShown:
         town.give(_LENA, _BREAD, 2)
         name = _item_name_in_inventory(town.state_text(), _BREAD)
 
-        result = town.call("market_list_item", {
-            "item_label": name, "quantity": 2, "unit_price": 20,
-            "inner_thought": "売ってみる",
-        })
+        result = town.call(
+            "market_list_item",
+            {
+                "item_label": name,
+                "quantity": 2,
+                "unit_price": 20,
+                "inner_thought": "売ってみる",
+            },
+        )
 
         assert result.success is True, result.message
         assert town.held(_LENA, _BREAD) == 0
@@ -218,15 +235,26 @@ class TestTheArgumentsCanBeBuiltFromWhatIsShown:
         食い違っていると、ここで落ちる。
         """
         town.give(_TOM, _BREAD, 1)
-        town.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 18,
-            "inner_thought": "出す",
-        }, player_id=_TOM)
+        town.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 18,
+                "inner_thought": "出す",
+            },
+            player_id=_TOM,
+        )
         name, price = _board_row(town.board_text(_LENA))
 
-        result = town.call("market_buy", {
-            "item_label": name, "quantity": 1, "inner_thought": "買う",
-        })
+        result = town.call(
+            "market_buy",
+            {
+                "item_label": name,
+                "quantity": 1,
+                "inner_thought": "買う",
+            },
+        )
 
         assert result.success is True, result.message
         assert town.held(_LENA, _BREAD) == 1
@@ -235,16 +263,26 @@ class TestTheArgumentsCanBeBuiltFromWhatIsShown:
     def test_you_can_reprice_by_the_name_in_your_own_row(self, town: _Town) -> None:
         """「あなたの出品」の行に出ている名前で、値を変えられる。"""
         town.give(_LENA, _BREAD, 1)
-        town.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 20,
-            "inner_thought": "出す",
-        })
+        town.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 20,
+                "inner_thought": "出す",
+            },
+        )
         name = _own_order_name(town.state_text())
 
-        result = town.call("market_reprice", {
-            "item_label": name, "side": "sell", "new_unit_price": 18,
-            "inner_thought": "下げる",
-        })
+        result = town.call(
+            "market_reprice",
+            {
+                "item_label": name,
+                "side": "sell",
+                "new_unit_price": 18,
+                "inner_thought": "下げる",
+            },
+        )
 
         assert result.success is True, result.message
         assert "18G" in result.message
@@ -252,15 +290,25 @@ class TestTheArgumentsCanBeBuiltFromWhatIsShown:
     def test_you_can_cancel_by_the_name_in_your_own_row(self, town: _Town) -> None:
         """同じ名前で取り下げられる。"""
         town.give(_LENA, _BREAD, 1)
-        town.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 20,
-            "inner_thought": "出す",
-        })
+        town.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 20,
+                "inner_thought": "出す",
+            },
+        )
         name = _own_order_name(town.state_text())
 
-        result = town.call("market_cancel", {
-            "item_label": name, "side": "sell", "inner_thought": "やめる",
-        })
+        result = town.call(
+            "market_cancel",
+            {
+                "item_label": name,
+                "side": "sell",
+                "inner_thought": "やめる",
+            },
+        )
 
         assert result.success is True, result.message
         assert town.held(_LENA, _BREAD) == 1
@@ -290,23 +338,39 @@ class TestTheBoardTellsTheTruth:
     def test_what_it_says_you_can_buy_you_can_buy(self, town: _Town) -> None:
         """「18G で買える」と出ている品は、その値で買える。"""
         town.give(_TOM, _BREAD, 1)
-        town.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 18,
-            "inner_thought": "出す",
-        }, player_id=_TOM)
+        town.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 18,
+                "inner_thought": "出す",
+            },
+            player_id=_TOM,
+        )
         before = town.gold(_LENA)
 
-        town.call("market_buy", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "買う",
-        })
+        town.call(
+            "market_buy",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "買う",
+            },
+        )
 
         assert town.gold(_LENA) == before - 18
 
     def test_what_it_does_not_show_cannot_be_bought(self, town: _Town) -> None:
         """行に出ていない品を買おうとすると、出ていないと分かる形で断られる。"""
-        result = town.call("market_buy", {
-            "item_label": _HERB, "quantity": 1, "inner_thought": "買う",
-        })
+        result = town.call(
+            "market_buy",
+            {
+                "item_label": _HERB,
+                "quantity": 1,
+                "inner_thought": "買う",
+            },
+        )
 
         assert result.success is False
         assert result.error_code == "MARKET_NOTHING_TO_BUY"
@@ -318,14 +382,24 @@ class TestTheBoardTellsTheTruth:
         なら値を下げる手がある。
         """
         town.give(_LENA, _BREAD, 1)
-        town.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 18,
-            "inner_thought": "出す",
-        })
+        town.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 18,
+                "inner_thought": "出す",
+            },
+        )
 
-        result = town.call("market_buy", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "買う",
-        })
+        result = town.call(
+            "market_buy",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "買う",
+            },
+        )
 
         assert result.success is False
         assert result.error_code == "MARKET_ONLY_YOUR_OWN"
@@ -336,14 +410,25 @@ class TestTheBoardTellsTheTruth:
         買えた数だけだと、読む側は自分の意図が満たされたか判断できない。
         """
         town.give(_TOM, _BREAD, 2)
-        town.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 2, "unit_price": 18,
-            "inner_thought": "出す",
-        }, player_id=_TOM)
+        town.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 2,
+                "unit_price": 18,
+                "inner_thought": "出す",
+            },
+            player_id=_TOM,
+        )
 
-        result = town.call("market_buy", {
-            "item_label": _BREAD, "quantity": 5, "inner_thought": "たくさん買う",
-        })
+        result = town.call(
+            "market_buy",
+            {
+                "item_label": _BREAD,
+                "quantity": 5,
+                "inner_thought": "たくさん買う",
+            },
+        )
 
         assert result.success is True
         assert "5" in result.message and "2" in result.message
@@ -354,19 +439,36 @@ class TestTheBoardTellsTheTruth:
         平均を出すと、次にいくらで出すかの判断材料が消える。
         """
         town.give(_TOM, _BREAD, 2)
-        town.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 2, "unit_price": 18,
-            "inner_thought": "出す",
-        }, player_id=_TOM)
+        town.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 2,
+                "unit_price": 18,
+                "inner_thought": "出す",
+            },
+            player_id=_TOM,
+        )
         town.give(_LENA, _BREAD, 1)
-        town.call("market_list_item", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 25,
-            "inner_thought": "高く出す",
-        })
+        town.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 25,
+                "inner_thought": "高く出す",
+            },
+        )
 
-        result = town.call("market_buy", {
-            "item_label": _BREAD, "quantity": 3, "inner_thought": "全部買う",
-        }, player_id=_TOM)
+        result = town.call(
+            "market_buy",
+            {
+                "item_label": _BREAD,
+                "quantity": 3,
+                "inner_thought": "全部買う",
+            },
+            player_id=_TOM,
+        )
 
         assert result.success is True
         assert "25G" in result.message
@@ -397,9 +499,7 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
 
     graph = runtime._spot_graph_repo.find_graph()
     here = graph.get_entity_spot(EntityId.create(int(player_id)))
-    elsewhere = next(
-        spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here
-    )
+    elsewhere = next(spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here)
     graph.unplace_entity(EntityId.create(int(player_id)))
     graph.place_entity(EntityId.create(int(player_id)), elsewhere)
     runtime._spot_graph_repo.save(graph)
@@ -410,26 +510,42 @@ class TestTheBuySideIsUsableFromWhatIsShown:
 
     def test_you_can_place_a_bid_by_the_item_name(self, town: _Town) -> None:
         """この世界にある品名で、買い注文を出せる。"""
-        result = town.call("market_bid", {
-            "item_label": _HERB, "quantity": 2, "unit_price": 7,
-            "inner_thought": "薬草がほしい",
-        })
+        result = town.call(
+            "market_bid",
+            {
+                "item_label": _HERB,
+                "quantity": 2,
+                "unit_price": 7,
+                "inner_thought": "薬草がほしい",
+            },
+        )
 
         assert result.success is True, result.message
         assert "7G" in result.message
 
     def test_you_can_sell_by_the_name_on_the_board(self, town: _Town) -> None:
         """「8G で売れる」と出ている品を、その名前で売れる。"""
-        town.call("market_bid", {
-            "item_label": _HERB, "quantity": 1, "unit_price": 8,
-            "inner_thought": "買いたい",
-        }, player_id=_TOM)
+        town.call(
+            "market_bid",
+            {
+                "item_label": _HERB,
+                "quantity": 1,
+                "unit_price": 8,
+                "inner_thought": "買いたい",
+            },
+            player_id=_TOM,
+        )
         town.give(_LENA, _HERB, 1)
         name, price = _sell_side_row(town.board_text(_LENA))
 
-        result = town.call("market_sell", {
-            "item_label": name, "quantity": 1, "inner_thought": "売る",
-        })
+        result = town.call(
+            "market_sell",
+            {
+                "item_label": name,
+                "quantity": 1,
+                "inner_thought": "売る",
+            },
+        )
 
         assert result.success is True, result.message
         assert price == 8
@@ -438,41 +554,65 @@ class TestTheBuySideIsUsableFromWhatIsShown:
         """買い注文の無い品を売ろうとすると、出ていないと分かる形で断られる。"""
         town.give(_LENA, _HERB, 1)
 
-        result = town.call("market_sell", {
-            "item_label": _HERB, "quantity": 1, "inner_thought": "売る",
-        })
+        result = town.call(
+            "market_sell",
+            {
+                "item_label": _HERB,
+                "quantity": 1,
+                "inner_thought": "売る",
+            },
+        )
 
         assert result.success is False
         assert result.error_code == "MARKET_NOTHING_TO_SELL"
 
-    def test_selling_into_your_own_bid_is_refused_for_its_own_reason(
-        self, town: _Town
-    ) -> None:
+    def test_selling_into_your_own_bid_is_refused_for_its_own_reason(self, town: _Town) -> None:
         """自分の買い注文しか無いときは、別の失敗になる。"""
-        town.call("market_bid", {
-            "item_label": _HERB, "quantity": 1, "unit_price": 8,
-            "inner_thought": "買いたい",
-        })
+        town.call(
+            "market_bid",
+            {
+                "item_label": _HERB,
+                "quantity": 1,
+                "unit_price": 8,
+                "inner_thought": "買いたい",
+            },
+        )
         town.give(_LENA, _HERB, 1)
 
-        result = town.call("market_sell", {
-            "item_label": _HERB, "quantity": 1, "inner_thought": "売る",
-        })
+        result = town.call(
+            "market_sell",
+            {
+                "item_label": _HERB,
+                "quantity": 1,
+                "inner_thought": "売る",
+            },
+        )
 
         assert result.success is False
         assert result.error_code == "MARKET_ONLY_YOUR_OWN_BID"
 
     def test_selling_more_than_wanted_says_both_numbers(self, town: _Town) -> None:
         """求められている数より多く売ろうとすると、両方の数が返る。"""
-        town.call("market_bid", {
-            "item_label": _HERB, "quantity": 1, "unit_price": 8,
-            "inner_thought": "買いたい",
-        }, player_id=_TOM)
+        town.call(
+            "market_bid",
+            {
+                "item_label": _HERB,
+                "quantity": 1,
+                "unit_price": 8,
+                "inner_thought": "買いたい",
+            },
+            player_id=_TOM,
+        )
         town.give(_LENA, _HERB, 3)
 
-        result = town.call("market_sell", {
-            "item_label": _HERB, "quantity": 3, "inner_thought": "まとめて売る",
-        })
+        result = town.call(
+            "market_sell",
+            {
+                "item_label": _HERB,
+                "quantity": 3,
+                "inner_thought": "まとめて売る",
+            },
+        )
 
         assert result.success is True
         assert "3" in result.message and "1" in result.message

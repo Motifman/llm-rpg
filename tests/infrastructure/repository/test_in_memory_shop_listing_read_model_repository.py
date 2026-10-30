@@ -1,4 +1,5 @@
 """InMemoryShopListingReadModelRepositoryのテスト"""
+
 from datetime import datetime
 
 import pytest
@@ -96,9 +97,7 @@ class TestInMemoryShopListingReadModelRepository:
             listed_by=PlayerId(101),
         )
         repository.save(other)
-        result = repository.find_by_ids(
-            [ShopListingId(101), ShopListingId(102), ShopListingId(999)]
-        )
+        result = repository.find_by_ids([ShopListingId(101), ShopListingId(102), ShopListingId(999)])
         assert len(result) == 2
 
     def test_find_all(self, repository, sample_listing):

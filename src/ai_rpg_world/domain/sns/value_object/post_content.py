@@ -32,7 +32,7 @@ class PostContent:
     @staticmethod
     def _extract_hashtags(content: str) -> tuple[str, ...]:
         """コンテンツからハッシュタグを抽出"""
-        hashtag_pattern = r'#(\w+)'
+        hashtag_pattern = r"#(\w+)"
         matches = re.findall(hashtag_pattern, content)
         return tuple(matches)
 

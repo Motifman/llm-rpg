@@ -83,9 +83,7 @@ class TestPlayerInteractionsParsing:
 
     def test_action_name_and_label_are_parsed(self) -> None:
         """action_name と display_label がそのまま載る。"""
-        result = ScenarioLoader().load_from_dict(
-            _scenario_with_player_interactions(_take_def())
-        )
+        result = ScenarioLoader().load_from_dict(_scenario_with_player_interactions(_take_def()))
         assert len(result.player_interactions) == 1
         idef = result.player_interactions[0]
         assert idef.action_name == "loot_from_downed"
@@ -97,9 +95,7 @@ class TestPlayerInteractionsParsing:
         行為者と対象がどちらも存在する唯一の文脈なので、scenario_event などと
         違って拒否しない。
         """
-        result = ScenarioLoader().load_from_dict(
-            _scenario_with_player_interactions(_take_def())
-        )
+        result = ScenarioLoader().load_from_dict(_scenario_with_player_interactions(_take_def()))
         effect = result.player_interactions[0].effects[0]
         assert effect.target is EffectTarget.TARGET_PLAYER
 
@@ -110,9 +106,7 @@ class TestPlayerInteractionsParsing:
         分からない」状態になる。
         """
         with pytest.raises(ScenarioLoadError) as exc_info:
-            ScenarioLoader().load_from_dict(
-                _scenario_with_player_interactions(_take_def(), _take_def())
-            )
+            ScenarioLoader().load_from_dict(_scenario_with_player_interactions(_take_def(), _take_def()))
         assert "loot_from_downed" in str(exc_info.value)
 
     def test_missing_action_name_fails_to_load(self) -> None:
@@ -120,9 +114,7 @@ class TestPlayerInteractionsParsing:
         broken = _take_def()
         del broken["action_name"]
         with pytest.raises(ScenarioLoadError):
-            ScenarioLoader().load_from_dict(
-                _scenario_with_player_interactions(broken)
-            )
+            ScenarioLoader().load_from_dict(_scenario_with_player_interactions(broken))
 
     def test_effect_without_target_player_fails_to_load(self) -> None:
         """対象への効果を 1 つも持たない定義は ScenarioLoadError になる。
@@ -131,15 +123,9 @@ class TestPlayerInteractionsParsing:
         効かない定義は書き間違いとみなす。放置すると「相手を選んだのに自分に
         効く」という最も分かりにくい失敗になる。
         """
-        actor_only = _take_def(
-            effects=[
-                {"effect_type": "APPLY_DAMAGE", "parameters": {"damage": 1}}
-            ]
-        )
+        actor_only = _take_def(effects=[{"effect_type": "APPLY_DAMAGE", "parameters": {"damage": 1}}])
         with pytest.raises(ScenarioLoadError) as exc_info:
-            ScenarioLoader().load_from_dict(
-                _scenario_with_player_interactions(actor_only)
-            )
+            ScenarioLoader().load_from_dict(_scenario_with_player_interactions(actor_only))
         assert "TARGET_PLAYER" in str(exc_info.value)
 
 

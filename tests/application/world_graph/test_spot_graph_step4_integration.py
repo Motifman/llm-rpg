@@ -14,9 +14,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """step4規則は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from tests.domain.player.aggregate.test_player_status_aggregate import create_test_status_aggregate
 
 from ai_rpg_world.application.world_graph.spot_graph_world_services import create_spot_graph_world_services
@@ -226,9 +226,7 @@ def test_interaction_propagates_actor_to_connection_state_event() -> None:
     )
 
     svc.execute_interaction(PlayerId(1), SpotObjectId.create(2), "use")
-    conn_events = [
-        e for e in published if isinstance(e, ConnectionStateChangedEvent)
-    ]
+    conn_events = [e for e in published if isinstance(e, ConnectionStateChangedEvent)]
     assert len(conn_events) == 1
     # cause は ACTOR_ACTION (PR #182 で設定済み)
     assert conn_events[0].cause == PassageChangeCauseEnum.ACTOR_ACTION

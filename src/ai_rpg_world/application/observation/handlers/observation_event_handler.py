@@ -20,9 +20,9 @@ from ai_rpg_world.application.observation.services.observation_timestamp_resolve
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
 )
-from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
+from ai_rpg_world.eventing import EventHandler
 
 
 class ObservationEventHandler(EventHandler[Any]):
@@ -94,6 +94,7 @@ class ObservationEventHandler(EventHandler[Any]):
         game_time_label = self._timestamp_resolver.resolve_game_time_label(event)
 
         for player_id, output in items:
-            self._appender.append(player_id, output, occurred_at, game_time_label)
+            if not self._appender.append(player_id, output, occurred_at, game_time_label):
+                continue
             self._movement_interruption.maybe_cancel(player_id, output)
             self._turn_scheduler.maybe_schedule(player_id, output)

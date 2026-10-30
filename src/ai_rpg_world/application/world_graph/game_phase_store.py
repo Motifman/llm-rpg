@@ -96,9 +96,7 @@ class GamePhaseStore:
             trigger=None,
         )
         self.meeting_tick_limit = (
-            self.DEFAULT_MEETING_TICK_LIMIT
-            if meeting_tick_limit is None
-            else int(meeting_tick_limit)
+            self.DEFAULT_MEETING_TICK_LIMIT if meeting_tick_limit is None else int(meeting_tick_limit)
         )
         self.meeting_silence_limit_ticks = (
             self.DEFAULT_MEETING_SILENCE_LIMIT_TICKS
@@ -106,9 +104,7 @@ class GamePhaseStore:
             else int(meeting_silence_limit_ticks)
         )
         self.meeting_cooldown_ticks = (
-            self.DEFAULT_MEETING_COOLDOWN_TICKS
-            if meeting_cooldown_ticks is None
-            else int(meeting_cooldown_ticks)
+            self.DEFAULT_MEETING_COOLDOWN_TICKS if meeting_cooldown_ticks is None else int(meeting_cooldown_ticks)
         )
         self.emergency_buttons_per_player = (
             self.DEFAULT_EMERGENCY_BUTTONS_PER_PLAYER
@@ -159,9 +155,7 @@ class GamePhaseStore:
 
     def cast_vote(self, voter_player_id: PlayerId, target_player_id: PlayerId | None) -> None:
         """票を記録する。``target_player_id`` が None なら棄権。"""
-        self._ballots[int(voter_player_id)] = (
-            None if target_player_id is None else int(target_player_id)
-        )
+        self._ballots[int(voter_player_id)] = None if target_player_id is None else int(target_player_id)
 
     def clear_ballots(self) -> None:
         """票を空にする。
@@ -226,9 +220,7 @@ class GamePhaseStore:
         """会議中か。toolset の選択と tool の fail-fast が参照する。"""
         return self._current.phase is GamePhase.MEETING
 
-    def begin_meeting(
-        self, *, tick: int, trigger: str, initiator_player_id: int | None = None
-    ) -> GamePhaseState:
+    def begin_meeting(self, *, tick: int, trigger: str, initiator_player_id: int | None = None) -> GamePhaseState:
         """会議を始める。既に会議中なら例外。
 
         黙って 2 回目を通すと開始 tick が上書きされ、会議の tick 上限が
@@ -237,8 +229,7 @@ class GamePhaseStore:
         """
         if self._current.phase is GamePhase.MEETING:
             raise GamePhaseTransitionException(
-                "会議はすでに始まっています "
-                f"(started_at_tick={self._current.started_at_tick})"
+                f"会議はすでに始まっています (started_at_tick={self._current.started_at_tick})"
             )
         # 前回の票を持ち越さない。持ち越すと、投票していない人が投票済みと
         # して扱われ、会議が始まった瞬間に閉じることがある。
@@ -258,12 +249,9 @@ class GamePhaseStore:
         """
         if self._current.phase is not GamePhase.MEETING:
             raise GamePhaseTransitionException(
-                "会議中ではないので終了できません "
-                f"(current={self._current.phase.value})"
+                f"会議中ではないので終了できません (current={self._current.phase.value})"
             )
-        return self._transition_to(
-            GamePhase.FREE_ROAM, tick=tick, trigger=reason
-        )
+        return self._transition_to(GamePhase.FREE_ROAM, tick=tick, trigger=reason)
 
     def note_activity(self, *, tick: int) -> None:
         """発言等があったことを記録する (沈黙上限の起点を進める)。
@@ -301,11 +289,12 @@ class GamePhaseStore:
         self._used_emergency_buttons = [int(pid) for pid in used_emergency_buttons]
         self._reported_bodies = {int(pid) for pid in reported_bodies}
         self._ballots = {
-            int(voter): None if target is None else int(target)
-            for voter, target in (ballots or {}).items()
+            int(voter): None if target is None else int(target) for voter, target in (ballots or {}).items()
         }
 
-    def rollback_snapshot(self) -> tuple[
+    def rollback_snapshot(
+        self,
+    ) -> tuple[
         GamePhaseState,
         tuple[GamePhaseState, ...],
         tuple[int, ...],

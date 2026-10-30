@@ -4,26 +4,22 @@
 特徴:
     - シナリオ非依存: ``data/scenarios/*.json`` を ``--scenario`` で指定
     - trace 自動記録: ``JsonlTraceRecorder`` を内部で生成して runtime に inject
-    - HTML 自動生成: 実行後に trace.html / viewer.html / episodic.html / timeline.html を出力
-    - 汎用レポート: WIN/LOSE/tick/action 数/memo 数の最小集計を Markdown で
-
-scenario 固有の集計 (relay_puzzle の latch tick / kaito-rin marker など) は
-``scripts/issue154_full_tables_experiment.py`` に残し、本スクリプトとは独立。
+    - HTML 自動生成: 実行後に trace.html / viewer.html / timeline.html を出力
+    - 汎用レポート: WIN/LOSE/tick/action 数などの最小集計を Markdown で
 
 使い方::
 
     python scripts/run_scenario_experiment.py \\
-        --scenario data/scenarios/relay_puzzle_demo.json \\
+        --scenario data/scenarios/forbidden_library_demo.json \\
         --max-world-ticks 30 \\
-        --out var/runs/relay-foo
+        --out var/runs/library-foo
 
     # 出力:
-    #   var/runs/relay-foo/trace.jsonl
-    #   var/runs/relay-foo/report.md
-    #   var/runs/relay-foo/trace.html
-    #   var/runs/relay-foo/viewer.html
-    #   var/runs/relay-foo/episodic.html
-    #   var/runs/relay-foo/timeline.html
+    #   var/runs/library-foo/trace.jsonl
+    #   var/runs/library-foo/report.md
+    #   var/runs/library-foo/trace.html
+    #   var/runs/library-foo/viewer.html
+    #   var/runs/library-foo/timeline.html
 """
 
 from __future__ import annotations
@@ -36,6 +32,7 @@ import os
 import subprocess
 import sys
 import time
+from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -53,6 +50,9 @@ for p in (_REPO_ROOT, _REPO_ROOT / "src"):
     if s not in sys.path:
         sys.path.insert(0, s)
 
+from ai_rpg_world.application.llm.contracts.aux_llm_call import (  # noqa: E402
+    AuxLlmComponent,
+)
 from ai_rpg_world.application.trace import (  # noqa: E402
     JsonlTraceRecorder,
     TraceEventKind,
@@ -115,11 +115,7 @@ def _classify_llm_run_health(
     if not isinstance(trace_path, Path):
         return outcome, end_reason, 0, 0
 
-    calls = [
-        event
-        for event in load_trace_events(trace_path)
-        if event.kind == TraceEventKind.LLM_CALL
-    ]
+    calls = [event for event in load_trace_events(trace_path) if event.kind == TraceEventKind.LLM_CALL]
     total = len(calls)
     succeeded = sum(bool(event.payload.get("success")) for event in calls)
     if total == 0 or succeeded > 0 or outcome == "LLM_ABORTED":
@@ -131,13 +127,8 @@ def _classify_llm_run_health(
     for event in calls:
         error_code = str(event.payload.get("error_code") or "UNKNOWN")
         error_counts[error_code] = error_counts.get(error_code, 0) + 1
-    breakdown = ", ".join(
-        f"{code}: {count}" for code, count in sorted(error_counts.items())
-    )
-    reason = (
-        f"LLM 呼び出し {total} 件がすべて失敗したため実験結果を無効とする "
-        f"({breakdown})"
-    )
+    breakdown = ", ".join(f"{code}: {count}" for code, count in sorted(error_counts.items()))
+    reason = f"LLM 呼び出し {total} 件がすべて失敗したため実験結果を無効とする ({breakdown})"
     return "LLM_FAILURE", reason, total, succeeded
 
 
@@ -344,11 +335,24 @@ def _runtime_config_mapping_from_source(
     rendered_values: dict[str, str] = {}
     for key, value in values.items():
         if not isinstance(key, str) or not key.strip():
-            raise ValueError(
-                "experiment config runtime_config keys must be non-empty strings"
-            )
+            raise ValueError("experiment config runtime_config keys must be non-empty strings")
         rendered_values[key] = _json_config_value(value)
     return rendered_values
+
+
+# 外した実験設定の欄。書かれていたら、黙って無視せず起動前に止める。
+_REMOVED_CONFIG_FIELDS = {
+    "snapshot_load_mode": (
+        "記憶だけを持ち越して世界を最初からやり直す replay は外しました "
+        "(design_decisions D1514 の「その後」)。snapshot からの再開は、いつも世界も記憶も続きから始めます"
+    ),
+}
+
+
+def _reject_removed_config_fields(config_source: Mapping[str, Any]) -> None:
+    for field, reason in _REMOVED_CONFIG_FIELDS.items():
+        if field in config_source:
+            raise ValueError(f"experiment config field {field!r} is no longer supported: {reason}")
 
 
 _SECRET_KEY_FRAGMENTS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD")
@@ -360,10 +364,7 @@ def _mask_secret_values(value: Any, *, key_name: str = "") -> Any:
     if any(fragment in normalized_key for fragment in _SECRET_KEY_FRAGMENTS):
         return "***"
     if isinstance(value, dict):
-        return {
-            k: _mask_secret_values(v, key_name=str(k))
-            for k, v in value.items()
-        }
+        return {k: _mask_secret_values(v, key_name=str(k)) for k, v in value.items()}
     if isinstance(value, list):
         return [_mask_secret_values(v) for v in value]
     return value
@@ -417,11 +418,7 @@ def _git_metadata() -> dict[str, Any]:
         "branch": _run_git(["branch", "--show-current"]),
         "dirty": bool(status),
         "dirty_files": dirty_files,
-        "dirty_diff_sha256": (
-            hashlib.sha256(combined_diff.encode("utf-8")).hexdigest()
-            if combined_diff
-            else None
-        ),
+        "dirty_diff_sha256": (hashlib.sha256(combined_diff.encode("utf-8")).hexdigest() if combined_diff else None),
     }
 
 
@@ -465,9 +462,7 @@ def _write_experiment_manifest(
         "max_world_ticks": int(max_world_ticks),
         "snapshot_save_dir": str(snapshot_save_dir) if snapshot_save_dir else None,
         "snapshot_load_dir": str(snapshot_load_dir) if snapshot_load_dir else None,
-        "runtime_config_source": _mask_secret_values(
-            dict(sorted(runtime_config_source.items()))
-        ),
+        "runtime_config_source": _mask_secret_values(dict(sorted(runtime_config_source.items()))),
         "runtime_config": resolved_config.to_trace_dict(),
         "git": _git_metadata(),
     }
@@ -484,132 +479,28 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     """``WorldRuntime`` から ``ExperimentSnapshotSession`` 用の wiring stub を作る。
 
     Phase 6 (Issue #470): world_runtime runtime には ``LlmAgentWiringResult`` の
-    全 store ハンドルが揃わない (semantic / memory_link / recall_buffer /
-    journal は world_runtime の通常経路では作られない) ため、runtime の
+    全 store ハンドルが揃わない (episode store は world_runtime の
+    通常経路では作られないことがある) ため、runtime の
     内部 field から **拾える分だけ** 集めて wiring 風オブジェクトを返す。
     足りない store は ``ExperimentSnapshotSession`` 側で空 in-memory に
     fallback する。
     """
     from types import SimpleNamespace
 
-    # episode_store は _episodic_stack が None のときは None。
-    episodic_stack = getattr(runtime, "_episodic_stack", None)
-    episode_store = (
-        getattr(episodic_stack, "episode_store", None)
-        if episodic_stack is not None
-        else None
-    )
     # 注意: ``_aux_being_repository`` は private 属性 (public property なし)。
     # ``aux_being_resolver`` の方は public property があるのでそちらを使う。
     # 将来 ``aux_being_repository`` の public property が追加されたら同じ
     # 形式に揃える。
     aux_resolver = getattr(runtime, "aux_being_resolver", None)
     aux_repo = getattr(runtime, "_aux_being_repository", None)
-    # #526 後続: SEMANTIC_PASSIVE_TOP_K / SEMANTIC_LLM_GIST_ENABLED が ON だと
-    # episodic_stack が semantic store + memory link store を持つ。あれば snapshot に
-    # 拾う (OFF なら従来どおり None = 空 in-memory fallback)。link store も拾わないと
-    # semantic entries だけ保存され、昇格根拠の link graph が空 fallback になる。
-    semantic_store = (
-        getattr(episodic_stack, "semantic_memory_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    memory_link_store = (
-        getattr(episodic_stack, "memory_link_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    # #558 レビュー反映 (MEDIUM-2): reinterpretation (段1) ON のとき episodic_stack が
-    # in-memory の recall_buffer / journal を持つ。snapshot surface で None ハードコード
-    # だと、再解釈 journal と pending recall buffer が save/load で silent に失われ、
-    # 再開時の記憶連続性 (自己の継続性) が壊れる。semantic と同じく stack から拾う
-    # (OFF なら None = 従来どおり空 in-memory fallback)。
-    recall_buffer_store = (
-        getattr(episodic_stack, "recall_buffer_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    reinterpretation_journal_store = (
-        getattr(episodic_stack, "reinterpretation_journal", None)
-        if episodic_stack is not None
-        else None
-    )
-    # U2 (証拠台帳統一設計): BELIEF_EVIDENCE_ENABLED ON のとき episodic_stack が
-    # belief evidence buffer store を持つ。checklist #27 (memory_full_003 で
-    # stub 追従漏れが実際に起きた教訓) に従い、ここで拾わないと flag ON でも
-    # evidence が save/load で silent に失われる。OFF なら None = 従来どおり
-    # 空 in-memory fallback。
-    belief_evidence_buffer_store = (
-        getattr(episodic_stack, "belief_evidence_buffer_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    # U9b (予測誤差統一設計 部品5・想起の信用割り当て): RECALL_HIT_BOOST_ENABLED
-    # ON のとき episodic_stack が的中側 sidecar store を持つ。checklist #27
-    # (memory_full_003 で stub 追従漏れが実際に起きた教訓) に従い、ここで
-    # 拾わないと flag ON でも的中回数が save/load で silent に失われる。
-    # OFF なら None = 空 in-memory fallback。
-    recall_success_store = (
-        getattr(episodic_stack, "recall_success_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    # U10a (予測誤差統一設計 部品6・pending prediction): PENDING_PREDICTION_ENABLED
-    # ON のとき episodic_stack が pending prediction store を持つ。checklist #27
-    # (memory_full_003 で stub 追従漏れが実際に起きた教訓) に従い、ここで拾わ
-    # ないと flag ON でも保留中の予測 (約束) が save/load で silent に失われる。
-    # OFF なら None = 空 in-memory fallback。
-    pending_prediction_store = (
-        getattr(episodic_stack, "pending_prediction_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    # P5 (目的層): GOAL_STORE_ENABLED ON のとき world_runtime が goal store を
-    # 構築し ``_goal_journal_store`` に保持する。checklist #27 に従い拾う。
-    # OFF なら None = 空 in-memory fallback。
-    goal_journal_store = getattr(runtime, "_goal_journal_store", None)
-    # P-U2 (停滞感 store): STAGNATION_PRESSURE_ENABLED ON のとき world_runtime が
-    # 停滞感カウンタ store を構築し ``_stagnation_pressure_store`` に保持する。
-    # checklist #27 に従い拾う。OFF なら None = 空 in-memory fallback。
-    stagnation_pressure_store = getattr(runtime, "_stagnation_pressure_store", None)
-    # PR-G (想起階層: slot / afterglow / habituation): #526 段階 3 で
-    # episodic_stack に生えた 3 store。checklist #27 の追従漏れが実際に
-    # 起きていた箇所 (ExperimentSnapshotSession 側は getattr で拾う準備が
-    # 済んでいたが、この stub がここまで一度も拾っていなかった)。ここで
-    # 拾わないと enable 時でも想起スロット / afterglow index / 慣化状態が
-    # save/load で silent に失われる。OFF なら None = 空 in-memory fallback。
-    recall_slot_store = (
-        getattr(episodic_stack, "recall_slot_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    afterglow_store = (
-        getattr(episodic_stack, "afterglow_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    recall_habituation_store = (
-        getattr(episodic_stack, "recall_habituation_store", None)
-        if episodic_stack is not None
-        else None
-    )
     return SimpleNamespace(
-        memo_store=getattr(runtime, "_todo_store", None),
-        semantic_memory_store=semantic_store,
-        memory_link_store=memory_link_store,
-        episodic_recall_buffer_store=recall_buffer_store,
-        episodic_reinterpretation_journal_store=reinterpretation_journal_store,
-        episodic_episode_store=episode_store,
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,
-        belief_evidence_buffer_store=belief_evidence_buffer_store,
-        recall_success_store=recall_success_store,
-        pending_prediction_store=pending_prediction_store,
-        goal_journal_store=goal_journal_store,
-        stagnation_pressure_store=stagnation_pressure_store,
-        recall_slot_store=recall_slot_store,
-        afterglow_store=afterglow_store,
-        recall_habituation_store=recall_habituation_store,
+        acquaintance_store=getattr(runtime, "_acquaintance_store", None),
+        being_episode_store=getattr(runtime, "_being_episode_store", None),
+        being_memo_store=getattr(runtime, "_being_memo_store", None),
+        memory_turn_clock=getattr(runtime, "_memory_turn_clock", None),
+        being_short_term_memory_store=getattr(runtime, "_being_short_term_memory_store", None),
     )
 
 
@@ -629,7 +520,7 @@ def _drive_scenario(
     """シナリオを 1 セッション分回し、最終ステートを dict で返す。
 
     GameRuntimeManager を内部で使う。:class:`WorldRuntime` 経由なので
-    既存の world_runtime / relay_puzzle 路線と互換。
+    既存の world_runtime 路線と互換。
 
     Args:
         max_world_ticks: ループ終了条件 (#404 P1)。``runtime.current_tick()`` が
@@ -637,6 +528,7 @@ def _drive_scenario(
             外側 for ループの回数だったが、``#405`` で 1 iteration = 1 world tick
             に揃ったので world tick 基準に意味論統一する。
     """
+    from contextlib import ExitStack
     from tempfile import TemporaryDirectory
 
     from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
@@ -652,26 +544,33 @@ def _drive_scenario(
     world_id = scenario_path.stem
     scenarios_dir = scenario_path.parent
 
-    with TemporaryDirectory() as d:
+    with TemporaryDirectory() as d, ExitStack() as cleanup:
         chars = Path(d) / "characters.json"
         mgr = GameRuntimeManager(
             scenarios_dir=scenarios_dir,
             characters_path=chars,
             runtime_config=runtime_config,
         )
-        char = mgr.create_character(
-            CharacterCreateRequest(name=f"exp-{scenario_path.stem}")
-        )
-        summary = mgr.create_session(
-            SessionCreateRequest(world_id=world_id, character_ids=[char.id])
-        )
+        char = mgr.create_character(CharacterCreateRequest(name=f"exp-{scenario_path.stem}"))
+        summary = mgr.create_session(SessionCreateRequest(world_id=world_id, character_ids=[char.id]))
         state = mgr._sessions[summary.session_id]
         runtime = state.runtime
+        cleanup.callback(runtime.shutdown_async_events)
         state.llm_wiring.prompt_dataset_sink = prompt_dataset_sink
         # API session の UUID ではなく実験 run 名を使い、run を跨ぐ衝突を避ける。
         state.llm_wiring.llm_session_run_id = run_id
-        # Phase 1d: trace recorder を runtime に注入 (memo executor + LLM wiring 経路)
+        # Phase 1d: trace recorder を runtime に注入 (LLM wiring 経路)
         runtime.set_trace_recorder(recorder)
+
+        round_assignment = runtime.round_assignment_trace()
+        if round_assignment:
+            recorder.record(
+                TraceEventKind.ROUND_ASSIGNMENT,
+                tick=runtime.current_tick(),
+                round=1,
+                seed=runtime_config.scenario_random_seed if runtime_config else None,
+                assignments=round_assignment,
+            )
 
         # Phase 1d viewer: 各プレイヤーの初期位置を position_change として
         # 記録 (from_spot_id=None で「ここから始まった」を表す)。これにより
@@ -713,8 +612,8 @@ def _drive_scenario(
             )
 
             # aux Being stack を確実に初期化 (= _aux_being_repository を作る)
-            if hasattr(runtime, "_wire_auxiliary_tool_stack"):
-                runtime._wire_auxiliary_tool_stack()
+            if hasattr(runtime, "_wire_being_stack"):
+                runtime._wire_being_stack()
             for pid in runtime.get_player_ids():
                 provisioning = getattr(runtime, "_aux_being_provisioning", None)
                 if provisioning is not None:
@@ -730,33 +629,13 @@ def _drive_scenario(
             )
 
             if snapshot_load_dir is not None:
-                logger.info(
-                    "loading snapshots from %s ...", snapshot_load_dir
-                )
+                logger.info("loading snapshots from %s ...", snapshot_load_dir)
                 restore_report = snapshot_session.restore_all_from_dir(
                     snapshot_load_dir,
                     current_scenario=scenario_path.stem,
                 )
-                logger.info(
-                    "restored %d being snapshot(s)", len(restore_report.restored)
-                )
-                # Phase 7: trace に「どの run から続きを取ったか」を残す。
-                # cross-scenario transfer も明示的に payload に乗せる。
-                recorder.record(
-                    TraceEventKind.SNAPSHOT_LOAD,
-                    directory=str(snapshot_load_dir),
-                    restored_count=len(restore_report.restored),
-                    restored_being_ids=[b.value for b in restore_report.restored],
-                    cross_scenario_transfers=[
-                        {
-                            "being_id": b.value,
-                            "source_scenario": src,
-                            "current_scenario": cur,
-                        }
-                        for (b, src, cur) in restore_report.cross_scenario_transfers
-                    ],
-                )
-
+                logger.info("restored %d being snapshot(s)", len(restore_report.restored))
+                runtime.note_being_memories_restored(restore_report.restored)
                 # Phase 9-1: world snapshot も load (= 旧 snapshot dir に
                 # world.json が無ければ no-op = 後方互換)。world snapshot は
                 # scenario fail-fast 方針なので例外は素通し。
@@ -765,10 +644,38 @@ def _drive_scenario(
                     snapshot_load_dir,
                     current_scenario=scenario_path.stem,
                 )
+                # Phase 7: trace に「どの run から続きを取ったか」を残す。
+                # cross-scenario transfer も明示的に payload に乗せる。
+                recorder.record(
+                    TraceEventKind.SNAPSHOT_LOAD,
+                    directory=str(snapshot_load_dir),
+                    restored_count=len(restore_report.restored),
+                    restored_being_ids=[b.value for b in restore_report.restored],
+                    memory_turns=snapshot_session.memory_turns(restore_report.restored),
+                    cross_scenario_transfers=[
+                        {
+                            "being_id": b.value,
+                            "source_scenario": src,
+                            "current_scenario": cur,
+                        }
+                        for (b, src, cur) in restore_report.cross_scenario_transfers
+                    ],
+                    removed_world_subsystems=(
+                        world_snapshot.removed_subsystem_counts if world_snapshot is not None else {}
+                    ),
+                    removed_declared_memory_kinds=[
+                        {"being_id": b.value, "counts": counts}
+                        for b, counts in restore_report.removed_declared_memory_kind_counts.items()
+                    ],
+                    removed_memory_keys=[
+                        {"being_id": b.value, "counts": counts}
+                        for b, counts in restore_report.removed_memory_key_counts.items()
+                    ],
+                )
+
                 if world_snapshot is not None:
                     logger.info(
-                        "restored world snapshot: source_scenario=%s "
-                        "world_tick=%d subsystems=%s",
+                        "restored world snapshot: source_scenario=%s world_tick=%d subsystems=%s",
                         world_snapshot.source_scenario,
                         world_snapshot.world_tick,
                         sorted(world_snapshot.subsystems.keys()),
@@ -780,8 +687,9 @@ def _drive_scenario(
                         current_scenario=scenario_path.stem,
                         world_tick=world_snapshot.world_tick,
                         restored_subsystems=sorted(
-                            world_snapshot.subsystems.keys()
+                            world_snapshot.subsystems.keys() - world_snapshot.removed_subsystem_counts.keys()
                         ),
+                        removed_subsystems=world_snapshot.removed_subsystem_counts,
                     )
 
         for pid in runtime.get_player_ids():
@@ -811,10 +719,7 @@ def _drive_scenario(
 
             def _handler(_signum: int, _frame: Any) -> None:
                 _interrupted["flag"] = True
-                logger.warning(
-                    "SIGINT received; will stop tick loop and capture "
-                    "snapshot before exit"
-                )
+                logger.warning("SIGINT received; will stop tick loop and capture snapshot before exit")
 
             old = _signal.signal(_signal.SIGINT, _handler)
             try:
@@ -823,14 +728,12 @@ def _drive_scenario(
                 try:
                     _signal.signal(_signal.SIGINT, old)
                 except Exception:
-                    logger.warning(
-                        "failed to restore SIGINT handler", exc_info=True
-                    )
+                    logger.warning("failed to restore SIGINT handler", exc_info=True)
+
         with _sigint_to_flag_guard():
             # 各 player の前 tick の spot を保持して差分検出に使う
             prev_spots: dict[int, str | None] = {
-                int(pid.value): runtime.get_player_spot_id(pid)
-                for pid in runtime.get_player_ids()
+                int(pid.value): runtime.get_player_spot_id(pid) for pid in runtime.get_player_ids()
             }
             # #404 P1: 外側ループを「world_tick が max_world_ticks に達するまで」に
             # 統一する。旧 ``for i in range(max_ticks)`` は外側 iteration 回数だった
@@ -840,11 +743,7 @@ def _drive_scenario(
             # world_tick が進まないバグが入ってもループが暴走しないようにする。
             max_iterations = max(1, max_world_ticks * 2)
             i = 0
-            while (
-                runtime.current_tick() < max_world_ticks
-                and i < max_iterations
-                and not _interrupted["flag"]
-            ):
+            while runtime.current_tick() < max_world_ticks and i < max_iterations and not _interrupted["flag"]:
                 w0 = runtime.current_tick()
                 # 旧 progress callable は legacy (start 通知)。新 reporter は
                 # tick 完了時に ETA / per-tick wall time を出す。
@@ -911,10 +810,7 @@ def _drive_scenario(
                 if abort_reason is not None:
                     outcome = "LLM_ABORTED"
                     end_reason = abort_reason
-                    message = (
-                        f"LLM 障害で実験を打ち切る world_tick={last_tick}: "
-                        f"{abort_reason}"
-                    )
+                    message = f"LLM 障害で実験を打ち切る world_tick={last_tick}: {abort_reason}"
                     if reporter is not None:
                         reporter.message(message)
                     else:
@@ -924,14 +820,17 @@ def _drive_scenario(
                 end_check = runtime.check_game_end()
                 if end_check.is_ended:
                     outcome, end_reason = _outcome_and_reason(end_check)
+                    team_result = runtime.team_result_trace(end_check)
+                    if team_result is not None:
+                        recorder.record(
+                            TraceEventKind.TEAM_RESULT,
+                            tick=last_tick,
+                            **team_result,
+                        )
                     if reporter is not None:
-                        reporter.message(
-                            f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
-                        )
+                        reporter.message(f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}")
                     else:
-                        progress(
-                            f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
-                        )
+                        progress(f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}")
                     break
                 i += 1
             if _interrupted["flag"] and outcome != "LLM_ABORTED":
@@ -955,12 +854,14 @@ def _drive_scenario(
         # 確実に元に戻った状態でここに到達する (= main() 以降の Ctrl+C は
         # 通常通り KeyboardInterrupt を raise する)。
 
-        # Phase 6: snapshot save。**runtime.shutdown より前** に行う理由:
-        # async LLM scheduler の drain が終わると episode_store に最後の
-        # 主観文 episode が書き込まれる可能性があるが、その後に capture
-        # すると snapshot 経路が ``shutdown=True`` の store を触る恐れがある。
-        # 「shutdown 前の last consistent state」を写し取るのが安全。
-        # 失敗しても run 自体は守る (= 例外を上位に飛ばさない)。
+        # #1626: 環境を離れるので、まだ畳まれていない出来事からエピソードを書く。
+        # 書いたエピソードを snapshot に入れるため、保存より前に置く。LLM が使えずに
+        # 終わった run では、呼んでも失敗が並ぶだけなので書かずに理由を残す。
+        runtime.write_episodes_on_leaving(skip_reason="llm_unusable" if outcome in _UNUSABLE_OUTCOMES else None)
+
+        runtime.shutdown_async_events()
+
+        # Phase 6: snapshot save。失敗しても run 自体は守る (= 例外を上位に飛ばさない)。
         # Phase 7: source_scenario を埋め込み + trace event 発行。
         if snapshot_session is not None and snapshot_save_dir is not None:
             try:
@@ -990,10 +891,8 @@ def _drive_scenario(
                     succeeded_count=len(report.succeeded),
                     failed_count=len(report.failed),
                     succeeded_being_ids=[b.value for b in report.succeeded],
-                    failures=[
-                        {"being_id": b.value, "error": err}
-                        for (b, err) in report.failed
-                    ],
+                    memory_turns=snapshot_session.memory_turns(report.succeeded),
+                    failures=[{"being_id": b.value, "error": err} for (b, err) in report.failed],
                 )
             except Exception:
                 logger.warning(
@@ -1028,9 +927,7 @@ def _drive_scenario(
                     world_tick=int(runtime.current_tick()),
                 )
                 # 公開アクセサで登録済 subsystem 名を取得 (= 観察用)。
-                captured_keys = (
-                    snapshot_session.world_snapshot_service.registered_subsystem_keys
-                )
+                captured_keys = snapshot_session.world_snapshot_service.registered_subsystem_keys
                 logger.info(
                     "world snapshot save: world_tick=%d subsystems=%s (dir=%s)",
                     int(runtime.current_tick()),
@@ -1065,28 +962,13 @@ def _drive_scenario(
                         exc_info=True,
                     )
 
-        # Issue #311/#325 後続: 非同期 LLM 主観文付与 scheduler (#310) の in-flight
-        # ジョブを drain してから return する。これをしないと、scenario 終了
-        # 直後に `with JsonlTraceRecorder` が close され、後追いで完了した worker
-        # が "recorder is already closed" RuntimeError に当たる (第21回/第22回
-        # 実験で各 2 件観測)。30s timeout は max latency (~14s) の余裕分。
-        shutdown = getattr(runtime, "shutdown", None)
-        if callable(shutdown):
-            try:
-                shutdown(timeout=30.0)
-            except Exception:
-                # shutdown 自体の失敗で trace 書き出しを止めない
-                logger.warning(
-                    "runtime.shutdown(timeout=30) raised; "
-                    "async LLM completions may not be fully drained",
-                    exc_info=True,
-                )
-        outcome, end_reason, llm_call_count, llm_success_count = (
-            _classify_llm_run_health(
-                recorder,
-                outcome=outcome,
-                end_reason=end_reason,
-            )
+        # 実験用の差し替え runtime は持っていないことがある。0 件と区別するため None で返す。
+        failure_counts_getter = getattr(runtime, "world_tick_failure_counts", None)
+        world_tick_failure_counts = failure_counts_getter() if callable(failure_counts_getter) else None
+        outcome, end_reason, llm_call_count, llm_success_count = _classify_llm_run_health(
+            recorder,
+            outcome=outcome,
+            end_reason=end_reason,
         )
         return {
             "outcome": outcome,
@@ -1098,6 +980,10 @@ def _drive_scenario(
             "max_world_ticks": max_world_ticks,
             "snapshot_save_dir": str(snapshot_save_dir) if snapshot_save_dir else None,
             "snapshot_load_dir": str(snapshot_load_dir) if snapshot_load_dir else None,
+            "world_tick_failure_counts": world_tick_failure_counts,
+            "world_tick_failure_total": (
+                sum(world_tick_failure_counts.values()) if world_tick_failure_counts is not None else None
+            ),
         }
 
 
@@ -1112,6 +998,112 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
     return counts
 
 
+_AUX_COMPONENT_LABELS: dict[str, str] = {
+    # 主観補完は #1631 で、短期記憶の長い要約は #1824 で消した。消す前の run の
+    # report を読むために残す。
+    "episode_subjective": "主観の書き込み",
+    "short_term_long_summary": "短期記憶の長い要約",
+    AuxLlmComponent.SHORT_TERM_SUMMARY.value: "短期記憶の要約",
+    AuxLlmComponent.EPISODE_WRITING.value: "エピソードの書き起こし",
+    AuxLlmComponent.TYPED_JUDGMENT.value: "Jev の型付き判断",
+}
+
+
+def _sum_or_unavailable(values: list[Any], *, money: bool) -> str:
+    """None は応答に無かった値。0 に潰すと無料・0 トークンと読めるので、回数を添える (#1617)。"""
+    known = [v for v in values if v is not None]
+    missing = len(values) - len(known)
+    if values and not known:
+        return "取れない"
+    total = sum(known)
+    shown = f"${total:.4f}" if money else str(int(total))
+    return f"{shown} + 取れない {missing} 回" if missing else shown
+
+
+def _billable(payload: Mapping[str, Any], key: str) -> bool:
+    """応答が届かず失敗した回は値が無くて当然なので、「取れない」に数えない。"""
+    return bool(payload.get("success")) or payload.get(key) is not None
+
+
+def _llm_cost_row(label: str, calls: list[Any]) -> str:
+    payloads = [e.payload for e in calls]
+    failures = sum(1 for p in payloads if not p.get("success"))
+    latency_sec = sum(int(p.get("wall_latency_ms") or 0) for p in payloads) / 1000.0
+    prompt, completion, cost = (
+        _sum_or_unavailable([p.get(key) for p in payloads if _billable(p, key)], money=key == "cost_usd")
+        for key in ("prompt_tokens", "completion_tokens", "cost_usd")
+    )
+    return f"| {label} | {len(payloads)} | {failures} | {prompt} | {completion} | {cost} | {latency_sec:.1f} |"
+
+
+def _known_cost(calls: list[Any]) -> float:
+    return sum(float(e.payload["cost_usd"]) for e in calls if e.payload.get("cost_usd") is not None)
+
+
+def _llm_cost_header_line(llm_calls: list[Any], aux_calls: list[Any]) -> str:
+    action_cost = _known_cost(llm_calls)
+    aux_cost = _known_cost(aux_calls)
+    line = (
+        f"- 費用 (取れた分の合計): ${action_cost + aux_cost:.4f} = "
+        f"行動 ${action_cost:.4f} + 記憶の部品と Jev ${aux_cost:.4f}"
+    )
+    missing = sum(
+        1 for e in llm_calls + aux_calls if e.payload.get("cost_usd") is None and _billable(e.payload, "cost_usd")
+    )
+    return f"{line}。費用が取れない呼び出し {missing} 回" if missing else line
+
+
+def _llm_cost_lines(llm_calls: list[Any], aux_calls: list[Any], aux_record_failures: list[Any]) -> list[str]:
+    """行動の呼び出しと、記憶の部品・Jev の呼び出しを部品ごとに分けた表 (#1617)。"""
+    by_component: dict[str, list[Any]] = {}
+    for event in aux_calls:
+        by_component.setdefault(str(event.payload.get("component")), []).append(event)
+    order = [c.value for c in AuxLlmComponent]
+    components = sorted(by_component, key=lambda c: (order.index(c) if c in order else len(order), c))
+    lines = [
+        "## LLM 呼び出しの回数と費用",
+        "",
+        "費用は provider が応答に載せた値 (OpenRouter の usage.cost)。"
+        "記憶の部品と Jev は、応答に無かった値を「取れない」とし、0 として足さない。"
+        "行動の呼び出しは、応答に費用が無くても 0 で記録される (llm_call の決まり)。",
+        "",
+        "| 呼び出し | 回数 | 失敗 | 入力トークン | 出力トークン | 費用 (USD) | 待ち時間の合計 (秒) |",
+        "|---|---|---|---|---|---|---|",
+        _llm_cost_row("行動", llm_calls),
+    ]
+    for component in components:
+        label = _AUX_COMPONENT_LABELS.get(component, component)
+        lines.append(_llm_cost_row(f"{label} ({component})", by_component[component]))
+    lines.append("")
+    if not aux_calls:
+        lines.append("- 記憶の部品と Jev の呼び出し: 0 件")
+    if aux_record_failures:
+        failed = Counter(str(e.payload.get("component")) for e in aux_record_failures)
+        breakdown = ", ".join(f"{c}={n}" for c, n in sorted(failed.items()))
+        lines.append(f"- 記録できなかった呼び出し: {breakdown} (この回数は上の表に入っていない)")
+    if not aux_calls or aux_record_failures:
+        lines.append("")
+    return lines
+
+
+def _world_tick_failure_lines(summary: dict[str, Any]) -> list[str]:
+    """世界の tick で例外を出した処理 (取りやめと後処理の失敗) の件数を、冒頭の要約に出す行 (design_decisions D1558)。"""
+    label = "- 世界の tick で例外を出した処理 (のべ)"
+    counts = summary.get("world_tick_failure_counts")
+    if counts is None:
+        return [f"{label}: 未計測"]
+    total = sum(counts.values())
+    if total == 0:
+        return [f"{label}: 0 件"]
+    breakdown = ", ".join(f"{stage}={count}" for stage, count in sorted(counts.items()))
+    return [
+        f"{label}: **{total} 件** ({breakdown})",
+        "  - 1 体ぶんの処理を取りやめたか、後処理の失敗を残して続けた run。"
+        "効果の測定に使う前に、trace の world_tick_unit_failed で原因を切り分ける"
+        " (continued が後処理の失敗)。同じ対象が毎 tick 失敗すると、そのたびに数える",
+    ]
+
+
 def _build_report(
     *,
     scenario_path: Path,
@@ -1122,27 +1114,27 @@ def _build_report(
     events = list(load_trace_events(trace_path))
     actions: list[Any] = []
     action_results: list[Any] = []
-    memo_adds: list[Any] = []
-    memo_dones: list[Any] = []
     memo_hints: list[Any] = []
     position_changes: list[Any] = []
     llm_calls: list[Any] = []
+    aux_calls: list[Any] = []
+    aux_record_failures: list[Any] = []
     by_player: dict[int, dict[str, int]] = {}
     for e in events:
         if e.kind == TraceEventKind.ACTION:
             actions.append(e)
         elif e.kind == TraceEventKind.ACTION_RESULT:
             action_results.append(e)
-        elif e.kind == TraceEventKind.MEMO_ADD:
-            memo_adds.append(e)
-        elif e.kind == TraceEventKind.MEMO_DONE:
-            memo_dones.append(e)
         elif e.kind == TraceEventKind.MEMO_HINT:
             memo_hints.append(e)
         elif e.kind == TraceEventKind.POSITION_CHANGE:
             position_changes.append(e)
         elif e.kind == TraceEventKind.LLM_CALL:
             llm_calls.append(e)
+        elif e.kind == TraceEventKind.AUX_LLM_CALL:
+            aux_calls.append(e)
+        elif e.kind == TraceEventKind.AUX_LLM_CALL_RECORD_FAILED:
+            aux_record_failures.append(e)
         pid = e.player_id
         if pid is None:
             continue
@@ -1152,8 +1144,6 @@ def _build_report(
                 "actions": 0,
                 "successes": 0,
                 "failures": 0,
-                "memo_adds": 0,
-                "memo_dones": 0,
                 "moves": 0,
             },
         )
@@ -1164,10 +1154,6 @@ def _build_report(
                 bucket["successes"] += 1
             else:
                 bucket["failures"] += 1
-        elif e.kind == TraceEventKind.MEMO_ADD:
-            bucket["memo_adds"] += 1
-        elif e.kind == TraceEventKind.MEMO_DONE:
-            bucket["memo_dones"] += 1
         elif e.kind == TraceEventKind.POSITION_CHANGE:
             # 初期配置 (from_spot_id=None) は move カウントに含めない
             from_spot = e.payload.get("from_spot_id") if isinstance(e.payload, dict) else None
@@ -1181,9 +1167,7 @@ def _build_report(
     lines.append(f"- outcome: **{summary['outcome']}**")
     if summary.get("end_reason"):
         lines.append(f"- end reason: {summary['end_reason']}")
-    lines.append(
-        f"- last tick: {summary['last_tick']} / max world ticks: {summary['max_world_ticks']}"
-    )
+    lines.append(f"- last tick: {summary['last_tick']} / max world ticks: {summary['max_world_ticks']}")
     lines.append(f"- elapsed: {summary['elapsed_sec']:.1f}s")
     lines.append(f"- total events: {len(events)}")
     # 層 3: 呼び出しの健全さは冒頭に出す。奥に置くと「outcome / 完走」だけを
@@ -1192,10 +1176,11 @@ def _build_report(
     if llm_calls:
         succeeded = len(llm_calls) - sum(llm_failures.values())
         rate = succeeded * 100.0 / len(llm_calls)
-        lines.append(
-            f"- llm calls: {len(llm_calls)} (成功 {succeeded} / {rate:.0f}%)"
-        )
+        lines.append(f"- llm calls: {len(llm_calls)} (成功 {succeeded} / {rate:.0f}%)")
+    lines.append(_llm_cost_header_line(llm_calls, aux_calls))
+    lines.extend(_world_tick_failure_lines(summary))
     lines.append("")
+    lines.extend(_llm_cost_lines(llm_calls, aux_calls, aux_record_failures))
     if llm_failures:
         lines.append("## LLM 呼び出しの失敗内訳")
         lines.append("")
@@ -1211,29 +1196,23 @@ def _build_report(
     lines.append("")
     lines.append(f"- action: {len(actions)}")
     lines.append(f"- action_result: {len(action_results)}")
-    lines.append(f"- memo_add: {len(memo_adds)}")
-    lines.append(f"- memo_done: {len(memo_dones)}")
     lines.append(f"- memo_hint: {len(memo_hints)}")
     lines.append(f"- position_change: {len(position_changes)}")
     lines.append("")
     if by_player:
         lines.append("## プレイヤー別集計")
         lines.append("")
-        lines.append("| player_id | actions | successes | failures | memo_adds | memo_dones | moves |")
-        lines.append("|-----------|---------|-----------|----------|-----------|------------|-------|")
+        lines.append("| player_id | actions | successes | failures | moves |")
+        lines.append("|-----------|---------|-----------|----------|-------|")
         for pid in sorted(by_player):
             b = by_player[pid]
-            lines.append(
-                f"| {pid} | {b['actions']} | {b['successes']} | {b['failures']} | "
-                f"{b['memo_adds']} | {b['memo_dones']} | {b.get('moves', 0)} |"
-            )
+            lines.append(f"| {pid} | {b['actions']} | {b['successes']} | {b['failures']} | {b.get('moves', 0)} |")
         lines.append("")
     lines.append("## 成果物")
     lines.append("")
     lines.append(f"- trace: `{trace_path}`")
     lines.append(f"- legacy HTML viewer: `{trace_path.with_suffix('.html')}`")
     lines.append(f"- map trace viewer: `{trace_path.parent / 'viewer.html'}`")
-    lines.append(f"- episodic memory viewer: `{trace_path.parent / 'episodic.html'}`")
     lines.append(f"- timeline viewer: `{trace_path.parent / 'timeline.html'}`")
     lines.append("")
     return "\n".join(lines)
@@ -1284,19 +1263,6 @@ def _render_map_viewer_html(run_dir: Path, trace_path: Path, *, title: str) -> s
     )
 
 
-def _render_episodic_viewer_html(trace_path: Path, *, title: str) -> str:
-    """episodic.html の HTML 文字列を返す。"""
-    from scripts.build_episodic_viewer import (
-        aggregate_episodes,
-        load_events,
-    )
-    from scripts.build_episodic_viewer import render_html as render_episodic_html
-
-    events = load_events(trace_path)
-    episodes = aggregate_episodes(events)
-    return render_episodic_html(episodes, title)
-
-
 def _render_timeline_viewer_html(trace_path: Path, *, title: str) -> str:
     """timeline.html の HTML 文字列を返す。"""
     from scripts.build_timeline_viewer import load_events
@@ -1322,9 +1288,7 @@ def _render_prompt_viewer_html(run_dir: Path) -> str:
     run_json = run_dir / "prompt_dataset" / "run.json"
     if run_json.exists():
         try:
-            profile = str(
-                json.loads(run_json.read_text(encoding="utf-8")).get("profile") or ""
-            )
+            profile = str(json.loads(run_json.read_text(encoding="utf-8")).get("profile") or "")
         except json.JSONDecodeError:
             profile = ""
     return render_prompt_html(calls, run_id=run_dir.name, profile=profile)
@@ -1379,13 +1343,6 @@ def _emit_html_artifacts(
     )
     artifacts.append(
         _write_html_artifact(
-            name="episodic.html",
-            path=run_dir / "episodic.html",
-            render=lambda: _render_episodic_viewer_html(trace_path, title=title),
-        )
-    )
-    artifacts.append(
-        _write_html_artifact(
             name="timeline.html",
             path=run_dir / "timeline.html",
             render=lambda: _render_timeline_viewer_html(trace_path, title=title),
@@ -1421,7 +1378,7 @@ def main(argv: list[str] | None = None) -> int:
         "--scenario",
         type=Path,
         default=None,
-        help="Path to scenario JSON (e.g. data/scenarios/relay_puzzle_demo.json)",
+        help="Path to scenario JSON (e.g. data/scenarios/forbidden_library_demo.json)",
     )
     parser.add_argument(
         "--profile",
@@ -1439,10 +1396,7 @@ def main(argv: list[str] | None = None) -> int:
         "--max-world-ticks",
         type=int,
         default=None,
-        help=(
-            "Stop when world_tick reaches this value (default 30, "
-            "or experiment config max_world_ticks)"
-        ),
+        help=("Stop when world_tick reaches this value (default 30, or experiment config max_world_ticks)"),
     )
     parser.add_argument(
         "--out",
@@ -1520,6 +1474,7 @@ def main(argv: list[str] | None = None) -> int:
             config_path=args.experiment_config,
         )
         runtime_config_source = _runtime_config_mapping_from_source(config_source)
+        _reject_removed_config_fields(config_source)
     except (OSError, ValueError) as e:
         parser.error(str(e))
 
@@ -1529,9 +1484,7 @@ def main(argv: list[str] | None = None) -> int:
         if raw_scenario:
             scenario_arg = Path(str(raw_scenario))
     if scenario_arg is None:
-        parser.error(
-            "scenario is required. Pass --scenario or set 'scenario' in the experiment config."
-        )
+        parser.error("scenario is required. Pass --scenario or set 'scenario' in the experiment config.")
     args.scenario = scenario_arg
 
     if not args.scenario.exists():
@@ -1541,9 +1494,7 @@ def main(argv: list[str] | None = None) -> int:
         if config_source.get("max_world_ticks") is not None:
             args.max_world_ticks = int(config_source["max_world_ticks"])
         else:
-            args.max_world_ticks = int(
-                "30"
-            )
+            args.max_world_ticks = int("30")
 
     out_dir = args.out
     if out_dir is None:
@@ -1559,53 +1510,18 @@ def main(argv: list[str] | None = None) -> int:
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
         ResolvedLlmRuntimeConfig,
     )
+
     cfg = ResolvedLlmRuntimeConfig.from_mapping(values=runtime_config_source)
 
     print(
         f"[run] scenario={args.scenario.name} max_world_ticks={args.max_world_ticks}",
         flush=True,
     )
-    print(
-        f"[run] section_order={cfg.prompt_section_order} "
-        "(runtime_config.PROMPT_SECTION_ORDER)",
-        flush=True,
-    )
-    print(
-        f"[run] episodic_explore_related={'on' if cfg.episodic_explore_related_enabled else 'off'} "
-        "(runtime_config.EPISODIC_EXPLORE_RELATED_ENABLED)",
-        flush=True,
-    )
-    print(
-        f"[run] semantic_llm_gist={'on' if cfg.semantic_llm_gist_enabled else 'off'} "
-        "(runtime_config.SEMANTIC_LLM_GIST_ENABLED)",
-        flush=True,
-    )
-    print(
-        f"[run] semantic_passive_top_k={cfg.semantic_passive_top_k} "
-        "(runtime_config.SEMANTIC_PASSIVE_TOP_K)",
-        flush=True,
-    )
-    print(
-        f"[run] semantic_search={'on' if cfg.semantic_search_enabled else 'off'} "
-        "(runtime_config.SEMANTIC_SEARCH_ENABLED)",
-        flush=True,
-    )
-    print(
-        f"[run] short_term_memory_kind={cfg.short_term_memory_kind} "
-        "(runtime_config.SHORT_TERM_MEMORY_KIND)",
-        flush=True,
-    )
-    print(
-        f"[run] short_term_memory_scheduler_mode={cfg.short_term_memory_scheduler_mode} "
-        "(runtime_config.SHORT_TERM_MEMORY_SCHEDULER_MODE)",
-        flush=True,
-    )
     # OpenRouter provider routing: 設定されているときだけ表示
-    if cfg.openrouter_provider or cfg.openrouter_quantization or cfg.openrouter_require_params:
+    if cfg.openrouter_provider or cfg.openrouter_quantization:
         print(
             f"[run] openrouter routing: provider={cfg.openrouter_provider or '-'} "
-            f"quantization={cfg.openrouter_quantization or '-'} "
-            f"require_params={'true' if cfg.openrouter_require_params else '-'}",
+            f"quantization={cfg.openrouter_quantization or '-'}",
             flush=True,
         )
     print(f"[out] {out_dir}", flush=True)
@@ -1631,26 +1547,24 @@ def main(argv: list[str] | None = None) -> int:
         no_html=args.no_html,
         no_progress_jsonl=args.no_progress_jsonl,
     )
-    prompt_dataset_sink = None
-    if cfg.prompt_dataset_capture_enabled:
-        from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
-            PromptDatasetCaptureSink,
-        )
+    from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
+        PromptDatasetCaptureSink,
+    )
 
-        prompt_dataset_sink = PromptDatasetCaptureSink(
-            run_dir=out_dir,
-            run_id=out_dir.name,
-            run_metadata={
-                "source_run_dir": str(out_dir),
-                "experiment_manifest_path": str(manifest_path),
-                "experiment_manifest_sha256": manifest_sha256,
-                "profile": config_source.get("profile"),
-                "scenario_path": str(args.scenario),
-                "scenario_sha256": _sha256_file(args.scenario),
-                "runtime_config": _prompt_dataset_runtime_config_payload(cfg),
-            },
-            failure_policy=cfg.prompt_dataset_capture_failure_policy,
-        )
+    prompt_dataset_sink = PromptDatasetCaptureSink(
+        run_dir=out_dir,
+        run_id=out_dir.name,
+        run_metadata={
+            "source_run_dir": str(out_dir),
+            "experiment_manifest_path": str(manifest_path),
+            "experiment_manifest_sha256": manifest_sha256,
+            "profile": config_source.get("profile"),
+            "scenario_path": str(args.scenario),
+            "scenario_sha256": _sha256_file(args.scenario),
+            "runtime_config": _prompt_dataset_runtime_config_payload(cfg),
+        },
+        failure_policy=cfg.prompt_dataset_capture_failure_policy,
+    )
 
     with JsonlTraceRecorder(trace_path) as rec:
         # PR #448: trace payload は cfg.to_trace_dict() で一括出力 + scenario /
@@ -1677,18 +1591,14 @@ def main(argv: list[str] | None = None) -> int:
             max_world_ticks=args.max_world_ticks,
             stdout=sys.stdout,
             stderr=None if args.no_stderr_progress else sys.stderr,
-            progress_jsonl=(
-                None if args.no_progress_jsonl else (out_dir / "progress.jsonl")
-            ),
+            progress_jsonl=(None if args.no_progress_jsonl else (out_dir / "progress.jsonl")),
         )
 
         # Phase 6 (Issue #470): snapshot-load-dir が指定されていれば存在チェック。
         # 不在 dir で進めると "途中で読めない" が分かるのが load 後になり、
         # 既存 experiment data の汚染リスクが上がる。ここで早期 fail-fast。
         if args.snapshot_load_dir is not None and not args.snapshot_load_dir.exists():
-            parser.error(
-                f"snapshot-load-dir does not exist: {args.snapshot_load_dir}"
-            )
+            parser.error(f"snapshot-load-dir does not exist: {args.snapshot_load_dir}")
         if args.snapshot_save_dir is not None:
             args.snapshot_save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1742,9 +1652,11 @@ def main(argv: list[str] | None = None) -> int:
     # 層 3: 端末で最後に見る 1 行にも呼び出しの健全さを出す。report.md を
     # 開かずに閉じる人がいるし、閾値未満の「じわ荒れ」はここだけが砦になる。
     done_line = (
-        f"[done] outcome={summary['outcome']} last_tick={summary['last_tick']} "
-        f"elapsed={summary['elapsed_sec']:.1f}s"
+        f"[done] outcome={summary['outcome']} last_tick={summary['last_tick']} elapsed={summary['elapsed_sec']:.1f}s"
     )
+    tick_failures = summary.get("world_tick_failure_total")
+    if tick_failures:
+        done_line += f" world_tick_failures={tick_failures}"
     llm_total = int(summary.get("llm_call_count") or 0)
     if llm_total:
         llm_ok = int(summary.get("llm_success_count") or 0)
@@ -1758,8 +1670,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         desc = args.publish_gist_desc or (
-            f"llm-rpg experiment: {args.scenario.stem} "
-            f"outcome={summary['outcome']} tick={summary['last_tick']}"
+            f"llm-rpg experiment: {args.scenario.stem} outcome={summary['outcome']} tick={summary['last_tick']}"
         )
         try:
             result = publish(

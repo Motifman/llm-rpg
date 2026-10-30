@@ -27,9 +27,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_DRILL = (
-    pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
 
@@ -68,7 +66,8 @@ def _world(
         raw["disabled_tools"] = list(raw.get("disabled_tools", ())) + list(disabled_tools)
     directory = pathlib.Path(tempfile.mkdtemp())
     (directory / "econ.json").write_text(
-        json.dumps(raw, ensure_ascii=False), encoding="utf-8",
+        json.dumps(raw, ensure_ascii=False),
+        encoding="utf-8",
     )
     return _Session(directory)
 
@@ -87,9 +86,7 @@ class _Session:
             characters_path=directory / "characters.json",
         )
         character = self._manager.create_character(CharacterCreateRequest(name="モリ"))
-        summary = self._manager.create_session(
-            SessionCreateRequest(world_id="econ", character_ids=[character.id])
-        )
+        summary = self._manager.create_session(SessionCreateRequest(world_id="econ", character_ids=[character.id]))
         self._state = self._manager._sessions[summary.session_id]
 
     @property
@@ -108,9 +105,7 @@ def _traded_item_name(session: Any) -> str:
     runtime = session.runtime
     spec_id = runtime.scenario.merchants[0].sells[0].item_spec_id
     return next(
-        definition.name
-        for definition in runtime.scenario.item_spec_definitions
-        if definition.spec_id.value == spec_id
+        definition.name for definition in runtime.scenario.item_spec_definitions if definition.spec_id.value == spec_id
     )
 
 
@@ -142,7 +137,9 @@ class TestBuyingThroughTheTool:
         item = _traded_item_name(session)
 
         result = _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {"item_label": item, "quantity": 2, "inner_thought": "買っておく"},
         )
 
@@ -160,7 +157,9 @@ class TestBuyingThroughTheTool:
         item = _traded_item_name(session)
 
         result = _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {"item_label": item, "quantity": 1, "inner_thought": "買う"},
         )
 
@@ -177,12 +176,16 @@ class TestBuyingThroughTheTool:
         session = _world(initial_gold=100, price=10)
         item = _traded_item_name(session)
         _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {"item_label": item, "quantity": 1, "inner_thought": "買う"},
         )
 
         result = _execute(
-            session, _MORI, "sell_item",
+            session,
+            _MORI,
+            "sell_item",
             {"item_label": item, "quantity": 1, "inner_thought": "売る"},
         )
 
@@ -200,7 +203,9 @@ class TestLearnableFailures:
         item = _traded_item_name(session)
 
         result = _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {"item_label": item, "quantity": 1, "inner_thought": "買いたい"},
         )
 
@@ -215,7 +220,9 @@ class TestLearnableFailures:
         item = _traded_item_name(session)
 
         result = _execute(
-            session, _MORI, "sell_item",
+            session,
+            _MORI,
+            "sell_item",
             {"item_label": item, "quantity": 1, "inner_thought": "売る"},
         )
 
@@ -231,7 +238,9 @@ class TestLearnableFailures:
         session = _world()
 
         result = _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {"item_label": "存在しない品", "quantity": 1, "inner_thought": "買う"},
         )
 
@@ -251,16 +260,15 @@ class TestLearnableFailures:
         item = _traded_item_name(session)
         graph = runtime._spot_graph_repo.find_graph()
         merchant_spot = runtime.scenario.merchants[0].spot_id
-        elsewhere = next(
-            node.spot_id for node in graph.iter_spot_nodes()
-            if node.spot_id != merchant_spot
-        )
+        elsewhere = next(node.spot_id for node in graph.iter_spot_nodes() if node.spot_id != merchant_spot)
         graph.unplace_entity(EntityId.create(int(_MORI)))
         graph.place_entity(EntityId.create(int(_MORI)), SpotId.create(elsewhere.value))
         runtime._spot_graph_repo.save(graph)
 
         result = _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {"item_label": item, "quantity": 1, "inner_thought": "買う"},
         )
 
@@ -274,7 +282,9 @@ class TestLearnableFailures:
         item = _traded_item_name(session)
 
         result = _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {"item_label": item, "quantity": quantity, "inner_thought": "買う"},
         )
 
@@ -292,7 +302,9 @@ class TestLearnableFailures:
         item = _traded_item_name(session)
 
         result = _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {"item_label": item, "quantity": 1, "inner_thought": "買う"},
         )
 
@@ -306,7 +318,9 @@ class TestLearnableFailures:
         item = _traded_item_name(session)
 
         result = _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {
                 "item_label": item,
                 "quantity": 1,
@@ -334,7 +348,9 @@ class TestOthersSeeTheTrade:
         _put_both_at_the_merchant(session)
 
         _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {"item_label": item, "quantity": 1, "inner_thought": "買う"},
         )
 
@@ -347,13 +363,17 @@ class TestOthersSeeTheTrade:
         item = _traded_item_name(session)
         _put_both_at_the_merchant(session)
         _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {"item_label": item, "quantity": 1, "inner_thought": "買う"},
         )
         session.runtime.build_full_prompt(_SENA)
 
         _execute(
-            session, _MORI, "sell_item",
+            session,
+            _MORI,
+            "sell_item",
             {"item_label": item, "quantity": 1, "inner_thought": "売る"},
         )
 
@@ -382,12 +402,10 @@ class TestOthersSeeTheTrade:
         actor_entries = runtime._obs_buffer.drain(_MORI)
         bystander_entries = runtime._obs_buffer.drain(_SENA)
         assert not [
-            entry for entry in actor_entries
-            if entry.output.structured.get("type") == "player_traded_with_merchant"
+            entry for entry in actor_entries if entry.output.structured.get("type") == "player_traded_with_merchant"
         ]
         assert [
-            entry for entry in bystander_entries
-            if entry.output.structured.get("type") == "player_traded_with_merchant"
+            entry for entry in bystander_entries if entry.output.structured.get("type") == "player_traded_with_merchant"
         ]
 
     def test_the_trade_does_not_wake_the_bystander(self) -> None:
@@ -397,7 +415,9 @@ class TestOthersSeeTheTrade:
         _put_both_at_the_merchant(session)
 
         _execute(
-            session, _MORI, "buy_item",
+            session,
+            _MORI,
+            "buy_item",
             {"item_label": item, "quantity": 1, "inner_thought": "買う"},
         )
 
@@ -413,10 +433,7 @@ class TestTheToolsFollowTheWorldDeclaration:
         """商人を宣言した世界では、買いと売りの両方が LLM に渡る一覧に出る。"""
         session = _world()
 
-        names = [
-            definition.name
-            for definition in session.runtime.get_tool_definitions(for_every_player=True)
-        ]
+        names = [definition.name for definition in session.runtime.get_tool_definitions(for_every_player=True)]
 
         assert "buy_item" in names
         assert "sell_item" in names
@@ -429,10 +446,7 @@ class TestTheToolsFollowTheWorldDeclaration:
         """
         session = _world(disabled_tools=("buy_item",))
 
-        names = [
-            definition.name
-            for definition in session.runtime.get_tool_definitions(for_every_player=True)
-        ]
+        names = [definition.name for definition in session.runtime.get_tool_definitions(for_every_player=True)]
 
         assert "buy_item" not in names
         assert "sell_item" in names

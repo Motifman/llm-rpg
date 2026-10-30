@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class SnsPostCreatedEvent(BaseDomainEvent[PostId, "PostAggregate"]):
     """ポスト作成イベント"""
+
     post_id: PostId
     author_user_id: UserId
     content: PostContent
@@ -23,6 +24,7 @@ class SnsPostCreatedEvent(BaseDomainEvent[PostId, "PostAggregate"]):
 @dataclass(frozen=True)
 class SnsReplyCreatedEvent(BaseDomainEvent[ReplyId, "ReplyAggregate"]):
     """リプライ作成イベント"""
+
     reply_id: ReplyId
     author_user_id: UserId
     content: PostContent
@@ -37,17 +39,24 @@ class SnsReplyCreatedEvent(BaseDomainEvent[ReplyId, "ReplyAggregate"]):
 @dataclass(frozen=True)
 class SnsContentLikedEvent(BaseDomainEvent[Union[PostId, ReplyId], "PostAggregate | ReplyAggregate"]):
     """汎用コンテンツいいねイベント"""
+
     target_id: PostId | ReplyId
-    user_id: UserId      # いいねしたユーザー
+    user_id: UserId  # いいねしたユーザー
     content_author_id: UserId  # コンテンツの作成者
     content_type: str = "post"  # "post" or "reply"
     content_text: str = ""
     liker_display_name: str = ""
+    actor_identity_token: str | None = None
+    recipient_identity_token: str | None = None
+    target_identity_token: str | None = None
+    is_liked: bool = True
+    execution_provenance: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
 class SnsContentDeletedEvent(BaseDomainEvent[Union[PostId, ReplyId], "PostAggregate | ReplyAggregate"]):
     """汎用コンテンツ削除イベント"""
+
     target_id: PostId | ReplyId  # post_id or reply_id
     author_user_id: UserId
     content_type: str = "post"  # "post" or "reply"

@@ -52,13 +52,17 @@ SPOT_C = SpotId.create(3)
 
 
 def _node(
-    spot_id: SpotId, *,
+    spot_id: SpotId,
+    *,
     intensity: SoundIntensityEnum = SoundIntensityEnum.SILENT,
     ambient: str | None = None,
 ) -> SpotNode:
     return SpotNode(
-        spot_id=spot_id, name=f"spot{spot_id.value}", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=spot_id,
+        name=f"spot{spot_id.value}",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
             lighting=LightingEnum.BRIGHT,
             sound_ambient=ambient,
@@ -70,16 +74,24 @@ def _node(
 
 
 def _conn(
-    cid: int, from_id: SpotId, to_id: SpotId, *, traversable: bool = True,
+    cid: int,
+    from_id: SpotId,
+    to_id: SpotId,
+    *,
+    traversable: bool = True,
 ) -> SpotConnection:
     # 通行不可な接続は wall(INTACT) で代表 (sound_permeability は本 PR では
     # 使わないので default で OK)。
     passage = Passage.open() if traversable else Passage.wall()
     return SpotConnection(
         connection_id=ConnectionId.create(cid),
-        from_spot_id=from_id, to_spot_id=to_id,
-        name=f"c{cid}", description="", travel_ticks=1,
-        is_bidirectional=False, passage=passage,
+        from_spot_id=from_id,
+        to_spot_id=to_id,
+        name=f"c{cid}",
+        description="",
+        travel_ticks=1,
+        is_bidirectional=False,
+        passage=passage,
     )
 
 
@@ -166,16 +178,22 @@ class TestEmitListenCarefullyAdjacent:
         from ai_rpg_world.domain.world_graph.enum.passage_kind import (
             BarrierStateEnum,
         )
+
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))
         g.add_spot(_node(SPOT_B, intensity=SoundIntensityEnum.MODERATE))
-        g.add_connection(SpotConnection(
-            connection_id=ConnectionId.create(10),
-            from_spot_id=SPOT_A, to_spot_id=SPOT_B,
-            name="barrier", description="", travel_ticks=1,
-            is_bidirectional=False,
-            passage=Passage.barrier(BarrierStateEnum.ACTIVE),
-        ))
+        g.add_connection(
+            SpotConnection(
+                connection_id=ConnectionId.create(10),
+                from_spot_id=SPOT_A,
+                to_spot_id=SPOT_B,
+                name="barrier",
+                description="",
+                travel_ticks=1,
+                is_bidirectional=False,
+                passage=Passage.barrier(BarrierStateEnum.ACTIVE),
+            )
+        )
         eid = EntityId.create(7)
         g.place_entity(eid, SPOT_A)
         g.clear_events()

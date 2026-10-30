@@ -2,7 +2,6 @@
 PersonalTradeQueryService専用のアプリケーション例外
 """
 
-
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.domain.common.exception import DomainException
 
@@ -32,10 +31,7 @@ class PersonalTradeQueryApplicationException(ApplicationException):
         Returns:
             PersonalTradeQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Invalid player ID: {player_id}",
-            player_id=player_id
-        )
+        return cls(f"Invalid player ID: {player_id}", player_id=player_id)
 
     @classmethod
     def personal_trades_not_found(cls, player_id: int) -> "PersonalTradeQueryApplicationException":
@@ -47,10 +43,7 @@ class PersonalTradeQueryApplicationException(ApplicationException):
         Returns:
             PersonalTradeQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"No personal trades found for player: {player_id}",
-            player_id=player_id
-        )
+        return cls(f"No personal trades found for player: {player_id}", player_id=player_id)
 
     @classmethod
     def invalid_limit(cls, limit: int) -> "PersonalTradeQueryApplicationException":
@@ -62,7 +55,4 @@ class PersonalTradeQueryApplicationException(ApplicationException):
         Returns:
             PersonalTradeQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Limit must be between 1 and 50, got {limit}",
-            limit=limit
-        )
+        return cls(f"Limit must be between 1 and 50, got {limit}", limit=limit)

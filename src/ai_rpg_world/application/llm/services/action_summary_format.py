@@ -29,13 +29,8 @@ from ai_rpg_world.application.llm.contracts.action_argument_classification impor
     ActionArgumentDisplayKind,
 )
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_MEMO_ADD,
-    TOOL_NAME_MEMO_DONE,
-    TOOL_NAME_MEMO_LIST,
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
-    TOOL_NAME_MEMORY_RECALL_EPISODES,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+    TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
@@ -66,18 +61,16 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 
 # action_summary の JSON fallback から落とす主観入力・冗長入力フィールド。
-# - expected_result: chunk_encoding が [予測: ...] で別表記するので二重表示回避
 # - inner_thought: ActionResultEntry.inner_thought から「心の声: ...」として出す
-# - content: speak / memo_add では自然文または別 section に出るため JSON から落とす
-# - reason / intention / emotion_hint: recent-events の生 JSON には不要
+# - content: speak では自然文で出るため JSON から落とす
+# - reason: recent-events の生 JSON には不要
+# - memo: メモは【メモ】に出るもので、行動の要約ではない
 ACTION_SUMMARY_HIDDEN_FIELDS = frozenset(
     {
         "content",
         "reason",
         "inner_thought",
-        "intention",
-        "expected_result",
-        "emotion_hint",
+        "memo",
     }
 )
 
@@ -93,6 +86,12 @@ ACTION_HISTORY_PROJECTION_KEY = "__action_history_projection"
 #: ACTION_HISTORY_PROJECTION_KEY と同じく resolver の出力にだけ載り、
 #: dispatch が回収して tool schema には出さない。
 CANONICAL_IDENTIFIERS_KEY = "__canonical_identifiers"
+
+#: interact の resolver が、対象名の後ろに続く句 (「で水門を開ける」「に対して殴りかかる」) を
+#: 操作の表示名 (display_label) から作って運ぶ内部キー。前提条件で断られた行も、成功の行と
+#: 同じ書き方にするため。action_name は呼び出しの値で、世界の言葉ではない。
+ACTION_DISPLAY_PHRASE_KEY = "__action_display_phrase"
+
 
 def project_action_arguments_for_history(
     args: Mapping[str, Any] | None,
@@ -127,14 +126,10 @@ def project_action_arguments_for_history(
                 identifiers[name] = canonical[name]
                 continue
             identifiers[name] = (
-                value
-                if isinstance(value, str)
-                else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+                value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
             )
         elif kind == ActionArgumentDisplayKind.IDENTIFIER_JSON:
-            identifiers[name] = json.dumps(
-                value, ensure_ascii=False, separators=(",", ":")
-            )
+            identifiers[name] = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
         elif kind == ActionArgumentDisplayKind.FREE_TEXT:
             free_text_names.append(name)
     return identifiers, tuple(free_text_names)
@@ -198,31 +193,13 @@ def _format_speak(args: Mapping[str, Any]) -> str:
     return f"あなたは言った: {_quote(content)}"
 
 
-def _format_memo_add(args: Mapping[str, Any]) -> str:
-    return "メモを書いた"
-
-
-def _format_memo_done(args: Mapping[str, Any]) -> str:
-    raw_ids = args.get("memo_ids")
-    if isinstance(raw_ids, list):
-        ids = [str(v).strip() for v in raw_ids if str(v).strip()]
-    else:
-        ids = []
-    if not ids:
-        return "メモを完了にした"
-    joined = ", ".join(ids)
-    return f"メモ {len(ids)} 件を完了にした ({joined})"
-
-
-def _format_memo_list(args: Mapping[str, Any]) -> str:
-    return "メモ一覧を確認した"
-
-
 def _format_interact(args: Mapping[str, Any]) -> str:
     target = _text(args, "target_label")
-    action = _text(args, "action_name")
-    if target and action:
-        return f"{_quote(target)}に {action} した"
+    display_phrase = _text(args, ACTION_DISPLAY_PHRASE_KEY)
+    if target and display_phrase:
+        return f"{_quote(target)}{display_phrase}"
+    # 表示名が届かないときも action_name は書かない。呼び出しの値で、本人の経験の行に
+    # 残すと記憶へ流れる (#1564)。何を試したかは断られた理由の文に残る。
     if target:
         return f"{_quote(target)}に働きかけた"
     return "目の前の対象に働きかけた"
@@ -395,9 +372,6 @@ def _format_report_body(args: Mapping[str, Any]) -> str:
 
 
 ACTION_SUMMARY_FORMATTERS: dict[str, ActionSummaryFormatter] = {
-    TOOL_NAME_MEMO_ADD: _format_memo_add,
-    TOOL_NAME_MEMO_DONE: _format_memo_done,
-    TOOL_NAME_MEMO_LIST: _format_memo_list,
     TOOL_NAME_SPEECH: _format_speak,
     TOOL_NAME_SPOT_GRAPH_ATTACK: _format_attack,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM: _format_buy_item,
@@ -427,22 +401,18 @@ ACTION_SUMMARY_FORMATTERS: dict[str, ActionSummaryFormatter] = {
     TOOL_NAME_SPOT_GRAPH_WAIT: _format_wait,
 }
 
-# 能動想起系は結果文が本体で、行動名と引数を短く自然文化しても情報量が増えない。
+# エピソードの道具は結果文が本体で、行動名と引数を短く自然文化しても情報量が増えない。
 # JSON fallback を意図的に使うツールとして明示分類し、追加時の判断漏れをテストで
 # 捕まえる。
 INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS = frozenset(
     {
-        TOOL_NAME_MEMORY_EXPLORE_RELATED,
-        TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
-        TOOL_NAME_MEMORY_RECALL_EPISODES,
-        TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
+        TOOL_NAME_EPISODE_RECALL,
+        TOOL_NAME_EPISODE_REVISE_INDEX,
     }
 )
 
 
-def format_action_summary_for_display(
-    tool_name: str, args: Mapping[str, Any] | None = None
-) -> str:
+def format_action_summary_for_display(tool_name: str, args: Mapping[str, Any] | None = None) -> str:
     """tool 名 + args から「直近の出来事」用の行動要約文を作る。"""
     formatter = ACTION_SUMMARY_FORMATTERS.get(tool_name)
     if formatter is not None:
@@ -450,20 +420,14 @@ def format_action_summary_for_display(
     return _format_action_summary_fallback(tool_name, args)
 
 
-def _format_action_summary_fallback(
-    tool_name: str, args: Mapping[str, Any] | None = None
-) -> str:
+def _format_action_summary_fallback(tool_name: str, args: Mapping[str, Any] | None = None) -> str:
     """表に無い tool 名を従来の JSON 形式で安全に表示する。"""
     if not args:
         return f"{tool_name} を実行しました。"
     # ``__`` 始まりは engine 内部の受け渡し用キー (履歴投影・正規値)。
     # LLM が読む文面に出さない。表に無い tool へ内部キーが混ざっても
     # 事故にならないよう、名前の規約で落とす。
-    visible = {
-        k: v
-        for k, v in args.items()
-        if k not in ACTION_SUMMARY_HIDDEN_FIELDS and not str(k).startswith("__")
-    }
+    visible = {k: v for k, v in args.items() if k not in ACTION_SUMMARY_HIDDEN_FIELDS and not str(k).startswith("__")}
     if not visible:
         return f"{tool_name} を実行しました。"
     try:

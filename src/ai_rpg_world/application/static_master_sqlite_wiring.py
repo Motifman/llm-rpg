@@ -71,9 +71,7 @@ def attach_static_master_sqlite_repositories(
         ),
         writers=StaticMasterWriteSqliteRepositories(
             spawn_tables=SqliteSpawnTableWriter.for_shared_unit_of_work(connection),
-            monster_templates=SqliteMonsterTemplateWriter.for_shared_unit_of_work(
-                connection
-            ),
+            monster_templates=SqliteMonsterTemplateWriter.for_shared_unit_of_work(connection),
             loot_tables=SqliteLootTableWriter.for_shared_unit_of_work(connection),
             item_specs=SqliteItemSpecWriter.for_shared_unit_of_work(connection),
             recipes=SqliteRecipeWriter.for_shared_unit_of_work(connection),

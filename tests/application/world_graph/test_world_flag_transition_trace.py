@@ -19,12 +19,7 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[3]
-    / "data"
-    / "scenarios"
-    / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 _MORI = PlayerId(1)
 
 
@@ -40,11 +35,7 @@ class _CapturingRecorder(NullTraceRecorder):
 
 
 def _flag_events(recorder: _CapturingRecorder):
-    return [
-        event
-        for event in recorder.events
-        if event.kind == TraceEventKind.WORLD_FLAG_CHANGED
-    ]
+    return [event for event in recorder.events if event.kind == TraceEventKind.WORLD_FLAG_CHANGED]
 
 
 class TestMutableWorldFlagStateTransitions:
@@ -65,10 +56,7 @@ class TestMutableWorldFlagStateTransitions:
             context=context,
         )
 
-        assert [
-            (change.flag_name, change.is_set, change.context)
-            for change in changes
-        ] == [
+        assert [(change.flag_name, change.is_set, change.context) for change in changes] == [
             ("lights_off", True, context),
             ("task_weather", True, context),
         ]
@@ -102,10 +90,9 @@ class TestMutableWorldFlagStateTransitions:
 
         state.remove("prepared:repair:3", context=context)
 
-        assert [
-            (change.flag_name, change.is_set, change.context)
-            for change in changes
-        ] == [("prepared:repair:3", False, context)]
+        assert [(change.flag_name, change.is_set, change.context) for change in changes] == [
+            ("prepared:repair:3", False, context)
+        ]
 
     def test_mutation_context_requires_an_explicit_actor(self) -> None:
         """actor が不明でも None を明記させ、呼び出し元の渡し忘れを許さない。"""
@@ -152,7 +139,5 @@ class TestWorldFlagTransitionTrace:
             },
         )
 
-        assert runtime._world_flag_state.as_frozen_set() == frozenset(
-            {"task_weather", "task_wiring"}
-        )
+        assert runtime._world_flag_state.as_frozen_set() == frozenset({"task_weather", "task_wiring"})
         assert _flag_events(recorder) == []

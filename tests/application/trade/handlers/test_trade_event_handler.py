@@ -165,11 +165,7 @@ class TestTradeEventHandler:
     ) -> None:
         """先行投影がないcancel/declineは処理済みにせず、再配送可能な例外にする。"""
         handler, _ = setup_handler
-        method_name = (
-            "handle_trade_cancelled"
-            if isinstance(event, TradeCancelledEvent)
-            else "handle_trade_declined"
-        )
+        method_name = "handle_trade_cancelled" if isinstance(event, TradeCancelledEvent) else "handle_trade_declined"
 
         with pytest.raises(TradeProjectionPrerequisiteMissingException):
             getattr(handler, method_name)(event)

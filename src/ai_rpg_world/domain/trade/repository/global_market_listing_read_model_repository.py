@@ -12,10 +12,7 @@ class GlobalMarketListingReadModelRepository(Repository[GlobalMarketListingReadM
 
     @abstractmethod
     def find_listings(
-        self,
-        filter_condition: TradeSearchFilter,
-        limit: int = 50,
-        cursor: ListingCursor | None = None
+        self, filter_condition: TradeSearchFilter, limit: int = 50, cursor: ListingCursor | None = None
     ) -> tuple[list[GlobalMarketListingReadModel], ListingCursor | None]:
         """フィルタ条件で出品を取得（カーソルベースページング）
 

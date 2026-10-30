@@ -43,7 +43,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -67,11 +66,16 @@ SPOT_C = SpotId.create(3)
 
 def _node(spot_id: SpotId) -> SpotNode:
     return SpotNode(
-        spot_id=spot_id, name=f"spot{spot_id.value}", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=spot_id,
+        name=f"spot{spot_id.value}",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
-            lighting=LightingEnum.BRIGHT, sound_ambient=None,
-            temperature=TemperatureEnum.NORMAL, smell=None,
+            lighting=LightingEnum.BRIGHT,
+            sound_ambient=None,
+            temperature=TemperatureEnum.NORMAL,
+            smell=None,
         ),
     )
 
@@ -79,9 +83,13 @@ def _node(spot_id: SpotId) -> SpotNode:
 def _conn(connection_id: int, from_id: SpotId, to_id: SpotId) -> SpotConnection:
     return SpotConnection(
         connection_id=ConnectionId.create(connection_id),
-        from_spot_id=from_id, to_spot_id=to_id,
-        name="edge", description="", travel_ticks=1,
-        is_bidirectional=False, passage=Passage.open(),
+        from_spot_id=from_id,
+        to_spot_id=to_id,
+        name="edge",
+        description="",
+        travel_ticks=1,
+        is_bidirectional=False,
+        passage=Passage.open(),
     )
 
 
@@ -103,8 +111,13 @@ def _template(*, chase_search_ticks: int = 3) -> MonsterTemplate:
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(100, True),
@@ -121,10 +134,11 @@ def _monster(template: MonsterTemplate | None = None) -> MonsterAggregate:
     return MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=template or _template(),
-        world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -169,7 +183,8 @@ class TestHeadingToLastObserved:
         monster = _monster()
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         # CHASE 状態で last_observed=B、現在位置 A
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
@@ -193,10 +208,12 @@ class TestHeadingToLastObserved:
         monster = _monster()
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
-            attacker_ref=ref, last_observed_target_spot_id=SPOT_C,
+            attacker_ref=ref,
+            last_observed_target_spot_id=SPOT_C,
             current_tick=WorldTick(9),
         )
 
@@ -223,7 +240,8 @@ class TestSearchStart:
         monster = _monster(_template(chase_search_ticks=3))
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         # last_observed=B、現在位置 B (= 既に到着済みの状況)
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
@@ -248,7 +266,8 @@ class TestSearchStart:
         monster = _monster(_template(chase_search_ticks=1))
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
 
@@ -269,7 +288,8 @@ class TestSearchStart:
         monster = _monster(_template(chase_search_ticks=0))
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
 
@@ -292,7 +312,8 @@ class TestSearchContinuationAndExpiry:
         monster = _monster(_template(chase_search_ticks=3))
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
         # 既に探索フェーズ中 (timer=2)
@@ -316,7 +337,8 @@ class TestSearchContinuationAndExpiry:
         monster = _monster(_template(chase_search_ticks=3))
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
         monster.start_chase_search(1)
@@ -347,7 +369,8 @@ class TestSearchRediscoveryOtherSpot:
         monster = _monster(_template(chase_search_ticks=3))
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
         monster.start_chase_search(2)
@@ -387,8 +410,13 @@ class TestSearchRediscovery:
             template_id=MonsterTemplateId.create(1),
             name="Wolf",
             base_stats=BaseStats(
-                max_hp=20, max_mp=0, attack=4,
-                defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+                max_hp=20,
+                max_mp=0,
+                attack=4,
+                defense=0,
+                speed=1,
+                critical_rate=0.0,
+                evasion_rate=0.0,
             ),
             reward_info=RewardInfo(exp=1, gold=1),
             respawn_info=RespawnInfo(100, True),
@@ -402,7 +430,8 @@ class TestSearchRediscovery:
         monster = _monster(ferocious_template)
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_B, current_tick=WorldTick(0))
         monster.start_chase_search(2)
@@ -417,10 +446,7 @@ class TestSearchRediscovery:
 
         assert result is not None
         # 攻撃 event が発火
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAttackedPlayerInSpotEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAttackedPlayerInSpotEvent)]
         assert len(events) == 1
         # search_timer は 0 にリセットされた
         assert monster._behavior_state.search_timer == 0
@@ -437,18 +463,22 @@ class TestNoLastObservedFallback:
         monster = _monster()
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         # behavior_state を直接 CHASE にして last_observed=None の不整合を作る
         from ai_rpg_world.domain.monster.value_object.monster_behavior_state import (
             MonsterBehaviorState,
         )
+
         monster._behavior_state = MonsterBehaviorState(
             state=BehaviorStateEnum.CHASE,
             target_id=None,
             last_known_position=None,
             initial_position=None,
-            patrol_index=0, search_timer=0, failure_count=0,
+            patrol_index=0,
+            search_timer=0,
+            failure_count=0,
             chase_attacker_ref=ref,
             last_observed_target_spot_id=None,
         )

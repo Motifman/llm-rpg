@@ -34,27 +34,17 @@ class TradeSide:
             spec_id, quantity = entry
             for name, value in (("item_spec_id", spec_id), ("quantity", quantity)):
                 if isinstance(value, bool) or not isinstance(value, int):
-                    raise TradeOfferValidationException(
-                        f"{name} は整数で指定してください (got {value!r})"
-                    )
+                    raise TradeOfferValidationException(f"{name} は整数で指定してください (got {value!r})")
             if quantity <= 0:
-                raise TradeOfferValidationException(
-                    f"quantity は 1 以上で指定してください (got {quantity})"
-                )
+                raise TradeOfferValidationException(f"quantity は 1 以上で指定してください (got {quantity})")
             if spec_id in seen:
                 # どちらの個数が効くか決まらない。商人の価格表で同じ判断をしている。
-                raise TradeOfferValidationException(
-                    f"同じ品を片側に二度書けません (item_spec_id={spec_id})"
-                )
+                raise TradeOfferValidationException(f"同じ品を片側に二度書けません (item_spec_id={spec_id})")
             seen.add(spec_id)
         if isinstance(self.gold, bool) or not isinstance(self.gold, int):
-            raise TradeOfferValidationException(
-                f"gold は整数で指定してください (got {self.gold!r})"
-            )
+            raise TradeOfferValidationException(f"gold は整数で指定してください (got {self.gold!r})")
         if self.gold < 0:
-            raise TradeOfferValidationException(
-                f"gold は 0 以上で指定してください (got {self.gold})"
-            )
+            raise TradeOfferValidationException(f"gold は 0 以上で指定してください (got {self.gold})")
 
     @property
     def is_empty(self) -> bool:

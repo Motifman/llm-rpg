@@ -30,9 +30,7 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
 )
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
 _KUZE = PlayerId(3)
@@ -55,11 +53,7 @@ def _wiring(runtime) -> _WorldLlmWiring:
 
 def _user_prompt(runtime, player_id: PlayerId) -> str:
     prompt = runtime.build_full_prompt(player_id)
-    return next(
-        message["content"]
-        for message in prompt["messages"]
-        if message["role"] == "user"
-    )
+    return next(message["content"] for message in prompt["messages"] if message["role"] == "user")
 
 
 def _main_distribution_panel_label(runtime, player_id: PlayerId) -> tuple[str, object]:
@@ -103,9 +97,7 @@ def _place_living(runtime, player_id: PlayerId, spot_name: str) -> None:
 
 def _make_dead(runtime, player_id: PlayerId, spot_name: str) -> None:
     _place_living(runtime, player_id, spot_name)
-    runtime._fallen_body_registry.record(
-        player_id, _spot(runtime, spot_name), WorldTick(runtime.current_tick())
-    )
+    runtime._fallen_body_registry.record(player_id, _spot(runtime, spot_name), WorldTick(runtime.current_tick()))
     status = runtime._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
     runtime._player_status_repo.save(status)
@@ -115,9 +107,7 @@ def _make_dead(runtime, player_id: PlayerId, spot_name: str) -> None:
 
 def _make_downed(runtime, player_id: PlayerId, spot_name: str) -> None:
     _place_living(runtime, player_id, spot_name)
-    runtime._fallen_body_registry.record(
-        player_id, _spot(runtime, spot_name), WorldTick(runtime.current_tick())
-    )
+    runtime._fallen_body_registry.record(player_id, _spot(runtime, spot_name), WorldTick(runtime.current_tick()))
     status = runtime._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
     runtime._player_status_repo.save(status)
@@ -140,9 +130,10 @@ def test_departed_position_is_visible_only_from_the_departed_side(runtime) -> No
     assert '"セナ"' not in living_text
     assert "現在地: 物資庫" in departed_text
     assert '"アオイ"' in departed_text
-    assert EntityId.create(int(_SENA)) not in runtime._spot_graph_repo.find_graph().presence_at(
-        _spot(runtime, "storage")
-    ).present_entity_ids
+    assert (
+        EntityId.create(int(_SENA))
+        not in runtime._spot_graph_repo.find_graph().presence_at(_spot(runtime, "storage")).present_entity_ids
+    )
 
 
 def test_departed_position_does_not_count_as_physical_presence(runtime) -> None:
@@ -152,13 +143,9 @@ def test_departed_position_does_not_count_as_physical_presence(runtime) -> None:
     runtime._departed_position_store.move(_SENA, _spot(runtime, "storage"))
     storage = runtime._spot_interior_repo.find_by_spot_id(_spot(runtime, "storage"))
     assert storage is not None
-    lantern_case = next(
-        obj for obj in storage.objects if obj.name == "非常用ランタンケース"
-    )
+    lantern_case = next(obj for obj in storage.objects if obj.name == "非常用ランタンケース")
     take_lantern = next(
-        interaction
-        for interaction in lantern_case.interactions
-        if interaction.action_name == "take_lantern"
+        interaction for interaction in lantern_case.interactions if interaction.action_name == "take_lantern"
     )
     two_people_required = replace(
         take_lantern,
@@ -177,9 +164,7 @@ def test_departed_position_does_not_count_as_physical_presence(runtime) -> None:
     )
     runtime._spot_interior_repo.save(
         _spot(runtime, "storage"),
-        storage.replace_object(
-            replace(lantern_case, interactions=(two_people_required,))
-        ),
+        storage.replace_object(replace(lantern_case, interactions=(two_people_required,))),
     )
 
     with pytest.raises(Exception, match="二人いなければ"):
@@ -197,12 +182,10 @@ def test_departed_player_can_move_without_moving_the_body(runtime) -> None:
             break
 
     assert runtime.get_player_spot_name(_SENA) == "物資庫"
-    assert runtime._fallen_body_registry.find(_SENA).spot_id == _spot(
+    assert runtime._fallen_body_registry.find(_SENA).spot_id == _spot(runtime, "corridor")
+    assert runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(_SENA))) == _spot(
         runtime, "corridor"
     )
-    assert runtime._spot_graph_repo.find_graph().get_entity_spot(
-        EntityId.create(int(_SENA))
-    ) == _spot(runtime, "corridor")
 
 
 def test_missing_departed_position_never_falls_back_to_moving_the_body(runtime) -> None:
@@ -217,9 +200,9 @@ def test_missing_departed_position_never_falls_back_to_moving_the_body(runtime) 
         runtime.do_move(_SENA, "storage")
 
     assert runtime.get_player_spot_id(_SENA) is None
-    assert runtime._spot_graph_repo.find_graph().get_entity_spot(
-        EntityId.create(int(_SENA))
-    ) == _spot(runtime, "corridor")
+    assert runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(_SENA))) == _spot(
+        runtime, "corridor"
+    )
 
 
 def test_departed_player_can_complete_their_declared_task(runtime) -> None:
@@ -256,9 +239,7 @@ def test_departed_wrong_action_guidance_does_not_reveal_living_only_action(
     """候補に出ない生者専用操作は、幽霊が名前を誤ったときの案内にも出ない。"""
     _make_dead(runtime, _SENA, "machine_room")
 
-    result = _interact_with_main_distribution_panel(
-        runtime, _SENA, "restore_lighting"
-    )
+    result = _interact_with_main_distribution_panel(runtime, _SENA, "restore_lighting")
 
     assert result.error_code == "INTERACTION_ACTION_NOT_FOUND"
     assert "restore_power" not in result.message
@@ -270,9 +251,7 @@ def test_living_wrong_action_guidance_keeps_the_visible_restore_action(
     """生者には候補表示と同じ restore_power を誤入力時の案内にも残す。"""
     _place_living(runtime, _HAGI, "machine_room")
 
-    result = _interact_with_main_distribution_panel(
-        runtime, _HAGI, "restore_lighting"
-    )
+    result = _interact_with_main_distribution_panel(runtime, _HAGI, "restore_lighting")
 
     assert result.error_code == "INTERACTION_ACTION_NOT_FOUND"
     assert "restore_power" in result.message
@@ -284,9 +263,7 @@ def test_departed_restore_refusal_explains_that_a_living_body_is_required(
     """幽霊が復旧を呼ぶと、曖昧な不能でなく生きた体が要る理由を返す。"""
     _make_dead(runtime, _SENA, "machine_room")
 
-    result = _interact_with_main_distribution_panel(
-        runtime, _SENA, "restore_power"
-    )
+    result = _interact_with_main_distribution_panel(runtime, _SENA, "restore_power")
 
     assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
     assert "生きた体が要る" in result.message
@@ -296,9 +273,7 @@ def test_departed_restore_refusal_explains_which_tasks_can_continue(runtime) -> 
     """幽霊の復旧拒否は、失われていない自分の担当と共通点検も伝える。"""
     _make_dead(runtime, _SENA, "machine_room")
 
-    result = _interact_with_main_distribution_panel(
-        runtime, _SENA, "restore_power"
-    )
+    result = _interact_with_main_distribution_panel(runtime, _SENA, "restore_power")
 
     assert "自分の担当と共通の点検" in result.message
 
@@ -307,9 +282,7 @@ def test_departed_restore_refusal_has_its_own_trace_classification(runtime) -> N
     """存在層の拒否は一般の前提不足へ混ぜず、actor_plane として記録する。"""
     _make_dead(runtime, _SENA, "machine_room")
 
-    result = _interact_with_main_distribution_panel(
-        runtime, _SENA, "restore_power"
-    )
+    result = _interact_with_main_distribution_panel(runtime, _SENA, "restore_power")
 
     assert result.trace_payload == {"precondition_failure_kind": "actor_plane"}
 
@@ -345,9 +318,7 @@ def test_departed_action_does_not_accumulate_fatigue(runtime) -> None:
     wiring = _wiring(runtime)
     context = runtime.build_llm_context(_SENA).tool_runtime_context
     target_label = next(
-        label
-        for label, target in context.targets.items()
-        if getattr(target, "display_name", "") == "照明設備"
+        label for label, target in context.targets.items() if getattr(target, "display_name", "") == "照明設備"
     )
     before = runtime._player_status_repo.find_by_id(_SENA).fatigue_value
 
@@ -374,15 +345,10 @@ def test_departed_player_sees_their_own_body_without_a_tool_target(runtime) -> N
     context = runtime.build_llm_context(_AOI).tool_runtime_context
 
     assert text.count('"アオイ" (あなたの亡骸)') == 1
-    own_body_row = next(
-        line for line in text.splitlines() if '"アオイ" (あなたの亡骸)' in line
-    )
+    own_body_row = next(line for line in text.splitlines() if '"アオイ" (あなたの亡骸)' in line)
     assert "loot_from_downed" not in own_body_row
     assert "report_body" not in own_body_row
-    assert all(
-        getattr(target, "player_id", None) != int(_AOI)
-        for target in context.targets.values()
-    )
+    assert all(getattr(target, "player_id", None) != int(_AOI) for target in context.targets.values())
 
 
 def test_departed_victim_is_told_they_can_move_without_learning_the_killer(runtime) -> None:
@@ -395,11 +361,7 @@ def test_departed_victim_is_told_they_can_move_without_learning_the_killer(runti
     runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
 
     entries = runtime._obs_buffer.get_observations(_SENA)[before:]
-    downed = next(
-        entry.output
-        for entry in entries
-        if entry.output.structured.get("type") == "player_downed"
-    )
+    downed = next(entry.output for entry in entries if entry.output.structured.get("type") == "player_downed")
     assert "死亡した後も移動できる" in downed.prose
     assert "生きている者には姿が見えず、声も届かない" in downed.prose
     assert "クゼ" not in downed.prose
@@ -446,28 +408,16 @@ def test_departed_player_is_offered_only_their_physical_capabilities(runtime) ->
         pytest.param(True, True, False, id="departed_meeting"),
     ],
 )
-@pytest.mark.parametrize(
-    "include_todo_tools",
-    [
-        pytest.param(True, id="with_memory_tools"),
-        pytest.param(False, id="without_memory_tools"),
-    ],
-)
 def test_actual_payload_keeps_the_always_present_prefix_in_every_observed_state(
     runtime,
     departed: bool,
     in_meeting: bool,
     voted: bool,
-    include_todo_tools: bool,
 ) -> None:
-    """run 035 の五状態で、設定上の常在ツールは実 payload の先頭で同順になる。
+    """run 035 の五状態で、実 payload の先頭が ``wait`` / ``speak`` / ``listen`` の順になる。
 
-    記憶ツールを無効にした比較構成では ``wait`` / ``speak`` に続く
-    ``listen`` までを実 payload で縛る。死亡時に ``listen`` が落ちる退行は、
-    長い記憶ツール定義が間に無い構成で初めて接頭辞の差として表れるためである。
+    死亡時に ``listen`` が落ちる退行は、この接頭辞の差として表れる。
     """
-    if not include_todo_tools:
-        runtime = create_world_runtime(_SCENARIO, include_todo_tools=False)
     player_id = _SENA if departed else _MORI
     if departed:
         _make_dead(runtime, player_id, "hall")
@@ -479,16 +429,9 @@ def test_actual_payload_keeps_the_always_present_prefix_in_every_observed_state(
     if voted:
         runtime.cast_vote(player_id, _KUZE)
 
-    names = [
-        tool["function"]["name"]
-        for tool in _wiring(runtime)._build_tools_payload(player_id)
-    ]
+    names = [tool["function"]["name"] for tool in _wiring(runtime)._build_tools_payload(player_id)]
 
-    expected_prefix = ["wait", "speak"]
-    if include_todo_tools:
-        expected_prefix += ["memo_add", "memo_list", "memo_done"]
-    else:
-        expected_prefix += ["listen"]
+    expected_prefix = ["wait", "speak", "listen"]
     assert names[: len(expected_prefix)] == expected_prefix
 
 
@@ -555,9 +498,7 @@ def test_undeclared_interaction_is_rejected_for_departed_player(runtime) -> None
 def test_departed_player_cannot_use_the_sabotage_panel(runtime) -> None:
     """幽霊には手元の制御端末を表示せず、直接指定しても隔壁妨害を拒否する。"""
     _make_dead(runtime, _KUZE, "hall")
-    terminal = ItemSpecId.create(
-        runtime.id_mapper.get_int("item_spec", "control_terminal")
-    )
+    terminal = ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "control_terminal"))
 
     prompt = runtime.build_full_prompt(_KUZE)["messages"][1]["content"]
     assert "seal_bulkhead" not in prompt

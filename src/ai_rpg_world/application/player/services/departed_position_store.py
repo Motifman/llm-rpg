@@ -22,9 +22,7 @@ class DepartedPositionStore:
 
     def move(self, player_id: PlayerId, spot_id: SpotId) -> None:
         if player_id not in self._positions:
-            raise ValueError(
-                f"departed player is not placed: player_id={int(player_id)}"
-            )
+            raise ValueError(f"departed player is not placed: player_id={int(player_id)}")
         self._positions[player_id] = spot_id
 
     def remove(self, player_id: PlayerId) -> None:
@@ -33,9 +31,7 @@ class DepartedPositionStore:
     def players_at(self, spot_id: SpotId) -> tuple[PlayerId, ...]:
         return tuple(
             player_id
-            for player_id, current in sorted(
-                self._positions.items(), key=lambda item: int(item[0])
-            )
+            for player_id, current in sorted(self._positions.items(), key=lambda item: int(item[0]))
             if current == spot_id
         )
 

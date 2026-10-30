@@ -126,6 +126,8 @@ unlocked で自己生成に任せる。1 つの機構で両方をカバーする
 
 ### 作業項目 (G 系)
 
+> G2 (`goal_update`) と G4 の清算 (`goal_outcome`、清算の信念の証拠、trace の `goal_resolution` / `goal_revision_rejected`) は、目的の見直し (`GOAL_REVISION_ENABLED`) として、記憶の部品の撤去 (#1631) の #1664 で消した。G3 の振り返り (`GOAL_REFLECT_ENABLED`) は #1679 で消した。G1 の goal store (`GOAL_STORE_ENABLED`、snapshot の `goal_journal`) も #1686 で消した。【現在の目的】は、シナリオの目的の文をそのまま出す。
+
 - **G1 — goal store**: per-Being の journal 方式 (belief journal と同型:
   改訂は supersede、履歴は消えない)。【現在の目的】を store から描画。
   シナリオは初期値 + locked flag。snapshot 追従 (checklist #27)。
@@ -145,10 +147,12 @@ unlocked で自己生成に任せる。1 つの機構で両方をカバーする
   > 変更の頻度ではなく**高度** (目的が次の 1 手 = intent に退化しない
   > こと)。目標が状況で変わること自体は不自然ではない
 
-  高度の防衛は schema 説明文で行う (`intention` との対比が鍵):
+  高度の防衛は schema 説明文で行う (次の 1 手の意図との対比が鍵):
   「数日スケールの方針を捨てて立て直すときにだけ書く。次の 1 手の意図は
-  intention に書くこと。目的を変えることは、これまでの自分の方針を
-  捨てることでもある。続けるなら書かない」。頻度は機構で強制しない —
+  ここに書かない。目的を変えることは、これまでの自分の方針を
+  捨てることでもある。続けるなら書かない」。初版は「次の 1 手の意図は
+  intention に書くこと」と書いていたが、`goal_update` を足す toolset は
+  `intention` 引数を出していないので、無い引数を指す文になっていた (#1521)。頻度は機構で強制しない —
   説明文の摩擦 + journal での churn 観測 + 実測で退化が出たら
   min-interval cap を定数 1 個 (発動時も観測で返し silent にしない)。
   書けば store が supersede で更新、書かなければ現状維持。locked は

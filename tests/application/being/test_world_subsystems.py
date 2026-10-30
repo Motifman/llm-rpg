@@ -99,9 +99,7 @@ class TestPendingFoodSpoilageCodec:
         )
         emitted: list[tuple[PlayerId, Any]] = []
         runtime.get_player_ids = lambda: [PlayerId(1), PlayerId(2)]
-        runtime._emit_observation_directly = (
-            lambda player_id, output: emitted.append((player_id, output))
-        )
+        runtime._emit_observation_directly = lambda player_id, output: emitted.append((player_id, output))
 
         WorldRuntime._flush_pending_food_spoiled(runtime)
 
@@ -225,9 +223,7 @@ class TestWorldTickCodec:
         provider = InMemoryGameTimeProvider()
         runtime = SimpleNamespace(_time_provider=provider)
         with pytest.raises(ValueError, match="schema_version"):
-            WorldTickSubsystemCodec().restore(
-                runtime, {"schema_version": 999, "world_tick": 1}
-            )
+            WorldTickSubsystemCodec().restore(runtime, {"schema_version": 999, "world_tick": 1})
 
     def test_set_current_tick_negative_raises_value_error(self) -> None:
         """setcurrenttick の負値は ValueError。"""
@@ -267,9 +263,7 @@ class TestPlayerVitalsCodec:
             repo[PlayerId(1)] = agg
 
         src_runtime = SimpleNamespace(
-            _player_status_repo=SimpleNamespace(
-                find_by_id=find_by_id, save=save
-            ),
+            _player_status_repo=SimpleNamespace(find_by_id=find_by_id, save=save),
             get_player_ids=lambda: [PlayerId(1)],
         )
         captured = PlayerVitalsSubsystemCodec().capture(src_runtime)
@@ -294,9 +288,7 @@ class TestPlayerNeedsCodec:
 
     def test_capture_restore_round_trip_3(self) -> None:
         agg = SimpleNamespace()
-        agg._needs = AgentNeeds.default(max_value=100).with_updated(
-            AgentNeed.create(NeedType.HUNGER, 65, 100)
-        )
+        agg._needs = AgentNeeds.default(max_value=100).with_updated(AgentNeed.create(NeedType.HUNGER, 65, 100))
         agg._events = []
         src_repo: dict[PlayerId, Any] = {PlayerId(1): agg}
         src_runtime = SimpleNamespace(
@@ -333,9 +325,7 @@ class TestPlayerPositionCodec:
         """capture は全 player の spotid を集める。"""
         # runtime stub: get_player_ids + get_player_spot_id を持つ
         runtime = SimpleNamespace(
-            _spot_graph_repo=SimpleNamespace(
-                find_graph=lambda: SimpleNamespace()
-            ),
+            _spot_graph_repo=SimpleNamespace(find_graph=lambda: SimpleNamespace()),
             get_player_ids=lambda: [PlayerId(1), PlayerId(2)],
             get_player_spot_id=lambda pid: "spot_a" if pid.value == 1 else "spot_b",
         )

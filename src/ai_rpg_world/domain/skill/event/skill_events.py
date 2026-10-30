@@ -89,4 +89,3 @@ class SkillEvolutionRejectedEvent(BaseDomainEvent[SkillDeckProgressId, "SkillDec
     proposal_id: int
     proposal_type: SkillProposalType
     offered_skill_id: SkillId
-

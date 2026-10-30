@@ -46,14 +46,8 @@ class OutboxDeliveryLoop:
             or not math.isfinite(self.interval_seconds)
             or self.interval_seconds < _MIN_INTERVAL_SECONDS
         ):
-            raise ValueError(
-                f"interval_secondsは{_MIN_INTERVAL_SECONDS}以上である必要があります"
-            )
-        if (
-            isinstance(self.batch_limit, bool)
-            or not isinstance(self.batch_limit, int)
-            or self.batch_limit < 1
-        ):
+            raise ValueError(f"interval_secondsは{_MIN_INTERVAL_SECONDS}以上である必要があります")
+        if isinstance(self.batch_limit, bool) or not isinstance(self.batch_limit, int) or self.batch_limit < 1:
             raise ValueError("batch_limitは1以上の整数である必要があります")
 
     @property

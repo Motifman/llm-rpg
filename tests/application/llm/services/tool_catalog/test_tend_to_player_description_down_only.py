@@ -40,20 +40,16 @@ class TestTendToPlayerDescriptionIsExplicitAboutDownOnly:
         """
         desc = TEND_TO_PLAYER_DEFINITION.description
         assert "ダウン" in desc, (
-            "description に「ダウン」の状態表現を含めないと「倒れている」が"
-            "抽象的すぎて疲労や空腹と混同される"
+            "description に「ダウン」の状態表現を含めないと「倒れている」が抽象的すぎて疲労や空腹と混同される"
         )
         # 逆に内部技術用語はもう漏らさないこと
-        assert "status_effect" not in desc, (
-            "内部フィールド名 status_effect は LLM 露出テキストには不要"
-        )
+        assert "status_effect" not in desc, "内部フィールド名 status_effect は LLM 露出テキストには不要"
 
     def test_hp_zero(self) -> None:
         """「倒れている」が比喩か機械的状態かを区別するため HP 0 / HP=0 を書く。"""
         desc = TEND_TO_PLAYER_DEFINITION.description
         assert "HP 0" in desc or "HP=0" in desc or "HP がゼロ" in desc, (
-            "down の機械的定義 (HP 0) を書かないと、疲労 100 や空腹 100 を "
-            "down と読み替える誤発火が起きる"
+            "down の機械的定義 (HP 0) を書かないと、疲労 100 や空腹 100 を down と読み替える誤発火が起きる"
         )
 
     def test_description_explicitly_excludes_fatigue_and_hunger(self) -> None:
@@ -71,8 +67,7 @@ class TestTendToPlayerDescriptionIsExplicitAboutDownOnly:
         主動詞は「蘇生」(= 倒れた人を起こす) に寄せる。"""
         desc = TEND_TO_PLAYER_DEFINITION.description
         assert "蘇生" in desc, (
-            "「介抱」だけでは「疲れた相手をケアする」と読まれる。"
-            "「蘇生」を主動詞に置いて down 限定の含意を強める"
+            "「介抱」だけでは「疲れた相手をケアする」と読まれる。「蘇生」を主動詞に置いて down 限定の含意を強める"
         )
 
 

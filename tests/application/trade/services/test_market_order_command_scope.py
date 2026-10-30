@@ -84,11 +84,7 @@ def _capture_observation_and_trace(
     original_publish = runtime._speech_event_publisher.publish_all
 
     def capture_events(published):
-        events.extend(
-            event
-            for event in published
-            if isinstance(event, MarketBoardActivityEvent)
-        )
+        events.extend(event for event in published if isinstance(event, MarketBoardActivityEvent))
         return original_publish(published)
 
     monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", capture_events)

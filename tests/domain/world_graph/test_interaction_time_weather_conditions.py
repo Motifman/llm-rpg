@@ -67,7 +67,9 @@ class TestTimeOfDayIsNot:
             failure_message="夜は釣りできない",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_time_of_day_phase="morning",
         )
@@ -82,7 +84,9 @@ class TestTimeOfDayIsNot:
             failure_message="夜は釣りできない",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_time_of_day_phase="night",
         )
@@ -98,7 +102,9 @@ class TestTimeOfDayIsNot:
             failure_message="",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_time_of_day_phase=None,  # provider 不在
         )
@@ -112,7 +118,9 @@ class TestTimeOfDayIsNot:
             required_time_of_day_phase=None,
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_time_of_day_phase="morning",
         )
@@ -129,7 +137,9 @@ class TestTimeOfDayIs:
             required_time_of_day_phase="noon",
         )
         ok, _ = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_time_of_day_phase="noon",
         )
@@ -142,7 +152,9 @@ class TestTimeOfDayIs:
             required_time_of_day_phase="noon",
         )
         ok, _ = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_time_of_day_phase="evening",
         )
@@ -159,7 +171,9 @@ class TestWeatherIsNot:
             required_weather_type="STORM",
         )
         ok, _ = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_weather_type="CLEAR",
         )
@@ -173,7 +187,9 @@ class TestWeatherIsNot:
             failure_message="嵐で危険",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_weather_type="STORM",
         )
@@ -187,7 +203,9 @@ class TestWeatherIsNot:
             required_weather_type="STORM",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_weather_type=None,
         )
@@ -205,7 +223,9 @@ class TestWeatherIs:
             required_weather_type="RAIN",
         )
         ok, _ = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_weather_type="RAIN",
         )
@@ -218,7 +238,9 @@ class TestWeatherIs:
             required_weather_type="RAIN",
         )
         ok, _ = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_weather_type="CLEAR",
         )

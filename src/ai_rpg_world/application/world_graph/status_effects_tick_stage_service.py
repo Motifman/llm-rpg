@@ -28,11 +28,11 @@ if TYPE_CHECKING:
 # 継続効果の毎 tick 変化量 (HP delta)。負数は damage、正数は heal。
 # 値は v2 シナリオの 1 tick = 1 時間 スケールに合わせた暫定値。
 DEFAULT_PER_TICK_HP_DELTA: dict[StatusEffectType, int] = {
-    StatusEffectType.BLEEDING: -1,       # 出血: 強め (24 時間で -24 HP)
-    StatusEffectType.HYPOTHERMIA: -1,    # 低体温: 出血と同程度
-    StatusEffectType.INFECTED: -1,        # 感染症: 同程度 (放置で死)
-    StatusEffectType.POISON: -2,          # 毒キノコ食害: 出血より速い
-    StatusEffectType.REGENERATION: 1,     # 回復: 緩やか
+    StatusEffectType.BLEEDING: -1,  # 出血: 強め (24 時間で -24 HP)
+    StatusEffectType.HYPOTHERMIA: -1,  # 低体温: 出血と同程度
+    StatusEffectType.INFECTED: -1,  # 感染症: 同程度 (放置で死)
+    StatusEffectType.POISON: -2,  # 毒キノコ食害: 出血より速い
+    StatusEffectType.REGENERATION: 1,  # 回復: 緩やか
 }
 
 
@@ -63,15 +63,11 @@ class StatusEffectsTickStageService:
         """全プレイヤーの active_effects を tick 進行に合わせて処理する。"""
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            raise RuntimeError(
-                "status effects tickにはCommandScopeFactoryの配線が必要です"
-            )
+            raise RuntimeError("status effects tickにはCommandScopeFactoryの配線が必要です")
         with scope_factory.create() as scope:
             repositories = scope.repositories
             if repositories is None:
-                raise RuntimeError(
-                    "status effects tick用repository providerがありません"
-                )
+                raise RuntimeError("status effects tick用repository providerがありません")
             self._run_with_repository(
                 current_tick,
                 repositories.player_statuses,

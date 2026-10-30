@@ -275,12 +275,7 @@ class TestExplicitHandlerImmediacy:
 class TestProductionLifecycleBoundary:
     """本番pipelineが身体・死亡猶予の正本状態を変更しないことを保証する。"""
 
-    _SCENARIO = (
-        Path(__file__).resolve().parents[3]
-        / "data"
-        / "scenarios"
-        / "station_drill.json"
-    )
+    _SCENARIO = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 
     def test_downed_event_does_not_create_body_or_grace_timer(self) -> None:
         """直接配信したPlayerDownedEventは身体も死亡猶予も作らない。"""
@@ -296,9 +291,7 @@ class TestProductionLifecycleBoundary:
         """直接配信したPlayerRevivedEventは既存の身体と死亡猶予を補正しない。"""
         runtime = create_world_runtime(self._SCENARIO)
         player_id = PlayerId(2)
-        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
-            EntityId.create(int(player_id))
-        )
+        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
         runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(0))
         runtime._death_grace_timer.register(player_id, downed_at_tick=0)
 
@@ -306,6 +299,7 @@ class TestProductionLifecycleBoundary:
 
         assert runtime._fallen_body_registry.find(player_id) is not None
         assert runtime._death_grace_timer.is_pending(player_id) is True
+
 
 class TestSideHandlerFailureTrace:
     """side handler の失敗を SIDE_HANDLER_FAILED trace に落とす (観測。挙動は変えない)。"""
@@ -360,9 +354,7 @@ class TestSideHandlerFailureTrace:
         recorder: list[str] = []
         tracer = _RecordingTraceRecorder()
         publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, tracer))
-        publisher.register_handler(
-            PlayerDownedEvent, _RecordingHandler("boom", recorder, fail=True)
-        )
+        publisher.register_handler(PlayerDownedEvent, _RecordingHandler("boom", recorder, fail=True))
         event = _make_downed_event(3)
 
         publisher.publish(event)
@@ -402,9 +394,7 @@ class TestSideHandlerFailureTrace:
                 raise RuntimeError("recorder down")
 
         recorder: list[str] = []
-        publisher = PipelineEventPublisher(
-            _FakeRuntimeWithTrace(recorder, _RaisingTraceRecorder())
-        )
+        publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, _RaisingTraceRecorder()))
         publisher.register_handler(_EventA, _RecordingHandler("boom", recorder, fail=True))
 
         publisher.publish(_EventA())  # 例外が漏れないこと

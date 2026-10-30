@@ -41,25 +41,15 @@ class Being(AggregateRoot):
     ) -> None:
         super().__init__()
         if not isinstance(being_id, BeingId):
-            raise TypeError(
-                f"being_id must be BeingId, got {type(being_id).__name__}"
-            )
+            raise TypeError(f"being_id must be BeingId, got {type(being_id).__name__}")
         if not isinstance(identity, BeingIdentity):
-            raise TypeError(
-                f"identity must be BeingIdentity, got {type(identity).__name__}"
-            )
+            raise TypeError(f"identity must be BeingIdentity, got {type(identity).__name__}")
         if attachment is not None and not isinstance(attachment, BeingAttachment):
-            raise TypeError(
-                f"attachment must be BeingAttachment or None, "
-                f"got {type(attachment).__name__}"
-            )
+            raise TypeError(f"attachment must be BeingAttachment or None, got {type(attachment).__name__}")
         validated: list[MemoryKind] = []
         for kind in declared_memory_kinds:
             if not isinstance(kind, MemoryKind):
-                raise TypeError(
-                    f"declared_memory_kinds must contain MemoryKind, "
-                    f"got {type(kind).__name__}"
-                )
+                raise TypeError(f"declared_memory_kinds must contain MemoryKind, got {type(kind).__name__}")
             validated.append(kind)
         self._being_id = being_id
         self._identity = identity
@@ -99,9 +89,7 @@ class Being(AggregateRoot):
         """指定 ``kind`` を所有宣言していれば True。"""
         return kind in self._declared_memory_kinds
 
-    def with_declared_memory_kinds(
-        self, kinds: Iterable[MemoryKind]
-    ) -> Being:
+    def with_declared_memory_kinds(self, kinds: Iterable[MemoryKind]) -> Being:
         """``declared_memory_kinds`` を差し替えた新しい Being を返す。
 
         集約 root の不変性 (= identity / being_id) は維持し、宣言集合だけを
@@ -122,13 +110,10 @@ class Being(AggregateRoot):
         乗り換える場合は先に ``detach`` を呼ぶ。
         """
         if not isinstance(attachment, BeingAttachment):
-            raise TypeError(
-                f"attachment must be BeingAttachment, got {type(attachment).__name__}"
-            )
+            raise TypeError(f"attachment must be BeingAttachment, got {type(attachment).__name__}")
         if self._attachment is not None:
             raise BeingAlreadyAttachedException(
-                f"Being({self._being_id}) is already attached to "
-                f"{self._attachment}; detach first to switch"
+                f"Being({self._being_id}) is already attached to {self._attachment}; detach first to switch"
             )
         self._attachment = attachment
 

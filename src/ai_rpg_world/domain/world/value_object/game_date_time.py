@@ -36,10 +36,7 @@ class GameDateTime:
 
     def format_for_display(self) -> str:
         """LLM やログ向けの人間可読文字列（例: 1年2月3日 12:30:45）を返す。"""
-        return (
-            f"{self.year}年{self.month}月{self.day}日 "
-            f"{self.hour:02d}:{self.minute:02d}:{self.second:02d}"
-        )
+        return f"{self.year}年{self.month}月{self.day}日 {self.hour:02d}:{self.minute:02d}:{self.second:02d}"
 
 
 def game_date_time_from_tick(

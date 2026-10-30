@@ -76,10 +76,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         default=_DEFAULT_PING_MODEL,
-        help=(
-            "litellm に渡す model id。OpenRouter なら 'openrouter/<provider>/<model>' "
-            "形式が安全。既定: %(default)s"
-        ),
+        help=("litellm に渡す model id。OpenRouter なら 'openrouter/<provider>/<model>' 形式が安全。既定: %(default)s"),
     )
     parser.add_argument(
         "--prompt",
@@ -136,10 +133,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--repeat",
         type=int,
         default=1,
-        help=(
-            f"直列に叩く回数 (上限 {_MAX_REPEAT})。共有プールの枯渇は時間帯で起き、"
-            "1 回では分からない。"
-        ),
+        help=(f"直列に叩く回数 (上限 {_MAX_REPEAT})。共有プールの枯渇は時間帯で起き、1 回では分からない。"),
     )
     parser.add_argument(
         "--interval",
@@ -178,9 +172,7 @@ def _check_environment() -> None:
     if not os.environ.get("OPENAI_API_KEY"):
         # ここではまだ .env が load されていないので「無いかも」しか言えない。
         # LiteLLMClient のコンストラクタが load_dotenv するので、後段で再判定する。
-        sys.stderr.write(
-            "[hint] OPENAI_API_KEY が shell env に無いので .env を読みに行きます。\n"
-        )
+        sys.stderr.write("[hint] OPENAI_API_KEY が shell env に無いので .env を読みに行きます。\n")
 
 
 def _provider_extra_body(
@@ -286,7 +278,7 @@ def _list_providers(model_id: str) -> int:
     # litellm 用に "openrouter/" prefix を付けて渡されるパターンを剥がす
     bare_id = model_id
     if bare_id.startswith("openrouter/"):
-        bare_id = bare_id[len("openrouter/"):]
+        bare_id = bare_id[len("openrouter/") :]
     safe = urllib.parse.quote(bare_id, safe="/")
     url = f"https://openrouter.ai/api/v1/models/{safe}/endpoints"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
@@ -408,9 +400,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.require_params,
             )
         except LlmApiCallException as e:
-            sys.stderr.write(
-                f"[error] LlmApiCallException error_code={e.error_code} message={e}\n"
-            )
+            sys.stderr.write(f"[error] LlmApiCallException error_code={e.error_code} message={e}\n")
             summary = {"ok": False, "reason": e.error_code}
         except Exception as e:
             sys.stderr.write(f"[error] {type(e).__name__}: {e}\n")

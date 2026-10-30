@@ -67,6 +67,7 @@ class _CommandContextEventPublisher:
     def publish_all(self, events: Any) -> None:
         self._context.collect_all(events)
 
+
 #: trace と観測が使う取引の向き。gold の増減イベントはこの 1 種類に集約し、
 #: source を増やすだけで trade / quest 報酬にも拡張できる形にする。
 TRADE_DIRECTION_BUY = "merchant_buy"
@@ -88,10 +89,7 @@ class MerchantNotAtSpotError(MerchantTradeException):
     error_code = "MERCHANT_NOT_AT_SPOT"
 
     def __init__(self, *, merchant_name: str = "その商人") -> None:
-        super().__init__(
-            f"{merchant_name}はこの場所に居ません。"
-            "商人と同じ場所に居るときだけ売り買いできます。"
-        )
+        super().__init__(f"{merchant_name}はこの場所に居ません。商人と同じ場所に居るときだけ売り買いできます。")
 
 
 class MerchantDoesNotSellError(MerchantTradeException):
@@ -102,8 +100,7 @@ class MerchantDoesNotSellError(MerchantTradeException):
     def __init__(self, *, merchant_name: str, item_name: str, sold: Sequence[str]) -> None:
         catalog = "、".join(sold) if sold else "何も"
         super().__init__(
-            f"{merchant_name}は{item_name}を売っていません。"
-            f"{merchant_name}が売っているのは {catalog} です。"
+            f"{merchant_name}は{item_name}を売っていません。{merchant_name}が売っているのは {catalog} です。"
         )
 
 
@@ -115,8 +112,7 @@ class MerchantDoesNotBuyError(MerchantTradeException):
     def __init__(self, *, merchant_name: str, item_name: str, bought: Sequence[str]) -> None:
         catalog = "、".join(bought) if bought else "何も"
         super().__init__(
-            f"{merchant_name}は{item_name}を買い取りません。"
-            f"{merchant_name}が買い取るのは {catalog} です。"
+            f"{merchant_name}は{item_name}を買い取りません。{merchant_name}が買い取るのは {catalog} です。"
         )
 
 
@@ -137,11 +133,7 @@ class NotEnoughGoldError(MerchantTradeException):
         # 不足額まで書く。「足りない」だけでは、あと何を売れば届くかを
         # 決められない。取引で凍結している額があれば、それも書く
         # (書かないと「持っているのに足りない」と読めてしまう)。
-        tail = (
-            f" (うち{committed}G は取引の提案に出しているため使えません)"
-            if committed > 0
-            else ""
-        )
+        tail = f" (うち{committed}G は取引の提案に出しているため使えません)" if committed > 0 else ""
         super().__init__(
             f"{item_name}を{quantity}つ買うには{total}G 必要ですが、"
             f"いま使えるのは{owned}G で{total - owned}G 足りません。{tail}"
@@ -168,21 +160,19 @@ class NotEnoughItemsToSellError(MerchantTradeException):
     error_code = "SELL_ITEM_NOT_OWNED"
 
     def __init__(
-        self, *, item_name: str, quantity: int, owned: int, frozen: int = 0,
+        self,
+        *,
+        item_name: str,
+        quantity: int,
+        owned: int,
+        frozen: int = 0,
     ) -> None:
         # 所持ゼロと数量不足を 1 つに畳む。原因 (手持ちが足りない) も
         # 次の一手 (数を減らすか集めてくる) も同じなので、分けても選択が
         # 変わらない。ただし取引に出しているぶんは別で、そちらは「返事を
         # 待つ / 取り下げる」という違う一手になるので書き分ける。
-        tail = (
-            f" (ほかに{frozen}つを取引の提案に出しているため使えません)"
-            if frozen > 0
-            else ""
-        )
-        super().__init__(
-            f"{item_name}を{quantity}つ売ろうとしましたが、"
-            f"いま売れるのは{owned}つです。{tail}"
-        )
+        tail = f" (ほかに{frozen}つを取引の提案に出しているため使えません)" if frozen > 0 else ""
+        super().__init__(f"{item_name}を{quantity}つ売ろうとしましたが、いま売れるのは{owned}つです。{tail}")
 
 
 @dataclass(frozen=True)
@@ -371,7 +361,9 @@ class SpotGraphMerchantTradeService:
             # 除外する) と揃っているので通常は起きないが、黙って売れたことに
             # すると金だけ増える。
             raise NotEnoughItemsToSellError(
-                item_name=item_name, quantity=quantity, owned=owned,
+                item_name=item_name,
+                quantity=quantity,
+                owned=owned,
             )
         self._player_inventory_repository.save(inventory)
 
@@ -431,7 +423,8 @@ class SpotGraphMerchantTradeService:
     def _merchant_present_for(self, player_id: PlayerId, merchant_id: int) -> Any:
         """行動者と同席している商人を返す。居なければ失敗にする。"""
         merchant = next(
-            (m for m in self._merchants if m.merchant_id == merchant_id), None,
+            (m for m in self._merchants if m.merchant_id == merchant_id),
+            None,
         )
         if merchant is None:
             raise MerchantNotAtSpotError()
@@ -467,9 +460,7 @@ class SpotGraphMerchantTradeService:
     def _require_status(self, player_id: PlayerId) -> PlayerStatusAggregate:
         status = self._player_status_repository.find_by_id(player_id)
         if status is None:
-            raise MerchantTradeException(
-                f"player status not found for {player_id.value}"
-            )
+            raise MerchantTradeException(f"player status not found for {player_id.value}")
         return status
 
     def _free_slots(self, player_id: PlayerId) -> int:
@@ -487,10 +478,7 @@ class SpotGraphMerchantTradeService:
         return None
 
     def _catalog_names(self, price_list: Sequence[Any]) -> tuple[str, ...]:
-        return tuple(
-            f"{self._item_name(entry.item_spec_id)} {entry.price}G"
-            for entry in price_list
-        )
+        return tuple(f"{self._item_name(entry.item_spec_id)} {entry.price}G" for entry in price_list)
 
     def _item_name(self, item_spec_id: int) -> str:
         if self._item_spec_name_resolver is None:
@@ -529,7 +517,10 @@ class SpotGraphMerchantTradeService:
         return result
 
     def _publish_trade_event(
-        self, player_id: PlayerId, spot_id: SpotId, result: MerchantTradeResult,
+        self,
+        player_id: PlayerId,
+        spot_id: SpotId,
+        result: MerchantTradeResult,
     ) -> None:
         if self._event_publisher is None:
             return

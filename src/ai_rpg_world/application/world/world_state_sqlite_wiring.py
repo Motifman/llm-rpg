@@ -7,18 +7,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from ai_rpg_world.infrastructure.repository.game_db_schema import init_game_db_schema
-from ai_rpg_world.infrastructure.repository.sqlite_hit_box_repository import (
-    SqliteHitBoxRepository,
-)
 from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import SqliteItemWriteRepository
 from ai_rpg_world.infrastructure.repository.sqlite_location_establishment_repository import (
     SqliteLocationEstablishmentRepository,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_monster_aggregate_repository import (
     SqliteMonsterAggregateRepository,
-)
-from ai_rpg_world.infrastructure.repository.sqlite_physical_map_repository import (
-    SqlitePhysicalMapRepository,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_player_inventory_write_repository import (
     SqlitePlayerInventoryWriteRepository,
@@ -44,9 +38,7 @@ class PlayerStateSqliteRepositories:
 
 @dataclass(frozen=True)
 class WorldRuntimeSqliteRepositories:
-    physical_maps: SqlitePhysicalMapRepository
     monsters: SqliteMonsterAggregateRepository
-    hit_boxes: SqliteHitBoxRepository
 
 
 @dataclass(frozen=True)
@@ -84,20 +76,10 @@ def attach_world_state_sqlite_repositories(
             player_inventories=SqlitePlayerInventoryWriteRepository.for_shared_unit_of_work(
                 connection, event_sink=event_sink
             ),
-            items=SqliteItemWriteRepository.for_shared_unit_of_work(
-                connection, event_sink=event_sink
-            ),
+            items=SqliteItemWriteRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
         ),
         world_runtime=WorldRuntimeSqliteRepositories(
-            physical_maps=SqlitePhysicalMapRepository.for_shared_unit_of_work(
-                connection, event_sink=event_sink
-            ),
-            monsters=SqliteMonsterAggregateRepository.for_shared_unit_of_work(
-                connection, event_sink=event_sink
-            ),
-            hit_boxes=SqliteHitBoxRepository.for_shared_unit_of_work(
-                connection, event_sink=event_sink
-            ),
+            monsters=SqliteMonsterAggregateRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
         ),
         world_structure=WorldStructureSqliteRepositories(
             spots=SqliteSpotRepository.for_shared_unit_of_work(connection),

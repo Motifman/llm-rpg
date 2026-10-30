@@ -62,7 +62,16 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
 def _minimal_scenario_with_tick_event() -> dict:
     return {
         "scenario_format_version": "1.0",
-        "metadata": {"id": "test", "title": "t", "description": "", "theme": "", "difficulty": "easy", "estimated_ticks": 10, "author": "", "tags": []},
+        "metadata": {
+            "id": "test",
+            "title": "t",
+            "description": "",
+            "theme": "",
+            "difficulty": "easy",
+            "estimated_ticks": 10,
+            "author": "",
+            "tags": [],
+        },
         "item_specs": [],
         "spots": [
             {
@@ -74,7 +83,10 @@ def _minimal_scenario_with_tick_event() -> dict:
         ],
         "connections": [],
         "players": [{"id": "p1", "name": "P1", "spawn_spot": "room_a", "initial_items": []}],
-        "game_end_conditions": {"win": {"type": "ALL_AT_SPOT", "target_spot": "room_a"}, "lose": {"type": "TICK_LIMIT", "tick_limit": 50}},
+        "game_end_conditions": {
+            "win": {"type": "ALL_AT_SPOT", "target_spot": "room_a"},
+            "lose": {"type": "TICK_LIMIT", "tick_limit": 50},
+        },
         "initial_flags": [],
         "scenario_events": [
             {
@@ -95,8 +107,18 @@ def _build_player_status(pid: PlayerId, spawn_spot_id) -> PlayerStatusAggregate:
     exp_table = ExpTable(base_exp=100.0, exponent=1.5)
     return PlayerStatusAggregate(
         player_id=pid,
-        base_stats=BaseStats(max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05),
-        stat_growth_factor=StatGrowthFactor(hp_factor=1.0, mp_factor=1.0, attack_factor=1.0, defense_factor=1.0, speed_factor=1.0, critical_rate_factor=0.0, evasion_rate_factor=0.0),
+        base_stats=BaseStats(
+            max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05
+        ),
+        stat_growth_factor=StatGrowthFactor(
+            hp_factor=1.0,
+            mp_factor=1.0,
+            attack_factor=1.0,
+            defense_factor=1.0,
+            speed_factor=1.0,
+            critical_rate_factor=0.0,
+            evasion_rate_factor=0.0,
+        ),
         exp_table=exp_table,
         growth=Growth(level=1, total_exp=0, exp_table=exp_table),
         gold=Gold(0),
@@ -235,33 +257,39 @@ class TestCompositeConditionEvaluation:
 
     def test_not_fires_when_inner_condition_is_false(self) -> None:
         """NOT(FLAG_SET) は flag が無いときに発火する。"""
-        scn = _scenario_with_composite_condition({
-            "condition_type": "NOT",
-            "children": [{"condition_type": "FLAG_SET", "flag_name": "blocker"}],
-        })
+        scn = _scenario_with_composite_condition(
+            {
+                "condition_type": "NOT",
+                "children": [{"condition_type": "FLAG_SET", "flag_name": "blocker"}],
+            }
+        )
         stage, flags, _ = _make_stage_for_scenario(scn)
         stage.run(WorldTick(1))
         assert "ev1_done" in flags.as_frozen_set()
 
     def test_not_does_not_fire_when_inner_condition_is_true(self) -> None:
         """NOT(FLAG_SET) は flag があれば発火しない。"""
-        scn = _scenario_with_composite_condition({
-            "condition_type": "NOT",
-            "children": [{"condition_type": "FLAG_SET", "flag_name": "blocker"}],
-        })
+        scn = _scenario_with_composite_condition(
+            {
+                "condition_type": "NOT",
+                "children": [{"condition_type": "FLAG_SET", "flag_name": "blocker"}],
+            }
+        )
         stage, flags, _ = _make_stage_for_scenario(scn, initial_flags=["blocker"])
         stage.run(WorldTick(1))
         assert "ev1_done" not in flags.as_frozen_set()
 
     def test_and_requires_all_children(self) -> None:
         """AND は全子条件が真でないと発火しない。"""
-        scn = _scenario_with_composite_condition({
-            "condition_type": "AND",
-            "children": [
-                {"condition_type": "TICK_AT_LEAST", "tick": 2},
-                {"condition_type": "FLAG_SET", "flag_name": "ready"},
-            ],
-        })
+        scn = _scenario_with_composite_condition(
+            {
+                "condition_type": "AND",
+                "children": [
+                    {"condition_type": "TICK_AT_LEAST", "tick": 2},
+                    {"condition_type": "FLAG_SET", "flag_name": "ready"},
+                ],
+            }
+        )
         stage, flags, _ = _make_stage_for_scenario(scn)
         # tick 満たすが flag 未設定 → 発火しない
         stage.run(WorldTick(2))
@@ -269,85 +297,105 @@ class TestCompositeConditionEvaluation:
 
     def test_and_fires_when_all_children_true(self) -> None:
         """AND は全子条件が真なら発火する。"""
-        scn = _scenario_with_composite_condition({
-            "condition_type": "AND",
-            "children": [
-                {"condition_type": "TICK_AT_LEAST", "tick": 2},
-                {"condition_type": "FLAG_SET", "flag_name": "ready"},
-            ],
-        })
+        scn = _scenario_with_composite_condition(
+            {
+                "condition_type": "AND",
+                "children": [
+                    {"condition_type": "TICK_AT_LEAST", "tick": 2},
+                    {"condition_type": "FLAG_SET", "flag_name": "ready"},
+                ],
+            }
+        )
         stage, flags, _ = _make_stage_for_scenario(scn, initial_flags=["ready"])
         stage.run(WorldTick(2))
         assert "ev1_done" in flags.as_frozen_set()
 
     def test_or_fires_when_any_child_true(self) -> None:
         """OR はどれか 1 つでも子条件が真なら発火する。"""
-        scn = _scenario_with_composite_condition({
-            "condition_type": "OR",
-            "children": [
-                {"condition_type": "FLAG_SET", "flag_name": "alpha"},
-                {"condition_type": "FLAG_SET", "flag_name": "beta"},
-            ],
-        })
+        scn = _scenario_with_composite_condition(
+            {
+                "condition_type": "OR",
+                "children": [
+                    {"condition_type": "FLAG_SET", "flag_name": "alpha"},
+                    {"condition_type": "FLAG_SET", "flag_name": "beta"},
+                ],
+            }
+        )
         stage, flags, _ = _make_stage_for_scenario(scn, initial_flags=["beta"])
         stage.run(WorldTick(1))
         assert "ev1_done" in flags.as_frozen_set()
 
     def test_or_does_not_fire_when_all_children_false(self) -> None:
         """OR は全子条件が偽なら発火しない。"""
-        scn = _scenario_with_composite_condition({
-            "condition_type": "OR",
-            "children": [
-                {"condition_type": "FLAG_SET", "flag_name": "alpha"},
-                {"condition_type": "FLAG_SET", "flag_name": "beta"},
-            ],
-        })
+        scn = _scenario_with_composite_condition(
+            {
+                "condition_type": "OR",
+                "children": [
+                    {"condition_type": "FLAG_SET", "flag_name": "alpha"},
+                    {"condition_type": "FLAG_SET", "flag_name": "beta"},
+                ],
+            }
+        )
         stage, flags, _ = _make_stage_for_scenario(scn)
         stage.run(WorldTick(1))
         assert "ev1_done" not in flags.as_frozen_set()
 
     def test_empty_and_is_vacuously_true(self) -> None:
         """AND の children が空なら vacuous truth で発火する（数学慣習）。"""
-        scn = _scenario_with_composite_condition({
-            "condition_type": "AND",
-            "children": [],
-        })
+        scn = _scenario_with_composite_condition(
+            {
+                "condition_type": "AND",
+                "children": [],
+            }
+        )
         stage, flags, _ = _make_stage_for_scenario(scn)
         stage.run(WorldTick(1))
         assert "ev1_done" in flags.as_frozen_set()
 
     def test_empty_or_is_false(self) -> None:
         """OR の children が空なら発火しない（数学慣習）。"""
-        scn = _scenario_with_composite_condition({
-            "condition_type": "OR",
-            "children": [],
-        })
+        scn = _scenario_with_composite_condition(
+            {
+                "condition_type": "OR",
+                "children": [],
+            }
+        )
         stage, flags, _ = _make_stage_for_scenario(scn)
         stage.run(WorldTick(1))
         assert "ev1_done" not in flags.as_frozen_set()
 
     def test_unknown_condition_type_is_rejected_during_loading(self) -> None:
         """未知の condition_type は永久に未発火へ縮退せず、読込時に拒否する。"""
-        scn = _scenario_with_composite_condition({
-            "condition_type": "TOTALLY_UNKNOWN_TYPE",
-        })
+        scn = _scenario_with_composite_condition(
+            {
+                "condition_type": "TOTALLY_UNKNOWN_TYPE",
+            }
+        )
 
         with pytest.raises(ScenarioLoadError, match="TOTALLY_UNKNOWN_TYPE"):
             _make_stage_for_scenario(scn)
 
     def test_nested_composite_de_morgan(self) -> None:
         """NOT(OR(A,B)) と AND(NOT(A), NOT(B)) が同じ評価結果になる。"""
-        scn = _scenario_with_composite_condition({
-            "condition_type": "AND",
-            "children": [
-                {"condition_type": "NOT", "children": [
-                    {"condition_type": "FLAG_SET", "flag_name": "a"},
-                ]},
-                {"condition_type": "NOT", "children": [
-                    {"condition_type": "FLAG_SET", "flag_name": "b"},
-                ]},
-            ],
-        })
+        scn = _scenario_with_composite_condition(
+            {
+                "condition_type": "AND",
+                "children": [
+                    {
+                        "condition_type": "NOT",
+                        "children": [
+                            {"condition_type": "FLAG_SET", "flag_name": "a"},
+                        ],
+                    },
+                    {
+                        "condition_type": "NOT",
+                        "children": [
+                            {"condition_type": "FLAG_SET", "flag_name": "b"},
+                        ],
+                    },
+                ],
+            }
+        )
         # どちらも未設定 → 発火する
         stage, flags, _ = _make_stage_for_scenario(scn)
         stage.run(WorldTick(1))

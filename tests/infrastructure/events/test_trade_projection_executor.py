@@ -189,9 +189,7 @@ def test_sqlite_projection_and_inbox_commit_together(tmp_path) -> None:
     with sqlite3.connect(database) as connection:
         repository = SqliteTradeReadModelRepository.for_standalone_connection(connection)
         assert repository.find_by_id(TradeId(99)) is not None
-        row = connection.execute(
-            "SELECT consumer_id, event_id FROM event_consumer_inbox"
-        ).fetchone()
+        row = connection.execute("SELECT consumer_id, event_id FROM event_consumer_inbox").fetchone()
         assert tuple(row) == ("consumer.v1", "100")
 
 
@@ -203,12 +201,10 @@ def test_sqlite_projection_and_inbox_are_hidden_until_commit(tmp_path) -> None:
     def projection(repository) -> None:
         repository.save(_read_model(99))
         with sqlite3.connect(database) as observer:
-            assert observer.execute(
-                "SELECT COUNT(*) FROM trade_read_models WHERE trade_id = 99"
-            ).fetchone() == (0,)
-            assert observer.execute(
-                "SELECT COUNT(*) FROM event_consumer_inbox WHERE event_id = '100'"
-            ).fetchone() == (0,)
+            assert observer.execute("SELECT COUNT(*) FROM trade_read_models WHERE trade_id = 99").fetchone() == (0,)
+            assert observer.execute("SELECT COUNT(*) FROM event_consumer_inbox WHERE event_id = '100'").fetchone() == (
+                0,
+            )
 
     assert executor.execute_once(
         consumer_id="consumer.v1",
@@ -217,12 +213,8 @@ def test_sqlite_projection_and_inbox_are_hidden_until_commit(tmp_path) -> None:
     )
 
     with sqlite3.connect(database) as observer:
-        assert observer.execute(
-            "SELECT COUNT(*) FROM trade_read_models WHERE trade_id = 99"
-        ).fetchone() == (1,)
-        assert observer.execute(
-            "SELECT COUNT(*) FROM event_consumer_inbox WHERE event_id = '100'"
-        ).fetchone() == (1,)
+        assert observer.execute("SELECT COUNT(*) FROM trade_read_models WHERE trade_id = 99").fetchone() == (1,)
+        assert observer.execute("SELECT COUNT(*) FROM event_consumer_inbox WHERE event_id = '100'").fetchone() == (1,)
 
 
 def test_sqlite_failure_rolls_back_projection_and_inbox(tmp_path) -> None:
@@ -244,9 +236,7 @@ def test_sqlite_failure_rolls_back_projection_and_inbox(tmp_path) -> None:
     with sqlite3.connect(database) as connection:
         repository = SqliteTradeReadModelRepository.for_standalone_connection(connection)
         assert repository.find_by_id(TradeId(99)) is None
-        row = connection.execute(
-            "SELECT COUNT(*) FROM event_consumer_inbox"
-        ).fetchone()
+        row = connection.execute("SELECT COUNT(*) FROM event_consumer_inbox").fetchone()
         assert tuple(row) == (0,)
     assert executor.execute_once(
         consumer_id="consumer.v1",
@@ -359,10 +349,13 @@ def test_trade_read_model_v1_migrates_without_losing_projection(tmp_path) -> Non
 
         assert repository.find_by_id(TradeId(99)) is not None
         assert get_applied_version(connection, "trade_read_model") == 2
-        assert connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
-            ("event_consumer_inbox",),
-        ).fetchone() is not None
+        assert (
+            connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+                ("event_consumer_inbox",),
+            ).fetchone()
+            is not None
+        )
 
 
 @pytest.mark.parametrize(

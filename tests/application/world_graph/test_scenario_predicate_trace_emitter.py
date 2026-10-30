@@ -97,6 +97,7 @@ class TestScenarioPredicateTraceEmitter:
 
     def test_provider_or_recorder_failure_does_not_escape(self) -> None:
         """trace取得・記録の障害は世界処理を停止させない。"""
+
         def broken_provider() -> object:
             raise RuntimeError("provider failed")
 

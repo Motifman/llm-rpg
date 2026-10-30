@@ -34,10 +34,7 @@ class TestExcludeSet:
     def test_set_sub_location_target_included(self) -> None:
         """脱出ランタイムでは set_sub_location は恒久的に UNSUPPORTED_TOOL を
         返す仕様のため、LLM に見せる必要が無い。"""
-        assert (
-            TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION
-            in ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS
-        )
+        assert TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION in ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS
 
     def test_other_spot_graph_tool_target_not_included(self) -> None:
         """主要 tool が誤って除外されていないことの regression check。"""

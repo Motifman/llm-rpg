@@ -14,12 +14,7 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[3]
-    / "data"
-    / "scenarios"
-    / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 
 
 def test_projection_keeps_copyable_values_and_only_free_text_names() -> None:
@@ -32,15 +27,14 @@ def test_projection_keeps_copyable_values_and_only_free_text_names() -> None:
             "parameters": {"text": "長い本文をここへ書く"},
             "say_inline": "書いておこう",
             "stealth": False,
-            "memo_ids": ["memo-a", "memo-b"],
+            "handles": ["ep_a", "ep_b"],
             "inner_thought": "すぐ下の専用行に出る",
-            "expected_result": "予測行に出る",
         }
     )
 
     assert identifiers == {
         "action_name": "write_note",
-        "memo_ids": '["memo-a","memo-b"]',
+        "handles": '["ep_a","ep_b"]',
         "stealth": "false",
         "target_label": "当番表",
     }
@@ -56,11 +50,7 @@ def test_startup_rejects_an_exposed_argument_missing_from_the_table(
     monkeypatch.setattr(
         action_argument_classification,
         "ACTION_ARGUMENT_CLASSIFICATIONS",
-        {
-            name: kind
-            for name, kind in ACTION_ARGUMENT_CLASSIFICATIONS.items()
-            if name != "action_name"
-        },
+        {name: kind for name, kind in ACTION_ARGUMENT_CLASSIFICATIONS.items() if name != "action_name"},
     )
 
     with pytest.raises(ActionArgumentClassificationError, match="action_name"):

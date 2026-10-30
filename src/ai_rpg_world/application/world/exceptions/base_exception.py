@@ -1,4 +1,3 @@
-
 from typing import Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
@@ -6,15 +5,7 @@ from ai_rpg_world.application.common.exceptions import ApplicationException
 
 class WorldApplicationException(ApplicationException):
     """ワールドドメインのアプリケーション例外基底クラス"""
-    
+
     def __init__(self, message: str, error_code: str | None = None, **context: Any) -> None:
         super().__init__(message, **context)
         self.error_code = error_code
-
-
-class WorldSystemErrorException(WorldApplicationException):
-    """ワールドドメインのシステム例外"""
-
-    def __init__(self, message: str, original_exception: Exception | None = None):
-        super().__init__(message, "SYSTEM_ERROR", original_exception=original_exception)
-        self.original_exception = original_exception

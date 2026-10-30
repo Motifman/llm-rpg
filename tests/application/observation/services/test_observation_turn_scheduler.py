@@ -151,4 +151,3 @@ class TestObservationTurnSchedulerExceptions:
             service.maybe_schedule(PlayerId(1), output)
 
         turn_trigger.schedule_turn.assert_called_once_with(PlayerId(1))
-

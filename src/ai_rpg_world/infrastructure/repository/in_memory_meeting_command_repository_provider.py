@@ -89,10 +89,7 @@ class InMemoryMeetingCommandRepositoryProviderFactory:
     ) -> InMemoryMeetingCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "インメモリ会議command providerには"
-                "InMemoryUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("インメモリ会議command providerにはInMemoryUnitOfWorkTransactionAdapterが必要です")
         return InMemoryMeetingCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

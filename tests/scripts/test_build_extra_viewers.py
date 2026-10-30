@@ -1,97 +1,65 @@
-"""build_episodic_viewer.py / build_timeline_viewer.py の基本検証 (Phase 3)。"""
+"""build_timeline_viewer.py の基本検証 (Phase 3)。"""
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-import pytest
-from scripts.build_episodic_viewer import aggregate_episodes
-from scripts.build_episodic_viewer import render_html as render_episodic
 from scripts.build_timeline_viewer import build_cells, extract_players
 from scripts.build_timeline_viewer import render_html as render_timeline
 
 
 def _make_events() -> list:
     return [
-        {"kind": "episodic_chunk_written", "tick": 3, "player_id": 1, "payload": {
-            "episode_id": "ep-1", "boundary_reason": "category_shift",
-            "cues": ["action:x", "outcome:success"],
-            "recall_text_snippet": "ada が漁った",
-            "action_count": 3, "observation_count": 10,
-        }},
-        {"kind": "episodic_subjective_filled", "tick": 6, "player_id": 1, "payload": {
-            "episode_id": "ep-1", "latency_ms": 1200,
-            "recall_text_snippet": "あの時 ada は浜辺で…",
-        }},
-        {"kind": "episodic_recall", "tick": 9, "player_id": 2, "payload": {
-            "candidate_count": 1,
-            "candidates": [{"episode_id": "ep-1", "recall_text_snippet": "snip"}],
-        }},
-        {"kind": "action", "tick": 1, "player_id": 1, "payload": {
-            "tool": "explore", "arguments": {"inner_thought": "see around"},
-        }},
+        {
+            "kind": "episodic_chunk_written",
+            "tick": 3,
+            "player_id": 1,
+            "payload": {
+                "episode_id": "ep-1",
+                "boundary_reason": "category_shift",
+                "cues": ["action:x", "outcome:success"],
+                "recall_text_snippet": "ada が漁った",
+                "action_count": 3,
+                "observation_count": 10,
+            },
+        },
+        {
+            "kind": "episodic_subjective_filled",
+            "tick": 6,
+            "player_id": 1,
+            "payload": {
+                "episode_id": "ep-1",
+                "latency_ms": 1200,
+                "recall_text_snippet": "あの時 ada は浜辺で…",
+            },
+        },
+        {
+            "kind": "episodic_recall",
+            "tick": 9,
+            "player_id": 2,
+            "payload": {
+                "candidate_count": 1,
+                "candidates": [{"episode_id": "ep-1", "recall_text_snippet": "snip"}],
+            },
+        },
+        {
+            "kind": "action",
+            "tick": 1,
+            "player_id": 1,
+            "payload": {
+                "tool": "explore",
+                "arguments": {"inner_thought": "see around"},
+            },
+        },
         {"kind": "observation", "tick": 2, "player_id": 1, "payload": {"prose": "hi"}},
-        {"kind": "position_change", "tick": 0, "player_id": 1, "payload": {
-            "spot_name": "beach", "player_name": "ada",
-        }},
+        {
+            "kind": "position_change",
+            "tick": 0,
+            "player_id": 1,
+            "payload": {
+                "spot_name": "beach",
+                "player_name": "ada",
+            },
+        },
     ]
-
-
-class TestEpisodicAggregation:
-    """`aggregate_episodes` が chunk / subjective / recall を 1 episode に集約する。"""
-
-    def test_chunk_episode_object(self) -> None:
-        """chunk は episodeobject になる。"""
-        episodes = aggregate_episodes(_make_events())
-        assert len(episodes) == 1
-        ep = episodes[0]
-        assert ep.episode_id == "ep-1"
-        assert ep.player_id == 1
-        assert ep.written_tick == 3
-        assert ep.boundary_reason == "category_shift"
-
-    def test_subjective_fill_episode_included(self) -> None:
-        """subjectivefill が episode に乗る。"""
-        episodes = aggregate_episodes(_make_events())
-        ep = episodes[0]
-        assert ep.subjective_latency_ms == 1200
-        assert "ada は浜辺で" in (ep.subjective_snippet or "")
-
-    def test_recall_history_episode_included(self) -> None:
-        """recallhistory が episode に乗る。"""
-        episodes = aggregate_episodes(_make_events())
-        ep = episodes[0]
-        assert len(ep.recalled_in) == 1
-        rec = ep.recalled_in[0]
-        assert rec["tick"] == 9
-        assert rec["player_id"] == 2
-
-    def test_unknown_episode_recall_skip(self) -> None:
-        """unknown episode の recall は skip。"""
-        events = [
-            {"kind": "episodic_recall", "tick": 1, "player_id": 1, "payload": {
-                "candidates": [{"episode_id": "missing"}],
-            }},
-        ]
-        episodes = aggregate_episodes(events)
-        # 該当 chunk が無いので空
-        assert episodes == []
-
-
-class TestEpisodicRender:
-    """`render_episodic` が valid な HTML を生成する。"""
-
-    def test_html_player_tab_episode_card_rendered(self) -> None:
-        """html に playertab と episodecard が出る。"""
-        episodes = aggregate_episodes(_make_events())
-        html_text = render_episodic(episodes, "test-run")
-        assert "<!DOCTYPE html>" in html_text
-        assert "test-run" in html_text
-        assert "ep-1" in html_text or "ep-1"[:8] in html_text
-        assert "category_shift" in html_text
-        # recall pill が出る
-        assert "by P2" in html_text
 
 
 class TestTimelineExtract:

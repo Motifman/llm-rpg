@@ -1,7 +1,7 @@
 """Sub-formatter 共通の名前解決・リポジトリ参照。親への依存を避けるための基盤。"""
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.application.observation.services.formatters.name_resolver import (
@@ -27,8 +27,7 @@ if TYPE_CHECKING:
 
 def _coerce_item_spec_id_entry_value(raw: Any) -> int | None:
     """
-    obtained_items 内 dict の item_spec_id を int に正規化する。
-    `episodic_cue_rules._coerce_non_bool_int` と同じ規則（bool は int とみなさない）。
+    obtained_items 内 dict の item_spec_id を int に正規化する。bool は int とみなさない。
     """
     if type(raw) is int:
         return raw
@@ -112,6 +111,10 @@ class ObservationFormatterContext:
     # player_downed の第三者向け身元開示に使う実効照明。未注入・解決失敗は
     # formatter 側で安全側 (加害者名を伏せる) へ倒す。
     effective_lighting_resolver: Any | None = None
+    # 品の定義 (item_spec_id の値) → シナリオの出来事で持ち物から外れたときに本人へ届ける文。
+    # 灯が燃え尽きる、食べ物が腐るなど、消え方は品ごとに違うのでシナリオが書く。
+    # 奪われた・渡した・使ったときには使わない (燃え尽きたと誤って伝えないため)。
+    event_removal_messages: Mapping[int, str] = field(default_factory=dict)
 
     def resolve_effective_lighting(self, spot_id: SpotId) -> Any | None:
         resolver = self.effective_lighting_resolver
@@ -134,9 +137,7 @@ class ObservationFormatterContext:
     def is_departed_after_downed(self, player_id: PlayerId) -> bool:
         return self.is_departed(player_id) or self.downed_self_becomes_departed
 
-    def lookup_recipient_spot(
-        self, recipient_player_id: PlayerId
-    ) -> SpotId | None:
+    def lookup_recipient_spot(self, recipient_player_id: PlayerId) -> SpotId | None:
         """observer (player) の現在 spot を引く。
 
         Issue #184 (軸 3) の位置ベース prose 分岐用。spot_graph_repository が

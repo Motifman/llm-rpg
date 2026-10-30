@@ -29,8 +29,7 @@ class SpotExplorationProgressSubsystemCodec(WorldSubsystemCodec):
         store = getattr(runtime, "_exploration_progress", None)
         if store is None:
             raise RuntimeError(
-                "runtime._exploration_progress not found; "
-                "SpotExplorationProgressSubsystemCodec requires it"
+                "runtime._exploration_progress not found; SpotExplorationProgressSubsystemCodec requires it"
             )
         # 内部 dict は (player_id_int, spot_id_int) -> count。
         # 決定的順序のため (player_id, spot_id) でソート。
@@ -53,15 +52,11 @@ class SpotExplorationProgressSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         store = getattr(runtime, "_exploration_progress", None)
         if store is None:
             raise RuntimeError(
-                "runtime._exploration_progress not found; "
-                "SpotExplorationProgressSubsystemCodec requires it"
+                "runtime._exploration_progress not found; SpotExplorationProgressSubsystemCodec requires it"
             )
         store._counts.clear()
         for entry in data.get("entries", []):

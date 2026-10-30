@@ -1,4 +1,5 @@
 """LocationEstablishment リポジトリインターフェース"""
+
 from abc import abstractmethod
 
 from ai_rpg_world.domain.common.repository import Repository
@@ -10,9 +11,7 @@ from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlot
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
-class LocationEstablishmentRepository(
-    Repository[LocationEstablishmentAggregate, LocationSlotId]
-):
+class LocationEstablishmentRepository(Repository[LocationEstablishmentAggregate, LocationSlotId]):
     """ロケーションスロット（施設割当）のリポジトリ"""
 
     @abstractmethod

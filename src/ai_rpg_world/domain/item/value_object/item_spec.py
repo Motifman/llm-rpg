@@ -12,9 +12,15 @@ from ai_rpg_world.domain.item.exception import ItemSpecValidationException
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 
 # 設置可能アイテムが設置後にどのオブジェクト種別になるか（ObjectTypeEnum と対応）
-PLACEABLE_OBJECT_TYPES: frozenset[str] = frozenset({
-    "CHEST", "DOOR", "GATE", "SIGN", "SWITCH",
-})
+PLACEABLE_OBJECT_TYPES: frozenset[str] = frozenset(
+    {
+        "CHEST",
+        "DOOR",
+        "GATE",
+        "SIGN",
+        "SWITCH",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -23,6 +29,7 @@ class ItemSpec:
 
     アイテムの同一性を表し、スペックが同じアイテムを識別する。
     """
+
     item_spec_id: ItemSpecId
     name: str
     item_type: ItemType
@@ -76,20 +83,22 @@ class ItemSpec:
             )
         # 耐久度が存在する場合、max_stack_sizeは1でなければならない
         if self.durability_max is not None and self.max_stack_size.value != 1:
-            raise ItemSpecValidationException(f"Item spec: items with durability must have max_stack_size of 1, got {self.max_stack_size.value}")
+            raise ItemSpecValidationException(
+                f"Item spec: items with durability must have max_stack_size of 1, got {self.max_stack_size.value}"
+            )
         # 装備タイプのバリデーション
         if self.item_type == ItemType.EQUIPMENT:
             if self.equipment_type is None:
                 raise ItemSpecValidationException(f"Item spec: equipment items must have equipment_type, got None")
         else:
             if self.equipment_type is not None:
-                raise ItemSpecValidationException(f"Item spec: non-equipment items must not have equipment_type, got {self.equipment_type}")
+                raise ItemSpecValidationException(
+                    f"Item spec: non-equipment items must not have equipment_type, got {self.equipment_type}"
+                )
         # 設置可能フラグと設置先オブジェクト種別のバリデーション
         if self.is_placeable:
             if not self.placeable_object_type or not self.placeable_object_type.strip():
-                raise ItemSpecValidationException(
-                    "Item spec: placeable items must have placeable_object_type set"
-                )
+                raise ItemSpecValidationException("Item spec: placeable items must have placeable_object_type set")
             if self.placeable_object_type not in PLACEABLE_OBJECT_TYPES:
                 raise ItemSpecValidationException(
                     f"Item spec: placeable_object_type must be one of {sorted(PLACEABLE_OBJECT_TYPES)}, got '{self.placeable_object_type}'"

@@ -26,9 +26,7 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
 _logger = logging.getLogger(__name__)
 
 
-def apply_change_player_state(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_change_player_state(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     visibility = resolve_visibility(effect)
     p = effect.parameters
     updates = p.get("state_updates")
@@ -39,10 +37,7 @@ def apply_change_player_state(
         )
         return
     if ctx.acting_player_status is None:
-        _logger.warning(
-            "CHANGE_PLAYER_STATE: caller did not provide acting_player_status; "
-            "skipping state merge"
-        )
+        _logger.warning("CHANGE_PLAYER_STATE: caller did not provide acting_player_status; skipping state merge")
         return
     before_state = dict(ctx.acting_player_status.state)
     ctx.acting_player_status.merge_state(updates)
@@ -57,9 +52,7 @@ def apply_change_player_state(
     )
 
 
-def apply_record_player_state_tick(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_record_player_state_tick(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     p = effect.parameters
     state_key = p.get("state_key")
     if not isinstance(state_key, str) or not state_key:
@@ -70,15 +63,13 @@ def apply_record_player_state_tick(
         return
     if ctx.current_tick is None:
         _logger.warning(
-            "RECORD_PLAYER_STATE_TICK: caller did not provide current_tick; "
-            "skipping write to state[%r]",
+            "RECORD_PLAYER_STATE_TICK: caller did not provide current_tick; skipping write to state[%r]",
             state_key,
         )
         return
     if ctx.acting_player_status is None:
         _logger.warning(
-            "RECORD_PLAYER_STATE_TICK: caller did not provide "
-            "acting_player_status; skipping write to state[%r]",
+            "RECORD_PLAYER_STATE_TICK: caller did not provide acting_player_status; skipping write to state[%r]",
             state_key,
         )
         return

@@ -16,7 +16,6 @@ def isolate_litellm_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     # OpenRouter routing 系: 開発者のシェルで設定されていてもテスト挙動を汚さない
     monkeypatch.delenv("OPENROUTER_PROVIDER", raising=False)
     monkeypatch.delenv("OPENROUTER_QUANTIZATION", raising=False)
-    monkeypatch.delenv("OPENROUTER_REQUIRE_PARAMS", raising=False)
     # reasoning effort: 開発者シェルの LLM_REASONING_EFFORT がテストに混入すると
     # 既定 "none" 前提のアサーションが揺れるので隔離する。
     monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
@@ -69,9 +68,7 @@ class TestLiteLLMClientInvoke:
     def test_invoke_returns_tool_call_when_litellm_returns_one(self, client):
         """litellm が 1 件の tool_call を返すとき、その name と arguments が返る"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
-            m_litellm.completion.return_value = _make_tool_call_response(
-                "world_no_op", {}
-            )
+            m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
             result = client.invoke(
                 messages=[{"role": "user", "content": "test"}],
                 tools=[{"type": "function", "function": {"name": "world_no_op", "parameters": {}}}],
@@ -141,7 +138,7 @@ class TestLiteLLMClientInvoke:
         assert captured[0].discarded_tool_calls == 0
         assert captured[0].tool_call_combination is None
 
-    def test_invoke_returns_None_when_tool_calls(self, client):
+    def test_invoke_returns_none_when_tool_calls(self, client):
         """tool_calls が空のとき None を返す"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             msg = MagicMock()
@@ -159,7 +156,7 @@ class TestLiteLLMClientInvoke:
             )
         assert result is None
 
-    def test_invoke_returns_None_when_choices_empty(self, client):
+    def test_invoke_returns_none_when_choices_empty(self, client):
         """choices が空のとき None を返す"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             resp = MagicMock()
@@ -198,9 +195,7 @@ class TestLiteLLMClientInvoke:
             "function": {"name": "assess_situation"},
         }
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
-            m_litellm.completion.return_value = _make_tool_call_response(
-                "assess_situation", {"inner_thought": "見る"}
-            )
+            m_litellm.completion.return_value = _make_tool_call_response("assess_situation", {"inner_thought": "見る"})
 
             client.invoke(messages=[], tools=[], tool_choice=named_choice)
 
@@ -217,9 +212,7 @@ class TestLiteLLMClientInvoke:
             {"role": "system", "content": "不変の指示"},
             {"role": "user", "content": "現在の局面"},
         ]
-        with patch(
-            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
-        ) as mock_completion:
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
             mock_completion.return_value = _make_tool_call_response("wait", {})
 
             client.invoke(
@@ -239,9 +232,7 @@ class TestLiteLLMClientInvoke:
             api_key="sk-dummy",
             api_base="https://api.openai.com/v1",
         )
-        with patch(
-            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
-        ) as mock_completion:
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
             mock_completion.return_value = _make_tool_call_response("wait", {})
 
             client.invoke(messages=[], tools=[], session_id="run034:w1:p3")
@@ -276,9 +267,7 @@ class TestLiteLLMClientInvoke:
             api_key="sk-dummy",
             api_base="https://openrouter.ai/api/v1",
         )
-        with patch(
-            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
-        ) as mock_completion:
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
             mock_completion.return_value = _make_tool_call_response("wait", {})
             invoke_kwargs = {"prompt_capture_context": capture}
             if session_id is not None:
@@ -332,7 +321,7 @@ class TestLiteLLMClientInvokeApiKey:
         assert exc_info.value.error_code == "LLM_API_KEY_MISSING"
         assert "OPENAI_API_KEY" in exc_info.value.message or "api_key" in exc_info.value.message.lower()
 
-    def test_invoke_uses_env_var_when_api_key_None(self):
+    def test_invoke_uses_env_var_when_api_key_none(self):
         """api_key が None のとき環境変数 OPENAI_API_KEY を使う"""
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-from-env"}, clear=False):
             client = LiteLLMClient(model="openai/gpt-5-mini", api_key=None)
@@ -440,9 +429,7 @@ class TestLiteLLMClientSelectiveRetry:
     5xx は短い backoff で retry する」二面性を構造的に保証する。
     """
 
-    def test_rate_limit_error_is_retried_then_succeeds(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_rate_limit_error_is_retried_then_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """RateLimitError 1 回 → 2 回目で成功する場合、結果が返る。"""
         monkeypatch.setattr(
             "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
@@ -468,9 +455,7 @@ class TestLiteLLMClientSelectiveRetry:
         assert result["name"] == "ok_tool"
         assert m_litellm.completion.call_count == 2
 
-    def test_injected_backoff_is_used_for_each_retry(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_injected_backoff_is_used_for_each_retry(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """基準 0.05 秒を注入すると、2 回の待ちは 0.05 秒と 0.10 秒になる。"""
         slept: list[float] = []
         monkeypatch.setattr(
@@ -489,9 +474,7 @@ class TestLiteLLMClientSelectiveRetry:
             m_litellm.RateLimitError = _ll.RateLimitError
             m_litellm.InternalServerError = _ll.InternalServerError
             m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
-            m_litellm.completion.side_effect = _ll.RateLimitError(
-                "rate limited", "openai", "gpt-5-mini"
-            )
+            m_litellm.completion.side_effect = _ll.RateLimitError("rate limited", "openai", "gpt-5-mini")
             with pytest.raises(LlmApiCallException):
                 client.invoke(messages=[], tools=[], tool_choice="required")
 
@@ -503,9 +486,7 @@ class TestLiteLLMClientSelectiveRetry:
 
         assert client._rate_limit_retry_base_sleep == 2.0
 
-    def test_rate_limit_exhausted_raises_llm_api_call_exception(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_rate_limit_exhausted_raises_llm_api_call_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """全 retry 失敗 (default 3 回) で LlmApiCallException(error_code=LLM_RATE_LIMIT) を投げる。"""
         monkeypatch.setattr(
             "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
@@ -518,9 +499,7 @@ class TestLiteLLMClientSelectiveRetry:
             m_litellm.RateLimitError = _ll.RateLimitError
             m_litellm.InternalServerError = _ll.InternalServerError
             m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
-            m_litellm.completion.side_effect = _ll.RateLimitError(
-                "rate limited", "openai", "gpt-5-mini"
-            )
+            m_litellm.completion.side_effect = _ll.RateLimitError("rate limited", "openai", "gpt-5-mini")
             with pytest.raises(LlmApiCallException) as exc_info:
                 client.invoke(
                     messages=[{"role": "user", "content": "x"}],
@@ -550,9 +529,7 @@ class TestLiteLLMClientSelectiveRetry:
             m_litellm.RateLimitError = _ll.RateLimitError
             m_litellm.InternalServerError = _ll.InternalServerError
             m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
-            m_litellm.completion.side_effect = _ll.Timeout(
-                "timeout", "openai", "gpt-5-mini"
-            )
+            m_litellm.completion.side_effect = _ll.Timeout("timeout", "openai", "gpt-5-mini")
             with pytest.raises(LlmApiCallException):
                 client.invoke(
                     messages=[{"role": "user", "content": "x"}],
@@ -563,9 +540,7 @@ class TestLiteLLMClientSelectiveRetry:
         assert m_litellm.completion.call_count == 1
         assert slept == []
 
-    def test_authentication_error_is_retried(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_authentication_error_is_retried(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """認証エラーは retry しても直らないので即失敗。"""
         slept: list[float] = []
         monkeypatch.setattr(
@@ -579,9 +554,7 @@ class TestLiteLLMClientSelectiveRetry:
             m_litellm.RateLimitError = _ll.RateLimitError
             m_litellm.InternalServerError = _ll.InternalServerError
             m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
-            m_litellm.completion.side_effect = _ll.AuthenticationError(
-                "bad key", "openai", "gpt-5-mini"
-            )
+            m_litellm.completion.side_effect = _ll.AuthenticationError("bad key", "openai", "gpt-5-mini")
             with pytest.raises(LlmApiCallException) as exc_info:
                 client.invoke(
                     messages=[{"role": "user", "content": "x"}],
@@ -592,9 +565,7 @@ class TestLiteLLMClientSelectiveRetry:
         assert slept == []
         assert exc_info.value.error_code == "LLM_AUTHENTICATION_ERROR"
 
-    def test_retry_attempts_constructor_override(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_retry_attempts_constructor_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """retry 回数は解決済み引数で上書きできる。"""
         monkeypatch.setattr(
             "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
@@ -611,9 +582,7 @@ class TestLiteLLMClientSelectiveRetry:
             m_litellm.RateLimitError = _ll.RateLimitError
             m_litellm.InternalServerError = _ll.InternalServerError
             m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
-            m_litellm.completion.side_effect = _ll.RateLimitError(
-                "rate limited", "openai", "gpt-5-mini"
-            )
+            m_litellm.completion.side_effect = _ll.RateLimitError("rate limited", "openai", "gpt-5-mini")
             with pytest.raises(LlmApiCallException):
                 client.invoke(
                     messages=[{"role": "user", "content": "x"}],
@@ -623,9 +592,7 @@ class TestLiteLLMClientSelectiveRetry:
         # attempts=1 → 1 + 1 = 2 回 call
         assert m_litellm.completion.call_count == 2
 
-    def test_internal_server_error_is_retried(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_internal_server_error_is_retried(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """500 系の一時的サーバエラーも retry 対象。"""
         monkeypatch.setattr(
             "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
@@ -665,6 +632,7 @@ class TestLiteLLMClientInvokeExceptions:
     def test_litellm_authentication_error_raises_with_auth_code(self, client):
         """litellm.AuthenticationError のとき error_code が LLM_AUTHENTICATION_ERROR"""
         import litellm
+
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.side_effect = litellm.AuthenticationError("invalid key", "openai", "gpt-5-mini")
             with pytest.raises(LlmApiCallException) as exc_info:
@@ -675,6 +643,7 @@ class TestLiteLLMClientInvokeExceptions:
     def test_litellm_rate_limit_error_raises_with_rate_limit_code(self, client):
         """litellm.RateLimitError のとき error_code が LLM_RATE_LIMIT"""
         import litellm
+
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.side_effect = litellm.RateLimitError("rate limited", "openai", "gpt-5-mini")
             with pytest.raises(LlmApiCallException) as exc_info:
@@ -701,13 +670,14 @@ class TestLiteLLMClientInvokeExceptions:
         """
         sink = _RecordingSink()
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
-            m_litellm.completion.side_effect = RuntimeError(
-                "Thinking mode does not support this tool_choice"
-            )
+            m_litellm.completion.side_effect = RuntimeError("Thinking mode does not support this tool_choice")
             with pytest.raises(LlmApiCallException):
                 client.invoke(
-                    messages=[], tools=[], tool_choice="required",
-                    metrics_sink=sink, reasoning_effort="low",
+                    messages=[],
+                    tools=[],
+                    tool_choice="required",
+                    metrics_sink=sink,
+                    reasoning_effort="low",
                 )
         assert len(sink.records) == 1
         m = sink.records[0]
@@ -725,8 +695,11 @@ class TestLiteLLMClientInvokeExceptions:
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.return_value = _make_tool_call_response("wait", {})
             client.invoke(
-                messages=[{"role": "user", "content": "x"}], tools=[],
-                tool_choice="required", metrics_sink=sink, reasoning_effort="low",
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+                metrics_sink=sink,
+                reasoning_effort="low",
             )
         assert len(sink.records) == 1
         m = sink.records[0]
@@ -758,12 +731,12 @@ class TestLiteLLMClientJsonCompletion:
     def client(self):
         return LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-dummy")
 
-    def test_subjective_json_completion_extracts_fenced_json(self, client):
+    def test_json_completion_extracts_fenced_json(self, client):
         """vLLM がコードフェンス付き JSON を返しても object を抽出する。"""
         content = '```json\n{"interpreted": "意味", "recall_text": "回想"}\n```'
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.return_value = _make_json_content_response(content)
-            result = client.complete_episode_subjective_json(
+            result = client.complete_short_term_summary_json(
                 [{"role": "user", "content": "json"}],
             )
         assert result == {"interpreted": "意味", "recall_text": "回想"}
@@ -777,13 +750,9 @@ class TestLiteLLMClientJsonCompletion:
             api_key="sk-dummy",
             reasoning_effort="minimal",
         )
-        with patch(
-            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
-        ) as mock_completion:
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
             mock_completion.return_value = _make_json_content_response('{"ok": true}')
-            client.complete_short_term_summary_json(
-                [{"role": "user", "content": "要約してください"}]
-            )
+            client.complete_short_term_summary_json([{"role": "user", "content": "要約してください"}])
 
         kwargs = mock_completion.call_args.kwargs
         assert "reasoning_effort" not in kwargs
@@ -793,33 +762,24 @@ class TestLiteLLMClientJsonCompletion:
         }
         assert kwargs["extra_body"]["thinking"] == {"type": "disabled"}
 
-    def test_reinterpretation_json_completion_extracts_after_think_tag(self, client):
-        """thinking 系モデルの思考タグ後にある JSON を抽出する。"""
-        content = (
-            "<think>hidden reasoning</think>\n"
-            '{"episode_updates": [{"episode_id": "ep-a", '
-            '"current_interpretation": "意味", "current_recall_text": "回想"}]}'
+    def test_episode_writing_json_completion_sends_messages_without_thinking(self) -> None:
+        """エピソードの書き起こしは json_object で送り、agent turn の熟考を継承せず止め、応答を dict で返す (#1626)。"""
+        client = LiteLLMClient(
+            model="openrouter/deepseek/deepseek-v4-flash",
+            api_key="sk-dummy",
+            reasoning_effort="minimal",
         )
-        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
-            m_litellm.completion.return_value = _make_json_content_response(content)
-            result = client.complete_episodic_reinterpretation_json(
-                [{"role": "user", "content": "json"}],
-            )
-        assert result["episode_updates"][0]["episode_id"] == "ep-a"
+        messages = [{"role": "user", "content": "書き残してください"}]
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
+            mock_completion.return_value = _make_json_content_response('{"episodes": []}')
+            result = client.complete_episode_writing_json(messages)
 
-    def test_belief_consolidation_json_completion_delegates_and_returns_dict(self, client):
-        """complete_belief_consolidation_json は messages を litellm に渡し、
-        返り値の JSON を decisions を含む dict として返す。"""
-        content = (
-            '{"decisions": [{"action": "create", "text": "探索は空振りが多い", '
-            '"importance": 6, "tags": ["探索"]}]}'
-        )
-        messages = [{"role": "user", "content": "json"}]
-        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
-            m_litellm.completion.return_value = _make_json_content_response(content)
-            result = client.complete_belief_consolidation_json(messages)
-        assert m_litellm.completion.call_args.kwargs["messages"] == messages
-        assert result["decisions"][0]["action"] == "create"
+        kwargs = mock_completion.call_args.kwargs
+        assert result == {"episodes": []}
+        assert kwargs["messages"] == messages
+        assert kwargs["response_format"] == {"type": "json_object"}
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"]["thinking"] == {"type": "disabled"}
 
 
 class TestLiteLLMClientInit:
@@ -937,9 +897,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
     防ぐ。env 未設定なら何も注入しない後方互換を厳守する。
     """
 
-    def test_env_unset_provider_routing_extra_body(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_unset_provider_routing_extra_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """OPENROUTER_* が無ければ provider routing は extra_body に乗らない。
 
         注: 別途 LLM_REASONING_EFFORT=none が default で reasoning/thinking を inject
@@ -963,16 +921,15 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             openrouter_provider="DeepSeek",
         )
         routing = client.openrouter_routing
-        assert routing == {"provider": {"only": ["DeepSeek"]}}
+        assert routing == {"provider": {"only": ["DeepSeek"], "require_parameters": True}}
 
-    def test_quantization_and_require_params_are_both_included(self) -> None:
-        """provider + quantization + require_params を同時に指定。"""
+    def test_provider_and_quantization_are_both_included(self) -> None:
+        """provider と quantization を同時に指定すると、両方の絞り込みと require_parameters が入る。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-x",
             openrouter_provider="DeepInfra",
             openrouter_quantization="fp8",
-            openrouter_require_params=True,
         )
         assert client.openrouter_routing == {
             "provider": {
@@ -983,33 +940,15 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         }
 
     def test_quantization_config_provider_not_included(self) -> None:
-        """provider 指定無しなら only は付けず、quantization だけを絞る。"""
+        """provider 指定無しなら only は付けず、quantization を絞って require_parameters を入れる。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-x",
             openrouter_quantization="fp8",
         )
-        assert client.openrouter_routing == {"provider": {"quantizations": ["fp8"]}}
+        assert client.openrouter_routing == {"provider": {"quantizations": ["fp8"], "require_parameters": True}}
 
-    def test_require_params_true_require_parameters(self) -> None:
-        """truthy 解釈は設定 DTO 側で済ませ、クライアントは bool を受け取る。"""
-        client = LiteLLMClient(
-            model="m", api_key="sk-x", openrouter_require_params=True
-        )
-        assert client.openrouter_routing == {
-            "provider": {"require_parameters": True}
-        }
-
-    def test_require_params_false(self) -> None:
-        """False なら他に routing 設定が無いため routing 全体が None になる。"""
-        client = LiteLLMClient(
-            model="m", api_key="sk-x", openrouter_require_params=False
-        )
-        assert client.openrouter_routing is None
-
-    def test_completion_base_kwargs_extra_body_injected(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_completion_base_kwargs_extra_body_injected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """JSON 系経路は completion_base_kwargs() を踏むので、ここに入れば
         complete_*_json 全部に効く。"""
         client = LiteLLMClient(
@@ -1025,12 +964,11 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         assert eb["provider"] == {
             "only": ["DeepInfra"],
             "quantizations": ["fp8"],
+            "require_parameters": True,
         }
         # reasoning は default OFF として乗っているはず (別テストで保証)
 
-    def test_invoke_litellm_completion_extra_body(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_invoke_litellm_completion_extra_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """tool_choice='required' 経路でも extra_body が litellm に流れる。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
@@ -1038,9 +976,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             openrouter_provider="DeepInfra",
             openrouter_quantization="fp8",
         )
-        with patch(
-            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
-        ) as mock_completion:
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
             mock_completion.return_value = _make_tool_call_response("noop", {})
             client.invoke(messages=[{"role": "user", "content": "hi"}], tools=[{"x": 1}])
             assert mock_completion.called
@@ -1049,22 +985,17 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             assert call_kw["extra_body"]["provider"] == {
                 "only": ["DeepInfra"],
                 "quantizations": ["fp8"],
+                "require_parameters": True,
             }
 
-    def test_returns_openrouter_routing_property(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_returns_openrouter_routing_property(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """外部から property 経由で取った dict を mutate しても内部状態は壊れない。"""
-        client = LiteLLMClient(
-            model="m", api_key="sk-x", openrouter_provider="DeepInfra"
-        )
+        client = LiteLLMClient(model="m", api_key="sk-x", openrouter_provider="DeepInfra")
         snapshot = client.openrouter_routing
         assert snapshot is not None
         snapshot["provider"]["only"] = ["Hacked"]
         # 再取得しても汚染されていない
-        assert client.openrouter_routing == {
-            "provider": {"only": ["DeepInfra"]}
-        }
+        assert client.openrouter_routing == {"provider": {"only": ["DeepInfra"], "require_parameters": True}}
 
 
 def _make_tool_call_response_with_cost(name: str, arguments: dict, cost: float):
@@ -1103,9 +1034,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
     USD コストを返す。直結 / vLLM では返ってこないので 0.0 維持。
     """
 
-    def test_api_base_openrouter_usage_include_extra_body_included(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_api_base_openrouter_usage_include_extra_body_included(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """api_base に 'openrouter.ai' を含む場合に限り usage.include を注入する。"""
         monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
         client = LiteLLMClient(
@@ -1117,9 +1046,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
         # usage.include が乗っていることだけ assert (本テストの主眼)
         assert kw["extra_body"]["usage"] == {"include": True}
 
-    def test_api_base_openai_provider_routing_field(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_api_base_openai_provider_routing_field(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """OpenAI / vLLM 直結では usage.include / provider 系は付けない。
 
         reasoning/thinking は別 axis (default OFF) で乗るので、ここでは
@@ -1137,9 +1064,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
             assert "usage" not in eb
             assert "provider" not in eb
 
-    def test_provider_routing_usage_include_same_extra_body(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_provider_routing_usage_include_same_extra_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """provider routing + api_base=openrouter の組み合わせで両方乗る。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
@@ -1155,12 +1080,11 @@ class TestLiteLLMClientOpenRouterCostTracking:
         assert eb["provider"] == {
             "only": ["DeepInfra"],
             "quantizations": ["fp8"],
+            "require_parameters": True,
         }
         assert eb["usage"] == {"include": True}
 
-    def test_response_usage_cost_metrics_cost_usd(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_response_usage_cost_metrics_cost_usd(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """invoke 経路で response.usage.cost が LlmCallMetrics.cost_usd に入る。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
@@ -1168,12 +1092,8 @@ class TestLiteLLMClientOpenRouterCostTracking:
             api_base="https://openrouter.ai/api/v1",
         )
         sink = _RecordingSink()
-        with patch(
-            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
-        ) as mock_completion:
-            mock_completion.return_value = _make_tool_call_response_with_cost(
-                "noop", {}, cost=0.0000089
-            )
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
+            mock_completion.return_value = _make_tool_call_response_with_cost("noop", {}, cost=0.0000089)
             client.invoke(
                 messages=[{"role": "user", "content": "hi"}],
                 tools=[{"x": 1}],
@@ -1182,9 +1102,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
         assert len(sink.records) == 1
         assert sink.records[0].cost_usd == pytest.approx(0.0000089)
 
-    def test_usage_cost_provider_cost_usd_zero(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_usage_cost_provider_cost_usd_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """OpenAI 直結 / vLLM などで cost フィールドが無いとき 0.0 を維持。"""
         usage = MagicMock(spec=["prompt_tokens", "completion_tokens"])
         usage.prompt_tokens = 50
@@ -1214,9 +1132,7 @@ class TestLiteLLMClientTimeout:
     本テスト群は LiteLLMClient が timeout を必ず litellm に渡すことを保証する。
     """
 
-    def test_default_timeout_90(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_default_timeout_90(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """env / 引数指定なしなら default 90 秒 (long-tail を抑制する程度)。"""
         monkeypatch.delenv("LLM_REQUEST_TIMEOUT_SECONDS", raising=False)
         client = LiteLLMClient(model="openai/gpt-4o-mini", api_key="sk-x")
@@ -1224,9 +1140,7 @@ class TestLiteLLMClientTimeout:
 
     def test_argument_timeout(self) -> None:
         """引数で timeout を明示できる。"""
-        client = LiteLLMClient(
-            model="m", api_key="sk-x", timeout_seconds=30.0
-        )
+        client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=30.0)
         assert client._timeout_seconds == 30.0
 
     def test_constructor_timeout_override(self) -> None:
@@ -1234,14 +1148,10 @@ class TestLiteLLMClientTimeout:
         client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=45.0)
         assert client._timeout_seconds == 45.0
 
-    def test_timeout_argument_used(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_timeout_argument_used(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """timeout 引数がそのまま使われる。"""
         monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", "10")
-        client = LiteLLMClient(
-            model="m", api_key="sk-x", timeout_seconds=120.0
-        )
+        client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=120.0)
         assert client._timeout_seconds == 120.0
 
     def test_timeout_raises_value_error(self) -> None:
@@ -1258,9 +1168,7 @@ class TestLiteLLMClientTimeout:
     def test_invoke_litellm_completion_timeout(self) -> None:
         """invoke が litellmcompletion に timeout を渡す。"""
         client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=45.0)
-        with patch(
-            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
-        ) as mock_completion:
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
             mock_completion.return_value = _make_tool_call_response("noop", {})
             client.invoke(messages=[{"role": "user", "content": "hi"}], tools=[{}])
             _, call_kw = mock_completion.call_args
@@ -1271,14 +1179,12 @@ class TestLiteLLMClientReasoningEffort:
     """``reasoning_effort`` 引数による reasoning ON/OFF 制御の挙動を保証。
 
     背景: deepseek-v4-flash 等の reasoning model は default で effort=high が
-    乗り、output token を 5-15x 膨らませる。litellm 1.44 の OpenrouterConfig は
-    ``none`` は既存の二重無効化を維持し、有効な effort は top-level 引数へ渡す。
-    無効化 field と有効化引数を同時に送らないことを保証する。
+    乗り、output token を 5-15x 膨らませる。``none`` は既存の二重無効化を維持し、
+    有効な effort は OpenRouter 統一の形で ``extra_body`` に載せる。top-level の
+    ``reasoning_effort`` は LiteLLM のモデル表に無いモデルで送る前に弾かれる (#1582)。
     """
 
-    def test_default_reasoning_none_thinking_disabled_injects(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_default_reasoning_none_thinking_disabled_injects(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """未指定なら reasoning OFF + thinking disabled が extra_body に乗る。"""
         client = LiteLLMClient(model="m", api_key="sk-x")
         eb = client._build_extra_body()
@@ -1295,9 +1201,7 @@ class TestLiteLLMClientReasoningEffort:
             api_key="sk-x",
             reasoning_effort="none",
         )
-        with patch(
-            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
-        ) as mock_completion:
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
             mock_completion.return_value = _make_tool_call_response("wait", {})
             client.invoke(messages=messages, tools=[], tool_choice="required")
 
@@ -1310,41 +1214,96 @@ class TestLiteLLMClientReasoningEffort:
             "thinking": {"type": "disabled"},
         }
 
-    def test_high_reasoning_uses_top_level_effort_without_disable_blocks(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """effort=high は top-level に渡し、reasoning/thinking 無効化 field を送らない。"""
-        client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="high")
+    @pytest.mark.parametrize("effort", ["minimal", "low", "medium", "high", "xhigh"])
+    def test_enabled_effort_is_sent_in_extra_body_not_top_level_on_invoke(self, effort: str) -> None:
+        """有効な effort を構築時に渡すと、invoke は extra_body の reasoning.effort だけで送り、
+        top-level の reasoning_effort と thinking の無効化を送らない。"""
+        client = LiteLLMClient(
+            model="openrouter/deepseek/deepseek-v4.1-flash",
+            api_key="sk-x",
+            reasoning_effort=effort,
+        )
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("wait", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+            )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {"reasoning": {"effort": effort}}
+
+    @pytest.mark.parametrize("effort", ["minimal", "low", "medium", "high", "xhigh"])
+    def test_enabled_effort_is_sent_in_extra_body_not_top_level_on_base_kwargs(self, effort: str) -> None:
+        """有効な effort を構築時に渡すと、completion_base_kwargs も extra_body の
+        reasoning.effort だけを持ち、top-level の reasoning_effort を持たない。"""
+        client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort=effort)
+
         kwargs = client.completion_base_kwargs()
-        assert kwargs["reasoning_effort"] == "high"
+
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {"reasoning": {"effort": effort}}
+
+    def test_enabled_effort_passes_litellm_param_check_for_unlisted_model(self) -> None:
+        """LiteLLM のモデル表で reasoning 対応と確かめられないモデルに medium を渡しても、
+        invoke が組む引数は LiteLLM の送信前の引数検査で UnsupportedParamsError にならない。"""
+        from litellm.utils import get_optional_params
+
+        model = "openrouter/deepseek/deepseek-v4.1-flash"
+        client = LiteLLMClient(model=model, api_key="sk-x", reasoning_effort="medium")
+        tools = [{"type": "function", "function": {"name": "wait", "parameters": {}}}]
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("wait", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=tools,
+                tool_choice="required",
+            )
+        kwargs = mock_completion.call_args.kwargs
+        sent_params = {
+            key: kwargs[key] for key in ("tools", "tool_choice", "reasoning_effort", "extra_body") if key in kwargs
+        }
+
+        optional_params = get_optional_params(
+            model="deepseek/deepseek-v4.1-flash",
+            custom_llm_provider="openrouter",
+            **sent_params,
+        )
+
+        assert optional_params["extra_body"]["reasoning"] == {"effort": "medium"}
+
+    def test_empty_string_effort_sends_no_reasoning_field_on_invoke(self) -> None:
+        """reasoning_effort="" のとき、invoke は top-level にも extra_body にも
+        reasoning / thinking の欄を何も送らない。"""
+        client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="")
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("wait", {})
+            client.invoke(messages=[{"role": "user", "content": "x"}], tools=[])
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "reasoning_effort" not in kwargs
         assert "extra_body" not in kwargs
 
-    def test_empty_string_reasoning_field(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """reasoning_effort="" は古い model 互換用のエスケープハッチ。"""
+    def test_empty_string_effort_sends_no_reasoning_field_on_base_kwargs(self) -> None:
+        """reasoning_effort="" のとき、completion_base_kwargs は reasoning の欄を何も持たない。"""
         client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="")
-        eb = client._build_extra_body()
-        # extra_body 自体が None でなくてもよいが、reasoning/thinking は乗らない
-        if eb is not None:
-            assert "reasoning" not in eb
-            assert "thinking" not in eb
 
-    def test_unknown_effort_raises_value_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+        kwargs = client.completion_base_kwargs()
+
+        assert "reasoning_effort" not in kwargs
+        assert "extra_body" not in kwargs
+
+    def test_unknown_effort_raises_value_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """typo 防止 (silent fallback しない / PR #434 ポリシー継承)。"""
         with pytest.raises(ValueError, match="reasoning_effort"):
             LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="extreme")
 
-    def test_invoke_extra_body_reasoning_block(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_invoke_extra_body_reasoning_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """invoke の litellm.completion 呼び出し時、extra_body に reasoning が乗る。"""
         client = LiteLLMClient(model="m", api_key="sk-x")
-        with patch(
-            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
-        ) as mock_completion:
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
             mock_completion.return_value = _make_tool_call_response("noop", {})
             client.invoke(messages=[{"role": "user", "content": "hi"}], tools=[{}])
             _, call_kw = mock_completion.call_args
@@ -1352,9 +1311,7 @@ class TestLiteLLMClientReasoningEffort:
             assert eb["reasoning"]["effort"] == "none"
             assert eb["thinking"] == {"type": "disabled"}
 
-    def test_openrouter_routing(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_openrouter_routing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """provider routing + reasoning が同一 extra_body に並ぶ (どちらも保持)。"""
         client = LiteLLMClient(
             model="openrouter/x",
@@ -1382,9 +1339,7 @@ class TestLiteLLMClientWallTimeHardCap:
     アプリ層から wall-time を独立に強制する。
     """
 
-    def test_default_wall_cap_timeout_seconds_five(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_default_wall_cap_timeout_seconds_five(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """未指定なら self._timeout_seconds + 5 が wall cap になる。"""
         client = LiteLLMClient(model="m", api_key="sk-x", timeout_seconds=60.0)
         assert client._wall_cap_seconds == 65.0
@@ -1409,9 +1364,7 @@ class TestLiteLLMClientWallTimeHardCap:
         with pytest.raises(ValueError, match="must be greater than 0"):
             LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds=0)
 
-    def test_wall_cap_over_call_litellm_timeout_packaged(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_wall_cap_over_call_litellm_timeout_packaged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """litellm.completion が遅延するときに wall cap で打ち切られ Timeout になる。
 
         Note: time.sleep を monkeypatch すると Python の time module 全体が
@@ -1485,9 +1438,7 @@ class TestLiteLLMClientWallTimeHardCap:
         )
         _block.set()
 
-    def test_call_wall_cap(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_call_wall_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """wall cap 内に完走する call は普通に結果を返す。"""
         client = LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds=5.0)
         with patch(
@@ -1502,9 +1453,7 @@ class TestLiteLLMClientWallTimeHardCap:
         assert result is not None
         assert result["name"] == "ok"
 
-    def test_wall_cap_per_attempt_retry(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_wall_cap_per_attempt_retry(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """wall cap は各 attempt 個別に効き、retry 合算には適用されない。
 
         = 「最大 wall = (cap × retry 回数 + sleep 合計)」 ではあるが、
@@ -1551,21 +1500,63 @@ class TestLiteLLMClientReasoningEffortOverride:
     def _completion_extra_body(self, m_litellm) -> dict:
         return m_litellm.completion.call_args.kwargs["extra_body"]
 
-    def test_invoke_reasoning_effort_override_uses_top_level_argument(self, client):
-        """reasoning_effort='low' は top-level に渡し、無効化 field を同送しない。"""
+    @pytest.mark.parametrize("effort", ["minimal", "low", "medium", "high", "xhigh"])
+    def test_invoke_override_with_enabled_effort_uses_extra_body(self, client, effort: str) -> None:
+        """構築時が none でも、invoke の per-call override に有効な effort を渡すと、
+        extra_body の reasoning.effort だけで送り、無効化の欄と top-level 引数を送らない。"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
             client.invoke(
                 messages=[{"role": "user", "content": "x"}],
                 tools=[],
                 tool_choice="required",
-                reasoning_effort="low",
+                reasoning_effort=effort,
             )
             kwargs = m_litellm.completion.call_args.kwargs
-            assert kwargs["reasoning_effort"] == "low"
-            assert "extra_body" not in kwargs
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {"reasoning": {"effort": effort}}
 
-    def test_invoke_without_override_keeps_construction_default_None(self, client):
+    def test_base_kwargs_override_with_enabled_effort_uses_extra_body(self, client) -> None:
+        """completion_base_kwargs の per-call override に有効な effort を渡すと、
+        extra_body の reasoning.effort だけを持ち、top-level 引数を持たない。"""
+        kwargs = client.completion_base_kwargs(reasoning_effort="medium")
+
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {"reasoning": {"effort": "medium"}}
+
+    def test_invoke_override_with_empty_string_sends_no_reasoning_field(self, client) -> None:
+        """構築時が none でも、invoke の per-call override に空文字を渡すと、
+        その呼び出しは reasoning の欄を何も送らない。"""
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                reasoning_effort="",
+            )
+            kwargs = m_litellm.completion.call_args.kwargs
+        assert "reasoning_effort" not in kwargs
+        assert "extra_body" not in kwargs
+
+    def test_invoke_override_with_none_sends_only_disable_blocks(self) -> None:
+        """構築時が medium でも、invoke の per-call override に none を渡すと、
+        従来の無効化ブロックだけを送る。"""
+        client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="medium")
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                reasoning_effort="none",
+            )
+            kwargs = m_litellm.completion.call_args.kwargs
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {
+            "reasoning": {"effort": "none", "exclude": True},
+            "thinking": {"type": "disabled"},
+        }
+
+    def test_invoke_without_override_keeps_construction_default_none(self, client):
         """reasoning_effort を渡さなければ、構築時の既定 (none) のまま送られる
         (= 既存挙動を壊さない・プレフィックスキャッシュ不変)。"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
@@ -1599,13 +1590,9 @@ class TestLiteLLMClientReasoningEffortOverride:
             reasoning_effort="minimal",
         )
         messages = [{"role": "user", "content": "行動してください"}]
-        with patch(
-            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
-        ) as mock_completion:
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion") as mock_completion:
             response = _make_tool_call_response("wait", {})
-            response.usage = MagicMock(
-                spec=["prompt_tokens", "completion_tokens"]
-            )
+            response.usage = MagicMock(spec=["prompt_tokens", "completion_tokens"])
             response.usage.prompt_tokens = 12
             response.usage.completion_tokens = 3
             mock_completion.return_value = response
@@ -1619,8 +1606,8 @@ class TestLiteLLMClientReasoningEffortOverride:
         kwargs = mock_completion.call_args.kwargs
         assert kwargs["messages"] is messages
         assert kwargs["tool_choice"] == "required"
-        assert kwargs["reasoning_effort"] == "minimal"
-        assert "extra_body" not in kwargs
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"]["reasoning"] == {"effort": "minimal"}
         metrics = capture_sink.calls[0]["metrics"]
         assert metrics["reasoning_effort"] == "minimal"
         assert metrics["cached_tokens"] == 0

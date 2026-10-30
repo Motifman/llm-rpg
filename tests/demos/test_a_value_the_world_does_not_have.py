@@ -73,10 +73,12 @@ def _use_typo_in_initial_state(raw: dict[str, Any]) -> None:
 
 
 def _use_typo_in_effect(raw: dict[str, Any]) -> None:
-    _oven(raw)["interactions"][0]["effects"].append({
-        "effect_type": "CHANGE_PLAYER_STATE",
-        "parameters": {"state_updates": {"trade": _TYPO}},
-    })
+    _oven(raw)["interactions"][0]["effects"].append(
+        {
+            "effect_type": "CHANGE_PLAYER_STATE",
+            "parameters": {"state_updates": {"trade": _TYPO}},
+        }
+    )
 
 
 def _use_typo_in_precondition(raw: dict[str, Any]) -> None:
@@ -88,33 +90,46 @@ def _use_typo_in_precondition(raw: dict[str, Any]) -> None:
 
 
 def _use_typo_in_target_precondition(raw: dict[str, Any]) -> None:
-    raw["player_interactions"] = [{
-        "action_name": "hand_over_the_dough",
-        "display_label": "生地を渡す",
-        "preconditions": [{
-            "condition_type": "TARGET_PLAYER_STATE_IS",
-            "required_state": {"trade": _TYPO},
-            "failure_message": "相手が焼き手でなければ意味がない。",
-        }],
-        "effects": [{
-            "effect_type": "SHOW_MESSAGE",
-            "target": "TARGET_PLAYER",
-            "parameters": {"message": "生地を受け取った。"},
-        }],
-    }]
+    raw["player_interactions"] = [
+        {
+            "action_name": "hand_over_the_dough",
+            "display_label": "生地を渡す",
+            "preconditions": [
+                {
+                    "condition_type": "TARGET_PLAYER_STATE_IS",
+                    "required_state": {"trade": _TYPO},
+                    "failure_message": "相手が焼き手でなければ意味がない。",
+                }
+            ],
+            "effects": [
+                {
+                    "effect_type": "SHOW_MESSAGE",
+                    "target": "TARGET_PLAYER",
+                    "parameters": {"message": "生地を受け取った。"},
+                }
+            ],
+        }
+    ]
 
 
 class TestAValueTheWorldDoesNotHaveStopsTheWorld:
     """宣言に無い値は、書かれた場所によらず落ちる。"""
 
-    @pytest.mark.parametrize("mutate, where", [
-        (_use_typo_in_initial_state, "initial_state"),
-        (_use_typo_in_effect, "CHANGE_PLAYER_STATE"),
-        (_use_typo_in_precondition, "PLAYER_STATE_IS"),
-        (_use_typo_in_target_precondition, "TARGET_PLAYER_STATE_IS"),
-    ], ids=["initial_state", "effect", "precondition", "target_precondition"])
+    @pytest.mark.parametrize(
+        "mutate, where",
+        [
+            (_use_typo_in_initial_state, "initial_state"),
+            (_use_typo_in_effect, "CHANGE_PLAYER_STATE"),
+            (_use_typo_in_precondition, "PLAYER_STATE_IS"),
+            (_use_typo_in_target_precondition, "TARGET_PLAYER_STATE_IS"),
+        ],
+        ids=["initial_state", "effect", "precondition", "target_precondition"],
+    )
     def test_the_typo_is_refused(
-        self, tmp_path: Path, mutate: Callable[[dict[str, Any]], None], where: str,
+        self,
+        tmp_path: Path,
+        mutate: Callable[[dict[str, Any]], None],
+        where: str,
     ) -> None:
         """4 つの書き場所すべてで落ちる。
 
@@ -157,9 +172,7 @@ class TestAValueTheWorldDoesNotHaveStopsTheWorld:
 class TestTheWorldThatIsMerelyHardStaysAllowed:
     """満たせる人が居る条件は、落とさない。"""
 
-    def test_a_requirement_only_someone_else_can_meet_is_fine(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_requirement_only_someone_else_can_meet_is_fine(self, tmp_path: Path) -> None:
         """摘み手に焼き手を要求する条件は、**正しい世界**である。
 
         その人には永久に無理だが、**焼き手なら満たせる**。市場町の職能設計
@@ -170,16 +183,14 @@ class TestTheWorldThatIsMerelyHardStaysAllowed:
         picker = runtime._player_status_repo.find_by_id(PlayerId(1))
 
         assert picker.state == {"trade": "picker"}
-        assert any(
-            spawn.initial_state.get("trade") == _REAL
-            for spawn in runtime.scenario.player_spawns
-        )
+        assert any(spawn.initial_state.get("trade") == _REAL for spawn in runtime.scenario.player_spawns)
 
     def test_a_declared_value_is_accepted(self, tmp_path: Path) -> None:
         """宣言されている値なら通る (**正の対照**)。
 
         これが無いと、上の検査は「値を書くと必ず落ちる」でも緑になる。
         """
+
         def mutate(raw: dict[str, Any]) -> None:
             _oven(raw)["interactions"][0]["preconditions"][0] = {
                 "condition_type": "PLAYER_STATE_IS",
@@ -189,14 +200,13 @@ class TestTheWorldThatIsMerelyHardStaysAllowed:
 
         assert _load(tmp_path, mutate).scenario is not None
 
-    def test_an_attribute_without_declared_values_accepts_anything(
-        self, tmp_path: Path
-    ) -> None:
+    def test_an_attribute_without_declared_values_accepts_anything(self, tmp_path: Path) -> None:
         """`values` を宣言していない属性は、どの値でも通る。
 
         数値や時刻のように**列挙のしようがない属性**がある。宣言していない
         ことを誤りにしない。
         """
+
         def mutate(raw: dict[str, Any]) -> None:
             raw["player_attributes"]["mood"] = {
                 "display_name": "機嫌",
@@ -210,6 +220,7 @@ class TestTheWorldThatIsMerelyHardStaysAllowed:
 
     def test_an_undeclared_attribute_accepts_anything(self, tmp_path: Path) -> None:
         """宣言の無い属性は、従来どおり何でも書ける。"""
+
         def mutate(raw: dict[str, Any]) -> None:
             for spawn in raw["players"]:
                 spawn.setdefault("initial_state", {})["whatever"] = "x"

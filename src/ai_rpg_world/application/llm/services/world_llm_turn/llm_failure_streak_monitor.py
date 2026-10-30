@@ -103,9 +103,7 @@ class LlmFailureStreakMonitor:
             return self._tripped_reason or ""
 
     def _describe_locked(self) -> str:
-        breakdown = ", ".join(
-            f"{code}: {count}" for code, count in _count_codes(self._streak_error_codes)
-        )
+        breakdown = ", ".join(f"{code}: {count}" for code, count in _count_codes(self._streak_error_codes))
         return f"LLM 呼び出しが {self._streak} 件連続で失敗した ({breakdown})"
 
 

@@ -57,11 +57,16 @@ def town(tmp_path: Path) -> Any:
     raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     for pid, name in (("tom", "トム"), ("mina", "ミナ")):
-        raw["players"].append({
-            "id": pid, "name": name, "spawn_spot": spawn,
-            "initial_items": [], "initial_gold": 200,
-            "persona_prompt": f"あなたは{name}。",
-        })
+        raw["players"].append(
+            {
+                "id": pid,
+                "name": name,
+                "spawn_spot": spawn,
+                "initial_items": [],
+                "initial_gold": 200,
+                "persona_prompt": f"あなたは{name}。",
+            }
+        )
     raw["market"] = {"board_spot": "market_square"}
     path = tmp_path / "market_town_v1.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -97,17 +102,16 @@ def _drain_all(runtime: Any) -> None:
 
 
 def _market_observations(runtime: Any, player_id: PlayerId) -> list[Any]:
-    return [
-        o
-        for o in _drain(runtime, player_id)
-        if (o.structured or {}).get("type") == "market_board_activity"
-    ]
+    return [o for o in _drain(runtime, player_id) if (o.structured or {}).get("type") == "market_board_activity"]
 
 
 def _list_bread(runtime: Any, seller: PlayerId, *, quantity: int, price: int) -> Any:
     _give(runtime, seller, _BREAD, quantity)
     return runtime._market_service.place_sell_order(
-        seller, item_label=_BREAD, quantity=quantity, unit_price=price,
+        seller,
+        item_label=_BREAD,
+        quantity=quantity,
+        unit_price=price,
         current_tick=runtime.current_tick(),
     )
 
@@ -117,9 +121,7 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
 
     graph = runtime._spot_graph_repo.find_graph()
     here = graph.get_entity_spot(EntityId.create(int(player_id)))
-    elsewhere = next(
-        spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here
-    )
+    elsewhere = next(spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here)
     graph.unplace_entity(EntityId.create(int(player_id)))
     graph.place_entity(EntityId.create(int(player_id)), elsewhere)
     runtime._spot_graph_repo.save(graph)
@@ -154,7 +156,10 @@ class TestNothingYouPutOnTheBoardIsAnnounced:
         _drain_all(town)
 
         town._market_service.reprice_order(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=18,
+            _LENA,
+            item_label=_BREAD,
+            side=MarketOrderSide.SELL,
+            new_unit_price=18,
         )
 
         assert _market_observations(town, _TOM) == []
@@ -165,7 +170,9 @@ class TestNothingYouPutOnTheBoardIsAnnounced:
         _drain_all(town)
 
         town._market_service.cancel_by(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL,
+            _LENA,
+            item_label=_BREAD,
+            side=MarketOrderSide.SELL,
         )
 
         assert _market_observations(town, _TOM) == []
@@ -175,7 +182,10 @@ class TestNothingYouPutOnTheBoardIsAnnounced:
         _drain_all(town)
 
         town._market_service.place_buy_order(
-            _LENA, item_label=_BREAD, quantity=1, unit_price=12,
+            _LENA,
+            item_label=_BREAD,
+            quantity=1,
+            unit_price=12,
             current_tick=town.current_tick(),
         )
 
@@ -198,7 +208,10 @@ class TestASettlementReachesBothSidesAndNoOneElse:
         _drain_all(town)
 
         town._market_service.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         observed = _market_observations(town, _LENA)
@@ -211,7 +224,10 @@ class TestASettlementReachesBothSidesAndNoOneElse:
         _drain_all(town)
 
         town._market_service.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert _market_observations(town, _MINA) == []
@@ -226,7 +242,10 @@ class TestASettlementReachesBothSidesAndNoOneElse:
         _drain_all(town)
 
         town._market_service.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         (observed,) = _market_observations(town, _LENA)
@@ -238,7 +257,10 @@ class TestASettlementReachesBothSidesAndNoOneElse:
         _drain_all(town)
 
         town._market_service.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert _market_observations(town, _TOM) == []
@@ -255,7 +277,10 @@ class TestASettlementReachesBothSidesAndNoOneElse:
         _drain_all(town)
 
         town._market_service.buy_best(
-            _TOM, item_label=_BREAD, quantity=2, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=2,
+            current_tick=town.current_tick(),
         )
 
         assert len(_market_observations(town, _LENA)) == 1

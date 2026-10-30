@@ -53,6 +53,7 @@ class ShopItemUnlistedEvent(BaseDomainEvent[ShopId, "ShopAggregate"]):
 @dataclass(frozen=True)
 class ShopItemPurchasedEvent(BaseDomainEvent[ShopId, "ShopAggregate"]):
     """ショップ購入イベント"""
+
     listing_id: ShopListingId
     item_instance_id: ItemInstanceId
     buyer_id: PlayerId

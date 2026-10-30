@@ -44,9 +44,7 @@ class PlayerDeathGraceTimer:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(downed_at_tick, int) or downed_at_tick < 0:
-            raise ValueError(
-                f"downed_at_tick must be non-negative int, got {downed_at_tick!r}"
-            )
+            raise ValueError(f"downed_at_tick must be non-negative int, got {downed_at_tick!r}")
         self._downed_at[int(player_id)] = downed_at_tick
 
     def cancel(self, player_id: PlayerId, *, event_id: int | None = None) -> None:
@@ -55,9 +53,7 @@ class PlayerDeathGraceTimer:
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
-        if event_id is not None and (
-            isinstance(event_id, bool) or not isinstance(event_id, int)
-        ):
+        if event_id is not None and (isinstance(event_id, bool) or not isinstance(event_id, int)):
             raise TypeError("event_id must be int or None")
         downed_at = self._downed_at.pop(int(player_id), None)
         if event_id is not None and downed_at is not None:
@@ -85,23 +81,15 @@ class PlayerDeathGraceTimer:
             raise TypeError("player_id must be PlayerId")
         return self._downed_at.get(int(player_id))
 
-    def overdue_players(
-        self, current_tick: int, grace_ticks: int
-    ) -> list[PlayerId]:
+    def overdue_players(self, current_tick: int, grace_ticks: int) -> list[PlayerId]:
         """猶予 tick を過ぎた pending player の list を返す。
 
         判定: current_tick - downed_at_tick >= grace_ticks
         (= ちょうど grace_ticks 経過した時点で overdue 入り、inclusive)
         """
         if not isinstance(grace_ticks, int) or grace_ticks < 0:
-            raise ValueError(
-                f"grace_ticks must be non-negative int, got {grace_ticks!r}"
-            )
-        return [
-            PlayerId(pid)
-            for pid, downed_at in self._downed_at.items()
-            if current_tick - downed_at >= grace_ticks
-        ]
+            raise ValueError(f"grace_ticks must be non-negative int, got {grace_ticks!r}")
+        return [PlayerId(pid) for pid, downed_at in self._downed_at.items() if current_tick - downed_at >= grace_ticks]
 
     def is_overdue(
         self,
@@ -114,14 +102,9 @@ class PlayerDeathGraceTimer:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(grace_ticks, int) or grace_ticks < 0:
-            raise ValueError(
-                f"grace_ticks must be non-negative int, got {grace_ticks!r}"
-            )
+            raise ValueError(f"grace_ticks must be non-negative int, got {grace_ticks!r}")
         downed_at = self._downed_at.get(int(player_id))
-        return (
-            downed_at is not None
-            and current_tick - downed_at >= grace_ticks
-        )
+        return downed_at is not None and current_tick - downed_at >= grace_ticks
 
     def rollback_snapshot(self) -> tuple[dict[int, int], dict[int, int]]:
         """pendingと確定後観測待ちの起点tickを複製して返す。"""

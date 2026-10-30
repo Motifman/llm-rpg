@@ -104,6 +104,8 @@ agent は「現在のもの」を見ることはできるが、「自分が初�
   そのまま従います
 - entity_key は polymorphic な string にします。`player:noa` / `spot:forest_clearing` /
   `weather:storm` / `emotion:fear` のように prefix で kind を表します
+- 人 (`player:`) は、いまは環境の encounter に書きません。会った人は Being の知り合いの
+  記録が持ちます (design_decisions D1520)
 - state は最小から始めます。first_seen / last_seen / count の 3 つ。intensity や context
   は必要になってから追加します
 - 「忘却」は当面入れません。snapshot resume との相性を考えて全保持から始めて、token
@@ -213,7 +215,7 @@ epistemic_gap が低頻度の自己モデル更新、という役割分担で両
 
 ## 関連
 
-- `docs/memory_system/episodic_memory_system_spec.md` — 既存 episodic 仕様
+- `docs/memory_system/episodic_memory_system_spec.md` (#1631 で削除) — 既存 episodic 仕様
 - `docs/memory_system/short_term_memory_design.md` — L1 / L4 / L5 設計
 - `docs/design_decisions.md` #4 — travel / wait は tool 内で tick を進めない (engine
   不変条件)

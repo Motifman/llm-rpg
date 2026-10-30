@@ -1,13 +1,13 @@
 """
 InMemoryDataStore - すべてのインメモリリポジトリで共有されるデータストレージ
 """
+
 from copy import deepcopy
 from datetime import datetime, timedelta
 from threading import Lock
 from typing import Any
+from uuid import uuid4
 
-from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
-from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
@@ -49,13 +49,11 @@ from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
     LocationEstablishmentAggregate,
 )
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
 from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 
 
@@ -69,25 +67,27 @@ class InMemoryDataStore:
         self._uow_transactions_poisoned = False
 
         # SNS Domain
+        # 保存領域の複製では維持し、新規作成時だけ別の名前空間を割り当てる。
+        self.sns_public_namespace = uuid4().hex
         self.sns_users: dict[SnsUserId, UserAggregate] = {}
         self.sns_username_to_user_id: dict[str, SnsUserId] = {}
         self.sns_next_user_id = 1
-        
+
         self.posts: dict[PostId, PostAggregate] = {}
         self.next_post_id = 1
-        
+
         self.replies: dict[ReplyId, ReplyAggregate] = {}
         self.next_reply_id = 1
-        
+
         self.sns_notifications: dict[NotificationId, SnsNotification] = {}
         self.next_sns_notification_id = 1
-        
+
         # Player Domain
         self.player_profiles: dict[PlayerId, Any] = {}
         self.player_inventories: dict[PlayerId, Any] = {}
         self.player_statuses: dict[PlayerId, Any] = {}
         self.next_player_id = 1
-        
+
         # Trade Domain
         self.trades: dict[Any, Any] = {}
         self.next_trade_id = 1
@@ -108,25 +108,17 @@ class InMemoryDataStore:
 
         # Skill Domain
         self.skill_loadouts: dict[SkillLoadoutId, SkillLoadoutAggregate] = {}
-        self.skill_deck_progresses: dict[
-            SkillDeckProgressId, SkillDeckProgressAggregate
-        ] = {}
+        self.skill_deck_progresses: dict[SkillDeckProgressId, SkillDeckProgressAggregate] = {}
 
         # Item Domain
         self.items: dict[ItemInstanceId, ItemAggregate] = {}
         self.next_item_instance_id = 1
-        
+
         # World Domain
-        self.physical_maps: dict[SpotId, PhysicalMapAggregate] = {}
         self.weather_zones: dict[WeatherZoneId, WeatherZone] = {}
         self.monsters: dict[MonsterId, MonsterAggregate] = {}
-        self.world_object_to_monster_id: dict[WorldObjectId, MonsterId] = {}
-        self.world_object_id_to_spot_id: dict[WorldObjectId, SpotId] = {}
         self.next_monster_id = 1
-        self.next_world_object_id = 100000  # NPC用。プレイヤーIDと衝突しない範囲
         self.spawn_tables: dict[SpotId, SpotSpawnTable] = {}
-        self.hit_boxes: dict[HitBoxId, HitBoxAggregate] = {}
-        self.next_hit_box_id = 1
         self.spots: dict[SpotId, Spot] = {}
         self.location_establishments: dict[LocationSlotId, LocationEstablishmentAggregate] = {}
 
@@ -201,36 +193,181 @@ class InMemoryDataStore:
     def _setup_sns_posts(self) -> None:
         """SNSポストのサンプルデータ"""
         base_time = datetime.now()
-        
+
         posts_data = [
             (1, 1, "今日は新しい冒険が始まる！ みんなの応援待ってるよ！", ["冒険", "勇者"], PostVisibility.PUBLIC, 120),
-            (2, 2, "新しい魔法の研究中！ 魔法の力で世界をより良くしたいな。", ["魔法", "研究"], PostVisibility.PUBLIC, 90),
-            (3, 3, "今日も剣の修行を頑張った！ 強くなるために毎日努力だ。", ["剣術", "修行"], PostVisibility.FOLLOWERS_ONLY, 60),
-            (4, 4, "素晴らしい宝物を見つけたぞ！ これでみんな幸せになるね。", ["宝物", "冒険"], PostVisibility.PUBLIC, 45),
-            (5, 5, "今日も多くの人々を癒すことができた。 みんなの笑顔を見るのが何よりの喜びだ。", ["癒し", "僧侶"], PostVisibility.PUBLIC, 30),
-            (6, 6, "良い品物を手に入れたよ！ 興味のある人は声かけてね。", ["取引", "商人"], PostVisibility.FOLLOWERS_ONLY, 15),
-            (7, 1, "もちろん一緒に研究しよう！ 魔法の力は冒険に欠かせないよ。", ["魔法", "協力"], PostVisibility.PUBLIC, 10),
-            (8, 2, "みんなの応援ありがとう！ 一緒に素晴らしい冒険にしよう。", ["魔法", "冒険"], PostVisibility.PUBLIC, 5),
-            (9, 1, "今日の出来事について考えている。冒険は楽しいけれど、責任も重いな...", ["メモ", "内省"], PostVisibility.PRIVATE, 3),
-            (10, 2, "新しい魔法の理論をまとめている。フォロワー諸君の意見が聞きたい。", ["魔法", "理論", "研究"], PostVisibility.FOLLOWERS_ONLY, 2),
-            (11, 3, "剣の修行は厳しいが、強くなれている実感がある。明日はもっと頑張ろう。", ["日記", "修行"], PostVisibility.PRIVATE, 1),
-            (12, 1, "明日、街の広場で大きなイベントが開催されます！ みんなで一緒に楽しみましょう！", ["イベント", "街", "みんな"], PostVisibility.PUBLIC, 180),
-            (13, 2, "新しい魔法の研究成果を発表します！ 火の魔法が大幅にパワーアップしました。", ["魔法", "研究", "進化"], PostVisibility.PUBLIC, 150),
-            (14, 4, "昔の冒険の思い出を語ろう。ドラゴンと戦ったあの日は忘れられないな。", ["冒険", "思い出", "ドラゴン"], PostVisibility.PUBLIC, 105),
-            (15, 5, "今夜、癒しの音楽会を開催します。美しい音楽と共に心を癒しましょう。", ["音楽", "癒し", "イベント"], PostVisibility.PUBLIC, 75),
-            (16, 3, "新しい剣術の技を開発しました！ フォロワー諸君に特別に公開します。", ["剣術", "技", "修行"], PostVisibility.FOLLOWERS_ONLY, 45),
-            (17, 4, "次の宝探しのヒント：森の奥深く、月の光が差す場所を探せ。", ["宝探し", "ヒント", "冒険"], PostVisibility.PUBLIC, 30),
-            (18, 6, "スペシャルオファー！ 今日だけ、全商品20%オフ！ お買い得ですよ。", ["セール", "商人", "お得"], PostVisibility.PUBLIC, 20),
-            (19, 2, "魔法のワークショップ開催！ 初心者でも参加OKです。一緒に魔法を学びましょう。", ["ワークショップ", "魔法", "初心者"], PostVisibility.PUBLIC, 10),
-            (20, 1, "ついに魔王を倒した！ みんなの応援のおかげだ。ありがとう！", ["勝利", "英雄", "魔王"], PostVisibility.PUBLIC, 240),
+            (
+                2,
+                2,
+                "新しい魔法の研究中！ 魔法の力で世界をより良くしたいな。",
+                ["魔法", "研究"],
+                PostVisibility.PUBLIC,
+                90,
+            ),
+            (
+                3,
+                3,
+                "今日も剣の修行を頑張った！ 強くなるために毎日努力だ。",
+                ["剣術", "修行"],
+                PostVisibility.FOLLOWERS_ONLY,
+                60,
+            ),
+            (
+                4,
+                4,
+                "素晴らしい宝物を見つけたぞ！ これでみんな幸せになるね。",
+                ["宝物", "冒険"],
+                PostVisibility.PUBLIC,
+                45,
+            ),
+            (
+                5,
+                5,
+                "今日も多くの人々を癒すことができた。 みんなの笑顔を見るのが何よりの喜びだ。",
+                ["癒し", "僧侶"],
+                PostVisibility.PUBLIC,
+                30,
+            ),
+            (
+                6,
+                6,
+                "良い品物を手に入れたよ！ 興味のある人は声かけてね。",
+                ["取引", "商人"],
+                PostVisibility.FOLLOWERS_ONLY,
+                15,
+            ),
+            (
+                7,
+                1,
+                "もちろん一緒に研究しよう！ 魔法の力は冒険に欠かせないよ。",
+                ["魔法", "協力"],
+                PostVisibility.PUBLIC,
+                10,
+            ),
+            (
+                8,
+                2,
+                "みんなの応援ありがとう！ 一緒に素晴らしい冒険にしよう。",
+                ["魔法", "冒険"],
+                PostVisibility.PUBLIC,
+                5,
+            ),
+            (
+                9,
+                1,
+                "今日の出来事について考えている。冒険は楽しいけれど、責任も重いな...",
+                ["メモ", "内省"],
+                PostVisibility.PRIVATE,
+                3,
+            ),
+            (
+                10,
+                2,
+                "新しい魔法の理論をまとめている。フォロワー諸君の意見が聞きたい。",
+                ["魔法", "理論", "研究"],
+                PostVisibility.FOLLOWERS_ONLY,
+                2,
+            ),
+            (
+                11,
+                3,
+                "剣の修行は厳しいが、強くなれている実感がある。明日はもっと頑張ろう。",
+                ["日記", "修行"],
+                PostVisibility.PRIVATE,
+                1,
+            ),
+            (
+                12,
+                1,
+                "明日、街の広場で大きなイベントが開催されます！ みんなで一緒に楽しみましょう！",
+                ["イベント", "街", "みんな"],
+                PostVisibility.PUBLIC,
+                180,
+            ),
+            (
+                13,
+                2,
+                "新しい魔法の研究成果を発表します！ 火の魔法が大幅にパワーアップしました。",
+                ["魔法", "研究", "進化"],
+                PostVisibility.PUBLIC,
+                150,
+            ),
+            (
+                14,
+                4,
+                "昔の冒険の思い出を語ろう。ドラゴンと戦ったあの日は忘れられないな。",
+                ["冒険", "思い出", "ドラゴン"],
+                PostVisibility.PUBLIC,
+                105,
+            ),
+            (
+                15,
+                5,
+                "今夜、癒しの音楽会を開催します。美しい音楽と共に心を癒しましょう。",
+                ["音楽", "癒し", "イベント"],
+                PostVisibility.PUBLIC,
+                75,
+            ),
+            (
+                16,
+                3,
+                "新しい剣術の技を開発しました！ フォロワー諸君に特別に公開します。",
+                ["剣術", "技", "修行"],
+                PostVisibility.FOLLOWERS_ONLY,
+                45,
+            ),
+            (
+                17,
+                4,
+                "次の宝探しのヒント：森の奥深く、月の光が差す場所を探せ。",
+                ["宝探し", "ヒント", "冒険"],
+                PostVisibility.PUBLIC,
+                30,
+            ),
+            (
+                18,
+                6,
+                "スペシャルオファー！ 今日だけ、全商品20%オフ！ お買い得ですよ。",
+                ["セール", "商人", "お得"],
+                PostVisibility.PUBLIC,
+                20,
+            ),
+            (
+                19,
+                2,
+                "魔法のワークショップ開催！ 初心者でも参加OKです。一緒に魔法を学びましょう。",
+                ["ワークショップ", "魔法", "初心者"],
+                PostVisibility.PUBLIC,
+                10,
+            ),
+            (
+                20,
+                1,
+                "ついに魔王を倒した！ みんなの応援のおかげだ。ありがとう！",
+                ["勝利", "英雄", "魔王"],
+                PostVisibility.PUBLIC,
+                240,
+            ),
         ]
 
         for pid, uid, content, tags, visibility, mins_ago in posts_data:
             post_content = PostContent(content=content, hashtags=tuple(tags), visibility=visibility)
             created_at = base_time - timedelta(minutes=mins_ago)
-            post = PostAggregate(PostId(pid), SnsUserId(uid), post_content, set(), set(), set(), False, None, None, created_at)
+            post = PostAggregate(
+                PostId(pid),
+                SnsUserId(uid),
+                post_content,
+                set(),
+                set(),
+                set(),
+                False,
+                None,
+                None,
+                created_at,
+                author_identity_token=self.sns_users[SnsUserId(uid)].identity_token,
+            )
             self.posts[PostId(pid)] = post
-            
+
         # いいねの追加
         self.posts[PostId(1)].like_post(SnsUserId(2))
         self.posts[PostId(1)].like_post(SnsUserId(3))
@@ -277,7 +414,7 @@ class InMemoryDataStore:
     def _setup_sns_replies(self) -> None:
         """SNSリプライのサンプルデータ"""
         base_time = datetime.now()
-        
+
         replies_data = [
             (1, 2, "一緒に冒険に行きたい！ 僕も手伝うよ。", ["冒険", "協力"], PostId(1), None, 105),
             (2, 3, "素晴らしい冒険の始まりですね！ 応援しています。", ["冒険", "応援"], PostId(1), None, 90),
@@ -294,9 +431,27 @@ class InMemoryDataStore:
         for rid, uid, content, tags, pid, parent_rid, mins_ago in replies_data:
             rep_content = PostContent(content=content, hashtags=tuple(tags), visibility=PostVisibility.PUBLIC)
             created_at = base_time - timedelta(minutes=mins_ago)
-            reply = ReplyAggregate(ReplyId(rid), SnsUserId(uid), rep_content, set(), set(), set(), False, pid, parent_rid, created_at)
+            if pid is not None:
+                parent_identity_token = self.posts[pid].identity_token
+            else:
+                assert parent_rid is not None
+                parent_identity_token = self.replies[parent_rid].identity_token
+            reply = ReplyAggregate(
+                ReplyId(rid),
+                SnsUserId(uid),
+                rep_content,
+                set(),
+                set(),
+                set(),
+                False,
+                pid,
+                parent_rid,
+                created_at,
+                author_identity_token=self.sns_users[SnsUserId(uid)].identity_token,
+                parent_identity_token=parent_identity_token,
+            )
             self.replies[ReplyId(rid)] = reply
-            
+
         self.next_reply_id = 11
 
     def clear_all(self) -> None:
@@ -328,53 +483,35 @@ class InMemoryDataStore:
         self.skill_deck_progresses.clear()
         self.items.clear()
         self.next_item_instance_id = 1
-        self.physical_maps.clear()
         self.weather_zones.clear()
         self.monsters.clear()
-        self.world_object_to_monster_id.clear()
-        self.world_object_id_to_spot_id.clear()
         self.next_monster_id = 1
-        self.next_world_object_id = 100000
         self.spawn_tables.clear()
-        self.hit_boxes.clear()
         self.spots.clear()
         self.location_establishments.clear()
         self.spot_interiors.clear()
 
     def take_snapshot(self) -> dict[str, Any]:
         """transaction管理用の私有属性を除く全業務状態を複製する。"""
-        return {
-            name: deepcopy(value)
-            for name, value in vars(self).items()
-            if not name.startswith("_uow_")
-        }
+        return {name: deepcopy(value) for name, value in vars(self).items() if not name.startswith("_uow_")}
 
     def restore_snapshot(self, snapshot: dict[str, Any]) -> None:
         """全業務状態の完全snapshotだけを復元する。"""
-        expected = {
-            name for name in vars(self) if not name.startswith("_uow_")
-        }
+        expected = {name for name in vars(self) if not name.startswith("_uow_")}
         actual = set(snapshot)
         if actual != expected:
             missing = sorted(expected - actual)
             unknown = sorted(actual - expected)
-            raise RuntimeError(
-                "InMemoryDataStoreのsnapshot項目が一致しません: "
-                f"missing={missing}, unknown={unknown}"
-            )
+            raise RuntimeError(f"InMemoryDataStoreのsnapshot項目が一致しません: missing={missing}, unknown={unknown}")
         for name, value in snapshot.items():
             setattr(self, name, deepcopy(value))
 
     def acquire_uow_transaction(self) -> None:
         """このstore上の全体snapshot transactionを非待機で1つだけ開始する。"""
         if self._uow_transactions_poisoned:
-            raise RuntimeError(
-                "rollback不能になったInMemoryDataStoreは再利用できません"
-            )
+            raise RuntimeError("rollback不能になったInMemoryDataStoreは再利用できません")
         if not self._uow_transaction_lock.acquire(blocking=False):
-            raise RuntimeError(
-                "同じInMemoryDataStore上で複数transactionは開始できません"
-            )
+            raise RuntimeError("同じInMemoryDataStore上で複数transactionは開始できません")
 
     def release_uow_transaction(self) -> None:
         """現在のsnapshot transactionの排他を解除する。"""

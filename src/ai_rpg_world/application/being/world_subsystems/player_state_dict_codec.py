@@ -32,10 +32,7 @@ class PlayerStateDictSubsystemCodec(WorldSubsystemCodec):
     def capture(self, runtime: Any) -> dict[str, Any]:
         repo = getattr(runtime, "_player_status_repo", None)
         if repo is None:
-            raise RuntimeError(
-                "runtime._player_status_repo not found; "
-                "PlayerStateDictSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._player_status_repo not found; PlayerStateDictSubsystemCodec requires it")
         entries: list[dict[str, Any]] = []
         for pid in runtime.get_player_ids():
             agg = repo.find_by_id(pid)
@@ -57,18 +54,12 @@ class PlayerStateDictSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
         repo = getattr(runtime, "_player_status_repo", None)
         if repo is None:
-            raise RuntimeError(
-                "runtime._player_status_repo not found; "
-                "PlayerStateDictSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._player_status_repo not found; PlayerStateDictSubsystemCodec requires it")
         for entry in data.get("entries", []):
             pid = PlayerId(int(entry["player_id"]))
             agg = repo.find_by_id(pid)

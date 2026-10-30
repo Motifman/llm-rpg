@@ -21,11 +21,7 @@ def evaluate_players_at_spot(
     required_player_count: int | None,
 ) -> PlayersAtSpotConditionResult:
     """必要人数の既定値を解決し、在席数がその人数以上かを判定する。"""
-    required = (
-        required_player_count
-        if required_player_count is not None
-        else DEFAULT_REQUIRED_PLAYER_COUNT
-    )
+    required = required_player_count if required_player_count is not None else DEFAULT_REQUIRED_PLAYER_COUNT
     return PlayersAtSpotConditionResult(
         required_player_count=required,
         is_satisfied=presence_count >= required,

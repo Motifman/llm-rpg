@@ -6,6 +6,7 @@ from ai_rpg_world.domain.item.exception import DurabilityValidationException
 @dataclass(frozen=True)
 class Durability:
     """耐久度を表す値オブジェクト"""
+
     max_value: int
     current: int
 
@@ -16,7 +17,9 @@ class Durability:
         if self.current < 0:
             raise DurabilityValidationException(f"Durability: current must be >= 0, got {self.current}")
         if self.current > self.max_value:
-            raise DurabilityValidationException(f"Durability: current ({self.current}) must be <= max_value ({self.max_value})")
+            raise DurabilityValidationException(
+                f"Durability: current ({self.current}) must be <= max_value ({self.max_value})"
+            )
 
     def use(self, amount: int = 1) -> tuple["Durability", bool]:
         """耐久度を使用する（新しいインスタンスを返す）

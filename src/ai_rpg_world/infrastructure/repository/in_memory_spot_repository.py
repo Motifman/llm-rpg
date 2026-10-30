@@ -1,4 +1,3 @@
-
 from typing import Any
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -16,7 +15,9 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemorySpotRepository(SpotRepository, InMemoryRepositoryBase):
     """スポットリポジトリのインメモリ実装"""
 
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
+    def __init__(
+        self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None
+    ):
         super().__init__(data_store, unit_of_work)
 
     @property
@@ -35,6 +36,7 @@ class InMemorySpotRepository(SpotRepository, InMemoryRepositoryBase):
 
     def save(self, spot: Spot) -> Spot:
         cloned = self._clone(spot)
+
         def operation() -> Any:
             self._spot_dict[cloned.spot_id] = cloned
             return cloned

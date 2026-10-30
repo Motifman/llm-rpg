@@ -1,6 +1,7 @@
 """
 InMemoryItemTradeStatisticsReadModelRepositoryのテスト
 """
+
 from datetime import datetime, timedelta
 
 import pytest
@@ -61,7 +62,7 @@ class TestInMemoryItemTradeStatisticsReadModelRepository:
             median_price=1500,
             total_trades=10,
             success_rate=0.8,
-            last_updated=datetime.now()
+            last_updated=datetime.now(),
         )
 
         # 保存

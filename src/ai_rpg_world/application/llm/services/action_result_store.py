@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from datetime import datetime, timezone
 
+from ai_rpg_world.application.common.execution_provenance import ExecutionProvenance
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.contracts.interfaces import IActionResultStore
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
@@ -14,15 +15,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class DefaultActionResultStore(IActionResultStore):
     """プレイヤーごとに行動結果をリストで保持する in-memory 実装。"""
 
-    def __init__(
-        self,
-        max_entries_per_player: int = 100,
-        *,
-        event_store: UnifiedRecentEventStore | None = None,
-    ) -> None:
-        if max_entries_per_player <= 0:
-            raise ValueError("max_entries_per_player must be greater than 0")
-        self._max_entries = max_entries_per_player
+    def __init__(self, *, event_store: UnifiedRecentEventStore | None = None) -> None:
         self._event_store = event_store or UnifiedRecentEventStore()
 
     def _key(self, player_id: PlayerId) -> int:
@@ -45,13 +38,8 @@ class DefaultActionResultStore(IActionResultStore):
         game_time_label: str | None = None,
         omit_result_in_prompt: bool = False,
         inner_thought: str | None = None,
-        expected_result: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
-        scene_boundary: bool = False,
         occurred_tick: int | None = None,
-        prediction_context_id: str | None = None,
-        in_context_belief_ids: tuple[str, ...] = (),
+        execution_provenance: ExecutionProvenance | None = None,
     ) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -67,15 +55,11 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("error_code must be str or None")
         if tool_name is not None and not isinstance(tool_name, str):
             raise TypeError("tool_name must be str or None")
-        if identifier_arguments is not None and not isinstance(
-            identifier_arguments, Mapping
-        ):
+        if identifier_arguments is not None and not isinstance(identifier_arguments, Mapping):
             raise TypeError("identifier_arguments must be Mapping[str, str] or None")
         if not isinstance(free_text_argument_names, tuple):
             raise TypeError("free_text_argument_names must be tuple[str, ...]")
-        if argument_fingerprint is not None and not isinstance(
-            argument_fingerprint, str
-        ):
+        if argument_fingerprint is not None and not isinstance(argument_fingerprint, str):
             raise TypeError("argument_fingerprint must be str or None")
         if not isinstance(should_reschedule, bool):
             raise TypeError("should_reschedule must be bool")
@@ -85,24 +69,8 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("omit_result_in_prompt must be bool")
         if inner_thought is not None and not isinstance(inner_thought, str):
             raise TypeError("inner_thought must be str or None")
-        if expected_result is not None and not isinstance(expected_result, str):
-            raise TypeError("expected_result must be str or None")
-        if intention is not None and not isinstance(intention, str):
-            raise TypeError("intention must be str or None")
-        if emotion_hint is not None and not isinstance(emotion_hint, str):
-            raise TypeError("emotion_hint must be str or None")
-        if not isinstance(scene_boundary, bool):
-            raise TypeError("scene_boundary must be bool")
-        if occurred_tick is not None and (
-            not isinstance(occurred_tick, int) or isinstance(occurred_tick, bool)
-        ):
+        if occurred_tick is not None and (not isinstance(occurred_tick, int) or isinstance(occurred_tick, bool)):
             raise TypeError("occurred_tick must be int or None")
-        if prediction_context_id is not None and not isinstance(
-            prediction_context_id, str
-        ):
-            raise TypeError("prediction_context_id must be str or None")
-        if not isinstance(in_context_belief_ids, tuple):
-            raise TypeError("in_context_belief_ids must be tuple[str, ...]")
         # Issue #311 後続: フォールバックを tz-aware UTC に統一。
         # world_runtime は明示的に渡すが、それ以外の caller の取りこぼし防止。
         at = occurred_at if occurred_at is not None else datetime.now(timezone.utc)
@@ -120,17 +88,10 @@ class DefaultActionResultStore(IActionResultStore):
             game_time_label=game_time_label,
             omit_result_in_prompt=omit_result_in_prompt,
             inner_thought=inner_thought,
-            expected_result=expected_result,
-            intention=intention,
-            emotion_hint=emotion_hint,
-            scene_boundary=scene_boundary,
             occurred_tick=occurred_tick,
-            prediction_context_id=prediction_context_id,
-            in_context_belief_ids=in_context_belief_ids,
+            execution_provenance=execution_provenance,
         )
-        self._event_store.append_action_result(
-            player_id, entry, max_entries=self._max_entries
-        )
+        self._event_store.append_action_result(player_id, entry)
 
     def get_recent(self, player_id: PlayerId, limit: int) -> list[ActionResultEntry]:
         if not isinstance(player_id, PlayerId):

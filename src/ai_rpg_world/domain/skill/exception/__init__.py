@@ -6,7 +6,6 @@ from .skill_exceptions import (
     SkillDeckProgressIdValidationException,
     SkillDeckValidationException,
     SkillDomainException,
-    SkillHitPatternValidationException,
     SkillIdValidationException,
     SkillLoadoutIdValidationException,
     SkillNotFoundInSlotException,
@@ -15,4 +14,3 @@ from .skill_exceptions import (
     SkillProposalValidationException,
     SkillSpecValidationException,
 )
-

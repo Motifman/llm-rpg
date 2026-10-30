@@ -15,9 +15,8 @@ PR #443 の実機 run で連続発覚した silent failure 系 bug (PR #439 / #4
 
 本 test 群はそのギャップを埋める「**配線契約テスト**」:
 
-- ``SHORT_TERM_MEMORY_KIND=rolling_summary`` を env で指定したら、実体も
-  ``SummarizingShortTermMemory`` であること (PR #439 silent failure 再発防止)
-- 上記 + ``LLM_CLIENT=litellm`` を組み合わせると、sliding_window 内部の
+- 短期記憶の実体が ``SummarizingShortTermMemory`` であること (PR #439 silent failure 再発防止)
+- 上記 + ``LLM_CLIENT=litellm`` を組み合わせると、短期記憶の
   ``_service`` (= 短期記憶要約 LLM 経路) が **None ではなく** 注入されていること
   (PR #444 silent failure 再発防止)
 - ``LiteLLMClient`` の ``_timeout_seconds`` が **必ず有限値** で、litellm
@@ -59,22 +58,13 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     で関連 env を全て delete し、各 test が明示的に setenv する形にする。
     """
     for key in (
-        "SHORT_TERM_MEMORY_KIND",
-        "SHORT_TERM_MEMORY_SCHEDULER_MODE",
-        "PROMPT_SECTION_ORDER",
         "LLM_CLIENT",
         "LLM_MODEL",
         "LLM_REQUEST_TIMEOUT_SECONDS",
-        "LLM_EPISODIC_ENABLED",
-        "EPISODIC_EXPLORE_RELATED_ENABLED",
-        "SEMANTIC_LLM_GIST_ENABLED",
-        "SEMANTIC_PASSIVE_TOP_K",
-        "SEMANTIC_SEARCH_ENABLED",
         "OPENAI_API_BASE",
         "OPENAI_API_KEY",
         "OPENROUTER_PROVIDER",
         "OPENROUTER_QUANTIZATION",
-        "OPENROUTER_REQUIRE_PARAMS",
     ):
         monkeypatch.delenv(key, raising=False)
     # litellm の dotenv 自動読込を抑える (.env 内の OPENAI_API_KEY 等が混入する)
@@ -97,62 +87,36 @@ def _build_runtime(config: Any = None) -> Any:
 
 
 class TestShortTermMemoryConfigVsRuntime:
-    """short_term_memory_kind 設定と実体の type が一致するか。
+    """設定から組んだ短期記憶の実体が、畳んで要約する短期記憶になるか。
 
     PR #439 で silent failure (env=rolling_summary でも DefaultSlidingWindowMemory
     が使われていた) が発覚し fix された。本 test 群は再発防止。
     """
 
     def test_config_unspecified_default_short_term_memory(self) -> None:
-        """設定未指定 → default の DefaultSlidingWindowMemory が使われる。"""
-        from ai_rpg_world.application.llm.services.sliding_window_memory import (
-            DefaultSlidingWindowMemory,
-        )
-
-        runtime = _build_runtime()
-        assert isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
-
-    def test_sliding_window_default_short_term_memory(self) -> None:
-        """sliding window 明示 でも DefaultSlidingWindowMemory。"""
-        from ai_rpg_world.application.llm.services.sliding_window_memory import (
-            DefaultSlidingWindowMemory,
-        )
-
-        runtime = _build_runtime(
-            ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind="sliding_window"
-            )
-        )
-        assert isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
-
-    def test_rolling_summary_builds_summarizing_short_term_memory(self) -> None:
-        """PR #439 silent failure 再発防止の核心 assert。"""
+        """設定未指定 → default の SummarizingShortTermMemory が使われる (#1631)。"""
         from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
             SummarizingShortTermMemory,
         )
 
-        runtime = _build_runtime(
-            ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind="rolling_summary"
-            )
-        )
+        runtime = _build_runtime()
         assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
-    @pytest.mark.parametrize("kind", ["sliding_window", "rolling_summary"])
-    def test_turn_window_settings_reach_both_memory_implementations(
-        self, kind: str
-    ) -> None:
-        """profile の cap / 畳む数は短期記憶の実装差に関わらず配線される。"""
-        runtime = _build_runtime(
-            ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind=kind,
-                short_term_memory_turn_cap=12,
-                short_term_memory_turn_compact_count=4,
-            )
+    def test_turn_window_follows_the_domain_constants(self) -> None:
+        """短期記憶のターン数は設定ではなく、Being のドメインの定数 (RECENT_TURNS / FOLD_TURNS / BACKSTORY_GENERATIONS) に従う (design_decisions D1824-9)。"""
+        from ai_rpg_world.being.domain.short_term_memory import (
+            BACKSTORY_GENERATIONS,
+            FOLD_TURNS,
+            RECENT_TURNS,
         )
 
-        assert runtime._short_term_memory._turn_cap == 12
-        assert runtime._short_term_memory._compact_turn_count == 4
+        memory = _build_runtime()._short_term_memory
+
+        assert (memory._turn_cap, memory._compact_turn_count, memory._keep_gen) == (
+            RECENT_TURNS,
+            FOLD_TURNS,
+            BACKSTORY_GENERATIONS,
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -167,9 +131,7 @@ class TestShortTermMemoryLlmServicesWired:
     L4 / L5 が全件 template fallback だった) が fix された。本 test 群は再発防止。
     """
 
-    def test_rolling_summary_stub_client_summary_service_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_rolling_summary_stub_client_summary_service_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """LLM_CLIENT=stub なら LiteLLMClient ではないので summary_service は注入されない
         (= template fallback mode で動く / これは正しい挙動)。"""
         from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
@@ -178,7 +140,6 @@ class TestShortTermMemoryLlmServicesWired:
 
         runtime = _build_runtime(
             ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind="rolling_summary",
                 llm_client_kind="stub",
             )
         )
@@ -186,20 +147,14 @@ class TestShortTermMemoryLlmServicesWired:
         assert isinstance(sw, SummarizingShortTermMemory)
         # stub なので LLM 経路は注入されない
         assert sw._service is None
-        assert sw._long_service is None
 
-    def test_rolling_summary_litellm_client_summary_service(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_rolling_summary_litellm_client_summary_service(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """PR #444 fix の核心 assert: rolling + litellm なら setter 注入が走り、
-        ``_service`` / ``_long_service`` が None でなくなる。
+        ``_service`` が None でなくなる。
 
         PR #444 前は呼び出し側 wiring が未実装で、ここが None のまま動いていた
-        (= L4 / L5 が全件 template fallback)。
+        (= L4 が全件 template fallback)。
         """
-        from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
-            ShortTermMemoryLongSummaryService,
-        )
         from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
             ShortTermMemorySummaryService,
         )
@@ -209,7 +164,6 @@ class TestShortTermMemoryLlmServicesWired:
 
         runtime = _build_runtime(
             ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind="rolling_summary",
                 llm_client_kind="litellm",
                 llm_model="openai/gpt-4o-mini",
                 llm_api_key="sk-test-dummy",
@@ -223,11 +177,7 @@ class TestShortTermMemoryLlmServicesWired:
             "なのに sliding_window._service=None。L4 が template fallback で動く危険"
         )
         assert isinstance(sw._service, ShortTermMemorySummaryService)
-        assert sw._long_service is not None, (
-            "PR #444 silent failure 再発: long_service が未注入で L5 が template fallback"
-        )
-        assert isinstance(sw._long_service, ShortTermMemoryLongSummaryService)
-        # persona_resolver も注入される (= L4 / L5 が player ごとの persona を読める)
+        # persona_resolver も注入される (= L4 が player ごとの persona を読める)
         assert sw._persona_resolver is not None
 
 
@@ -279,41 +229,7 @@ class TestLiteLLMClientTimeout:
 
 
 # ──────────────────────────────────────────────────────────────────
-# Section order: env <-> 実体一致
-# ──────────────────────────────────────────────────────────────────
-
-
-class TestSectionOrderConfigVsRuntime:
-    """prompt_section_order 設定と prompt builder の strategy が一致する。"""
-
-    def test_config_unspecified_stable_volatile_default(self) -> None:
-        """設定未指定なら stable to volatile default。"""
-        from ai_rpg_world.application.llm.services.context_format_strategy import (
-            SECTION_ORDER_STABLE_TO_VOLATILE,
-        )
-
-        runtime = _build_runtime()
-        # context_strategy field が存在する想定。なければ test を更新
-        strategy = getattr(runtime, "_context_strategy", None)
-        assert strategy is not None
-        assert strategy.section_order == SECTION_ORDER_STABLE_TO_VOLATILE
-
-    def test_legacy_strategy(self) -> None:
-        """legacy 明示で legacy strategy。"""
-        from ai_rpg_world.application.llm.services.context_format_strategy import (
-            SECTION_ORDER_LEGACY,
-        )
-
-        runtime = _build_runtime(
-            ResolvedLlmRuntimeConfig.for_tests(prompt_section_order="legacy")
-        )
-        strategy = getattr(runtime, "_context_strategy", None)
-        assert strategy is not None
-        assert strategy.section_order == SECTION_ORDER_LEGACY
-
-
-# ──────────────────────────────────────────────────────────────────
-# run_start trace payload <-> 実体一致 (= config-init split 検出)
+# 設定の注入経路
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -323,62 +239,23 @@ class TestConfigInjection:
     渡し回す形を構造で保証する。"""
 
     def test_uses_cfg(self) -> None:
-        """cfg を渡したら、その値で配線される。
+        """cfg を渡したら、runtime はその cfg の値を設定として持つ。
 
         = 設定入力経路を 1 つにする原則の構造的保証。
         """
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
         from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
             ResolvedLlmRuntimeConfig,
         )
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-        cfg = ResolvedLlmRuntimeConfig.for_tests(
-            short_term_memory_kind="rolling_summary",
-        )
+        cfg = ResolvedLlmRuntimeConfig.for_tests(being_episode_index_limit=7)
         runtime = create_world_runtime(_SCENARIO, config=cfg)
-        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
+        assert runtime._runtime_config.being_episode_index_limit == 7
 
-    def test_cfg_empty_config_default(self) -> None:
-        """cfg 引数省略時は環境変数を読まず、空設定の既定値になる。"""
-        from ai_rpg_world.application.llm.services.sliding_window_memory import (
-            DefaultSlidingWindowMemory,
-        )
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
+    def test_cfg_empty_config_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """cfg 引数省略時は環境変数の LLM_MODEL を読まず、空設定の既定 (モデル無し) になる。"""
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
+        monkeypatch.setenv("LLM_MODEL", "openrouter/google/gemma-4-31b-it")
         runtime = create_world_runtime(_SCENARIO)  # cfg 省略
-        assert not isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
-        assert isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
-
-
-class TestRunStartTraceVsRuntime:
-    """run_scenario_experiment.py が run_start trace に書く設定と、実体の
-    runtime 内部の type が一致するか。
-
-    PR #439 silent failure はまさにこのズレ (trace は rolling_summary と書くが
-    実体は DefaultSlidingWindowMemory) だった。本 test で「trace に出る値」と
-    「runtime の実体」が同じ config から派生していることを構造的に保証する。
-    """
-
-    def test_rolling_summary_config_rolling_summary_matches(self) -> None:
-        """trace に出す config と runtime の sliding_window type が同一 cfg から決まる。"""
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
-
-        cfg = ResolvedLlmRuntimeConfig.for_tests(
-            short_term_memory_kind="rolling_summary"
-        )
-        assert cfg.to_trace_dict()["short_term_memory_kind"] == "rolling_summary"
-
-        runtime = _build_runtime(cfg)
-        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory), (
-            "config で rolling_summary を指定したのに、実体は "
-            f"{type(runtime._short_term_memory).__name__}。"
-            "PR #439 silent failure (config-init split) が再発している"
-        )
+        assert runtime._runtime_config.llm_model is None

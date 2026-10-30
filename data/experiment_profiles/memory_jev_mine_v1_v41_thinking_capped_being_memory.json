@@ -1,0 +1,23 @@
+{
+  "profile": "memory_jev_mine_v1_v41_thinking_capped_being_memory",
+  "description": "廃坑の山村を新しい記憶 (#1621) で回す。短期記憶を畳むときと環境を出るときに目次つきのエピソードを書き起こし、【思い出せる出来事】に目次を呼び出された順に積み直して 10 件まで出し、一度に 3 件まで呼び出せる。メモはメモ帳 (共通の引数 memo) で書く。信念・予期・想起などの古い部品は止めたまま。メモが済んだかの判定 (Jev) はメモ帳のやることに効くので残る。全部入りの run (mine_v1_006, 006_r2。profile は #1631 で退役) と比べる。",
+  "scenario": "data/scenarios/mine_village_v1.json",
+  "max_world_ticks": 40,
+  "snapshot_save": true,
+  "runtime_config": {
+    "BEING_EPISODE_INDEX_LIMIT": 10,
+    "BEING_EPISODE_RECALL_MAX_HANDLES": 3,
+    "LLM_CLIENT": "litellm",
+    "LLM_IDLE_TIMEOUT_TICKS": 6,
+    "LLM_MAX_OUTPUT_TOKENS": 4096,
+    "LLM_MODEL": "openrouter/deepseek/deepseek-v4.1-flash",
+    "LLM_REASONING_EFFORT": "minimal",
+    "LLM_TURN_PARALLEL_WORKERS": 2,
+    "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
+    "OPENROUTER_PROVIDER": "DeepInfra",
+    "PROMPT_DATASET_CAPTURE_FAILURE_POLICY": "warn",
+    "SCENARIO_RANDOM_SEED": 42,
+    "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED": true,
+    "TYPED_JUDGMENT_PROVIDER": "jev"
+  }
+}

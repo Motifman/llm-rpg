@@ -5,27 +5,20 @@
 LLM 向けの対処ヒントを取得し、IActionResultStore の result_summary に載せる。
 """
 
-
 # error_code → 対処法の短い文言。オーケストレータで「結果: 失敗。{message} 対処: {remediation}」のように組み立てる。
 DEFAULT_REMEDIATION_BY_ERROR_CODE: dict[str, str] = {
     "PLAYER_NOT_FOUND": "指定したプレイヤーが存在しません。",
     "MAP_NOT_FOUND": "現在地または目的地のマップ情報が見つかりません。",
-    "MOVEMENT_FAILED": "現在地にいるか、目的地が接続されているか確認してください。",
-    "MOVEMENT_INVALID": "現在地にいるか、目的地が接続されているか確認してください。",
     "INVALID_DESTINATION": "有効な移動先を選んでください。接続先スポット一覧を確認してください。",
-    "GATEWAY_OBJECT_NOT_FOUND": "移動先のゲートウェイまたはオブジェクトを確認してください。",
-    "GATEWAY_MONSTER_NOT_FOUND": "移動先のゲートウェイを確認してください。",
-    "INVALID_DESTINATION_LABEL": "「現在の状況」の接続先に表示されているスポット名を destination_label に指定してください。矢印の左側の道や扉の名前ではなく、\"\" で囲まれた行き先名を使ってください。",
-    "DESTINATION_NOT_ADJACENT": "その場所はここから直接は行けません。「現在の状況」の接続先に表示されている隣の場所を destination_label に指定し、順に進んでください。",
+    "INVALID_DESTINATION_LABEL": '【現在地と周囲】の接続先に表示されているスポット名を destination_label に指定してください。矢印の左側の道や扉の名前ではなく、"" で囲まれた行き先名を使ってください。',
+    "DESTINATION_NOT_ADJACENT": "その場所はここから直接は行けません。【現在地と周囲】の接続先に表示されている隣の場所を destination_label に指定し、順に進んでください。",
     "INVALID_DESTINATION_KIND": "destination_label には移動先として使えるスポット名を指定してください。アイテム名・プレイヤー名・オブジェクト名は移動先には使えません。",
-    "INVALID_TARGET_LABEL": "「現在の状況」に表示されている対象の名前を指定してください。名前が \"\" で囲まれている場合は、その中身をそのまま引数に入れてください。",
-    "INVALID_TARGET_KIND": "指定した名前はこの操作の対象ではありません。ツール説明と「現在の状況」を確認し、オブジェクト名・所持アイテム名・その場に落ちているものの名前・プレイヤー名・モンスター名のうち、そのツールが要求する名前を指定してください。",
+    "INVALID_TARGET_LABEL": '【現在地と周囲】に表示されている対象の名前を指定してください。名前が "" で囲まれている場合は、その中身をそのまま引数に入れてください。',
+    "INVALID_TARGET_KIND": "指定した名前はこの操作の対象ではありません。ツール説明と【現在地と周囲】を確認し、オブジェクト名・所持アイテム名・その場に落ちているものの名前・プレイヤー名・モンスター名のうち、そのツールが要求する名前を指定してください。",
     "INTERACTION_INVALID": "相互作用できる距離や状態か確認し、別の対象を選んでください。",
-    "INTERACTION_TARGET_NOT_FOUND": "対象オブジェクトがまだ見えているか確認してください。",
     "ITEM_NOT_FOUND": "指定されたアイテムがインベントリにないか、既に失われています。",
     "NO_ITEM_IN_SLOT": "指定スロットにアイテムがありません。インベントリの状態を確認してください。",
     "ITEM_RESERVED": "そのアイテムは取引中等で予約されています。取引を完了またはキャンセルしてください。",
-    "PLACEMENT_SPOT_NOT_FOUND": "プレイヤーの現在地が取得できません。マップ上にいるか確認してください。",
     "TARGET_NOT_FOUND": "指定された対象が視界内にないか、既に去っています。",
     "UNKNOWN_TOOL": "利用可能なツール一覧から選択してください。",
     "TODO_ERROR": "正しい TODO ID または内容を指定してください。",
@@ -54,18 +47,14 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: dict[str, str] = {
     # application/llm/services/failure_helpers.py のファクトリから参照される。
     "INVALID_ARGUMENT": "ツール引数の型 / 必須項目を確認してください。",
     "SNS_REF_STALE": "SNS の ref は世代管理されています。ページを再読込してから ref を取得し直してください。",
-    "SNS_PAGE_NOT_SUPPORTED": "現在の SNS ページではこの操作は実行できません。open_page で適切なページに遷移してから再度試してください。",
+    "SNS_PAGE_NOT_SUPPORTED": "現在の SNS ページではこの操作は実行できません。この操作ができるページへ移ってから再度試してください。",
     "SNS_REPLY_PARENT_AMBIGUOUS": "リプライの親は 1 つだけです。parent_post_ref か parent_reply_ref の、返信したい方だけを指定してください。",
     "TRADE_ARG_MISSING": "取引ツールの必須引数 (item_instance_id / slot_id / requested_gold / trade_ref 等) を確認してください。",
     "TRADE_PAGE_NOT_SUPPORTED": "現在の SNS / Trade ページではこの操作は実行できません。対応するページに遷移してください。",
     "ATTACK_PRECONDITION_FAILED": "攻撃の前提条件 (クールダウン / 対象の生死 / 攻撃力など) を確認し、必要なら待機または別行動を選んでください。",
     "INVENTORY_NOT_FOUND": "プレイヤーのインベントリが見つかりません。プレイヤー初期化が完了しているか確認してください。",
     "ITEM_NOT_CONSUMABLE": "そのアイテムは食べ物ではないので、食べる行動では使えません。素材や道具は、近くのものに働きかけて使ってください (例: 焚き火跡に火打ち石で着火)。食べるなら所持アイテムの「食料」を選んでください。",
-    "ACTIVE_APP_CONFLICT": "既に別アプリ (SNS / 取引所など) を開いています。exit してから再度 enter してください。",
-    "INVALID_DIRECTION": "方向は 北 / 北東 / 東 / 南東 / 南 / 南西 / 西 / 北西 のいずれかを指定してください。",
-    "PURSUIT_FAILED": "追跡対象が視界外か既に去っている可能性があります。対象を再確認してください。",
-    "PURSUIT_START_FAILED": "追跡対象を確認してください (視界内か / 同じスポットか)。",
-    "PURSUIT_CANCEL_FAILED": "追跡中の状態を確認してください。既に中断済みの可能性があります。",
+    "ACTIVE_APP_CONFLICT": "既に別アプリ (SNS / 取引所など) を開いています。いま開いているアプリを閉じてから、開き直してください。",
     "NOT_WIRED": "本ツールはこの構成では有効になっていません。別の方法を試してください。",
     "ITEM_TRANSFER_FAILED": "アイテムの受け渡しに失敗しました。インベントリ・現在地・対象 instance を確認してください。",
     # PR-α (Y_after_pr639_640 後続): give_item の domain-specific error に
@@ -99,9 +88,10 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: dict[str, str] = {
     "MERCHANT_TRADE_FAILED": "取引が成立しませんでした。『商人:』に出ている品名と価格、自分の所持金と持ち物を確認してから、もう一度指定してください。",
     "GIVE_ITEM_TARGET_DEAD": "死亡している相手はアイテムを受け取れません。生存していて同じ場所にいる別の相手を選んでください。",
     "GIVE_ITEM_TARGET_DOWN": "倒れている相手はアイテムを受け取れません。先に相手を助け起こすか、生存して動ける別の相手を選んでください。",
+    "SPEAKER_DOWN": "倒れている間は声を出せません。いまの発言は誰にも届いていません。",
     # PR-ε (Y_after_pr639_640 audit 後続): drop / pickup 系の頻発失敗を汎用
     # ITEM_TRANSFER_FAILED から分離し、LLM が次アクションを判断できる粒度に
-    "ITEM_TRANSFER_SLOT_IS_EMPTY": "その名前のアイテムをもう持っていない可能性があります。inspect_target で自分の所持品を確認し、所持品欄に表示されているアイテム名を指定してください。",
+    "ITEM_TRANSFER_SLOT_IS_EMPTY": "その名前のアイテムをもう持っていない可能性があります。【現在地と周囲】の「所持アイテム:」に出ている名前を確かめて、その名前で指定してください。",
     "PICKUP_ITEM_GROUND_ITEM_GONE": "そのアイテムはもう地面にありません。他のプレイヤーが先に拾ったか、あなたの観測が古い可能性があります。周囲を見直すか、別の目的に切り替えてください。",
     "PICKUP_ITEM_SELF_INVENTORY_FULL": "持ち物がいっぱいです。不要なものを 1 つ手放して空きを作ってから、もう一度拾ってください。",
     # PR-γ (Y_after_pr639_640 後続): audit で未登録が発覚した 5 code に
@@ -117,7 +107,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: dict[str, str] = {
     "UNSUPPORTED_TOOL": "このツール名は現在の状況では使えません (存在しない / 未配線 / 権限なし)。「利用可能な tool」一覧を確認して別のツールを選んでください。",
     "ATTACK_FAILED": "攻撃が失敗しました。対象モンスターの状態 (瀕死 / 既に死骸 / 逃走) や自分の HP・武器の有無を再確認してください。その場を離れて逃げるのも選択肢です。",
     "EXHAUSTED": "疲労が限界で、移動や争い、物への働きかけのような重い行動は実行できません。休むか、何か食べてから再挑戦してください。",
-    "INTERACTION_PRECONDITION_FAILED": "対象オブジェクトの現在の状態が action の前提条件を満たしていません (例: 既に取り尽くした / 既に開けた)。『現在の状況』のオブジェクト行にある state タグを確認し、別の対象・別の action_name を検討してください。",
+    "INTERACTION_PRECONDITION_FAILED": "対象オブジェクトの現在の状態が action の前提条件を満たしていません (例: 既に取り尽くした / 既に開けた)。【現在地と周囲】のオブジェクト行にある state タグを確認し、別の対象・別の action_name を検討してください。",
 }
 
 

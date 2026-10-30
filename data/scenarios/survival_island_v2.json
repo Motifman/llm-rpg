@@ -874,8 +874,7 @@
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {
-                      "flag_name": "shelter_built",
-                      "value": true
+                      "flag_name": "shelter_built"
                     }
                   },
                   {
@@ -1751,8 +1750,7 @@
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {
-                      "flag_name": "map_revealed",
-                      "value": true
+                      "flag_name": "map_revealed"
                     }
                   },
                   {
@@ -2174,8 +2172,7 @@
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {
-                      "flag_name": "signal_fire_lit",
-                      "value": true
+                      "flag_name": "signal_fire_lit"
                     }
                   },
                   {
@@ -2527,9 +2524,14 @@
                   {
                     "effect_type": "APPLY_STATUS_EFFECT",
                     "parameters": {
-                      "effect_type": "bleeding",
+                      "status_effect_type": "bleeding",
                       "duration_ticks": 12,
-                      "value": 1.0,
+                      "value": 1.0
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
                       "message": "肩から血が滲み始めた。手当てしないと出血が続く。"
                     }
                   },
@@ -3133,8 +3135,7 @@
         {
           "effect_type": "SET_FLAG",
           "parameters": {
-            "flag_name": "storm_warned",
-            "value": true
+            "flag_name": "storm_warned"
           }
         }
       ]
@@ -3176,8 +3177,7 @@
         {
           "effect_type": "SET_FLAG",
           "parameters": {
-            "flag_name": "high_tide",
-            "value": true
+            "flag_name": "high_tide"
           }
         },
         {
@@ -3200,10 +3200,9 @@
       ],
       "effects": [
         {
-          "effect_type": "SET_FLAG",
+          "effect_type": "CLEAR_FLAG",
           "parameters": {
-            "flag_name": "high_tide",
-            "value": false
+            "flag_name": "high_tide"
           }
         },
         {
@@ -3317,37 +3316,15 @@
       "once": true,
       "conditions": [
         {
-          "condition_type": "OR",
-          "children": [
-            {
-              "condition_type": "PLAYER_AT_SPOT",
-              "player_id": "ada",
-              "spot_id": "observation_outpost_ruins"
-            },
-            {
-              "condition_type": "PLAYER_AT_SPOT",
-              "player_id": "noah",
-              "spot_id": "observation_outpost_ruins"
-            },
-            {
-              "condition_type": "PLAYER_AT_SPOT",
-              "player_id": "rio",
-              "spot_id": "observation_outpost_ruins"
-            },
-            {
-              "condition_type": "PLAYER_AT_SPOT",
-              "player_id": "kai",
-              "spot_id": "observation_outpost_ruins"
-            }
-          ]
+          "condition_type": "PLAYER_AT_SPOT",
+          "target_spot": "observation_outpost_ruins"
         }
       ],
       "effects": [
         {
           "effect_type": "SET_FLAG",
           "parameters": {
-            "flag_name": "outpost_discovered",
-            "value": true
+            "flag_name": "outpost_discovered"
           }
         },
         {
@@ -3364,37 +3341,15 @@
       "once": true,
       "conditions": [
         {
-          "condition_type": "OR",
-          "children": [
-            {
-              "condition_type": "PLAYER_AT_SPOT",
-              "player_id": "ada",
-              "spot_id": "lone_hut"
-            },
-            {
-              "condition_type": "PLAYER_AT_SPOT",
-              "player_id": "noah",
-              "spot_id": "lone_hut"
-            },
-            {
-              "condition_type": "PLAYER_AT_SPOT",
-              "player_id": "rio",
-              "spot_id": "lone_hut"
-            },
-            {
-              "condition_type": "PLAYER_AT_SPOT",
-              "player_id": "kai",
-              "spot_id": "lone_hut"
-            }
-          ]
+          "condition_type": "PLAYER_AT_SPOT",
+          "target_spot": "lone_hut"
         }
       ],
       "effects": [
         {
           "effect_type": "SET_FLAG",
           "parameters": {
-            "flag_name": "lone_hut_discovered",
-            "value": true
+            "flag_name": "lone_hut_discovered"
           }
         },
         {

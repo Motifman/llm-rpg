@@ -42,6 +42,7 @@ from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
     InteractionCondition,
 )
+from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 
@@ -68,8 +69,13 @@ def _status(player_id: int, state: dict) -> PlayerStatusAggregate:
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
         base_stats=BaseStats(
-            max_hp=100, max_mp=50, attack=10, defense=10, speed=10,
-            critical_rate=0.05, evasion_rate=0.05,
+            max_hp=100,
+            max_mp=50,
+            attack=10,
+            defense=10,
+            speed=10,
+            critical_rate=0.05,
+            evasion_rate=0.05,
         ),
         stat_growth_factor=StatGrowthFactor(1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0),
         exp_table=exp_table,
@@ -92,11 +98,27 @@ class TestSpotLightingIs:
             required_lighting="DARK",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_effective_lighting=LightingEnum.DARK,
         )
         assert (ok, msg) == (True, None)
+
+        interaction = InteractionDef(
+            action_name="check_place",
+            display_label="場所を確かめる",
+            preconditions=(cond,),
+            effects=(),
+        )
+        assert svc.can_interact(
+            interaction,
+            obj,
+            frozenset(),
+            frozenset(),
+            current_effective_lighting=LightingEnum.DARK,
+        ) == (True, None)
 
     def test_brighter_spot_is_rejected_with_the_authored_message(self, svc, obj) -> None:
         """明るい場所では拒否し、シナリオが書いた失敗文をそのまま返す。
@@ -109,7 +131,9 @@ class TestSpotLightingIs:
             failure_message="明るすぎる。誰かに見られる。",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_effective_lighting=LightingEnum.BRIGHT,
         )
@@ -127,7 +151,9 @@ class TestSpotLightingIs:
             required_lighting="DARK",
         )
         ok, _ = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_effective_lighting=None,
         )
@@ -139,7 +165,9 @@ class TestSpotLightingIs:
             condition_type=InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
         )
         ok, _ = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_effective_lighting=LightingEnum.DARK,
         )
@@ -156,7 +184,9 @@ class TestSpotLightingIsNot:
             required_lighting="PITCH_BLACK",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_effective_lighting=LightingEnum.DARK,
         )
@@ -170,7 +200,9 @@ class TestSpotLightingIsNot:
             failure_message="暗すぎて手元が見えない。",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_effective_lighting=LightingEnum.PITCH_BLACK,
         )
@@ -187,11 +219,27 @@ class TestAtSpotIs:
             required_spot_id=SpotId.create(7),
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_spot_id=SpotId.create(7),
         )
         assert (ok, msg) == (True, None)
+
+        interaction = InteractionDef(
+            action_name="check_place",
+            display_label="場所を確かめる",
+            preconditions=(cond,),
+            effects=(),
+        )
+        assert svc.can_interact(
+            interaction,
+            obj,
+            frozenset(),
+            frozenset(),
+            current_spot_id=SpotId.create(7),
+        ) == (True, None)
 
     def test_other_spot_is_rejected(self, svc, obj) -> None:
         """別のスポットに居れば拒否する。"""
@@ -201,7 +249,9 @@ class TestAtSpotIs:
             failure_message="ここではできない。",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_spot_id=SpotId.create(8),
         )
@@ -214,7 +264,9 @@ class TestAtSpotIs:
             required_spot_id=SpotId.create(7),
         )
         ok, _ = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_spot_id=None,
         )
@@ -226,7 +278,9 @@ class TestAtSpotIs:
             condition_type=InteractionConditionTypeEnum.AT_SPOT_IS,
         )
         ok, _ = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_spot_id=SpotId.create(7),
         )
@@ -243,7 +297,9 @@ class TestAtSpotIsNot:
             required_spot_id=SpotId.create(7),
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_spot_id=SpotId.create(8),
         )
@@ -257,7 +313,9 @@ class TestAtSpotIsNot:
             failure_message="ここは聖域だ。",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             current_spot_id=SpotId.create(7),
         )
@@ -278,7 +336,9 @@ class TestTargetPlayerStateIs:
             required_state={"role": "crew"},
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             target_player_status=_status(2, {"role": "crew"}),
         )
@@ -292,7 +352,9 @@ class TestTargetPlayerStateIs:
             failure_message="その相手は同じ側の人間だ。",
         )
         ok, msg = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             target_player_status=_status(2, {"role": "hunter"}),
         )
@@ -309,7 +371,9 @@ class TestTargetPlayerStateIs:
             required_state={"role": "crew"},
         )
         ok, _ = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             acting_player_status=_status(1, {"role": "crew"}),
             target_player_status=_status(2, {"role": "hunter"}),
@@ -323,7 +387,9 @@ class TestTargetPlayerStateIs:
             required_state={"role": "crew"},
         )
         ok, _ = svc._evaluate_condition(
-            cond, obj, frozenset(),
+            cond,
+            obj,
+            frozenset(),
             owned_item_spec_counts={},
             target_player_status=None,
         )
@@ -353,9 +419,11 @@ class TestEveryConditionTypeHasABranch:
         """どの条件も「未対応」で落ちない (必要値が欠けた拒否は許容)。"""
         cond = InteractionCondition(condition_type=condition_type)
         _, msg = svc._evaluate_condition(
-            cond, obj, frozenset(), owned_item_spec_counts={},
+            cond,
+            obj,
+            frozenset(),
+            owned_item_spec_counts={},
         )
         assert msg != self._UNHANDLED, (
-            f"{condition_type.value} に評価分岐がありません。"
-            "この条件を使う interaction は永久に実行不能になります。"
+            f"{condition_type.value} に評価分岐がありません。この条件を使う interaction は永久に実行不能になります。"
         )

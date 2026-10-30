@@ -55,9 +55,7 @@ class TestWhatTheWorldHas:
 
     def test_a_tool_the_scenario_disabled_is_not(self) -> None:
         """シナリオが無効化したツールは出ない。"""
-        exposure = ToolExposure.from_scenario(
-            _Scenario(disabled=("attack",)), meeting_declared=False
-        )
+        exposure = ToolExposure.from_scenario(_Scenario(disabled=("attack",)), meeting_declared=False)
 
         assert exposure.is_exposed("attack") is False
 
@@ -76,9 +74,7 @@ class TestWhatTheWorldHas:
 
     def test_synchronized_groups_add_no_tool_of_their_own(self) -> None:
         """同時行動を宣言しても専用ツールは出ない。入口は interact に統合した。"""
-        with_groups = ToolExposure.from_scenario(
-            _Scenario(synchronized=("dig",)), meeting_declared=False
-        )
+        with_groups = ToolExposure.from_scenario(_Scenario(synchronized=("dig",)), meeting_declared=False)
 
         assert "prepare_action" not in _spot_tool_names()
         assert with_groups.is_exposed("interact") is True
@@ -89,9 +85,7 @@ class TestWhatTheWorldHas:
         「会議を宣言しているが投票はさせない」のような世界を書けるように
         する。**engine が「会議があるなら投票もある」と決めない。**
         """
-        exposure = ToolExposure.from_scenario(
-            _Scenario(disabled=("vote",)), meeting_declared=True
-        )
+        exposure = ToolExposure.from_scenario(_Scenario(disabled=("vote",)), meeting_declared=True)
 
         assert exposure.is_exposed("vote") is False
 
@@ -122,10 +116,7 @@ class TestWhichBlockATooolGoesIn:
         """
         assert ToolExposure.is_phase_common(tool_name) is True
         for in_meeting in (True, False):
-            assert (
-                ToolExposure.is_available_in_phase(tool_name, in_meeting=in_meeting)
-                is False
-            )
+            assert ToolExposure.is_available_in_phase(tool_name, in_meeting=in_meeting) is False
 
     def test_voting_only_appears_during_a_meeting(self) -> None:
         """投票は会議中だけ。
@@ -158,9 +149,7 @@ class TestWhichBlockATooolGoesIn:
             for in_meeting in (True, False):
                 blocks = [
                     ToolExposure.is_phase_common(name),
-                    ToolExposure.is_available_in_phase(
-                        name, in_meeting=in_meeting
-                    ),
+                    ToolExposure.is_available_in_phase(name, in_meeting=in_meeting),
                 ]
                 assert sum(blocks) <= 1, (name, in_meeting, blocks)
 
@@ -181,8 +170,7 @@ class TestWhichBlockATooolGoesIn:
         surviving = {
             name
             for name in _spot_tool_names()
-            if ToolExposure.is_phase_common(name)
-            or ToolExposure.is_available_in_phase(name, in_meeting=in_meeting)
+            if ToolExposure.is_phase_common(name) or ToolExposure.is_available_in_phase(name, in_meeting=in_meeting)
         }
 
         for name in expected:
@@ -211,12 +199,7 @@ class TestTheOrderOfTheBlocks:
             create_world_runtime,
         )
 
-        scenario = (
-            Path(__file__).resolve().parents[3]
-            / "data"
-            / "scenarios"
-            / "station_drill.json"
-        )
+        scenario = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
         runtime = create_world_runtime(scenario)
         return [
             d.name
@@ -239,14 +222,10 @@ class TestTheOrderOfTheBlocks:
         exposure = ToolExposure(meeting_declared=True)
 
         with pytest.raises(TypeError):
-            exposure.split_for_phase(
-                ("vote",), in_meeting=True, voting_completed=False
-            )
+            exposure.split_for_phase(("vote",), in_meeting=True, voting_completed=False)
 
     @pytest.mark.parametrize("in_meeting", [False, True])
-    def test_always_present_tools_come_before_state_dependent_ones(
-        self, in_meeting
-    ) -> None:
+    def test_always_present_tools_come_before_state_dependent_ones(self, in_meeting) -> None:
         """常在ブロックが、状態により出入りするツールより前に並ぶ。"""
         from ai_rpg_world.application.llm.tool_exposure import (
             ALWAYS_PRESENT_TOOL_ORDER,
@@ -254,9 +233,7 @@ class TestTheOrderOfTheBlocks:
 
         names = self._tool_names(in_meeting=in_meeting)
 
-        assert names[: len(ALWAYS_PRESENT_TOOL_ORDER)] == list(
-            ALWAYS_PRESENT_TOOL_ORDER
-        )
+        assert names[: len(ALWAYS_PRESENT_TOOL_ORDER)] == list(ALWAYS_PRESENT_TOOL_ORDER)
 
     def test_the_leading_block_is_identical_across_phases(self) -> None:
         """先頭の共通ブロックが、自由時間と会議中で同じ。

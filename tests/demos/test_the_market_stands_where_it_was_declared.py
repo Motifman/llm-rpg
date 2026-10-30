@@ -34,9 +34,7 @@ def _build(tmp_path: Path, market: dict[str, Any] | None) -> Any:
 class TestTheBoardStandsInTheDeclaredPlace:
     """板は、宣言した場所に立つ。"""
 
-    def test_the_board_has_a_place_in_a_world_that_declares_one(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_board_has_a_place_in_a_world_that_declares_one(self, tmp_path: Path) -> None:
         """市場を宣言した世界では、板の置き場所が決まっている。"""
         runtime = _build(tmp_path, {"board_spot": "market_square"})
 
@@ -58,33 +56,35 @@ class TestTheBoardStandsInTheDeclaredPlace:
         読めているのに配線されていないと、シナリオに書いたのに効かない静かな
         失敗になる。
         """
-        runtime = _build(tmp_path, {
-            "board_spot": "market_square",
-            "order_expires_in_ticks": 33,
-            "initial_orders": [
-                {"merchant": "gustav", "side": "sell", "item_spec": "herb",
-                 "quantity": 1, "unit_price": 9},
-            ],
-        })
+        runtime = _build(
+            tmp_path,
+            {
+                "board_spot": "market_square",
+                "order_expires_in_ticks": 33,
+                "initial_orders": [
+                    {"merchant": "gustav", "side": "sell", "item_spec": "herb", "quantity": 1, "unit_price": 9},
+                ],
+            },
+        )
 
         (order,) = runtime._market_service.board().orders
         assert order.expires_at_tick == order.listed_at_tick + 33
 
-    def test_the_engine_default_applies_without_a_declaration(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_engine_default_applies_without_a_declaration(self, tmp_path: Path) -> None:
         """期限を書かなければ engine の既定 (40 手番) のままになる。
 
         正の対照。宣言を読む経路を壊したときに、上のテストだけだと「既定へ
         倒れた」ことに気付けない。
         """
-        runtime = _build(tmp_path, {
-            "board_spot": "market_square",
-            "initial_orders": [
-                {"merchant": "gustav", "side": "sell", "item_spec": "herb",
-                 "quantity": 1, "unit_price": 9},
-            ],
-        })
+        runtime = _build(
+            tmp_path,
+            {
+                "board_spot": "market_square",
+                "initial_orders": [
+                    {"merchant": "gustav", "side": "sell", "item_spec": "herb", "quantity": 1, "unit_price": 9},
+                ],
+            },
+        )
 
         (order,) = runtime._market_service.board().orders
         assert order.expires_at_tick == order.listed_at_tick + 40
@@ -95,13 +95,15 @@ class TestTheDeclaredOrdersAreOnTheBoardFromTheStart:
 
     def test_a_declared_sell_order_is_standing(self, tmp_path: Path) -> None:
         """宣言した売り注文が、商人名義で板に並んでいる。"""
-        runtime = _build(tmp_path, {
-            "board_spot": "market_square",
-            "initial_orders": [
-                {"merchant": "gustav", "side": "sell", "item_spec": "herb",
-                 "quantity": 2, "unit_price": 9},
-            ],
-        })
+        runtime = _build(
+            tmp_path,
+            {
+                "board_spot": "market_square",
+                "initial_orders": [
+                    {"merchant": "gustav", "side": "sell", "item_spec": "herb", "quantity": 2, "unit_price": 9},
+                ],
+            },
+        )
 
         (order,) = runtime._market_service.board().orders
         assert order.side is MarketOrderSide.SELL
@@ -111,13 +113,15 @@ class TestTheDeclaredOrdersAreOnTheBoardFromTheStart:
 
     def test_a_declared_buy_order_is_standing(self, tmp_path: Path) -> None:
         """宣言した買い注文も、同じように板に並んでいる。"""
-        runtime = _build(tmp_path, {
-            "board_spot": "market_square",
-            "initial_orders": [
-                {"merchant": "gustav", "side": "buy", "item_spec": "herb",
-                 "quantity": 3, "unit_price": 7},
-            ],
-        })
+        runtime = _build(
+            tmp_path,
+            {
+                "board_spot": "market_square",
+                "initial_orders": [
+                    {"merchant": "gustav", "side": "buy", "item_spec": "herb", "quantity": 3, "unit_price": 7},
+                ],
+            },
+        )
 
         (order,) = runtime._market_service.board().orders
         assert order.side is MarketOrderSide.BUY
@@ -129,15 +133,16 @@ class TestTheDeclaredOrdersAreOnTheBoardFromTheStart:
         「昨日の売れ残り」を別々の値で置けることが、最初の手番から**値の比較**が
         起きる条件になる。1 件しか置けないと、比べる相手が居ない。
         """
-        runtime = _build(tmp_path, {
-            "board_spot": "market_square",
-            "initial_orders": [
-                {"merchant": "gustav", "side": "sell", "item_spec": "herb",
-                 "quantity": 1, "unit_price": 9},
-                {"merchant": "gustav", "side": "sell", "item_spec": "herb",
-                 "quantity": 1, "unit_price": 11},
-            ],
-        })
+        runtime = _build(
+            tmp_path,
+            {
+                "board_spot": "market_square",
+                "initial_orders": [
+                    {"merchant": "gustav", "side": "sell", "item_spec": "herb", "quantity": 1, "unit_price": 9},
+                    {"merchant": "gustav", "side": "sell", "item_spec": "herb", "quantity": 1, "unit_price": 11},
+                ],
+            },
+        )
 
         prices = sorted(o.unit_price_gold for o in runtime._market_service.board().orders)
         assert prices == [9, 11]

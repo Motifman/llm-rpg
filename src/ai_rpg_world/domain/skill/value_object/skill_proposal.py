@@ -18,13 +18,9 @@ class SkillProposal:
 
     def __post_init__(self) -> None:
         if self.proposal_id <= 0:
-            raise SkillProposalValidationException(
-                f"proposal_id must be positive: {self.proposal_id}"
-            )
+            raise SkillProposalValidationException(f"proposal_id must be positive: {self.proposal_id}")
         if self.target_slot_index is not None and (self.target_slot_index < 0 or self.target_slot_index >= 5):
-            raise SkillProposalValidationException(
-                f"target_slot_index must be in range 0..4: {self.target_slot_index}"
-            )
+            raise SkillProposalValidationException(f"target_slot_index must be in range 0..4: {self.target_slot_index}")
 
 
 @dataclass(frozen=True)
@@ -39,13 +35,9 @@ class SkillProposalContext:
 
     def __post_init__(self) -> None:
         if self.player_level <= 0:
-            raise SkillProposalValidationException(
-                f"player_level must be positive: {self.player_level}"
-            )
+            raise SkillProposalValidationException(f"player_level must be positive: {self.player_level}")
         if self.free_capacity_ratio < 0 or self.free_capacity_ratio > 1:
-            raise SkillProposalValidationException(
-                f"free_capacity_ratio must be in [0, 1]: {self.free_capacity_ratio}"
-            )
+            raise SkillProposalValidationException(f"free_capacity_ratio must be in [0, 1]: {self.free_capacity_ratio}")
         if self.current_slots and len(self.current_slots) != 5:
             raise SkillProposalValidationException(
                 f"current_slots length must be 5 when provided: {len(self.current_slots)}"
@@ -77,25 +69,15 @@ class SkillProposalTableEntry:
         if self.weight <= 0:
             raise SkillProposalValidationException(f"weight must be positive: {self.weight}")
         if self.min_player_level <= 0:
-            raise SkillProposalValidationException(
-                f"min_player_level must be positive: {self.min_player_level}"
-            )
+            raise SkillProposalValidationException(f"min_player_level must be positive: {self.min_player_level}")
         if self.max_player_level is not None and self.max_player_level < self.min_player_level:
-            raise SkillProposalValidationException(
-                "max_player_level must be greater than or equal to min_player_level"
-            )
+            raise SkillProposalValidationException("max_player_level must be greater than or equal to min_player_level")
         if self.min_free_capacity_ratio < 0 or self.min_free_capacity_ratio > 1:
-            raise SkillProposalValidationException(
-                "min_free_capacity_ratio must be in [0, 1]"
-            )
+            raise SkillProposalValidationException("min_free_capacity_ratio must be in [0, 1]")
         if self.max_free_capacity_ratio < 0 or self.max_free_capacity_ratio > 1:
-            raise SkillProposalValidationException(
-                "max_free_capacity_ratio must be in [0, 1]"
-            )
+            raise SkillProposalValidationException("max_free_capacity_ratio must be in [0, 1]")
         if self.min_free_capacity_ratio > self.max_free_capacity_ratio:
-            raise SkillProposalValidationException(
-                "min_free_capacity_ratio must be <= max_free_capacity_ratio"
-            )
+            raise SkillProposalValidationException("min_free_capacity_ratio must be <= max_free_capacity_ratio")
 
 
 @dataclass(frozen=True)
@@ -108,4 +90,3 @@ class SkillProposalTable:
             raise SkillProposalValidationException(f"table_id must be positive: {self.table_id}")
         if not self.entries:
             raise SkillProposalValidationException("entries cannot be empty")
-

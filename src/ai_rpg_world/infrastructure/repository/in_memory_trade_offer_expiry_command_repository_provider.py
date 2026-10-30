@@ -45,9 +45,7 @@ from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_a
 class _ScopeBoundPendingTradeOfferStore:
     """期限切れ処理に必要な提案store操作だけをscope内へ限定する。"""
 
-    def __init__(
-        self, store: InMemoryPendingTradeOfferStore, require_active: Callable[[], None]
-    ) -> None:
+    def __init__(self, store: InMemoryPendingTradeOfferStore, require_active: Callable[[], None]) -> None:
         self._store = store
         self._require_active = require_active
 
@@ -138,21 +136,13 @@ class InMemoryTradeOfferExpiryCommandRepositoryProviderFactory:
     ) -> InMemoryTradeOfferExpiryCommandRepositoryProvider:
         if not isinstance(transaction, RollbackParticipantTransactionAdapter):
             raise TypeError(
-                "trade offer expiry providerには提案storeを含む"
-                "RollbackParticipantTransactionAdapterが必要です"
+                "trade offer expiry providerには提案storeを含むRollbackParticipantTransactionAdapterが必要です"
             )
-        if not transaction.contains_rollback_resource(
-            self._pending_trade_offer_store
-        ):
-            raise TypeError(
-                "trade offer expiry providerの提案storeがrollback対象にありません"
-            )
+        if not transaction.contains_rollback_resource(self._pending_trade_offer_store):
+            raise TypeError("trade offer expiry providerの提案storeがrollback対象にありません")
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "インメモリtrade offer expiry providerには"
-                "InMemoryUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("インメモリtrade offer expiry providerにはInMemoryUnitOfWorkTransactionAdapterが必要です")
         return InMemoryTradeOfferExpiryCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

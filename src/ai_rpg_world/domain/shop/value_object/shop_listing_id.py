@@ -10,13 +10,12 @@ class ShopListingId:
 
     ショップ内で一意のリストID。正の整数である必要があります。
     """
+
     value: int
 
     def __post_init__(self) -> None:
         if self.value <= 0:
-            raise ShopListingIdValidationException(
-                f"Shop listing ID must be positive: {self.value}"
-            )
+            raise ShopListingIdValidationException(f"Shop listing ID must be positive: {self.value}")
 
     @classmethod
     def create(cls, value: int | str) -> "ShopListingId":

@@ -43,9 +43,7 @@ class InMemorySpotGraphScenarioEventProgressStore:
         """event command開始前の発火・予約状態を複製して返す。"""
         return frozenset(self._fired_event_ids), dict(self._scheduled)
 
-    def restore_rollback_snapshot(
-        self, snapshot: ScenarioEventProgressSnapshot
-    ) -> None:
+    def restore_rollback_snapshot(self, snapshot: ScenarioEventProgressSnapshot) -> None:
         """event command失敗時に発火・予約状態を開始前へ戻す。"""
         fired, scheduled = snapshot
         self._fired_event_ids = set(fired)

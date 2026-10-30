@@ -35,9 +35,7 @@ def _being(
         if attached is not None
         else None
     )
-    return Being(
-        being_id=BeingId(being_id), identity=_identity(), attachment=attachment
-    )
+    return Being(being_id=BeingId(being_id), identity=_identity(), attachment=attachment)
 
 
 @pytest.fixture
@@ -53,9 +51,7 @@ def resolver(repo: InMemoryBeingRepository) -> BeingAttachmentResolver:
 class TestResolverConstruction:
     """コンストラクタの型ガード。"""
 
-    def test_being_repository_can_create(
-        self, repo: InMemoryBeingRepository
-    ) -> None:
+    def test_being_repository_can_create(self, repo: InMemoryBeingRepository) -> None:
         """正しい Repository を渡せばインスタンス化される。"""
         BeingAttachmentResolver(repo)
 
@@ -115,14 +111,10 @@ class TestResolveAttachedBeing:
         # aggregate ガードを迂回して直接 Repository に異常状態を作る
         repo.save(_being("ada", attached=(1, 2)))
         repo.save(_being("ben", attached=(1, 2)))
-        with pytest.raises(
-            BeingMultipleAttachmentException, match="multiple Beings"
-        ):
+        with pytest.raises(BeingMultipleAttachmentException, match="multiple Beings"):
             resolver.resolve_attached_being(WorldId(1), PlayerId(2))
 
-    def test_vo_raises_type_error(
-        self, resolver: BeingAttachmentResolver
-    ) -> None:
+    def test_vo_raises_type_error(self, resolver: BeingAttachmentResolver) -> None:
         """型違反は TypeError で弾く。"""
         with pytest.raises(TypeError, match="world_id"):
             resolver.resolve_attached_being(1, PlayerId(2))  # type: ignore[arg-type]
@@ -140,9 +132,7 @@ class TestResolveBeingId:
     ) -> None:
         """attach Being の id が返る。"""
         repo.save(_being("ada", attached=(1, 2)))
-        assert resolver.resolve_being_id(WorldId(1), PlayerId(2)) == BeingId(
-            "ada"
-        )
+        assert resolver.resolve_being_id(WorldId(1), PlayerId(2)) == BeingId("ada")
 
     def test_none(
         self,
@@ -174,15 +164,11 @@ class TestResolvePlayerId:
         repo.save(_being("ada", attached=None))
         assert resolver.resolve_player_id(BeingId("ada")) is None
 
-    def test_being_none(
-        self, resolver: BeingAttachmentResolver
-    ) -> None:
+    def test_being_none(self, resolver: BeingAttachmentResolver) -> None:
         """未保存の BeingId は None を返す (= 例外ではない)。"""
         assert resolver.resolve_player_id(BeingId("missing")) is None
 
-    def test_being_id_raises_type_error(
-        self, resolver: BeingAttachmentResolver
-    ) -> None:
+    def test_being_id_raises_type_error(self, resolver: BeingAttachmentResolver) -> None:
         """型違反は TypeError で弾く。"""
         with pytest.raises(TypeError, match="being_id"):
             resolver.resolve_player_id("ada")  # type: ignore[arg-type]

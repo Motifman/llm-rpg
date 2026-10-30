@@ -6,11 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
-    STAGNATION_PRESSURE_BAND_NONE,
-)
-
 # --- 構造化エントリ（UiContextBuilder がラベル付与に使用） ---
+
 
 @dataclass(frozen=True)
 class SpotGraphInteractionEntry:
@@ -32,6 +29,7 @@ class SpotGraphConnectionEntry:
     使われている外部互換のフィールド名なので、ドメイン側の `passage.traversable`
     とは意図的に名前を分けている（リネームすると外部契約が壊れるため温存）。
     """
+
     destination_spot_id: int
     connection_name: str
     destination_spot_name: str
@@ -42,6 +40,7 @@ class SpotGraphConnectionEntry:
 @dataclass(frozen=True)
 class SpotGraphObjectEntry:
     """スポット内オブジェクト1件の構造化データ。"""
+
     object_id: int
     name: str
     description: str
@@ -67,6 +66,7 @@ class SpotGraphObjectEntry:
 @dataclass(frozen=True)
 class SpotGraphSubLocationEntry:
     """サブロケーション1件の構造化データ。"""
+
     sub_location_id: int
     name: str
     is_current: bool
@@ -76,6 +76,7 @@ class SpotGraphSubLocationEntry:
 @dataclass(frozen=True)
 class SpotGraphWeatherEntry:
     """天候情報の構造化データ。屋外スポットのみ有効。"""
+
     weather_type: str
     weather_intensity: float
     is_outdoor: bool
@@ -84,6 +85,7 @@ class SpotGraphWeatherEntry:
 @dataclass(frozen=True)
 class SpotGraphAtmosphereEntry:
     """雰囲気情報の構造化データ。"""
+
     lighting: str
     sound_ambient: str | None
     temperature: str
@@ -98,6 +100,7 @@ class SpotGraphTimeOfDayEntry:
     シナリオが day_night サイクルを宣言していなければ snapshot.time_of_day は
     None。「現在時刻: 朝」のような行をプロンプトに 1 行足すために使う。
     """
+
     phase_name: str
     display_text: str
     is_dark: bool
@@ -155,6 +158,7 @@ class SpotGraphInventoryItemEntry:
     も保持する。集約時は代表 instance (最初に発見したスロットの instance)
     の id を載せる。-1 は未設定を表す sentinel。
     """
+
     item_spec_id: int
     name: str
     quantity: int
@@ -196,6 +200,7 @@ class SpotGraphGroundItemEntry:
     初期配置で置かれたアイテムを、pickup tool が指せるラベル付きで
     プロンプトに載せるために使う。
     """
+
     item_instance_id: int
     item_spec_id: int
     name: str
@@ -206,6 +211,7 @@ class SpotGraphGroundItemEntry:
 @dataclass(frozen=True)
 class SpotGraphNearbyEntityEntry:
     """同スポットにいるエンティティ1件の構造化データ。"""
+
     entity_id: int
     display_name: str = ""
     # PR #347 後続: PlayerDownedEvent が一度通知された後でも、snapshot からは
@@ -223,12 +229,6 @@ class SpotGraphNearbyEntityEntry:
     # 仲間の状態を「常時見えている」モデル: Observation ではなく state として
     # 毎 tick 反映する (#421/#425 のラベル → 名前+状態 設計に対称的)。
     fatigue_level: str = "ok"
-    # P-U4 (停滞感の表出・他者): 同 spot の他 player の停滞感バンド。
-    # ``none`` / ``light`` / ``strong`` の3段階 (P-U2 の
-    # ``resolve_stagnation_pressure_band`` の戻り値と同型)。ゲージ値そのものは
-    # 見せず、バンドだけを渡す設計 (docs/memory_system 系の停滞感 UX 判断)。
-    # fatigue_level と対称に「常時見えている」state として扱う。
-    stagnation_band: str = STAGNATION_PRESSURE_BAND_NONE
     # 行動不能 (is_down / is_dead) の相手が持っているものの表示名。
     #
     # 実 run のボトルネックが背景にある。山頂で仲間が倒れ、その荷物 (狼煙に要る
@@ -280,6 +280,7 @@ class SpotGraphMonsterEntry:
 
 # --- agent busy 状態 ---
 
+
 @dataclass(frozen=True)
 class SpotGraphAgentStatusEntry:
     """プレイヤーの現在の行動状態 (busy / 中断可能性) を LLM に伝えるための構造化情報。
@@ -288,6 +289,7 @@ class SpotGraphAgentStatusEntry:
     ことを snapshot から読み取れるようにする。中断可能 (= 別の重い行動を取ると
     travel をキャンセルして新行動に切り替わる) ことも明示する。
     """
+
     # 現在 busy 状態にあるか (= multi-tick action の途中)。
     busy: bool = False
     # busy の理由 (人間可読、例: "山頂への移動中")。None なら busy=False のときだけ。
@@ -301,6 +303,7 @@ class SpotGraphAgentStatusEntry:
 
 
 # --- 市場の掲示板 (経済統合 Phase 3) ---
+
 
 @dataclass(frozen=True)
 class SpotGraphMarketRowEntry:
@@ -345,6 +348,7 @@ class SpotGraphMarketOwnOrderEntry:
 
 # --- スナップショット ---
 
+
 @dataclass(frozen=True)
 class SpotGraphPlayerSnapshotDto:
     """スポットグラフ上のプレイヤー周辺の読み取り専用スナップショット。
@@ -355,11 +359,7 @@ class SpotGraphPlayerSnapshotDto:
     参照する。仲間用の ``SpotGraphNearbyEntityDto.fatigue_level`` の自分版。
     旧構造では ``player_state`` dict に ``fatigue_level`` を入れる構造だったが、
     実際には ``dict(player.state)`` (= 自由 state) しか乗らず、hint が常に空に
-    なる silent failure があった。専用 field として明示する。
-
-    ``own_stagnation_band`` は P-U3 (停滞感の表出・自己) 用。行動者本人の
-    停滞感バンド (``none`` / ``light`` / ``strong``)。fatigue と同じく
-    ui_context_builder の「身体の状態」section で hint に変換される。"""
+    なる silent failure があった。専用 field として明示する。"""
 
     current_spot_id: int
     current_spot_name: str
@@ -433,14 +433,6 @@ class SpotGraphPlayerSnapshotDto:
     # エージェントの欲求状態テキスト
     need_lines: tuple[str, ...] = ()
 
-    # 欲求そのもの (値オブジェクト)。**表示文とは別に持つ。**
-    #
-    # 想起の検索語を決めるのに、以前は need_lines を文字列として読み直して
-    # 「高い or 危険 を含むか」を見ていた。判定に要る値 (need_type と閾値) は
-    # AgentNeed が持っているので、それを渡す。表示の言い回しを変えても検索語が
-    # 変わらないようにするため (系統2)。
-    need_states: tuple[Any, ...] = ()
-
     # 行動者本人の HP 行 (値 + 前 turn からの増減)。空文字は「HP 行を出さない」。
     # need_lines と同じ「身体の状態」section の先頭に描画する。従来は HP が
     # プロンプトに一切出ておらず、エージェントは被弾観測を暗算で積み上げるしか
@@ -453,9 +445,7 @@ class SpotGraphPlayerSnapshotDto:
     active_effect_lines: tuple[str, ...] = ()
 
     # 現在の行動状態 (travel 等の multi-tick action 中か)。busy=False が default。
-    agent_status: SpotGraphAgentStatusEntry = field(
-        default_factory=SpotGraphAgentStatusEntry
-    )
+    agent_status: SpotGraphAgentStatusEntry = field(default_factory=SpotGraphAgentStatusEntry)
 
     # 本人の疲労 tier。`ok` / `tired` / `fatigued` / `severe` / `exhausted`。
     # ui_context_builder が「身体の状態」section に
@@ -463,13 +453,6 @@ class SpotGraphPlayerSnapshotDto:
     # のような操作可能性 hint を出すために参照する。
     # default `ok` は player aggregate が無い経路 (= テスト等) の fallback。
     own_fatigue_level: str = "ok"
-
-    # P-U3 (停滞感の表出・自己): 行動者本人の停滞感バンド。``none`` / ``light``
-    # / ``strong`` の3段階。ui_context_builder が「身体の状態」section に
-    # 「何かが前に進んでいない気がする」等の hint を出すために参照する。
-    # default ``none`` は provider 未配線 / flag OFF の経路の fallback
-    # (= 導入前と同じく何も描画しない)。
-    own_stagnation_band: str = STAGNATION_PRESSURE_BAND_NONE
 
     # Phase 4-E: 行動者本人の自由 state (HIDDEN を含む全項目)。
     # 自分自身の内面なので毒・呪い・隠しフラグも本人プロンプトには載せる。

@@ -105,12 +105,8 @@ def _build_in_memory_service(
     scope_factory = CommandScopeFactory(
         InMemoryUnitOfWorkTransactionFactory(data_store),
         sync_dispatcher=(sync_dispatcher or _NoOpSyncDispatcher()),  # type: ignore[arg-type]
-        after_commit_handoff=(
-            after_commit_handoff or _NoOpAfterCommitHandoff()
-        ),  # type: ignore[arg-type]
-        repository_provider_factory=(
-            InMemoryTradeCommandRepositoryProviderFactory()
-        ),
+        after_commit_handoff=(after_commit_handoff or _NoOpAfterCommitHandoff()),  # type: ignore[arg-type]
+        repository_provider_factory=(InMemoryTradeCommandRepositoryProviderFactory()),
     )
     service = TradeCommandService(scope_factory)
     return (
@@ -149,18 +145,12 @@ class TestTradeCommandService:
         item_numeric_id: int,
         buyer_ids: list[int],
     ) -> None:
-        profile_repo.save(
-            PlayerProfileAggregate.create(PlayerId(seller_id), PlayerName("SellerOne"))
-        )
+        profile_repo.save(PlayerProfileAggregate.create(PlayerId(seller_id), PlayerName("SellerOne")))
         buyer_names = {2: "BuyerOne", 3: "BuyerTwo", 4: "BuyerFou"}
         for bid in buyer_ids:
             nm = buyer_names.get(bid, f"Play{bid}")
             profile_repo.save(PlayerProfileAggregate.create(PlayerId(bid), PlayerName(nm)))
-        item_repo.save(
-            ItemAggregate.create(
-                ItemInstanceId(item_numeric_id), self._cmd_item_spec(), quantity=1
-            )
-        )
+        item_repo.save(ItemAggregate.create(ItemInstanceId(item_numeric_id), self._cmd_item_spec(), quantity=1))
 
     def _create_sample_status(self, player_id: int):
         exp_table = ExpTable(100, 1.5)
@@ -173,7 +163,7 @@ class TestTradeCommandService:
             gold=Gold(1000),
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
-            stamina=Stamina.create(100, 100)
+            stamina=Stamina.create(100, 100),
         )
 
     def _seed_active_trade(
@@ -221,7 +211,7 @@ class TestTradeCommandService:
 
     def test_offer_item_success(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
-        
+
         # Setup seller inventory
         seller_id = 1
         self._seed_profile_item(
@@ -236,18 +226,13 @@ class TestTradeCommandService:
         inventory.acquire_item(item_id)
         inv_repo.save(inventory)
 
-        command = OfferItemCommand(
-            seller_id=seller_id,
-            item_instance_id=100,
-            slot_id=0,
-            requested_gold=500
-        )
+        command = OfferItemCommand(seller_id=seller_id, item_instance_id=100, slot_id=0, requested_gold=500)
 
         result = service.offer_item(command)
 
         assert result.success is True
         trade_id_val = result.data["trade_id"]
-        
+
         # Verify trade aggregate
         trade = trade_repo.find_by_id(TradeId(trade_id_val))
         assert trade is not None
@@ -262,13 +247,8 @@ class TestTradeCommandService:
 
     def test_offer_item_seller_inventory_not_found(self, setup_service):
         service, _, _, _, _, _, _, _ = setup_service
-        
-        command = OfferItemCommand(
-            seller_id=999,
-            item_instance_id=100,
-            slot_id=0,
-            requested_gold=500
-        )
+
+        command = OfferItemCommand(seller_id=999, item_instance_id=100, slot_id=0, requested_gold=500)
 
         with pytest.raises(TradeCreationException) as excinfo:
             service.offer_item(command)
@@ -276,18 +256,13 @@ class TestTradeCommandService:
 
     def test_offer_item_slot_mismatch(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
-        
+
         seller_id = 1
         inventory = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
-        inventory.acquire_item(ItemInstanceId(101)) # Wrong ID
+        inventory.acquire_item(ItemInstanceId(101))  # Wrong ID
         inv_repo.save(inventory)
 
-        command = OfferItemCommand(
-            seller_id=seller_id,
-            item_instance_id=100,
-            slot_id=0,
-            requested_gold=500
-        )
+        command = OfferItemCommand(seller_id=seller_id, item_instance_id=100, slot_id=0, requested_gold=500)
 
         with pytest.raises(TradeCreationException) as excinfo:
             service.offer_item(command)
@@ -295,7 +270,7 @@ class TestTradeCommandService:
 
     def test_offer_item_direct_trade_missing_target(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
-        
+
         seller_id = 1
         inventory = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
         inventory.acquire_item(ItemInstanceId(100))
@@ -307,7 +282,7 @@ class TestTradeCommandService:
             slot_id=0,
             requested_gold=500,
             is_direct=True,
-            target_player_id=None # Missing
+            target_player_id=None,  # Missing
         )
 
         with pytest.raises(TradeCreationException) as excinfo:
@@ -316,7 +291,7 @@ class TestTradeCommandService:
 
     def test_accept_trade_success(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
-        
+
         # Setup seller and buyer
         seller_id = 1
         buyer_id = 2
@@ -328,21 +303,21 @@ class TestTradeCommandService:
             item_numeric_id=item_id.value,
             buyer_ids=[buyer_id],
         )
-        
+
         seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
         seller_inv.acquire_item(item_id)
         seller_inv.reserve_item(SlotId(0))
         inv_repo.save(seller_inv)
-        
+
         seller_status = self._create_sample_status(seller_id)
         status_repo.save(seller_status)
-        
+
         buyer_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(buyer_id))
         inv_repo.save(buyer_inv)
-        
+
         buyer_status = self._create_sample_status(buyer_id)
         status_repo.save(buyer_status)
-        
+
         # Setup trade
         trade_id = trade_repo.generate_trade_id()
         trade = TradeAggregate.create_new_trade(
@@ -360,15 +335,15 @@ class TestTradeCommandService:
         result = service.accept_trade(command)
 
         assert result.success is True
-        
+
         # Verify trade status
         trade = trade_repo.find_by_id(trade_id)
         assert trade.status == TradeStatus.COMPLETED
         assert trade.buyer_id.value == buyer_id
 
         # Verify gold transfer
-        assert status_repo.find_by_id(PlayerId(buyer_id)).gold.value == 500 # 1000 - 500
-        assert status_repo.find_by_id(PlayerId(seller_id)).gold.value == 1500 # 1000 + 500
+        assert status_repo.find_by_id(PlayerId(buyer_id)).gold.value == 500  # 1000 - 500
+        assert status_repo.find_by_id(PlayerId(seller_id)).gold.value == 1500  # 1000 + 500
 
         # Verify item transfer
         assert inv_repo.find_by_id(PlayerId(seller_id)).get_item_instance_id_by_slot(SlotId(0)) is None
@@ -415,22 +390,22 @@ class TestTradeCommandService:
 
     def test_accept_trade_not_found(self, setup_service):
         service, _, _, _, _, _, _, _ = setup_service
-        
+
         command = AcceptTradeCommand(trade_id=999, buyer_id=2)
         with pytest.raises(TradeNotFoundForCommandException):
             service.accept_trade(command)
 
     def test_accept_trade_self_trade_not_allowed(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
-        
+
         seller_id = 1
         item_id = ItemInstanceId(100)
-        
+
         seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
         seller_inv.acquire_item(item_id)
         seller_inv.reserve_item(SlotId(0))
         inv_repo.save(seller_inv)
-        
+
         trade_id = trade_repo.generate_trade_id()
         trade = TradeAggregate.create_new_trade(
             trade_id=trade_id,
@@ -450,12 +425,12 @@ class TestTradeCommandService:
 
     def test_accept_trade_target_mismatch(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
-        
+
         seller_id = 1
         buyer_id = 2
         other_id = 3
         item_id = ItemInstanceId(100)
-        
+
         # Setup direct trade for 'other_id'
         trade_id = trade_repo.generate_trade_id()
         trade = TradeAggregate.create_new_trade(
@@ -476,7 +451,7 @@ class TestTradeCommandService:
 
     def test_accept_trade_insufficient_gold(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
-        
+
         seller_id = 1
         buyer_id = 2
         item_id = ItemInstanceId(100)
@@ -487,22 +462,22 @@ class TestTradeCommandService:
             item_numeric_id=item_id.value,
             buyer_ids=[buyer_id],
         )
-        
+
         # Setup seller
         seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
         seller_inv.acquire_item(item_id)
         seller_inv.reserve_item(SlotId(0))
         inv_repo.save(seller_inv)
         status_repo.save(self._create_sample_status(seller_id))
-        
+
         # Setup buyer with only 100 gold
         buyer_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(buyer_id))
         inv_repo.save(buyer_inv)
         buyer_status = self._create_sample_status(buyer_id)
         # Manually adjust gold to be insufficient
-        buyer_status.pay_gold(900) # Left with 100 gold
+        buyer_status.pay_gold(900)  # Left with 100 gold
         status_repo.save(buyer_status)
-        
+
         # Setup trade for 500 gold
         trade_id = trade_repo.generate_trade_id()
         trade = TradeAggregate.create_new_trade(
@@ -517,7 +492,7 @@ class TestTradeCommandService:
         trade_repo.save(trade)
 
         command = AcceptTradeCommand(trade_id=trade_id.value, buyer_id=buyer_id)
-        
+
         # Should raise TradeCommandException because of InsufficientGoldException (DomainException)
         with pytest.raises(TradeCommandException) as excinfo:
             service.accept_trade(command)
@@ -525,7 +500,7 @@ class TestTradeCommandService:
 
     def test_accept_trade_inventory_full(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
-        
+
         seller_id = 1
         buyer_id = 2
         item_id = ItemInstanceId(100)
@@ -536,20 +511,20 @@ class TestTradeCommandService:
             item_numeric_id=item_id.value,
             buyer_ids=[buyer_id],
         )
-        
+
         # Setup seller
         seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
         seller_inv.acquire_item(item_id)
         seller_inv.reserve_item(SlotId(0))
         inv_repo.save(seller_inv)
         status_repo.save(self._create_sample_status(seller_id))
-        
+
         # Setup buyer with full inventory
         buyer_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(buyer_id), max_slots=1)
-        buyer_inv.acquire_item(ItemInstanceId(200)) # Fill the only slot
+        buyer_inv.acquire_item(ItemInstanceId(200))  # Fill the only slot
         inv_repo.save(buyer_inv)
         status_repo.save(self._create_sample_status(buyer_id))
-        
+
         # Setup trade
         trade_id = trade_repo.generate_trade_id()
         trade = TradeAggregate.create_new_trade(
@@ -564,22 +539,22 @@ class TestTradeCommandService:
         trade_repo.save(trade)
 
         command = AcceptTradeCommand(trade_id=trade_id.value, buyer_id=buyer_id)
-        
+
         with pytest.raises(TradeCommandException) as excinfo:
             service.accept_trade(command)
         assert "Buyer inventory is full" in str(excinfo.value)
 
     def test_cancel_trade_success(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
-        
+
         seller_id = 1
         item_id = ItemInstanceId(100)
-        
+
         seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
         seller_inv.acquire_item(item_id)
         seller_inv.reserve_item(SlotId(0))
         inv_repo.save(seller_inv)
-        
+
         trade_id = trade_repo.generate_trade_id()
         trade = TradeAggregate.create_new_trade(
             trade_id=trade_id,
@@ -596,7 +571,7 @@ class TestTradeCommandService:
         result = service.cancel_trade(command)
 
         assert result.success is True
-        
+
         # Verify trade status
         trade = trade_repo.find_by_id(trade_id)
         assert trade.status == TradeStatus.CANCELLED
@@ -635,11 +610,11 @@ class TestTradeCommandService:
 
     def test_cancel_trade_not_seller(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
-        
+
         seller_id = 1
         other_id = 2
         item_id = ItemInstanceId(100)
-        
+
         # Setup trade
         trade_id = trade_repo.generate_trade_id()
         trade = TradeAggregate.create_new_trade(
@@ -659,17 +634,17 @@ class TestTradeCommandService:
 
     def test_cancel_trade_already_completed(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
-        
+
         seller_id = 1
         buyer_id = 2
         item_id = ItemInstanceId(100)
-        
+
         # Setup seller inventory
         seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
         seller_inv.acquire_item(item_id)
         seller_inv.reserve_item(SlotId(0))
         inv_repo.save(seller_inv)
-        
+
         # Setup trade
         trade_id = trade_repo.generate_trade_id()
         trade = TradeAggregate.create_new_trade(
@@ -689,7 +664,7 @@ class TestTradeCommandService:
         trade_repo.save(trade)
 
         command = CancelTradeCommand(trade_id=trade_id.value, player_id=seller_id)
-        
+
         # Domain will raise InvalidTradeStatusException -> TradeCommandException
         with pytest.raises(TradeCommandException) as excinfo:
             service.cancel_trade(command)

@@ -268,9 +268,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         スポットの全員が観測する。行為者が判るときだけ二重観測を防ぐ。
         """
         if event.actor_entity_id is not None:
-            self._resolve_at_spot_excluding_actor(
-                event.spot_id, event.actor_entity_id, add
-            )
+            self._resolve_at_spot_excluding_actor(event.spot_id, event.actor_entity_id, add)
         else:
             self._resolve_all_at_spot(event.spot_id, add)
 
@@ -295,9 +293,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         """
         self._resolve_all_players(add)
 
-    def _deliver_vote_progress_to_the_other_voters(
-        self, event: Any, add: _Add
-    ) -> None:
+    def _deliver_vote_progress_to_the_other_voters(self, event: Any, add: _Add) -> None:
         """投票した本人以外の参加者へ、投票の進捗を届ける。
 
         本人にはツール結果が返る。本人を再起床させると、投票直後に余分な
@@ -338,19 +334,12 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         """グラフ上の指定スポットにいるプレイヤーの一覧を返す。"""
         graph = self._spot_graph_repository.find_graph()
         entity_spot = graph.entity_spot_mapping()
-        known_player_ids: set[int] = {
-            s.player_id.value
-            for s in self._player_status_repository.find_all()
-        }
+        known_player_ids: set[int] = {s.player_id.value for s in self._player_status_repository.find_all()}
         physical = [
-            PlayerId(eid.value)
-            for eid, sid in entity_spot.items()
-            if sid == spot_id and eid.value in known_player_ids
+            PlayerId(eid.value) for eid, sid in entity_spot.items() if sid == spot_id and eid.value in known_player_ids
         ]
         departed = (
-            list(self._departed_position_store.players_at(spot_id))
-            if self._departed_position_store is not None
-            else []
+            list(self._departed_position_store.players_at(spot_id)) if self._departed_position_store is not None else []
         )
         seen = {int(player_id) for player_id in physical}
         return physical + [pid for pid in departed if int(pid) not in seen]
@@ -362,9 +351,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             if pid.value != actor_entity_id.value:
                 add(pid)
 
-    def _resolve_connection_changed(
-        self, event: ConnectionStateChangedEvent, add: Callable[[PlayerId], None]
-    ) -> None:
+    def _resolve_connection_changed(self, event: ConnectionStateChangedEvent, add: Callable[[PlayerId], None]) -> None:
         """ConnectionStateChangedEvent の配信先を解決する。
 
         Issue #184 (軸 3): 観測者の位置に応じた段階的な観測を実装する。
@@ -393,9 +380,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
                 continue
             add(pid)
 
-    def _audible_neighbor_recipients(
-        self, event: ConnectionStateChangedEvent
-    ) -> list[PlayerId]:
+    def _audible_neighbor_recipients(self, event: ConnectionStateChangedEvent) -> list[PlayerId]:
         """変化した connection の音が漏れ届く隣接 spot の player を返す。
 
         from_spot と to_spot それぞれから 1 hop 出ていく接続のうち、
@@ -458,32 +443,26 @@ _RECIPIENT_RULES: RuleTable = {
     SpotExploredEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
     # 公開可能なプレイヤー state 変化。本人は current_state プロンプトで知る。
     SpotPlayerStateChangedInSpotEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
-
     # --- witness_policy を見てから同席者へ ---
     SpotObjectInteractedEvent: SpotGraphRecipientStrategy._deliver_to_others_only_when_witnessed,
     PlayerDroppedItemEvent: SpotGraphRecipientStrategy._deliver_to_others_only_when_witnessed,
     PlayerPickedUpItemEvent: SpotGraphRecipientStrategy._deliver_to_others_only_when_witnessed,
-
     # --- 対人行為 (対象本人を含める / notify_target で伏せたまま届ける) ---
     PlayerInteractedWithPlayerEvent: SpotGraphRecipientStrategy._deliver_interpersonal_action,
-
     # --- 行為者が判れば除外、判らなければ同席者全員 ---
     SpotObjectStateChangedEvent: SpotGraphRecipientStrategy._deliver_excluding_the_actor_if_known,
     SpotPublicEffectObservedEvent: SpotGraphRecipientStrategy._deliver_excluding_the_actor_if_known,
-
     # --- 接続の変化 ---
     # 状態変化は両端 + 音が漏れる隣接まで (Issue #184 の軸 3)。
     ConnectionStateChangedEvent: SpotGraphRecipientStrategy._resolve_connection_changed,
     ConnectionCreatedEvent: SpotGraphRecipientStrategy._deliver_to_both_ends_of_the_connection,
     ConnectionDestroyedEvent: SpotGraphRecipientStrategy._deliver_to_both_ends_of_the_connection,
-
     # --- 世界全体 ---
     # 追放が起きなかった場合も同じ経路を通す (会議設計 doc §6.4)。
     MeetingVoteResolvedEvent: SpotGraphRecipientStrategy._deliver_to_everyone_in_the_world,
     GamePhaseChangedEvent: SpotGraphRecipientStrategy._deliver_to_everyone_in_the_world,
     TimeOfDayChangedEvent: SpotGraphRecipientStrategy._deliver_to_everyone_in_the_world,
     MeetingVoteCastEvent: SpotGraphRecipientStrategy._deliver_vote_progress_to_the_other_voters,
-
     # --- 同席者全員 (行為者がプレイヤーでないので除外なし) ---
     MonsterAppearedAtSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
     MonsterLeftSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
@@ -498,10 +477,8 @@ _RECIPIENT_RULES: RuleTable = {
     MonsterRespondedToPackHelpInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
     MonsterFollowedPackFleeInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
     MonsterAlertedByPackInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
-
     # --- 攻撃したプレイヤーだけ除外 (フィールド名が attacker_entity_id) ---
     PlayerAttackedMonsterInSpotEvent: SpotGraphRecipientStrategy._deliver_to_others_excluding_the_attacker,
-
     # --- 聞いた本人だけ ---
     SpotSoundHeardEvent: SpotGraphRecipientStrategy._deliver_only_to_the_listener,
     SpotPresenceListenedEvent: SpotGraphRecipientStrategy._deliver_only_to_the_listener,

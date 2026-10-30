@@ -28,9 +28,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_TOWN = (
-    pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
-)
+_TOWN = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _LENA = PlayerId(1)
 
 #: 引数なしで成功まで届くツール。ここは「成功した呼び出しも 1 件」を見る。
@@ -45,15 +43,15 @@ _NO_ARG_CALLS: dict[str, dict[str, Any]] = {
 def town(tmp_path: pathlib.Path) -> Any:
     raw = json.loads(_TOWN.read_text(encoding="utf-8"))
     (tmp_path / "market_town_v1.json").write_text(
-        json.dumps(raw, ensure_ascii=False), encoding="utf-8",
+        json.dumps(raw, ensure_ascii=False),
+        encoding="utf-8",
     )
     manager = GameRuntimeManager(
-        scenarios_dir=tmp_path, characters_path=tmp_path / "characters.json",
+        scenarios_dir=tmp_path,
+        characters_path=tmp_path / "characters.json",
     )
     character = manager.create_character(CharacterCreateRequest(name="レナ"))
-    summary = manager.create_session(
-        SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id])
-    )
+    summary = manager.create_session(SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id]))
     return manager._sessions[summary.session_id]
 
 
@@ -101,8 +99,7 @@ class TestEachToolCallIsRecordedExactlyOnce:
         assert result.success is True, f"{tool} が失敗している: {result.message}"
         mine = [entry for entry in _records(town) if entry.tool_name == tool]
         assert len(mine) == 1, (
-            f"{tool} の記録が {len(mine)} 件ある。記録経路が 2 本になっていないか "
-            f"({[e.action_summary for e in mine]})"
+            f"{tool} の記録が {len(mine)} 件ある。記録経路が 2 本になっていないか ({[e.action_summary for e in mine]})"
         )
 
     def test_waiting_twice_leaves_exactly_two_records(self, town: Any) -> None:

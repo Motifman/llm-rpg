@@ -41,9 +41,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────
 
 
-def list_targets_of_kind(
-    targets: dict[str, ToolRuntimeTargetDto], kind: str
-) -> str:
+def list_targets_of_kind(targets: dict[str, ToolRuntimeTargetDto], kind: str) -> str:
     """``targets`` から指定 kind の項目を ``"display" / "display2"`` で返す。
 
     空なら空文字列。spot_graph の現在プロンプトでは S1 / OBJ1 / I1 のような
@@ -63,8 +61,7 @@ def list_targets_of_kind(
         display = target.display_name or ""
         if not display:
             logger.warning(
-                "target without display_name is hidden from LLM-facing candidate list: "
-                "label=%s kind=%s",
+                "target without display_name is hidden from LLM-facing candidate list: label=%s kind=%s",
                 label,
                 kind,
             )
@@ -154,9 +151,7 @@ def build_unknown_label_failure(
     )
     return LlmCommandResultDto(
         success=False,
-        message=(
-            f"{label_kind}={given_label!r} を解決できませんでした。{valid_part}"
-        ),
+        message=(f"{label_kind}={given_label!r} を解決できませんでした。{valid_part}"),
         error_code=error_code,
         remediation=get_remediation(error_code),
     )

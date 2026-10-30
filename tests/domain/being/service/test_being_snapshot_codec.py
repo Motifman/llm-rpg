@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from ai_rpg_world.domain.being.aggregate.being import Being
@@ -138,9 +140,7 @@ class TestBeingSnapshotCodecMemoryPayload:
 
     def test_memory_payload_encode_snapshot_preserved(self) -> None:
         """``memory_payload_json`` を渡すと snapshot にそのまま乗る。"""
-        snapshot = BeingSnapshotCodec.encode(
-            _attached_being(), memory_payload_json='{"memo": [], "semantic": []}'
-        )
+        snapshot = BeingSnapshotCodec.encode(_attached_being(), memory_payload_json='{"memo": [], "semantic": []}')
         assert snapshot.memory_payload_json == '{"memo": [], "semantic": []}'
         assert snapshot.snapshot_version == CURRENT_SNAPSHOT_VERSION
         assert snapshot.has_memory_payload is True
@@ -156,7 +156,8 @@ class TestBeingSnapshotCodecMemoryPayload:
         """渡し間違いは TypeError で弾く (= 形式エラーは早期に検出)。"""
         with pytest.raises(TypeError, match="memory_payload_json"):
             BeingSnapshotCodec.encode(
-                _attached_being(), memory_payload_json=123  # type: ignore[arg-type]
+                _attached_being(),
+                memory_payload_json=123,  # type: ignore[arg-type]
             )
 
     def test_v1_snapshot_decode(self) -> None:
@@ -191,9 +192,7 @@ class TestBeingSnapshotCodecMemoryPayload:
 
     def test_decode_being_restore_payload(self) -> None:
         """memory payload は Phase 4-2 の service 責務なので codec では復元しない。"""
-        snapshot = BeingSnapshotCodec.encode(
-            _attached_being(), memory_payload_json='{"any": "thing"}'
-        )
+        snapshot = BeingSnapshotCodec.encode(_attached_being(), memory_payload_json='{"any": "thing"}')
         being = BeingSnapshotCodec.decode(snapshot)
         # codec は Being 集約 root の状態 (identity / attachment / kinds) だけ復元
         assert being.attachment is not None
@@ -207,3 +206,30 @@ class TestBeingSnapshotCodecMemoryPayload:
         decoded = BeingSnapshotCodec.decode(s1)
         s2 = BeingSnapshotCodec.encode(decoded, memory_payload_json=payload)
         assert s2 == s1
+
+
+class TestRemovedMemoryDeclaration:
+    """古いsnapshotの廃止済み宣言だけを除き、ほかの復元契約を保つ。"""
+
+    @pytest.mark.parametrize("version", [1, 2])
+    @pytest.mark.parametrize("kinds", [("semantic",), ("semantic", "memo", "semantic", "short_term", "episodic")])
+    def test_old_declaration_is_omitted_on_decode_and_reencode(self, version: int, kinds: tuple[str, ...]) -> None:
+        """v1/v2のsemantic宣言を除去し、同一性・所属・現役宣言を保ち、再保存で復活させない。"""
+        snapshot = replace(
+            BeingSnapshotCodec.encode(_attached_being()), snapshot_version=version, declared_memory_kinds=kinds
+        )
+        being = BeingSnapshotCodec.decode(snapshot)
+        encoded = BeingSnapshotCodec.encode(being)
+        assert encoded.being_id_value == snapshot.being_id_value
+        assert encoded.identity_name == snapshot.identity_name
+        assert encoded.identity_first_person == snapshot.identity_first_person
+        assert encoded.attachment_world_id == snapshot.attachment_world_id
+        assert encoded.attachment_player_id == snapshot.attachment_player_id
+        assert encoded.declared_memory_kinds == tuple(sorted(set(kinds) - {"semantic"}))
+
+    @pytest.mark.parametrize("kinds", [("semantic", "unknown_kind"), ("Semantic",), ("SEMANTIC",)])
+    def test_unknown_declarations_are_still_rejected(self, kinds: tuple[str, ...]) -> None:
+        """廃止済み宣言との混在や大文字表記を含め、未知の宣言は従来どおり拒否する。"""
+        snapshot = replace(BeingSnapshotCodec.encode(_attached_being()), declared_memory_kinds=kinds)
+        with pytest.raises(BeingSnapshotIncompleteException, match="unknown memory_kind"):
+            BeingSnapshotCodec.decode(snapshot)

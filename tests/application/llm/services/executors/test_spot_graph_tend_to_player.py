@@ -10,9 +10,8 @@ resolver で target_player_id まで解決済みの args を受けて、
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
-
-import pytest
 
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
@@ -23,6 +22,8 @@ from ai_rpg_world.application.world_graph.spot_graph_world_services import (
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.service.player_outcome_registry import PlayerOutcomeRegistry
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
 from ai_rpg_world.domain.player.value_object.gold import Gold
@@ -30,12 +31,8 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
-)
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
@@ -48,10 +45,7 @@ def _build_player(
     hp_max: int = 100,
 ) -> PlayerStatusAggregate:
     exp_table = ExpTable(100, 1.5)
-    nav = PlayerNavigationState.from_parts(
-        current_spot_id=SpotId(spot_id),
-        current_coordinate=Coordinate(0, 0, 0),
-    )
+    nav = SpotId(spot_id)
     status = PlayerStatusAggregate(
         player_id=PlayerId(player_id),
         base_stats=BaseStats(hp_max, 50, 10, 10, 10, 0.05, 0.05),
@@ -62,13 +56,16 @@ def _build_player(
         hp=Hp.create(hp_current, hp_max),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        navigation_state=nav,
+        current_spot_id=nav,
         is_down=is_down,
     )
     return status
 
 
-def _build_executor() -> tuple[SpotGraphToolExecutor, MagicMock, MagicMock]:
+def _build_executor(
+    *,
+    runtime: SimpleNamespace | None = None,
+) -> tuple[SpotGraphToolExecutor, MagicMock, MagicMock]:
     """tend_to_player 用の最小 executor を返す。
 
     Returns:
@@ -93,6 +90,7 @@ def _build_executor() -> tuple[SpotGraphToolExecutor, MagicMock, MagicMock]:
         item_repository=item_repo,
         event_publisher=publisher,
         player_status_repository=status_repo,
+        runtime=runtime,
     )
     return exec, status_repo, publisher
 
@@ -117,11 +115,10 @@ class TestTendToPlayerSuccess:
         LLM が travel_to で退避する時間が確保できる。"""
         exec, status_repo, publisher = _build_executor()
         actor = _build_player(player_id=1, is_down=False, spot_id=10)
-        target = _build_player(
-            player_id=2, is_down=True, spot_id=10, hp_current=0, hp_max=100
-        )
+        target = _build_player(player_id=2, is_down=True, spot_id=10, hp_current=0, hp_max=100)
         status_repo.find_by_id.side_effect = lambda pid: {
-            PlayerId(1): actor, PlayerId(2): target,
+            PlayerId(1): actor,
+            PlayerId(2): target,
         }.get(pid)
 
         result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
@@ -138,13 +135,13 @@ class TestTendToPlayerSuccess:
         """Phase 5: post hoc observation handler が「誰に介抱されたか」を読むために
         actor の PlayerId が PlayerRevivedEvent.caregiver_player_id に乗る必要がある。"""
         from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
+
         exec, status_repo, publisher = _build_executor()
         actor = _build_player(player_id=1, is_down=False, spot_id=10)
-        target = _build_player(
-            player_id=2, is_down=True, spot_id=10, hp_current=0, hp_max=100
-        )
+        target = _build_player(player_id=2, is_down=True, spot_id=10, hp_current=0, hp_max=100)
         status_repo.find_by_id.side_effect = lambda pid: {
-            PlayerId(1): actor, PlayerId(2): target,
+            PlayerId(1): actor,
+            PlayerId(2): target,
         }.get(pid)
 
         exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
@@ -158,11 +155,10 @@ class TestTendToPlayerSuccess:
         """成功メッセージに HP と対象名が含まれる。"""
         exec, status_repo, publisher = _build_executor()
         actor = _build_player(player_id=1, is_down=False, spot_id=10)
-        target = _build_player(
-            player_id=2, is_down=True, spot_id=10, hp_current=0, hp_max=100
-        )
+        target = _build_player(player_id=2, is_down=True, spot_id=10, hp_current=0, hp_max=100)
         status_repo.find_by_id.side_effect = lambda pid: {
-            PlayerId(1): actor, PlayerId(2): target,
+            PlayerId(1): actor,
+            PlayerId(2): target,
         }.get(pid)
 
         result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
@@ -211,7 +207,8 @@ class TestTendToPlayerFailures:
         actor = _build_player(player_id=1, is_down=False, spot_id=10)
         target = _build_player(player_id=2, is_down=False, spot_id=10)
         status_repo.find_by_id.side_effect = lambda pid: {
-            PlayerId(1): actor, PlayerId(2): target,
+            PlayerId(1): actor,
+            PlayerId(2): target,
         }.get(pid)
 
         result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
@@ -225,7 +222,8 @@ class TestTendToPlayerFailures:
         actor = _build_player(player_id=1, is_down=True, spot_id=10, hp_current=0)
         target = _build_player(player_id=2, is_down=True, spot_id=10, hp_current=0)
         status_repo.find_by_id.side_effect = lambda pid: {
-            PlayerId(1): actor, PlayerId(2): target,
+            PlayerId(1): actor,
+            PlayerId(2): target,
         }.get(pid)
 
         result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
@@ -238,7 +236,8 @@ class TestTendToPlayerFailures:
         actor = _build_player(player_id=1, is_down=False, spot_id=10)
         target = _build_player(player_id=2, is_down=True, spot_id=20)  # 別 spot
         status_repo.find_by_id.side_effect = lambda pid: {
-            PlayerId(1): actor, PlayerId(2): target,
+            PlayerId(1): actor,
+            PlayerId(2): target,
         }.get(pid)
 
         result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
@@ -259,9 +258,7 @@ class TestTendToPlayerFailures:
         services = SpotGraphWorldServices(
             interaction=MagicMock(),
             exploration=MagicMock(),
-            world_flags=MagicMock(
-                as_frozen_set=MagicMock(return_value=frozenset())
-            ),
+            world_flags=MagicMock(as_frozen_set=MagicMock(return_value=frozenset())),
             game_end_evaluator=MagicMock(),
             exploration_progress=MagicMock(),
             movement=MagicMock(),
@@ -284,6 +281,46 @@ class TestDispatch:
         from ai_rpg_world.application.llm.tool_constants import (
             TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
         )
+
         exec, _, _ = _build_executor()
         handlers = exec.get_handlers()
         assert TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER in handlers
+
+
+class TestTendNoLongerRevivesTheConfirmedDead:
+    """確定死者は拒否し、まだ猶予のある相手は実際に蘇生する。"""
+
+    def _executor_with(self, *, outcome: PlayerOutcomeEnum):
+        registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1), PlayerId(2)])
+        registry.set_outcome(PlayerId(2), outcome)
+        executor, status_repo, publisher = _build_executor(runtime=SimpleNamespace(_player_outcome_registry=registry))
+        actor = _build_player(player_id=1, is_down=False, spot_id=1)
+        target = _build_player(player_id=2, is_down=True, spot_id=1, hp_current=0)
+        status_repo.find_by_id.side_effect = {
+            PlayerId(1): actor,
+            PlayerId(2): target,
+        }.get
+        return executor, target, status_repo, publisher
+
+    def test_a_confirmed_dead_target_cannot_be_revived(self) -> None:
+        """DEADが確定した相手は失敗理由を返し、身体・保存・通知を変えない。"""
+        executor, target, status_repo, publisher = self._executor_with(outcome=PlayerOutcomeEnum.DEAD)
+
+        result = executor._execute_tend_to_player_in_scope(1, {"target_player_id": 2, "target_display_name": "セナ"})
+
+        assert result.success is False
+        assert "戻らない" in result.message
+        assert target.is_down is True
+        assert target.hp.value == 0
+        status_repo.save.assert_not_called()
+        publisher.publish_all.assert_not_called()
+
+    def test_a_merely_downed_target_can_still_be_revived(self) -> None:
+        """UNRESOLVEDの昏倒者は成功し、HPが回復して起き上がる。"""
+        executor, target, _, _ = self._executor_with(outcome=PlayerOutcomeEnum.UNRESOLVED)
+
+        result = executor._execute_tend_to_player_in_scope(1, {"target_player_id": 2, "target_display_name": "セナ"})
+
+        assert result.success is True
+        assert target.is_down is False
+        assert target.hp.value == 60

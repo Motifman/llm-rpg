@@ -54,8 +54,12 @@ def _build_graph_two_players_same_spot():
 def _build_graph_two_players_different_spots():
     """2人のプレイヤーが別々のスポットにいるグラフ"""
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
-    spot1 = SpotNode(spot_id=SpotId.create(1), name="広場", description="", category=SpotCategoryEnum.TOWN, parent_id=None)
-    spot2 = SpotNode(spot_id=SpotId.create(2), name="裏路地", description="", category=SpotCategoryEnum.TOWN, parent_id=None)
+    spot1 = SpotNode(
+        spot_id=SpotId.create(1), name="広場", description="", category=SpotCategoryEnum.TOWN, parent_id=None
+    )
+    spot2 = SpotNode(
+        spot_id=SpotId.create(2), name="裏路地", description="", category=SpotCategoryEnum.TOWN, parent_id=None
+    )
     graph.add_spot(spot1)
     graph.add_spot(spot2)
     graph.place_entity(EntityId.create(1), SpotId.create(1))

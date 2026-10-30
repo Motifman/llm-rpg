@@ -16,7 +16,7 @@ class TestInMemoryGameTimeProvider:
         """ティックを正しく進められること"""
         provider = InMemoryGameTimeProvider(10)
         new_tick = provider.advance_tick(5)
-        
+
         assert new_tick == WorldTick(15)
         assert provider.get_current_tick() == WorldTick(15)
 

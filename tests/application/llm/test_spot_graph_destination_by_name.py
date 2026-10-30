@@ -193,6 +193,7 @@ class TestNormalizeLabelCandidates:
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             _normalize_label_candidates,
         )
+
         c = _normalize_label_candidates("S2: 禁書扉 → 館長書斎")
         assert "S2" in c
         assert "禁書扉" in c
@@ -205,6 +206,7 @@ class TestNormalizeLabelCandidates:
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             _normalize_label_candidates,
         )
+
         c = _normalize_label_candidates("S2: 扉 → 館長書斎（通行可）")
         # 末尾の通行可注釈は剥がされた "館長書斎" が候補に出る
         assert "館長書斎" in c
@@ -214,6 +216,7 @@ class TestNormalizeLabelCandidates:
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             _normalize_label_candidates,
         )
+
         assert _normalize_label_candidates("") == []
         assert _normalize_label_candidates("   ") == []
 
@@ -222,6 +225,7 @@ class TestNormalizeLabelCandidates:
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             _normalize_label_candidates,
         )
+
         c = _normalize_label_candidates("S1")
         assert c == ["S1"]
 

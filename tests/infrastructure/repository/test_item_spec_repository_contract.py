@@ -120,9 +120,7 @@ class TestItemSpecRepositoryReturnType:
         assert all(isinstance(spec, ItemSpec) for spec in found)
         assert _SPEC_ID in {spec.item_spec_id for spec in found}
 
-    def test_find_tradeable_items_returns_item_specs(
-        self, repository: ItemSpecRepository
-    ) -> None:
+    def test_find_tradeable_items_returns_item_specs(self, repository: ItemSpecRepository) -> None:
         """取引可能検索の結果が ItemSpec のリストで、QUEST 以外の投入 spec を含む。"""
         found = repository.find_tradeable_items()
 
@@ -136,9 +134,7 @@ class TestItemSpecRepositoryReturnType:
         assert isinstance(found, ItemSpec)
         assert found.item_spec_id == _SPEC_ID
 
-    def test_find_by_id_returns_none_for_unknown_id(
-        self, repository: ItemSpecRepository
-    ) -> None:
+    def test_find_by_id_returns_none_for_unknown_id(self, repository: ItemSpecRepository) -> None:
         """投入していない ID を渡すと None が返る。"""
         assert repository.find_by_id(ItemSpecId(999_001)) is None
 
@@ -167,9 +163,7 @@ class TestItemSpecRepositoryKeepsScenarioDefinedFields:
         assert found is not None
         assert found.fatigue_recovery == 15
 
-    def test_defaults_stay_off_when_not_declared(
-        self, repository: ItemSpecRepository
-    ) -> None:
+    def test_defaults_stay_off_when_not_declared(self, repository: ItemSpecRepository) -> None:
         """3 つを指定せずに投入した spec は、取得しても既定の無効値で返る。"""
         found = repository.find_by_id(_SPEC_ID)
 

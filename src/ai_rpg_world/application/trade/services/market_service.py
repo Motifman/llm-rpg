@@ -109,27 +109,21 @@ class MarketUnknownItemError(MarketException):
     error_code = "MARKET_UNKNOWN_ITEM"
 
     def __init__(self, *, item_label: str) -> None:
-        super().__init__(
-            f"この世界に「{item_label}」という品はありません。名前を確かめてください。"
-        )
+        super().__init__(f"この世界に「{item_label}」という品はありません。名前を確かめてください。")
 
 
 class MarketItemNotOwnedError(MarketException):
     error_code = "MARKET_ITEM_NOT_OWNED"
 
     def __init__(self, *, item_name: str, quantity: int, owned: int) -> None:
-        super().__init__(
-            f"{item_name}を{quantity}つ出そうとしましたが、いま出せるのは{owned}つです。"
-        )
+        super().__init__(f"{item_name}を{quantity}つ出そうとしましたが、いま出せるのは{owned}つです。")
 
 
 class MarketGoldNotEnoughError(MarketException):
     error_code = "MARKET_GOLD_NOT_ENOUGH"
 
     def __init__(self, *, needed: int, available: int) -> None:
-        super().__init__(
-            f"{needed}G が要りますが、いま使えるのは{available}G です。"
-        )
+        super().__init__(f"{needed}G が要りますが、いま使えるのは{available}G です。")
         self.needed = needed
         self.available = available
 
@@ -150,8 +144,7 @@ class MarketOrderAwaitingCollectionError(MarketException):
 
     def __init__(self, *, item_name: str) -> None:
         super().__init__(
-            f"板には、期限切れで預けたままの{item_name}が残っています。"
-            "先にそれを引き取ってから出し直してください。"
+            f"板には、期限切れで預けたままの{item_name}が残っています。先にそれを引き取ってから出し直してください。"
         )
 
 
@@ -169,10 +162,7 @@ class MarketBoardNotHereError(MarketException):
     error_code = "MARKET_BOARD_NOT_HERE"
 
     def __init__(self) -> None:
-        super().__init__(
-            "市場の掲示板はこの場所にありません。"
-            "板のある場所まで移動してから使ってください。"
-        )
+        super().__init__("市場の掲示板はこの場所にありません。板のある場所まで移動してから使ってください。")
 
 
 class MarketNothingToBuyError(MarketException):
@@ -180,8 +170,7 @@ class MarketNothingToBuyError(MarketException):
 
     def __init__(self, *, item_name: str) -> None:
         super().__init__(
-            f"{item_name}は板に 1 つも出ていません。誰かが出すのを待つか、"
-            "買い注文を出して待ってください。"
+            f"{item_name}は板に 1 つも出ていません。誰かが出すのを待つか、買い注文を出して待ってください。"
         )
 
 
@@ -221,8 +210,7 @@ class MarketNoSuchOrderError(MarketException):
 
     def __init__(self, *, item_name: str, action: str) -> None:
         super().__init__(
-            f"{item_name}の{action}は板に出ていません。"
-            "「あなたの出品」に出ている品の名前を指定してください。"
+            f"{item_name}の{action}は板に出ていません。「あなたの出品」に出ている品の名前を指定してください。"
         )
 
 
@@ -509,12 +497,19 @@ class MarketService:
         self._take_items_from(player_id, spec_id, quantity)
         self._store.save(self._store.board().with_order(order))
         self._publish(
-            player_id, kind="listed", side=MarketOrderSide.SELL, item_spec_id=spec_id,
-            quantity=order.quantity, unit_price=order.unit_price_gold,
+            player_id,
+            kind="listed",
+            side=MarketOrderSide.SELL,
+            item_spec_id=spec_id,
+            quantity=order.quantity,
+            unit_price=order.unit_price_gold,
         )
         self._record(
-            kind="listed", item_spec_id=spec_id, side=MarketOrderSide.SELL.value,
-            quantity=order.quantity, unit_price=order.unit_price_gold,
+            kind="listed",
+            item_spec_id=spec_id,
+            side=MarketOrderSide.SELL.value,
+            quantity=order.quantity,
+            unit_price=order.unit_price_gold,
             actor_name=self._name_of(MarketParticipant.player(player_id)),
             order_id=order.order_id.value,
             expires_at_tick=order.expires_at_tick,
@@ -559,12 +554,19 @@ class MarketService:
         self._take_gold_from(player_id, order.total_gold)
         self._store.save(self._store.board().with_order(order))
         self._publish(
-            player_id, kind="listed", side=MarketOrderSide.BUY, item_spec_id=spec_id,
-            quantity=order.quantity, unit_price=order.unit_price_gold,
+            player_id,
+            kind="listed",
+            side=MarketOrderSide.BUY,
+            item_spec_id=spec_id,
+            quantity=order.quantity,
+            unit_price=order.unit_price_gold,
         )
         self._record(
-            kind="listed", item_spec_id=spec_id, side=MarketOrderSide.BUY.value,
-            quantity=order.quantity, unit_price=order.unit_price_gold,
+            kind="listed",
+            item_spec_id=spec_id,
+            side=MarketOrderSide.BUY.value,
+            quantity=order.quantity,
+            unit_price=order.unit_price_gold,
             actor_name=self._name_of(MarketParticipant.player(player_id)),
             order_id=order.order_id.value,
             expires_at_tick=order.expires_at_tick,
@@ -650,16 +652,22 @@ class MarketService:
         self._settle(board.find(order_id), trade, taker=player_id)
         self._store.save(after)
         self._publish(
-            player_id, kind="bought", side=order.side, item_spec_id=trade.item_spec_id,
-            quantity=trade.quantity, unit_price=trade.unit_price_gold,
+            player_id,
+            kind="bought",
+            side=order.side,
+            item_spec_id=trade.item_spec_id,
+            quantity=trade.quantity,
+            unit_price=trade.unit_price_gold,
             counterparty=trade.seller,
             # 売り手が板に居なくても「売れた」は届ける。届かないと、次に板へ
             # 寄るまで自分の持ち物が変わった理由が分からない。
             notify=trade.seller,
         )
         self._record(
-            kind="settled", item_spec_id=trade.item_spec_id,
-            quantity=trade.quantity, unit_price=trade.unit_price_gold,
+            kind="settled",
+            item_spec_id=trade.item_spec_id,
+            quantity=trade.quantity,
+            unit_price=trade.unit_price_gold,
             total_gold=trade.total_gold,
             seller_name=self._name_of(trade.seller),
             buyer_name=self._name_of(trade.buyer),
@@ -714,9 +722,7 @@ class MarketService:
         offers = [
             order
             for order in self._store.board().orders
-            if order.item_spec_id == spec_id
-            and order.side is MarketOrderSide.SELL
-            and not order.is_awaiting_collection
+            if order.item_spec_id == spec_id and order.side is MarketOrderSide.SELL and not order.is_awaiting_collection
         ]
         if not offers:
             raise MarketNothingToBuyError(item_name=self._item_display_name(spec_id))
@@ -755,16 +761,16 @@ class MarketService:
         # なると、半分だけ成立した状態が残る。
         self._require_gold(
             player_id,
-            sum(
-                self._store.board().find(order_id).unit_price_gold * take
-                for order_id, take in plan
-            ),
+            sum(self._store.board().find(order_id).unit_price_gold * take for order_id, take in plan),
         )
         self._require_room(player_id, sum(take for _order_id, take in plan))
 
         settlements = [
             self.take_order(
-                player_id, order_id=order_id, quantity=take, current_tick=current_tick,
+                player_id,
+                order_id=order_id,
+                quantity=take,
+                current_tick=current_tick,
             )
             for order_id, take in plan
         ]
@@ -776,7 +782,11 @@ class MarketService:
         )
 
     def find_my_order_price(
-        self, player_id: PlayerId, *, item_label: str, side: MarketOrderSide,
+        self,
+        player_id: PlayerId,
+        *,
+        item_label: str,
+        side: MarketOrderSide,
     ) -> int:
         """自分の注文の、いまの単価を返す。
 
@@ -785,7 +795,10 @@ class MarketService:
         """
         spec_id = self._item_spec_id_by_label(item_label)
         return self._my_order(
-            player_id, spec_id, side, action="値を変える注文",
+            player_id,
+            spec_id,
+            side,
+            action="値を変える注文",
         ).unit_price_gold
 
     def sell_best(
@@ -823,9 +836,7 @@ class MarketService:
         bids = [
             order
             for order in self._store.board().orders
-            if order.item_spec_id == spec_id
-            and order.side is MarketOrderSide.BUY
-            and not order.is_awaiting_collection
+            if order.item_spec_id == spec_id and order.side is MarketOrderSide.BUY and not order.is_awaiting_collection
         ]
         if not bids:
             raise MarketNothingToSellError(item_name=self._item_display_name(spec_id))
@@ -842,7 +853,9 @@ class MarketService:
         if owned <= 0:
             # 「売れるだけ売る」が 0 個になると、何も起きないのに成功と返る。
             raise MarketItemNotOwnedError(
-                item_name=self._item_display_name(spec_id), quantity=wanted, owned=0,
+                item_name=self._item_display_name(spec_id),
+                quantity=wanted,
+                owned=0,
             )
 
         plan = []
@@ -856,7 +869,10 @@ class MarketService:
 
         settlements = [
             self.take_order(
-                player_id, order_id=order_id, quantity=take, current_tick=current_tick,
+                player_id,
+                order_id=order_id,
+                quantity=take,
+                current_tick=current_tick,
             )
             for order_id, take in plan
         ]
@@ -910,13 +926,20 @@ class MarketService:
         repriced = order.repriced(int(new_unit_price))
         self._store.save(self._store.board().with_repriced(repriced))
         self._publish(
-            player_id, kind="repriced", side=side, item_spec_id=spec_id,
-            quantity=repriced.quantity, unit_price=repriced.unit_price_gold,
+            player_id,
+            kind="repriced",
+            side=side,
+            item_spec_id=spec_id,
+            quantity=repriced.quantity,
+            unit_price=repriced.unit_price_gold,
             old_unit_price=order.unit_price_gold,
         )
         self._record(
-            kind="repriced", item_spec_id=spec_id, side=side.value,
-            quantity=repriced.quantity, unit_price=repriced.unit_price_gold,
+            kind="repriced",
+            item_spec_id=spec_id,
+            side=side.value,
+            quantity=repriced.quantity,
+            unit_price=repriced.unit_price_gold,
             old_unit_price=order.unit_price_gold,
             actor_name=self._name_of(MarketParticipant.player(player_id)),
             order_id=repriced.order_id.value,
@@ -926,7 +949,10 @@ class MarketService:
     # ── 取り下げ・期限切れ ──────────────────────────────────────────────
 
     def cancel_order(
-        self, player_id: PlayerId, *, order_id: MarketOrderId,
+        self,
+        player_id: PlayerId,
+        *,
+        order_id: MarketOrderId,
     ) -> MarketOrder:
         """自分の注文を取り下げ、預けたものを引き取る。"""
         if not self._command_bound:
@@ -944,14 +970,19 @@ class MarketService:
         returned = self._return_deposit(order)
         if returned:
             self._publish(
-                player_id, kind="cancelled", side=order.side,
+                player_id,
+                kind="cancelled",
+                side=order.side,
                 item_spec_id=order.item_spec_id,
-                quantity=order.quantity, unit_price=order.unit_price_gold,
+                quantity=order.quantity,
+                unit_price=order.unit_price_gold,
             )
             self._record(
-                kind="cancelled", item_spec_id=order.item_spec_id,
+                kind="cancelled",
+                item_spec_id=order.item_spec_id,
                 side=order.side.value,
-                quantity=order.quantity, unit_price=order.unit_price_gold,
+                quantity=order.quantity,
+                unit_price=order.unit_price_gold,
                 actor_name=self._name_of(MarketParticipant.player(player_id)),
                 order_id=order.order_id.value,
             )
@@ -959,13 +990,18 @@ class MarketService:
             # 引き取り待ちにするのは期限切れの話で、取り下げは本人の意思。
             # 受け取れないなら取り下げ自体を断る (板の状態を変えない)。
             raise MarketInventoryFullError(
-                needed=order.quantity, free=self._free_slots(player_id),
+                needed=order.quantity,
+                free=self._free_slots(player_id),
             )
         self._store.save(after)
         return cast("MarketOrder", order)
 
     def cancel_by(
-        self, player_id: PlayerId, *, item_label: str, side: MarketOrderSide,
+        self,
+        player_id: PlayerId,
+        *,
+        item_label: str,
+        side: MarketOrderSide,
     ) -> MarketOrder:
         """品名と向きで、自分の注文を取り下げる。
 
@@ -988,9 +1024,7 @@ class MarketService:
     def expire_orders(self, *, current_tick: int) -> tuple[MarketOrder, ...]:
         """期限を過ぎた注文を一件ずつ確定して預かり物を返す。"""
         if self._command_scope_factory is None:
-            raise RuntimeError(
-                "市場注文期限切れ用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("市場注文期限切れ用CommandScopeFactoryが未配線です。")
         expired = self.expired_orders(current_tick=current_tick)
         completed = []
         for order in expired:
@@ -1020,9 +1054,7 @@ class MarketService:
     ) -> MarketOrderExpiryResult | None:
         """期限切れ注文一件を独立した確定区間で返却・板更新する。"""
         if self._command_scope_factory is None:
-            raise RuntimeError(
-                "市場注文期限切れ用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("市場注文期限切れ用CommandScopeFactoryが未配線です。")
         result: MarketOrderExpiryResult | None = None
         try:
             with self._command_scope_factory.create() as context:
@@ -1053,11 +1085,7 @@ class MarketService:
         """scope由来repositoryで期限切れ注文一件を返却・板更新する。"""
         board = self._store.board()
         order = board.find(order_id)
-        if (
-            order is None
-            or order.is_awaiting_collection
-            or not order.is_expired_at(current_tick)
-        ):
+        if order is None or order.is_awaiting_collection or not order.is_expired_at(current_tick):
             return None
         returned = self._return_deposit(order)
         if returned:
@@ -1181,7 +1209,9 @@ class MarketService:
             # 「値動きが引けない」でしか気づけない。
             logger.warning(
                 "市場の trace を記録できなかった: kind=%s item_spec_id=%s",
-                kind, item_spec_id, exc_info=True,
+                kind,
+                item_spec_id,
+                exc_info=True,
             )
 
     def _publish(
@@ -1250,8 +1280,11 @@ class MarketService:
         # trace は商人の注文も残す。板が痩せていく理由を読むのに、誰の注文
         # だったかは関係ない。
         self._record(
-            kind="expired", item_spec_id=order.item_spec_id, side=order.side.value,
-            quantity=order.quantity, unit_price=order.unit_price_gold,
+            kind="expired",
+            item_spec_id=order.item_spec_id,
+            side=order.side.value,
+            quantity=order.quantity,
+            unit_price=order.unit_price_gold,
             actor_name=self._name_of(order.owner),
             order_id=order.order_id.value,
             collected=(kind == "expired_returned"),
@@ -1259,9 +1292,12 @@ class MarketService:
         if order.owner.is_merchant:
             return
         self._publish(
-            order.owner.player_id, kind=kind, side=order.side,
+            order.owner.player_id,
+            kind=kind,
+            side=order.side,
             item_spec_id=order.item_spec_id,
-            quantity=order.quantity, unit_price=order.unit_price_gold,
+            quantity=order.quantity,
+            unit_price=order.unit_price_gold,
             notify=order.owner,
         )
 
@@ -1313,15 +1349,14 @@ class MarketService:
             quantity=int(quantity),
             unit_price_gold=int(unit_price),
             listed_at_tick=int(current_tick),
-            expires_in_ticks=(
-                self._expires_in_ticks
-                if expires_in_ticks is None
-                else int(expires_in_ticks)
-            ),
+            expires_in_ticks=(self._expires_in_ticks if expires_in_ticks is None else int(expires_in_ticks)),
         )
 
     def _require_can_take(
-        self, taker: PlayerId, order: MarketOrder, quantity: int,
+        self,
+        taker: PlayerId,
+        order: MarketOrder,
+        quantity: int,
     ) -> None:
         """受ける側が本当に受けられるかを、何かを動かす前に確かめる。"""
         if order.side is MarketOrderSide.SELL:
@@ -1333,16 +1368,18 @@ class MarketService:
             self._require_holds(taker, order.item_spec_id, int(quantity))
 
     def _settle(
-        self, order: MarketOrder, trade: MarketTrade, *, taker: PlayerId,
+        self,
+        order: MarketOrder,
+        trade: MarketTrade,
+        *,
+        taker: PlayerId,
     ) -> None:
         """約定した内容どおりに、品と gold を動かす。
 
         板に預けてあるぶんは**もう誰の持ち物でもない**ので、板側から動かす。
         預けた人からもう一度引くと二重に取ることになる。
         """
-        spec_ids = tuple(
-            ItemSpecId.create(trade.item_spec_id) for _ in range(trade.quantity)
-        )
+        spec_ids = tuple(ItemSpecId.create(trade.item_spec_id) for _ in range(trade.quantity))
         if order.side is MarketOrderSide.SELL:
             # 品は板から買い手へ。gold は買い手から売り手へ。
             self._give_items_to(taker, spec_ids)
@@ -1369,14 +1406,14 @@ class MarketService:
             return False
         self._give_items_to(
             player_id,
-            tuple(
-                ItemSpecId.create(order.item_spec_id) for _ in range(order.quantity)
-            ),
+            tuple(ItemSpecId.create(order.item_spec_id) for _ in range(order.quantity)),
         )
         return True
 
     def _deliver_items(
-        self, participant: MarketParticipant, spec_ids: tuple[ItemSpecId, ...],
+        self,
+        participant: MarketParticipant,
+        spec_ids: tuple[ItemSpecId, ...],
     ) -> None:
         """買い手へ品を渡す。商人が買い手なら、品は世界から消える。"""
         if participant.is_merchant:
@@ -1387,7 +1424,10 @@ class MarketService:
         # 置き、本人に知らせる (事前拒否は使えない — 売る側から相手の所持品は
         # 見えないので、打つ前に避けようがない)。
         grant_item_specs_to_inventory(
-            participant.player_id, spec_ids, self._items, self._item_specs,
+            participant.player_id,
+            spec_ids,
+            self._items,
+            self._item_specs,
             self._inventories,
             overflow_sink=self._delivery_overflow_sink or self._overflow_sink,
         )
@@ -1401,20 +1441,27 @@ class MarketService:
         self._statuses.save(status)
 
     def _give_items_to(
-        self, player_id: PlayerId, spec_ids: tuple[ItemSpecId, ...],
+        self,
+        player_id: PlayerId,
+        spec_ids: tuple[ItemSpecId, ...],
     ) -> None:
         grant_item_specs_to_inventory(
-            player_id, spec_ids, self._items, self._item_specs, self._inventories,
+            player_id,
+            spec_ids,
+            self._items,
+            self._item_specs,
+            self._inventories,
             overflow_sink=self._overflow_sink,
         )
 
     def _take_items_from(
-        self, player_id: PlayerId, item_spec_id: int, quantity: int,
+        self,
+        player_id: PlayerId,
+        item_spec_id: int,
+        quantity: int,
     ) -> None:
         inventory = self._inventories.find_by_id(player_id)
-        spec_ids = tuple(
-            ItemSpecId.create(item_spec_id) for _ in range(int(quantity))
-        )
+        spec_ids = tuple(ItemSpecId.create(item_spec_id) for _ in range(int(quantity)))
         remove_items_of_specs_from_inventory(inventory, spec_ids, self._items)
         self._inventories.save(inventory)
 
@@ -1448,7 +1495,8 @@ class MarketService:
             ):
                 return cast("MarketOrder", order)
         raise MarketNoSuchOrderError(
-            item_name=self._item_display_name(item_spec_id), action=action,
+            item_name=self._item_display_name(item_spec_id),
+            action=action,
         )
 
     def _require_at_board(self, player_id: PlayerId) -> None:
@@ -1476,7 +1524,10 @@ class MarketService:
             raise MarketBoardNotHereError()
 
     def _require_no_order_yet(
-        self, player_id: PlayerId, item_spec_id: int, side: MarketOrderSide,
+        self,
+        player_id: PlayerId,
+        item_spec_id: int,
+        side: MarketOrderSide,
     ) -> None:
         """同じ品目・同じ向きの自分の注文が、まだ板に無いことを確かめる。
 
@@ -1505,7 +1556,10 @@ class MarketService:
             )
 
     def _require_holds(
-        self, player_id: PlayerId, item_spec_id: int, quantity: int,
+        self,
+        player_id: PlayerId,
+        item_spec_id: int,
+        quantity: int,
     ) -> None:
         owned = self._owned_counts(player_id).get(int(item_spec_id), 0)
         if owned < int(quantity):

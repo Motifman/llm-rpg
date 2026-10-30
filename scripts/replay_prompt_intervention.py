@@ -192,9 +192,7 @@ def _select_targets(
 ) -> list[ReplayTarget]:
     dataset = run_dir / "prompt_dataset"
     calls = _load_jsonl(dataset / "calls.jsonl")
-    system_prompts = {
-        row["system_prompt_id"]: row for row in _load_jsonl(dataset / "system_prompts.jsonl")
-    }
+    system_prompts = {row["system_prompt_id"]: row for row in _load_jsonl(dataset / "system_prompts.jsonl")}
     toolsets = {row["toolset_id"]: row for row in _load_jsonl(dataset / "toolsets.jsonl")}
 
     targets: list[ReplayTarget] = []
@@ -282,9 +280,7 @@ def _summarise(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
             "chose_speak_rate": round(speak / answered, 3) if answered else None,
             "non_speak_actions": non_speak,
             "non_speak_with_say_inline": with_inline,
-            "say_inline_attach_rate": (
-                round(with_inline / non_speak, 3) if non_speak else None
-            ),
+            "say_inline_attach_rate": (round(with_inline / non_speak, 3) if non_speak else None),
             "tool_histogram": dict(Counter(r.get("tool") for r in arm_rows).most_common()),
         }
     return summary
@@ -334,8 +330,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     arms = ["A", "B"] if args.arm == "both" else [args.arm]
     total_jobs = len(targets) * len(arms) * args.samples
     print(
-        f"対象 call {len(targets)} 件 x アーム {len(arms)} x sample {args.samples}"
-        f" = {total_jobs} 呼び出し",
+        f"対象 call {len(targets)} 件 x アーム {len(arms)} x sample {args.samples} = {total_jobs} 呼び出し",
         flush=True,
     )
 
@@ -343,11 +338,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if targets:
             before = targets[0].kwargs["tools"]
             after = apply_say_inline_intervention(before)
-            changed = [
-                (b.get("function", {}).get("name"))
-                for b, a in zip(before, after)
-                if b != a
-            ]
+            changed = [(b.get("function", {}).get("name")) for b, a in zip(before, after) if b != a]
             print(f"介入で変わる tool ({len(changed)} 件): {changed}")
         return 0
 

@@ -1,9 +1,5 @@
 """ツール利用可否リゾルバのデフォルト実装"""
 
-
-from collections.abc import Sequence
-from typing import Any
-
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.world.contracts.dtos import (
     PlayerAppSessionStateDto,
@@ -11,19 +7,6 @@ from ai_rpg_world.application.world.contracts.dtos import (
     PlayerRuntimeContextDto,
     PlayerWorldStateDto,
 )
-
-
-def _has_visible_action(obj: Any, flag_name: str, legacy_name: str) -> bool:
-    if getattr(obj, flag_name, False):
-        return True
-    return legacy_name in getattr(obj, "available_interactions", [])
-
-
-def _iter_actionable_objects(context: PlayerCurrentStateDto) -> Sequence[Any]:
-    runtime = context.runtime_context
-    world = context.world_state
-    objs = runtime.actionable_objects or world.visible_objects
-    return objs if objs is not None else []
 
 
 def _world(context: PlayerCurrentStateDto) -> PlayerWorldStateDto:
@@ -48,157 +31,14 @@ class NoOpAvailabilityResolver(IAvailabilityResolver):
         return True
 
 
-class MemoryExploreRelatedAvailabilityResolver(IAvailabilityResolver):
-    """エピソード間リンク探索。利用可否は実行時に空結果となり得るが、LLM からは常に呼び出し可能。"""
+class EpisodeRecallAvailabilityResolver(IAvailabilityResolver):
+    """目次つきのエピソードの呼び出しと目次の直し (#1623)。目次が空でも呼べて、記憶が無いと返る。"""
 
     def is_available(
         self,
         context: PlayerCurrentStateDto | None,
     ) -> bool:
         return True
-
-
-class MemorySearchSemanticAvailabilityResolver(IAvailabilityResolver):
-    """semantic memory の能動検索 (Phase 1d)。
-
-    実行時には結果が空になり得るが、LLM からは常時呼び出し可能 (= 「思い出そう
-    としたが何も無かった」を学習させる)。
-    """
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return True
-
-
-class MemoryRecallEpisodesAvailabilityResolver(IAvailabilityResolver):
-    """episodic memory の能動 recall (Issue #526 不在 2)。
-
-    LLM からは常時呼び出し可能。実行時に 0 件なら「思い出そうとしたが何も
-    浮かばなかった」を message として返す (= 失敗の質感を学習させる)。
-    """
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return True
-
-
-class MemoryRecallByHandleAvailabilityResolver(IAvailabilityResolver):
-    """afterglow index の handle から本文を引き戻す能動想起 (#526 PR-D)。
-
-    afterglow が空でも tool 自体は呼び出し可能 (= LLM が誤って空の状態で
-    呼んだら「該当する見出しがありません」と返す)。state に依存せず常時 True。
-    """
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return True
-
-
-class SetDestinationAvailabilityResolver(IAvailabilityResolver):
-    """目的地設定ツールは、現在地があり利用可能な移動先（スポット・ロケーション）が1件以上あるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        world = _world(context)
-        runtime = _runtime(context)
-        if world.is_busy or world.has_active_path:
-            return False
-        if world.current_spot_id is None:
-            return False
-        has_spot_moves = (
-            world.available_moves is not None
-            and world.total_available_moves is not None
-            and world.total_available_moves > 0
-        )
-        has_location_moves = (
-            world.available_location_areas is not None
-            and len(world.available_location_areas) > 0
-        )
-        has_object_moves = (
-            runtime.actionable_objects is not None
-            and len(runtime.actionable_objects) > 0
-        )
-        return has_spot_moves or has_location_moves or has_object_moves
-
-
-class PursuitStartAvailabilityResolver(IAvailabilityResolver):
-    """追跡開始ツールは可視中のプレイヤーまたはモンスターがいて、かつ actor が busy でないときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        world = _world(context)
-        if world.is_busy:
-            return False
-        visible = world.visible_objects or []
-        return any(
-            obj.object_kind in {"player", "monster"} and not obj.is_self
-            for obj in visible
-        )
-
-
-class PursuitCancelAvailabilityResolver(IAvailabilityResolver):
-    """追跡中断ツールは現在状態が取得できていれば利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return context is not None
-
-
-class CancelMovementAvailabilityResolver(IAvailabilityResolver):
-    """移動キャンセルツールは、経路設定中（has_active_path）のときのみ利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return context is not None and _world(context).has_active_path
-
-
-class MoveOneStepAvailabilityResolver(IAvailabilityResolver):
-    """1歩移動ツールは、マップ上にいて行動可能なときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        world = _world(context)
-        if world.is_busy:
-            return False
-        return world.current_spot_id is not None
-
-
-class WhisperAvailabilityResolver(IAvailabilityResolver):
-    """囁きツールは、視界内に自分以外のプレイヤーがいるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        visible = _world(context).visible_objects or []
-        return any(
-            obj.object_kind == "player" and not obj.is_self
-            for obj in visible
-        )
 
 
 class SayAvailabilityResolver(IAvailabilityResolver):
@@ -209,212 +49,6 @@ class SayAvailabilityResolver(IAvailabilityResolver):
         context: PlayerCurrentStateDto | None,
     ) -> bool:
         return context is not None
-
-
-class InteractAvailabilityResolver(IAvailabilityResolver):
-    """追加引数不要の相互作用があるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        return any(
-            _has_visible_action(obj, "can_interact", "interact")
-            for obj in _iter_actionable_objects(context)
-            if not obj.is_self
-        )
-
-
-class HarvestStartAvailabilityResolver(IAvailabilityResolver):
-    """採集開始ツールは、視界内に採集可能な資源があるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        world = _world(context)
-        runtime = _runtime(context)
-        if world.is_busy or runtime.active_harvest is not None:
-            return False
-        return any(
-            _has_visible_action(obj, "can_harvest", "harvest")
-            for obj in _iter_actionable_objects(context)
-            if not obj.is_self
-        )
-
-
-class HarvestCancelAvailabilityResolver(IAvailabilityResolver):
-    """採集中断ツールは進行中採集があるときのみ利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return context is not None and _runtime(context).active_harvest is not None
-
-
-class ChangeAttentionAvailabilityResolver(IAvailabilityResolver):
-    """注意レベル変更ツールは、切り替え候補があるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return context is not None and bool(_runtime(context).attention_level_options)
-
-
-class ConversationAdvanceAvailabilityResolver(IAvailabilityResolver):
-    """会話進行ツールはアクティブな会話があるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return context is not None and _runtime(context).active_conversation is not None
-
-
-class PlaceObjectAvailabilityResolver(IAvailabilityResolver):
-    """設置ツールは設置可能な在庫アイテムがあるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        items = _runtime(context).inventory_items
-        return any(item.is_placeable for item in items)
-
-
-class InspectItemAvailabilityResolver(IAvailabilityResolver):
-    """アイテム調査ツールは在庫アイテムが1件以上あるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        return bool(_runtime(context).inventory_items)
-
-
-class InspectTargetAvailabilityResolver(IAvailabilityResolver):
-    """対象調査ツールは視界内に interact/harvest 可能な対象があるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        return any(
-            _has_visible_action(obj, "can_interact", "interact")
-            or _has_visible_action(obj, "can_harvest", "harvest")
-            for obj in _iter_actionable_objects(context)
-            if not obj.is_self
-        )
-
-
-class DestroyPlaceableAvailabilityResolver(IAvailabilityResolver):
-    """破壊ツールは前方に設置物があるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return context is not None and _runtime(context).can_destroy_placeable
-
-
-class DropItemAvailabilityResolver(IAvailabilityResolver):
-    """意図的ドロップツールは在庫アイテムがあるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return context is not None and bool(_runtime(context).inventory_items)
-
-
-class ChestStoreAvailabilityResolver(IAvailabilityResolver):
-    """チェスト収納は開いているチェストと在庫アイテムがあり、かつ actor がビジーでないときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        world = _world(context)
-        runtime = _runtime(context)
-        if world.is_busy:
-            return False
-        has_open_chest = any(
-            _has_visible_action(obj, "can_store_in_chest", "store_in_chest")
-            for obj in _iter_actionable_objects(context)
-            if not obj.is_self
-        )
-        return has_open_chest and bool(runtime.inventory_items)
-
-
-class ChestTakeAvailabilityResolver(IAvailabilityResolver):
-    """チェスト取得は取り出せるチェスト中身があり、かつ actor がビジーでないときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        world = _world(context)
-        runtime = _runtime(context)
-        if world.is_busy:
-            return False
-        return bool(runtime.chest_items)
-
-
-class CombatUseSkillAvailabilityResolver(IAvailabilityResolver):
-    """戦闘スキルは使用可能スキルがあるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return context is not None and bool(_runtime(context).usable_skills)
-
-
-class SkillEquipAvailabilityResolver(IAvailabilityResolver):
-    """スキル装備は候補スキルと装備先スロットの両方があるときに利用可能。"""
-
-    def is_available(self, context: PlayerCurrentStateDto | None) -> bool:
-        if context is None:
-            return False
-        runtime = _runtime(context)
-        return bool(runtime.equipable_skill_candidates) and bool(runtime.skill_equip_slots)
-
-
-class SkillAcceptProposalAvailabilityResolver(IAvailabilityResolver):
-    """スキル提案受諾は pending proposal があるときに利用可能。"""
-
-    def is_available(self, context: PlayerCurrentStateDto | None) -> bool:
-        return context is not None and bool(_runtime(context).pending_skill_proposals)
-
-
-class SkillRejectProposalAvailabilityResolver(IAvailabilityResolver):
-    """スキル提案却下は pending proposal があるときに利用可能。"""
-
-    def is_available(self, context: PlayerCurrentStateDto | None) -> bool:
-        return context is not None and bool(_runtime(context).pending_skill_proposals)
-
-
-class SkillActivateAwakenedModeAvailabilityResolver(IAvailabilityResolver):
-    """覚醒モード発動は action label があるときに利用可能。"""
-
-    def is_available(self, context: PlayerCurrentStateDto | None) -> bool:
-        return context is not None and _runtime(context).awakened_action is not None
 
 
 class QuestAcceptAvailabilityResolver(IAvailabilityResolver):
@@ -469,9 +103,7 @@ class GuildAddMemberAvailabilityResolver(IAvailabilityResolver):
         memberships = _runtime(context).guild_memberships
         if not memberships:
             return False
-        return any(
-            m.role in ("leader", "officer") for m in memberships
-        )
+        return any(m.role in ("leader", "officer") for m in memberships)
 
 
 class GuildChangeRoleAvailabilityResolver(IAvailabilityResolver):
@@ -483,9 +115,7 @@ class GuildChangeRoleAvailabilityResolver(IAvailabilityResolver):
         memberships = _runtime(context).guild_memberships
         if not memberships:
             return False
-        return any(
-            m.role in ("leader", "officer") for m in memberships
-        )
+        return any(m.role in ("leader", "officer") for m in memberships)
 
 
 class GuildDisbandAvailabilityResolver(IAvailabilityResolver):
@@ -784,26 +414,3 @@ class TradeCancelTradePageAvailabilityResolver(IAvailabilityResolver):
         if k == "my_trades" and app.trade_my_trades_tab == "selling":
             return True
         return False
-
-
-class TodoAddAvailabilityResolver(IAvailabilityResolver):
-    """TODO 追加は常に利用可能。"""
-
-    def is_available(self, context: PlayerCurrentStateDto | None) -> bool:
-        return True
-
-
-class TodoListAvailabilityResolver(IAvailabilityResolver):
-    """TODO 一覧は常に利用可能。"""
-
-    def is_available(self, context: PlayerCurrentStateDto | None) -> bool:
-        return True
-
-
-class TodoCompleteAvailabilityResolver(IAvailabilityResolver):
-    """TODO 完了は常に利用可能。"""
-
-    def is_available(self, context: PlayerCurrentStateDto | None) -> bool:
-        return True
-
-

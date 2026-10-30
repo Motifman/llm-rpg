@@ -67,9 +67,7 @@ class TestToolCallLoopGuardServiceInitialization:
 
     def test_time_label_provider_is_required(self) -> None:
         """警告の記録境界は世界時刻 provider の明示を必須にする。"""
-        parameter = inspect.signature(ToolCallLoopGuardService).parameters[
-            "time_label_provider"
-        ]
+        parameter = inspect.signature(ToolCallLoopGuardService).parameters["time_label_provider"]
         assert parameter.default is inspect.Parameter.empty
         with pytest.raises(TypeError, match="time_label_provider"):
             ToolCallLoopGuardService(  # type: ignore[call-arg]
@@ -103,9 +101,7 @@ class TestToolCallLoopGuardServiceWaitDetection:
     def test_three_consecutive_same_wait_records_emit_one_warning(self) -> None:
         """wait は threshold=3。3 回目で警告 entry が buffer に追加される。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(
-            buf, lambda: "Day 2 朝 6:00", clock=_fixed_clock
-        )
+        svc = ToolCallLoopGuardService(buf, lambda: "Day 2 朝 6:00", clock=_fixed_clock)
         pid = _pid(1)
         for _ in range(3):
             svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
@@ -263,12 +259,8 @@ class TestToolCallLoopGuardServiceArgumentSensitivity:
         buf = DefaultObservationContextBuffer()
         svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
-        svc.record_and_check(
-            pid, TOOL_NAME_SPEECH, {"channel": "say", "content": "聞こえる？"}
-        )
-        svc.record_and_check(
-            pid, TOOL_NAME_SPEECH, {"channel": "say", "content": "今どこにいる？"}
-        )
+        svc.record_and_check(pid, TOOL_NAME_SPEECH, {"channel": "say", "content": "聞こえる？"})
+        svc.record_and_check(pid, TOOL_NAME_SPEECH, {"channel": "say", "content": "今どこにいる？"})
         assert buf.get_observations(pid) == []
 
     def test_argument_count(self) -> None:
@@ -278,9 +270,7 @@ class TestToolCallLoopGuardServiceArgumentSensitivity:
         pid = _pid(1)
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
-        svc.record_and_check(
-            pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"destination_label": "S1"}
-        )
+        svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"destination_label": "S1"})
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
         # wait 2 → travel_to → wait 2: いずれも閾値到達せず警告は出ない
@@ -344,9 +334,7 @@ class TestToolCallLoopGuardServiceWarningResume:
         for _ in range(3):
             svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
         # 一旦違う tool を挟む
-        svc.record_and_check(
-            pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"destination_label": "S1"}
-        )
+        svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"destination_label": "S1"})
         # 別の引数で interact を 4 回連打
         for _ in range(4):
             svc.record_and_check(
@@ -389,9 +377,7 @@ class TestToolCallLoopGuardServiceTraceEmission:
                 self.calls: list[dict] = []
 
             def record(self, kind, *, tick=None, player_id=None, **payload):
-                self.calls.append(
-                    {"kind": kind, "tick": tick, "player_id": player_id, "payload": payload}
-                )
+                self.calls.append({"kind": kind, "tick": tick, "player_id": player_id, "payload": payload})
                 return super().record(kind, tick=tick, player_id=player_id, **payload)
 
         recorder = _CapturingRecorder()
@@ -467,9 +453,7 @@ class TestToolCallLoopGuardServiceTraceRecorderProvider:
                 self.calls: list[dict] = []
 
             def record(self, kind, *, tick=None, player_id=None, **payload):
-                self.calls.append(
-                    {"kind": kind, "tick": tick, "player_id": player_id, "payload": payload}
-                )
+                self.calls.append({"kind": kind, "tick": tick, "player_id": player_id, "payload": payload})
                 return super().record(kind, tick=tick, player_id=player_id, **payload)
 
         # 最初は recorder が None で、後から差し込まれるシナリオ

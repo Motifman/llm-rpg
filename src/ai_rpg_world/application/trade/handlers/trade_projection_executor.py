@@ -20,8 +20,7 @@ class TradeProjectionPrerequisiteMissingException(ApplicationException):
         self.trade_id = trade_id
         self.event_name = event_name
         super().__init__(
-            "取引read modelの前提投影がまだありません: "
-            f"trade_id={trade_id}, event={event_name}",
+            f"取引read modelの前提投影がまだありません: trade_id={trade_id}, event={event_name}",
             trade_id=trade_id,
             event_name=event_name,
         )
@@ -43,11 +42,7 @@ class TradeProjectionExecutorPort(Protocol):
 
 def validate_consumer_identity(*, consumer_id: object, event_id: object) -> None:
     """consumer inboxの一意キーを永続化前に検証する。"""
-    if (
-        not isinstance(consumer_id, str)
-        or not consumer_id
-        or consumer_id != consumer_id.strip()
-    ):
+    if not isinstance(consumer_id, str) or not consumer_id or consumer_id != consumer_id.strip():
         raise ValueError("consumer_idは前後空白のない文字列である必要があります")
     if isinstance(event_id, bool) or not isinstance(event_id, int) or event_id < 1:
         raise ValueError("event_idは1以上の整数である必要があります")

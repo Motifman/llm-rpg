@@ -152,9 +152,7 @@ class TestExecuteMonsterAttackPublishesPlayerEvents:
             aggregate_type="PlayerStatusAggregate",
             killer_player_id=None,
         )
-        player = _make_player(
-            is_down_after=True, events_when_down=[downed_event]
-        )
+        player = _make_player(is_down_after=True, events_when_down=[downed_event])
         monster = _make_monster(attack=999)
         graph = _make_graph()
         graph.place_monster(MonsterId.create(101), SPOT_A)
@@ -170,9 +168,7 @@ class TestExecuteMonsterAttackPublishesPlayerEvents:
         )
         assert outcome.executed is True
         # publish_all に PlayerDownedEvent が含まれている
-        assert any(
-            isinstance(e, PlayerDownedEvent) for e in publisher.events_published
-        ), (
+        assert any(isinstance(e, PlayerDownedEvent) for e in publisher.events_published), (
             "PR-K: 致命攻撃時に PlayerDownedEvent が publish されていない。"
             "aggregate.get_events() を回収して publish_all に流す必要がある。"
         )
@@ -198,9 +194,7 @@ class TestExecuteMonsterAttackPublishesPlayerEvents:
             spot_id=SPOT_A,
             current_tick=WorldTick(10),
         )
-        assert not any(
-            isinstance(e, PlayerDownedEvent) for e in publisher.events_published
-        )
+        assert not any(isinstance(e, PlayerDownedEvent) for e in publisher.events_published)
 
     def test_no_publisher_falls_back_silently(self):
         """publisher 未注入時、致命攻撃でも crash せず executed=True を返す。
@@ -212,9 +206,7 @@ class TestExecuteMonsterAttackPublishesPlayerEvents:
             aggregate_type="PlayerStatusAggregate",
             killer_player_id=None,
         )
-        player = _make_player(
-            is_down_after=True, events_when_down=[downed_event]
-        )
+        player = _make_player(is_down_after=True, events_when_down=[downed_event])
         monster = _make_monster(attack=999)
         graph = _make_graph()
         graph.place_monster(MonsterId.create(101), SPOT_A)

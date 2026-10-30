@@ -111,12 +111,8 @@ def _build_scoped_service(*, fail_second_save: bool = False):
     inventories = InMemoryPlayerInventoryRepository(data_store)
     items = InMemoryItemRepository(data_store)
     statuses = InMemoryPlayerStatusRepository(data_store)
-    graph = InMemorySpotGraphRepository(
-        _make_graph_with_player(SPOT_ID, (PLAYER_ID, OTHER_PLAYER_ID))
-    )
-    item = ItemAggregate.create(
-        items.generate_item_instance_id(), _make_item_spec(), quantity=1
-    )
+    graph = InMemorySpotGraphRepository(_make_graph_with_player(SPOT_ID, (PLAYER_ID, OTHER_PLAYER_ID)))
+    item = ItemAggregate.create(items.generate_item_instance_id(), _make_item_spec(), quantity=1)
     items.save(item)
     sender = PlayerInventoryAggregate.create_new_inventory(PLAYER_ID)
     sender.acquire_item(
@@ -129,21 +125,15 @@ def _build_scoped_service(*, fail_second_save: bool = False):
     statuses.save(create_test_status_aggregate(player_id=OTHER_PLAYER_ID.value))
 
     observations: list[_CommitObservation] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def observe_committed(_: object) -> None:
         committed_sender = inventories.find_by_id(PLAYER_ID)
         committed_recipient = inventories.find_by_id(OTHER_PLAYER_ID)
         observations.append(
             _CommitObservation(
-                sender_has_item=(
-                    committed_sender.get_item_instance_id_by_slot(SlotId(0))
-                    is not None
-                ),
-                recipient_has_item=(
-                    committed_recipient.get_item_instance_id_by_slot(SlotId(0))
-                    is not None
-                ),
+                sender_has_item=(committed_sender.get_item_instance_id_by_slot(SlotId(0)) is not None),
+                recipient_has_item=(committed_recipient.get_item_instance_id_by_slot(SlotId(0)) is not None),
             )
         )
 
@@ -153,9 +143,7 @@ def _build_scoped_service(*, fail_second_save: bool = False):
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
-    provider_factory: object = InMemoryItemTransferCommandRepositoryProviderFactory(
-        graph
-    )
+    provider_factory: object = InMemoryItemTransferCommandRepositoryProviderFactory(graph)
     if fail_second_save:
         provider_factory = _FailingProviderFactory(provider_factory)
     scope_factory = CommandScopeFactory(
@@ -187,9 +175,7 @@ def test_give_item_commits_both_inventories_before_observation() -> None:
 
 def test_recipient_save_failure_rolls_back_both_inventories_and_observation() -> None:
     """受け手保存で失敗すると送り手側も戻し、成功観測を配送しない。"""
-    service, inventories, item_id, observations = _build_scoped_service(
-        fail_second_save=True
-    )
+    service, inventories, item_id, observations = _build_scoped_service(fail_second_save=True)
 
     with pytest.raises(RuntimeError, match="recipient save failed"):
         service.give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0))

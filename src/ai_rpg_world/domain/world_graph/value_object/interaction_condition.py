@@ -60,4 +60,3 @@ class InteractionCondition:
     #   AT_SPOT_IS{_NOT} → required_spot_id
     required_lighting: str | None = None
     required_spot_id: SpotId | None = None
-

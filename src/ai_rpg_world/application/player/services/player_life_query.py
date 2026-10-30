@@ -37,9 +37,7 @@ class PlayerLifeQuery:
         self._player_status_repository = player_status_repository
         self._player_outcome_registry = player_outcome_registry
         self._departed_agents_enabled = bool(departed_agents_enabled)
-        self._scoped_player_status_repository: ContextVar[
-            PlayerStatusRepository | None
-        ] = ContextVar(
+        self._scoped_player_status_repository: ContextVar[PlayerStatusRepository | None] = ContextVar(
             f"player_life_query_status_repository_{id(self)}",
             default=None,
         )
@@ -82,8 +80,7 @@ class PlayerLifeQuery:
                     return False
             except Exception:
                 logger.warning(
-                    "outcome_registry.get_outcome failed for player_id=%s; "
-                    "falling back to turn-continue",
+                    "outcome_registry.get_outcome failed for player_id=%s; falling back to turn-continue",
                     int(player_id),
                     exc_info=True,
                 )
@@ -94,8 +91,7 @@ class PlayerLifeQuery:
             status = repository.find_by_id(player_id)
         except Exception:
             logger.warning(
-                "player_status_repo.find_by_id failed for player_id=%s; "
-                "falling back to turn-continue",
+                "player_status_repo.find_by_id failed for player_id=%s; falling back to turn-continue",
                 int(player_id),
                 exc_info=True,
             )

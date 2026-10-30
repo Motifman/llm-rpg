@@ -59,10 +59,7 @@ class PreparedActionRegistry:
         """指定プレイヤーの全準備アクションをキャンセルする。"""
         prefix = self.FLAG_PREFIX
         suffix = f":{player_id}"
-        to_remove = [
-            f for f in self._world_flag_state.as_frozen_set()
-            if f.startswith(prefix) and f.endswith(suffix)
-        ]
+        to_remove = [f for f in self._world_flag_state.as_frozen_set() if f.startswith(prefix) and f.endswith(suffix)]
         for flag in to_remove:
             self._world_flag_state.remove(
                 flag,
@@ -77,7 +74,7 @@ class PreparedActionRegistry:
         prefix = f"{self.FLAG_PREFIX}{action_id}:"
         for flag in self._world_flag_state.as_frozen_set():
             if flag.startswith(prefix):
-                player_id_str = flag[len(prefix):]
+                player_id_str = flag[len(prefix) :]
                 try:
                     player_id = int(player_id_str)
                     self._world_flag_state.remove(

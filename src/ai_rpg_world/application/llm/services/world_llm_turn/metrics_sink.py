@@ -10,6 +10,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 logger = logging.getLogger(__name__)
 
+
 class LlmMetricsTraceSink:
     """Phase A の LLM 呼び出し metrics を trace に流す sink (PR #358)。
 
@@ -60,9 +61,8 @@ class LlmMetricsTraceSink:
                 prompt_tokens=metrics.prompt_tokens,
                 completion_tokens=metrics.completion_tokens,
                 cached_tokens=metrics.cached_tokens,
-                # 案A (band-gated thinking) の効果測定用。tool-calling 経路では
-                # 思考本文が返らないため、AGENT_REASONING_ENGAGED と同 tick の
-                # この値を突き合わせて「実際にどれだけ熟考したか」を事後計算する。
+                # tool-calling 経路では思考本文が返らないため、この値で
+                # 「実際にどれだけ熟考したか」を事後計算する。
                 reasoning_tokens=metrics.reasoning_tokens,
                 tps=metrics.tps,
                 success=metrics.success,

@@ -173,6 +173,4 @@ class TestTeleportVersusConnectionMovement:
         graph.teleport_entity(entity, SpotId.create(3))
 
         with pytest.raises(EntityNotAtSpotException):
-            graph.move_entity(
-                entity, ConnectionId.create(1), frozenset(), frozenset()
-            )
+            graph.move_entity(entity, ConnectionId.create(1), frozenset(), frozenset())

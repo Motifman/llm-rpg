@@ -10,13 +10,20 @@ from ai_rpg_world.application.social.exceptions.base_exception import Applicatio
 class UserCommandException(ApplicationException):
     """ユーザーコマンド関連の例外"""
 
-    def __init__(self, message: str, error_code: str | None = None, user_id: int | None = None, target_user_id: int | None = None, **context: Any) -> None:
+    def __init__(
+        self,
+        message: str,
+        error_code: str | None = None,
+        user_id: int | None = None,
+        target_user_id: int | None = None,
+        **context: Any,
+    ) -> None:
         # 既存の動作を維持しつつ、新しい基底クラスに適合
         all_context = context.copy()
         if user_id is not None:
-            all_context['user_id'] = user_id
+            all_context["user_id"] = user_id
         if target_user_id is not None:
-            all_context['target_user_id'] = target_user_id
+            all_context["target_user_id"] = target_user_id
         super().__init__(message, error_code, **all_context)
 
 

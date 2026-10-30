@@ -71,12 +71,7 @@ class TestWorldCooldown:
         store.begin_meeting(tick=10, trigger="emergency_button")
         store.end_meeting(tick=20, reason="vote_concluded")
 
-        assert (
-            store.is_meeting_on_cooldown(
-                tick=20 + GamePhaseStore.DEFAULT_MEETING_COOLDOWN_TICKS
-            )
-            is False
-        )
+        assert store.is_meeting_on_cooldown(tick=20 + GamePhaseStore.DEFAULT_MEETING_COOLDOWN_TICKS) is False
 
     def test_cooldown_is_measured_from_the_end_not_the_start(self) -> None:
         """起点は会議の**終わり**であって始まりではない。

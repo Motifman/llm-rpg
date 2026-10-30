@@ -138,23 +138,15 @@ def deposit_removal_details(
 ) -> tuple[ItemSpecId, str, SpotObject, int]:
     """預け入れ効果の対象と削除数を、副作用なしで一度だけ解決する。"""
     if owned_item_spec_counts is None:
-        raise InteractionEffectValidationException(
-            "DEPOSIT_ITEM_TO_OBJECT は行為者の所持数を必要とします"
-        )
+        raise InteractionEffectValidationException("DEPOSIT_ITEM_TO_OBJECT は行為者の所持数を必要とします")
     params = effect.parameters
-    sid = resolve_item_spec_for_transfer(
-        params, interaction_parameters, "DEPOSIT_ITEM_TO_OBJECT"
-    )
+    sid = resolve_item_spec_for_transfer(params, interaction_parameters, "DEPOSIT_ITEM_TO_OBJECT")
     state_key = params.get("state_key")
     if not isinstance(state_key, str) or not state_key:
-        raise InteractionEffectValidationException(
-            "DEPOSIT_ITEM_TO_OBJECT: state_key is required"
-        )
+        raise InteractionEffectValidationException("DEPOSIT_ITEM_TO_OBJECT: state_key is required")
     target = resolve_target_object(interior, acting_object, params)
     if target is None:
-        raise InteractionEffectValidationException(
-            "DEPOSIT_ITEM_TO_OBJECT: target object is not resolvable"
-        )
+        raise InteractionEffectValidationException("DEPOSIT_ITEM_TO_OBJECT: target object is not resolvable")
     owned = max(0, int(owned_item_spec_counts.get(sid, 0)))
     raw_quantity: Any = params.get("quantity")
     if raw_quantity == "all":
@@ -189,9 +181,7 @@ def item_removals_for_effect(
     effect_type = effect.effect_type
     params = effect.parameters
     if effect_type == InteractionEffectTypeEnum.REMOVE_ITEM:
-        sid = resolve_item_spec_for_transfer(
-            params, interaction_parameters, "REMOVE_ITEM"
-        )
+        sid = resolve_item_spec_for_transfer(params, interaction_parameters, "REMOVE_ITEM")
         bucket = item_bucket_for(
             effect,
             actor_bucket=actor,
@@ -209,8 +199,5 @@ def item_removals_for_effect(
         )
         actor.extend((sid,) * deposited)
     elif effect_type == InteractionEffectTypeEnum.COMBINE_ITEMS:
-        actor.extend(
-            item_spec_from_param(raw)
-            for raw in params.get("input_item_spec_ids", [])
-        )
+        actor.extend(item_spec_from_param(raw) for raw in params.get("input_item_spec_ids", []))
     return tuple(actor), tuple(target)

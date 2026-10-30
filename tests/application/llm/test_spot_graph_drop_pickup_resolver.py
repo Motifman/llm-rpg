@@ -285,10 +285,12 @@ class TestInventoryAndPlayerFailureMessages:
         result = resolver.resolve_args(
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
             {
-                "gives": [{
-                    "item_label": "壊れた薬草",
-                    "target_player_label": "リン",
-                }],
+                "gives": [
+                    {
+                        "item_label": "壊れた薬草",
+                        "target_player_label": "リン",
+                    }
+                ],
                 "inner_thought": "",
             },
             context,

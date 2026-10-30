@@ -96,7 +96,9 @@ class TestResolveUseItem:
         ctx = _runtime_context({})
         with pytest.raises(ToolArgumentResolutionException) as ei:
             resolver.resolve_args(
-                TOOL_NAME_SPOT_GRAPH_USE_ITEM, {"item_label": ""}, ctx,
+                TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+                {"item_label": ""},
+                ctx,
             )
         assert ei.value.error_code == "INVALID_TARGET_LABEL"
 
@@ -106,7 +108,9 @@ class TestResolveUseItem:
         ctx = _runtime_context({"I1": _inventory_target()})
         with pytest.raises(ToolArgumentResolutionException):
             resolver.resolve_args(
-                TOOL_NAME_SPOT_GRAPH_USE_ITEM, {"item_label": "I99"}, ctx,
+                TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+                {"item_label": "I99"},
+                ctx,
             )
 
     def test_spot_graph_use_item_is_dispatch_target(self) -> None:
@@ -114,6 +118,7 @@ class TestResolveUseItem:
         from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
             _SPOT_GRAPH_TOOLS,
         )
+
         assert TOOL_NAME_SPOT_GRAPH_USE_ITEM in _SPOT_GRAPH_TOOLS
 
 
@@ -130,10 +135,13 @@ class TestAdapterWithResolver:
 
         resolver = MagicMock()
         resolver.resolve_args.return_value = {
-            "item_spec_id": 42, "inner_thought": "ok",
+            "item_spec_id": 42,
+            "inner_thought": "ok",
         }
         handler = _WorldLlmWiring._adapt_executor_handler_with_resolver(
-            fake_executor, TOOL_NAME_SPOT_GRAPH_USE_ITEM, resolver,
+            fake_executor,
+            TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+            resolver,
         )
         result = handler(PlayerId(1), {"item_label": "I1"}, _runtime_context({}))
         assert result.success is True
@@ -143,15 +151,19 @@ class TestAdapterWithResolver:
 
     def test_resolver_llm_command_result_dto_raises_exception(self) -> None:
         """resolver 例外は名前指定の remediation を持つ LlmCommandResultDto に変換。"""
+
         def fake_executor(pid_int: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
             pytest.fail("resolver 失敗時に executor が呼ばれてはいけない")
 
         resolver = MagicMock()
         resolver.resolve_args.side_effect = ToolArgumentResolutionException(
-            "ラベルが見つかりません: I99", "INVALID_TARGET_LABEL",
+            "ラベルが見つかりません: I99",
+            "INVALID_TARGET_LABEL",
         )
         handler = _WorldLlmWiring._adapt_executor_handler_with_resolver(
-            fake_executor, TOOL_NAME_SPOT_GRAPH_USE_ITEM, resolver,
+            fake_executor,
+            TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+            resolver,
         )
         result = handler(PlayerId(1), {"item_label": "I99"}, _runtime_context({}))
         assert result.success is False
@@ -182,6 +194,7 @@ class TestAdapterWithResolver:
         forbidden_phrase: str,
     ) -> None:
         """resolver 汎用失敗でも、各 tool の対象種別に合う復帰ヒントを返す。"""
+
         def fake_executor(pid_int: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
             pytest.fail("resolver 失敗時に executor が呼ばれてはいけない")
 
@@ -191,7 +204,9 @@ class TestAdapterWithResolver:
             "INVALID_TARGET_LABEL",
         )
         handler = _WorldLlmWiring._adapt_executor_handler_with_resolver(
-            fake_executor, tool_name, resolver,
+            fake_executor,
+            tool_name,
+            resolver,
         )
         result = handler(PlayerId(1), {"inner_thought": "t"}, _runtime_context({}))
         assert result.success is False
@@ -218,7 +233,9 @@ class TestAdapterWithResolver:
         resolver = MagicMock()
         resolver.resolve_args.return_value = None
         handler = _WorldLlmWiring._adapt_executor_handler_with_resolver(
-            fake_executor, "unknown_tool", resolver,
+            fake_executor,
+            "unknown_tool",
+            resolver,
         )
         result = handler(PlayerId(1), {"item_label": "I1"}, _runtime_context({}))
         # executor は呼ばれない
@@ -235,9 +252,7 @@ class TestDispatchTableUsesResolver:
     ことを直接検証する (regression test)。
     """
 
-    def test_all_four_item_tool_resolver_aware_handler(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path
-    ) -> None:
+    def test_all_four_item_tool_resolver_aware_handler(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
         """use/drop/give/pickup の handler が resolver を呼ぶ動作になっている。
 
         実体は `_adapt_executor_handler_with_resolver` の closure。closure 名を
@@ -266,9 +281,7 @@ class TestDispatchTableUsesResolver:
                 args = {"ground_item_label": "G99", "inner_thought": "t"}
             elif tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
                 args = {
-                    "gives": [
-                        {"item_label": "I99", "target_player_label": "P99"}
-                    ],
+                    "gives": [{"item_label": "I99", "target_player_label": "P99"}],
                     "inner_thought": "t",
                 }
             else:
@@ -367,9 +380,11 @@ class TestResolveAttack:
         INVALID_TARGET_LABEL を返す (別ケース)。
         """
         resolver = SpotGraphArgumentResolver()
-        ctx = _runtime_context({
-            "I1": _inventory_target(label="I1", display_name="椰子の実"),
-        })
+        ctx = _runtime_context(
+            {
+                "I1": _inventory_target(label="I1", display_name="椰子の実"),
+            }
+        )
         with pytest.raises(ToolArgumentResolutionException) as ei:
             resolver.resolve_args(
                 TOOL_NAME_SPOT_GRAPH_ATTACK,
@@ -388,9 +403,7 @@ class TestAttackDispatchUsesResolver:
     致命的バグ)。本テストが落ちる = resolver_targets から attack が消えた。
     """
 
-    def test_attack_handler_resolver_via(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path
-    ) -> None:
+    def test_attack_handler_resolver_via(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
         """不正 label で attack を呼ぶと INVALID_TARGET_LABEL が返る (= resolver を通った証拠)。
 
         旧コード (resolver 漏れ) では executor 直叩きで `monster_id が解決
@@ -425,9 +438,7 @@ class TestAttackDispatchUsesResolver:
         実装ファイルを文字列検索する形式。`resolver_targets = frozenset({...
         TOOL_NAME_SPOT_GRAPH_ATTACK, ...})` のブロックを担保する。
         """
-        path = (
-            "src/ai_rpg_world/application/llm/services/world_llm_turn/tool_dispatch.py"
-        )
+        path = "src/ai_rpg_world/application/llm/services/world_llm_turn/tool_dispatch.py"
         content = open(path).read()
         # resolver_targets ブロック内に TOOL_NAME_SPOT_GRAPH_ATTACK が必須
         start = content.find("resolver_targets = frozenset")

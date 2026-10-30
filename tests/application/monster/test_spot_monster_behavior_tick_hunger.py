@@ -47,7 +47,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -88,8 +87,13 @@ def _hungry_template(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=10, max_mp=0, attack=2,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=10,
+            max_mp=0,
+            attack=2,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -110,10 +114,11 @@ def _make_monster(template: MonsterTemplate) -> MonsterAggregate:
     return MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=template,
-        world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -141,17 +146,21 @@ def _make_svc(graph, monster, *, interior_repo=None):
     monster_repo.find_by_id.return_value = monster
     player_repo = MagicMock()
     player_repo.find_by_id.return_value = None
-    return SpotMonsterBehaviorTickService(
-        spot_graph_repository=spot_repo,
-        monster_repository=monster_repo,
-        player_status_repository=player_repo,
-        attack_orchestrator=SpotAttackOrchestrator(
+    return (
+        SpotMonsterBehaviorTickService(
             spot_graph_repository=spot_repo,
             monster_repository=monster_repo,
             player_status_repository=player_repo,
+            attack_orchestrator=SpotAttackOrchestrator(
+                spot_graph_repository=spot_repo,
+                monster_repository=monster_repo,
+                player_status_repository=player_repo,
+            ),
+            spot_interior_repository=interior_repo,
         ),
-        spot_interior_repository=interior_repo,
-    ), spot_repo, monster_repo
+        spot_repo,
+        monster_repo,
+    )
 
 
 class TestHungerTick:
@@ -159,9 +168,7 @@ class TestHungerTick:
 
     def test_starvation_ticks_hunger_line(self) -> None:
         """飢餓無効テンプレでは `_lifecycle_state.hunger` が変化しない。"""
-        template = _hungry_template(
-            starvation_ticks=0, hunger_increase=0.5
-        )
+        template = _hungry_template(starvation_ticks=0, hunger_increase=0.5)
         monster = _make_monster(template)
         graph = _make_graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -209,9 +216,7 @@ class TestStarvationDeath:
         svc.tick(WorldTick(11))
         svc.tick(WorldTick(12))
 
-        died_events = [
-            e for e in monster.get_events() if isinstance(e, MonsterDiedEvent)
-        ]
+        died_events = [e for e in monster.get_events() if isinstance(e, MonsterDiedEvent)]
         assert len(died_events) == 1
         assert monster.status != MonsterStatusEnum.ALIVE
 
@@ -237,9 +242,7 @@ class TestStarvationDeath:
         # 飢餓死しているが graph 上の在席は維持
         assert monster.status != MonsterStatusEnum.ALIVE
         assert graph.is_monster_present(monster.monster_id) is True
-        assert (
-            graph.get_monster_spot(monster.monster_id) == SPOT_A
-        )
+        assert graph.get_monster_spot(monster.monster_id) == SPOT_A
 
 
 class TestForage:
@@ -273,16 +276,11 @@ class TestForage:
         interior_repo = MagicMock()
         interior_repo.find_by_spot_id.return_value = interior
 
-        svc, spot_repo, monster_repo = _make_svc(
-            graph, monster, interior_repo=interior_repo
-        )
+        svc, spot_repo, monster_repo = _make_svc(graph, monster, interior_repo=interior_repo)
         svc.tick(WorldTick(10))
 
         # event が発火
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAteGroundItemEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAteGroundItemEvent)]
         assert len(events) == 1
         assert events[0].item_spec_id == MEAT_SPEC
         assert events[0].item_instance_id == ItemInstanceId(1001)
@@ -290,10 +288,7 @@ class TestForage:
         # interior が更新保存された (item が消えている)
         save_call = interior_repo.save.call_args
         saved_interior: SpotInterior = save_call[0][1]
-        assert all(
-            g.item_instance_id != ItemInstanceId(1001)
-            for g in saved_interior.ground_items
-        )
+        assert all(g.item_instance_id != ItemInstanceId(1001) for g in saved_interior.ground_items)
 
         # graph save も呼ばれた
         spot_repo.save.assert_called_once_with(graph)
@@ -327,10 +322,7 @@ class TestForage:
         svc, _, _ = _make_svc(graph, monster, interior_repo=interior_repo)
         svc.tick(WorldTick(10))
 
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAteGroundItemEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAteGroundItemEvent)]
         assert events == []
         interior_repo.save.assert_not_called()
 
@@ -365,10 +357,7 @@ class TestForage:
         svc, _, _ = _make_svc(graph, monster, interior_repo=interior_repo)
         svc.tick(WorldTick(10))
 
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAteGroundItemEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAteGroundItemEvent)]
         assert events == []
 
     def test_interior_repo_uninjected(self) -> None:
@@ -387,8 +376,5 @@ class TestForage:
         svc, _, _ = _make_svc(graph, monster, interior_repo=None)
         svc.tick(WorldTick(10))
 
-        events = [
-            e for e in graph.get_events()
-            if isinstance(e, MonsterAteGroundItemEvent)
-        ]
+        events = [e for e in graph.get_events() if isinstance(e, MonsterAteGroundItemEvent)]
         assert events == []

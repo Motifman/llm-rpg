@@ -50,11 +50,16 @@ def town(tmp_path: Path) -> Any:
     raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     for pid, name in (("tom", "トム"), ("mina", "ミナ")):
-        raw["players"].append({
-            "id": pid, "name": name, "spawn_spot": spawn,
-            "initial_items": [], "initial_gold": 200,
-            "persona_prompt": f"あなたは{name}。",
-        })
+        raw["players"].append(
+            {
+                "id": pid,
+                "name": name,
+                "spawn_spot": spawn,
+                "initial_items": [],
+                "initial_gold": 200,
+                "persona_prompt": f"あなたは{name}。",
+            }
+        )
     raw["market"] = {"board_spot": "market_square"}
     path = tmp_path / "market_town_v1.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -92,11 +97,18 @@ def _gold(runtime: Any, player_id: PlayerId) -> int:
 
 
 def _list_bread(
-    runtime: Any, seller: PlayerId, *, quantity: int, price: int,
+    runtime: Any,
+    seller: PlayerId,
+    *,
+    quantity: int,
+    price: int,
 ) -> Any:
     _give(runtime, seller, _BREAD, quantity)
     return runtime._market_service.place_sell_order(
-        seller, item_label=_BREAD, quantity=quantity, unit_price=price,
+        seller,
+        item_label=_BREAD,
+        quantity=quantity,
+        unit_price=price,
         current_tick=runtime.current_tick(),
     )
 
@@ -104,53 +116,54 @@ def _list_bread(
 class TestBuyingSweepsTheCheapestFirst:
     """買う側は注文を選ばない。安い方から順に買う。"""
 
-    def test_a_single_listing_is_bought_at_its_price(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_a_single_listing_is_bought_at_its_price(self, town: Any, market: MarketService) -> None:
         """出品が 1 件なら、その値で買える。"""
         _list_bread(town, _LENA, quantity=1, price=18)
         before = _gold(town, _TOM)
 
         result = market.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert result.bought_quantity == 1
         assert _held(town, _TOM, _BREAD) == 1
         assert _gold(town, _TOM) == before - 18
 
-    def test_it_crosses_two_listings_when_one_is_not_enough(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_it_crosses_two_listings_when_one_is_not_enough(self, town: Any, market: MarketService) -> None:
         """18G に 1 つ、20G に 2 つ出ているとき、3 つ買うと両方から買える。"""
         _list_bread(town, _LENA, quantity=1, price=18)
         _list_bread(town, _MINA, quantity=2, price=20)
         before = _gold(town, _TOM)
 
         result = market.buy_best(
-            _TOM, item_label=_BREAD, quantity=3, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=3,
+            current_tick=town.current_tick(),
         )
 
         assert result.bought_quantity == 3
         assert _gold(town, _TOM) == before - (18 + 20 * 2)
 
-    def test_the_cheaper_listing_is_emptied_first(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_the_cheaper_listing_is_emptied_first(self, town: Any, market: MarketService) -> None:
         """安い方から減る。1 つだけ買うと 18G の側が消える。"""
         cheap = _list_bread(town, _LENA, quantity=1, price=18)
         dear = _list_bread(town, _MINA, quantity=1, price=20)
 
         market.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert market.board().find(cheap.order_id) is None
         assert market.board().find(dear.order_id) is not None
 
-    def test_your_own_listing_is_skipped(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_your_own_listing_is_skipped(self, town: Any, market: MarketService) -> None:
         """自分の出品は飛ばして買う。
 
         自己約定の禁止がここで効く。飛ばさないと、自分の 18G を自分で買って
@@ -161,7 +174,10 @@ class TestBuyingSweepsTheCheapestFirst:
         before = _gold(town, _TOM)
 
         result = market.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert result.bought_quantity == 1
@@ -169,9 +185,7 @@ class TestBuyingSweepsTheCheapestFirst:
         assert market.board().find(mine.order_id) is not None
         assert market.board().find(theirs.order_id) is None
 
-    def test_each_fill_is_reported_separately(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_each_fill_is_reported_separately(self, town: Any, market: MarketService) -> None:
         """またいで買うと、約定は 1 件ずつ返る。
 
         単価が違うので 1 件にまとめると価格の時系列が壊れる。trace も観測も
@@ -181,7 +195,10 @@ class TestBuyingSweepsTheCheapestFirst:
         _list_bread(town, _MINA, quantity=2, price=20)
 
         result = market.buy_best(
-            _TOM, item_label=_BREAD, quantity=3, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=3,
+            current_tick=town.current_tick(),
         )
 
         assert [s.trade.unit_price_gold for s in result.settlements] == [18, 20]
@@ -191,9 +208,7 @@ class TestBuyingSweepsTheCheapestFirst:
 class TestWhatHappensWhenYouCannotHaveItAll:
     """外部の変化には適応し、自分の誤りには従わない。"""
 
-    def test_a_short_board_sells_what_it_has(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_a_short_board_sells_what_it_has(self, town: Any, market: MarketService) -> None:
         """板の在庫が足りないときは、買えるだけ買う。
 
         板の中身は他人の手番で変わるので、「あるだけ買う」が自然。
@@ -201,14 +216,15 @@ class TestWhatHappensWhenYouCannotHaveItAll:
         _list_bread(town, _LENA, quantity=2, price=18)
 
         result = market.buy_best(
-            _TOM, item_label=_BREAD, quantity=3, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=3,
+            current_tick=town.current_tick(),
         )
 
         assert result.bought_quantity == 2
 
-    def test_the_result_keeps_both_the_wish_and_the_outcome(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_the_result_keeps_both_the_wish_and_the_outcome(self, town: Any, market: MarketService) -> None:
         """買えるだけ買ったとき、求めた数と買えた数の両方が残る。
 
         買えた数だけだと、読む側は自分の意図が満たされたか判断できない。
@@ -216,15 +232,16 @@ class TestWhatHappensWhenYouCannotHaveItAll:
         _list_bread(town, _LENA, quantity=2, price=18)
 
         result = market.buy_best(
-            _TOM, item_label=_BREAD, quantity=3, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=3,
+            current_tick=town.current_tick(),
         )
 
         assert result.requested_quantity == 3
         assert result.bought_quantity == 2
 
-    def test_a_purse_that_is_too_light_buys_nothing(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_a_purse_that_is_too_light_buys_nothing(self, town: Any, market: MarketService) -> None:
         """gold が足りないときは、1 つも買わずに断る。
 
         所持金は**自分で見える自分の状態**なので、足りないのは自分の計算違い。
@@ -235,24 +252,26 @@ class TestWhatHappensWhenYouCannotHaveItAll:
 
         with pytest.raises(MarketGoldNotEnoughError):
             market.buy_best(
-                _TOM, item_label=_BREAD, quantity=3, current_tick=town.current_tick(),
+                _TOM,
+                item_label=_BREAD,
+                quantity=3,
+                current_tick=town.current_tick(),
             )
 
         assert _gold(town, _TOM) == before
         assert _held(town, _TOM, _BREAD) == 0
 
-    def test_an_item_nobody_listed_cannot_be_bought(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_an_item_nobody_listed_cannot_be_bought(self, town: Any, market: MarketService) -> None:
         """誰も出していない品は買えない。"""
         with pytest.raises(MarketNothingToBuyError):
             market.buy_best(
-                _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+                _TOM,
+                item_label=_BREAD,
+                quantity=1,
+                current_tick=town.current_tick(),
             )
 
-    def test_an_item_only_you_listed_says_so(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_an_item_only_you_listed_says_so(self, town: Any, market: MarketService) -> None:
         """自分の出品しか無い品は、「誰も出していない」とは別の失敗になる。
 
         次の一手が違う。誰も出していないなら待つしかないが、自分が出している
@@ -262,7 +281,10 @@ class TestWhatHappensWhenYouCannotHaveItAll:
 
         with pytest.raises(MarketOnlyYourOwnListingError):
             market.buy_best(
-                _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+                _TOM,
+                item_label=_BREAD,
+                quantity=1,
+                current_tick=town.current_tick(),
             )
 
 
@@ -274,15 +296,16 @@ class TestRepricingMovesThePriceWithoutMovingTheGoods:
         order = _list_bread(town, _LENA, quantity=2, price=20)
 
         after = market.reprice_order(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=18,
+            _LENA,
+            item_label=_BREAD,
+            side=MarketOrderSide.SELL,
+            new_unit_price=18,
         )
 
         assert after.unit_price_gold == 18
         assert market.board().find(order.order_id).unit_price_gold == 18
 
-    def test_it_works_with_a_full_inventory(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_it_works_with_a_full_inventory(self, town: Any, market: MarketService) -> None:
         """所持品が満杯でも値を変えられる。
 
         **これが値の付け直しを入れた理由**。取り下げは預けた品を引き取るので
@@ -295,7 +318,10 @@ class TestRepricingMovesThePriceWithoutMovingTheGoods:
             _give(town, _LENA, _HERB, 1)
 
         after = market.reprice_order(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=18,
+            _LENA,
+            item_label=_BREAD,
+            side=MarketOrderSide.SELL,
+            new_unit_price=18,
         )
 
         assert after.unit_price_gold == 18
@@ -306,7 +332,10 @@ class TestRepricingMovesThePriceWithoutMovingTheGoods:
         held = _held(town, _LENA, _BREAD)
 
         market.reprice_order(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=18,
+            _LENA,
+            item_label=_BREAD,
+            side=MarketOrderSide.SELL,
+            new_unit_price=18,
         )
 
         assert _held(town, _LENA, _BREAD) == held
@@ -321,25 +350,27 @@ class TestRepricingMovesThePriceWithoutMovingTheGoods:
         order = _list_bread(town, _LENA, quantity=1, price=20)
 
         after = market.reprice_order(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=18,
+            _LENA,
+            item_label=_BREAD,
+            side=MarketOrderSide.SELL,
+            new_unit_price=18,
         )
 
         assert after.expires_at_tick == order.expires_at_tick
 
-    def test_someone_elses_order_cannot_be_repriced(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_someone_elses_order_cannot_be_repriced(self, town: Any, market: MarketService) -> None:
         """他人の注文の値は変えられない。"""
         _list_bread(town, _LENA, quantity=1, price=20)
 
         with pytest.raises(MarketNoSuchOrderError):
             market.reprice_order(
-                _TOM, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=18,
+                _TOM,
+                item_label=_BREAD,
+                side=MarketOrderSide.SELL,
+                new_unit_price=18,
             )
 
-    def test_an_order_awaiting_collection_cannot_be_repriced(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_an_order_awaiting_collection_cannot_be_repriced(self, town: Any, market: MarketService) -> None:
         """引き取り待ちの注文は値を変えられない (もう板の商品ではない)。"""
         order = _list_bread(town, _LENA, quantity=1, price=20)
         while not town._player_inventory_repo.find_by_id(_LENA).is_inventory_full():
@@ -348,7 +379,10 @@ class TestRepricingMovesThePriceWithoutMovingTheGoods:
 
         with pytest.raises(MarketNoSuchOrderError):
             market.reprice_order(
-                _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=18,
+                _LENA,
+                item_label=_BREAD,
+                side=MarketOrderSide.SELL,
+                new_unit_price=18,
             )
 
 
@@ -359,9 +393,7 @@ class TestYourOwnOrderIsNamedByItsItemAndSide:
     名前をそのまま渡す」規約から外れる。
     """
 
-    def test_cancelling_by_item_and_side_works(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_cancelling_by_item_and_side_works(self, town: Any, market: MarketService) -> None:
         """品名と向きで、自分の注文を取り下げられる。"""
         _list_bread(town, _LENA, quantity=2, price=20)
 
@@ -370,16 +402,12 @@ class TestYourOwnOrderIsNamedByItsItemAndSide:
         assert market.board().orders == ()
         assert _held(town, _LENA, _BREAD) == 2
 
-    def test_cancelling_what_you_never_listed_is_refused(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_cancelling_what_you_never_listed_is_refused(self, town: Any, market: MarketService) -> None:
         """出していない品は取り下げられない。"""
         with pytest.raises(MarketNoSuchOrderError):
             market.cancel_by(_LENA, item_label=_BREAD, side=MarketOrderSide.SELL)
 
-    def test_someone_elses_order_is_not_yours_to_cancel(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_someone_elses_order_is_not_yours_to_cancel(self, town: Any, market: MarketService) -> None:
         """他人が同じ品を出していても、自分の注文としては見つからない。"""
         _list_bread(town, _LENA, quantity=1, price=20)
 
@@ -402,7 +430,10 @@ class TestTheBoardHasToBeWithinReach:
 
         with pytest.raises(MarketBoardNotHereError):
             market.place_sell_order(
-                _LENA, item_label=_BREAD, quantity=1, unit_price=18,
+                _LENA,
+                item_label=_BREAD,
+                quantity=1,
+                unit_price=18,
                 current_tick=town.current_tick(),
             )
 
@@ -413,7 +444,10 @@ class TestTheBoardHasToBeWithinReach:
 
         with pytest.raises(MarketBoardNotHereError):
             market.buy_best(
-                _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+                _TOM,
+                item_label=_BREAD,
+                quantity=1,
+                current_tick=town.current_tick(),
             )
 
     def test_being_at_the_board_is_enough(self, town: Any, market: MarketService) -> None:
@@ -424,7 +458,10 @@ class TestTheBoardHasToBeWithinReach:
         _give(town, _LENA, _BREAD, 1)
 
         order = market.place_sell_order(
-            _LENA, item_label=_BREAD, quantity=1, unit_price=18,
+            _LENA,
+            item_label=_BREAD,
+            quantity=1,
+            unit_price=18,
             current_tick=town.current_tick(),
         )
 
@@ -437,9 +474,7 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
 
     graph = runtime._spot_graph_repo.find_graph()
     here = graph.get_entity_spot(EntityId.create(int(player_id)))
-    elsewhere = next(
-        spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here
-    )
+    elsewhere = next(spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here)
     graph.unplace_entity(EntityId.create(int(player_id)))
     graph.place_entity(EntityId.create(int(player_id)), elsewhere)
     runtime._spot_graph_repo.save(graph)

@@ -1,4 +1,3 @@
-
 import pytest
 
 from ai_rpg_world.domain.sns.exception.user_profile_exceptions import (
@@ -19,6 +18,7 @@ class _TestUserRepositoryInterface:
     def test_find_by_id_existing_user(self, repository):
         """既存ユーザーのID検索テスト"""
         from ai_rpg_world.domain.sns.value_object import UserId
+
         user = repository.find_by_id(UserId(1))
         assert user is not None
         assert user.user_id == UserId(1)
@@ -27,12 +27,14 @@ class _TestUserRepositoryInterface:
     def test_find_by_id_nonexistent_user(self, repository):
         """存在しないユーザーのID検索テスト"""
         from ai_rpg_world.domain.sns.value_object import UserId
+
         user = repository.find_by_id(UserId(999))
         assert user is None
 
     def test_find_by_user_name_existing_user(self, repository):
         """既存ユーザーのユーザー名検索テスト"""
         from ai_rpg_world.domain.sns.value_object import UserId
+
         user = repository.find_by_user_name("hero_user")
         assert user is not None
         assert user.user_id == UserId(1)
@@ -45,6 +47,7 @@ class _TestUserRepositoryInterface:
     def test_find_by_ids_multiple_users(self, repository):
         """複数ユーザーのID検索テスト"""
         from ai_rpg_world.domain.sns.value_object import UserId
+
         users = repository.find_by_ids([UserId(1), UserId(2), UserId(3)])
         assert len(users) == 3
         user_ids = [user.user_id for user in users]
@@ -53,6 +56,7 @@ class _TestUserRepositoryInterface:
     def test_find_by_ids_with_invalid_ids(self, repository):
         """無効なIDを含む複数ユーザー検索テスト"""
         from ai_rpg_world.domain.sns.value_object import UserId
+
         users = repository.find_by_ids([UserId(1), UserId(999), UserId(3)])
         assert len(users) == 2
         user_ids = [user.user_id for user in users]
@@ -105,7 +109,7 @@ class _TestUserRepositoryInterface:
 
     def test_is_blocked(self, repository):
         """ブロック関係確認テスト"""
-        assert repository.is_blocked(UserId(2), UserId(4)) == True   # 魔法使い -> 盗賊
+        assert repository.is_blocked(UserId(2), UserId(4)) == True  # 魔法使い -> 盗賊
         assert repository.is_blocked(UserId(1), UserId(2)) == False  # 勇者 -> 魔法使い
 
     def test_find_subscribers(self, repository):
@@ -124,7 +128,7 @@ class _TestUserRepositoryInterface:
 
     def test_is_subscribed(self, repository):
         """購読関係確認テスト"""
-        assert repository.is_subscribed(UserId(1), UserId(2)) == True   # 勇者 -> 魔法使い
+        assert repository.is_subscribed(UserId(1), UserId(2)) == True  # 勇者 -> 魔法使い
         assert repository.is_subscribed(UserId(1), UserId(3)) == False  # 勇者 -> 戦士
 
     def test_search_users_by_name(self, repository):

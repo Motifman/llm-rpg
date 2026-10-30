@@ -30,6 +30,9 @@ from typing import TYPE_CHECKING, Any
 from ai_rpg_world.application.trade.services.trade_freeze_service import (
     TradeFreezeService,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
 
@@ -41,6 +44,7 @@ if TYPE_CHECKING:
         TradeOfferExpiryCommandRepositoryProviderPort,
     )
 
+
 class TradeOfferExpiryStage:
     """期限切れの提案を、凍結を解いてから片付ける。"""
 
@@ -48,7 +52,9 @@ class TradeOfferExpiryStage:
         self,
         *,
         command_scope_factory: CommandScopeFactoryPort[TradeOfferExpiryCommandRepositoryProviderPort] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._command_scope_factory = command_scope_factory
 
     def set_command_scope_factory(
@@ -69,14 +75,17 @@ class TradeOfferExpiryStage:
         # 先行offerの確定は後続offerの失敗に巻き戻されない。
         with factory.create() as scope:
             offer_ids = tuple(
-                offer.offer_id
-                for offer in scope.repositories.pending_trade_offers.expired_offers(
-                    tick_value
-                )
+                offer.offer_id for offer in scope.repositories.pending_trade_offers.expired_offers(tick_value)
             )
 
         for offer_id in offer_ids:
-            self._expire_one(factory, offer_id, tick_value)
+            with self._failure_isolator.unit(
+                stage="trade_offer_expiry",
+                tick=WorldTick(tick_value),
+                target_kind="trade_offer",
+                target_id=getattr(offer_id, "value", offer_id),
+            ):
+                self._expire_one(factory, offer_id, tick_value)
 
     @staticmethod
     def _expire_one(factory: Any, offer_id: Any, tick_value: int) -> None:
@@ -85,9 +94,7 @@ class TradeOfferExpiryStage:
             repositories = scope.repositories
             offers = repositories.pending_trade_offers
             offer = offers.find(offer_id)
-            if offer is None or not offer.is_pending or not offer.is_expired_at(
-                tick_value
-            ):
+            if offer is None or not offer.is_pending or not offer.is_expired_at(tick_value):
                 return
             freeze = TradeFreezeService(
                 pending_trade_offer_store=offers,

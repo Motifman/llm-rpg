@@ -1,4 +1,3 @@
-
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -9,10 +8,7 @@ class RecipeDomainService:
     """レシピドメインサービス"""
 
     @staticmethod
-    def find_recipes_by_result_item(
-        item_spec_id: ItemSpecId,
-        recipes: list[RecipeAggregate]
-    ) -> list[RecipeAggregate]:
+    def find_recipes_by_result_item(item_spec_id: ItemSpecId, recipes: list[RecipeAggregate]) -> list[RecipeAggregate]:
         """指定アイテムを作成できるレシピを取得
 
         Args:
@@ -22,16 +18,10 @@ class RecipeDomainService:
         Returns:
             List[Recipe]: 指定アイテムを作成できるレシピのリスト
         """
-        return [
-            recipe for recipe in recipes
-            if recipe.result.item_spec_id == item_spec_id
-        ]
+        return [recipe for recipe in recipes if recipe.result.item_spec_id == item_spec_id]
 
     @staticmethod
-    def find_recipes_by_ingredient(
-        item_spec_id: ItemSpecId,
-        recipes: list[RecipeAggregate]
-    ) -> list[RecipeAggregate]:
+    def find_recipes_by_ingredient(item_spec_id: ItemSpecId, recipes: list[RecipeAggregate]) -> list[RecipeAggregate]:
         """指定アイテムを材料として使用するレシピを取得
 
         Args:
@@ -41,17 +31,10 @@ class RecipeDomainService:
         Returns:
             List[Recipe]: 指定アイテムを材料として使用するレシピのリスト
         """
-        return [
-            recipe for recipe in recipes
-            if any(ing.item_spec_id == item_spec_id for ing in recipe.ingredients)
-        ]
-
+        return [recipe for recipe in recipes if any(ing.item_spec_id == item_spec_id for ing in recipe.ingredients)]
 
     @staticmethod
-    def can_player_craft_recipe(
-        recipe: RecipeAggregate,
-        player_inventory: list[ItemAggregate]
-    ) -> bool:
+    def can_player_craft_recipe(recipe: RecipeAggregate, player_inventory: list[ItemAggregate]) -> bool:
         """プレイヤーが指定レシピで合成可能かチェック
 
         Args:
@@ -68,8 +51,7 @@ class RecipeDomainService:
 
     @staticmethod
     def get_available_recipes_for_player(
-        recipes: list[RecipeAggregate],
-        player_inventory: list[ItemAggregate]
+        recipes: list[RecipeAggregate], player_inventory: list[ItemAggregate]
     ) -> list[RecipeAggregate]:
         """プレイヤーが合成可能なレシピを取得
 
@@ -88,7 +70,3 @@ class RecipeDomainService:
                 available_recipes.append(recipe)
 
         return available_recipes
-
-
-
-

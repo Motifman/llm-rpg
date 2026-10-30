@@ -14,6 +14,8 @@ API:
 
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
@@ -29,7 +31,8 @@ from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 def _new_inv(player_id_val: int = 1, max_slots: int = 4) -> PlayerInventoryAggregate:
     return PlayerInventoryAggregate.create_new_inventory(
-        player_id=PlayerId(player_id_val), max_slots=max_slots,
+        player_id=PlayerId(player_id_val),
+        max_slots=max_slots,
     )
 
 
@@ -60,39 +63,41 @@ class TestIterSlots:
     """`iter_slots` の挙動。"""
 
     def test_all_slot_order_yield(self) -> None:
-        """全スロットを順序通り yield。"""
+        """新規作成した全枠を、枠番号の昇順で空の値とともに返す。"""
         inv = _new_inv(max_slots=3)
-        # 内部 dict の insertion 順 = slot_id.value 昇順 (create_new_inventory の実装)
-        slots = list(inv.iter_slots())
-        assert len(slots) == 3
-        # 初期状態は全部 None
-        for slot_id, iid in slots:
-            assert iid is None
+
+        assert list(inv.iter_slots()) == [
+            (SlotId(0), None),
+            (SlotId(1), None),
+            (SlotId(2), None),
+        ]
 
     def test_includes_empty_slot(self) -> None:
-        """空スロットも 含む。"""
+        """品が入った枠と残りの空枠を、どちらも正しい番号で返す。"""
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
-        slots = list(inv.iter_slots())
-        # max_slots 件きっちり
-        assert len(slots) == 4
-        # 1 件は埋まっている
-        occupied = [s for s in slots if s[1] is not None]
-        assert len(occupied) == 1
+
+        assert list(inv.iter_slots()) == [
+            (SlotId(0), ItemInstanceId(7001)),
+            (SlotId(1), None),
+            (SlotId(2), None),
+            (SlotId(3), None),
+        ]
 
 
 class TestIterOccupiedSlots:
     """`iter_occupied_slots` の挙動。"""
 
     def test_item_slot_yield(self) -> None:
-        """item が入っているスロットだけ yield。"""
+        """占有枠だけを、枠番号と品の対応を保って取得順に返す。"""
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         inv.acquire_item(item_instance_id=ItemInstanceId(7002))
-        occ = list(inv.iter_occupied_slots())
-        assert len(occ) == 2
-        iids = {iid for _, iid in occ}
-        assert iids == {ItemInstanceId(7001), ItemInstanceId(7002)}
+
+        assert list(inv.iter_occupied_slots()) == [
+            (SlotId(0), ItemInstanceId(7001)),
+            (SlotId(1), ItemInstanceId(7002)),
+        ]
 
     def test_empty_inventory_empty_iter(self) -> None:
         """空 inventory は空 iter。"""
@@ -109,49 +114,7 @@ class TestFindSlotByItemSpecId:
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         appearances = _appearances({ItemInstanceId(7001): ItemSpecId.create(101)})
         result = inv.find_slot_by_item_spec_id(ItemSpecId.create(101), appearances)
-        assert result is not None
-        slot_id, iid = result
-        assert iid == ItemInstanceId(7001)
-
-
-class TestFindSlotByItemSpecIdAndSpoilage:
-    """`find_slot_by_item_spec_id_and_spoilage` は表示側の集約キーと同じ条件で探す。"""
-
-    def test_returns_spoiled_slot_when_same_spec_has_fresh_and_spoiled(self) -> None:
-        """同じ spec の新鮮品と腐敗品があるとき、腐敗指定では腐敗 slot を返す。"""
-        inv = _new_inv(max_slots=4)
-        inv.acquire_item(item_instance_id=ItemInstanceId(7001))
-        inv.acquire_item(item_instance_id=ItemInstanceId(7002))
-        appearances = _appearances_with_state({
-            ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
-            ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
-        })
-
-        result = inv.find_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), True, appearances,
-        )
-
-        assert result is not None
-        _slot_id, iid = result
-        assert iid == ItemInstanceId(7002)
-
-    def test_returns_fresh_slot_when_same_spec_has_fresh_and_spoiled(self) -> None:
-        """同じ spec の新鮮品と腐敗品があるとき、新鮮指定では新鮮 slot を返す。"""
-        inv = _new_inv(max_slots=4)
-        inv.acquire_item(item_instance_id=ItemInstanceId(7001))
-        inv.acquire_item(item_instance_id=ItemInstanceId(7002))
-        appearances = _appearances_with_state({
-            ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
-            ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
-        })
-
-        result = inv.find_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), False, appearances,
-        )
-
-        assert result is not None
-        _slot_id, iid = result
-        assert iid == ItemInstanceId(7001)
+        assert result == (SlotId(0), ItemInstanceId(7001))
 
     def test_none(self) -> None:
         """見つからない場合は None。"""
@@ -176,15 +139,58 @@ class TestFindSlotByItemSpecIdAndSpoilage:
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         inv.acquire_item(item_instance_id=ItemInstanceId(7002))
-        appearances = _appearances({
-            ItemInstanceId(7001): ItemSpecId.create(101),
-            ItemInstanceId(7002): ItemSpecId.create(101),
-        })
+        appearances = _appearances(
+            {
+                ItemInstanceId(7001): ItemSpecId.create(101),
+                ItemInstanceId(7002): ItemSpecId.create(101),
+            }
+        )
         result = inv.find_slot_by_item_spec_id(ItemSpecId.create(101), appearances)
-        assert result is not None
-        _, iid = result
-        # insertion 順で最初の SlotId(0) には 7001 が入る
-        assert iid == ItemInstanceId(7001)
+        assert result == (SlotId(0), ItemInstanceId(7001))
+
+
+class TestFindSlotByItemSpecIdAndSpoilage:
+    """`find_slot_by_item_spec_id_and_spoilage` は表示側の集約キーと同じ条件で探す。"""
+
+    def test_returns_spoiled_slot_when_same_spec_has_fresh_and_spoiled(self) -> None:
+        """同じ spec の新鮮品と腐敗品があるとき、腐敗指定では腐敗 slot を返す。"""
+        inv = _new_inv(max_slots=4)
+        inv.acquire_item(item_instance_id=ItemInstanceId(7001))
+        inv.acquire_item(item_instance_id=ItemInstanceId(7002))
+        appearances = _appearances_with_state(
+            {
+                ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
+                ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
+            }
+        )
+
+        result = inv.find_slot_by_item_spec_id_and_spoilage(
+            ItemSpecId.create(101),
+            True,
+            appearances,
+        )
+
+        assert result == (SlotId(1), ItemInstanceId(7002))
+
+    def test_returns_fresh_slot_when_same_spec_has_fresh_and_spoiled(self) -> None:
+        """同じ spec の新鮮品と腐敗品があるとき、新鮮指定では新鮮 slot を返す。"""
+        inv = _new_inv(max_slots=4)
+        inv.acquire_item(item_instance_id=ItemInstanceId(7001))
+        inv.acquire_item(item_instance_id=ItemInstanceId(7002))
+        appearances = _appearances_with_state(
+            {
+                ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
+                ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
+            }
+        )
+
+        result = inv.find_slot_by_item_spec_id_and_spoilage(
+            ItemSpecId.create(101),
+            False,
+            appearances,
+        )
+
+        assert result == (SlotId(0), ItemInstanceId(7001))
 
 
 class TestFindAvailableSlotByItemSpecIdAndSpoilage:
@@ -197,12 +203,15 @@ class TestFindAvailableSlotByItemSpecIdAndSpoilage:
         appearances = _appearances({ItemInstanceId(7001): ItemSpecId.create(101)})
 
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), False, appearances,
+            ItemSpecId.create(101),
+            False,
+            appearances,
         )
 
         assert found.found is True
-        assert found.blocked_by_reservation is False
+        assert found.slot_id == SlotId(0)
         assert found.item_instance_id == ItemInstanceId(7001)
+        assert found.blocked_by_reservation is False
 
     def test_all_matches_reserved_reports_blocked(self) -> None:
         """一致が全部予約中なら blocked_by_reservation が True、found は False。"""
@@ -212,10 +221,14 @@ class TestFindAvailableSlotByItemSpecIdAndSpoilage:
         appearances = _appearances({ItemInstanceId(7001): ItemSpecId.create(101)})
 
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), False, appearances,
+            ItemSpecId.create(101),
+            False,
+            appearances,
         )
 
         assert found.found is False
+        assert found.slot_id is None
+        assert found.item_instance_id is None
         assert found.blocked_by_reservation is True
 
     def test_prefers_unreserved_when_one_of_two_is_reserved(self) -> None:
@@ -224,32 +237,58 @@ class TestFindAvailableSlotByItemSpecIdAndSpoilage:
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         inv.acquire_item(item_instance_id=ItemInstanceId(7002))
         inv.reserve_item(SlotId(0))
-        appearances = _appearances({
-            ItemInstanceId(7001): ItemSpecId.create(101),
-            ItemInstanceId(7002): ItemSpecId.create(101),
-        })
+        appearances = _appearances(
+            {
+                ItemInstanceId(7001): ItemSpecId.create(101),
+                ItemInstanceId(7002): ItemSpecId.create(101),
+            }
+        )
 
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), False, appearances,
+            ItemSpecId.create(101),
+            False,
+            appearances,
         )
 
         assert found.found is True
         assert found.slot_id == SlotId(1)
+        assert found.item_instance_id == ItemInstanceId(7002)
         assert found.blocked_by_reservation is False
 
-    def test_no_match_is_not_blocked(self) -> None:
-        """spec も腐敗も一致しないなら blocked_by_reservation は False。"""
+    @pytest.mark.parametrize(
+        "item_spoiled, requested_spoiled, matches",
+        [
+            pytest.param(None, False, False, id="empty-inventory"),
+            pytest.param(False, True, False, id="fresh-is-not-spoiled"),
+            pytest.param(True, False, False, id="spoiled-is-not-fresh"),
+            pytest.param(True, True, True, id="spoiled-match"),
+        ],
+    )
+    def test_lookup_distinguishes_absence_from_spoilage(
+        self,
+        item_spoiled: bool | None,
+        requested_spoiled: bool,
+        matches: bool,
+    ) -> None:
+        """未所持や鮮度不一致を予約扱いせず、腐敗指定に一致する品だけを返す。"""
         inv = _new_inv(max_slots=4)
-        inv.acquire_item(item_instance_id=ItemInstanceId(7001))
-        appearances = _appearances_with_state({
-            ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
-        })
+        appearances = {}
+        if item_spoiled is not None:
+            inv.acquire_item(item_instance_id=ItemInstanceId(7001))
+            appearances = _appearances(
+                {ItemInstanceId(7001): ItemSpecId.create(101)},
+                is_spoiled=item_spoiled,
+            )
 
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), True, appearances,
+            ItemSpecId.create(101),
+            requested_spoiled,
+            appearances,
         )
 
-        assert found.found is False
+        assert found.found is matches
+        assert found.slot_id == (SlotId(0) if matches else None)
+        assert found.item_instance_id == (ItemInstanceId(7001) if matches else None)
         assert found.blocked_by_reservation is False
 
 
@@ -260,14 +299,13 @@ class TestPrivateAccessRemoval:
     def test_executor_inv_inventory_slots(self) -> None:
         """executor が invinventoryslots を直接参照しない。"""
         from pathlib import Path
+
         executor_src = (
             Path(__file__).resolve().parents[4]
             / "src/ai_rpg_world/application/llm/services/executors/spot_graph_tool_executor.py"
         )
         text = executor_src.read_text(encoding="utf-8")
-        non_comment = "\n".join(
-            ln for ln in text.splitlines() if not ln.lstrip().startswith("#")
-        )
+        non_comment = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
         assert "inv._inventory_slots" not in non_comment, (
             "executor が aggregate の private dict `_inventory_slots` を "
             "まだ直接 iter している。`find_slot_by_item_spec_id` を使うべき"

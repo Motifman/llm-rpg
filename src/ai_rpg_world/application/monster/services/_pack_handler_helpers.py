@@ -19,7 +19,8 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 
 
 def resolve_monster_spot(
-    graph: SpotGraphAggregate, monster: MonsterAggregate,
+    graph: SpotGraphAggregate,
+    monster: MonsterAggregate,
 ) -> SpotId | None:
     """graph 上の monster の現在 spot を取得する。未配置なら None。
 

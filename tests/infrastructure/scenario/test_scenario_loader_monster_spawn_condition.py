@@ -26,7 +26,8 @@ class TestParseMonsterSpawnCondition:
     def test_day_night_phases_string_tuple(self) -> None:
         """day night phases を文字列タプルに変換。"""
         result = parse_monster_spawn_condition(
-            {"day_night_phases": ["night", "evening"]}, 0,
+            {"day_night_phases": ["night", "evening"]},
+            0,
         )
         assert isinstance(result, ScenarioMonsterSpawnCondition)
         assert result.day_night_phase_names == ("night", "evening")
@@ -48,7 +49,8 @@ class TestParseMonsterSpawnCondition:
         """WeatherTypeEnum に無い名前は boundary で弾く。"""
         with pytest.raises(ScenarioLoadError) as exc:
             parse_monster_spawn_condition(
-                {"weather_types": ["TYPHOON"]}, 0,
+                {"weather_types": ["TYPHOON"]},
+                0,
             )
         # エラーメッセージに valid な enum 値が含まれる
         assert "weather_types" in str(exc.value)
@@ -63,7 +65,8 @@ class TestParseMonsterSpawnCondition:
         """配列でない値は ScenarioLoadError。"""
         with pytest.raises(ScenarioLoadError):
             parse_monster_spawn_condition(
-                {"day_night_phases": "night"}, 0,  # 文字列、list ではない
+                {"day_night_phases": "night"},
+                0,  # 文字列、list ではない
             )
 
     def test_dict_spawn_condition_scenario_load_error(self) -> None:

@@ -194,9 +194,7 @@ class TestAppearance:
     def test_template_description_populates_appearance(self) -> None:
         """MonsterTemplate.description があれば appearance にそのまま入る。"""
         lookup = MagicMock()
-        lookup.find_by_id.return_value = _make_aggregate(
-            description="岩陰から横歩きで現れる大型のカニ。"
-        )
+        lookup.find_by_id.return_value = _make_aggregate(description="岩陰から横歩きで現れる大型のカニ。")
 
         view = build_monster_view_provider(lookup)(MonsterId.create(101))
 

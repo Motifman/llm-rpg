@@ -23,12 +23,8 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
-)
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
@@ -56,10 +52,7 @@ def _make_status(
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=None if spot_id_none else SpotId(spot_id),
-            current_coordinate=Coordinate(0, 0, 0) if not spot_id_none else None,
-        ),
+        current_spot_id=None if spot_id_none else SpotId(spot_id),
     )
 
 
@@ -80,9 +73,7 @@ class TestPlayerAudienceQueryServicePlayersAtSpot:
             player_status_repository=status_repo,
         )
 
-    def test_returns_multiple_players_at_same_spot(
-        self, service, status_repo
-    ):
+    def test_returns_multiple_players_at_same_spot(self, service, status_repo):
         """同一スポットに複数プレイヤーがいる場合、すべて返す（正常）"""
         status_repo.save(_make_status(1, spot_id=5))
         status_repo.save(_make_status(2, spot_id=5))
@@ -91,34 +82,26 @@ class TestPlayerAudienceQueryServicePlayersAtSpot:
         assert len(result) == 3
         assert {p.value for p in result} == {1, 2, 3}
 
-    def test_returns_single_player_when_only_one_at_spot(
-        self, service, status_repo
-    ):
+    def test_returns_single_player_when_only_one_at_spot(self, service, status_repo):
         """スポットに1人だけいる場合、その1人を返す（正常）"""
         status_repo.save(_make_status(7, spot_id=10))
         result = service.players_at_spot(SpotId(10))
         assert len(result) == 1
         assert result[0].value == 7
 
-    def test_returns_empty_list_when_no_players_at_spot(
-        self, service, status_repo
-    ):
+    def test_returns_empty_list_when_no_players_at_spot(self, service, status_repo):
         """指定スポットに誰もいない場合、空リストを返す（境界）"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=2))
         result = service.players_at_spot(SpotId(99))
         assert result == []
 
-    def test_returns_empty_list_when_repository_empty(
-        self, service
-    ):
+    def test_returns_empty_list_when_repository_empty(self, service):
         """リポジトリが空の場合、空リストを返す（境界）"""
         result = service.players_at_spot(SpotId(1))
         assert result == []
 
-    def test_excludes_players_with_current_spot_id_none(
-        self, service, status_repo
-    ):
+    def test_excludes_players_with_current_spot_id_none(self, service, status_repo):
         """current_spot_id が None のプレイヤーは結果に含めない（境界）"""
         status_repo.save(_make_status(1, spot_id=3))
         status_repo.save(_make_status(2, spot_id_none=True))
@@ -126,9 +109,7 @@ class TestPlayerAudienceQueryServicePlayersAtSpot:
         assert len(result) == 1
         assert result[0].value == 1
 
-    def test_returns_only_players_at_specified_spot(
-        self, service, status_repo
-    ):
+    def test_returns_only_players_at_specified_spot(self, service, status_repo):
         """異なるスポットにいるプレイヤーは含めない（正常）"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=2))
@@ -137,9 +118,7 @@ class TestPlayerAudienceQueryServicePlayersAtSpot:
         assert len(result) == 2
         assert {p.value for p in result} == {2, 3}
 
-    def test_spot_graph_repository_takes_precedence_over_stale_status_position(
-        self, status_repo
-    ):
+    def test_spot_graph_repository_takes_precedence_over_stale_status_position(self, status_repo):
         """spot_graph 注入時は status の古い spot でなく、graph 上の nav_state で同席判定する。"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=1))
@@ -161,9 +140,7 @@ class TestPlayerAudienceQueryServicePlayersAtSpot:
 
         assert {p.value for p in result} == {1, 2}
 
-    def test_current_spot_of_uses_spot_graph_position_when_available(
-        self, status_repo
-    ):
+    def test_current_spot_of_uses_spot_graph_position_when_available(self, status_repo):
         """spot_graph 注入時の current_spot_of は status.current_spot_id ではなく graph を返す。"""
         status_repo.save(_make_status(1, spot_id=1))
         graph = MagicMock()
@@ -181,9 +158,7 @@ class TestPlayerAudienceQueryServicePlayersAtSpot:
         assert result == SpotId(7)
         graph.get_entity_spot.assert_called_once_with(EntityId.create(1))
 
-    def test_current_spot_of_returns_none_when_player_is_not_placed_on_graph(
-        self, status_repo
-    ):
+    def test_current_spot_of_returns_none_when_player_is_not_placed_on_graph(self, status_repo):
         """status に存在しても graph 上に未配置なら、current_spot_of は None を返す。"""
         status_repo.save(_make_status(1, spot_id=1))
         graph = MagicMock()

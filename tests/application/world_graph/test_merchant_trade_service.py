@@ -31,9 +31,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_DRILL = (
-    pathlib.Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = pathlib.Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 _BUYER = PlayerId(1)
 
 
@@ -100,11 +98,7 @@ def _move_away(runtime: Any, player_id: PlayerId) -> None:
     """商人と同席していない場所へプレイヤーを移す。"""
     graph = runtime._spot_graph_repo.find_graph()
     merchant_spot = runtime.scenario.merchants[0].spot_id
-    other = next(
-        node.spot_id
-        for node in graph.iter_spot_nodes()
-        if node.spot_id != merchant_spot
-    )
+    other = next(node.spot_id for node in graph.iter_spot_nodes() if node.spot_id != merchant_spot)
     graph.unplace_entity(EntityId.create(int(player_id)))
     graph.place_entity(EntityId.create(int(player_id)), SpotId.create(other.value))
     runtime._spot_graph_repo.save(graph)
@@ -120,7 +114,10 @@ class TestBuyingFromAMerchant:
         before = _owned_count(runtime, spec_id)
 
         runtime._merchant_trade_service.buy(
-            _BUYER, merchant_id=_merchant_id(runtime), item_spec_id=spec_id, quantity=1,
+            _BUYER,
+            merchant_id=_merchant_id(runtime),
+            item_spec_id=spec_id,
+            quantity=1,
         )
 
         assert _gold_of(runtime) == 90
@@ -133,7 +130,10 @@ class TestBuyingFromAMerchant:
         before = _owned_count(runtime, spec_id)
 
         result = runtime._merchant_trade_service.buy(
-            _BUYER, merchant_id=_merchant_id(runtime), item_spec_id=spec_id, quantity=2,
+            _BUYER,
+            merchant_id=_merchant_id(runtime),
+            item_spec_id=spec_id,
+            quantity=2,
         )
 
         assert _gold_of(runtime) == 80
@@ -149,7 +149,10 @@ class TestBuyingFromAMerchant:
 
         with pytest.raises(NotEnoughGoldError) as excinfo:
             runtime._merchant_trade_service.buy(
-                _BUYER, merchant_id=_merchant_id(runtime), item_spec_id=spec_id, quantity=3,
+                _BUYER,
+                merchant_id=_merchant_id(runtime),
+                item_spec_id=spec_id,
+                quantity=3,
             )
 
         assert _gold_of(runtime) == 25
@@ -169,7 +172,10 @@ class TestBuyingFromAMerchant:
 
         with pytest.raises(MerchantDoesNotSellError):
             runtime._merchant_trade_service.buy(
-                _BUYER, merchant_id=_merchant_id(runtime), item_spec_id=other_spec, quantity=1,
+                _BUYER,
+                merchant_id=_merchant_id(runtime),
+                item_spec_id=other_spec,
+                quantity=1,
             )
 
         assert _gold_of(runtime) == 100
@@ -182,7 +188,10 @@ class TestBuyingFromAMerchant:
 
         with pytest.raises(MerchantNotAtSpotError):
             runtime._merchant_trade_service.buy(
-                _BUYER, merchant_id=_merchant_id(runtime), item_spec_id=spec_id, quantity=1,
+                _BUYER,
+                merchant_id=_merchant_id(runtime),
+                item_spec_id=spec_id,
+                quantity=1,
             )
 
         assert _gold_of(runtime) == 100
@@ -192,9 +201,7 @@ class TestBuyingFromAMerchant:
         runtime = _world(initial_gold=1000, sells_price=1)
         spec_id = _traded_spec_id(runtime)
         inventory = runtime._player_inventory_repo.find_by_id(_BUYER)
-        free_slots = sum(
-            1 for _slot, instance in inventory.iter_slots() if instance is None
-        )
+        free_slots = sum(1 for _slot, instance in inventory.iter_slots() if instance is None)
 
         with pytest.raises(PurchaseInventoryFullError):
             runtime._merchant_trade_service.buy(
@@ -231,7 +238,10 @@ class TestSellingToAMerchant:
         before = _owned_count(runtime, spec_id)
 
         result = runtime._merchant_trade_service.sell(
-            _BUYER, merchant_id=_merchant_id(runtime), item_spec_id=spec_id, quantity=1,
+            _BUYER,
+            merchant_id=_merchant_id(runtime),
+            item_spec_id=spec_id,
+            quantity=1,
         )
 
         assert _gold_of(runtime) == 6
@@ -245,7 +255,10 @@ class TestSellingToAMerchant:
 
         with pytest.raises(NotEnoughItemsToSellError):
             runtime._merchant_trade_service.sell(
-                _BUYER, merchant_id=_merchant_id(runtime), item_spec_id=spec_id, quantity=1,
+                _BUYER,
+                merchant_id=_merchant_id(runtime),
+                item_spec_id=spec_id,
+                quantity=1,
             )
 
         assert _gold_of(runtime) == 0
@@ -258,7 +271,10 @@ class TestSellingToAMerchant:
         with pytest.raises(MerchantDoesNotBuyError):
             # マーサは売るだけで買い取らない。
             runtime._merchant_trade_service.sell(
-                _BUYER, merchant_id=_merchant_id(runtime, 1), item_spec_id=spec_id, quantity=1,
+                _BUYER,
+                merchant_id=_merchant_id(runtime, 1),
+                item_spec_id=spec_id,
+                quantity=1,
             )
 
         assert _gold_of(runtime) == 0
@@ -271,5 +287,8 @@ class TestSellingToAMerchant:
 
         with pytest.raises(MerchantNotAtSpotError):
             runtime._merchant_trade_service.sell(
-                _BUYER, merchant_id=_merchant_id(runtime), item_spec_id=spec_id, quantity=1,
+                _BUYER,
+                merchant_id=_merchant_id(runtime),
+                item_spec_id=spec_id,
+                quantity=1,
             )

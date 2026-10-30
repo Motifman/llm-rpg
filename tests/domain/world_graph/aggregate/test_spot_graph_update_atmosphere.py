@@ -16,6 +16,8 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 )
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import SoundIntensityEnum
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotNotInGraphException,
 )
@@ -53,15 +55,28 @@ class TestUpdateSpotAtmosphere:
 
         assert graph.get_spot(SpotId.create(1)).atmosphere.lighting is LightingEnum.DARK
 
-    def test_unspecified_fields_are_preserved(self) -> None:
-        """指定しなかった項目 (sound_ambient など) は元の値のまま残る。"""
+    @pytest.mark.parametrize("with_other_fields", [False, True])
+    def test_unspecified_fields_are_preserved(self, with_other_fields: bool) -> None:
+        """照明だけを変えても、音・温度・匂い・危険情報と更新前の値を保つ。"""
         graph = _graph(
             SpotAtmosphere(
                 lighting=LightingEnum.BRIGHT,
                 sound_ambient="機械の駆動音",
                 hazard_level=2,
+                **(
+                    {
+                        "temperature": TemperatureEnum.COLD,
+                        "smell": "焦げた油",
+                        "hazard_description": "床が滑る",
+                        "sound_intensity": SoundIntensityEnum.LOUD,
+                    }
+                    if with_other_fields
+                    else {}
+                ),
             )
         )
+
+        original = graph.get_spot(SpotId.create(1)).atmosphere
 
         graph.update_spot_atmosphere(SpotId.create(1), lighting=LightingEnum.PITCH_BLACK)
 
@@ -69,14 +84,23 @@ class TestUpdateSpotAtmosphere:
         assert atmosphere.lighting is LightingEnum.PITCH_BLACK
         assert atmosphere.sound_ambient == "機械の駆動音"
         assert atmosphere.hazard_level == 2
+        assert original.lighting is LightingEnum.BRIGHT
+        if with_other_fields:
+            assert atmosphere.temperature is TemperatureEnum.COLD
+            assert atmosphere.smell == "焦げた油"
+            assert atmosphere.hazard_description == "床が滑る"
+            assert atmosphere.sound_intensity is SoundIntensityEnum.LOUD
+        else:
+            assert atmosphere.temperature is TemperatureEnum.NORMAL
+            assert atmosphere.smell is None
+            assert atmosphere.hazard_description is None
+            assert atmosphere.sound_intensity is SoundIntensityEnum.SILENT
 
     def test_hazard_level_and_description_are_replaced(self) -> None:
         """hazard_level と hazard_description を渡すと危険度の表示が入れ替わる。"""
         graph = _graph(SpotAtmosphere(lighting=LightingEnum.BRIGHT))
 
-        graph.update_spot_atmosphere(
-            SpotId.create(1), hazard_level=3, hazard_description="有毒ガスが漏れている"
-        )
+        graph.update_spot_atmosphere(SpotId.create(1), hazard_level=3, hazard_description="有毒ガスが漏れている")
 
         atmosphere = graph.get_spot(SpotId.create(1)).atmosphere
         assert atmosphere.hazard_level == 3

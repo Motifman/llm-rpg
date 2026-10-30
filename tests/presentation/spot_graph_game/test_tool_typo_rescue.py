@@ -64,14 +64,9 @@ class TestSuggestClosestToolName:
         """
         valid = ["pickup_item", "drop_item", "travel_to"]
         # LLM の旧習慣 typo → bare 版 pickup_item に救済
-        assert (
-            suggest_closest_tool_name("spot_graph_pickup", valid) == "pickup_item"
-        )
+        assert suggest_closest_tool_name("spot_graph_pickup", valid) == "pickup_item"
         # 完全 legacy 名 (spot_graph_interact) も interact に救済される
-        assert (
-            suggest_closest_tool_name("spot_graph_travel_to", valid + ["travel_to"])
-            == "travel_to"
-        )
+        assert suggest_closest_tool_name("spot_graph_travel_to", valid + ["travel_to"]) == "travel_to"
 
     def test_legacy_prefix_habit_still_rejects_imaginary_tools(self):
         """旧 prefix + 存在しない tool 名 (= 想像) は依然として None。
@@ -129,9 +124,9 @@ class TestBuildUnsupportedToolMessage:
         正しい tool を選び直せるようにする。"""
         msg = build_unsupported_tool_message(
             requested="spot_graph_gather",
-            valid_tools=["explore", "wait", "memo_add"],
+            valid_tools=["explore", "wait", "speak"],
         )
-        for valid_name in ("explore", "wait", "memo_add"):
+        for valid_name in ("explore", "wait", "speak"):
             assert valid_name in msg
 
 
@@ -142,6 +137,7 @@ class TestUnsupportedToolIsReschedulable:
         from ai_rpg_world.application.llm.contracts.dtos import (
             is_reschedulable_error_code,
         )
+
         assert is_reschedulable_error_code("UNSUPPORTED_TOOL")
 
 
@@ -176,9 +172,7 @@ class TestExecuteToolReturnsReschedulableDto:
         assert result.error_code == "UNSUPPORTED_TOOL"
         assert result.should_reschedule is True
 
-    def test_execute_tool_unknown_message_has_suggestion_and_valid_list(
-        self, monkeypatch, tmp_path
-    ):
+    def test_execute_tool_unknown_message_has_suggestion_and_valid_list(self, monkeypatch, tmp_path):
         """提案と一覧は、そのターンに送った tool から作る (#1413)。"""
         from tests.demos.test_world_runtime_dispatch_table import _create_session
 
@@ -190,7 +184,7 @@ class TestExecuteToolReturnsReschedulableDto:
         wiring = state.llm_wiring
         pid = state.runtime.get_player_ids()[0]
         offered = offered_tools_from_payload(wiring._build_tools_payload(pid))
-        assert "pickup_item" in offered and "memo_add" in offered
+        assert "pickup_item" in offered and "speak" in offered
 
         # 旧 prefix 剥がしで短縮形 (pickup → pickup_item) にヒットする典型
         # ケース (LLM の旧習慣) をシミュレートする。
@@ -203,7 +197,7 @@ class TestExecuteToolReturnsReschedulableDto:
         )
         assert "spot_graph_pickup" in result.message
         assert "もしかして 'pickup_item' ですか?" in result.message
-        assert "memo_add" in result.message
+        assert "speak" in result.message
 
 
 class TestInvalidDestinationLabelIsReschedulable:
@@ -219,9 +213,7 @@ class TestInvalidDestinationLabelIsReschedulable:
     ``should_reschedule=True`` は ``_build_travel_to_invalid_label_failure``
     で組み立てられる。"""
 
-    def test_invalid_destination_label_dto_has_should_reschedule_true(
-        self, monkeypatch, tmp_path
-    ):
+    def test_invalid_destination_label_dto_has_should_reschedule_true(self, monkeypatch, tmp_path):
         from types import SimpleNamespace
 
         from tests.demos.test_world_runtime_dispatch_table import _create_session
@@ -239,9 +231,7 @@ class TestInvalidDestinationLabelIsReschedulable:
         # runtime_context の targets は空。実在しないラベルを送ると
         # ToolArgumentResolutionException → INVALID_DESTINATION_LABEL に化ける。
         runtime_context = SimpleNamespace(targets={})
-        result = handler(
-            pid, {"destination_label": "存在しない場所"}, runtime_context
-        )
+        result = handler(pid, {"destination_label": "存在しない場所"}, runtime_context)
         assert result.success is False
         assert result.error_code == "INVALID_DESTINATION_LABEL"
         assert result.should_reschedule is True, (

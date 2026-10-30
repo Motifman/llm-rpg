@@ -55,22 +55,14 @@ class AttackerRef:
     def __post_init__(self) -> None:
         if self.kind == AttackerKind.MONSTER:
             if self.monster_id is None:
-                raise AttackerRefValidationException(
-                    "AttackerRef(kind=MONSTER) requires monster_id"
-                )
+                raise AttackerRefValidationException("AttackerRef(kind=MONSTER) requires monster_id")
             if self.player_id is not None:
-                raise AttackerRefValidationException(
-                    "AttackerRef(kind=MONSTER) must not set player_id"
-                )
+                raise AttackerRefValidationException("AttackerRef(kind=MONSTER) must not set player_id")
         elif self.kind == AttackerKind.PLAYER:
             if self.player_id is None:
-                raise AttackerRefValidationException(
-                    "AttackerRef(kind=PLAYER) requires player_id"
-                )
+                raise AttackerRefValidationException("AttackerRef(kind=PLAYER) requires player_id")
             if self.monster_id is not None:
-                raise AttackerRefValidationException(
-                    "AttackerRef(kind=PLAYER) must not set monster_id"
-                )
+                raise AttackerRefValidationException("AttackerRef(kind=PLAYER) must not set monster_id")
         else:
             raise AttackerRefValidationException(f"Unknown kind: {self.kind}")
 

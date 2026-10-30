@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Any
@@ -22,6 +23,7 @@ from ai_rpg_world.domain.sns.value_object.notification_type import NotificationT
 from ai_rpg_world.domain.sns.value_object.post_content import PostContent
 from ai_rpg_world.domain.sns.value_object.post_id import PostId
 from ai_rpg_world.domain.sns.value_object.reply_id import ReplyId
+from ai_rpg_world.domain.sns.value_object.sns_identity_token import SnsIdentityToken
 from ai_rpg_world.domain.sns.value_object.subscribe import SubscribeRelationShip
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
 from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
@@ -40,8 +42,10 @@ def build_user_aggregate(
     follows: Sequence[tuple[int, int, str]],
     blocks: Sequence[tuple[int, int, str]],
     subscriptions: Sequence[tuple[int, int, str]],
+    identity_token: str,
 ) -> UserAggregate:
     return UserAggregate(
+        identity_token=identity_token,
         user_id=UserId(user_id),
         sns_user=SnsUser(
             UserId(user_id),
@@ -86,9 +90,13 @@ def build_post_aggregate(
     likes: Sequence[tuple[int, str]],
     mentions: Iterable[str],
     reply_ids: Iterable[int],
+    identity_token: str,
+    author_identity_token: str | None = None,
 ) -> PostAggregate:
     post_id_vo = PostId(post_id)
     return PostAggregate.create_from_db(
+        identity_token=identity_token,
+        author_identity_token=author_identity_token,
         post_id=post_id_vo,
         author_user_id=UserId(author_user_id),
         post_content=PostContent(
@@ -121,9 +129,15 @@ def build_reply_aggregate(
     likes: Sequence[tuple[int, str]],
     mentions: Iterable[str],
     child_reply_ids: Iterable[int],
+    identity_token: str,
+    author_identity_token: str | None = None,
+    parent_identity_token: str | None = None,
 ) -> ReplyAggregate:
     reply_id_vo = ReplyId(reply_id)
     return ReplyAggregate.create_from_db(
+        identity_token=identity_token,
+        author_identity_token=author_identity_token,
+        parent_identity_token=parent_identity_token,
         reply_id=reply_id_vo,
         parent_post_id=None if parent_post_id is None else PostId(parent_post_id),
         parent_reply_id=None if parent_reply_id is None else ReplyId(parent_reply_id),
@@ -160,7 +174,8 @@ def build_notification(row: tuple[Any, ...]) -> Notification:
         created_at,
         is_read,
         expires_at,
-    ) = row
+    ) = row[:14]
+    metadata = row[14:]
     return Notification(
         notification_id=NotificationId(notification_id),
         user_id=UserId(user_id),
@@ -174,10 +189,17 @@ def build_notification(row: tuple[Any, ...]) -> Notification:
             related_reply_id=None if related_reply_id is None else ReplyId(related_reply_id),
             content_type=content_type,
             content_text=content_text,
+            related_target_id=metadata[0] if metadata else None,
+            actor_identity_token=metadata[1] if metadata else None,
         ),
         created_at=_parse_dt(created_at),
         is_read=bool(is_read),
         expires_at=None if expires_at is None else _parse_dt(expires_at),
+        identity_token=SnsIdentityToken(metadata[2]).value if metadata else None,
+        source_event_id=metadata[3] if metadata else None,
+        recipient_identity_token=metadata[4] if metadata else None,
+        execution_provenance=json.loads(metadata[5]) if metadata and metadata[5] else None,
+        observation_delivered=bool(metadata[6]) if metadata else False,
     )
 
 

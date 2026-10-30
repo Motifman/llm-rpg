@@ -1,4 +1,5 @@
 """ショップアプリケーション例外"""
+
 from ai_rpg_world.application.shop.exceptions.base_exception import (
     ShopApplicationException,
     ShopSystemErrorException,

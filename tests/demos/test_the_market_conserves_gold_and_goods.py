@@ -40,11 +40,16 @@ def town(tmp_path: Path) -> Any:
     raw["players"][0]["initial_gold"] = 300
     spawn = raw["players"][0]["spawn_spot"]
     for pid, name in (("tom", "トム"), ("mina", "ミナ")):
-        raw["players"].append({
-            "id": pid, "name": name, "spawn_spot": spawn,
-            "initial_items": [], "initial_gold": 300,
-            "persona_prompt": f"あなたは{name}。",
-        })
+        raw["players"].append(
+            {
+                "id": pid,
+                "name": name,
+                "spawn_spot": spawn,
+                "initial_items": [],
+                "initial_gold": 300,
+                "persona_prompt": f"あなたは{name}。",
+            }
+        )
     raw["market"] = {"board_spot": "market_square"}
     path = tmp_path / "market_town_v1.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -73,9 +78,7 @@ def _totals(runtime: Any, label: str) -> tuple[int, int]:
     """
     spec_id = _spec_id(runtime, label)
 
-    gold = sum(
-        runtime._player_status_repo.find_by_id(pid).gold.value for pid in _PLAYERS
-    )
+    gold = sum(runtime._player_status_repo.find_by_id(pid).gold.value for pid in _PLAYERS)
     goods = 0
     for pid in _PLAYERS:
         inventory = runtime._player_inventory_repo.find_by_id(pid)
@@ -94,9 +97,7 @@ def _totals(runtime: Any, label: str) -> tuple[int, int]:
         interior = runtime._spot_interior_repo.find_by_spot_id(spot_id)
         if interior is None:
             continue
-        goods += sum(
-            1 for item in interior.ground_items if item.item_spec_id.value == spec_id
-        )
+        goods += sum(1 for item in interior.ground_items if item.item_spec_id.value == spec_id)
     return gold, goods
 
 
@@ -114,11 +115,17 @@ class TestNothingIsCreatedOrDestroyedBetweenAgents:
         _give(town, _LENA, _HERB, 2)
         before = _totals(town, _HERB)
         town._market_service.place_sell_order(
-            _LENA, item_label=_HERB, quantity=2, unit_price=8,
+            _LENA,
+            item_label=_HERB,
+            quantity=2,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         town._market_service.buy_best(
-            _TOM, item_label=_HERB, quantity=2, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_HERB,
+            quantity=2,
+            current_tick=town.current_tick(),
         )
 
         assert _totals(town, _HERB) == before
@@ -128,11 +135,17 @@ class TestNothingIsCreatedOrDestroyedBetweenAgents:
         _give(town, _LENA, _HERB, 2)
         before = _totals(town, _HERB)
         town._market_service.place_buy_order(
-            _TOM, item_label=_HERB, quantity=2, unit_price=8,
+            _TOM,
+            item_label=_HERB,
+            quantity=2,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         town._market_service.sell_best(
-            _LENA, item_label=_HERB, quantity=2, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=2,
+            current_tick=town.current_tick(),
         )
 
         assert _totals(town, _HERB) == before
@@ -147,11 +160,17 @@ class TestNothingIsCreatedOrDestroyedBetweenAgents:
             _give(town, _TOM, _HERB, 1)
         before = _totals(town, _HERB)
         town._market_service.place_buy_order(
-            _TOM, item_label=_HERB, quantity=1, unit_price=8,
+            _TOM,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         town._market_service.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert _totals(town, _HERB) == before
@@ -161,18 +180,28 @@ class TestNothingIsCreatedOrDestroyedBetweenAgents:
         _give(town, _LENA, _HERB, 2)
         before = _totals(town, _HERB)
         town._market_service.place_sell_order(
-            _LENA, item_label=_HERB, quantity=2, unit_price=8,
+            _LENA,
+            item_label=_HERB,
+            quantity=2,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         town._market_service.place_buy_order(
-            _TOM, item_label=_HERB, quantity=1, unit_price=5,
+            _TOM,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=5,
             current_tick=town.current_tick(),
         )
         town._market_service.cancel_by(
-            _LENA, item_label=_HERB, side=MarketOrderSide.SELL,
+            _LENA,
+            item_label=_HERB,
+            side=MarketOrderSide.SELL,
         )
         town._market_service.cancel_by(
-            _TOM, item_label=_HERB, side=MarketOrderSide.BUY,
+            _TOM,
+            item_label=_HERB,
+            side=MarketOrderSide.BUY,
         )
 
         assert _totals(town, _HERB) == before
@@ -184,14 +213,23 @@ class TestNothingIsCreatedOrDestroyedBetweenAgents:
         """
         before = _totals(town, _HERB)
         town._market_service.place_buy_order(
-            _TOM, item_label=_HERB, quantity=2, unit_price=8,
+            _TOM,
+            item_label=_HERB,
+            quantity=2,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         town._market_service.reprice_order(
-            _TOM, item_label=_HERB, side=MarketOrderSide.BUY, new_unit_price=12,
+            _TOM,
+            item_label=_HERB,
+            side=MarketOrderSide.BUY,
+            new_unit_price=12,
         )
         town._market_service.reprice_order(
-            _TOM, item_label=_HERB, side=MarketOrderSide.BUY, new_unit_price=6,
+            _TOM,
+            item_label=_HERB,
+            side=MarketOrderSide.BUY,
+            new_unit_price=6,
         )
 
         assert _totals(town, _HERB) == before
@@ -203,14 +241,21 @@ class TestNothingIsCreatedOrDestroyedBetweenAgents:
             _give(town, _TOM, _HERB, 1)
         before = _totals(town, _HERB)
         town._market_service.place_buy_order(
-            _TOM, item_label=_HERB, quantity=1, unit_price=8,
+            _TOM,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         town._market_service.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
         town._item_transfer_service.pickup_item(
-            _MINA, _first_ground_item(town, _HERB),
+            _MINA,
+            _first_ground_item(town, _HERB),
         )
 
         assert _totals(town, _HERB) == before
@@ -227,14 +272,20 @@ class TestTheMerchantIsAllowedToBreakConservation:
         いうことをここで固定しておく。
         """
         town._market_service.place_merchant_buy_order(
-            merchant_id=1, item_spec_id=_spec_id(town, _HERB),
-            quantity=1, unit_price=7, current_tick=town.current_tick(),
+            merchant_id=1,
+            item_spec_id=_spec_id(town, _HERB),
+            quantity=1,
+            unit_price=7,
+            current_tick=town.current_tick(),
         )
         _give(town, _LENA, _HERB, 1)
         _gold_before, goods_before = _totals(town, _HERB)
 
         town._market_service.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         _gold_after, goods_after = _totals(town, _HERB)

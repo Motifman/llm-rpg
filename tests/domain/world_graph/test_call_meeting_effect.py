@@ -47,9 +47,7 @@ class TestCallMeetingEffect:
             frozenset({"emergency_button", "test_second_trigger"}),
         )
 
-        assert _apply({"trigger": "test_second_trigger"}) == (
-            "test_second_trigger",
-        )
+        assert _apply({"trigger": "test_second_trigger"}) == ("test_second_trigger",)
 
     def test_rejects_a_missing_trigger(self) -> None:
         """triggerの無い直接構築もemergency_buttonへ補完せず拒否する。"""

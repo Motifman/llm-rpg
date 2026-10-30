@@ -55,9 +55,7 @@ def _build_service(database):
     statuses = SqlitePlayerStatusWriteRepository.for_standalone_connection(connection)
     graph = SqliteSpotGraphRepository.for_standalone_connection(connection)
     graph.save(_make_graph_with_player(SPOT_ID, (PLAYER_ID, OTHER_PLAYER_ID)))
-    item = ItemAggregate.create(
-        items.generate_item_instance_id(), _make_item_spec(), quantity=1
-    )
+    item = ItemAggregate.create(items.generate_item_instance_id(), _make_item_spec(), quantity=1)
     items.save(item)
     sender = PlayerInventoryAggregate.create_new_inventory(PLAYER_ID)
     sender.acquire_item(
@@ -69,7 +67,7 @@ def _build_service(database):
     statuses.save(create_test_status_aggregate(player_id=PLAYER_ID.value))
     statuses.save(create_test_status_aggregate(player_id=OTHER_PLAYER_ID.value))
 
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     scope_factory = CommandScopeFactory(
         SqliteUnitOfWorkTransactionFactory(database),
         sync_dispatcher=dispatcher,

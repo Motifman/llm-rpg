@@ -2,7 +2,6 @@
 RecentTradeQueryService専用のアプリケーション例外
 """
 
-
 from typing import Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
@@ -34,10 +33,7 @@ class RecentTradeQueryApplicationException(ApplicationException):
         Returns:
             RecentTradesQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Recent trades information not found: {item_name}",
-            item_name=item_name
-        )
+        return cls(f"Recent trades information not found: {item_name}", item_name=item_name)
 
     @classmethod
     def invalid_request(cls, message: str, **context: Any) -> "RecentTradeQueryApplicationException":

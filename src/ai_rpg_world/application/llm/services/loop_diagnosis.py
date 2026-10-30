@@ -52,24 +52,12 @@ class RepeatReason(Enum):
 
 
 _REASON_MEANINGS: Mapping[RepeatReason, str] = {
-    RepeatReason.ACHIEVED: (
-        "目的の状態に既に届いているのに、同じ行動を取っている"
-    ),
-    RepeatReason.STATE_MISTAKEN: (
-        "自分の居場所、所持品、移動中かどうかを取り違えている"
-    ),
-    RepeatReason.MISSING_PRECONDITION: (
-        "失敗文が示す条件を満たさないまま、同じ行動を試している"
-    ),
-    RepeatReason.WAITING: (
-        "世界の変化や他者の到着を待っていて、繰り返し自体は意図どおり"
-    ),
-    RepeatReason.UNANSWERED_REQUEST: (
-        "返事の無い相手に、同じ依頼を繰り返している"
-    ),
-    RepeatReason.FIXED_MEANS: (
-        "目的は妥当だが、同じ手段だけを試し続けている"
-    ),
+    RepeatReason.ACHIEVED: ("目的の状態に既に届いているのに、同じ行動を取っている"),
+    RepeatReason.STATE_MISTAKEN: ("自分の居場所、所持品、移動中かどうかを取り違えている"),
+    RepeatReason.MISSING_PRECONDITION: ("失敗文が示す条件を満たさないまま、同じ行動を試している"),
+    RepeatReason.WAITING: ("世界の変化や他者の到着を待っていて、繰り返し自体は意図どおり"),
+    RepeatReason.UNANSWERED_REQUEST: ("返事の無い相手に、同じ依頼を繰り返している"),
+    RepeatReason.FIXED_MEANS: ("目的は妥当だが、同じ手段だけを試し続けている"),
 }
 
 _NONE_APPLICABLE_MEANING = "上のどの理由にも当たらない"
@@ -107,13 +95,9 @@ class LoopDiagnosis:
         #: 公開するのは、ポートが profile から届いたかを外から確かめるため。
         self.port = port
 
-    def diagnose(
-        self, state: Mapping[str, Any] | Sequence[Any] | str
-    ) -> LoopDiagnosisJudgment:
+    def diagnose(self, state: Mapping[str, Any] | Sequence[Any] | str) -> LoopDiagnosisJudgment:
         try:
-            answer = self.port.judge(state, {QUESTION_NAME: _question()}).get(
-                QUESTION_NAME
-            )
+            answer = self.port.judge(state, {QUESTION_NAME: _question()}).get(QUESTION_NAME)
         except TypedJudgmentUnavailableException as exc:
             logger.warning("loop diagnosis unavailable: %s", exc)
             return self._unavailable(exc.error_code)

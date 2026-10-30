@@ -1,5 +1,3 @@
-from datetime import datetime
-
 import pytest
 
 from ai_rpg_world.domain.sns.enum import PostVisibility
@@ -55,10 +53,20 @@ class TestPostContent:
         with pytest.raises(VisibilityValidationException, match="可視性は有効な値である必要があります"):
             PostContent("content", [], "invalid_visibility")
 
-    def test_immutability_after_creation(self):
-        """作成後の不変性テスト"""
-        hashtags = ("#tag1",)
-        post_content = PostContent("content", hashtags, PostVisibility.PUBLIC)
+    @pytest.mark.parametrize(
+        ("attribute", "replacement"),
+        [("content", "changed"), ("hashtags", ("#changed",)), ("visibility", PostVisibility.PRIVATE)],
+    )
+    def test_immutability_after_creation(self, attribute, replacement):
+        """本文・タグ・公開範囲の再代入を拒み、構築時の全値を保持する。"""
+        post_content = PostContent("content", ("#tag1",), PostVisibility.PUBLIC)
+
+        with pytest.raises(AttributeError):
+            setattr(post_content, attribute, replacement)
+
+        assert post_content.content == "content"
+        assert post_content.hashtags == ("#tag1",)
+        assert post_content.visibility == PostVisibility.PUBLIC
 
         # タプルは変更できないことを確認
         # これはfrozen=Trueによって保証される
@@ -76,13 +84,23 @@ class TestPostContent:
         assert post1 == post2
         assert hash(post1) == hash(post2)
 
-    def test_inequality_comparison(self):
-        """非等価性の比較テスト"""
+    @pytest.mark.parametrize(
+        ("content", "hashtags", "visibility"),
+        [
+            ("content2", ("#tag2",), PostVisibility.FOLLOWERS_ONLY),
+            ("content2", ("#tag1",), PostVisibility.PUBLIC),
+            ("content1", ("#tag2",), PostVisibility.PUBLIC),
+            ("content1", ("#tag1",), PostVisibility.FOLLOWERS_ONLY),
+        ],
+        ids=["all-fields", "content", "hashtags", "visibility"],
+    )
+    def test_inequality_comparison(self, content, hashtags, visibility):
+        """本文・タグ・公開範囲のどれだけが違っても、別の値として集合に共存する。"""
         post1 = PostContent("content1", ("#tag1",), PostVisibility.PUBLIC)
-        post2 = PostContent("content2", ("#tag2",), PostVisibility.FOLLOWERS_ONLY)
+        post2 = PostContent(content, hashtags, visibility)
 
         assert post1 != post2
-        assert hash(post1) != hash(post2)
+        assert len({post1, post2}) == 2
 
     def test_boundary_content_length(self):
         """境界値のコンテンツ長テスト"""
@@ -149,3 +167,22 @@ class TestPostContent:
         assert post_content.content == content
         assert post_content.visibility == PostVisibility.PUBLIC
         assert post_content.hashtags == ("default",)
+
+    def test_aggregate_origin_length_rejections(self):
+        """集約の旧試験にあった日本語281文字は、集約へ渡る前に専用例外で拒否する。"""
+        with pytest.raises(ContentLengthValidationException):
+            PostContent("あ" * 281)
+
+    @pytest.mark.parametrize(
+        ("body", "hashtags"),
+        [
+            ("content", ["#tag"] * 11),
+            ("content", tuple(["#tag"] * 11)),
+            ("テスト", tuple(f"tag{i}" for i in range(11))),
+        ],
+        ids=["duplicate-list11", "duplicate-tuple11", "unprefixed-tuple11"],
+    )
+    def test_aggregate_origin_hashtag_rejections(self, body, hashtags):
+        """集約の旧試験にあったlist/tupleの重複タグと接頭辞なし11タグを、専用例外で拒否する。"""
+        with pytest.raises(HashtagCountValidationException):
+            PostContent(body, hashtags)

@@ -28,17 +28,3 @@ def test_trade_handlers_are_registered_as_durable_read_model_delivery() -> None:
         }
         for call in registrar.register_after_commit.call_args_list
     )
-
-
-def test_legacy_trade_registry_still_marks_all_handlers_as_asynchronous() -> None:
-    """未移行publisher向け互換入口も取引4イベントを非同期登録のまま維持する。"""
-    registry = TradeEventHandlerRegistry(Mock())
-    publisher = Mock()
-
-    registry.register_handlers(publisher)
-
-    assert publisher.register_handler.call_count == 4
-    assert all(
-        call.kwargs == {"is_synchronous": False}
-        for call in publisher.register_handler.call_args_list
-    )

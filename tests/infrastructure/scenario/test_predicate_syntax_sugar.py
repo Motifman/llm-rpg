@@ -22,9 +22,14 @@ def _scenario_with_event_condition(condition_raw: dict) -> dict:
     return {
         "scenario_format_version": "1.0",
         "metadata": {
-            "id": "x", "title": "x", "description": "x",
-            "theme": "x", "difficulty": "easy", "estimated_ticks": 1,
-            "author": "x", "tags": [],
+            "id": "x",
+            "title": "x",
+            "description": "x",
+            "theme": "x",
+            "difficulty": "easy",
+            "estimated_ticks": 1,
+            "author": "x",
+            "tags": [],
         },
         "item_specs": [],
         "environment": {
@@ -35,28 +40,33 @@ def _scenario_with_event_condition(condition_raw: dict) -> dict:
                 "announce_changes": False,
             },
         },
-        "spots": [{
-            "id": "s", "name": "S", "description": "d", "category": "OTHER",
-            "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
-            "interior": {"objects": []},
-        }],
+        "spots": [
+            {
+                "id": "s",
+                "name": "S",
+                "description": "d",
+                "category": "OTHER",
+                "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+                "interior": {"objects": []},
+            }
+        ],
         "connections": [],
         "players": [{"id": "p", "name": "P", "spawn_spot": "s", "initial_items": []}],
         "game_end_conditions": {"win": [], "lose": []},
-        "scenario_events": [{
-            "id": "ev",
-            "trigger": "ON_TICK",
-            "once": True,
-            "conditions": [condition_raw],
-            "effects": [],
-        }],
+        "scenario_events": [
+            {
+                "id": "ev",
+                "trigger": "ON_TICK",
+                "once": True,
+                "conditions": [condition_raw],
+                "effects": [],
+            }
+        ],
     }
 
 
 def _loaded_root_condition(condition_raw: dict):
-    result = ScenarioLoader().load_from_dict(
-        _scenario_with_event_condition(condition_raw)
-    )
+    result = ScenarioLoader().load_from_dict(_scenario_with_event_condition(condition_raw))
     assert len(result.scenario_events) == 1
     conds = result.scenario_events[0].conditions
     assert len(conds) == 1
@@ -68,12 +78,14 @@ class TestAllOfShorthand:
 
     def test_all_of_becomes_and_with_children(self) -> None:
         """`{all_of: [c1, c2]}` は condition_type=AND の 2-child ノードになる。"""
-        cond = _loaded_root_condition({
-            "all_of": [
-                {"condition_type": "TICK_AT_LEAST", "tick": 5},
-                {"condition_type": "FLAG_SET", "flag_name": "ready"},
-            ],
-        })
+        cond = _loaded_root_condition(
+            {
+                "all_of": [
+                    {"condition_type": "TICK_AT_LEAST", "tick": 5},
+                    {"condition_type": "FLAG_SET", "flag_name": "ready"},
+                ],
+            }
+        )
         assert cond.condition_type == "AND"
         assert len(cond.children) == 2
         assert cond.children[0].condition_type == "TICK_AT_LEAST"
@@ -81,15 +93,19 @@ class TestAllOfShorthand:
 
     def test_all_of_can_nest(self) -> None:
         """`all_of` 内に更なる `all_of` / `any_of` を入れて再帰展開できる。"""
-        cond = _loaded_root_condition({
-            "all_of": [
-                {"condition_type": "TICK_AT_LEAST", "tick": 5},
-                {"any_of": [
-                    {"condition_type": "FLAG_SET", "flag_name": "a"},
-                    {"condition_type": "FLAG_SET", "flag_name": "b"},
-                ]},
-            ],
-        })
+        cond = _loaded_root_condition(
+            {
+                "all_of": [
+                    {"condition_type": "TICK_AT_LEAST", "tick": 5},
+                    {
+                        "any_of": [
+                            {"condition_type": "FLAG_SET", "flag_name": "a"},
+                            {"condition_type": "FLAG_SET", "flag_name": "b"},
+                        ]
+                    },
+                ],
+            }
+        )
         assert cond.condition_type == "AND"
         # 2 番目の child は OR に展開されている
         nested = cond.children[1]
@@ -108,12 +124,14 @@ class TestAnyOfShorthand:
 
     def test_any_of_becomes_or(self) -> None:
         """`{any_of: [c1, c2]}` は condition_type=OR の 2-child ノードになる。"""
-        cond = _loaded_root_condition({
-            "any_of": [
-                {"condition_type": "FLAG_SET", "flag_name": "a"},
-                {"condition_type": "FLAG_SET", "flag_name": "b"},
-            ],
-        })
+        cond = _loaded_root_condition(
+            {
+                "any_of": [
+                    {"condition_type": "FLAG_SET", "flag_name": "a"},
+                    {"condition_type": "FLAG_SET", "flag_name": "b"},
+                ],
+            }
+        )
         assert cond.condition_type == "OR"
         assert len(cond.children) == 2
 
@@ -123,9 +141,11 @@ class TestNotShorthand:
 
     def test_not_takes_single_condition(self) -> None:
         """`{not_: c}` は condition_type=NOT の 1-child ノードになる。"""
-        cond = _loaded_root_condition({
-            "not_": {"condition_type": "FLAG_SET", "flag_name": "x"},
-        })
+        cond = _loaded_root_condition(
+            {
+                "not_": {"condition_type": "FLAG_SET", "flag_name": "x"},
+            }
+        )
         assert cond.condition_type == "NOT"
         assert len(cond.children) == 1
         assert cond.children[0].condition_type == "FLAG_SET"
@@ -133,9 +153,13 @@ class TestNotShorthand:
     def test_not_rejects_list_payload(self) -> None:
         """`not_` に list を渡すのは作家ミスとして拒否（NOT は単項）。"""
         with pytest.raises(ScenarioLoadError, match="not_"):
-            ScenarioLoader().load_from_dict(_scenario_with_event_condition({
-                "not_": [{"condition_type": "FLAG_SET", "flag_name": "x"}],
-            }))
+            ScenarioLoader().load_from_dict(
+                _scenario_with_event_condition(
+                    {
+                        "not_": [{"condition_type": "FLAG_SET", "flag_name": "x"}],
+                    }
+                )
+            )
 
 
 class TestShorthandValidation:
@@ -144,35 +168,51 @@ class TestShorthandValidation:
     def test_multiple_shortcuts_rejected(self) -> None:
         """同じノードに `all_of` と `any_of` を併記するのは拒否。"""
         with pytest.raises(ScenarioLoadError, match="multiple composite shortcuts"):
-            ScenarioLoader().load_from_dict(_scenario_with_event_condition({
-                "all_of": [{"condition_type": "FLAG_SET", "flag_name": "a"}],
-                "any_of": [{"condition_type": "FLAG_SET", "flag_name": "b"}],
-            }))
+            ScenarioLoader().load_from_dict(
+                _scenario_with_event_condition(
+                    {
+                        "all_of": [{"condition_type": "FLAG_SET", "flag_name": "a"}],
+                        "any_of": [{"condition_type": "FLAG_SET", "flag_name": "b"}],
+                    }
+                )
+            )
 
     def test_shortcut_mixed_with_condition_type_rejected(self) -> None:
         """`condition_type` と糖衣記法の併記は拒否（曖昧さを排除）。"""
         with pytest.raises(ScenarioLoadError, match="cannot mix"):
-            ScenarioLoader().load_from_dict(_scenario_with_event_condition({
-                "condition_type": "AND",
-                "all_of": [{"condition_type": "FLAG_SET", "flag_name": "a"}],
-            }))
+            ScenarioLoader().load_from_dict(
+                _scenario_with_event_condition(
+                    {
+                        "condition_type": "AND",
+                        "all_of": [{"condition_type": "FLAG_SET", "flag_name": "a"}],
+                    }
+                )
+            )
 
     def test_all_of_non_list_rejected(self) -> None:
         """`all_of` の値は list でないと拒否する。"""
         with pytest.raises(ScenarioLoadError, match="all_of must be a list"):
-            ScenarioLoader().load_from_dict(_scenario_with_event_condition({
-                "all_of": {"condition_type": "FLAG_SET", "flag_name": "a"},  # dict は不可
-            }))
+            ScenarioLoader().load_from_dict(
+                _scenario_with_event_condition(
+                    {
+                        "all_of": {"condition_type": "FLAG_SET", "flag_name": "a"},  # dict は不可
+                    }
+                )
+            )
 
     def test_all_of_non_dict_item_rejected_with_path(self) -> None:
         """list 内に dict 以外（null や文字列）が混じった場合、path 付きで早期拒否。"""
         with pytest.raises(ScenarioLoadError, match=r"all_of\[1\] must be a condition object"):
-            ScenarioLoader().load_from_dict(_scenario_with_event_condition({
-                "all_of": [
-                    {"condition_type": "FLAG_SET", "flag_name": "a"},
-                    None,  # 不正
-                ],
-            }))
+            ScenarioLoader().load_from_dict(
+                _scenario_with_event_condition(
+                    {
+                        "all_of": [
+                            {"condition_type": "FLAG_SET", "flag_name": "a"},
+                            None,  # 不正
+                        ],
+                    }
+                )
+            )
 
     def test_any_of_empty_list_yields_or_with_no_children(self) -> None:
         """空 `any_of: []` も children=() の OR になる（評価器は False を返す約束）。"""
@@ -186,19 +226,23 @@ class TestEquivalenceWithVerboseForm:
 
     def test_all_of_equivalent_to_explicit_and(self) -> None:
         """`all_of` 版と explicit AND 版で AST が完全に一致する (dataclass __eq__ 使用)。"""
-        explicit = _loaded_root_condition({
-            "condition_type": "AND",
-            "children": [
-                {"condition_type": "TICK_AT_LEAST", "tick": 5},
-                {"condition_type": "FLAG_SET", "flag_name": "ready"},
-            ],
-        })
-        sugary = _loaded_root_condition({
-            "all_of": [
-                {"condition_type": "TICK_AT_LEAST", "tick": 5},
-                {"condition_type": "FLAG_SET", "flag_name": "ready"},
-            ],
-        })
+        explicit = _loaded_root_condition(
+            {
+                "condition_type": "AND",
+                "children": [
+                    {"condition_type": "TICK_AT_LEAST", "tick": 5},
+                    {"condition_type": "FLAG_SET", "flag_name": "ready"},
+                ],
+            }
+        )
+        sugary = _loaded_root_condition(
+            {
+                "all_of": [
+                    {"condition_type": "TICK_AT_LEAST", "tick": 5},
+                    {"condition_type": "FLAG_SET", "flag_name": "ready"},
+                ],
+            }
+        )
         # ScenarioEventCondition は frozen dataclass なので __eq__ 自動生成。
         # 全フィールド比較で「将来フィールドが追加されても test が網羅性を保つ」。
         assert explicit == sugary

@@ -133,9 +133,7 @@ def test_merchant_trade_updates_require_command_scope_before_dependencies(
     service, dependencies = _merchant_trade()
 
     with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
-        getattr(service, method)(
-            PlayerId(1), merchant_id=1, item_spec_id=1, quantity=1
-        )
+        getattr(service, method)(PlayerId(1), merchant_id=1, item_spec_id=1, quantity=1)
 
     assert all(dependency.mock_calls == [] for dependency in dependencies)
 
@@ -176,27 +174,17 @@ def _market() -> tuple[MarketService, tuple[Mock, ...]]:
         lambda service: service.place_buy_order(
             PlayerId(1), item_label="薬草", quantity=1, unit_price=1, current_tick=0
         ),
-        lambda service: service.take_order(
-            PlayerId(1), order_id=MarketOrderId(1), quantity=1, current_tick=0
-        ),
-        lambda service: service.buy_best(
-            PlayerId(1), item_label="薬草", quantity=1, current_tick=0
-        ),
-        lambda service: service.sell_best(
-            PlayerId(1), item_label="薬草", quantity=1, current_tick=0
-        ),
+        lambda service: service.take_order(PlayerId(1), order_id=MarketOrderId(1), quantity=1, current_tick=0),
+        lambda service: service.buy_best(PlayerId(1), item_label="薬草", quantity=1, current_tick=0),
+        lambda service: service.sell_best(PlayerId(1), item_label="薬草", quantity=1, current_tick=0),
         lambda service: service.reprice_order(
             PlayerId(1),
             item_label="薬草",
             side=MarketOrderSide.SELL,
             new_unit_price=2,
         ),
-        lambda service: service.cancel_order(
-            PlayerId(1), order_id=MarketOrderId(1)
-        ),
-        lambda service: service.cancel_by(
-            PlayerId(1), item_label="薬草", side=MarketOrderSide.SELL
-        ),
+        lambda service: service.cancel_order(PlayerId(1), order_id=MarketOrderId(1)),
+        lambda service: service.cancel_by(PlayerId(1), item_label="薬草", side=MarketOrderSide.SELL),
     ),
 )
 def test_market_updates_require_command_scope_before_dependencies(

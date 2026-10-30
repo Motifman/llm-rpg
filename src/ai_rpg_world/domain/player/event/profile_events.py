@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class PlayerProfileChangedEvent(BaseDomainEvent[PlayerId, "PlayerProfileAggregate"]):
     """プレイヤープロフィール変更イベント"""
+
     old_name: PlayerName | None
     new_name: PlayerName | None
     old_role: Role | None

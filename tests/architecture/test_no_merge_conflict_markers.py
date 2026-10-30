@@ -34,9 +34,7 @@ _MARKER_LENGTH = 7
 _MARKER_HEADS = ("<", "|", "=", ">")
 
 #: 中身が本文でないファイル。読み込めても検査の意味がない。
-_SKIPPED_SUFFIXES = frozenset(
-    {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz", ".woff2"}
-)
+_SKIPPED_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz", ".woff2"})
 
 
 def _tracked_files() -> list[Path]:

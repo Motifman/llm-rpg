@@ -68,9 +68,7 @@ class IntentResolutionService:
         if not isinstance(intent_queue, IntentQueue):
             raise TypeError("intent_queue must be IntentQueue")
         if not isinstance(intent_id_generator, IntentIdGenerator):
-            raise TypeError(
-                "intent_id_generator must be IntentIdGenerator"
-            )
+            raise TypeError("intent_id_generator must be IntentIdGenerator")
         if not callable(tick_provider):
             raise TypeError("tick_provider must be callable")
         if failure_observer is not None and not callable(failure_observer):
@@ -143,9 +141,7 @@ class IntentResolutionService:
         self._notify_failure(extracted, dto)
         return dto
 
-    def _resolve_drained(
-        self, intents: Sequence[Intent]
-    ) -> list[tuple[Intent, LlmCommandResultDto]]:
+    def _resolve_drained(self, intents: Sequence[Intent]) -> list[tuple[Intent, LlmCommandResultDto]]:
         """drain 済み intent をフェーズ順そのままに resolve する (private)。
 
         将来 PR で post-tick batching の経路を追加する際の seam。本 PR では
@@ -159,9 +155,7 @@ class IntentResolutionService:
             results.append((intent, dto))
         return results
 
-    def _notify_failure(
-        self, intent: Intent, dto: LlmCommandResultDto
-    ) -> None:
+    def _notify_failure(self, intent: Intent, dto: LlmCommandResultDto) -> None:
         """失敗 DTO の場合に failure_observer を呼ぶ。
 
         observer の例外は resolve 結果を倒さないように吸収する (best-effort)。

@@ -38,7 +38,7 @@ class ItemStackingApplicationService:
 
             # 数量を設定
             item_aggregate.set_quantity(update_op.new_quantity)
-            
+
             # 保存
             saved = self._item_repository.save(item_aggregate)
             updated_items.append(saved)
@@ -57,7 +57,7 @@ class ItemStackingApplicationService:
                 item_instance_id=new_instance_id,
                 item_spec=create_op.item_spec,
                 durability=create_op.durability,
-                quantity=create_op.quantity
+                quantity=create_op.quantity,
             )
 
             # 保存

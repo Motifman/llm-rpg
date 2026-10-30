@@ -36,30 +36,22 @@ class DayNightCycleDef:
 
     def __post_init__(self) -> None:
         if self.ticks_per_day < 1:
-            raise DayNightCycleValidationException(
-                f"DayNightCycleDef.ticks_per_day must be >= 1: {self.ticks_per_day}"
-            )
+            raise DayNightCycleValidationException(f"DayNightCycleDef.ticks_per_day must be >= 1: {self.ticks_per_day}")
         if not 0 <= self.starting_tick_in_day < self.ticks_per_day:
             raise DayNightCycleValidationException(
-                "DayNightCycleDef.starting_tick_in_day must be in "
-                f"[0, ticks_per_day): {self.starting_tick_in_day}"
+                f"DayNightCycleDef.starting_tick_in_day must be in [0, ticks_per_day): {self.starting_tick_in_day}"
             )
         if not self.phases:
-            raise DayNightCycleValidationException(
-                "DayNightCycleDef.phases must not be empty"
-            )
+            raise DayNightCycleValidationException("DayNightCycleDef.phases must not be empty")
         if self.phases[0].start_ratio != 0.0:
             raise DayNightCycleValidationException(
-                "DayNightCycleDef.phases[0].start_ratio must be 0.0; "
-                f"got {self.phases[0].start_ratio}"
+                f"DayNightCycleDef.phases[0].start_ratio must be 0.0; got {self.phases[0].start_ratio}"
             )
         names_seen: set[str] = set()
         prev_ratio = -1.0
         for p in self.phases:
             if p.name in names_seen:
-                raise DayNightCycleValidationException(
-                    f"Duplicate phase name in DayNightCycleDef: {p.name}"
-                )
+                raise DayNightCycleValidationException(f"Duplicate phase name in DayNightCycleDef: {p.name}")
             names_seen.add(p.name)
             if p.start_ratio <= prev_ratio:
                 raise DayNightCycleValidationException(
