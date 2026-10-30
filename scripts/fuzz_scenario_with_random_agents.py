@@ -4,7 +4,9 @@
 選ぶ。次を見つけたら、そのシードは失敗として、tick と行動の並びを添えて出す。
 
 - ``exception``: 例外が ``advance_tick`` の外まで抜けて run が止まった。または、世界の tick が
-  1 体ぶんの例外を取りやめて run を続けた (trace の ``world_tick_unit_failed``、#1558)
+  1 体ぶんの例外を取りやめて run を続けた (trace の ``world_tick_unit_failed``、#1558)。または、
+  非同期のハンドラが run の途中で失敗したか、受付の上限で仕事を断った (trace の
+  ``async_event_delivery_failed``、design_decisions D1824-16)。理由ごとの件数はシードの行に出す
 - ``swallowed_exception``: ツールの中で想定外の例外が握られ、trace にだけ残った
 - ``logged_error``: engine が ERROR 以上のログを出した
 - ``leak``: エージェントへの文に、内部の番号やシナリオの ID が出た
@@ -32,6 +34,7 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import traceback
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -54,6 +57,12 @@ INTERNAL_NUMBER_PATTERNS: tuple[re.Pattern[str], ...] = (
 
 #: 世界の tick で 1 体ぶんの例外を取りやめて run を続けたときの trace (#1558)。止まらなくても例外として数える。
 WORLD_TICK_UNIT_FAILED = "world_tick_unit_failed"
+
+#: 非同期のハンドラの失敗の trace (design_decisions D1824-16)。
+ASYNC_EVENT_DELIVERY_FAILED = "async_event_delivery_failed"
+#: そのうち、run の途中で記憶が欠ける理由。run を終えるときに終わらなかったもの (shutdown、shutdown_timeout) は
+#: 件数だけ出し、穴 (exception の findings) にしない。
+ASYNC_EVENT_DELIVERY_HOLE_REASONS = frozenset({"prepare_failed", "handler_failed", "application_failed", "capacity"})
 
 #: Being 側の短期記憶へ写せなかったうち、規則の崩れか想定外の例外を表す理由 (design_decisions D1824-7)。
 #: 記憶の道具や 1 手の無い結果のような、決めたとおりに写さないものは数えない。
@@ -129,6 +138,8 @@ class FuzzResult:
     findings: list[FuzzFinding] = field(default_factory=list)
     #: 名前を知らない相手が、見た目で文に出た手番の数。0 なら ``stranger_name`` の検査は何も見ていない。
     strangers_seen: int = 0
+    #: 非同期のハンドラの失敗の件数を理由ごとに。穴にしない理由も数える。
+    async_event_delivery_failures: dict[str, int] = field(default_factory=dict)
 
     @property
     def failed(self) -> bool:
@@ -145,6 +156,10 @@ class FuzzResult:
             f"reached={self.reached_tick} actions={len(self.actions)}"
         )
         known = " known=" + ",".join(f"#{n}" for n in self.known_issues) if self.known_issues else ""
+        if self.async_event_delivery_failures:
+            known += " async_failures=" + ",".join(
+                f"{reason}:{count}" for reason, count in sorted(self.async_event_delivery_failures.items())
+            )
         if not self.failed:
             return f"OK   {head}{known}"
         lines = [f"FAIL {head}{known}"]
@@ -433,6 +448,8 @@ def _drive(
         runtime = state.runtime
         recorded_by_player = _count_recorded_action_results(runtime)
         recorded_before_action: dict[int, int] = {}
+        # 非同期のハンドラの失敗は裏のスレッドから trace に残る。件数の加算が重ならないよう囲む。
+        async_failures_lock = threading.Lock()
 
         def on_trace(kind: str, tick: int | None, player_id: int | None, payload: Mapping[str, Any]) -> None:
             if kind == "action":
@@ -449,6 +466,15 @@ def _drive(
                 result.findings.append(
                     FuzzFinding("exception", int(tick or 0), f"世界の tick で 1 体ぶん取りやめた: {_compact(payload)}")
                 )
+            elif kind == ASYNC_EVENT_DELIVERY_FAILED:
+                reason = str(payload.get("reason"))
+                with async_failures_lock:
+                    failures = result.async_event_delivery_failures
+                    failures[reason] = failures.get(reason, 0) + 1
+                if reason in ASYNC_EVENT_DELIVERY_HOLE_REASONS:
+                    result.findings.append(
+                        FuzzFinding("exception", int(tick or 0), f"非同期のハンドラが失敗した: {_compact(payload)}")
+                    )
             elif kind == RECENT_EVENTS_SHADOW_MISMATCH and payload.get("mismatch_kind") == "different":
                 result.findings.append(
                     FuzzFinding(

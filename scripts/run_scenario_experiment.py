@@ -965,6 +965,8 @@ def _drive_scenario(
         # 実験用の差し替え runtime は持っていないことがある。0 件と区別するため None で返す。
         failure_counts_getter = getattr(runtime, "world_tick_failure_counts", None)
         world_tick_failure_counts = failure_counts_getter() if callable(failure_counts_getter) else None
+        async_counts_getter = getattr(runtime, "async_event_delivery_failure_counts", None)
+        async_failure_counts = async_counts_getter() if callable(async_counts_getter) else None
         outcome, end_reason, llm_call_count, llm_success_count = _classify_llm_run_health(
             recorder,
             outcome=outcome,
@@ -983,6 +985,10 @@ def _drive_scenario(
             "world_tick_failure_counts": world_tick_failure_counts,
             "world_tick_failure_total": (
                 sum(world_tick_failure_counts.values()) if world_tick_failure_counts is not None else None
+            ),
+            "async_event_delivery_failure_counts": async_failure_counts,
+            "async_event_delivery_failure_total": (
+                sum(async_failure_counts.values()) if async_failure_counts is not None else None
             ),
         }
 
@@ -1104,6 +1110,24 @@ def _world_tick_failure_lines(summary: dict[str, Any]) -> list[str]:
     ]
 
 
+def _async_event_delivery_failure_lines(summary: dict[str, Any]) -> list[str]:
+    """非同期のハンドラの失敗 (prepare・handle・apply の例外と、仕事を受け付けなかったこと) の件数を、冒頭の要約に出す行 (design_decisions D1824-16)。"""
+    label = "- 非同期のハンドラの失敗 (のべ)"
+    counts = summary.get("async_event_delivery_failure_counts")
+    if counts is None:
+        return [f"{label}: 未計測"]
+    total = sum(counts.values())
+    if total == 0:
+        return [f"{label}: 0 件"]
+    breakdown = ", ".join(f"{reason}={count}" for reason, count in sorted(counts.items()))
+    return [
+        f"{label}: **{total} 件** ({breakdown})",
+        "  - 別のスレッドで書くいきさつやエピソードが、書かれなかったか、記憶に入らなかった。"
+        "効果の測定に使う前に、trace の async_event_delivery_failed で、どのイベントのどのハンドラかを切り分ける"
+        " (shutdown と shutdown_timeout は、run を終えるときに終わらなかったもの)",
+    ]
+
+
 def _build_report(
     *,
     scenario_path: Path,
@@ -1179,6 +1203,7 @@ def _build_report(
         lines.append(f"- llm calls: {len(llm_calls)} (成功 {succeeded} / {rate:.0f}%)")
     lines.append(_llm_cost_header_line(llm_calls, aux_calls))
     lines.extend(_world_tick_failure_lines(summary))
+    lines.extend(_async_event_delivery_failure_lines(summary))
     lines.append("")
     lines.extend(_llm_cost_lines(llm_calls, aux_calls, aux_record_failures))
     if llm_failures:
@@ -1657,6 +1682,9 @@ def main(argv: list[str] | None = None) -> int:
     tick_failures = summary.get("world_tick_failure_total")
     if tick_failures:
         done_line += f" world_tick_failures={tick_failures}"
+    async_failures = summary.get("async_event_delivery_failure_total")
+    if async_failures:
+        done_line += f" async_event_delivery_failures={async_failures}"
     llm_total = int(summary.get("llm_call_count") or 0)
     if llm_total:
         llm_ok = int(summary.get("llm_success_count") or 0)

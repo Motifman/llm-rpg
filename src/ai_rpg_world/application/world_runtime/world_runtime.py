@@ -637,6 +637,9 @@ class WorldRuntime:
     # (Phase 1d 配線)。
     _trace_recorder: Any = field(default=None, repr=False)
     _async_event_executor: AsyncEventExecutor | None = field(default=None, repr=False)
+    _async_event_delivery_failure_counts: dict[str, int] = field(default_factory=dict, repr=False)
+    # 失敗は裏のスレッドからも知らされる。読んでから書く加算が重なって数え落とさないよう、ロックで囲む。
+    _async_event_delivery_failure_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     # 記憶の部品と Jev の呼び出しの記録先 (#1617)。runtime の外で組む Jev も
     # ここを通すので、create_world_runtime 以外で組んだ runtime では None。
     _aux_llm_call_sink: Any = field(default=None, repr=False)
@@ -1001,7 +1004,15 @@ class WorldRuntime:
             raise RuntimeError("非同期の配送が組み立てられていません")
         return self._async_event_executor
 
+    def async_event_delivery_failure_counts(self) -> dict[str, int]:
+        """非同期のハンドラが失敗したか、仕事を受け付けなかった件数を、理由ごとに返す (design_decisions D1824-16)。"""
+        with self._async_event_delivery_failure_lock:
+            return dict(self._async_event_delivery_failure_counts)
+
     def _record_async_delivery_failure(self, failure: AsyncFailure) -> None:
+        with self._async_event_delivery_failure_lock:
+            counts = self._async_event_delivery_failure_counts
+            counts[failure.reason] = counts.get(failure.reason, 0) + 1
         recorder = self._trace_recorder
         if recorder is None:
             raise RuntimeError("非同期の配送の失敗を記録する trace がありません")

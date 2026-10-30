@@ -176,6 +176,53 @@ class TestDetectsExceptions:
         exceptions = [f for f in result.findings if f.kind == "exception"]
         assert [(f.tick, reason in f.detail) for f in exceptions] == ([(2, True)] if reported else [])
 
+    @pytest.mark.parametrize(
+        ("reason", "reported"),
+        [
+            ("prepare_failed", True),
+            ("handler_failed", True),
+            ("application_failed", True),
+            ("capacity", True),
+            ("shutdown", False),
+            ("shutdown_timeout", False),
+        ],
+    )
+    def test_async_event_delivery_failure_is_reported_by_reason(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason: str, reported: bool
+    ) -> None:
+        """非同期のハンドラの失敗の trace のうち、run の途中で記憶が欠ける理由 (準備・仕事・反映の失敗、受付の上限) は例外として出す。run を終えるときの間に合わなさ (停止のあと、停止の期限切れ) は出さず、どの理由もシードの行に件数を出す (design_decisions D1824-16)。"""
+        original = WorldRuntime.advance_tick
+
+        def advance_tick_that_fails_a_handler(self, *args, **kwargs):
+            if self.current_tick() == 2:
+                self._trace_recorder.record(
+                    "async_event_delivery_failed",
+                    tick=2,
+                    reason=reason,
+                    recipient_key="being_w1_p1",
+                    event_type="ShortTermMemoryRangeFilledEvent",
+                    handler="WriteBackstoryHandler",
+                )
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(WorldRuntime, "advance_tick", advance_tick_that_fails_a_handler)
+
+        result = run_random_agents(_small_scenario(tmp_path), seed=0, max_world_ticks=4)
+
+        exceptions = [f for f in result.findings if f.kind == "exception"]
+        assert [(f.tick, reason in f.detail, "WriteBackstoryHandler" in f.detail) for f in exceptions] == (
+            [(2, True, True)] if reported else []
+        )
+        assert result.async_event_delivery_failures == {reason: 1}
+        assert f"async_failures={reason}:1" in result.report().splitlines()[0]
+
+    def test_seed_line_has_no_async_failure_counts_without_failures(self, tmp_path: Path) -> None:
+        """非同期のハンドラの失敗が無ければ、シードの行に件数を出さない。"""
+        result = run_random_agents(_small_scenario(tmp_path), seed=0, max_world_ticks=2)
+
+        assert result.async_event_delivery_failures == {}
+        assert "async_failures" not in result.report()
+
     @pytest.mark.parametrize(("mismatch_kind", "reported"), [("different", True), ("public_sns_projection", False)])
     def test_recent_events_shadow_mismatch_is_reported(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mismatch_kind: str, reported: bool
