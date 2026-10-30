@@ -135,7 +135,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
             aggregate_type=aggregate_type,
             target_id=self._content_id,
             author_user_id=user_id,
-            content_type=content_type
+            content_type=content_type,
         )
         self.add_event(event)
 
@@ -175,7 +175,8 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
     def _create_mentions_from_content(self, content: PostContent) -> set[Mention]:
         """コンテンツからメンションを抽出"""
         import re
-        mention_pattern = r'@(\S+)'
+
+        mention_pattern = r"@(\S+)"
         matches = re.findall(mention_pattern, content.content)
         return set(Mention(mentioned_user_name=match, post_id=self._content_id) for match in matches)
 
@@ -194,7 +195,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
                 aggregate_type=aggregate_type,
                 target_id=self._content_id,
                 mentioned_by_user_id=self._author_user_id,
-            mentioned_user_names=mentioned_users,
-            content_type=content_type
+                mentioned_user_names=mentioned_users,
+                content_type=content_type,
             )
             self.add_event(event)

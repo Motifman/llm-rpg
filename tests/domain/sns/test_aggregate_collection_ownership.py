@@ -28,8 +28,11 @@ def test_constructor_does_not_retain_caller_relationship_list(relationship: str)
         "subscribe": [SubscribeRelationShip(owner, target)],
     }
     aggregate = UserAggregate(
-        owner, SnsUser(owner, UserProfile("owner", "所有者", "")),
-        relations["follow"], relations["block"], relations["subscribe"],
+        owner,
+        SnsUser(owner, UserProfile("owner", "所有者", "")),
+        relations["follow"],
+        relations["block"],
+        relations["subscribe"],
     )
     relations[relationship].clear()
     assert len(getattr(aggregate, f"{relationship}_relationships")) == 1
@@ -41,8 +44,10 @@ def test_relationship_property_does_not_expose_internal_list(relationship: str) 
     """取得した関係一覧を空にしても、集約の関係は消えない。"""
     owner, target = UserId(1), UserId(2)
     aggregate = UserAggregate(
-        owner, SnsUser(owner, UserProfile("owner", "所有者", "")),
-        [FollowRelationShip(owner, target)], [BlockRelationShip(owner, UserId(3))],
+        owner,
+        SnsUser(owner, UserProfile("owner", "所有者", "")),
+        [FollowRelationShip(owner, target)],
+        [BlockRelationShip(owner, UserId(3))],
         [SubscribeRelationShip(owner, target)],
     )
     getattr(aggregate, f"{relationship}_relationships").clear()
@@ -61,7 +66,12 @@ def test_content_constructor_does_not_retain_caller_sets(kind: str, collection: 
         aggregate = PostAggregate(PostId(1), UserId(1), PostContent("本文"), likes, mentions, set())
     else:
         aggregate = ReplyAggregate(
-            ReplyId(1), UserId(1), PostContent("本文"), likes, mentions, set(),
+            ReplyId(1),
+            UserId(1),
+            PostContent("本文"),
+            likes,
+            mentions,
+            set(),
             parent_post_id=PostId(1),
         )
     {"likes": likes, "mentions": mentions}[collection].clear()
