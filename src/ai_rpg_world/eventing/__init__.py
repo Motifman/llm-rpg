@@ -4,6 +4,7 @@ from ai_rpg_world.eventing.aggregate_root import AggregateRoot as AggregateRoot
 from ai_rpg_world.eventing.async_delivery import AsyncDelivery as AsyncDelivery
 from ai_rpg_world.eventing.async_delivery import AsyncEventExecutor as AsyncEventExecutor
 from ai_rpg_world.eventing.async_delivery import AsyncFailure as AsyncFailure
+from ai_rpg_world.eventing.async_event_handler import AsyncEventHandler as AsyncEventHandler
 from ai_rpg_world.eventing.delivery import DeliveryChannel as DeliveryChannel
 from ai_rpg_world.eventing.delivery import DeliveryGuarantee as DeliveryGuarantee
 from ai_rpg_world.eventing.dispatcher import EventDispatcher as EventDispatcher

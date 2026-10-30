@@ -25,6 +25,9 @@ class TraceEventKind:
     残すため (JSONL なので緩く)。よく使う既知値だけここに集める。
     """
 
+    # 非同期のハンドラが失敗したか、仕事を受け付けなかった。1 件ごとに 1 件。payload: reason
+    # (prepare_failed / handler_failed / application_failed / capacity / shutdown / shutdown_timeout) /
+    # recipient_key / event_id / event_type / handler / error_type / error_message (design_decisions D1824-15)。
     ASYNC_EVENT_DELIVERY_FAILED = "async_event_delivery_failed"
     RUN_START = "run_start"
     RUN_END = "run_end"

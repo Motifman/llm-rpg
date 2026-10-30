@@ -11,17 +11,21 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Any, Generic, Literal, TypeVar
 
+from ai_rpg_world.eventing.async_event_handler import AsyncEventHandler
 from ai_rpg_world.eventing.domain_event import DomainEvent
 
 _Event = TypeVar("_Event", bound=DomainEvent)
 _Result = TypeVar("_Result")
+_Command = TypeVar("_Command")
 
 
 @dataclass(frozen=True)
 class AsyncFailure:
     """実行や反映の失敗と、受付拒否・終了期限による破棄を知らせる。"""
 
-    reason: Literal["handler_failed", "capacity", "shutdown", "shutdown_timeout", "application_failed"]
+    reason: Literal[
+        "prepare_failed", "handler_failed", "capacity", "shutdown", "shutdown_timeout", "application_failed"
+    ]
     key: Hashable
     event: DomainEvent
     handler: object
@@ -30,9 +34,12 @@ class AsyncFailure:
 
 @dataclass(frozen=True)
 class _Work:
+    """``handler`` は失敗を知らせるときに名指すもの。裏のスレッドで呼ぶのは ``run``。"""
+
     key: Hashable
     event: DomainEvent
-    handler: Callable[[Any], Any]
+    handler: object
+    run: Callable[[], Any]
     apply_result: Callable[[Any], None]
 
 
@@ -79,8 +86,29 @@ class AsyncEventExecutor:
         apply_result: Callable[[_Result], None],
     ) -> bool:
         """受付の可否を返し、実行の完了は待たない。"""
+        return self._accept(_Work(key, event, handler, lambda: handler(event), apply_result))
+
+    def submit_handler(
+        self,
+        *,
+        key: Hashable,
+        event: _Event,
+        handler: AsyncEventHandler[_Event, _Command, _Result],
+    ) -> bool:
+        """呼んだスレッドで ``prepare`` を呼び、できたコマンドで ``handle`` を裏のスレッドで呼び、結果を ``apply`` に渡す。
+
+        ``prepare`` の失敗も、ほかの段の失敗と同じく、元のイベントとハンドラで知らせて受け付けない。
+        """
+        try:
+            command = handler.prepare(event)
+        except Exception as error:
+            self._notify(AsyncFailure("prepare_failed", key, event, handler, error))
+            return False
+        return self._accept(_Work(key, event, handler, lambda: handler.handle(command), handler.apply))
+
+    def _accept(self, work: _Work) -> bool:
+        key, event, handler = work.key, work.event, work.handler
         hash(key)
-        work = _Work(key, event, handler, apply_result)
         with self._lock:
             if not self._accepting:
                 self._notify(AsyncFailure("shutdown", key, event, handler))
@@ -114,7 +142,7 @@ class AsyncEventExecutor:
                 number = queue.popleft()
                 work = self._unfinished[number]
             try:
-                result = work.handler(work.event)
+                result = work.run()
             except BaseException as error:
                 with self._lock:
                     if self._unfinished.pop(number, None) is not None:
