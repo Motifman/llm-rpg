@@ -21,15 +21,24 @@ def _event(kind: str, visibility: PostVisibility, *, self_reply: bool = False):
     content = PostContent.create("作者だけの本文", visibility)
     if kind == "post":
         return SnsPostCreatedEvent.create(
-            aggregate_id=PostId(1), aggregate_type="PostAggregate", post_id=PostId(1),
-            author_user_id=UserId(1), author_display_name="作者", content=content,
+            aggregate_id=PostId(1),
+            aggregate_type="PostAggregate",
+            post_id=PostId(1),
+            author_user_id=UserId(1),
+            author_display_name="作者",
+            content=content,
             mentioned_user_ids=frozenset({UserId(2)}),
             subscriber_user_ids=frozenset({UserId(3)}),
         )
     return SnsReplyCreatedEvent.create(
-        aggregate_id=ReplyId(1), aggregate_type="ReplyAggregate", reply_id=ReplyId(1),
-        author_user_id=UserId(1), author_display_name="作者", content=content,
-        parent_post_id=PostId(1), parent_author_id=UserId(1) if self_reply else UserId(3),
+        aggregate_id=ReplyId(1),
+        aggregate_type="ReplyAggregate",
+        reply_id=ReplyId(1),
+        author_user_id=UserId(1),
+        author_display_name="作者",
+        content=content,
+        parent_post_id=PostId(1),
+        parent_author_id=UserId(1) if self_reply else UserId(3),
         mentioned_user_ids=frozenset({UserId(2)}),
     )
 
