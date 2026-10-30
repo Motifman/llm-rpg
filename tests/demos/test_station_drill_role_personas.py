@@ -9,9 +9,7 @@ from pathlib import Path
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 
 def _raw() -> dict:
@@ -20,9 +18,7 @@ def _raw() -> dict:
 
 def _players_by_role(runtime, role: str) -> tuple[PlayerId, ...]:
     return tuple(
-        PlayerId(spawn.player_id)
-        for spawn in runtime.scenario.player_spawns
-        if spawn.initial_state.get("role") == role
+        PlayerId(spawn.player_id) for spawn in runtime.scenario.player_spawns if spawn.initial_state.get("role") == role
     )
 
 
@@ -31,9 +27,7 @@ def test_each_crew_system_joins_its_person_and_the_identical_role_text() -> None
     raw = _raw()
     runtime = create_world_runtime(_DRILL)
     crew_role = raw["role_personas"]["crew"]
-    individual_by_id = {
-        player["id"]: player["persona_prompt"] for player in raw["players"]
-    }
+    individual_by_id = {player["id"]: player["persona_prompt"] for player in raw["players"]}
 
     for spawn in runtime.scenario.player_spawns:
         if spawn.initial_state.get("role") != "crew":
@@ -49,9 +43,7 @@ def test_each_impostor_system_receives_the_same_role_facts_after_personal_text()
     raw = _raw()
     runtime = create_world_runtime(_DRILL)
     keeper_role = raw["role_personas"]["keeper"]
-    individual_by_id = {
-        player["id"]: player["persona_prompt"] for player in raw["players"]
-    }
+    individual_by_id = {player["id"]: player["persona_prompt"] for player in raw["players"]}
 
     for spawn in runtime.scenario.player_spawns:
         if spawn.initial_state.get("role") != "keeper":
@@ -80,7 +72,18 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
 
     もとは #1115 の分割が**バイトを変えていない**ことを示すために置いた。共通引数の
     説明を system prompt へ寄せた時点で、**意図してバイトが変わった**ので値を更新
-    してある。
+    してある。#1521 で、persona_prompt に【ペルソナ】の見出しが付くようになり
+    (本文が「上記【ペルソナ】」と指す見出しが無かった)、見出しの 1 行ぶん
+    バイトが変わった。#1520 で、誰を知っているかを system prompt に書かず、毎ターンの
+    メッセージの【知っている人】に移したので、【同じ局面にいる者】の節のぶん
+    バイトが変わった。#1616 で、記憶の指示が出ている欄とツールだけを指すように
+    なり、記憶の部品を有効にしないこの世界では【関連する記憶】と能動想起の文の
+    ぶんバイトが変わった。#1612 で、行動に添える一言には結果ではなくこれから
+    することを書くよう【独白と一言の書き方】に 1 文足したので、そのぶんバイトが
+    変わった。#1631 で、目次つきのエピソードが設定で止められない標準になり、
+    【思い出せる出来事】と `episode_recall` を説明する 1 行ぶんバイトが変わった。
+    同じく #1631 で、メモ帳が設定で止められない標準になり、【メモの書き方】の節の
+    ぶんバイトが変わった。
 
     以後この検査が守るのは「**気づかないうちに system prompt が変わらない**」こと。
     値を更新するときは、prompt を変えた理由が PR にあるはずなので、それを確かめる
@@ -88,19 +91,17 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
     """
     runtime = create_world_runtime(_DRILL)
     expected_by_string_id = {
-        "mori": "2d1b8bac38e3be1ee53eb832b7373bd1058dc4fd6e57c8d7ae9e74ecfd013379",
-        "sena": "49fc3d18ec846774fb05ba398a6a9fdbbdc23f76b610f2e436fa664699fc0338",
-        "aoi": "5289f54d20517f3ad6ff5ee5dd6c7b00bf2f41198bb35f6836a349768cea3cb5",
-        "hagi": "6533ac30cf95ef5fff58a684e28a1daec2a1dd6b29385dffa8c0c6262b0afd79",
-        "yura": "e8575b4db3016e953d908018e2677b1406857ee923c5c59bab0b207e23031e60",
-        "saki": "93846bbdd13b18cc096bf926883d335308d1f274209a5f66d853ab9f91ce19f1",
+        "mori": "54a22be5ea599d0fe8d95fcc97432497f4a8922416c36dad4cd730d51e522db1",
+        "sena": "49f9054a8434ecb27354b3598680b7577105b2f13e4bc7ae98fd1f32037d7af5",
+        "aoi": "921ab48a160e275ff93284baea30a5eec8f5cb4bad9156bd2a533c30b5102bdb",
+        "hagi": "4334968e4bb5586c318eac36f09e19b865fa4e595c81bfae8a86ffc35d409d79",
+        "yura": "7f5983a4d4eeecb5a7b0bf255ab85bce772493305ed485e7749fafbe1a79f8ea",
+        "saki": "4784da98307c9e30575315044c2d367da102719f3ae66ae6c81cd81d3fc28ac6",
     }
 
     actual_by_string_id = {
         spawn.string_id: hashlib.sha256(
-            runtime._world_llm_system_prompts_by_player_id[spawn.player_id].encode(
-                "utf-8"
-            )
+            runtime._world_llm_system_prompts_by_player_id[spawn.player_id].encode("utf-8")
         ).hexdigest()
         for spawn in runtime.scenario.player_spawns
         if spawn.initial_state.get("role") == "crew"

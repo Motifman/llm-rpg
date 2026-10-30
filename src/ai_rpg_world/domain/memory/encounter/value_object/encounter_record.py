@@ -43,33 +43,20 @@ class EncounterRecord:
     count: int
 
     def __post_init__(self) -> None:
-        if not isinstance(self.first_seen_tick, int) or isinstance(
-            self.first_seen_tick, bool
-        ):
-            raise EncounterRecordValidationException(
-                "first_seen_tick must be int"
-            )
-        if not isinstance(self.last_seen_tick, int) or isinstance(
-            self.last_seen_tick, bool
-        ):
-            raise EncounterRecordValidationException(
-                "last_seen_tick must be int"
-            )
+        if not isinstance(self.first_seen_tick, int) or isinstance(self.first_seen_tick, bool):
+            raise EncounterRecordValidationException("first_seen_tick must be int")
+        if not isinstance(self.last_seen_tick, int) or isinstance(self.last_seen_tick, bool):
+            raise EncounterRecordValidationException("last_seen_tick must be int")
         if not isinstance(self.count, int) or isinstance(self.count, bool):
             raise EncounterRecordValidationException("count must be int")
         if self.first_seen_tick < 0:
-            raise EncounterRecordValidationException(
-                f"first_seen_tick must be >= 0 (got {self.first_seen_tick})"
-            )
+            raise EncounterRecordValidationException(f"first_seen_tick must be >= 0 (got {self.first_seen_tick})")
         if self.last_seen_tick < self.first_seen_tick:
             raise EncounterRecordValidationException(
-                f"last_seen_tick ({self.last_seen_tick}) must be >= "
-                f"first_seen_tick ({self.first_seen_tick})"
+                f"last_seen_tick ({self.last_seen_tick}) must be >= first_seen_tick ({self.first_seen_tick})"
             )
         if self.count < 1:
-            raise EncounterRecordValidationException(
-                f"count must be >= 1 (got {self.count})"
-            )
+            raise EncounterRecordValidationException(f"count must be >= 1 (got {self.count})")
 
     @property
     def is_first(self) -> bool:
@@ -86,8 +73,7 @@ class EncounterRecord:
             raise EncounterRecordValidationException("current_tick must be int")
         if current_tick < self.last_seen_tick:
             raise EncounterRecordRuleException(
-                f"current_tick ({current_tick}) must be >= last_seen_tick "
-                f"({self.last_seen_tick})"
+                f"current_tick ({current_tick}) must be >= last_seen_tick ({self.last_seen_tick})"
             )
         return current_tick - self.last_seen_tick
 
@@ -122,8 +108,7 @@ class EncounterRecord:
             raise EncounterRecordValidationException("now_tick must be int")
         if now_tick < self.last_seen_tick:
             raise EncounterRecordRuleException(
-                f"now_tick ({now_tick}) must be >= last_seen_tick "
-                f"({self.last_seen_tick})"
+                f"now_tick ({now_tick}) must be >= last_seen_tick ({self.last_seen_tick})"
             )
         return EncounterRecord(
             first_seen_tick=self.first_seen_tick,

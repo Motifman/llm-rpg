@@ -99,16 +99,13 @@ class TestTheFragmentReachesTheListener:
         from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
         from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (  # noqa: E501
             InMemorySpotGraphRepository,
         )
 
         formatter = ObservationFormatter(
-            spot_graph_repository=InMemorySpotGraphRepository(
-                _build_two_spot_graph(perm=0.5)
-            )
+            spot_graph_repository=InMemorySpotGraphRepository(_build_two_spot_graph(perm=0.5))
         )
         event = PlayerSpokeEvent.create(
             aggregate_id=PlayerId(1),
@@ -116,7 +113,6 @@ class TestTheFragmentReachesTheListener:
             content=content,
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=None,
         )
         return formatter.format(event, PlayerId(2))

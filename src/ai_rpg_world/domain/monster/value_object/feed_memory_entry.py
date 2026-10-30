@@ -12,5 +12,6 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 @dataclass(frozen=True)
 class FeedMemoryEntry:
     """餌オブジェクトの位置記憶（object_id と coordinate のペア）"""
+
     object_id: WorldObjectId
     coordinate: Coordinate

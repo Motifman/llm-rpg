@@ -109,11 +109,16 @@ def _make_orchestrator(graph: SpotGraphAggregate, monster, player):
     monster_repo.find_by_id.return_value = monster
     player_repo = MagicMock()
     player_repo.find_by_id.return_value = player
-    return SpotAttackOrchestrator(
-        spot_graph_repository=spot_repo,
-        monster_repository=monster_repo,
-        player_status_repository=player_repo,
-    ), spot_repo, monster_repo, player_repo
+    return (
+        SpotAttackOrchestrator(
+            spot_graph_repository=spot_repo,
+            monster_repository=monster_repo,
+            player_status_repository=player_repo,
+        ),
+        spot_repo,
+        monster_repo,
+        player_repo,
+    )
 
 
 class TestExecuteMonsterAttack:
@@ -243,14 +248,18 @@ class TestExecutePlayerAttack:
             SkillLoadoutAggregate,
         )
         from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-        from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
         template = MonsterTemplate(
             template_id=MonsterTemplateId.create(1),
             name="Wolf",
             base_stats=BaseStats(
-                max_hp=30, max_mp=0, attack=2,
-                defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+                max_hp=30,
+                max_mp=0,
+                attack=2,
+                defense=0,
+                speed=1,
+                critical_rate=0.0,
+                evasion_rate=0.0,
             ),
             reward_info=RewardInfo(exp=1, gold=1),
             respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -261,10 +270,11 @@ class TestExecutePlayerAttack:
         monster = MonsterAggregate(
             monster_id=MonsterId.create(101),
             template=template,
-            world_object_id=WorldObjectId.create(9001),
             skill_loadout=SkillLoadoutAggregate.create(
-                SkillLoadoutId(1), owner_id=101,
-                normal_capacity=4, awakened_capacity=2,
+                SkillLoadoutId(1),
+                owner_id=101,
+                normal_capacity=4,
+                awakened_capacity=2,
             ),
             status=MonsterStatusEnum.ALIVE,
             spawned_at_tick=WorldTick(0),

@@ -8,6 +8,7 @@ from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
 @dataclass(frozen=True)
 class WeatherChangedEvent(BaseDomainEvent[WeatherZoneId, str]):
     """天候が変化した際のイベント"""
+
     zone_id: WeatherZoneId
     old_weather: WeatherTypeEnum
     new_weather: WeatherTypeEnum
@@ -24,7 +25,7 @@ class WeatherChangedEvent(BaseDomainEvent[WeatherZoneId, str]):
         zone_id: WeatherZoneId,
         old_weather: WeatherTypeEnum,
         new_weather: WeatherTypeEnum,
-        intensity: float
+        intensity: float,
     ) -> "WeatherChangedEvent":
         return super().create(
             aggregate_id=aggregate_id,
@@ -32,5 +33,5 @@ class WeatherChangedEvent(BaseDomainEvent[WeatherZoneId, str]):
             zone_id=zone_id,
             old_weather=old_weather,
             new_weather=new_weather,
-            intensity=intensity
+            intensity=intensity,
         )

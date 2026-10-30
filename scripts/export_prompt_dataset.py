@@ -64,16 +64,12 @@ def export_prompt_dataset(
     for loaded in loaded_runs:
         split = _resolve_split(loaded["run_id"], split_map)
         calls = loaded["calls"]
-        turn_results_by_id = _index_by_key(
-            loaded["turn_results"], "llm_call_id", table_name="turn_results"
-        )
+        turn_results_by_id = _index_by_key(loaded["turn_results"], "llm_call_id", table_name="turn_results")
         for call in calls:
             llm_call_id = _required_str(call, "llm_call_id", table_name="calls")
             result_row = turn_results_by_id.get(llm_call_id)
             if result_row is None:
-                raise ValueError(
-                    f"turn_results.jsonl missing llm_call_id={llm_call_id!r}"
-                )
+                raise ValueError(f"turn_results.jsonl missing llm_call_id={llm_call_id!r}")
             turn = dict(call)
             turn["result"] = result_row.get("result", {})
             turn["turn_result"] = result_row
@@ -295,9 +291,9 @@ def _request_kwargs(call: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _write_parquet(path: Path, rows: list[dict[str, Any]]) -> None:
-    Dataset, pq = _load_export_dependencies()
+    dataset_cls, pq = _load_export_dependencies()
     path.parent.mkdir(parents=True, exist_ok=True)
-    dataset = Dataset.from_list([_json_stringify_nested(row) for row in rows])
+    dataset = dataset_cls.from_list([_json_stringify_nested(row) for row in rows])
     pq.write_table(dataset.data.table, path, compression="zstd")
 
 
@@ -405,12 +401,8 @@ def _write_dataset_infos(
     turns_by_split: Mapping[str, list[dict[str, Any]]],
     runs_by_split: Mapping[str, list[dict[str, Any]]],
 ) -> None:
-    turns_features = _dataset_info_features(
-        row for rows in turns_by_split.values() for row in rows
-    )
-    runs_features = _dataset_info_features(
-        row for rows in runs_by_split.values() for row in rows
-    )
+    turns_features = _dataset_info_features(row for rows in turns_by_split.values() for row in rows)
+    runs_features = _dataset_info_features(row for rows in runs_by_split.values() for row in rows)
     infos: dict[str, dict[str, Any]] = {}
     for config_name in _TABLE_DIRS:
         if config_name == "default":
@@ -462,10 +454,7 @@ def _dataset_info_features(rows: Iterable[Mapping[str, Any]]) -> dict[str, dict[
                 dtypes_by_key[key] = "float64"
             else:
                 dtypes_by_key[key] = "string"
-    return {
-        key: {"dtype": dtype, "_type": "Value"}
-        for key, dtype in dtypes_by_key.items()
-    }
+    return {key: {"dtype": dtype, "_type": "Value"} for key, dtype in dtypes_by_key.items()}
 
 
 def _dataset_info_dtype(value: Any) -> str:

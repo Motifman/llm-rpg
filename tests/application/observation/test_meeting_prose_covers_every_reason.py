@@ -58,9 +58,7 @@ class TestEveryStartTriggerHasItsOwnProse:
         足して書き忘れると「招集がかかった」という**誰が何をしたか分からない文**へ
         静かに倒れる。
         """
-        missing = sorted(
-            t.name for t in MeetingStartTrigger if t.value not in _start_prose()
-        )
+        missing = sorted(t.name for t in MeetingStartTrigger if t.value not in _start_prose())
 
         assert missing == [], missing
 
@@ -87,9 +85,7 @@ class TestEveryEndReasonHasItsOwnProse:
 
     def test_no_end_reason_is_missing(self) -> None:
         """`MeetingEndReason` 全件が表にある。"""
-        missing = sorted(
-            r.name for r in MeetingEndReason if r.value not in _end_prose()
-        )
+        missing = sorted(r.name for r in MeetingEndReason if r.value not in _end_prose())
 
         assert missing == [], missing
 
@@ -154,20 +150,15 @@ class TestTheVocabularyIsDeclaredOnce:
             root / "application" / "world_runtime" / "world_runtime.py",
             root / "application" / "world_graph" / "game_phase_store.py",
         )
-        vocabulary = {t.value for t in MeetingStartTrigger} | {
-            r.value for r in MeetingEndReason
-        }
+        vocabulary = {t.value for t in MeetingStartTrigger} | {r.value for r in MeetingEndReason}
         offenders = []
         for path in producers:
             text = path.read_text(encoding="utf-8")
             for word in vocabulary:
                 if f'"{word}"' in text:
-                    offenders.append(f"{path.name}: \"{word}\"")
+                    offenders.append(f'{path.name}: "{word}"')
 
-        assert offenders == [], (
-            "生産側に理由の生リテラルが残っています。enum の .value を使ってください: "
-            f"{offenders}"
-        )
+        assert offenders == [], f"生産側に理由の生リテラルが残っています。enum の .value を使ってください: {offenders}"
 
     def test_the_two_vocabularies_do_not_overlap(self) -> None:
         """始まりの理由と終わりの理由が重なっていない。
@@ -194,14 +185,10 @@ class TestAnUnknownReasonIsVisible:
         経路をどのテストも通っていなかった)。
         """
         with caplog.at_level(logging.WARNING):
-            text = SpotGraphObjectHandler._meeting_prose(
-                _end_prose(), "no_such_reason", fallback="汎用文"
-            )
+            text = SpotGraphObjectHandler._meeting_prose(_end_prose(), "no_such_reason", fallback="汎用文")
 
         assert text == "汎用文"
-        assert any("no_such_reason" in r.getMessage() for r in caplog.records), [
-            r.getMessage() for r in caplog.records
-        ]
+        assert any("no_such_reason" in r.getMessage() for r in caplog.records), [r.getMessage() for r in caplog.records]
 
     def test_a_known_reason_is_not_logged(self, caplog) -> None:
         """既知の理由では warning を出さない (正の対照)。

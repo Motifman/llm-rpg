@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
 
 from ai_rpg_world.application.common.exceptions import (
     TransactionCommittedCleanupException,
@@ -22,15 +21,8 @@ class InMemoryUnitOfWorkTransactionAdapter:
     """イベント責務を除いたインメモリtransactionだけを公開する。"""
 
     def __init__(self, unit_of_work: InMemoryUnitOfWork) -> None:
-        if unit_of_work.sync_event_dispatcher is not None:
-            raise ValueError(
-                "CommandScope用adapterにはsync_event_dispatcher未設定の"
-                "InMemoryUnitOfWorkが必要です"
-            )
         if not unit_of_work.supports_atomic_rollback:
-            raise ValueError(
-                "CommandScope用InMemoryUnitOfWorkにはrollback用data_storeが必要です"
-            )
+            raise ValueError("CommandScope用InMemoryUnitOfWorkにはrollback用data_storeが必要です")
         self._unit_of_work = unit_of_work
 
     @property
@@ -61,10 +53,7 @@ class InMemoryUnitOfWorkTransactionAdapter:
 
     def _require_no_legacy_events(self) -> None:
         if self._unit_of_work.has_pending_events():
-            raise RuntimeError(
-                "旧Unit of Workに未回収イベントがあります。"
-                "CommandContextへ収集してください"
-            )
+            raise RuntimeError("旧Unit of Workに未回収イベントがあります。CommandContextへ収集してください")
 
     def rollback(self) -> None:
         """未確定変更をsnapshotへ戻す。"""
@@ -75,11 +64,6 @@ class SqliteUnitOfWorkTransactionAdapter:
     """イベント責務を除いたSQLite transactionだけを公開する。"""
 
     def __init__(self, unit_of_work: SqliteUnitOfWork) -> None:
-        if unit_of_work.sync_event_dispatcher is not None:
-            raise ValueError(
-                "CommandScope用adapterにはsync_event_dispatcher未設定の"
-                "SqliteUnitOfWorkが必要です"
-            )
         self._unit_of_work = unit_of_work
 
     @property
@@ -99,10 +83,7 @@ class SqliteUnitOfWorkTransactionAdapter:
     def commit(self) -> None:
         """イベント配送と自動rollbackを行わずtransactionを確定する。"""
         if self._unit_of_work.has_pending_events():
-            raise RuntimeError(
-                "旧Unit of Workに未回収イベントがあります。"
-                "CommandContextへ収集してください"
-            )
+            raise RuntimeError("旧Unit of Workに未回収イベントがあります。CommandContextへ収集してください")
         try:
             self._unit_of_work.commit_transaction()
         except SqliteCommittedCleanupError as error:
@@ -123,9 +104,7 @@ class InMemoryUnitOfWorkTransactionFactory:
 
     def create(self) -> InMemoryUnitOfWorkTransactionAdapter:
         """未開始のUoW adapterを返す。"""
-        return InMemoryUnitOfWorkTransactionAdapter(
-            InMemoryUnitOfWork(data_store=self._data_store)
-        )
+        return InMemoryUnitOfWorkTransactionAdapter(InMemoryUnitOfWork(data_store=self._data_store))
 
 
 class SqliteUnitOfWorkTransactionFactory:
@@ -144,9 +123,7 @@ class SqliteUnitOfWorkTransactionFactory:
 
     def create(self) -> SqliteUnitOfWorkTransactionAdapter:
         """未開始のUoW adapterを返す。"""
-        return SqliteUnitOfWorkTransactionAdapter(
-            SqliteUnitOfWork(database=self._database)
-        )
+        return SqliteUnitOfWorkTransactionAdapter(SqliteUnitOfWork(database=self._database))
 
 
 __all__ = [

@@ -97,15 +97,11 @@ class FoodSpoilageStageService:
             return
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            raise RuntimeError(
-                "food spoilageにはCommandScopeFactoryの配線が必要です"
-            )
+            raise RuntimeError("food spoilageにはCommandScopeFactoryの配線が必要です")
         with scope_factory.create() as scope:
             repositories = scope.repositories
             if repositories is None:
-                raise RuntimeError(
-                    "food spoilage用repository providerがありません"
-                )
+                raise RuntimeError("food spoilage用repository providerがありません")
             self._run_with_repository(
                 current_tick,
                 repositories.items,

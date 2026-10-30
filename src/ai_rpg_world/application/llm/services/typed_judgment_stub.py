@@ -54,10 +54,7 @@ class DeterministicTypedJudgmentPort(ITypedJudgmentPort):
         questions: Mapping[str, Question],
     ) -> Mapping[str, JudgmentResult]:
         started = time.perf_counter()
-        decided = {
-            name: self._answer(name, question)
-            for name, question in questions.items()
-        }
+        decided = {name: self._answer(name, question) for name, question in questions.items()}
         elapsed_ms = (time.perf_counter() - started) * 1000
         return {
             name: JudgmentResult(
@@ -70,9 +67,7 @@ class DeterministicTypedJudgmentPort(ITypedJudgmentPort):
             for name, (value, probabilities, confidence) in decided.items()
         }
 
-    def _answer(
-        self, name: str, question: Question
-    ) -> tuple[Any, Mapping[str, float], float | None]:
+    def _answer(self, name: str, question: Question) -> tuple[Any, Mapping[str, float], float | None]:
         if isinstance(question, NoulQuestion):
             return float(self._answers.get(name, _UNDECIDED_NOUL)), {}, None
         if isinstance(question, ChoiceQuestion):
@@ -82,9 +77,7 @@ class DeterministicTypedJudgmentPort(ITypedJudgmentPort):
             share = 1.0 / len(options)
             chosen = self._answers.get(name, options[0])
             if chosen not in question.options:
-                raise ValueError(
-                    f"answers[{name!r}]={chosen!r} is not one of the offered options"
-                )
+                raise ValueError(f"answers[{name!r}]={chosen!r} is not one of the offered options")
             return chosen, {option: share for option in options}, share
         if isinstance(question, ScoreQuestion):
             levels = list(question.levels)
@@ -101,9 +94,7 @@ class DeterministicTypedJudgmentPort(ITypedJudgmentPort):
         raise TypeError(f"unsupported question type for {name!r}: {type(question)!r}")
 
     @staticmethod
-    def _level_index(
-        name: str, levels: Sequence[str], requested: Any | None
-    ) -> int:
+    def _level_index(name: str, levels: Sequence[str], requested: Any | None) -> int:
         if requested is None:
             return (len(levels) - 1) // 2
         if isinstance(requested, int) and 0 <= requested < len(levels):

@@ -26,20 +26,13 @@ from ai_rpg_world.domain.player.event.status_events import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "survival_island_v2.json"
-)
+_SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 class TestPlayerDownedCurrentTickWiring:
     """side handler の current_tick_provider が int を返し例外を出さないことを保証する。"""
 
-    def test_downed_event_does_not_raise_attribute_error_in_side_handler(
-        self, caplog
-    ) -> None:
+    def test_downed_event_does_not_raise_attribute_error_in_side_handler(self, caplog) -> None:
         """PlayerDownedEvent を流しても current_tick().value 由来の AttributeError が出ない。
 
         修正前はこの発行で PlayerDownedOutcomeHandler が
@@ -59,9 +52,7 @@ class TestPlayerDownedCurrentTickWiring:
         assert "has no attribute 'value'" not in caplog.text
         assert "PlayerDownedOutcomeHandler failed" not in caplog.text
 
-    def test_downed_then_revived_sequence_runs_side_handlers_without_error(
-        self, caplog
-    ) -> None:
+    def test_downed_then_revived_sequence_runs_side_handlers_without_error(self, caplog) -> None:
         """戦闘不能→復帰を連続で流しても side handler が例外を出さない。
 
         復帰の post hoc 観測 handler (行 3667) は grace timer に downed_at_tick が

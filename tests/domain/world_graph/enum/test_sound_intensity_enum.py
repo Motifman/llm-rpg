@@ -25,10 +25,6 @@ class TestLevelOrdering:
         assert SoundIntensityEnum.FAINT.level == 1
         assert SoundIntensityEnum.MODERATE.level == 2
         assert SoundIntensityEnum.LOUD.level == 3
-
-    def test_level_order(self) -> None:
-        """level 比較で順序を扱える。"""
-        # 直接比較ではなく level 整数経由で順序判定
         assert SoundIntensityEnum.LOUD.level > SoundIntensityEnum.SILENT.level
         assert SoundIntensityEnum.MODERATE.level > SoundIntensityEnum.FAINT.level
 
@@ -38,10 +34,7 @@ class TestAttenuate:
 
     def test_loud_1hop_moderate(self) -> None:
         """LOUD 1hop は MODERATE。"""
-        assert (
-            SoundIntensityEnum.LOUD.attenuate(1)
-            == SoundIntensityEnum.MODERATE
-        )
+        assert SoundIntensityEnum.LOUD.attenuate(1) == SoundIntensityEnum.MODERATE
 
     def test_loud_2hop_faint(self) -> None:
         """LOUD 2hop は FAINT。"""
@@ -57,10 +50,7 @@ class TestAttenuate:
 
     def test_silent_hop_silent(self) -> None:
         """SILENT は何 hop 減衰しても SILENT。"""
-        assert (
-            SoundIntensityEnum.SILENT.attenuate(5)
-            == SoundIntensityEnum.SILENT
-        )
+        assert SoundIntensityEnum.SILENT.attenuate(5) == SoundIntensityEnum.SILENT
 
     def test_hops_zero_less(self) -> None:
         """hops 0 以下は 減衰なし。"""
@@ -69,7 +59,4 @@ class TestAttenuate:
 
     def test_default_hops_is_one(self) -> None:
         """default hops は 1。"""
-        assert (
-            SoundIntensityEnum.LOUD.attenuate()
-            == SoundIntensityEnum.MODERATE
-        )
+        assert SoundIntensityEnum.LOUD.attenuate() == SoundIntensityEnum.MODERATE

@@ -14,8 +14,12 @@ class TestGameDateTime:
     def test_create_valid_values(self):
         """正常な年・月・日・時・分・秒で生成できること"""
         dt = GameDateTime(
-            year=1, month=1, day=1,
-            hour=0, minute=0, second=0,
+            year=1,
+            month=1,
+            day=1,
+            hour=0,
+            minute=0,
+            second=0,
         )
         assert dt.year == 1 and dt.month == 1 and dt.day == 1
         assert dt.hour == 0 and dt.minute == 0 and dt.second == 0
@@ -23,16 +27,24 @@ class TestGameDateTime:
     def test_format_for_display(self):
         """format_for_display が期待どおりの文字列を返すこと"""
         dt = GameDateTime(
-            year=2, month=3, day=4,
-            hour=12, minute=30, second=45,
+            year=2,
+            month=3,
+            day=4,
+            hour=12,
+            minute=30,
+            second=45,
         )
         assert dt.format_for_display() == "2年3月4日 12:30:45"
 
     def test_format_for_display_zero_padding(self):
         """時・分・秒がゼロ埋めで表示されること"""
         dt = GameDateTime(
-            year=1, month=1, day=1,
-            hour=1, minute=2, second=3,
+            year=1,
+            month=1,
+            day=1,
+            hour=1,
+            minute=2,
+            second=3,
         )
         assert dt.format_for_display() == "1年1月1日 01:02:03"
 
@@ -40,53 +52,81 @@ class TestGameDateTime:
         """year が 1 未満のとき ValueError"""
         with pytest.raises(ValueError, match="year must be positive"):
             GameDateTime(
-                year=0, month=1, day=1,
-                hour=0, minute=0, second=0,
+                year=0,
+                month=1,
+                day=1,
+                hour=0,
+                minute=0,
+                second=0,
             )
 
     def test_month_positive_required(self):
         """month が 1 未満のとき ValueError"""
         with pytest.raises(ValueError, match="month must be positive"):
             GameDateTime(
-                year=1, month=0, day=1,
-                hour=0, minute=0, second=0,
+                year=1,
+                month=0,
+                day=1,
+                hour=0,
+                minute=0,
+                second=0,
             )
 
     def test_day_positive_required(self):
         """day が 1 未満のとき ValueError"""
         with pytest.raises(ValueError, match="day must be positive"):
             GameDateTime(
-                year=1, month=1, day=0,
-                hour=0, minute=0, second=0,
+                year=1,
+                month=1,
+                day=0,
+                hour=0,
+                minute=0,
+                second=0,
             )
 
     def test_hour_range_0_to_23(self):
         """hour が 0-23 の範囲外のとき ValueError"""
         with pytest.raises(ValueError, match="hour must be 0-23"):
             GameDateTime(
-                year=1, month=1, day=1,
-                hour=24, minute=0, second=0,
+                year=1,
+                month=1,
+                day=1,
+                hour=24,
+                minute=0,
+                second=0,
             )
         with pytest.raises(ValueError, match="hour must be 0-23"):
             GameDateTime(
-                year=1, month=1, day=1,
-                hour=-1, minute=0, second=0,
+                year=1,
+                month=1,
+                day=1,
+                hour=-1,
+                minute=0,
+                second=0,
             )
 
     def test_minute_range_0_to_59(self):
         """minute が 0-59 の範囲外のとき ValueError"""
         with pytest.raises(ValueError, match="minute must be 0-59"):
             GameDateTime(
-                year=1, month=1, day=1,
-                hour=0, minute=60, second=0,
+                year=1,
+                month=1,
+                day=1,
+                hour=0,
+                minute=60,
+                second=0,
             )
 
     def test_second_range_0_to_59(self):
         """second が 0-59 の範囲外のとき ValueError"""
         with pytest.raises(ValueError, match="second must be 0-59"):
             GameDateTime(
-                year=1, month=1, day=1,
-                hour=0, minute=0, second=60,
+                year=1,
+                month=1,
+                day=1,
+                hour=0,
+                minute=0,
+                second=60,
             )
 
 
@@ -113,8 +153,10 @@ class TestGameDateTimeFromTick:
     def test_tick_zero_first_moment(self):
         """tick=0 は 1年1月1日 00:00:00 になること"""
         dt = game_date_time_from_tick(
-            0, ticks_per_day=86400,
-            days_per_month=30, months_per_year=12,
+            0,
+            ticks_per_day=86400,
+            days_per_month=30,
+            months_per_year=12,
         )
         assert dt.year == 1 and dt.month == 1 and dt.day == 1
         assert dt.hour == 0 and dt.minute == 0 and dt.second == 0
@@ -151,13 +193,17 @@ class TestGameDateTimeFromTick:
         ticks_per_day = 86400
         days_per_month = 30
         dt_day29 = game_date_time_from_tick(
-            29 * ticks_per_day, ticks_per_day,
-            days_per_month=days_per_month, months_per_year=12,
+            29 * ticks_per_day,
+            ticks_per_day,
+            days_per_month=days_per_month,
+            months_per_year=12,
         )
         assert dt_day29.month == 1 and dt_day29.day == 30
         dt_day30 = game_date_time_from_tick(
-            30 * ticks_per_day, ticks_per_day,
-            days_per_month=days_per_month, months_per_year=12,
+            30 * ticks_per_day,
+            ticks_per_day,
+            days_per_month=days_per_month,
+            months_per_year=12,
         )
         assert dt_day30.month == 2 and dt_day30.day == 1
 

@@ -1,10 +1,12 @@
 """
 PostCommandServiceのテスト
 """
+
 import logging
 from unittest.mock import Mock, patch
 
 import pytest
+from tests.support.command_scope_stack import CommandScopeTestStack
 
 from ai_rpg_world.application.social.contracts.commands import CreatePostCommand, DeletePostCommand, LikePostCommand
 from ai_rpg_world.application.social.contracts.dtos import CommandResultDto
@@ -33,11 +35,9 @@ from ai_rpg_world.domain.sns.exception import (
     VisibilityValidationException,
 )
 from ai_rpg_world.domain.sns.value_object import PostId, UserId
-from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class TestPostCommandService:
@@ -46,16 +46,8 @@ class TestPostCommandService:
     @pytest.fixture
     def setup_service(self):
         """テスト用のサービスとリポジトリをセットアップ"""
-        # Unit of Workファクトリ関数を定義（別トランザクション用）
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-
-        # ファクトリーメソッドでUnit of Workとイベントパブリッシャーを作成
-        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
-            unit_of_work_factory=create_uow
-        )
-
         data_store = InMemoryDataStore()
+        unit_of_work = event_publisher = CommandScopeTestStack(data_store)
         post_repository = InMemoryPostRepository(data_store, unit_of_work)
         user_repository = InMemorySnsUserRepository(data_store, unit_of_work)
 
@@ -67,11 +59,7 @@ class TestPostCommandService:
         """ポスト作成成功のテスト"""
         service, post_repository, user_repository, event_publisher, unit_of_work = setup_service
 
-        command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
 
         result = service.create_post(command)
 
@@ -97,7 +85,7 @@ class TestPostCommandService:
         command = CreatePostCommand(
             user_id=999,  # 存在しないユーザー
             content="テストポスト",
-            visibility=PostVisibility.PUBLIC
+            visibility=PostVisibility.PUBLIC,
         )
 
         with pytest.raises(UserQueryException):  # ApplicationExceptionFactoryによって変換される
@@ -108,19 +96,12 @@ class TestPostCommandService:
         service, post_repository, user_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        create_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         create_result = service.create_post(create_command)
         post_id = create_result.data["post_id"]
 
         # いいねコマンド
-        like_command = LikePostCommand(
-            post_id=post_id,
-            user_id=1
-        )
+        like_command = LikePostCommand(post_id=post_id, user_id=1)
 
         result = service.like_post(like_command)
 
@@ -141,7 +122,7 @@ class TestPostCommandService:
 
         command = LikePostCommand(
             post_id=999,  # 存在しないポスト
-            user_id=1
+            user_id=1,
         )
 
         with pytest.raises(PostCommandException):  # PostNotFoundForCommandExceptionが変換される
@@ -152,19 +133,12 @@ class TestPostCommandService:
         service, post_repository, user_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        create_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         create_result = service.create_post(create_command)
         post_id = create_result.data["post_id"]
 
         # 削除コマンド
-        delete_command = DeletePostCommand(
-            post_id=post_id,
-            user_id=1
-        )
+        delete_command = DeletePostCommand(post_id=post_id, user_id=1)
 
         result = service.delete_post(delete_command)
 
@@ -185,7 +159,7 @@ class TestPostCommandService:
 
         command = DeletePostCommand(
             post_id=999,  # 存在しないポスト
-            user_id=1
+            user_id=1,
         )
 
         with pytest.raises(PostCommandException):  # PostNotFoundForCommandExceptionが変換される
@@ -196,18 +170,14 @@ class TestPostCommandService:
         service, post_repository, user_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        create_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         create_result = service.create_post(create_command)
         post_id = create_result.data["post_id"]
 
         # 別のユーザー（既存のユーザー2）で削除コマンド
         delete_command = DeletePostCommand(
             post_id=post_id,
-            user_id=2  # 作成者ではないユーザー
+            user_id=2,  # 作成者ではないユーザー
         )
 
         with pytest.raises(PostCommandException):  # PostOwnershipExceptionが変換される
@@ -218,11 +188,7 @@ class TestPostCommandService:
         service, post_repository, user_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        create_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         create_result = service.create_post(create_command)
         post_id = create_result.data["post_id"]
 
@@ -250,12 +216,8 @@ class TestPostCommandService:
         service, post_repository, user_repository, event_publisher, unit_of_work = setup_service
 
         # リポジトリのsaveメソッドで例外を発生させる
-        with patch.object(post_repository, 'save', side_effect=Exception("Unexpected error")):
-            command = CreatePostCommand(
-                user_id=1,
-                content="テストポスト",
-                visibility=PostVisibility.PUBLIC
-            )
+        with patch.object(post_repository, "save", side_effect=Exception("Unexpected error")):
+            command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
 
             with pytest.raises(SystemErrorException):
                 service.create_post(command)
@@ -267,7 +229,7 @@ class TestPostCommandService:
         command = CreatePostCommand(
             user_id=1,
             content="x" * 281,  # 281文字（上限280）
-            visibility=PostVisibility.PUBLIC
+            visibility=PostVisibility.PUBLIC,
         )
 
         with pytest.raises(PostCommandException):  # ContentLengthValidationExceptionが変換される
@@ -281,11 +243,7 @@ class TestPostCommandService:
         hashtags = " ".join([f"#tag{i}" for i in range(11)])
         content = f"Test content {hashtags}"
 
-        command = CreatePostCommand(
-            user_id=1,
-            content=content,
-            visibility=PostVisibility.PUBLIC
-        )
+        command = CreatePostCommand(user_id=1, content=content, visibility=PostVisibility.PUBLIC)
 
         with pytest.raises(PostCommandException):  # HashtagCountValidationExceptionが変換される
             service.create_post(command)
@@ -296,13 +254,13 @@ class TestPostCommandService:
 
         # PostVisibilityではない値を直接渡すことはできないので、
         # モックを使ってPostContent.createがVisibilityValidationExceptionを投げるようにする
-        with patch('ai_rpg_world.domain.sns.value_object.post_content.PostContent.create') as mock_create:
+        with patch("ai_rpg_world.domain.sns.value_object.post_content.PostContent.create") as mock_create:
             mock_create.side_effect = VisibilityValidationException("invalid_visibility")
 
             command = CreatePostCommand(
                 user_id=1,
                 content="test",
-                visibility=PostVisibility.PUBLIC  # 実際には無効な値になるようモック
+                visibility=PostVisibility.PUBLIC,  # 実際には無効な値になるようモック
             )
 
             with pytest.raises(PostCommandException):  # VisibilityValidationExceptionが変換される
@@ -313,11 +271,7 @@ class TestPostCommandService:
         service, post_repository, _, _, _ = setup_service
 
         # まずポストを作成
-        create_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         create_result = service.create_post(create_command)
         post_id = create_result.data["post_id"]
 
@@ -356,11 +310,7 @@ class TestPostCommandService:
         # イベントクリア
         event_publisher.clear_events()
 
-        command = CreatePostCommand(
-            user_id=1,
-            content="Hello #world @user1",
-            visibility=PostVisibility.PUBLIC
-        )
+        command = CreatePostCommand(user_id=1, content="Hello #world @user1", visibility=PostVisibility.PUBLIC)
         result = service.create_post(command)
 
         # イベントが発行されていることを確認
@@ -452,9 +402,7 @@ class TestPostCommandService:
         service, post_repository, _, _, _ = setup_service
 
         command = CreatePostCommand(
-            user_id=1,
-            content="Hello #world #test #hashtag123 and #日本語タグ",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, content="Hello #world #test #hashtag123 and #日本語タグ", visibility=PostVisibility.PUBLIC
         )
         result = service.create_post(command)
 
@@ -472,11 +420,7 @@ class TestPostCommandService:
         """ハッシュタグの大文字小文字の扱いのテスト"""
         service, post_repository, _, _, _ = setup_service
 
-        command = CreatePostCommand(
-            user_id=1,
-            content="#Test #test #TEST",
-            visibility=PostVisibility.PUBLIC
-        )
+        command = CreatePostCommand(user_id=1, content="#Test #test #TEST", visibility=PostVisibility.PUBLIC)
         result = service.create_post(command)
 
         # ハッシュタグが大文字小文字を区別して抽出されることを確認
@@ -493,9 +437,7 @@ class TestPostCommandService:
         service, post_repository, _, _, _ = setup_service
 
         command = CreatePostCommand(
-            user_id=1,
-            content="Hello world without any hashtags",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, content="Hello world without any hashtags", visibility=PostVisibility.PUBLIC
         )
         result = service.create_post(command)
 
@@ -543,8 +485,8 @@ class TestPostCommandService:
         service, _, _, _, _ = setup_service
 
         # 予期せぬ例外のログテスト - ログメソッドが呼ばれることを確認
-        with patch.object(service._logger, 'error') as mock_error:
-            with patch.object(service._post_repository, 'save', side_effect=Exception("Unexpected")):
+        with patch.object(service._logger, "error") as mock_error:
+            with patch.object(service._post_repository, "save", side_effect=Exception("Unexpected")):
                 create_command = CreatePostCommand(user_id=1, content="test", visibility=PostVisibility.PUBLIC)
                 try:
                     service.create_post(create_command)
@@ -567,11 +509,12 @@ class TestPostCommandService:
         command = CreatePostCommand(
             user_id=999,  # 存在しないユーザー
             content="テストポスト",
-            visibility=PostVisibility.PUBLIC
+            visibility=PostVisibility.PUBLIC,
         )
 
         # 例外が発生することを確認
         from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
+
         with pytest.raises(UserQueryException):
             service.create_post(command)
 

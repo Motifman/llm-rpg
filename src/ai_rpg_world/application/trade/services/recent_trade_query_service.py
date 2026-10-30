@@ -20,9 +20,7 @@ class RecentTradeQueryService:
         self._recent_trade_read_model_repository = recent_trade_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -34,19 +32,16 @@ class RecentTradeQueryService:
             raise RecentTradeQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(
+                f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra={"error_details": context}
+            )
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def get_recent_trades(self, item_name: str) -> RecentTradeDto:
         """指定アイテムの最近取引履歴を取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_recent_trades_impl(item_name),
-            context={
-                "action": "get_recent_trades",
-                "item_name": item_name
-            }
+            context={"action": "get_recent_trades", "item_name": item_name},
         )
 
     def _get_recent_trades_impl(self, item_name: str) -> RecentTradeDto:
@@ -64,12 +59,9 @@ class RecentTradeQueryService:
                 trade_id=trade_data.trade_id,
                 item_name=read_model.item_name,
                 price=trade_data.price,
-                traded_at=trade_data.traded_at
+                traded_at=trade_data.traded_at,
             )
             for trade_data in read_model.recent_trades
         ]
 
-        return RecentTradeDto(
-            item_name=read_model.item_name,
-            trades=trades
-        )
+        return RecentTradeDto(item_name=read_model.item_name, trades=trades)

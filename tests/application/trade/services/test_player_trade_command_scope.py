@@ -90,9 +90,7 @@ def _capture_trade_events(runtime: Any, monkeypatch: pytest.MonkeyPatch):
     original = runtime._speech_event_publisher.publish_all
 
     def capture(events):
-        delivered.extend(
-            event for event in events if isinstance(event, PlayerTradeOfferEvent)
-        )
+        delivered.extend(event for event in events if isinstance(event, PlayerTradeOfferEvent))
         return original(events)
 
     monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", capture)
@@ -118,9 +116,7 @@ def test_offer_inventory_failure_rolls_back_offer_reservation_and_observation(
         runtime._player_trade_service.offer(
             _OFFERER,
             target=_TARGET,
-            gives_items=(
-                {"item_spec_id": _spec_id(runtime, _HERB).value, "quantity": 1},
-            ),
+            gives_items=({"item_spec_id": _spec_id(runtime, _HERB).value, "quantity": 1},),
             gives_gold=0,
             asks_item_labels=(),
             asks_gold=1,
@@ -140,8 +136,7 @@ def test_accept_late_status_failure_rolls_back_both_sides_and_keeps_offer(
     _give(runtime, _TARGET, _HERB)
     offer = _offer_herb_for_gold(runtime)
     before_gold = tuple(
-        runtime._player_status_repo.find_by_id(player_id).gold.value
-        for player_id in (_OFFERER, _TARGET)
+        runtime._player_status_repo.find_by_id(player_id).gold.value for player_id in (_OFFERER, _TARGET)
     )
     delivered = _capture_trade_events(runtime, monkeypatch)
     original_save = InMemoryPlayerStatusRepository.save
@@ -162,10 +157,10 @@ def test_accept_late_status_failure_rolls_back_both_sides_and_keeps_offer(
 
     assert _held(runtime, _TARGET, _HERB) == 1
     assert _held(runtime, _OFFERER, _HERB) == 0
-    assert tuple(
-        runtime._player_status_repo.find_by_id(player_id).gold.value
-        for player_id in (_OFFERER, _TARGET)
-    ) == before_gold
+    assert (
+        tuple(runtime._player_status_repo.find_by_id(player_id).gold.value for player_id in (_OFFERER, _TARGET))
+        == before_gold
+    )
     assert runtime._pending_trade_offer_store.find(offer.offer_id) == offer
     assert delivered == []
 
@@ -179,9 +174,7 @@ def test_decline_release_failure_keeps_offer_reservation_and_skips_observation(
     offer = runtime._player_trade_service.offer(
         _OFFERER,
         target=_TARGET,
-        gives_items=(
-            {"item_spec_id": _spec_id(runtime, _HERB).value, "quantity": 1},
-        ),
+        gives_items=({"item_spec_id": _spec_id(runtime, _HERB).value, "quantity": 1},),
         gives_gold=0,
         asks_item_labels=(),
         asks_gold=1,
@@ -200,7 +193,5 @@ def test_decline_release_failure_keeps_offer_reservation_and_skips_observation(
         runtime._player_trade_service.decline(_TARGET, offerer=_OFFERER)
 
     assert runtime._pending_trade_offer_store.find(offer.offer_id) == offer
-    assert len(
-        runtime._player_inventory_repo.find_by_id(_OFFERER).reserved_item_ids
-    ) == 1
+    assert len(runtime._player_inventory_repo.find_by_id(_OFFERER).reserved_item_ids) == 1
     assert delivered == []

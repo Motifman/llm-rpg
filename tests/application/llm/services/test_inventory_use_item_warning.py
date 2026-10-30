@@ -28,17 +28,11 @@ class TestFormatItemTypeTag:
 
     def test_material(self) -> None:
         """流木のような素材は、そのまま食べず interact の材料にすることを示す。"""
-        assert (
-            _format_item_type_tag("material")
-            == " (素材・そのままは食べられない。焚き火などの材料)"
-        )
+        assert _format_item_type_tag("material") == " (素材・そのままは食べられない。焚き火などの材料)"
 
     def test_tool(self) -> None:
         """tool は食べ物でなく、近くのオブジェクトへの interact 用途を示す。"""
-        assert (
-            _format_item_type_tag("tool")
-            == " (道具・そのままは食べられない。近くのものに使う)"
-        )
+        assert _format_item_type_tag("tool") == " (道具・そのままは食べられない。近くのものに使う)"
 
     def test_equipment(self) -> None:
         """equipment は食べ物でなく、身につける用途を示す。"""
@@ -46,17 +40,11 @@ class TestFormatItemTypeTag:
 
     def test_key_item_is_marked_important_and_unusable(self) -> None:
         """keyitem は食べ物でなく、対応する場所やオブジェクトで使うことを示す。"""
-        assert (
-            _format_item_type_tag("key_item")
-            == " (重要品・そのままは食べられない。対応する場所やものに使う)"
-        )
+        assert _format_item_type_tag("key_item") == " (重要品・そのままは食べられない。対応する場所やものに使う)"
 
     def test_quest(self) -> None:
         """quest は食べ物でなく、対応する場所やオブジェクトで使うことを示す。"""
-        assert (
-            _format_item_type_tag("quest")
-            == " (任務品・そのままは食べられない。対応する場所やものに使う)"
-        )
+        assert _format_item_type_tag("quest") == " (任務品・そのままは食べられない。対応する場所やものに使う)"
 
     def test_cosmetic(self) -> None:
         """cosmetic は装飾品であり、食べ物ではないことを示す。"""
@@ -64,10 +52,7 @@ class TestFormatItemTypeTag:
 
     def test_other(self) -> None:
         """``other`` は全否定にせず、食べ物でないことと確認先を示す。"""
-        assert (
-            _format_item_type_tag("other")
-            == " (食べ物ではない。用途は周囲のオブジェクトや行動で確認)"
-        )
+        assert _format_item_type_tag("other") == " (食べ物ではない。用途は周囲のオブジェクトや行動で確認)"
 
     def test_non_consumable_tags_do_not_use_absolute_unusable_word(self) -> None:
         """非食料タグは「使用不可」という全否定語を使わない。"""

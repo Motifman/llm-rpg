@@ -1,4 +1,5 @@
 """ショップクエリサービス"""
+
 import logging
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -41,9 +42,7 @@ class ShopQueryService:
         self._shop_listing_repository = shop_listing_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -63,9 +62,7 @@ class ShopQueryService:
                 original_exception=e,
             )
 
-    def get_shops_at_location(
-        self, spot_id: int, location_area_id: int
-    ) -> list[ShopSummaryDto]:
+    def get_shops_at_location(self, spot_id: int, location_area_id: int) -> list[ShopSummaryDto]:
         """指定ロケーションのショップ一覧を取得する（通常は0件または1件）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_shops_at_location_impl(spot_id, location_area_id),
@@ -76,9 +73,7 @@ class ShopQueryService:
             },
         )
 
-    def _get_shops_at_location_impl(
-        self, spot_id: int, location_area_id: int
-    ) -> list[ShopSummaryDto]:
+    def _get_shops_at_location_impl(self, spot_id: int, location_area_id: int) -> list[ShopSummaryDto]:
         shop = self._shop_summary_repository.find_by_spot_and_location(
             SpotId(spot_id), LocationAreaId(location_area_id)
         )

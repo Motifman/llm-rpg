@@ -1,7 +1,5 @@
 """プレイヤー間発言のアプリケーション例外"""
 
-
-
 from typing import Any
 
 

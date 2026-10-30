@@ -63,8 +63,7 @@ class SpotGraphActorStageService:
             # その他予期しない graph エラー (corrupt state / repository error) は
             # silent に握りつぶさず warning を残してから skip する。
             _logger.warning(
-                "SpotGraphActorStageService: unexpected error reading entity_spot "
-                "for entity_id=%s; skipping this tick",
+                "SpotGraphActorStageService: unexpected error reading entity_spot for entity_id=%s; skipping this tick",
                 rule.entity_id,
                 exc_info=True,
             )

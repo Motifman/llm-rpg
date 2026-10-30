@@ -62,9 +62,7 @@ class TestGiveItemDefinitionIsBatchAlways:
         assert "gives" in required
         # 旧 top-level 引数は廃止
         assert "item_label" not in props, "top-level item_label は廃止"
-        assert "target_player_label" not in props, (
-            "top-level target_player_label は廃止"
-        )
+        assert "target_player_label" not in props, "top-level target_player_label は廃止"
 
     def test_gives_array_type_length(self) -> None:
         """gives は array 型で length 制約あり。"""
@@ -77,9 +75,7 @@ class TestGiveItemDefinitionIsBatchAlways:
 
     def test_gives_entry_item_label_target_player_label_required(self) -> None:
         """gives の各 entry は itemlabel と targetplayerlabel が required。"""
-        gives_items = GIVE_ITEM_DEFINITION.parameters["properties"]["gives"][
-            "items"
-        ]
+        gives_items = GIVE_ITEM_DEFINITION.parameters["properties"]["gives"]["items"]
         assert gives_items["type"] == "object"
         entry_props = gives_items["properties"]
         entry_required = gives_items["required"]
@@ -95,9 +91,7 @@ class TestGiveItemsIsDeleted:
     def test_give_items_spec_get_spot_graph_specs(self) -> None:
         """giveitemsspec は getspotgraphspecs から消えている。"""
         names = {defn.name for defn, _ in get_spot_graph_specs()}
-        assert "give_items" not in names, (
-            "give_items は give_item (batch-always) に統合されて廃止された"
-        )
+        assert "give_items" not in names, "give_items は give_item (batch-always) に統合されて廃止された"
 
     def test_give_item_appears_once_in_spot_graph_specs(self) -> None:
         """give item は get spot graph specs に 1件だけ存在する。"""
@@ -112,25 +106,13 @@ class TestGiveItemDescriptionExplainsBatchFormat:
         """description に複数配布または batch の言及あり。"""
         desc = GIVE_ITEM_DEFINITION.description
         # 「複数」「まとめて」「一度」「batch」のいずれかを含む
-        assert (
-            "複数" in desc
-            or "まとめて" in desc
-            or "一度" in desc
-            or "batch" in desc.lower()
-            or "配列" in desc
-        )
+        assert "複数" in desc or "まとめて" in desc or "一度" in desc or "batch" in desc.lower() or "配列" in desc
 
     def test_description(self) -> None:
         """LLM が単発ケースで戸惑わないよう「1 件でも配列で」を書く。"""
         desc = GIVE_ITEM_DEFINITION.description
         # 「1 件」「単発」「gives: [」のような hint を含む
-        assert (
-            "1 件" in desc
-            or "1件" in desc
-            or "単発" in desc
-            or "1 つ" in desc
-            or "1つ" in desc
-        )
+        assert "1 件" in desc or "1件" in desc or "単発" in desc or "1 つ" in desc or "1つ" in desc
 
     def test_description_explains_sharing_food_or_healing_items(self) -> None:
         """give_item は素材だけでなく、食料や回復アイテムを分ける手段だと説明する。"""

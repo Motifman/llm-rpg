@@ -1,6 +1,7 @@
 """
 InMemoryGlobalMarketListingReadModelRepository - GlobalMarketListingReadModelを使用するインメモリ実装
 """
+
 import random
 from datetime import datetime, timedelta
 
@@ -47,7 +48,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(hours=2),
             durability_current=85,
             durability_max=100,
-            requested_gold=500
+            requested_gold=500,
         )
         self._listings[TradeId(1)] = sword_listing
 
@@ -65,7 +66,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(hours=1, minutes=30),
             durability_current=92,
             durability_max=100,
-            requested_gold=1200
+            requested_gold=1200,
         )
         self._listings[TradeId(2)] = staff_listing
 
@@ -83,7 +84,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(hours=1),
             durability_current=None,
             durability_max=None,
-            requested_gold=150
+            requested_gold=150,
         )
         self._listings[TradeId(3)] = potion_listing
 
@@ -101,7 +102,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(minutes=45),
             durability_current=95,
             durability_max=100,
-            requested_gold=5000
+            requested_gold=5000,
         )
         self._listings[TradeId(4)] = rare_armor_listing
 
@@ -119,7 +120,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(minutes=30),
             durability_current=78,
             durability_max=100,
-            requested_gold=300
+            requested_gold=300,
         )
         self._listings[TradeId(5)] = shield_listing
 
@@ -137,7 +138,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(minutes=15),
             durability_current=None,
             durability_max=None,
-            requested_gold=50
+            requested_gold=50,
         )
         self._listings[TradeId(6)] = cheap_listing
 
@@ -155,7 +156,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(minutes=5),
             durability_current=100,
             durability_max=100,
-            requested_gold=15000
+            requested_gold=15000,
         )
         self._listings[TradeId(7)] = epic_listing
 
@@ -174,7 +175,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(hours=1, minutes=45),
             durability_current=90,
             durability_max=100,
-            requested_gold=750
+            requested_gold=750,
         )
         self._listings[TradeId(8)] = hero_listing_2
 
@@ -192,7 +193,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(hours=1, minutes=15),
             durability_current=100,
             durability_max=100,
-            requested_gold=3000
+            requested_gold=3000,
         )
         self._listings[TradeId(9)] = mage_listing_2
 
@@ -210,7 +211,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(hours=1, minutes=30),
             durability_current=None,
             durability_max=None,
-            requested_gold=600
+            requested_gold=600,
         )
         self._listings[TradeId(10)] = herbalist_listing
 
@@ -228,7 +229,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(hours=2),
             durability_current=None,
             durability_max=None,
-            requested_gold=2500
+            requested_gold=2500,
         )
         self._listings[TradeId(11)] = hunter_listing
 
@@ -246,16 +247,26 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=base_time - timedelta(hours=3, minutes=30),
             durability_current=85,
             durability_max=100,
-            requested_gold=1800
+            requested_gold=1800,
         )
         self._listings[TradeId(12)] = guardian_listing
 
-    def _create_sample_listing(self, trade_id: int, item_spec_id: int, item_instance_id: int,
-                              item_name: str, item_quantity: int, item_type: ItemType,
-                              item_rarity: Rarity, item_equipment_type: EquipmentType | None,
-                              status: TradeStatus, created_at: datetime,
-                              durability_current: int | None, durability_max: int | None,
-                              requested_gold: int) -> GlobalMarketListingReadModel:
+    def _create_sample_listing(
+        self,
+        trade_id: int,
+        item_spec_id: int,
+        item_instance_id: int,
+        item_name: str,
+        item_quantity: int,
+        item_type: ItemType,
+        item_rarity: Rarity,
+        item_equipment_type: EquipmentType | None,
+        status: TradeStatus,
+        created_at: datetime,
+        durability_current: int | None,
+        durability_max: int | None,
+        requested_gold: int,
+    ) -> GlobalMarketListingReadModel:
         """サンプル取引出品を作成するヘルパーメソッド"""
         return GlobalMarketListingReadModel.create_from_trade_data(
             trade_id=TradeId(trade_id),
@@ -270,7 +281,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             created_at=created_at,
             durability_current=durability_current,
             durability_max=durability_max,
-            requested_gold=requested_gold
+            requested_gold=requested_gold,
         )
 
     # Repository基本メソッドの実装
@@ -305,10 +316,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
 
     # GlobalMarketListingReadModelRepository特有メソッドの実装
     def find_listings(
-        self,
-        filter_condition: TradeSearchFilter,
-        limit: int = 50,
-        cursor: ListingCursor | None = None
+        self, filter_condition: TradeSearchFilter, limit: int = 50, cursor: ListingCursor | None = None
     ) -> tuple[list[GlobalMarketListingReadModel], ListingCursor | None]:
         """フィルタ条件で出品を取得（カーソルベースページング）
 
@@ -335,8 +343,9 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
         if cursor:
             cursor_filtered_listings = []
             for listing in filtered_listings:
-                if (listing.created_at < cursor.created_at or
-                    (listing.created_at == cursor.created_at and int(listing.trade_id) < cursor.listing_id)):
+                if listing.created_at < cursor.created_at or (
+                    listing.created_at == cursor.created_at and int(listing.trade_id) < cursor.listing_id
+                ):
                     cursor_filtered_listings.append(listing)
             filtered_listings = cursor_filtered_listings
 
@@ -347,10 +356,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
         next_cursor = None
         if len(filtered_listings) > limit and len(result_listings) > 0:
             last_listing = result_listings[-1]
-            next_cursor = ListingCursor(
-                created_at=last_listing.created_at,
-                listing_id=int(last_listing.trade_id)
-            )
+            next_cursor = ListingCursor(created_at=last_listing.created_at, listing_id=int(last_listing.trade_id))
 
         return result_listings, next_cursor
 
@@ -392,7 +398,10 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
 
         # 装備タイプフィルタ（装備品の場合のみ）
         if filter_condition.equipment_types:
-            if listing.item_equipment_type is None or listing.item_equipment_type not in filter_condition.equipment_types:
+            if (
+                listing.item_equipment_type is None
+                or listing.item_equipment_type not in filter_condition.equipment_types
+            ):
                 return False
 
         # 価格範囲フィルタ

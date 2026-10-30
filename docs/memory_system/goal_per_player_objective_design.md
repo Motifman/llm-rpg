@@ -2,6 +2,8 @@
 
 > 前提: [goal_layer_design_active_inference.md](./goal_layer_design_active_inference.md)
 > の G1 (goal store) は実装済み。本 doc はその **入口** だけを扱う。
+>
+> G1 の goal store と `players[].goal_locked` は、記憶の部品の撤去 (#1631) の #1686 で消した。`players[].objective` は残り、そのプレイヤーの【現在の目的】にそのまま載る。`goal_locked` を書いたシナリオは、読み込みの時点で止まる。
 
 ## 0. 要約
 
@@ -20,9 +22,11 @@
 
 ## 1. 実測 — いま目的層は本命 run で死んでいる
 
-`belief_goal_full` 系 profile は `GOAL_STORE_ENABLED` と
+`belief_goal_full` 系 profile (Issue #1631 で退役) は `GOAL_STORE_ENABLED` と
 `GOAL_REVISION_ENABLED` を両方 true にしている。つまり目的の見直し (G2) は
 配線されている。それでも既存 run の trace は次のとおり。
+
+> 目的の見直し (`GOAL_REVISION_ENABLED`) と、表の 2 つの trace (`goal_revision_rejected` / `goal_resolution`) は、記憶の部品の撤去 (#1631) の #1664 で消した。
 
 | run | tick | `goal_revision_rejected` | 内 `reason=locked` | `goal_resolution` (成功) |
 |---|---|---|---|---|

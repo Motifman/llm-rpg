@@ -57,10 +57,15 @@ class _StubInteriorRepo:
 def _make_graph_with_object(state: dict) -> tuple[SpotGraphAggregate, _StubInteriorRepo]:
     """SPOT_ID に 1 つ OBJECT_ID が置かれた最小 graph + 対応する interior。"""
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
-    graph.add_spot(SpotNode(
-        spot_id=SPOT_ID, name="採取スポット", description="test",
-        category=SpotCategoryEnum.FIELD, parent_id=None,
-    ))
+    graph.add_spot(
+        SpotNode(
+            spot_id=SPOT_ID,
+            name="採取スポット",
+            description="test",
+            category=SpotCategoryEnum.FIELD,
+            parent_id=None,
+        )
+    )
     obj = SpotObject(
         object_id=OBJECT_ID,
         name="ベリー茂み",

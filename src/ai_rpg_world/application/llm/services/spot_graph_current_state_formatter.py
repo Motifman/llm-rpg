@@ -3,27 +3,27 @@
 from typing import Any
 
 from ai_rpg_world.application.llm.contracts.interfaces import ICurrentStateFormatter
-from ai_rpg_world.application.llm.services.current_state_formatter import DefaultCurrentStateFormatter
 from ai_rpg_world.application.llm.services.world_vocabulary import (
     lighting_display,
     temperature_display,
     weather_display,
 )
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
+from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
 from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
     HEALTH_BUCKET_JP,
 )
 
 
 class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
-    """spot_graph_snapshot があればスポットグラフ向けに整形し、なければデフォルトにフォールバック。"""
+    """スポットの状態を整形し、状態の無い DTO は入口で拒否する。"""
 
     def format(self, dto: PlayerCurrentStateDto) -> str:
         if not isinstance(dto, PlayerCurrentStateDto):
             raise TypeError("dto must be PlayerCurrentStateDto")
         snap = dto.spot_graph_snapshot
         if snap is None:
-            return DefaultCurrentStateFormatter().format(dto)
+            raise ValueError("spot_graph_snapshot is required")
 
         lines: list[str] = []
         lines.append(f"現在地: {snap.current_spot_name}")
@@ -94,9 +94,9 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         if dto.tick_budget_remaining is not None:
             remaining = dto.tick_budget_remaining
             if remaining <= 0:
-                lines.append("残り行動可能 tick: 0 (時間切れ寸前)")
+                lines.append("時間切れまで: もう時間が残っていない (時間切れ寸前)")
             else:
-                lines.append(f"残り行動可能 tick: {remaining}")
+                lines.append(f"時間切れまで: あと{span_text(remaining, dto.minutes_per_tick)}")
 
         # Phase 4-E: スポット内オブジェクトの動的 state は、
         # UiContextBuilder._build_object_section が「オブジェクト:」section
@@ -118,12 +118,8 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
                 if entry.is_dead:
                     lines.append(f"- {entry.display_name}（死骸）")
                 else:
-                    health_label = HEALTH_BUCKET_JP.get(
-                        entry.health_bucket, entry.health_bucket
-                    )
-                    lines.append(
-                        f"- {entry.display_name}（{entry.behavior_label}・{health_label}）"
-                    )
+                    health_label = HEALTH_BUCKET_JP.get(entry.health_bucket, entry.health_bucket)
+                    lines.append(f"- {entry.display_name}（{entry.behavior_label}・{health_label}）")
                 appearance = str(getattr(entry, "appearance", "") or "").strip()
                 if appearance:
                     lines.append(f"  見た目: {appearance}")
@@ -148,8 +144,6 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         return "\n".join(lines)
 
 
-
-
 def _render_own_state(
     player_state: Any,
     display_names: Any = None,
@@ -162,10 +156,11 @@ def _render_own_state(
     記録する``)。呼び名の出所はシナリオ (metadata.role_labels / interaction の
     display_label) で、**ここに新しい辞書を作らない**。
 
-    ``hidden_keys`` に挙がったキーは出さない。手番を記録する効果が書いた
-    内部の記録で、``prayed_at_tick=5`` と出ても読み手は何も判断できない
-    (#892)。どのキーがそれかは**シナリオの宣言から導出**しており、名前を
-    当てにいってはいない。
+    ``hidden_keys`` に挙がったキーは出さない。1 つは手番を記録する効果が
+    書いた内部の記録で、``prayed_at_tick=5`` と出ても読み手は何も判断できない
+    (#892)。もう 1 つは ``player_attributes`` で ``hidden`` と宣言された属性で、
+    ``team=north`` が本人に見えるだけで対になる側の存在が漏れる (#1546)。
+    どちらも**シナリオの宣言から決めて**おり、名前を当てにいってはいない。
 
     **それ以外で宣言の無いキーは従来どおり ``key=value`` で残す。** 一度は落とす実装に
     したが、それだと ``cursed=true`` のような自由 state を持つ世界で
@@ -179,8 +174,6 @@ def _render_own_state(
     hidden = frozenset(hidden_keys or ())
     rendered: list[str] = []
     for key, value in sorted(dict(player_state or {}).items()):
-        # 手番を記録する効果が書いた key は出さない。宣言から導出したもので、
-        # 名前を当てにいってはいない (物体 state と同じ判断)。
         if key in hidden:
             continue
         entry = names.get(f"{key}={_render_value(value)}")

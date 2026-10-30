@@ -47,50 +47,28 @@ class StateDisplayRule:
 
     def __post_init__(self) -> None:
         if not isinstance(self.key, str) or not self.key.strip():
-            raise StateDisplayRuleValidationException(
-                "StateDisplayRule.key must be a non-empty string"
-            )
+            raise StateDisplayRuleValidationException("StateDisplayRule.key must be a non-empty string")
         if type(self.value) not in _ALLOWED_VALUE_TYPES:
             raise StateDisplayRuleValidationException(
-                "StateDisplayRule.value must be a JSON primitive "
-                "(bool, int, float, str, or null)"
+                "StateDisplayRule.value must be a JSON primitive (bool, int, float, str, or null)"
             )
         if self.at_least is not None and type(self.at_least) is not int:
-            raise StateDisplayRuleValidationException(
-                "StateDisplayRule.at_least must be an integer"
-            )
-        if self.within_ticks is not None and (
-            type(self.within_ticks) is not int or self.within_ticks <= 0
-        ):
-            raise StateDisplayRuleValidationException(
-                "StateDisplayRule.within_ticks must be a positive integer"
-            )
-        if self.within_ticks is not None and (
-            self.at_least is not None or self.value is not None
-        ):
+            raise StateDisplayRuleValidationException("StateDisplayRule.at_least must be an integer")
+        if self.within_ticks is not None and (type(self.within_ticks) is not int or self.within_ticks <= 0):
+            raise StateDisplayRuleValidationException("StateDisplayRule.within_ticks must be a positive integer")
+        if self.within_ticks is not None and (self.at_least is not None or self.value is not None):
             raise StateDisplayRuleValidationException(
                 "StateDisplayRule.within_ticks cannot be combined with value or at_least"
             )
         if type(self.requires_light) is not bool:
-            raise StateDisplayRuleValidationException(
-                "StateDisplayRule.requires_light must be a boolean"
-            )
+            raise StateDisplayRuleValidationException("StateDisplayRule.requires_light must be a boolean")
         if self.unless_flag_set is not None and (
-            not isinstance(self.unless_flag_set, str)
-            or not self.unless_flag_set.strip()
+            not isinstance(self.unless_flag_set, str) or not self.unless_flag_set.strip()
         ):
-            raise StateDisplayRuleValidationException(
-                "StateDisplayRule.unless_flag_set must be a non-empty string"
-            )
+            raise StateDisplayRuleValidationException("StateDisplayRule.unless_flag_set must be a non-empty string")
         if self.unless_flag_set is not None and self.within_ticks is None:
-            raise StateDisplayRuleValidationException(
-                "StateDisplayRule.unless_flag_set requires within_ticks"
-            )
+            raise StateDisplayRuleValidationException("StateDisplayRule.unless_flag_set requires within_ticks")
         if not isinstance(self.text, str) or not self.text.strip():
-            raise StateDisplayRuleValidationException(
-                "StateDisplayRule.text must be a non-empty string"
-            )
+            raise StateDisplayRuleValidationException("StateDisplayRule.text must be a non-empty string")
         if "{remaining_minutes}" in self.text and self.within_ticks is None:
-            raise StateDisplayRuleValidationException(
-                "StateDisplayRule.remaining_minutes requires within_ticks"
-            )
+            raise StateDisplayRuleValidationException("StateDisplayRule.remaining_minutes requires within_ticks")

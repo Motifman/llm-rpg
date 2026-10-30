@@ -35,9 +35,7 @@ class DayNightPhaseDef:
 
     def __post_init__(self) -> None:
         if not self.name:
-            raise DayNightPhaseValidationException(
-                "DayNightPhaseDef.name must not be empty"
-            )
+            raise DayNightPhaseValidationException("DayNightPhaseDef.name must not be empty")
         if not 0.0 <= self.start_ratio < 1.0:
             raise DayNightPhaseValidationException(
                 f"DayNightPhaseDef.start_ratio must be in [0.0, 1.0): {self.start_ratio}"

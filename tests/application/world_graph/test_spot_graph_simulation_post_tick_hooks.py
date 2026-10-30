@@ -97,7 +97,7 @@ class TestSpotGraphSimulationPostTickHooks:
         # 1 tick 目では heartbeat が anchor のみで schedule_turn は呼ばれない
         assert events_before_emit == ["run"]
         # 2 tick 目で schedule → run の順に積まれる
-        new_events = trigger.events[len(events_before_emit):]
+        new_events = trigger.events[len(events_before_emit) :]
         assert new_events == ["schedule(1)", "run"]
 
     def test_heartbeat_can_be_absent(self) -> None:

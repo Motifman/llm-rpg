@@ -64,13 +64,8 @@ class TestSignObjectScenarioLoading:
         for interior in result.interiors.values():
             for obj in interior.objects:
                 if obj.name == "掲示板":
-                    write_def = next(
-                        i for i in obj.interactions if i.action_name == "write"
-                    )
-                    assert (
-                        write_def.effects[0].effect_type
-                        == InteractionEffectTypeEnum.WRITE_PLAYER_TEXT
-                    )
+                    write_def = next(i for i in obj.interactions if i.action_name == "write")
+                    assert write_def.effects[0].effect_type == InteractionEffectTypeEnum.WRITE_PLAYER_TEXT
                     return
         raise AssertionError("掲示板 object not found")
 
@@ -80,13 +75,8 @@ class TestSignObjectScenarioLoading:
         for interior in result.interiors.values():
             for obj in interior.objects:
                 if obj.name == "掲示板":
-                    examine_def = next(
-                        i for i in obj.interactions if i.action_name == "examine"
-                    )
-                    assert (
-                        examine_def.effects[0].effect_type
-                        == InteractionEffectTypeEnum.SHOW_PLAYER_TEXT
-                    )
+                    examine_def = next(i for i in obj.interactions if i.action_name == "examine")
+                    assert examine_def.effects[0].effect_type == InteractionEffectTypeEnum.SHOW_PLAYER_TEXT
                     return
         raise AssertionError("掲示板 object not found")
 
@@ -99,6 +89,7 @@ class TestSignObjectScenarioLoading:
                     from ai_rpg_world.domain.world_graph.enum.spot_object_type import (
                         SpotObjectTypeEnum,
                     )
+
                     assert obj.object_type == SpotObjectTypeEnum.SIGN
                     return
         raise AssertionError("掲示板 object not found")

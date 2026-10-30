@@ -6,9 +6,9 @@
 > **prefix cache 効率** と **連続性のある記憶** の両立を目的とする。
 >
 > **関連**: 長期記憶側の整理は
-> [semantic_memory_activation_plan.md](./semantic_memory_activation_plan.md)。
+> `semantic_memory_activation_plan.md` (#1631 で削除)。
 > エピソード記憶パイプライン全体像は
-> [../episodic_memory_overview.md](../episodic_memory_overview.md)。
+> `episodic_memory_overview.md` (#1631 で削除)。
 
 ---
 
@@ -52,7 +52,7 @@ prefix cache が効かない根本理由は **「user content 上位 (current_st
 
 このモジュールは **「最近やったこと」「今の気分」「自分の語り口」** だけを
 担う。学び (タカシは信頼できる) や世界ルール (毒キノコ = 赤い斑点) は
-**episodic → semantic の経路** に任せる ([semantic_memory_activation_plan.md](./semantic_memory_activation_plan.md) 参照)。
+**episodic → semantic の経路** に任せる (`semantic_memory_activation_plan.md` (#1631 で削除) 参照)。
 
 これは Tulving の memory taxonomy に近い分離:
 - **episodic** = 「あの時あの場所」(具体エピソード)
@@ -81,7 +81,7 @@ prefix cache が効かない根本理由は **「user content 上位 (current_st
 軽く、prefix cache 寿命が伸びる。
 
 > **L2 / L3 を欠番にしている理由**: ドキュメント中の番号は
-> [../episodic_memory_overview.md](../episodic_memory_overview.md) の
+> `episodic_memory_overview.md` (#1631 で削除) の
 > エピソード階層 (L0 raw → L2 chunk → L3 episode) と整合させるため。
 
 ### 3.1 状態遷移
@@ -130,6 +130,8 @@ prompt 表示時は **生成中の世代を待たない**: 現状の L4 をそ�
 ## 4. 生成プロンプト
 
 ### 4.1 L4 生成 (mid summary)
+
+> #1824 で、L4 は【ここまでのいきさつ】として流れと気分だけを持つ形にした。`unresolved` は外し、言われた予定と実際にしたことを分けて書かせる。今の指示は `short_term_memory_summary_service.py` の `_SYSTEM_PROMPT` (design_decisions D1824-2)。以下は変える前の設計の記録。
 
 ```
 あなた = {player_name}
@@ -181,6 +183,8 @@ tick {t1}: {raw_obs_1}
 - `key_facts` → 「事実」は semantic、ここは narrative voice に絞る
 
 ### 4.2 L5 生成 (long summary 更新)
+
+> L5 と【自己像と世界観】は #1824 で消した (design_decisions D1824)。以下は消す前の設計の記録。
 
 ```
 あなた = {player_name}
@@ -270,6 +274,8 @@ tick {t1}: {raw_obs_1}
 
 ## 6. 実装フェーズ
 
+> L4 / L5 の生成の scheduler を設定 (`SHORT_TERM_MEMORY_SCHEDULER_MODE`) で選ぶ口は、記憶ではない設定の片付け (#1631) の #1759 で消した。ThreadPool の scheduler (`ThreadPoolShortTermMemoryScheduler`) を設定から組んでいたのは、2026-06-07 (a9eded93b) から 2026-06-21 (2bfd0d3a1) まで full wiring (`wiring/__init__.py`) だけだった。実験と本番が通る escape の経路 (いまの world_runtime) は一度も組んでおらず、`thread_pool` と記録された run も、短期記憶の要約は同期 (inline) で作っていた。非同期の部品は残っている。
+
 | Phase | 内容 | 工数 | デフォルト | 検証対象 |
 |---|---|---|---|---|
 | **0** | prompt section 順入替 (現状の sliding window のまま) | 1日 | **ON** | prefix cache 効率 (`cached_tokens / prompt_tokens` 比) |
@@ -288,14 +294,7 @@ Phase 1/2 で実装する `RollingSummaryShortTermMemory` は **wiring を整え
   検証が崩れる
 - まず episodic を固めてから rolling を入れる順序にする
 
-config 例 (案):
-```json
-{
-  "SHORT_TERM_MEMORY_KIND": "sliding_window",
-  "SHORT_TERM_MEMORY_TURN_CAP": 20,
-  "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT": 10
-}
-```
+この案の config のキー (短期記憶の種類とターン数) は、今は無い。ターン数は Being のドメインの定数になった (design_decisions D1824-9)。
 
 wiring 側で `IShortTermMemory` の実装を分岐選択する。`SummarizingShortTermMemory`
 を作っても scenario が明示しなければ instantiate しない。
@@ -305,6 +304,8 @@ wiring 側で `IShortTermMemory` の実装を分岐選択する。`SummarizingSh
 維持する。Phase 1 以降も削除しない。理由:
 - A/B 実験の比較対象として残す
 - 短いシナリオ (escape_game のような数十ターンで完結する) では sliding window で十分
+
+**その後**: 6.1 と 6.2 の方針はもう使えない。どの profile も `rolling_summary` で動かしていたので、`SHORT_TERM_MEMORY_KIND` は #1631 の #1785 で消した。短期記憶は常に `SummarizingShortTermMemory` で組む。`DefaultSlidingWindowMemory` は試験の代役としてだけ残る。#1811 で `DefaultSlidingWindowMemory` と、snapshot の codec が固定容量の短期記憶へ書き戻す経路を消した。snapshot の保存形式のキー `"sliding_window"` と、固定容量の短期記憶で保存した古い snapshot を要約する短期記憶へ読む経路は残した。
 
 ---
 

@@ -24,9 +24,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """人数条件は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,

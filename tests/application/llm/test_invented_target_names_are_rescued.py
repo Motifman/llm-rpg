@@ -67,8 +67,20 @@ def _target(label: str, name: str, *, kind: str = "spot_graph_object", **extra: 
 
 
 def _context() -> ToolRuntimeContextDto:
-    east = _target("O1", "東の祭壇", world_object_id=11, available_interactions=("offer",), interaction_labels=(("offer", "供物を捧げる"),))
-    west = _target("O2", "西の祭壇", world_object_id=12, available_interactions=("offer",), interaction_labels=(("offer", "供物を捧げる"),))
+    east = _target(
+        "O1",
+        "東の祭壇",
+        world_object_id=11,
+        available_interactions=("offer",),
+        interaction_labels=(("offer", "供物を捧げる"),),
+    )
+    west = _target(
+        "O2",
+        "西の祭壇",
+        world_object_id=12,
+        available_interactions=("offer",),
+        interaction_labels=(("offer", "供物を捧げる"),),
+    )
     return ToolRuntimeContextDto(targets={"O1": east, "O2": west})
 
 
@@ -179,7 +191,9 @@ class TestAnUncertainChoiceLeavesTheFailure:
     def test_kind_mismatch_is_not_asked_about(self) -> None:
         """種別違いの失敗 (INVALID_TARGET_KIND) は名前の問題ではないので問わない。"""
         port = _FixedPort("東の祭壇")
-        ctx = ToolRuntimeContextDto(targets={"S1": _target("S1", "祭壇前", kind="spot_graph_sub_location", sub_location_id=1)})
+        ctx = ToolRuntimeContextDto(
+            targets={"S1": _target("S1", "祭壇前", kind="spot_graph_sub_location", sub_location_id=1)}
+        )
         resolver = SpotGraphArgumentResolver(target_label_rescue=TargetLabelRescue(port=port, min_confidence=0.85))
 
         with pytest.raises(ToolArgumentResolutionException) as caught:

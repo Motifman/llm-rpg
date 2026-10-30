@@ -17,9 +17,7 @@ class TestBeingAttachmentValidation:
 
     def test_world_id_player_id_can_create(self) -> None:
         """正しい型の引数でインスタンス化される。"""
-        attachment = BeingAttachment(
-            world_id=WorldId(1), player_id=PlayerId(2)
-        )
+        attachment = BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
         assert attachment.world_id == WorldId(1)
         assert attachment.player_id == PlayerId(2)
 
@@ -43,11 +41,12 @@ class TestBeingAttachmentEquality:
         b = BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
         assert a == b
 
-    def test_world_not_equal(self) -> None:
-        """world_id が違えば等しくない。"""
-        a = BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
-        b = BeingAttachment(world_id=WorldId(99), player_id=PlayerId(2))
-        assert a != b
+    @pytest.mark.parametrize("world, player", [(99, 2), (1, 99)])
+    def test_different_world_or_player_is_not_equal(self, world: int, player: int) -> None:
+        """世界・プレイヤーの一方だけが違っても、接続先は同じではない。"""
+        original = BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
+        other = BeingAttachment(world_id=WorldId(world), player_id=PlayerId(player))
+        assert original != other
 
     def test_hashable(self) -> None:
         """frozen dataclass なので set / dict キーとして使える。"""

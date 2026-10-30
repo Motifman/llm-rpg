@@ -23,9 +23,7 @@ class CommandContextUnitOfWorkFacade:
             is_active=unit_of_work.is_in_transaction,
         )
 
-    def add_events_from_aggregate(
-        self, aggregate: EventProducingAggregatePort
-    ) -> None:
+    def add_events_from_aggregate(self, aggregate: EventProducingAggregatePort) -> None:
         self._event_sink.add_events_from_aggregate(aggregate)
 
     def is_in_transaction(self) -> bool:
@@ -34,9 +32,7 @@ class CommandContextUnitOfWorkFacade:
     def add_operation(self, operation: Callable[[], object]) -> None:
         self._unit_of_work.add_operation(operation)
 
-    def register_pending_aggregate(
-        self, repo_key: str, entity_id: Any, aggregate: Any
-    ) -> None:
+    def register_pending_aggregate(self, repo_key: str, entity_id: Any, aggregate: Any) -> None:
         self._unit_of_work.register_pending_aggregate(repo_key, entity_id, aggregate)
 
     def get_pending_aggregate(self, repo_key: str, entity_id: Any) -> Any | None:

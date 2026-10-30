@@ -45,28 +45,46 @@ def _scenario_with_initial_items(initial_items_raw) -> dict:
     return {
         "scenario_format_version": "1.0",
         "metadata": {
-            "id": "x", "title": "x", "description": "x",
-            "theme": "x", "difficulty": "easy", "estimated_ticks": 1,
-            "author": "x", "tags": [],
+            "id": "x",
+            "title": "x",
+            "description": "x",
+            "theme": "x",
+            "difficulty": "easy",
+            "estimated_ticks": 1,
+            "author": "x",
+            "tags": [],
         },
         "item_specs": [
             {"id": "torch", "name": "松明", "description": "d", "category": "MATERIAL"},
             {"id": "match", "name": "マッチ", "description": "d", "category": "MATERIAL"},
         ],
         "environment": {
-            "weather": {"enabled": False, "initial": {"weather_type": "CLEAR", "intensity": 0.0},
-                        "update_interval_ticks": 100, "announce_changes": False},
+            "weather": {
+                "enabled": False,
+                "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+                "update_interval_ticks": 100,
+                "announce_changes": False,
+            },
         },
-        "spots": [{
-            "id": "s", "name": "S", "description": "d", "category": "OTHER",
-            "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
-            "interior": {"objects": []},
-        }],
+        "spots": [
+            {
+                "id": "s",
+                "name": "S",
+                "description": "d",
+                "category": "OTHER",
+                "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+                "interior": {"objects": []},
+            }
+        ],
         "connections": [],
-        "players": [{
-            "id": "p", "name": "P", "spawn_spot": "s",
-            "initial_items": initial_items_raw,
-        }],
+        "players": [
+            {
+                "id": "p",
+                "name": "P",
+                "spawn_spot": "s",
+                "initial_items": initial_items_raw,
+            }
+        ],
         "game_end_conditions": {"win": [], "lose": []},
     }
 
@@ -76,9 +94,7 @@ class TestInitialItemSpecParsing:
 
     def test_string_form_has_empty_state(self) -> None:
         """文字列形式は state を空 dict として正規化される (旧シナリオと互換)。"""
-        result = ScenarioLoader().load_from_dict(
-            _scenario_with_initial_items(["torch"])
-        )
+        result = ScenarioLoader().load_from_dict(_scenario_with_initial_items(["torch"]))
         spawn = result.player_spawns[0]
         assert len(spawn.initial_items) == 1
         item = spawn.initial_items[0]
@@ -88,9 +104,11 @@ class TestInitialItemSpecParsing:
     def test_dict_form_with_state(self) -> None:
         """dict 形式は spec + state を正しく分離する。"""
         result = ScenarioLoader().load_from_dict(
-            _scenario_with_initial_items([
-                {"spec": "torch", "state": {"lit": False, "fuel": 100}},
-            ])
+            _scenario_with_initial_items(
+                [
+                    {"spec": "torch", "state": {"lit": False, "fuel": 100}},
+                ]
+            )
         )
         item = result.player_spawns[0].initial_items[0]
         assert item.spec_id.value == result.id_mapper.get_int("item_spec", "torch")
@@ -98,19 +116,19 @@ class TestInitialItemSpecParsing:
 
     def test_dict_form_without_state_key_defaults_to_empty(self) -> None:
         """dict 形式でも state キーが無ければ空 dict (state なしの dict 表記も許容)。"""
-        result = ScenarioLoader().load_from_dict(
-            _scenario_with_initial_items([{"spec": "torch"}])
-        )
+        result = ScenarioLoader().load_from_dict(_scenario_with_initial_items([{"spec": "torch"}]))
         item = result.player_spawns[0].initial_items[0]
         assert item.state == {}
 
     def test_mixed_string_and_dict_forms(self) -> None:
         """同じ players entry 内で文字列形式と dict 形式の混在を許容する。"""
         result = ScenarioLoader().load_from_dict(
-            _scenario_with_initial_items([
-                "torch",
-                {"spec": "match", "state": {"used": False}},
-            ])
+            _scenario_with_initial_items(
+                [
+                    "torch",
+                    {"spec": "match", "state": {"used": False}},
+                ]
+            )
         )
         items = result.player_spawns[0].initial_items
         assert len(items) == 2
@@ -124,25 +142,23 @@ class TestInitialItemSpecValidation:
     def test_dict_without_spec_rejected(self) -> None:
         """dict 形式で `spec` キーが無いと拒否。"""
         with pytest.raises(ScenarioLoadError, match="spec is required"):
-            ScenarioLoader().load_from_dict(
-                _scenario_with_initial_items([{"state": {"lit": True}}])
-            )
+            ScenarioLoader().load_from_dict(_scenario_with_initial_items([{"state": {"lit": True}}]))
 
     def test_state_not_dict_rejected(self) -> None:
         """`state` が dict 以外なら拒否。"""
         with pytest.raises(ScenarioLoadError, match="state must be an object"):
             ScenarioLoader().load_from_dict(
-                _scenario_with_initial_items([
-                    {"spec": "torch", "state": "lit=true"},
-                ])
+                _scenario_with_initial_items(
+                    [
+                        {"spec": "torch", "state": "lit=true"},
+                    ]
+                )
             )
 
     def test_non_string_non_dict_rejected(self) -> None:
         """文字列でも dict でもない要素 (null, int 等) は拒否。"""
         with pytest.raises(ScenarioLoadError, match="must be a string or object"):
-            ScenarioLoader().load_from_dict(
-                _scenario_with_initial_items([42])
-            )
+            ScenarioLoader().load_from_dict(_scenario_with_initial_items([42]))
 
 
 class TestGrantInitialItemsToInventory:
@@ -179,36 +195,43 @@ class TestGrantInitialItemsToInventory:
     def test_state_is_persisted_on_generated_instance(self) -> None:
         """JSON の initial_items に state を仕込むと、その state を持つ instance が生成される。"""
         loaded = ScenarioLoader().load_from_dict(
-            _scenario_with_initial_items([
-                {"spec": "torch", "state": {"lit": False, "fuel": 100}},
-            ])
+            _scenario_with_initial_items(
+                [
+                    {"spec": "torch", "state": {"lit": False, "fuel": 100}},
+                ]
+            )
         )
         item_repo, item_spec_repo, inv_repo = self._build_repos(loaded)
         pid = PlayerId(loaded.player_spawns[0].player_id)
         inv_repo.save(PlayerInventoryAggregate(player_id=pid))
 
         grant_initial_items_to_inventory(
-            pid, loaded.player_spawns[0].initial_items,
-            item_repo, item_spec_repo, inv_repo,
+            pid,
+            loaded.player_spawns[0].initial_items,
+            item_repo,
+            item_spec_repo,
+            inv_repo,
             overflow_sink=IGNORE_OVERFLOW,
         )
         # instance が state を持って生成されている
         assert self._state_of_first_instance(inv_repo, item_repo, pid) == {
-            "lit": False, "fuel": 100,
+            "lit": False,
+            "fuel": 100,
         }
 
     def test_string_form_yields_empty_state_instance(self) -> None:
         """文字列形式 (state なし) では instance.state は空 dict になる。"""
-        loaded = ScenarioLoader().load_from_dict(
-            _scenario_with_initial_items(["torch"])
-        )
+        loaded = ScenarioLoader().load_from_dict(_scenario_with_initial_items(["torch"]))
         item_repo, item_spec_repo, inv_repo = self._build_repos(loaded)
         pid = PlayerId(loaded.player_spawns[0].player_id)
         inv_repo.save(PlayerInventoryAggregate(player_id=pid))
 
         grant_initial_items_to_inventory(
-            pid, loaded.player_spawns[0].initial_items,
-            item_repo, item_spec_repo, inv_repo,
+            pid,
+            loaded.player_spawns[0].initial_items,
+            item_repo,
+            item_spec_repo,
+            inv_repo,
             overflow_sink=IGNORE_OVERFLOW,
         )
         assert self._state_of_first_instance(inv_repo, item_repo, pid) == {}

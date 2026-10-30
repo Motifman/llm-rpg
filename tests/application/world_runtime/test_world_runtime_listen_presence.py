@@ -24,6 +24,7 @@ def test_do_listen_excludes_downed_players_and_returns_no_partial_count() -> Non
 
     assert result is None
     graph.emit_listen_carefully.assert_called_once_with(
-        EntityId.create(1), moving_entity_ids=frozenset({EntityId.create(2)}),
+        EntityId.create(1),
+        moving_entity_ids=frozenset({EntityId.create(2)}),
     )
     runtime._process_graph_events.assert_called_once_with()

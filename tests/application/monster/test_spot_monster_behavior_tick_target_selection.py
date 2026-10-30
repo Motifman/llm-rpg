@@ -30,9 +30,7 @@ def _make_service(random_source, players: dict):
     """
     graph = MagicMock()
     presence = MagicMock()
-    presence.present_entity_ids = frozenset(
-        EntityId.create(pid) for pid in players
-    )
+    presence.present_entity_ids = frozenset(EntityId.create(pid) for pid in players)
     graph.presence_at.return_value = presence
 
     player_repo = MagicMock()
@@ -63,20 +61,14 @@ class TestPickTargetNotLowestIdFixed:
         (= 最小 ID 一択ではない)。"""
         players = {1: _fake_player(1), 2: _fake_player(2)}
         svc, graph = _make_service(random.Random(0), players)
-        picked_ids = {
-            svc._pick_target(graph, SPOT_A).player_id.value
-            for _ in range(40)
-        }
+        picked_ids = {svc._pick_target(graph, SPOT_A).player_id.value for _ in range(40)}
         assert picked_ids == {1, 2}
 
     def test_down_player_never_targeted(self) -> None:
         """ダウン中のプレイヤーは標的にならない (生存者のみ)。"""
         players = {1: _fake_player(1, is_down=True), 2: _fake_player(2)}
         svc, graph = _make_service(random.Random(0), players)
-        picked_ids = {
-            svc._pick_target(graph, SPOT_A).player_id.value
-            for _ in range(20)
-        }
+        picked_ids = {svc._pick_target(graph, SPOT_A).player_id.value for _ in range(20)}
         assert picked_ids == {2}
 
     def test_single_living_player_returned(self) -> None:

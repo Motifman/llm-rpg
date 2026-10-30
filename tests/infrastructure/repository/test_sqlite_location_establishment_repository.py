@@ -27,9 +27,7 @@ def sqlite_conn() -> sqlite3.Connection:
 
 
 class TestSqliteLocationEstablishmentRepository:
-    def test_shared_repository_requires_active_transaction_for_save(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_repository_requires_active_transaction_for_save(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteLocationEstablishmentRepository.for_shared_unit_of_work(sqlite_conn)
         slot = LocationEstablishmentAggregate.create(SpotId(1), LocationAreaId(1))
         with pytest.raises(RuntimeError, match="for_shared_unit_of_work"):
@@ -57,9 +55,7 @@ class TestSqliteLocationEstablishmentRepository:
         assert found.establishment_type == EstablishmentType.SHOP
         assert found.establishment_id == 10
 
-    def test_release_persists_empty_slot_instead_of_deleting(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_release_persists_empty_slot_instead_of_deleting(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteLocationEstablishmentRepository.for_standalone_connection(sqlite_conn)
         slot = LocationEstablishmentAggregate.create(SpotId(2), LocationAreaId(3))
         slot.claim(EstablishmentType.GUILD, 55)
@@ -94,14 +90,10 @@ class TestSqliteLocationEstablishmentRepository:
         assert repo.delete(LocationSlotId(SpotId(1), LocationAreaId(1))) is True
         assert repo.find_by_spot_and_location(SpotId(1), LocationAreaId(1)) is None
 
-    def test_shared_uow_write_is_visible_inside_transaction(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_uow_write_is_visible_inside_transaction(self, sqlite_conn: sqlite3.Connection) -> None:
         uow = SqliteUnitOfWork(connection=sqlite_conn)
         with uow:
-            repo = SqliteLocationEstablishmentRepository.for_shared_unit_of_work(
-                uow.connection
-            )
+            repo = SqliteLocationEstablishmentRepository.for_shared_unit_of_work(uow.connection)
             slot = LocationEstablishmentAggregate.create(SpotId(1), LocationAreaId(4))
             slot.claim(EstablishmentType.SHOP, 99)
             repo.save(slot)

@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
     resolve_player_target,
 )
@@ -26,13 +27,16 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     SPEECH_CHANNEL_VALUES,
     SPEECH_CHANNEL_WHISPER,
 )
+from ai_rpg_world.application.speech.exceptions import SpeechCommandException
 from ai_rpg_world.application.speech.services.audience_feedback import (
     compact_audience_summary_text,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.exception import PlayerDownedException
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 logger = logging.getLogger(__name__)
+
 
 def handle_speech(
     wiring: WorldLlmWiring,
@@ -52,8 +56,7 @@ def handle_speech(
         return LlmCommandResultDto(
             success=False,
             message=(
-                f"channel が不正です: {channel_str!r}。"
-                f"{list(SPEECH_CHANNEL_VALUES)!r} のいずれかを指定してください。"
+                f"channel が不正です: {channel_str!r}。{list(SPEECH_CHANNEL_VALUES)!r} のいずれかを指定してください。"
             ),
             error_code="INVALID_SPEECH_CHANNEL",
         )
@@ -87,10 +90,7 @@ def handle_speech(
                 success=False,
                 message=f"囁きを送れませんでした: {detail}",
                 error_code="INVALID_WHISPER",
-                remediation=(
-                    "channel=whisper のときは target_label に同じスポット内の "
-                    "相手の名前を指定してください。"
-                ),
+                remediation=("channel=whisper のときは target_label に同じスポット内の 相手の名前を指定してください。"),
             )
         target_player_id_obj = PlayerId(target.player_id)
         outcome_registry = getattr(wiring.runtime, "_player_outcome_registry", None)
@@ -105,16 +105,11 @@ def handle_speech(
             and perception_policy.is_departed(target_player_id_obj)
         )
         if outcome_registry is not None and not both_departed:
-            if outcome_registry.get_outcome(
-                target_player_id_obj
-            ).is_eliminated:
+            if outcome_registry.get_outcome(target_player_id_obj).is_eliminated:
                 target_name = getattr(target, "display_name", "") or "相手"
                 return LlmCommandResultDto(
                     success=False,
-                    message=(
-                        f"囁きを送れませんでした: {target_name}は死亡しており、"
-                        "囁きは届きません。"
-                    ),
+                    message=(f"囁きを送れませんでした: {target_name}は死亡しており、囁きは届きません。"),
                     error_code="INVALID_WHISPER",
                     remediation=(
                         "channel=whisper は声を聞ける同じスポット内の相手にだけ"
@@ -122,15 +117,25 @@ def handle_speech(
                     ),
                 )
 
-    wiring.runtime.do_speech(player_id, content, channel_enum, target_player_id_obj)
+    try:
+        wiring.runtime.do_speech(player_id, content, channel_enum, target_player_id_obj)
+    except SpeechCommandException as exc:
+        # 手番を選ばれたあと、同じ tick の先行者に倒されることがある (design_decisions 47)。
+        if exc.error_code != PlayerDownedException.error_code:
+            raise
+        return LlmCommandResultDto(
+            success=False,
+            message="倒れていて声が出せません。",
+            error_code="SPEAKER_DOWN",
+            remediation=get_remediation("SPEAKER_DOWN"),
+        )
 
-    audience_suffix = build_audience_summary(
-        wiring, player_id, channel_enum, target_player_id_obj
-    )
+    audience_suffix = build_audience_summary(wiring, player_id, channel_enum, target_player_id_obj)
     return LlmCommandResultDto(
         success=True,
         message=audience_suffix or "（発話した）",
     )
+
 
 def resolve_whisper_target(
     wiring: WorldLlmWiring,
@@ -162,6 +167,7 @@ def resolve_whisper_target(
     except ToolArgumentResolutionException:
         return None
 
+
 def build_audience_summary(
     wiring: WorldLlmWiring,
     player_id: PlayerId,
@@ -180,13 +186,13 @@ def build_audience_summary(
         members = wiring.speech_audience_resolver.resolve_audience_with_clarity(
             speaker_player_id=int(player_id.value),
             channel=channel,
-            target_player_id=(
-                int(target_player_id.value)
-                if target_player_id is not None
-                else None
-            ),
+            target_player_id=(int(target_player_id.value) if target_player_id is not None else None),
         )
     except Exception:
         logger.exception("speech_audience_resolver.resolve_audience_with_clarity failed")
         return ""
+    # 会っていない聞き手を数えると、人数から知らない誰かが近くにいると分かる。
+    acquaintances = getattr(wiring.runtime, "_player_acquaintances", None)
+    if acquaintances is not None:
+        members = [m for m in members if acquaintances.knows(player_id, m.player_id)]
     return f"（{compact_audience_summary_text(channel, members)}）"

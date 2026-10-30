@@ -30,9 +30,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
-_FIXTURE_SCENARIOS = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
-)
+_FIXTURE_SCENARIOS = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
 _WITH_MEETING = _FIXTURE_SCENARIOS / "darkened_station.json"
 _WITHOUT_MEETING = _SCENARIOS / "survival_island_v4_coop.json"
 
@@ -115,8 +113,7 @@ class TestDuringAMeeting:
         assert (
             # 単位は世界の時計に揃えてある (tick は engine の語彙・#892)。
             # 換算まで焼き付けず、定数から導く。
-            f"あと {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT * _MINUTES_PER_TICK} 分"
-            in _meeting_line(runtime, _MORI)
+            f"あと {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT * _MINUTES_PER_TICK} 分" in _meeting_line(runtime, _MORI)
         )
 
     def test_the_remaining_count_goes_down(self, runtime) -> None:
@@ -132,14 +129,8 @@ class TestDuringAMeeting:
         second = _meeting_line(runtime, _MORI)
 
         assert first and second
-        assert (
-            f"あと {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT * _MINUTES_PER_TICK} 分"
-            in first
-        )
-        assert (
-            f"あと {(GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT - 2) * _MINUTES_PER_TICK} 分"
-            in second
-        )
+        assert f"あと {GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT * _MINUTES_PER_TICK} 分" in first
+        assert f"あと {(GamePhaseStore.DEFAULT_MEETING_TICK_LIMIT - 2) * _MINUTES_PER_TICK} 分" in second
 
     def test_who_called_it_is_shown(self, runtime) -> None:
         """誰が呼んだのかが分かる。

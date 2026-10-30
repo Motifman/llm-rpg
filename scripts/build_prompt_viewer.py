@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """prompt_dataset/calls.jsonl から「実際に LLM へ送った prompt」の閲覧 HTML を生成する。
 
-既存 viewer (build_trace_viewer / build_episodic_viewer / build_timeline_viewer) は
+既存 viewer (build_trace_viewer / build_timeline_viewer) は
 trace event を見せるもので、**実際に送信した messages そのもの**を読む経路が無かった。
 「停滞の表出は本当に prompt に届いていたのか」「遠景に山影が出ていたのか」のような
 問いは trace の集計ではなく prompt 本文を読まないと確かめられない。
@@ -102,12 +102,8 @@ def _load_calls(run_dir: Path) -> list[PromptCall]:
     dataset_dir = run_dir / "prompt_dataset"
     path = dataset_dir / "calls.jsonl"
     if not path.exists():
-        raise FileNotFoundError(
-            f"{path} が無い。PROMPT_DATASET_CAPTURE_ENABLED=true で走らせた run を指定する。"
-        )
-    system_prompts = _load_side_table(
-        dataset_dir / "system_prompts.jsonl", "system_prompt_id"
-    )
+        raise FileNotFoundError(f"{path} が無い。prompt dataset を保存した run を指定する。")
+    system_prompts = _load_side_table(dataset_dir / "system_prompts.jsonl", "system_prompt_id")
     toolsets = _load_side_table(dataset_dir / "toolsets.jsonl", "toolset_id")
     calls: list[PromptCall] = []
     with path.open(encoding="utf-8") as f:
@@ -124,7 +120,7 @@ def _load_calls(run_dir: Path) -> list[PromptCall]:
                 )
                 continue
             calls.append(_to_call(raw, system_prompts, toolsets))
-    calls.sort(key=lambda c: (c.world_tick if c.world_tick is not None else -1))
+    calls.sort(key=lambda c: c.world_tick if c.world_tick is not None else -1)
     return calls
 
 
@@ -249,7 +245,7 @@ def _render_body(content: str) -> str:
                 rendered.append(f'<span class="line">{escaped}</span>')
         body = "\n".join(rendered)
         heading = html.escape(title) if title else "(見出しなし)"
-        marked = " data-marked=\"1\"" if any(_line_class(x) for x in lines) else ""
+        marked = ' data-marked="1"' if any(_line_class(x) for x in lines) else ""
         opened = " open" if marked else ""
         parts.append(
             f'<details class="section"{opened}{marked}>'
@@ -268,14 +264,8 @@ def _render_output(call: PromptCall) -> str:
         value = call.tool_arguments[key]
         if not isinstance(value, str):
             value = json.dumps(value, ensure_ascii=False)
-        rows.append(
-            f"<tr><th>{html.escape(key)}</th>"
-            f"<td>{html.escape(value)}</td></tr>"
-        )
-    return (
-        f'<p class="tool-name">{html.escape(call.tool_name)}</p>'
-        f'<table class="args">{"".join(rows)}</table>'
-    )
+        rows.append(f"<tr><th>{html.escape(key)}</th><td>{html.escape(value)}</td></tr>")
+    return f'<p class="tool-name">{html.escape(call.tool_name)}</p><table class="args">{"".join(rows)}</table>'
 
 
 def _render_tool_names(call: PromptCall) -> str:
@@ -286,13 +276,11 @@ def _render_tool_names(call: PromptCall) -> str:
     """
     if not call.tool_names:
         return (
-            '<p class="sysnote">toolset を解決できなかった。<br>'
-            f'<code>{html.escape(call.toolset_id or "-")}</code></p>'
+            f'<p class="sysnote">toolset を解決できなかった。<br><code>{html.escape(call.toolset_id or "-")}</code></p>'
         )
     chosen = call.tool_name
     chips = "".join(
-        f'<span class="toolchip{" chosen" if n == chosen else ""}">{html.escape(n)}</span>'
-        for n in call.tool_names
+        f'<span class="toolchip{" chosen" if n == chosen else ""}">{html.escape(n)}</span>' for n in call.tool_names
     )
     return f'<div class="toolset">{chips}</div>'
 
@@ -302,7 +290,7 @@ def _render_system(call: PromptCall) -> str:
         return (
             '<p class="sysnote">system prompt を解決できなかった '
             "(system_prompts.jsonl が無いか id が一致しない)。<br>"
-            f'<code>{html.escape(call.system_prompt_id or "-")}</code></p>'
+            f"<code>{html.escape(call.system_prompt_id or '-')}</code></p>"
         )
     return (
         '<details class="section"><summary>system prompt を開く</summary>'
@@ -319,8 +307,7 @@ def _render_call(index: int, call: PromptCall) -> str:
     prompt_tokens = metrics.get("prompt_tokens")
     cached = metrics.get("cached_tokens")
     chips = "".join(
-        f'<span class="chip chip-{html.escape(label)}">{html.escape(label)}</span>'
-        for label in call.highlights
+        f'<span class="chip chip-{html.escape(label)}">{html.escape(label)}</span>' for label in call.highlights
     )
     return f"""
 <article class="call" id="call-{index}"
@@ -328,12 +315,12 @@ def _render_call(index: int, call: PromptCall) -> str:
          data-phase="{html.escape(call.phase)}"
          data-tool="{html.escape(call.tool_name)}"
          data-tick="{html.escape(str(tick))}"
-         data-highlights="{html.escape('|'.join(call.highlights))}">
+         data-highlights="{html.escape("|".join(call.highlights))}">
   <header class="call-head">
     <span class="tick">t{html.escape(str(tick))}</span>
-    <span class="who">{html.escape(call.character_name or f'P{call.player_id}')}</span>
+    <span class="who">{html.escape(call.character_name or f"P{call.player_id}")}</span>
     <span class="phase phase-{html.escape(call.phase)}">{html.escape(call.phase)}</span>
-    <span class="tool">{html.escape(call.tool_name or '-')}</span>
+    <span class="tool">{html.escape(call.tool_name or "-")}</span>
     <span class="chips">{chips}</span>
     <span class="meta">{latency_text} / prompt {prompt_tokens} (cached {cached})</span>
   </header>
@@ -521,13 +508,9 @@ def render_html(calls: Sequence[PromptCall], *, run_id: str, profile: str) -> st
         opts = "".join(f'<option value="{html.escape(v)}">{html.escape(v)}</option>' for v in values)
         return f'<option value="">{html.escape(label)}</option>{opts}'
 
-    name_by_id = {
-        str(c.player_id): c.character_name for c in calls if c.player_id is not None
-    }
+    name_by_id = {str(c.player_id): c.character_name for c in calls if c.player_id is not None}
     player_opts = "".join(
-        f'<option value="{html.escape(p)}">'
-        f'{html.escape(name_by_id.get(p) or ("P" + p))}</option>'
-        for p in players
+        f'<option value="{html.escape(p)}">{html.escape(name_by_id.get(p) or ("P" + p))}</option>' for p in players
     )
     body = "\n".join(_render_call(i, c) for i, c in enumerate(calls))
     marked = sum(1 for c in calls if c.highlights)
@@ -544,8 +527,8 @@ def render_html(calls: Sequence[PromptCall], *, run_id: str, profile: str) -> st
     ハイライト該当 {marked} 件</span>
   <div class="controls">
     <select id="f-player"><option value="">全員</option>{player_opts}</select>
-    <select id="f-phase">{options(phases, '全 phase')}</select>
-    <select id="f-tool">{options(tools, '全 tool')}</select>
+    <select id="f-phase">{options(phases, "全 phase")}</select>
+    <select id="f-tool">{options(tools, "全 tool")}</select>
     <label><input type="checkbox" id="f-mark"> ハイライトのみ</label>
     <input type="search" id="q" placeholder="本文を検索 (例: 山影)">
     <button id="fold" type="button">全部折る / 開く</button>
@@ -560,9 +543,7 @@ def render_html(calls: Sequence[PromptCall], *, run_id: str, profile: str) -> st
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path, help="run ディレクトリ")
-    parser.add_argument(
-        "--output", type=Path, default=None, help="出力先 (既定: <run_dir>/prompt.html)"
-    )
+    parser.add_argument("--output", type=Path, default=None, help="出力先 (既定: <run_dir>/prompt.html)")
     args = parser.parse_args(argv)
 
     run_dir: Path = args.run_dir
@@ -575,9 +556,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         except json.JSONDecodeError:
             profile = ""
     output: Path = args.output or (run_dir / "prompt.html")
-    output.write_text(
-        render_html(calls, run_id=run_dir.name, profile=profile), encoding="utf-8"
-    )
+    output.write_text(render_html(calls, run_id=run_dir.name, profile=profile), encoding="utf-8")
     print(f"[html] prompt.html: {output} ({len(calls)} calls)")
     return 0
 

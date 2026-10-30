@@ -64,19 +64,27 @@ class Scene:
 
 SCENES: tuple[Scene, ...] = (
     Scene(
-        "market_town_v37_division", 1, 372,
+        "market_town_v37_division",
+        1,
+        372,
         "t23 で到着済み。本人は移動中と思っていた。居場所の取り違え",
     ),
     Scene(
-        "market_town_v37_division", 3, 569,
+        "market_town_v37_division",
+        3,
+        569,
         "bake_bread の前提条件失敗が 8 tick 空けて再発。麦束が無いことは失敗文にある",
     ),
     Scene(
-        "offering_race_v2_second", 1, 914,
+        "offering_race_v2_second",
+        1,
+        914,
         "ユノへの同じ申し出 ×3。返事が無いので言い直している",
     ),
     Scene(
-        "station_drill_gemma31_jev_001", 4, 1713,
+        "station_drill_gemma31_jev_001",
+        4,
+        1713,
         "引数なしの wait ×3。他人が居なくなるのを待っていた可能性",
     ),
 )
@@ -142,10 +150,13 @@ def replay(scene: Scene, runs_dir: Path, port: ITypedJudgmentPort) -> dict[str, 
             continue
         kind, p = e["kind"], e["payload"]
         if kind == "observation" and p.get("prose"):
-            buffer.append(pid, ObservationEntry(
-                occurred_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-                output=ObservationOutput(prose=p["prose"], structured=p.get("structured") or {}),
-            ))
+            buffer.append(
+                pid,
+                ObservationEntry(
+                    occurred_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                    output=ObservationOutput(prose=p["prose"], structured=p.get("structured") or {}),
+                ),
+            )
         elif kind == "action":
             buffer.drain(pid)
             pending_action = p
@@ -161,7 +172,9 @@ def replay(scene: Scene, runs_dir: Path, port: ITypedJudgmentPort) -> dict[str, 
                 result_summary=p.get("result_summary"),
             )
             pending_action = None
-    judgments = [pl for k, pl in recorder.events if k == TraceEventKind.TYPED_JUDGMENT and pl.get("question") == QUESTION_NAME]
+    judgments = [
+        pl for k, pl in recorder.events if k == TraceEventKind.TYPED_JUDGMENT and pl.get("question") == QUESTION_NAME
+    ]
     warnings = [pl for k, pl in recorder.events if k == TraceEventKind.LOOP_GUARD_WARNING]
     prose = [e.output.prose for e in buffer.get_observations(pid) if (e.output.structured or {}).get("loop_guard")]
     return {
@@ -175,11 +188,15 @@ def replay(scene: Scene, runs_dir: Path, port: ITypedJudgmentPort) -> dict[str, 
 def _port(kind: str) -> ITypedJudgmentPort:
     if kind == "stub":
         from ai_rpg_world.application.llm.services.typed_judgment_stub import DeterministicTypedJudgmentPort
+
         return DeterministicTypedJudgmentPort()
     from dotenv import load_dotenv
-    load_dotenv(); load_dotenv(_REPO_ROOT.parent.parent.parent / ".env")
+
+    load_dotenv()
+    load_dotenv(_REPO_ROOT.parent.parent.parent / ".env")
     from ai_rpg_world.application.llm.wiring._typed_judgment_factory import create_typed_judgment_port_from_config
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import ResolvedLlmRuntimeConfig
+
     port = create_typed_judgment_port_from_config(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="jev"))
     assert port is not None
     return port
@@ -193,7 +210,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     port = _port(args.port)
     results = [replay(s, Path(args.runs_dir), port) for s in SCENES]
-    out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(results, ensure_ascii=False, indent=1))
     for r in results:
         s, j = r["scene"], r["judgment"]
@@ -203,7 +221,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("警告が発火しなかった (組み直しの誤り)")
             continue
         probs = ", ".join(f"{k}={v:.2f}" for k, v in sorted(j["probabilities"].items(), key=lambda kv: -kv[1]))
-        print(f"見立て: {j['chosen']} 確信={j['confidence']} 採用={j['accepted']} 縮退={j['fallback_reason']} {j.get('unavailable_reason') or ''}")
+        print(
+            f"見立て: {j['chosen']} 確信={j['confidence']} 採用={j['accepted']} 縮退={j['fallback_reason']} {j.get('unavailable_reason') or ''}"
+        )
         print(f"確率: {probs}")
         print(f"文面: {r['prose']}")
     print(f"\n→ {out}")

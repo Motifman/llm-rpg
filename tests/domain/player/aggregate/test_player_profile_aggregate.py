@@ -40,15 +40,6 @@ class TestPlayerProfileAggregate:
         assert profile.race == Race.HUMAN
         assert profile.element == Element.NEUTRAL
 
-    def test_change_name(self):
-        """名前が正しく変更されること"""
-        profile = create_test_profile(name="OldName")
-        new_name = PlayerName("NewName")
-
-        profile.change_name(new_name)
-
-        assert profile.name == new_name
-
     def test_change_name_no_change(self):
         """同じ名前の場合は変更されないこと"""
         profile = create_test_profile(name="SameName")
@@ -62,11 +53,13 @@ class TestPlayerProfileAggregate:
         assert len(events) == 0
 
     def test_change_name_emits_event(self):
-        """名前変更時にイベントが発行されること"""
+        """名前変更を保存し、旧値と新値を含む通知を1件発行すること"""
         profile = create_test_profile(name="OldName")
         new_name = PlayerName("NewName")
 
         profile.change_name(new_name)
+
+        assert profile.name == new_name
 
         events = profile.get_events()
         assert len(events) == 1
@@ -78,14 +71,6 @@ class TestPlayerProfileAggregate:
         assert event.old_role is None
         assert event.new_role is None
         assert event.aggregate_id.value == 1
-
-    def test_change_role(self):
-        """ロールが正しく変更されること"""
-        profile = create_test_profile(role=Role.CITIZEN)
-
-        profile.change_role(Role.ADVENTURER)
-
-        assert profile.role == Role.ADVENTURER
 
     def test_change_role_no_change(self):
         """同じロールの場合は変更されないこと"""
@@ -99,10 +84,12 @@ class TestPlayerProfileAggregate:
         assert len(events) == 0
 
     def test_change_role_emits_event(self):
-        """ロール変更時にイベントが発行されること"""
+        """ロール変更を保存し、旧値と新値を含む通知を1件発行すること"""
         profile = create_test_profile(role=Role.CITIZEN)
 
         profile.change_role(Role.ADVENTURER)
+
+        assert profile.role == Role.ADVENTURER
 
         events = profile.get_events()
         assert len(events) == 1
@@ -113,14 +100,6 @@ class TestPlayerProfileAggregate:
         assert event.new_role == Role.ADVENTURER
         assert event.old_name is None
         assert event.new_name is None
-
-    def test_change_race(self):
-        """種族が正しく変更されること"""
-        profile = create_test_profile(race=Race.HUMAN)
-
-        profile.change_race(Race.GOBLIN)
-
-        assert profile.race == Race.GOBLIN
 
     def test_change_race_no_change(self):
         """同じ種族の場合は変更されないこと"""
@@ -133,10 +112,12 @@ class TestPlayerProfileAggregate:
         assert len(events) == 0
 
     def test_change_race_emits_event(self):
-        """種族変更時にイベントが発行されること"""
+        """種族変更を保存し、旧値と新値を含む通知を1件発行すること"""
         profile = create_test_profile(race=Race.HUMAN)
 
         profile.change_race(Race.GOBLIN)
+
+        assert profile.race == Race.GOBLIN
 
         events = profile.get_events()
         assert len(events) == 1
@@ -145,14 +126,6 @@ class TestPlayerProfileAggregate:
         assert isinstance(event, PlayerProfileChangedEvent)
         assert event.old_race == Race.HUMAN
         assert event.new_race == Race.GOBLIN
-
-    def test_change_element(self):
-        """属性が正しく変更されること"""
-        profile = create_test_profile(element=Element.NEUTRAL)
-
-        profile.change_element(Element.FIRE)
-
-        assert profile.element == Element.FIRE
 
     def test_change_element_no_change(self):
         """同じ属性の場合は変更されないこと"""
@@ -165,10 +138,12 @@ class TestPlayerProfileAggregate:
         assert len(events) == 0
 
     def test_change_element_emits_event(self):
-        """属性変更時にイベントが発行されること"""
+        """属性変更を保存し、旧値と新値を含む通知を1件発行すること"""
         profile = create_test_profile(element=Element.NEUTRAL)
 
         profile.change_element(Element.FIRE)
+
+        assert profile.element == Element.FIRE
 
         events = profile.get_events()
         assert len(events) == 1
@@ -192,19 +167,9 @@ class TestPlayerProfileAggregate:
 
     def test_update_profile_multiple_fields(self):
         """複数フィールドの一括更新が正しく動作すること"""
-        profile = create_test_profile(
-            name="OldName",
-            role=Role.CITIZEN,
-            race=Race.HUMAN,
-            element=Element.NEUTRAL
-        )
+        profile = create_test_profile(name="OldName", role=Role.CITIZEN, race=Race.HUMAN, element=Element.NEUTRAL)
 
-        profile.update_profile(
-            name=PlayerName("NewName"),
-            role=Role.ADVENTURER,
-            race=Race.GOBLIN,
-            element=Element.FIRE
-        )
+        profile.update_profile(name=PlayerName("NewName"), role=Role.ADVENTURER, race=Race.GOBLIN, element=Element.FIRE)
 
         assert profile.name.value == "NewName"
         assert profile.role == Role.ADVENTURER
@@ -232,24 +197,35 @@ class TestPlayerProfileAggregate:
             name=PlayerName("TestPlayer"),  # 同じ値
             role=Role.CITIZEN,  # 同じ値
             race=Race.HUMAN,  # 同じ値
-            element=Element.NEUTRAL  # 同じ値
+            element=Element.NEUTRAL,  # 同じ値
         )
 
         events = profile.get_events()
         assert len(events) == 0
 
-    def test_update_profile_partial_changes(self):
-        """一部フィールドのみ変更した場合のイベント発行"""
+    @pytest.mark.parametrize(
+        ("role", "element"),
+        [(Role.CITIZEN, Element.NEUTRAL), (Role.MERCHANT, Element.WATER)],
+        ids=["original-defaults", "preserve-non-defaults"],
+    )
+    def test_update_profile_partial_changes(self, role, element):
+        """名前と種族を変え、省略した役割・属性を保持して変更分だけ通知する。"""
         profile = create_test_profile(
             name="OldName",
-            role=Role.CITIZEN
+            role=role,
+            element=element,
         )
 
         profile.update_profile(
             name=PlayerName("NewName"),
             # roleは変更なし
-            race=Race.GOBLIN  # raceのみ変更
+            race=Race.GOBLIN,  # raceのみ変更
         )
+
+        assert profile.name.value == "NewName"
+        assert profile.race == Race.GOBLIN
+        assert profile.role == role
+        assert profile.element == element
 
         events = profile.get_events()
         assert len(events) == 1
@@ -261,7 +237,6 @@ class TestPlayerProfileAggregate:
         assert event.new_race == Race.GOBLIN
         assert event.old_role is None  # roleは変更なし
         assert event.new_role is None
-
 
     def test_can_change_name_true(self):
         """名前変更可能チェックが正しく動作すること（変更可能）"""
@@ -332,9 +307,23 @@ class TestPlayerProfileAggregate:
 class TestPlayerProfileAggregateControlType:
     """control_type / change_control_type / is_llm_controlled のテスト"""
 
-    def test_create_default_control_type_is_human(self):
-        """create で control_type を省略した場合 HUMAN"""
-        profile = create_test_profile()
+    @pytest.mark.parametrize(
+        "create_profile",
+        [
+            pytest.param(create_test_profile, id="original-explicit-human"),
+            pytest.param(
+                lambda: PlayerProfileAggregate(PlayerId(1), PlayerName("TestPlayer"), Role.CITIZEN),
+                id="constructor-default",
+            ),
+            pytest.param(
+                lambda: PlayerProfileAggregate.create(PlayerId(1), PlayerName("TestPlayer")),
+                id="factory-default",
+            ),
+        ],
+    )
+    def test_create_default_control_type_is_human(self, create_profile):
+        """明示HUMANの旧経路と、両生成入口で操作主体を省略する経路は人間操作となる。"""
+        profile = create_profile()
         assert profile.control_type == ControlType.HUMAN
         assert profile.is_llm_controlled() is False
 
@@ -380,3 +369,4 @@ class TestPlayerProfileAggregateControlType:
         )
         profile.change_control_type(ControlType.LLM)
         assert profile.control_type == ControlType.LLM
+        assert profile.get_events() == []

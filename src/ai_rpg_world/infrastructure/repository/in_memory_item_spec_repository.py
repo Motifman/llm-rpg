@@ -34,7 +34,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             description="基本的な鉄製の剣。冒険者の定番武器。",
             max_stack_size=MaxStackSize(1),
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         self._save_item_spec(sword_spec)
 
@@ -46,7 +46,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             description="鋭い鋼製の剣。攻撃力が高い。",
             max_stack_size=MaxStackSize(1),
             durability_max=120,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         self._save_item_spec(steel_sword_spec)
 
@@ -58,7 +58,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             description="古代の英雄が使っていたという伝説の剣。",
             max_stack_size=MaxStackSize(1),
             durability_max=200,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         self._save_item_spec(legendary_sword_spec)
 
@@ -71,7 +71,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             description="軽量な革製の鎧。防御力は低いが動きやすい。",
             max_stack_size=MaxStackSize(1),
             durability_max=80,
-            equipment_type=EquipmentType.ARMOR
+            equipment_type=EquipmentType.ARMOR,
         )
         self._save_item_spec(leather_armor_spec)
 
@@ -83,7 +83,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             description="頑丈な鉄製の鎧。防御力が高い。",
             max_stack_size=MaxStackSize(1),
             durability_max=150,
-            equipment_type=EquipmentType.ARMOR
+            equipment_type=EquipmentType.ARMOR,
         )
         self._save_item_spec(iron_armor_spec)
 
@@ -94,7 +94,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             item_type=ItemType.CONSUMABLE,
             rarity=Rarity.COMMON,
             description="HPを50回復する魔法のポーション。",
-            max_stack_size=MaxStackSize(99)
+            max_stack_size=MaxStackSize(99),
         )
         self._save_item_spec(health_potion_spec)
 
@@ -104,7 +104,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             item_type=ItemType.CONSUMABLE,
             rarity=Rarity.COMMON,
             description="MPを30回復する魔法のポーション。",
-            max_stack_size=MaxStackSize(99)
+            max_stack_size=MaxStackSize(99),
         )
         self._save_item_spec(mana_potion_spec)
 
@@ -114,7 +114,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             item_type=ItemType.CONSUMABLE,
             rarity=Rarity.UNCOMMON,
             description="HPを150回復する強力なポーション。",
-            max_stack_size=MaxStackSize(50)
+            max_stack_size=MaxStackSize(50),
         )
         self._save_item_spec(greater_health_potion_spec)
 
@@ -125,7 +125,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             item_type=ItemType.MATERIAL,
             rarity=Rarity.COMMON,
             description="鉄の武器や防具を作るための素材。",
-            max_stack_size=MaxStackSize(64)
+            max_stack_size=MaxStackSize(64),
         )
         self._save_item_spec(iron_ore_spec)
 
@@ -135,7 +135,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             item_type=ItemType.MATERIAL,
             rarity=Rarity.UNCOMMON,
             description="高品質な鋼鉄のインゴット。武器強化に使用。",
-            max_stack_size=MaxStackSize(32)
+            max_stack_size=MaxStackSize(32),
         )
         self._save_item_spec(steel_ingot_spec)
 
@@ -145,7 +145,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             item_type=ItemType.MATERIAL,
             rarity=Rarity.RARE,
             description="魔法の力が宿った希少なクリスタル。",
-            max_stack_size=MaxStackSize(16)
+            max_stack_size=MaxStackSize(16),
         )
         self._save_item_spec(mystic_crystal_spec)
 
@@ -156,7 +156,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             item_type=ItemType.QUEST,
             rarity=Rarity.EPIC,
             description="古代の魔法が記された貴重な巻物。",
-            max_stack_size=MaxStackSize(1)
+            max_stack_size=MaxStackSize(1),
         )
         self._save_item_spec(ancient_scroll_spec)
 
@@ -167,7 +167,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             item_type=ItemType.OTHER,
             rarity=Rarity.COMMON,
             description="丈夫なロープ。様々な場面で役立つ。",
-            max_stack_size=MaxStackSize(10)
+            max_stack_size=MaxStackSize(10),
         )
         self._save_item_spec(rope_spec)
 
@@ -178,7 +178,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             item_type=ItemType.QUEST,
             rarity=Rarity.RARE,
             description="特定のクエストでしか使えない特別な鍵。",
-            max_stack_size=MaxStackSize(1)
+            max_stack_size=MaxStackSize(1),
         )
         self._save_item_spec(quest_key_spec)
 
@@ -191,7 +191,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             description="軽い革製の靴。歩きやすい。",
             max_stack_size=MaxStackSize(1),
             durability_max=60,
-            equipment_type=EquipmentType.BOOTS
+            equipment_type=EquipmentType.BOOTS,
         )
         self._save_item_spec(leather_boots_spec)
 
@@ -203,7 +203,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             description="基本的な革製の手袋。",
             max_stack_size=MaxStackSize(1),
             durability_max=50,
-            equipment_type=EquipmentType.ACCESSORY
+            equipment_type=EquipmentType.ACCESSORY,
         )
         self._save_item_spec(leather_gloves_spec)
 
@@ -215,7 +215,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             description="頭を守る革製の兜。",
             max_stack_size=MaxStackSize(1),
             durability_max=70,
-            equipment_type=EquipmentType.HELMET
+            equipment_type=EquipmentType.HELMET,
         )
         self._save_item_spec(leather_helmet_spec)
 
@@ -261,24 +261,15 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
 
     def find_by_type(self, item_type: ItemType) -> list[ItemSpec]:
         """アイテムタイプで検索"""
-        return [
-            item_spec for item_spec in self._item_specs.values()
-            if item_spec.item_type == item_type
-        ]
+        return [item_spec for item_spec in self._item_specs.values() if item_spec.item_type == item_type]
 
     def find_by_rarity(self, rarity: Rarity) -> list[ItemSpec]:
         """レアリティで検索"""
-        return [
-            item_spec for item_spec in self._item_specs.values()
-            if item_spec.rarity == rarity
-        ]
+        return [item_spec for item_spec in self._item_specs.values() if item_spec.rarity == rarity]
 
     def find_tradeable_items(self) -> list[ItemSpec]:
         """取引可能なアイテムを検索（クエストアイテム以外）"""
-        return [
-            item_spec for item_spec in self._item_specs.values()
-            if item_spec.item_type != ItemType.QUEST
-        ]
+        return [item_spec for item_spec in self._item_specs.values() if item_spec.item_type != ItemType.QUEST]
 
     def find_by_name(self, name: str) -> ItemSpec | None:
         """名前で検索"""

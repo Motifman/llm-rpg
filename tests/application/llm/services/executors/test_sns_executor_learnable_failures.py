@@ -52,33 +52,25 @@ class TestResolveRefStaleness:
 
     def test_post_ref_stale_is_learnable(self) -> None:
         executor = _build_executor(sns_page_session=_stale_ref_session())
-        result = executor._resolve_post_id_from_args(
-            player_id=1, args={"post_ref": "stale-1"}
-        )
+        result = executor._resolve_post_id_from_args(player_id=1, args={"post_ref": "stale-1"})
         assert isinstance(result, LlmCommandResultDto)
         _assert_learnable(result, "SNS_REF_STALE")
 
     def test_reply_ref_stale_is_learnable(self) -> None:
         executor = _build_executor(sns_page_session=_stale_ref_session())
-        result = executor._resolve_reply_id_from_args(
-            player_id=1, args={"reply_ref": "stale-r"}
-        )
+        result = executor._resolve_reply_id_from_args(player_id=1, args={"reply_ref": "stale-r"})
         assert isinstance(result, LlmCommandResultDto)
         _assert_learnable(result, "SNS_REF_STALE")
 
     def test_notification_ref_stale_is_learnable(self) -> None:
         executor = _build_executor(sns_page_session=_stale_ref_session())
-        result = executor._resolve_notification_id_from_args(
-            player_id=1, args={"notification_ref": "stale-n"}
-        )
+        result = executor._resolve_notification_id_from_args(player_id=1, args={"notification_ref": "stale-n"})
         assert isinstance(result, LlmCommandResultDto)
         _assert_learnable(result, "SNS_REF_STALE")
 
     def test_target_user_ref_stale_is_learnable(self) -> None:
         executor = _build_executor(sns_page_session=_stale_ref_session())
-        result = executor._resolve_target_user_id_from_args(
-            player_id=1, args={"target_user_ref": "stale-u"}
-        )
+        result = executor._resolve_target_user_id_from_args(player_id=1, args={"target_user_ref": "stale-u"})
         assert isinstance(result, LlmCommandResultDto)
         _assert_learnable(result, "SNS_REF_STALE")
 
@@ -123,9 +115,7 @@ class TestOpenRefResolution:
             sns_page_session=sess,
             sns_page_query_service=MagicMock(),
         )
-        result = executor._execute_open_ref(
-            player_id=1, args={"ref": "nonexistent"}
-        )
+        result = executor._execute_open_ref(player_id=1, args={"ref": "nonexistent"})
         _assert_learnable(result, "SNS_REF_STALE")
 
 
@@ -138,16 +128,12 @@ class TestSwitchTabPageRestriction:
         )
 
         sess = MagicMock()
-        sess.get_state.return_value = MagicMock(
-            page_kind=SnsVirtualPageKind.PROFILE
-        )
+        sess.get_state.return_value = MagicMock(page_kind=SnsVirtualPageKind.PROFILE)
         executor = SnsToolExecutor(
             sns_mode_session=MagicMock(),
             sns_page_session=sess,
         )
-        result = executor._execute_switch_tab(
-            player_id=1, args={"tab": "FOLLOWING"}
-        )
+        result = executor._execute_switch_tab(player_id=1, args={"tab": "FOLLOWING"})
         _assert_learnable(result, "SNS_PAGE_NOT_SUPPORTED")
 
 
@@ -175,7 +161,5 @@ class TestAllFailuresHaveLearnableShape:
         ).read_text(encoding="utf-8")
         # success=False の出現位置の次の 10 行以内に error_code= が必ず有ること
         for m in re.finditer(r"success=False", src):
-            window = src[m.start(): m.start() + 600]
-            assert "error_code" in window, (
-                f"bare success=False at pos {m.start()}: {window[:200]!r}"
-            )
+            window = src[m.start() : m.start() + 600]
+            assert "error_code" in window, f"bare success=False at pos {m.start()}: {window[:200]!r}"

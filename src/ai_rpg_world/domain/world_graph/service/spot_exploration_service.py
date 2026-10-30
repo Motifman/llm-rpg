@@ -52,7 +52,11 @@ class SpotExplorationService:
             ):
                 marked = d.mark_discovered()
                 new_list.append(marked)
-                desc = marked.description.strip() if marked.description else f"アイテムを発見した（spec={marked.item_spec_id}）"
+                desc = (
+                    marked.description.strip()
+                    if marked.description
+                    else f"アイテムを発見した（spec={marked.item_spec_id}）"
+                )
                 descriptions.append(desc)
                 discovered_specs.append(marked.item_spec_id)
             else:
@@ -63,9 +67,7 @@ class SpotExplorationService:
             new_interior=new_interior,
             discovery_descriptions=tuple(descriptions),
             item_spec_ids_newly_discovered=tuple(discovered_specs),
-            has_remaining_discoverable_items=any(
-                not item.is_discovered for item in new_interior.discoverable_items
-            ),
+            has_remaining_discoverable_items=any(not item.is_discovered for item in new_interior.discoverable_items),
         )
 
     def _meets_condition(

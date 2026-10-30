@@ -15,7 +15,7 @@ class TestDefaultActionResultStore:
 
     @pytest.fixture
     def store(self):
-        return DefaultActionResultStore(max_entries_per_player=10)
+        return DefaultActionResultStore()
 
     def test_append_and_get_recent_returns_appended(self, store):
         """append した行動結果が get_recent で取得できる"""
@@ -51,29 +51,16 @@ class TestDefaultActionResultStore:
         assert got[0].argument_fingerprint == "{}"
         assert got[0].should_reschedule is True
 
-    def test_append_with_expected_result(self, store):
-        """行動前予測を append し get_recent で取り出せる。"""
+    def test_append_with_inner_thought(self, store):
+        """独白 (inner_thought) を append し取り出せる。"""
         store.append(
             PlayerId(1),
             "調べる",
             "扉は固く閉まっていた",
-            expected_result="扉の仕掛けが分かる",
+            inner_thought="扉の先へ進みたい",
         )
         got = store.get_recent(PlayerId(1), 1)
-        assert got[0].expected_result == "扉の仕掛けが分かる"
-
-    def test_append_with_intention_and_emotion_hint(self, store):
-        """目的 (intention) と感情 (emotion_hint) を append し取り出せる。"""
-        store.append(
-            PlayerId(1),
-            "調べる",
-            "扉は固く閉まっていた",
-            intention="扉の先へ進む",
-            emotion_hint="caution",
-        )
-        got = store.get_recent(PlayerId(1), 1)
-        assert got[0].intention == "扉の先へ進む"
-        assert got[0].emotion_hint == "caution"
+        assert got[0].inner_thought == "扉の先へ進みたい"
 
     def test_get_recent_empty_for_unknown_player(self, store):
         """未登録プレイヤーでは get_recent が空リストを返す"""
@@ -105,19 +92,14 @@ class TestDefaultActionResultStore:
         got = store.get_recent(player_id, 1)
         assert got[0].occurred_at == at
 
-    def test_sliding_trim_to_max_entries(self):
-        """max_entries_per_player を超えると古いものが捨てられる"""
-        store = DefaultActionResultStore(max_entries_per_player=3)
+    def test_results_are_not_trimmed_by_count(self):
+        """行動の結果は件数で削らない。101 件足すと 101 件とも返る。古い出来事を外すのは短期記憶のターンの範囲の規則 (design_decisions D1824-9)。"""
+        store = DefaultActionResultStore()
         player_id = PlayerId(1)
-        for i in range(5):
+        for i in range(101):
             store.append(player_id, f"a_{i}", f"r_{i}")
-        got = store.get_recent(player_id, 10)
-        assert len(got) == 3
-
-    def test_init_max_entries_zero_raises_value_error(self):
-        """max_entries_per_player が 0 以下で ValueError"""
-        with pytest.raises(ValueError, match="max_entries_per_player must be greater than 0"):
-            DefaultActionResultStore(max_entries_per_player=0)
+        got = store.get_recent(player_id, 200)
+        assert len(got) == 101
 
     def test_append_player_id_none_raises_type_error(self, store):
         """append に player_id が None のとき TypeError"""
@@ -142,43 +124,6 @@ class TestDefaultActionResultStore:
                 "a",
                 "b",
                 occurred_at="2025-01-01",  # type: ignore[arg-type]
-            )
-
-    def test_append_expected_result_not_str_raises_type_error(self, store):
-        """expected_result が str / None 以外なら TypeError。"""
-        with pytest.raises(TypeError, match="expected_result must be str or None"):
-            store.append(
-                PlayerId(1),
-                "a",
-                "b",
-                expected_result=123,  # type: ignore[arg-type]
-            )
-
-    def test_append_with_in_context_belief_ids(self, store):
-        """U4 (予測誤差統一設計 部品3): in_context_belief_ids を append し
-        get_recent で取り出せる。"""
-        store.append(
-            PlayerId(1),
-            "調べる",
-            "扉は固く閉まっていた",
-            in_context_belief_ids=("sem-1", "sem-2"),
-        )
-        got = store.get_recent(PlayerId(1), 1)
-        assert got[0].in_context_belief_ids == ("sem-1", "sem-2")
-
-    def test_append_default_in_context_belief_ids_is_empty_tuple(self, store):
-        """未指定なら空タプル (= attribution 機構 OFF と同じ形)。"""
-        store.append(PlayerId(1), "a", "b")
-        got = store.get_recent(PlayerId(1), 1)
-        assert got[0].in_context_belief_ids == ()
-
-    def test_append_in_context_belief_ids_not_tuple_raises_type_error(self, store):
-        with pytest.raises(TypeError, match="in_context_belief_ids must be tuple"):
-            store.append(
-                PlayerId(1),
-                "a",
-                "b",
-                in_context_belief_ids=["sem-1"],  # type: ignore[arg-type]
             )
 
     def test_get_recent_negative_limit_raises_value_error(self, store):

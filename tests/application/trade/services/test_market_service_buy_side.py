@@ -55,11 +55,16 @@ def town(tmp_path: Path) -> Any:
     raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     for pid, name in (("tom", "トム"), ("mina", "ミナ")):
-        raw["players"].append({
-            "id": pid, "name": name, "spawn_spot": spawn,
-            "initial_items": [], "initial_gold": 300,
-            "persona_prompt": f"あなたは{name}。",
-        })
+        raw["players"].append(
+            {
+                "id": pid,
+                "name": name,
+                "spawn_spot": spawn,
+                "initial_items": [],
+                "initial_gold": 300,
+                "persona_prompt": f"あなたは{name}。",
+            }
+        )
     raw["market"] = {"board_spot": "market_square"}
     # レナの初期金はシナリオの屋台向けで、板の値付けを試すには足りない。
     raw["players"][0]["initial_gold"] = 300
@@ -100,7 +105,10 @@ def _gold(runtime: Any, player_id: PlayerId) -> int:
 
 def _bid(runtime: Any, buyer: PlayerId, *, quantity: int, price: int) -> Any:
     return runtime._market_service.place_buy_order(
-        buyer, item_label=_HERB, quantity=quantity, unit_price=price,
+        buyer,
+        item_label=_HERB,
+        quantity=quantity,
+        unit_price=price,
         current_tick=runtime.current_tick(),
     )
 
@@ -115,7 +123,10 @@ class TestSellingTakesTheHighestBidFirst:
         before = _gold(town, _LENA)
 
         result = market.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert result.sold_quantity == 1
@@ -132,7 +143,10 @@ class TestSellingTakesTheHighestBidFirst:
         _give(town, _LENA, _HERB, 1)
 
         market.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert market.board().find(high.order_id) is None
@@ -146,7 +160,10 @@ class TestSellingTakesTheHighestBidFirst:
         before = _gold(town, _LENA)
 
         result = market.sell_best(
-            _LENA, item_label=_HERB, quantity=3, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=3,
+            current_tick=town.current_tick(),
         )
 
         assert result.sold_quantity == 3
@@ -159,7 +176,10 @@ class TestSellingTakesTheHighestBidFirst:
         _give(town, _LENA, _HERB, 3)
 
         result = market.sell_best(
-            _LENA, item_label=_HERB, quantity=3, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=3,
+            current_tick=town.current_tick(),
         )
 
         assert [s.trade.unit_price_gold for s in result.settlements] == [15, 12]
@@ -171,7 +191,10 @@ class TestSellingTakesTheHighestBidFirst:
         _give(town, _LENA, _HERB, 1)
 
         market.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert market.board().find(mine.order_id) is not None
@@ -190,21 +213,25 @@ class TestSellingWhatYouCanWhenEitherSideIsShort:
         _give(town, _LENA, _HERB, 3)
 
         result = market.sell_best(
-            _LENA, item_label=_HERB, quantity=3, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=3,
+            current_tick=town.current_tick(),
         )
 
         assert result.sold_quantity == 2
         assert result.requested_quantity == 3
 
-    def test_holding_less_than_you_offer_sells_what_you_hold(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_holding_less_than_you_offer_sells_what_you_hold(self, town: Any, market: MarketService) -> None:
         """自分の持っている数が足りないときも、売れるだけ売る。"""
         _bid(town, _TOM, quantity=3, price=8)
         _give(town, _LENA, _HERB, 1)
 
         result = market.sell_best(
-            _LENA, item_label=_HERB, quantity=3, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=3,
+            current_tick=town.current_tick(),
         )
 
         assert result.sold_quantity == 1
@@ -220,7 +247,10 @@ class TestSellingWhatYouCanWhenEitherSideIsShort:
 
         with pytest.raises(MarketItemNotOwnedError):
             market.sell_best(
-                _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+                _LENA,
+                item_label=_HERB,
+                quantity=1,
+                current_tick=town.current_tick(),
             )
 
     def test_an_item_nobody_wants_cannot_be_sold(self, town: Any, market: MarketService) -> None:
@@ -229,7 +259,10 @@ class TestSellingWhatYouCanWhenEitherSideIsShort:
 
         with pytest.raises(MarketNothingToSellError):
             market.sell_best(
-                _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+                _LENA,
+                item_label=_HERB,
+                quantity=1,
+                current_tick=town.current_tick(),
             )
 
     def test_only_your_own_bid_says_so(self, town: Any, market: MarketService) -> None:
@@ -243,7 +276,10 @@ class TestSellingWhatYouCanWhenEitherSideIsShort:
 
         with pytest.raises(MarketOnlyYourOwnBidError):
             market.sell_best(
-                _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+                _LENA,
+                item_label=_HERB,
+                quantity=1,
+                current_tick=town.current_tick(),
             )
 
     def test_a_refused_sale_costs_nothing(self, town: Any, market: MarketService) -> None:
@@ -253,7 +289,10 @@ class TestSellingWhatYouCanWhenEitherSideIsShort:
 
         with pytest.raises(MarketNothingToSellError):
             market.sell_best(
-                _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+                _LENA,
+                item_label=_HERB,
+                quantity=1,
+                current_tick=town.current_tick(),
             )
 
         assert _held(town, _LENA, _HERB) == held
@@ -273,7 +312,10 @@ class TestRepricingAndCancellingWorkOnBids:
         before = _gold(town, _TOM)
 
         market.reprice_order(
-            _TOM, item_label=_HERB, side=MarketOrderSide.BUY, new_unit_price=10,
+            _TOM,
+            item_label=_HERB,
+            side=MarketOrderSide.BUY,
+            new_unit_price=10,
         )
 
         assert _gold(town, _TOM) == before - (10 - 8) * 2
@@ -284,14 +326,15 @@ class TestRepricingAndCancellingWorkOnBids:
         before = _gold(town, _TOM)
 
         market.reprice_order(
-            _TOM, item_label=_HERB, side=MarketOrderSide.BUY, new_unit_price=8,
+            _TOM,
+            item_label=_HERB,
+            side=MarketOrderSide.BUY,
+            new_unit_price=8,
         )
 
         assert _gold(town, _TOM) == before + (10 - 8) * 2
 
-    def test_you_cannot_raise_a_bid_you_cannot_fund(
-        self, town: Any, market: MarketService
-    ) -> None:
+    def test_you_cannot_raise_a_bid_you_cannot_fund(self, town: Any, market: MarketService) -> None:
         """払えない額へは上げられない (**自分の誤りには従わない**)。"""
         from ai_rpg_world.application.trade.services.market_service import (
             MarketGoldNotEnoughError,
@@ -301,7 +344,10 @@ class TestRepricingAndCancellingWorkOnBids:
 
         with pytest.raises(MarketGoldNotEnoughError):
             market.reprice_order(
-                _TOM, item_label=_HERB, side=MarketOrderSide.BUY, new_unit_price=9999,
+                _TOM,
+                item_label=_HERB,
+                side=MarketOrderSide.BUY,
+                new_unit_price=9999,
             )
 
     def test_cancelling_a_bid_returns_the_gold(self, town: Any, market: MarketService) -> None:
@@ -320,7 +366,10 @@ class TestRepricingAndCancellingWorkOnBids:
         """
         _give(town, _LENA, _HERB, 1)
         sell_order = market.place_sell_order(
-            _LENA, item_label=_HERB, quantity=1, unit_price=20,
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=20,
             current_tick=town.current_tick(),
         )
         buy_order = _bid(town, _LENA, quantity=1, price=5)

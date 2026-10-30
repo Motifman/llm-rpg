@@ -7,6 +7,7 @@ from ai_rpg_world.domain.monster.value_object.spawn_condition import SpawnCondit
 @dataclass(frozen=True)
 class RespawnInfo:
     """モンスターのリスポーン設定"""
+
     respawn_interval_ticks: int
     is_auto_respawn: bool = True
     condition: SpawnCondition | None = None

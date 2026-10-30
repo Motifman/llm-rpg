@@ -12,7 +12,6 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
     GuildToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
-    MonsterToolRuntimeTargetDto,
     NpcToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
     ResourceToolRuntimeTargetDto,
@@ -32,35 +31,11 @@ from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     ToolArgumentResolutionException,
 )
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_CANCEL_MOVEMENT,
-    TOOL_NAME_CHANGE_ATTENTION,
-    TOOL_NAME_CHEST_STORE,
-    TOOL_NAME_CHEST_TAKE,
-    TOOL_NAME_COMBAT_USE_SKILL,
-    TOOL_NAME_CONVERSATION_ADVANCE,
-    TOOL_NAME_DESTROY_PLACEABLE,
-    TOOL_NAME_DROP_ITEM,
-    TOOL_NAME_GUILD_ADD_MEMBER,
-    TOOL_NAME_GUILD_CHANGE_ROLE,
     TOOL_NAME_GUILD_CREATE,
     TOOL_NAME_GUILD_DEPOSIT_BANK,
     TOOL_NAME_GUILD_DISBAND,
-    TOOL_NAME_HARVEST_CANCEL,
-    TOOL_NAME_HARVEST_START,
-    TOOL_NAME_INSPECT_ITEM,
-    TOOL_NAME_INSPECT_TARGET,
-    TOOL_NAME_INTERACT_WORLD_OBJECT,
-    TOOL_NAME_MOVE_TO_DESTINATION,
-    TOOL_NAME_NO_OP,
-    TOOL_NAME_PLACE_OBJECT,
-    TOOL_NAME_PURSUIT_CANCEL,
-    TOOL_NAME_PURSUIT_START,
     TOOL_NAME_QUEST_ISSUE,
     TOOL_NAME_SHOP_LIST_ITEM,
-    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
-    TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
-    TOOL_NAME_SKILL_EQUIP,
-    TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_SPEECH,
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
@@ -202,49 +177,6 @@ def _make_context() -> ToolRuntimeContextDto:
 
 
 class TestDefaultToolArgumentResolver:
-    def test_resolve_move_destination_label(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_MOVE_TO_DESTINATION,
-            {"destination_label": "S1"},
-            _make_context(),
-        )
-
-        assert result == {
-            "destination_type": "spot",
-            "target_spot_id": 2,
-            "target_location_area_id": None,
-        }
-
-    def test_resolve_move_destination_location_label(self):
-        """destination_label が L1（ロケーション）のとき destination_type=location, target_location_area_id が解決される"""
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_MOVE_TO_DESTINATION,
-            {"destination_label": "L1"},
-            _make_context(),
-        )
-
-        assert result["destination_type"] == "location"
-        assert result["target_spot_id"] == 1
-        assert result["target_location_area_id"] == 10
-
-    def test_resolve_move_destination_object_label(self):
-        """destination_label が D1（オブジェクト）のとき destination_type=object, target_world_object_id が解決される"""
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_MOVE_TO_DESTINATION,
-            {"destination_label": "D1"},
-            _make_context(),
-        )
-
-        assert result["destination_type"] == "object"
-        assert result["target_spot_id"] == 1
-        assert result["target_world_object_id"] == 200
-
     def test_resolve_whisper_target_label(self):
         """Issue #264 後続: 統合された speech tool で channel=whisper を解決する。"""
         resolver = DefaultToolArgumentResolver()
@@ -258,72 +190,6 @@ class TestDefaultToolArgumentResolver:
         assert result["target_player_id"] == 2
         assert result["content"] == "こんにちは"
         assert result["channel"] == SpeechChannel.WHISPER
-
-    def test_resolve_pursuit_start_player_label(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_PURSUIT_START,
-            {"target_label": "P1"},
-            _make_context(),
-        )
-
-        assert result["target_world_object_id"] == 100
-
-    def test_resolve_pursuit_start_monster_label(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_PURSUIT_START,
-            {"target_label": "M1"},
-            ToolRuntimeContextDto(
-                targets={
-                    **_make_context().targets,
-                    "M1": MonsterToolRuntimeTargetDto(
-                        label="M1",
-                        kind="monster",
-                        display_name="スライム",
-                        world_object_id=301,
-                    ),
-                }
-            ),
-        )
-
-        assert result["target_world_object_id"] == 301
-
-    def test_resolve_pursuit_cancel_returns_empty_args(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_PURSUIT_CANCEL,
-            {},
-            _make_context(),
-        )
-
-        assert result == {}
-
-    def test_resolve_cancel_movement_returns_empty_args(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_CANCEL_MOVEMENT,
-            {},
-            _make_context(),
-        )
-
-        assert result == {}
-
-    def test_resolve_move_unknown_label_raises(self):
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_MOVE_TO_DESTINATION,
-                {"destination_label": "S9"},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_DESTINATION_LABEL"
 
     def test_resolve_say_sets_say_channel(self):
         """Issue #264 後続: channel=say を解決すると SpeechChannel.SAY が入る。"""
@@ -351,432 +217,6 @@ class TestDefaultToolArgumentResolver:
         assert result["content"] == "聞こえるか！"
         assert result["channel"] == SpeechChannel.SHOUT
 
-    def test_resolve_interact_target_label(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_INTERACT_WORLD_OBJECT,
-            {"target_label": "N1"},
-            _make_context(),
-        )
-
-        assert result["target_world_object_id"] == 200
-
-    def test_resolve_skill_equip_from_action_first_labels(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_SKILL_EQUIP,
-            {"skill_label": "EK1", "slot_label": "ES1"},
-            _make_context(),
-        )
-
-        assert result == {
-            "loadout_id": 10,
-            "deck_tier": DeckTier.NORMAL,
-            "slot_index": 0,
-            "skill_id": 1001,
-            "skill_display_name": "火球",
-            "slot_display_name": "通常スロット 1",
-        }
-
-    def test_resolve_skill_equip_rejects_mismatched_label_kind(self):
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_SKILL_EQUIP,
-                {"skill_label": "K1", "slot_label": "ES1"},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_KIND"
-
-    def test_resolve_skill_proposal_for_accept_and_reject(self):
-        resolver = DefaultToolArgumentResolver()
-
-        accepted = resolver.resolve(
-            TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
-            {"proposal_label": "SP1"},
-            _make_context(),
-        )
-        rejected = resolver.resolve(
-            TOOL_NAME_SKILL_REJECT_PROPOSAL,
-            {"proposal_label": "SP1"},
-            _make_context(),
-        )
-
-        assert accepted == {
-            "progress_id": 20,
-            "proposal_id": 2,
-            "proposal_display_name": "新しい攻撃手段",
-            "slot_display_name": "通常スロット 1",
-        }
-        assert rejected == {
-            "progress_id": 20,
-            "proposal_id": 2,
-            "proposal_display_name": "新しい攻撃手段",
-            "slot_display_name": "通常スロット 1",
-        }
-
-    def test_resolve_activate_awakened_mode_without_numeric_payload(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
-            {"awakened_action_label": "AW1"},
-            _make_context(),
-        )
-
-        assert result == {"loadout_id": 10}
-
-    def test_resolve_harvest_target_label(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_HARVEST_START,
-            {"target_label": "O1"},
-            _make_context(),
-        )
-
-        assert result["target_world_object_id"] == 300
-        assert result["target_display_name"] == "薬草"
-
-    def test_resolve_harvest_cancel_target_label(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_HARVEST_CANCEL,
-            {"target_label": "H1"},
-            _make_context(),
-        )
-
-        assert result["target_world_object_id"] == 300
-        assert result["target_display_name"] == "薬草"
-
-    def test_resolve_change_attention_level_label(self):
-        """level_label が有効なとき attention_level_value が返る"""
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_CHANGE_ATTENTION,
-            {"level_label": "A1"},
-            _make_context(),
-        )
-
-        assert result["attention_level_value"] == "FULL"
-
-    def test_resolve_change_attention_empty_label_raises(self):
-        """level_label が空文字のとき INVALID_TARGET_LABEL"""
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_CHANGE_ATTENTION,
-                {"level_label": ""},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-        assert "指定されていません" in str(exc_info.value)
-
-    def test_resolve_change_attention_none_label_raises(self):
-        """level_label が None（args に含まれない）のとき INVALID_TARGET_LABEL"""
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_CHANGE_ATTENTION,
-                {},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-
-    def test_resolve_change_attention_invalid_label_raises(self):
-        """level_label が候補に存在しないラベルのとき INVALID_TARGET_LABEL"""
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_CHANGE_ATTENTION,
-                {"level_label": "X99"},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-        assert "候補にありません" in str(exc_info.value)
-
-    def test_resolve_change_attention_wrong_type_label_raises(self):
-        """level_label が注意レベル以外（例: プレイヤーラベル）のとき INVALID_TARGET_KIND"""
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_CHANGE_ATTENTION,
-                {"level_label": "P1"},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_KIND"
-        assert "使えないラベル" in str(exc_info.value)
-
-    def test_resolve_conversation_advance_labels(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_CONVERSATION_ADVANCE,
-            {"target_label": "N1", "choice_label": "R1"},
-            _make_context(),
-        )
-
-        assert result["npc_world_object_id"] == 200
-        assert result["choice_index"] == 0
-
-    def test_resolve_place_object_inventory_label(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_PLACE_OBJECT,
-            {"inventory_item_label": "I1"},
-            _make_context(),
-        )
-
-        assert result["inventory_slot_id"] == 2
-
-    def test_resolve_drop_item_inventory_label(self):
-        """inventory_item_label が I1（在庫アイテム）のとき inventory_slot_id, target_display_name が解決される"""
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_DROP_ITEM,
-            {"inventory_item_label": "I1"},
-            _make_context(),
-        )
-
-        assert result["inventory_slot_id"] == 2
-        assert result["target_display_name"] == "木箱"
-
-    def test_resolve_drop_item_invalid_label_raises(self):
-        """存在しない在庫ラベルのとき ToolArgumentResolutionException"""
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_DROP_ITEM,
-                {"inventory_item_label": "X99"},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-
-    def test_resolve_drop_item_empty_label_raises(self):
-        """inventory_item_label が空文字のとき INVALID_TARGET_LABEL"""
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_DROP_ITEM,
-                {"inventory_item_label": ""},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-        assert "指定されていません" in str(exc_info.value)
-
-    def test_resolve_drop_item_none_label_raises(self):
-        """inventory_item_label が None（args に含まれない）のとき INVALID_TARGET_LABEL"""
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_DROP_ITEM,
-                {},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-
-    def test_resolve_drop_item_inventory_slot_none_raises(self):
-        """inventory_slot_id が None の在庫ラベルは捨てられないため INVALID_TARGET_KIND"""
-        resolver = DefaultToolArgumentResolver()
-        ctx = _make_context()
-        ctx.targets["I_NO_SLOT"] = InventoryToolRuntimeTargetDto(
-            label="I_NO_SLOT",
-            kind="inventory_item",
-            display_name="特殊アイテム",
-            item_instance_id=401,
-            inventory_slot_id=None,
-            is_placeable=False,
-            available_interactions=(),
-        )
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_DROP_ITEM,
-                {"inventory_item_label": "I_NO_SLOT"},
-                ctx,
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_KIND"
-        assert "捨てられない" in str(exc_info.value)
-
-    def test_resolve_inspect_item_inventory_label(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_INSPECT_ITEM,
-            {"inventory_item_label": "I1"},
-            _make_context(),
-        )
-
-        assert result["item_instance_id"] == 400
-
-    def test_resolve_inspect_target_npc_label(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_INSPECT_TARGET,
-            {"target_label": "N1"},
-            _make_context(),
-        )
-
-        assert result["target_world_object_id"] == 200
-
-    def test_resolve_inspect_item_invalid_label_raises(self):
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_INSPECT_ITEM,
-                {"inventory_item_label": "X99"},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-
-    def test_resolve_inspect_item_empty_label_raises(self):
-        """inventory_item_label が空文字のとき INVALID_TARGET_LABEL"""
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_INSPECT_ITEM,
-                {"inventory_item_label": ""},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-        assert "指定されていません" in str(exc_info.value)
-
-    def test_resolve_inspect_item_none_label_raises(self):
-        """inventory_item_label が None（args に含まれない）のとき INVALID_TARGET_LABEL"""
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_INSPECT_ITEM,
-                {},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-
-    def test_resolve_inspect_target_invalid_label_raises(self):
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_INSPECT_TARGET,
-                {"target_label": "X99"},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-
-    def test_resolve_inspect_target_empty_label_raises(self):
-        """target_label が空文字のとき INVALID_TARGET_LABEL"""
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_INSPECT_TARGET,
-                {"target_label": ""},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-        assert "指定されていません" in str(exc_info.value)
-
-    def test_resolve_inspect_target_none_label_raises(self):
-        """target_label が None（args に含まれない）のとき INVALID_TARGET_LABEL"""
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_INSPECT_TARGET,
-                {},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-
-    def test_resolve_destroy_placeable_returns_empty(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_DESTROY_PLACEABLE,
-            {},
-            _make_context(),
-        )
-
-        assert result == {}
-
-    def test_resolve_chest_store_labels(self):
-        resolver = DefaultToolArgumentResolver()
-
-        result = resolver.resolve(
-            TOOL_NAME_CHEST_STORE,
-            {"target_label": "O2", "inventory_item_label": "I1"},
-            _make_context(),
-        )
-
-        assert result["item_instance_id"] == 400
-
-    def test_resolve_chest_take_labels(self):
-        resolver = DefaultToolArgumentResolver()
-
-        ctx = _make_context()
-        result = resolver.resolve(
-            TOOL_NAME_CHEST_TAKE,
-            {"target_label": "O2", "chest_item_label": "C1"},
-            ctx,
-        )
-
-        assert result["item_instance_id"] == 500
-
-    def test_resolve_combat_use_skill_with_target(self):
-        resolver = DefaultToolArgumentResolver()
-        ctx = _make_context()
-        ctx.targets["M1"] = MonsterToolRuntimeTargetDto(
-            label="M1",
-            kind="monster",
-            display_name="ゴブリン",
-            relative_dx=1,
-            relative_dy=-1,
-            relative_dz=0,
-        )
-
-        result = resolver.resolve(
-            TOOL_NAME_COMBAT_USE_SKILL,
-            {"skill_label": "K1", "target_label": "M1"},
-            ctx,
-        )
-
-        assert result["skill_loadout_id"] == 10
-        assert result["skill_slot_index"] == 1
-        assert result["target_direction"] == "NORTHEAST"
-        assert result["auto_aim"] is False
-
     def test_resolve_whisper_non_player_label_raises(self):
         """channel=whisper で target_label が non-player なら INVALID_TARGET_KIND。"""
         resolver = DefaultToolArgumentResolver()
@@ -789,50 +229,6 @@ class TestDefaultToolArgumentResolver:
             )
 
         assert exc_info.value.error_code == "INVALID_TARGET_KIND"
-
-    def test_resolve_interact_destination_label_raises(self):
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_INTERACT_WORLD_OBJECT,
-                {"target_label": "S1"},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_KIND"
-
-    def test_resolve_harvest_non_resource_label_raises(self):
-        resolver = DefaultToolArgumentResolver()
-
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_HARVEST_START,
-                {"target_label": "N1"},
-                _make_context(),
-            )
-
-        assert exc_info.value.error_code == "INVALID_TARGET_KIND"
-
-    def test_resolve_place_object_non_placeable_label_raises(self):
-        """inventory_item_label が設置不可（is_placeable=False）のとき INVALID_TARGET_KIND"""
-        resolver = DefaultToolArgumentResolver()
-        ctx = _make_context()
-        ctx.targets["I2"] = InventoryToolRuntimeTargetDto(
-            label="I2",
-            kind="inventory_item",
-            display_name="石",
-            item_instance_id=401,
-            inventory_slot_id=3,
-        )
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_PLACE_OBJECT,
-                {"inventory_item_label": "I2"},
-                ctx,
-            )
-        assert exc_info.value.error_code == "INVALID_TARGET_KIND"
-        assert "使えない在庫ラベル" in str(exc_info.value)
 
 
 class TestDefaultToolArgumentResolverInputValidation:
@@ -847,7 +243,7 @@ class TestDefaultToolArgumentResolverInputValidation:
         resolver = DefaultToolArgumentResolver()
         with pytest.raises(TypeError, match="arguments must be dict or None"):
             resolver.resolve(
-                TOOL_NAME_NO_OP,
+                TOOL_NAME_SPEECH,
                 "invalid",  # type: ignore[arg-type]
                 _make_context(),
             )
@@ -856,25 +252,10 @@ class TestDefaultToolArgumentResolverInputValidation:
         resolver = DefaultToolArgumentResolver()
         with pytest.raises(TypeError, match="runtime_context must be ToolRuntimeContextDto"):
             resolver.resolve(
-                TOOL_NAME_NO_OP,
+                TOOL_NAME_SPEECH,
                 {},
                 None,  # type: ignore[arg-type]
             )
-
-
-class TestDefaultToolArgumentResolverConversationAdvance:
-    """conversation_advance の例外ケース"""
-
-    def test_resolve_conversation_advance_target_label_none_raises(self):
-        resolver = DefaultToolArgumentResolver()
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_CONVERSATION_ADVANCE,
-                {},
-                _make_context(),
-            )
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-        assert "会話対象ラベル" in str(exc_info.value)
 
 
 def _make_shop_guild_trade_context() -> ToolRuntimeContextDto:
@@ -964,7 +345,9 @@ class TestTheLegacyResolverNoLongerClaimsTheTradeNames:
         """旧 resolver は trade_accept / trade_decline を解決せず、次へ譲る。"""
         assert (
             GuildShopTradeArgumentResolver().resolve_args(
-                tool_name, {"trade_ref": "r_trade_x"}, _make_context(),
+                tool_name,
+                {"trade_ref": "r_trade_x"},
+                _make_context(),
             )
             is None
         )
@@ -976,7 +359,9 @@ class TestTheLegacyResolverNoLongerClaimsTheTradeNames:
         ことを固定する。
         """
         assert GuildShopTradeArgumentResolver().resolve_args(
-            TOOL_NAME_TRADE_CANCEL, {"trade_ref": "  r_trade_x  "}, _make_context(),
+            TOOL_NAME_TRADE_CANCEL,
+            {"trade_ref": "  r_trade_x  "},
+            _make_context(),
         ) == {"trade_ref": "r_trade_x"}
 
 

@@ -105,9 +105,7 @@ class TestProse:
 
         終わったことが届かないと、いつまで発言してよいのか分からない。
         """
-        output = _format(
-            _event(new_phase=GamePhase.FREE_ROAM, trigger="vote_concluded")
-        )
+        output = _format(_event(new_phase=GamePhase.FREE_ROAM, trigger="vote_concluded"))
         assert output.prose
 
 
@@ -136,9 +134,7 @@ def _format(event: GamePhaseChangedEvent):
     )
 
     handler = SpotGraphObjectHandler(
-        ObservationFormatterContext(
-            name_resolver=ObservationNameResolver(), item_repository=None
-        )
+        ObservationFormatterContext(name_resolver=ObservationNameResolver(), item_repository=None)
     )
     output = handler.format(event, _VIEWER)
     assert output is not None, "フェーズ変化の観測が作られていない"

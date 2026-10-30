@@ -40,9 +40,7 @@ def _create_forbidden_library_session(monkeypatch, tmp_path: Path, stub: StubLlm
         characters_path=chars,
     )
     char = mgr.create_character(CharacterCreateRequest(name="カイト"))
-    summary = mgr.create_session(
-        SessionCreateRequest(world_id="forbidden_library_demo", character_ids=[char.id])
-    )
+    summary = mgr.create_session(SessionCreateRequest(world_id="forbidden_library_demo", character_ids=[char.id]))
     state = mgr._sessions[summary.session_id]
     state.llm_wiring.llm_client = stub
     return state
@@ -51,9 +49,7 @@ def _create_forbidden_library_session(monkeypatch, tmp_path: Path, stub: StubLlm
 class TestWorldRuntimeTravelBySpotName:
     """destination_label にスポット名を渡しても解決される (PR 3)。"""
 
-    def test_destination_label_accepts_spot_display_name(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_destination_label_accepts_spot_display_name(self, monkeypatch, tmp_path: Path) -> None:
         """旧 world_runtime では label lookup のみで失敗していた。PR 3 で
         display_name fallback が追加され、スポット名指定で移動できる。"""
         # forbidden_library_demo: カイトの spawn は入口広間 (1)。閲覧室 (2) は
@@ -68,14 +64,10 @@ class TestWorldRuntimeTravelBySpotName:
         target_pid = state.runtime.get_player_ids()[0]
         result = state.llm_wiring.run_turn(target_pid)
 
-        assert result.success is True, (
-            f"BUG: スポット名 '閲覧室' で移動できなかった: {result.message}"
-        )
+        assert result.success is True, f"BUG: スポット名 '閲覧室' で移動できなかった: {result.message}"
         assert "閲覧室" in result.message
 
-    def test_dynamic_label_s1_still_works_after_fallback_added(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_dynamic_label_s1_still_works_after_fallback_added(self, monkeypatch, tmp_path: Path) -> None:
         """display_name fallback 追加後も既存のラベル指定パスは動く (回帰確認)。"""
         # 入口広間からの隣接スポットの先頭 (S1) を指定する
         stub = StubLlmClient(
@@ -88,13 +80,9 @@ class TestWorldRuntimeTravelBySpotName:
         target_pid = state.runtime.get_player_ids()[0]
         result = state.llm_wiring.run_turn(target_pid)
 
-        assert result.success is True, (
-            f"BUG: 既存のラベル指定が動かなくなった: {result.message}"
-        )
+        assert result.success is True, f"BUG: 既存のラベル指定が動かなくなった: {result.message}"
 
-    def test_unknown_destination_returns_learnable_failure_dto(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_unknown_destination_returns_learnable_failure_dto(self, monkeypatch, tmp_path: Path) -> None:
         """旧ラベルにも表示名にもマッチしなければ INVALID_DESTINATION_LABEL
         を返し、現在プロンプトで指定すべき名前候補を message に列挙する。"""
         stub = StubLlmClient(

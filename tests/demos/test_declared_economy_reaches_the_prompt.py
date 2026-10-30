@@ -16,9 +16,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI = PlayerId(1)
 
 

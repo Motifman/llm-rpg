@@ -27,14 +27,12 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
-_MORI = PlayerId(1)   # crew
-_SENA = PlayerId(2)   # crew
-_KUZE = PlayerId(3)   # keeper
-_AOI = PlayerId(4)    # crew
+_MORI = PlayerId(1)  # crew
+_SENA = PlayerId(2)  # crew
+_KUZE = PlayerId(3)  # keeper
+_AOI = PlayerId(4)  # crew
 
 _ALL_CREW = (_MORI, _SENA, _AOI)
 
@@ -51,10 +49,7 @@ class TestEjectionIsRecorded:
         """追放した相手の outcome が EJECTED になる。"""
         runtime.eject_player(_KUZE)
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(_KUZE)
-            is PlayerOutcomeEnum.EJECTED
-        )
+        assert runtime._player_outcome_registry.get_outcome(_KUZE) is PlayerOutcomeEnum.EJECTED
 
     def test_ejection_is_distinguishable_from_death(self, runtime) -> None:
         """殺害と読み分けられる。
@@ -64,10 +59,7 @@ class TestEjectionIsRecorded:
         """
         runtime.eject_player(_KUZE)
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(_KUZE)
-            is not PlayerOutcomeEnum.DEAD
-        )
+        assert runtime._player_outcome_registry.get_outcome(_KUZE) is not PlayerOutcomeEnum.DEAD
 
     def test_ejection_does_not_create_a_departed_position(self, runtime) -> None:
         """身体記録があっても、第1版では EJECTED を幽霊位置へ置かない。
@@ -76,9 +68,7 @@ class TestEjectionIsRecorded:
         配置する outcome の境界そのものを検査する。
         """
         runtime._fallen_body_registry.record(_SENA, SpotId(1), WorldTick(3))
-        runtime._player_outcome_registry.set_outcome(
-            _SENA, PlayerOutcomeEnum.EJECTED
-        )
+        runtime._player_outcome_registry.set_outcome(_SENA, PlayerOutcomeEnum.EJECTED)
 
         assert runtime._departed_position_store.find(_SENA) is None
 

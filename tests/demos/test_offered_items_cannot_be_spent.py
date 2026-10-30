@@ -33,9 +33,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_TOWN = (
-    pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
-)
+_TOWN = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _LENA = PlayerId(1)
 _HERB = "薬草"
 
@@ -60,19 +58,17 @@ class _Town:
         raw["player_trade"] = {"enabled": True}
         # 市場町は 1 人の世界なので give_item を落としている。ここでは相手を
         # 足したので、渡す経路も検査対象に戻す。
-        raw["disabled_tools"] = [
-            name for name in raw.get("disabled_tools", []) if name != "give_item"
-        ]
+        raw["disabled_tools"] = [name for name in raw.get("disabled_tools", []) if name != "give_item"]
         (directory / "market_town_v1.json").write_text(
-            json.dumps(raw, ensure_ascii=False), encoding="utf-8",
+            json.dumps(raw, ensure_ascii=False),
+            encoding="utf-8",
         )
         manager = GameRuntimeManager(
-            scenarios_dir=directory, characters_path=directory / "characters.json",
+            scenarios_dir=directory,
+            characters_path=directory / "characters.json",
         )
         character = manager.create_character(CharacterCreateRequest(name="レナ"))
-        summary = manager.create_session(
-            SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id])
-        )
+        summary = manager.create_session(SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id]))
         self._state = manager._sessions[summary.session_id]
 
     @property
@@ -186,7 +182,8 @@ class TestEachSpendingPathRefusesFrozenItems:
         town.move_to_merchant()
 
         result = town.call(
-            "sell_item", {"item_label": _HERB, "quantity": 1, "inner_thought": "売る"},
+            "sell_item",
+            {"item_label": _HERB, "quantity": 1, "inner_thought": "売る"},
         )
 
         assert result.success is False
@@ -254,7 +251,8 @@ class TestReleasingTheOfferUnfreezes:
     def test_unfrozen_gold_can_be_spent_again(self, town: _Town) -> None:
         """提案が終われば、出していた gold もまた使える。"""
         offer = town.offer(
-            gives=TradeSide(gold=10), asks=TradeSide(items=((_spec(town), 1),)),
+            gives=TradeSide(gold=10),
+            asks=TradeSide(items=((_spec(town), 1),)),
         )
         town.move_to_merchant()
 

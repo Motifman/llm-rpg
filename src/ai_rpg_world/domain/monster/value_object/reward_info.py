@@ -7,6 +7,7 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterRewa
 @dataclass(frozen=True)
 class RewardInfo:
     """モンスター討伐時の報酬情報"""
+
     exp: int
     gold: int
     loot_table_id: LootTableId | None = None

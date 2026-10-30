@@ -43,26 +43,49 @@ def _context() -> ToolRuntimeContextDto:
     return ToolRuntimeContextDto(
         targets={
             "O1": ToolRuntimeTargetDto(
-                label="O1", kind="spot_graph_object", display_name="貝の岩棚", world_object_id=11,
-                available_interactions=("harvest",), interaction_labels=(("harvest", "貝を採る"),),
+                label="O1",
+                kind="spot_graph_object",
+                display_name="貝の岩棚",
+                world_object_id=11,
+                available_interactions=("harvest",),
+                interaction_labels=(("harvest", "貝を採る"),),
             ),
             "M1": MonsterToolRuntimeTargetDto(
-                label="M1", kind="spot_graph_monster", display_name="大型カニ", world_object_id=31, monster_id=5,
+                label="M1",
+                kind="spot_graph_monster",
+                display_name="大型カニ",
+                world_object_id=31,
+                monster_id=5,
             ),
             "S1": DestinationToolRuntimeTargetDto(
-                label="S1", kind="spot_graph_destination", display_name="川の上流", spot_id=7,
+                label="S1",
+                kind="spot_graph_destination",
+                display_name="川の上流",
+                spot_id=7,
             ),
             "SL1": ToolRuntimeTargetDto(
-                label="SL1", kind="spot_graph_sub_location", display_name="焚き火跡", sub_location_id=2,
+                label="SL1",
+                kind="spot_graph_sub_location",
+                display_name="焚き火跡",
+                sub_location_id=2,
             ),
             "P1": PlayerToolRuntimeTargetDto(
-                label="P1", kind="spot_graph_player", display_name="リン", player_id=2,
+                label="P1",
+                kind="spot_graph_player",
+                display_name="リン",
+                player_id=2,
             ),
             "I1": InventoryToolRuntimeTargetDto(
-                label="I1", kind="inventory_item", display_name="貝", item_instance_id=41,
+                label="I1",
+                kind="inventory_item",
+                display_name="貝",
+                item_instance_id=41,
             ),
             "G1": InventoryToolRuntimeTargetDto(
-                label="G1", kind="ground_item", display_name="流木", real_item_instance_id=51,
+                label="G1",
+                kind="ground_item",
+                display_name="流木",
+                real_item_instance_id=51,
             ),
         }
     )
@@ -205,7 +228,9 @@ class TestTheDispatchBuildersKeepTheExplanation:
             raise AssertionError("resolver must fail before the executor runs")
 
         handler = adapt_executor_handler_with_resolver(
-            raw, TOOL_NAME_SPOT_GRAPH_INTERACT, SpotGraphArgumentResolver(),
+            raw,
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            SpotGraphArgumentResolver(),
             invalid_label_failure_builder=build_interact_invalid_label_failure,
         )
         result = handler(PlayerId(3), {"target_label": "川の上流", "action_name": "harvest"}, _context())
@@ -214,7 +239,9 @@ class TestTheDispatchBuildersKeepTheExplanation:
         assert "travel_to" in result.message
 
         handler = adapt_executor_handler_with_resolver(
-            raw, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, SpotGraphArgumentResolver(),
+            raw,
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            SpotGraphArgumentResolver(),
             invalid_label_failure_builder=build_travel_to_invalid_label_failure,
         )
         result = handler(PlayerId(3), {"destination_label": "大型カニ"}, _context())

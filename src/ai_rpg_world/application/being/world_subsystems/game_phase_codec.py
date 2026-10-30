@@ -47,19 +47,13 @@ def _decode(raw: Any) -> GamePhaseState:
         phase = GamePhase(phase_raw)
     except ValueError as exc:
         valid = ", ".join(p.value for p in GamePhase)
-        raise ValueError(
-            f"{SUBSYSTEM_KEY} phase={phase_raw!r} unknown (expected one of {valid})"
-        ) from exc
+        raise ValueError(f"{SUBSYSTEM_KEY} phase={phase_raw!r} unknown (expected one of {valid})") from exc
     return GamePhaseState(
         phase=phase,
         started_at_tick=int(raw.get("started_at_tick", 0)),
         last_activity_tick=int(raw.get("last_activity_tick", 0)),
         trigger=raw.get("trigger"),
-        initiator_player_id=(
-            int(raw["initiator_player_id"])
-            if raw.get("initiator_player_id") is not None
-            else None
-        ),
+        initiator_player_id=(int(raw["initiator_player_id"]) if raw.get("initiator_player_id") is not None else None),
     )
 
 
@@ -93,10 +87,7 @@ class GamePhaseSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         store = getattr(runtime, "_game_phase_store", None)
         if store is None:
             return
@@ -107,9 +98,7 @@ class GamePhaseSubsystemCodec(WorldSubsystemCodec):
         store.replace_all(
             current=_decode(current_raw),
             history=[_decode(entry) for entry in data.get("history", [])],
-            used_emergency_buttons=[
-                int(pid) for pid in data.get("used_emergency_buttons", [])
-            ],
+            used_emergency_buttons=[int(pid) for pid in data.get("used_emergency_buttons", [])],
             reported_bodies=[int(pid) for pid in data.get("reported_bodies", [])],
         )
 

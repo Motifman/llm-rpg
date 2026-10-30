@@ -70,9 +70,7 @@ class DistantViewResult:
     active_cue_count: int = 0
     skipped_reasons: tuple[str, ...] = ()
 
-    def with_added_skipped_reasons(
-        self, reasons: Sequence[str]
-    ) -> DistantViewResult:
+    def with_added_skipped_reasons(self, reasons: Sequence[str]) -> DistantViewResult:
         """呼び出し側で解決した skipped reason を重複なく追加する。"""
         if not reasons:
             return self
@@ -235,25 +233,13 @@ class DistantViewService:
         best_by_direction: dict[str, _Candidate] = {}
         for candidate in candidates:
             current_best = best_by_direction.get(candidate.direction)
-            if current_best is None or _candidate_sort_key(candidate) < _candidate_sort_key(
-                current_best
-            ):
+            if current_best is None or _candidate_sort_key(candidate) < _candidate_sort_key(current_best):
                 best_by_direction[candidate.direction] = candidate
 
-        selected = sorted(best_by_direction.values(), key=_candidate_sort_key)[
-            : self._max_lines
-        ]
+        selected = sorted(best_by_direction.values(), key=_candidate_sort_key)[: self._max_lines]
         lines = tuple(_candidate_to_line(candidate) for candidate in selected)
-        area_ids = tuple(
-            candidate.source.candidate_id
-            for candidate in selected
-            if candidate.source.kind == "area"
-        )
-        cue_ids = tuple(
-            candidate.source.candidate_id
-            for candidate in selected
-            if candidate.source.kind == "cue"
-        )
+        area_ids = tuple(candidate.source.candidate_id for candidate in selected if candidate.source.kind == "area")
+        cue_ids = tuple(candidate.source.candidate_id for candidate in selected if candidate.source.kind == "cue")
         return DistantViewResult(
             lines=lines,
             rendered_area_ids=area_ids,

@@ -17,16 +17,11 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     ScenarioLoadError,
 )
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI = PlayerId(1)
 _KUZE = PlayerId(3)
 _POWER_MESSAGE = "配電が落ちている。機関室の主配電盤で復旧できる。"
-_FUEL_MESSAGE = (
-    "燃料が凍りはじめている。燃料庫の解氷弁と機関室の送油弁を"
-    "二人で同時に開ける必要がある。"
-)
+_FUEL_MESSAGE = "燃料が凍りはじめている。燃料庫の解氷弁と機関室の送油弁を二人で同時に開ける必要がある。"
 _ONGOING_HEADER = "【進行中の異常】"
 _ELAPSED_HEADER = "【時間の経過】"
 _INSTRUCTION = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
@@ -38,9 +33,7 @@ def runtime():
 
 
 def _terminal_spec(runtime) -> ItemSpecId:
-    return ItemSpecId.create(
-        runtime.id_mapper.get_int("item_spec", "control_terminal")
-    )
+    return ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "control_terminal"))
 
 
 def _move(runtime, player_id: PlayerId, spot: str) -> None:
@@ -105,13 +98,11 @@ def test_only_fuel_freeze_declares_meeting_start_resolution_effects() -> None:
 
     conditions = {condition.flag: condition for condition in loaded.ongoing_conditions}
     assert conditions["power_out"].on_meeting_start == ()
-    assert [
-        effect.effect_type.value
-        for effect in conditions["fuel_frozen"].on_meeting_start
-    ] == ["RESOLVE_ONGOING_CONDITION", "SHOW_MESSAGE"]
-    assert [
-        effect.effect_type.value for effect in conditions["fuel_frozen"].resolution
-    ] == ["CLEAR_FLAG", "SET_FLAG"]
+    assert [effect.effect_type.value for effect in conditions["fuel_frozen"].on_meeting_start] == [
+        "RESOLVE_ONGOING_CONDITION",
+        "SHOW_MESSAGE",
+    ]
+    assert [effect.effect_type.value for effect in conditions["fuel_frozen"].resolution] == ["CLEAR_FLAG", "SET_FLAG"]
 
 
 def test_active_condition_remains_in_the_variable_tail_before_instruction(runtime) -> None:
@@ -139,9 +130,7 @@ def test_departed_player_also_sees_the_active_condition(runtime) -> None:
 def test_ongoing_condition_rejects_a_flag_that_nothing_can_set() -> None:
     """SET_FLAG も初期値も無いフラグの表示宣言は、起動時に原因つきで拒否する。"""
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-    raw["ongoing_conditions"].append(
-        {"flag": "power_ot", "message": "存在しない異常。"}
-    )
+    raw["ongoing_conditions"].append({"flag": "power_ot", "message": "存在しない異常。"})
 
     with pytest.raises(ScenarioLoadError, match=r"ongoing_conditions.*power_ot"):
         ScenarioLoader().load_from_dict(raw)
@@ -169,9 +158,7 @@ def test_meeting_resolution_rejects_an_empty_effect_list() -> None:
 def test_condition_resolution_must_clear_its_own_active_flag() -> None:
     """共通 resolution が成立条件の flag を降ろさなければ、解決したふりをする前に拒否する。"""
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-    raw["ongoing_conditions"][1]["resolution"][0]["parameters"][
-        "flag_name"
-    ] = "power_out"
+    raw["ongoing_conditions"][1]["resolution"][0]["parameters"]["flag_name"] = "power_out"
 
     with pytest.raises(ScenarioLoadError, match=r"fuel_frozen.*CLEAR_FLAG"):
         ScenarioLoader().load_from_dict(raw)
@@ -224,9 +211,7 @@ def test_meeting_resolution_does_not_count_as_the_condition_flag_producer() -> N
 def test_resolve_effect_rejects_a_condition_without_resolution() -> None:
     """RESOLVE_ONGOING_CONDITION の参照先に resolution が無ければ起動前に拒否する。"""
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-    raw["synchronized_action_groups"][0]["on_complete"][0]["parameters"][
-        "flag"
-    ] = "power_out"
+    raw["synchronized_action_groups"][0]["on_complete"][0]["parameters"]["flag"] = "power_out"
 
     with pytest.raises(ScenarioLoadError, match=r"resolution.*power_out"):
         ScenarioLoader().load_from_dict(raw)

@@ -40,23 +40,18 @@ class TestPostQueryService:
         TestPostQueryService().setup_test_data(post_repository, user_repository)
         return PostQueryService(post_repository, user_repository)
 
-    def create_test_post(self, post_id: int, user_id: int, content: str, visibility: PostVisibility = PostVisibility.PUBLIC) -> PostAggregate:
+    def create_test_post(
+        self, post_id: int, user_id: int, content: str, visibility: PostVisibility = PostVisibility.PUBLIC
+    ) -> PostAggregate:
         """テスト用のポストを作成"""
         # contentからハッシュタグを抽出（#で始まる単語）
         import re
-        hashtags_in_content = re.findall(r'#(\w+)', content)
+
+        hashtags_in_content = re.findall(r"#(\w+)", content)
         hashtags = tuple(hashtags_in_content) if hashtags_in_content else ("test", "hashtag")
 
-        post_content = PostContent(
-            content=content,
-            hashtags=hashtags,
-            visibility=visibility
-        )
-        return PostAggregate.create(
-            post_id=PostId(post_id),
-            author_user_id=UserId(user_id),
-            post_content=post_content
-        )
+        post_content = PostContent(content=content, hashtags=hashtags, visibility=visibility)
+        return PostAggregate.create(post_id=PostId(post_id), author_user_id=UserId(user_id), post_content=post_content)
 
     def setup_test_data(self, post_repository, user_repository):
         """テストデータをセットアップ"""
@@ -88,32 +83,34 @@ class TestPostQueryService:
 
         # いいねデータを追加（ユーザー1がポスト1005と1006にいいね）
         from ai_rpg_world.domain.sns.value_object.like import Like
+
         liked_post1._likes.add(Like(UserId(1), PostId(1005)))
         liked_post2._likes.add(Like(UserId(1), PostId(1006)))
 
         # 人気ポスト用のテストデータ（たくさんのいいねがついたポスト）
         popular_post1 = self.create_test_post(12, 1, "人気ポスト1です #人気")
         for i in range(10):  # 10個のいいね
-            popular_post1._likes.add(Like(UserId(100+i), PostId(12)))
+            popular_post1._likes.add(Like(UserId(100 + i), PostId(12)))
         post_repository._posts[PostId(12)] = popular_post1
 
         popular_post2 = self.create_test_post(18, 2, "人気ポスト2です #人気")
         for i in range(8):  # 8個のいいね
-            popular_post2._likes.add(Like(UserId(110+i), PostId(18)))
+            popular_post2._likes.add(Like(UserId(110 + i), PostId(18)))
         post_repository._posts[PostId(18)] = popular_post2
 
         popular_post3 = self.create_test_post(19, 3, "人気ポスト3です #人気")
         for i in range(6):  # 6個のいいね
-            popular_post3._likes.add(Like(UserId(120+i), PostId(19)))
+            popular_post3._likes.add(Like(UserId(120 + i), PostId(19)))
         post_repository._posts[PostId(19)] = popular_post3
 
         popular_post4 = self.create_test_post(20, 1, "人気ポスト4です #人気")
         for i in range(4):  # 4個のいいね
-            popular_post4._likes.add(Like(UserId(130+i), PostId(20)))
+            popular_post4._likes.add(Like(UserId(130 + i), PostId(20)))
         post_repository._posts[PostId(20)] = popular_post4
 
         # トレンド計算用のテストポストを追加（過去24時間以内）
         from datetime import timedelta
+
         recent_time = datetime.now() - timedelta(hours=1)  # 1時間前
 
         # ハッシュタグを含むポストを複数追加
@@ -142,7 +139,9 @@ class TestPostQueryService:
         post_repository._posts[PostId(3002)] = search_post2
 
         # アクセス拒否テスト用のフォロワー限定ポスト（ユーザー6のポスト）
-        followers_only_post = self.create_test_post(6, 6, "これはフォロワー限定のポストです", PostVisibility.FOLLOWERS_ONLY)
+        followers_only_post = self.create_test_post(
+            6, 6, "これはフォロワー限定のポストです", PostVisibility.FOLLOWERS_ONLY
+        )
         post_repository._posts[PostId(6)] = followers_only_post
 
     def test_get_user_timeline_success(self, post_query_service, post_repository, user_repository):
@@ -326,11 +325,7 @@ class TestPostQueryService:
         from ai_rpg_world.domain.sns.value_object.post_content import PostContent
 
         # 存在しない著者ユーザーID（999）のポストを作成
-        test_content = PostContent(
-            content="テストポスト",
-            hashtags=("test",),
-            visibility=PostVisibility.PUBLIC
-        )
+        test_content = PostContent(content="テストポスト", hashtags=("test",), visibility=PostVisibility.PUBLIC)
         from ai_rpg_world.domain.sns.value_object import Like, Mention, ReplyId
 
         orphaned_post = PostAggregate(
@@ -343,7 +338,7 @@ class TestPostQueryService:
             deleted=False,
             parent_post_id=None,
             parent_reply_id=None,
-            created_at=None
+            created_at=None,
         )
         post_repository.save(orphaned_post)
 
@@ -360,11 +355,7 @@ class TestPostQueryService:
         from ai_rpg_world.domain.sns.value_object.post_content import PostContent
 
         # 存在しない著者ユーザーID（999）のポストを作成
-        test_content = PostContent(
-            content="テストポスト",
-            hashtags=("test",),
-            visibility=PostVisibility.PUBLIC
-        )
+        test_content = PostContent(content="テストポスト", hashtags=("test",), visibility=PostVisibility.PUBLIC)
         orphaned_post = PostAggregate(
             post_id=PostId(9999),
             author_user_id=UserId(999),  # 存在しないユーザー
@@ -375,7 +366,7 @@ class TestPostQueryService:
             deleted=False,
             parent_post_id=None,
             parent_reply_id=None,
-            created_at=None
+            created_at=None,
         )
         post_repository.save(orphaned_post)
 
@@ -394,7 +385,7 @@ class TestPostQueryService:
         from ai_rpg_world.application.social.exceptions import SystemErrorException
 
         # post_repository.find_by_user_id で予期せぬ例外を発生させる
-        with patch.object(post_repository, 'find_by_user_id', side_effect=RuntimeError("予期せぬエラー")):
+        with patch.object(post_repository, "find_by_user_id", side_effect=RuntimeError("予期せぬエラー")):
             with pytest.raises(SystemErrorException) as exc_info:
                 post_query_service.get_user_timeline(user_id=1, viewer_user_id=1)
 
@@ -409,7 +400,9 @@ class TestPostQueryService:
 
         # _user_repository.find_by_id でドメイン例外を発生させる
         # UserProfileExceptionはUserQueryExceptionに変換される
-        with patch.object(user_repository, 'find_by_id', side_effect=UserProfileException("ユーザープロファイルエラー")):
+        with patch.object(
+            user_repository, "find_by_id", side_effect=UserProfileException("ユーザープロファイルエラー")
+        ):
             with pytest.raises(UserQueryException):
                 post_query_service.get_post(post_id=1, viewer_user_id=1)
 
@@ -547,13 +540,19 @@ class TestPostQueryService:
 
         # 検索機能ではプライベートポストは見えないはず
         for post in public_hashtag_posts:
-            assert post.visibility in ["public", "followers_only"], f"ハッシュタグ検索でプライベートポストが見える: {post.post_id}"
+            assert post.visibility in ["public", "followers_only"], (
+                f"ハッシュタグ検索でプライベートポストが見える: {post.post_id}"
+            )
         for post in public_keyword_posts:
-            assert post.visibility in ["public", "followers_only"], f"キーワード検索でプライベートポストが見える: {post.post_id}"
+            assert post.visibility in ["public", "followers_only"], (
+                f"キーワード検索でプライベートポストが見える: {post.post_id}"
+            )
 
         # 人気ポストランキングでは自分のポスト（プライベート含む）が見える可能性がある
         for post in popular_posts:
-            assert post.visibility in ["public", "followers_only", "private"], f"人気ポストで不正な可視性のポストが見える: {post.post_id}"
+            assert post.visibility in ["public", "followers_only", "private"], (
+                f"人気ポストで不正な可視性のポストが見える: {post.post_id}"
+            )
 
     def test_domain_exception_handling(self, post_query_service):
         """ドメイン層の例外が適切にアプリケーション層でハンドリングされることをテスト"""
@@ -601,6 +600,7 @@ class TestPostQueryService:
 
         # トレンド計算用のテストデータのみを追加
         from datetime import timedelta
+
         recent_time = datetime.now() - timedelta(hours=1)
 
         # ハッシュタグを含むポストを追加
@@ -648,7 +648,7 @@ class TestPostQueryService:
         expected_order = ["#人気", "#トレンド", "#おすすめ", "#話題"]
         for i, expected_hashtag in enumerate(expected_order):
             if i < len(result):
-                assert result[i] == expected_hashtag, f"順位{i+1}が{expected_hashtag}であるべき: {result}"
+                assert result[i] == expected_hashtag, f"順位{i + 1}が{expected_hashtag}であるべき: {result}"
 
     def test_get_trending_hashtags_limit(self, post_query_service):
         """get_trending_hashtagsのlimitパラメータテスト"""

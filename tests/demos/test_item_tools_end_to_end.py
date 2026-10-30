@@ -40,25 +40,26 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "survival_island_v2.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 @pytest.fixture
 def session(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """survival_island_v2 セッションを LLM stub で立ち上げる共有 fixture。"""
     from tests.demos._world_runtime_helpers import create_world_runtime_session
+
     return create_world_runtime_session(
-        monkeypatch, tmp_path, world_id="survival_island_v2",
+        monkeypatch,
+        tmp_path,
+        world_id="survival_island_v2",
     )
 
 
 def _grant(runtime, pid: PlayerId, spec_str_id: str) -> None:
     spec_id = ItemSpecId.create(runtime.id_mapper.get_int("item_spec", spec_str_id))
     grant_item_specs_to_inventory(
-        player_id=pid, item_spec_ids=(spec_id,),
+        player_id=pid,
+        item_spec_ids=(spec_id,),
         item_repository=runtime._item_repo,
         item_spec_repository=runtime._item_spec_repo,
         player_inventory_repository=runtime._player_inventory_repo,
@@ -225,36 +226,37 @@ class TestUseItemEndToEnd:
         _grant(runtime, ada, "coconut")  # CONSUMABLE
         label = _label_for_item(runtime, ada, "coconut")
 
-        stub = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_USE_ITEM,
-            "arguments": {"item_label": label, "inner_thought": "食べる"},
-        })
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+                "arguments": {"item_label": label, "inner_thought": "食べる"},
+            }
+        )
         session.llm_wiring.llm_client = stub
         result = session.llm_wiring.run_turn(ada)
 
-        assert result.success is True, (
-            f"use_item が失敗: code={result.error_code} msg={result.message[:160]}"
-        )
+        assert result.success is True, f"use_item が失敗: code={result.error_code} msg={result.message[:160]}"
         # inventory から該当アイテムが消えていること
         inv = runtime._player_inventory_repo.find_by_id(ada)
         assert inv is not None
-        assert not _owns_spec(runtime, ada, "coconut"), (
-            "use_item 成功後も coconut が inventory に残っている"
-        )
+        assert not _owns_spec(runtime, ada, "coconut"), "use_item 成功後も coconut が inventory に残っている"
 
     def test_returns_item_label_invalid_target_label(self, session) -> None:
         """resolver 経路が壊れていれば INVALID_ARGUMENT (= 実験 #25 の症状) に化ける。"""
         runtime = session.runtime
         ada = _player_id(runtime, "ada")
-        stub = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_USE_ITEM,
-            "arguments": {"item_label": "I99", "inner_thought": "t"},
-        })
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+                "arguments": {"item_label": "I99", "inner_thought": "t"},
+            }
+        )
         session.llm_wiring.llm_client = stub
         result = session.llm_wiring.run_turn(ada)
         assert result.success is False
         assert result.error_code in (
-            "INVALID_TARGET_LABEL", "INVALID_TARGET_KIND",
+            "INVALID_TARGET_LABEL",
+            "INVALID_TARGET_KIND",
         ), f"unexpected code: {result.error_code} (resolver が動いていない疑い)"
 
     def test_successful_use_item_runs_observation_pipeline_without_exception(self, session) -> None:
@@ -274,15 +276,16 @@ class TestUseItemEndToEnd:
         _grant(runtime, ada, "coconut")
         label = _label_for_item(runtime, ada, "coconut")
 
-        stub = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_USE_ITEM,
-            "arguments": {"item_label": label, "inner_thought": "食"},
-        })
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+                "arguments": {"item_label": label, "inner_thought": "食"},
+            }
+        )
         session.llm_wiring.llm_client = stub
         result = session.llm_wiring.run_turn(ada)
         assert result.success is True, (
-            f"use_item の event publish/formatter で例外: "
-            f"code={result.error_code} msg={result.message[:200]}"
+            f"use_item の event publish/formatter で例外: code={result.error_code} msg={result.message[:200]}"
         )
         # SYSTEM_ERROR (= AttributeError 等) が出ていないことを明示
         assert result.error_code != "SYSTEM_ERROR"
@@ -433,13 +436,18 @@ class TestUseItemEndToEnd:
         _grant(runtime, ada, "coconut")
         _set_one_owned_item_spoiled(runtime, ada, "coconut", is_spoiled=True)
         spoiled_label = _label_for_item_with_spoilage(
-            runtime, ada, "coconut", is_spoiled=True,
+            runtime,
+            ada,
+            "coconut",
+            is_spoiled=True,
         )
 
-        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_USE_ITEM,
-            "arguments": {"item_label": spoiled_label, "inner_thought": "腐った方を食べる"},
-        })
+        session.llm_wiring.llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+                "arguments": {"item_label": spoiled_label, "inner_thought": "腐った方を食べる"},
+            }
+        )
 
         result = session.llm_wiring.run_turn(ada)
 
@@ -460,15 +468,15 @@ class TestDropItemEndToEnd:
         _grant(runtime, ada, "coconut")
         label = _label_for_item(runtime, ada, "coconut")
 
-        stub = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-            "arguments": {"item_label": label, "inner_thought": "捨てる"},
-        })
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+                "arguments": {"item_label": label, "inner_thought": "捨てる"},
+            }
+        )
         session.llm_wiring.llm_client = stub
         result = session.llm_wiring.run_turn(ada)
-        assert result.success is True, (
-            f"drop_item 失敗: {result.error_code} {result.message[:120]}"
-        )
+        assert result.success is True, f"drop_item 失敗: {result.error_code} {result.message[:120]}"
 
     def test_drop_same_named_item_twice_resolves_slot_at_execution_time(self, session) -> None:
         """同名アイテムを2個持つとき、古い item_label を使う連続 drop でも毎回 slot を引き直す。"""
@@ -479,17 +487,21 @@ class TestDropItemEndToEnd:
         _grant(runtime, ada, "coconut")
         item_label = _label_for_item(runtime, ada, "coconut")
 
-        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-            "arguments": {"item_label": item_label, "inner_thought": "1個置く"},
-        })
+        session.llm_wiring.llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+                "arguments": {"item_label": item_label, "inner_thought": "1個置く"},
+            }
+        )
         first = session.llm_wiring.run_turn(ada)
         assert first.success is True, first.message
 
-        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-            "arguments": {"item_label": item_label, "inner_thought": "もう1個置く"},
-        })
+        session.llm_wiring.llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+                "arguments": {"item_label": item_label, "inner_thought": "もう1個置く"},
+            }
+        )
         second = session.llm_wiring.run_turn(ada)
         assert second.success is True, second.message
         assert not _owns_spec(runtime, ada, "coconut")
@@ -504,13 +516,18 @@ class TestDropItemEndToEnd:
         _grant(runtime, ada, "coconut")
         _set_one_owned_item_spoiled(runtime, ada, "coconut", is_spoiled=True)
         spoiled_label = _label_for_item_with_spoilage(
-            runtime, ada, "coconut", is_spoiled=True,
+            runtime,
+            ada,
+            "coconut",
+            is_spoiled=True,
         )
 
-        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-            "arguments": {"item_label": spoiled_label, "inner_thought": "腐った方を捨てる"},
-        })
+        session.llm_wiring.llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+                "arguments": {"item_label": spoiled_label, "inner_thought": "腐った方を捨てる"},
+            }
+        )
 
         result = session.llm_wiring.run_turn(ada)
 
@@ -529,9 +546,8 @@ class TestGiveItemEndToEnd:
         prompt = runtime.build_full_prompt(actor)
         ctx = prompt["tool_runtime_context"]
         for label, target in ctx.targets.items():
-            if (
-                getattr(target, "kind", None) == "spot_graph_player"
-                and getattr(target, "player_id", None) == int(target_pid)
+            if getattr(target, "kind", None) == "spot_graph_player" and getattr(target, "player_id", None) == int(
+                target_pid
             ):
                 return label
         raise AssertionError(f"player_id={int(target_pid)} の label が見つからない")
@@ -550,23 +566,23 @@ class TestGiveItemEndToEnd:
 
         # PR-α (Y_after_pr639_640 後続): give_item は batch-always に統合。
         # 単発でも ``gives: [...]`` 配列で渡す (要素数 1)。
-        stub = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-            "arguments": {
-                "gives": [
-                    {
-                        "item_label": item_label,
-                        "target_player_label": target_player_label,
-                    },
-                ],
-                "inner_thought": "渡す",
-            },
-        })
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+                "arguments": {
+                    "gives": [
+                        {
+                            "item_label": item_label,
+                            "target_player_label": target_player_label,
+                        },
+                    ],
+                    "inner_thought": "渡す",
+                },
+            }
+        )
         session.llm_wiring.llm_client = stub
         result = session.llm_wiring.run_turn(ada)
-        assert result.success is True, (
-            f"give_item 失敗: {result.error_code} {result.message[:160]}"
-        )
+        assert result.success is True, f"give_item 失敗: {result.error_code} {result.message[:160]}"
         # noah の inventory に coconut が入っている
         assert _owns_spec(runtime, noah, "coconut")
         # ada の inventory から消えている
@@ -590,17 +606,19 @@ class TestGiveItemEndToEnd:
             self._player_target_label(runtime, ada, kai),
         ]
 
-        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-            "arguments": {
-                "gives": [
-                    {"item_label": item_label, "target_player_label": labels[0]},
-                    {"item_label": item_label, "target_player_label": labels[1]},
-                    {"item_label": item_label, "target_player_label": labels[2]},
-                ],
-                "inner_thought": "全員に分ける",
-            },
-        })
+        session.llm_wiring.llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+                "arguments": {
+                    "gives": [
+                        {"item_label": item_label, "target_player_label": labels[0]},
+                        {"item_label": item_label, "target_player_label": labels[1]},
+                        {"item_label": item_label, "target_player_label": labels[2]},
+                    ],
+                    "inner_thought": "全員に分ける",
+                },
+            }
+        )
 
         result = session.llm_wiring.run_turn(ada)
 
@@ -640,17 +658,19 @@ class TestGiveItemEndToEnd:
             self._player_target_label(runtime, ada, kai),
         ]
 
-        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-            "arguments": {
-                "gives": [
-                    {"item_label": item_label, "target_player_label": labels[0]},
-                    {"item_label": item_label, "target_player_label": labels[1]},
-                    {"item_label": item_label, "target_player_label": labels[2]},
-                ],
-                "inner_thought": "足りる分だけ分ける",
-            },
-        })
+        session.llm_wiring.llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+                "arguments": {
+                    "gives": [
+                        {"item_label": item_label, "target_player_label": labels[0]},
+                        {"item_label": item_label, "target_player_label": labels[1]},
+                        {"item_label": item_label, "target_player_label": labels[2]},
+                    ],
+                    "inner_thought": "足りる分だけ分ける",
+                },
+            }
+        )
 
         result = session.llm_wiring.run_turn(ada)
 
@@ -691,20 +711,27 @@ class TestGiveItemEndToEnd:
         _grant(runtime, ada, "coconut")
         _set_one_owned_item_spoiled(runtime, ada, "coconut", is_spoiled=True)
         fresh_label = _label_for_item_with_spoilage(
-            runtime, ada, "coconut", is_spoiled=False,
+            runtime,
+            ada,
+            "coconut",
+            is_spoiled=False,
         )
         target_player_label = self._player_target_label(runtime, ada, noah)
 
-        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-            "arguments": {
-                "gives": [{
-                    "item_label": fresh_label,
-                    "target_player_label": target_player_label,
-                }],
-                "inner_thought": "新鮮な方を渡す",
-            },
-        })
+        session.llm_wiring.llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+                "arguments": {
+                    "gives": [
+                        {
+                            "item_label": fresh_label,
+                            "target_player_label": target_player_label,
+                        }
+                    ],
+                    "inner_thought": "新鮮な方を渡す",
+                },
+            }
+        )
 
         result = session.llm_wiring.run_turn(ada)
 
@@ -726,17 +753,19 @@ class TestGiveItemEndToEnd:
         item_label = _label_for_item(runtime, ada, "coconut")
         target_player_label = self._player_target_label(runtime, ada, noah)
 
-        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-            "arguments": {
-                "gives": [
-                    {
-                        "item_label": item_label,
-                        "target_player_label": target_player_label,
-                    },
-                ],
-            },
-        })
+        session.llm_wiring.llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+                "arguments": {
+                    "gives": [
+                        {
+                            "item_label": item_label,
+                            "target_player_label": target_player_label,
+                        },
+                    ],
+                },
+            }
+        )
 
         result = session.llm_wiring.run_turn(ada)
 
@@ -760,17 +789,19 @@ class TestGiveItemEndToEnd:
         item_label = _label_for_item(runtime, ada, "coconut")
         target_player_label = self._player_target_label(runtime, ada, noah)
 
-        session.llm_wiring.llm_client = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-            "arguments": {
-                "gives": [
-                    {
-                        "item_label": item_label,
-                        "target_player_label": target_player_label,
-                    },
-                ],
-            },
-        })
+        session.llm_wiring.llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+                "arguments": {
+                    "gives": [
+                        {
+                            "item_label": item_label,
+                            "target_player_label": target_player_label,
+                        },
+                    ],
+                },
+            }
+        )
 
         result = session.llm_wiring.run_turn(ada)
 
@@ -796,10 +827,12 @@ class TestPickupItemEndToEnd:
         label = _label_for_item(runtime, ada, "coconut")
 
         # ada が drop
-        stub = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-            "arguments": {"item_label": label, "inner_thought": "落とす"},
-        })
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+                "arguments": {"item_label": label, "inner_thought": "落とす"},
+            }
+        )
         session.llm_wiring.llm_client = stub
         drop_result = session.llm_wiring.run_turn(ada)
         assert drop_result.success is True
@@ -813,15 +846,15 @@ class TestPickupItemEndToEnd:
                 ground_label = label_n
                 break
         assert ground_label is not None, "地面に drop されたアイテムが noah の context に出ない"
-        stub2 = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-            "arguments": {"ground_item_label": ground_label, "inner_thought": "拾う"},
-        })
+        stub2 = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+                "arguments": {"ground_item_label": ground_label, "inner_thought": "拾う"},
+            }
+        )
         session.llm_wiring.llm_client = stub2
         pickup_result = session.llm_wiring.run_turn(noah)
-        assert pickup_result.success is True, (
-            f"pickup 失敗: {pickup_result.error_code} {pickup_result.message[:120]}"
-        )
+        assert pickup_result.success is True, f"pickup 失敗: {pickup_result.error_code} {pickup_result.message[:120]}"
 
 
 # ---------------------------------------------------------------------------
@@ -845,15 +878,16 @@ class TestNameResolverMethodNames:
 
         # public method 名 (アンダースコア始まりでないもの) を列挙
         valid_methods = {
-            name for name, _ in inspect.getmembers(
-                ObservationNameResolver, predicate=inspect.isfunction,
+            name
+            for name, _ in inspect.getmembers(
+                ObservationNameResolver,
+                predicate=inspect.isfunction,
             )
             if not name.startswith("_")
         }
 
         formatters_dir = (
-            Path(__file__).resolve().parents[2]
-            / "src/ai_rpg_world/application/observation/services/formatters"
+            Path(__file__).resolve().parents[2] / "src/ai_rpg_world/application/observation/services/formatters"
         )
         pattern = re.compile(r"name_resolver\.([a-zA-Z_][a-zA-Z_0-9]*)\s*\(")
         offenders: list[tuple[Path, int, str]] = []
@@ -869,11 +903,8 @@ class TestNameResolverMethodNames:
                         offenders.append((py, i, method))
         assert not offenders, (
             "name_resolver に存在しない method を呼んでいる formatter が "
-            "残っている (実験 #27 と同型のバグ):\n" +
-            "\n".join(
-                f"  {o[0].name}:{o[1]} → name_resolver.{o[2]}() (未定義)"
-                for o in offenders
-            )
+            "残っている (実験 #27 と同型のバグ):\n"
+            + "\n".join(f"  {o[0].name}:{o[1]} → name_resolver.{o[2]}() (未定義)" for o in offenders)
         )
 
     def test_inv_aggregate_method_typo_regression(self) -> None:
@@ -888,7 +919,8 @@ class TestNameResolverMethodNames:
         )
 
         valid_members = {
-            name for name, _ in inspect.getmembers(PlayerInventoryAggregate)
+            name
+            for name, _ in inspect.getmembers(PlayerInventoryAggregate)
             if not name.startswith("_") or name == "_inventory_slots"
         }
 
@@ -909,6 +941,6 @@ class TestNameResolverMethodNames:
                     offenders.append((i, name))
         assert not offenders, (
             "PlayerInventoryAggregate に存在しない member を executor が "
-            "呼んでいる (実験 #26 と同型のバグ):\n" +
-            "\n".join(f"  spot_graph_tool_executor.py:{i} → inv.{n}" for i, n in offenders)
+            "呼んでいる (実験 #26 と同型のバグ):\n"
+            + "\n".join(f"  spot_graph_tool_executor.py:{i} → inv.{n}" for i, n in offenders)
         )

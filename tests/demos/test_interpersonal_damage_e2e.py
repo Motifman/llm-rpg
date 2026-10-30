@@ -29,7 +29,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_FORBIDDEN_LIBRARY = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 
 _ACTOR = PlayerId(1)
 _VICTIM = PlayerId(2)
@@ -51,9 +51,9 @@ _STRIKE_DEF = {
 @pytest.fixture()
 def runtime(tmp_path: Path):
     """殴る行為を宣言し、二人を同じスポットに揃えた runtime。"""
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
     scenario["player_interactions"] = [_STRIKE_DEF]
-    path = tmp_path / "relay_with_strike.json"
+    path = tmp_path / "library_with_strike.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
     rt = create_world_runtime(path)
@@ -122,9 +122,7 @@ class TestDownedEventIsDelivered:
         猶予が始まらないと放置しても DEAD が確定しない。
         """
         runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
-        assert runtime._death_grace_timer.is_pending(_VICTIM), (
-            "PlayerDownedEvent が handler に届いていない"
-        )
+        assert runtime._death_grace_timer.is_pending(_VICTIM), "PlayerDownedEvent が handler に届いていない"
 
     def test_grace_registration_failure_rolls_back_the_whole_knockout(
         self,
@@ -136,9 +134,7 @@ class TestDownedEventIsDelivered:
         original_publish_all = runtime._speech_event_publisher.publish_all
 
         def observe(events) -> None:
-            delivered.extend(
-                event for event in events if isinstance(event, PlayerDownedEvent)
-            )
+            delivered.extend(event for event in events if isinstance(event, PlayerDownedEvent))
             original_publish_all(events)
 
         monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
@@ -205,9 +201,9 @@ class TestDownedEventIsDelivered:
         """
         runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
         status = runtime._player_status_repo.find_by_id(_VICTIM)
-        assert not any(
-            isinstance(e, PlayerDownedEvent) for e in status.get_events()
-        ), "publish 済みの PlayerDownedEvent が集約に残っている"
+        assert not any(isinstance(e, PlayerDownedEvent) for e in status.get_events()), (
+            "publish 済みの PlayerDownedEvent が集約に残っている"
+        )
 
 
 class TestFellingBlowIsNotAnIncidentWhileDown:
@@ -221,9 +217,7 @@ class TestFellingBlowIsNotAnIncidentWhileDown:
     ない。後者で判定すると、致死の一撃は必ず前者に化ける。
     """
 
-    def test_the_knockout_blow_is_not_logged_as_happening_while_down(
-        self, runtime
-    ) -> None:
+    def test_the_knockout_blow_is_not_logged_as_happening_while_down(self, runtime) -> None:
         """立っている相手を倒した一撃は、被害記録に残らない。"""
         recorded: list = []
         log = runtime._downed_incident_log
@@ -263,18 +257,22 @@ class TestSelfDamageIsNotSilentlyIgnored:
         受け取っておいて何も起きないのが最悪で、作者は書いたつもりのまま
         気付けない。
         """
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
-        scenario["player_interactions"] = [{
-            "action_name": "reckless_strike",
-            "display_label": "捨て身で殴る",
-            "preconditions": [{"condition_type": "ALWAYS"}],
-            "effects": [
-                {"effect_type": "APPLY_DAMAGE", "target": "TARGET_PLAYER",
-                 "parameters": {"damage": 5}},
-                {"effect_type": "APPLY_DAMAGE", "target": "ACTOR",
-                 "parameters": {"damage": 3, "message": "拳が裂けた。"}},
-            ],
-        }]
+        scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
+        scenario["player_interactions"] = [
+            {
+                "action_name": "reckless_strike",
+                "display_label": "捨て身で殴る",
+                "preconditions": [{"condition_type": "ALWAYS"}],
+                "effects": [
+                    {"effect_type": "APPLY_DAMAGE", "target": "TARGET_PLAYER", "parameters": {"damage": 5}},
+                    {
+                        "effect_type": "APPLY_DAMAGE",
+                        "target": "ACTOR",
+                        "parameters": {"damage": 3, "message": "拳が裂けた。"},
+                    },
+                ],
+            }
+        ]
         path = tmp_path / "reckless.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
         rt = create_world_runtime(path)

@@ -1,6 +1,7 @@
 """
 SqliteTradeReadModelRepository — TradeReadModel の SQLite 実装
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -94,9 +95,7 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
     - `for_shared_unit_of_work`: `SqliteUnitOfWork` と同一接続。確定は UoW の `commit` に任せる。
     """
 
-    def __init__(
-        self, connection: sqlite3.Connection, *, _commits_after_write: bool
-    ) -> None:
+    def __init__(self, connection: sqlite3.Connection, *, _commits_after_write: bool) -> None:
         self._conn = connection
         self._commits_after_write = _commits_after_write
         if connection.row_factory is not sqlite3.Row:
@@ -104,16 +103,12 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
         init_trade_read_model_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteTradeReadModelRepository:
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteTradeReadModelRepository:
         """単体 `sqlite3.connect` 用。各書き込み後に `commit` する。"""
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteTradeReadModelRepository:
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteTradeReadModelRepository:
         """UoW と共有する接続用。リポジトリ内では `commit` しない。"""
         return cls(connection, _commits_after_write=False)
 
@@ -179,9 +174,7 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
         return cur.rowcount > 0
 
     def find_all(self) -> list[TradeReadModel]:
-        cur = self._conn.execute(
-            "SELECT * FROM trade_read_models ORDER BY created_at DESC, trade_id ASC"
-        )
+        cur = self._conn.execute("SELECT * FROM trade_read_models ORDER BY created_at DESC, trade_id ASC")
         return [_row_to_model(r) for r in cur.fetchall()]
 
     def _select_paged(

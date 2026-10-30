@@ -50,27 +50,21 @@ class ReactivePassageBindingStageService:
         spot_graph_repository: ISpotGraphRepository,
         condition_evaluator: ScenarioConditionEvaluator,
         predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
-        command_scope_factory: (
-            CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort] | None
-        ) = None,
+        command_scope_factory: (CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort] | None) = None,
     ) -> None:
         self._bindings = tuple(bindings)
         self._spot_graph_repository = spot_graph_repository
         self._condition_evaluator = condition_evaluator
         self._predicate_trace_emitter = predicate_trace_emitter
         self._command_scope_factory = command_scope_factory
-        self._condition_evaluator.validate_dependencies(
-            binding.predicate for binding in self._bindings
-        )
+        self._condition_evaluator.validate_dependencies(binding.predicate for binding in self._bindings)
 
     def run(self, current_tick: WorldTick) -> None:
         if not self._bindings:
             return
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            raise RuntimeError(
-                "reactive passage用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("reactive passage用CommandScopeFactoryが未配線です。")
         with scope_factory.create() as context:
             self._run_with_repository(
                 current_tick,
@@ -108,7 +102,10 @@ class ReactivePassageBindingStageService:
         emitted_transitions: set[tuple[tuple[int, ...], str]] = set()
         for binding_index, binding in enumerate(self._bindings):
             target_state = self._target_state_for(
-                binding, binding_index, current_tick, graph,
+                binding,
+                binding_index,
+                current_tick,
+                graph,
             )
             conn = graph.get_connection(binding.target_connection_id)
             # 既に目標 state ならスキップ。set_connection_passage_state 自体も
@@ -140,7 +137,7 @@ class ReactivePassageBindingStageService:
             new_events: tuple[Any, ...] = ()
             if context is not None:
                 all_events = tuple(graph.get_events())
-                new_events = all_events[len(existing_events):]
+                new_events = all_events[len(existing_events) :]
                 graph.clear_events()
                 for event in existing_events:
                     graph.add_event(event)
@@ -156,7 +153,9 @@ class ReactivePassageBindingStageService:
         graph: SpotGraphAggregate,
     ) -> str:
         evaluation = self._condition_evaluator.evaluate_diagnostic(
-            binding.predicate, current_tick, graph,
+            binding.predicate,
+            current_tick,
+            graph,
         )
         result = evaluation.result
         if self._predicate_trace_emitter is not None:

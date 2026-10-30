@@ -28,13 +28,15 @@ class SqliteSnsUserRepository(UserRepository):
         *,
         _commits_after_write: bool,
         event_sink: Any = None,
+        _initialize_schema: bool = True,
     ) -> None:
         self._conn = connection
         self._commits_after_write = _commits_after_write
         self._event_sink = event_sink
         if connection.row_factory is not sqlite3.Row:
             connection.row_factory = sqlite3.Row
-        init_game_write_schema(connection)
+        if _initialize_schema:
+            init_game_write_schema(connection)
 
     @classmethod
     def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteSnsUserRepository:
@@ -98,16 +100,13 @@ class SqliteSnsUserRepository(UserRepository):
         user_id = UserId(int(row["user_id"]))
         return copy.deepcopy(
             build_user_aggregate(
+                identity_token=str(row["identity_token"]),
                 user_id=int(user_id),
                 user_name=str(row["user_name"]),
                 display_name=str(row["display_name"]),
                 bio=str(row["bio"]),
-                follows=self._relation_rows(
-                    "game_sns_follows", "follower_user_id", "followee_user_id", user_id
-                ),
-                blocks=self._relation_rows(
-                    "game_sns_blocks", "blocker_user_id", "blocked_user_id", user_id
-                ),
+                follows=self._relation_rows("game_sns_follows", "follower_user_id", "followee_user_id", user_id),
+                blocks=self._relation_rows("game_sns_blocks", "blocker_user_id", "blocked_user_id", user_id),
                 subscriptions=self._relation_rows(
                     "game_sns_subscriptions",
                     "subscriber_user_id",
@@ -142,18 +141,20 @@ class SqliteSnsUserRepository(UserRepository):
         try:
             self._conn.execute(
                 """
-                INSERT INTO game_sns_users (user_id, user_name, display_name, bio)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO game_sns_users (user_id, user_name, display_name, bio, identity_token)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     user_name = excluded.user_name,
                     display_name = excluded.display_name,
-                    bio = excluded.bio
+                    bio = excluded.bio,
+                    identity_token = excluded.identity_token
                 """,
                 (
                     int(entity.user_id),
                     profile["user_name"],
                     profile["display_name"],
                     profile["bio"],
+                    entity.identity_token,
                 ),
             )
             self._conn.execute(

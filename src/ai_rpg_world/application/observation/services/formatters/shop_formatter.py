@@ -40,9 +40,7 @@ class ShopObservationFormatter:
             return self._format_shop_closed(event, recipient_player_id)
         return None
 
-    def _format_shop_created(
-        self, event: ShopCreatedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_shop_created(self, event: ShopCreatedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         prose = "ショップが開設されました。"
         shop_id = event.aggregate_id.value
         structured: dict[str, Any] = {"type": "shop_created", "shop_id_value": shop_id}
@@ -52,9 +50,7 @@ class ShopObservationFormatter:
             observation_category="social",
         )
 
-    def _format_shop_item_listed(
-        self, event: ShopItemListedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_shop_item_listed(self, event: ShopItemListedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"ショップに{item_name}が出品されました。"
         shop_id_value = event.aggregate_id.value
@@ -63,9 +59,7 @@ class ShopObservationFormatter:
             "item_name": item_name,
             "shop_id_value": shop_id_value,
         }
-        spec_val = resolve_item_spec_id_value_for_instance(
-            self._context.item_repository, event.item_instance_id
-        )
+        spec_val = resolve_item_spec_id_value_for_instance(self._context.item_repository, event.item_instance_id)
         if spec_val is not None:
             structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
@@ -112,9 +106,7 @@ class ShopObservationFormatter:
                 "seller": seller_name,
                 "shop_id_value": shop_id,
             }
-        spec_val = resolve_item_spec_id_value_for_instance(
-            self._context.item_repository, event.item_instance_id
-        )
+        spec_val = resolve_item_spec_id_value_for_instance(self._context.item_repository, event.item_instance_id)
         if spec_val is not None:
             structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
@@ -124,9 +116,7 @@ class ShopObservationFormatter:
             schedules_turn=True,
         )
 
-    def _format_shop_closed(
-        self, event: ShopClosedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_shop_closed(self, event: ShopClosedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         prose = "ショップが閉鎖されました。"
         shop_id_value = event.aggregate_id.value
         structured: dict[str, Any] = {"type": "shop_closed", "shop_id_value": shop_id_value}

@@ -62,9 +62,7 @@ class TestWorldFlagsCodec:
         state = MutableWorldFlagState()
         runtime = SimpleNamespace(_world_flag_state=state)
         with pytest.raises(ValueError, match="schema_version"):
-            WorldFlagsSubsystemCodec().restore(
-                runtime, {"schema_version": 999, "flags": []}
-            )
+            WorldFlagsSubsystemCodec().restore(runtime, {"schema_version": 999, "flags": []})
 
 
 class TestScenarioEventProgressCodec:
@@ -78,9 +76,7 @@ class TestScenarioEventProgressCodec:
         src_runtime = SimpleNamespace(_scenario_event_progress=src_store)
         captured = ScenarioEventProgressSubsystemCodec().capture(src_runtime)
         assert captured["fired_event_ids"] == ["ev_intro", "ev_midpoint"]
-        assert captured["scheduled"] == [
-            {"event_id": "ev_endgame", "fire_at_tick": 50}
-        ]
+        assert captured["scheduled"] == [{"event_id": "ev_endgame", "fire_at_tick": 50}]
 
         dst_store = InMemorySpotGraphScenarioEventProgressStore()
         dst_store.mark_fired("ev_dst_stale")  # restore で消えるはず

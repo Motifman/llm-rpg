@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
@@ -27,6 +28,7 @@ from ai_rpg_world.infrastructure.scenario.models import (
 )
 from ai_rpg_world.infrastructure.scenario.parse_helpers import (
     parse_bool,
+    parse_limits_actions,
     parse_player_outcome_messages,
     parse_role_labels,
     parse_show_world_map,
@@ -45,13 +47,9 @@ def declared_world_flag_writers(raw: Mapping[str, Any]) -> frozenset[str]:
     found: set[str] = set()
     initial_flags = raw.get("initial_flags")
     if isinstance(initial_flags, Mapping):
-        found.update(
-            key for key in initial_flags if isinstance(key, str) and key
-        )
+        found.update(key for key in initial_flags if isinstance(key, str) and key)
     elif isinstance(initial_flags, list):
-        found.update(
-            value for value in initial_flags if isinstance(value, str) and value
-        )
+        found.update(value for value in initial_flags if isinstance(value, str) and value)
 
     def visit(value: Any) -> None:
         if isinstance(value, Mapping):
@@ -74,6 +72,7 @@ def declared_world_flag_writers(raw: Mapping[str, Any]) -> frozenset[str]:
         if key != "ongoing_conditions":
             visit(value)
     return frozenset(found)
+
 
 def parse_ongoing_conditions(
     raw: Any,
@@ -117,33 +116,21 @@ def parse_ongoing_conditions(
             raise ScenarioLoadError(f"{path} は object で書いてください")
         unknown_keys = set(entry) - allowed_keys
         if unknown_keys:
-            raise ScenarioLoadError(
-                f"{path} に未知のキーがあります: {sorted(unknown_keys)}"
-            )
+            raise ScenarioLoadError(f"{path} に未知のキーがあります: {sorted(unknown_keys)}")
         flag = entry.get("flag")
         if not isinstance(flag, str) or not flag.strip():
             raise ScenarioLoadError(f"{path}.flag は空でない文字列にしてください")
         flag = flag.strip()
         if flag in seen_flags:
-            raise ScenarioLoadError(
-                f"ongoing_conditions に flag の重複があります: {flag}"
-            )
+            raise ScenarioLoadError(f"ongoing_conditions に flag の重複があります: {flag}")
         if flag not in declared_flag_writers:
-            raise ScenarioLoadError(
-                f"{path}.flag={flag!r} は initial_flags にも SET_FLAG にも"
-                "宣言されていません"
-            )
+            raise ScenarioLoadError(f"{path}.flag={flag!r} は initial_flags にも SET_FLAG にも宣言されていません")
         message = entry.get("message")
         if not isinstance(message, str) or not message.strip():
-            raise ScenarioLoadError(
-                f"{path}.message は空でない文字列にしてください"
-            )
+            raise ScenarioLoadError(f"{path}.message は空でない文字列にしてください")
         blocks_emergency_button = entry.get("blocks_emergency_button")
         if not isinstance(blocks_emergency_button, bool):
-            raise ScenarioLoadError(
-                f"{path}.blocks_emergency_button は true / false を"
-                "明示してください"
-            )
+            raise ScenarioLoadError(f"{path}.blocks_emergency_button は true / false を明示してください")
         raw_resolution = entry.get("resolution", [])
         if not isinstance(raw_resolution, list):
             raise ScenarioLoadError(f"{path}.resolution は配列で書いてください")
@@ -160,9 +147,7 @@ def parse_ongoing_conditions(
                 for effect in raw_resolution
             )
         unsupported_resolution = [
-            effect.effect_type.name
-            for effect in resolution
-            if effect.effect_type not in supported_resolution_effects
+            effect.effect_type.name for effect in resolution if effect.effect_type not in supported_resolution_effects
         ]
         if unsupported_resolution:
             raise ScenarioLoadError(
@@ -170,23 +155,16 @@ def parse_ongoing_conditions(
                 f"{unsupported_resolution}. 使える効果: CLEAR_FLAG, SET_FLAG"
             )
         if resolution and not any(
-            effect.effect_type is InteractionEffectTypeEnum.CLEAR_FLAG
-            and effect.parameters.get("flag_name") == flag
+            effect.effect_type is InteractionEffectTypeEnum.CLEAR_FLAG and effect.parameters.get("flag_name") == flag
             for effect in resolution
         ):
-            raise ScenarioLoadError(
-                f"{path}.resolution は成立条件の flag={flag!r} を"
-                "CLEAR_FLAG で解除してください"
-            )
+            raise ScenarioLoadError(f"{path}.resolution は成立条件の flag={flag!r} をCLEAR_FLAG で解除してください")
         raw_effects = entry.get("on_meeting_start", [])
         if not isinstance(raw_effects, list):
-            raise ScenarioLoadError(
-                f"{path}.on_meeting_start は配列で書いてください"
-            )
+            raise ScenarioLoadError(f"{path}.on_meeting_start は配列で書いてください")
         if "on_meeting_start" in entry and not raw_effects:
             raise ScenarioLoadError(
-                f"{path}.on_meeting_start は空にできません。会議で解かない異常は"
-                "キー自体を省略してください"
+                f"{path}.on_meeting_start は空にできません。会議で解かない異常はキー自体を省略してください"
             )
         with declaring(f"{path}.on_meeting_start:"):
             effects = tuple(
@@ -199,9 +177,7 @@ def parse_ongoing_conditions(
                 for effect in raw_effects
             )
         unsupported = [
-            effect.effect_type.name
-            for effect in effects
-            if effect.effect_type not in supported_meeting_effects
+            effect.effect_type.name for effect in effects if effect.effect_type not in supported_meeting_effects
         ]
         if unsupported:
             raise ScenarioLoadError(
@@ -209,18 +185,14 @@ def parse_ongoing_conditions(
                 "使える効果: RESOLVE_ONGOING_CONDITION, SHOW_MESSAGE"
             )
         if effects and not resolution:
-            raise ScenarioLoadError(
-                f"{path}.on_meeting_start を使う異常には resolution が必要です"
-            )
+            raise ScenarioLoadError(f"{path}.on_meeting_start を使う異常には resolution が必要です")
         if effects and not any(
-            effect.effect_type
-            is InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION
+            effect.effect_type is InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION
             and effect.parameters.get("flag") == flag
             for effect in effects
         ):
             raise ScenarioLoadError(
-                f"{path}.on_meeting_start は自身の flag={flag!r} を"
-                "RESOLVE_ONGOING_CONDITION で参照してください"
+                f"{path}.on_meeting_start は自身の flag={flag!r} をRESOLVE_ONGOING_CONDITION で参照してください"
             )
         parsed.append(
             OngoingConditionDef(
@@ -234,14 +206,13 @@ def parse_ongoing_conditions(
         seen_flags.add(flag)
     return tuple(parsed)
 
+
 def validate_ongoing_condition_resolution_references(
     raw: Mapping[str, Any],
     conditions: Sequence[OngoingConditionDef],
 ) -> None:
     """全 effect の異常解除参照が、実体のある resolution を指すと確かめる。"""
-    resolvable = {
-        condition.flag for condition in conditions if condition.resolution
-    }
+    resolvable = {condition.flag for condition in conditions if condition.resolution}
 
     def visit(value: Any, path: str) -> None:
         if isinstance(value, Mapping):
@@ -249,10 +220,7 @@ def validate_ongoing_condition_resolution_references(
                 parameters = value.get("parameters")
                 flag = parameters.get("flag") if isinstance(parameters, Mapping) else None
                 if not isinstance(flag, str) or not flag:
-                    raise ScenarioLoadError(
-                        f"{path} の RESOLVE_ONGOING_CONDITION は"
-                        " parameters.flag を必要とします"
-                    )
+                    raise ScenarioLoadError(f"{path} の RESOLVE_ONGOING_CONDITION は parameters.flag を必要とします")
                 if flag not in resolvable:
                     raise ScenarioLoadError(
                         "RESOLVE_ONGOING_CONDITION が参照する flag に"
@@ -265,6 +233,7 @@ def validate_ongoing_condition_resolution_references(
                 visit(child, f"{path}[{index}]")
 
     visit(raw, "scenario")
+
 
 def parse_meeting_tuning(raw: dict[str, Any]) -> dict[str, int | None]:
     """`meeting` block の調整値を読む。書かれていない項目は None (既定)。
@@ -289,20 +258,13 @@ def parse_meeting_tuning(raw: dict[str, Any]) -> dict[str, int | None]:
         value = block.get(key)
         if value is not None:
             if not isinstance(value, int) or isinstance(value, bool):
-                raise ScenarioLoadError(
-                    f"meeting.{key} は整数で指定してください"
-                )
+                raise ScenarioLoadError(f"meeting.{key} は整数で指定してください")
             if value < 1:
-                raise ScenarioLoadError(
-                    f"meeting.{key} は 1 以上である必要があります: {value}"
-                )
-        field = (
-            key
-            if key == "emergency_buttons_per_player"
-            else f"meeting_{key}"
-        )
+                raise ScenarioLoadError(f"meeting.{key} は 1 以上である必要があります: {value}")
+        field = key if key == "emergency_buttons_per_player" else f"meeting_{key}"
         parsed[field] = value
     return parsed
+
 
 def parse_death_semantics(raw: dict[str, Any]) -> DeathSemantics:
     """`death` block を読む。書かれていない項目は engine の既定。
@@ -318,9 +280,7 @@ def parse_death_semantics(raw: dict[str, Any]) -> DeathSemantics:
     grace = block.get("grace_ticks")
     if grace is not None:
         if not isinstance(grace, int) or isinstance(grace, bool) or grace < 0:
-            raise ScenarioLoadError(
-                f"death.grace_ticks は 0 以上の整数で指定してください: {grace!r}"
-            )
+            raise ScenarioLoadError(f"death.grace_ticks は 0 以上の整数で指定してください: {grace!r}")
     for key in ("announce_globally", "victim_learns_killer"):
         if key in block and not isinstance(block[key], bool):
             raise ScenarioLoadError(f"death.{key} は真偽値で指定してください。")
@@ -329,6 +289,7 @@ def parse_death_semantics(raw: dict[str, Any]) -> DeathSemantics:
         announce_globally=block.get("announce_globally", True),
         victim_learns_killer=block.get("victim_learns_killer", True),
     )
+
 
 def parse_player_trade(raw: dict[str, Any]) -> tuple[bool, int | None]:
     """`player_trade` block から取引の on/off と提案の期限を読む。
@@ -346,27 +307,18 @@ def parse_player_trade(raw: dict[str, Any]) -> tuple[bool, int | None]:
     if block is None:
         return False, None
     if not isinstance(block, dict):
-        raise ScenarioLoadError(
-            "player_trade は object で指定してください。"
-        )
+        raise ScenarioLoadError("player_trade は object で指定してください。")
     enabled = block.get("enabled", True)
     if not isinstance(enabled, bool):
-        raise ScenarioLoadError(
-            "player_trade.enabled は真偽値で指定してください。"
-        )
+        raise ScenarioLoadError("player_trade.enabled は真偽値で指定してください。")
     expires = block.get("offer_expires_in_ticks")
     if expires is not None:
         if not isinstance(expires, int) or isinstance(expires, bool):
-            raise ScenarioLoadError(
-                "player_trade.offer_expires_in_ticks は整数で指定してください: "
-                f"{expires!r}"
-            )
+            raise ScenarioLoadError(f"player_trade.offer_expires_in_ticks は整数で指定してください: {expires!r}")
         if expires < 1:
-            raise ScenarioLoadError(
-                "player_trade.offer_expires_in_ticks は 1 以上である必要が"
-                f"あります: {expires}"
-            )
+            raise ScenarioLoadError(f"player_trade.offer_expires_in_ticks は 1 以上である必要があります: {expires}")
     return enabled, expires
+
 
 def parse_meeting_enabled(raw: dict[str, Any]) -> bool:
     """`meeting` block の有無と `enabled` から会議機構の on/off を決める。
@@ -379,17 +331,14 @@ def parse_meeting_enabled(raw: dict[str, Any]) -> bool:
     if block is None:
         return False
     if not isinstance(block, dict):
-        raise ScenarioLoadError(
-            "meeting は object で指定してください。"
-        )
+        raise ScenarioLoadError("meeting は object で指定してください。")
     enabled = block.get("enabled", True)
     if not isinstance(enabled, bool):
-        raise ScenarioLoadError(
-            "meeting.enabled は真偽値で指定してください。"
-        )
+        raise ScenarioLoadError("meeting.enabled は真偽値で指定してください。")
     return enabled
 
-def parse_metadata( raw: dict[str, Any]) -> ScenarioMetadata:
+
+def parse_metadata(raw: dict[str, Any]) -> ScenarioMetadata:
     return ScenarioMetadata(
         id=raw["id"],
         title=raw["title"],
@@ -401,12 +350,14 @@ def parse_metadata( raw: dict[str, Any]) -> ScenarioMetadata:
         tags=tuple(raw.get("tags", [])),
         llm_public_intro=str(raw.get("llm_public_intro", "") or "").strip(),
         show_world_map=parse_show_world_map(raw),
+        limits_actions=parse_limits_actions(raw),
         role_labels=parse_role_labels(raw),
         llm_objective_text=str(raw.get("llm_objective_text", "") or "").strip(),
         player_outcome_messages=parse_player_outcome_messages(raw),
     )
 
-def pre_register_ids( raw: dict[str, Any], mapper: ScenarioIdMapper) -> None:
+
+def pre_register_ids(raw: dict[str, Any], mapper: ScenarioIdMapper) -> None:
     """スポット・接続・オブジェクトの全 ID を先行登録する。
 
     interaction effect が他スポットの接続やオブジェクトを参照する場合に備え、
@@ -444,7 +395,9 @@ def pre_register_ids( raw: dict[str, Any], mapper: ScenarioIdMapper) -> None:
     for item in raw.get("item_specs", []):
         mapper.register("item_spec", item["id"])
 
-def parse_day_night_config( raw: dict[str, Any],
+
+def parse_day_night_config(
+    raw: dict[str, Any],
 ) -> ScenarioDayNightConfig | None:
     """`environment.day_night` を読んで DayNightCycleDef を組み立てる。
 
@@ -492,9 +445,7 @@ def parse_day_night_config( raw: dict[str, Any],
     )
     phases_raw = day_night.get("phases", [])
     if not isinstance(phases_raw, list) or not phases_raw:
-        raise ScenarioLoadError(
-            "environment.day_night.phases must be a non-empty list"
-        )
+        raise ScenarioLoadError("environment.day_night.phases must be a non-empty list")
     required_keys = ("name", "start_ratio", "display_text", "ambient_light", "is_dark")
     phases_list: list[DayNightPhaseDef] = []
     for i, p in enumerate(phases_raw):
@@ -502,15 +453,10 @@ def parse_day_night_config( raw: dict[str, Any],
         # 層で弾く。これを怠ると未定義キーで KeyError が ScenarioLoadError を
         # 経由せず素通りし、作家へのエラーメッセージが分かりにくくなる。
         if not isinstance(p, dict):
-            raise ScenarioLoadError(
-                f"environment.day_night.phases[{i}] must be an object, "
-                f"got {type(p).__name__}"
-            )
+            raise ScenarioLoadError(f"environment.day_night.phases[{i}] must be an object, got {type(p).__name__}")
         missing = [k for k in required_keys if k not in p]
         if missing:
-            raise ScenarioLoadError(
-                f"environment.day_night.phases[{i}] is missing required keys: {missing}"
-            )
+            raise ScenarioLoadError(f"environment.day_night.phases[{i}] is missing required keys: {missing}")
         phases_list.append(
             DayNightPhaseDef(
                 name=str(p["name"]),
@@ -531,7 +477,8 @@ def parse_day_night_config( raw: dict[str, Any],
     )
     return ScenarioDayNightConfig(cycle=cycle, announce_changes=announce)
 
-def parse_weather_config( raw: dict[str, Any]) -> ScenarioWeatherConfig | None:
+
+def parse_weather_config(raw: dict[str, Any]) -> ScenarioWeatherConfig | None:
     weather = raw.get("weather") if isinstance(raw, dict) else None
     if not isinstance(weather, dict):
         return None
@@ -554,7 +501,8 @@ def parse_weather_config( raw: dict[str, Any]) -> ScenarioWeatherConfig | None:
         ),
     )
 
-def parse_disabled_tools( raw: Any) -> tuple[str, ...]:
+
+def parse_disabled_tools(raw: Any) -> tuple[str, ...]:
     """``disabled_tools`` を読む。
 
     ここでは形だけを見る。**名前が実在するかは runtime 側で確かめる。**
@@ -573,14 +521,22 @@ def parse_disabled_tools( raw: Any) -> tuple[str, ...]:
     names: list[str] = []
     for entry in raw:
         if not isinstance(entry, str) or not entry.strip():
-            raise ScenarioLoadError(
-                f"disabled_tools の要素は空でない文字列にしてください: {entry!r}"
-            )
+            raise ScenarioLoadError(f"disabled_tools の要素は空でない文字列にしてください: {entry!r}")
         name = entry.strip()
         if name in names:
             raise ScenarioLoadError(f"disabled_tools に重複があります: {name}")
         names.append(name)
     return tuple(names)
+
+
+_SECTION_LABELS: Mapping[str, str] = {
+    "win": "game_end_conditions.win",
+    "lose": "game_end_conditions.lose",
+    "end": "game_end_conditions.end",
+    "team_win": "teams[].win",
+    "team_end": "teams のあるシナリオの game_end_conditions.end",
+}
+
 
 def parse_end_conditions(
     raw: Any,
@@ -596,39 +552,38 @@ def parse_end_conditions(
         ctype = GameEndConditionTypeEnum[item["type"]]
         allowed_sections = _GAME_END_CONDITION_ALLOWED_SECTIONS.get(ctype)
         if allowed_sections is None:
-            raise ScenarioLoadError(
-                f"game_end_conditions の条件型 {ctype.value} は置き場所が"
-                "未分類です"
-            )
+            raise ScenarioLoadError(f"game_end_conditions の条件型 {ctype.value} は置き場所が未分類です")
         if section not in allowed_sections:
-            allowed = " / ".join(
-                name for name in ("win", "lose", "end")
-                if name in allowed_sections
-            )
+            allowed = " / ".join(_SECTION_LABELS[name] for name in _SECTION_LABELS if name in allowed_sections)
             raise ScenarioLoadError(
-                f"game_end_conditions.{section} に {ctype.value} は置けません。"
-                f"{allowed} に置いてください [index={index}]"
+                f"{_SECTION_LABELS[section]} に {ctype.value} は置けません。{allowed} に置いてください [index={index}]"
             )
         validate_end_condition_required_fields(item, ctype, index=index)
         target_spot = None
         if "target_spot" in item:
             target_spot = SpotId.create(mapper.get_int("spot", item["target_spot"]))
-        conditions.append(GameEndCondition(
-            condition_type=ctype,
-            target_spot_id=target_spot,
-            target_flag=item.get("target_flag"),
-            tick_limit=item.get("tick_limit"),
-            required_state=item.get("required_state"),
-            max_surviving=item.get("max_surviving"),
-            comparison_state=item.get("comparison_state"),
-            required_flags=(
-                tuple(item["required_flags"])
-                if isinstance(item.get("required_flags"), list)
-                else None
-            ),
-            min_set_count=item.get("min_set_count"),
-        ))
+        conditions.append(
+            GameEndCondition(
+                condition_type=ctype,
+                target_spot_id=target_spot,
+                target_flag=item.get("target_flag"),
+                tick_limit=item.get("tick_limit"),
+                required_state=item.get("required_state"),
+                max_surviving=item.get("max_surviving"),
+                comparison_state=item.get("comparison_state"),
+                required_flags=(
+                    tuple(item["required_flags"]) if isinstance(item.get("required_flags"), list) else None
+                ),
+                min_set_count=item.get("min_set_count"),
+                required_outcome=(
+                    PlayerOutcomeEnum(item["outcome"])
+                    if ctype is GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME
+                    else None
+                ),
+            )
+        )
     return conditions
+
 
 def validate_end_condition_required_fields(
     item: dict[str, Any],
@@ -645,9 +600,7 @@ def validate_end_condition_required_fields(
                 "配列が必要です (空だと開始した瞬間に成立します)"
                 f" [index={index}]"
             )
-        if not all(
-            isinstance(name, str) and name.strip() for name in required_flags
-        ):
+        if not all(isinstance(name, str) and name.strip() for name in required_flags):
             raise ScenarioLoadError(
                 f"game_end_conditions の {ctype.value} の required_flags は"
                 "空でない文字列の配列である必要があります"
@@ -664,6 +617,15 @@ def validate_end_condition_required_fields(
         # __post_init__ が見る。ここで二重に書くと判断が 2 箇所に散る。
         return
 
+    if ctype is GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME:
+        outcome = item.get("outcome")
+        resolved = [o.value for o in PlayerOutcomeEnum if o.is_resolved]
+        if outcome not in resolved:
+            raise ScenarioLoadError(
+                f"{ctype.value} の outcome は {resolved} のどれかにしてください: {outcome!r} [index={index}]"
+            )
+        return
+
     if ctype == GameEndConditionTypeEnum.FLAG_SET:
         target_flag = item.get("target_flag")
         if not isinstance(target_flag, str) or not target_flag.strip():
@@ -676,10 +638,7 @@ def validate_end_condition_required_fields(
         return
     if ctype == GameEndConditionTypeEnum.TICK_LIMIT:
         if item.get("tick_limit") is None:
-            raise ScenarioLoadError(
-                "game_end_conditions の TICK_LIMIT には tick_limit が必要です"
-                f" [index={index}]"
-            )
+            raise ScenarioLoadError(f"game_end_conditions の TICK_LIMIT には tick_limit が必要です [index={index}]")
         return
     if ctype is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST:
         required_state = item.get("required_state")
@@ -702,16 +661,12 @@ def validate_end_condition_required_fields(
                 f"である必要があります: {max_surviving} [index={index}]"
             )
         return
-    if (
-        ctype
-        is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
-    ):
+    if ctype is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE:
         for field_name in ("required_state", "comparison_state"):
             state = item.get(field_name)
             if not isinstance(state, dict) or not state:
                 raise ScenarioLoadError(
-                    f"game_end_conditions の {ctype.value} には {field_name} が"
-                    f"必要です [index={index}]"
+                    f"game_end_conditions の {ctype.value} には {field_name} が必要です [index={index}]"
                 )
         # 左右が同じ集合かは GameEndCondition が単一の判断場所として見る。
         return
@@ -721,7 +676,4 @@ def validate_end_condition_required_fields(
     ):
         target_spot = item.get("target_spot")
         if not isinstance(target_spot, str) or not target_spot.strip():
-            raise ScenarioLoadError(
-                f"game_end_conditions の {ctype.value} には target_spot が必要です"
-                f" [index={index}]"
-            )
+            raise ScenarioLoadError(f"game_end_conditions の {ctype.value} には target_spot が必要です [index={index}]")

@@ -111,9 +111,7 @@ class MonsterPackAwarenessHandler:
             return False
 
         if pack_members is None:
-            pack_members = self._monster_repository.find_by_pack_id(
-                monster.pack_id
-            )
+            pack_members = self._monster_repository.find_by_pack_id(monster.pack_id)
         scout = self._find_chasing_pack_scout_from(monster, pack_members)
         if scout is None:
             return False
@@ -123,15 +121,13 @@ class MonsterPackAwarenessHandler:
         if scout_spot is None:
             return False
 
-        world_flags = (
-            self._world_flags_provider()
-            if self._world_flags_provider is not None
-            else frozenset()
-        )
+        world_flags = self._world_flags_provider() if self._world_flags_provider is not None else frozenset()
 
         def _is_passable(conn: Any) -> bool:
             return graph.can_traverse_connection(
-                conn.connection_id, frozenset(), world_flags,
+                conn.connection_id,
+                frozenset(),
+                world_flags,
             )
 
         distance = find_hop_distance(
@@ -174,12 +170,10 @@ class MonsterPackAwarenessHandler:
                 spot_id=spot_id,
                 target_player_id=(
                     EntityId.create(scout_target_ref.player_id.value)
-                    if scout_target_ref.player_id is not None else None
+                    if scout_target_ref.player_id is not None
+                    else None
                 ),
-                target_monster_id=(
-                    scout_target_ref.monster_id
-                    if scout_target_ref.is_monster else None
-                ),
+                target_monster_id=(scout_target_ref.monster_id if scout_target_ref.is_monster else None),
             )
         )
         return True

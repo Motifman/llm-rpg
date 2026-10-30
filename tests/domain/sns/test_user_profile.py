@@ -86,20 +86,17 @@ class TestUserProfile:
         empty_bio = UserProfile("testuser", "表示名", "")
         assert empty_bio.bio == ""
 
-    def test_update_bio_returns_new_instance(self):
-        """update_bioが新しいインスタンスを返すテスト"""
-        original_profile = UserProfile("testuser", "表示名", "元のbio")
-        new_bio = "新しいbio"
-
-        updated_profile = original_profile.update_bio(new_bio)
-
-        # 新しいインスタンスが作成される
-        assert updated_profile.bio == new_bio
+    @pytest.mark.parametrize("old_bio", ["元のbio", "bio"])
+    def test_update_bio_returns_new_instance(self, old_bio):
+        """Bio更新は新しい値を返し、元のBioと両者の名前を維持する。"""
+        original_profile = UserProfile("testuser", "表示名", old_bio)
+        updated_profile = original_profile.update_bio("新しいbio")
+        assert updated_profile.bio == "新しいbio"
         assert updated_profile.user_name == original_profile.user_name
         assert updated_profile.display_name == original_profile.display_name
-
-        # 元のインスタンスは変更されない
-        assert original_profile.bio == "元のbio"
+        assert original_profile.bio == old_bio
+        assert original_profile != updated_profile
+        assert original_profile is not updated_profile
 
     def test_update_display_name_returns_new_instance(self):
         """update_display_nameが新しいインスタンスを返すテスト"""
@@ -116,15 +113,6 @@ class TestUserProfile:
         # 元のインスタンスは変更されない
         assert original_profile.display_name == "元の表示名"
 
-    def test_immutability_after_update(self):
-        """更新後の不変性テスト"""
-        profile = UserProfile("testuser", "表示名", "bio")
-        new_profile = profile.update_bio("新しいbio")
-
-        # 異なるインスタンスであることを確認
-        assert profile != new_profile
-        assert profile is not new_profile
-
     def test_equality_comparison(self):
         """等価性の比較テスト"""
         profile1 = UserProfile("testuser", "表示名", "bio")
@@ -134,10 +122,18 @@ class TestUserProfile:
         assert profile1 == profile2
         assert hash(profile1) == hash(profile2)
 
-    def test_inequality_comparison(self):
-        """非等価性の比較テスト"""
-        profile1 = UserProfile("testuser1", "表示名1", "bio1")
-        profile2 = UserProfile("testuser2", "表示名2", "bio2")
-
-        assert profile1 != profile2
-        assert hash(profile1) != hash(profile2)
+    @pytest.mark.parametrize(
+        "other",
+        [
+            ("testuser2", "表示名2", "bio2"),
+            ("testuser2", "表示名1", "bio1"),
+            ("testuser1", "表示名2", "bio1"),
+            ("testuser1", "表示名1", "bio2"),
+        ],
+    )
+    def test_inequality_comparison(self, other):
+        """全3値またはいずれか1値が違うプロフィールは非等価で、集合に共存できる。"""
+        left = UserProfile("testuser1", "表示名1", "bio1")
+        right = UserProfile(*other)
+        assert left != right
+        assert len({left, right}) == 2

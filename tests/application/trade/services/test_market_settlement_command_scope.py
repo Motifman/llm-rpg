@@ -69,9 +69,7 @@ def _gold(runtime: Any) -> int:
 
 
 def _item_ids(runtime: Any) -> tuple[int, ...]:
-    return tuple(
-        sorted(item.item_instance_id.value for item in runtime._item_repo.find_all())
-    )
+    return tuple(sorted(item.item_instance_id.value for item in runtime._item_repo.find_all()))
 
 
 def _capture_observation_and_trace(
@@ -85,11 +83,7 @@ def _capture_observation_and_trace(
     original_publish = runtime._speech_event_publisher.publish_all
 
     def capture(published):
-        events.extend(
-            event
-            for event in published
-            if isinstance(event, MarketBoardActivityEvent)
-        )
+        events.extend(event for event in published if isinstance(event, MarketBoardActivityEvent))
         return original_publish(published)
 
     monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", capture)

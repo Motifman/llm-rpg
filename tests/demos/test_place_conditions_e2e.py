@@ -26,7 +26,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_CONTROL_PANEL_TOGGLE = _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "control_panel_toggle.json"
 
 _ACTOR = PlayerId(1)
 _VICTIM = PlayerId(2)
@@ -65,24 +65,26 @@ def _build_runtime(
     ``lighting`` はそのスポットの静的な明るさ。``give_actor_a_lamp`` を
     立てると行為者が光源アイテムを持って出発する。
     """
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
     scenario["player_interactions"] = list(player_interactions)
     for spot in scenario["spots"]:
         if spot["id"] == "control_room":
             spot["atmosphere"] = {"lighting": lighting, "temperature": "NORMAL"}
     if give_actor_a_lamp:
-        scenario["item_specs"].append({
-            "id": "lamp",
-            "name": "ランタン",
-            "description": "小さな灯り。",
-            "category": "TOOL",
-            "is_light_source": True,
-        })
+        scenario["item_specs"].append(
+            {
+                "id": "lamp",
+                "name": "ランタン",
+                "description": "小さな灯り。",
+                "category": "TOOL",
+                "is_light_source": True,
+            }
+        )
         for spawn in scenario["players"]:
             if spawn["id"] == "player_a":
                 spawn["initial_items"] = ["lamp"]
 
-    path = tmp_path / f"relay_{lighting.lower()}.json"
+    path = tmp_path / f"panel_{lighting.lower()}.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
     runtime = create_world_runtime(path)
@@ -166,22 +168,27 @@ class TestAtSpotGate:
         return {
             "action_name": "ritual",
             "display_label": "儀式を施す",
-            "preconditions": [{
-                "condition_type": "AT_SPOT_IS",
-                "required_spot": spot_str_id,
-                "failure_message": self._WRONG_PLACE,
-            }],
-            "effects": [{
-                "effect_type": "APPLY_DAMAGE",
-                "target": "TARGET_PLAYER",
-                "parameters": {"damage": 3},
-            }],
+            "preconditions": [
+                {
+                    "condition_type": "AT_SPOT_IS",
+                    "required_spot": spot_str_id,
+                    "failure_message": self._WRONG_PLACE,
+                }
+            ],
+            "effects": [
+                {
+                    "effect_type": "APPLY_DAMAGE",
+                    "target": "TARGET_PLAYER",
+                    "parameters": {"damage": 3},
+                }
+            ],
         }
 
     def test_action_succeeds_at_the_declared_spot(self, tmp_path) -> None:
         """宣言されたスポットに居れば成立する。"""
         runtime = _build_runtime(
-            tmp_path, lighting="DIM",
+            tmp_path,
+            lighting="DIM",
             player_interactions=(self._definition("control_room"),),
         )
         before = _victim_hp(runtime)
@@ -193,7 +200,8 @@ class TestAtSpotGate:
     def test_action_is_refused_elsewhere(self, tmp_path) -> None:
         """別のスポットでは拒否する。"""
         runtime = _build_runtime(
-            tmp_path, lighting="DIM",
+            tmp_path,
+            lighting="DIM",
             player_interactions=(self._definition("vault"),),
         )
         before = _victim_hp(runtime)
@@ -215,7 +223,7 @@ class TestObjectInteractionHonoursPlaceConditions:
     _TOO_BRIGHT_FOR_THE_PANEL = "眩しくて盤面が読めない。"
 
     def _runtime_with_gated_panel(self, tmp_path, lighting: str):
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
         for spot in scenario["spots"]:
             if spot["id"] != "control_room":
                 continue
@@ -223,17 +231,21 @@ class TestObjectInteractionHonoursPlaceConditions:
             for obj in spot["interior"]["objects"]:
                 if obj["id"] != "control_panel":
                     continue
-                obj["interactions"].append({
-                    "action_name": "read_dial",
-                    "display_label": "目盛りを読む",
-                    "preconditions": [{
-                        "condition_type": "SPOT_LIGHTING_IS",
-                        "required_lighting": "DIM",
-                        "failure_message": self._TOO_BRIGHT_FOR_THE_PANEL,
-                    }],
-                    "effects": [],
-                })
-        path = tmp_path / f"relay_panel_{lighting.lower()}.json"
+                obj["interactions"].append(
+                    {
+                        "action_name": "read_dial",
+                        "display_label": "目盛りを読む",
+                        "preconditions": [
+                            {
+                                "condition_type": "SPOT_LIGHTING_IS",
+                                "required_lighting": "DIM",
+                                "failure_message": self._TOO_BRIGHT_FOR_THE_PANEL,
+                            }
+                        ],
+                        "effects": [],
+                    }
+                )
+        path = tmp_path / f"panel_gated_{lighting.lower()}.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
         return create_world_runtime(path)
 
@@ -263,22 +275,24 @@ class TestTargetPlayerStateGate:
     _MARK: ClassVar[dict[str, object]] = {
         "action_name": "mark",
         "display_label": "印を刻む",
-        "preconditions": [{
-            "condition_type": "TARGET_PLAYER_STATE_IS",
-            "required_state": {"role": "crew"},
-            "failure_message": _WRONG_SIDE,
-        }],
-        "effects": [{
-            "effect_type": "APPLY_DAMAGE",
-            "target": "TARGET_PLAYER",
-            "parameters": {"damage": 1},
-        }],
+        "preconditions": [
+            {
+                "condition_type": "TARGET_PLAYER_STATE_IS",
+                "required_state": {"role": "crew"},
+                "failure_message": _WRONG_SIDE,
+            }
+        ],
+        "effects": [
+            {
+                "effect_type": "APPLY_DAMAGE",
+                "target": "TARGET_PLAYER",
+                "parameters": {"damage": 1},
+            }
+        ],
     }
 
     def _runtime_with_target_role(self, tmp_path, role: str):
-        runtime = _build_runtime(
-            tmp_path, lighting="DIM", player_interactions=(self._MARK,)
-        )
+        runtime = _build_runtime(tmp_path, lighting="DIM", player_interactions=(self._MARK,))
         status = runtime._player_status_repo.find_by_id(_VICTIM)
         status.merge_state({"role": role})
         runtime._player_status_repo.save(status)

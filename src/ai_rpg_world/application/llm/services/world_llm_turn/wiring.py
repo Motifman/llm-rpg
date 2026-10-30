@@ -23,11 +23,11 @@ from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ITypedJudgmentPort,
 )
-from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.loop_diagnosis import LoopDiagnosis
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     DEFAULT_MIN_PROBABILITY,
     MemoCompletionHintService,
+    PendingTodo,
 )
 from ai_rpg_world.application.llm.services.semantic_repeat_detector import (
     SemanticRepeatDetector,
@@ -73,14 +73,9 @@ from ai_rpg_world.application.llm.services.world_llm_turn.turn_trigger import (
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
-    TOOL_NAME_MEMORY_RECALL_EPISODES,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+    TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_SPEECH,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
 )
 from ai_rpg_world.application.observation.services.observation_appender import (
     ObservationAppender,
@@ -88,6 +83,8 @@ from ai_rpg_world.application.observation.services.observation_appender import (
 from ai_rpg_world.application.speech.services.speech_audience_resolver import (
     SpeechAudienceResolver,
 )
+from ai_rpg_world.being.domain.memo_book import MemoKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
     PlayerSpotNavigationState,
@@ -123,7 +120,9 @@ class WorldLlmWiring:
     runtime: Any
     observation_buffer: Any
     short_term_memory: IShortTermMemory
-    llm_client: Any = field(default_factory=StubLlmClient)
+    #: 既定値を置かない。スタブを既定にすると、本番の配線で渡し忘れても黙って
+    #: スタブで動く。スタブで回す試験と smoke_stub は、明示して渡す。
+    llm_client: Any
     llm_session_run_id: str = "interactive"
     llm_session_world_id: str = "world"
     prompt_dataset_sink: Any | None = None
@@ -139,9 +138,6 @@ class WorldLlmWiring:
     #: で、trace で区別できなければ OFF の run と全件 fallback の run が同じに
     #: 見える。
     typed_judgment_port: ITypedJudgmentPort | None = None
-    #: tick の終わりに「いま動く必要があるか」を問う起動判定。profile が求めなければ None。
-    #: runtime_manager が typed_judgment_port から組んで差し込む。
-    turn_gate: Any | None = None
     #: 存在しない tool 名から意図した tool を意味で選ぶ口 (#1413)。
     #: typed_judgment_port から __post_init__ で組む。None なら文字の類似度だけで提案する。
     tool_name_rescue: ToolNameRescue | None = field(default=None, init=False)
@@ -169,20 +165,12 @@ class WorldLlmWiring:
         self.tool_call_loop_guard = ToolCallLoopGuardService(
             observation_buffer=self.observation_buffer,
             time_label_provider=self._time_label,
-            trace_recorder_provider=lambda: getattr(
-                self.runtime, "trace_recorder", None
-            ),
-            current_tick_provider=(
-                self.runtime.current_tick
-                if hasattr(self.runtime, "current_tick")
-                else None
-            ),
+            trace_recorder_provider=lambda: getattr(self.runtime, "trace_recorder", None),
+            current_tick_provider=(self.runtime.current_tick if hasattr(self.runtime, "current_tick") else None),
             loop_diagnosis=self._build_loop_diagnosis(),
             semantic_repeat_detector=self._build_semantic_repeat_detector(),
             location_provider=(
-                self.runtime.get_player_spot_name
-                if hasattr(self.runtime, "get_player_spot_name")
-                else None
+                self.runtime.get_player_spot_name if hasattr(self.runtime, "get_player_spot_name") else None
             ),
         )
         # 同じ instance を prompt_builder にも共有させる。record_and_check で
@@ -192,48 +180,22 @@ class WorldLlmWiring:
         # の prompt を流して二重に attention を取りに行く。
         if hasattr(self.runtime, "set_tool_call_loop_guard"):
             self.runtime.set_tool_call_loop_guard(self.tool_call_loop_guard)
-        # PR 5 (#227): memo 完了 hint。LLM が memo_done を呼ばずに memo を
-        # 放置するケースを救済するため、action_summary / result_summary と
-        # 未完了 memo の content を SequenceMatcher で比較し、類似度が高ければ
-        # 「memo を完了したかも」hint を result.message に append する。
-        # PR #230 で本家経路に配線済みだが、world_runtime の独自 turn 実行は
-        # 経由しないため、ここで wiring に直接組み込む。
         runtime_config = getattr(self.runtime, "_runtime_config", None)
-        memo_tools_enabled = bool(
-            getattr(runtime_config, "memo_tools_enabled", True)
-        )
-        memo_store = getattr(self.runtime, "_todo_store", None)
-        # runtime 側で aux being stack を初期化しておく。phase_b の
-        # _acting_being_for が動くために必要。idempotent な呼び出し。
-        if memo_tools_enabled and memo_store is not None and hasattr(
-            self.runtime, "_wire_auxiliary_tool_stack"
-        ):
-            try:
-                self.runtime._wire_auxiliary_tool_stack()
-            except Exception:
-                logger.warning(
-                    "_wire_auxiliary_tool_stack failed; "
-                    "MemoCompletionHintService will be disabled",
-                    exc_info=True,
-                )
-        if memo_tools_enabled and memo_store is not None:
-            # #1322: profile が型付き判断を求めていれば、文字の重なりでなく
-            # 意味で完了を判定する。求めていなければ従来の重なり判定で動く。
-            self.memo_completion_hint_service: MemoCompletionHintService | None = (
-                MemoCompletionHintService(
-                    memo_store=memo_store,
-                    judgment_port=self.typed_judgment_port,
-                    min_probability=float(
-                        getattr(
-                            runtime_config,
-                            "typed_judgment_memo_min_probability",
-                            DEFAULT_MIN_PROBABILITY,
-                        )
-                    ),
-                )
+        min_probability = float(
+            getattr(
+                runtime_config,
+                "typed_judgment_memo_min_probability",
+                DEFAULT_MIN_PROBABILITY,
             )
-        else:
-            self.memo_completion_hint_service = None
+        )
+        self.memo_completion_hint_service: MemoCompletionHintService | None = None
+        if runtime_config is not None:
+            # #1628: メモ帳のやることが済んだかを問う。自動では消さない。
+            self.memo_completion_hint_service = MemoCompletionHintService(
+                pending_todos=self._pending_todos,
+                judgment_port=self.typed_judgment_port,
+                min_probability=min_probability,
+            )
         if self.typed_judgment_port is not None:
             self.tool_name_rescue = ToolNameRescue(port=self.typed_judgment_port)
         # Issue #264 後続 B1: speech_say の audience resolver。
@@ -248,12 +210,8 @@ class WorldLlmWiring:
                 spot_graph_repository=spot_graph_repo,
                 player_status_repository=player_status_repo,
                 sound_propagation_service=SoundPropagationService(),
-                player_perception_policy=getattr(
-                    self.runtime, "_player_perception_policy", None
-                ),
-                departed_position_store=getattr(
-                    self.runtime, "_departed_position_store", None
-                ),
+                player_perception_policy=getattr(self.runtime, "_player_perception_policy", None),
+                departed_position_store=getattr(self.runtime, "_departed_position_store", None),
             )
         # PR 7 (#227): ツール名→ハンドラの dispatch table。本家
         # ToolCommandMapper.execute と構造を揃え、巨大 if-elif を排除する。
@@ -274,42 +232,22 @@ class WorldLlmWiring:
             #   は将来の別ランタイム用に残す。仮に何らかの経路で呼ばれても、
             #   default `_execute_tool` の UNSUPPORTED_TOOL 経路で正しく弾く。
             TOOL_NAME_SPEECH: self._handle_speech,
-            TOOL_NAME_TODO_ADD: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_ADD),
-            TOOL_NAME_TODO_LIST: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_LIST),
-            TOOL_NAME_TODO_COMPLETE: self._make_auxiliary_tool_handler(
-                TOOL_NAME_TODO_COMPLETE
-            ),
-            # Issue #526 後続: memory_recall_episodes も aux 経路で dispatch する。
-            # ``runtime.run_llm_auxiliary_tool`` が ``_memory_recall_tool_executor``
-            # を併用するよう PR #535 で配線済み。tool 定義は episodic_stack ON
-            # のときだけ ``get_tool_definitions`` で expose される。
-            TOOL_NAME_MEMORY_RECALL_EPISODES: self._make_auxiliary_tool_handler(
-                TOOL_NAME_MEMORY_RECALL_EPISODES
-            ),
-            TOOL_NAME_MEMORY_EXPLORE_RELATED: self._make_auxiliary_tool_handler(
-                TOOL_NAME_MEMORY_EXPLORE_RELATED
-            ),
-            TOOL_NAME_MEMORY_SEARCH_SEMANTIC: self._make_auxiliary_tool_handler(
-                TOOL_NAME_MEMORY_SEARCH_SEMANTIC
-            ),
-            # PR-D (#588) 後続 fix: memory_recall_by_handle も同じ aux 経路に
-            # 載せる。SSOT である本テーブルにエントリが無いと
-            # ``execute_tool`` の dispatcher が UNSUPPORTED_TOOL を返す silent
-            # failure になる (= Run D で 30 tick 中 2 回呼ばれたが両方失敗した
-            # 直接原因)。tool 定義は afterglow_store + slot_store が揃った
-            # ときだけ ``get_tool_definitions`` で expose されるので、ここに
-            # 居ても afterglow off の run では一切呼ばれない (= 安全)。
-            TOOL_NAME_MEMORY_RECALL_BY_HANDLE: self._make_auxiliary_tool_handler(
-                TOOL_NAME_MEMORY_RECALL_BY_HANDLE
-            ),
+            # #1623: 定義は目次を出す設定でだけ get_tool_definitions が出す。
+            TOOL_NAME_EPISODE_RECALL: self._make_auxiliary_tool_handler(TOOL_NAME_EPISODE_RECALL),
+            TOOL_NAME_EPISODE_REVISE_INDEX: self._make_auxiliary_tool_handler(TOOL_NAME_EPISODE_REVISE_INDEX),
         }
         # #344 配線漏れ修正: spot_graph_use_item / attack / give_item /
         # pickup_item / drop_item / prepare_action は application 層 (executor)
         # に実装があるが、experiment runtime の _tool_handlers に dispatch が
         # 無く UNSUPPORTED_TOOL に化けていた。executor を遅延構築し、これら
         # の handler を _tool_handlers に追加する。
+        public_sns_executor = getattr(self.runtime, "_public_sns_executor", None)
+        if public_sns_executor is not None:
+            self._tool_handlers["sns_read"] = lambda pid, args, ctx: public_sns_executor.read(int(pid), args, ctx)
+            self._tool_handlers["sns_publish"] = lambda pid, args, ctx: public_sns_executor.publish(int(pid), args, ctx)
         self._spot_graph_executor: Any | None = None
         wire_missing_spot_graph_tools(self)
+
     def attach_action_failed_wiring(
         self,
         emitter: ActionFailedObservationEmitter,
@@ -324,14 +262,15 @@ class WorldLlmWiring:
         return self.run_phase_b(phase_a)
 
     def run_phase_a(self, player_id: PlayerId) -> LlmPhaseAResult:
+        apply_results = getattr(self.runtime, "apply_async_results", None)
+        if callable(apply_results):
+            apply_results(player_id)
         return run_phase_a(self, player_id)
 
     def run_phase_b(self, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
         return run_phase_b(self, phase_a)
 
-    def _build_tools_payload(
-        self, player_id: PlayerId, *, tool_schema_mode: str = "legacy"
-    ) -> list[dict[str, Any]]:
+    def _build_tools_payload(self, player_id: PlayerId, *, tool_schema_mode: str = "legacy") -> list[dict[str, Any]]:
         return build_tools_payload(self, player_id, tool_schema_mode=tool_schema_mode)
 
     def _maybe_interrupt_busy(
@@ -339,9 +278,7 @@ class WorldLlmWiring:
     ) -> tuple[bool, PlayerSpotNavigationState | None]:
         return maybe_interrupt_busy(self, player_id, tool_name)
 
-    def _restore_nav_state(
-        self, player_id: PlayerId, nav_snapshot: PlayerSpotNavigationState
-    ) -> None:
+    def _restore_nav_state(self, player_id: PlayerId, nav_snapshot: PlayerSpotNavigationState) -> None:
         restore_nav_state(self, player_id, nav_snapshot)
 
     def _reason_tool_is_not_offered(
@@ -370,22 +307,14 @@ class WorldLlmWiring:
     def _build_loop_diagnosis(self) -> LoopDiagnosis | None:
         """profile が繰り返しの理由の判定を求め、判断ポートがあるときだけ組む (#1411)。"""
         config = getattr(self.runtime, "_runtime_config", None)
-        if (
-            self.typed_judgment_port is None
-            or config is None
-            or not config.typed_judgment_loop_diagnosis_enabled
-        ):
+        if self.typed_judgment_port is None or config is None or not config.typed_judgment_loop_diagnosis_enabled:
             return None
         return LoopDiagnosis(port=self.typed_judgment_port)
 
     def _build_semantic_repeat_detector(self) -> SemanticRepeatDetector | None:
         """profile が意味上の繰り返しの検出を求め、判断ポートがあるときだけ組む (#1412)。"""
         config = getattr(self.runtime, "_runtime_config", None)
-        if (
-            self.typed_judgment_port is None
-            or config is None
-            or not config.typed_judgment_semantic_repeat_enabled
-        ):
+        if self.typed_judgment_port is None or config is None or not config.typed_judgment_semantic_repeat_enabled:
             return None
         return SemanticRepeatDetector(
             self.typed_judgment_port,
@@ -394,6 +323,12 @@ class WorldLlmWiring:
             threshold=float(config.typed_judgment_semantic_repeat_min_probability),
             trace_recorder_provider=lambda: getattr(self.runtime, "trace_recorder", None),
         )
+
+    def _pending_todos(self, being_id: BeingId) -> list[PendingTodo]:
+        book = self.runtime._being_memo_store.get(being_id)
+        return [
+            PendingTodo(id=m.memo_id, content=m.text, handle=m.handle) for m in book.memos if m.kind is MemoKind.TODO
+        ]
 
     def _time_label(self) -> str:
         runtime_label = getattr(self.runtime, "_time_label", None)
@@ -423,7 +358,11 @@ class WorldLlmWiring:
         offered_tools_at_prompt: Mapping[str, str | None],
     ) -> LlmCommandResultDto:
         return execute_tool(
-            self, player_id, name, arguments, runtime_context,
+            self,
+            player_id,
+            name,
+            arguments,
+            runtime_context,
             offered_tools_at_prompt=offered_tools_at_prompt,
         )
 
@@ -445,9 +384,7 @@ class WorldLlmWiring:
     ) -> LlmCommandResultDto:
         return handle_speech(self, player_id, arguments, runtime_context)
 
-    def _resolve_whisper_target(
-        self, target_label: str, targets: dict[str, Any]
-    ) -> Any | None:
+    def _resolve_whisper_target(self, target_label: str, targets: dict[str, Any]) -> Any | None:
         return resolve_whisper_target(self, target_label, targets)
 
     def _make_auxiliary_tool_handler(
@@ -464,7 +401,9 @@ class WorldLlmWiring:
         invalid_label_failure_builder: Any = None,
     ) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
         return adapt_executor_handler_with_resolver(
-            raw_handler, tool_name, argument_resolver,
+            raw_handler,
+            tool_name,
+            argument_resolver,
             invalid_label_failure_builder=invalid_label_failure_builder,
         )
 

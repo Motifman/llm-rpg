@@ -30,6 +30,7 @@ def _make_status(hp: int = 100) -> PlayerStatusAggregate:
     from ai_rpg_world.domain.player.value_object.player_id import PlayerId
     from ai_rpg_world.domain.player.value_object.stamina import Stamina
     from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+
     exp_table = ExpTable(100, 1.5)
     return PlayerStatusAggregate(
         player_id=PlayerId(1),
@@ -48,11 +49,13 @@ class TestBleedingDamage:
     def test_bleeding_reduces_hp_by_one_each_tick(self) -> None:
         """BLEEDING は毎 tickHP1 減らす。"""
         status = _make_status(hp=100)
-        status.add_status_effect(StatusEffect(
-            effect_type=StatusEffectType.BLEEDING,
-            value=1.0,
-            expiry_tick=WorldTick(10),
-        ))
+        status.add_status_effect(
+            StatusEffect(
+                effect_type=StatusEffectType.BLEEDING,
+                value=1.0,
+                expiry_tick=WorldTick(10),
+            )
+        )
         repo = MagicMock()
         repo.find_all.return_value = [status]
         stage = StatusEffectsTickStageService()
@@ -66,11 +69,13 @@ class TestRegenerationHeal:
     def test_regeneration_restores_hp_by_one_each_tick(self) -> None:
         """REGENERATION は毎 tickHP1 回復。"""
         status = _make_status(hp=50)
-        status.add_status_effect(StatusEffect(
-            effect_type=StatusEffectType.REGENERATION,
-            value=1.0,
-            expiry_tick=WorldTick(10),
-        ))
+        status.add_status_effect(
+            StatusEffect(
+                effect_type=StatusEffectType.REGENERATION,
+                value=1.0,
+                expiry_tick=WorldTick(10),
+            )
+        )
         repo = MagicMock()
         repo.find_all.return_value = [status]
         stage = StatusEffectsTickStageService()
@@ -86,11 +91,13 @@ class TestPoisonStrongerThanBleeding:
     def test_poison_tick_hp_two(self) -> None:
         """POISON は毎 tickHP2 減らす。"""
         status = _make_status(hp=100)
-        status.add_status_effect(StatusEffect(
-            effect_type=StatusEffectType.POISON,
-            value=1.0,
-            expiry_tick=WorldTick(10),
-        ))
+        status.add_status_effect(
+            StatusEffect(
+                effect_type=StatusEffectType.POISON,
+                value=1.0,
+                expiry_tick=WorldTick(10),
+            )
+        )
         repo = MagicMock()
         repo.find_all.return_value = [status]
         stage = StatusEffectsTickStageService()
@@ -106,11 +113,13 @@ class TestExpiry:
     def test_expiry_tick_cleanup(self) -> None:
         """expiry tick 到達で 最終ダメージが入ったあと cleanup される。"""
         status = _make_status(hp=100)
-        status.add_status_effect(StatusEffect(
-            effect_type=StatusEffectType.BLEEDING,
-            value=1.0,
-            expiry_tick=WorldTick(5),
-        ))
+        status.add_status_effect(
+            StatusEffect(
+                effect_type=StatusEffectType.BLEEDING,
+                value=1.0,
+                expiry_tick=WorldTick(5),
+            )
+        )
         repo = MagicMock()
         repo.find_all.return_value = [status]
         stage = StatusEffectsTickStageService()
@@ -125,11 +134,13 @@ class TestExpiry:
     def test_expiry_over_tick(self) -> None:
         """expiry を超えた tick ではダメージが入らない。"""
         status = _make_status(hp=100)
-        status.add_status_effect(StatusEffect(
-            effect_type=StatusEffectType.BLEEDING,
-            value=1.0,
-            expiry_tick=WorldTick(5),
-        ))
+        status.add_status_effect(
+            StatusEffect(
+                effect_type=StatusEffectType.BLEEDING,
+                value=1.0,
+                expiry_tick=WorldTick(5),
+            )
+        )
         repo = MagicMock()
         repo.find_all.return_value = [status]
         stage = StatusEffectsTickStageService()
@@ -146,11 +157,13 @@ class TestDeathChain:
     def test_bleeding_hp_zero_player_downed_event(self) -> None:
         """BLEEDING で HP0 になったら PlayerDownedEvent が流れる。"""
         status = _make_status(hp=1)
-        status.add_status_effect(StatusEffect(
-            effect_type=StatusEffectType.BLEEDING,
-            value=1.0,
-            expiry_tick=WorldTick(10),
-        ))
+        status.add_status_effect(
+            StatusEffect(
+                effect_type=StatusEffectType.BLEEDING,
+                value=1.0,
+                expiry_tick=WorldTick(10),
+            )
+        )
         repo = MagicMock()
         repo.find_all.return_value = [status]
         stage = StatusEffectsTickStageService()

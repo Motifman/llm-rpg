@@ -1,4 +1,4 @@
-from datetime import datetime
+from dataclasses import replace
 from unittest.mock import Mock
 
 import pytest
@@ -9,7 +9,6 @@ from ai_rpg_world.application.quest.contracts.commands import (
     CancelQuestCommand,
     IssueQuestCommand,
 )
-from ai_rpg_world.application.quest.contracts.dtos import QuestCommandResultDto
 from ai_rpg_world.application.quest.exceptions.base_exception import (
     QuestSystemErrorException,
 )
@@ -21,10 +20,8 @@ from ai_rpg_world.application.quest.exceptions.command.quest_command_exception i
 )
 from ai_rpg_world.application.quest.services.quest_command_service import QuestCommandService
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
-from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
@@ -39,8 +36,6 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
@@ -52,23 +47,15 @@ from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
 from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
 from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.entity.location_area import LocationArea
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.value_object.area import PointArea
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_guild_repository import (
     InMemoryGuildRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
     InMemoryItemRepository,
-)
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
     InMemoryPlayerInventoryRepository,
@@ -84,7 +71,11 @@ from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
 )
 
 
-def _create_player_status(player_id: PlayerId, gold_amount: int = 0) -> PlayerStatusAggregate:
+def _create_player_status(
+    player_id: PlayerId,
+    gold_amount: int = 0,
+    current_spot_id: SpotId | None = None,
+) -> PlayerStatusAggregate:
     """テスト用の PlayerStatus を作成（ゴールド指定可）"""
     base_stats = BaseStats(
         max_hp=100,
@@ -105,57 +96,7 @@ def _create_player_status(player_id: PlayerId, gold_amount: int = 0) -> PlayerSt
         hp=Hp.create(100, 100),
         mp=Mp.create(100, 100),
         stamina=Stamina.create(100, 100),
-    )
-
-
-def _create_player_status_at_location(
-    player_id: PlayerId,
-    spot_id: int,
-    coord: Coordinate,
-    gold_amount: int = 200,
-) -> PlayerStatusAggregate:
-    """テスト用の PlayerStatus を作成（位置情報付き、ギルド依頼発行テスト用）"""
-    base_stats = BaseStats(
-        max_hp=100,
-        max_mp=100,
-        attack=10,
-        defense=10,
-        speed=10,
-        critical_rate=0.0,
-        evasion_rate=0.0,
-    )
-    return PlayerStatusAggregate(
-        player_id=player_id,
-        base_stats=base_stats,
-        stat_growth_factor=StatGrowthFactor.for_level(1),
-        exp_table=ExpTable(100, 2.0),
-        growth=Growth(1, 0, ExpTable(100, 2.0)),
-        gold=Gold.create(gold_amount),
-        hp=Hp.create(100, 100),
-        mp=Mp.create(100, 100),
-        stamina=Stamina.create(100, 100),
-        navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=SpotId.create(spot_id),
-            current_coordinate=coord,
-        ),
-    )
-
-
-def _make_physical_map_with_location_areas(
-    spot_id: int,
-    location_areas: list[LocationArea],
-) -> PhysicalMapAggregate:
-    """LocationArea を持つ物理マップを作成"""
-    tiles = {}
-    for x in range(4):
-        for y in range(4):
-            coord = Coordinate(x, y, 0)
-            tiles[coord] = Tile(coord, TerrainType.grass())
-    return PhysicalMapAggregate(
-        spot_id=SpotId(spot_id),
-        tiles=tiles,
-        objects=[],
-        location_areas=location_areas,
+        current_spot_id=current_spot_id,
     )
 
 
@@ -164,12 +105,9 @@ class TestQuestCommandService:
 
     @pytest.fixture
     def setup_service(self):
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
 
         data_store = InMemoryDataStore()
         uow = InMemoryUnitOfWork(
-            unit_of_work_factory=create_uow,
             data_store=data_store,
         )
         quest_repository = InMemoryQuestRepository(
@@ -190,12 +128,9 @@ class TestQuestCommandService:
     @pytest.fixture
     def setup_service_with_guild(self):
         """Quest + Guild リポジトリ付き（ギルド掲示・承認・受託テスト用）"""
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
 
         data_store = InMemoryDataStore()
         uow = InMemoryUnitOfWork(
-            unit_of_work_factory=create_uow,
             data_store=data_store,
         )
         quest_repository = InMemoryQuestRepository(
@@ -286,9 +221,7 @@ class TestQuestCommandService:
         with pytest.raises(QuestNotFoundForCommandException):
             service.accept_quest(command)
 
-    def test_cancel_quest_when_completed_raises_quest_command_exception(
-        self, setup_service
-    ):
+    def test_cancel_quest_when_completed_raises_quest_command_exception(self, setup_service):
         """完了済みクエストをキャンセルすると DomainException が QuestCommandException にラップされる"""
         service, quest_repo, _ = setup_service
         quest_id = quest_repo.generate_quest_id()
@@ -321,9 +254,7 @@ class TestQuestCommandService:
         with pytest.raises(QuestCommandException) as exc_info:
             service.cancel_quest(command)
         assert exc_info.value.__cause__ is not None
-        assert isinstance(
-            exc_info.value.__cause__, InvalidQuestStatusException
-        )
+        assert isinstance(exc_info.value.__cause__, InvalidQuestStatusException)
 
     def test_accept_quest_direct_scope_wrong_player_raises(self, setup_service):
         service, quest_repo, uow = setup_service
@@ -415,9 +346,7 @@ class TestQuestCommandService:
         with pytest.raises(QuestNotFoundForCommandException):
             service.cancel_quest(command)
 
-    def test_accept_quest_unexpected_exception_wrapped_as_quest_system_error(
-        self, setup_service
-    ):
+    def test_accept_quest_unexpected_exception_wrapped_as_quest_system_error(self, setup_service):
         """リポジトリ等が想定外の例外を投げたとき QuestSystemErrorException にラップされる"""
         service, quest_repo, uow = setup_service
         original_error = RuntimeError("database connection failed")
@@ -459,15 +388,9 @@ class TestQuestCommandService:
     @pytest.fixture
     def setup_service_with_player_repos(self):
         """PlayerStatus / Inventory / Item リポジトリ付きのサービス（プレイヤー発行テスト用）"""
-        def create_uow():
-            return InMemoryUnitOfWork(
-                unit_of_work_factory=create_uow,
-                data_store=data_store,
-            )
 
         data_store = InMemoryDataStore()
         uow = InMemoryUnitOfWork(
-            unit_of_work_factory=create_uow,
             data_store=data_store,
         )
         quest_repository = InMemoryQuestRepository(
@@ -543,9 +466,7 @@ class TestQuestCommandService:
             s["service"].issue_quest(command)
         assert "経験値報酬" in str(exc_info.value)
 
-    def test_issue_quest_player_issued_insufficient_gold_raises(
-        self, setup_service_with_player_repos
-    ):
+    def test_issue_quest_player_issued_insufficient_gold_raises(self, setup_service_with_player_repos):
         """プレイヤー発行クエストでゴールド不足のとき QuestCreationException"""
         s = setup_service_with_player_repos
         issuer_id = PlayerId(1)
@@ -562,9 +483,7 @@ class TestQuestCommandService:
             s["service"].issue_quest(command)
         assert "ゴールド" in str(exc_info.value)
 
-    def test_issue_quest_player_issued_issuer_not_found_raises(
-        self, setup_service_with_player_repos
-    ):
+    def test_issue_quest_player_issued_issuer_not_found_raises(self, setup_service_with_player_repos):
         """発行者が存在しないとき QuestCreationException"""
         s = setup_service_with_player_repos
         command = IssueQuestCommand(
@@ -576,9 +495,7 @@ class TestQuestCommandService:
             s["service"].issue_quest(command)
         assert "発行者" in str(exc_info.value)
 
-    def test_issue_quest_player_issued_with_items_success(
-        self, setup_service_with_player_repos
-    ):
+    def test_issue_quest_player_issued_with_items_success(self, setup_service_with_player_repos):
         """プレイヤー発行クエスト（アイテム報酬）が正常に発行され、予約アイテムが記録される"""
         s = setup_service_with_player_repos
         issuer_id = PlayerId(1)
@@ -618,9 +535,7 @@ class TestQuestCommandService:
         assert len(quest.reserved_item_instance_ids) == 1
         assert quest.reserved_item_instance_ids[0] == instance_id
 
-    def test_issue_quest_player_issued_insufficient_items_raises(
-        self, setup_service_with_player_repos
-    ):
+    def test_issue_quest_player_issued_insufficient_items_raises(self, setup_service_with_player_repos):
         """プレイヤー発行クエストで報酬アイテムが不足しているとき QuestCreationException"""
         s = setup_service_with_player_repos
         issuer_id = PlayerId(1)
@@ -638,9 +553,7 @@ class TestQuestCommandService:
             s["service"].issue_quest(command)
         assert "報酬アイテム" in str(exc_info.value)
 
-    def test_cancel_quest_player_issued_returns_gold_to_issuer(
-        self, setup_service_with_player_repos
-    ):
+    def test_cancel_quest_player_issued_returns_gold_to_issuer(self, setup_service_with_player_repos):
         """プレイヤー発行クエストをキャンセルすると確保済みゴールドが発行者に返却される"""
         s = setup_service_with_player_repos
         issuer_id = PlayerId(1)
@@ -670,6 +583,7 @@ class TestQuestCommandService:
         service, quest_repo, guild_repo, _ = setup_service_with_guild
         from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
@@ -699,6 +613,7 @@ class TestQuestCommandService:
         """オフィサー以上が承認すると status=OPEN になる"""
         service, quest_repo, guild_repo, _ = setup_service_with_guild
         from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
@@ -732,6 +647,7 @@ class TestQuestCommandService:
         """MEMBER は承認権限がない"""
         service, quest_repo, guild_repo, _ = setup_service_with_guild
         from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
@@ -764,6 +680,7 @@ class TestQuestCommandService:
         """ギルドスコープのクエストはギルドメンバーが受託可能"""
         service, quest_repo, guild_repo, _ = setup_service_with_guild
         from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
@@ -797,6 +714,7 @@ class TestQuestCommandService:
         """ギルドスコープのクエストは非メンバーは受託できない"""
         service, quest_repo, guild_repo, _ = setup_service_with_guild
         from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
@@ -826,16 +744,10 @@ class TestQuestCommandService:
 
     @pytest.fixture
     def setup_service_with_guild_location(self):
-        """ギルド依頼の発行者ロケーション検証用（guild + physical_map + player repos）"""
-        def create_uow():
-            return InMemoryUnitOfWork(
-                unit_of_work_factory=create_uow,
-                data_store=data_store,
-            )
+        """ギルド依頼の発行者ロケーション検証用（ギルドとプレイヤーの保存先）"""
 
         data_store = InMemoryDataStore()
         uow = InMemoryUnitOfWork(
-            unit_of_work_factory=create_uow,
             data_store=data_store,
         )
         quest_repository = InMemoryQuestRepository(
@@ -858,10 +770,6 @@ class TestQuestCommandService:
             data_store=data_store,
             unit_of_work=uow,
         )
-        physical_map_repository = InMemoryPhysicalMapRepository(
-            data_store=data_store,
-            unit_of_work=uow,
-        )
         service = QuestCommandService(
             quest_repository=quest_repository,
             unit_of_work=uow,
@@ -869,7 +777,6 @@ class TestQuestCommandService:
             player_inventory_repository=player_inventory_repository,
             item_repository=item_repository,
             guild_repository=guild_repository,
-            physical_map_repository=physical_map_repository,
         )
         return {
             "service": service,
@@ -878,149 +785,67 @@ class TestQuestCommandService:
             "status_repo": player_status_repository,
             "inventory_repo": player_inventory_repository,
             "item_repo": item_repository,
-            "phys_repo": physical_map_repository,
             "uow": uow,
         }
 
-    def test_issue_quest_guild_at_guild_location_success(
-        self, setup_service_with_guild_location
-    ):
-        """ギルド指定で発行者がギルドロケーションにいるとき: 成功"""
-        s = setup_service_with_guild_location
-        guild_id = s["guild_repo"].generate_guild_id()
-        location_area_id = LocationAreaId.create(1)
-        guild = GuildAggregate.create_guild(
-            guild_id=guild_id,
-            spot_id=SpotId.create(1),
-            location_area_id=location_area_id,
-            name="Test Guild",
-            description="",
-            creator_player_id=PlayerId(1),
-        )
-        s["guild_repo"].save(guild)
-
-        coord = Coordinate(0, 0, 0)
-        loc_area = LocationArea(
-            location_id=location_area_id,
-            area=PointArea(coord),
-            name="広場",
-            description="",
-        )
-        phys_map = _make_physical_map_with_location_areas(1, [loc_area])
-        s["phys_repo"].save(phys_map)
-
-        issuer_id = PlayerId(1)
-        s["status_repo"].save(
-            _create_player_status_at_location(issuer_id, spot_id=1, coord=coord)
-        )
-        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(issuer_id))
-
-        command = IssueQuestCommand(
-            objectives=[("kill_monster", 101, 2)],
-            reward_gold=0,
-            reward_exp=0,
-            issuer_player_id=1,
-            guild_id=guild_id.value,
-        )
+    @pytest.mark.parametrize("spot_id, coord", [(1, Coordinate(3, 3, 0)), (1, None)])
+    def test_issue_guild_quest_at_same_spot(self, setup_service_with_guild_location, spot_id, coord):
+        """ギルドと同じスポットなら、座標の値や有無に関係なく承認待ちの依頼を発行する。"""
+        s, command = self._prepare_guild_issue(setup_service_with_guild_location, spot_id, coord)
         result = s["service"].issue_quest(command)
-        assert result.success is True
         quest = s["quest_repo"].find_by_id(QuestId(result.data["quest_id"]))
-        assert quest.guild_id == guild_id.value
+        assert result.success
         assert quest.status == QuestStatus.PENDING_APPROVAL
 
-    def test_issue_quest_guild_not_at_guild_location_raises(
-        self, setup_service_with_guild_location
-    ):
-        """ギルド指定で発行者がギルドロケーションにいないとき: QuestCreationException"""
-        s = setup_service_with_guild_location
-        guild_id = s["guild_repo"].generate_guild_id()
-        location_area_id = LocationAreaId.create(1)
-        guild = GuildAggregate.create_guild(
-            guild_id=guild_id,
-            spot_id=SpotId.create(1),
-            location_area_id=location_area_id,
-            name="Test Guild",
-            description="",
-            creator_player_id=PlayerId(1),
-        )
-        s["guild_repo"].save(guild)
-
-        guild_coord = Coordinate(0, 0, 0)
-        loc_area = LocationArea(
-            location_id=location_area_id,
-            area=PointArea(guild_coord),
-            name="広場",
-            description="",
-        )
-        phys_map = _make_physical_map_with_location_areas(1, [loc_area])
-        s["phys_repo"].save(phys_map)
-
-        issuer_id = PlayerId(1)
-        other_coord = Coordinate(3, 3, 0)
-        s["status_repo"].save(
-            _create_player_status_at_location(issuer_id, spot_id=1, coord=other_coord)
-        )
-        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(issuer_id))
-
-        command = IssueQuestCommand(
-            objectives=[("kill_monster", 101, 2)],
-            reward_gold=0,
-            reward_exp=0,
-            issuer_player_id=1,
-            guild_id=guild_id.value,
-        )
+    @pytest.mark.parametrize("spot_id", [2, None])
+    def test_issue_guild_quest_outside_spot_is_rejected(self, setup_service_with_guild_location, spot_id):
+        """別スポットまたは未配置の発行者は場所エラーになり、報酬を引き落とさない。"""
+        s, command = self._prepare_guild_issue(setup_service_with_guild_location, spot_id, None)
         with pytest.raises(QuestCreationException) as exc_info:
             s["service"].issue_quest(command)
         assert exc_info.value.error_code == "QUEST_ISSUER_NOT_AT_GUILD_LOCATION"
-        assert "ギルド" in str(exc_info.value)
+        assert s["status_repo"].find_by_id(PlayerId(1)).gold.value == 200
+        assert s["quest_repo"].find_by_id(QuestId(1)) is None
 
-    def test_issue_quest_guild_at_overlapping_location_success(
-        self, setup_service_with_guild_location
-    ):
-        """重なりロケーションで、発行者がギルドの area に含まれるとき: 成功"""
-        s = setup_service_with_guild_location
+    def test_issue_guild_quest_missing_guild_is_rejected(self, setup_service_with_guild_location):
+        """ギルドを取得できないときは、ギルド不在のエラーで発行を拒否する。"""
+        s, command = self._prepare_guild_issue(setup_service_with_guild_location, 1, None)
+        command = replace(command, guild_id=999)
+        with pytest.raises(QuestCreationException) as exc_info:
+            s["service"].issue_quest(command)
+        assert exc_info.value.error_code == "QUEST_GUILD_NOT_FOUND"
+
+    def test_issue_guild_quest_without_guild_repository_is_rejected(self, setup_service_with_guild_location):
+        """ギルド保存先が未設定のときは場所を確認できず、発行を拒否する。"""
+        s, command = self._prepare_guild_issue(setup_service_with_guild_location, 1, None)
+        s["service"]._guild_repository = None
+        with pytest.raises(QuestCreationException) as exc_info:
+            s["service"].issue_quest(command)
+        assert exc_info.value.error_code == "QUEST_ISSUER_NOT_AT_GUILD_LOCATION"
+
+    def _prepare_guild_issue(self, s, spot_id, coord):
         guild_id = s["guild_repo"].generate_guild_id()
-        location_area_id = LocationAreaId.create(1)
-        guild = GuildAggregate.create_guild(
-            guild_id=guild_id,
-            spot_id=SpotId.create(1),
-            location_area_id=location_area_id,
-            name="Test Guild",
-            description="",
-            creator_player_id=PlayerId(1),
+        s["guild_repo"].save(
+            GuildAggregate.create_guild(
+                guild_id=guild_id,
+                spot_id=SpotId(1),
+                location_area_id=LocationAreaId(1),
+                name="依頼所",
+                description="",
+                creator_player_id=PlayerId(1),
+            )
         )
-        s["guild_repo"].save(guild)
-
-        coord = Coordinate(0, 0, 0)
-        loc1 = LocationArea(
-            location_id=location_area_id,
-            area=PointArea(coord),
-            name="広場",
-            description="",
+        status = _create_player_status(
+            PlayerId(1),
+            gold_amount=200,
+            current_spot_id=SpotId(spot_id) if spot_id else None,
         )
-        loc2 = LocationArea(
-            location_id=LocationAreaId.create(2),
-            area=PointArea(coord),
-            name="市場",
-            description="",
-        )
-        phys_map = _make_physical_map_with_location_areas(1, [loc1, loc2])
-        s["phys_repo"].save(phys_map)
-
-        issuer_id = PlayerId(1)
-        s["status_repo"].save(
-            _create_player_status_at_location(issuer_id, spot_id=1, coord=coord)
-        )
-        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(issuer_id))
-
-        command = IssueQuestCommand(
+        s["status_repo"].save(status)
+        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(PlayerId(1)))
+        return s, IssueQuestCommand(
             objectives=[("kill_monster", 101, 2)],
-            reward_gold=0,
+            reward_gold=10,
             reward_exp=0,
             issuer_player_id=1,
             guild_id=guild_id.value,
         )
-        result = s["service"].issue_quest(command)
-        assert result.success is True
-        quest = s["quest_repo"].find_by_id(QuestId(result.data["quest_id"]))
-        assert quest.guild_id == guild_id.value

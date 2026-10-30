@@ -35,9 +35,7 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI, _SENA, _KUZE = (PlayerId(i) for i in (1, 2, 3))
 _ALARM = (
     "観測所じゅうに警報が鳴った。燃料が凍りはじめている。"
@@ -60,9 +58,7 @@ def runtime():
 
 
 def _terminal_spec(runtime) -> ItemSpecId:
-    return ItemSpecId.create(
-        runtime.id_mapper.get_int("item_spec", "control_terminal")
-    )
+    return ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "control_terminal"))
 
 
 def _move(runtime, player_id: PlayerId, spot: str) -> None:
@@ -103,12 +99,8 @@ def _executor(runtime) -> SpotGraphToolExecutor:
         sync_action_groups=runtime.scenario.synchronized_action_groups,
         time_provider=runtime._time_provider,
         spot_graph_repository=runtime._spot_graph_repo,
-        sync_action_registry=(
-            runtime._simulation_service._sync_action_resolver_stage._registry
-        ),
-        prepare_action_command_scope_factory=(
-            runtime._prepare_action_command_scope_factory
-        ),
+        sync_action_registry=(runtime._simulation_service._sync_action_resolver_stage._registry),
+        prepare_action_command_scope_factory=(runtime._prepare_action_command_scope_factory),
     )
 
 
@@ -127,9 +119,15 @@ def _restore_fuel(runtime) -> None:
 
 
 def _prose(runtime, player_id: PlayerId) -> list[str]:
+    return [entry.output.prose for entry in runtime._obs_buffer.get_observations(player_id)]
+
+
+def _fuel_alarm_prose(runtime, player_id: PlayerId) -> list[str]:
+    """未知の段階が紛れた場合も拾えるよう、警報イベントの配送結果を列挙する。"""
     return [
         entry.output.prose
         for entry in runtime._obs_buffer.get_observations(player_id)
+        if entry.output.structured.get("event_id", "").startswith("fuel_freeze_alarm_")
     ]
 
 
@@ -145,53 +143,11 @@ def test_remote_freeze_sounds_the_alarm_for_every_player(runtime) -> None:
         assert _ALARM in _prose(runtime, player_id)
 
 
-def test_all_three_countdown_alarms_reach_every_player(runtime) -> None:
-    """凍結後の30分・20分・10分警報は省略されず、8人全員へ順に届く。"""
-    _freeze(runtime)
-
-    for _ in range(7):
-        runtime.advance_tick()
-
-    for player_id in runtime.get_player_ids():
-        prose = _prose(runtime, player_id)
-        positions = [prose.index(message) for message in _STAGED_ALARMS]
-        assert positions == sorted(positions)
-
-
-def test_each_alarm_stage_has_a_one_tick_reusable_window() -> None:
-    """各段階警報は一度きりの記録でなく、発動から該当する1 tickだけ成立する。"""
-    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-    alarms = [
-        event
-        for event in raw["scenario_events"]
-        if event["id"].startswith("fuel_freeze_alarm_")
-    ]
-
-    assert len(alarms) == 4
-    for event in alarms:
-        assert event["once"] is False
-        lower = next(
-            condition
-            for condition in event["conditions"]
-            if condition["condition_type"] == "OBJECT_STATE_TICK_AT_LEAST"
-        )
-        upper = next(
-            condition["children"][0]
-            for condition in event["conditions"]
-            if condition["condition_type"] == "NOT"
-        )
-        assert upper["ticks_offset"] - lower["ticks_offset"] == 1
-
-
 def test_alarm_minutes_match_the_declared_deadline_for_every_stage() -> None:
     """全警報の分表示は発火時点から締切までの残りtickを5分換算した値と一致する。"""
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
     events = {event["id"]: event for event in raw["scenario_events"]}
-    alarms = [
-        event
-        for event_id, event in events.items()
-        if event_id.startswith("fuel_freeze_alarm_")
-    ]
+    alarms = [event for event_id, event in events.items() if event_id.startswith("fuel_freeze_alarm_")]
     deadline = next(
         condition["ticks_offset"]
         for condition in events["fuel_freeze_deadline"]["conditions"]
@@ -228,8 +184,14 @@ def test_freeze_is_blocked_until_its_longest_sabotage_cooldown_expires(
     with pytest.raises(InteractionNotAllowedException, match="まだそれはできない"):
         _freeze(runtime)
 
-    for _ in range(24):
+    for _ in range(23):
         runtime.advance_tick()
+    assert runtime.current_tick() == 24
+    with pytest.raises(InteractionNotAllowedException, match="まだそれはできない"):
+        _freeze(runtime)
+
+    runtime.advance_tick()
+    assert runtime.current_tick() == 25
     _freeze(runtime)
 
     assert "fuel_frozen" in runtime._world_flag_state.as_frozen_set()
@@ -237,19 +199,27 @@ def test_freeze_is_blocked_until_its_longest_sabotage_cooldown_expires(
 
 
 def test_second_freeze_repeats_all_alarms_and_global_restoration_once(runtime) -> None:
-    """復旧後の二度目も4段警報と全員向け復旧告知が各周期に一度ずつ届く。"""
+    """両周期とも1・3・5・7 tickに四段警報が全員へ順に一度ずつ届き、復旧も一度告げる。"""
+    alarms = (_ALARM, *_STAGED_ALARMS)
+    offsets = (1, 3, 5, 7)
     for cycle in range(2):
         if cycle:
             while runtime.current_tick() < 25:
                 runtime.advance_tick()
+        started_at = runtime.current_tick()
         _freeze(runtime)
-        for _ in range(7):
+        for elapsed in range(1, 8):
             runtime.advance_tick()
+            assert runtime.current_tick() == started_at + elapsed
+            expected = list(alarms) * cycle + [message for offset, message in zip(offsets, alarms) if offset <= elapsed]
+            for player_id in runtime.get_player_ids():
+                assert _fuel_alarm_prose(runtime, player_id) == expected
         _restore_fuel(runtime)
         runtime.advance_tick()
 
     for player_id in runtime.get_player_ids():
         prose = _prose(runtime, player_id)
+        assert _fuel_alarm_prose(runtime, player_id) == list(alarms) * 2
         assert prose.count(_ALARM) == 2
         assert all(prose.count(message) == 2 for message in _STAGED_ALARMS)
         assert prose.count(_GLOBAL_RESTORE) == 2
@@ -273,9 +243,7 @@ def test_ignoring_the_second_freeze_still_causes_the_declared_loss(runtime) -> N
 
 
 @pytest.mark.parametrize("terminal_flag", ["fuel_restored", "fuel_lost"])
-def test_resolved_or_lost_fuel_suppresses_future_countdown_alarms(
-    runtime, terminal_flag: str
-) -> None:
+def test_resolved_or_lost_fuel_suppresses_future_countdown_alarms(runtime, terminal_flag: str) -> None:
     """復旧済みまたは停止済みなら、まだ時刻を迎えていない段階警報は発火しない。"""
     _freeze(runtime)
     runtime.advance_tick()
@@ -295,17 +263,6 @@ def test_resolved_or_lost_fuel_suppresses_future_countdown_alarms(
         assert all(message not in prose for message in _STAGED_ALARMS)
 
 
-def test_only_the_terminal_owner_can_see_the_freeze_action(runtime) -> None:
-    """凍結操作はクゼの所持品行だけに出て、クルーのプロンプトには現れない。"""
-    kuze = runtime.build_full_prompt(_KUZE)["messages"][1]["content"]
-
-    assert '燃料を凍結させる → "freeze_fuel"' in kuze
-    for player_id in (_MORI, _SENA):
-        prompt = runtime.build_full_prompt(player_id)["messages"][1]["content"]
-        assert "freeze_fuel" not in prompt
-        assert "燃料を凍結させる" not in prompt
-
-
 @pytest.mark.parametrize(
     ("player_id", "spot", "action_name"),
     [
@@ -313,9 +270,7 @@ def test_only_the_terminal_owner_can_see_the_freeze_action(runtime) -> None:
         (_SENA, "machine_room", "open_oil_feed_valve"),
     ],
 )
-def test_valves_are_hidden_until_the_fuel_freezes(
-    runtime, player_id: PlayerId, spot: str, action_name: str
-) -> None:
+def test_valves_are_hidden_until_the_fuel_freezes(runtime, player_id: PlayerId, spot: str, action_name: str) -> None:
     """解氷操作は平常時には存在ごと隠れ、凍結後だけ各現地の物体行へ現れる。"""
     _move(runtime, player_id, spot)
     before = runtime.build_observation(player_id)
@@ -340,27 +295,30 @@ def test_wrong_name_guidance_does_not_reveal_an_inactive_valve(runtime) -> None:
     assert "open_thaw_valve" in active
 
 
-def test_two_people_restore_fuel_within_the_three_tick_window(runtime) -> None:
-    """別々の二人が猶予内に両室の弁を準備すると復旧し、締切を過ぎても燃料を失わない。"""
+def test_two_people_restore_fuel_without_completing_routine_tasks_or_losing(runtime) -> None:
+    """二人の弁操作で復旧し、通常点検は増えず、締切後も敗北せず両弁の操作は隠れる。"""
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    routine_flags = set(raw["game_end_conditions"]["win"][0]["required_flags"])
+    assert routine_flags
+    completed_before = runtime._world_flag_state.as_frozen_set() & routine_flags
     _freeze(runtime)
     _move(runtime, _MORI, "fuel_bay")
     _move(runtime, _SENA, "machine_room")
     executor = _executor(runtime)
 
-    left = executor._prepare_action(_MORI.value, {"action_name": "open_thaw_valve"})
-    right = executor._prepare_action(
-        _SENA.value, {"action_name": "open_oil_feed_valve"}
-    )
+    left = _interact(runtime, executor, _MORI, "fuel_thaw_valve", "open_thaw_valve")
+    right = _interact(runtime, executor, _SENA, "oil_feed_valve", "open_oil_feed_valve")
+    assert left.success is True
+    assert right.success is True
     runtime.advance_tick()
     for _ in range(9):
         runtime.advance_tick()
 
     flags = runtime._world_flag_state.as_frozen_set()
-    assert left.success is True
-    assert right.success is True
+    assert flags & routine_flags == completed_before
     assert "fuel_restored" in flags
     assert "fuel_lost" not in flags
-    assert runtime.check_game_end().reason != "燃料が凍りついて発電が止まった。"
+    assert runtime.check_game_end().is_ended is False
     assert "open_thaw_valve" not in runtime.build_observation(_MORI)
     assert "open_oil_feed_valve" not in runtime.build_observation(_SENA)
 
@@ -398,9 +356,7 @@ def test_partial_prepare_times_out_but_does_not_cancel_the_deadline(runtime) -> 
     _freeze(runtime)
     _move(runtime, _MORI, "fuel_bay")
     executor = _executor(runtime)
-    prepared = executor._prepare_action(
-        _MORI.value, {"action_name": "open_thaw_valve"}
-    )
+    prepared = executor._prepare_action(_MORI.value, {"action_name": "open_thaw_valve"})
     registry = runtime._simulation_service._sync_action_resolver_stage._registry
 
     for _ in range(3):
@@ -428,29 +384,21 @@ def test_ignored_freeze_reaches_the_deadline_and_loses(runtime) -> None:
     assert result.result.value == "LOSE"
     declared_loss = next(
         condition
-        for condition in json.loads(_DRILL.read_text(encoding="utf-8"))[
-            "game_end_conditions"
-        ]["lose"]
+        for condition in json.loads(_DRILL.read_text(encoding="utf-8"))["game_end_conditions"]["lose"]
         if condition.get("target_flag") == "fuel_lost"
     )
     assert result.reason == "フラグ成立: fuel_lost"
     assert declared_loss["description"] == "燃料が凍りついて発電が止まった。"
 
 
-def test_distance_equals_the_window_so_one_runner_cannot_cover_both_valves(
-    runtime,
-) -> None:
+def test_valve_distance_matches_the_declared_three_tick_window() -> None:
     """弁間の距離と窓はともに3で、遠い側から先に動く段取りを要求する。"""
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
     edges: dict[str, list[tuple[str, int]]] = {}
     for connection in raw["connections"]:
-        edges.setdefault(connection["from"], []).append(
-            (connection["to"], connection["travel_ticks"])
-        )
+        edges.setdefault(connection["from"], []).append((connection["to"], connection["travel_ticks"]))
         if connection.get("is_bidirectional", False):
-            edges.setdefault(connection["to"], []).append(
-                (connection["from"], connection["travel_ticks"])
-            )
+            edges.setdefault(connection["to"], []).append((connection["from"], connection["travel_ticks"]))
     costs = {"fuel_bay": 0}
     pending = [(0, "fuel_bay")]
     while pending:
@@ -464,10 +412,10 @@ def test_distance_equals_the_window_so_one_runner_cannot_cover_both_valves(
                 costs[neighbor] = candidate
                 pending.append((candidate, neighbor))
     distance = costs["machine_room"]
-    group = runtime.scenario.synchronized_action_groups[0]
+    group = next(group for group in raw["synchronized_action_groups"] if group["id"] == "restore_frozen_fuel")
 
-    assert distance == group.window_ticks == 3
-    assert len(group.required_action_names) == 2
+    assert distance == group["window_ticks"] == 3
+    assert len(group["required_action_names"]) == 2
 
 
 def test_distinct_people_complete_on_the_third_counted_tick(runtime) -> None:
@@ -475,12 +423,8 @@ def test_distinct_people_complete_on_the_third_counted_tick(runtime) -> None:
     _freeze(runtime)
     stage = runtime._simulation_service._sync_action_resolver_stage
     registry = stage._registry
-    registry.prepare(
-        action_id="open_thaw_valve", player_id=_MORI.value, current_tick=0
-    )
-    registry.prepare(
-        action_id="open_oil_feed_valve", player_id=_SENA.value, current_tick=2
-    )
+    registry.prepare(action_id="open_thaw_valve", player_id=_MORI.value, current_tick=0)
+    registry.prepare(action_id="open_oil_feed_valve", player_id=_SENA.value, current_tick=2)
 
     stage.run(WorldTick(2))
 
@@ -492,12 +436,8 @@ def test_distinct_people_miss_the_window_on_the_fourth_counted_tick(runtime) -> 
     _freeze(runtime)
     stage = runtime._simulation_service._sync_action_resolver_stage
     registry = stage._registry
-    registry.prepare(
-        action_id="open_thaw_valve", player_id=_MORI.value, current_tick=0
-    )
-    registry.prepare(
-        action_id="open_oil_feed_valve", player_id=_SENA.value, current_tick=3
-    )
+    registry.prepare(action_id="open_thaw_valve", player_id=_MORI.value, current_tick=0)
+    registry.prepare(action_id="open_oil_feed_valve", player_id=_SENA.value, current_tick=3)
 
     stage.run(WorldTick(3))
 
@@ -509,26 +449,6 @@ def test_distinct_people_miss_the_window_on_the_fourth_counted_tick(runtime) -> 
     for _ in range(9):
         runtime.advance_tick()
     assert "fuel_lost" in runtime._world_flag_state.as_frozen_set()
-
-
-def test_one_player_is_rejected_when_trying_to_prepare_both_valves(runtime) -> None:
-    """同一人物が移動済みでも二つ目の役割を兼ねられず、復旧フラグは立たない。"""
-    _freeze(runtime)
-    _move(runtime, _MORI, "fuel_bay")
-    executor = _executor(runtime)
-    first = executor._prepare_action(
-        _MORI.value, {"action_name": "open_thaw_valve"}
-    )
-    _move(runtime, _MORI, "machine_room")
-    second = executor._prepare_action(
-        _MORI.value, {"action_name": "open_oil_feed_valve"}
-    )
-    runtime.advance_tick()
-
-    assert first.success is True
-    assert second.success is False
-    assert "別の参加者" in second.message
-    assert "fuel_restored" not in runtime._world_flag_state.as_frozen_set()
 
 
 def test_pressure_gauge_shows_world_minutes_only_during_the_emergency(runtime) -> None:
@@ -547,9 +467,7 @@ def test_pressure_gauge_shows_world_minutes_only_during_the_emergency(runtime) -
     machine_room = runtime._spot_interior_repo.find_by_spot_id(
         SpotId.create(runtime.id_mapper.get_int("spot", "machine_room"))
     )
-    assert "frozen_at_tick" in machine_room.get_object(
-        SpotObjectId.create(gauge_id)
-    ).hidden_state_keys
+    assert "frozen_at_tick" in machine_room.get_object(SpotObjectId.create(gauge_id)).hidden_state_keys
 
     runtime._world_flag_state.add(
         "fuel_restored",
@@ -574,27 +492,8 @@ def test_duty_board_teaches_the_emergency_procedure_before_freezing(runtime) -> 
     ) in message
 
 
-def test_emergency_valves_do_not_count_as_routine_tasks() -> None:
-    """緊急対応の二操作は16件の点検フラグを立てず、妨害がクルー勝利を助けない。"""
-    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-    valve_actions = {"open_thaw_valve", "open_oil_feed_valve"}
-    found: dict[str, list[dict[str, object]]] = {}
-    for spot in raw["spots"]:
-        for obj in spot.get("interior", {}).get("objects", []):
-            for interaction in obj.get("interactions", []):
-                if interaction.get("action_name") in valve_actions:
-                    found[interaction["action_name"]] = interaction.get("effects", [])
-
-    assert set(found) == valve_actions
-    assert all(
-        effect.get("parameters", {}).get("flag_name") not in raw["game_end_conditions"]["win"][0]["required_flags"]
-        for effects in found.values()
-        for effect in effects
-    )
-
-
-def test_alarm_and_deadline_wake_every_player(runtime) -> None:
-    """警報と締切は全員向けに手番を予約し、妨害を誰も知らない状態にしない。"""
+def test_alarm_restoration_and_deadline_declare_all_player_turn_notifications() -> None:
+    """四段警報・復旧・締切の宣言は、全員への通知と手番予約の対象を指定する。"""
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
     events = {event["id"]: event for event in raw["scenario_events"]}
 

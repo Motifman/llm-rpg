@@ -7,6 +7,10 @@
 > 位置づけ: [unified_memory_phase3_implementation_plan.md](./unified_memory_phase3_implementation_plan.md)
 > §保留 が「単調ループが R1 で再現したら設計へ」とした条件が r1_003 で発火したことへの応答。
 > ステータス: **案1 はユーザーと合意済み (2026-07-18)。案2 は併走案でレビュー中。**
+>
+> 本文が現役として書いている G4 の清算 (`goal_outcome`) と G2 の `goal_update` は、目的の見直し (`GOAL_REVISION_ENABLED`) として、記憶の部品の撤去 (#1631) の #1664 で消した。
+> 案1 と案2 が読む目的の振り返り (`GOAL_REFLECT_ENABLED`、固着パスの reflect) も、#1679 で消した。
+> 目的の保存先 (`GOAL_STORE_ENABLED`) も #1686 で消した。
 
 ## 1. 問題 — 効用勾配の不在の再現
 
@@ -74,6 +78,8 @@ reflect は設計上わざと弱い。プロンプト指示 (`belief_consolidati
 
 ## 3. 案1 (中核・合意済み) — 目的に自動の鼓動誤差を与える
 
+> 案1 (`GOAL_STAGNATION_EVIDENCE_ENABLED`。停滞の振り返りを `goal:` 軸の信念の証拠にする部品) は、記憶の部品の撤去 (#1631) の #1663 で消した。
+
 現状の G4 は自己申告清算 (`goal_outcome`) だが、
 [goal_layer_design_active_inference.md](./goal_layer_design_active_inference.md) §2/§4.4 の
 原案は「**目的を選好的 pending prediction として保持し、期限で自動清算**」だった。これを起動する。
@@ -96,6 +102,8 @@ reflect は設計上わざと弱い。プロンプト指示 (`belief_consolidati
 自発依存) に頼らないので、快適なループでも確実に鳴る。
 
 ## 4. 案2 (併走・レビュー中) — 蓄積する停滞感
+
+> 案2 の停滞感 (`STAGNATION_PRESSURE_ENABLED`。数え方、snapshot、本人と他者への表示) は、記憶の部品の撤去 (#1631) の #1661 で消した。
 
 案1 は無意識・客観・遅い経路 (belief を直す)。それだけでは、行動ターンの LLM が
 **その瞬間に**ギャップを感じる仕組みがない。案2 は意識・主観・速い経路を足す。
@@ -345,6 +353,8 @@ DeepSeek v4 flash、llm_call=436、outcome=TIMEOUT)。比較ベースライン�
   明記するかは D1 で観測可能になってから判断する
 
 ## 12. 案A (band-gated thinking) — inner_thought 後付け問題への構造的対処 (2026-07-19)
+
+> 案A (`STAGNATION_REASONING_ENABLED`) は、記憶の部品の撤去 (#1631) の #1659 で消した。
 
 検証 run が示した核心「表出しても行動が変わらない」の構造的原因は、**inner_thought が
 tool_call 確定後に生成される後付け**だったこと (応答は tool_choice="required" の tool-calling で、

@@ -40,10 +40,7 @@ class PendingFoodSpoilageSubsystemCodec(WorldSubsystemCodec):
                     "spec_name": entry.get("spec_name"),
                     # 同一 item spec 内は腐敗検出順を保つ。観測文の count は同じでも、
                     # trace 上の item_instance_ids は runtime が積んだ順序に揃える。
-                    "instance_ids": [
-                        int(instance_id)
-                        for instance_id in entry.get("instance_ids", [])
-                    ],
+                    "instance_ids": [int(instance_id) for instance_id in entry.get("instance_ids", [])],
                 }
             )
         entries.sort(key=lambda e: e["spec_id"])
@@ -56,10 +53,7 @@ class PendingFoodSpoilageSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         pending_day = data.get("pending_day")
         restored: dict[int, dict[str, Any]] = {}
         for raw_entry in data.get("entries", []):
@@ -68,14 +62,10 @@ class PendingFoodSpoilageSubsystemCodec(WorldSubsystemCodec):
             restored[spec_id] = {
                 "spec_id": spec_id,
                 "spec_name": entry.get("spec_name"),
-                "instance_ids": [
-                    int(instance_id) for instance_id in entry.get("instance_ids", [])
-                ],
+                "instance_ids": [int(instance_id) for instance_id in entry.get("instance_ids", [])],
             }
         runtime._pending_spoiled = restored
-        runtime._pending_spoiled_day = (
-            None if pending_day is None else int(pending_day)
-        )
+        runtime._pending_spoiled_day = None if pending_day is None else int(pending_day)
 
 
 __all__ = [

@@ -114,9 +114,7 @@ class TestTheAuthorsMessageIsSurfacedVerbatim:
 
         generic な失敗に潰さない、という #25 の成果はそのまま保つ。
         """
-        result = _executor()._precondition_failure_result(
-            _object_state_failure("近くの蔓は採り尽くした。")
-        )
+        result = _executor()._precondition_failure_result(_object_state_failure("近くの蔓は採り尽くした。"))
 
         assert "近くの蔓は採り尽くした。" in result.message
 
@@ -126,9 +124,7 @@ class TestTheAuthorsMessageIsSurfacedVerbatim:
         実 run 最多 (679 件) のコードなので、分割すると過去 run との比較が切れる。
         区分は `trace_payload` で測る。
         """
-        result = _executor()._precondition_failure_result(
-            _object_state_failure("近くの蔓は採り尽くした。")
-        )
+        result = _executor()._precondition_failure_result(_object_state_failure("近くの蔓は採り尽くした。"))
 
         assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
 
@@ -146,20 +142,14 @@ class TestTheAdviceComesFromTheDeclarationNotTheWording:
             _object_state_failure("ここの枯れ葉はもう集めた。風がまた運んでくる。")
         )
 
-        assert result.remediation == REMEDIATION_BY_KIND[
-            PreconditionFailureKind.TIME_RECOVERING
-        ]
+        assert result.remediation == REMEDIATION_BY_KIND[PreconditionFailureKind.TIME_RECOVERING]
         assert "待" in result.remediation
 
     def test_an_object_with_no_binding_is_told_to_move_on(self) -> None:
         """戻す宣言が無ければ「別の対象へ」と伝える。"""
-        result = _executor()._precondition_failure_result(
-            _object_state_failure("ここの漂着物は調べ尽くした。")
-        )
+        result = _executor()._precondition_failure_result(_object_state_failure("ここの漂着物は調べ尽くした。"))
 
-        assert result.remediation == REMEDIATION_BY_KIND[
-            PreconditionFailureKind.PERMANENT
-        ]
+        assert result.remediation == REMEDIATION_BY_KIND[PreconditionFailureKind.PERMANENT]
 
     def test_the_same_wording_gets_different_advice_by_declaration(self) -> None:
         """**同じ文でも、宣言が違えば助言が変わる。**
@@ -169,12 +159,8 @@ class TestTheAdviceComesFromTheDeclarationNotTheWording:
         """
         message = "もう採り尽くした。"
 
-        waiting = _executor(bindings=(_time_binding(),))._precondition_failure_result(
-            _object_state_failure(message)
-        )
-        permanent = _executor()._precondition_failure_result(
-            _object_state_failure(message)
-        )
+        waiting = _executor(bindings=(_time_binding(),))._precondition_failure_result(_object_state_failure(message))
+        permanent = _executor()._precondition_failure_result(_object_state_failure(message))
 
         assert waiting.remediation != permanent.remediation
 
@@ -185,9 +171,7 @@ class TestTheAdviceComesFromTheDeclarationNotTheWording:
         その結合を知らない。宣言が同じなら助言は同じでなければならない。
         """
         binding = (_time_binding(),)
-        a = _executor(bindings=binding)._precondition_failure_result(
-            _object_state_failure("採り尽くした。")
-        )
+        a = _executor(bindings=binding)._precondition_failure_result(_object_state_failure("採り尽くした。"))
         b = _executor(bindings=binding)._precondition_failure_result(
             _object_state_failure("ここの枯れ葉はもう集めた。")
         )
@@ -198,16 +182,12 @@ class TestTheAdviceComesFromTheDeclarationNotTheWording:
         """持ち物などの前提不足は「揃えてから」と伝える。"""
         exc = InteractionNotAllowedException(
             "松明を持っていない。",
-            failed_condition=InteractionCondition(
-                condition_type=InteractionConditionTypeEnum.HAS_ITEM
-            ),
+            failed_condition=InteractionCondition(condition_type=InteractionConditionTypeEnum.HAS_ITEM),
         )
 
         result = _executor()._precondition_failure_result(exc)
 
-        assert result.remediation == REMEDIATION_BY_KIND[
-            PreconditionFailureKind.MISSING_PREREQUISITE
-        ]
+        assert result.remediation == REMEDIATION_BY_KIND[PreconditionFailureKind.MISSING_PREREQUISITE]
 
 
 class TestTheKindIsMeasurableFromTraces:

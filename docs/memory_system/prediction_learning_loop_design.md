@@ -281,4 +281,4 @@ expected:
 - Issue #526 — 構造的不在 #3
 - PR #533 — `docs/agent_design_principles.md` (原則 #3 / #4)
 - PR #521 — `docs/memory_system/perception_memory_join_design.md`
-- `docs/memory_module_implementation_plan.md` — 予測誤差最小化 / 予測志向検索
+- `docs/memory_module_implementation_plan.md` (#1631 で削除) — 予測誤差最小化 / 予測志向検索

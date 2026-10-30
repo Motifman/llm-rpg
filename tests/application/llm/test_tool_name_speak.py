@@ -25,14 +25,10 @@ class TestSpeakToolName:
     def test_tool_name_speech_value_speak(self) -> None:
         """``TOOL_NAME_SPEECH`` (歴史的名残の Python 定数) の値は ``"speak"``。
         LLM に露出する tool name はこの値で決まる。"""
-        assert TOOL_NAME_SPEECH == "speak", (
-            "PR-DD: 発話 tool 名を speech_speak → speak に短縮する"
-        )
+        assert TOOL_NAME_SPEECH == "speak", "PR-DD: 発話 tool 名を speech_speak → speak に短縮する"
 
     def test_speech_tool_prefix(self) -> None:
         """``speech_`` などの冗長 prefix が含まれない (spot_graph_ prefix 廃止と
         同方針)。"""
-        assert not TOOL_NAME_SPEECH.startswith("speech_"), (
-            "冗長 prefix (speech_) を除去する"
-        )
+        assert not TOOL_NAME_SPEECH.startswith("speech_"), "冗長 prefix (speech_) を除去する"
         assert not TOOL_NAME_SPEECH.startswith("spot_graph_")

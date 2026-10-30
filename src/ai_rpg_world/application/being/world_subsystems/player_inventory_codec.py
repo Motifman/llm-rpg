@@ -37,10 +37,7 @@ class PlayerInventorySubsystemCodec(WorldSubsystemCodec):
     def capture(self, runtime: Any) -> dict[str, Any]:
         repo = getattr(runtime, "_player_inventory_repo", None)
         if repo is None:
-            raise RuntimeError(
-                "runtime._player_inventory_repo not found; "
-                "PlayerInventorySubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._player_inventory_repo not found; PlayerInventorySubsystemCodec requires it")
         entries: list[dict[str, Any]] = []
         for pid in runtime.get_player_ids():
             inv = repo.find_by_id(pid)
@@ -52,9 +49,7 @@ class PlayerInventorySubsystemCodec(WorldSubsystemCodec):
                 inv_slot_list.append(
                     {
                         "slot_id": int(slot_id.value),
-                        "item_instance_id": (
-                            int(item_id.value) if item_id is not None else None
-                        ),
+                        "item_instance_id": (int(item_id.value) if item_id is not None else None),
                     }
                 )
             # equipment_slots: EquipmentSlotType -> ItemInstanceId | None
@@ -63,9 +58,7 @@ class PlayerInventorySubsystemCodec(WorldSubsystemCodec):
                 eq_slot_list.append(
                     {
                         "equipment_slot_type": eq_type.value,  # str (Enum)
-                        "item_instance_id": (
-                            int(item_id.value) if item_id is not None else None
-                        ),
+                        "item_instance_id": (int(item_id.value) if item_id is not None else None),
                     }
                 )
             reserved_ids = [int(i.value) for i in inv._reserved_item_ids]
@@ -86,10 +79,7 @@ class PlayerInventorySubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         from ai_rpg_world.domain.item.value_object.item_instance_id import (
             ItemInstanceId,
         )
@@ -104,10 +94,7 @@ class PlayerInventorySubsystemCodec(WorldSubsystemCodec):
 
         repo = getattr(runtime, "_player_inventory_repo", None)
         if repo is None:
-            raise RuntimeError(
-                "runtime._player_inventory_repo not found; "
-                "PlayerInventorySubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._player_inventory_repo not found; PlayerInventorySubsystemCodec requires it")
         for entry in data.get("entries", []):
             pid = PlayerId(int(entry["player_id"]))
             max_slots = int(entry["max_slots"])
@@ -116,25 +103,14 @@ class PlayerInventorySubsystemCodec(WorldSubsystemCodec):
             for s in entry.get("inventory_slots", []):
                 slot_id = SlotId(int(s["slot_id"]))
                 item_raw = s.get("item_instance_id")
-                inv_slots[slot_id] = (
-                    ItemInstanceId(int(item_raw))
-                    if item_raw is not None
-                    else None
-                )
+                inv_slots[slot_id] = ItemInstanceId(int(item_raw)) if item_raw is not None else None
             # equipment_slots
             eq_slots: dict[EquipmentSlotType, Any] = {}
             for s in entry.get("equipment_slots", []):
                 eq_type = EquipmentSlotType(str(s["equipment_slot_type"]))
                 item_raw = s.get("item_instance_id")
-                eq_slots[eq_type] = (
-                    ItemInstanceId(int(item_raw))
-                    if item_raw is not None
-                    else None
-                )
-            reserved = set(
-                ItemInstanceId(int(i))
-                for i in entry.get("reserved_item_ids", [])
-            )
+                eq_slots[eq_type] = ItemInstanceId(int(item_raw)) if item_raw is not None else None
+            reserved = set(ItemInstanceId(int(i)) for i in entry.get("reserved_item_ids", []))
             # restore_from_data は AggregateRoot の super().__init__ を呼ぶので
             # 内部 _events は空で始まる。
             new_inv = PlayerInventoryAggregate.restore_from_data(

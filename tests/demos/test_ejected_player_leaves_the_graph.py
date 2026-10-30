@@ -31,9 +31,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI, _SENA, _KUZE, _AOI = (PlayerId(i) for i in (1, 2, 3, 4))
 
@@ -91,9 +89,7 @@ class TestEjectionRemovesThePlayer:
 
         runtime.eject_player(_KUZE)
 
-        assert runtime._player_outcome_registry.get_outcome(_KUZE) is (
-            PlayerOutcomeEnum.EJECTED
-        )
+        assert runtime._player_outcome_registry.get_outcome(_KUZE) is (PlayerOutcomeEnum.EJECTED)
 
 
 class TestAKilledBodyStays:
@@ -134,10 +130,7 @@ class TestMeetingsSkipTheEjected:
         assert runtime.call_emergency_meeting(_AOI).success
 
         graph = runtime._spot_graph_repo.find_graph()
-        gathered = {
-            int(graph.get_entity_spot(EntityId.create(int(p))))
-            for p in (_MORI, _SENA, _AOI)
-        }
+        gathered = {int(graph.get_entity_spot(EntityId.create(int(p)))) for p in (_MORI, _SENA, _AOI)}
         assert len(gathered) == 1
 
     def test_the_ejected_player_is_not_brought_back(self, runtime) -> None:

@@ -25,6 +25,7 @@ class TraceEventKind:
     残すため (JSONL なので緩く)。よく使う既知値だけここに集める。
     """
 
+    ASYNC_EVENT_DELIVERY_FAILED = "async_event_delivery_failed"
     RUN_START = "run_start"
     RUN_END = "run_end"
     TICK_START = "tick_start"
@@ -32,9 +33,13 @@ class TraceEventKind:
     OBSERVATION = "observation"
     ACTION = "action"
     ACTION_RESULT = "action_result"
-    MEMO_ADD = "memo_add"
-    MEMO_DONE = "memo_done"
     MEMO_HINT = "memo_hint"
+    # #1628: 環境の tool の引数 memo を読んだ 1 回。引数を書かなかった呼び出しでは出さない。
+    # payload: being_id / turn / tool / environment_name /
+    #   applied: list[{index, do, handle, kind, text, provenance}] (消した操作は消したメモ) /
+    #   rejected: list[{index, reason, raw, detail}] (形が崩れた操作と、メモ帳が受け付けなかった操作) /
+    #   skipped_reason: "no_acting_being" | "writing_failed" | None / error
+    BEING_MEMO = "being_memo"
     # #1319: 型付きの判断 (Noul / Choice / Score) を引いた 1 件。
     # payload: question / original / chosen / probability / confidence /
     # min_confidence / accepted / latency_ms / source / unavailable_reason。
@@ -43,16 +48,30 @@ class TraceEventKind:
     # OFF の run と全件 fallback の run が trace で見分けられず、閾値を動かす
     # 判断ができない。
     TYPED_JUDGMENT = "typed_judgment"
+    # #1641: 人を対象にした操作の引数 item を、正式な名前どおりでなく相手の所持品へ
+    # 当てようとした 1 件。正式な名前で当たったときは出さない。
+    # payload: action_name / target_player_id / written /
+    #   outcome: "resolved" | "ambiguous" | "absent" | "unrecognized" /
+    #   method: "exact" | "partial" | "judgment" | "official_name_of_other_item" |
+    #   "nothing_held" | "no_judge" (後ろの 3 つは absent と言い切った理由) /
+    #   resolved_name / matched_names /
+    #   rescue_wired (意味の判断が配線されていたか) /
+    #   judgment: {chosen, probability, confidence, min_confidence, accepted, latency_ms,
+    #   source, unavailable_reason} | None
+    ITEM_NAME_RESOLUTION = "item_name_resolution"
     # Issue #240 後続: 同一 (tool, fingerprint) の連打を loop guard が検知し
     # 警告観測を注入したタイミング。trace で wait spam の抑制動作を可視化する。
     # payload: tool_name / argument_fingerprint / consecutive_count
     LOOP_GUARD_WARNING = "loop_guard_warning"
-    SCENE = "scene"
     NOTE = "note"
     # Phase 1d viewer: プレイヤーがスポット間を移動した瞬間。空間アニメーション
     # 描画に使う。payload は ``from_spot_id`` / ``to_spot_id`` / ``spot_name`` /
     # ``player_name`` を持つ (run の最初の初期配置は from_spot_id=None で emit)。
     POSITION_CHANGE = "position_change"
+    # 予約の後に区間が閉じ、その手前で移動を取りやめた (#1559)。payload は
+    # connection_id / connection_name / passage_kind / passage_state / reason /
+    # condition_message と、区間の両端と最終の行き先の spot id と名前。
+    TRAVEL_BLOCKED = "travel_blocked"
     # 経済統合 Phase 3: 市場の掲示板の上で起きたこと。出品・値の付け直し・
     # 約定・取り下げ・期限切れを 1 つの kind にまとめ、payload の ``kind`` で
     # 分ける。**品目ごとの (tick, 単価) の並びを 1 種類の行から組み立てられる**
@@ -70,29 +89,6 @@ class TraceEventKind:
     # cumulative_meeting_ticks も持つ。
     MEETING_STARTED = "meeting_started"
     MEETING_ENDED = "meeting_ended"
-    # Issue #283 後続: episodic memory pipeline の可視化。
-    # EPISODIC_CHUNK_WRITTEN: ``EpisodicChunkCoordinator`` が境界を閉じて
-    # SubjectiveEpisode を 1 件 store に書いた瞬間。
-    # payload: episode_id / boundary_reason / cues (canonical list) /
-    # recall_text_snippet / action_count / observation_count
-    EPISODIC_CHUNK_WRITTEN = "episodic_chunk_written"
-    # EPISODIC_RECALL: ``DefaultPromptBuilder._run_passive_recall`` が
-    # passive recall を実行した瞬間。
-    # payload: situation_cues (canonical list) / candidate_count /
-    # candidates (episode_id / source_axes / recall_text_snippet)
-    EPISODIC_RECALL = "episodic_recall"
-    # Issue #295 後続 (PR #309): episodic subjective LLM 補完を非同期で実行する
-    # スケジューラ (``ThreadPoolEpisodicSubjectiveScheduler`` 等) が、
-    # LLM 呼び出しを完了して store に「リッチ化された」episode を上書きした瞬間。
-    # payload: episode_id / latency_ms / recall_text_snippet
-    EPISODIC_SUBJECTIVE_FILLED = "episodic_subjective_filled"
-    # スケジューラが LLM 呼び出しを試みたが失敗 (LLM API エラー / parse 失敗 等)
-    # → draft (= テンプレ既定値) のまま store に残った瞬間。
-    # payload: episode_id / error_code (LLM_API_CALL_FAILED 等)
-    EPISODIC_SUBJECTIVE_FAILED = "episodic_subjective_failed"
-    # キュー満杯で enqueue を諦めた瞬間 (back-pressure)。
-    # payload: episode_id / queue_size / max_queue_size
-    EPISODIC_SUBJECTIVE_DROPPED = "episodic_subjective_dropped"
     # LLM 性能メトリクス (実験 #356 後続): Phase A の LLM 呼び出し 1 件分の
     # 壁時計 latency / token usage / TPS を記録する。
     # payload: model / wall_latency_ms / prompt_tokens / completion_tokens /
@@ -100,10 +96,26 @@ class TraceEventKind:
     # ``cost_usd`` は OpenRouter 経由時のみ provider 宣告値が乗る (直結 / vLLM では 0.0)。
     # τ_sim の設定根拠データ + scenario ごとの cost 評価に使う。
     LLM_CALL = "llm_call"
+    # 行動を決める呼び出し以外の LLM 呼び出し 1 回ぶん (#1617)。記憶の部品と Jev。
+    # llm_call と分けるのは、行動の費用と混ぜず、連続失敗の監視にも数えないため。
+    # payload: component (AuxLlmComponent の値) / model / wall_latency_ms /
+    # success / error_code / prompt_tokens / completion_tokens / cached_tokens /
+    # cost_usd / question_names (Jev の問いの名前)。
+    # 応答に無かった値は null。とくに Jev の cost_usd は null で「取れない」を表す。
+    AUX_LLM_CALL = "aux_llm_call"
+    # aux_llm_call を書けなかった。payload: component / error_type。
+    AUX_LLM_CALL_RECORD_FAILED = "aux_llm_call_record_failed"
+    # #1595: 呼び出しが失敗した (時間切れを含む) 手番を、次の tick に回したか。
+    # 失敗のたびに 1 件。上限に達して回さなかった失敗は rescheduled=False で残る。
+    # payload: consecutive_failures / max_consecutive_failures / rescheduled / error_code
+    LLM_FAILURE_RETRY = "llm_failure_retry"
+    # #1597: 成功した自分の行動のあと、次の tick に手番を回したか。成功した手番ごとに 1 件。
+    # payload: rescheduled / reason (succeeded / rest_chosen / traveling / cannot_act)
+    OWN_ACTION_FOLLOW_UP = "own_action_follow_up"
     # prompt section の文字数内訳 (実験 #356 後続: prefix cache 分析用)。
     # prompt_builder.build() が messages / tools を組み上げた直後に 1 件記録する。
-    # payload: system_chars / objective_chars / current_state_chars / memos_chars /
-    # prediction_feedback_chars / recent_events_chars / recall_chars / inventory_chars /
+    # payload: system_chars / objective_chars / known_people_chars / current_state_chars / memos_chars /
+    # recent_events_chars / inventory_chars /
     # instruction_chars / tools_chars / messages_total_chars
     # token 数ではなく char 数で出す: 軽量 / モデル非依存 / deterministic。
     # 分析側で同 turn の prompt_tokens 比に換算する (≒ token 内訳)。
@@ -113,14 +125,6 @@ class TraceEventKind:
     # 落とすが、run 中の状態変化で発見した場合は実験データを守るため
     # trace に残して続行する。payload: violation_count / violations[]。
     PROMPT_ARGUMENT_CONTRACT_VIOLATION = "prompt_argument_contract_violation"
-    # Phase 1c: semantic memory passive top-K の発火結果。prompt build 時に
-    # ``SemanticPassiveRecallService.retrieve`` が走ったタイミングで 1 件記録。
-    # payload: situation_cues / top_k / candidate_count / candidates[].entry_id /
-    # candidates[].score / .recency / .importance / .relevance / .text_snippet /
-    # .tags / .importance_score
-    # 検証中は top_k=0 (default) で発火しない。SEMANTIC_PASSIVE_TOP_K env で
-    # 明示的に有効化したときだけ trace に出る。
-    SEMANTIC_PASSIVE_RECALL = "semantic_passive_recall"
     # Phase 2.1: 短期記憶 L4 生成タスクが scheduler でキュー満杯 / shutdown 後に
     # drop された瞬間。payload: reason / queue_size / max_queue_size。
     # silent failure 防止のため、drop は trace + warning で必ず可観測化する。
@@ -137,17 +141,12 @@ class TraceEventKind:
     # 「rolling が何を圧縮して覚えていたか」が事後追えなかった (実験 #30 前準備で
     # ギャップとして発覚)。
     # payload: summary_id / raw_count / compressed_activity / emotional_summary /
-    # unresolved / is_fallback
+    # is_fallback
     SHORT_TERM_SUMMARY_GENERATED = "short_term_summary_generated"
     # 短期記憶のターン窓が古いターン群を畳んだ瞬間。summary 生成の成否とは
     # 別に、圧縮自体の発火を測る。payload: completed_turn_count_before / after /
     # entry_count_before / after / compacted_turn_count。
     SHORT_TERM_MEMORY_COMPACTED = "short_term_memory_compacted"
-    # PR #435: L5 long summary が install された瞬間 (LLM 成功 / template fallback
-    # / previous_l5 延命を含む)。Phase 3 で生成される self_image / world_view を
-    # 後から振り返るための trace。生成タイミング + 内容を 1 件で残す。
-    # payload: summary_id / generation_index / self_image / world_view / is_fallback
-    SHORT_TERM_LONG_SUMMARY_GENERATED = "short_term_long_summary_generated"
     # Phase 7 (Issue #470): Being snapshot save / load。run が前回 snapshot
     # からの続きか・どの player の memory が今 run の trace に乗っているかを
     # post-hoc 分析できるようにする。silent failure 防止用に **必ず** trace に
@@ -155,15 +154,87 @@ class TraceEventKind:
     # SNAPSHOT_LOAD payload:
     #   - directory: str (= --snapshot-load-dir)
     #   - restored_count: int (= 成功した Being 数)
+    #   - memory_turns: list[{being_id, memory_turn}] (= 復元した Being ごとの
+    #     記憶のターン数)
     #   - source_scenario: str | None (= snapshot 内に書かれていた元シナリオ名。
     #     現 scenario と異なる場合は cross-scenario transfer)
+    #   - removed_memory_keys: list[{being_id, counts: {キー: 件数}}] (= 消した
+    #     部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない)
     # SNAPSHOT_SAVE payload:
     #   - directory: str (= --snapshot-save-dir)
     #   - succeeded_count: int
     #   - failed_count: int
     #   - failures: list[{being_id, error}]
+    #   - memory_turns: SNAPSHOT_LOAD と同じ形。保存できた Being ごと
     SNAPSHOT_LOAD = "snapshot_load"
+    # 名前を知らずに会った相手の名前を知った (#1581)。payload: learned_name /
+    # appearance (それまでの呼び方) / how (「名乗り」か「呼びかけ」)。
+    NAME_LEARNED = "name_learned"
+    # 目次つきのエピソードを書き起こした (#1626)。1 回の書き起こしごとに 1 件。
+    # payload: being_id / trigger (compaction か leaving) / event_count /
+    # outcome (written / failed / skipped) / episode_count / dropped_count /
+    # written_turn / environment_name / episodes: list[{handle, summary,
+    # recall_when, body_length, truncated: {鍵: 切り詰める前の長さ}}] /
+    # 失敗なら error_type と error、飛ばしたなら skip_reason。
+    EPISODE_WRITING = "episode_writing"
+    # 今の短期記憶に入った出来事を、Being 側の短期記憶へ写さなかった (#1824、design_decisions D1824-7)。
+    # 写さなかった 1 件ごとに 1 件。payload: being_id / source (observation / action_result /
+    # move) / reason (being_inner_record / empty_body / missing_time_label / unpaired_result /
+    # memory_rule / contract_violation / unexpected_error) / event_kind (観測の種類か道具の名前。無ければ None)。
+    # unexpected_error なら error_type も持つ。
+    BEING_SHORT_TERM_MEMORY_NOT_COPIED = "being_short_term_memory_not_copied"
+    # 今の【直近の出来事】と、Being の短期記憶から作った文が違った (#1824、design_decisions D1824-10)。
+    # プロンプトは今の文のまま。プロンプトを組むたびに比べ、違ったときだけ 1 件。
+    # payload: being_id / mismatch_kind (different / public_sns_projection)。
+    # public_sns_projection は比べなかった印で Being ごとに 1 回だけ。different は compared_as
+    # (whole = 全体が同じか / subsequence = 今の短期記憶が畳んだあとで、今の文の行が同じ順で Being の文に
+    # 含まれるか) / line_index (今の文で最初に違った出来事の位置。出来事は「- 」で始まる行と続き行の塊) /
+    # current_line / being_line (whole のときの、同じ位置の Being の側の出来事。無ければ None) /
+    # current_line_count / being_line_count (出来事の数) も持つ。
+    RECENT_EVENTS_SHADOW_MISMATCH = "recent_events_shadow_mismatch"
+    # Being の短期記憶の直近の範囲が上限に届き、いきさつを待たずに古いターンを外した (#1824、design_decisions D1824-11)。
+    # payload: being_id / turn (外したときのターン) / until_turn (外した範囲の終わり) / dropped_count (外した出来事の数)。
+    BEING_SHORT_TERM_MEMORY_FOLD_FORCED = "being_short_term_memory_fold_forced"
+    # 届いたいきさつが、Being が持ついきさつと同じか前の範囲までだったので入れなかった (design_decisions D1824-11)。
+    # payload: being_id / until_turn (届いたいきさつの範囲の終わり) / latest_until_turn (持っているいきさつの範囲の終わり)。
+    BEING_BACKSTORY_DISCARDED = "being_backstory_discarded"
+    # Being の短期記憶が頼んだいきさつを裏で作り、ターンの始めに短期記憶へ渡した (#1824、design_decisions D1824-12)。
+    # 同じか前の範囲までだったときは、このあと being_backstory_discarded も残る。書けなかったときは
+    # async_event_delivery_failed に残る。payload: being_id / until_turn / written_turn / flow / mood。
+    BEING_BACKSTORY_WRITTEN = "being_backstory_written"
+    # エピソードの目次を 1 ターンのプロンプトに出した (#1623)。プロンプトを組むたびに 1 件。
+    # payload: being_id / order (並べ方) / limit (N) / total_count (記録の件数) /
+    # shown_handles (出した呼び名、出した順)。
+    EPISODE_INDEX_SHOWN = "episode_index_shown"
+    # エピソードを呼び出した (#1623)。呼び出しのツールの 1 回ごとに 1 件。
+    # payload: being_id / outcome (recalled / rejected / failed) / requested (渡した呼び名) /
+    # recalled なら turn と results: list[{handle, found, recall_count}]、
+    # rejected なら reject_reason (malformed / too_many) と max_handles、
+    # failed なら error_type と error。
+    EPISODE_RECALL = "episode_recall"
+    # エピソードの目次を直した (#1623)。目次を直すツールの 1 回ごとに 1 件。
+    # payload: being_id / outcome (revised / rejected / failed) / handle /
+    # revised なら turn・before と after ({about, recall_when})・truncated
+    # ({鍵: 切り詰める前の長さ})、rejected なら reject_reason (malformed / unknown_handle)、
+    # failed なら error_type と error。
+    EPISODE_INDEX_REVISION = "episode_index_revision"
     SNAPSHOT_SAVE = "snapshot_save"
+    # シナリオの round_assignment で player に割り当てた枠 (#1514)。宣言の無い
+    # シナリオでは出ない。payload: round / seed / assignments: list[{player_id,
+    # player_name, group_index, slot_index, spawn_spot, initial_state}]。
+    # spawn_spot と initial_state は割り当てたあとに player が持つ値で、枠に
+    # spawn_spot が無ければ宣言どおりの場所が入る。
+    ROUND_ASSIGNMENT = "round_assignment"
+    # teams のあるシナリオで、ゲームが終わったときのチームの勝敗と個人の結果
+    # (#1516)。check_game_end で終わった tick に 1 件。teams の無いシナリオでは
+    # 出ない。ゲームが終わる前に run が止まったとき (run_end の outcome が
+    # TIMEOUT / LLM_ABORTED / INTERRUPTED) も出ない。勝敗は決まっていない。
+    # payload: reason / teams: list[{team_id, name, result, satisfied, reason,
+    # member_player_ids, member_player_string_ids}] / players: list[{player_id,
+    # player_string_id, player_name, team_id, outcome, result}]。
+    # result は WIN / LOSE / DRAW で、個人の result は所属チームと同じ。
+    # outcome は PlayerOutcomeEnum の値 (寝返って脱出した人は RESCUED と LOSE)。
+    TEAM_RESULT = "team_result"
     # Phase 9-1 (Issue #470): WorldStateSnapshot (= scenario 全体の world state)
     # の save / load。Being snapshot とは独立に発火 (= 同じ run で両方出る)。
     # WORLD_SNAPSHOT_LOAD payload:
@@ -188,46 +259,13 @@ class TraceEventKind:
     # root_condition_type / failed_condition_type / failed_path / missing_context /
     # probability_decisions
     SCENARIO_PREDICATE_EVALUATED = "scenario_predicate_evaluated"
-    # U1 (予測誤差統一設計 部品1): chunk 主観補完 (``merge_llm_subjective_fields``)
-    # が prediction_error (str = 予測が外れた内容 / None = 予測どおり) を確定
-    # させた瞬間。「どのプロンプト文脈 (in-context だった episode/belief) で
-    # 立てた予測がどう外れたか」を後から辿るための土台の 1 件。
-    # prediction_error が None (予測どおり) のときも「判定は走った」事実を
-    # 残すため必ず emit する (的中/外れ両方を後段 U4 の CONFIRMATION /
-    # 反証転記が拾えるようにするため)。
-    # payload:
-    #   - episode_id: str
-    #   - prediction_error: str | None
-    #   - prediction_context_ids: list[str] (= chunk に含まれる action 群のうち
-    #     prediction_context_id が付いていたものの重複排除リスト。1 chunk が
-    #     複数 action から成る場合は複数件になりうる)
-    PREDICTION_OUTCOME = "prediction_outcome"
-    # U2 (証拠台帳統一設計): chunk 主観補完が prediction_error を非 None で
-    # 埋めた瞬間、ルールベースの転記で BeliefEvidence 1 件を evidence buffer
-    # に積んだタイミング。学習の素材がどれだけ流れているかを観測するための
-    # trace (M1 マイルストーンで流量を確認する)。semantic の想起挙動は
-    # 変えない (buffer に積むだけ)。
-    # payload: evidence_id / source_kind / episode_ids / cue_signature /
-    # text_snippet / salience
-    BELIEF_EVIDENCE = "belief_evidence"
-    # U3b (固着パス): BeliefConsolidationCoordinator が evidence batch を
-    # LLM に処理させ、belief journal への decisions (create / strengthen /
-    # revise / contradict / discard) を確定させた瞬間。実験で「学びがいつ・
-    # なぜ生まれた/直されたか」を trace から追えるようにする。
-    # payload:
-    #   - being_id: str
-    #   - batch_evidence_ids: list[str] (処理対象だった evidence_id 群)
-    #   - shortlist_belief_ids: list[str] (LLM に提示した既存 belief の belief_id)
-    #   - decisions: list[dict] (LLM 応答の decisions をそのまま)
-    BELIEF_CONSOLIDATION = "belief_consolidation"
-    # 常時遠景の prompt 表示可視化。ambient 系なので既定では発火せず、
-    # DISTANT_VIEW_TRACE_ENABLED 等の明示設定時だけ prompt build ごとに残す。
+    # 常時遠景の prompt 表示可視化。prompt build ごとに残す。
     # payload: spot_id / current_area_id / candidate_count / rendered_count /
     # rendered_area_ids / skipped_reasons / thresholds
     DISTANT_VIEW_RENDERED = "distant_view_rendered"
     DISTANT_VIEW_SKIPPED = "distant_view_skipped"
     # 動的遠景 cue の source 条件が false→true になった境界。
-    # ambient 系の DISTANT_VIEW_* と違い、世界状態変化そのものなので常時残す。
+    # prompt build ごとの DISTANT_VIEW_* と違い、世界状態変化そのものを残す。
     # payload: cue_id / old_active / new_active / initialized_before /
     # origin_area_id / source_kind / source_state_key / visible_recipient_count /
     # delivery_skipped_reason
@@ -236,18 +274,6 @@ class TraceEventKind:
     # payload: cue_id / player_id / spot_id / direction / distance_band /
     # schedules_turn
     DISTANT_CUE_DELIVERED = "distant_cue_delivered"
-    # 案A (band-gated thinking): 停滞感 band が strong の局面で、停滞 reflect の
-    # 注入直後の行動に限り reasoning (熟考) を有効化した瞬間。「いつ・なぜ熟考を
-    # 焚いたか」を trace から追えるようにする (tool-calling 経路では思考本文は
-    # 返らないので、この event と同 tick の LLM metrics の reasoning_tokens を
-    # 突き合わせて「どれだけ熟考したか」を見る)。
-    # payload:
-    #   - player_id: int
-    #   - being_id: str | None
-    #   - band: str (発火時の停滞感 band。基本 "strong")
-    #   - effort: str (開いた reasoning 予算。例 "low")
-    #   - trigger: str (発火契機。"fresh_reflect")
-    AGENT_REASONING_ENGAGED = "agent_reasoning_engaged"
     # reason-first 2段階ターン: 行動前評価を named tool_call で先に取り、
     # その評価を行動 tool 引数へ内部注入してから実行する経路の観測点。
     # STARTED: 2段階経路を開始した瞬間。
@@ -260,98 +286,6 @@ class TraceEventKind:
     REASON_FIRST_ASSESSMENT_INJECTED = "reason_first_assessment_injected"
     REASON_FIRST_STEP_FAILED = "reason_first_step_failed"
     REASON_FIRST_ACTION_SELECTED = "reason_first_action_selected"
-    # U10a (予測誤差統一設計 部品6・pending prediction): chunk 主観補完が
-    # pending_prediction を非 null で抽出し、PendingPrediction 化して
-    # per-Being store に積んだ瞬間。抽出品質 (乱発していないか) を後から
-    # trace で数えられるようにするための観測点。
-    # payload:
-    #   - pending_id: str
-    #   - being_id: str
-    #   - origin_episode_id: str
-    #   - resolution_cues: list[str]
-    #   - tick_from: int / tick_to: int
-    PENDING_PREDICTION_CREATED = "pending_prediction_created"
-    # U10a: prompt build 時に pending prediction が再浮上し、【保留中の予測】
-    # section に載った瞬間。cue 一致・tick 範囲判定が正しく動いているかを
-    # trace から検証するための観測点。
-    # payload:
-    #   - pending_ids: list[str] (= 再浮上した pending の id 群。cap 適用後)
-    #   - being_id: str
-    PENDING_PREDICTION_RESURFACED = "pending_prediction_resurfaced"
-    # U10b: 再浮上していた pending prediction (約束) が次の chunk 補完で
-    # 「果たされた / 破られた」と判定され、PENDING_RESOLUTION evidence に
-    # 転記されて store から除かれた瞬間。約束ループが閉じたことの観測点。
-    # tick は「実際に清算された現在 tick」(LOW-2: 以前は窓の終端 tick_to を
-    # 使っており、窓の早い時点で果たされた約束が trace 上は未来の tick に
-    # 記録される非対称があった。CREATED / EXPIRED は現在 tick なのでそちらに
-    # 揃えた)。窓の情報は tick_from / tick_to として別途 payload に残す。
-    # payload:
-    #   - pending_id: str
-    #   - being_id: str
-    #   - verdict: str ("fulfilled" | "broken")
-    #   - evidence_id: str | None (= 転記された evidence。transcriber 未配線なら None)
-    #   - origin_episode_id: str
-    #   - tick_from: int / tick_to: int (= 約束の解決見込み窓)
-    PENDING_PREDICTION_RESOLVED = "pending_prediction_resolved"
-    # U10b: tick_to を過ぎても果たされも破られもしなかった pending prediction
-    # が静かに失効し store から除かれた瞬間 (= 人間でも忘れられた約束は消える)。
-    # payload:
-    #   - pending_ids: list[str] (= 失効した pending の id 群)
-    #   - being_id: str
-    #   - tick: int | None
-    PENDING_PREDICTION_EXPIRED = "pending_prediction_expired"
-    # PR-C (共在ゲート): fulfilled 判定が下ったが、resolution_cues の
-    # player:X 全員が判定 chunk の episode.who (エンジン由来の確定事実) に
-    # 不在だったため、清算を棄却し約束を store に残したままにした瞬間。
-    # 「合流しよう」と*思っただけ*の chunk を LLM が fulfilled と誤判定し、
-    # 現実に反する「果たした」evidence が belief を汚染する事故 (m7_v3coop_001
-    # t188) の再発防止。broken 判定・player cue の無い約束には一切発生しない。
-    # payload:
-    #   - being_id: str
-    #   - pending_id: str
-    #   - verdict: str (常に "fulfilled")
-    #   - required_players: list[str] (= resolution_cues の player:X 全員)
-    #   - present_players: list[str] (= episode.who に実在した相手)
-    #   - missing_players: list[str] (= episode.who に不在だった相手)
-    PENDING_PREDICTION_VERDICT_REJECTED = "pending_prediction_verdict_rejected"
-    # LOW-1 (約束の trace 実態対応): per-Being store の容量上限 (既定 8 件) を
-    # 超えたため、新しい約束を積む際に最も古い未決着の約束が黙って evict
-    # された瞬間。EXPIRED (期限切れによる失効) とは別イベントにする理由は、
-    # run 分析で「作られたのに RESOLVED も EXPIRED も無い pending」が謎として
-    # 残っていた原因がこの evict だったため、両者を区別できる必要があるから。
-    # payload:
-    #   - pending_id: str (= evict された約束の id)
-    #   - being_id: str
-    #   - origin_episode_id: str
-    #   - resolution_cues: list[str]
-    #   - tick_from: int / tick_to: int
-    #   - pending_kind: str ("promise" | "plan")
-    #   - tick: int (= evict が起きた現在 tick。約束自体の created_tick とは別)
-    PENDING_PREDICTION_EVICTED = "pending_prediction_evicted"
-    # P8 (目的の清算 / goal_outcome 自己申告): 本人が goal_outcome を宣言し、
-    # active 目的が achieved / abandoned で閉じられた瞬間。目的の一生 (立てる →
-    # 見直す → 閉じる) の終端で、次の目的が立つまでの「無目的」区間の入口。
-    # payload:
-    #   - being_id: str
-    #   - goal_id: str (= 閉じられた目的の id)
-    #   - outcome: str ("achieved" | "abandoned")
-    #   - goal_text: str (= 閉じられた目的の文)
-    #   - evidence_id: str | None (= 転記された belief evidence。転記未配線なら None)
-    #   - tick: int | None
-    GOAL_RESOLUTION = "goal_resolution"
-    # LOW-3 (locked 拒否の trace 追加): 現在の active 目的が locked (シナリオ
-    # 初期目的) のときに goal_update / goal_outcome の反映が拒否された瞬間。
-    # 本人への観測 (GOAL_LOCKED_REJECTION_OBSERVATION) とは別に、run 分析で
-    # 「何回見直しを試みて拒否されたか」を trace から数えられるようにする
-    # ための観測点 (見直し頻度の計測にも使う)。
-    # payload:
-    #   - being_id: str
-    #   - tick: int | None
-    #   - reason: str (現在は "locked" のみ)
-    #   - goal_id: str (= 拒否の原因になった locked 目的の id)
-    #   - attempted_goal_text: str | None (= 試みられた goal_update の文。
-    #     長ければ切り詰め。goal_outcome のみの清算試行では None)
-    GOAL_REVISION_REJECTED = "goal_revision_rejected"
     # 配信一元化リファクタ Stage 3X 前段 (観測): PipelineEventPublisher が
     # side handler の例外を握って observation pipeline を継続したとき、その失敗を
     # log だけでなく trace にも 1 件残す。現状は log のみで実 run の集計に乗らず、
@@ -369,6 +303,21 @@ class TraceEventKind:
     # top-level player_id: aggregate が PlayerStatusAggregate のときだけ best-effort で
     # 入る (= どの player の grace 登録/解除・効果適用が失われたかの per-agent 分析用)。
     SIDE_HANDLER_FAILED = "side_handler_failed"
+    # #1558: 世界の tick の段で、1 体 (プレイヤー / モンスター / 出来事 / 段そのもの)
+    # の処理か、それに続く後処理が例外を出した。isolate ではその 1 体だけを取りやめて tick を続け、
+    # fail_fast ではこれを残してから止める。run_end の world_tick_failure_counts と
+    # report.md の件数は、この行の数と一致する。
+    # payload:
+    #   - stage: str (= 段の名前。"travel" / "monster_behavior" / "post_tick.llm_turn_trigger" など)
+    #   - target_kind: str (= "player" | "monster" | "scenario_event" | "stage" など)
+    #   - target_id: int | str | None
+    #   - error_type / error_message (500 字超は切り詰め)
+    #   - error_origin: str | None (= 例外が出た最も内側の "file:line in func")
+    #   - committed: bool (= commit 後の後処理だけが失敗し、状態は確定済み)
+    #   - continued: bool (= True は、確定済みの処理に続く後処理 (通知・観測・記録)
+    #     の失敗で、取りやめるものが無く続けた。target_kind は失敗した後処理の種類)
+    #   - policy: "isolate" | "fail_fast"
+    WORLD_TICK_UNIT_FAILED = "world_tick_unit_failed"
 
 
 @dataclass(frozen=True)

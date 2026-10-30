@@ -19,31 +19,14 @@ class AttackStatusEffectChance:
 
     def __post_init__(self) -> None:
         if not isinstance(self.effect_type, StatusEffectType):
-            raise MonsterTemplateValidationException(
-                "attack status effect_type must be StatusEffectType"
-            )
-        if not isinstance(self.chance, (int, float)) or isinstance(
-            self.chance, bool
-        ):
-            raise MonsterTemplateValidationException(
-                "attack status effect chance must be numeric"
-            )
+            raise MonsterTemplateValidationException("attack status effect_type must be StatusEffectType")
+        if not isinstance(self.chance, (int, float)) or isinstance(self.chance, bool):
+            raise MonsterTemplateValidationException("attack status effect chance must be numeric")
         if not 0.0 <= float(self.chance) <= 1.0:
-            raise MonsterTemplateValidationException(
-                "attack status effect chance must be between 0.0 and 1.0"
-            )
-        if not isinstance(self.duration_ticks, int) or isinstance(
-            self.duration_ticks, bool
-        ):
-            raise MonsterTemplateValidationException(
-                "attack status effect duration_ticks must be int"
-            )
+            raise MonsterTemplateValidationException("attack status effect chance must be between 0.0 and 1.0")
+        if not isinstance(self.duration_ticks, int) or isinstance(self.duration_ticks, bool):
+            raise MonsterTemplateValidationException("attack status effect duration_ticks must be int")
         if self.duration_ticks <= 0:
-            raise MonsterTemplateValidationException(
-                "attack status effect duration_ticks must be greater than 0"
-            )
+            raise MonsterTemplateValidationException("attack status effect duration_ticks must be greater than 0")
         if not isinstance(self.value, (int, float)) or isinstance(self.value, bool):
-            raise MonsterTemplateValidationException(
-                "attack status effect value must be numeric"
-            )
-
+            raise MonsterTemplateValidationException("attack status effect value must be numeric")

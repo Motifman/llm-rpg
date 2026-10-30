@@ -64,22 +64,22 @@ class TestWhatCannotBeChangedIsSaidToBeImpossible:
 
     def test_an_immutable_mismatch_is_never(self) -> None:
         """変えられない属性が食い違っていれば `NEVER`。"""
-        assert _specs().satisfiability(
-            {"trade": "baker"}, {"trade": "picker"}
-        ) is ConditionSatisfiability.NEVER
+        assert _specs().satisfiability({"trade": "baker"}, {"trade": "picker"}) is ConditionSatisfiability.NEVER
 
     def test_a_mutable_mismatch_is_only_not_yet(self) -> None:
         """変えられる属性なら `NOT_YET` (まだ満たしていないだけ)。"""
-        assert _specs(mutable=True).satisfiability(
-            {"trade": "baker"}, {"trade": "picker"}
-        ) is ConditionSatisfiability.NOT_YET
+        assert (
+            _specs(mutable=True).satisfiability({"trade": "baker"}, {"trade": "picker"})
+            is ConditionSatisfiability.NOT_YET
+        )
 
     def test_a_match_is_satisfied_regardless(self) -> None:
         """満たしていれば、変えられるかに関係なく `SATISFIED`。"""
         for mutable in (True, False):
-            assert _specs(mutable=mutable).satisfiability(
-                {"trade": "baker"}, {"trade": "baker"}
-            ) is ConditionSatisfiability.SATISFIED
+            assert (
+                _specs(mutable=mutable).satisfiability({"trade": "baker"}, {"trade": "baker"})
+                is ConditionSatisfiability.SATISFIED
+            )
 
     def test_an_undeclared_attribute_stays_not_yet(self) -> None:
         """宣言の無い属性は従来どおり (**変えられる前提**)。
@@ -87,28 +87,30 @@ class TestWhatCannotBeChangedIsSaidToBeImpossible:
         **新しい規則を既定にしない。** 既定を変えると、過去の run と
         比べられなくなる。
         """
-        assert PlayerAttributeSpecs.empty().satisfiability(
-            {"trade": "baker"}, {"trade": "picker"}
-        ) is ConditionSatisfiability.NOT_YET
+        assert (
+            PlayerAttributeSpecs.empty().satisfiability({"trade": "baker"}, {"trade": "picker"})
+            is ConditionSatisfiability.NOT_YET
+        )
 
     def test_one_immutable_mismatch_makes_the_whole_thing_never(self) -> None:
         """複数の条件のうち 1 つでも変えられず食い違えば、全体が `NEVER`。
 
         残りが変えられても、**全体としては永久に満たせない**。
         """
-        specs = PlayerAttributeSpecs(by_name={
-            "trade": PlayerAttributeSpec(
-                "trade", "生業", AttributeVisibility.PUBLIC, mutable=False
-            ),
-            "mood": PlayerAttributeSpec(
-                "mood", "機嫌", AttributeVisibility.PUBLIC, mutable=True
-            ),
-        })
+        specs = PlayerAttributeSpecs(
+            by_name={
+                "trade": PlayerAttributeSpec("trade", "生業", AttributeVisibility.PUBLIC, mutable=False),
+                "mood": PlayerAttributeSpec("mood", "機嫌", AttributeVisibility.PUBLIC, mutable=True),
+            }
+        )
 
-        assert specs.satisfiability(
-            {"trade": "baker", "mood": "calm"},
-            {"trade": "picker", "mood": "angry"},
-        ) is ConditionSatisfiability.NEVER
+        assert (
+            specs.satisfiability(
+                {"trade": "baker", "mood": "calm"},
+                {"trade": "picker", "mood": "angry"},
+            )
+            is ConditionSatisfiability.NEVER
+        )
 
     def test_an_unreadable_actor_is_not_declared_impossible(self) -> None:
         """行為者の状態が読めないときは `NOT_YET`。
@@ -117,9 +119,7 @@ class TestWhatCannotBeChangedIsSaidToBeImpossible:
         成立しうる行動を諦めさせる。`NEVER` に 2 種類 (本当に無理 /
         見えていない) を作らない。
         """
-        assert _specs().satisfiability(
-            {"trade": "baker"}, None
-        ) is ConditionSatisfiability.NOT_YET
+        assert _specs().satisfiability({"trade": "baker"}, None) is ConditionSatisfiability.NOT_YET
 
 
 class TestTheDeclarationIsRead:
@@ -152,14 +152,19 @@ class TestTheDeclarationIsRead:
 
         assert runtime.scenario.player_attribute_specs.by_name == {}
 
-    @pytest.mark.parametrize("broken", [
-        {"trade": {"visibility": "maybe", "mutable": False}},
-        {"trade": {"visibility": "public", "mutable": "no"}},
-        {"trade": {"visibility": "public", "mutable": False, "values": "baker"}},
-        {"trade": "public"},
-    ])
+    @pytest.mark.parametrize(
+        "broken",
+        [
+            {"trade": {"visibility": "maybe", "mutable": False}},
+            {"trade": {"visibility": "public", "mutable": "no"}},
+            {"trade": {"visibility": "public", "mutable": False, "values": "baker"}},
+            {"trade": "public"},
+        ],
+    )
     def test_a_broken_declaration_stops_the_world(
-        self, tmp_path: Path, broken: Any,
+        self,
+        tmp_path: Path,
+        broken: Any,
     ) -> None:
         """宣言が壊れていたら起動時に落ちる。
 
@@ -173,9 +178,7 @@ class TestTheDeclarationIsRead:
 
         数値や時刻の属性には列挙が無い。**必須にすると書けない属性ができる。**
         """
-        runtime = self._world(
-            tmp_path, {"mood": {"visibility": "secret", "mutable": True}}
-        )
+        runtime = self._world(tmp_path, {"mood": {"visibility": "secret", "mutable": True}})
 
         assert runtime.scenario.player_attribute_specs.spec_of("mood").values == ()
 
@@ -196,9 +199,7 @@ class TestTheDeclarationReachesTheJudgement:
         runtime = create_world_runtime(str(path))
 
         picker = runtime._player_status_repo.find_by_id(PlayerId(1))
-        verdict = runtime.scenario.player_attribute_specs.satisfiability(
-            {"trade": "baker"}, picker.state
-        )
+        verdict = runtime.scenario.player_attribute_specs.satisfiability({"trade": "baker"}, picker.state)
 
         assert picker.state == {"trade": "picker"}
         assert verdict is ConditionSatisfiability.NEVER
@@ -213,7 +214,9 @@ class TestNothingTheAgentReadsHasChanged:
 
     @pytest.mark.parametrize("scenario_path", [_TOWN, _DRILL])
     def test_the_prompts_are_byte_identical(
-        self, tmp_path: Path, scenario_path: Path,
+        self,
+        tmp_path: Path,
+        scenario_path: Path,
     ) -> None:
         """宣言を足す前と後で、全プレイヤーのプロンプトがバイト一致する。"""
         raw: dict[str, Any] = json.loads(scenario_path.read_text(encoding="utf-8"))
@@ -221,15 +224,14 @@ class TestNothingTheAgentReadsHasChanged:
 
         raw["player_attributes"] = {"trade": _TRADE}
         declared_path = tmp_path / "declared.json"
-        declared_path.write_text(
-            json.dumps(raw, ensure_ascii=False), encoding="utf-8"
-        )
+        declared_path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
         after = create_world_runtime(str(declared_path))
 
         assert _prompt_hashes(after) == _prompt_hashes(before)
 
     def test_the_oven_row_no_longer_says_only_that_nothing_is_possible(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """石窯の行が、待っても変わらないことを言うようになった。
 
@@ -251,11 +253,7 @@ class TestNothingTheAgentReadsHasChanged:
         for _ in range(2):
             runtime.advance_tick()
         line = next(
-            line
-            for line in runtime.build_llm_context(
-                PlayerId(1)
-            ).current_state_text.splitlines()
-            if '"石窯"' in line
+            line for line in runtime.build_llm_context(PlayerId(1)).current_state_text.splitlines() if '"石窯"' in line
         )
 
         assert "いまのあなたには扱えない" in line
@@ -266,7 +264,5 @@ class TestNothingTheAgentReadsHasChanged:
 def _prompt_hashes(runtime: Any) -> dict[int, str]:
     return {
         player_id: hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-        for player_id, prompt in (
-            runtime._world_llm_system_prompts_by_player_id.items()
-        )
+        for player_id, prompt in (runtime._world_llm_system_prompts_by_player_id.items())
     }

@@ -21,6 +21,4 @@ class IntentPriority:
 
     def __post_init__(self) -> None:
         if not isinstance(self.value, int) or isinstance(self.value, bool):
-            raise IntentPriorityValidationException(
-                "IntentPriority.value must be int (got %r)" % (type(self.value),)
-            )
+            raise IntentPriorityValidationException("IntentPriority.value must be int (got %r)" % (type(self.value),))

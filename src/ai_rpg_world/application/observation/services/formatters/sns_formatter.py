@@ -42,13 +42,9 @@ class SnsObservationFormatter:
     def _sns_user_name(self, user_id: Any) -> str:
         return self._context.name_resolver.sns_user_display_name(user_id)
 
-    def _format_sns_post_created(
-        self, event: SnsPostCreatedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_sns_post_created(self, event: SnsPostCreatedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         author_name = self._sns_user_name(event.author_user_id)
-        content_preview = event.content.content[:50] + (
-            "..." if len(event.content.content) > 50 else ""
-        )
+        content_preview = event.content.content[:50] + ("..." if len(event.content.content) > 50 else "")
         post_id_value = event.post_id.value
         prose = f"{author_name}が投稿しました: {content_preview}"
         structured: dict[str, Any] = {
@@ -69,14 +65,10 @@ class SnsObservationFormatter:
         self, event: SnsReplyCreatedEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         author_name = self._sns_user_name(event.author_user_id)
-        content_preview = event.content.content[:50] + (
-            "..." if len(event.content.content) > 50 else ""
-        )
+        content_preview = event.content.content[:50] + ("..." if len(event.content.content) > 50 else "")
         reply_id_value = event.reply_id.value
         parent_post_id_value = event.parent_post_id.value if event.parent_post_id else None
-        parent_reply_id_value = (
-            event.parent_reply_id.value if event.parent_reply_id else None
-        )
+        parent_reply_id_value = event.parent_reply_id.value if event.parent_reply_id else None
         prose = f"{author_name}がリプライしました: {content_preview}"
         structured: dict[str, Any] = {
             "type": "sns_reply_created",

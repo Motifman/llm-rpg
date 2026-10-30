@@ -58,20 +58,14 @@ class CaptureBeingSnapshotToFileUseCase:
         file_gateway: BeingSnapshotFileGateway,
     ) -> None:
         if not isinstance(being_repository, BeingRepository):
-            raise TypeError(
-                "being_repository must be BeingRepository, "
-                f"got {type(being_repository).__name__}"
-            )
+            raise TypeError(f"being_repository must be BeingRepository, got {type(being_repository).__name__}")
         if not isinstance(memory_snapshot_service, BeingMemorySnapshotService):
             raise TypeError(
                 "memory_snapshot_service must be BeingMemorySnapshotService, "
                 f"got {type(memory_snapshot_service).__name__}"
             )
         if not isinstance(file_gateway, BeingSnapshotFileGateway):
-            raise TypeError(
-                "file_gateway must be BeingSnapshotFileGateway, "
-                f"got {type(file_gateway).__name__}"
-            )
+            raise TypeError(f"file_gateway must be BeingSnapshotFileGateway, got {type(file_gateway).__name__}")
         self._repo = being_repository
         self._memory = memory_snapshot_service
         self._gateway = file_gateway
@@ -90,24 +84,16 @@ class CaptureBeingSnapshotToFileUseCase:
         埋め込める。cross-scenario transfer 検知用。
         """
         if not isinstance(being_id, BeingId):
-            raise TypeError(
-                f"being_id must be BeingId, got {type(being_id).__name__}"
-            )
+            raise TypeError(f"being_id must be BeingId, got {type(being_id).__name__}")
         if not isinstance(output_path, Path):
-            raise TypeError(
-                f"output_path must be Path, got {type(output_path).__name__}"
-            )
+            raise TypeError(f"output_path must be Path, got {type(output_path).__name__}")
 
         being = self._repo.find_by_id(being_id)
         if being is None:
-            raise BeingNotFoundForSnapshotError(
-                f"being not found in repository: being_id={being_id.value!r}"
-            )
+            raise BeingNotFoundForSnapshotError(f"being not found in repository: being_id={being_id.value!r}")
 
         memory_payload_json = self._memory.capture(being_id)
-        snapshot = BeingSnapshotCodec.encode(
-            being, memory_payload_json=memory_payload_json
-        )
+        snapshot = BeingSnapshotCodec.encode(being, memory_payload_json=memory_payload_json)
         self._gateway.write(snapshot, output_path, metadata=metadata)
         return CaptureBeingSnapshotResult(
             being_id=being_id,

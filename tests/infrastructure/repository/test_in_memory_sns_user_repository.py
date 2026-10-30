@@ -151,8 +151,8 @@ class TestInMemorySnsUserRepository:
         """ブロック関係確認テスト"""
         from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
-        assert self.repository.is_blocked(UserId(2), UserId(4)) == True   # 魔法使い -> 盗賊
-        assert self.repository.is_blocked(UserId(6), UserId(1)) == True   # 商人 -> 勇者
+        assert self.repository.is_blocked(UserId(2), UserId(4)) == True  # 魔法使い -> 盗賊
+        assert self.repository.is_blocked(UserId(6), UserId(1)) == True  # 商人 -> 勇者
         assert self.repository.is_blocked(UserId(1), UserId(2)) == False  # 勇者 -> 魔法使い（ブロックなし）
         assert self.repository.is_blocked(UserId(1), UserId(4)) == False  # 勇者 -> 盗賊（ブロックなし）
 
@@ -194,8 +194,8 @@ class TestInMemorySnsUserRepository:
         """購読関係確認テスト"""
         from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
-        assert self.repository.is_subscribed(UserId(1), UserId(2)) == True   # 勇者 -> 魔法使い
-        assert self.repository.is_subscribed(UserId(2), UserId(1)) == True   # 魔法使い -> 勇者
+        assert self.repository.is_subscribed(UserId(1), UserId(2)) == True  # 勇者 -> 魔法使い
+        assert self.repository.is_subscribed(UserId(2), UserId(1)) == True  # 魔法使い -> 勇者
         assert self.repository.is_subscribed(UserId(1), UserId(3)) == False  # 勇者 -> 戦士（購読なし）
         assert self.repository.is_subscribed(UserId(3), UserId(1)) == False  # 戦士 -> 勇者（購読なし）
 
@@ -286,9 +286,9 @@ class TestInMemorySnsUserRepository:
 
         # 新しい関係性を追加
         relationships = [
-            (UserId(3), UserId(2), "follow"),    # 戦士 -> 魔法使いをフォロー
-            (UserId(4), UserId(2), "follow"),    # 盗賊 -> 魔法使いをフォロー
-            (UserId(5), UserId(3), "follow"),    # 僧侶 -> 戦士をフォロー
+            (UserId(3), UserId(2), "follow"),  # 戦士 -> 魔法使いをフォロー
+            (UserId(4), UserId(2), "follow"),  # 盗賊 -> 魔法使いをフォロー
+            (UserId(5), UserId(3), "follow"),  # 僧侶 -> 戦士をフォロー
         ]
 
         updated_count = self.repository.bulk_update_relationships(relationships)

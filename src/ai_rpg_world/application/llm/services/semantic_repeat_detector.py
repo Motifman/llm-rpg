@@ -45,10 +45,6 @@ from ai_rpg_world.application.llm.services.loop_guard_detectors import (
     RecordedAction,
     SemanticRepeat,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
-    GOAL_OUTCOME_FIELD_NAME,
-    GOAL_UPDATE_FIELD_NAME,
-)
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -56,9 +52,6 @@ logger = logging.getLogger(__name__)
 
 QUESTION_NAME = "semantic_repeat"
 
-# 目的の同乗フィールドは fingerprint に残るので、要約の表に無い tool では JSON の
-# まま state に出てしまう。
-_GOAL_FIELDS = frozenset({GOAL_UPDATE_FIELD_NAME, GOAL_OUTCOME_FIELD_NAME})
 _RESULT_MAX_CHARS = 200
 
 
@@ -83,7 +76,6 @@ def _summarize(action: RecordedAction) -> str:
         arguments = {}
     if not isinstance(arguments, dict):
         arguments = {}
-    arguments = {k: v for k, v in arguments.items() if k not in _GOAL_FIELDS}
     return format_action_summary_for_display(action.tool_name, arguments)
 
 
@@ -94,18 +86,14 @@ def build_state(actor: str, actions: Sequence[RecentAction]) -> dict[str, Any]:
 def build_question(actor: str) -> NoulQuestion:
     return NoulQuestion(
         instructions=(
-            f"{actor}は、直近のこれらの行動で、手段を変えずに同じことを試し続けているか。"
-            "行動は古い順に並んでいる。"
+            f"{actor}は、直近のこれらの行動で、手段を変えずに同じことを試し続けているか。行動は古い順に並んでいる。"
         ),
         true_means=(
             "言い回し、呼び名、操作の名前が違っても、同じ相手や同じ対象に向けた同じ"
             "試みを繰り返していて、結果が同じまま変わっていない。同じ理由で拒否され"
             "続けている場合や、2 つの行動を行き来しているだけで状況が進んでいない場合も含む"
         ),
-        false_means=(
-            "行動ごとに対象、相手、手段のどれかが変わっている。または前の結果を"
-            "受けて次の段階へ進んでいる"
-        ),
+        false_means=("行動ごとに対象、相手、手段のどれかが変わっている。または前の結果を受けて次の段階へ進んでいる"),
     )
 
 
@@ -134,9 +122,7 @@ class SemanticRepeatDetector:
         self._trace_recorder_provider = trace_recorder_provider
         self._windows: dict[int, deque[RecentAction]] = {}
 
-    def observe(
-        self, action: RecordedAction, *, exact_match_fired: bool = False
-    ) -> SemanticRepeat | None:
+    def observe(self, action: RecordedAction, *, exact_match_fired: bool = False) -> SemanticRepeat | None:
         """行動を 1 件積み、窓が K 件そろっていれば問う。1 回の呼び出しで問うのは最大 1 回。
 
         ``exact_match_fired`` は同じ行動で完全一致の検出が発火したか。trace に
@@ -164,9 +150,9 @@ class SemanticRepeatDetector:
         source: str | None = None
         unavailable_reason: str | None = None
         try:
-            answer = self.judgment_port.judge(
-                build_state(actor, actions), {QUESTION_NAME: build_question(actor)}
-            )[QUESTION_NAME]
+            answer = self.judgment_port.judge(build_state(actor, actions), {QUESTION_NAME: build_question(actor)})[
+                QUESTION_NAME
+            ]
             probability = float(answer.value)
             latency_ms = answer.latency_ms
             source = answer.source.value
@@ -182,9 +168,15 @@ class SemanticRepeatDetector:
 
         accepted = probability is not None and probability >= self.threshold
         self._record(
-            tick=action.tick, player_id=key, actions=actions, probability=probability,
-            accepted=accepted, exact_match_fired=exact_match_fired,
-            latency_ms=latency_ms, source=source, unavailable_reason=unavailable_reason,
+            tick=action.tick,
+            player_id=key,
+            actions=actions,
+            probability=probability,
+            accepted=accepted,
+            exact_match_fired=exact_match_fired,
+            latency_ms=latency_ms,
+            source=source,
+            unavailable_reason=unavailable_reason,
         )
         if exact_match_fired:
             window.clear()

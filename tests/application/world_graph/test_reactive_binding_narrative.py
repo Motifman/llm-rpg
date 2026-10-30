@@ -61,7 +61,8 @@ class TestReactiveBindingNarrativeFields:
         b = ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(1),
             predicate=ScenarioEventCondition(
-                condition_type="TICK_AT_LEAST", tick=100,
+                condition_type="TICK_AT_LEAST",
+                tick=100,
             ),
             on_true_state_updates=(("available", True),),
             on_false_state_updates=(),
@@ -73,7 +74,7 @@ class TestReactiveBindingNarrativeFields:
 class TestSpotObjectStateChangedEventNarrativeField:
     """`SpotObjectStateChangedEvent` が narrative を保持できる。"""
 
-    def test_narrative_default_None(self) -> None:
+    def test_narrative_default_none(self) -> None:
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
         from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
@@ -83,7 +84,8 @@ class TestSpotObjectStateChangedEventNarrativeField:
             aggregate_type="SpotGraphAggregate",
             spot_id=SpotId.create(1),
             object_id=SpotObjectId.create(1),
-            old_state={"a": False}, new_state={"a": True},
+            old_state={"a": False},
+            new_state={"a": True},
         )
         assert ev.narrative is None
 
@@ -98,7 +100,8 @@ class TestSpotObjectStateChangedEventNarrativeField:
             aggregate_type="SpotGraphAggregate",
             spot_id=SpotId.create(1),
             object_id=SpotObjectId.create(1),
-            old_state={"a": False}, new_state={"a": True},
+            old_state={"a": False},
+            new_state={"a": True},
             narrative="花が咲いた",
         )
         assert ev.narrative == "花が咲いた"
@@ -107,9 +110,7 @@ class TestSpotObjectStateChangedEventNarrativeField:
 class TestScenarioLoaderParsesNarrative:
     """survival_island_v2.json の harvest cooldown binding に narrative_on_true が載っている。"""
 
-    SCENARIO_PATH = (
-        Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
-    )
+    SCENARIO_PATH = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
 
     def test_v2_all_harvest_binding_narrative_true(self) -> None:
         """資源 cooldown の reset (false→true) は narrative が出る前提に揃える。
@@ -135,10 +136,7 @@ class TestScenarioLoaderParsesNarrative:
 
         loaded = ScenarioLoader().load_from_file(str(self.SCENARIO_PATH))
         # 1 件以上の binding に narrative_on_true がパースされていること
-        with_narrative = [
-            b for b in loaded.reactive_object_state_bindings
-            if b.narrative_on_true is not None
-        ]
+        with_narrative = [b for b in loaded.reactive_object_state_bindings if b.narrative_on_true is not None]
         assert len(with_narrative) == 14, (
             f"narrative_on_true 付きの binding 数が想定と異なる: {len(with_narrative)}"
             " (survival_island_v2.json の harvest cooldown は 14 件: PR で"

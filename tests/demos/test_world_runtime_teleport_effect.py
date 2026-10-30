@@ -23,17 +23,15 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_CONTROL_PANEL_TOGGLE = _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "control_panel_toggle.json"
 
 _ACTOR = PlayerId(1)
 _OBSERVER = PlayerId(2)
 
 
-def _scenario_with_teleport(
-    tmp_path: Path, *, destination_spot: str, witness_policy: str | None = None
-) -> Path:
-    """relay_puzzle の control_panel/power_on に TELEPORT_ENTITY を足して書き出す。"""
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+def _scenario_with_teleport(tmp_path: Path, *, destination_spot: str, witness_policy: str | None = None) -> Path:
+    """control_panel_toggle の control_panel/power_on に TELEPORT_ENTITY を足して書き出す。"""
+    scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
     patched = False
     for spot in scenario["spots"]:
         for obj in (spot.get("interior") or {}).get("objects", []):
@@ -52,7 +50,7 @@ def _scenario_with_teleport(
                     interaction["witness_policy"] = witness_policy
                 patched = True
     assert patched, "control_panel/power_on が見つからない (シナリオ構造が変わった)"
-    path = tmp_path / "relay_teleport.json"
+    path = tmp_path / "panel_teleport.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
     return path
 
@@ -63,10 +61,7 @@ def _spot_of(runtime, player_id: PlayerId):
 
 
 def _observation_types(runtime, player_id: PlayerId) -> list[str]:
-    return [
-        e.output.structured.get("type")
-        for e in runtime._obs_buffer.get_observations(player_id)
-    ]
+    return [e.output.structured.get("type") for e in runtime._obs_buffer.get_observations(player_id)]
 
 
 class TestTeleportDestinationValidation:
@@ -78,32 +73,28 @@ class TestTeleportDestinationValidation:
         行き先が無いと domain 側は spec を作らず、書いたのに何も起きない静かな
         失敗になるため、起動時に落とす。
         """
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
         for spot in scenario["spots"]:
             for obj in (spot.get("interior") or {}).get("objects", []):
                 if obj.get("id") != "control_panel":
                     continue
                 for interaction in obj.get("interactions", []):
                     if interaction.get("action_name") == "power_on":
-                        interaction.setdefault("effects", []).append(
-                            {"effect_type": "TELEPORT_ENTITY"}
-                        )
-        path = tmp_path / "relay_no_target.json"
+                        interaction.setdefault("effects", []).append({"effect_type": "TELEPORT_ENTITY"})
+        path = tmp_path / "panel_no_target.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
         with pytest.raises(ScenarioLoadError) as exc_info:
             create_world_runtime(path)
         assert "target_spot" in str(exc_info.value)
 
-    def test_teleport_with_target_spot_outside_parameters_fails_to_load(
-        self, tmp_path: Path
-    ) -> None:
+    def test_teleport_with_target_spot_outside_parameters_fails_to_load(self, tmp_path: Path) -> None:
         """target_spot を parameters の外に書いた TELEPORT_ENTITY も起動時に弾かれる。
 
         effect 直下に書くと params に載らず無言で消えるため、書き間違いとして
         検出する必要がある。
         """
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
         for spot in scenario["spots"]:
             for obj in (spot.get("interior") or {}).get("objects", []):
                 if obj.get("id") != "control_panel":
@@ -113,7 +104,7 @@ class TestTeleportDestinationValidation:
                         interaction.setdefault("effects", []).append(
                             {"effect_type": "TELEPORT_ENTITY", "target_spot": "corridor"}
                         )
-        path = tmp_path / "relay_misplaced_target.json"
+        path = tmp_path / "panel_misplaced_target.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
         with pytest.raises(ScenarioLoadError) as exc_info:
@@ -127,7 +118,7 @@ class TestTeleportDestinationValidation:
         書いても挙動は変わらない。「HIDDEN にしたから見られない」と誤解したまま
         秘密の移動を期待されるより、読み込み時に落とす。
         """
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
         for spot in scenario["spots"]:
             for obj in (spot.get("interior") or {}).get("objects", []):
                 if obj.get("id") != "control_panel":
@@ -141,7 +132,7 @@ class TestTeleportDestinationValidation:
                                 "visibility": "HIDDEN",
                             }
                         )
-        path = tmp_path / "relay_visibility.json"
+        path = tmp_path / "panel_visibility.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
         with pytest.raises(ScenarioLoadError) as exc_info:
@@ -162,13 +153,10 @@ class TestTeleportEntityEffect:
 
         after = _spot_of(runtime, _ACTOR)
         assert after != before, (
-            "TELEPORT_ENTITY を書いても行為者が移動していない "
-            "(spec が生成されるだけで消費されていない可能性)"
+            "TELEPORT_ENTITY を書いても行為者が移動していない (spec が生成されるだけで消費されていない可能性)"
         )
 
-    def test_teleport_to_own_spot_keeps_the_actor_in_place(
-        self, tmp_path: Path
-    ) -> None:
+    def test_teleport_to_own_spot_keeps_the_actor_in_place(self, tmp_path: Path) -> None:
         """現在地と同じスポットへの TELEPORT_ENTITY では、行為者はその場に留まる。"""
         scenario = _scenario_with_teleport(tmp_path, destination_spot="control_room")
         runtime = create_world_runtime(scenario)
@@ -192,13 +180,10 @@ class TestTeleportEntityEffect:
         runtime.do_interact(_ACTOR, "control_panel", "power_on")
 
         assert "entity_left_spot" in _observation_types(runtime, _OBSERVER), (
-            "同スポットの第三者に離脱が観測されていない。"
-            f"types={_observation_types(runtime, _OBSERVER)}"
+            f"同スポットの第三者に離脱が観測されていない。types={_observation_types(runtime, _OBSERVER)}"
         )
 
-    def test_nobody_observes_a_teleport_between_empty_spots(
-        self, tmp_path: Path
-    ) -> None:
+    def test_nobody_observes_a_teleport_between_empty_spots(self, tmp_path: Path) -> None:
         """出発先・到着先のどちらにも他者が居なければ、テレポートは誰にも観測されない。
 
         「誰にも見られずに移動する」= 隠し通路・ベントの成立条件。
@@ -213,8 +198,6 @@ class TestTeleportEntityEffect:
         runtime.do_interact(_ACTOR, "control_panel", "power_on")
 
         movement = [
-            t
-            for t in _observation_types(runtime, _OBSERVER)
-            if t in {"entity_left_spot", "entity_entered_spot"}
+            t for t in _observation_types(runtime, _OBSERVER) if t in {"entity_left_spot", "entity_entered_spot"}
         ]
         assert movement == [], f"誰も居ないはずなのに移動が観測されている: {movement}"

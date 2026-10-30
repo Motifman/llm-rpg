@@ -91,9 +91,7 @@ class ToolCommandMapper:
         args = arguments if arguments is not None else {}
 
         if self._intent_resolution_service is not None:
-            return self._intent_resolution_service.submit_and_resolve_immediately(
-                player_id, tool_name, args
-            )
+            return self._intent_resolution_service.submit_and_resolve_immediately(player_id, tool_name, args)
 
         executor = self._executor_map.get(tool_name)
         if executor is not None:

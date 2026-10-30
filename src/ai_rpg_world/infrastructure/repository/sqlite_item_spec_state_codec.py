@@ -75,9 +75,7 @@ def item_spec_to_payload(item_spec: ItemSpec) -> dict[str, Any]:
         "description": item_spec.description,
         "max_stack_size": int(item_spec.max_stack_size.value),
         "durability_max": item_spec.durability_max,
-        "equipment_type": (
-            None if item_spec.equipment_type is None else item_spec.equipment_type.value
-        ),
+        "equipment_type": (None if item_spec.equipment_type is None else item_spec.equipment_type.value),
         "is_placeable": item_spec.is_placeable,
         "placeable_object_type": item_spec.placeable_object_type,
         "consume_effect": _effect_to_payload(item_spec.consume_effect),
@@ -99,9 +97,7 @@ def payload_to_item_spec(payload: dict[str, Any]) -> ItemSpec:
         description=str(payload.get("description", "")),
         max_stack_size=MaxStackSize(int(payload.get("max_stack_size", 1))),
         durability_max=payload.get("durability_max"),
-        equipment_type=(
-            None if equipment_type is None else EquipmentType(str(equipment_type))
-        ),
+        equipment_type=(None if equipment_type is None else EquipmentType(str(equipment_type))),
         is_placeable=bool(payload.get("is_placeable", False)),
         placeable_object_type=payload.get("placeable_object_type"),
         consume_effect=_payload_to_effect(payload.get("consume_effect")),
@@ -181,11 +177,7 @@ def _payload_to_effect(payload: dict[str, Any] | None) -> ItemEffect | None:
     if kind == "composite":
         raw_children = payload.get("effects", [])
         return CompositeItemEffect(
-            tuple(
-                child
-                for child in (_payload_to_effect(raw_child) for raw_child in raw_children)
-                if child is not None
-            )
+            tuple(child for child in (_payload_to_effect(raw_child) for raw_child in raw_children) if child is not None)
         )
     amount = int(payload["amount"])
     if kind == "heal":

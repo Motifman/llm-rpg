@@ -28,8 +28,7 @@ from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowt
 
 def _run_rules(stage: SpotGraphNeedsDecayStageService, repo: MagicMock) -> None:
     """確定境界から独立した疲労規則だけを検証する。"""
-    evidence_statuses = stage._run_with_repository(repo)
-    stage._sync_hunger_max_evidence_all(evidence_statuses)
+    stage._run_with_repository(repo)
 
 
 def _build_status(fatigue_value: int, hp: int = 100) -> PlayerStatusAggregate:

@@ -67,9 +67,7 @@ __all__ = [
 #: ``required_state`` を持たないため、binding の state 更新と突き合わせられない。
 #: それらを含めても照合が成立しないので、対象から外して
 #: ``MISSING_PREREQUISITE`` へ倒す。
-_OBJECT_STATE_CONDITIONS = frozenset(
-    {InteractionConditionTypeEnum.OBJECT_STATE}
-)
+_OBJECT_STATE_CONDITIONS = frozenset({InteractionConditionTypeEnum.OBJECT_STATE})
 
 #: 述語のうち「時間経過だけで真になる」もの。
 #:
@@ -101,27 +99,19 @@ class PreconditionFailureKind(Enum):
 #: 方針の裏口になる。
 REMEDIATION_BY_KIND: dict[PreconditionFailureKind, str] = {
     PreconditionFailureKind.TIME_RECOVERING: (
-        "時間が経てば元に戻る。いま繰り返しても変わらないので、"
-        "他のことをして待ってから戻ること。"
+        "時間が経てば元に戻る。いま繰り返しても変わらないので、他のことをして待ってから戻ること。"
     ),
     PreconditionFailureKind.CONDITION_RECOVERING: (
-        "状況が変われば通るようになる。何が足りないのかを確かめるか、"
-        "先に別の手を打ってから戻ること。"
+        "状況が変われば通るようになる。何が足りないのかを確かめるか、先に別の手を打ってから戻ること。"
     ),
     PreconditionFailureKind.PERMANENT: (
-        "ここはもう変わらない。同じ相手に同じことを繰り返さず、"
-        "別の場所か別の対象を選ぶこと。"
+        "ここはもう変わらない。同じ相手に同じことを繰り返さず、別の場所か別の対象を選ぶこと。"
     ),
-    PreconditionFailureKind.STATE_MOVED_ON: (
-        "この対象は先に進んでいる。同じ対象の、いま通る手順を選ぶこと。"
-    ),
+    PreconditionFailureKind.STATE_MOVED_ON: ("この対象は先に進んでいる。同じ対象の、いま通る手順を選ぶこと。"),
     PreconditionFailureKind.MISSING_PREREQUISITE: (
-        "足りない前提を先に満たすこと。"
-        "失敗の説明に名指しされた持ち物や状態を確かめること。"
+        "足りない前提を先に満たすこと。失敗の説明に名指しされた持ち物や状態を確かめること。"
     ),
-    PreconditionFailureKind.ACTOR_PLANE: (
-        "身体を必要としない、自分の担当か共通の点検は続けられる。"
-    ),
+    PreconditionFailureKind.ACTOR_PLANE: ("身体を必要としない、自分の担当か共通の点検は続けられる。"),
 }
 
 
@@ -180,8 +170,7 @@ def classify_precondition_failure(
             if not _restores(binding, state_key, required_value):
                 continue
             if any(
-                _TIME_PREDICATE_MARKER in kind
-                for kind in _iter_predicate_types(getattr(binding, "predicate", None))
+                _TIME_PREDICATE_MARKER in kind for kind in _iter_predicate_types(getattr(binding, "predicate", None))
             ):
                 return PreconditionFailureKind.TIME_RECOVERING
             found_non_time_restore = True
@@ -197,6 +186,4 @@ def remediation_for_precondition_failure(
     bindings: Sequence[Any] = (),
 ) -> str:
     """失敗した条件に対する助言文を返す。"""
-    return REMEDIATION_BY_KIND[
-        classify_precondition_failure(condition, bindings=bindings)
-    ]
+    return REMEDIATION_BY_KIND[classify_precondition_failure(condition, bindings=bindings)]

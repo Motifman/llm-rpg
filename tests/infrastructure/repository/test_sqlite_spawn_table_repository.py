@@ -42,15 +42,11 @@ def sqlite_conn() -> sqlite3.Connection:
 
 
 class TestSqliteSpawnTableRepository:
-    def test_find_by_spot_id_returns_none_when_empty(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_find_by_spot_id_returns_none_when_empty(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteSpawnTableRepository.for_connection(sqlite_conn)
         assert repo.find_by_spot_id(SpotId(1)) is None
 
-    def test_writer_replace_and_find_roundtrip(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_writer_replace_and_find_roundtrip(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteSpawnTableWriter.for_standalone_connection(sqlite_conn)
         repo = SqliteSpawnTableRepository.for_connection(sqlite_conn)
         writer.replace_table(_table(1))
@@ -61,9 +57,7 @@ class TestSqliteSpawnTableRepository:
         assert len(result.slots) == 1
         assert result.slots[0].coordinate == Coordinate(1, 2, 0)
 
-    def test_writer_replace_updates_existing_table(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_writer_replace_updates_existing_table(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteSpawnTableWriter.for_standalone_connection(sqlite_conn)
         repo = SqliteSpawnTableRepository.for_connection(sqlite_conn)
         writer.replace_table(_table(1, template_id=1))
@@ -73,16 +67,12 @@ class TestSqliteSpawnTableRepository:
         assert result is not None
         assert result.slots[0].template_id == MonsterTemplateId.create(2)
 
-    def test_shared_writer_requires_active_transaction(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_writer_requires_active_transaction(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteSpawnTableWriter.for_shared_unit_of_work(sqlite_conn)
         with pytest.raises(RuntimeError, match="writer"):
             writer.replace_table(_table(1))
 
-    def test_shared_writer_is_visible_inside_transaction(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_writer_is_visible_inside_transaction(self, sqlite_conn: sqlite3.Connection) -> None:
         uow = SqliteUnitOfWork(connection=sqlite_conn)
         with uow:
             writer = SqliteSpawnTableWriter.for_shared_unit_of_work(uow.connection)

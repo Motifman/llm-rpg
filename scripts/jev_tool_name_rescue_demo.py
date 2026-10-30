@@ -100,9 +100,7 @@ def _descriptions(scenario: Path | None) -> dict[str, str | None]:
     try:
         runtime = create_world_runtime(scenario)
         for as_meeting in (False, True):
-            for d in runtime.get_tool_definitions(
-                as_meeting_phase=as_meeting, for_every_player=True
-            ):
+            for d in runtime.get_tool_definitions(as_meeting_phase=as_meeting, for_every_player=True):
                 lines = d.description.strip().splitlines()
                 out.setdefault(d.name, lines[0].strip() if lines else None)
     except Exception as exc:  # 古いシナリオが今の engine で組めないことがある
@@ -150,17 +148,19 @@ def extract_cases(runs_dir: Path) -> list[Case]:
                 source = "result_summary"
             descriptions = {**_catalog(), **{k: v for k, v in _descriptions(scenario).items() if v}}
             offered = {n: descriptions.get(n) for n in names}
-            cases.append(Case(
-                run=trace.parent.name,
-                tick=e.get("tick"),
-                player_id=e.get("player_id"),
-                requested=str(p.get("tool") or ""),
-                arguments=dict(_preceding(events, i, "action").get("arguments") or {}),
-                offered=offered,
-                offered_source=source,
-                scenario_path=str(scenario or ""),
-                missing_descriptions=[n for n, d in offered.items() if not d],
-            ))
+            cases.append(
+                Case(
+                    run=trace.parent.name,
+                    tick=e.get("tick"),
+                    player_id=e.get("player_id"),
+                    requested=str(p.get("tool") or ""),
+                    arguments=dict(_preceding(events, i, "action").get("arguments") or {}),
+                    offered=offered,
+                    offered_source=source,
+                    scenario_path=str(scenario or ""),
+                    missing_descriptions=[n for n, d in offered.items() if not d],
+                )
+            )
     return cases
 
 
@@ -171,7 +171,9 @@ def cmd_extract(args: argparse.Namespace) -> int:
     out.write_text(json.dumps([asdict(c) for c in cases], ensure_ascii=False, indent=1))
     print(f"cases: {len(cases)} → {out}")
     for c in cases:
-        print(f"  {c.run} t={c.tick} {c.requested} ({c.offered_source}, 送った {len(c.offered)} 件, 説明なし {len(c.missing_descriptions)})")
+        print(
+            f"  {c.run} t={c.tick} {c.requested} ({c.offered_source}, 送った {len(c.offered)} 件, 説明なし {len(c.missing_descriptions)})"
+        )
     return 0
 
 
@@ -191,25 +193,28 @@ def cmd_run(args: argparse.Namespace) -> int:
         ResolvedLlmRuntimeConfig,
     )
 
-    port = create_typed_judgment_port_from_config(
-        ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="jev")
-    )
+    port = create_typed_judgment_port_from_config(ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="jev"))
     rescue = ToolNameRescue(port=port)
     cases = [Case(**c) for c in json.loads(Path(args.cases).read_text())]
     results = []
     for c in cases:
         suggestion = rescue.suggest(c.requested, offered=c.offered, arguments=c.arguments)
-        results.append({
-            "case": asdict(c),
-            "similarity": suggest_closest_tool_name(c.requested, c.offered),
-            "judgment": suggestion.trace_payload(),
-        })
+        results.append(
+            {
+                "case": asdict(c),
+                "similarity": suggest_closest_tool_name(c.requested, c.offered),
+                "judgment": suggestion.trace_payload(),
+            }
+        )
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(
-        {"results": results},
-        ensure_ascii=False, indent=1,
-    ))
+    out.write_text(
+        json.dumps(
+            {"results": results},
+            ensure_ascii=False,
+            indent=1,
+        )
+    )
     print(f"事例 {len(results)} 件 → {out}")
     for r in results:
         c, j = r["case"], r["judgment"] or {}

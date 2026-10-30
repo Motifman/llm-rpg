@@ -59,11 +59,20 @@ class _Runtime:
             return None
         return "LLM 呼び出しが 8 件連続で失敗した (LLM_API_CALL_FAILED: 8)"
 
+    def round_assignment_trace(self) -> list:
+        return []
+
     def pop_llm_call_count(self) -> int:
         return 0
 
     def count_traveling_players(self) -> int:
         return 0
+
+    def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
+        return None
+
+    def shutdown_async_events(self) -> None:
+        return None
 
     def shutdown(self, *, timeout: float) -> None:
         return None
@@ -116,9 +125,7 @@ class TestADeadRunStopsEarly:
         assert summary["last_tick"] == 3
         assert summary["last_tick"] < summary["max_world_ticks"]
 
-    def test_the_outcome_says_it_was_aborted(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_the_outcome_says_it_was_aborted(self, tmp_path: Path, monkeypatch) -> None:
         """outcome が `LLM_ABORTED` になる。
 
         既存の `LLM_FAILURE` は「1 件も成功しなかった」の意味で使っている。
@@ -128,9 +135,7 @@ class TestADeadRunStopsEarly:
 
         assert summary["outcome"] == "LLM_ABORTED"
 
-    def test_the_reason_carries_the_streak(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_the_reason_carries_the_streak(self, tmp_path: Path, monkeypatch) -> None:
         """end_reason に連続件数と error_code が入る。
 
         止めた判断の根拠を、止めた場所に書く。trace を探し直させない。
@@ -140,9 +145,7 @@ class TestADeadRunStopsEarly:
         assert "8 件連続" in summary["end_reason"]
         assert "LLM_API_CALL_FAILED" in summary["end_reason"]
 
-    def test_a_healthy_run_reaches_the_deadline(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_a_healthy_run_reaches_the_deadline(self, tmp_path: Path, monkeypatch) -> None:
         """停止理由が立たない run は最後まで走る (**負の対照**)。
 
         ここが効かないと、**止めるべきでない run を engine が殺す**。
@@ -152,9 +155,7 @@ class TestADeadRunStopsEarly:
         assert summary["last_tick"] == 5
         assert summary["outcome"] != "LLM_ABORTED"
 
-    def test_a_runtime_without_the_hook_still_runs(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_a_runtime_without_the_hook_still_runs(self, tmp_path: Path, monkeypatch) -> None:
         """`llm_abort_reason` を持たない runtime でも落ちない (**負の対照**)。
 
         presentation 単体テスト等の軽量 runtime を巻き込まない。
@@ -163,15 +164,11 @@ class TestADeadRunStopsEarly:
         class _Hookless(_Runtime):
             llm_abort_reason = None  # type: ignore[assignment]
 
-        summary = _drive(
-            tmp_path, monkeypatch, _Hookless(abort_at=None), max_ticks=3
-        )
+        summary = _drive(tmp_path, monkeypatch, _Hookless(abort_at=None), max_ticks=3)
 
         assert summary["last_tick"] == 3
 
-    def test_a_broken_monitor_does_not_kill_the_run(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_a_broken_monitor_does_not_kill_the_run(self, tmp_path: Path, monkeypatch) -> None:
         """`llm_abort_reason` が例外を投げても run は続く (**負の対照**)。
 
         監視の故障で実験そのものを落とさない。ただし**停止は永久に効かなく
@@ -223,9 +220,7 @@ class TestTheReportAlwaysShowsTheCallHealth:
         **節の奥ではなく冒頭。** 140 tick run の report は 34 行あり、
         奥に置くと「outcome: LOSE / 140 tick 完走」だけを読んで閉じる。
         """
-        trace = self._trace(
-            tmp_path, [(True, "")] * 76 + [(False, "LLM_API_CALL_FAILED")] * 74
-        )
+        trace = self._trace(tmp_path, [(True, "")] * 76 + [(False, "LLM_API_CALL_FAILED")] * 74)
 
         report = self._report(tmp_path, trace)
         header = report.split("##")[0]
@@ -238,9 +233,7 @@ class TestTheReportAlwaysShowsTheCallHealth:
         """失敗があるとき、error_code の内訳が出る。"""
         trace = self._trace(
             tmp_path,
-            [(True, "")] * 2
-            + [(False, "LLM_API_CALL_FAILED")] * 3
-            + [(False, "LLM_WALL_TIME_CAP")],
+            [(True, "")] * 2 + [(False, "LLM_API_CALL_FAILED")] * 3 + [(False, "LLM_WALL_TIME_CAP")],
         )
 
         report = self._report(tmp_path, trace)
@@ -292,9 +285,7 @@ class TestTheReportAlwaysShowsTheCallHealth:
 class TestTheAbortReasonSurvivesTheFinalVerdict:
     """自ら止めた run の理由が、最後の全滅判定に丸められない。"""
 
-    def test_the_streak_reason_is_kept_when_nothing_succeeded(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_streak_reason_is_kept_when_nothing_succeeded(self, tmp_path: Path) -> None:
         """abort した run で成功が 0 件でも、end_reason が書き換わらない。
 
         `_classify_llm_run_health` は「1 件も成功しなかった run」を
@@ -327,9 +318,7 @@ class TestTheAbortReasonSurvivesTheFinalVerdict:
         assert reason == streak_reason
         assert (total, succeeded) == (8, 0)
 
-    def test_a_plain_wipeout_still_becomes_llm_failure(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_plain_wipeout_still_becomes_llm_failure(self, tmp_path: Path) -> None:
         """abort していない全滅 run は従来どおり `LLM_FAILURE` (**正の対照**)。
 
         上の分岐を広げすぎると、既存の砦が黙る。
@@ -358,9 +347,7 @@ class TestTheExitCodeSaysTheRunIsUnusable:
     """止まった run は、呼び出し元にも失敗として返る。"""
 
     @pytest.mark.parametrize("outcome", ["LLM_FAILURE", "LLM_ABORTED"])
-    def test_both_llm_failures_return_one(
-        self, tmp_path: Path, monkeypatch, outcome: str
-    ) -> None:
+    def test_both_llm_failures_return_one(self, tmp_path: Path, monkeypatch, outcome: str) -> None:
         """`LLM_FAILURE` と `LLM_ABORTED` はどちらも終了コード 1 を返す。
 
         **成果物は残す** (実験データを守る)。壊れているのは run であって、
@@ -388,8 +375,10 @@ class TestTheExitCodeSaysTheRunIsUnusable:
 
         rc = main(
             [
-                "--profile", "smoke_stub",
-                "--out", str(out_dir),
+                "--profile",
+                "smoke_stub",
+                "--out",
+                str(out_dir),
                 "--no-html",
                 "--no-progress-jsonl",
                 "--no-stderr-progress",
@@ -398,6 +387,4 @@ class TestTheExitCodeSaysTheRunIsUnusable:
 
         assert rc == 1
         assert (out_dir / "trace.jsonl").exists()
-        assert f"outcome: **{outcome}**" in (
-            out_dir / "report.md"
-        ).read_text(encoding="utf-8")
+        assert f"outcome: **{outcome}**" in (out_dir / "report.md").read_text(encoding="utf-8")

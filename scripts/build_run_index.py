@@ -121,9 +121,9 @@ def build_index(runs_dir: Path) -> list[dict[str, Any]]:
             {
                 "kind": "run",
                 "id": run_dir.name,
-                "measured_at": datetime.fromtimestamp(
-                    os.path.getmtime(trace), tz=timezone.utc
-                ).isoformat(timespec="seconds"),
+                "measured_at": datetime.fromtimestamp(os.path.getmtime(trace), tz=timezone.utc).isoformat(
+                    timespec="seconds"
+                ),
                 # 設定ファイルが無い run は条件を復元できない。**後から埋め
                 # られないので、埋まらないことを記録する。**
                 "conditions_recoverable": config is not None,
@@ -134,9 +134,7 @@ def build_index(runs_dir: Path) -> list[dict[str, Any]]:
                 "scenario_sha256": (config or {}).get("scenario_sha256"),
                 "max_world_ticks": (config or {}).get("max_world_ticks"),
                 "model": runtime_config.get("llm_model"),
-                "typed_judgment_provider": runtime_config.get(
-                    "typed_judgment_provider"
-                ),
+                "typed_judgment_provider": runtime_config.get("typed_judgment_provider"),
                 "metrics": _summarize_trace(trace),
                 "artifacts": str(run_dir),
             }
@@ -162,9 +160,7 @@ def read_index(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def write_index(
-    path: Path, rows: Sequence[dict[str, Any]], *, merge: bool = False
-) -> list[dict[str, Any]]:
+def write_index(path: Path, rows: Sequence[dict[str, Any]], *, merge: bool = False) -> list[dict[str, Any]]:
     """索引を書く。``merge`` なら既存の行を残したまま差し替える。
 
     **手元に無い run の行を消さない。** 索引は成果物より長く生きるためのもの
@@ -187,9 +183,7 @@ def write_index(
     # 読めなくなる。
     ordered = [merged[key] for key in sorted(merged)]
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(
-        "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in ordered)
-    )
+    Path(path).write_text("".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in ordered))
     return ordered
 
 

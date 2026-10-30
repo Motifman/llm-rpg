@@ -1,0 +1,2946 @@
+{
+ "labeled_by": "Claude (サブエージェント 2 体。どの手法が載せたかを伏せて付けた。人は確かめていない)",
+ "results": "results.json",
+ "selection": "results.json の 40 場面を人の順に並べ、4 つおきに選んだ 10 場面",
+ "criteria": "Y: この場面で次に何をするかを決める材料になる / ?: 関わりはあるが判断にほとんど効かない、決められない / N: 関わらない、または場面と食い違う",
+ "summary": {
+  "scenes": 10,
+  "pairs": 306,
+  "slots": 30,
+  "labels": {
+   "?": 124,
+   "N": 162,
+   "Y": 20
+  },
+  "ceiling_slots_with_Y": 17,
+  "Y_picked": {
+   "old": 4,
+   "char_bigram_bm25": 3,
+   "qwen3_embedding_8b_openrouter": 6,
+   "ruri_v3_30m": 2,
+   "ruri_v3_310m": 3
+  },
+  "relabel_agreement": {
+   "pairs": 92,
+   "same": 66,
+   "pr_1505_to_now": {
+    "?->?": 26,
+    "?->N": 9,
+    "?->Y": 6,
+    "N->?": 7,
+    "N->N": 34,
+    "N->Y": 1,
+    "Y->?": 3,
+    "Y->Y": 6
+   }
+  },
+  "per_scene": [
+   {
+    "who": "エイダ",
+    "prompt": 97,
+    "candidates": 32,
+    "Y": 3,
+    "?": 20,
+    "N": 9,
+    "Y_picked": {
+     "old": 1,
+     "char_bigram_bm25": 1,
+     "qwen3_embedding_8b_openrouter": 0,
+     "ruri_v3_30m": 0,
+     "ruri_v3_310m": 0
+    }
+   },
+   {
+    "who": "エイダ",
+    "prompt": 101,
+    "candidates": 34,
+    "Y": 2,
+    "?": 23,
+    "N": 9,
+    "Y_picked": {
+     "old": 1,
+     "char_bigram_bm25": 0,
+     "qwen3_embedding_8b_openrouter": 0,
+     "ruri_v3_30m": 0,
+     "ruri_v3_310m": 0
+    }
+   },
+   {
+    "who": "エイダ",
+    "prompt": 105,
+    "candidates": 35,
+    "Y": 2,
+    "?": 6,
+    "N": 27,
+    "Y_picked": {
+     "old": 0,
+     "char_bigram_bm25": 0,
+     "qwen3_embedding_8b_openrouter": 1,
+     "ruri_v3_30m": 0,
+     "ruri_v3_310m": 0
+    }
+   },
+   {
+    "who": "ノア",
+    "prompt": 102,
+    "candidates": 27,
+    "Y": 6,
+    "?": 15,
+    "N": 6,
+    "Y_picked": {
+     "old": 1,
+     "char_bigram_bm25": 1,
+     "qwen3_embedding_8b_openrouter": 1,
+     "ruri_v3_30m": 0,
+     "ruri_v3_310m": 0
+    }
+   },
+   {
+    "who": "ノア",
+    "prompt": 106,
+    "candidates": 27,
+    "Y": 2,
+    "?": 12,
+    "N": 13,
+    "Y_picked": {
+     "old": 0,
+     "char_bigram_bm25": 0,
+     "qwen3_embedding_8b_openrouter": 1,
+     "ruri_v3_30m": 0,
+     "ruri_v3_310m": 0
+    }
+   },
+   {
+    "who": "リオ",
+    "prompt": 93,
+    "candidates": 32,
+    "Y": 1,
+    "?": 9,
+    "N": 22,
+    "Y_picked": {
+     "old": 0,
+     "char_bigram_bm25": 0,
+     "qwen3_embedding_8b_openrouter": 1,
+     "ruri_v3_30m": 0,
+     "ruri_v3_310m": 1
+    }
+   },
+   {
+    "who": "リオ",
+    "prompt": 97,
+    "candidates": 33,
+    "Y": 0,
+    "?": 14,
+    "N": 19,
+    "Y_picked": {
+     "old": 0,
+     "char_bigram_bm25": 0,
+     "qwen3_embedding_8b_openrouter": 0,
+     "ruri_v3_30m": 0,
+     "ruri_v3_310m": 0
+    }
+   },
+   {
+    "who": "リオ",
+    "prompt": 101,
+    "candidates": 34,
+    "Y": 2,
+    "?": 8,
+    "N": 24,
+    "Y_picked": {
+     "old": 0,
+     "char_bigram_bm25": 0,
+     "qwen3_embedding_8b_openrouter": 1,
+     "ruri_v3_30m": 1,
+     "ruri_v3_310m": 1
+    }
+   },
+   {
+    "who": "カイ",
+    "prompt": 99,
+    "candidates": 26,
+    "Y": 1,
+    "?": 13,
+    "N": 12,
+    "Y_picked": {
+     "old": 0,
+     "char_bigram_bm25": 1,
+     "qwen3_embedding_8b_openrouter": 0,
+     "ruri_v3_30m": 0,
+     "ruri_v3_310m": 0
+    }
+   },
+   {
+    "who": "カイ",
+    "prompt": 103,
+    "candidates": 26,
+    "Y": 1,
+    "?": 4,
+    "N": 21,
+    "Y_picked": {
+     "old": 1,
+     "char_bigram_bm25": 0,
+     "qwen3_embedding_8b_openrouter": 1,
+     "ruri_v3_30m": 1,
+     "ruri_v3_310m": 1
+    }
+   }
+  ]
+ },
+ "rows": [
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-2fed9ceedde349d8b5f7de3da228133b",
+   "text": "カイは食料を分け合おうとする協力的な人物だ。",
+   "label": "?",
+   "reason": "協力性は分かるが今の判断に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-aed2b62c4a684b3b9d7c39d3b7e28674",
+   "text": "カイは探索を優先し自ら情報を開示しないことがある",
+   "label": "?",
+   "reason": "カイは情報を持ち帰ると言っている",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-3e45b0879f6740a196798c3111cb38a4",
+   "text": "隠し入江の刻みは山頂への経路を示すが、雨季の沼東ルートは危険だ。",
+   "label": "?",
+   "reason": "山頂ルートは後の話で今は風向き",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-9be19150e6d4434da229b51d36f480b9",
+   "text": "カイは物資の受け渡しを助けてくれる協力的な仲間だ",
+   "label": "?",
+   "reason": "協力性は分かるが今の判断に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-ec5e2caa645f47d9a758231da560112f",
+   "text": "浜辺には流木以外の有用なものは少ない。",
+   "label": "N",
+   "reason": "浜辺の話で場面と無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-19afcf41b0e042c182ba669a0630a2c0",
+   "text": "この島には観測拠点があった歴史がある",
+   "label": "?",
+   "reason": "向かう先の背景だが判断に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-7789b8c7b81745db9711d148eeb7d9b8",
+   "text": "カイは焚き火に必要な知識を持っている。",
+   "label": "?",
+   "reason": "火の知識は食料確保に間接的",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-a35411d27a5a44b09d96e94e12750344",
+   "text": "リオは地形の知識があり戦略的な判断をする。",
+   "label": "?",
+   "reason": "リオの判断傾向は合流に弱く効く",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-4cb2fe393dc74686ac181a24a91d3031",
+   "text": "ノアとリオは干潟に行くようだ。",
+   "label": "N",
+   "reason": "古い。ノアは隣、リオは廃屋",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-3f2cce46325f46c1aef4eecc60ea3346",
+   "text": "ノアに医療行為はシステム的に不可能だ。",
+   "label": "Y",
+   "reason": "治療不可で口頭指示に切替の根拠",
+   "label_in_pr_1505": "Y"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-bde931fc164b4d8d9a54613ac98c23e6",
+   "text": "狼煙は北西の風の日に焚くのが効果的だ。",
+   "label": "Y",
+   "reason": "合流後に風向きを調べる目的",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-392aca380cc4461088a9d8ca31b3700d",
+   "text": "廃屋はかつての観測所S.E.-7跡だ。",
+   "label": "?",
+   "reason": "行き先の素性だが判断に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-697a02ccc68b4f38bf33691bdb616506",
+   "text": "仲間への医療行為にはシステム制約がある。",
+   "label": "Y",
+   "reason": "治療不可で口頭指示に切替の根拠",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-8ba7a2fc1a3744db8fb2473539b772ea",
+   "text": "刻み跡は山頂への二つのルートを示している。",
+   "label": "?",
+   "reason": "山頂ルートは後の話で今は風向き",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-bc7f4a6546e743b189b1f282ead1dc35",
+   "text": "隠し入江の刻みは山頂への経路を示す。",
+   "label": "?",
+   "reason": "山頂ルートは後の話で今は風向き",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-346eceb758fd438b9a675f70b1014320",
+   "text": "カイの祖父はこの島の観測者だった。",
+   "label": "N",
+   "reason": "祖父の素性は今の判断に無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-fbf9b083e34d4c01bb75d41c8183305b",
+   "text": "interactで手記は読めない。",
+   "label": "N",
+   "reason": "手記はすでに読めた。古い",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-e95815d728b9439fb106b77c68cd4158",
+   "text": "この島は昔から観測拠点として使われていた。",
+   "label": "?",
+   "reason": "向かう先の背景だが判断に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-a2c9581d0b1249bbb91b0b8a86bb4b5f",
+   "text": "カイに手記を開くよう促しても応答がない。",
+   "label": "N",
+   "reason": "手記はすでに読めた。古い",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-5cc0d7666bfe4050ad2314ee214b4a75",
+   "text": "ノアが動いていると医療処置ができない。",
+   "label": "?",
+   "reason": "治療関連だが治療自体が不可",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-bc868458f7294d2ebc0cbd9626a0916c",
+   "text": "S.E.-7は祖父が働いていた観測点のコードだ。",
+   "label": "N",
+   "reason": "祖父の素性は今の判断に無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-6cc3c17d802842b8a11d97c9bdfb72cf",
+   "text": "ノアとリオは干潟に向かっている。",
+   "label": "N",
+   "reason": "古い。ノアは隣、リオは廃屋",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-ac369ef98ac64cb590ce17a90f3e7962",
+   "text": "怪我人が増え危険なら全員で安全地帯へ移動すべき",
+   "label": "?",
+   "reason": "負傷者いるが移動先は拠点跡",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-3a3fecd52d4e4de3ae5328b485355b1e",
+   "text": "刻み跡には山頂への二つのルートが記されている",
+   "label": "?",
+   "reason": "山頂ルートは後の話で今は風向き",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-69b2a35b8f5244018c5690502b3eda7e",
+   "text": "リオは医者を一人で危険地に行かせないと判断する",
+   "label": "?",
+   "reason": "合流の判断に弱く関わる",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-b0dd50691c8a4317883f075f386b6d7a",
+   "text": "隠し入江は安全な拠点かもしれない",
+   "label": "?",
+   "reason": "入江を離れる判断に弱い",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-8f8390429e0d4226a17c6a9a17eda66c",
+   "text": "刻み跡の解読は具体的な道順を示す。",
+   "label": "?",
+   "reason": "山頂ルートは後の話で今は風向き",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-dcea1acfade448c59afe53ad5f02400b",
+   "text": "刻み跡の解読は具体的な道順を示すことがある。",
+   "label": "?",
+   "reason": "山頂ルートは後の話で今は風向き",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-549f6eada3794838a418ee0386a131a2",
+   "text": "刻み跡は島の道順・山頂ルートを記している",
+   "label": "?",
+   "reason": "山頂ルートは後の話で今は風向き",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-f744a267485e446c9c13468dc5609740",
+   "text": "アイテムの受け渡しは通信手段を選ぶことがある。",
+   "label": "N",
+   "reason": "受け渡しの話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-4b0a650c458d4e4898835e2349c2c682",
+   "text": "浜辺には流木以外の有用なものは少ない。",
+   "label": "N",
+   "reason": "浜辺の話で場面と無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 97,
+   "entry_id": "sem-c40df627f90e48eda6f7231cabf338c4",
+   "text": "救助手段をまだ具体的に進められていない",
+   "label": "?",
+   "reason": "全体課題だが次の一手に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-2fed9ceedde349d8b5f7de3da228133b",
+   "text": "カイは食料を分け合おうとする協力的な人物だ。",
+   "label": "?",
+   "reason": "空腹のカイと食料の話はあるが判断に弱い",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-aed2b62c4a684b3b9d7c39d3b7e28674",
+   "text": "カイは探索を優先し自ら情報を開示しないことがある",
+   "label": "?",
+   "reason": "風向き結果を聞く場面だが効き薄",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-3e45b0879f6740a196798c3111cb38a4",
+   "text": "隠し入江の刻みは山頂への経路を示すが、雨季の沼東ルートは危険だ。",
+   "label": "?",
+   "reason": "山頂ルートは今の判断外",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-9be19150e6d4434da229b51d36f480b9",
+   "text": "カイは物資の受け渡しを助けてくれる協力的な仲間だ",
+   "label": "?",
+   "reason": "受け渡しは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-ac0f19931cf148499c8574407113e6fb",
+   "text": "カイは狼煙を北西の風の日に焚くべきと知っている。",
+   "label": "Y",
+   "reason": "風向きの結果を聞く目的に直結",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-ec5e2caa645f47d9a758231da560112f",
+   "text": "浜辺には流木以外の有用なものは少ない。",
+   "label": "N",
+   "reason": "浜辺の話で場面と無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-19afcf41b0e042c182ba669a0630a2c0",
+   "text": "この島には観測拠点があった歴史がある",
+   "label": "N",
+   "reason": "歴史は次の行動に効かない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-7789b8c7b81745db9711d148eeb7d9b8",
+   "text": "カイは焚き火に必要な知識を持っている。",
+   "label": "?",
+   "reason": "焼いて食う話はあるが間接的",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-a35411d27a5a44b09d96e94e12750344",
+   "text": "リオは地形の知識があり戦略的な判断をする。",
+   "label": "?",
+   "reason": "リオの判断力は間接的",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-4cb2fe393dc74686ac181a24a91d3031",
+   "text": "ノアとリオは干潟に行くようだ。",
+   "label": "N",
+   "reason": "干潟行きは古い情報",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-54ec491f40834e7c95264bd55dd7276e",
+   "text": "ノアの傷を直接治療するアクションはシステム上存在しない。",
+   "label": "?",
+   "reason": "傷の話は場面に出ていない",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-3f2cce46325f46c1aef4eecc60ea3346",
+   "text": "ノアに医療行為はシステム的に不可能だ。",
+   "label": "?",
+   "reason": "傷の話は場面に出ていない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-bde931fc164b4d8d9a54613ac98c23e6",
+   "text": "狼煙は北西の風の日に焚くのが効果的だ。",
+   "label": "Y",
+   "reason": "狼煙と風向きの判断材料",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-392aca380cc4461088a9d8ca31b3700d",
+   "text": "廃屋はかつての観測所S.E.-7跡だ。",
+   "label": "?",
+   "reason": "移動先の素性だが判断に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-697a02ccc68b4f38bf33691bdb616506",
+   "text": "仲間への医療行為にはシステム制約がある。",
+   "label": "?",
+   "reason": "医療は場面の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-8ba7a2fc1a3744db8fb2473539b772ea",
+   "text": "刻み跡は山頂への二つのルートを示している。",
+   "label": "?",
+   "reason": "山頂ルートは今の判断外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-bc7f4a6546e743b189b1f282ead1dc35",
+   "text": "隠し入江の刻みは山頂への経路を示す。",
+   "label": "?",
+   "reason": "山頂ルートは今の判断外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-346eceb758fd438b9a675f70b1014320",
+   "text": "カイの祖父はこの島の観測者だった。",
+   "label": "N",
+   "reason": "祖父の話は判断に効かない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-fbf9b083e34d4c01bb75d41c8183305b",
+   "text": "interactで手記は読めない。",
+   "label": "?",
+   "reason": "手記は場面に出ていない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-e95815d728b9439fb106b77c68cd4158",
+   "text": "この島は昔から観測拠点として使われていた。",
+   "label": "N",
+   "reason": "歴史は次の行動に効かない",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-a2c9581d0b1249bbb91b0b8a86bb4b5f",
+   "text": "カイに手記を開くよう促しても応答がない。",
+   "label": "?",
+   "reason": "手記は場面に出ていない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-5cc0d7666bfe4050ad2314ee214b4a75",
+   "text": "ノアが動いていると医療処置ができない。",
+   "label": "?",
+   "reason": "医療は場面の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-bc868458f7294d2ebc0cbd9626a0916c",
+   "text": "S.E.-7は祖父が働いていた観測点のコードだ。",
+   "label": "N",
+   "reason": "コードの由来は判断に効かない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-6cc3c17d802842b8a11d97c9bdfb72cf",
+   "text": "ノアとリオは干潟に向かっている。",
+   "label": "N",
+   "reason": "干潟行きは古い情報",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-ac369ef98ac64cb590ce17a90f3e7962",
+   "text": "怪我人が増え危険なら全員で安全地帯へ移動すべき",
+   "label": "?",
+   "reason": "安全地帯移動は今の論点と弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-3a3fecd52d4e4de3ae5328b485355b1e",
+   "text": "刻み跡には山頂への二つのルートが記されている",
+   "label": "?",
+   "reason": "山頂ルートは今の判断外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-69b2a35b8f5244018c5690502b3eda7e",
+   "text": "リオは医者を一人で危険地に行かせないと判断する",
+   "label": "?",
+   "reason": "リオ単独行の話だが効き薄",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-b0dd50691c8a4317883f075f386b6d7a",
+   "text": "隠し入江は安全な拠点かもしれない",
+   "label": "?",
+   "reason": "入江へ戻る話と関連するが弱い",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-8f8390429e0d4226a17c6a9a17eda66c",
+   "text": "刻み跡の解読は具体的な道順を示す。",
+   "label": "?",
+   "reason": "刻み解読は今の判断外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-dcea1acfade448c59afe53ad5f02400b",
+   "text": "刻み跡の解読は具体的な道順を示すことがある。",
+   "label": "?",
+   "reason": "刻み解読は今の判断外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-549f6eada3794838a418ee0386a131a2",
+   "text": "刻み跡は島の道順・山頂ルートを記している",
+   "label": "?",
+   "reason": "刻み解読は今の判断外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-f744a267485e446c9c13468dc5609740",
+   "text": "アイテムの受け渡しは通信手段を選ぶことがある。",
+   "label": "N",
+   "reason": "受け渡し手段は無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-4b0a650c458d4e4898835e2349c2c682",
+   "text": "浜辺には流木以外の有用なものは少ない。",
+   "label": "N",
+   "reason": "浜辺の話で場面と無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 101,
+   "entry_id": "sem-c40df627f90e48eda6f7231cabf338c4",
+   "text": "救助手段をまだ具体的に進められていない",
+   "label": "?",
+   "reason": "救助全体の状況で間接的",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-2fed9ceedde349d8b5f7de3da228133b",
+   "text": "カイは食料を分け合おうとする協力的な人物だ。",
+   "label": "?",
+   "reason": "食料共有の文脈だが判断に弱い",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-aed2b62c4a684b3b9d7c39d3b7e28674",
+   "text": "カイは探索を優先し自ら情報を開示しないことがある",
+   "label": "N",
+   "reason": "情報開示は今の課題でない",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-3e45b0879f6740a196798c3111cb38a4",
+   "text": "隠し入江の刻みは山頂への経路を示すが、雨季の沼東ルートは危険だ。",
+   "label": "N",
+   "reason": "ルートは今の課題でない",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-9be19150e6d4434da229b51d36f480b9",
+   "text": "カイは物資の受け渡しを助けてくれる協力的な仲間だ",
+   "label": "?",
+   "reason": "食料共有の文脈だが判断に弱い",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-ac0f19931cf148499c8574407113e6fb",
+   "text": "カイは狼煙を北西の風の日に焚くべきと知っている。",
+   "label": "N",
+   "reason": "風向きは食料確保後の話",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-ec5e2caa645f47d9a758231da560112f",
+   "text": "浜辺には流木以外の有用なものは少ない。",
+   "label": "?",
+   "reason": "流木で火を起こす話に弱く関わる",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-19afcf41b0e042c182ba669a0630a2c0",
+   "text": "この島には観測拠点があった歴史がある",
+   "label": "N",
+   "reason": "島の歴史は判断に無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-7789b8c7b81745db9711d148eeb7d9b8",
+   "text": "カイは焚き火に必要な知識を持っている。",
+   "label": "Y",
+   "reason": "入江で火を起こし食料を焼く",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-8e50ff479d654e41a81878b8382a8951",
+   "text": "カイの祖父はこの島の観測者だったようだ。",
+   "label": "N",
+   "reason": "祖父の話は無関係",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-a35411d27a5a44b09d96e94e12750344",
+   "text": "リオは地形の知識があり戦略的な判断をする。",
+   "label": "?",
+   "reason": "リオ合流済みで判断に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-4cb2fe393dc74686ac181a24a91d3031",
+   "text": "ノアとリオは干潟に行くようだ。",
+   "label": "N",
+   "reason": "古い。全員が廃屋にいる",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-54ec491f40834e7c95264bd55dd7276e",
+   "text": "ノアの傷を直接治療するアクションはシステム上存在しない。",
+   "label": "N",
+   "reason": "治療は今の課題でない",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-3f2cce46325f46c1aef4eecc60ea3346",
+   "text": "ノアに医療行為はシステム的に不可能だ。",
+   "label": "N",
+   "reason": "治療は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-bde931fc164b4d8d9a54613ac98c23e6",
+   "text": "狼煙は北西の風の日に焚くのが効果的だ。",
+   "label": "N",
+   "reason": "風向きは食料確保後の話",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-392aca380cc4461088a9d8ca31b3700d",
+   "text": "廃屋はかつての観測所S.E.-7跡だ。",
+   "label": "N",
+   "reason": "いる場所の素性で判断に無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-697a02ccc68b4f38bf33691bdb616506",
+   "text": "仲間への医療行為にはシステム制約がある。",
+   "label": "N",
+   "reason": "治療は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-8ba7a2fc1a3744db8fb2473539b772ea",
+   "text": "刻み跡は山頂への二つのルートを示している。",
+   "label": "N",
+   "reason": "ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-bc7f4a6546e743b189b1f282ead1dc35",
+   "text": "隠し入江の刻みは山頂への経路を示す。",
+   "label": "N",
+   "reason": "ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-346eceb758fd438b9a675f70b1014320",
+   "text": "カイの祖父はこの島の観測者だった。",
+   "label": "N",
+   "reason": "祖父の話は無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-fbf9b083e34d4c01bb75d41c8183305b",
+   "text": "interactで手記は読めない。",
+   "label": "N",
+   "reason": "手記は読めた。古い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-e95815d728b9439fb106b77c68cd4158",
+   "text": "この島は昔から観測拠点として使われていた。",
+   "label": "N",
+   "reason": "島の歴史は判断に無関係",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-a2c9581d0b1249bbb91b0b8a86bb4b5f",
+   "text": "カイに手記を開くよう促しても応答がない。",
+   "label": "N",
+   "reason": "手記は読めた。古い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-5cc0d7666bfe4050ad2314ee214b4a75",
+   "text": "ノアが動いていると医療処置ができない。",
+   "label": "N",
+   "reason": "治療は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-bc868458f7294d2ebc0cbd9626a0916c",
+   "text": "S.E.-7は祖父が働いていた観測点のコードだ。",
+   "label": "N",
+   "reason": "祖父の話は無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-6cc3c17d802842b8a11d97c9bdfb72cf",
+   "text": "ノアとリオは干潟に向かっている。",
+   "label": "N",
+   "reason": "古い。全員が廃屋にいる",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-ac369ef98ac64cb590ce17a90f3e7962",
+   "text": "怪我人が増え危険なら全員で安全地帯へ移動すべき",
+   "label": "?",
+   "reason": "全員移動を支えるが理由が違う",
+   "label_in_pr_1505": "Y"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-3a3fecd52d4e4de3ae5328b485355b1e",
+   "text": "刻み跡には山頂への二つのルートが記されている",
+   "label": "N",
+   "reason": "ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-69b2a35b8f5244018c5690502b3eda7e",
+   "text": "リオは医者を一人で危険地に行かせないと判断する",
+   "label": "N",
+   "reason": "単独行の場面でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-b0dd50691c8a4317883f075f386b6d7a",
+   "text": "隠し入江は安全な拠点かもしれない",
+   "label": "Y",
+   "reason": "移動先の入江が安全拠点",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-8f8390429e0d4226a17c6a9a17eda66c",
+   "text": "刻み跡の解読は具体的な道順を示す。",
+   "label": "N",
+   "reason": "ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-dcea1acfade448c59afe53ad5f02400b",
+   "text": "刻み跡の解読は具体的な道順を示すことがある。",
+   "label": "N",
+   "reason": "ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-549f6eada3794838a418ee0386a131a2",
+   "text": "刻み跡は島の道順・山頂ルートを記している",
+   "label": "N",
+   "reason": "ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-f744a267485e446c9c13468dc5609740",
+   "text": "アイテムの受け渡しは通信手段を選ぶことがある。",
+   "label": "N",
+   "reason": "受け渡しの話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-4b0a650c458d4e4898835e2349c2c682",
+   "text": "浜辺には流木以外の有用なものは少ない。",
+   "label": "?",
+   "reason": "流木で火を起こす話に弱く関わる",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "エイダ",
+   "prompt": 105,
+   "entry_id": "sem-c40df627f90e48eda6f7231cabf338c4",
+   "text": "救助手段をまだ具体的に進められていない",
+   "label": "N",
+   "reason": "いまは食料が最優先",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-29690416b0f74435a3b56c05aa2549ec",
+   "text": "隠し入江への移動が安全を確保する",
+   "label": "Y",
+   "reason": "入江に戻るかの選択に関わる",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-af2903ceaeaf4ae5a25937c2ec5ca4c4",
+   "text": "リオは怪我をしていて、単独行動は危険だ",
+   "label": "Y",
+   "reason": "リオを追うかの判断材料",
+   "label_in_pr_1505": "Y"
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-dca7bc45f24c4a88b1f5092584ca3067",
+   "text": "山頂へのルートは川沿いと沼東の二つある",
+   "label": "?",
+   "reason": "山頂ルートは今の判断外",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-97b1912a431d4acca624eec17ba50859",
+   "text": "エイダはシステムに制限されて直接治療できない",
+   "label": "Y",
+   "reason": "腕の傷を診てもらえるかに直結",
+   "label_in_pr_1505": "Y"
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-3d548e671b9a44c5bb8458a3f278ae75",
+   "text": "カイは手記の中身を開けられない",
+   "label": "N",
+   "reason": "カイは手記を読めたと言い食い違う",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-4776079b2abf400688298c9da8e3dd16",
+   "text": "焚き火には火打ち石と流木と枯れ葉が必要だ",
+   "label": "?",
+   "reason": "焼くには火が要るが間接的",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-602cfc5f63ed4bd9b3a0aa3a8e63b9d5",
+   "text": "カイは船倉で道具を見つけた",
+   "label": "N",
+   "reason": "船倉の道具は無関係",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-7a1ba4ae35c24e7c95e9b409abee9bac",
+   "text": "エイダは治療しようとするが行動が阻まれることが多い",
+   "label": "?",
+   "reason": "治療の話だが判断に弱い",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-302abbf4d81c450ba4a3a8fd459e042c",
+   "text": "浜辺や船倉では採取できるものが限られる",
+   "label": "?",
+   "reason": "食料の取れ場所選びに弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-04cda8af255f41f5b9907594699c1432",
+   "text": "刻み跡が山頂への道筋を教えてくれる",
+   "label": "?",
+   "reason": "山頂ルートは今の判断外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-fc6cd57bb6514928bf573030320d0ff8",
+   "text": "狼煙台を使うには北西の風の日に焚く",
+   "label": "?",
+   "reason": "手記で確認済みで新味なし",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-87aaaf9bff784d018d0f871c864c734f",
+   "text": "沼東ルートは乾季に安定して通行できる",
+   "label": "?",
+   "reason": "山頂ルートは今の判断外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-81bb1d6bd8cf420284b1f34903d90d65",
+   "text": "一方的な指示ではチームは動かないことがある",
+   "label": "?",
+   "reason": "相談の進め方に弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-a159fd75feb543e18395cb460189f6ac",
+   "text": "行動が救助につながっていない",
+   "label": "?",
+   "reason": "全体の振り返りで間接的",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-edca9df46da544cfb194391e60826014",
+   "text": "動いている相手には治療をinteractできない",
+   "label": "Y",
+   "reason": "傷の治療を受ける条件になる",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-dea404c91aba44f88f498c29c5b5d1ee",
+   "text": "刻みは暗くなっても読め、未読の情報がある",
+   "label": "N",
+   "reason": "刻みの話は場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-944a191658e6450a8940181c614cbfbf",
+   "text": "カイの祖父はS.E.-7の観測員で行方不明になった",
+   "label": "N",
+   "reason": "祖父の話は判断に効かない",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-2bc4419c7e3d4f5ebe1a1ea977dde71a",
+   "text": "エイダは治療の意思を行動で示せる",
+   "label": "?",
+   "reason": "治療の話だが判断に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-8c49636a42bb464e849eadb56805b42b",
+   "text": "システム上の意図と発話にずれがあることがある",
+   "label": "?",
+   "reason": "判断に効かない一般論",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-cb3cc2a953e6405aa22a753908607732",
+   "text": "川沿いが本道で安全、沼東は近道だがリスキー",
+   "label": "?",
+   "reason": "山頂ルートは今の判断外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-f24c633720af4b97bbb30004491edfcc",
+   "text": "廃屋はS.E.-7観測点跡の可能性が高い",
+   "label": "N",
+   "reason": "廃屋の素性は判断に効かない",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-8cd78757db8f4af6a2bc360d9d4f8538",
+   "text": "リオは内陸からのルートを提案する",
+   "label": "?",
+   "reason": "リオの提案傾向は弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-c02b402deed840499047e9f10aa3b1ce",
+   "text": "約束を破るノアは頼りにならない",
+   "label": "N",
+   "reason": "自分への評価で判断に効かない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-9d3a953a7922413faca23e105c74f112",
+   "text": "安全第一で行動方針を決める必要がある",
+   "label": "?",
+   "reason": "一般論で決め手にならない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-b1ff921578fd4b35902e7a68aa65e80a",
+   "text": "川沿いルートは安全で迷いにくい",
+   "label": "?",
+   "reason": "山頂ルートは今の判断外",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-6bf7c69ab9f74ceca3deb91e70d1263f",
+   "text": "リオは怪我をしていて一人で行動させるのは危険だ",
+   "label": "Y",
+   "reason": "リオを追うかの判断材料",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 102,
+   "entry_id": "sem-c2dcb9d2ca284ec9b21509ebcc5f9a85",
+   "text": "仲間と食料を分け合うことで信頼が生まれる",
+   "label": "Y",
+   "reason": "空腹のカイへ貝を分ける判断",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-29690416b0f74435a3b56c05aa2549ec",
+   "text": "隠し入江への移動が安全を確保する",
+   "label": "?",
+   "reason": "入江に戻る話と関連するが弱い",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-af2903ceaeaf4ae5a25937c2ec5ca4c4",
+   "text": "リオは怪我をしていて、単独行動は危険だ",
+   "label": "?",
+   "reason": "リオは不在で今は効き薄",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-dca7bc45f24c4a88b1f5092584ca3067",
+   "text": "山頂へのルートは川沿いと沼東の二つある",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-97b1912a431d4acca624eec17ba50859",
+   "text": "エイダはシステムに制限されて直接治療できない",
+   "label": "?",
+   "reason": "治療は今の課題でない",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-3d548e671b9a44c5bb8458a3f278ae75",
+   "text": "カイは手記の中身を開けられない",
+   "label": "N",
+   "reason": "カイは手記を読めており古い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-4776079b2abf400688298c9da8e3dd16",
+   "text": "焚き火には火打ち石と流木と枯れ葉が必要だ",
+   "label": "Y",
+   "reason": "食料を焼く火起こしに直結",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-602cfc5f63ed4bd9b3a0aa3a8e63b9d5",
+   "text": "カイは船倉で道具を見つけた",
+   "label": "?",
+   "reason": "道具の出所で間接的",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-7a1ba4ae35c24e7c95e9b409abee9bac",
+   "text": "エイダは治療しようとするが行動が阻まれることが多い",
+   "label": "?",
+   "reason": "治療は今の課題でない",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-302abbf4d81c450ba4a3a8fd459e042c",
+   "text": "浜辺や船倉では採取できるものが限られる",
+   "label": "?",
+   "reason": "食料の取れ場所に弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-04cda8af255f41f5b9907594699c1432",
+   "text": "刻み跡が山頂への道筋を教えてくれる",
+   "label": "N",
+   "reason": "刻みの話は場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-fc6cd57bb6514928bf573030320d0ff8",
+   "text": "狼煙台を使うには北西の風の日に焚く",
+   "label": "N",
+   "reason": "狼煙は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-87aaaf9bff784d018d0f871c864c734f",
+   "text": "沼東ルートは乾季に安定して通行できる",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-81bb1d6bd8cf420284b1f34903d90d65",
+   "text": "一方的な指示ではチームは動かないことがある",
+   "label": "?",
+   "reason": "全員合意済みで効き薄",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-a159fd75feb543e18395cb460189f6ac",
+   "text": "行動が救助につながっていない",
+   "label": "?",
+   "reason": "全体の振り返りで間接的",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-edca9df46da544cfb194391e60826014",
+   "text": "動いている相手には治療をinteractできない",
+   "label": "?",
+   "reason": "治療は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-dea404c91aba44f88f498c29c5b5d1ee",
+   "text": "刻みは暗くなっても読め、未読の情報がある",
+   "label": "N",
+   "reason": "刻みの話は場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-944a191658e6450a8940181c614cbfbf",
+   "text": "カイの祖父はS.E.-7の観測員で行方不明になった",
+   "label": "N",
+   "reason": "祖父の話は判断に効かない",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-2bc4419c7e3d4f5ebe1a1ea977dde71a",
+   "text": "エイダは治療の意思を行動で示せる",
+   "label": "?",
+   "reason": "治療は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-8c49636a42bb464e849eadb56805b42b",
+   "text": "システム上の意図と発話にずれがあることがある",
+   "label": "N",
+   "reason": "判断に効かない一般論",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-cb3cc2a953e6405aa22a753908607732",
+   "text": "川沿いが本道で安全、沼東は近道だがリスキー",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-f24c633720af4b97bbb30004491edfcc",
+   "text": "廃屋はS.E.-7観測点跡の可能性が高い",
+   "label": "N",
+   "reason": "廃屋の素性は判断に効かない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-8cd78757db8f4af6a2bc360d9d4f8538",
+   "text": "リオは内陸からのルートを提案する",
+   "label": "N",
+   "reason": "リオの提案は場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-c02b402deed840499047e9f10aa3b1ce",
+   "text": "約束を破るノアは頼りにならない",
+   "label": "N",
+   "reason": "自分への評価で判断に効かない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-9d3a953a7922413faca23e105c74f112",
+   "text": "安全第一で行動方針を決める必要がある",
+   "label": "?",
+   "reason": "一般論で決め手にならない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-b1ff921578fd4b35902e7a68aa65e80a",
+   "text": "川沿いルートは安全で迷いにくい",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-6bf7c69ab9f74ceca3deb91e70d1263f",
+   "text": "リオは怪我をしていて一人で行動させるのは危険だ",
+   "label": "?",
+   "reason": "リオは不在で今は効き薄",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "ノア",
+   "prompt": 106,
+   "entry_id": "sem-c2dcb9d2ca284ec9b21509ebcc5f9a85",
+   "text": "仲間と食料を分け合うことで信頼が生まれる",
+   "label": "Y",
+   "reason": "空腹のカイと食料を分ける判断",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-2e7f8137c44b47f09c48b19fd77f4b74",
+   "text": "刻みには川沿いが本道で沼東ルートもあると書かれている",
+   "label": "?",
+   "reason": "山頂ルートは後の話",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-95199abd72bb48018b01c369194464ee",
+   "text": "干潟には大型カニがいて危険だ",
+   "label": "N",
+   "reason": "干潟の話で無関係",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-f095e21174574b909d823250b1c507fc",
+   "text": "エイダは島の過去を記した手記と海図を読んだ",
+   "label": "?",
+   "reason": "手記に風向きの手がかりの可能性",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-557683a948da4b67a419495494f1509c",
+   "text": "エイダは手記を共有したがリオの奪おうとする態度で警戒した",
+   "label": "N",
+   "reason": "手記をめぐる過去の対立",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-0a1c04d9ead5443bad484ff131e0bbea",
+   "text": "エイダは廃屋にも手がかりがあると考えた",
+   "label": "N",
+   "reason": "廃屋は空と確定。食い違う",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-9f704f0f9e9842209065a9874e7eb5f8",
+   "text": "砂に埋もれた箱から火打ち石と枯れ葉が見つかる",
+   "label": "N",
+   "reason": "火打ち石の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-c9f06e4ed1ff4bbeb43843f0e7ce6250",
+   "text": "隠し入江への移動は仲間の合意を得て進める",
+   "label": "N",
+   "reason": "入江へ行く場面でない",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-d15a190e16ef4f04914830e0cd522236",
+   "text": "カイは即座に情報を教えてくれない",
+   "label": "?",
+   "reason": "カイの情報共有の傾向に弱く関わる",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-b41cd09f17e04cc4b2d3313ddddfa3c3",
+   "text": "エイダは手記を簡単には渡さない態度を示した",
+   "label": "N",
+   "reason": "手記をめぐる過去の対立",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-540f7d1b1d2c40008f8fbb7b94996cfc",
+   "text": "廃屋に「墜ちた鉄の鳥」や山頂への手がかりがあるかもしれない",
+   "label": "N",
+   "reason": "廃屋は空と確定。食い違う",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-9018605e958a41d59f7b6eaeb1bdddc0",
+   "text": "海図の断片はexamineで調べられない",
+   "label": "N",
+   "reason": "海図の操作の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-263d9de19d2048c39931bbb32f9deb58",
+   "text": "山頂へのルートは川沿い本道と沼東の近道がある",
+   "label": "?",
+   "reason": "山頂ルートは後の話",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-8e2b03969f97486792fc6e03eacc1663",
+   "text": "岩肌の刻み跡は隠れたルートを示すかもしれない",
+   "label": "N",
+   "reason": "刻みの話で今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-37313e2df39c47cc8f34825241d6523e",
+   "text": "干潟には大型カニがいて危険な場所がある",
+   "label": "N",
+   "reason": "干潟の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-551a0900b7dc423a9d5790f0dbf49627",
+   "text": "誰かがこの島に備えを残している",
+   "label": "?",
+   "reason": "小屋に備えがある期待に弱く効く",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-ac6dff4fae834e61af293203b092d83a",
+   "text": "カイに焚き火準備を任せるのが確実だ",
+   "label": "N",
+   "reason": "焚き火は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-99774d166a094788998ec59771ffeff9",
+   "text": "空腹が危険域に達したら即座に食料を口にする",
+   "label": "?",
+   "reason": "空腹の話は場面に出ていない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-b237a6c5878d4941a3ea4de52faef2d6",
+   "text": "山頂への道は川沿いと沼東の二ルートある",
+   "label": "?",
+   "reason": "山頂ルートは後の話",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-159819462ffd4591be99aee79f07b75d",
+   "text": "手記は持ち主でないと開けないシステム制限がある",
+   "label": "N",
+   "reason": "手記はすでに読めた",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-b4e2d785f9c642c799557d7397431529",
+   "text": "カイは火起こし道具一式を持っている",
+   "label": "N",
+   "reason": "焚き火は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-9285a89f2e01448d801d51572929b8b5",
+   "text": "ノアは川沿いルートを推した",
+   "label": "?",
+   "reason": "ノアの計画で判断に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-07a090173cd9421faddd6c595a617f12",
+   "text": "海図は直接examineできず砂に埋もれた箱などが対象だった",
+   "label": "N",
+   "reason": "海図の操作の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-794665080ecf44329ef96827bb5623c8",
+   "text": "救助のための行動をしていない",
+   "label": "?",
+   "reason": "全体課題だが次の一手に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-390f59ad845a43fa9afb3cfe864a6f38",
+   "text": "ノアは道案内の情報に詳しい",
+   "label": "N",
+   "reason": "根拠が薄く判断に無関係",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-ad6ca1508097450b9b937ba2ad08dd72",
+   "text": "S.E.-7はカイの祖父が働いていた観測点のコードだ",
+   "label": "N",
+   "reason": "観測点コードは判断に無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-0ac58d773e2b4b029ba06acc805f2f8a",
+   "text": "リオは干潟で貝を採れると教えてくれた",
+   "label": "N",
+   "reason": "干潟の貝は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-077ce8a268bc45348ebf736636ab0bfb",
+   "text": "エイダは怪我の治療手段を提案できる",
+   "label": "N",
+   "reason": "治療は自分の判断に無関係",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-c22fef865d274fb294ff3672d3250439",
+   "text": "刻みを再度調べると前回と異なる情報が出ることがある",
+   "label": "N",
+   "reason": "刻みの再調査は無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-8422600364964565ba9a1cc0562da375",
+   "text": "リオは干潟で貝を採れると言っている",
+   "label": "N",
+   "reason": "干潟の貝は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-bc8f78bb324c4296bc5b307c58f7c4a3",
+   "text": "救助には狼煙台への山頂到達が必要だ",
+   "label": "Y",
+   "reason": "風向き調査の目的が狼煙",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-f1e9cb48798543379cc4913fc7d55045",
+   "text": "夜間の単独行動は危険なので夜明けを待つ",
+   "label": "N",
+   "reason": "朝になり夜の話は古い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 93,
+   "entry_id": "sem-5eae0bb64fdb4294a9d9b8df07fb84ec",
+   "text": "干潟は大型カニがいて危険だ",
+   "label": "N",
+   "reason": "干潟の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-af5a2dbe557243a0a7cb2ca59cf14713",
+   "text": "空腹が危険域に達したら即座に食料を口にするべきだ",
+   "label": "?",
+   "reason": "空腹は他所で語られるが状態欄なし",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-2e7f8137c44b47f09c48b19fd77f4b74",
+   "text": "刻みには川沿いが本道で沼東ルートもあると書かれている",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-95199abd72bb48018b01c369194464ee",
+   "text": "干潟には大型カニがいて危険だ",
+   "label": "?",
+   "reason": "食料採りの危険として弱く関連",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-f095e21174574b909d823250b1c507fc",
+   "text": "エイダは島の過去を記した手記と海図を読んだ",
+   "label": "N",
+   "reason": "手記の経緯は場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-557683a948da4b67a419495494f1509c",
+   "text": "エイダは手記を共有したがリオの奪おうとする態度で警戒した",
+   "label": "N",
+   "reason": "過去の対立で場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-0a1c04d9ead5443bad484ff131e0bbea",
+   "text": "エイダは廃屋にも手がかりがあると考えた",
+   "label": "N",
+   "reason": "廃屋の話で小屋探索と別",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-9f704f0f9e9842209065a9874e7eb5f8",
+   "text": "砂に埋もれた箱から火打ち石と枯れ葉が見つかる",
+   "label": "N",
+   "reason": "別の場所の発見物",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-c9f06e4ed1ff4bbeb43843f0e7ce6250",
+   "text": "隠し入江への移動は仲間の合意を得て進める",
+   "label": "?",
+   "reason": "入江へ戻る話に弱く関連",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-d15a190e16ef4f04914830e0cd522236",
+   "text": "カイは即座に情報を教えてくれない",
+   "label": "N",
+   "reason": "カイの性格は判断に効かない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-b41cd09f17e04cc4b2d3313ddddfa3c3",
+   "text": "エイダは手記を簡単には渡さない態度を示した",
+   "label": "N",
+   "reason": "過去の対立で場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-540f7d1b1d2c40008f8fbb7b94996cfc",
+   "text": "廃屋に「墜ちた鉄の鳥」や山頂への手がかりがあるかもしれない",
+   "label": "N",
+   "reason": "廃屋の話で小屋探索と別",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-9018605e958a41d59f7b6eaeb1bdddc0",
+   "text": "海図の断片はexamineで調べられない",
+   "label": "N",
+   "reason": "海図は場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-263d9de19d2048c39931bbb32f9deb58",
+   "text": "山頂へのルートは川沿い本道と沼東の近道がある",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-8e2b03969f97486792fc6e03eacc1663",
+   "text": "岩肌の刻み跡は隠れたルートを示すかもしれない",
+   "label": "N",
+   "reason": "刻みの話は場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-37313e2df39c47cc8f34825241d6523e",
+   "text": "干潟には大型カニがいて危険な場所がある",
+   "label": "?",
+   "reason": "食料採りの危険として弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-551a0900b7dc423a9d5790f0dbf49627",
+   "text": "誰かがこの島に備えを残している",
+   "label": "?",
+   "reason": "小屋に備えがある期待に弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-ac6dff4fae834e61af293203b092d83a",
+   "text": "カイに焚き火準備を任せるのが確実だ",
+   "label": "?",
+   "reason": "火起こし役の話で間接的",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-99774d166a094788998ec59771ffeff9",
+   "text": "空腹が危険域に達したら即座に食料を口にする",
+   "label": "?",
+   "reason": "空腹は他所で語られるが状態欄なし",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-b237a6c5878d4941a3ea4de52faef2d6",
+   "text": "山頂への道は川沿いと沼東の二ルートある",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-159819462ffd4591be99aee79f07b75d",
+   "text": "手記は持ち主でないと開けないシステム制限がある",
+   "label": "N",
+   "reason": "手記の制限は場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-b4e2d785f9c642c799557d7397431529",
+   "text": "カイは火起こし道具一式を持っている",
+   "label": "?",
+   "reason": "刃物探しと別だが道具の当て",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-9285a89f2e01448d801d51572929b8b5",
+   "text": "ノアは川沿いルートを推した",
+   "label": "N",
+   "reason": "過去のルート推しは場面外",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-07a090173cd9421faddd6c595a617f12",
+   "text": "海図は直接examineできず砂に埋もれた箱などが対象だった",
+   "label": "N",
+   "reason": "海図は場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-794665080ecf44329ef96827bb5623c8",
+   "text": "救助のための行動をしていない",
+   "label": "?",
+   "reason": "全体の振り返りで間接的",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-390f59ad845a43fa9afb3cfe864a6f38",
+   "text": "ノアは道案内の情報に詳しい",
+   "label": "N",
+   "reason": "道案内は場面外",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-ad6ca1508097450b9b937ba2ad08dd72",
+   "text": "S.E.-7はカイの祖父が働いていた観測点のコードだ",
+   "label": "N",
+   "reason": "コードの由来は判断に効かない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-0ac58d773e2b4b029ba06acc805f2f8a",
+   "text": "リオは干潟で貝を採れると教えてくれた",
+   "label": "?",
+   "reason": "食料の当てとして弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-077ce8a268bc45348ebf736636ab0bfb",
+   "text": "エイダは怪我の治療手段を提案できる",
+   "label": "?",
+   "reason": "治療の話で間接的",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-c22fef865d274fb294ff3672d3250439",
+   "text": "刻みを再度調べると前回と異なる情報が出ることがある",
+   "label": "N",
+   "reason": "刻みの話は場面外",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-8422600364964565ba9a1cc0562da375",
+   "text": "リオは干潟で貝を採れると言っている",
+   "label": "?",
+   "reason": "食料の当てとして弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-bc8f78bb324c4296bc5b307c58f7c4a3",
+   "text": "救助には狼煙台への山頂到達が必要だ",
+   "label": "?",
+   "reason": "救助全体の目標で間接的",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-f1e9cb48798543379cc4913fc7d55045",
+   "text": "夜間の単独行動は危険なので夜明けを待つ",
+   "label": "N",
+   "reason": "今は昼で前提が合わない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 97,
+   "entry_id": "sem-5eae0bb64fdb4294a9d9b8df07fb84ec",
+   "text": "干潟は大型カニがいて危険だ",
+   "label": "?",
+   "reason": "食料採りの危険として弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-af5a2dbe557243a0a7cb2ca59cf14713",
+   "text": "空腹が危険域に達したら即座に食料を口にするべきだ",
+   "label": "?",
+   "reason": "空腹はしのげた後で弱い",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-2e7f8137c44b47f09c48b19fd77f4b74",
+   "text": "刻みには川沿いが本道で沼東ルートもあると書かれている",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-95199abd72bb48018b01c369194464ee",
+   "text": "干潟には大型カニがいて危険だ",
+   "label": "N",
+   "reason": "干潟の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-f095e21174574b909d823250b1c507fc",
+   "text": "エイダは島の過去を記した手記と海図を読んだ",
+   "label": "N",
+   "reason": "エイダと手記の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-557683a948da4b67a419495494f1509c",
+   "text": "エイダは手記を共有したがリオの奪おうとする態度で警戒した",
+   "label": "N",
+   "reason": "エイダと手記の話で無関係",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-0a1c04d9ead5443bad484ff131e0bbea",
+   "text": "エイダは廃屋にも手がかりがあると考えた",
+   "label": "N",
+   "reason": "エイダと手記の話で無関係",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-76e5068ac8654234bb4ad166d306e00e",
+   "text": "カイが手記から川沿いルート安全と読んだ",
+   "label": "N",
+   "reason": "ルートは今の課題でない",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-9f704f0f9e9842209065a9874e7eb5f8",
+   "text": "砂に埋もれた箱から火打ち石と枯れ葉が見つかる",
+   "label": "?",
+   "reason": "火の材料だがカイが道具を持つ",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-c9f06e4ed1ff4bbeb43843f0e7ce6250",
+   "text": "隠し入江への移動は仲間の合意を得て進める",
+   "label": "?",
+   "reason": "合流はすでに合意されている",
+   "label_in_pr_1505": "Y"
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-d15a190e16ef4f04914830e0cd522236",
+   "text": "カイは即座に情報を教えてくれない",
+   "label": "N",
+   "reason": "情報開示は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-b41cd09f17e04cc4b2d3313ddddfa3c3",
+   "text": "エイダは手記を簡単には渡さない態度を示した",
+   "label": "N",
+   "reason": "エイダと手記の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-540f7d1b1d2c40008f8fbb7b94996cfc",
+   "text": "廃屋に「墜ちた鉄の鳥」や山頂への手がかりがあるかもしれない",
+   "label": "N",
+   "reason": "廃屋は空と確定。古い",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-9018605e958a41d59f7b6eaeb1bdddc0",
+   "text": "海図の断片はexamineで調べられない",
+   "label": "N",
+   "reason": "海図の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-263d9de19d2048c39931bbb32f9deb58",
+   "text": "山頂へのルートは川沿い本道と沼東の近道がある",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-8e2b03969f97486792fc6e03eacc1663",
+   "text": "岩肌の刻み跡は隠れたルートを示すかもしれない",
+   "label": "N",
+   "reason": "刻みの話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-37313e2df39c47cc8f34825241d6523e",
+   "text": "干潟には大型カニがいて危険な場所がある",
+   "label": "N",
+   "reason": "干潟の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-551a0900b7dc423a9d5790f0dbf49627",
+   "text": "誰かがこの島に備えを残している",
+   "label": "N",
+   "reason": "判断に無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-ac6dff4fae834e61af293203b092d83a",
+   "text": "カイに焚き火準備を任せるのが確実だ",
+   "label": "Y",
+   "reason": "焚き火で貝を焼く段取り",
+   "label_in_pr_1505": "Y"
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-99774d166a094788998ec59771ffeff9",
+   "text": "空腹が危険域に達したら即座に食料を口にする",
+   "label": "?",
+   "reason": "空腹はしのげた後で弱い",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-b237a6c5878d4941a3ea4de52faef2d6",
+   "text": "山頂への道は川沿いと沼東の二ルートある",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-159819462ffd4591be99aee79f07b75d",
+   "text": "手記は持ち主でないと開けないシステム制限がある",
+   "label": "N",
+   "reason": "手記は読めた。古い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-b4e2d785f9c642c799557d7397431529",
+   "text": "カイは火起こし道具一式を持っている",
+   "label": "Y",
+   "reason": "焚き火で貝を焼く段取り",
+   "label_in_pr_1505": "Y"
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-9285a89f2e01448d801d51572929b8b5",
+   "text": "ノアは川沿いルートを推した",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-07a090173cd9421faddd6c595a617f12",
+   "text": "海図は直接examineできず砂に埋もれた箱などが対象だった",
+   "label": "N",
+   "reason": "海図の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-794665080ecf44329ef96827bb5623c8",
+   "text": "救助のための行動をしていない",
+   "label": "?",
+   "reason": "全体課題だが次の一手に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-390f59ad845a43fa9afb3cfe864a6f38",
+   "text": "ノアは道案内の情報に詳しい",
+   "label": "N",
+   "reason": "判断に無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-ad6ca1508097450b9b937ba2ad08dd72",
+   "text": "S.E.-7はカイの祖父が働いていた観測点のコードだ",
+   "label": "N",
+   "reason": "判断に無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-0ac58d773e2b4b029ba06acc805f2f8a",
+   "text": "リオは干潟で貝を採れると教えてくれた",
+   "label": "?",
+   "reason": "食料源として弱く関わる",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-077ce8a268bc45348ebf736636ab0bfb",
+   "text": "エイダは怪我の治療手段を提案できる",
+   "label": "N",
+   "reason": "治療は今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-c22fef865d274fb294ff3672d3250439",
+   "text": "刻みを再度調べると前回と異なる情報が出ることがある",
+   "label": "N",
+   "reason": "刻みの再調査は無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-8422600364964565ba9a1cc0562da375",
+   "text": "リオは干潟で貝を採れると言っている",
+   "label": "?",
+   "reason": "食料源として弱く関わる",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-bc8f78bb324c4296bc5b307c58f7c4a3",
+   "text": "救助には狼煙台への山頂到達が必要だ",
+   "label": "?",
+   "reason": "後の風向き確認の背景",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-f1e9cb48798543379cc4913fc7d55045",
+   "text": "夜間の単独行動は危険なので夜明けを待つ",
+   "label": "N",
+   "reason": "朝になり夜の話は古い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "リオ",
+   "prompt": 101,
+   "entry_id": "sem-5eae0bb64fdb4294a9d9b8df07fb84ec",
+   "text": "干潟は大型カニがいて危険だ",
+   "label": "N",
+   "reason": "干潟の話で無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-57d16e3b7e7e4c80a87c518c0bd5218e",
+   "text": "エイダは仲間と食料を分け合う思いやりのある人物だ",
+   "label": "N",
+   "reason": "エイダの性格は探索に効かない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-dd545c7f6fe54756af9fa883582b31e0",
+   "text": "リオは怪我をしていても率先して動けるリーダー格だ",
+   "label": "?",
+   "reason": "リオ評価だが今は不在",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-9439cb05049a4c22b90ba0d9b58255ce",
+   "text": "隠し入江から山頂へは川沿いと沼経由の二ルートがある",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-6d3e1c4b1f414f6a85ae2fab66ed5a36",
+   "text": "リオは独断で行動しがちだ",
+   "label": "?",
+   "reason": "リオの離脱に符合するが効き薄",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-6948edd50e694d8d90f8c650784a17da",
+   "text": "エイダに手記を渡せば読んでもらえる",
+   "label": "?",
+   "reason": "手記の読み方に弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-d9b2d69da0cf4c22822702cf7056af19",
+   "text": "山頂へのルートは川沿いと沼経由の2つがある",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-07947b6e9e5b4634834bb962a8238e84",
+   "text": "川沿いルートは雨季でも安全だ",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-794db9819b5d4a90b2534d5386b02cd6",
+   "text": "島には使える道具が存在する",
+   "label": "?",
+   "reason": "探索の期待に弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-f67ff435c6fa46dab570750fe5c9251f",
+   "text": "川沿いと沼経由の山頂ルートがある",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-9ed34b44a2924b3f94fb36dbab621ea1",
+   "text": "エイダは廃屋に関心があり手記や地図を探している",
+   "label": "?",
+   "reason": "エイダの関心で間接的",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-cc2cba1a953142d69d66605d6012d321",
+   "text": "この島の廃屋は観測点だった",
+   "label": "?",
+   "reason": "廃屋の素性で探索に弱く関連",
+   "label_in_pr_1505": "Y"
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-48fe19eb30df48498f03e0f6edd0eb97",
+   "text": "手記は所有しているだけでは読めず、別の方法が必要かもしれない",
+   "label": "?",
+   "reason": "手記の読み方に弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-9a3af99865aa4c319c6c10f56d71d7dd",
+   "text": "リオは川沿いルートを推している",
+   "label": "N",
+   "reason": "ルート推しは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-8caab75eb9564423867875ada6e174c5",
+   "text": "仲間は山頂ルートとして川沿いを選んだようだ",
+   "label": "N",
+   "reason": "ルート選択は場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-d68648e89fa94ad995c99beb587ac9a6",
+   "text": "川沿いが本道で沼東が近道、S.E.-7が鍵",
+   "label": "?",
+   "reason": "S.E.-7は探索に弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-debb7afdbee44ba287f43841b3dcb202",
+   "text": "手記はuse_itemでは読めずinteractが必要",
+   "label": "Y",
+   "reason": "手記を読む手段で風向き情報へ",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-02b6d6dbee1d41d18067bc418a9715d2",
+   "text": "手記や海図は直接手元にないことがある",
+   "label": "?",
+   "reason": "手記の所在に弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-70e14a9a5f10490b82cbe4b9763d6b39",
+   "text": "川沿いルートで山頂を目指す計画がある",
+   "label": "N",
+   "reason": "山頂計画は場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-d008dff8da894e88948569609d7ac86b",
+   "text": "山頂へのルートは複数ある",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-02ea17fcf49d418bab23d90cea248bc0",
+   "text": "所持品の管理はこまめにしないと誤認する",
+   "label": "?",
+   "reason": "所持品確認として間接的",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-f0df5b85b7894bacacc601e585b52dea",
+   "text": "隠し入江から川沿い本道と沼経由の二ルートが山頂へ通じる",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-adedede91d074c35b2670ef6fad3655f",
+   "text": "観測拠点跡の廃屋に祖父の手記があるかもしれない",
+   "label": "?",
+   "reason": "廃屋探索に関わるが既に探索済",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-7c8169f690954a8abe6065d22b58652f",
+   "text": "仲間は協力的で情報共有を大切にする",
+   "label": "?",
+   "reason": "二手に分かれる提案に弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-7970b05c91bc4200862df2fc7727badb",
+   "text": "島には使える素材や道具が存在する",
+   "label": "?",
+   "reason": "探索の期待に弱く関連",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-d2ee1d4d3d644a2283fac125a2535f5c",
+   "text": "山頂へのルートは複数存在する",
+   "label": "N",
+   "reason": "山頂ルートは場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 99,
+   "entry_id": "sem-d69c0ae98d214096984f722e02c6314d",
+   "text": "干潟は大型カニが頻出する危険な場所だ",
+   "label": "N",
+   "reason": "干潟の話で場面外",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-57d16e3b7e7e4c80a87c518c0bd5218e",
+   "text": "エイダは仲間と食料を分け合う思いやりのある人物だ",
+   "label": "Y",
+   "reason": "食料確保で頼れる相手が合流",
+   "label_in_pr_1505": "Y"
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-dd545c7f6fe54756af9fa883582b31e0",
+   "text": "リオは怪我をしていても率先して動けるリーダー格だ",
+   "label": "N",
+   "reason": "リオの怪我の話は無関係",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-9439cb05049a4c22b90ba0d9b58255ce",
+   "text": "隠し入江から山頂へは川沿いと沼経由の二ルートがある",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-6d3e1c4b1f414f6a85ae2fab66ed5a36",
+   "text": "リオは独断で行動しがちだ",
+   "label": "?",
+   "reason": "リオを後で追う判断に弱く効く",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-6948edd50e694d8d90f8c650784a17da",
+   "text": "エイダに手記を渡せば読んでもらえる",
+   "label": "N",
+   "reason": "手記はすでに読めた",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-d9b2d69da0cf4c22822702cf7056af19",
+   "text": "山頂へのルートは川沿いと沼経由の2つがある",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-07947b6e9e5b4634834bb962a8238e84",
+   "text": "川沿いルートは雨季でも安全だ",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-794db9819b5d4a90b2534d5386b02cd6",
+   "text": "島には使える道具が存在する",
+   "label": "N",
+   "reason": "漠然としていて判断に効かない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-f67ff435c6fa46dab570750fe5c9251f",
+   "text": "川沿いと沼経由の山頂ルートがある",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-9ed34b44a2924b3f94fb36dbab621ea1",
+   "text": "エイダは廃屋に関心があり手記や地図を探している",
+   "label": "N",
+   "reason": "エイダの関心は今の課題でない",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-cc2cba1a953142d69d66605d6012d321",
+   "text": "この島の廃屋は観測点だった",
+   "label": "N",
+   "reason": "いる場所の素性で判断に無関係",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-48fe19eb30df48498f03e0f6edd0eb97",
+   "text": "手記は所有しているだけでは読めず、別の方法が必要かもしれない",
+   "label": "N",
+   "reason": "手記はすでに読めた",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-9a3af99865aa4c319c6c10f56d71d7dd",
+   "text": "リオは川沿いルートを推している",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": "?"
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-8caab75eb9564423867875ada6e174c5",
+   "text": "仲間は山頂ルートとして川沿いを選んだようだ",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-d68648e89fa94ad995c99beb587ac9a6",
+   "text": "川沿いが本道で沼東が近道、S.E.-7が鍵",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-debb7afdbee44ba287f43841b3dcb202",
+   "text": "手記はuse_itemでは読めずinteractが必要",
+   "label": "N",
+   "reason": "手記はすでに読めた",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-02b6d6dbee1d41d18067bc418a9715d2",
+   "text": "手記や海図は直接手元にないことがある",
+   "label": "N",
+   "reason": "手記はすでに読めた",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-70e14a9a5f10490b82cbe4b9763d6b39",
+   "text": "川沿いルートで山頂を目指す計画がある",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-d008dff8da894e88948569609d7ac86b",
+   "text": "山頂へのルートは複数ある",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-02ea17fcf49d418bab23d90cea248bc0",
+   "text": "所持品の管理はこまめにしないと誤認する",
+   "label": "?",
+   "reason": "食料の手持ち確認に弱く効く",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-f0df5b85b7894bacacc601e585b52dea",
+   "text": "隠し入江から川沿い本道と沼経由の二ルートが山頂へ通じる",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-adedede91d074c35b2670ef6fad3655f",
+   "text": "観測拠点跡の廃屋に祖父の手記があるかもしれない",
+   "label": "N",
+   "reason": "廃屋は出尽くした。古い",
+   "label_in_pr_1505": "N"
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-7c8169f690954a8abe6065d22b58652f",
+   "text": "仲間は協力的で情報共有を大切にする",
+   "label": "?",
+   "reason": "協力的だが判断に弱い",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-7970b05c91bc4200862df2fc7727badb",
+   "text": "島には使える素材や道具が存在する",
+   "label": "?",
+   "reason": "食料確保に弱く関わる",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-d2ee1d4d3d644a2283fac125a2535f5c",
+   "text": "山頂へのルートは複数存在する",
+   "label": "N",
+   "reason": "山頂ルートは今の課題でない",
+   "label_in_pr_1505": null
+  },
+  {
+   "who": "カイ",
+   "prompt": 103,
+   "entry_id": "sem-d69c0ae98d214096984f722e02c6314d",
+   "text": "干潟は大型カニが頻出する危険な場所だ",
+   "label": "N",
+   "reason": "干潟の話で無関係",
+   "label_in_pr_1505": null
+  }
+ ]
+}

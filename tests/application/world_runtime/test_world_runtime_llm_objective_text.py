@@ -73,9 +73,7 @@ class TestScenarioObjectiveFailFast:
         original = json.loads(_ABANDONED.read_text(encoding="utf-8"))
         original["metadata"]["llm_objective_text"] = ""
         broken_path = tmp_path / "broken_no_objective.json"
-        broken_path.write_text(
-            json.dumps(original, ensure_ascii=False), encoding="utf-8"
-        )
+        broken_path.write_text(json.dumps(original, ensure_ascii=False), encoding="utf-8")
 
         runtime = create_world_runtime(broken_path)
         player_id = runtime.get_player_ids()[0]
@@ -92,9 +90,7 @@ class TestScenarioObjectiveFailFast:
         original = json.loads(_ABANDONED.read_text(encoding="utf-8"))
         del original["metadata"]["llm_objective_text"]
         broken_path = tmp_path / "broken_missing_objective.json"
-        broken_path.write_text(
-            json.dumps(original, ensure_ascii=False), encoding="utf-8"
-        )
+        broken_path.write_text(json.dumps(original, ensure_ascii=False), encoding="utf-8")
 
         runtime = create_world_runtime(broken_path)
         player_id = runtime.get_player_ids()[0]

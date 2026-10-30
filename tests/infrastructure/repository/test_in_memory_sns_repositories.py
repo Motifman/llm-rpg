@@ -55,8 +55,8 @@ class TestInMemoryUserRepositorySpecific:
     def test_bulk_update_relationships(self, repository):
         """一括関係性更新テスト"""
         relationships = [
-            (UserId(3), UserId(2), "follow"),    # 戦士 -> 魔法使いをフォロー
-            (UserId(4), UserId(2), "follow"),    # 盗賊 -> 魔法使いをフォロー
+            (UserId(3), UserId(2), "follow"),  # 戦士 -> 魔法使いをフォロー
+            (UserId(4), UserId(2), "follow"),  # 盗賊 -> 魔法使いをフォロー
         ]
 
         updated_count = repository.bulk_update_relationships(relationships)
@@ -105,15 +105,8 @@ class TestInMemoryPostRepositorySpecific:
         from ai_rpg_world.domain.sns.value_object import PostContent
 
         # 新しいポストを作成
-        content = PostContent(
-            content="テストポスト",
-            hashtags=("テスト",),
-            visibility=PostVisibility.PUBLIC
-        )
-        new_post = PostAggregate(
-            PostId(6), UserId(1), content, set(), set(), set(),
-            False, None, None, datetime.now()
-        )
+        content = PostContent(content="テストポスト", hashtags=("テスト",), visibility=PostVisibility.PUBLIC)
+        new_post = PostAggregate(PostId(6), UserId(1), content, set(), set(), set(), False, None, None, datetime.now())
 
         # 保存
         repository.save(new_post)
@@ -157,14 +150,9 @@ class TestInMemoryReplyRepositorySpecific:
         from ai_rpg_world.domain.sns.value_object import PostContent
 
         # 新しいリプライを作成
-        content = PostContent(
-            content="テストリプライ",
-            hashtags=("テスト",),
-            visibility=PostVisibility.PUBLIC
-        )
+        content = PostContent(content="テストリプライ", hashtags=("テスト",), visibility=PostVisibility.PUBLIC)
         new_reply = ReplyAggregate(
-            ReplyId(8), UserId(1), content, set(), set(), set(),
-            False, PostId(1), None, datetime.now()
+            ReplyId(8), UserId(1), content, set(), set(), set(), False, PostId(1), None, datetime.now()
         )
 
         # 保存
@@ -175,6 +163,7 @@ class TestInMemoryReplyRepositorySpecific:
         assert found_reply is not None
         assert found_reply.reply_id == ReplyId(8)
         assert found_reply.content.content == "テストリプライ"
+
 
 # 統合テスト：リポジトリ間の連携テスト
 class TestSNSRepositoriesIntegration:

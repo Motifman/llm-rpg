@@ -45,12 +45,16 @@ _BREAD = "焼きたてのパン"
 def town(tmp_path: Path) -> Any:
     """レナとトムが同じ場所に居て、人同士の取引が使える市場町。"""
     raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
-    raw["players"].append({
-        "id": "tom", "name": "トム",
-        "spawn_spot": raw["players"][0]["spawn_spot"],
-        "initial_items": [], "initial_gold": 100,
-        "persona_prompt": "あなたはトム。",
-    })
+    raw["players"].append(
+        {
+            "id": "tom",
+            "name": "トム",
+            "spawn_spot": raw["players"][0]["spawn_spot"],
+            "initial_items": [],
+            "initial_gold": 100,
+            "persona_prompt": "あなたはトム。",
+        }
+    )
     raw["player_trade"] = {"enabled": True}
     path = tmp_path / "market_town_v1.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")

@@ -81,9 +81,7 @@ class TestPlayerInventoryCodec:
         assert entry["reserved_item_ids"] == [400]
 
         # 別 stub に restore
-        dst_inv = PlayerInventoryAggregate.create_new_inventory(
-            player_id=PlayerId(1), max_slots=5
-        )
+        dst_inv = PlayerInventoryAggregate.create_new_inventory(player_id=PlayerId(1), max_slots=5)
         dst_stub = _make_inventory_repo_stub(dst_inv)
         dst_runtime = SimpleNamespace(
             _player_inventory_repo=dst_stub,
@@ -128,9 +126,7 @@ class TestPlayerGrowthCodec:
             evasion_rate_factor=1.01,
         )
         agg._exp_table = ExpTable(base_exp=100.0, exponent=1.5)
-        agg._growth = Growth(
-            level=level, total_exp=total_exp, exp_table=agg._exp_table
-        )
+        agg._growth = Growth(level=level, total_exp=total_exp, exp_table=agg._exp_table)
         agg._events = []
         return agg
 

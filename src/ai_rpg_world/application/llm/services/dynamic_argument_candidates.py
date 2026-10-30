@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -23,39 +24,6 @@ from ai_rpg_world.application.llm.services._argument_resolvers.target_lookup imp
 # runtime_context のラベルを require_target_type で直接引くツール。値には
 # display_name ではなく、実際に resolver が受理する label を載せる。
 _EXACT_LABEL_SPECS: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
-    "world_inspect_item": (("inventory_item_label", ("inventory_item",)),),
-    "world_inspect_target": (("target_label", ("npc", "monster", "chest", "door", "resource", "object")),),
-    "world_interact": (("target_label", ("npc", "chest", "door", "object")),),
-    "harvest_start": (("target_label", ("resource",)),),
-    "harvest_cancel": (("target_label", ("active_harvest", "resource")),),
-    "world_change_attention": (("level_label", ("attention_level",)),),
-    "conversation_advance": (
-        ("target_label", ("npc",)),
-        ("choice_label", ("conversation_choice",)),
-    ),
-    "world_place_object": (("inventory_item_label", ("inventory_item",)),),
-    "world_drop_item": (("inventory_item_label", ("inventory_item",)),),
-    "world_chest_store": (
-        ("target_label", ("chest",)),
-        ("inventory_item_label", ("inventory_item",)),
-    ),
-    "world_chest_take": (
-        ("target_label", ("chest",)),
-        ("chest_item_label", ("chest_item",)),
-    ),
-    "move_to_destination": (("destination_label", ("destination",)),),
-    "world_pursue_target": (("target_label", ("player", "npc", "monster")),),
-    "combat_use_skill": (
-        ("skill_label", ("skill",)),
-        ("target_label", ("player", "npc", "monster")),
-    ),
-    "skill_equip": (
-        ("skill_label", ("skill_equip_candidate",)),
-        ("slot_label", ("skill_equip_slot",)),
-    ),
-    "skill_accept_proposal": (("proposal_label", ("skill_proposal",)),),
-    "skill_reject_proposal": (("proposal_label", ("skill_proposal",)),),
-    "skill_activate_awakened_mode": (("awakened_action_label", ("awakened_action",)),),
     "quest_accept": (("quest_label", ("quest",)),),
     "quest_cancel": (("quest_label", ("quest",)),),
     "quest_approve": (("quest_label", ("quest",)),),
@@ -84,7 +52,7 @@ _EXACT_LABEL_SPECS: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
         ("shop_label", ("shop",)),
         ("listing_label", ("shop_listing",)),
     ),
-    "speak": (("target_label", ("player", "spot_graph_player")),),
+    "speak": (("target_label", ("player",)),),
 }
 
 
@@ -102,12 +70,11 @@ _DISPLAY_NAME_SPECS: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
     "trade_offer": (("target_player_label", ("spot_graph_player",)),),
     "trade_accept": (("offerer_player_label", ("spot_graph_player",)),),
     "trade_decline": (("offerer_player_label", ("spot_graph_player",)),),
+    "speak": (("target_label", ("spot_graph_player",)),),
 }
 
 
 _OPTIONAL_ARGUMENTS = {
-    ("combat_use_skill", "target_label"),
-    ("conversation_advance", "choice_label"),
     ("quest_issue", "guild_label"),
     ("speak", "target_label"),
     ("trade_accept", "offerer_player_label"),
@@ -358,6 +325,46 @@ def render_dynamic_argument_candidate_table(
         return ""
     lines.append("※ 一覧にあることは操作の成功を保証しない。現在の状態や前提条件によって失敗する場合がある。")
     return "\n".join(lines)
+
+
+_CANDIDATE_TABLE_HEADING = "【現在選べる対象引数】"
+_CANDIDATE_LINE = re.compile(
+    r"^- (?P<tool>[A-Za-z0-9_]+)\.(?P<argument>[^\s(:]+)"
+    r'(?: \((?P<target>"(?:[^"\\]|\\.)*")\))?: (?P<values>.+)$'
+)
+
+
+def parse_dynamic_argument_candidate_table(text: str) -> list[dict[str, Any]]:
+    """プロンプト本文から候補表を読み戻し、``tool`` / ``argument`` / ``target`` / ``values`` の列にする。
+
+    でたらめに行動するスタブが、エージェントに見えている候補だけから選ぶために使う。
+    表が無ければ空の列を返す。読めない行に当たったら、そこまでで止める。
+    """
+    lines = text.splitlines()
+    try:
+        start = lines.index(_CANDIDATE_TABLE_HEADING)
+    except ValueError:
+        return []
+    entries: list[dict[str, Any]] = []
+    for line in lines[start + 1 :]:
+        match = _CANDIDATE_LINE.match(line)
+        if match is None:
+            break
+        target = match.group("target")
+        try:
+            values = json.loads(f"[{match.group('values')}]")
+            parsed_target = json.loads(target) if target else None
+        except json.JSONDecodeError:
+            break
+        entries.append(
+            {
+                "tool": match.group("tool"),
+                "argument": match.group("argument"),
+                "target": parsed_target,
+                "values": values,
+            }
+        )
+    return entries
 
 
 def inject_dynamic_argument_candidate_table(

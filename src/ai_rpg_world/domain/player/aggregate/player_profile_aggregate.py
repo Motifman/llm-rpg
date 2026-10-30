@@ -1,4 +1,3 @@
-
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.player.enum.player_enum import ControlType, Element, Race, Role
 from ai_rpg_world.domain.player.event.profile_events import PlayerProfileChangedEvent
@@ -77,18 +76,20 @@ class PlayerProfileAggregate(AggregateRoot):
         old_name = self._name
         self._name = new_name
 
-        self.add_event(PlayerProfileChangedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerProfileAggregate",
-            old_name=old_name,
-            new_name=new_name,
-            old_role=None,
-            new_role=None,
-            old_race=None,
-            new_race=None,
-            old_element=None,
-            new_element=None
-        ))
+        self.add_event(
+            PlayerProfileChangedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerProfileAggregate",
+                old_name=old_name,
+                new_name=new_name,
+                old_role=None,
+                new_role=None,
+                old_race=None,
+                new_race=None,
+                old_element=None,
+                new_element=None,
+            )
+        )
 
     def change_role(self, new_role: Role) -> None:
         """ロールを変更する"""
@@ -98,18 +99,20 @@ class PlayerProfileAggregate(AggregateRoot):
         old_role = self._role
         self._role = new_role
 
-        self.add_event(PlayerProfileChangedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerProfileAggregate",
-            old_name=None,
-            new_name=None,
-            old_role=old_role,
-            new_role=new_role,
-            old_race=None,
-            new_race=None,
-            old_element=None,
-            new_element=None
-        ))
+        self.add_event(
+            PlayerProfileChangedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerProfileAggregate",
+                old_name=None,
+                new_name=None,
+                old_role=old_role,
+                new_role=new_role,
+                old_race=None,
+                new_race=None,
+                old_element=None,
+                new_element=None,
+            )
+        )
 
     def change_race(self, new_race: Race) -> None:
         """種族を変更する"""
@@ -119,18 +122,20 @@ class PlayerProfileAggregate(AggregateRoot):
         old_race = self._race
         self._race = new_race
 
-        self.add_event(PlayerProfileChangedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerProfileAggregate",
-            old_name=None,
-            new_name=None,
-            old_role=None,
-            new_role=None,
-            old_race=old_race,
-            new_race=new_race,
-            old_element=None,
-            new_element=None
-        ))
+        self.add_event(
+            PlayerProfileChangedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerProfileAggregate",
+                old_name=None,
+                new_name=None,
+                old_role=None,
+                new_role=None,
+                old_race=old_race,
+                new_race=new_race,
+                old_element=None,
+                new_element=None,
+            )
+        )
 
     def change_element(self, new_element: Element) -> None:
         """属性を変更する"""
@@ -140,25 +145,27 @@ class PlayerProfileAggregate(AggregateRoot):
         old_element = self._element
         self._element = new_element
 
-        self.add_event(PlayerProfileChangedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerProfileAggregate",
-            old_name=None,
-            new_name=None,
-            old_role=None,
-            new_role=None,
-            old_race=None,
-            new_race=None,
-            old_element=old_element,
-            new_element=new_element
-        ))
+        self.add_event(
+            PlayerProfileChangedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerProfileAggregate",
+                old_name=None,
+                new_name=None,
+                old_role=None,
+                new_role=None,
+                old_race=None,
+                new_race=None,
+                old_element=old_element,
+                new_element=new_element,
+            )
+        )
 
     def update_profile(
         self,
         name: PlayerName | None = None,
         role: Role | None = None,
         race: Race | None = None,
-        element: Element | None = None
+        element: Element | None = None,
     ) -> None:
         """プロフィールを一括更新する"""
         old_name = self._name if name is not None and self._name != name else None
@@ -182,19 +189,20 @@ class PlayerProfileAggregate(AggregateRoot):
         if element is not None:
             self._element = element
 
-        self.add_event(PlayerProfileChangedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerProfileAggregate",
-            old_name=old_name,
-            new_name=name if old_name is not None else None,
-            old_role=old_role,
-            new_role=role if old_role is not None else None,
-            old_race=old_race,
-            new_race=race if old_race is not None else None,
-            old_element=old_element,
-            new_element=element if old_element is not None else None
-        ))
-
+        self.add_event(
+            PlayerProfileChangedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerProfileAggregate",
+                old_name=old_name,
+                new_name=name if old_name is not None else None,
+                old_role=old_role,
+                new_role=role if old_role is not None else None,
+                old_race=old_race,
+                new_race=race if old_race is not None else None,
+                old_element=old_element,
+                new_element=element if old_element is not None else None,
+            )
+        )
 
     def can_change_name(self, new_name: PlayerName) -> bool:
         """名前変更可能かどうかをチェック"""

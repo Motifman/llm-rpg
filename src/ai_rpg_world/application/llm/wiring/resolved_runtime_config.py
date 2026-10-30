@@ -9,8 +9,8 @@ PR #443 で連続発覚した silent failure (PR #439 / #441 / #444 / #446) の�
 - ``run_scenario_experiment.py`` が env を読んで run_start trace に書く
 - ``wiring/_build_short_term_memory`` が env を読んで kind を解決する
 - ``demos/world_runtime/world_runtime.py`` が **別経路で** env を読んで
-  ``DefaultSlidingWindowMemory`` を直接作る (PR #439 で fix した silent failure
-  の原因)
+  ``DefaultSlidingWindowMemory`` (Issue #1631 で削除) を直接作る
+  (PR #439 で fix した silent failure の原因)
 - ``demos/world_runtime/world_runtime.py`` が **また別経路で** env を読み
   忘れて ``SectionBasedContextFormatStrategy()`` を ClassVar で作る (PR #446
   で fix した silent failure)
@@ -32,8 +32,8 @@ PR #443 で連続発覚した silent failure (PR #439 / #441 / #444 / #446) の�
    (PR #434 ポリシー継承)
 3. **外側 shell を読まない**: ``from_mapping`` は引数 mapping だけを読む
 4. **trace 表現**: ``to_trace_dict()`` で run_start payload に書ける dict を返す
-5. **既存 resolver の活用**: 内部で既存 ``resolve_short_term_memory_kind`` 等を
-   呼ぶ薄いラッパー (= 段階移行可能 / behavior 等価)
+5. **既存 resolver の活用**: 内部で既存の resolver を呼ぶ薄いラッパー
+   (= 段階移行可能 / behavior 等価)
 
 # 将来計画
 
@@ -46,6 +46,7 @@ PR #443 で連続発覚した silent failure (PR #439 / #441 / #444 / #446) の�
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -53,96 +54,63 @@ from typing import Any
 from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
     DEFAULT_FAILURE_STREAK_ABORT,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailurePolicy,
+)
 
-SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
-    "BELIEF_ATTRIBUTION_ENABLED",
-    "BELIEF_CONSOLIDATION_ENABLED",
-    "BELIEF_EVIDENCE_ENABLED",
-    "DISTANT_VIEW_TRACE_ENABLED",
-    "EPISODIC_EXPLORE_RELATED_ENABLED",
-    "EPISODIC_PROMOTION_EXPANSION_HOPS",
-    "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
-    "EPISODIC_RECALL_ENABLED",
-    "ERROR_DRIVEN_REINTERPRETATION_ENABLED",
-    "ERROR_GATED_ENCODING_ENABLED",
-    "END_ON_ALL_DOWN",
-    "ESCAPE_LLM_SSOT",
-    "GOAL_REFLECT_ENABLED",
-    "GOAL_REVISION_ENABLED",
-    "GOAL_STAGNATION_EVIDENCE_ENABLED",
-    "GOAL_STORE_ENABLED",
-    "HEARSAY_ENABLED",
-    "LLM_AFTERGLOW_CAPACITY",
-    "LLM_AFTERGLOW_ENABLED",
-    "LLM_AFTERGLOW_MAX_RESIDENCE",
-    "LLM_CLIENT",
-    "LLM_EPISODIC_ENABLED",
-    "LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS",
-    "LLM_EPISODIC_RECALL_HABITUATION_ENABLED",
-    "LLM_EPISODIC_RECALL_SLOT_CAPACITY",
-    "LLM_EPISODIC_RECALL_SLOT_COOLDOWN",
-    "LLM_EPISODIC_RECALL_SLOT_ENABLED",
-    "LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK",
-    "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD",
-    "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE",
-    "LLM_EPISODIC_REINTERPRETATION_ENABLED",
-    "LLM_EPISODIC_SUBJECTIVE_ENABLED",
-    "LLM_EXPECTED_RESULT_POLICY",
-    "LLM_FAILURE_STREAK_ABORT",
-    "LLM_IDLE_TIMEOUT_TICKS",
-    "LLM_MEETING_SERIAL_TURNS",
-    "LLM_MODEL",
-    "LLM_RATE_LIMIT_RETRY_ATTEMPTS",
-    "LLM_RATE_LIMIT_RETRY_BASE_SLEEP",
-    "LLM_REASONING_EFFORT",
-    "LLM_REQUEST_TIMEOUT_SECONDS",
-    "LLM_SESSION_ID_ENABLED",
-    "LLM_TOOL_MODE",
-    "LLM_TOOL_CHOICE",
-    "LLM_TURN_PARALLEL_WORKERS",
-    "LLM_WALL_TIME_CAP_SECONDS",
-    "MEMO_DISTILL_ENABLED",
-    "MEMO_TOOLS_ENABLED",
-    "OPENAI_API_BASE",
-    "OPENROUTER_PROVIDER",
-    "OPENROUTER_QUANTIZATION",
-    "OPENROUTER_REQUIRE_PARAMS",
-    "PENDING_PREDICTION_ENABLED",
-    "PREDICTION_CONTEXT_ID_ENABLED",
-    "PROMPT_DATASET_CAPTURE_ENABLED",
-    "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
-    "PROMPT_SECTION_ORDER",
-    "RECALL_HIT_BOOST_ENABLED",
-    "REASON_FIRST_TWO_STEP_ENABLED",
-    "SALIENCE_STRUCTURED_FAILURE_ENABLED",
-    "SCENARIO_RANDOM_SEED",
-    "SEMANTIC_LLM_GIST_ENABLED",
-    "SEMANTIC_PASSIVE_TOP_K",
-    "SEMANTIC_SEARCH_ENABLED",
-    "SHORT_TERM_MEMORY_KIND",
-    "SHORT_TERM_MEMORY_SCHEDULER_MODE",
-    "SHORT_TERM_MEMORY_TURN_CAP",
-    "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
-    "STAGNATION_PRESSURE_ENABLED",
-    "STAGNATION_REASONING_ENABLED",
-    "STATE_COLLAPSE_EVIDENCE_ENABLED",
-    "SUBJECTIVE_EPISODE_DB_PATH",
-    "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
-    "TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE",
-    "TYPED_JUDGMENT_API_KEY_ENV",
-    "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
-    "TYPED_JUDGMENT_ENDPOINT",
-    "TYPED_JUDGMENT_MODEL",
-    "TYPED_JUDGMENT_PROVIDER",
-    "TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED",
-    "TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY",
-    "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW",
-    "TYPED_JUDGMENT_TURN_GATE_ENABLED",
-    "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
-    "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED",
-    "TYPED_JUDGMENT_TIMEOUT_SECONDS",
-    "UNCONSCIOUS_CONTEXT_ENABLED",
-})
+_DEFAULT_BEING_EPISODE_INDEX_LIMIT = 10
+_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES = 3
+
+SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset(
+    {
+        "ASYNC_EVENT_WORKERS",
+        "ASYNC_EVENT_MAX_PENDING",
+        "ASYNC_EVENT_SHUTDOWN_TIMEOUT_SECONDS",
+        "BEING_EPISODE_INDEX_LIMIT",
+        "BEING_EPISODE_RECALL_MAX_HANDLES",
+        "LLM_CLIENT",
+        "LLM_FAILURE_STREAK_ABORT",
+        "LLM_IDLE_TIMEOUT_TICKS",
+        "LLM_MAX_OUTPUT_TOKENS",
+        "LLM_MODEL",
+        "LLM_RATE_LIMIT_RETRY_ATTEMPTS",
+        "LLM_RATE_LIMIT_RETRY_BASE_SLEEP",
+        "LLM_REASONING_EFFORT",
+        "LLM_REQUEST_TIMEOUT_SECONDS",
+        "LLM_SESSION_ID_ENABLED",
+        "LLM_TOOL_CHOICE",
+        "LLM_TURN_PARALLEL_WORKERS",
+        "LLM_WALL_TIME_CAP_SECONDS",
+        "OPENAI_API_BASE",
+        "OPENROUTER_PROVIDER",
+        "OPENROUTER_QUANTIZATION",
+        "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
+        "SCENARIO_RANDOM_SEED",
+        "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
+        "TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE",
+        "TYPED_JUDGMENT_API_KEY_ENV",
+        "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
+        "TYPED_JUDGMENT_ENDPOINT",
+        "TYPED_JUDGMENT_MODEL",
+        "TYPED_JUDGMENT_PROVIDER",
+        "TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED",
+        "TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY",
+        "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW",
+        "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED",
+        "TYPED_JUDGMENT_TIMEOUT_SECONDS",
+        "WORLD_TICK_FAILURE_POLICY",
+    }
+)
+
+#: 消した設定のキーと、消した理由。書かれていたら、知らないキーとしてではなく理由を添えて止める。
+_REMOVED_RUNTIME_CONFIG_KEYS: dict[str, str] = {
+    key: (
+        "直近の出来事として持つターン数と一度に外すターン数は、全員共通のドメインの定数 "
+        "(being/domain/short_term_memory.py の RECENT_TURNS / FOLD_TURNS) になった "
+        "(design_decisions D1824-9)"
+    )
+    for key in ("SHORT_TERM_MEMORY_TURN_CAP", "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT")
+}
 
 #: profile / runtime_config に書かせない秘密。値そのものは env からだけ読む。
 #: profile は run の記録として ``experiment.config.source.json`` に残るため、
@@ -159,13 +127,6 @@ class ResolvedLlmRuntimeConfig:
     2 箇所で別解釈する silent failure」を構造で防ぐ。
 
     Attributes:
-        # === Short-term memory (Phase 2) ===
-        short_term_memory_kind: ``"sliding_window"`` | ``"rolling_summary"``
-        short_term_memory_scheduler_mode: ``"inline"`` | ``"thread_pool"``
-
-        # === Prompt section ordering (Phase 0) ===
-        prompt_section_order: ``"stable_to_volatile"`` | ``"legacy"``
-
         # === LLM client / model ===
         llm_client_kind: ``"stub"`` | ``"litellm"``
         llm_model: model 名 (例: ``"openrouter/google/gemma-4-31b-it"``)。
@@ -178,7 +139,6 @@ class ResolvedLlmRuntimeConfig:
         # === OpenRouter provider routing (PR #426) ===
         openrouter_provider: provider 名 (例: ``"Parasail"``)。未設定なら None
         openrouter_quantization: quant 指定 (例: ``"fp8"``)。未設定なら None
-        openrouter_require_params: True なら必須 param 全対応 provider のみ
 
         # === 型付き判断 (#1319) ===
         typed_judgment_provider: ``"off"`` | ``"jev"`` | ``"stub"``。
@@ -191,11 +151,6 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_target_label_min_confidence: 対象の名前を置き換える閾値。
             行動名より高い (既定 0.85)
         typed_judgment_memo_min_probability: memo を達成扱いにする閾値
-        typed_judgment_turn_gate_enabled: tick の終わりに pending の全員へ「いま
-            動く必要があるか」を問う起動判定を挟む。**既定は off**。provider を jev に
-            しても起動判定は入らない (#222)。観察するときだけ明示的に true にする
-        typed_judgment_turn_gate_skip_below: 動く必要がある確率がこれ未満なら
-            回さない。取りこぼしを避けるため小さく置く
         typed_judgment_loop_diagnosis_enabled: ループ警告の発火時に、繰り返しの
             理由を問うて文面を選ぶ (#1411)。**既定は off**。provider が off なら
             有効にしても入らない
@@ -204,27 +159,7 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_semantic_repeat_min_probability: 繰り返しと見なす確率の閾値。
             警告が待機へ押すのを避けるため高めに置く
         typed_judgment_semantic_repeat_window: 判断に渡す直近の行動の件数
-
-        # === Episodic memory (Phase 1a / Phase B) ===
-        episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
-        episodic_explore_related_enabled: ``EPISODIC_EXPLORE_RELATED_ENABLED=1``
-            で memory_explore_related tool を露出
-
-        # === Semantic memory (Phase 1b-1d) ===
-        semantic_llm_gist_enabled: ``SEMANTIC_LLM_GIST_ENABLED=1`` で episodic →
-            semantic 昇格時に LLM 要約を生成
-        semantic_passive_top_k: ``SEMANTIC_PASSIVE_TOP_K`` 整数。>0 で prompt
-            に §learned section が出る
-        semantic_search_enabled: ``SEMANTIC_SEARCH_ENABLED=1`` で能動 semantic
-            検索 tool を露出
     """
-
-    # Short-term memory
-    short_term_memory_kind: str
-    short_term_memory_scheduler_mode: str
-
-    # Prompt
-    prompt_section_order: str
 
     # LLM client
     llm_client_kind: str
@@ -233,11 +168,11 @@ class ResolvedLlmRuntimeConfig:
     llm_api_base: str | None
     llm_request_timeout_seconds: float
     llm_reasoning_effort: str
+    llm_max_output_tokens: int | None
     llm_wall_time_cap_seconds: float | None
     llm_rate_limit_retry_attempts: int
     llm_rate_limit_retry_base_sleep: float
     llm_turn_parallel_workers: int
-    llm_meeting_serial_turns: bool
     llm_idle_timeout_ticks: int
     llm_failure_streak_abort: int
     llm_tool_choice: str
@@ -246,7 +181,6 @@ class ResolvedLlmRuntimeConfig:
     # OpenRouter routing
     openrouter_provider: str | None
     openrouter_quantization: str | None
-    openrouter_require_params: bool
 
     # 型付き判断 (#1319)
     typed_judgment_provider: str
@@ -257,124 +191,29 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_action_name_min_confidence: float
     typed_judgment_target_label_min_confidence: float
     typed_judgment_memo_min_probability: float
-    typed_judgment_turn_gate_enabled: bool
-    typed_judgment_turn_gate_skip_below: float
     typed_judgment_loop_diagnosis_enabled: bool
     typed_judgment_semantic_repeat_enabled: bool
     typed_judgment_semantic_repeat_min_probability: float
     typed_judgment_semantic_repeat_window: int
 
-    # Episodic memory
-    episodic_enabled: bool
-    episodic_subjective_enabled: bool
-    episodic_explore_related_enabled: bool
-    episodic_promotion_force_full_scan: bool
-    episodic_promotion_expansion_hops: int
+    # #1623: 目次に載せる件数 N と、1 回に呼び出せる件数 M。
+    being_episode_index_limit: int = _DEFAULT_BEING_EPISODE_INDEX_LIMIT
+    being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
 
-    # Semantic memory
-    semantic_llm_gist_enabled: bool
-    semantic_passive_top_k: int
-    semantic_search_enabled: bool
-
-    # Prediction (#526): 行動前の予測 expected_result を core action tool の
-    # schema に露出するか。``"off"`` (露出せず挙動不変) | ``"optional"`` (schema
-    # に出すが required にしない) | ``"required"`` (毎ターン必須)。
-    expected_result_policy: str
-
-    # Prediction (#526 / U3): 段1=LLM 駆動のエピソード再解釈 (credit assignment) を
-    # 有効化するか。``LLM_EPISODIC_REINTERPRETATION_ENABLED=1`` で ON。default OFF で
-    # 従来の episodic-only 動作 (再解釈を組まない)。
-    episodic_reinterpretation_enabled: bool
-
-    # #526 段階 2: 慣化ペナルティ (recall された episode のスコアを decay_window
-    # tick の間だけ下げる)。``LLM_EPISODIC_RECALL_HABITUATION_ENABLED=1`` で ON。
-    # default OFF で既存挙動と完全同一。decay_window は
-    # ``LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS`` で 0 以上の整数で上書き可。
-    recall_habituation_enabled: bool = False
-    recall_habituation_decay_window_ticks: int = 5
-    short_term_memory_turn_cap: int = 20
-    short_term_memory_turn_compact_count: int = 10
-
-    # #526 段階 3: 想起スロット (working memory)。
-    # ``LLM_EPISODIC_RECALL_SLOT_ENABLED=1`` で ON、各パラメータは env で
-    # 上書き可:
-    #   ``LLM_EPISODIC_RECALL_SLOT_CAPACITY``           (N)
-    #   ``LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK``    (K_insert)
-    #   ``LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE``      (L)
-    #   ``LLM_EPISODIC_RECALL_SLOT_COOLDOWN``           (C)
-    #   ``LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD`` (score 閾値)
-    #
-    # PR-A: slot を「希少資源」化する default に更新。
-    # N=4 / K_insert=1 / L=8 / C=5 / threshold=2。
-    # K=1 で 1 tick で 1 件しか入れ替えないため recall section の前半が
-    # 安定し、prefix cache が育つ。閾値 2 で「2 軸以上の cue で当たった
-    # 強い signal だけ」が slot に入る (弱い候補は後段の Afterglow 行き)。
-    recall_slot_enabled: bool = False
-    recall_slot_capacity: int = 4
-    recall_slot_insert_per_tick: int = 1
-    recall_slot_max_residence: int = 8
-    recall_slot_cooldown_ticks: int = 5
-    recall_slot_insert_score_threshold: int = 2
-
-    # #526 段階 3 PR-C: afterglow index (= ぼんやり覚えてる 1 行見出し)。
-    # ``LLM_AFTERGLOW_ENABLED=1`` で ON (要 slot enable)。容量 M と滞在期間
-    # M_L は env で上書き可:
-    #   ``LLM_AFTERGLOW_CAPACITY``       (default 10)
-    #   ``LLM_AFTERGLOW_MAX_RESIDENCE``  (default 10 tick)
-    afterglow_enabled: bool = False
-    afterglow_capacity: int = 10
-    afterglow_max_residence: int = 10
-
-    # Active episodic recall tool (Issue #526 後続)。
-    episodic_recall_enabled: bool = False
-
-    # Prediction / belief / semantic journal 系。いずれも実験条件を変える
-    # flag なので、run_start / manifest に残すため本 DTO に集約する。
-    prediction_context_id_enabled: bool = False
-    belief_evidence_enabled: bool = False
-    belief_consolidation_enabled: bool = False
-    belief_attribution_enabled: bool = False
-    salience_structured_failure_enabled: bool = False
-    memo_distill_enabled: bool = False
-    unconscious_context_enabled: bool = False
-    error_driven_reinterpretation_enabled: bool = False
-    recall_hit_boost_enabled: bool = False
-    error_gated_encoding_enabled: bool = False
-    pending_prediction_enabled: bool = False
-    hearsay_enabled: bool = False
-    state_collapse_evidence_enabled: bool = False
-
-    # Goal / stagnation 系。
-    goal_store_enabled: bool = False
-    goal_revision_enabled: bool = False
-    goal_reflect_enabled: bool = False
-    goal_stagnation_evidence_enabled: bool = False
-    stagnation_pressure_enabled: bool = False
-    stagnation_reasoning_enabled: bool = False
-
-    # Prompt / tool 表面。``tool_mode`` は TODO 系 tool の露出を切り替えるため、
-    # 実験条件として trace に残す。``escape_llm_ssot_enabled`` は system prompt
-    # 文字列を変えるため同じく実験条件。
-    tool_mode: str = "default"
-    memo_tools_enabled: bool = True
-    escape_llm_ssot_enabled: bool = False
+    # Prompt / tool 表面。
     scenario_random_seed: int | None = None
-    prompt_dataset_capture_enabled: bool = False
     prompt_dataset_capture_failure_policy: str = "fail"
-    distant_view_trace_enabled: bool = False
     # reason-first 2段階ターン。True でも常時発火ではなく、Phase A 入口で
     # 既存の loop_guard / action_result / stagnation state を読んだ gated 発火にする。
-    reason_first_two_step_enabled: bool = False
-    # 全員が down または outcome 確定済みなら、DEAD 猶予を待たず outcome モードを
-    # 終了する。既定 OFF で、蘇生手段を実験したい profile は従来どおり猶予を残す。
-    end_on_all_down: bool = False
+    # 設定のキーは無く、llm_tool_choice から決める (_reason_first_two_step_enabled_for)。
+    reason_first_two_step_enabled: bool = True
 
-    # Episode store の永続化先 (``SUBJECTIVE_EPISODE_DB_PATH``)。None なら in-memory。
-    # 実 path 指定時は SQLite 永続化。従来 ``_default_episodic_episode_store`` が
-    # os.environ を直読みしており profile/manifest の外で決まっていた
-    # (PR #736 の単一窓口化で取り残されていた env)。config に載せ替えて
-    # 解決経路を from_mapping の 1 本に固定し、run_start / manifest に残す。
-    subjective_episode_db_path: str | None = None
+    # 世界の tick の 1 体ぶんの例外を、取りやめて続けるか止めるか (design_decisions D1558)。
+    # 既定が isolate なのは、その場で書いた実験設定がキーを書き忘れても run を捨てないため。
+    world_tick_failure_policy: str = WorldTickFailurePolicy.ISOLATE.value
+    async_event_workers: int = 2
+    async_event_max_pending: int = 100
+    async_event_shutdown_timeout_seconds: float = 10.0
 
     # ──────────────────────────────────────────────────────────────
     # Invariants
@@ -388,26 +227,6 @@ class ResolvedLlmRuntimeConfig:
         enum 的フィールドは、どの構築経路でも未知値が silent に通らないよう
         本メソッドで一括検証する (codex PR #557 レビュー反映)。
         """
-        if (
-            self.short_term_memory_turn_cap <= 0
-            or self.short_term_memory_turn_compact_count <= 0
-            or self.short_term_memory_turn_compact_count
-            >= self.short_term_memory_turn_cap
-        ):
-            raise ValueError(
-                "short-term memory turn window requires "
-                "0 < compact_count < cap"
-            )
-        if self.expected_result_policy not in _VALID_EXPECTED_RESULT_POLICIES:
-            raise ValueError(
-                f"expected_result_policy={self.expected_result_policy!r} is not recognized. "
-                f"valid: {sorted(_VALID_EXPECTED_RESULT_POLICIES)}"
-            )
-        if self.tool_mode not in _VALID_TOOL_MODES:
-            raise ValueError(
-                f"tool_mode={self.tool_mode!r} is not recognized. "
-                f"valid: {sorted(_VALID_TOOL_MODES)}"
-            )
         if self.llm_reasoning_effort not in _VALID_REASONING_EFFORTS:
             raise ValueError(
                 f"llm_reasoning_effort={self.llm_reasoning_effort!r} is not recognized. "
@@ -415,61 +234,27 @@ class ResolvedLlmRuntimeConfig:
             )
         if self.llm_tool_choice not in _VALID_TOOL_CHOICES:
             raise ValueError(
-                f"llm_tool_choice={self.llm_tool_choice!r} is not recognized. "
-                f"valid: {sorted(_VALID_TOOL_CHOICES)}"
+                f"llm_tool_choice={self.llm_tool_choice!r} is not recognized. valid: {sorted(_VALID_TOOL_CHOICES)}"
             )
+        for name in ("async_event_workers", "async_event_max_pending"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name}は1以上の整数である必要があります")
+        timeout = self.async_event_shutdown_timeout_seconds
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not math.isfinite(timeout)
+            or timeout < 0
+        ):
+            raise ValueError("async_event_shutdown_timeout_secondsは0以上の有限の秒数である必要があります")
+        WorldTickFailurePolicy.parse(self.world_tick_failure_policy)
         if self.prompt_dataset_capture_failure_policy not in {"fail", "warn"}:
             raise ValueError(
                 "prompt_dataset_capture_failure_policy="
                 f"{self.prompt_dataset_capture_failure_policy!r} is not recognized. "
                 "valid: ['fail', 'warn']"
             )
-        if self.stagnation_reasoning_enabled and not self.stagnation_pressure_enabled:
-            raise ValueError(
-                "STAGNATION_REASONING_ENABLED=1 requires "
-                "STAGNATION_PRESSURE_ENABLED=1"
-            )
-        if self.stagnation_reasoning_enabled and not self.goal_reflect_enabled:
-            raise ValueError(
-                "STAGNATION_REASONING_ENABLED=1 requires GOAL_REFLECT_ENABLED=1"
-            )
-        if (
-            self.goal_stagnation_evidence_enabled or self.stagnation_pressure_enabled
-        ) and not self.belief_consolidation_enabled:
-            raise ValueError(
-                "GOAL_STAGNATION_EVIDENCE_ENABLED=1 / "
-                "STAGNATION_PRESSURE_ENABLED=1 require "
-                "BELIEF_CONSOLIDATION_ENABLED=1"
-            )
-        if (
-            self.goal_stagnation_evidence_enabled
-            or self.stagnation_pressure_enabled
-            or self.stagnation_reasoning_enabled
-        ) and not self.episodic_enabled:
-            raise ValueError(
-                "GOAL_STAGNATION_EVIDENCE_ENABLED=1 / "
-                "STAGNATION_PRESSURE_ENABLED=1 / "
-                "STAGNATION_REASONING_ENABLED=1 require LLM_EPISODIC_ENABLED=1"
-            )
-        # SUBJECTIVE_EPISODE_DB_PATH は episode store が組まれる経路でしか意味を
-        # 持たない。episodic OFF では store 自体を作らず、subjective 経路は
-        # (scheduler と共有する都合で) 常に in-memory を使うため、どちらの場合も
-        # path 指定は静かに無視される。従来 env 直読み時代からの silent failure
-        # なので、無視になる組み合わせは fail-fast で落とす。
-        if self.subjective_episode_db_path:
-            if not self.episodic_enabled:
-                raise ValueError(
-                    "SUBJECTIVE_EPISODE_DB_PATH requires LLM_EPISODIC_ENABLED=1 "
-                    "(episodic OFF では episode store を組まないため path が無視される)"
-                )
-            if self.episodic_subjective_enabled:
-                raise ValueError(
-                    "SUBJECTIVE_EPISODE_DB_PATH is not supported with "
-                    "LLM_EPISODIC_SUBJECTIVE_ENABLED=1 "
-                    "(subjective 経路は in-memory episode store 固定なので path が"
-                    "無視される)。永続化が要るなら subjective を OFF にするか "
-                    "snapshot を使う"
-                )
 
     # ──────────────────────────────────────────────────────────────
     # Construction
@@ -483,72 +268,17 @@ class ResolvedLlmRuntimeConfig:
         """設定値から全フィールドを resolve する (PR 2/6 の核心)。
 
         - ``values`` 省略時は空設定として扱う。環境変数は読まない
-        - 各フィールドは既存 resolver (``feature_flags.resolve_*`` /
-          ``context_format_strategy.resolve_section_order_from_env`` /
-          ``_llm_client_factory`` の値) を呼ぶ薄いラッパー
+        - 各フィールドは既存 resolver (``_llm_client_factory`` の値など) を呼ぶ薄いラッパー
         - 不正値は各 resolver が ``ValueError`` を投げる (PR #434 fail-fast 継承)
 
         Raises:
             ValueError: values のいずれかが不正値のとき
         """
-        # 既存 resolver の import は関数内で行い、循環参照を避ける
-        from ai_rpg_world.application.llm.services.context_format_strategy import (
-            resolve_section_order_from_env,
-        )
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            resolve_belief_attribution_enabled,
-            resolve_belief_consolidation_enabled,
-            resolve_belief_evidence_enabled,
-            resolve_episodic_explore_related_enabled,
-            resolve_episodic_recall_enabled,
-            resolve_error_driven_reinterpretation_enabled,
-            resolve_error_gated_encoding_enabled,
-            resolve_goal_reflect_enabled,
-            resolve_goal_revision_enabled,
-            resolve_goal_stagnation_evidence_enabled,
-            resolve_goal_store_enabled,
-            resolve_hearsay_enabled,
-            resolve_memo_distill_enabled,
-            resolve_memo_tools_enabled,
-            resolve_pending_prediction_enabled,
-            resolve_prediction_context_id_enabled,
-            resolve_recall_hit_boost_enabled,
-            resolve_salience_structured_failure_enabled,
-            resolve_semantic_llm_gist_enabled,
-            resolve_semantic_passive_top_k,
-            resolve_semantic_search_enabled,
-            resolve_short_term_memory_kind,
-            resolve_short_term_memory_scheduler_mode,
-            resolve_short_term_memory_turn_window,
-            resolve_stagnation_pressure_enabled,
-            resolve_stagnation_reasoning_enabled,
-            resolve_state_collapse_evidence_enabled,
-            resolve_unconscious_context_enabled,
-        )
-
         source: Mapping[str, str] = values if values is not None else {}
         _validate_runtime_config_keys(source)
 
-        # 既存 resolver は env=None だと os.environ を読むものがあるため、
-        # ここでは必ず明示 mapping を渡す。実験設定の入力経路を
+        # resolver には必ず明示 mapping を渡す。実験設定の入力経路を
         # profile/config → 本 DTO の 1 本に固定するため。
-        short_term_memory_kind = resolve_short_term_memory_kind(env=source)
-        short_term_memory_scheduler_mode = resolve_short_term_memory_scheduler_mode(
-            env=source
-        )
-        (
-            short_term_memory_turn_cap,
-            short_term_memory_turn_compact_count,
-        ) = resolve_short_term_memory_turn_window(env=source)
-        prompt_section_order = resolve_section_order_from_env(env=source)
-        episodic_explore_related_enabled = resolve_episodic_explore_related_enabled(
-            env=source
-        )
-        semantic_llm_gist_enabled = resolve_semantic_llm_gist_enabled(env=source)
-        semantic_passive_top_k = resolve_semantic_passive_top_k(env=source)
-        semantic_search_enabled = resolve_semantic_search_enabled(env=source)
-        episodic_recall_enabled = resolve_episodic_recall_enabled(env=source)
-
         # LLM client kind (factory と同じロジックで解決)
         llm_client_kind = _resolve_llm_client_kind(source)
         llm_model = _strip_or_none(source.get("LLM_MODEL"))
@@ -556,24 +286,14 @@ class ResolvedLlmRuntimeConfig:
         llm_api_base = _strip_or_none(source.get("OPENAI_API_BASE"))
         llm_request_timeout_seconds = _resolve_timeout_seconds(source)
         llm_reasoning_effort = _resolve_reasoning_effort(source)
-        llm_wall_time_cap_seconds = _resolve_optional_positive_float(
-            source, "LLM_WALL_TIME_CAP_SECONDS"
-        )
-        llm_rate_limit_retry_attempts = _resolve_non_negative_int(
-            source, "LLM_RATE_LIMIT_RETRY_ATTEMPTS", default=3
-        )
+        llm_max_output_tokens = _resolve_optional_positive_int(source, "LLM_MAX_OUTPUT_TOKENS")
+        llm_wall_time_cap_seconds = _resolve_optional_positive_float(source, "LLM_WALL_TIME_CAP_SECONDS")
+        llm_rate_limit_retry_attempts = _resolve_non_negative_int(source, "LLM_RATE_LIMIT_RETRY_ATTEMPTS", default=3)
         llm_rate_limit_retry_base_sleep = _resolve_non_negative_float(
             source, "LLM_RATE_LIMIT_RETRY_BASE_SLEEP", default=2.0
         )
-        llm_turn_parallel_workers = _resolve_non_negative_int(
-            source, "LLM_TURN_PARALLEL_WORKERS", default=0
-        )
-        llm_meeting_serial_turns = _parse_truthy(
-            source.get("LLM_MEETING_SERIAL_TURNS"), default=False
-        )
-        llm_idle_timeout_ticks = _resolve_positive_int(
-            source, "LLM_IDLE_TIMEOUT_TICKS", default=6
-        )
+        llm_turn_parallel_workers = _resolve_non_negative_int(source, "LLM_TURN_PARALLEL_WORKERS", default=0)
+        llm_idle_timeout_ticks = _resolve_positive_int(source, "LLM_IDLE_TIMEOUT_TICKS", default=6)
         # 連続失敗で run を止める閾値。0 で無効。既定 8 の根拠は
         # LlmFailureStreakMonitor の試験に書いた (履歴 68 run の校正)。
         llm_failure_streak_abort = _resolve_non_negative_int(
@@ -583,30 +303,23 @@ class ResolvedLlmRuntimeConfig:
         )
         llm_tool_choice = _resolve_tool_choice(source)
         try:
-            llm_session_id_enabled = _parse_truthy(
-                source.get("LLM_SESSION_ID_ENABLED"), default=True
-            )
+            llm_session_id_enabled = _parse_truthy(source.get("LLM_SESSION_ID_ENABLED"), default=True)
         except ValueError as exc:
             raise ValueError(f"LLM_SESSION_ID_ENABLED: {exc}") from exc
 
         # 型付き判断 (#1319)
         typed_judgment_provider = _resolve_typed_judgment_provider(source)
         typed_judgment_endpoint = (
-            _strip_or_none(source.get("TYPED_JUDGMENT_ENDPOINT"))
-            or _DEFAULT_TYPED_JUDGMENT_ENDPOINT
+            _strip_or_none(source.get("TYPED_JUDGMENT_ENDPOINT")) or _DEFAULT_TYPED_JUDGMENT_ENDPOINT
         )
-        typed_judgment_model = (
-            _strip_or_none(source.get("TYPED_JUDGMENT_MODEL"))
-            or _DEFAULT_TYPED_JUDGMENT_MODEL
-        )
+        typed_judgment_model = _strip_or_none(source.get("TYPED_JUDGMENT_MODEL")) or _DEFAULT_TYPED_JUDGMENT_MODEL
         typed_judgment_timeout_seconds = _resolve_positive_float_with_default(
             source,
             "TYPED_JUDGMENT_TIMEOUT_SECONDS",
             default=_DEFAULT_TYPED_JUDGMENT_TIMEOUT_SECONDS,
         )
         typed_judgment_api_key_env = (
-            _strip_or_none(source.get("TYPED_JUDGMENT_API_KEY_ENV"))
-            or _DEFAULT_TYPED_JUDGMENT_API_KEY_ENV
+            _strip_or_none(source.get("TYPED_JUDGMENT_API_KEY_ENV")) or _DEFAULT_TYPED_JUDGMENT_API_KEY_ENV
         )
         typed_judgment_action_name_min_confidence = _resolve_ratio_with_default(
             source,
@@ -622,17 +335,6 @@ class ResolvedLlmRuntimeConfig:
             source,
             "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
             default=_DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY,
-        )
-        try:
-            typed_judgment_turn_gate_enabled = _parse_truthy(
-                source.get("TYPED_JUDGMENT_TURN_GATE_ENABLED"), default=False
-            )
-        except ValueError as exc:
-            raise ValueError(f"TYPED_JUDGMENT_TURN_GATE_ENABLED: {exc}") from exc
-        typed_judgment_turn_gate_skip_below = _resolve_ratio_with_default(
-            source,
-            "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
-            default=_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW,
         )
         try:
             typed_judgment_loop_diagnosis_enabled = _parse_truthy(
@@ -657,235 +359,74 @@ class ResolvedLlmRuntimeConfig:
             default=_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW,
         )
         if typed_judgment_semantic_repeat_window < 2:
-            raise ValueError(
-                "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW must be 2 or greater"
-            )
-
+            raise ValueError("TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW must be 2 or greater")
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
         openrouter_quantization = _strip_or_none(source.get("OPENROUTER_QUANTIZATION"))
-        openrouter_require_params = _parse_truthy(
-            source.get("OPENROUTER_REQUIRE_PARAMS"), default=False
-        )
-
-        # Episodic on/off (旧来は episodic_stack.is_episodic_enabled が同等の
-        # ロジック。bool 解釈は _parse_truthy で統一)
-        episodic_enabled = _parse_truthy(source.get("LLM_EPISODIC_ENABLED"), default=False)
-        episodic_subjective_enabled = _parse_truthy(
-            source.get("LLM_EPISODIC_SUBJECTIVE_ENABLED"), default=True
-        )
-        episodic_promotion_force_full_scan = _parse_truthy(
-            source.get("EPISODIC_PROMOTION_FORCE_FULL_SCAN"), default=False
-        )
-        episodic_promotion_expansion_hops = _resolve_non_negative_int(
-            source, "EPISODIC_PROMOTION_EXPANSION_HOPS", default=4
-        )
-
-        # Prediction (#526): expected_result 露出 policy
-        expected_result_policy = _resolve_expected_result_policy(source)
 
         # Prediction (#526 / U3): エピソード再解釈 on/off
-        episodic_reinterpretation_enabled = _parse_truthy(
-            source.get("LLM_EPISODIC_REINTERPRETATION_ENABLED"), default=False
-        )
 
-        # #526 段階 2: 慣化ペナルティ (default off / decay 5 tick)
-        recall_habituation_enabled = _parse_truthy(
-            source.get("LLM_EPISODIC_RECALL_HABITUATION_ENABLED"), default=False
+        being_episode_index_limit = _resolve_positive_int(
+            source, "BEING_EPISODE_INDEX_LIMIT", default=_DEFAULT_BEING_EPISODE_INDEX_LIMIT
         )
-        recall_habituation_decay_window_ticks = _resolve_recall_habituation_decay(
-            source
-        )
-
-        # #526 段階 3 + PR-A: 想起スロット (default off / N=4 K=1 L=8 C=5 / 閾値=2)
-        recall_slot_enabled = _parse_truthy(
-            source.get("LLM_EPISODIC_RECALL_SLOT_ENABLED"), default=False
-        )
-        recall_slot_capacity = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_CAPACITY", default=4
-        )
-        recall_slot_insert_per_tick = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK", default=1
-        )
-        recall_slot_max_residence = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE", default=8
-        )
-        recall_slot_cooldown_ticks = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_COOLDOWN", default=5
-        )
-        recall_slot_insert_score_threshold = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD", default=2
-        )
-
-        # #526 段階 3 PR-C: afterglow index (default off / M=10, M_L=10)
-        afterglow_enabled = _parse_truthy(
-            source.get("LLM_AFTERGLOW_ENABLED"), default=False
-        )
-        afterglow_capacity = _resolve_non_negative_int(
-            source, "LLM_AFTERGLOW_CAPACITY", default=10
-        )
-        afterglow_max_residence = _resolve_non_negative_int(
-            source, "LLM_AFTERGLOW_MAX_RESIDENCE", default=10
-        )
-
-        prediction_context_id_enabled = resolve_prediction_context_id_enabled(env=source)
-        belief_evidence_enabled = resolve_belief_evidence_enabled(env=source)
-        belief_consolidation_enabled = resolve_belief_consolidation_enabled(env=source)
-        belief_attribution_enabled = resolve_belief_attribution_enabled(env=source)
-        salience_structured_failure_enabled = (
-            resolve_salience_structured_failure_enabled(env=source)
-        )
-        memo_distill_enabled = resolve_memo_distill_enabled(env=source)
-        memo_tools_enabled = resolve_memo_tools_enabled(env=source)
-        unconscious_context_enabled = resolve_unconscious_context_enabled(env=source)
-        error_driven_reinterpretation_enabled = (
-            resolve_error_driven_reinterpretation_enabled(env=source)
-        )
-        recall_hit_boost_enabled = resolve_recall_hit_boost_enabled(env=source)
-        error_gated_encoding_enabled = resolve_error_gated_encoding_enabled(env=source)
-        pending_prediction_enabled = resolve_pending_prediction_enabled(env=source)
-        hearsay_enabled = resolve_hearsay_enabled(env=source)
-        state_collapse_evidence_enabled = resolve_state_collapse_evidence_enabled(
-            env=source
-        )
-        goal_store_enabled = resolve_goal_store_enabled(env=source)
-        goal_revision_enabled = resolve_goal_revision_enabled(env=source)
-        goal_reflect_enabled = resolve_goal_reflect_enabled(env=source)
-        goal_stagnation_evidence_enabled = resolve_goal_stagnation_evidence_enabled(
-            env=source
-        )
-        stagnation_pressure_enabled = resolve_stagnation_pressure_enabled(env=source)
-        stagnation_reasoning_enabled = resolve_stagnation_reasoning_enabled(env=source)
-        tool_mode = _resolve_tool_mode(source)
-        escape_llm_ssot_enabled = _parse_truthy(
-            source.get("ESCAPE_LLM_SSOT"), default=False
+        being_episode_recall_max_handles = _resolve_positive_int(
+            source,
+            "BEING_EPISODE_RECALL_MAX_HANDLES",
+            default=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
         )
         scenario_random_seed = _resolve_optional_int(source, "SCENARIO_RANDOM_SEED")
-        prompt_dataset_capture_enabled = _parse_truthy(
-            source.get("PROMPT_DATASET_CAPTURE_ENABLED"), default=False
-        )
         prompt_dataset_capture_failure_policy = (
-            source.get("PROMPT_DATASET_CAPTURE_FAILURE_POLICY") or "fail"
-        ).strip().lower()
-        distant_view_trace_enabled = _parse_truthy(
-            source.get("DISTANT_VIEW_TRACE_ENABLED"), default=False
+            (source.get("PROMPT_DATASET_CAPTURE_FAILURE_POLICY") or "fail").strip().lower()
         )
+        reason_first_two_step_enabled = _reason_first_two_step_enabled_for(llm_tool_choice)
         try:
-            reason_first_two_step_enabled = _parse_truthy(
-                source.get("REASON_FIRST_TWO_STEP_ENABLED"), default=False
-            )
+            world_tick_failure_policy = WorldTickFailurePolicy.parse(
+                source.get("WORLD_TICK_FAILURE_POLICY") or WorldTickFailurePolicy.ISOLATE.value
+            ).value
         except ValueError as exc:
-            raise ValueError(f"REASON_FIRST_TWO_STEP_ENABLED: {exc}") from exc
-        # reason-first の第1段は named tool_choice を使う。DeepSeek で
-        # thinking + named の対応を実 API なしに保証できないため、auto 比較腕では
-        # 2段階経路を実効 OFF にし、解決済み設定にも false として残す。
-        if llm_tool_choice == "auto":
-            reason_first_two_step_enabled = False
-        try:
-            end_on_all_down = _parse_truthy(
-                source.get("END_ON_ALL_DOWN"), default=False
-            )
-        except ValueError as exc:
-            raise ValueError(f"END_ON_ALL_DOWN: {exc}") from exc
-        subjective_episode_db_path = _strip_or_none(
-            source.get("SUBJECTIVE_EPISODE_DB_PATH")
-        )
+            raise ValueError(f"WORLD_TICK_FAILURE_POLICY: {exc}") from exc
 
         return cls(
-            short_term_memory_kind=short_term_memory_kind,
-            short_term_memory_scheduler_mode=short_term_memory_scheduler_mode,
-            short_term_memory_turn_cap=short_term_memory_turn_cap,
-            short_term_memory_turn_compact_count=short_term_memory_turn_compact_count,
-            prompt_section_order=prompt_section_order,
             llm_client_kind=llm_client_kind,
             llm_model=llm_model,
             llm_api_key=llm_api_key,
             llm_api_base=llm_api_base,
             llm_request_timeout_seconds=llm_request_timeout_seconds,
             llm_reasoning_effort=llm_reasoning_effort,
+            llm_max_output_tokens=llm_max_output_tokens,
             llm_wall_time_cap_seconds=llm_wall_time_cap_seconds,
             llm_rate_limit_retry_attempts=llm_rate_limit_retry_attempts,
             llm_rate_limit_retry_base_sleep=llm_rate_limit_retry_base_sleep,
             llm_turn_parallel_workers=llm_turn_parallel_workers,
-            llm_meeting_serial_turns=llm_meeting_serial_turns,
             llm_idle_timeout_ticks=llm_idle_timeout_ticks,
             llm_failure_streak_abort=llm_failure_streak_abort,
             llm_tool_choice=llm_tool_choice,
             llm_session_id_enabled=llm_session_id_enabled,
             openrouter_provider=openrouter_provider,
             openrouter_quantization=openrouter_quantization,
-            openrouter_require_params=openrouter_require_params,
             typed_judgment_provider=typed_judgment_provider,
             typed_judgment_endpoint=typed_judgment_endpoint,
             typed_judgment_model=typed_judgment_model,
             typed_judgment_timeout_seconds=typed_judgment_timeout_seconds,
             typed_judgment_api_key_env=typed_judgment_api_key_env,
-            typed_judgment_action_name_min_confidence=(
-                typed_judgment_action_name_min_confidence
-            ),
-            typed_judgment_target_label_min_confidence=(
-                typed_judgment_target_label_min_confidence
-            ),
+            typed_judgment_action_name_min_confidence=(typed_judgment_action_name_min_confidence),
+            typed_judgment_target_label_min_confidence=(typed_judgment_target_label_min_confidence),
             typed_judgment_memo_min_probability=typed_judgment_memo_min_probability,
-            typed_judgment_turn_gate_enabled=typed_judgment_turn_gate_enabled,
-            typed_judgment_turn_gate_skip_below=typed_judgment_turn_gate_skip_below,
             typed_judgment_loop_diagnosis_enabled=typed_judgment_loop_diagnosis_enabled,
             typed_judgment_semantic_repeat_enabled=typed_judgment_semantic_repeat_enabled,
-            typed_judgment_semantic_repeat_min_probability=(
-                typed_judgment_semantic_repeat_min_probability
-            ),
+            typed_judgment_semantic_repeat_min_probability=(typed_judgment_semantic_repeat_min_probability),
             typed_judgment_semantic_repeat_window=typed_judgment_semantic_repeat_window,
-            episodic_enabled=episodic_enabled,
-            episodic_subjective_enabled=episodic_subjective_enabled,
-            episodic_explore_related_enabled=episodic_explore_related_enabled,
-            episodic_promotion_force_full_scan=episodic_promotion_force_full_scan,
-            episodic_promotion_expansion_hops=episodic_promotion_expansion_hops,
-            semantic_llm_gist_enabled=semantic_llm_gist_enabled,
-            semantic_passive_top_k=semantic_passive_top_k,
-            semantic_search_enabled=semantic_search_enabled,
-            expected_result_policy=expected_result_policy,
-            episodic_reinterpretation_enabled=episodic_reinterpretation_enabled,
-            recall_habituation_enabled=recall_habituation_enabled,
-            recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
-            recall_slot_enabled=recall_slot_enabled,
-            recall_slot_capacity=recall_slot_capacity,
-            recall_slot_insert_per_tick=recall_slot_insert_per_tick,
-            recall_slot_insert_score_threshold=recall_slot_insert_score_threshold,
-            recall_slot_max_residence=recall_slot_max_residence,
-            recall_slot_cooldown_ticks=recall_slot_cooldown_ticks,
-            afterglow_enabled=afterglow_enabled,
-            afterglow_capacity=afterglow_capacity,
-            afterglow_max_residence=afterglow_max_residence,
-            episodic_recall_enabled=episodic_recall_enabled,
-            prediction_context_id_enabled=prediction_context_id_enabled,
-            belief_evidence_enabled=belief_evidence_enabled,
-            belief_consolidation_enabled=belief_consolidation_enabled,
-            belief_attribution_enabled=belief_attribution_enabled,
-            salience_structured_failure_enabled=salience_structured_failure_enabled,
-            memo_distill_enabled=memo_distill_enabled,
-            unconscious_context_enabled=unconscious_context_enabled,
-            error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
-            recall_hit_boost_enabled=recall_hit_boost_enabled,
-            error_gated_encoding_enabled=error_gated_encoding_enabled,
-            pending_prediction_enabled=pending_prediction_enabled,
-            hearsay_enabled=hearsay_enabled,
-            state_collapse_evidence_enabled=state_collapse_evidence_enabled,
-            goal_store_enabled=goal_store_enabled,
-            goal_revision_enabled=goal_revision_enabled,
-            goal_reflect_enabled=goal_reflect_enabled,
-            goal_stagnation_evidence_enabled=goal_stagnation_evidence_enabled,
-            stagnation_pressure_enabled=stagnation_pressure_enabled,
-            stagnation_reasoning_enabled=stagnation_reasoning_enabled,
-            tool_mode=tool_mode,
-            memo_tools_enabled=memo_tools_enabled,
-            escape_llm_ssot_enabled=escape_llm_ssot_enabled,
+            being_episode_index_limit=being_episode_index_limit,
+            being_episode_recall_max_handles=being_episode_recall_max_handles,
             scenario_random_seed=scenario_random_seed,
-            prompt_dataset_capture_enabled=prompt_dataset_capture_enabled,
             prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
-            distant_view_trace_enabled=distant_view_trace_enabled,
             reason_first_two_step_enabled=reason_first_two_step_enabled,
-            end_on_all_down=end_on_all_down,
-            subjective_episode_db_path=subjective_episode_db_path,
+            world_tick_failure_policy=world_tick_failure_policy,
+            async_event_workers=_resolve_positive_int(source, "ASYNC_EVENT_WORKERS", default=2),
+            async_event_max_pending=_resolve_positive_int(source, "ASYNC_EVENT_MAX_PENDING", default=100),
+            async_event_shutdown_timeout_seconds=_resolve_non_negative_float(
+                source, "ASYNC_EVENT_SHUTDOWN_TIMEOUT_SECONDS", default=10.0
+            ),
         )
 
     @classmethod
@@ -896,126 +437,60 @@ class ResolvedLlmRuntimeConfig:
         keyword で渡す。test fixture の肥大化を防ぐ。
 
         - LLM 系は全部 ``stub`` / None で「実 LLM を呼ばない」
-        - feature flag は全部 OFF
-        - prompt_section_order は ``stable_to_volatile`` (= default)
+        - feature flag は全部 OFF。reason-first 2段階ターンだけは設定で切れないので、
+          本番と同じく llm_tool_choice から決める
 
         Usage:
             cfg = ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind="rolling_summary",
+                typed_judgment_provider="jev",
             )
         """
         defaults: dict[str, Any] = dict(
-            short_term_memory_kind="sliding_window",
-            short_term_memory_turn_cap=20,
-            short_term_memory_turn_compact_count=10,
-            # PR #467: K run #466 で thread_pool を本番 default に。テスト
-            # factory も from_mapping と整合させる。テストで inline を要求するなら
-            # 明示 override する。
-            short_term_memory_scheduler_mode="thread_pool",
-            prompt_section_order="stable_to_volatile",
             llm_client_kind="stub",
             llm_model=None,
             llm_api_key=None,
             llm_api_base=None,
             llm_request_timeout_seconds=90.0,
-            llm_reasoning_effort="none",
+            llm_reasoning_effort="minimal",
+            llm_max_output_tokens=None,
             llm_wall_time_cap_seconds=None,
             llm_rate_limit_retry_attempts=3,
             llm_rate_limit_retry_base_sleep=2.0,
             llm_turn_parallel_workers=0,
-            llm_meeting_serial_turns=False,
             llm_idle_timeout_ticks=6,
             llm_failure_streak_abort=DEFAULT_FAILURE_STREAK_ABORT,
             llm_tool_choice="required",
             llm_session_id_enabled=True,
             openrouter_provider=None,
             openrouter_quantization=None,
-            openrouter_require_params=False,
             typed_judgment_provider="off",
             typed_judgment_endpoint=_DEFAULT_TYPED_JUDGMENT_ENDPOINT,
             typed_judgment_model=_DEFAULT_TYPED_JUDGMENT_MODEL,
             typed_judgment_timeout_seconds=_DEFAULT_TYPED_JUDGMENT_TIMEOUT_SECONDS,
             typed_judgment_api_key_env=_DEFAULT_TYPED_JUDGMENT_API_KEY_ENV,
-            typed_judgment_action_name_min_confidence=(
-                _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE
-            ),
-            typed_judgment_target_label_min_confidence=(
-                _DEFAULT_TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE
-            ),
-            typed_judgment_memo_min_probability=(
-                _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY
-            ),
-            typed_judgment_turn_gate_enabled=False,
-            typed_judgment_turn_gate_skip_below=(
-                _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW
-            ),
+            typed_judgment_action_name_min_confidence=(_DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE),
+            typed_judgment_target_label_min_confidence=(_DEFAULT_TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE),
+            typed_judgment_memo_min_probability=(_DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY),
             typed_judgment_loop_diagnosis_enabled=False,
             typed_judgment_semantic_repeat_enabled=False,
-            typed_judgment_semantic_repeat_min_probability=(
-                _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY
-            ),
-            typed_judgment_semantic_repeat_window=(
-                _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW
-            ),
-            episodic_enabled=False,
-            episodic_subjective_enabled=True,
-            episodic_explore_related_enabled=False,
-            episodic_promotion_force_full_scan=False,
-            episodic_promotion_expansion_hops=4,
-            semantic_llm_gist_enabled=False,
-            semantic_passive_top_k=0,
-            semantic_search_enabled=False,
-            expected_result_policy="off",
-            episodic_reinterpretation_enabled=False,
-            recall_habituation_enabled=False,
-            recall_habituation_decay_window_ticks=5,
-            recall_slot_enabled=False,
-            recall_slot_capacity=4,
-            recall_slot_insert_per_tick=1,
-            recall_slot_max_residence=8,
-            recall_slot_cooldown_ticks=5,
-            recall_slot_insert_score_threshold=2,
-            afterglow_enabled=False,
-            afterglow_capacity=10,
-            afterglow_max_residence=10,
-            episodic_recall_enabled=False,
-            prediction_context_id_enabled=False,
-            belief_evidence_enabled=False,
-            belief_consolidation_enabled=False,
-            belief_attribution_enabled=False,
-            salience_structured_failure_enabled=False,
-            memo_distill_enabled=True,
-            unconscious_context_enabled=False,
-            error_driven_reinterpretation_enabled=False,
-            recall_hit_boost_enabled=False,
-            error_gated_encoding_enabled=False,
-            pending_prediction_enabled=False,
-            hearsay_enabled=False,
-            state_collapse_evidence_enabled=False,
-            goal_store_enabled=False,
-            goal_revision_enabled=False,
-            goal_reflect_enabled=False,
-            goal_stagnation_evidence_enabled=False,
-            stagnation_pressure_enabled=False,
-            stagnation_reasoning_enabled=False,
-            tool_mode="default",
-            memo_tools_enabled=True,
-            escape_llm_ssot_enabled=False,
+            typed_judgment_semantic_repeat_min_probability=(_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY),
+            typed_judgment_semantic_repeat_window=(_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW),
+            being_episode_index_limit=_DEFAULT_BEING_EPISODE_INDEX_LIMIT,
+            being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
             scenario_random_seed=None,
-            prompt_dataset_capture_enabled=False,
             prompt_dataset_capture_failure_policy="fail",
-            distant_view_trace_enabled=False,
-            reason_first_two_step_enabled=False,
-            end_on_all_down=False,
-            subjective_episode_db_path=None,
+            reason_first_two_step_enabled=True,
+            world_tick_failure_policy=WorldTickFailurePolicy.ISOLATE.value,
+            async_event_workers=2,
+            async_event_max_pending=100,
+            async_event_shutdown_timeout_seconds=10.0,
         )
         unknown = set(overrides) - set(defaults)
         if unknown:
-            raise TypeError(
-                f"Unknown override keys: {sorted(unknown)}. "
-                f"valid: {sorted(defaults)}"
-            )
+            raise TypeError(f"Unknown override keys: {sorted(unknown)}. valid: {sorted(defaults)}")
         defaults.update(overrides)
+        if "reason_first_two_step_enabled" not in overrides:
+            defaults["reason_first_two_step_enabled"] = _reason_first_two_step_enabled_for(defaults["llm_tool_choice"])
         return cls(**defaults)
 
     # ──────────────────────────────────────────────────────────────
@@ -1038,6 +513,16 @@ class ResolvedLlmRuntimeConfig:
 # ──────────────────────────────────────────────────────────────────
 # Internal helpers
 # ──────────────────────────────────────────────────────────────────
+
+
+def _reason_first_two_step_enabled_for(llm_tool_choice: str) -> bool:
+    """reason-first 2段階ターンを使うかを tool_choice から決める。
+
+    第1段は named tool_choice を使う。DeepSeek で thinking + named の対応を
+    実 API なしに保証できないため、auto 比較腕では 2段階経路を実効 OFF にし、
+    解決済み設定にも false として残す。
+    """
+    return llm_tool_choice != "auto"
 
 
 #: 型付き判断の provider。``llm`` は未実装なので受け取らない。受け取ると
@@ -1073,10 +558,6 @@ _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE = 0.7
 #: 確信 0.89、誤った寄せは 0.8 台だった (scripts/jev_target_label_rescue_demo.py)。
 _DEFAULT_TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE = 0.85
 
-#: 動く必要がある確率がこれ未満のときだけ回さない。発言単位の起動判定 (#217) で
-#: 0.05 → 0.15 に上げた値を引き継ぐ。tick 単位では未較正。
-_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
-
 #: 過去 run の窓 20 件で測った (scripts/jev_semantic_repeat_demo.py)。繰り返しで
 #: ない窓の最大は 0.51 で、完全一致で拾えなかった繰り返し 10 件のうち 6 件が
 #: 0.86 以上だった。警告が待機へ押すのを避けるため、非繰り返しの最大から離して置く。
@@ -1090,18 +571,18 @@ _FALSY = frozenset({"0", "false", "no", "off"})
 
 def _validate_runtime_config_keys(source: Mapping[str, str]) -> None:
     """profile/runtime_config の typo と秘密値混入を入口で止める。"""
+    removed = sorted(set(source) & set(_REMOVED_RUNTIME_CONFIG_KEYS))
+    if removed:
+        reasons = "; ".join(f"{key}: {_REMOVED_RUNTIME_CONFIG_KEYS[key]}" for key in removed)
+        raise ValueError(f"removed runtime_config key(s): {removed}. 消してください ({reasons})")
     env_only = sorted(set(source) & _SECRET_ENV_ONLY_KEYS)
     if env_only:
         raise ValueError(
-            "secret key(s) are not allowed in runtime_config: "
-            f"{env_only}. Set them via process environment instead."
+            f"secret key(s) are not allowed in runtime_config: {env_only}. Set them via process environment instead."
         )
     unknown = sorted(set(source) - SUPPORTED_RUNTIME_CONFIG_KEYS)
     if unknown:
-        raise ValueError(
-            f"unknown runtime_config key(s): {unknown}. "
-            f"valid: {sorted(SUPPORTED_RUNTIME_CONFIG_KEYS)}"
-        )
+        raise ValueError(f"unknown runtime_config key(s): {unknown}. valid: {sorted(SUPPORTED_RUNTIME_CONFIG_KEYS)}")
 
 
 def _strip_or_none(value: str | None) -> str | None:
@@ -1113,7 +594,7 @@ def _strip_or_none(value: str | None) -> str | None:
 
 
 def _parse_truthy(value: str | None, *, default: bool) -> bool:
-    """bool 解釈。``_parse_bool_env`` と同じロジック (PR #434 ポリシー)。
+    """bool 解釈 (PR #434 ポリシー)。
 
     未設定 / 空文字 → ``default``
     truthy / falsy リテラル → True / False
@@ -1126,61 +607,24 @@ def _parse_truthy(value: str | None, *, default: bool) -> bool:
         return True
     if raw in _FALSY:
         return False
-    raise ValueError(
-        f"{value!r} is not a recognized boolean. "
-        f"truthy: {sorted(_TRUTHY)}, falsy: {sorted(_FALSY)}"
-    )
+    raise ValueError(f"{value!r} is not a recognized boolean. truthy: {sorted(_TRUTHY)}, falsy: {sorted(_FALSY)}")
 
 
-_VALID_EXPECTED_RESULT_POLICIES = frozenset({"off", "optional", "required"})
-_VALID_TOOL_MODES = frozenset({"default", "pure_spot_graph"})
 _VALID_TOOL_CHOICES = frozenset({"required", "auto"})
-_VALID_REASONING_EFFORTS = frozenset({
-    "",
-    "none",
-    "minimal",
-    "low",
-    "medium",
-    "high",
-    "xhigh",
-})
+_VALID_REASONING_EFFORTS = frozenset(
+    {
+        "",
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+    }
+)
 
 
-def _resolve_expected_result_policy(source: Mapping[str, str]) -> str:
-    """``LLM_EXPECTED_RESULT_POLICY`` を解決 (#526 / PR #434 fail-fast 継承)。
-
-    未設定 / 空文字 → ``"off"`` (露出せず挙動不変)。off / optional / required の
-    いずれでもなければ ``ValueError``。
-    """
-    raw = (source.get("LLM_EXPECTED_RESULT_POLICY") or "off").strip().lower()
-    if raw not in _VALID_EXPECTED_RESULT_POLICIES:
-        raise ValueError(
-            f"LLM_EXPECTED_RESULT_POLICY={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_EXPECTED_RESULT_POLICIES)}"
-        )
-    return raw
-
-
-def _resolve_tool_mode(source: Mapping[str, str]) -> str:
-    """``LLM_TOOL_MODE`` を解決する。
-
-    旧 world_runtime 経路は未知値を warning + default fallback にしていたが、
-    実験条件では typo を黙って受ける価値が低いため fail-fast に揃える。
-    """
-    raw = (source.get("LLM_TOOL_MODE") or "").strip().lower()
-    if not raw:
-        return "default"
-    if raw not in _VALID_TOOL_MODES:
-        raise ValueError(
-            f"LLM_TOOL_MODE={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_TOOL_MODES)}"
-        )
-    return raw
-
-
-def _resolve_ratio_with_default(
-    source: Mapping[str, str], key: str, *, default: float
-) -> float:
+def _resolve_ratio_with_default(source: Mapping[str, str], key: str, *, default: float) -> float:
     """0 より大きく 1 以下の比率を解決する。範囲外は起動前に拒否する。
 
     確率と比べる閾値なので、1 を超える値や 0 以下は意味を持たない。黙って
@@ -1207,15 +651,12 @@ def _resolve_typed_judgment_provider(source: Mapping[str, str]) -> str:
     raw = (source.get("TYPED_JUDGMENT_PROVIDER") or "off").strip().lower()
     if raw not in _VALID_TYPED_JUDGMENT_PROVIDERS:
         raise ValueError(
-            f"TYPED_JUDGMENT_PROVIDER={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_TYPED_JUDGMENT_PROVIDERS)}"
+            f"TYPED_JUDGMENT_PROVIDER={raw!r} is not recognized. valid: {sorted(_VALID_TYPED_JUDGMENT_PROVIDERS)}"
         )
     return raw
 
 
-def _resolve_positive_float_with_default(
-    source: Mapping[str, str], key: str, *, default: float
-) -> float:
+def _resolve_positive_float_with_default(source: Mapping[str, str], key: str, *, default: float) -> float:
     raw = (source.get(key) or "").strip()
     if not raw:
         return default
@@ -1233,26 +674,22 @@ def _resolve_tool_choice(source: Mapping[str, str]) -> str:
 
     raw = (source.get("LLM_TOOL_CHOICE") or "required").strip().lower()
     if raw not in _VALID_TOOL_CHOICES:
-        raise ValueError(
-            f"LLM_TOOL_CHOICE={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_TOOL_CHOICES)}"
-        )
+        raise ValueError(f"LLM_TOOL_CHOICE={raw!r} is not recognized. valid: {sorted(_VALID_TOOL_CHOICES)}")
     return raw
 
 
 def _resolve_reasoning_effort(source: Mapping[str, str]) -> str:
     """``LLM_REASONING_EFFORT`` を解決する。
 
-    reasoning model でコストが膨らむ事故を防ぐため、既定は ``"none"``。
+    既定は ``"minimal"``。本命の profile をはじめ、実 LLM の run の多くが
+    minimal で動いており、書き忘れた run だけが熟考なしで走るのを避ける (#1631)。
+    ``"none"`` を使う profile は値を明示している。
     空文字は「reasoning 関連フィールドを一切注入しない」を表す明示値として許す。
     """
     raw = source.get("LLM_REASONING_EFFORT")
-    value = "none" if raw is None else raw.strip().lower()
+    value = "minimal" if raw is None else raw.strip().lower()
     if value not in _VALID_REASONING_EFFORTS:
-        raise ValueError(
-            f"LLM_REASONING_EFFORT={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_REASONING_EFFORTS)}"
-        )
+        raise ValueError(f"LLM_REASONING_EFFORT={raw!r} is not recognized. valid: {sorted(_VALID_REASONING_EFFORTS)}")
     return value
 
 
@@ -1269,13 +706,10 @@ def _resolve_optional_int(
         raise ValueError(f"{env_name}={raw!r} must be an integer")
 
 
-def _resolve_non_negative_int(
-    source: Mapping[str, str], key: str, *, default: int
-) -> int:
+def _resolve_non_negative_int(source: Mapping[str, str], key: str, *, default: int) -> int:
     """``key`` を 0 以上の整数として解決。未設定 / 空文字 → ``default``。
 
-    負値・非数値は ``ValueError`` で fail-fast。``_resolve_recall_habituation_decay``
-    と同じ方針を共有 helper として一般化したもの。
+    負値・非数値は ``ValueError`` で fail-fast。
     """
     raw = (source.get(key) or "").strip()
     if not raw:
@@ -1289,9 +723,7 @@ def _resolve_non_negative_int(
     return value
 
 
-def _resolve_positive_int(
-    source: Mapping[str, str], key: str, *, default: int
-) -> int:
+def _resolve_positive_int(source: Mapping[str, str], key: str, *, default: int) -> int:
     raw = (source.get(key) or "").strip()
     if not raw:
         return default
@@ -1304,9 +736,7 @@ def _resolve_positive_int(
     return value
 
 
-def _resolve_non_negative_float(
-    source: Mapping[str, str], key: str, *, default: float
-) -> float:
+def _resolve_non_negative_float(source: Mapping[str, str], key: str, *, default: float) -> float:
     raw = (source.get(key) or "").strip()
     if not raw:
         return default
@@ -1319,9 +749,14 @@ def _resolve_non_negative_float(
     return value
 
 
-def _resolve_optional_positive_float(
-    source: Mapping[str, str], key: str
-) -> float | None:
+def _resolve_optional_positive_int(source: Mapping[str, str], key: str) -> int | None:
+    raw = (source.get(key) or "").strip()
+    if not raw:
+        return None
+    return _resolve_positive_int(source, key, default=0)
+
+
+def _resolve_optional_positive_float(source: Mapping[str, str], key: str) -> float | None:
     raw = (source.get(key) or "").strip()
     if not raw:
         return None
@@ -1334,27 +769,6 @@ def _resolve_optional_positive_float(
     return value
 
 
-def _resolve_recall_habituation_decay(source: Mapping[str, str]) -> int:
-    """``LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS`` を解決 (#526 段階 2)。
-
-    未設定 / 空文字 → default 5。負値・非数値は fail-fast で ``ValueError``。
-    """
-    raw = (source.get("LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS") or "").strip()
-    if not raw:
-        return 5
-    try:
-        value = int(raw)
-    except ValueError as e:
-        raise ValueError(
-            f"LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS={raw!r} is not an integer"
-        ) from e
-    if value < 0:
-        raise ValueError(
-            f"LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS={value} must be 0 or greater"
-        )
-    return value
-
-
 _VALID_LLM_CLIENT_KINDS = frozenset({"stub", "litellm"})
 
 
@@ -1362,10 +776,7 @@ def _resolve_llm_client_kind(source: Mapping[str, str]) -> str:
     """``LLM_CLIENT`` を解決 (factory と同じロジック / PR #434 fail-fast 継承)。"""
     raw = (source.get("LLM_CLIENT") or "stub").strip().lower()
     if raw not in _VALID_LLM_CLIENT_KINDS:
-        raise ValueError(
-            f"LLM_CLIENT={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_LLM_CLIENT_KINDS)}"
-        )
+        raise ValueError(f"LLM_CLIENT={raw!r} is not recognized. valid: {sorted(_VALID_LLM_CLIENT_KINDS)}")
     return raw
 
 
@@ -1380,9 +791,7 @@ def _resolve_timeout_seconds(source: Mapping[str, str]) -> float:
     try:
         return float(raw)
     except ValueError:
-        raise ValueError(
-            f"LLM_REQUEST_TIMEOUT_SECONDS={raw!r} must be a number (seconds)"
-        )
+        raise ValueError(f"LLM_REQUEST_TIMEOUT_SECONDS={raw!r} must be a number (seconds)")
 
 
 __all__ = ["ResolvedLlmRuntimeConfig", "SUPPORTED_RUNTIME_CONFIG_KEYS"]

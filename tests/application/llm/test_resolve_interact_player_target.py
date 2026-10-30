@@ -142,9 +142,7 @@ class TestInteractResolvesHeldItemTarget:
         assert out["target_player_id"] is None
 
     @pytest.mark.parametrize("other_kind", ["spot_graph_object", "spot_graph_player"])
-    def test_item_name_collision_is_rejected(
-        self, other_kind: str
-    ) -> None:
+    def test_item_name_collision_is_rejected(self, other_kind: str) -> None:
         """道具名が物体または人と衝突したら、宣言順で選ばず曖昧として拒否する。"""
         other = ToolRuntimeTargetDto(
             label="X1",

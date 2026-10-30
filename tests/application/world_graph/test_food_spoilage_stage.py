@@ -140,9 +140,7 @@ class TestEmptySpoilableSpecs:
 class TestInvalidAcquiredAtTick:
     """不正 acquired_at_tick の warning と spoiled 非更新。"""
 
-    def test_invalid_acquired_at_tick_logs_warning_and_skips_spoilage(
-        self, repo_with_raw_fish, caplog
-    ) -> None:
+    def test_invalid_acquired_at_tick_logs_warning_and_skips_spoilage(self, repo_with_raw_fish, caplog) -> None:
         """acquired_at_tick が int 以外なら warning を出し spoiled は立たない。"""
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: "bad"})

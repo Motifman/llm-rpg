@@ -1,14 +1,13 @@
 """
 InMemoryUnitOfWorkのテスト
 """
+
 from unittest.mock import Mock
 
 import pytest
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
-from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from ai_rpg_world.infrastructure.unit_of_work.transactional_scope import TransactionalScope
 
 
 class TestInMemoryUnitOfWork:
@@ -16,12 +15,10 @@ class TestInMemoryUnitOfWork:
 
     def setup_method(self):
         """各テストメソッドの前に実行"""
-        def create_unit_of_work():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_unit_of_work)
-        self.unit_of_work = create_unit_of_work()
+        self.unit_of_work = InMemoryUnitOfWork()
 
     def test_constructor_does_not_require_unit_of_work_factory(self):
-        """Phase 10: unit_of_work_factory は任意（未使用・後方互換のみ）"""
+        """配送の組み立てを渡さなくても、保存用の区切りを開始して取り消せる。"""
         uow = InMemoryUnitOfWork()
         uow.begin()
         uow.rollback()
@@ -99,37 +96,6 @@ class TestInMemoryUnitOfWork:
         with pytest.raises(RuntimeError, match="No transaction in progress"):
             self.unit_of_work.add_events([event])
 
-    def test_event_publishing_with_event_publisher(self):
-        """Phase 4: TransactionalScope の post-commit orchestration で publish_async_events が呼ばれる"""
-        mock_event_publisher = Mock()
-        mock_event_publisher.publish_async_events = Mock()
-
-        scope = TransactionalScope(self.unit_of_work, mock_event_publisher)
-        event1 = Mock(spec=DomainEvent)
-        event2 = Mock(spec=DomainEvent)
-
-        with scope:
-            scope.add_events([event1, event2])
-
-        # post-commit orchestration で publish_async_events が呼ばれたことを確認
-        mock_event_publisher.publish_async_events.assert_called_once()
-        mock_event_publisher.publish_async_events.assert_called_with([event1, event2])
-
-    def test_async_event_processing_failure_re_raises_exception(self):
-        """Phase 4: post-commit orchestration で publish_async_events が例外を投げたら、握りつぶさず再送出する"""
-        mock_event_publisher = Mock()
-        mock_event_publisher.publish_async_events = Mock(
-            side_effect=RuntimeError("Async handler failed")
-        )
-        scope = TransactionalScope(self.unit_of_work, mock_event_publisher)
-
-        event = Mock(spec=DomainEvent)
-        with pytest.raises(RuntimeError, match="Async handler failed"):
-            with scope:
-                scope.add_events([event])
-
-        mock_event_publisher.publish_async_events.assert_called_once()
-
     def test_no_event_publishing_without_event_publisher(self):
         """イベントパブリッシャーが設定されていない場合のテスト"""
         event = Mock(spec=DomainEvent)
@@ -143,7 +109,6 @@ class TestInMemoryUnitOfWork:
     def test_pending_events_are_cleared_after_commit(self):
         """コミット後に保留中のイベントがクリアされるテスト"""
         event = Mock(spec=DomainEvent)
-        self.unit_of_work._event_publisher = Mock()
 
         with self.unit_of_work:
             self.unit_of_work.add_events([event])
@@ -174,27 +139,6 @@ class TestInMemoryUnitOfWork:
         assert len(self.unit_of_work._pending_operations) == 0
         assert self.unit_of_work.get_pending_events() == []
 
-    def test_create_with_event_publisher_factory_method(self):
-        """ファクトリーメソッドのテスト - Phase 4: TransactionalScope を返し、with uow: 互換を維持"""
-        def create_unit_of_work():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_unit_of_work)
-        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(unit_of_work_factory=create_unit_of_work)
-
-        # Phase 4: create_with_event_publisher は TransactionalScope を返す（内部で InMemoryUnitOfWork をラップ）
-        assert isinstance(unit_of_work, TransactionalScope)
-        assert unit_of_work._event_publisher is event_publisher
-
-        # イベントパブリッシャーが正しく作成されていることを確認
-        assert event_publisher._unit_of_work is unit_of_work
-
-        # 双方向参照が正しく設定されていることを確認
-        assert unit_of_work._event_publisher is event_publisher
-
-        # SyncEventDispatcher が注入されていること（Phase 5.1）
-        assert unit_of_work._sync_event_dispatcher is not None
-        assert unit_of_work._sync_event_dispatcher._unit_of_work is unit_of_work
-        assert unit_of_work._sync_event_dispatcher._event_publisher is event_publisher
-
     def test_add_events_from_aggregate_collects_events(self):
         """add_events_from_aggregate が集約からイベントを収集し pending_events に追加するテスト"""
         # モック集約の作成
@@ -206,34 +150,12 @@ class TestInMemoryUnitOfWork:
         with self.unit_of_work:
             # 集約からイベントを収集・追加
             self.unit_of_work.add_events_from_aggregate(mock_aggregate)
-            
+
             # 即座に pending_events に反映される
             assert self.unit_of_work.get_pending_events() == [mock_event]
-            
-        mock_aggregate.get_events.assert_called_once()
-        mock_aggregate.clear_events.assert_called_once()
-
-    def test_add_events_from_aggregate_before_sync_event_processing(self):
-        """add_events_from_aggregate で収集したイベントが SyncEventDispatcher.flush_sync_events で処理されるテスト"""
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
-            unit_of_work_factory=create_uow
-        )
-        mock_event = Mock(spec=DomainEvent)
-        mock_aggregate = Mock()
-        mock_aggregate.get_events.return_value = [mock_event]
-        mock_aggregate.clear_events = Mock()
-        # パブリッシャーの publish_sync_events をモックして呼び出しを検証
-        event_publisher.publish_sync_events = Mock()
-
-        with unit_of_work:
-            unit_of_work.add_events_from_aggregate(mock_aggregate)
-            unit_of_work.sync_event_dispatcher.flush_sync_events()
 
         mock_aggregate.get_events.assert_called_once()
         mock_aggregate.clear_events.assert_called_once()
-        event_publisher.publish_sync_events.assert_called_once_with([mock_event])
 
     def test_register_pending_aggregate_and_get_pending_aggregate(self):
         """同一トランザクション内で保留集約を登録・取得できること。コミット/ロールバックでクリアされること。"""
@@ -249,7 +171,6 @@ class TestInMemoryUnitOfWork:
     def test_pending_aggregates_cleared_after_commit(self):
         """コミット後に保留集約がクリアされること。"""
         obj = Mock()
-        self.unit_of_work._event_publisher = Mock()
         with self.unit_of_work:
             self.unit_of_work.register_pending_aggregate("TestRepo", 1, obj)
             assert self.unit_of_work.get_pending_aggregate("TestRepo", 1) is obj
@@ -257,7 +178,6 @@ class TestInMemoryUnitOfWork:
 
     def test_get_committed_events_returns_events_after_commit(self):
         """Phase 3: コミット成功後に get_committed_events でイベントが取得できる"""
-        self.unit_of_work._event_publisher = Mock()
         event1 = Mock(spec=DomainEvent)
         event2 = Mock(spec=DomainEvent)
 
@@ -271,7 +191,6 @@ class TestInMemoryUnitOfWork:
 
     def test_clear_committed_events_clears_buffer(self):
         """Phase 3: clear_committed_events でバッファが空になる"""
-        self.unit_of_work._event_publisher = Mock()
         event = Mock(spec=DomainEvent)
 
         with self.unit_of_work:
@@ -290,7 +209,6 @@ class TestInMemoryUnitOfWork:
 
     def test_committed_events_cleared_on_begin(self):
         """Phase 3: begin で前回の committed events がクリアされる"""
-        self.unit_of_work._event_publisher = Mock()
         event = Mock(spec=DomainEvent)
 
         with self.unit_of_work:

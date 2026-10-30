@@ -37,11 +37,7 @@ class DistantCueStateSubsystemCodec(WorldSubsystemCodec):
                     "cue_id": str(cue_id),
                     "active": bool(state.get("active", False)),
                     "initialized": bool(state.get("initialized", False)),
-                    "last_changed_tick": (
-                        None
-                        if last_changed_tick is None
-                        else int(last_changed_tick)
-                    ),
+                    "last_changed_tick": (None if last_changed_tick is None else int(last_changed_tick)),
                 }
             )
         entries.sort(key=lambda e: e["cue_id"])
@@ -53,10 +49,7 @@ class DistantCueStateSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         restored: dict[str, dict[str, Any]] = {}
         for raw_entry in data.get("entries", []):
             entry = dict(raw_entry)
@@ -64,22 +57,14 @@ class DistantCueStateSubsystemCodec(WorldSubsystemCodec):
             active = entry.get("active", False)
             initialized = entry.get("initialized", False)
             if not isinstance(active, bool):
-                raise ValueError(
-                    f"{SUBSYSTEM_KEY} entry cue_id={cue_id!r} active must be bool"
-                )
+                raise ValueError(f"{SUBSYSTEM_KEY} entry cue_id={cue_id!r} active must be bool")
             if not isinstance(initialized, bool):
-                raise ValueError(
-                    f"{SUBSYSTEM_KEY} entry cue_id={cue_id!r} initialized must be bool"
-                )
+                raise ValueError(f"{SUBSYSTEM_KEY} entry cue_id={cue_id!r} initialized must be bool")
             last_changed_tick = entry.get("last_changed_tick")
             restored[cue_id] = {
                 "active": active,
                 "initialized": initialized,
-                "last_changed_tick": (
-                    None
-                    if last_changed_tick is None
-                    else int(last_changed_tick)
-                ),
+                "last_changed_tick": (None if last_changed_tick is None else int(last_changed_tick)),
             }
         runtime._distant_cue_states = restored
 

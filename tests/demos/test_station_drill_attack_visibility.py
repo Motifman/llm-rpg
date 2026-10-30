@@ -26,9 +26,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI, _SENA, _KUZE, _AOI = (PlayerId(i) for i in range(1, 5))
 
 
@@ -71,9 +69,7 @@ class TestAVisibleAttackIsWitnessed:
     """暗がりでない場所の襲撃は、同席者に加害者名つきで届く。"""
 
     @pytest.mark.parametrize("spot", ["hall", "corridor"])
-    def test_the_same_attack_is_available_in_light_and_dark(
-        self, runtime, spot: str
-    ) -> None:
+    def test_the_same_attack_is_available_in_light_and_dark(self, runtime, spot: str) -> None:
         """明暗どちらでも入口は ``strike_down`` 一つで、明るさに阻害されない。"""
         if spot == "corridor":
             darken_spot(runtime, spot)
@@ -97,9 +93,7 @@ class TestAVisibleAttackIsWitnessed:
         assert "クゼ" in observations[0].prose
         assert "セナ" in observations[0].prose
 
-    def test_a_bystander_gets_one_prose_line_and_keeps_downed_structure(
-        self, runtime
-    ) -> None:
+    def test_a_bystander_gets_one_prose_line_and_keeps_downed_structure(self, runtime) -> None:
         """公開 prompt は一行だけを見せ、downed の構造は分析用に残す。"""
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
 
@@ -107,33 +101,23 @@ class TestAVisibleAttackIsWitnessed:
         downed = _downed_observations(runtime, _MORI)
 
         assert len(interacted) == 1
-        assert interacted[0].prose == (
-            "クゼがセナに刃物を突き立てた。セナは動かなくなった。"
-        )
+        assert interacted[0].prose == ("クゼがセナに刃物を突き立てた。セナは動かなくなった。")
         assert len(downed) == 1
         assert downed[0].prose == ""
         assert downed[0].structured["type"] == "player_downed"
         assert downed[0].structured["killer_player_id"] == int(_KUZE)
 
         user_prompt = runtime.build_full_prompt(_MORI)["messages"][-1]["content"]
-        recent_section = user_prompt.split("【直近の出来事】", 1)[1].split(
-            "【", 1
-        )[0]
-        attack_lines = [
-            line for line in recent_section.splitlines() if line.startswith("- ")
-        ]
-        assert attack_lines == [
-            "- [深夜 0:00] クゼがセナに刃物を突き立てた。セナは動かなくなった。"
-        ]
+        recent_section = user_prompt.split("【直近の出来事】", 1)[1].split("【", 1)[0]
+        attack_lines = [line for line in recent_section.splitlines() if line.startswith("- ")]
+        assert attack_lines == ["- [深夜 0:00] クゼがセナに刃物を突き立てた。セナは動かなくなった。"]
 
     def test_the_attacker_keeps_the_engine_death_line(self, runtime) -> None:
         """目撃文を受け取らない加害者本人には、downed の死亡行を残す。"""
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
 
         user_prompt = runtime.build_full_prompt(_KUZE)["messages"][-1]["content"]
-        recent_section = user_prompt.split("【直近の出来事】", 1)[1].split(
-            "【", 1
-        )[0]
+        recent_section = user_prompt.split("【直近の出来事】", 1)[1].split("【", 1)[0]
 
         assert "- [深夜 0:00] クゼがセナを倒した。" in recent_section
 
@@ -141,14 +125,10 @@ class TestAVisibleAttackIsWitnessed:
         """被害者本人向けの文は加害者を伏せ、明所でも成り立つ事実だけを伝える。"""
         scenario = ScenarioLoader().load_from_file(_SCENARIO)
         attack = next(
-            interaction
-            for interaction in scenario.player_interactions
-            if interaction.action_name == "strike_down"
+            interaction for interaction in scenario.player_interactions if interaction.action_name == "strike_down"
         )
 
-        assert attack.target_observation_message == (
-            "強い衝撃を受けた。誰にやられたのか分からない。"
-        )
+        assert attack.target_observation_message == ("強い衝撃を受けた。誰にやられたのか分からない。")
 
     def test_a_witness_observation_schedules_the_next_turn(self, runtime) -> None:
         """明所の襲撃を目撃した第三者は、直後に考えて行動できる。"""
@@ -175,9 +155,7 @@ class TestAHiddenAttackStaysHidden:
         assert "クゼ" not in observations[0].prose
         assert "actor" not in observations[0].structured
 
-    def test_the_downed_event_does_not_restore_the_hidden_identity(
-        self, runtime
-    ) -> None:
+    def test_the_downed_event_does_not_restore_the_hidden_identity(self, runtime) -> None:
         """暗所の第三者には player_downed 側からも加害者名や ID が漏れない。"""
         darken_spot(runtime, "corridor")
         for player_id in (_KUZE, _SENA, _MORI):
@@ -191,16 +169,10 @@ class TestAHiddenAttackStaysHidden:
         assert observations[0].structured["killer_visible_to_recipient"] is False
         assert "killer_player_id" not in observations[0].structured
 
-    def test_actor_only_declaration_keeps_the_bystander_engine_prose(
-        self, tmp_path: Path
-    ) -> None:
+    def test_actor_only_declaration_keeps_the_bystander_engine_prose(self, tmp_path: Path) -> None:
         """第三者へ宣言文を配らない ACTOR_ONLY では downed の汎用文を残す。"""
         raw = json.loads(_SCENARIO.read_text(encoding="utf-8"))
-        attack = next(
-            item
-            for item in raw["player_interactions"]
-            if item["action_name"] == "strike_down"
-        )
+        attack = next(item for item in raw["player_interactions"] if item["action_name"] == "strike_down")
         attack["witness_policy"] = "ACTOR_ONLY"
         path = tmp_path / "actor_only_attack.json"
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -214,9 +186,7 @@ class TestAHiddenAttackStaysHidden:
         assert downed[0].prose == "クゼがセナを倒した。"
 
     @pytest.mark.parametrize("is_dark", [False, True])
-    def test_the_victim_never_learns_the_killer_when_the_scenario_forbids_it(
-        self, runtime, is_dark: bool
-    ) -> None:
+    def test_the_victim_never_learns_the_killer_when_the_scenario_forbids_it(self, runtime, is_dark: bool) -> None:
         """victim_learns_killer=false なら、明暗によらず被害者へ身元を出さない。"""
         if is_dark:
             darken_spot(runtime, "hall")
@@ -238,16 +208,10 @@ class TestAHiddenAttackStaysHidden:
         assert observations[0].prose == "暗がりで、何かがぶつかる鈍い音がした。"
         assert "actor" not in observations[0].structured
 
-    def test_undeclared_dark_message_keeps_the_bright_message(
-        self, tmp_path: Path
-    ) -> None:
+    def test_undeclared_dark_message_keeps_the_bright_message(self, tmp_path: Path) -> None:
         """暗所文を宣言しない既存 interaction は、暗さによらず従来文を使う。"""
         raw = json.loads(_SCENARIO.read_text(encoding="utf-8"))
-        attack = next(
-            item
-            for item in raw["player_interactions"]
-            if item["action_name"] == "strike_down"
-        )
+        attack = next(item for item in raw["player_interactions"] if item["action_name"] == "strike_down")
         attack.pop("witness_observation_message_in_dark", None)
         path = tmp_path / "strike_without_dark_message.json"
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -269,10 +233,7 @@ class TestOneAttackKeepsOneWait:
     def test_light_then_dark_is_still_waiting(self, runtime) -> None:
         """明所で襲った直後は、暗所へ移っても同じ襲撃を使えない。"""
         scenario = ScenarioLoader().load_from_file(_SCENARIO)
-        attack = next(
-            item for item in scenario.player_interactions
-            if item.action_name == "strike_down"
-        )
+        attack = next(item for item in scenario.player_interactions if item.action_name == "strike_down")
         assert attack.cooldown_group is None
 
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
@@ -298,9 +259,7 @@ class TestOneAttackKeepsOneWait:
 class TestTheWorldExplainsWhatLightChanges:
     """シナリオ本文が、襲撃と灯りの実際の規則に一致する。"""
 
-    def test_public_place_descriptions_do_not_claim_light_prevents_attacks(
-        self, runtime
-    ) -> None:
+    def test_public_place_descriptions_do_not_claim_light_prevents_attacks(self, runtime) -> None:
         """集会室と連絡通路の描写は、安全や完全な不可視を断定しない。"""
         hall = runtime.build_observation(_KUZE)
         _move(runtime, _KUZE, "corridor")
@@ -311,9 +270,7 @@ class TestTheWorldExplainsWhatLightChanges:
         assert "誰にも見えない" not in corridor
         assert "誰の仕業かまでは分からない" in corridor
 
-    def test_the_impostor_persona_explains_attribution_not_immunity(
-        self, runtime
-    ) -> None:
+    def test_the_impostor_persona_explains_attribution_not_immunity(self, runtime) -> None:
         """インポスター本人には、明暗で変わるのは特定可能性だと伝わる。"""
         prompt = runtime.build_system_prompt(_KUZE)
 
@@ -336,9 +293,7 @@ class TestTheWorldExplainsWhatLightChanges:
     def test_lantern_authoring_text_matches_the_rule(self) -> None:
         """prompt に未露出の item 説明も、作者向け宣言として実態と一致する。"""
         scenario = ScenarioLoader().load_from_file(_SCENARIO)
-        lantern = next(
-            item for item in scenario.item_spec_definitions if item.string_id == "lantern"
-        )
+        lantern = next(item for item in scenario.item_spec_definitions if item.string_id == "lantern")
 
         assert "持っている人が居る場所は、暗がりではなくなる" not in lantern.description
         assert "誰の仕業か見て取れる" in lantern.description

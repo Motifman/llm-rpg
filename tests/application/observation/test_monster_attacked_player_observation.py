@@ -75,9 +75,7 @@ class TestRecipientStrategy:
 
     def test_victim_and_same_spot_bystanders_receive_observation(self) -> None:
         """被害者 P1 と bystander P2 の両方が recipients に含まれる。"""
-        registry = ObservedEventRegistry(
-            event_to_strategy={MonsterAttackedPlayerInSpotEvent: "spot_graph"}
-        )
+        registry = ObservedEventRegistry(event_to_strategy={MonsterAttackedPlayerInSpotEvent: "spot_graph"})
 
         graph = MagicMock()
         graph.entity_spot_mapping.return_value = {
@@ -106,12 +104,10 @@ class TestRecipientStrategy:
 
 def _make_ctx() -> ObservationFormatterContext:
     name_resolver = MagicMock(spec=ObservationNameResolver)
-    name_resolver.monster_name_by_monster_id.side_effect = (
-        lambda mid: "灰色のオオカミ" if mid.value == MONSTER.value else "?"
+    name_resolver.monster_name_by_monster_id.side_effect = lambda mid: (
+        "灰色のオオカミ" if mid.value == MONSTER.value else "?"
     )
-    name_resolver.player_name.side_effect = (
-        lambda pid: {1: "勇者", 2: "魔法使い"}.get(pid.value, "?")
-    )
+    name_resolver.player_name.side_effect = lambda pid: {1: "勇者", 2: "魔法使い"}.get(pid.value, "?")
     repo = MagicMock()
     graph = MagicMock()
     repo.find_graph.return_value = graph
@@ -146,9 +142,7 @@ class TestFormatterVictim:
         """target_visible=False なら「暗闇から何かに襲われた」。モンスター名は出さない。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
 
-        result = formatter.format(
-            _make_event(target_visible=False, damage=4), PLAYER_VICTIM
-        )
+        result = formatter.format(_make_event(target_visible=False, damage=4), PLAYER_VICTIM)
 
         assert result is not None
         assert "暗闇" in result.prose
@@ -158,9 +152,7 @@ class TestFormatterVictim:
         """致命でダウンした場合、prose に「倒れた」suffix が追加される。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
 
-        result = formatter.format(
-            _make_event(target_incapacitated=True), PLAYER_VICTIM
-        )
+        result = formatter.format(_make_event(target_incapacitated=True), PLAYER_VICTIM)
 
         assert result is not None
         assert "倒れた" in result.prose

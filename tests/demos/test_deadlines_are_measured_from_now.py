@@ -29,10 +29,7 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "market_town_v3_board.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v3_board.json"
 
 _EXPIRES_IN = 6
 _ELAPSED_BEFORE_LISTING = 4
@@ -64,12 +61,18 @@ def _list_bread(runtime: Any, *, baker: int = 3) -> Any:
 
     spec = runtime._item_spec_repo.find_by_name("焼きたてのパン").item_spec_id.value
     grant_item_specs_to_inventory(
-        PlayerId(baker), (ItemSpecId.create(spec),), runtime._item_repo,
-        runtime._item_spec_repo, runtime._player_inventory_repo,
+        PlayerId(baker),
+        (ItemSpecId.create(spec),),
+        runtime._item_repo,
+        runtime._item_spec_repo,
+        runtime._player_inventory_repo,
         overflow_sink=IGNORE_OVERFLOW,
     )
     return runtime._market_service.place_sell_order(
-        PlayerId(baker), item_label="焼きたてのパン", quantity=1, unit_price=12,
+        PlayerId(baker),
+        item_label="焼きたてのパン",
+        quantity=1,
+        unit_price=12,
         current_tick=runtime.current_tick(),
     )
 
@@ -148,6 +151,7 @@ class TestTheToolPathSeesTheRealClock:
         **黙って 0 を返すと、期限がすべて「世界の開始から」になる。**
         run が終わるまで誰も気づけない形だった。
         """
+
         class _BrokenClock:
             def get_current_tick(self):
                 raise RuntimeError("時計が読めない")
@@ -165,6 +169,7 @@ class TestTheToolPathSeesTheRealClock:
         提供者だけを見て諦めると、**壊れた瞬間に全部の期限が開始起点に
         戻る**。落とし所は 0 ではなく、同じ世界の別の読み方。
         """
+
         class _BrokenClock:
             def get_current_tick(self):
                 raise RuntimeError("時計が読めない")

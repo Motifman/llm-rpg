@@ -22,9 +22,7 @@ class TestPhaseForTool:
             ("whisper", IntentPhase.SOCIAL),
         ],
     )
-    def test_explicit_mapping(
-        self, tool_name: str, expected: IntentPhase
-    ) -> None:
+    def test_explicit_mapping(self, tool_name: str, expected: IntentPhase) -> None:
         """既知のツール名は明示マッピングで返る。"""
         assert phase_for_tool(tool_name) == expected
 
@@ -37,9 +35,7 @@ class TestPhaseForTool:
             ("conversation_start", IntentPhase.SOCIAL),
         ],
     )
-    def test_prefix_fallback(
-        self, tool_name: str, expected: IntentPhase
-    ) -> None:
+    def test_prefix_fallback(self, tool_name: str, expected: IntentPhase) -> None:
         """明示マッピングが無い場合 prefix で分類される。
 
         PR-CC (Y_after_pr639_640 後続): ``spot_graph_`` prefix は廃止

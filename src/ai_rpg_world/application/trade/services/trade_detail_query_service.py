@@ -23,15 +23,13 @@ class TradeDetailQueryService:
     def __init__(
         self,
         trade_detail_read_model_repository: TradeDetailReadModelRepository,
-        item_trade_statistics_read_model_repository: ItemTradeStatisticsReadModelRepository
+        item_trade_statistics_read_model_repository: ItemTradeStatisticsReadModelRepository,
     ):
         self._trade_detail_repository = trade_detail_read_model_repository
         self._statistics_repository = item_trade_statistics_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -43,10 +41,10 @@ class TradeDetailQueryService:
             raise TradeDetailQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(
+                f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra={"error_details": context}
+            )
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def get_trade_detail(self, trade_id: int) -> TradeDetailDto:
         """取引詳細情報を取得
@@ -63,10 +61,7 @@ class TradeDetailQueryService:
 
         return self._execute_with_error_handling(
             operation=lambda: self._get_trade_detail_impl(trade_id),
-            context={
-                "action": "get_trade_detail",
-                "trade_id": trade_id
-            }
+            context={"action": "get_trade_detail", "trade_id": trade_id},
         )
 
     def _get_trade_detail_impl(self, trade_id: int) -> TradeDetailDto:
@@ -103,7 +98,7 @@ class TradeDetailQueryService:
             seller_name=trade_detail.seller_name,
             buyer_name=trade_detail.buyer_name,
             status=trade_detail.status,
-            statistics=statistics_dto
+            statistics=statistics_dto,
         )
 
     def _convert_to_statistics_dto(self, read_model: Any) -> TradeStatisticsDto:
@@ -115,5 +110,5 @@ class TradeDetailQueryService:
             median_price=read_model.median_price,
             total_trades=read_model.total_trades,
             success_rate=read_model.success_rate,
-            last_updated=read_model.last_updated
+            last_updated=read_model.last_updated,
         )

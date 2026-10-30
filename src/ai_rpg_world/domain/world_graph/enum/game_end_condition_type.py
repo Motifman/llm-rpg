@@ -18,9 +18,7 @@ class GameEndConditionTypeEnum(str, Enum):
     # ``required_state`` 側の生存者数が ``comparison_state`` 側以下なら成立。
     # 固定閾値では、片方が追放された後も古い人数で敗北してしまうため、現在の
     # 両陣営をその都度比較する条件を別に持つ。
-    SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE = (
-        "SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE"
-    )
+    SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE = "SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE"
     # 宣言した作業フラグのうち ``min_set_count`` 個以上が立ったら成立。
     #
     # FLAG_SET は 1 個ずつしか見られないので「8 個のうち 6 個」が書けない。
@@ -31,3 +29,6 @@ class GameEndConditionTypeEnum(str, Enum):
     # 個人結果が混在していても、全対象プレイヤーが終局結果へ確定したら
     # 集団 WIN / LOSE を付けずに世界を終了する。
     ALL_PLAYER_OUTCOMES_RESOLVED = "ALL_PLAYER_OUTCOMES_RESOLVED"
+    # チームの全員が ``required_outcome`` の個人結果になったら成立 (#1516)。
+    # ``teams[].win`` の中でだけ使え、評価には所属する人の一覧が要る。
+    ALL_MEMBERS_HAVE_OUTCOME = "ALL_MEMBERS_HAVE_OUTCOME"

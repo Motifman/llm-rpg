@@ -11,5 +11,5 @@ __all__ = [
     "GlobalMarketListingReadModel",
     "PersonalTradeListingReadModel",
     "TradeDetailReadModel",
-    "ItemTradeStatisticsReadModel"
+    "ItemTradeStatisticsReadModel",
 ]

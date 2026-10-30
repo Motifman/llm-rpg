@@ -13,10 +13,7 @@ class PersonalTradeListingReadModelRepository(Repository[PersonalTradeListingRea
 
     @abstractmethod
     def find_for_player(
-        self,
-        player_id: PlayerId,
-        limit: int = 20,
-        cursor: ListingCursor | None = None
+        self, player_id: PlayerId, limit: int = 20, cursor: ListingCursor | None = None
     ) -> tuple[list[PersonalTradeListingReadModel], ListingCursor | None]:
         """プレイヤー宛の取引を取得（カーソルベースページング）
 

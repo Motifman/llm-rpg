@@ -57,9 +57,7 @@ def test_task_and_lantern_declare_different_actor_planes() -> None:
         InteractionActorPlane.LIVING,
         InteractionActorPlane.DEPARTED,
     )
-    assert _interaction(result, "take_lantern").allowed_actor_planes == (
-        InteractionActorPlane.LIVING,
-    )
+    assert _interaction(result, "take_lantern").allowed_actor_planes == (InteractionActorPlane.LIVING,)
 
 
 def test_station_player_interactions_are_explicitly_living_only() -> None:
@@ -70,9 +68,7 @@ def test_station_player_interactions_are_explicitly_living_only() -> None:
         "strike_down",
         "loot_from_downed",
     ):
-        assert _player_interaction(result, action_name).allowed_actor_planes == (
-            InteractionActorPlane.LIVING,
-        )
+        assert _player_interaction(result, action_name).allowed_actor_planes == (InteractionActorPlane.LIVING,)
 
 
 def test_unknown_actor_plane_fails_while_loading(tmp_path: Path) -> None:

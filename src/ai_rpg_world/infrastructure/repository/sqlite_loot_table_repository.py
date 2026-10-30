@@ -42,18 +42,14 @@ class SqliteLootTableRepository(LootTableRepository):
         return self._build_table_from_row(row)
 
     def find_all(self) -> list[LootTableAggregate]:
-        cur = self._conn.execute(
-            "SELECT loot_table_id, name FROM game_loot_tables ORDER BY loot_table_id ASC"
-        )
+        cur = self._conn.execute("SELECT loot_table_id, name FROM game_loot_tables ORDER BY loot_table_id ASC")
         return [self._build_table_from_row(row) for row in cur.fetchall()]
 
     def find_by_ids(self, entity_ids: list[LootTableId]) -> list[LootTableAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
     def save(self, entity: LootTableAggregate) -> LootTableAggregate:
-        raise NotImplementedError(
-            "SqliteLootTableRepository is read-only. Use SqliteLootTableWriter."
-        )
+        raise NotImplementedError("SqliteLootTableRepository is read-only. Use SqliteLootTableWriter.")
 
     def _build_table_from_row(self, row: sqlite3.Row) -> LootTableAggregate:
         entry_rows = self._conn.execute(
@@ -72,9 +68,7 @@ class SqliteLootTableRepository(LootTableRepository):
         )
 
     def delete(self, entity_id: LootTableId) -> bool:
-        raise NotImplementedError(
-            "SqliteLootTableRepository is read-only. Use SqliteLootTableWriter."
-        )
+        raise NotImplementedError("SqliteLootTableRepository is read-only. Use SqliteLootTableWriter.")
 
 
 class SqliteLootTableWriter(LootTableWriter):
@@ -88,15 +82,11 @@ class SqliteLootTableWriter(LootTableWriter):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteLootTableWriter:
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteLootTableWriter:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteLootTableWriter:
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteLootTableWriter:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:

@@ -13,8 +13,6 @@ def test_runtime_injects_market_expiry_scope_for_shared_stores() -> None:
     scope_factory = stage._command_scope_factory
     assert scope_factory is not None
     transaction_factory = scope_factory._transaction_factory
-    assert transaction_factory._transaction_factory._data_store is (
-        runtime._item_repo._data_store
-    )
+    assert transaction_factory._transaction_factory._data_store is (runtime._item_repo._data_store)
     participant = transaction_factory._participants[0]
     assert participant.rollback_resource is runtime._market_board_store

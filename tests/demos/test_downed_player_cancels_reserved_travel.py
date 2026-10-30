@@ -17,9 +17,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _SENA = PlayerId(2)
 _KUZE = PlayerId(3)
 
@@ -51,8 +49,6 @@ def test_downed_player_stays_at_the_attack_scene_on_the_next_tick() -> None:
     runtime.advance_tick()
 
     assert runtime.get_player_spot_name(_SENA) == "連絡通路"
-    navigation = runtime._player_status_repo.find_by_id(
-        _SENA
-    ).spot_navigation_state
+    navigation = runtime._player_status_repo.find_by_id(_SENA).spot_navigation_state
     assert navigation is not None
     assert not navigation.is_traveling

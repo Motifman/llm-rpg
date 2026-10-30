@@ -207,11 +207,7 @@ class CommandScope(Generic[RepositoryProviderT]):
         transactional_outbox: TransactionalOutboxPort | None = None,
         max_sync_events: int = 1000,
     ) -> None:
-        if (
-            isinstance(max_sync_events, bool)
-            or not isinstance(max_sync_events, int)
-            or max_sync_events < 1
-        ):
+        if isinstance(max_sync_events, bool) or not isinstance(max_sync_events, int) or max_sync_events < 1:
             raise ValueError("max_sync_eventsは1以上の整数である必要があります")
         self._transaction = transaction
         self._sync_dispatcher = sync_dispatcher
@@ -220,9 +216,7 @@ class CommandScope(Generic[RepositoryProviderT]):
         self._transactional_outbox = transactional_outbox
         self._max_sync_events = max_sync_events
         self._collector = DomainEventCollector()
-        self._context: CommandContext[RepositoryProviderT] = CommandContext(
-            self._collector
-        )
+        self._context: CommandContext[RepositoryProviderT] = CommandContext(self._collector)
         self._dispatched_events: list[DomainEvent] = []
         self._state = CommandScopeState.NEW
         self._completion = CommandCompletion.NONE
@@ -306,11 +300,7 @@ class CommandScope(Generic[RepositoryProviderT]):
                 self._after_commit_handoff.handoff(tuple(self._dispatched_events))
             except Exception as error:
                 handoff_error = error
-            if (
-                handoff_error is None
-                and self._transactional_outbox is not None
-                and staged_outbox is not None
-            ):
+            if handoff_error is None and self._transactional_outbox is not None and staged_outbox is not None:
                 try:
                     self._transactional_outbox.mark_delivered(staged_outbox)
                 except Exception as error:
@@ -322,11 +312,7 @@ class CommandScope(Generic[RepositoryProviderT]):
             if post_commit_error is not None:
                 raise cleanup_error from post_commit_error
             raise cleanup_error
-        if (
-            cleanup_error is not None
-            or handoff_error is not None
-            or outbox_error is not None
-        ):
+        if cleanup_error is not None or handoff_error is not None or outbox_error is not None:
             raise CommandPostCommitException(
                 cleanup_error=cleanup_error,
                 handoff_error=handoff_error,

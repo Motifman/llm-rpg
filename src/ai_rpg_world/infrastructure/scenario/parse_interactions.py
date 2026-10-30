@@ -98,51 +98,33 @@ def parse_interaction_def(
         )
     display_label = raw.get("display_label")
     if not isinstance(display_label, str) or not display_label.strip():
-        raise ScenarioLoadError(
-            f"interaction[{action_name!r}].display_label must be a non-empty string"
-        )
+        raise ScenarioLoadError(f"interaction[{action_name!r}].display_label must be a non-empty string")
     display_label = display_label.strip()
 
     with declaring(f"操作 {action_name!r} の前提条件:"):
         preconds = tuple(
-            parse_interaction_condition(
-                c, mapper, player_attribute_specs=player_attribute_specs
-            )
+            parse_interaction_condition(c, mapper, player_attribute_specs=player_attribute_specs)
             for c in raw.get("preconditions", [])
         )
     with declaring(f"操作 {action_name!r} の効果:"):
         effects = tuple(
-            parse_interaction_effect(
-                e, mapper, player_attribute_specs=player_attribute_specs
-            )
+            parse_interaction_effect(e, mapper, player_attribute_specs=player_attribute_specs)
             for e in raw.get("effects", [])
         )
-    if any(
-        effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING
-        for effect in effects
-    ) and len(effects) != 1:
+    if any(effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING for effect in effects) and len(effects) != 1:
         raise ScenarioLoadError(
-            f"interaction[{action_name!r}].effects の CALL_MEETING は"
-            "単独の効果として宣言してください"
+            f"interaction[{action_name!r}].effects の CALL_MEETING は単独の効果として宣言してください"
         )
     _require_gold_precondition_covers_deposits(action_name, preconds, effects)
     on_failure_observation = raw.get("on_failure_observation")
     witness_observation_message = raw.get("witness_observation_message")
-    if (
-        witness_observation_message is not None
-        and not isinstance(witness_observation_message, str)
-    ):
+    if witness_observation_message is not None and not isinstance(witness_observation_message, str):
         raise ScenarioLoadError(
             f"interaction[{raw.get('action_name')!r}].witness_observation_message "
             f"must be a string, got {type(witness_observation_message).__name__}"
         )
-    witness_observation_message_in_dark = raw.get(
-        "witness_observation_message_in_dark"
-    )
-    if (
-        witness_observation_message_in_dark is not None
-        and not isinstance(witness_observation_message_in_dark, str)
-    ):
+    witness_observation_message_in_dark = raw.get("witness_observation_message_in_dark")
+    if witness_observation_message_in_dark is not None and not isinstance(witness_observation_message_in_dark, str):
         raise ScenarioLoadError(
             f"interaction[{raw.get('action_name')!r}]."
             "witness_observation_message_in_dark must be a string, got "
@@ -176,29 +158,18 @@ def parse_interaction_def(
     cooldown_scope = parse_cooldown_scope(raw)
     allowed_actor_planes_raw = raw.get("allowed_actor_planes", ["LIVING"])
     if not isinstance(allowed_actor_planes_raw, list) or not allowed_actor_planes_raw:
-        raise ScenarioLoadError(
-            f"interaction[{action_name!r}].allowed_actor_planes は"
-            "空でないリストで書いてください"
-        )
+        raise ScenarioLoadError(f"interaction[{action_name!r}].allowed_actor_planes は空でないリストで書いてください")
     try:
-        allowed_actor_planes = tuple(
-            InteractionActorPlane(value) for value in allowed_actor_planes_raw
-        )
+        allowed_actor_planes = tuple(InteractionActorPlane(value) for value in allowed_actor_planes_raw)
     except (TypeError, ValueError) as exc:
         raise ScenarioLoadError(
-            f"interaction[{action_name!r}].allowed_actor_planes は "
-            "LIVING / DEPARTED だけを指定できます"
+            f"interaction[{action_name!r}].allowed_actor_planes は LIVING / DEPARTED だけを指定できます"
         ) from exc
     if len(set(allowed_actor_planes)) != len(allowed_actor_planes):
-        raise ScenarioLoadError(
-            f"interaction[{action_name!r}].allowed_actor_planes に重複があります"
-        )
+        raise ScenarioLoadError(f"interaction[{action_name!r}].allowed_actor_planes に重複があります")
     hide_when_flag_preconditions_fail = parse_bool(
         raw.get("hide_when_flag_preconditions_fail", False),
-        path=(
-            f"interaction[{action_name!r}]."
-            "hide_when_flag_preconditions_fail"
-        ),
+        path=(f"interaction[{action_name!r}].hide_when_flag_preconditions_fail"),
     )
     if hide_when_flag_preconditions_fail and not any(
         condition.condition_type
@@ -219,9 +190,7 @@ def parse_interaction_def(
         effects=effects,
         on_failure_observation=on_failure_observation,
         witness_observation_message=witness_observation_message,
-        witness_observation_message_in_dark=(
-            witness_observation_message_in_dark
-        ),
+        witness_observation_message_in_dark=(witness_observation_message_in_dark),
         witness_policy=witness_policy,
         notify_target=notify_target,
         target_observation_message=target_observation_message,
@@ -231,6 +200,7 @@ def parse_interaction_def(
         allowed_actor_planes=allowed_actor_planes,
         hide_when_flag_preconditions_fail=hide_when_flag_preconditions_fail,
     )
+
 
 def parse_cooldown_group(raw: Any) -> str | None:
     """複数の interaction が共有する待ち時間キーを読む。
@@ -245,16 +215,11 @@ def parse_cooldown_group(raw: Any) -> str | None:
     action_name = raw.get("action_name")
     if not isinstance(value, str) or not value.strip():
         raise ScenarioLoadError(
-            f"interaction[{action_name!r}].cooldown_group は"
-            f"空でない文字列で書いてください: {value!r}"
+            f"interaction[{action_name!r}].cooldown_group は空でない文字列で書いてください: {value!r}"
         )
     value = value.strip()
     reserved_prefix = next(
-        (
-            prefix
-            for prefix in (RESERVED_ACTION_NAME_PREFIX, ITEM_ACTION_NAME_PREFIX)
-            if value.startswith(prefix)
-        ),
+        (prefix for prefix in (RESERVED_ACTION_NAME_PREFIX, ITEM_ACTION_NAME_PREFIX) if value.startswith(prefix)),
         None,
     )
     if reserved_prefix is not None:
@@ -264,6 +229,7 @@ def parse_cooldown_group(raw: Any) -> str | None:
             "(engine が待ち時間の記録に使う接頭辞です)"
         )
     return value
+
 
 def parse_cooldown_ticks(raw: Any) -> int:
     """``cooldown_ticks`` を読む。省略時は 0 (制限しない)。
@@ -277,15 +243,14 @@ def parse_cooldown_ticks(raw: Any) -> int:
         return 0
     if isinstance(value, bool) or not isinstance(value, int):
         raise ScenarioLoadError(
-            f"interaction[{raw.get('action_name')!r}].cooldown_ticks は"
-            f"整数で書いてください: {value!r}"
+            f"interaction[{raw.get('action_name')!r}].cooldown_ticks は整数で書いてください: {value!r}"
         )
     if value < 0:
         raise ScenarioLoadError(
-            f"interaction[{raw.get('action_name')!r}].cooldown_ticks は"
-            f"0 以上で書いてください: {value}"
+            f"interaction[{raw.get('action_name')!r}].cooldown_ticks は0 以上で書いてください: {value}"
         )
     return value
+
 
 def parse_cooldown_scope(raw: Any) -> InteractionCooldownScope:
     """待ち時間の共有単位を読み、未知値を actor へ黙って縮退させない。"""
@@ -299,8 +264,11 @@ def parse_cooldown_scope(raw: Any) -> InteractionCooldownScope:
             f"{{{valid}}} のいずれかで書いてください: {value!r}"
         ) from exc
 
+
 def parse_target_notification(
-    raw: dict[str, Any], *, allow_target_notification: bool,
+    raw: dict[str, Any],
+    *,
+    allow_target_notification: bool,
 ) -> tuple[bool, str | None]:
     """``notify_target`` / ``target_observation_message`` を検証して返す。
 
@@ -321,8 +289,7 @@ def parse_target_notification(
         )
     if notify_raw is not None and not isinstance(notify_raw, bool):
         raise ScenarioLoadError(
-            f"interaction[{action_name!r}].notify_target must be a boolean, "
-            f"got {type(notify_raw).__name__}"
+            f"interaction[{action_name!r}].notify_target must be a boolean, got {type(notify_raw).__name__}"
         )
     if message_raw is not None and not isinstance(message_raw, str):
         raise ScenarioLoadError(
@@ -339,6 +306,7 @@ def parse_target_notification(
             "(立てないと対象本人にはこの文面が届きません)"
         )
     return notify_target, message_raw
+
 
 def parse_player_interactions(
     raw_list: Any,
@@ -362,21 +330,15 @@ def parse_player_interactions(
     seen_action_names: set[str] = set()
     for i, raw in enumerate(raw_list):
         if not isinstance(raw, dict):
-            raise ScenarioLoadError(
-                f"player_interactions[{i}] must be an object"
-            )
+            raise ScenarioLoadError(f"player_interactions[{i}] must be an object")
         action_name = raw.get("action_name")
         if not isinstance(action_name, str) or not action_name.strip():
-            raise ScenarioLoadError(
-                f"player_interactions[{i}] requires a non-empty action_name"
-            )
+            raise ScenarioLoadError(f"player_interactions[{i}] requires a non-empty action_name")
         action_name = action_name.strip()
         if action_name in seen_action_names:
             # LLM は action_name で行為を指定するので、重複すると
             # 「どちらが実行されたか分からない」状態になる。
-            raise ScenarioLoadError(
-                f"duplicate player_interaction action_name: {action_name!r}"
-            )
+            raise ScenarioLoadError(f"duplicate player_interaction action_name: {action_name!r}")
         seen_action_names.add(action_name)
 
         with declaring(f"player_interactions[{i}] の"):
@@ -386,9 +348,7 @@ def parse_player_interactions(
                 allow_target_notification=True,
                 player_attribute_specs=player_attribute_specs,
             )
-        if not any(
-            e.target is EffectTarget.TARGET_PLAYER for e in idef.effects
-        ):
+        if not any(e.target is EffectTarget.TARGET_PLAYER for e in idef.effects):
             # 対象への効果を 1 つも持たない定義は書き間違い。放置すると
             # 「相手を選んだのに自分に効く」という最も分かりにくい失敗になる。
             raise ScenarioLoadError(

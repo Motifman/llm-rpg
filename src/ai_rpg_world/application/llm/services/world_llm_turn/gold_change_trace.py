@@ -67,7 +67,9 @@ def wrap_with_gold_change(
     """
 
     def _handler(
-        player_id: PlayerId, arguments: dict[str, Any], runtime_context: Any,
+        player_id: PlayerId,
+        arguments: dict[str, Any],
+        runtime_context: Any,
     ) -> LlmCommandResultDto:
         watched = _watched(roster_reader, player_id)
         before = _snapshot(gold_reader, watched)
@@ -80,16 +82,21 @@ def wrap_with_gold_change(
         return replace(
             result,
             trace_payload=_with_gold(
-                result.trace_payload, changes, player_id, tool_name,
+                result.trace_payload,
+                changes,
+                player_id,
+                tool_name,
             ),
         )
 
     _handler.records_gold_change = True  # type: ignore[attr-defined]
+    _handler.__wrapped__ = handler  # type: ignore[attr-defined]
     return _handler
 
 
 def _watched(
-    roster_reader: RosterReader | None, player_id: PlayerId,
+    roster_reader: RosterReader | None,
+    player_id: PlayerId,
 ) -> list[PlayerId]:
     """測る対象。名簿が読めなければ、少なくとも本人は測る。"""
     if roster_reader is None:
@@ -105,7 +112,8 @@ def _watched(
 
 
 def _snapshot(
-    gold_reader: GoldReader, watched: Sequence[PlayerId],
+    gold_reader: GoldReader,
+    watched: Sequence[PlayerId],
 ) -> dict[int, int]:
     """いまの所持金。読めなかった人は**入れない** (0 と書かない)。"""
     out: dict[int, int] = {}
@@ -117,7 +125,8 @@ def _snapshot(
 
 
 def _changes(
-    before: dict[int, int], after: dict[int, int],
+    before: dict[int, int],
+    after: dict[int, int],
 ) -> dict[int, dict[str, int]]:
     """前後で動いた人だけを返す。
 
@@ -176,13 +185,15 @@ def _warn_on_mismatch(
     if unexpected:
         logger.warning(
             "%s: 申告に無い人の所持金が動いた (player_ids=%s)",
-            tool_name, sorted(unexpected),
+            tool_name,
+            sorted(unexpected),
         )
     missing = declared - moved - {actor}
     if missing:
         logger.warning(
             "%s: 動くと申告された人の所持金が動かなかった (player_ids=%s)",
-            tool_name, sorted(missing),
+            tool_name,
+            sorted(missing),
         )
 
 
@@ -193,7 +204,8 @@ def _read_gold(gold_reader: GoldReader, player_id: PlayerId) -> int | None:
     except Exception:  # noqa: BLE001
         logger.warning(
             "所持金を読めなかったため gold の変化を trace に残せない: player_id=%s",
-            player_id, exc_info=True,
+            player_id,
+            exc_info=True,
         )
         return None
 

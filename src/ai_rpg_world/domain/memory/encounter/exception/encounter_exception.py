@@ -27,9 +27,7 @@ class EncounterKeyValidationException(EncounterDomainException, ValidationExcept
     error_code = "ENCOUNTER.KEY_VALIDATION"
 
 
-class EncounterRecordValidationException(
-    EncounterDomainException, ValidationException
-):
+class EncounterRecordValidationException(EncounterDomainException, ValidationException):
     """``EncounterRecord`` のバリデーション例外 (tick / count の不正)。"""
 
     error_code = "ENCOUNTER.RECORD_VALIDATION"

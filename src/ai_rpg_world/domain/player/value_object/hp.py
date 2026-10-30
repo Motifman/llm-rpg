@@ -11,6 +11,7 @@ class Hp:
     HPは0以上max_hp以下の値を持ちます。
     max_hpは0以上の値である必要があります。
     """
+
     value: int
     max_hp: int
 
@@ -19,7 +20,9 @@ class Hp:
         if self.max_hp < 0:
             raise HpValidationException(f"max_hpは0以上の値である必要があります。max_hp: {self.max_hp}")
         if self.value > self.max_hp:
-            raise HpValidationException(f"HPはmax_hp以下の値である必要があります。value: {self.value}, max_hp: {self.max_hp}")
+            raise HpValidationException(
+                f"HPはmax_hp以下の値である必要があります。value: {self.value}, max_hp: {self.max_hp}"
+            )
         if self.value < 0:
             raise HpValidationException(f"HPは0以上の値である必要があります。value: {self.value}")
 

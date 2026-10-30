@@ -106,6 +106,7 @@ def _build_stage(group: SynchronizedActionGroup, *, message_observer=None):
         spot_graph=spot_graph_repo,
     )
     if message_observer is not None:
+
         def collect(event) -> None:
             if isinstance(event, SynchronizedActionMessageEvent):
                 message_observer(
@@ -202,9 +203,7 @@ class TestResolverCompletion:
 
         stage.run(WorldTick(5))
 
-        assert delivered == [
-            ("g", "completed", (1, 2, 3), "扉が開いた。")
-        ]
+        assert delivered == [("g", "completed", (1, 2, 3), "扉が開いた。")]
         assert "done" in flags.as_frozen_set()
 
 
@@ -266,9 +265,7 @@ class TestResolverTimeout:
 
         stage.run(WorldTick(7))
 
-        assert delivered == [
-            ("g", "timed_out", (2,), "合わせ直す必要がある。")
-        ]
+        assert delivered == [("g", "timed_out", (2,), "合わせ直す必要がある。")]
 
     def test_show_message_is_collected_as_command_event(self) -> None:
         """SHOW_MESSAGE は直接callbackでなく確定区間のeventとして収集される。"""
@@ -359,6 +356,7 @@ class TestResolverBoundary:
         from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
             InteractionEffect,
         )
+
         unsupported = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.CHANGE_OBJECT_STATE,
             parameters={"state_updates": {}},

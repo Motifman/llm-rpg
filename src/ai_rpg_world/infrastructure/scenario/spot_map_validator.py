@@ -111,9 +111,7 @@ def validate_spot_map(
     undirected_adjacency = _undirected_adjacency(spots, edges)
     start_spot_id = _resolve_start_spot(raw, spots, config, collector)
     components = _connected_components(spots, undirected_adjacency)
-    reachable = (
-        _reachable_from(start_spot_id, directed_adjacency) if start_spot_id else set()
-    )
+    reachable = _reachable_from(start_spot_id, directed_adjacency) if start_spot_id else set()
     unreachable = sorted(spot_set - reachable) if start_spot_id else []
     cycle_rank = len(edges) - len(spots) + len(components)
     articulation_spots = _articulation_spots(spots, undirected_adjacency)
@@ -430,7 +428,8 @@ def _check_key_spots(
         edge_cut = [
             edge.edge_id
             for edge in edges
-            if key_spot not in _reachable_from(
+            if key_spot
+            not in _reachable_from(
                 start_spot_id,
                 adjacency,
                 removed_edge_id=edge.edge_id,
@@ -448,7 +447,8 @@ def _check_key_spots(
             spot
             for spot in spots
             if spot not in {start_spot_id, key_spot}
-            and key_spot not in _reachable_from(
+            and key_spot
+            not in _reachable_from(
                 start_spot_id,
                 adjacency,
                 removed_spot_id=spot,
@@ -913,10 +913,7 @@ def _check_distance_dependent_rules(
         ax, ay = positions[edge.from_spot]
         bx, by = positions[edge.to_spot]
         distance = hypot(ax - bx, ay - by)
-        if (
-            config.max_direct_connection_distance is not None
-            and distance > config.max_direct_connection_distance
-        ):
+        if config.max_direct_connection_distance is not None and distance > config.max_direct_connection_distance:
             collector.add(
                 "LONG_EDGE_DISTANCE",
                 "warning",

@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class TradeOfferedEvent(BaseDomainEvent[TradeId, "TradeAggregate"]):
     """取引提案イベント"""
+
     seller_id: PlayerId
     offered_item_id: ItemInstanceId
     requested_gold: TradeRequestedGold
@@ -31,6 +32,7 @@ class TradeOfferedEvent(BaseDomainEvent[TradeId, "TradeAggregate"]):
 @dataclass(frozen=True)
 class TradeAcceptedEvent(BaseDomainEvent[TradeId, "TradeAggregate"]):
     """取引受託イベント"""
+
     buyer_id: PlayerId
     buyer_display_name: str
     listing_projection: TradeListingProjection
@@ -48,13 +50,12 @@ class TradeCancelledEvent(BaseDomainEvent[TradeId, "TradeAggregate"]):
 @dataclass(frozen=True)
 class TradeDeclinedEvent(BaseDomainEvent[TradeId, "TradeAggregate"]):
     """取引拒否イベント"""
+
     decliner_id: PlayerId
 
 
 @dataclass(frozen=True)
-class TradeOfferExpiredEvent(
-    BaseDomainEvent[TradeOfferId, "PendingTradeOffer"]
-):
+class TradeOfferExpiredEvent(BaseDomainEvent[TradeOfferId, "PendingTradeOffer"]):
     """返事待ちの取引提案が期限切れで片付いたことを表す。"""
 
     offerer_player_id: PlayerId

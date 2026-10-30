@@ -43,15 +43,11 @@ class SqliteShopSummaryReadModelRepository(ShopSummaryReadModelRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteShopSummaryReadModelRepository:
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteShopSummaryReadModelRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteShopSummaryReadModelRepository:
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteShopSummaryReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
     def find_by_id(self, entity_id: ShopId) -> ShopSummaryReadModel | None:
@@ -104,9 +100,7 @@ class SqliteShopSummaryReadModelRepository(ShopSummaryReadModelRepository):
         return cur.rowcount > 0
 
     def find_all(self) -> list[ShopSummaryReadModel]:
-        cur = self._conn.execute(
-            "SELECT * FROM game_shop_summary_read_models ORDER BY shop_id ASC"
-        )
+        cur = self._conn.execute("SELECT * FROM game_shop_summary_read_models ORDER BY shop_id ASC")
         return [shop_summary_row_to_model(row) for row in cur.fetchall()]
 
     def find_by_spot_and_location(

@@ -262,18 +262,18 @@ def write_markdown(summary: dict[str, Any], out: TextIO) -> None:
     out.write("## 連続発言 run (相手の返事を待たず話し続ける)\n\n")
     out.write("| player_id | run_count | max_run | mean_run |\n|---|---|---|---|\n")
     for pid, info in summary["consecutive_runs_by_player"].items():
-        out.write(
-            f"| {pid} | {info['run_count']} | {info['max_run']} | {info['mean_run']:.2f} |\n"
-        )
+        out.write(f"| {pid} | {info['run_count']} | {info['max_run']} | {info['mean_run']:.2f} |\n")
     out.write("\n")
 
     rl = summary["reply_lag_ticks"]
     out.write("## 反応 lag (speech observation → 同 player 次 speech_speak まで)\n\n")
+
     # count=0 (= 該当 observation 無し / 該当 recipient の action 無し) では
     # mean / p50 / p95 / p99 / max が全部 None になる。markdown 上は "—" で
     # 表現し「データなし」を明示する (code-review MEDIUM 対応)。
     def _fmt(v: Any) -> str:
         return "—" if v is None else str(v)
+
     out.write(f"- 観測数: {rl['count']}\n")
     out.write(f"- mean: {_fmt(rl['mean'])}\n")
     out.write(
@@ -292,7 +292,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("trace_files", nargs="+", type=Path, help="trace.jsonl path(s)")
     p.add_argument(
-        "--markdown", type=Path, default=None,
+        "--markdown",
+        type=Path,
+        default=None,
         help="markdown report の出力先 (省略時は stdout に JSON で出す)",
     )
     return p

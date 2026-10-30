@@ -58,23 +58,17 @@ class QuestObservationFormatter:
         item_parts: list[str] = []
         for item_spec_id, qty in item_rewards:
             try:
-                spec_id_value = int(
-                    getattr(item_spec_id, "value", item_spec_id)
-                )
+                spec_id_value = int(getattr(item_spec_id, "value", item_spec_id))
             except (TypeError, ValueError):
                 item_parts.append(f"{FALLBACK_ITEM_LABEL}を{qty}個")
             else:
-                name = self._context.name_resolver.item_spec_name(
-                    spec_id_value
-                )
+                name = self._context.name_resolver.item_spec_name(spec_id_value)
                 item_parts.append(f"{name}を{qty}個")
         if item_parts:
             parts.append("、".join(item_parts))
         return "、".join(parts) if parts else ""
 
-    def _format_quest_issued(
-        self, event: QuestIssuedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_quest_issued(self, event: QuestIssuedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         reward_summary = self._quest_reward_summary(event.reward)
         prose = "新しいクエストが発行されました。"
         if reward_summary:
@@ -92,9 +86,7 @@ class QuestObservationFormatter:
             schedules_turn=True,
         )
 
-    def _format_quest_accepted(
-        self, event: QuestAcceptedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_quest_accepted(self, event: QuestAcceptedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         prose = "クエストを受託しました。"
         quest_id_value = event.aggregate_id.value
         structured: dict[str, Any] = {
@@ -107,9 +99,7 @@ class QuestObservationFormatter:
             observation_category="self_only",
         )
 
-    def _format_quest_completed(
-        self, event: QuestCompletedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_quest_completed(self, event: QuestCompletedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         reward_summary = self._quest_reward_summary(event.reward)
         prose = "クエストを完了しました。"
         if reward_summary:
@@ -149,9 +139,7 @@ class QuestObservationFormatter:
             observation_category="environment",
         )
 
-    def _format_quest_approved(
-        self, event: QuestApprovedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_quest_approved(self, event: QuestApprovedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         actor = self._context.name_resolver.player_name(event.approved_by)
         prose = f"クエストが承認されました（承認者: {actor}）。"
         quest_id_value = event.aggregate_id.value
@@ -166,9 +154,7 @@ class QuestObservationFormatter:
             observation_category="environment",
         )
 
-    def _format_quest_cancelled(
-        self, event: QuestCancelledEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_quest_cancelled(self, event: QuestCancelledEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         prose = "クエストがキャンセルされました。"
         quest_id_value = event.aggregate_id.value
         structured: dict[str, Any] = {

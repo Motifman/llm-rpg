@@ -1,5 +1,7 @@
 """Step 6: スポットグラフ用フォーマッタ・ツールカタログ・UiContextBuilder のスモークテスト"""
 
+import pytest
+
 from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
     SpotGraphCurrentStateFormatter,
 )
@@ -17,7 +19,6 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphSubLocationEntry,
     SpotGraphWeatherEntry,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
@@ -25,23 +26,6 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
         player_id=1,
         player_name="P",
         current_spot_id=snap.current_spot_id,
-        current_spot_name=snap.current_spot_name,
-        current_spot_description=snap.current_spot_description,
-        x=None,
-        y=None,
-        z=None,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="晴れ",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=0,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=snap,
     )
 
@@ -74,15 +58,33 @@ def test_get_spot_graph_specs_exposes_the_expected_tools() -> None:
     specs = get_spot_graph_specs()
     names = {s[0].name for s in specs}
     assert names == {
-        "travel_to", "set_sub_location", "explore", "interact",
-        "use_item", "drop_item", "pickup_item",
-        "give_item", "buy_item", "sell_item",
-        "trade_offer", "trade_accept", "trade_decline",
+        "travel_to",
+        "set_sub_location",
+        "explore",
+        "interact",
+        "use_item",
+        "drop_item",
+        "pickup_item",
+        "give_item",
+        "buy_item",
+        "sell_item",
+        "trade_offer",
+        "trade_accept",
+        "trade_decline",
         "market_view",
-        "market_list_item", "market_buy", "market_reprice", "market_cancel",
-        "market_bid", "market_sell",
-        "attack", "listen", "wait", "tend_to_player",
-        "vote", "report_body", "speak",
+        "market_list_item",
+        "market_buy",
+        "market_reprice",
+        "market_cancel",
+        "market_bid",
+        "market_sell",
+        "attack",
+        "listen",
+        "wait",
+        "tend_to_player",
+        "vote",
+        "report_body",
+        "speak",
     }
     # PR-CC: spot_graph_ prefix 廃止 → bare 名
     # PR-DD: speech_speak → speak
@@ -151,7 +153,10 @@ def test_spot_graph_formatter_outputs_base_info() -> None:
         current_spot_description="暗い",
         travel_status_line=None,
         atmosphere=SpotGraphAtmosphereEntry(
-            lighting="DIM", sound_ambient="水滴の音", temperature="COLD", smell="カビ",
+            lighting="DIM",
+            sound_ambient="水滴の音",
+            temperature="COLD",
+            smell="カビ",
         ),
     )
     dto = _make_dto(snap)
@@ -188,9 +193,7 @@ def test_spot_graph_ui_context_builder_adds_labels() -> None:
                 object_id=10,
                 name="箱",
                 description="古い木箱",
-                interactions=(
-                    SpotGraphInteractionEntry(action_name="open", display_label="開ける"),
-                ),
+                interactions=(SpotGraphInteractionEntry(action_name="open", display_label="開ける"),),
             ),
         ),
         sub_locations=(
@@ -284,7 +287,10 @@ def test_spot_graph_formatter_omits_weather_for_indoor() -> None:
         current_spot_description="暗い",
         travel_status_line=None,
         atmosphere=SpotGraphAtmosphereEntry(
-            lighting="DIM", sound_ambient="水滴の音", temperature="COLD", smell="カビ",
+            lighting="DIM",
+            sound_ambient="水滴の音",
+            temperature="COLD",
+            smell="カビ",
         ),
         weather=None,
     )
@@ -293,30 +299,13 @@ def test_spot_graph_formatter_omits_weather_for_indoor() -> None:
     assert "天候" not in text
 
 
-def test_spot_graph_formatter_falls_back_without_snapshot() -> None:
+def test_spot_graph_formatter_rejects_missing_snapshot() -> None:
+    """スポットの状態が無い DTO を渡すと ValueError で止まり、タイルの文面を出さない。"""
     dto = PlayerCurrentStateDto(
         player_id=1,
         player_name="P",
         current_spot_id=1,
-        current_spot_name="広場",
-        current_spot_description="",
-        x=1,
-        y=2,
-        z=0,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="晴れ",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=3,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=None,
     )
-    text = SpotGraphCurrentStateFormatter().format(dto)
-    assert "広場" in text
-    assert "座標" in text
+    with pytest.raises(ValueError, match="spot_graph_snapshot is required"):
+        SpotGraphCurrentStateFormatter().format(dto)

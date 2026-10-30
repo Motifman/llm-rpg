@@ -1,5 +1,8 @@
 # World Simulation Service リファクタリング進捗プラン
 
+> 退役した計画（2026-10-25、Issue #1862）。旧シミュレーションの分割計画は退役した。完了内容は当時の履歴として残す。
+> 以下の本文は当時の記録として保存する。現行構成は[世界の現在の構成](../game/world_architecture.md)を参照。
+
 親ロードマップ: [llm-agent-refactoring-roadmap.md](./llm-agent-refactoring-roadmap.md)
 
 `WorldSimulationApplicationService` のリファクタリングは、2026-03-14 の `v1.2` milestone 完了後に残っていた follow-up を 2026-03-15 に実装完了した。本ファイルは、その完了内容と追加した collaborator/test seam を記録する。

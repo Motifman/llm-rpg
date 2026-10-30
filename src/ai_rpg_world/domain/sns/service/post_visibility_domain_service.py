@@ -12,15 +12,15 @@ class PostVisibilityDomainService:
         # ポストが削除されている場合
         if post.deleted:
             return False
-        
+
         # 自分のポストは常に閲覧可能
         if author_user.user_id == viewer_user.user_id:
             return True
-            
+
         # ブロック関係のチェック（双方向）
         if viewer_user.is_blocked(author_user.user_id) or author_user.is_blocked(viewer_user.user_id):
             return False
-            
+
         # 可視性のチェック
         if post.post_content.visibility == PostVisibility.PRIVATE:
             return False
@@ -30,7 +30,12 @@ class PostVisibilityDomainService:
         return True  # PUBLICの場合
 
     @staticmethod
-    def can_view_reply(reply: ReplyAggregate, viewer_user: UserAggregate, author_user: UserAggregate, parent_post: PostAggregate | None = None) -> bool:
+    def can_view_reply(
+        reply: ReplyAggregate,
+        viewer_user: UserAggregate,
+        author_user: UserAggregate,
+        parent_post: PostAggregate | None = None,
+    ) -> bool:
         """リプライの閲覧権限をチェック"""
         # リプライが削除されている場合
         if reply.deleted:
@@ -57,7 +62,9 @@ class PostVisibilityDomainService:
         return True  # PUBLICの場合
 
     @staticmethod
-    def can_view_deleted_post_for_reply_thread(post: PostAggregate, viewer_user: UserAggregate, author_user: UserAggregate) -> bool:
+    def can_view_deleted_post_for_reply_thread(
+        post: PostAggregate, viewer_user: UserAggregate, author_user: UserAggregate
+    ) -> bool:
         """リプライツリー表示のために削除されたポストを表示できるかどうか"""
         # 自分の削除したポストは表示可能
         if author_user.user_id == viewer_user.user_id:
@@ -70,7 +77,9 @@ class PostVisibilityDomainService:
         return True
 
     @staticmethod
-    def can_view_deleted_reply_for_thread(reply: ReplyAggregate, viewer_user: UserAggregate, author_user: UserAggregate) -> bool:
+    def can_view_deleted_reply_for_thread(
+        reply: ReplyAggregate, viewer_user: UserAggregate, author_user: UserAggregate
+    ) -> bool:
         """リプライツリー表示のために削除されたリプライを表示できるかどうか"""
         # 自分の削除したリプライは表示可能
         if author_user.user_id == viewer_user.user_id:

@@ -50,7 +50,11 @@ class SynchronizedActionRegistry:
         self._world_flag_state = world_flag_state
 
     def prepare(
-        self, *, action_id: str, player_id: int, current_tick: int,
+        self,
+        *,
+        action_id: str,
+        player_id: int,
+        current_tick: int,
     ) -> SyncPrepareEntry:
         """sync prepare を記録する。
 
@@ -63,8 +67,7 @@ class SynchronizedActionRegistry:
             raise ValueError("action_id must not contain ':'")
         # 同 player + 同 action の旧 flag を削除
         old_flags = [
-            f for f in self._world_flag_state.as_frozen_set()
-            if f.startswith(f"{_FLAG_PREFIX}{action_id}:{player_id}:")
+            f for f in self._world_flag_state.as_frozen_set() if f.startswith(f"{_FLAG_PREFIX}{action_id}:{player_id}:")
         ]
         for f in old_flags:
             self._world_flag_state.remove(
@@ -75,7 +78,9 @@ class SynchronizedActionRegistry:
                 ),
             )
         entry = SyncPrepareEntry(
-            action_id=action_id, player_id=player_id, prepare_tick=current_tick,
+            action_id=action_id,
+            player_id=player_id,
+            prepare_tick=current_tick,
         )
         self._world_flag_state.add(
             entry.flag,
@@ -94,7 +99,7 @@ class SynchronizedActionRegistry:
             if not f.startswith(prefix):
                 continue
             # parse: sync_prep:{action_id}:{player_id}:{tick}
-            tail = f[len(_FLAG_PREFIX):]
+            tail = f[len(_FLAG_PREFIX) :]
             parts = tail.split(":")
             if len(parts) != 3:
                 _logger.warning("Malformed sync_prep flag skipped: %r", f)
@@ -103,11 +108,13 @@ class SynchronizedActionRegistry:
             if parsed_action != action_id:
                 continue
             try:
-                out.append(SyncPrepareEntry(
-                    action_id=action_id,
-                    player_id=int(player_str),
-                    prepare_tick=int(tick_str),
-                ))
+                out.append(
+                    SyncPrepareEntry(
+                        action_id=action_id,
+                        player_id=int(player_str),
+                        prepare_tick=int(tick_str),
+                    )
+                )
             except ValueError:
                 _logger.warning("Malformed sync_prep flag (int parse): %r", f)
                 continue
@@ -130,17 +137,19 @@ class SynchronizedActionRegistry:
         for f in self._world_flag_state.as_frozen_set():
             if not f.startswith(_FLAG_PREFIX):
                 continue
-            tail = f[len(_FLAG_PREFIX):]
+            tail = f[len(_FLAG_PREFIX) :]
             parts = tail.split(":")
             if len(parts) != 3:
                 _logger.warning("Malformed sync_prep flag skipped: %r", f)
                 continue
             try:
-                out.append(SyncPrepareEntry(
-                    action_id=parts[0],
-                    player_id=int(parts[1]),
-                    prepare_tick=int(parts[2]),
-                ))
+                out.append(
+                    SyncPrepareEntry(
+                        action_id=parts[0],
+                        player_id=int(parts[1]),
+                        prepare_tick=int(parts[2]),
+                    )
+                )
             except ValueError:
                 _logger.warning("Malformed sync_prep flag (int parse): %r", f)
                 continue

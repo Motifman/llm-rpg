@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-SCENARIO = Path("data/scenarios/relay_puzzle_demo.json")
+SCENARIO = Path("data/scenarios/survival_island_v4_coop.json")
 
 
 def test_runtime_wires_object_and_passage_to_same_scope_factory() -> None:
@@ -17,7 +17,4 @@ def test_runtime_wires_object_and_passage_to_same_scope_factory() -> None:
     assert object_stage._command_scope_factory is not None
     assert passage_stage._command_scope_factory is object_stage._command_scope_factory
     transaction_factory = object_stage._command_scope_factory._transaction_factory
-    assert (
-        transaction_factory._transaction_factory._data_store
-        is runtime._spot_interior_repo._data_store
-    )
+    assert transaction_factory._transaction_factory._data_store is runtime._spot_interior_repo._data_store

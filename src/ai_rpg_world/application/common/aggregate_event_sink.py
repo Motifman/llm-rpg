@@ -60,8 +60,7 @@ class CommandContextAggregateEventSink:
                 )
             if event.event_id is None:
                 raise ValueError(
-                    "CommandContextAggregateEventSinkにはevent_id=Noneの"
-                    f"イベントを渡せません: {type(event).__name__}"
+                    f"CommandContextAggregateEventSinkにはevent_id=Noneのイベントを渡せません: {type(event).__name__}"
                 )
 
 

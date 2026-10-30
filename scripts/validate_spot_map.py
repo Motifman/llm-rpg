@@ -59,9 +59,7 @@ def _parse_key_spot(raw: str) -> KeySpotRequirement:
         return KeySpotRequirement(raw, severity="warning")
     spot_id, severity = raw.rsplit(":", 1)
     if severity not in {"warning", "error"}:
-        raise argparse.ArgumentTypeError(
-            "--key-spot severity must be warning or error"
-        )
+        raise argparse.ArgumentTypeError("--key-spot severity must be warning or error")
     return KeySpotRequirement(spot_id, severity=severity)
 
 

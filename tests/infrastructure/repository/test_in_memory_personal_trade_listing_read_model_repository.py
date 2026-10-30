@@ -1,6 +1,7 @@
 """
 InMemoryPersonalTradeListingReadModelRepositoryのテスト
 """
+
 from datetime import datetime, timedelta
 
 import pytest
@@ -71,7 +72,7 @@ class TestInMemoryPersonalTradeListingReadModelRepository:
             durability_max=100,
             requested_gold=1000,
             seller_name="テスト売り手",
-            created_at=datetime.now()
+            created_at=datetime.now(),
         )
 
         # 保存

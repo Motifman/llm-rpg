@@ -73,21 +73,17 @@ class PendingTradeOffer:
             raise TradeOfferValidationException("自分自身へは持ちかけられません")
         if gives.is_empty or asks.is_empty:
             raise TradeOfferValidationException(
-                "gives と asks の両方に中身が要ります "
-                "(片側だけの譲渡は give_item の仕事)"
+                "gives と asks の両方に中身が要ります (片側だけの譲渡は give_item の仕事)"
             )
         if gives.has_gold and asks.has_gold:
             # 金だけを両替する取引に意味が無く、決済も「差額を動かす」のか
             # 「両方向に動かす」のかで解釈が割れる。片側だけに寄せる。
-            raise TradeOfferValidationException(
-                "gold は片側にだけ置けます (両側に gold のある提案は作れません)"
-            )
+            raise TradeOfferValidationException("gold は片側にだけ置けます (両側に gold のある提案は作れません)")
         if isinstance(expires_in_ticks, bool) or not isinstance(expires_in_ticks, int):
             raise TradeOfferValidationException("expires_in_ticks は整数で指定してください")
         if expires_in_ticks <= 0:
             raise TradeOfferValidationException(
-                "expires_in_ticks は 1 以上で指定してください "
-                "(作った瞬間に切れる提案を作らない)"
+                "expires_in_ticks は 1 以上で指定してください (作った瞬間に切れる提案を作らない)"
             )
         if isinstance(created_tick, bool) or not isinstance(created_tick, int):
             raise TradeOfferValidationException("created_tick は整数で指定してください")
@@ -128,7 +124,6 @@ class PendingTradeOffer:
     def _answered(self, state: TradeOfferState) -> PendingTradeOffer:
         if not self.is_pending:
             raise TradeOfferStateException(
-                f"既に {self.state.value} の提案には返事できません "
-                f"(offer_id={self.offer_id.value})"
+                f"既に {self.state.value} の提案には返事できません (offer_id={self.offer_id.value})"
             )
         return replace(self, state=state)

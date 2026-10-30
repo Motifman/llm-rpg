@@ -170,9 +170,7 @@ class InteractionCooldownStore:
         for player_id, action_name, tick in entries:
             replaced.setdefault(int(player_id), {})[str(action_name)] = int(tick)
         self._last_success = replaced
-        self._world_last_success = {
-            str(action_name): int(tick) for action_name, tick in world_entries
-        }
+        self._world_last_success = {str(action_name): int(tick) for action_name, tick in world_entries}
 
     def last_success_tick(
         self,

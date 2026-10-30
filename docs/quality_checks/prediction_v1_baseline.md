@@ -4,14 +4,14 @@
 (Issue #526 不在#3、PR0〜PR3 = 予測→学習ループ)。詳細設計は
 [../memory_system/prediction_learning_loop_design.md](../memory_system/prediction_learning_loop_design.md)。
 
-テスト: `tests/quality/test_prediction_v1.py` (`-m quality`、CI 非搭載)。
-dump: `prediction_v1_immediate.prompt.txt` / `prediction_v1_learned.prompt.txt`。
+テスト: `tests/quality/test_prediction_v1.py` (`-m quality`、CI 非搭載)。【関連する学び】を Issue #1631 で消したとき、残っていた `learned` variant ごとテストと dump を外した。この文書は記録として残す。
+dump: `prediction_v1_learned.prompt.txt`。`immediate` variant と `prediction_v1_immediate.prompt.txt` は、行動ごとの結果の予想 (`expected_result`) と【前回の予測と実際】を消したとき (Issue #1631) に外した。
 
 ## variant
 
 | variant | 再現する状況 | 見るもの |
 |---|---|---|
-| `immediate` | 「ノアに声をかければ聞ける」と予測 → ノアは無視。その直後のターン | `【前回の予測と実際】` が予測と実際の gap を並べるか (PR1 突き合わせ) |
+| `immediate` (#1631 で外した) | 「ノアに声をかければ聞ける」と予測 → ノアは無視。その直後のターン | `【前回の予測と実際】` が予測と実際の gap を並べるか (PR1 突き合わせ) |
 | `learned` | 「ノアは機嫌が悪いと無視する」学びが semantic に既にある状態で、次にノアに会うターン | `【関連する学び】` にその学びが戻り次の予測を変える材料になるか (PR3 ループ閉) |
 
 ## 所感

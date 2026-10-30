@@ -23,14 +23,12 @@ from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnu
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
-_MORI = PlayerId(1)   # crew
-_SENA = PlayerId(2)   # crew
-_KUZE = PlayerId(3)   # keeper
-_AOI = PlayerId(4)    # crew
+_MORI = PlayerId(1)  # crew
+_SENA = PlayerId(2)  # crew
+_KUZE = PlayerId(3)  # keeper
+_AOI = PlayerId(4)  # crew
 _SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
     source=WorldFlagMutationSource.SCENARIO_EVENT,
     actor_player_id=None,
@@ -94,9 +92,9 @@ class TestDownedCrewDoesNotEndTheRun:
             status.apply_damage(status.hp.value)
             runtime._player_status_repo.save(status)
 
-        assert all(
-            runtime._player_status_repo.find_by_id(pid).is_down for pid in _ALL_CREW
-        ), "前提が崩れている: crew が倒れていない"
+        assert all(runtime._player_status_repo.find_by_id(pid).is_down for pid in _ALL_CREW), (
+            "前提が崩れている: crew が倒れていない"
+        )
         assert runtime.check_game_end().is_ended is False
 
 

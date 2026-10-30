@@ -43,11 +43,7 @@ def _create_coop_session(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         characters_path=tmp_path / "characters.json",
     )
     char = mgr.create_character(CharacterCreateRequest(name="テスト探索者"))
-    summary = mgr.create_session(
-        SessionCreateRequest(
-            world_id="survival_island_v3_coop", character_ids=[char.id]
-        )
-    )
+    summary = mgr.create_session(SessionCreateRequest(world_id="survival_island_v3_coop", character_ids=[char.id]))
     return mgr._sessions[summary.session_id]
 
 
@@ -77,9 +73,7 @@ def _player_id(runtime, string_id: str) -> PlayerId:
 class TestCampNoticeBoardCarriesMessageAcrossAbsence:
     """ada が書いた伝言を、居合わせなかった noah が後から読める。"""
 
-    def test_noah_reads_message_ada_wrote_while_absent(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_noah_reads_message_ada_wrote_while_absent(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """ada が campsite の板切れに書き残し、その場に居なかった noah が
         後から campsite に来て読むと『本文』— エイダ が返る。"""
         state = _create_coop_session(monkeypatch, tmp_path)
@@ -88,8 +82,14 @@ class TestCampNoticeBoardCarriesMessageAcrossAbsence:
         noah = _player_id(runtime, "noah")
         board_id = SpotObjectId.create(_id_int(runtime, "object", "camp_notice_board"))
 
-        # ada は campsite で書き残し、その後 noah が (別の場所から) 訪れる想定。
+        # 未記入の明示も同じ板切れで確認し、Noahは書込み前に立ち去る。
+        _teleport(runtime, int(noah), "campsite")
+        empty = runtime._interaction_service.execute_interaction(noah, board_id, "read_notice")
+        assert empty.messages == ("何も書かれていない。",)
+        _teleport(runtime, int(noah), "shipwreck_beach")
         _teleport(runtime, int(ada), "campsite")
+        graph = runtime._spot_graph_repo.find_graph()
+        assert graph.get_entity_spot(EntityId.create(int(noah))) != SpotId.create(_id_int(runtime, "spot", "campsite"))
         write_result = runtime._interaction_service.execute_interaction(
             ada,
             board_id,
@@ -106,36 +106,13 @@ class TestCampNoticeBoardCarriesMessageAcrossAbsence:
             "read_notice",
         )
 
-        assert read_result.messages == (
-            "『山頂ルートは川沿い。合流して。』 — エイダ",
-        )
-
-    def test_unwritten_board_shows_nothing_written(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """誰も書いていない板切れを読むと「何も書かれていない。」になる
-        (未記入を silent failure にせず明示するのが #714 の仕様)。"""
-        state = _create_coop_session(monkeypatch, tmp_path)
-        runtime = state.runtime
-        noah = _player_id(runtime, "noah")
-        board_id = SpotObjectId.create(_id_int(runtime, "object", "camp_notice_board"))
-        _teleport(runtime, int(noah), "campsite")
-
-        read_result = runtime._interaction_service.execute_interaction(
-            noah,
-            board_id,
-            "read_notice",
-        )
-
-        assert read_result.messages == ("何も書かれていない。",)
+        assert read_result.messages == ("『山頂ルートは川沿い。合流して。』 — エイダ",)
 
 
 class TestTrailCairnAtFoothillsForksTowardMountain:
     """山麓の石積みの目印も同じ書き込み→読み取り経路が通る。"""
 
-    def test_write_then_read_round_trip_at_foothills(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_write_then_read_round_trip_at_foothills(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         state = _create_coop_session(monkeypatch, tmp_path)
         runtime = state.runtime
         rio = _player_id(runtime, "rio")
@@ -158,6 +135,4 @@ class TestTrailCairnAtFoothillsForksTowardMountain:
             "read_carving",
         )
 
-        assert read_result.messages == (
-            "『洞窟の先は崖崩れ、崖沿いへ回れ』 — リオ",
-        )
+        assert read_result.messages == ("『洞窟の先は崖崩れ、崖沿いへ回れ』 — リオ",)

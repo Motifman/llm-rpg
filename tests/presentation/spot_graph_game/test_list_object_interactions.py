@@ -75,9 +75,7 @@ def _make_runtime_with_object(
     runtime = MagicMock()
     runtime._player_perception_policy = None
     runtime._spot_graph_repo.find_graph.return_value = graph
-    runtime._spot_interior_repo.find_by_spot_id.side_effect = (
-        lambda s: interior if s == sid else None
-    )
+    runtime._spot_interior_repo.find_by_spot_id.side_effect = lambda s: interior if s == sid else None
     return runtime
 
 
@@ -90,9 +88,7 @@ class TestEnumerationActuallyWorks:
         **行為者を渡す。** 渡さない経路は空を返すようになった。全部を返すと
         役割で伏せた操作まで名前ごと漏れる (実 run 011)。
         """
-        runtime = _make_runtime_with_object(
-            object_id=42, interactions=["search_debris", "examine"]
-        )
+        runtime = _make_runtime_with_object(object_id=42, interactions=["search_debris", "examine"])
         result = _list_object_interactions(runtime, 42, player_id=1)
         assert set(result) == {"search_debris", "examine"}
 
@@ -103,9 +99,7 @@ class TestEnumerationActuallyWorks:
         **空になるのもそれはそれで静かな失敗**で、案内が丸ごと死んだことに
         誰も気づけない。必須にすれば即座に落ちる。
         """
-        runtime = _make_runtime_with_object(
-            object_id=42, interactions=["search_debris"]
-        )
+        runtime = _make_runtime_with_object(object_id=42, interactions=["search_debris"])
 
         with pytest.raises(TypeError):
             _list_object_interactions(runtime, 42)
@@ -118,15 +112,11 @@ class TestEnumerationActuallyWorks:
 
     def test_returns_unknown_world_object_id_empty_list(self) -> None:
         """未知の worldobjectid は空 list を返す。"""
-        runtime = _make_runtime_with_object(
-            object_id=42, interactions=["gather"]
-        )
+        runtime = _make_runtime_with_object(object_id=42, interactions=["gather"])
         assert _list_object_interactions(runtime, 99, player_id=1) == []
 
     def test_runtime_empty_list_fallback_raises_exception(self) -> None:
         """runtime 例外時は 空 list に fallback。"""
         runtime = MagicMock()
-        runtime._spot_graph_repo.find_graph.side_effect = RuntimeError(
-            "graph broken"
-        )
+        runtime._spot_graph_repo.find_graph.side_effect = RuntimeError("graph broken")
         assert _list_object_interactions(runtime, 42, player_id=1) == []

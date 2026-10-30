@@ -8,7 +8,15 @@ on:
 
 jobs:
   test:
+    # 1 台では収集と重い試験の偏りで約 6.8 分かかっていた (2026-10-19、#1652)。
+    # .test_durations の時間で 3 組に分け、組ごとの所要時間をそろえる。
+    # 1 組が落ちても残りの組の結果を見られるよう、fail-fast は切る。
+    name: test (${{ matrix.group }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
 
@@ -18,12 +26,11 @@ jobs:
           # pyproject.toml の対応下限。下限で通らない退行は上位版だけでは拾えない。
           python-version: "3.10"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          version: "0.11.28"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+      - name: Install uv
+        # setup-uv は uv 本体を配布元から取りに行き、そこで時間切れになって
+        # job が止まったり 3 分待たされたりした (design_decisions D1652)。
+        # PyPI から入れる。版は全 job で同じものに固定する。
+        run: python -m pip install uv==0.11.28
 
       - name: Install locked dependencies
         run: uv sync --locked --extra export
@@ -34,7 +41,11 @@ jobs:
         #
         # 手元の既定 (pytest.ini) には入れない。1 件だけ流したいときに
         # 邪魔になり、失敗時の出力も worker 単位に散って読みにくくなる。
-        run: uv run --frozen pytest -n auto
+        #
+        # worksteal は、重い試験が 1 つの worker に積み重なったとき、空いた
+        # worker が残りを引き取る。既定の load では重い 2 本が同じ worker に
+        # 順に並び、ほかの worker が先に手を空けていた。
+        run: uv run --frozen pytest -n auto --dist=worksteal --splits 3 --group "${{ matrix.group }}"
 
   lint:
     # ruff の静的検査。テストとは別 job にして、落ちたときに「テストが壊れた」
@@ -48,18 +59,17 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          version: "0.11.28"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+      - name: Install uv
+        run: python -m pip install uv==0.11.28
 
       - name: Install locked dependencies
         run: uv sync --locked --extra dev
 
       - name: Run ruff
         run: uv run --frozen ruff check src tests scripts
+
+      - name: Check ruff format
+        run: uv run --frozen ruff format --check src tests scripts
 
   typecheck:
     # mypy の型検査。ruff とは別 job にする。静的検査の中でも、型の不整合と
@@ -73,12 +83,8 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          version: "0.11.28"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+      - name: Install uv
+        run: python -m pip install uv==0.11.28
 
       - name: Install locked dependencies
         run: uv sync --locked --extra dev
@@ -113,12 +119,8 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          version: "0.11.28"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+      - name: Install uv
+        run: python -m pip install uv==0.11.28
 
       - name: Install locked dependencies
         run: uv sync --locked --extra export
@@ -126,7 +128,7 @@ jobs:
       - name: Regenerate quality goldens
         # ここは -n を付けない。golden は同じファイルへ書き出すものがあり、
         # 並列にすると書き込み順で中身が変わって差分検査が不安定になる。
-        # 11 件で 51 秒しかかからず、通常試験と並列に走るので短縮の必要もない。
+        # 1 分かからず、通常試験と並列に走るので短縮の必要もない。
         run: uv run --frozen pytest -m quality
 
       - name: Fail if the goldens changed

@@ -25,7 +25,7 @@
 - **trace イベント**: 新しい判断・書き込みには `TraceEventKind`
   (`application/trace/events.py:21`) に定数を足し payload を残す
 - **feature flag**: 新機構は env フラグで default OFF
-  (`application/llm/wiring/feature_flags.py` の既存パターンに倣う)
+  (このとき倣った `application/llm/wiring/feature_flags.py` は、短期記憶のターン数を設定から消したときに無くなった。今の設定の入口は `resolved_runtime_config.py`)
 - **ドメイン例外**: `domain/` 配下は各コンテキストのドメイン例外を使う
 - 1 PR = 1 目的、200〜400 行目安。旧計画との名前対応は下表に固定する
 
@@ -253,6 +253,8 @@
 
 ### U5 — MEMO_DISTILL
 
+> 書き起こしとキー `MEMO_DISTILL_ENABLED` は #1654 で消した (#1631)。
+
 - 触る場所: `memo_done` / memo 溢れの経路 (`TraceEventKind.MEMO_DONE` を
   出している箇所) から memo 本文を**無条件で** MEMO_DISTILL evidence に
   転記。discard 済み memo の再判定防止の記録 (evidence buffer 側に
@@ -283,6 +285,8 @@
   上限 k 件しか採らない」ルール cap を最初から入れておく
 
 ### U7 — 無意識コンテキスト → chunk 補完 (最優先の適用先)
+
+> U7 (`UNCONSCIOUS_CONTEXT_ENABLED`、chunk 主観補完に信念の上位 5 件と自己像を渡す provider) は #1690 で消した (#1631)。
 
 **できるようになること**: `prediction_error` / `salience` の判定が
 「誰にとっても同じ驚き」から「このキャラにとっての驚き」になる。
@@ -317,6 +321,8 @@
 
 ### U8 — 誤差ゲート付き符号化 (境界 + 解像度)
 
+> 2b (解像度) は #1646、2a (境界) とキー `ERROR_GATED_ENCODING_ENABLED` は #1651 で消した (#1631)。
+
 - 触る場所:
   - 2a: `application/llm/chunk_boundary/rules.py:155-278` に 1 条項追加 —
     bucket 内 action に「成功予測 (expected_result あり) → success=False」
@@ -346,7 +352,7 @@
     (旧 PR-D)。generic 再解釈と混ぜず、「これらから X を予測したが Y
     だった」を明示する専用 batch item 種別として同じ周期に相乗り
   - 的中: episode の想起価値 boost。実装は
-    [recall_ranking_failure_boost_design.md](./recall_ranking_failure_boost_design.md)
+    `recall_ranking_failure_boost_design.md` (#1631 で削除)
     の路線と統合 — `multi_cue_score` (`episodic_passive_recall_retrieval.py:389-456`)
     への加点項として入れる
 - テスト: 外れ時に専用 batch item が積まれる / 的中 boost の加点 /

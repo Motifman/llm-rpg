@@ -8,6 +8,7 @@ DDD の原則に従い、ドメイン固有の意味を持つカスタム例外�
 from __future__ import annotations
 
 from ai_rpg_world.domain.common.exception import (
+    BusinessRuleException,
     DomainException,
     NotFoundException,
     StateException,
@@ -96,6 +97,60 @@ class BeingSnapshotVersionException(BeingDomainException, ValidationException):
     error_code = "BEING.SNAPSHOT_VERSION"
 
 
+class EpisodeValidationException(BeingDomainException, ValidationException):
+    """エピソードや目次が決まり (空でない、長さの上限、呼び名、回数と時の並び) を満たさない。"""
+
+    error_code = "BEING.EPISODE_VALIDATION"
+
+
+class EpisodeConflictException(BeingDomainException, BusinessRuleException):
+    """同じ Being の中で、ID か呼び名が重なるエピソードを置こうとした。"""
+
+    error_code = "BEING.EPISODE_CONFLICT"
+
+
+class EpisodeNotFoundException(BeingDomainException, NotFoundException):
+    """書き戻そうとしたエピソードが、その Being の記録に無い。"""
+
+    error_code = "BEING.EPISODE_NOT_FOUND"
+
+
+class EpisodeWritingResponseException(BeingDomainException, ValidationException):
+    """エピソードの書き起こしの応答が、決めた形になっていない。"""
+
+    error_code = "BEING.EPISODE_WRITING_RESPONSE"
+
+
+class MemoValidationException(BeingDomainException, ValidationException):
+    """メモやメモ帳が決まり (空でない、長さの上限、分類と出どころの組み合わせ、呼び名、ターンの並び) を満たさない。"""
+
+    error_code = "BEING.MEMO_VALIDATION"
+
+
+class MemoLimitReachedException(BeingDomainException, BusinessRuleException):
+    """分類ごとの件数の上限に達したメモ帳に、同じ分類のメモを足そうとした。"""
+
+    error_code = "BEING.MEMO_LIMIT_REACHED"
+
+
+class MemoNotFoundException(BeingDomainException, NotFoundException):
+    """書き換えや消す対象の呼び名が、メモ帳に無い。"""
+
+    error_code = "BEING.MEMO_NOT_FOUND"
+
+
+class ShortTermMemoryValidationException(BeingDomainException, ValidationException):
+    """短期記憶の出来事やいきさつが決まり (手番の番号、結果と 1 手の対、並び、世代の上限) を満たさない。"""
+
+    error_code = "BEING.SHORT_TERM_MEMORY_VALIDATION"
+
+
+class ShortTermMemoryUnpairedResultException(BeingDomainException, BusinessRuleException):
+    """結果を待っている 1 手が無いか、結果の呼び出しの ID が待っている 1 手と違う。"""
+
+    error_code = "BEING.SHORT_TERM_MEMORY_UNPAIRED_RESULT"
+
+
 __all__ = [
     "BeingAlreadyAttachedException",
     "BeingAttachmentValidationException",
@@ -106,4 +161,13 @@ __all__ = [
     "BeingNotFoundException",
     "BeingSnapshotIncompleteException",
     "BeingSnapshotVersionException",
+    "EpisodeConflictException",
+    "EpisodeNotFoundException",
+    "EpisodeValidationException",
+    "EpisodeWritingResponseException",
+    "MemoLimitReachedException",
+    "MemoNotFoundException",
+    "MemoValidationException",
+    "ShortTermMemoryUnpairedResultException",
+    "ShortTermMemoryValidationException",
 ]

@@ -48,13 +48,9 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 #: モリ / セナ / クゼ / アオイ / ハギ / ユラ / サキ / ジン
-(_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _SAKI, _JIN) = (
-    PlayerId(i) for i in range(1, 9)
-)
+(_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _SAKI, _JIN) = (PlayerId(i) for i in range(1, 9))
 
 _SEALED_CONNECTIONS = ("observatory_to_medbay", "observatory_to_comms")
 
@@ -87,17 +83,13 @@ def _advance(runtime, ticks: int) -> None:
 def _is_open(runtime, connection: str = "observatory_to_medbay") -> bool:
     """その接続が、いま通れるか。"""
     graph = runtime._spot_graph_repo.find_graph()
-    conn = graph.get_connection(
-        ConnectionId.create(runtime.id_mapper.get_int("connection", connection))
-    )
+    conn = graph.get_connection(ConnectionId.create(runtime.id_mapper.get_int("connection", connection)))
     return conn.passage.traversable
 
 
 def _seal(runtime, actor: PlayerId = _KUZE):
     """手元の制御端末から、隔壁盤へ記録手番を遠隔で書き込む。"""
-    terminal = ItemSpecId.create(
-        runtime.id_mapper.get_int("item_spec", "control_terminal")
-    )
+    terminal = ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "control_terminal"))
     return runtime.do_interact_with_item(actor, terminal, "seal_bulkhead")
 
 
@@ -119,11 +111,7 @@ def _terminal_row(runtime, viewer: PlayerId) -> str:
     通ってしまう。**端末について何が書かれているか**を見る。
     """
     lines = runtime.build_full_prompt(viewer)["messages"][1]["content"].splitlines()
-    index = next(
-        index
-        for index, line in enumerate(lines)
-        if line.lstrip().startswith('- "制御端末"')
-    )
+    index = next(index for index, line in enumerate(lines) if line.lstrip().startswith('- "制御端末"'))
     return "\n".join(lines[index : index + 2])
 
 
@@ -133,10 +121,7 @@ def _delivered(runtime, viewer: PlayerId) -> tuple:
     現在状態には「通行不可」と書かれるが、それは今の姿であって出来事ではない。
     妨害が伝わったかは、届いた観測で見る。
     """
-    return tuple(
-        entry.output.prose
-        for entry in runtime._obs_buffer.get_observations(viewer)
-    )
+    return tuple(entry.output.prose for entry in runtime._obs_buffer.get_observations(viewer))
 
 
 class TestOnlyTheKeeperCanDropIt:
@@ -185,9 +170,7 @@ class TestTheDoorFallsAndLiftsByItself:
         _seal(runtime)
         _advance(runtime, 1)
 
-        assert all(
-            not _is_open(runtime, connection) for connection in _SEALED_CONNECTIONS
-        )
+        assert all(not _is_open(runtime, connection) for connection in _SEALED_CONNECTIONS)
 
     def test_the_door_stays_closed_for_a_while(self, runtime) -> None:
         """待ち時間の途中では、まだ閉じたままになっている。
@@ -198,9 +181,7 @@ class TestTheDoorFallsAndLiftsByItself:
         _seal(runtime)
         _advance(runtime, _SEALED_TICKS - 1)
 
-        assert all(
-            not _is_open(runtime, connection) for connection in _SEALED_CONNECTIONS
-        )
+        assert all(not _is_open(runtime, connection) for connection in _SEALED_CONNECTIONS)
 
     def test_the_door_lifts_without_anyone_touching_it(self, runtime) -> None:
         """誰も触らないまま待つと、扉がまた通れるようになる。
@@ -226,9 +207,7 @@ class TestTheDoorFallsAndLiftsByItself:
         _seal(runtime)
         _advance(runtime, 1)
 
-        assert all(
-            not _is_open(runtime, connection) for connection in _SEALED_CONNECTIONS
-        )
+        assert all(not _is_open(runtime, connection) for connection in _SEALED_CONNECTIONS)
 
 
 class TestTheDoorCannotBeDroppedAgainRightAway:
@@ -270,9 +249,7 @@ class TestTheDoorCannotBeDroppedAgainRightAway:
         assert "あと 45 分" in row
         assert "tick" not in row
 
-    def test_the_terminal_row_shows_no_wait_before_the_first_use(
-        self, runtime
-    ) -> None:
+    def test_the_terminal_row_shows_no_wait_before_the_first_use(self, runtime) -> None:
         """一度も降ろしていないうちは、盤の行に待ち時間が出ない。
 
         **「常に出る」でも上のテストは通る**ので、出ない側を一緒に見る。
@@ -335,9 +312,7 @@ class TestTheDoorTellsBothRoomsButNotWho:
 
         for viewer in (_MORI, _SENA, _HAGI):
             door_lines = [
-                line
-                for line in _delivered(runtime, viewer)
-                if "通行不能になった" in line or "音がした" in line
+                line for line in _delivered(runtime, viewer) if "通行不能になった" in line or "音がした" in line
             ]
             # 1 件も拾えないと assert が 0 回になり、**何も確かめずに緑**に
             # なる (claude の指摘)。拾えていること自体を先に見る。
@@ -355,9 +330,7 @@ class TestTheDoorTellsBothRoomsButNotWho:
 
         assert not any("クゼ" in line for line in _delivered(runtime, _MORI))
 
-    def test_even_someone_with_the_actor_does_not_see_the_hand(
-        self, runtime
-    ) -> None:
+    def test_even_someone_with_the_actor_does_not_see_the_hand(self, runtime) -> None:
         """行為者と同じ集会室に居る人にも、端末を操作したこと自体が届かない。
 
         目撃文を書かなければ黙る、ではない。**書かないと「{行為者}が「隔壁を
@@ -379,17 +352,11 @@ class TestTheDoorTellsBothRoomsButNotWho:
         """
         self._seal_with_everyone_placed(runtime)
 
-        row = next(
-            line
-            for line in _observations(runtime, _MORI).splitlines()
-            if "観測室と医務室の通路" in line
-        )
+        row = next(line for line in _observations(runtime, _MORI).splitlines() if "観測室と医務室の通路" in line)
 
         assert "通行不可" in row
 
-    def test_the_closed_door_does_not_explain_how_to_operate_it(
-        self, runtime
-    ) -> None:
+    def test_the_closed_door_does_not_explain_how_to_operate_it(self, runtime) -> None:
         """封鎖中の扉は通行不可と伝えるが、隔壁盤の操作方法までは教えない。
 
         誰が仕掛けを動かしたかを推理する材料は、世界で実際に観測した出来事から
@@ -399,11 +366,7 @@ class TestTheDoorTellsBothRoomsButNotWho:
         self._seal_with_everyone_placed(runtime)
 
         for viewer in (_MORI, _SENA):
-            row = next(
-                line
-                for line in _observations(runtime, viewer).splitlines()
-                if "観測室と医務室の通路" in line
-            )
+            row = next(line for line in _observations(runtime, viewer).splitlines() if "観測室と医務室の通路" in line)
 
             assert "通行不可" in row
             assert "隔壁盤" not in row
@@ -422,9 +385,7 @@ class TestTheClosedDoorsIsolateTheObservatory:
             assert not _is_open(runtime, connection)
             assert not _is_open(runtime, f"{connection}__reverse")
 
-    def test_a_meeting_inside_the_sealed_observatory_gathers_everyone(
-        self, runtime
-    ) -> None:
+    def test_a_meeting_inside_the_sealed_observatory_gathers_everyone(self, runtime) -> None:
         """封鎖中でも会議は物理的な隔壁を越え、全生存者を開催室へ集める。
 
         会議で一部の参加者が構造的に発言できない状態より、集合が一時的に
@@ -469,11 +430,7 @@ class TestTheDeclaredSoundStaysTrue:
         import json
 
         data = json.loads(_DRILL.read_text(encoding="utf-8"))
-        door = next(
-            conn
-            for conn in data["connections"]
-            if conn["id"] == "observatory_to_medbay"
-        )
+        door = next(conn for conn in data["connections"] if conn["id"] == "observatory_to_medbay")
 
         assert door["passage"]["kind"] == "DOOR"
         assert "sound_permeability" not in door["passage"]

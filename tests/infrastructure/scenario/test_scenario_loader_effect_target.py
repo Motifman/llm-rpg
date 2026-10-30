@@ -66,9 +66,7 @@ class TestEffectTargetParsing:
     def test_target_defaults_to_actor(self) -> None:
         """target を書かない効果は EffectTarget.ACTOR になる (既存シナリオの挙動不変)。"""
         effect = _first_effect(
-            _scenario_with_object_effect(
-                {"effect_type": "APPLY_DAMAGE", "parameters": {"damage": 1}}
-            )
+            _scenario_with_object_effect({"effect_type": "APPLY_DAMAGE", "parameters": {"damage": 1}})
         )
         assert effect.target is EffectTarget.ACTOR
 
@@ -84,7 +82,7 @@ class TestEffectTargetParsing:
                 {
                     "effect_type": "REMOVE_ITEM",
                     "target": "TARGET_PLAYER",
-                    "parameters": {"item_spec_id": "iron_sword"},
+                    "parameters": {"item_spec": "key"},
                 }
             )
         )

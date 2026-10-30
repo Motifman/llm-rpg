@@ -43,9 +43,8 @@ class TestNotificationQueryService:
             user_id=UserId(1),
             notification_type=NotificationType.FOLLOW,
             content=NotificationContent.create_follow_notification(
-                follower_user_id=UserId(2),
-                follower_user_name="ユーザー2"
-            )
+                follower_user_id=UserId(2), follower_user_name="ユーザー2"
+            ),
         )
 
         notification2 = Notification.create_persistent_notification(
@@ -57,8 +56,8 @@ class TestNotificationQueryService:
                 liker_user_name="ユーザー3",
                 content_type="post",
                 content_id=1,
-                content_text="いいねされたポストの内容"
-            )
+                content_text="いいねされたポストの内容",
+            ),
         )
         notification2.mark_as_read()  # 既読にする
 
@@ -72,8 +71,8 @@ class TestNotificationQueryService:
                 replier_user_name="ユーザー1",
                 content_type="post",
                 content_id=2,
-                content_text="返信の内容"
-            )
+                content_text="返信の内容",
+            ),
         )
         notification3.mark_as_read()  # 既読にする
 
@@ -82,38 +81,41 @@ class TestNotificationQueryService:
         notification_repository.save(notification2)
         notification_repository.save(notification3)
 
-    def create_test_notification(self, notification_id: int, user_id: int, notification_type: NotificationType, actor_user_id: int, actor_user_name: str, is_read: bool = False) -> Notification:
+    def create_test_notification(
+        self,
+        notification_id: int,
+        user_id: int,
+        notification_type: NotificationType,
+        actor_user_id: int,
+        actor_user_name: str,
+        is_read: bool = False,
+    ) -> Notification:
         """テスト用の通知を作成"""
         if notification_type == NotificationType.FOLLOW:
             content = NotificationContent.create_follow_notification(
-                follower_user_id=UserId(actor_user_id),
-                follower_user_name=actor_user_name
+                follower_user_id=UserId(actor_user_id), follower_user_name=actor_user_name
             )
         elif notification_type == NotificationType.LIKE:
             content = NotificationContent.create_like_notification(
-                liker_user_id=UserId(actor_user_id),
-                liker_user_name=actor_user_name,
-                content_type="post",
-                content_id=1
+                liker_user_id=UserId(actor_user_id), liker_user_name=actor_user_name, content_type="post", content_id=1
             )
         elif notification_type == NotificationType.REPLY:
             content = NotificationContent.create_reply_notification(
                 replier_user_id=UserId(actor_user_id),
                 replier_user_name=actor_user_name,
                 content_type="post",
-                content_id=1
+                content_id=1,
             )
         else:
             content = NotificationContent.create_follow_notification(
-                follower_user_id=UserId(actor_user_id),
-                follower_user_name=actor_user_name
+                follower_user_id=UserId(actor_user_id), follower_user_name=actor_user_name
             )
 
         notification = Notification.create_persistent_notification(
             notification_id=NotificationId(notification_id),
             user_id=UserId(user_id),
             notification_type=notification_type,
-            content=content
+            content=content,
         )
         if is_read:
             notification.mark_as_read()

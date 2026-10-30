@@ -2,6 +2,7 @@
 InMemoryRepositoryBase - インメモリリポジトリの基底クラス
 Unit of Workとの統合ロジックを提供します。
 """
+
 import copy
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar, cast
@@ -10,7 +11,7 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 
 from .in_memory_data_store import InMemoryDataStore
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 _Result = TypeVar("_Result")
 
@@ -29,9 +30,7 @@ class RepositoryUnitOfWorkPort(Protocol):
 
     def add_events_from_aggregate(self, aggregate: Any) -> None: ...
 
-    def register_pending_aggregate(
-        self, repo_key: str, entity_id: Any, aggregate: Any
-    ) -> None: ...
+    def register_pending_aggregate(self, repo_key: str, entity_id: Any, aggregate: Any) -> None: ...
 
     def get_pending_aggregate(self, repo_key: str, entity_id: Any) -> Any | None: ...
 
@@ -39,16 +38,18 @@ class RepositoryUnitOfWorkPort(Protocol):
 class InMemoryRepositoryBase:
     """インメモリリポジトリの共通基底クラス"""
 
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
+    def __init__(
+        self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None
+    ):
         """初期化
-        
+
         Args:
             data_store: 共有データストア
             unit_of_work: Unit of Work (任意)
         """
         if data_store is None:
             data_store = InMemoryDataStore()
-            
+
         self._data_store = data_store
         self._unit_of_work = unit_of_work
 
@@ -84,22 +85,22 @@ class InMemoryRepositoryBase:
 
     def _execute_operation(self, operation: Callable[[], _Result]) -> _Result:
         """操作を実行またはUOWに登録
-        
+
         Args:
             operation: 実行する操作
-            
+
         Returns:
             操作が即時実行された場合はその戻り値、UOWに登録された場合はNone
         """
         if self._unit_of_work and self._is_in_transaction():
             # TODO: InMemoryUnitOfWorkに直接依存せずにProtocolで解決したいが
             # 現状はInMemoryUnitOfWorkのadd_operationメソッドが必要
-            if hasattr(self._unit_of_work, 'add_operation'):
+            if hasattr(self._unit_of_work, "add_operation"):
                 # UoW に積むので、この場では結果を返せない。呼び出し側は
                 # トランザクション中の戻り値を使わない契約になっている。
                 self._unit_of_work.add_operation(operation)
                 return cast("_Result", None)
-            
+
         # トランザクション外、またはUOWが指定されていない場合は即時実行
         return operation()
 
@@ -107,7 +108,7 @@ class InMemoryRepositoryBase:
         """集約からイベントを収集し、UoW 経由で add_events する（イベント収集 1 本化）"""
         if not self._unit_of_work or not self._is_in_transaction():
             return
-        if hasattr(self._unit_of_work, 'add_events_from_aggregate'):
+        if hasattr(self._unit_of_work, "add_events_from_aggregate"):
             self._unit_of_work.add_events_from_aggregate(aggregate)
 
     def _repo_key(self) -> str:
@@ -117,14 +118,14 @@ class InMemoryRepositoryBase:
     def _register_pending_if_uow(self, entity_id: Any, aggregate: Any) -> None:
         """保存予定の集約をUoWに登録し、同一トランザクション内の find で未反映の状態を返せるようにする"""
         if self._unit_of_work and self._is_in_transaction():
-            if hasattr(self._unit_of_work, 'register_pending_aggregate'):
+            if hasattr(self._unit_of_work, "register_pending_aggregate"):
                 self._unit_of_work.register_pending_aggregate(self._repo_key(), entity_id, aggregate)
 
     def _get_pending_aggregate(self, entity_id: Any) -> Any | None:
         """同一トランザクション内で保留中の集約があれば返す"""
         if not self._unit_of_work or not self._is_in_transaction():
             return None
-        if hasattr(self._unit_of_work, 'get_pending_aggregate'):
+        if hasattr(self._unit_of_work, "get_pending_aggregate"):
             return self._unit_of_work.get_pending_aggregate(self._repo_key(), entity_id)
         return None
 
@@ -132,9 +133,9 @@ class InMemoryRepositoryBase:
         """トランザクション中かどうかを確認"""
         if not self._unit_of_work:
             return False
-        
+
         # InMemoryUnitOfWorkのis_in_transactionメソッドを確認
-        if hasattr(self._unit_of_work, 'is_in_transaction'):
+        if hasattr(self._unit_of_work, "is_in_transaction"):
             return self._unit_of_work.is_in_transaction()
-        
+
         return False

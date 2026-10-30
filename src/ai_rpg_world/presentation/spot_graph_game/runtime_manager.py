@@ -30,7 +30,6 @@ from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
 from ai_rpg_world.application.llm.services.world_llm_prompt import (
     CharacterPromptInput,
 )
-from ai_rpg_world.application.llm.services.world_llm_turn.turn_gate import TurnGate
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_config,
 )
@@ -114,34 +113,6 @@ from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (  # noq
 )
 
 
-def _build_turn_gate(runtime: Any, judgment_port: Any) -> TurnGate | None:
-    """tick の終わりに「いま動く必要があるか」を問う起動判定を、profile が求めたときだけ組む。
-
-    provider が off なら判断ポートが無く、起動判定も無い。起動判定が無い run と起動判定が全員回した
-    run は trace の TYPED_JUDGMENT で見分ける。
-    """
-    config = runtime._runtime_config
-    if judgment_port is None or not config.typed_judgment_turn_gate_enabled:
-        return None
-    player_names = {
-        int(spawn.player_id): spawn.name for spawn in runtime.scenario.player_spawns
-    }
-
-    def _pending(player_id: PlayerId) -> list[ObservationOutput]:
-        return [entry.output for entry in runtime._obs_buffer.get_observations(player_id)]
-
-    return TurnGate(
-        judgment_port,
-        current_tick_provider=runtime.current_tick,
-        player_name_resolver=lambda pid: player_names.get(int(pid.value), ""),
-        pending_observations_provider=_pending,
-        is_meeting_provider=runtime._game_phase_store.is_meeting,
-        all_player_ids_provider=lambda: [PlayerId(pid) for pid in player_names],
-        skip_below=config.typed_judgment_turn_gate_skip_below,
-        trace_recorder_provider=lambda: runtime.trace_recorder,
-    )
-
-
 def _character_to_prompt_input(
     character: CharacterDetailResponse | None,
 ) -> CharacterPromptInput | None:
@@ -165,6 +136,8 @@ def _character_to_prompt_input(
 
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
 @dataclass
 class _WorldSpawnAllPlayersLlmResolver(ILLMPlayerResolver):
     """スポーンした全員をプレゼン層脱出セッションでは LLM ターン対象とみなす。"""
@@ -173,6 +146,8 @@ class _WorldSpawnAllPlayersLlmResolver(ILLMPlayerResolver):
 
     def is_llm_controlled(self, player_id: PlayerId) -> bool:
         return player_id.value in self.spawn_player_ids
+
+
 def _safe_get_str(mapper: Any, namespace: str, numeric_id: int) -> str:
     """Return the string ID for *numeric_id*, falling back to str(numeric_id)."""
     try:
@@ -204,6 +179,8 @@ class _QueuedTurnTrigger:
 
     def run_scheduled_turns(self) -> None:
         self.pending_player_ids.clear()
+
+
 @dataclass
 class _SessionState:
     """Lightweight bookkeeping for a running game session."""
@@ -229,28 +206,18 @@ class GameRuntimeManager:
     characters_path: Path = field(default_factory=lambda: Path("var/characters.json"))
     runtime_config: Any | None = field(default=None, repr=False)
 
-    _scenario_cache: dict[str, dict[str, Any]] = field(
-        default_factory=dict, repr=False
-    )
-    _characters: dict[str, CharacterDetailResponse] = field(
-        default_factory=dict, repr=False
-    )
+    _scenario_cache: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
+    _characters: dict[str, CharacterDetailResponse] = field(default_factory=dict, repr=False)
     _characters_loaded: bool = field(default=False, repr=False)
-    _sessions: dict[str, _SessionState] = field(
-        default_factory=dict, repr=False
-    )
-    _chat_histories: dict[str, list[ChatMessageResponse]] = field(
-        default_factory=dict, repr=False
-    )
+    _sessions: dict[str, _SessionState] = field(default_factory=dict, repr=False)
+    _chat_histories: dict[str, list[ChatMessageResponse]] = field(default_factory=dict, repr=False)
     # 長走時の保険:
     # - tick thread と chat 送信 thread が同時に dict を触る (compound op race)
     # - 履歴に上限なしで永遠に append されてメモリが膨らむ
     # の 2 つを 1 つの lock + cap で潰す。200 件はキャラとの最近の会話を
     # 復元するのに十分で、それ以上は viewer 側で必要なら別 store に永続化
     # する設計を想定。
-    _chat_history_lock: threading.Lock = field(
-        default_factory=threading.Lock, repr=False
-    )
+    _chat_history_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _CHAT_HISTORY_MAX_PER_KEY: int = 200
 
     # ── Worlds ──
@@ -340,10 +307,7 @@ class GameRuntimeManager:
         self.characters_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "characters": [
-                character.model_dump()
-                for character in sorted(
-                    self._characters.values(), key=lambda c: c.name
-                )
+                character.model_dump() for character in sorted(self._characters.values(), key=lambda c: c.name)
             ]
         }
         tmp_path = self.characters_path.with_suffix(self.characters_path.suffix + ".tmp")
@@ -370,9 +334,7 @@ class GameRuntimeManager:
         self._load_characters()
         return self._characters.get(character_id)
 
-    def create_character(
-        self, request: CharacterCreateRequest
-    ) -> CharacterDetailResponse:
+    def create_character(self, request: CharacterCreateRequest) -> CharacterDetailResponse:
         self._load_characters()
         cid = uuid.uuid4().hex[:8]
         while cid in self._characters:
@@ -395,9 +357,7 @@ class GameRuntimeManager:
         self._save_characters()
         return character
 
-    def update_character(
-        self, character_id: str, request: CharacterUpdateRequest
-    ) -> CharacterDetailResponse | None:
+    def update_character(self, character_id: str, request: CharacterUpdateRequest) -> CharacterDetailResponse | None:
         self._load_characters()
         current = self._characters.get(character_id)
         if current is None:
@@ -412,9 +372,7 @@ class GameRuntimeManager:
 
     # ── Sessions ──
 
-    def create_session(
-        self, request: SessionCreateRequest
-    ) -> SessionSummaryResponse:
+    def create_session(self, request: SessionCreateRequest) -> SessionSummaryResponse:
         sid = uuid.uuid4().hex[:12]
         scenario_path = self.scenarios_dir / f"{request.world_id}.json"
         if not scenario_path.exists():
@@ -452,13 +410,14 @@ class GameRuntimeManager:
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
             short_term_memory=runtime._short_term_memory,
-            llm_client=create_llm_client_from_config(runtime_config),
+            llm_client=create_llm_client_from_config(runtime_config, aux_call_sink=runtime._aux_llm_call_sink),
             # 使えるキーが無い設定はここで落ちる。1 件目の判断まで進ませない。
-            typed_judgment_port=create_typed_judgment_port_from_config(runtime_config),
+            typed_judgment_port=create_typed_judgment_port_from_config(
+                runtime_config, aux_call_sink=runtime._aux_llm_call_sink
+            ),
             llm_session_run_id=sid,
             llm_session_world_id=request.world_id,
         )
-        llm_wiring.turn_gate = _build_turn_gate(runtime, llm_wiring.typed_judgment_port)
         turn_scheduler = ObservationTurnScheduler(
             turn_trigger=llm_wiring.llm_turn_trigger,
             llm_player_resolver=llm_resolver,
@@ -489,10 +448,9 @@ class GameRuntimeManager:
             turn_scheduler,
             _heartbeat_llm_player_ids,
             time_label_provider=lambda _tick: llm_wiring._time_label(),
-            interval_ticks=int(
-                getattr(runtime._runtime_config, "llm_idle_timeout_ticks", 6)
-            ),
+            interval_ticks=int(getattr(runtime._runtime_config, "llm_idle_timeout_ticks", 6)),
             is_traveling_provider=_is_traveling,
+            failure_isolator=runtime.world_tick_failure_isolator,
         )
         # ActionFailed 観測の wire: 失敗 DTO を当該プレイヤーへの観測に変換する。
         # ``intent_id_generator`` は wiring と emitter で共有しないが、wiring 側
@@ -521,9 +479,7 @@ class GameRuntimeManager:
             # **足す。置き換えない。** 上書きにすると world_runtime が先に
             # 置いた hook (encounter 記録・到着の履歴) が実走経路でだけ
             # 消え、テストでは再現しない静かな失敗になる。
-            travel_stage.add_arrival_observer(
-                llm_wiring.llm_turn_trigger.schedule_turn
-            )
+            travel_stage.add_arrival_observer(llm_wiring.llm_turn_trigger.schedule_turn)
 
         title = runtime.metadata.title
         state = _SessionState(
@@ -548,9 +504,7 @@ class GameRuntimeManager:
             created_at=state.created_at,
         )
 
-    def get_session_state(
-        self, session_id: str
-    ) -> SessionStateResponse | None:
+    def get_session_state(self, session_id: str) -> SessionStateResponse | None:
         state = self._sessions.get(session_id)
         if state is None:
             return None
@@ -607,9 +561,7 @@ class GameRuntimeManager:
         state.status = "ended"
         return True
 
-    def set_session_speed(
-        self, session_id: str, speed_multiplier: float
-    ) -> bool:
+    def set_session_speed(self, session_id: str, speed_multiplier: float) -> bool:
         state = self._sessions.get(session_id)
         if state is None:
             return False
@@ -663,6 +615,7 @@ class GameRuntimeManager:
         if spot_id is not None:
             target_spot_int = runtime.id_mapper.get_int("spot", spot_id)
             from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
             target_spot_id = SpotId.create(target_spot_int)
         elif character_id is not None:
             pid_int = runtime.id_mapper.get_int("player", character_id)
@@ -686,36 +639,42 @@ class GameRuntimeManager:
                 None,
             )
             str_id = spawn.string_id if spawn else str(eid_val)
-            characters.append(CharacterInSpotResponse(
-                character_id=str_id,
-                name=name,
-            ))
+            characters.append(
+                CharacterInSpotResponse(
+                    character_id=str_id,
+                    name=name,
+                )
+            )
 
         objects: list[SpotObjectResponse] = []
         if interior:
             for obj in interior.objects:
                 actions = [i.action_name for i in obj.interactions]
                 obj_str = _safe_get_str(runtime.id_mapper, "object", obj.object_id.value)
-                objects.append(SpotObjectResponse(
-                    object_id=obj_str,
-                    name=obj.name,
-                    description=obj.description,
-                    object_type=obj.object_type.name,
-                    state=dict(obj.state),
-                    available_actions=actions,
-                ))
+                objects.append(
+                    SpotObjectResponse(
+                        object_id=obj_str,
+                        name=obj.name,
+                        description=obj.description,
+                        object_type=obj.object_type.name,
+                        state=dict(obj.state),
+                        available_actions=actions,
+                    )
+                )
 
         connections: list[SpotConnectionResponse] = []
         for conn in graph.iter_outgoing_connections_from(target_spot_id):
             target_node = graph.get_spot(conn.to_spot_id)
             conn_str = _safe_get_str(runtime.id_mapper, "connection", conn.connection_id.value)
-            connections.append(SpotConnectionResponse(
-                connection_id=conn_str,
-                target_spot_id=_safe_get_str(runtime.id_mapper, "spot", conn.to_spot_id.value),
-                target_spot_name=target_node.name,
-                name=conn.name,
-                is_passable=conn.passage.traversable,
-            ))
+            connections.append(
+                SpotConnectionResponse(
+                    connection_id=conn_str,
+                    target_spot_id=_safe_get_str(runtime.id_mapper, "spot", conn.to_spot_id.value),
+                    target_spot_name=target_node.name,
+                    name=conn.name,
+                    is_passable=conn.passage.traversable,
+                )
+            )
 
         spot_str = _safe_get_str(runtime.id_mapper, "spot", target_spot_id.value)
         return SpotViewResponse(
@@ -728,23 +687,21 @@ class GameRuntimeManager:
                 "sound_ambient": spot_node.atmosphere.sound_ambient,
                 "temperature": spot_node.atmosphere.temperature.name,
                 "smell": spot_node.atmosphere.smell,
-            } if spot_node.atmosphere else None,
+            }
+            if spot_node.atmosphere
+            else None,
             characters_present=characters,
             objects=objects,
             connections=connections,
         )
 
-    def get_event_log(
-        self, session_id: str, *, limit: int = 50, offset: int = 0
-    ) -> EventLogResponse | None:
+    def get_event_log(self, session_id: str, *, limit: int = 50, offset: int = 0) -> EventLogResponse | None:
         state = self._sessions.get(session_id)
         if state is None:
             return None
         return EventLogResponse()
 
-    def get_inventory(
-        self, session_id: str, character_id: str
-    ) -> InventoryResponse | None:
+    def get_inventory(self, session_id: str, character_id: str) -> InventoryResponse | None:
         state = self._sessions.get(session_id)
         if state is None or state.runtime is None:
             return None
@@ -759,9 +716,7 @@ class GameRuntimeManager:
         view = query.list_held_items(pid)
         items = [
             InventoryItemResponse(
-                item_spec_id=_safe_get_str(
-                    runtime.id_mapper, "item_spec", row.item_spec_id
-                ),
+                item_spec_id=_safe_get_str(runtime.id_mapper, "item_spec", row.item_spec_id),
                 name=row.name,
                 description=row.description,
                 quantity=row.quantity,
@@ -772,9 +727,7 @@ class GameRuntimeManager:
 
     # ── Chat (stub) ──
 
-    def send_chat_message(
-        self, request: ChatSendRequest
-    ) -> ChatMessageResponse:
+    def send_chat_message(self, request: ChatSendRequest) -> ChatMessageResponse:
         if request.scope != "individual":
             raise ValueError("Only individual chat scope is currently supported")
 
@@ -787,17 +740,13 @@ class GameRuntimeManager:
         runtime = state.runtime
 
         try:
-            target_player_int = runtime.id_mapper.get_int(
-                "player", request.target_character_id
-            )
+            target_player_int = runtime.id_mapper.get_int("player", request.target_character_id)
         except (ScenarioIdMappingError, KeyError):
             try:
                 character_index = state.character_ids.index(request.target_character_id)
                 target_player_int = runtime.get_player_ids()[character_index].value
             except (ValueError, IndexError) as exc:
-                raise ValueError(
-                    f"Character not found in session: {request.target_character_id}"
-                ) from exc
+                raise ValueError(f"Character not found in session: {request.target_character_id}") from exc
 
         target_player_id = PlayerId(target_player_int)
         now = datetime.now(timezone.utc)
@@ -858,29 +807,19 @@ class GameRuntimeManager:
                     del bucket[: len(bucket) - self._CHAT_HISTORY_MAX_PER_KEY]
         return message
 
-    def get_chat_history(
-        self, character_id: str
-    ) -> ChatHistoryResponse | None:
+    def get_chat_history(self, character_id: str) -> ChatHistoryResponse | None:
         with self._chat_history_lock:
-            return ChatHistoryResponse(
-                messages=list(self._chat_histories.get(character_id, []))
-            )
+            return ChatHistoryResponse(messages=list(self._chat_histories.get(character_id, [])))
 
     # ── Results (stub) ──
 
-    def get_result_impressions(
-        self, session_id: str
-    ) -> ResultImpressionResponse | None:
+    def get_result_impressions(self, session_id: str) -> ResultImpressionResponse | None:
         return None
 
-    def get_result_timeline(
-        self, session_id: str
-    ) -> ResultTimelineResponse | None:
+    def get_result_timeline(self, session_id: str) -> ResultTimelineResponse | None:
         return None
 
-    def get_result_relationships(
-        self, session_id: str
-    ) -> ResultRelationshipResponse | None:
+    def get_result_relationships(self, session_id: str) -> ResultRelationshipResponse | None:
         return None
 
     # ── Saves (stub) ──

@@ -41,12 +41,16 @@ _HERB = "薬草"
 def town(tmp_path: Path) -> Any:
     raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     raw["players"][0]["initial_gold"] = 300
-    raw["players"].append({
-        "id": "tom", "name": "トム",
-        "spawn_spot": raw["players"][0]["spawn_spot"],
-        "initial_items": [], "initial_gold": 300,
-        "persona_prompt": "あなたはトム。",
-    })
+    raw["players"].append(
+        {
+            "id": "tom",
+            "name": "トム",
+            "spawn_spot": raw["players"][0]["spawn_spot"],
+            "initial_items": [],
+            "initial_gold": 300,
+            "persona_prompt": "あなたはトム。",
+        }
+    )
     raw["market"] = {"board_spot": "market_square"}
     path = tmp_path / "market_town_v1.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -81,11 +85,7 @@ def _fill(runtime: Any, player_id: PlayerId, label: str) -> None:
 
 def _on_the_ground_at(runtime: Any, spot_id: Any, label: str) -> int:
     interior = runtime._spot_interior_repo.find_by_spot_id(spot_id)
-    return sum(
-        1
-        for item in interior.ground_items
-        if item.item_spec_id.value == _spec_id(runtime, label)
-    )
+    return sum(1 for item in interior.ground_items if item.item_spec_id.value == _spec_id(runtime, label))
 
 
 def _board_spot(runtime: Any) -> Any:
@@ -100,9 +100,7 @@ def _spot_of(runtime: Any, player_id: PlayerId) -> Any:
 def _walk_away(runtime: Any, player_id: PlayerId) -> None:
     graph = runtime._spot_graph_repo.find_graph()
     here = graph.get_entity_spot(EntityId.create(int(player_id)))
-    elsewhere = next(
-        spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here
-    )
+    elsewhere = next(spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here)
     graph.unplace_entity(EntityId.create(int(player_id)))
     graph.place_entity(EntityId.create(int(player_id)), elsewhere)
     runtime._spot_graph_repo.save(graph)
@@ -114,22 +112,26 @@ def _drain(runtime: Any, player_id: PlayerId) -> list[Any]:
 
 def _undelivered(runtime: Any, player_id: PlayerId) -> list[Any]:
     return [
-        o
-        for o in _drain(runtime, player_id)
-        if (o.structured or {}).get("type") == "market_delivery_left_at_the_board"
+        o for o in _drain(runtime, player_id) if (o.structured or {}).get("type") == "market_delivery_left_at_the_board"
     ]
 
 
 def _sell_into_a_full_buyer(town: Any) -> None:
     """トムが買い注文を出し、満杯のまま、レナが売る。"""
     town._market_service.place_buy_order(
-        _TOM, item_label=_HERB, quantity=1, unit_price=8,
+        _TOM,
+        item_label=_HERB,
+        quantity=1,
+        unit_price=8,
         current_tick=town.current_tick(),
     )
     _fill(town, _TOM, _HERB)
     _give(town, _LENA, _HERB, 1)
     town._market_service.sell_best(
-        _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+        _LENA,
+        item_label=_HERB,
+        quantity=1,
+        current_tick=town.current_tick(),
     )
 
 
@@ -150,7 +152,10 @@ class TestUndeliverableGoodsStayAtTheBoard:
         **落ちる場所が本人の居場所に依存しない**ので、探しに行く先が決まる。
         """
         town._market_service.place_buy_order(
-            _TOM, item_label=_HERB, quantity=1, unit_price=8,
+            _TOM,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         _fill(town, _TOM, _HERB)
@@ -161,7 +166,10 @@ class TestUndeliverableGoodsStayAtTheBoard:
         before_elsewhere = _on_the_ground_at(town, elsewhere, _HERB)
 
         town._market_service.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert _on_the_ground_at(town, _board_spot(town), _HERB) == before_board + 1
@@ -170,32 +178,35 @@ class TestUndeliverableGoodsStayAtTheBoard:
     def test_nothing_is_lost(self, town: Any) -> None:
         """品は世界から消えていない。"""
         town._market_service.place_buy_order(
-            _TOM, item_label=_HERB, quantity=1, unit_price=8,
+            _TOM,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         _fill(town, _TOM, _HERB)
         _give(town, _LENA, _HERB, 1)
         before = (
-            _held(town, _LENA, _HERB)
-            + _held(town, _TOM, _HERB)
-            + _on_the_ground_at(town, _board_spot(town), _HERB)
+            _held(town, _LENA, _HERB) + _held(town, _TOM, _HERB) + _on_the_ground_at(town, _board_spot(town), _HERB)
         )
 
         town._market_service.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
-        after = (
-            _held(town, _LENA, _HERB)
-            + _held(town, _TOM, _HERB)
-            + _on_the_ground_at(town, _board_spot(town), _HERB)
-        )
+        after = _held(town, _LENA, _HERB) + _held(town, _TOM, _HERB) + _on_the_ground_at(town, _board_spot(town), _HERB)
         assert after == before
 
     def test_the_seller_is_still_paid(self, town: Any) -> None:
         """受け取り側の事情で、売った人が損することはない。"""
         town._market_service.place_buy_order(
-            _TOM, item_label=_HERB, quantity=1, unit_price=8,
+            _TOM,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         _fill(town, _TOM, _HERB)
@@ -203,7 +214,10 @@ class TestUndeliverableGoodsStayAtTheBoard:
         before = town._player_status_repo.find_by_id(_LENA).gold.value
 
         town._market_service.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert town._player_status_repo.find_by_id(_LENA).gold.value == before + 8
@@ -211,14 +225,20 @@ class TestUndeliverableGoodsStayAtTheBoard:
     def test_a_buyer_with_room_receives_it_directly(self, town: Any) -> None:
         """買い手に空きがあれば、地面には置かれない (**正の対照**)。"""
         town._market_service.place_buy_order(
-            _TOM, item_label=_HERB, quantity=1, unit_price=8,
+            _TOM,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         _give(town, _LENA, _HERB, 1)
         before = _on_the_ground_at(town, _board_spot(town), _HERB)
 
         town._market_service.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert _held(town, _TOM, _HERB) == 1
@@ -234,7 +254,10 @@ class TestTheBuyerIsToldWhereItIs:
         届かないと、gold は減っているのに品が無い理由が分からない。
         """
         town._market_service.place_buy_order(
-            _TOM, item_label=_HERB, quantity=1, unit_price=8,
+            _TOM,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         _fill(town, _TOM, _HERB)
@@ -243,7 +266,10 @@ class TestTheBuyerIsToldWhereItIs:
         _drain(town, _TOM)
 
         town._market_service.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         observed = _undelivered(town, _TOM)
@@ -257,7 +283,10 @@ class TestTheBuyerIsToldWhereItIs:
         なので、混ぜると読み違える。
         """
         town._market_service.place_buy_order(
-            _TOM, item_label=_HERB, quantity=1, unit_price=8,
+            _TOM,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
         _fill(town, _TOM, _HERB)
@@ -265,7 +294,10 @@ class TestTheBuyerIsToldWhereItIs:
         _drain(town, _TOM)
 
         town._market_service.sell_best(
-            _LENA, item_label=_HERB, quantity=1, current_tick=town.current_tick(),
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         (observed,) = _undelivered(town, _TOM)

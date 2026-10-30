@@ -1,6 +1,7 @@
 """
 RecentTradeQueryServiceのテスト
 """
+
 from unittest import mock
 
 import pytest
@@ -198,15 +199,15 @@ class TestRecentTradeQueryService:
         self.repository.find_by_item_name = mock_find_by_item_name
 
         try:
-            with caplog.at_level('ERROR'):
+            with caplog.at_level("ERROR"):
                 with pytest.raises(SystemErrorException):
                     self.service.get_recent_trades("ログテストアイテム")
 
                 # ログ出力が記録されたことを確認
                 assert len(caplog.records) == 1
                 log_record = caplog.records[0]
-                assert log_record.levelname == 'ERROR'
-                assert log_record.name == 'RecentTradeQueryService'
+                assert log_record.levelname == "ERROR"
+                assert log_record.name == "RecentTradeQueryService"
                 assert "Unexpected error in get_recent_trades: ログテスト例外" in log_record.message
         finally:
             # モックを元に戻す
@@ -238,8 +239,16 @@ class TestRecentTradeQueryService:
     def test_get_recent_trades_all_sample_items(self):
         """全てのサンプルアイテムについて取引履歴を取得できることを確認"""
         sample_items = [
-            "鋼の剣", "魔法の杖", "回復薬", "上級回復薬", "輝く宝石",
-            "鉄の盾", "冒険者のブーツ", "魔法の書", "丈夫な縄", "伝説の剣"
+            "鋼の剣",
+            "魔法の杖",
+            "回復薬",
+            "上級回復薬",
+            "輝く宝石",
+            "鉄の盾",
+            "冒険者のブーツ",
+            "魔法の書",
+            "丈夫な縄",
+            "伝説の剣",
         ]
 
         for item_name in sample_items:
@@ -292,7 +301,7 @@ class TestRecentTradeQueryService:
             "アイテム'\"\\",
             "アイテム<>\"'",
             "アイテム日本語漢字",
-            "アイテム🌟⭐🔥"
+            "アイテム🌟⭐🔥",
         ]
 
         for item_name in special_item_names:

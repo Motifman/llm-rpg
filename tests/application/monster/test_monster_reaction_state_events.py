@@ -45,7 +45,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -73,11 +72,16 @@ SPOT_B = SpotId.create(2)
 
 def _node(spot_id: SpotId) -> SpotNode:
     return SpotNode(
-        spot_id=spot_id, name=f"spot{spot_id.value}", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=spot_id,
+        name=f"spot{spot_id.value}",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
-            lighting=LightingEnum.BRIGHT, sound_ambient=None,
-            temperature=TemperatureEnum.NORMAL, smell=None,
+            lighting=LightingEnum.BRIGHT,
+            sound_ambient=None,
+            temperature=TemperatureEnum.NORMAL,
+            smell=None,
         ),
     )
 
@@ -85,9 +89,13 @@ def _node(spot_id: SpotId) -> SpotNode:
 def _conn(connection_id: int, from_id: SpotId, to_id: SpotId) -> SpotConnection:
     return SpotConnection(
         connection_id=ConnectionId.create(connection_id),
-        from_spot_id=from_id, to_spot_id=to_id,
-        name="edge", description="", travel_ticks=1,
-        is_bidirectional=False, passage=Passage.open(),
+        from_spot_id=from_id,
+        to_spot_id=to_id,
+        name="edge",
+        description="",
+        travel_ticks=1,
+        is_bidirectional=False,
+        passage=Passage.open(),
     )
 
 
@@ -111,8 +119,13 @@ def _template(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(100, True),
@@ -130,10 +143,11 @@ def _monster(template: MonsterTemplate | None = None) -> MonsterAggregate:
     return MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=template or _template(),
-        world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -249,13 +263,18 @@ class TestAbandonedChaseEvent:
     """各 abandon 経路で reason 付きで event 発火。"""
 
     def _setup_chasing_monster(
-        self, handler, *, current_tick: WorldTick, chase_started_tick: WorldTick = WorldTick(10),
+        self,
+        handler,
+        *,
+        current_tick: WorldTick,
+        chase_started_tick: WorldTick = WorldTick(10),
         template: MonsterTemplate | None = None,
     ):
         monster = _monster(template or _template())
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=chase_started_tick, attacker_ref=ref,
+            current_tick=chase_started_tick,
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,
@@ -308,7 +327,7 @@ class TestAbandonedChaseEvent:
         (= last_observed が None で `_handle_lost_target` の冒頭分岐) に
         到達する公開経路は存在しない。`target_lost` は将来「last_observed
         を None にする経路」を導入したときに使えるよう reason 文字列だけ
-        予約してある状態 (event 定義側でテストする)。
+        予約してある状態 (公開formatterの理由値試験で構築と保持を確かめる)。
         """
         handler = _make_handler(player=None)
         monster, graph = self._setup_chasing_monster(
@@ -331,7 +350,8 @@ class TestAbandonedChaseEvent:
         monster = _monster(_template())
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(10), attacker_ref=ref,
+            current_tick=WorldTick(10),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,

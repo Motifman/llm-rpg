@@ -1,4 +1,5 @@
 """ShopQueryServiceのテスト"""
+
 from datetime import datetime
 
 import pytest
@@ -206,6 +207,7 @@ class TestShopQueryService:
 
     def test_execute_with_error_handling_unexpected_exception(self):
         """予期しない例外はSystemErrorExceptionに変換される"""
+
         def raise_value():
             raise ValueError("Unexpected")
 

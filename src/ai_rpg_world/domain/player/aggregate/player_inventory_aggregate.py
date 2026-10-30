@@ -17,6 +17,7 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
     ItemEquipRequestedEvent,
+    ItemRemovedFromInventoryEvent,
     ItemReservationCancelledEvent,
     ItemReservedForTradeEvent,
     ItemUnequippedEvent,
@@ -62,6 +63,7 @@ class PlayerInventoryAggregate(AggregateRoot):
     ItemInstanceIdのみを保持し、アイテムの状態管理はItemAggregateに委ねる。
     装備スロットはEquipmentTypeごとに管理する。
     """
+
     DEFAULT_MAX_SLOTS = 20
 
     def __init__(
@@ -70,7 +72,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         max_slots: int = DEFAULT_MAX_SLOTS,
         inventory_slots: dict[SlotId, ItemInstanceId | None] | None = None,
         equipment_slots: dict[EquipmentSlotType, ItemInstanceId | None] | None = None,
-        reserved_item_ids: set[ItemInstanceId] | None = None
+        reserved_item_ids: set[ItemInstanceId] | None = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -105,9 +107,7 @@ class PlayerInventoryAggregate(AggregateRoot):
 
     @classmethod
     def create_new_inventory(
-        cls,
-        player_id: PlayerId,
-        max_slots: int = DEFAULT_MAX_SLOTS
+        cls, player_id: PlayerId, max_slots: int = DEFAULT_MAX_SLOTS
     ) -> "PlayerInventoryAggregate":
         """新しいインベントリを作成"""
         return cls(player_id=player_id, max_slots=max_slots)
@@ -119,7 +119,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         max_slots: int,
         inventory_slots: dict[SlotId, ItemInstanceId | None],
         equipment_slots: dict[EquipmentSlotType, ItemInstanceId | None],
-        reserved_item_ids: set[ItemInstanceId] | None = None
+        reserved_item_ids: set[ItemInstanceId] | None = None,
     ) -> "PlayerInventoryAggregate":
         """既存データからインベントリを復元"""
         return cls(
@@ -127,7 +127,7 @@ class PlayerInventoryAggregate(AggregateRoot):
             max_slots=max_slots,
             inventory_slots=inventory_slots,
             equipment_slots=equipment_slots,
-            reserved_item_ids=reserved_item_ids
+            reserved_item_ids=reserved_item_ids,
         )
 
     @property
@@ -160,9 +160,7 @@ class PlayerInventoryAggregate(AggregateRoot):
 
         # イベント発行
         event = ItemReservedForTradeEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerInventoryAggregate",
-            item_instance_id=item_id
+            aggregate_id=self._player_id, aggregate_type="PlayerInventoryAggregate", item_instance_id=item_id
         )
         self.add_event(event)
 
@@ -175,9 +173,7 @@ class PlayerInventoryAggregate(AggregateRoot):
 
             # イベント発行
             event = ItemReservationCancelledEvent.create(
-                aggregate_id=self._player_id,
-                aggregate_type="PlayerInventoryAggregate",
-                item_instance_id=item_id
+                aggregate_id=self._player_id, aggregate_type="PlayerInventoryAggregate", item_instance_id=item_id
             )
             self.add_event(event)
 
@@ -197,12 +193,10 @@ class PlayerInventoryAggregate(AggregateRoot):
         self._inventory_slots[slot_id] = None
         self._reserved_item_ids.remove(item_id)
 
-        # 通常の削除イベントを発行
-        event = ItemDroppedFromInventoryEvent.create(
+        event = ItemRemovedFromInventoryEvent.create(
             aggregate_id=self._player_id,
             aggregate_type="PlayerInventoryAggregate",
             item_instance_id=item_id,
-            slot_id=slot_id
         )
         self.add_event(event)
 
@@ -352,7 +346,7 @@ class PlayerInventoryAggregate(AggregateRoot):
                 aggregate_id=self._player_id,
                 aggregate_type="PlayerInventoryAggregate",
                 overflowed_item_instance_id=item_instance_id,
-                reason="inventory_full_on_acquire"
+                reason="inventory_full_on_acquire",
             )
             self.add_event(overflow_event)
             return
@@ -410,22 +404,37 @@ class PlayerInventoryAggregate(AggregateRoot):
             aggregate_id=self._player_id,
             aggregate_type="PlayerInventoryAggregate",
             item_instance_id=item_instance_id,
-            slot_id=slot_id
+            slot_id=slot_id,
         )
         self.add_event(event)
+
+    def remove_item(self, slot_id: SlotId, *, by_world_event: bool = False) -> None:
+        """効果・出来事・売買で品を持ち物から外す。本人が捨てたのではないので、捨てたイベントは出さない。"""
+        item_instance_id = self.get_item_instance_id_by_slot(slot_id)
+        if item_instance_id is None:
+            raise ItemNotInSlotException(f"No item in slot {slot_id.value}")
+        if item_instance_id in self._reserved_item_ids:
+            raise ItemReservedException(f"Item {item_instance_id} is reserved and cannot be removed")
+
+        self._inventory_slots[slot_id] = None
+
+        self.add_event(
+            ItemRemovedFromInventoryEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerInventoryAggregate",
+                item_instance_id=item_instance_id,
+                by_world_event=by_world_event,
+            )
+        )
 
     def remove_item_for_storage(self, item_instance_id: ItemInstanceId) -> None:
         """チェスト等への収納のため、指定アイテムをインベントリから削除する。
         イベントは発行しない（ItemStoredInChestEvent が別で発行される想定）。"""
         if item_instance_id in self._reserved_item_ids:
-            raise ItemReservedException(
-                f"Item {item_instance_id} is reserved and cannot be moved to storage"
-            )
+            raise ItemReservedException(f"Item {item_instance_id} is reserved and cannot be moved to storage")
         slot_id = self._find_slot_by_item_id(item_instance_id)
         if slot_id is None:
-            raise ItemNotInSlotException(
-                f"Item {item_instance_id} is not in any inventory slot"
-            )
+            raise ItemNotInSlotException(f"Item {item_instance_id} is not in any inventory slot")
         self._inventory_slots[slot_id] = None
 
     def remove_item_for_placement(self, slot_id: SlotId) -> ItemInstanceId:
@@ -436,9 +445,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         if item_instance_id is None:
             raise ItemNotInSlotException(f"No item in inventory slot {slot_id.value}")
         if item_instance_id in self._reserved_item_ids:
-            raise ItemReservedException(
-                f"Item {item_instance_id} is reserved and cannot be placed"
-            )
+            raise ItemReservedException(f"Item {item_instance_id} is reserved and cannot be placed")
         self._inventory_slots[slot_id] = None
         return item_instance_id
 
@@ -459,11 +466,13 @@ class PlayerInventoryAggregate(AggregateRoot):
             aggregate_type="PlayerInventoryAggregate",
             inventory_slot_id=inventory_slot_id,
             item_instance_id=item_instance_id,
-            target_equipment_slot=equipment_slot
+            target_equipment_slot=equipment_slot,
         )
         self.add_event(event)
 
-    def complete_equip_item(self, inventory_slot_id: SlotId, equipment_slot: EquipmentSlotType, item_instance_id: ItemInstanceId) -> None:
+    def complete_equip_item(
+        self, inventory_slot_id: SlotId, equipment_slot: EquipmentSlotType, item_instance_id: ItemInstanceId
+    ) -> None:
         """装備要求に対する実際の装備処理を実行"""
         # 予約チェック
         if item_instance_id in self._reserved_item_ids:
@@ -480,7 +489,7 @@ class PlayerInventoryAggregate(AggregateRoot):
                     aggregate_id=self._player_id,
                     aggregate_type="PlayerInventoryAggregate",
                     overflowed_item_instance_id=current_equipped,
-                    reason="equip_replacement"
+                    reason="equip_replacement",
                 )
                 self.add_event(overflow_event)
             else:
@@ -497,7 +506,7 @@ class PlayerInventoryAggregate(AggregateRoot):
             aggregate_type="PlayerInventoryAggregate",
             item_instance_id=item_instance_id,
             from_slot_id=inventory_slot_id,
-            to_equipment_slot=equipment_slot
+            to_equipment_slot=equipment_slot,
         )
         self.add_event(event)
 
@@ -515,7 +524,7 @@ class PlayerInventoryAggregate(AggregateRoot):
                 aggregate_id=self._player_id,
                 aggregate_type="PlayerInventoryAggregate",
                 overflowed_item_instance_id=item_instance_id,
-                reason="unequip_no_space"
+                reason="unequip_no_space",
             )
             self.add_event(overflow_event)
         else:
@@ -531,7 +540,7 @@ class PlayerInventoryAggregate(AggregateRoot):
             aggregate_type="PlayerInventoryAggregate",
             item_instance_id=item_instance_id,
             from_equipment_slot=equipment_slot,
-            to_slot_id=empty_slot if empty_slot is not None else None
+            to_slot_id=empty_slot if empty_slot is not None else None,
         )
         self.add_event(event)
 
@@ -562,15 +571,14 @@ class PlayerInventoryAggregate(AggregateRoot):
             "equipped_slots": equipped_slots,
             "total_equipment_slots": len(EquipmentSlotType),
             "is_inventory_full": self.is_inventory_full(),
-            "is_inventory_empty": used_inventory_slots == 0
+            "is_inventory_empty": used_inventory_slots == 0,
         }
 
     def request_inventory_compaction(self) -> None:
         """インベントリの整理要求（イベントを発行）"""
         # 整理要求イベントを発行（実際の整理処理はイベントハンドラで行う）
         event = InventoryCompactionRequestedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerInventoryAggregate"
+            aggregate_id=self._player_id, aggregate_type="PlayerInventoryAggregate"
         )
         self.add_event(event)
 
@@ -589,9 +597,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         """
         # ソート要求イベントを発行（実際のソート処理はイベントハンドラで行う）
         event = InventorySortRequestedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerInventoryAggregate",
-            sort_criteria=sort_criteria
+            aggregate_id=self._player_id, aggregate_type="PlayerInventoryAggregate", sort_criteria=sort_criteria
         )
         self.add_event(event)
 

@@ -144,20 +144,14 @@ class MarketBoard:
                 return order
         return None
 
-    def orders_visible_to(
-        self, viewer: MarketParticipant
-    ) -> tuple[MarketOrder, ...]:
+    def orders_visible_to(self, viewer: MarketParticipant) -> tuple[MarketOrder, ...]:
         """その人から見える注文を返す。
 
         引き取り待ちの行は他人からは買えないので見せない。ただし**持ち主には
         見える**。見えないと、期限切れの通知を 1 回見落とした時点で預けた物を
         取り戻す手がかりが消える (静かな失敗)。
         """
-        return tuple(
-            order
-            for order in self.orders
-            if not order.is_awaiting_collection or order.owner == viewer
-        )
+        return tuple(order for order in self.orders if not order.is_awaiting_collection or order.owner == viewer)
 
     def rows_for(self, viewer: MarketParticipant) -> MarketBoardView:
         """その人から見た板を返す。
@@ -232,9 +226,7 @@ class MarketBoard:
         既に一度流れているので、二度目は返さない。
         """
         return tuple(
-            order
-            for order in self.orders
-            if not order.is_awaiting_collection and order.is_expired_at(current_tick)
+            order for order in self.orders if not order.is_awaiting_collection and order.is_expired_at(current_tick)
         )
 
     # ── 更新 (どれも新しい板を返す) ────────────────────────────────────
@@ -242,20 +234,14 @@ class MarketBoard:
     def with_order(self, order: MarketOrder) -> MarketBoard:
         """注文を 1 件置いた板を返す。"""
         if self.find(order.order_id) is not None:
-            raise MarketBoardStateException(
-                f"同じ注文 ID は二度置けません (order_id={order.order_id.value})"
-            )
+            raise MarketBoardStateException(f"同じ注文 ID は二度置けません (order_id={order.order_id.value})")
         return replace(self, orders=self.orders + (order,))
 
-    def cancelled(
-        self, order_id: MarketOrderId, *, by: MarketParticipant
-    ) -> MarketBoard:
+    def cancelled(self, order_id: MarketOrderId, *, by: MarketParticipant) -> MarketBoard:
         """その人の注文を取り下げた板を返す。"""
         order = self._require_order(order_id)
         if order.owner != by:
-            raise MarketBoardStateException(
-                f"他人の注文は取り下げられません (order_id={order_id.value})"
-            )
+            raise MarketBoardStateException(f"他人の注文は取り下げられません (order_id={order_id.value})")
         return self._without(order_id)
 
     def awaiting_collection(self, order_id: MarketOrderId) -> MarketBoard:
@@ -281,15 +267,9 @@ class MarketBoard:
         if order.owner == by:
             # gold と品が自分の中で往復するだけなのに、板には「約定した」
             # 履歴が値として残る。価格の時系列に偽の値が混ざる。
-            raise MarketBoardStateException(
-                f"自分の注文は自分で受けられません (order_id={order_id.value})"
-            )
+            raise MarketBoardStateException(f"自分の注文は自分で受けられません (order_id={order_id.value})")
         remaining = order.filled_by(quantity)
-        board = (
-            self._without(order_id)
-            if remaining.is_exhausted
-            else self._replace_order(remaining)
-        )
+        board = self._without(order_id) if remaining.is_exhausted else self._replace_order(remaining)
         seller = order.owner if order.side is MarketOrderSide.SELL else by
         buyer = by if order.side is MarketOrderSide.SELL else order.owner
         trade = MarketTrade(
@@ -309,22 +289,16 @@ class MarketBoard:
     def _require_order(self, order_id: MarketOrderId) -> MarketOrder:
         order = self.find(order_id)
         if order is None:
-            raise MarketBoardStateException(
-                f"その注文は板にありません (order_id={order_id.value})"
-            )
+            raise MarketBoardStateException(f"その注文は板にありません (order_id={order_id.value})")
         return order
 
     def _without(self, order_id: MarketOrderId) -> MarketBoard:
-        return replace(
-            self, orders=tuple(o for o in self.orders if o.order_id != order_id)
-        )
+        return replace(self, orders=tuple(o for o in self.orders if o.order_id != order_id))
 
     def _replace_order(self, order: MarketOrder) -> MarketBoard:
         return replace(
             self,
-            orders=tuple(
-                order if o.order_id == order.order_id else o for o in self.orders
-            ),
+            orders=tuple(order if o.order_id == order.order_id else o for o in self.orders),
         )
 
     def _with_last(self, trade: MarketTrade) -> tuple[MarketTrade, ...]:
@@ -334,9 +308,7 @@ class MarketBoard:
         snapshot も同じだけ太る。**時系列は trace の仕事**で、板が持つのは
         「いまの値付けの材料」だけでよい。
         """
-        return tuple(
-            t for t in self.last_trades if t.item_spec_id != trade.item_spec_id
-        ) + (trade,)
+        return tuple(t for t in self.last_trades if t.item_spec_id != trade.item_spec_id) + (trade,)
 
 
 __all__ = ["MarketBoard", "MarketBoardRow", "MarketBoardView", "MarketTrade"]

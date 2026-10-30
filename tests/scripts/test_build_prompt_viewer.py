@@ -103,9 +103,7 @@ class TestLoadCalls:
         call = _load_calls(run_dir)[0]
         assert call.system_content == "あなたは次のペルソナとして行動する。"
 
-    def test_unresolvable_system_reference_is_left_empty_not_faked(
-        self, tmp_path
-    ) -> None:
+    def test_unresolvable_system_reference_is_left_empty_not_faked(self, tmp_path) -> None:
         """参照先が無い run では本文を捏造せず空のままにし、id を保持して
         「解決できなかった」と表示できる状態にする。"""
         run_dir = _write(tmp_path, [_call(system_content="")])
@@ -147,10 +145,10 @@ class TestLoadCalls:
         assert [c.llm_call_id for c in calls] == ["ok"]
         assert "warning" in capsys.readouterr().err
 
-    def test_missing_dataset_raises_with_the_flag_to_set(self, tmp_path) -> None:
-        """capture 無効の run を渡したら、有効化に必要なフラグ名を含めて失敗する。"""
+    def test_missing_dataset_raises_with_what_to_pass(self, tmp_path) -> None:
+        """prompt dataset の無い run を渡したら、保存した run を指定するよう案内して失敗する。"""
         (tmp_path / "run").mkdir()
-        with pytest.raises(FileNotFoundError, match="PROMPT_DATASET_CAPTURE_ENABLED"):
+        with pytest.raises(FileNotFoundError, match="prompt dataset を保存した run"):
             _load_calls(tmp_path / "run")
 
 

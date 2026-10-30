@@ -1,10 +1,12 @@
 """
 UserCommandServiceのテスト
 """
+
 import logging
 from unittest.mock import Mock, patch
 
 import pytest
+from tests.support.command_scope_stack import CommandScopeTestStack
 
 from ai_rpg_world.application.social.contracts.commands import (
     BlockUserCommand,
@@ -55,8 +57,8 @@ from ai_rpg_world.domain.sns.exception import (
     UserNotFoundException,
 )
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class TestUserCommandService:
@@ -64,15 +66,9 @@ class TestUserCommandService:
 
     def setup_method(self):
         """各テストメソッドの前に実行"""
-        # Unit of Workファクトリ関数を定義（別トランザクション用）
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-
-        # Unit of Workとイベントパブリッシャーを作成
-        self.unit_of_work, self.event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
-            unit_of_work_factory=create_uow
-        )
-        self.repository = InMemorySnsUserRepository(unit_of_work=self.unit_of_work)
+        store = InMemoryDataStore()
+        self.unit_of_work = self.event_publisher = CommandScopeTestStack(store)
+        self.repository = InMemorySnsUserRepository(store, self.unit_of_work)
         self.service = UserCommandService(self.repository, self.event_publisher, self.unit_of_work)
         # ログ出力をテスト用に設定
         self.service.logger.setLevel(logging.DEBUG)
@@ -87,11 +83,7 @@ class TestUserCommandService:
     def test_create_user_success(self):
         """create_user - 正常系テスト"""
         # Given
-        command = CreateUserCommand(
-            user_name="test_user",
-            display_name="テストユーザー",
-            bio="テストユーザーです"
-        )
+        command = CreateUserCommand(user_name="test_user", display_name="テストユーザー", bio="テストユーザーです")
         initial_count = self.repository.count()
 
         # When
@@ -115,11 +107,7 @@ class TestUserCommandService:
     def test_create_user_with_empty_username_raises_exception(self):
         """create_user - ユーザー名が空の場合の異常系テスト"""
         # Given
-        command = CreateUserCommand(
-            user_name="",
-            display_name="テストユーザー",
-            bio="テストユーザーです"
-        )
+        command = CreateUserCommand(user_name="", display_name="テストユーザー", bio="テストユーザーです")
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -132,11 +120,7 @@ class TestUserCommandService:
         """create_user - ユーザー名が長すぎる場合の異常系テスト"""
         # Given
         long_username = "a" * 51  # 50文字を超える
-        command = CreateUserCommand(
-            user_name=long_username,
-            display_name="テストユーザー",
-            bio="テストユーザーです"
-        )
+        command = CreateUserCommand(user_name=long_username, display_name="テストユーザー", bio="テストユーザーです")
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -150,9 +134,7 @@ class TestUserCommandService:
         """update_user_profile - 正常系テスト"""
         # Given: まずユーザーを1つ作成する
         create_command = CreateUserCommand(
-            user_name="test_update_user",
-            display_name="テスト更新ユーザー",
-            bio="テスト更新用ユーザーです"
+            user_name="test_update_user", display_name="テスト更新ユーザー", bio="テスト更新用ユーザーです"
         )
         create_result = self.service.create_user(create_command)
         user_id = int(create_result.data["user_id"])
@@ -167,9 +149,7 @@ class TestUserCommandService:
         print(f"Found user with UserId({user_id}): {target_user}")
 
         command = UpdateUserProfileCommand(
-            user_id=int(user_id),
-            new_display_name="新しい勇者",
-            new_bio="新しい世界を救う勇者です"
+            user_id=int(user_id), new_display_name="新しい勇者", new_bio="新しい世界を救う勇者です"
         )
 
         # When
@@ -192,9 +172,7 @@ class TestUserCommandService:
         # Given
         non_existent_user_id = 999
         command = UpdateUserProfileCommand(
-            user_id=non_existent_user_id,
-            new_display_name="新しい名前",
-            new_bio="新しい自己紹介"
+            user_id=non_existent_user_id, new_display_name="新しい名前", new_bio="新しい自己紹介"
         )
 
         # When & Then
@@ -212,7 +190,7 @@ class TestUserCommandService:
         command = UpdateUserProfileCommand(
             user_id=user_id,
             new_display_name="",  # 空の表示名
-            new_bio="新しい自己紹介"
+            new_bio="新しい自己紹介",
         )
 
         # When & Then
@@ -228,10 +206,7 @@ class TestUserCommandService:
         # Given
         follower_user_id = 4  # 盗賊（ユーザーID: 4）
         followee_user_id = 5  # 僧侶（ユーザーID: 5）
-        command = FollowUserCommand(
-            follower_user_id=follower_user_id,
-            followee_user_id=followee_user_id
-        )
+        command = FollowUserCommand(follower_user_id=follower_user_id, followee_user_id=followee_user_id)
 
         # When
         result = self.service.follow_user(command)
@@ -252,10 +227,7 @@ class TestUserCommandService:
         """follow_user - 自分自身をフォローしようとする場合の異常系テスト"""
         # Given
         user_id = 1
-        command = FollowUserCommand(
-            follower_user_id=user_id,
-            followee_user_id=user_id
-        )
+        command = FollowUserCommand(follower_user_id=user_id, followee_user_id=user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -269,10 +241,7 @@ class TestUserCommandService:
         # Given
         non_existent_user_id = 999
         followee_user_id = 1
-        command = FollowUserCommand(
-            follower_user_id=non_existent_user_id,
-            followee_user_id=followee_user_id
-        )
+        command = FollowUserCommand(follower_user_id=non_existent_user_id, followee_user_id=followee_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -286,10 +255,7 @@ class TestUserCommandService:
         # Given: 商人（ID: 6）は勇者（ID: 1）をブロックしている
         follower_user_id = 1  # 勇者
         followee_user_id = 6  # 商人
-        command = FollowUserCommand(
-            follower_user_id=follower_user_id,
-            followee_user_id=followee_user_id
-        )
+        command = FollowUserCommand(follower_user_id=follower_user_id, followee_user_id=followee_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -304,10 +270,7 @@ class TestUserCommandService:
         # Given: 既存のフォロー関係があることを確認
         follower_user_id = 1  # 勇者
         followee_user_id = 2  # 魔法使い（勇者は魔法使いをフォローしている）
-        command = UnfollowUserCommand(
-            follower_user_id=follower_user_id,
-            followee_user_id=followee_user_id
-        )
+        command = UnfollowUserCommand(follower_user_id=follower_user_id, followee_user_id=followee_user_id)
 
         # When
         result = self.service.unfollow_user(command)
@@ -328,10 +291,7 @@ class TestUserCommandService:
         """unfollow_user - 自分自身をアンフォローしようとする場合の異常系テスト"""
         # Given
         user_id = 1
-        command = UnfollowUserCommand(
-            follower_user_id=user_id,
-            followee_user_id=user_id
-        )
+        command = UnfollowUserCommand(follower_user_id=user_id, followee_user_id=user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -345,10 +305,7 @@ class TestUserCommandService:
         # Given
         non_existent_user_id = 999
         followee_user_id = 1
-        command = UnfollowUserCommand(
-            follower_user_id=non_existent_user_id,
-            followee_user_id=followee_user_id
-        )
+        command = UnfollowUserCommand(follower_user_id=non_existent_user_id, followee_user_id=followee_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -362,10 +319,7 @@ class TestUserCommandService:
         # Given: 僧侶（ID: 5）は商人（ID: 6）をフォローしていない
         follower_user_id = 5  # 僧侶
         followee_user_id = 6  # 商人
-        command = UnfollowUserCommand(
-            follower_user_id=follower_user_id,
-            followee_user_id=followee_user_id
-        )
+        command = UnfollowUserCommand(follower_user_id=follower_user_id, followee_user_id=followee_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -380,10 +334,7 @@ class TestUserCommandService:
         # Given
         blocker_user_id = 1  # 勇者
         blocked_user_id = 4  # 盗賊（勇者は盗賊をブロックしていない）
-        command = BlockUserCommand(
-            blocker_user_id=blocker_user_id,
-            blocked_user_id=blocked_user_id
-        )
+        command = BlockUserCommand(blocker_user_id=blocker_user_id, blocked_user_id=blocked_user_id)
 
         # When
         result = self.service.block_user(command)
@@ -404,10 +355,7 @@ class TestUserCommandService:
         """block_user - 自分自身をブロックしようとする場合の異常系テスト"""
         # Given
         user_id = 1
-        command = BlockUserCommand(
-            blocker_user_id=user_id,
-            blocked_user_id=user_id
-        )
+        command = BlockUserCommand(blocker_user_id=user_id, blocked_user_id=user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -421,10 +369,7 @@ class TestUserCommandService:
         # Given
         non_existent_user_id = 999
         blocked_user_id = 1
-        command = BlockUserCommand(
-            blocker_user_id=non_existent_user_id,
-            blocked_user_id=blocked_user_id
-        )
+        command = BlockUserCommand(blocker_user_id=non_existent_user_id, blocked_user_id=blocked_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -438,10 +383,7 @@ class TestUserCommandService:
         # Given: 魔法使い（ID: 2）は盗賊（ID: 4）をブロックしている
         blocker_user_id = 2  # 魔法使い
         blocked_user_id = 4  # 盗賊
-        command = BlockUserCommand(
-            blocker_user_id=blocker_user_id,
-            blocked_user_id=blocked_user_id
-        )
+        command = BlockUserCommand(blocker_user_id=blocker_user_id, blocked_user_id=blocked_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -456,10 +398,7 @@ class TestUserCommandService:
         # Given: 魔法使い（ID: 2）は盗賊（ID: 4）をブロックしている
         blocker_user_id = 2  # 魔法使い
         blocked_user_id = 4  # 盗賊
-        command = UnblockUserCommand(
-            blocker_user_id=blocker_user_id,
-            blocked_user_id=blocked_user_id
-        )
+        command = UnblockUserCommand(blocker_user_id=blocker_user_id, blocked_user_id=blocked_user_id)
 
         # When
         result = self.service.unblock_user(command)
@@ -480,10 +419,7 @@ class TestUserCommandService:
         """unblock_user - 自分自身のブロックを解除しようとする場合の異常系テスト"""
         # Given
         user_id = 1
-        command = UnblockUserCommand(
-            blocker_user_id=user_id,
-            blocked_user_id=user_id
-        )
+        command = UnblockUserCommand(blocker_user_id=user_id, blocked_user_id=user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -497,10 +433,7 @@ class TestUserCommandService:
         # Given
         non_existent_user_id = 999
         blocked_user_id = 1
-        command = UnblockUserCommand(
-            blocker_user_id=non_existent_user_id,
-            blocked_user_id=blocked_user_id
-        )
+        command = UnblockUserCommand(blocker_user_id=non_existent_user_id, blocked_user_id=blocked_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -514,10 +447,7 @@ class TestUserCommandService:
         # Given: 勇者（ID: 1）は盗賊（ID: 4）をブロックしていない
         blocker_user_id = 1  # 勇者
         blocked_user_id = 4  # 盗賊
-        command = UnblockUserCommand(
-            blocker_user_id=blocker_user_id,
-            blocked_user_id=blocked_user_id
-        )
+        command = UnblockUserCommand(blocker_user_id=blocker_user_id, blocked_user_id=blocked_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -532,17 +462,14 @@ class TestUserCommandService:
         # Given: まず盗賊が戦士をフォローする
         follow_command = FollowUserCommand(
             follower_user_id=4,  # 盗賊
-            followee_user_id=3   # 戦士
+            followee_user_id=3,  # 戦士
         )
         self.service.follow_user(follow_command)
 
         # 次に購読する
         subscriber_user_id = 4  # 盗賊
         subscribed_user_id = 3  # 戦士
-        command = SubscribeUserCommand(
-            subscriber_user_id=subscriber_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
+        command = SubscribeUserCommand(subscriber_user_id=subscriber_user_id, subscribed_user_id=subscribed_user_id)
 
         # When
         result = self.service.subscribe_user(command)
@@ -563,10 +490,7 @@ class TestUserCommandService:
         """subscribe_user - 自分自身を購読しようとする場合の異常系テスト"""
         # Given
         user_id = 1
-        command = SubscribeUserCommand(
-            subscriber_user_id=user_id,
-            subscribed_user_id=user_id
-        )
+        command = SubscribeUserCommand(subscriber_user_id=user_id, subscribed_user_id=user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -580,10 +504,7 @@ class TestUserCommandService:
         # Given
         non_existent_user_id = 999
         subscribed_user_id = 1
-        command = SubscribeUserCommand(
-            subscriber_user_id=non_existent_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
+        command = SubscribeUserCommand(subscriber_user_id=non_existent_user_id, subscribed_user_id=subscribed_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -597,10 +518,7 @@ class TestUserCommandService:
         # Given: 勇者（ID: 1）は魔法使い（ID: 2）を購読している
         subscriber_user_id = 1  # 勇者
         subscribed_user_id = 2  # 魔法使い
-        command = SubscribeUserCommand(
-            subscriber_user_id=subscriber_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
+        command = SubscribeUserCommand(subscriber_user_id=subscriber_user_id, subscribed_user_id=subscribed_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -615,7 +533,7 @@ class TestUserCommandService:
         # まず勇者が商人をフォローしようとするが、ブロックされているので失敗する
         follow_command = FollowUserCommand(
             follower_user_id=1,  # 勇者
-            followee_user_id=6   # 商人
+            followee_user_id=6,  # 商人
         )
 
         # When & Then: フォローしようとしてもブロックされているので失敗
@@ -630,10 +548,7 @@ class TestUserCommandService:
         # Given: 戦士（ID: 3）は商人（ID: 6）をフォローしていない
         subscriber_user_id = 3  # 戦士
         subscribed_user_id = 6  # 商人
-        command = SubscribeUserCommand(
-            subscriber_user_id=subscriber_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
+        command = SubscribeUserCommand(subscriber_user_id=subscriber_user_id, subscribed_user_id=subscribed_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -648,10 +563,7 @@ class TestUserCommandService:
         # Given: 勇者（ID: 1）は魔法使い（ID: 2）を購読している
         subscriber_user_id = 1  # 勇者
         subscribed_user_id = 2  # 魔法使い
-        command = UnsubscribeUserCommand(
-            subscriber_user_id=subscriber_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
+        command = UnsubscribeUserCommand(subscriber_user_id=subscriber_user_id, subscribed_user_id=subscribed_user_id)
 
         # When
         result = self.service.unsubscribe_user(command)
@@ -672,10 +584,7 @@ class TestUserCommandService:
         """unsubscribe_user - 自分自身の購読を解除しようとする場合の異常系テスト"""
         # Given
         user_id = 1
-        command = UnsubscribeUserCommand(
-            subscriber_user_id=user_id,
-            subscribed_user_id=user_id
-        )
+        command = UnsubscribeUserCommand(subscriber_user_id=user_id, subscribed_user_id=user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -689,10 +598,7 @@ class TestUserCommandService:
         # Given
         non_existent_user_id = 999
         subscribed_user_id = 1
-        command = UnsubscribeUserCommand(
-            subscriber_user_id=non_existent_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
+        command = UnsubscribeUserCommand(subscriber_user_id=non_existent_user_id, subscribed_user_id=subscribed_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -706,10 +612,7 @@ class TestUserCommandService:
         # Given: 盗賊（ID: 4）は戦士（ID: 3）を購読していない
         subscriber_user_id = 4  # 盗賊
         subscribed_user_id = 3  # 戦士
-        command = UnsubscribeUserCommand(
-            subscriber_user_id=subscriber_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
+        command = UnsubscribeUserCommand(subscriber_user_id=subscriber_user_id, subscribed_user_id=subscribed_user_id)
 
         # When & Then
         with pytest.raises(UserCommandException) as exc_info:
@@ -725,11 +628,7 @@ class TestUserCommandService:
 
         # When
         error_response = ErrorResponseDto(
-            error_code="TEST_ERROR",
-            message="テストエラー",
-            details="詳細情報",
-            user_id=1,
-            target_user_id=2
+            error_code="TEST_ERROR", message="テストエラー", details="詳細情報", user_id=1, target_user_id=2
         )
 
         # Then
@@ -744,7 +643,7 @@ class TestUserCommandService:
         # Given
         command = FollowUserCommand(
             follower_user_id=999,  # 存在しないユーザー
-            followee_user_id=1
+            followee_user_id=1,
         )
 
         # When & Then
@@ -756,15 +655,12 @@ class TestUserCommandService:
         assert exc_info.value.user_id == 999
         # ログは記録されているはず（実際のテストではログの確認は難しいため、例外が適切に処理されることを確認）
 
-    @patch('ai_rpg_world.application.social.services.user_command_service.logging')
+    @patch("ai_rpg_world.application.social.services.user_command_service.logging")
     def test_unexpected_error_logging(self, mock_logging):
         """予期しないエラーが発生した場合に適切にログが記録されることのテスト"""
         # Given: モックを使って予期しないエラーを発生させる
-        with patch.object(self.repository, 'find_by_id', side_effect=RuntimeError("Database error")):
-            command = FollowUserCommand(
-                follower_user_id=1,
-                followee_user_id=2
-            )
+        with patch.object(self.repository, "find_by_id", side_effect=RuntimeError("Database error")):
+            command = FollowUserCommand(follower_user_id=1, followee_user_id=2)
 
             # When & Then
             with pytest.raises(SystemErrorException):
@@ -779,9 +675,7 @@ class TestUserCommandService:
         # Given
         self.event_publisher.clear_events()
         command = CreateUserCommand(
-            user_name="event_test_user",
-            display_name="イベントテストユーザー",
-            bio="イベント発行テスト用ユーザーです"
+            user_name="event_test_user", display_name="イベントテストユーザー", bio="イベント発行テスト用ユーザーです"
         )
 
         # When
@@ -806,9 +700,7 @@ class TestUserCommandService:
         self.event_publisher.clear_events()
         user_id = 1
         command = UpdateUserProfileCommand(
-            user_id=user_id,
-            new_display_name="更新された勇者",
-            new_bio="更新された自己紹介"
+            user_id=user_id, new_display_name="更新された勇者", new_bio="更新された自己紹介"
         )
 
         # When
@@ -832,10 +724,7 @@ class TestUserCommandService:
         self.event_publisher.clear_events()
         follower_user_id = 3  # 戦士
         followee_user_id = 4  # 盗賊
-        command = FollowUserCommand(
-            follower_user_id=follower_user_id,
-            followee_user_id=followee_user_id
-        )
+        command = FollowUserCommand(follower_user_id=follower_user_id, followee_user_id=followee_user_id)
 
         # When
         result = self.service.follow_user(command)
@@ -861,10 +750,7 @@ class TestUserCommandService:
         # 既存のフォロー関係を使用（勇者（ID: 1）が魔法使い（ID: 2）をフォローしている）
         follower_user_id = 1  # 勇者
         followee_user_id = 2  # 魔法使い
-        command = UnfollowUserCommand(
-            follower_user_id=follower_user_id,
-            followee_user_id=followee_user_id
-        )
+        command = UnfollowUserCommand(follower_user_id=follower_user_id, followee_user_id=followee_user_id)
 
         # When
         result = self.service.unfollow_user(command)
@@ -887,10 +773,7 @@ class TestUserCommandService:
         self.event_publisher.clear_events()
         blocker_user_id = 3  # 戦士
         blocked_user_id = 4  # 盗賊
-        command = BlockUserCommand(
-            blocker_user_id=blocker_user_id,
-            blocked_user_id=blocked_user_id
-        )
+        command = BlockUserCommand(blocker_user_id=blocker_user_id, blocked_user_id=blocked_user_id)
 
         # When
         result = self.service.block_user(command)
@@ -915,10 +798,7 @@ class TestUserCommandService:
         # 既存のブロック関係を使用（魔法使い（ID: 2）が盗賊（ID: 4）をブロックしている）
         blocker_user_id = 2  # 魔法使い
         blocked_user_id = 4  # 盗賊
-        command = UnblockUserCommand(
-            blocker_user_id=blocker_user_id,
-            blocked_user_id=blocked_user_id
-        )
+        command = UnblockUserCommand(blocker_user_id=blocker_user_id, blocked_user_id=blocked_user_id)
 
         # When
         result = self.service.unblock_user(command)
@@ -945,18 +825,12 @@ class TestUserCommandService:
         subscribed_user_id = 4  # 盗賊
 
         # まずフォロー関係を作成（購読にはフォロー関係が必要）
-        follow_command = FollowUserCommand(
-            follower_user_id=subscriber_user_id,
-            followee_user_id=subscribed_user_id
-        )
+        follow_command = FollowUserCommand(follower_user_id=subscriber_user_id, followee_user_id=subscribed_user_id)
         self.service.follow_user(follow_command)
 
         # イベントパブリッシャーをクリアしてからsubscribeを実行
         self.event_publisher.clear_events()
-        command = SubscribeUserCommand(
-            subscriber_user_id=subscriber_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
+        command = SubscribeUserCommand(subscriber_user_id=subscriber_user_id, subscribed_user_id=subscribed_user_id)
 
         # When
         result = self.service.subscribe_user(command)
@@ -981,24 +855,17 @@ class TestUserCommandService:
         subscribed_user_id = 4  # 盗賊
 
         # まずフォローと購読関係を作成
-        follow_command = FollowUserCommand(
-            follower_user_id=subscriber_user_id,
-            followee_user_id=subscribed_user_id
-        )
+        follow_command = FollowUserCommand(follower_user_id=subscriber_user_id, followee_user_id=subscribed_user_id)
         self.service.follow_user(follow_command)
 
         subscribe_command = SubscribeUserCommand(
-            subscriber_user_id=subscriber_user_id,
-            subscribed_user_id=subscribed_user_id
+            subscriber_user_id=subscriber_user_id, subscribed_user_id=subscribed_user_id
         )
         self.service.subscribe_user(subscribe_command)
 
         # イベントパブリッシャーをクリアしてからunsubscribeを実行
         self.event_publisher.clear_events()
-        command = UnsubscribeUserCommand(
-            subscriber_user_id=subscriber_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
+        command = UnsubscribeUserCommand(subscriber_user_id=subscriber_user_id, subscribed_user_id=subscribed_user_id)
 
         # When
         result = self.service.unsubscribe_user(command)
@@ -1012,4 +879,3 @@ class TestUserCommandService:
         assert unsubscribed_events[0].aggregate_id == UserId(subscriber_user_id)
         assert unsubscribed_events[0].subscriber_user_id == UserId(subscriber_user_id)
         assert unsubscribed_events[0].subscribed_user_id == UserId(subscribed_user_id)
-

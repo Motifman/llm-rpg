@@ -46,9 +46,7 @@ from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
 )
 
 
-def resolve_reason_first_gate(
-    wiring: WorldLlmWiring, player_id: PlayerId
-) -> ReasonFirstGateDecision:
+def resolve_reason_first_gate(wiring: WorldLlmWiring, player_id: PlayerId) -> ReasonFirstGateDecision:
     """reason-first 2段階 turn の Phase A gate を解決する。
 
     bool flag は「gated reason-first を有効化する」だけで、常時 2段階には
@@ -56,7 +54,6 @@ def resolve_reason_first_gate(
 
     - loop_guard が直前に警告を注入した
     - 直近 2 件の action result が同一失敗
-    - stagnation band が strong
 
     callable は PR-3/4 の契約テスト用 override として残す。実 run では
     ``ResolvedLlmRuntimeConfig.reason_first_two_step_enabled`` 由来の bool を使う。
@@ -69,9 +66,7 @@ def resolve_reason_first_gate(
         except Exception:
             logger.exception("reason_first_two_step_enabled callable failed")
             return ReasonFirstGateDecision(False, "callable_failed")
-        return ReasonFirstGateDecision(
-            enabled, "callable_override" if enabled else "callable_disabled"
-        )
+        return ReasonFirstGateDecision(enabled, "callable_override" if enabled else "callable_disabled")
     if not bool(flag):
         return ReasonFirstGateDecision(False, "feature_disabled")
 
@@ -80,9 +75,8 @@ def resolve_reason_first_gate(
         return ReasonFirstGateDecision(True, "loop_guard_warning")
     if has_recent_same_failure(wiring, player_id):
         return ReasonFirstGateDecision(True, "recent_same_failure")
-    if is_stagnation_reason_first_armed(wiring, player_id):
-        return ReasonFirstGateDecision(True, "stagnation_strong")
     return ReasonFirstGateDecision(False, "no_trigger")
+
 
 def has_recent_same_failure(wiring: WorldLlmWiring, player_id: PlayerId) -> bool:
     """ActionResultStore の直近2件が同一失敗なら True。
@@ -110,6 +104,7 @@ def has_recent_same_failure(wiring: WorldLlmWiring, player_id: PlayerId) -> bool
     previous_key = wiring._action_failure_key(previous)
     return latest_key is not None and latest_key == previous_key
 
+
 def action_failure_key(entry: Any) -> tuple[str, str, str] | None:
     tool_name = str(getattr(entry, "tool_name", "") or "").strip()
     error_code = str(getattr(entry, "error_code", "") or "").strip()
@@ -120,50 +115,6 @@ def action_failure_key(entry: Any) -> tuple[str, str, str] | None:
         return None
     return (tool_name, error_code, identity)
 
-def is_stagnation_reason_first_armed(wiring: WorldLlmWiring, player_id: PlayerId) -> bool:
-    """停滞 reflect 注入直後の一発ラッチと band strong が揃ったときだけ True。
-
-    band-gated reasoning と同じ入力を使うが、band だけを見ると停滞中の
-    毎 turn で reason-first が発火してしまう。ここでは既存ラッチも peek し、
-    「reflect 注入直後の 1 行動だけ」に頻度を揃える。
-    """
-
-    latch = getattr(wiring.runtime, "_stagnation_reasoning_latch", None)
-    is_armed = getattr(latch, "is_armed", None)
-    if not callable(is_armed):
-        return False
-    try:
-        armed = bool(is_armed(player_id))
-    except Exception:
-        logger.exception("reason-first gate: stagnation latch check failed")
-        return False
-    if not armed:
-        return False
-    resolver = getattr(wiring.runtime, "_resolve_stagnation_band_value", None)
-    if not callable(resolver):
-        return False
-    try:
-        return str(resolver(player_id)) == "strong"
-    except Exception:
-        logger.exception("reason-first gate: stagnation band resolution failed")
-        return False
-
-def consume_stagnation_reason_first_latch(wiring: WorldLlmWiring, player_id: PlayerId) -> None:
-    """reason-first が停滞ラッチを使ったとき、一発権を消費する。
-
-    reason-first 経路では ``resolve_turn_reasoning_effort`` を呼ばないため、
-    band-gated reasoning 側の commit/abandon 消費に乗らない。ここで消費し、
-    strong band が続いても同じ reflect から毎 turn 2段階へ入らないようにする。
-    """
-
-    latch = getattr(wiring.runtime, "_stagnation_reasoning_latch", None)
-    consume = getattr(latch, "consume", None)
-    if not callable(consume):
-        return
-    try:
-        consume(player_id)
-    except Exception:
-        logger.exception("reason-first gate: stagnation latch consume failed")
 
 def build_tools_payload(
     wiring: WorldLlmWiring, player_id: PlayerId, *, tool_schema_mode: str = "legacy"
@@ -173,9 +124,7 @@ def build_tools_payload(
     definitions = (
         wiring.runtime.get_tool_definitions(player_id=player_id)
         if tool_schema_mode == "legacy"
-        else wiring.runtime.get_tool_definitions(
-            tool_schema_mode=tool_schema_mode, player_id=player_id
-        )
+        else wiring.runtime.get_tool_definitions(tool_schema_mode=tool_schema_mode, player_id=player_id)
     )
     return [
         {
@@ -186,10 +135,9 @@ def build_tools_payload(
                 "parameters": definition.parameters,
             },
         }
-        for definition in filter_definitions_for_escape_llm(
-            definitions
-        )
+        for definition in filter_definitions_for_escape_llm(definitions)
     ]
+
 
 def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
     """Phase A: snapshot 構築 + LLM 呼び出し。並列化可能。
@@ -208,11 +156,7 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
     # auto の補助文に載せる名前は、この呼び出しで実際に API へ渡す payload
     # から取る。宣言一覧を別に持つと disabled_tools や状態フィルタとずれる。
     tools_payload = build_tools_payload(wiring, player_id)
-    tool_names = [
-        t.get("function", {}).get("name")
-        for t in tools_payload
-        if t.get("function", {}).get("name")
-    ]
+    tool_names = [t.get("function", {}).get("name") for t in tools_payload if t.get("function", {}).get("name")]
     action_instruction = None
     if tool_choice == "auto":
         action_instruction = wiring.runtime.escape_game_action_instruction(tool_names)
@@ -225,9 +169,7 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
         )
     reason_first_gate = resolve_reason_first_gate(wiring, player_id)
     if reason_first_gate.enabled:
-        return run_reason_first_phase_a(
-            wiring, player_id, prompt, gate_reason=reason_first_gate.reason
-        )
+        return run_reason_first_phase_a(wiring, player_id, prompt, gate_reason=reason_first_gate.reason)
     prompt = inject_dynamic_argument_candidate_table(prompt, set(tool_names))
     # PR-A: 脱出ランタイムで恒久的に UNSUPPORTED_TOOL になる tool は LLM に
     # 見せない。Y_after_issue621 trace で set_sub_location が 3 回叩かれて
@@ -240,15 +182,9 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
     # tools_payload から function name を抽出する (= OpenAI function calling
     # 形式の "type":"function" 構造から function.name を読む)。
     metrics_sink = build_llm_metrics_sink(wiring, player_id, tool_names=tool_names)
-    # 案A (band-gated thinking): 停滞 strong の局面で reflect 注入直後の 1 行動
-    # だけ reasoning を焚く。flag OFF / 対象外なら None (= 既定のまま reasoning
-    # OFF・プロンプト byte 不変)。判断と AGENT_REASONING_ENGAGED trace は runtime
-    # 側に閉じ込め、ここは effort を invoke に橋渡しし、失敗時の降格を扱う。
-    reasoning_effort = wiring.runtime.resolve_turn_reasoning_effort(player_id)
     last_llm_call_id: str | None = None
 
     def _invoke(
-        effort: Any,
         *,
         attempt_index: int,
         parent_attempt_id: str | None = None,
@@ -264,7 +200,7 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
             player_id=player_id,
             prompt=prompt,
             tool_choice=tool_choice,
-            reasoning_effort=effort,
+            reasoning_effort=None,
             attempt_index=attempt_index,
             parent_attempt_id=parent_attempt_id,
             phase="one_step",
@@ -274,20 +210,20 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
             last_llm_call_id = prompt_capture_context.context.llm_call_id
         invoke_kwargs = {
             "metrics_sink": metrics_sink,
-            "reasoning_effort": effort,
+            "reasoning_effort": None,
             **llm_session_kwargs(wiring, player_id),
         }
         if prompt_capture_context is not None:
             invoke_kwargs["prompt_capture_context"] = prompt_capture_context
         invoked: dict[str, Any] | None = wiring.llm_client.invoke(
-            messages, tools_payload, tool_choice,
+            messages,
+            tools_payload,
+            tool_choice,
             **invoke_kwargs,
         )
         return invoked
 
-    def _result(
-        tool_call: dict[str, Any] | None, exception: BaseException | None
-    ) -> LlmPhaseAResult:
+    def _result(tool_call: dict[str, Any] | None, exception: BaseException | None) -> LlmPhaseAResult:
         return LlmPhaseAResult(
             player_id=player_id,
             prompt=prompt,
@@ -297,39 +233,11 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
             llm_call_id=last_llm_call_id,
         )
 
-    def _fallback_without_reasoning() -> LlmPhaseAResult:
-        # 餓死ループ修正: 熟考ターンが失敗 (例外 / tool_call なし) したら latch を
-        # 消費して「同条件での再試行」を止め、reasoning なしで 1 回だけ降格再試行
-        # して行動を成立させる。これをしないと詰まった agent が毎行動 same-condition
-        # で失敗し続けて餓死する (実 run v3coop_stagnation_002 の P3)。
-        wiring.runtime.abandon_turn_reasoning(player_id)
-        try:
-            parent = last_llm_call_id
-            return _result(
-                _invoke(None, attempt_index=1, parent_attempt_id=parent),
-                None,
-            )
-        except Exception as exc:  # noqa: BLE001 — 降格後も失敗なら通常の失敗として詰める
-            logger.exception(
-                "Phase A fallback (reasoning なし) invoke failed for player_id=%s",
-                player_id.value,
-            )
-            return _result(None, exc)
-
     try:
-        tool_call = _invoke(reasoning_effort, attempt_index=0)
+        tool_call = _invoke(attempt_index=0)
     except Exception as exc:  # KeyboardInterrupt / SystemExit / GeneratorExit は伝播
-        if reasoning_effort is None:
-            logger.exception(
-                "Phase A llm invoke failed for player_id=%s", player_id.value
-            )
-            return _result(None, exc)
-        logger.warning(
-            "Phase A reasoning invoke failed for player_id=%s; "
-            "latch を消費し reasoning なしで降格再試行する",
-            player_id.value, exc_info=True,
-        )
-        return _fallback_without_reasoning()
+        logger.exception("Phase A llm invoke failed for player_id=%s", player_id.value)
+        return _result(None, exc)
 
     if tool_choice == "auto" and tool_call is None:
         # auto では文章回答が返り得る。最初の失敗を即 no-op にせず、同じ
@@ -343,7 +251,6 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
         try:
             parent = last_llm_call_id
             tool_call = _invoke(
-                reasoning_effort,
                 attempt_index=1,
                 parent_attempt_id=parent,
                 messages_override=retry_messages,
@@ -355,27 +262,15 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
             )
             return _result(None, exc)
 
-    if (
-        tool_choice == "required"
-        and reasoning_effort is not None
-        and tool_call is None
-    ):
-        # 熟考ターンだが tool_call なし (NO_TOOL_CALL)。commit せず降格再試行。
-        logger.warning(
-            "Phase A reasoning turn returned no tool_call for player_id=%s; "
-            "latch を消費し reasoning なしで降格再試行する",
-            player_id.value,
-        )
-        return _fallback_without_reasoning()
-
-    # 案A HIGH 2: 熟考付き行動が「成立した後にだけ」ラッチを消費し
-    # AGENT_REASONING_ENGAGED trace を残す (成立 = 例外なし かつ tool_call あり)。
-    if reasoning_effort is not None and tool_call is not None:
-        wiring.runtime.commit_turn_reasoning_engaged(player_id, reasoning_effort)
     return _result(tool_call, None)
 
+
 def run_reason_first_phase_a(
-    wiring: Any, player_id: PlayerId, prompt: dict[str, Any], *, gate_reason: str,
+    wiring: Any,
+    player_id: PlayerId,
+    prompt: dict[str, Any],
+    *,
+    gate_reason: str,
 ) -> LlmPhaseAResult:
     """reason-first 2段階ターンの Phase A。
 
@@ -385,30 +280,18 @@ def run_reason_first_phase_a(
     実行へ進めない。
     """
 
-    assess_tools_payload = build_tools_payload(
-        wiring, player_id, tool_schema_mode="reason_first"
-    )
+    assess_tools_payload = build_tools_payload(wiring, player_id, tool_schema_mode="reason_first")
     action_tools_payload = [
-        tool
-        for tool in assess_tools_payload
-        if tool.get("function", {}).get("name") != TOOL_NAME_ASSESS_SITUATION
+        tool for tool in assess_tools_payload if tool.get("function", {}).get("name") != TOOL_NAME_ASSESS_SITUATION
     ]
     assess_tool_names = [
-        t.get("function", {}).get("name")
-        for t in assess_tools_payload
-        if t.get("function", {}).get("name")
+        t.get("function", {}).get("name") for t in assess_tools_payload if t.get("function", {}).get("name")
     ]
     action_tool_names = [
-        t.get("function", {}).get("name")
-        for t in action_tools_payload
-        if t.get("function", {}).get("name")
+        t.get("function", {}).get("name") for t in action_tools_payload if t.get("function", {}).get("name")
     ]
-    assess_metrics_sink = build_llm_metrics_sink(
-        wiring, player_id, tool_names=assess_tool_names
-    )
-    action_metrics_sink = build_llm_metrics_sink(
-        wiring, player_id, tool_names=action_tool_names
-    )
+    assess_metrics_sink = build_llm_metrics_sink(wiring, player_id, tool_names=assess_tool_names)
+    action_metrics_sink = build_llm_metrics_sink(wiring, player_id, tool_names=action_tool_names)
     reason_first_turn_id = f"reason-first-{uuid.uuid4().hex}"
     last_llm_call_id: str | None = None
     assess_choice = {
@@ -425,8 +308,6 @@ def run_reason_first_phase_a(
         action_phase_tool_count=len(action_tool_names),
         retry_limit=1,
     )
-    if gate_reason == "stagnation_strong":
-        consume_stagnation_reason_first_latch(wiring, player_id)
 
     def _result(
         tool_call: dict[str, Any] | None,
@@ -525,13 +406,8 @@ def run_reason_first_phase_a(
                 final=final,
             )
             if final:
-                return _result(
-                    None,
-                    None,
-                    failure_result=reason_first_failed_result(
-                        "REASON_FIRST_STEP_FAILED"
-                    ),
-                )
+                # 評価の不成立ではなく呼び出しの失敗なので、次の tick に回す経路へ渡す (#1595)。
+                return _result(None, exc)
             parent_attempt_id = last_llm_call_id
             continue
 
@@ -544,13 +420,10 @@ def run_reason_first_phase_a(
                 player_id,
                 reason_first_turn_id=reason_first_turn_id,
                 attempt_index=attempt_index,
-                has_expected_result=bool(parsed.get("expected_result")),
             )
             break
         final = attempt_index == 1
-        returned_tool = (
-            str(tool_call.get("name", "")) if isinstance(tool_call, dict) else None
-        )
+        returned_tool = str(tool_call.get("name", "")) if isinstance(tool_call, dict) else None
         record_reason_first_trace(
             wiring,
             TraceEventKind.REASON_FIRST_STEP_FAILED,
@@ -567,9 +440,7 @@ def run_reason_first_phase_a(
             return _result(
                 None,
                 None,
-                failure_result=reason_first_failed_result(
-                    "REASON_FIRST_STEP_FAILED"
-                ),
+                failure_result=reason_first_failed_result("REASON_FIRST_STEP_FAILED"),
             )
         parent_attempt_id = last_llm_call_id
 
@@ -577,14 +448,10 @@ def run_reason_first_phase_a(
         return _result(
             None,
             None,
-            failure_result=reason_first_failed_result(
-                "REASON_FIRST_STEP_FAILED"
-            ),
+            failure_result=reason_first_failed_result("REASON_FIRST_STEP_FAILED"),
         )
 
-    action_messages = append_reason_first_assessment(
-        prompt["messages"], assessment
-    )
+    action_messages = append_reason_first_assessment(prompt["messages"], assessment)
     prompt = dict(prompt)
     prompt["messages"] = action_messages
     prompt["action_instruction"] = _REASON_FIRST_ACTION_INSTRUCTION
@@ -607,11 +474,7 @@ def run_reason_first_phase_a(
         )
         return _result(None, exc)
 
-    action_name = (
-        str(action_tool_call.get("name", ""))
-        if isinstance(action_tool_call, dict)
-        else ""
-    )
+    action_name = str(action_tool_call.get("name", "")) if isinstance(action_tool_call, dict) else ""
     if action_name == TOOL_NAME_ASSESS_SITUATION:
         record_reason_first_trace(
             wiring,
@@ -629,9 +492,7 @@ def run_reason_first_phase_a(
         return _result(
             None,
             None,
-            failure_result=reason_first_failed_result(
-                "REASON_FIRST_ACTION_PHASE_INVALID_TOOL"
-            ),
+            failure_result=reason_first_failed_result("REASON_FIRST_ACTION_PHASE_INVALID_TOOL"),
         )
     if action_tool_call is not None:
         record_reason_first_trace(
@@ -649,6 +510,7 @@ def run_reason_first_phase_a(
         subjective_overrides=assessment,
     )
 
+
 def parse_assessment_tool_call(
     tool_call: dict[str, Any] | None,
 ) -> tuple[dict[str, str] | None, str]:
@@ -660,11 +522,8 @@ def parse_assessment_tool_call(
     inner_thought = str(arguments.get("inner_thought") or "").strip()
     if not inner_thought:
         return None, "missing_inner_thought"
-    assessment = {"inner_thought": inner_thought}
-    expected_result = str(arguments.get("expected_result") or "").strip()
-    if expected_result:
-        assessment["expected_result"] = expected_result
-    return assessment, ""
+    return {"inner_thought": inner_thought}, ""
+
 
 def append_reason_first_assessment(
     messages: list[dict[str, Any]],
@@ -675,9 +534,6 @@ def append_reason_first_assessment(
         "【行動前の状況評価】",
         f"- 考え: {assessment['inner_thought']}",
     ]
-    expected_result = assessment.get("expected_result")
-    if expected_result:
-        lines.append(f"- 期待する結果: {expected_result}")
     lines.append(_REASON_FIRST_ACTION_INSTRUCTION)
     suffix = "\n\n" + "\n".join(lines)
     if copied and copied[-1].get("role") == "user":
@@ -688,19 +544,14 @@ def append_reason_first_assessment(
     return copied
 
 
-_REASON_FIRST_ACTION_INSTRUCTION = (
-    "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
-    "inner_thought / expected_result は再生成しない。"
-)
+_REASON_FIRST_ACTION_INSTRUCTION = "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。inner_thought は再生成しない。"
+
 
 def reason_first_failed_result(error_code: str) -> LlmCommandResultDto:
     if error_code == "REASON_FIRST_ACTION_PHASE_INVALID_TOOL":
         return LlmCommandResultDto(
             success=False,
-            message=(
-                "行動選択段階で状況評価 tool が返されたため、このターンは"
-                "行動しませんでした。"
-            ),
+            message=("行動選択段階で状況評価 tool が返されたため、このターンは行動しませんでした。"),
             error_code=error_code,
             remediation="行動段階では assess_situation ではなく、実行する行動 tool を1つ選んでください。",
             should_reschedule=False,
@@ -708,17 +559,18 @@ def reason_first_failed_result(error_code: str) -> LlmCommandResultDto:
         )
     return LlmCommandResultDto(
         success=False,
-        message=(
-            "行動前の状況評価が成立しなかったため、このターンは行動しませんでした。"
-        ),
+        message=("行動前の状況評価が成立しなかったため、このターンは行動しませんでした。"),
         error_code=error_code,
         remediation="次のターンで状況を読み直し、実行する行動 tool を選び直してください。",
         should_reschedule=False,
         was_no_op=True,
     )
 
+
 def build_llm_metrics_sink(
-    wiring: WorldLlmWiring, player_id: PlayerId, tool_names: list[str] | None = None,
+    wiring: WorldLlmWiring,
+    player_id: PlayerId,
+    tool_names: list[str] | None = None,
 ) -> Any | None:
     """Phase A の LLM 呼び出し metrics を trace に流す sink を構築する。
 

@@ -32,7 +32,9 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
     """モンスター反応・Pack 連動イベントの formatter。"""
 
     def format(
-        self, event: Any, recipient_player_id: PlayerId,
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
     ) -> ObservationOutput | None:
         if isinstance(event, MonsterStartedFleeingInSpotEvent):
             return self._format_monster_started_fleeing(event, recipient_player_id)
@@ -42,19 +44,23 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             return self._format_monster_abandoned_chase(event, recipient_player_id)
         if isinstance(event, MonsterFeltTemperatureDiscomfortInSpotEvent):
             return self._format_monster_felt_temperature_discomfort(
-                event, recipient_player_id,
+                event,
+                recipient_player_id,
             )
         if isinstance(event, MonsterRespondedToPackHelpInSpotEvent):
             return self._format_monster_responded_to_pack_help(
-                event, recipient_player_id,
+                event,
+                recipient_player_id,
             )
         if isinstance(event, MonsterFollowedPackFleeInSpotEvent):
             return self._format_monster_followed_pack_flee(
-                event, recipient_player_id,
+                event,
+                recipient_player_id,
             )
         if isinstance(event, MonsterAlertedByPackInSpotEvent):
             return self._format_monster_alerted_by_pack(
-                event, recipient_player_id,
+                event,
+                recipient_player_id,
             )
         return None
 
@@ -69,9 +75,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         MonsterLeft/Appeared と組み合わせて「殴られて逃げ出した」prose を
         構築する。
         """
-        monster_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.monster_id
-        )
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(event.monster_id)
         prose = f"{monster_name}が怯えて逃げ出した。"
         structured: dict[str, Any] = {
             "type": "monster_started_fleeing",
@@ -95,22 +99,17 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         観測者が **target 本人** ならより緊張感のある prose に切り替える。
         target が他 monster の場合や第三者観測者は中立 prose。
         """
-        monster_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.monster_id
-        )
-        is_target = (
-            event.target_player_id is not None
-            and event.target_player_id.value == recipient_id.value
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(event.monster_id)
+        is_target = event.target_player_id is not None and event.target_player_id.value == recipient_id.value
+        target_player_name = (
+            self._resolve_entity_name(event.target_player_id) if event.target_player_id is not None else None
         )
         if is_target:
             prose = f"{monster_name}があなたを睨み、追跡を始めた。"
-        elif event.target_player_id is not None:
-            target_name = self._resolve_entity_name(event.target_player_id)
-            prose = f"{monster_name}が{target_name}を狙って追跡を始めた。"
+        elif target_player_name is not None:
+            prose = f"{monster_name}が{target_player_name}を狙って追跡を始めた。"
         elif event.target_monster_id is not None:
-            target_name = self._context.name_resolver.monster_name_by_monster_id(
-                event.target_monster_id
-            )
+            target_name = self._context.name_resolver.monster_name_by_monster_id(event.target_monster_id)
             prose = f"{monster_name}が{target_name}を狙って追跡を始めた。"
         else:
             # target id 両方 None は不整合だが防御
@@ -119,14 +118,9 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             "type": "monster_started_chasing",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
-            "target_player_id": (
-                event.target_player_id.value
-                if event.target_player_id is not None else None
-            ),
-            "target_monster_id": (
-                event.target_monster_id.value
-                if event.target_monster_id is not None else None
-            ),
+            "target_player_id": (event.target_player_id.value if event.target_player_id is not None else None),
+            "target_player_name": target_player_name,
+            "target_monster_id": (event.target_monster_id.value if event.target_monster_id is not None else None),
         }
         return ObservationOutput(
             prose=prose,
@@ -151,9 +145,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         範囲外に出るのを見届けた」などの判定ができるようになったら、
         位置 / 状況ベースで prose を分岐させる (軸 3 の自然な拡張)。
         """
-        monster_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.monster_id
-        )
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(event.monster_id)
         prose = f"{monster_name}は追跡を諦めて立ち去った。"
         structured: dict[str, Any] = {
             "type": "monster_abandoned_chase",
@@ -178,9 +170,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         kind に応じて寒さ / 暑さの prose を切り替える。第三者視点で
         「monster が environment から圧を受けている」を観測させる。
         """
-        monster_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.monster_id
-        )
+        monster_name = self._context.name_resolver.monster_name_by_monster_id(event.monster_id)
         if event.kind == "too_cold":
             prose = f"{monster_name}は寒さに身を震わせている。"
         elif event.kind == "too_hot":
@@ -216,21 +206,11 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         target が観測者本人かで切り替え。第三者には「{responder} が
         {victim} の援護に駆け付ける」中立 prose。
         """
-        responder_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.responder_monster_id
-        )
-        victim_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.victim_monster_id
-        )
-        is_target_self = (
-            event.target_player_id is not None
-            and event.target_player_id.value == recipient_id.value
-        )
+        responder_name = self._context.name_resolver.monster_name_by_monster_id(event.responder_monster_id)
+        victim_name = self._context.name_resolver.monster_name_by_monster_id(event.victim_monster_id)
+        is_target_self = event.target_player_id is not None and event.target_player_id.value == recipient_id.value
         if is_target_self:
-            prose = (
-                f"{responder_name}が{victim_name}の救援に駆け付けた。"
-                "あなたを睨んでいる。"
-            )
+            prose = f"{responder_name}が{victim_name}の救援に駆け付けた。あなたを睨んでいる。"
         else:
             prose = f"{responder_name}が{victim_name}の救援に駆け付けた。"
         structured: dict[str, Any] = {
@@ -239,14 +219,8 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             "responder_id": event.responder_monster_id.value,
             "victim_name": victim_name,
             "victim_id": event.victim_monster_id.value,
-            "target_player_id": (
-                event.target_player_id.value
-                if event.target_player_id is not None else None
-            ),
-            "target_monster_id": (
-                event.target_monster_id.value
-                if event.target_monster_id is not None else None
-            ),
+            "target_player_id": (event.target_player_id.value if event.target_player_id is not None else None),
+            "target_monster_id": (event.target_monster_id.value if event.target_monster_id is not None else None),
         }
         return ObservationOutput(
             prose=prose,
@@ -266,12 +240,8 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         leader 自身の FLEE 開始は別途 `MonsterStartedFleeingInSpotEvent`
         で「{leader} が怯えて逃げ出した」と観測される。
         """
-        follower_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.follower_monster_id
-        )
-        leader_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.leader_monster_id
-        )
+        follower_name = self._context.name_resolver.monster_name_by_monster_id(event.follower_monster_id)
+        leader_name = self._context.name_resolver.monster_name_by_monster_id(event.leader_monster_id)
         prose = f"{follower_name}も{leader_name}に続いて逃げ出した。"
         structured: dict[str, Any] = {
             "type": "monster_followed_pack_flee",
@@ -298,40 +268,21 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         - 本人: 「気配を察した」+「あなたを警戒している」
         - 第三者: 「{scout} の警戒を察して {responder} も追跡を始めた」
         """
-        responder_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.responder_monster_id
-        )
-        scout_name = self._context.name_resolver.monster_name_by_monster_id(
-            event.scout_monster_id
-        )
-        is_target_self = (
-            event.target_player_id is not None
-            and event.target_player_id.value == recipient_id.value
-        )
+        responder_name = self._context.name_resolver.monster_name_by_monster_id(event.responder_monster_id)
+        scout_name = self._context.name_resolver.monster_name_by_monster_id(event.scout_monster_id)
+        is_target_self = event.target_player_id is not None and event.target_player_id.value == recipient_id.value
         if is_target_self:
-            prose = (
-                f"{responder_name}が{scout_name}の警戒を察し、"
-                "あなたの方を睨み始めた。"
-            )
+            prose = f"{responder_name}が{scout_name}の警戒を察し、あなたの方を睨み始めた。"
         else:
-            prose = (
-                f"{responder_name}が{scout_name}の警戒を察して"
-                "追跡を始めた。"
-            )
+            prose = f"{responder_name}が{scout_name}の警戒を察して追跡を始めた。"
         structured: dict[str, Any] = {
             "type": "monster_alerted_by_pack",
             "responder_name": responder_name,
             "responder_id": event.responder_monster_id.value,
             "scout_name": scout_name,
             "scout_id": event.scout_monster_id.value,
-            "target_player_id": (
-                event.target_player_id.value
-                if event.target_player_id is not None else None
-            ),
-            "target_monster_id": (
-                event.target_monster_id.value
-                if event.target_monster_id is not None else None
-            ),
+            "target_player_id": (event.target_player_id.value if event.target_player_id is not None else None),
+            "target_monster_id": (event.target_monster_id.value if event.target_monster_id is not None else None),
         }
         return ObservationOutput(
             prose=prose,

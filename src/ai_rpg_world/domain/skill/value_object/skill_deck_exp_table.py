@@ -15,12 +15,9 @@ class SkillDeckExpTable:
         if self.exponent <= 0:
             raise SkillProposalValidationException(f"exponent must be positive: {self.exponent}")
         if self.level_offset < 0:
-            raise SkillProposalValidationException(
-                f"level_offset cannot be negative: {self.level_offset}"
-            )
+            raise SkillProposalValidationException(f"level_offset cannot be negative: {self.level_offset}")
 
     def get_required_exp_for_level(self, level: int) -> int:
         if level <= 1:
             return 0
         return int(self.base_exp * ((level - 1 + self.level_offset) ** self.exponent))
-

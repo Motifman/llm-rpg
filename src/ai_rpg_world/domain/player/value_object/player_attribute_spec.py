@@ -38,15 +38,18 @@ from ai_rpg_world.domain.player.exception.player_exceptions import (
 
 
 class AttributeVisibility(Enum):
-    """その属性を、本人以外が知っていてよいか。
+    """その属性を、誰が知っていてよいか。
 
-    **二択で始める。** 「誰から見て」を分ける必要が出たら、そのとき広げる。
+    「誰から見て」を分ける必要が出たら、そのとき広げる。
     """
 
     #: 全員が知っている (生業・見た目など)。理由として口に出してよい。
     PUBLIC = "public"
     #: 本人だけが知っている (役割・変装など)。**存在も伏せる。**
     SECRET = "secret"
+    #: 本人も知らない。互いを知らずに始まるチームの所属のように、本人に
+    #: 見えるだけで対になる側の存在が漏れるもの (#1546)。
+    HIDDEN = "hidden"
 
 
 class ConditionSatisfiability(Enum):
@@ -85,23 +88,19 @@ class PlayerAttributeSpec:
         if not str(self.name).strip():
             raise PlayerAttributeSpecValidationException("属性名は空にできません")
         if not str(self.display_name).strip():
-            raise PlayerAttributeSpecValidationException(
-                f"属性 {self.name} の表示名は空にできません"
-            )
+            raise PlayerAttributeSpecValidationException(f"属性 {self.name} の表示名は空にできません")
         if not isinstance(self.visibility, AttributeVisibility):
             raise PlayerAttributeSpecValidationException(
                 f"属性 {self.name} の visibility が不正です: {self.visibility!r}"
             )
         if not isinstance(self.mutable, bool):
             raise PlayerAttributeSpecValidationException(
-                f"属性 {self.name} の mutable は真偽値で指定してください: "
-                f"{self.mutable!r}"
+                f"属性 {self.name} の mutable は真偽値で指定してください: {self.mutable!r}"
             )
         for value, display in self.value_display_names.items():
             if not str(value).strip() or not str(display).strip():
                 raise PlayerAttributeSpecValidationException(
-                    f"属性 {self.name} の値の呼び名は空にできません: "
-                    f"{value!r} -> {display!r}"
+                    f"属性 {self.name} の値の呼び名は空にできません: {value!r} -> {display!r}"
                 )
 
     def display_name_of_value(self, value: Any) -> str | None:
@@ -158,6 +157,10 @@ class PlayerAttributeSpecs:
     def spec_of(self, name: str) -> PlayerAttributeSpec | None:
         return self.by_name.get(name)
 
+    def hidden_names(self) -> frozenset[str]:
+        """本人の表示からも外す属性の名前。"""
+        return frozenset(name for name, spec in self.by_name.items() if spec.visibility is AttributeVisibility.HIDDEN)
+
     def satisfiability(
         self,
         required_state: Mapping[str, Any],
@@ -176,11 +179,7 @@ class PlayerAttributeSpecs:
         if actor_state is None:
             return ConditionSatisfiability.NOT_YET
 
-        unmet = {
-            key: wanted
-            for key, wanted in required_state.items()
-            if actor_state.get(key) != wanted
-        }
+        unmet = {key: wanted for key, wanted in required_state.items() if actor_state.get(key) != wanted}
         if not unmet:
             return ConditionSatisfiability.SATISFIED
         for key in unmet:
@@ -215,13 +214,15 @@ class PlayerAttributeSpecs:
             spec = self.by_name.get(key)
             if spec is None or spec.mutable:
                 continue
-            found.append(UnreachableRequirement(
-                name=key,
-                required_value=wanted,
-                attribute_display_name=spec.display_name,
-                value_display_name=spec.display_name_of_value(wanted),
-                visibility=spec.visibility,
-            ))
+            found.append(
+                UnreachableRequirement(
+                    name=key,
+                    required_value=wanted,
+                    attribute_display_name=spec.display_name,
+                    value_display_name=spec.display_name_of_value(wanted),
+                    visibility=spec.visibility,
+                )
+            )
         return tuple(found)
 
 

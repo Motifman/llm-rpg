@@ -1,7 +1,6 @@
 """``SummarizingShortTermMemory``: ターン窓 + L4 要約の階層型短期記憶。
 
-Phase 2 (#356 後続) で導入。``DefaultSlidingWindowMemory`` の代替として
-``IShortTermMemory`` を満たす別実装。
+Phase 2 (#356 後続) で導入。``IShortTermMemory`` の唯一の実装。
 
 挙動概要:
 - ``append`` / ``append_all`` で現在の自分のターンへ観測を積む
@@ -32,11 +31,6 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
 )
 from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
-    ShortTermMemoryLongSummaryService,
-    _ParsedLongSummary,
-    build_template_fallback_long_summary,
-)
 from ai_rpg_world.application.llm.services.short_term_memory_schedulers import (
     InlineShortTermMemoryScheduler,
     IShortTermMemoryScheduler,
@@ -52,18 +46,17 @@ from ai_rpg_world.application.llm.services.unified_recent_event_store import (
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder, NullTraceRecorder
+from ai_rpg_world.being.domain.short_term_memory import (
+    BACKSTORY_GENERATIONS,
+    FOLD_TURNS,
+    RECENT_TURNS,
+)
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
-)
-from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
-    L5LongSummary,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _logger = logging.getLogger(__name__)
-
-
-DEFAULT_L4_KEEP_GENERATIONS = 3
 
 
 # PR #449 (PR 4/6): NullObject パターンで silent None skip を排除する helper。
@@ -97,6 +90,7 @@ def _ensure_trace_recorder_provider(
 
 # persona resolver は (player_id_int) -> (player_name, persona_block)
 PersonaResolverFn = Callable[[int], "tuple[str, str]"]
+CompactionListenerFn = Callable[[PlayerId, Sequence[UnifiedRecentEventEntry]], None]
 
 
 class SummarizingShortTermMemory(IShortTermMemory):
@@ -127,42 +121,29 @@ class SummarizingShortTermMemory(IShortTermMemory):
         self,
         *,
         summary_service: ShortTermMemorySummaryService | None = None,
-        long_summary_service: ShortTermMemoryLongSummaryService | None = None,
         persona_resolver: PersonaResolverFn | None = None,
-        l4_keep_generations: int = DEFAULT_L4_KEEP_GENERATIONS,
+        l4_keep_generations: int = BACKSTORY_GENERATIONS,
         scheduler: IShortTermMemoryScheduler | None = None,
-        # PR #435: L4 / L5 が install された瞬間に trace event を 1 件吐く。
+        # PR #435: L4 が install された瞬間に trace event を 1 件吐く。
         # 失敗時は既に DROPPED / GENERATION_FAILED が吐かれているが、成功時の
         # 生成内容を後追いする経路が無かった。両方とも optional で、None なら
         # 完全 no-op (= 既存挙動の後方互換 / テスト fixture が簡素)。
         trace_recorder_provider: Callable[[], Any] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
         event_store: UnifiedRecentEventStore | None = None,
-        turn_cap: int = 20,
-        compact_turn_count: int = 10,
+        turn_cap: int = RECENT_TURNS,
+        compact_turn_count: int = FOLD_TURNS,
+        on_compacted: CompactionListenerFn | None = None,
     ) -> None:
         if l4_keep_generations <= 0:
             raise ValueError("l4_keep_generations must be positive")
-        if summary_service is not None and not isinstance(
-            summary_service, ShortTermMemorySummaryService
-        ):
-            raise TypeError(
-                "summary_service must be ShortTermMemorySummaryService or None"
-            )
-        if long_summary_service is not None and not isinstance(
-            long_summary_service, ShortTermMemoryLongSummaryService
-        ):
-            raise TypeError(
-                "long_summary_service must be ShortTermMemoryLongSummaryService or None"
-            )
+        if summary_service is not None and not isinstance(summary_service, ShortTermMemorySummaryService):
+            raise TypeError("summary_service must be ShortTermMemorySummaryService or None")
         if persona_resolver is not None and not callable(persona_resolver):
             raise TypeError("persona_resolver must be callable or None")
         if scheduler is not None and not isinstance(scheduler, IShortTermMemoryScheduler):
-            raise TypeError(
-                "scheduler must be IShortTermMemoryScheduler or None"
-            )
+            raise TypeError("scheduler must be IShortTermMemoryScheduler or None")
         self._service = summary_service
-        self._long_service = long_summary_service
         self._persona_resolver = persona_resolver
         self._keep_gen = l4_keep_generations
         self._scheduler: IShortTermMemoryScheduler = (
@@ -172,60 +153,40 @@ class SummarizingShortTermMemory(IShortTermMemory):
         # NullTraceRecorder を返す callable に正規化する。これで emit 側の
         # `if provider is None: return` / `if recorder is None: return` の
         # silent skip 経路を排除できる (= NullObject パターン)。
-        self._trace_recorder_provider: Callable[[], ITraceRecorder] = (
-            _ensure_trace_recorder_provider(trace_recorder_provider)
+        self._trace_recorder_provider: Callable[[], ITraceRecorder] = _ensure_trace_recorder_provider(
+            trace_recorder_provider
         )
         self._current_tick_provider = current_tick_provider
         self._event_store = event_store or UnifiedRecentEventStore()
         self._turn_cap = turn_cap
         self._compact_turn_count = compact_turn_count
+        self._on_compacted = on_compacted
         if turn_cap <= 0 or compact_turn_count <= 0 or compact_turn_count >= turn_cap:
             raise ValueError("turn window requires 0 < compact_turn_count < turn_cap")
         # L4 は新しい順に並べる (index 0 = 最新)。worker thread からも書く
         # ので mid_lock で保護する。
         self._mid: dict[int, deque[L4MidSummary]] = {}
         self._mid_lock = threading.Lock()
-        # Phase 3: L5 long summary (1 player 1 件)。worker thread からも書く
-        # ので long_lock で保護する。世代数のカウンタも保持。
-        self._long: dict[int, L5LongSummary] = {}
-        self._long_gen_index: dict[int, int] = {}
-        self._long_lock = threading.Lock()
 
     # ──────────────────────────────────────────────────────────
     # IShortTermMemory contract
     # ──────────────────────────────────────────────────────────
-
-    @property
-    def recent_equal_timestamp_newest_first(self) -> bool:
-        """同時刻の観測は従来の deque 反転と同じく後から積んだ順に返す。"""
-        return True
 
     def append(self, player_id: PlayerId, entry: ObservationEntry) -> None:
         pid = int(player_id.value)
         self._ensure_player(pid)
         self._event_store.append_observation(player_id, entry)
 
-    def append_all(
-        self, player_id: PlayerId, entries: list[ObservationEntry]
-    ) -> list[ObservationEntry]:
-        """observations を順に append する。
-
-        ``DefaultSlidingWindowMemory`` と違って evict は無い (代わりに L4 に
-        畳む)。本 implementation では戻り値は常に空 list (overflow 0)。
-        """
+    def append_all(self, player_id: PlayerId, entries: list[ObservationEntry]) -> None:
+        """observations を順に append する。古いターンは捨てずに L4 に畳む。"""
         for e in entries:
             self.append(player_id, e)
-        return []
 
-    def get_recent(
-        self, player_id: PlayerId, limit: int
-    ) -> list[ObservationEntry]:
+    def get_recent(self, player_id: PlayerId, limit: int) -> list[ObservationEntry]:
         pid = int(player_id.value)
         if limit <= 0:
             return []
-        return self._event_store.get_recent_observations(
-            player_id, limit, newest_equal_first=True
-        )
+        return self._event_store.get_recent_observations(player_id, limit, newest_equal_first=True)
 
     def complete_turn(self, player_id: PlayerId) -> None:
         """ターンを閉じ、cap 到達時は古い K ターンの出来事を L4 へ送る。"""
@@ -237,9 +198,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
             return
         turns_before = self._event_store.completed_turn_count(player_id)
         entries_before = len(self._event_store.get_active_timeline(player_id))
-        compaction = self._event_store.compact_oldest_turns(
-            player_id, self._compact_turn_count
-        )
+        compaction = self._event_store.compact_oldest_turns(player_id, self._compact_turn_count)
         self._emit_compaction(
             player_id,
             completed_turn_count_before=turns_before,
@@ -248,11 +207,28 @@ class SummarizingShortTermMemory(IShortTermMemory):
         )
         consumed = list(compaction.entries)
         if consumed:
-            self._submit_summary(
-                player_id.value,
-                consumed,
-                compacted_turn_count=compaction.turn_count,
-            )
+            # 畳んだ範囲はもう窓から消えているので、要約の送信が失敗しても聞き手へは渡す。
+            try:
+                self._submit_summary(
+                    player_id.value,
+                    consumed,
+                    compacted_turn_count=compaction.turn_count,
+                )
+            finally:
+                self._notify_compacted(player_id, consumed)
+
+    def _notify_compacted(self, player_id: PlayerId, consumed: list[UnifiedRecentEventEntry]) -> None:
+        """要約の scheduler とは別に、この場で同期して呼ぶ。"""
+        if self._on_compacted is None:
+            return
+        try:
+            self._on_compacted(player_id, tuple(consumed))
+        except Exception:
+            _logger.exception("compaction listener raised (player_id=%s); continuing", player_id.value)
+
+    def uncompacted_entries(self, player_id: PlayerId) -> tuple[UnifiedRecentEventEntry, ...]:
+        """まだ畳んでいない出来事。閉じていないターンの分も含む。"""
+        return tuple(self._event_store.get_active_timeline(player_id))
 
     def _emit_compaction(
         self,
@@ -269,69 +245,19 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 tick=self._safe_current_tick(),
                 player_id=int(player_id),
                 completed_turn_count_before=completed_turn_count_before,
-                completed_turn_count_after=self._event_store.completed_turn_count(
-                    player_id
-                ),
+                completed_turn_count_after=self._event_store.completed_turn_count(player_id),
                 entry_count_before=entry_count_before,
-                entry_count_after=len(
-                    self._event_store.get_active_timeline(player_id)
-                ),
+                entry_count_after=len(self._event_store.get_active_timeline(player_id)),
                 compacted_turn_count=compacted_turn_count,
             )
         except Exception:
-            _logger.exception(
-                "trace recorder.record raised for SHORT_TERM_MEMORY_COMPACTED; skipping"
-            )
-
-    def get_oldest_entry_datetime(
-        self, player_id: PlayerId
-    ) -> datetime | None:
-        """PR5 (R1): 現在 short-term window に乗っている最古 entry の ``occurred_at``。
-
-        L1 raw queue の最古 entry を返す。L4 mid summary は raw を畳んだ
-        概要であり、構成要素の raw entry そのものは既に retire 済みなので、
-        ここでは含めない (= 「**今 raw として手元にあるもの**」の最古を
-        返す)。
-        """
-        if not isinstance(player_id, PlayerId):
-            raise TypeError("player_id must be PlayerId")
-        pid = int(player_id.value)
-        raw = self._event_store.get_recent_observations(
-            player_id,
-            self._event_store.count_observations(player_id),
-            newest_equal_first=True,
-        )
-        if not raw:
-            return None
-        # raw queue には naive な datetime (= シナリオファイル由来) と aware な
-        # datetime (= LLM 呼び出し後に dataset から組まれた直近観測) が混在しうる。
-        # そのまま min() で比較すると ``TypeError: can't compare offset-naive
-        # and offset-aware datetimes`` で実験が落ちるため、UTC 相当として
-        # 正規化してから比較する。本体の occurred_at は書き換えない。
-        def _as_utc(dt: datetime) -> datetime:
-            if dt.tzinfo is None:
-                return dt.replace(tzinfo=timezone.utc)
-            return dt.astimezone(timezone.utc)
-
-        return min(_as_utc(entry.occurred_at) for entry in raw)
-
-    def get_long_summary_text(self, player_id: PlayerId) -> str:
-        """Phase 3: L5 long summary を prompt 用テキストに整形する。
-
-        L5 未生成なら空文字 (= section 非表示)。
-        """
-        pid = int(player_id.value)
-        with self._long_lock:
-            l5 = self._long.get(pid)
-        if l5 is None:
-            return ""
-        return format_long_summary_block(l5)
+            _logger.exception("trace recorder.record raised for SHORT_TERM_MEMORY_COMPACTED; skipping")
 
     def get_mid_summary_text(self, player_id: PlayerId) -> str:
         """L4 mid summary を prompt 用テキストに整形する。
 
-        新しい世代から順に、各世代の compressed_activity / emotional_summary /
-        unresolved を箇条書きで並べる。L4 が空なら空文字 (= section 非表示)。
+        新しい世代から順に、各世代の compressed_activity / emotional_summary を
+        並べる。L4 が空なら空文字 (= section 非表示)。
 
         non-blocking: lock の中で snapshot を取って lock 外で整形する。
         """
@@ -427,8 +353,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 )
             except (LlmApiCallException, ValueError) as e:
                 _logger.warning(
-                    "SummarizingShortTermMemory(player_id=%s): L4 LLM 生成失敗 "
-                    "(%s); template fallback に縮退します",
+                    "SummarizingShortTermMemory(player_id=%s): L4 LLM 生成失敗 (%s); template fallback に縮退します",
                     pid,
                     e,
                 )
@@ -436,8 +361,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 is_fallback = True
             except Exception as e:  # pragma: no cover - 想定外も握って続行
                 _logger.exception(
-                    "SummarizingShortTermMemory(player_id=%s): 想定外の例外 "
-                    "(%s); template fallback に縮退します",
+                    "SummarizingShortTermMemory(player_id=%s): 想定外の例外 (%s); template fallback に縮退します",
                     pid,
                     e,
                 )
@@ -451,14 +375,11 @@ class SummarizingShortTermMemory(IShortTermMemory):
             generated_at=datetime.now(timezone.utc),
             compressed_activity=parsed.compressed_activity,
             emotional_summary=parsed.emotional_summary,
-            unresolved=parsed.unresolved,
             is_fallback=is_fallback,
         )
         self._install_l4(summary)
 
-    def set_trace_recorder_provider(
-        self, provider: Callable[[], Any] | None
-    ) -> None:
+    def set_trace_recorder_provider(self, provider: Callable[[], Any] | None) -> None:
         """trace_recorder_provider を後から差し替える (PR #439 / PR #449 正規化)。
 
         ``world_runtime`` のように runtime 構築時点では trace_recorder が
@@ -471,9 +392,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         """
         self._trace_recorder_provider = _ensure_trace_recorder_provider(provider)
 
-    def set_current_tick_provider(
-        self, provider: Callable[[], int | None] | None
-    ) -> None:
+    def set_current_tick_provider(self, provider: Callable[[], int | None] | None) -> None:
         """current_tick_provider を後から差し替える (PR #439)。
 
         trace event の tick フィールドを正しく入れたいときに使う。
@@ -482,7 +401,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         self._current_tick_provider = provider
 
     # PR #451 (PR 6/6): set_summary_services は廃止。
-    # ctor で summary_service / long_summary_service / persona_resolver を必ず
+    # ctor で summary_service / persona_resolver を必ず
     # 指定する経路に統一した (= setter 呼び忘れ silent failure を構造で排除)。
     # 旧来は world_runtime が runtime 構築時点で llm_client を持っていない
     # ライフサイクル都合で空殻 ctor + 後注入していたが、PR #451 で構築順序を
@@ -507,31 +426,10 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 raw_count=summary.raw_count,
                 compressed_activity=summary.compressed_activity,
                 emotional_summary=summary.emotional_summary,
-                unresolved=list(summary.unresolved),
                 is_fallback=summary.is_fallback,
             )
         except Exception:
-            _logger.exception(
-                "trace recorder.record raised for SHORT_TERM_SUMMARY_GENERATED; skipping"
-            )
-
-    def _emit_l5_generated(self, summary: L5LongSummary) -> None:
-        """L5 install 直後に trace event を 1 件吐く (PR #435 / PR #449 簡略化)。"""
-        try:
-            self._trace_recorder_provider().record(
-                TraceEventKind.SHORT_TERM_LONG_SUMMARY_GENERATED,
-                tick=self._safe_current_tick(),
-                player_id=summary.player_id,
-                summary_id=summary.summary_id,
-                generation_index=summary.generation_index,
-                self_image=summary.self_image,
-                world_view=summary.world_view,
-                is_fallback=summary.is_fallback,
-            )
-        except Exception:
-            _logger.exception(
-                "trace recorder.record raised for SHORT_TERM_LONG_SUMMARY_GENERATED; skipping"
-            )
+            _logger.exception("trace recorder.record raised for SHORT_TERM_SUMMARY_GENERATED; skipping")
 
     def _safe_current_tick(self) -> int | None:
         """current_tick_provider を best-effort で評価。例外は None に縮退。"""
@@ -552,133 +450,20 @@ class SummarizingShortTermMemory(IShortTermMemory):
         ``_install_l4`` を直接呼ぶ経路や、将来の coordinator 経路への防衛と
         して、ここでも player 初期化を行う (review HIGH #3)。
 
-        Phase 3: keep_gen を超えて evict された L4 は L5 統合タスクに回す。
-        evict は lock 内で検出して取り出し、L5 task の submit は lock 外で行う
-        (scheduler 内部の lock とのデッドロック回避)。
+        keep_gen を超えた古い L4 は捨てる。長い期間の流れはエピソードの目次が
+        受け持つので、要約の要約 (L5) は作らない (#1824)。
         """
-        evicted_l4: L4MidSummary | None = None
         pid = summary.player_id
         with self._mid_lock:
             if pid not in self._mid:
                 self._mid[pid] = deque()
             self._mid[pid].appendleft(summary)
             while len(self._mid[pid]) > self._keep_gen:
-                evicted_l4 = self._mid[pid].pop()
+                self._mid[pid].pop()
 
         # PR #435: 成功時の生成内容を trace に残す。lock 外で emit する
         # (recorder の I/O が L4 install を blocking しないように)。
         self._emit_l4_generated(summary)
-
-        if evicted_l4 is not None:
-            self._maybe_trigger_long_summary(pid, evicted_l4)
-
-    def _maybe_trigger_long_summary(
-        self, pid: int, evicted_l4: L4MidSummary
-    ) -> None:
-        """Phase 3: L4 が evict されたタイミングで L5 統合 task を投げる。
-
-        - ``long_summary_service=None`` → template fallback で延命 (LLM なしモード)
-        - service あり + LLM 成功 → 新 L5
-        - service あり + LLM 失敗 → 同じく template fallback で previous_l5 延命
-
-        scheduler.submit の戻り値が False (drop) の場合は WARNING ログを残す
-        (L4 既に evict 済みで失われる)。
-
-        **並列性に関する重要な制約 (review HIGH #2)**:
-        ``ThreadPoolShortTermMemoryScheduler`` の ``max_workers=1`` (default) を
-        前提にしている。同一プレイヤーに対して 2 つの L5 task が並列実行されると
-        どちらも同じ ``previous_l5`` snapshot を保持したまま LLM を呼び、
-        後勝ちで新世代が古い ``evicted_l4`` に基づく内容で上書きされる risk が
-        ある。default 構成 (wiring 経由の ``_build_short_term_memory``) では
-        max_workers=1 を使うので影響なし。
-        """
-        with self._long_lock:
-            previous_l5 = self._long.get(pid)
-
-        def _task() -> None:
-            self._run_long_generation(
-                pid=pid,
-                evicted_l4=evicted_l4,
-                previous_l5=previous_l5,
-            )
-
-        accepted = self._scheduler.submit(pid, _task)
-        if not accepted:
-            _logger.warning(
-                "SummarizingShortTermMemory(player_id=%s): scheduler が L5 "
-                "統合 task を drop。evicted L4 (summary_id=%s) は失われます "
-                "(queue_full or shutdown 由来)。",
-                pid,
-                evicted_l4.summary_id,
-            )
-
-    def _run_long_generation(
-        self,
-        *,
-        pid: int,
-        evicted_l4: L4MidSummary,
-        previous_l5: L5LongSummary | None,
-    ) -> None:
-        """L5 生成本体。Inline なら main thread、ThreadPool なら worker thread。"""
-        parsed: _ParsedLongSummary
-        is_fallback = False
-
-        if self._long_service is None:
-            parsed = build_template_fallback_long_summary(
-                previous_l5=previous_l5,
-                evicted_l4=evicted_l4,
-            )
-            is_fallback = True
-        else:
-            try:
-                player_name, persona_block = self._resolve_persona(pid)
-                parsed = self._long_service.generate(
-                    player_name=player_name,
-                    persona_block=persona_block,
-                    previous_l5=previous_l5,
-                    evicted_l4=evicted_l4,
-                )
-            except (LlmApiCallException, ValueError) as e:
-                _logger.warning(
-                    "SummarizingShortTermMemory(player_id=%s): L5 LLM 生成失敗 "
-                    "(%s); template fallback (previous_l5 延命) に縮退します",
-                    pid,
-                    e,
-                )
-                parsed = build_template_fallback_long_summary(
-                    previous_l5=previous_l5,
-                    evicted_l4=evicted_l4,
-                )
-                is_fallback = True
-            except Exception as e:  # pragma: no cover - 想定外も握って続行
-                _logger.exception(
-                    "SummarizingShortTermMemory(player_id=%s): 想定外の例外 "
-                    "(%s); L5 template fallback に縮退します",
-                    pid,
-                    e,
-                )
-                parsed = build_template_fallback_long_summary(
-                    previous_l5=previous_l5,
-                    evicted_l4=evicted_l4,
-                )
-                is_fallback = True
-
-        with self._long_lock:
-            next_index = self._long_gen_index.get(pid, 0) + 1
-            self._long_gen_index[pid] = next_index
-            installed = L5LongSummary(
-                summary_id=f"l5-{uuid4().hex}",
-                player_id=pid,
-                generation_index=next_index,
-                generated_at=datetime.now(timezone.utc),
-                self_image=parsed.self_image,
-                world_view=parsed.world_view,
-                is_fallback=is_fallback,
-            )
-            self._long[pid] = installed
-
-        # PR #435: 成功時の生成内容を trace に残す。lock 外で emit する。
-        self._emit_l5_generated(installed)
 
     def _resolve_persona(self, pid: int) -> tuple[str, str]:
         if self._persona_resolver is None:
@@ -712,23 +497,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
         with self._mid_lock:
             return list(self._mid.get(player_id, ()))
 
-    def _long_summary(self, player_id: int) -> L5LongSummary | None:
-        with self._long_lock:
-            return self._long.get(player_id)
-
-
-def format_long_summary_block(l5: L5LongSummary) -> str:
-    """L5 を prompt 表示用に整形する (Phase 3)。
-
-    self_image / world_view を 2 行で並べる。空ラインは出さない。
-    """
-    lines: list[str] = []
-    if l5.self_image.strip():
-        lines.append(f"私について: {l5.self_image.strip()}")
-    if l5.world_view.strip():
-        lines.append(f"この世界について: {l5.world_view.strip()}")
-    return "\n".join(lines)
-
 
 def format_mid_summary_block(generations: Sequence[L4MidSummary]) -> str:
     """L4 世代群を prompt 表示用に整形する (新しい順)。
@@ -739,23 +507,17 @@ def format_mid_summary_block(generations: Sequence[L4MidSummary]) -> str:
         return ""
     blocks: list[str] = []
     for i, gen in enumerate(generations):
-        header = "[最新] " if i == 0 else f"[{i+1} 世代前] "
+        header = "[最新] " if i == 0 else f"[{i + 1} 世代前] "
         lines: list[str] = []
         lines.append(f"{header}{gen.compressed_activity.strip()}")
         if gen.emotional_summary.strip():
             lines.append(f"  気分: {gen.emotional_summary.strip()}")
-        if gen.unresolved:
-            lines.append("  未解決:")
-            for u in gen.unresolved:
-                lines.append(f"    - {u}")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
 
 __all__ = [
-    "DEFAULT_L4_KEEP_GENERATIONS",
     "PersonaResolverFn",
     "SummarizingShortTermMemory",
-    "format_long_summary_block",
     "format_mid_summary_block",
 ]

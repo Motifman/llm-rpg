@@ -99,9 +99,7 @@ def spot_graph_aggregate_from_json_dict(payload: dict[str, Any]) -> SpotGraphAgg
     """JSON dict から SpotGraphAggregate を復元する。"""
     version = int(payload["schema_version"])
     if version not in (1, 2, AGGREGATE_SCHEMA_VERSION):
-        raise UnsupportedSpotGraphAggregateSchemaError(
-            f"Unsupported spot graph aggregate schema: {version}"
-        )
+        raise UnsupportedSpotGraphAggregateSchemaError(f"Unsupported spot graph aggregate schema: {version}")
 
     graph_id = SpotGraphId.create(int(payload["graph_id"]))
     graph = SpotGraphAggregate.empty(graph_id)
@@ -127,9 +125,7 @@ def spot_graph_aggregate_from_json_dict(payload: dict[str, Any]) -> SpotGraphAgg
             rev_id = ConnectionId.create(int(record["reverse_connection_id"]))
             graph.add_connection(forward, reverse_connection_id=rev_id)
         else:
-            raise SpotGraphConnectionRecordInvariantError(
-                f"Unknown connection record kind: {record.get('kind')}"
-            )
+            raise SpotGraphConnectionRecordInvariantError(f"Unknown connection record kind: {record.get('kind')}")
 
     for entity_key, spot_int in payload["entity_spot"].items():
         graph.place_entity(EntityId.create(int(entity_key)), SpotId.create(int(spot_int)))
@@ -151,9 +147,7 @@ def spot_interior_to_json_dict(interior: SpotInterior) -> dict[str, Any]:
 def spot_interior_from_json_dict(payload: dict[str, Any]) -> SpotInterior:
     version = int(payload["schema_version"])
     if version not in (1, 2, 3, INTERIOR_SCHEMA_VERSION):
-        raise UnsupportedSpotInteriorSchemaError(
-            f"Unsupported spot interior schema: {version}"
-        )
+        raise UnsupportedSpotInteriorSchemaError(f"Unsupported spot interior schema: {version}")
     return SpotInterior(
         sub_locations=tuple(_sub_location_from_dict(x) for x in payload["sub_locations"]),
         objects=tuple(_spot_object_from_dict(x) for x in payload["objects"]),
@@ -244,9 +238,7 @@ def _spot_node_from_dict(d: dict[str, Any]) -> SpotNode:
             parent_id=parent,
             interior=None,
             atmosphere=atmosphere,
-            is_outdoor=_decode_optional_bool(
-                d, "is_outdoor", default=False, owner="spot node"
-            ),
+            is_outdoor=_decode_optional_bool(d, "is_outdoor", default=False, owner="spot node"),
             traps=tuple(_trap_def_from_dict(trap) for trap in traps_payload),
             position=position,
             area_id=d.get("area_id"),
@@ -254,9 +246,7 @@ def _spot_node_from_dict(d: dict[str, Any]) -> SpotNode:
     except SpotGraphStateDecodeError:
         raise
     except Exception as exc:
-        raise SpotGraphStateDecodeError(
-            f"invalid spot node payload: {exc}"
-        ) from exc
+        raise SpotGraphStateDecodeError(f"invalid spot node payload: {exc}") from exc
 
 
 def _spot_position_to_dict(position: SpotPosition) -> dict[str, float]:
@@ -287,7 +277,8 @@ def _spot_atmosphere_from_dict(d: dict[str, Any]) -> SpotAtmosphere:
         # Phase 5: 旧スキーマ row には sound_intensity が無いので SILENT
         # を default として返す (= 「音なし」と同等で後方互換)。
         sound_intensity=_parse_enum(
-            SoundIntensityEnum, d.get("sound_intensity", "SILENT"),
+            SoundIntensityEnum,
+            d.get("sound_intensity", "SILENT"),
         ),
     )
 
@@ -423,7 +414,9 @@ def _discovery_condition_from_dict(d: dict[str, Any]) -> DiscoveryCondition:
     return DiscoveryCondition(
         condition_type=_parse_enum(DiscoveryConditionTypeEnum, d["condition_type"]),
         required_search_count=int(d.get("required_search_count", 1)),
-        required_item_spec_id=ItemSpecId.create(int(d["required_item_spec_id"])) if d.get("required_item_spec_id") else None,
+        required_item_spec_id=ItemSpecId.create(int(d["required_item_spec_id"]))
+        if d.get("required_item_spec_id")
+        else None,
         flag_name=d.get("flag_name"),
     )
 
@@ -505,9 +498,7 @@ def _interaction_def_to_dict(i: InteractionDef) -> dict[str, Any]:
     if i.witness_observation_message is not None:
         out["witness_observation_message"] = i.witness_observation_message
     if i.witness_observation_message_in_dark is not None:
-        out["witness_observation_message_in_dark"] = (
-            i.witness_observation_message_in_dark
-        )
+        out["witness_observation_message_in_dark"] = i.witness_observation_message_in_dark
     if i.witness_policy is not WitnessPolicy.SAME_SPOT:
         out["witness_policy"] = i.witness_policy.value
     if i.notify_target:
@@ -538,25 +529,14 @@ def _interaction_def_from_dict(d: dict[str, Any]) -> InteractionDef:
         effects=tuple(_interaction_effect_from_dict(x) for x in d["effects"]),
         on_failure_observation=d.get("on_failure_observation"),
         witness_observation_message=d.get("witness_observation_message"),
-        witness_observation_message_in_dark=d.get(
-            "witness_observation_message_in_dark"
-        ),
+        witness_observation_message_in_dark=d.get("witness_observation_message_in_dark"),
         witness_policy=WitnessPolicy(d.get("witness_policy", WitnessPolicy.SAME_SPOT.value)),
-        notify_target=_decode_optional_bool(
-            d, "notify_target", default=False, owner="interaction"
-        ),
-        target_observation_message=_decode_optional_string(
-            d, "target_observation_message", owner="interaction"
-        ),
+        notify_target=_decode_optional_bool(d, "notify_target", default=False, owner="interaction"),
+        target_observation_message=_decode_optional_string(d, "target_observation_message", owner="interaction"),
         cooldown_ticks=int(d.get("cooldown_ticks", 0)),
         cooldown_group=d.get("cooldown_group"),
-        cooldown_scope=InteractionCooldownScope(
-            d.get("cooldown_scope", InteractionCooldownScope.ACTOR.value)
-        ),
-        allowed_actor_planes=tuple(
-            InteractionActorPlane(value)
-            for value in d.get("allowed_actor_planes", ["LIVING"])
-        ),
+        cooldown_scope=InteractionCooldownScope(d.get("cooldown_scope", InteractionCooldownScope.ACTOR.value)),
+        allowed_actor_planes=tuple(InteractionActorPlane(value) for value in d.get("allowed_actor_planes", ["LIVING"])),
         hide_when_flag_preconditions_fail=_decode_optional_bool(
             d,
             "hide_when_flag_preconditions_fail",
@@ -593,21 +573,15 @@ _INTERACTION_CONDITION_FIELD_CODECS = {
 
 def _interaction_condition_to_dict(p: InteractionCondition) -> dict[str, Any]:
     return {
-        field_name: _encode_interaction_condition_value(
-            field_name, codec_name, getattr(p, field_name)
-        )
+        field_name: _encode_interaction_condition_value(field_name, codec_name, getattr(p, field_name))
         for field_name, codec_name in _INTERACTION_CONDITION_FIELD_CODECS.items()
     }
 
 
 def _interaction_condition_from_dict(d: dict[str, Any]) -> InteractionCondition:
     if "condition_type" not in d:
-        raise SpotGraphStateDecodeError(
-            "interaction condition payload requires condition_type"
-        )
-    defaults = InteractionCondition(
-        condition_type=InteractionConditionTypeEnum.ALWAYS
-    )
+        raise SpotGraphStateDecodeError("interaction condition payload requires condition_type")
+    defaults = InteractionCondition(condition_type=InteractionConditionTypeEnum.ALWAYS)
     try:
         values = {
             field_name: _decode_interaction_condition_value(
@@ -621,13 +595,13 @@ def _interaction_condition_from_dict(d: dict[str, Any]) -> InteractionCondition:
     except SpotGraphStateDecodeError:
         raise
     except Exception as exc:
-        raise SpotGraphStateDecodeError(
-            f"invalid interaction condition payload: {exc}"
-        ) from exc
+        raise SpotGraphStateDecodeError(f"invalid interaction condition payload: {exc}") from exc
 
 
 def _encode_interaction_condition_value(
-    field_name: str, codec_name: str, value: Any,
+    field_name: str,
+    codec_name: str,
+    value: Any,
 ) -> Any:
     if codec_name == "condition_type":
         return _enum_name(value)
@@ -639,12 +613,12 @@ def _encode_interaction_condition_value(
 
 
 def _decode_interaction_condition_value(
-    field_name: str, codec_name: str, value: Any,
+    field_name: str,
+    codec_name: str,
+    value: Any,
 ) -> Any:
     def fail(expected: str) -> None:
-        raise SpotGraphStateDecodeError(
-            f"interaction condition {field_name} must be {expected}"
-        )
+        raise SpotGraphStateDecodeError(f"interaction condition {field_name} must be {expected}")
 
     if codec_name == "condition_type":
         if not isinstance(value, str):
@@ -679,10 +653,7 @@ def _decode_interaction_condition_value(
             return None
         if not isinstance(value, list):
             fail("an array or None")
-        return tuple(
-            ItemSpecId.create(_decode_json_int(field_name, item_value))
-            for item_value in value
-        )
+        return tuple(ItemSpecId.create(_decode_json_int(field_name, item_value)) for item_value in value)
     if value is None:
         return None
     int_value = _decode_json_int(field_name, value)
@@ -692,16 +663,12 @@ def _decode_interaction_condition_value(
         return SpotObjectId.create(int_value)
     if codec_name == "optional_spot_id":
         return SpotId.create(int_value)
-    raise SpotGraphStateDecodeError(
-        f"unknown interaction condition codec for {field_name}: {codec_name}"
-    )
+    raise SpotGraphStateDecodeError(f"unknown interaction condition codec for {field_name}: {codec_name}")
 
 
 def _decode_json_int(field_name: str, value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
-        raise SpotGraphStateDecodeError(
-            f"interaction condition {field_name} must contain integers"
-        )
+        raise SpotGraphStateDecodeError(f"interaction condition {field_name} must contain integers")
     return value
 
 
@@ -719,34 +686,22 @@ def _interaction_effect_from_dict(d: dict[str, Any]) -> InteractionEffect:
         visibility_value = d.get("visibility")
         target_value = d.get("target", EffectTarget.ACTOR.value)
         if visibility_value is not None and not isinstance(visibility_value, str):
-            raise SpotGraphStateDecodeError(
-                "interaction effect visibility must be a str or None"
-            )
+            raise SpotGraphStateDecodeError("interaction effect visibility must be a str or None")
         if not isinstance(target_value, str):
-            raise SpotGraphStateDecodeError(
-                "interaction effect target must be a str"
-            )
+            raise SpotGraphStateDecodeError("interaction effect target must be a str")
         parameters = d.get("parameters", {})
         if not isinstance(parameters, dict):
-            raise SpotGraphStateDecodeError(
-                "interaction effect parameters must be an object"
-            )
+            raise SpotGraphStateDecodeError("interaction effect parameters must be an object")
         return InteractionEffect(
             effect_type=_parse_enum(InteractionEffectTypeEnum, d["effect_type"]),
             parameters=dict(parameters),
-            visibility=(
-                EffectVisibility(visibility_value)
-                if visibility_value is not None
-                else None
-            ),
+            visibility=(EffectVisibility(visibility_value) if visibility_value is not None else None),
             target=EffectTarget(target_value),
         )
     except SpotGraphStateDecodeError:
         raise
     except Exception as exc:
-        raise SpotGraphStateDecodeError(
-            f"invalid interaction effect payload: {exc}"
-        ) from exc
+        raise SpotGraphStateDecodeError(f"invalid interaction effect payload: {exc}") from exc
 
 
 def _trap_def_to_dict(trap: TrapDef) -> dict[str, Any]:
@@ -756,10 +711,7 @@ def _trap_def_to_dict(trap: TrapDef) -> dict[str, Any]:
         "effects": [_interaction_effect_to_dict(effect) for effect in trap.effects],
         "is_hidden": trap.is_hidden,
         "is_repeating": trap.is_repeating,
-        "disarm_conditions": [
-            _interaction_condition_to_dict(condition)
-            for condition in trap.disarm_conditions
-        ],
+        "disarm_conditions": [_interaction_condition_to_dict(condition) for condition in trap.disarm_conditions],
         "detection_difficulty": trap.detection_difficulty,
     }
 
@@ -772,9 +724,7 @@ def _trap_def_from_dict(d: dict[str, Any]) -> TrapDef:
     if not isinstance(effects, list):
         raise SpotGraphStateDecodeError("trap effects must be an array")
     if not isinstance(disarm_conditions, list):
-        raise SpotGraphStateDecodeError(
-            "trap disarm_conditions must be an array"
-        )
+        raise SpotGraphStateDecodeError("trap disarm_conditions must be an array")
     trap_id = d.get("trap_id")
     trigger_type = d.get("trigger_type")
     detection_difficulty = d.get("detection_difficulty", 0)
@@ -782,39 +732,30 @@ def _trap_def_from_dict(d: dict[str, Any]) -> TrapDef:
         raise SpotGraphStateDecodeError("trap trap_id must be a str")
     if not isinstance(trigger_type, str):
         raise SpotGraphStateDecodeError("trap trigger_type must be a str")
-    if isinstance(detection_difficulty, bool) or not isinstance(
-        detection_difficulty, int
-    ):
-        raise SpotGraphStateDecodeError(
-            "trap detection_difficulty must be an int"
-        )
+    if isinstance(detection_difficulty, bool) or not isinstance(detection_difficulty, int):
+        raise SpotGraphStateDecodeError("trap detection_difficulty must be an int")
     try:
         return TrapDef(
             trap_id=trap_id,
             trigger_type=_parse_enum(TrapTriggerTypeEnum, trigger_type),
             effects=tuple(_interaction_effect_from_dict(effect) for effect in effects),
-            is_hidden=_decode_optional_bool(
-                d, "is_hidden", default=True, owner="trap"
-            ),
-            is_repeating=_decode_optional_bool(
-                d, "is_repeating", default=False, owner="trap"
-            ),
-            disarm_conditions=tuple(
-                _interaction_condition_from_dict(condition)
-                for condition in disarm_conditions
-            ),
+            is_hidden=_decode_optional_bool(d, "is_hidden", default=True, owner="trap"),
+            is_repeating=_decode_optional_bool(d, "is_repeating", default=False, owner="trap"),
+            disarm_conditions=tuple(_interaction_condition_from_dict(condition) for condition in disarm_conditions),
             detection_difficulty=detection_difficulty,
         )
     except SpotGraphStateDecodeError:
         raise
     except Exception as exc:
-        raise SpotGraphStateDecodeError(
-            f"invalid trap payload: {exc}"
-        ) from exc
+        raise SpotGraphStateDecodeError(f"invalid trap payload: {exc}") from exc
 
 
 def _decode_optional_bool(
-    payload: dict[str, Any], key: str, *, default: bool, owner: str,
+    payload: dict[str, Any],
+    key: str,
+    *,
+    default: bool,
+    owner: str,
 ) -> bool:
     value = payload.get(key, default)
     if not isinstance(value, bool):
@@ -823,7 +764,10 @@ def _decode_optional_bool(
 
 
 def _decode_optional_string(
-    payload: dict[str, Any], key: str, *, owner: str,
+    payload: dict[str, Any],
+    key: str,
+    *,
+    owner: str,
 ) -> str | None:
     value = payload.get(key)
     if value is not None and not isinstance(value, str):

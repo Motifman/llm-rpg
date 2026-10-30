@@ -71,8 +71,7 @@ class TestEveryCodecIsRegistered:
 
         assert not missing, (
             "codec を書いたのに _default_world_subsystem_codecs() に登録されて"
-            "いません。再開時にその state だけ初期値へ戻ります。\n\n  "
-            + "\n  ".join(missing)
+            "いません。再開時にその state だけ初期値へ戻ります。\n\n  " + "\n  ".join(missing)
         )
 
     def test_allowlist_has_no_stale_entries(self) -> None:
@@ -112,8 +111,7 @@ class TestRegisteredKeysAreExpected:
 
         assert not missing, (
             "codec は登録されていますが EXPECTED_WORLD_SUBSYSTEM_KEYS に"
-            "載っていません。snapshot の網羅検査が落ちます。\n\n  "
-            + "\n  ".join(missing)
+            "載っていません。snapshot の網羅検査が落ちます。\n\n  " + "\n  ".join(missing)
         )
 
     def test_no_expected_key_lacks_a_codec(self) -> None:

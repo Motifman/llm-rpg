@@ -17,7 +17,7 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
 | 1 | `tool_choice=required` が実呼び出しで通る | 必須 | 主ターンは required で呼ぶ。通らない provider は毎回 404 になり、run が止まる。`auto` へ下げると、ツールを返さない応答でエージェントが 1 回の起動を黙って失う (設計判断 #39・#96) |
 | 2 | 版を固定したモデル ID を使う | 必須 | `deepseek/deepseek-v4-flash` (0423 版) と `deepseek/deepseek-v4-flash-0731` は別物。`~deepseek/deepseek-v4-flash-latest` のような別名は中身が黙って替わり、過去 run と比べられなくなる (#39) |
 | 3 | 共有プールの 429 が続かない | 必須 | `upstream_provider_shared_pool` の 429 は OpenRouter 利用者全体の枠の枯渇で、こちらの並列度を下げても直らない。時間帯で全滅することがある |
-| 4 | 応答が API タイムアウト (90 秒) に収まる | 必須 | 超えた呼び出しは失敗として扱われ、その tick の行動を失う |
+| 4 | 応答が API タイムアウト (90 秒) に収まる | 必須 | 超えた呼び出しは失敗として扱われ、その tick の行動を失う。次の tick に回し直すが、同じ人が 3 回続けて失敗したら回さない (design_decisions D1595) |
 | 5 | 単価 (入力・キャッシュ読み込み・出力) | 比較 | 1 呼び出しあたり入力は約 9,000 トークン、出力は数百トークンなので、入力とキャッシュ読み込みの単価が費用を決める。同じモデルでも provider で 5 倍違うことがあり、run の途中で値上がりした例もある |
 | 6 | プレフィックスキャッシュが効く | 比較 | キャッシュの保持時間は provider ごとに違う。1 tick が長くなり呼び出しの間隔が空くと、キャッシュ率が下がる (Venice では、呼び出し間隔が 15 秒未満なら 0.77、60 秒を超えると 0) |
 | 7 | 量子化 (fp8 / fp4 / bf16 など) | 比較 | fp4 はモデル品質を落とすことがある。ただし候補から外す条件にはせず、選んだ provider の量子化を profile の description と run の結果に残す。`quantization` が `unknown` の provider も同じ扱いにする |
@@ -25,8 +25,10 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
 補足:
 
 - `supported_parameters` に `tool_choice` があっても、`required` が通るとは限らない。provider の宣言であって、値ごとの動作保証ではない。条件 1 は必ず実呼び出しで見る
+- provider を固定した run は、いつも `require_parameters=true` を送る。`supported_parameters` に送る引数が無い provider には、送る前に OpenRouter がエラーで止める (design_decisions D1631-2)
 - DeepSeek の思考 (thinking) と `required` は両立しないことがある。思考を入れる run では、条件 1 を思考ありの設定で確かめる (#96)
 - 思考トークンは出力トークンの上限に数えられる。上限を小さくしたプローブでは、思考で上限に達してツールが返らないことがある。プローブの `--max-tokens` は 200 以上にする
+- 思考の長さで条件 4 を超えるときは、runtime_config の `LLM_MAX_OUTPUT_TOKENS` で出力の上限を送る。`LLM_REASONING_EFFORT` は上限の何割を思考に回すかの指定なので、上限を送らないと抑えにならない (design_decisions D1595)
 
 ## 確かめ方
 
@@ -55,6 +57,21 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
 4. **1 tick だけ回す**: profile を作り、`MAX_WORLD_TICKS=1` で回す。`prompt_dataset/calls.jsonl` の `metrics` で、全呼び出しの成功・応答時間・`cached_tokens`・`cost_usd` を見る (条件 4・5・6)
 
 5. **profile の description に残す**: 選んだ理由・確かめた日付・実測値を書く。provider を替えたら、既存 profile は書き換えずに新しい profile を足す (#39。既存 profile は過去の実験条件の記録)
+
+## 実呼び出しのプローブ
+
+provider の対応が変わったことに気づくための試験を、`live_api` marker で置いている。`.env` の `OPENAI_API_KEY` (Jev は `OPENROUTER_API_KEY` を優先) を読んで実 endpoint を叩くので、通常の pytest、CI、`-m quality` のいずれでも選ばれない。回すときは `-m live_api` を明示する。
+
+```bash
+uv run pytest -m live_api
+```
+
+| 試験 | 叩く先 | 失敗したら |
+|---|---|---|
+| `tests/quality/test_deepseek_v4_flash_0731_required_probe.py` | OpenRouter 経由の DeepSeek 公式 provider | 公式が `required` に対応した。Cloudflare 固定を見直す (設計判断 #39) |
+| `tests/quality/test_jev_typed_judgment_probe.py` | OpenRouter の Jev (`/api/alpha/decisions`) | 応答の形か、行動名を救う閾値 0.7 が実モデルと合わなくなった |
+
+実 endpoint を叩く試験を新しく足すときも `live_api` を付ける。`quality` を付けると、golden を直すために `-m quality` を回した人が知らずに実 API を呼ぶ。
 
 ## 記録
 

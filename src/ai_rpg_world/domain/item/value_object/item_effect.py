@@ -96,9 +96,7 @@ class SatisfyNeedEffect(ItemEffect):
     def __post_init__(self) -> None:
         _validate_non_negative(self.amount, "Satisfy need effect")
         if not self.need_type_name:
-            raise ItemEffectValidationException(
-                "SatisfyNeedEffect: need_type_name must not be empty"
-            )
+            raise ItemEffectValidationException("SatisfyNeedEffect: need_type_name must not be empty")
 
 
 @dataclass(frozen=True)
@@ -119,9 +117,7 @@ class ReviveEffect(ItemEffect):
 
     def __post_init__(self) -> None:
         if self.hp_rate < 0.0 or self.hp_rate > 1.0:
-            raise ItemEffectValidationException(
-                f"Revive effect: hp_rate must be in [0.0, 1.0], got {self.hp_rate}"
-            )
+            raise ItemEffectValidationException(f"Revive effect: hp_rate must be in [0.0, 1.0], got {self.hp_rate}")
 
 
 @dataclass(frozen=True)
@@ -132,9 +128,7 @@ class CompositeItemEffect(ItemEffect):
 
     def __post_init__(self) -> None:
         if self.effects is None:
-            raise ItemEffectValidationException(
-                "CompositeItemEffect: effects must not be None"
-            )
+            raise ItemEffectValidationException("CompositeItemEffect: effects must not be None")
         if not isinstance(self.effects, tuple):
             object.__setattr__(self, "effects", tuple(self.effects))
         for i, sub in enumerate(self.effects):

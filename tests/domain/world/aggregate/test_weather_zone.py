@@ -24,9 +24,9 @@ class TestWeatherZone:
         name = WeatherZoneName("Test Zone")
         spot_ids = {SpotId(1), SpotId(2)}
         initial_state = WeatherState.clear()
-        
+
         zone = WeatherZone.create(zone_id, name, spot_ids, initial_state)
-        
+
         assert zone.zone_id == zone_id
         assert zone.name == name
         assert zone.spot_ids == spot_ids
@@ -59,12 +59,12 @@ class TestWeatherZone:
         name = WeatherZoneName("Test Zone")
         zone = WeatherZone(zone_id, name, {SpotId(1)}, WeatherState.clear())
         zone.clear_events()
-        
+
         new_state = WeatherState(WeatherTypeEnum.CLOUDY, 0.5)
         zone.change_weather(new_state)
-        
+
         assert zone.current_state == new_state
-        
+
         events = zone.get_events()
         assert len(events) == 1
         event = events[0]
@@ -77,24 +77,24 @@ class TestWeatherZone:
         """同じ天候への変更時にイベントが発行されないことのテスト"""
         zone = WeatherZone(WeatherZoneId(1), WeatherZoneName("Z"), {SpotId(1)}, WeatherState.clear())
         zone.clear_events()
-        
+
         zone.change_weather(WeatherState.clear())
-        
+
         assert len(zone.get_events()) == 0
 
     def test_spot_management(self):
         """スポット管理機能のテスト"""
         zone = WeatherZone(WeatherZoneId(1), WeatherZoneName("Z"), {SpotId(1)}, WeatherState.clear())
-        
+
         assert zone.contains_spot(SpotId(1))
         assert not zone.contains_spot(SpotId(2))
-        
+
         zone.add_spot(SpotId(2))
         assert zone.contains_spot(SpotId(2))
-        
+
         zone.remove_spot(SpotId(1))
         assert not zone.contains_spot(SpotId(1))
-        
+
         # 存在しないスポットの削除で例外が投げられること
         with pytest.raises(WeatherZoneSpotNotFoundException):
             zone.remove_spot(SpotId(999))
@@ -103,11 +103,11 @@ class TestWeatherZone:
         """spot_idsの不変性テスト"""
         spot_ids = {SpotId(1)}
         zone = WeatherZone(WeatherZoneId(1), WeatherZoneName("Z"), spot_ids, WeatherState.clear())
-        
+
         # 内部セットがコピーされていることを確認
         zone.spot_ids.add(SpotId(2))
         assert not zone.contains_spot(SpotId(2))
-        
+
         # 元のセットを変更しても影響を受けないことを確認
         spot_ids.add(SpotId(3))
         assert not zone.contains_spot(SpotId(3))

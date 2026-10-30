@@ -55,10 +55,7 @@ class RollbackParticipantTransactionAdapter:
 
     def contains_rollback_resource(self, resource: object) -> bool:
         """指定資源がこの確定区間の復元対象ならTrueを返す。"""
-        return any(
-            participant.rollback_resource is resource
-            for participant in self._participants
-        )
+        return any(participant.rollback_resource is resource for participant in self._participants)
 
     def begin(self) -> None:
         """全参加資源を占有してから基底transactionとsnapshotを開始する。"""
@@ -78,9 +75,7 @@ class RollbackParticipantTransactionAdapter:
 
         self._transaction.begin()
         for participant in self._participants:
-            self._snapshots.append(
-                (participant, participant.take_rollback_snapshot())
-            )
+            self._snapshots.append((participant, participant.take_rollback_snapshot()))
 
     def commit(self) -> None:
         """永続化commit成功時だけsnapshotを破棄し、占有を解放する。"""
@@ -102,9 +97,7 @@ class RollbackParticipantTransactionAdapter:
         if participant_errors:
             cleanup_error = RollbackParticipantCleanupException(
                 transaction_cleanup_error=(
-                    committed_cleanup_exception.cleanup_error
-                    if committed_cleanup_exception is not None
-                    else None
+                    committed_cleanup_exception.cleanup_error if committed_cleanup_exception is not None else None
                 ),
                 participant_errors=tuple(participant_errors),
             )
@@ -117,11 +110,7 @@ class RollbackParticipantTransactionAdapter:
                 else tuple(error for _, error in participant_errors)
             )
             control_error = next(
-                (
-                    error
-                    for error in cleanup_causes
-                    if not isinstance(error, Exception)
-                ),
+                (error for error in cleanup_causes if not isinstance(error, Exception)),
                 None,
             )
             if control_error is not None:
@@ -133,12 +122,8 @@ class RollbackParticipantTransactionAdapter:
                     )
                 except BaseException:
                     pass
-                raise TransactionCommittedCleanupException(
-                    cleanup_error=control_error
-                ) from cleanup_error
-            raise TransactionCommittedCleanupException(
-                cleanup_error=cleanup_error
-            ) from participant_errors[0][1]
+                raise TransactionCommittedCleanupException(cleanup_error=control_error) from cleanup_error
+            raise TransactionCommittedCleanupException(cleanup_error=cleanup_error) from participant_errors[0][1]
 
     def rollback(self) -> None:
         """永続化を戻し、参加資源を逆順で復元して占有を解放する。"""
@@ -203,9 +188,7 @@ class RollbackParticipantTransactionAdapter:
     def _require_active(self, operation: str) -> None:
         if self._active:
             return
-        raise RuntimeError(
-            f"rollback参加transactionが開始されていません: operation={operation}"
-        )
+        raise RuntimeError(f"rollback参加transactionが開始されていません: operation={operation}")
 
 
 class RollbackParticipantTransactionFactory:

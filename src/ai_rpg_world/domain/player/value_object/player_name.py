@@ -16,6 +16,7 @@ class PlayerName:
     「リン」(2 文字) が validation で弾かれ tick=1 即死した issue を受けて、
     最低長 3 → 2 に緩和 (Issue #264 第16回実験の所見)。
     """
+
     value: str
 
     def __post_init__(self) -> None:
@@ -26,6 +27,5 @@ class PlayerName:
         length = len(self.value)
         if not (_MIN_NAME_LENGTH <= length <= _MAX_NAME_LENGTH):
             raise PlayerNameValidationException(
-                f"Name must be between {_MIN_NAME_LENGTH} and {_MAX_NAME_LENGTH} characters. "
-                f"current: {length}"
+                f"Name must be between {_MIN_NAME_LENGTH} and {_MAX_NAME_LENGTH} characters. current: {length}"
             )

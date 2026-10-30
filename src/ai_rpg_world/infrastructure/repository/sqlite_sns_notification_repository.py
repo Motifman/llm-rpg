@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import sqlite3
 from datetime import datetime
 from typing import Any
@@ -27,18 +28,18 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
         *,
         _commits_after_write: bool,
         event_sink: Any = None,
+        _initialize_schema: bool = True,
     ) -> None:
         self._conn = connection
         self._commits_after_write = _commits_after_write
         self._event_sink = event_sink
         if connection.row_factory is not sqlite3.Row:
             connection.row_factory = sqlite3.Row
-        init_game_write_schema(connection)
+        if _initialize_schema:
+            init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteSnsNotificationRepository:
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteSnsNotificationRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
@@ -91,14 +92,19 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
                     str(row["created_at"]),
                     int(row["is_read"]),
                     row["expires_at"],
+                    row["related_target_id"],
+                    row["actor_identity_token"],
+                    row["identity_token"],
+                    row["source_event_id"],
+                    row["recipient_identity_token"],
+                    row["execution_provenance"],
+                    row["observation_delivered"],
                 )
             )
         )
 
     def _current_max_notification_id(self) -> int:
-        cur = self._conn.execute(
-            "SELECT COALESCE(MAX(notification_id), 0) FROM game_sns_notifications"
-        )
+        cur = self._conn.execute("SELECT COALESCE(MAX(notification_id), 0) FROM game_sns_notifications")
         return int(cur.fetchone()[0])
 
     def generate_notification_id(self) -> NotificationId:
@@ -137,8 +143,9 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
                     content_text,
                     created_at,
                     is_read,
-                    expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    expires_at, related_target_id, actor_identity_token, identity_token,
+                    source_event_id, recipient_identity_token, execution_provenance, observation_delivered
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(notification_id) DO UPDATE SET
                     user_id = excluded.user_id,
                     notification_type = excluded.notification_type,
@@ -152,7 +159,11 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
                     content_text = excluded.content_text,
                     created_at = excluded.created_at,
                     is_read = excluded.is_read,
-                    expires_at = excluded.expires_at
+                    expires_at = excluded.expires_at,
+                    related_target_id = excluded.related_target_id, actor_identity_token = excluded.actor_identity_token,
+                    identity_token = excluded.identity_token, source_event_id = excluded.source_event_id,
+                    recipient_identity_token = excluded.recipient_identity_token,
+                    execution_provenance = excluded.execution_provenance, observation_delivered = excluded.observation_delivered
                 """,
                 (
                     int(notification.notification_id),
@@ -163,12 +174,23 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
                     int(notification.content.actor_user_id),
                     notification.content.actor_user_name,
                     None if notification.content.related_post_id is None else int(notification.content.related_post_id),
-                    None if notification.content.related_reply_id is None else int(notification.content.related_reply_id),
+                    None
+                    if notification.content.related_reply_id is None
+                    else int(notification.content.related_reply_id),
                     notification.content.content_type,
                     notification.content.content_text,
                     notification.created_at.isoformat(),
                     1 if notification.is_read else 0,
                     None if notification.expires_at is None else notification.expires_at.isoformat(),
+                    notification.content.related_target_id,
+                    notification.content.actor_identity_token,
+                    notification.identity_token,
+                    notification.source_event_id,
+                    notification.recipient_identity_token,
+                    json.dumps(notification.execution_provenance)
+                    if notification.execution_provenance is not None
+                    else None,
+                    int(notification.observation_delivered),
                 ),
             )
             if began_local_transaction:
@@ -213,9 +235,7 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
         return cur.rowcount > 0
 
     def find_all(self) -> list[Notification]:
-        cur = self._conn.execute(
-            "SELECT * FROM game_sns_notifications ORDER BY created_at DESC, notification_id DESC"
-        )
+        cur = self._conn.execute("SELECT * FROM game_sns_notifications ORDER BY created_at DESC, notification_id DESC")
         return [x for row in cur.fetchall() for x in [self._hydrate(row)] if x is not None]
 
     def find_by_user_id(self, user_id: UserId, limit: int = 50, offset: int = 0) -> list[Notification]:

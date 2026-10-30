@@ -25,16 +25,14 @@ _SENA = PlayerId(2)
 _KUZE = PlayerId(3)
 
 
-def _build_runtime_and_snapshot_session(
-    root: Path, monkeypatch: pytest.MonkeyPatch
-):
+def _build_runtime_and_snapshot_session(root: Path, monkeypatch: pytest.MonkeyPatch):
     state = create_world_runtime_session(
         monkeypatch,
         root,
         world_id="station_drill",
     )
     runtime = state.runtime
-    runtime._wire_auxiliary_tool_stack()
+    runtime._wire_being_stack()
     for player_id in runtime.get_player_ids():
         runtime._aux_being_provisioning.ensure_attached(player_id)
 
@@ -62,9 +60,7 @@ class TestPlayerOutcomeSnapshotSemantics:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """DEAD と EJECTED が復元後に生存者や投票者へ戻らない。"""
-        source_state, source_session = _build_runtime_and_snapshot_session(
-            tmp_path / "source", monkeypatch
-        )
+        source_state, source_session = _build_runtime_and_snapshot_session(tmp_path / "source", monkeypatch)
         source = source_state.runtime
         sena = source._player_status_repo.find_by_id(_SENA)
         sena.apply_damage(sena.hp.value)
@@ -75,16 +71,12 @@ class TestPlayerOutcomeSnapshotSemantics:
         expected_game_end = source.check_game_end()
         expected_voters = source.eligible_voters()
         expected_can_act = {
-            player_id: source_state.llm_wiring.llm_turn_trigger._can_player_act(
-                int(player_id)
-            )
+            player_id: source_state.llm_wiring.llm_turn_trigger._can_player_act(int(player_id))
             for player_id in (_SENA, _KUZE)
         }
         snapshot_path = _capture(source_session, source)
 
-        restored_state, restored_session = _build_runtime_and_snapshot_session(
-            tmp_path / "restored", monkeypatch
-        )
+        restored_state, restored_session = _build_runtime_and_snapshot_session(tmp_path / "restored", monkeypatch)
         restored_dir = tmp_path / "restored" / "snapshots"
         restored_dir.mkdir(parents=True, exist_ok=True)
         copy2(snapshot_path, restored_dir / "world.json")
@@ -98,38 +90,26 @@ class TestPlayerOutcomeSnapshotSemantics:
         assert restored.check_game_end() == expected_game_end
         assert restored.eligible_voters() == expected_voters
         assert {
-            player_id: restored_state.llm_wiring.llm_turn_trigger._can_player_act(
-                int(player_id)
-            )
+            player_id: restored_state.llm_wiring.llm_turn_trigger._can_player_act(int(player_id))
             for player_id in (_SENA, _KUZE)
         } == expected_can_act
-        assert restored._player_outcome_registry.get_outcome(_SENA) is (
-            PlayerOutcomeEnum.DEAD
-        )
-        assert restored._player_outcome_registry.get_outcome(_KUZE) is (
-            PlayerOutcomeEnum.EJECTED
-        )
+        assert restored._player_outcome_registry.get_outcome(_SENA) is (PlayerOutcomeEnum.DEAD)
+        assert restored._player_outcome_registry.get_outcome(_KUZE) is (PlayerOutcomeEnum.EJECTED)
 
     def test_version_two_is_rejected_before_restoring_an_incomplete_world(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """outcome の無い版 2 は公開 resume 入口で理由を示して拒否する。"""
-        source_state, source_session = _build_runtime_and_snapshot_session(
-            tmp_path / "source", monkeypatch
-        )
+        source_state, source_session = _build_runtime_and_snapshot_session(tmp_path / "source", monkeypatch)
         snapshot_path = _capture(source_session, source_state.runtime)
         data = json.loads(snapshot_path.read_text(encoding="utf-8"))
         data["schema_version"] = 2
         data["subsystems"].pop("player_outcome")
 
-        restored_state, restored_session = _build_runtime_and_snapshot_session(
-            tmp_path / "restored", monkeypatch
-        )
+        restored_state, restored_session = _build_runtime_and_snapshot_session(tmp_path / "restored", monkeypatch)
         restored_dir = tmp_path / "restored" / "snapshots"
         restored_dir.mkdir(parents=True, exist_ok=True)
-        (restored_dir / "world.json").write_text(
-            json.dumps(data, ensure_ascii=False), encoding="utf-8"
-        )
+        (restored_dir / "world.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
         with pytest.raises(
             WorldStateSnapshotVersionError,
@@ -149,15 +129,11 @@ class TestDepartedPositionSnapshotSemantics:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """既定 codec の保存と復元を通して、別位置 store の内容が連続する。"""
-        source_state, source_session = _build_runtime_and_snapshot_session(
-            tmp_path / "source", monkeypatch
-        )
+        source_state, source_session = _build_runtime_and_snapshot_session(tmp_path / "source", monkeypatch)
         source_state.runtime._departed_position_store.place(_SENA, SpotId(3))
         snapshot_path = _capture(source_session, source_state.runtime)
 
-        restored_state, restored_session = _build_runtime_and_snapshot_session(
-            tmp_path / "restored", monkeypatch
-        )
+        restored_state, restored_session = _build_runtime_and_snapshot_session(tmp_path / "restored", monkeypatch)
         restored_dir = tmp_path / "restored" / "snapshots"
         restored_dir.mkdir(parents=True, exist_ok=True)
         copy2(snapshot_path, restored_dir / "world.json")
@@ -167,21 +143,15 @@ class TestDepartedPositionSnapshotSemantics:
             current_scenario="station_drill",
         )
 
-        assert restored_state.runtime._departed_position_store.find(_SENA) == (
-            SpotId(3)
-        )
+        assert restored_state.runtime._departed_position_store.find(_SENA) == (SpotId(3))
 
     def test_body_removed_by_meeting_does_not_return_after_snapshot_restore(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """会議後に保存した world snapshot は、復元先でも消えた遺体を空のまま保つ。"""
-        source_state, source_session = _build_runtime_and_snapshot_session(
-            tmp_path / "source", monkeypatch
-        )
+        source_state, source_session = _build_runtime_and_snapshot_session(tmp_path / "source", monkeypatch)
         source = source_state.runtime
-        body_spot = source._spot_graph_repo.find_graph().get_entity_spot(
-            EntityId.create(int(_SENA))
-        )
+        body_spot = source._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(_SENA)))
         source._fallen_body_registry.record(
             _SENA,
             body_spot,
@@ -197,9 +167,7 @@ class TestDepartedPositionSnapshotSemantics:
         assert source._fallen_body_registry.find(_SENA) is None
         snapshot_path = _capture(source_session, source)
 
-        restored_state, restored_session = _build_runtime_and_snapshot_session(
-            tmp_path / "restored", monkeypatch
-        )
+        restored_state, restored_session = _build_runtime_and_snapshot_session(tmp_path / "restored", monkeypatch)
         restored_dir = tmp_path / "restored" / "snapshots"
         restored_dir.mkdir(parents=True, exist_ok=True)
         copy2(snapshot_path, restored_dir / "world.json")
@@ -211,31 +179,23 @@ class TestDepartedPositionSnapshotSemantics:
 
         restored = restored_state.runtime
         assert restored._fallen_body_registry.find(_SENA) is None
-        assert restored._player_outcome_registry.get_outcome(_SENA) is (
-            PlayerOutcomeEnum.DEAD
-        )
+        assert restored._player_outcome_registry.get_outcome(_SENA) is (PlayerOutcomeEnum.DEAD)
         assert restored._departed_position_store.find(_SENA) == body_spot
 
     def test_version_four_is_rejected_before_departed_positions_are_lost(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """別位置を持たない版 4 は、主体の現在地を失う理由を示して拒否する。"""
-        source_state, source_session = _build_runtime_and_snapshot_session(
-            tmp_path / "source", monkeypatch
-        )
+        source_state, source_session = _build_runtime_and_snapshot_session(tmp_path / "source", monkeypatch)
         snapshot_path = _capture(source_session, source_state.runtime)
         data = json.loads(snapshot_path.read_text(encoding="utf-8"))
         data["schema_version"] = 4
         data["subsystems"].pop("departed_position")
 
-        restored_state, restored_session = _build_runtime_and_snapshot_session(
-            tmp_path / "restored", monkeypatch
-        )
+        restored_state, restored_session = _build_runtime_and_snapshot_session(tmp_path / "restored", monkeypatch)
         restored_dir = tmp_path / "restored" / "snapshots"
         restored_dir.mkdir(parents=True, exist_ok=True)
-        (restored_dir / "world.json").write_text(
-            json.dumps(data, ensure_ascii=False), encoding="utf-8"
-        )
+        (restored_dir / "world.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
         with pytest.raises(
             WorldStateSnapshotVersionError,
@@ -260,10 +220,5 @@ class TestPlayerPerceptionPolicyWiring:
         policy = runtime._player_perception_policy
 
         assert runtime._state_builder._player_perception_policy is policy
-        assert (
-            runtime._obs_pipeline._resolver._player_perception_policy is policy
-        )
-        assert (
-            state.llm_wiring.speech_audience_resolver._player_perception_policy
-            is policy
-        )
+        assert runtime._obs_pipeline._resolver._player_perception_policy is policy
+        assert state.llm_wiring.speech_audience_resolver._player_perception_policy is policy

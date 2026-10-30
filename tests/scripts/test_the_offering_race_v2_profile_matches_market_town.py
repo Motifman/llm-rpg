@@ -49,14 +49,13 @@ class TestTheProfilesShareTheirConditions:
         race = _load("offering_race_v2")
         town = _load("market_town")
 
-        differing = {
-            key
-            for key in set(race) | set(town)
-            if race.get(key) != town.get(key)
-        }
+        differing = {key for key in set(race) | set(town) if race.get(key) != town.get(key)}
 
         assert differing == {
-            "profile", "description", "scenario", "max_world_ticks",
+            "profile",
+            "description",
+            "scenario",
+            "max_world_ticks",
         }
 
     def test_it_points_at_the_offering_race(self) -> None:
@@ -98,10 +97,6 @@ class TestTheProfileDoesNotCutTheWorldShort:
         勝敗が付かない。profile が長いと余りが空回りする。
         """
         scenario = _scenario(_load("offering_race_v2")["scenario"])
-        deadline = next(
-            c["tick_limit"]
-            for c in scenario["game_end_conditions"]["lose"]
-            if c["type"] == "TICK_LIMIT"
-        )
+        deadline = next(c["tick_limit"] for c in scenario["game_end_conditions"]["lose"] if c["type"] == "TICK_LIMIT")
 
         assert _load("offering_race_v2")["max_world_ticks"] == deadline

@@ -6,6 +6,7 @@ from ai_rpg_world.domain.world.exception.weather_exception import WeatherZoneNam
 @dataclass(frozen=True)
 class WeatherZoneName:
     """天候ゾーンの名前を表す値オブジェクト"""
+
     value: str
 
     def __post_init__(self) -> None:

@@ -102,9 +102,7 @@ def verify_rules_cover_registry(
     registered: Iterable[type] = registry.get_event_types_for_strategy(strategy_key)
 
     missing = sorted(
-        event_type.__name__
-        for event_type in registered
-        if event_type not in rules and event_type not in nobody
+        event_type.__name__ for event_type in registered if event_type not in rules and event_type not in nobody
     )
     if missing:
         raise RecipientRuleWiringError(
@@ -114,9 +112,7 @@ def verify_rules_cover_registry(
             "_DELIVERS_TO_NOBODY へ登録してください: " + ", ".join(missing)
         )
 
-    both = sorted(
-        event_type.__name__ for event_type in rules if event_type in nobody
-    )
+    both = sorted(event_type.__name__ for event_type in rules if event_type in nobody)
     if both:
         raise RecipientRuleWiringError(
             f"{strategy_key} で、配信規則と「配らない」宣言の両方に載っている"
@@ -130,11 +126,7 @@ def blank_reasons(delivers_to_nobody: Mapping[type, str]) -> list[str]:
     理由を書く欄があっても空で登録できるなら「登録すれば無検査で通る」抜け道が
     残る。中身の妥当さはレビューが見るしかないが、空であることは機械で落とせる。
     """
-    return sorted(
-        event_type.__name__
-        for event_type, reason in delivers_to_nobody.items()
-        if not reason.strip()
-    )
+    return sorted(event_type.__name__ for event_type, reason in delivers_to_nobody.items() if not reason.strip())
 
 
 #: 型注釈のための別名。``Dict[type, RecipientRule]`` を各 strategy で書くより短い。

@@ -46,7 +46,6 @@ class TestSystemPromptNoHardcodedEscapeObjective:
             world_title="テスト世界",
             persona_block="(空)",
             safe_intro=_DEFAULT_SAFE_INTRO,
-            participant_names=(),
         )
         # 「最優先の目的は『脱出』」フレーズが消えていること
         assert "最優先の目的は「脱出」" not in prompt
@@ -62,7 +61,6 @@ class TestSystemPromptNoHardcodedEscapeObjective:
             world_title="テスト世界",
             persona_block="(空)",
             safe_intro=_DEFAULT_SAFE_INTRO,
-            participant_names=(),
         )
         # 既存の行動ルールに「未発見の事実を、すでに知っているかのように断言しない。」が残る
         assert "未発見の事実を" in prompt
@@ -73,14 +71,12 @@ class TestSystemPromptNoHardcodedEscapeObjective:
             world_title="テスト世界",
             persona_block="(空)",
             safe_intro=_DEFAULT_SAFE_INTRO,
-            participant_names=(),
-            expected_result_policy="required",
             tool_schema_mode="reason_first",
         )
 
         assert "まず `assess_situation` で `inner_thought`" in prompt
         assert "行動 tool では、`assess_situation` の評価に従って" in prompt
-        assert "`assess_situation` で `expected_result`" in prompt
+        assert "expected_result" not in prompt
         assert "各ツール呼び出しでは `inner_thought`" not in prompt
 
     def test_safe_world_intro_text_prefers_scenario_llm_public_intro(self) -> None:

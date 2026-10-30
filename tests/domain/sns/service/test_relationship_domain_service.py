@@ -21,10 +21,7 @@ from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
 
 
 def create_test_user_aggregate(
-    user_id: int,
-    follows: list | None = None,
-    blocks: list | None = None,
-    subscribes: list | None = None
+    user_id: int, follows: list | None = None, blocks: list | None = None, subscribes: list | None = None
 ) -> UserAggregate:
     """テスト用のUserAggregateを作成するヘルパー関数"""
     profile = UserProfile(f"user{user_id}", f"User {user_id}", f"Test user {user_id}")
@@ -56,7 +53,7 @@ class TestRelationshipDomainService:
         follower = create_test_user_aggregate(1)  # フォローするユーザー
         followee = create_test_user_aggregate(
             2,
-            blocks=[BlockRelationShip(UserId(2), UserId(1))]  # ユーザー2がユーザー1をブロック
+            blocks=[BlockRelationShip(UserId(2), UserId(1))],  # ユーザー2がユーザー1をブロック
         )
 
         # When & Then
@@ -71,7 +68,7 @@ class TestRelationshipDomainService:
         # Given
         subscriber = create_test_user_aggregate(
             1,
-            follows=[FollowRelationShip(UserId(1), UserId(2))]  # ユーザー1がユーザー2をフォロー
+            follows=[FollowRelationShip(UserId(1), UserId(2))],  # ユーザー1がユーザー2をフォロー
         )
         subscribed = create_test_user_aggregate(2)  # 購読されるユーザー（ブロックなし）
 
@@ -108,11 +105,11 @@ class TestRelationshipDomainService:
         # Given
         subscriber = create_test_user_aggregate(
             1,
-            follows=[FollowRelationShip(UserId(1), UserId(2))]  # フォロー関係あり
+            follows=[FollowRelationShip(UserId(1), UserId(2))],  # フォロー関係あり
         )
         subscribed = create_test_user_aggregate(
             2,
-            blocks=[BlockRelationShip(UserId(2), UserId(1))]  # ユーザー2がユーザー1をブロック
+            blocks=[BlockRelationShip(UserId(2), UserId(1))],  # ユーザー2がユーザー1をブロック
         )
 
         # When & Then

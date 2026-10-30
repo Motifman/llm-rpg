@@ -37,13 +37,11 @@ from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnu
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
-_KUZE = PlayerId(3)   # keeper
+_KUZE = PlayerId(3)  # keeper
 
 
 @pytest.fixture()
@@ -64,9 +62,7 @@ def runtime_with_tending(tmp_path):
 
     raw = json.loads(_SCENARIO.read_text(encoding="utf-8"))
     raw["death"]["grace_ticks"] = 1
-    raw["disabled_tools"] = [
-        name for name in raw.get("disabled_tools", []) if name != "tend_to_player"
-    ]
+    raw["disabled_tools"] = [name for name in raw.get("disabled_tools", []) if name != "tend_to_player"]
     path = tmp_path / "with_tending.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     return create_world_runtime(path)
@@ -87,12 +83,8 @@ def _down(runtime, player_id: PlayerId) -> None:
     status.clear_events()
     runtime._player_status_repo.save(status)
     current_tick = int(runtime.current_tick())
-    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
-        EntityId.create(int(player_id))
-    )
-    runtime._fallen_body_registry.record(
-        player_id, spot_id, WorldTick(current_tick)
-    )
+    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
+    runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(current_tick))
     runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
     runtime._speech_event_publisher.publish_all(events)
 
@@ -152,9 +144,7 @@ class TestEliminatedTarget:
         _down(runtime, _SENA)
         runtime._player_outcome_registry.set_outcome(_SENA, outcome)
 
-    @pytest.mark.parametrize(
-        "outcome", [PlayerOutcomeEnum.DEAD, PlayerOutcomeEnum.EJECTED]
-    )
+    @pytest.mark.parametrize("outcome", [PlayerOutcomeEnum.DEAD, PlayerOutcomeEnum.EJECTED])
     def test_no_action_is_offered(self, runtime, outcome) -> None:
         """死亡でも追放でも、行動候補が空になる。"""
         self._eliminate(runtime, outcome)

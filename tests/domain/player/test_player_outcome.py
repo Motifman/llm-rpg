@@ -83,9 +83,7 @@ class TestCallback:
         """変化時に callback が呼ばれる。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         calls: list[tuple] = []
-        reg.register_callback(
-            lambda pid, old, new: calls.append((int(pid), old.value, new.value))
-        )
+        reg.register_callback(lambda pid, old, new: calls.append((int(pid), old.value, new.value)))
 
         reg.set_outcome(PlayerId(1), PlayerOutcomeEnum.DEAD)
 
@@ -116,9 +114,7 @@ class TestAggregateQueries:
 
     def test_one_unresolved_rendered(self) -> None:
         """1 人 未確定なら unresolved に出る。"""
-        reg = PlayerOutcomeRegistry.new_for_players(
-            [PlayerId(1), PlayerId(2), PlayerId(3)]
-        )
+        reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1), PlayerId(2), PlayerId(3)])
         reg.set_outcome(PlayerId(1), PlayerOutcomeEnum.DEAD)
         unresolved = reg.unresolved_player_ids()
         unresolved_ids = {int(p) for p in unresolved}

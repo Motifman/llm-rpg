@@ -1,0 +1,819 @@
+"""ゲームの観測と行動結果を、契約の観測 (``Observation``) へ変換する規則を保証する。"""
+
+from __future__ import annotations
+
+import importlib
+import pkgutil
+from datetime import datetime, timezone
+from typing import Any
+
+import pytest
+
+import ai_rpg_world.application.llm.services.tool_catalog as tool_catalog
+from ai_rpg_world.application.llm import tool_constants
+from ai_rpg_world.application.llm.contracts.chunk_encoding import format_action_result_body
+from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry, ToolDefinitionDto
+from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
+from ai_rpg_world.application.llm.services.tool_catalog.memory import (
+    episode_recall_definition,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+    assess_situation_definition,
+)
+from ai_rpg_world.application.observation.being_contract import (
+    NotRepresentableReason,
+    ObservationNotRepresentable,
+    Observer,
+    lapse_body_and_time,
+    observation_from_action_result,
+    observation_from_game,
+    observation_from_unprompted_result,
+    result_from_action_result,
+)
+from ai_rpg_world.application.observation.contracts.dtos import (
+    ObservationCategory,
+    ObservationOutput,
+    SubjectUnknownView,
+    WithheldFromStrangers,
+)
+from ai_rpg_world.being.contract import (
+    UNKNOWN,
+    EnvironmentNotice,
+    ObservedTime,
+    OccurrenceOrder,
+    OwnActionResult,
+    OwnBodyState,
+    SeenOrHeard,
+    ToldOrWritten,
+)
+from ai_rpg_world.being.domain.short_term_memory import MemoryOperationOutcome, ObservedOutcome
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+_NOAH = Observer(
+    player_id=PlayerId.create(2),
+    name="ノア",
+    place_name="浜辺",
+    seconds_per_tick=300,
+)
+
+
+def _output(
+    structured: dict[str, Any],
+    *,
+    category: ObservationCategory = "social",
+    schedules_turn: bool = False,
+    prose: str | None = None,
+) -> ObservationOutput:
+    """``prose`` を省くと、構造化データの文字列をすべて含む本文にする (名前を伏せない観測)。"""
+    if prose is None:
+        prose = "、".join(v for v in structured.values() if isinstance(v, str)) + "。"
+    return ObservationOutput(
+        prose=prose,
+        structured=structured,
+        observation_category=category,
+        schedules_turn=schedules_turn,
+    )
+
+
+def _translate(output: ObservationOutput, observer: Observer = _NOAH) -> Any:
+    return observation_from_game(output, tick=12, game_time_label="一日目の朝 1:00", observer=observer)
+
+
+def _speech(channel: str = "say", **extra: Any) -> dict[str, Any]:
+    return {
+        "type": "player_spoke",
+        "speaker": "カイ",
+        "speaker_player_id": 4,
+        "channel": channel,
+        "content": "水場は北だ",
+        "role": "other",
+        **extra,
+    }
+
+
+class TestSubjectFromRole:
+    """``role`` から「主体が本人か」と主体の名前を決める規則を保証する。"""
+
+    def test_speech_of_another_player_has_speaker_as_subject_and_source(self) -> None:
+        """role が other の発言は、主体が本人でなく、主体の名前と情報源に話者名が入り、経路は「言われた」になる。"""
+        observation = _translate(_output(_speech(), schedules_turn=True, prose="カイが言った: 「水場は北だ」"))
+
+        assert observation.subject_is_self is False
+        assert observation.subject_name == "カイ"
+        assert observation.source == "カイ"
+        assert isinstance(observation.route, ToldOrWritten)
+        assert observation.body == "カイが言った: 「水場は北だ」"
+
+    def test_self_role_makes_subject_self(self) -> None:
+        """role が self の観測は、主体が本人になり、主体の名前に本人の名前が入る。"""
+        observation = _translate(_output({"type": "player_downed", "role": "self"}, category="self_only"))
+
+        assert observation.subject_is_self is True
+        assert observation.subject_name == "ノア"
+        assert isinstance(observation.route, OwnBodyState)
+
+    def test_actor_with_own_name_is_self(self) -> None:
+        """role が無くても、行為者の名前が本人の名前なら主体は本人になる。"""
+        observation = _translate(_output({"type": "spot_explored", "actor": "ノア"}))
+
+        assert observation.subject_is_self is True
+
+    def test_self_subject_type_without_actor_is_self(self) -> None:
+        """行為者の名前を持たず本文が本人の状態を述べる種類 (入手) は、主体が本人になる。"""
+        observation = _translate(
+            _output(
+                {"type": "item_added_to_inventory", "item_name": "貝"},
+                category="self_only",
+                prose="貝を入手しました。",
+            )
+        )
+
+        assert observation.subject_is_self is True
+        assert observation.subject_name == "ノア"
+
+    def test_self_only_about_another_party_is_not_self(self) -> None:
+        """self_only でも、取引を断った相手のように主体が他人で名前が無ければ、本人とせず「不明」にする。"""
+        observation = _translate(
+            _output(
+                {"type": "trade_declined", "role": "seller", "decliner_player_id": 4},
+                category="self_only",
+                prose="カイが取引を断りました。",
+            )
+        )
+
+        assert observation.subject_is_self is False
+        assert observation.subject_name is UNKNOWN
+
+    def test_trade_offer_has_seller_as_subject(self) -> None:
+        """取引の提案を受けた観測は、本文に現れる出品者が主体になる。"""
+        observation = _translate(
+            _output(
+                {"type": "trade_offered", "role": "recipient", "seller": "カイ"},
+                category="self_only",
+                prose="カイから「貝」の取引提案が届きました（10G）。",
+            )
+        )
+
+        assert observation.subject_is_self is False
+        assert observation.subject_name == "カイ"
+
+    def test_speaker_id_of_self_makes_subject_self(self) -> None:
+        """話者の ID が本人なら、名前が違っていても主体は本人になる。"""
+        observation = _translate(_output(_speech(speaker="のあ", speaker_player_id=2), prose="のあが言った"))
+
+        assert observation.subject_is_self is True
+
+    def test_actor_hidden_from_prose_is_self_when_it_is_the_observer(self) -> None:
+        """本文が行為者を伏せていても、行為者が本人なら主体は本人になる。本人は自分がしたと知っている。"""
+        observation = _translate(
+            _output(
+                {"type": "spot_public_effect_observed", "actor_name": "ノア"},
+                category="environment",
+                prose="集会室の雰囲気が変わった。",
+            )
+        )
+
+        assert observation.subject_is_self is True
+        assert observation.subject_name == "ノア"
+
+    def test_actor_hidden_from_prose_is_not_revealed(self) -> None:
+        """構造化データに行為者があっても本文が伏せていれば、主体の名前は「不明」になる。"""
+        observation = _translate(
+            _output(
+                {"type": "spot_public_effect_observed", "actor_name": "クゼ"},
+                category="environment",
+                prose="集会室の雰囲気が変わった。",
+            )
+        )
+
+        assert observation.subject_name is UNKNOWN
+        assert observation.subject_is_self is False
+
+    def test_environment_event_without_actor_has_unknown_subject(self) -> None:
+        """行為者を持たない環境の出来事は、主体が本人でなく、主体の名前が「不明」になる。"""
+        observation = _translate(_output({"type": "weather_changed"}, category="environment"))
+
+        assert observation.subject_is_self is False
+        assert observation.subject_name is UNKNOWN
+
+
+class TestWantsWake:
+    """``schedules_turn`` を「起こしてほしいか」へ写す規則を保証する。"""
+
+    def test_schedules_turn_true_means_wants_wake(self) -> None:
+        """schedules_turn=True の観測は、起こしてほしいかが True になる。"""
+        assert _translate(_output(_speech(), schedules_turn=True)).wants_wake is True
+
+    def test_schedules_turn_false_means_does_not_want_wake(self) -> None:
+        """schedules_turn=False の観測は、起こしてほしいかが False になり、省略と区別される。"""
+        assert _translate(_output(_speech(), schedules_turn=False)).wants_wake is False
+
+
+class TestRoute:
+    """``observation_category`` と観測の種類から経路を決める規則を保証する。"""
+
+    @pytest.mark.parametrize(
+        ("structured", "category", "route_type"),
+        [
+            ({"type": "entity_entered_spot", "actor": "カイ", "spot_name": "浜辺"}, "social", SeenOrHeard),
+            ({"type": "item_added_to_inventory", "item_name": "貝"}, "self_only", OwnBodyState),
+            ({"type": "scenario_event", "message": "鐘が鳴った"}, "environment", EnvironmentNotice),
+            ({"type": "game_phase_changed", "initiator_display_name": "モリ"}, "social", EnvironmentNotice),
+            ({"type": "meeting_vote_cast", "voter_display_name": "モリ"}, "social", EnvironmentNotice),
+            ({"type": "weather_changed"}, "environment", SeenOrHeard),
+            ({"type": "time_of_day_changed"}, "environment", SeenOrHeard),
+            ({"kind": "player_revived_post_hoc"}, "self_only", OwnBodyState),
+        ],
+    )
+    def test_route_is_decided_by_type_then_category(
+        self,
+        structured: dict[str, Any],
+        category: ObservationCategory,
+        route_type: type,
+    ) -> None:
+        """種類ごとの上書きがあればそれを、無ければ observation_category の既定を経路にする。"""
+        observation = _translate(_output(structured, category=category))
+
+        assert isinstance(observation.route, route_type)
+
+    def test_monster_attack_on_self_is_own_body_state(self) -> None:
+        """自分が標的のモンスターの攻撃は「自分の体の状態」になり、自分宛てになる。"""
+        observation = _translate(
+            _output({"type": "monster_attacked_player", "monster_name": "大型カニ", "target_player_id": 2})
+        )
+
+        assert isinstance(observation.route, OwnBodyState)
+        assert observation.subject_name == "大型カニ"
+        assert observation.subject_is_self is False
+        assert observation.addressed_to_self is True
+
+    def test_being_targeted_without_harm_is_seen(self) -> None:
+        """標的が本人でも害を受けない出来事 (追跡の開始) は「見た・聞いた」のままで、自分宛てになる。"""
+        observation = _translate(
+            _output({"type": "monster_started_chasing", "monster_name": "大型カニ", "target_player_id": 2})
+        )
+
+        assert isinstance(observation.route, SeenOrHeard)
+        assert observation.addressed_to_self is True
+
+    def test_written_post_has_author_as_source(self) -> None:
+        """書き込みは「言われた・書かれていた」になり、書いた人が情報源になる。"""
+        observation = _translate(_output({"type": "sns_post_created", "actor": "カイ", "content": "北に水場"}))
+
+        assert isinstance(observation.route, ToldOrWritten)
+        assert observation.source == "カイ"
+
+    def test_monster_attack_on_another_is_seen(self) -> None:
+        """他人が標的のモンスターの攻撃は「見た・聞いた」になり、自分宛てでない。"""
+        observation = _translate(
+            _output({"type": "monster_attacked_player", "monster_name": "大型カニ", "target_player_id": 4})
+        )
+
+        assert isinstance(observation.route, SeenOrHeard)
+        assert observation.addressed_to_self is False
+
+    def test_loop_guard_warning_is_an_environment_notice_to_self(self) -> None:
+        """同じ行動の繰り返しへの警告は、出すかを環境が判定するので、自分についての環境からの知らせとして写す。送り手は分からない (design_decisions D1824-10)。"""
+        observation = _translate(_output({"loop_guard": True, "tool_name": "wait"}, category="self_only"))
+
+        assert observation.route == EnvironmentNotice()
+        assert (observation.subject_is_self, observation.addressed_to_self, observation.source) == (True, True, UNKNOWN)
+
+    def test_blank_prose_is_not_representable(self) -> None:
+        """目撃文との重複を避けて本文を空にした観測は、必須の本文が無いので変換を拒む。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            _translate(_output({"type": "player_downed", "actor": "モリ"}, prose=""))
+
+        assert raised.value.reason is NotRepresentableReason.EMPTY_BODY
+
+
+class TestKnownIfPossibleFields:
+    """情報源・場所・自分宛てかを、分かるときだけ埋める規則を保証する。"""
+
+    def test_whisper_is_addressed_to_self(self) -> None:
+        """囁きは相手にしか届かないので、自分宛てになる。"""
+        assert _translate(_output(_speech("whisper"))).addressed_to_self is True
+
+    def test_say_has_unknown_addressee(self) -> None:
+        """場の全員に届く発言は、自分宛てかが「不明」になる。"""
+        assert _translate(_output(_speech("say"))).addressed_to_self is UNKNOWN
+
+    def test_interaction_reports_whether_self_is_target(self) -> None:
+        """対人行為は is_target から自分宛てかを決める。"""
+        observation = _translate(_output({"type": "player_interacted_with_player", "actor": "カイ", "is_target": True}))
+
+        assert observation.addressed_to_self is True
+
+    def test_first_hand_perception_has_self_as_source(self) -> None:
+        """「見た・聞いた」の観測は、情報源が本人になる。"""
+        observation = _translate(_output({"type": "spot_explored", "actor": "カイ"}))
+
+        assert observation.source == "ノア"
+
+    def test_environment_notice_has_unknown_source_and_place(self) -> None:
+        """環境からの知らせは、情報源と場所が「不明」になる。"""
+        observation = _translate(_output({"type": "player_outcome_resolved", "label": "脱落"}, category="environment"))
+
+        assert observation.source is UNKNOWN
+        assert observation.place is UNKNOWN
+
+    def test_place_defaults_to_where_the_observer_is(self) -> None:
+        """出来事の場所が観測に書かれていなければ、観測者がいる場所を場所にする。"""
+        assert _translate(_output(_speech())).place == "浜辺"
+
+    def test_place_written_in_the_event_wins(self) -> None:
+        """隣の場所から聞こえた発言は、その隣の場所を場所にする。"""
+        observation = _translate(_output(_speech(source_adjacent_spot_name="岩場")))
+
+        assert observation.place == "岩場"
+
+    def test_adjacent_place_hidden_from_prose_is_unknown(self) -> None:
+        """隣の場所から聞こえた発言でも、本文がその場所を書いていなければ場所は「不明」になる。"""
+        observation = _translate(
+            _output(
+                _speech(source_adjacent_spot_name="岩場"),
+                prose="どこからかカイの声が聞こえた: 「水場は北だ」",
+            )
+        )
+
+        assert observation.place is UNKNOWN
+
+    def test_entered_spot_uses_the_spot_name(self) -> None:
+        """誰かが入ってきた観測は、入った場所を場所にする。"""
+        observation = _translate(_output({"type": "entity_entered_spot", "actor": "カイ", "spot_name": "洞窟"}))
+
+        assert observation.place == "洞窟"
+
+    def test_unknown_observer_place_becomes_unknown(self) -> None:
+        """観測者の居場所が分からず、観測にも場所が無ければ、場所は「不明」になる。"""
+        observer = Observer(player_id=PlayerId.create(2), name="ノア", place_name=None, seconds_per_tick=300)
+
+        assert _translate(_output(_speech()), observer).place is UNKNOWN
+
+
+class TestTime:
+    """世界の tick と時刻のラベルを、時刻の数値 (秒) と表示の文へ写す規則を保証する。"""
+
+    def test_tick_becomes_seconds_and_label_becomes_display(self) -> None:
+        """tick 12 は 1 tick 300 秒の世界で 3600 秒になり、ラベルが表示の文になる。"""
+        observation = _translate(_output(_speech()))
+
+        assert observation.time == ObservedTime(display="一日目の朝 1:00", seconds=3600)
+
+    @pytest.mark.parametrize(("tick", "seconds"), [(0, 0), (None, None)])
+    def test_tick_zero_is_zero_seconds_and_missing_tick_has_no_seconds(
+        self, tick: int | None, seconds: int | None
+    ) -> None:
+        """tick 0 は 0 秒になり、tick が無ければ秒を省く。"""
+        observation = observation_from_game(_output(_speech()), tick=tick, game_time_label="深夜 0:00", observer=_NOAH)
+
+        assert observation.time.seconds == seconds
+
+    def test_seconds_is_none_when_tick_length_is_unknown(self) -> None:
+        """1 tick の長さが分からない世界では、数値を省いて表示の文だけにする。"""
+        observer = Observer(player_id=PlayerId.create(2), name="ノア", place_name="浜辺", seconds_per_tick=None)
+
+        assert _translate(_output(_speech()), observer).time.seconds is None
+
+    def test_missing_time_label_is_rejected(self) -> None:
+        """時刻のラベルが無い観測は、必須の時刻を埋められないので変換を拒む。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            observation_from_game(_output(_speech()), tick=12, game_time_label=None, observer=_NOAH)
+
+        assert raised.value.reason is NotRepresentableReason.MISSING_TIME_LABEL
+
+
+class TestActionResult:
+    """ツールの結果を、経路「自分の行動の結果」の観測へ変換する規則を保証する。"""
+
+    def _entry(self, **overrides: Any) -> ActionResultEntry:
+        fields: dict[str, Any] = {
+            "occurred_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "action_summary": "通信室へ移動しようとした",
+            "result_summary": "通路が塞がっていて進めない。",
+            "success": False,
+            "error_code": "CONNECTION_BLOCKED",
+            "tool_name": "travel_to",
+            "game_time_label": "一日目の朝 0:10",
+            "occurred_tick": 2,
+        }
+        fields.update(overrides)
+        return ActionResultEntry(**fields)
+
+    def test_failed_result_has_call_id_and_failure(self) -> None:
+        """失敗したツールの結果は、成否が失敗で、渡した呼び出しの ID が付いた観測になる。本文は失敗の行で、error_code と道具の名前を持つ。"""
+        observation = observation_from_action_result(self._entry(), call_id="call-9", observer=_NOAH)
+
+        assert observation.route == OwnActionResult(call_id="call-9", succeeded=False)
+        assert (
+            observation.body
+            == "[行動] 通信室へ移動しようとした → [失敗] | error_code=CONNECTION_BLOCKED | tool=travel_to | 通路が塞がっていて進めない。"
+        )
+
+    def test_result_is_about_self_and_addressed_to_self(self) -> None:
+        """ツールの結果は、主体も情報源も本人で、自分宛てになる。"""
+        observation = observation_from_action_result(self._entry(success=True), call_id="call-9", observer=_NOAH)
+
+        assert observation.subject_is_self is True
+        assert observation.subject_name == "ノア"
+        assert observation.source == "ノア"
+        assert observation.addressed_to_self is True
+        assert observation.place == "浜辺"
+        assert observation.time == ObservedTime(display="一日目の朝 0:10", seconds=600)
+
+    def test_successful_result_has_success(self) -> None:
+        """成功したツールの結果は、成否が成功の観測になる。"""
+        observation = observation_from_action_result(self._entry(success=True), call_id="call-9", observer=_NOAH)
+
+        assert observation.route == OwnActionResult(call_id="call-9", succeeded=True)
+
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_reschedule_flag_becomes_wants_wake(self, flag: bool) -> None:
+        """should_reschedule の値が、そのまま起こしてほしいかになる。"""
+        observation = observation_from_action_result(
+            self._entry(should_reschedule=flag), call_id="call-9", observer=_NOAH
+        )
+
+        assert observation.wants_wake is flag
+
+    def test_result_without_any_text_is_not_representable(self) -> None:
+        """結果の文も行動の要約も空なら、必須の本文が無いので変換を拒む。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            observation_from_action_result(
+                self._entry(result_summary="", action_summary=" "),
+                call_id="call-9",
+                observer=_NOAH,
+            )
+
+        assert raised.value.reason is NotRepresentableReason.EMPTY_BODY
+
+    def test_result_without_time_label_is_not_representable(self) -> None:
+        """時刻のラベルが無いツールの結果は、必須の時刻を埋められないので変換を拒む。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            observation_from_action_result(self._entry(game_time_label=None), call_id="call-9", observer=_NOAH)
+
+        assert raised.value.reason is NotRepresentableReason.MISSING_TIME_LABEL
+
+    @pytest.mark.parametrize("result_summary", ["", "通信室に着いた"], ids=["blank-result", "with-result"])
+    def test_body_is_the_recent_event_line_without_time_and_inner_thought(self, result_summary: str) -> None:
+        """本文は、直近の出来事の行から時刻の前置きと心の声を除いた文 (format_action_result_body) になる。結果の文が空でも、行動の要約があれば写す (design_decisions D1824-7)。"""
+        entry = self._entry(result_summary=result_summary)
+
+        observation = observation_from_action_result(entry, call_id="call-9", observer=_NOAH)
+
+        assert observation.body == format_action_result_body(entry)
+        assert "通信室へ移動しようとした" in observation.body
+
+
+class TestObservationFromUnpromptedResult:
+    """observation_from_unprompted_result が、1 手と同じ手番に届かない結果 (移動の到着など) を、呼び出しの ID を持たない経路で写すことを保証する。"""
+
+    def _entry(self, **overrides: object) -> ActionResultEntry:
+        fields: dict[str, object] = {
+            "occurred_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "action_summary": "通信室へ移動した",
+            "result_summary": "通信室に着いた",
+            "success": True,
+            "tool_name": "travel_to",
+            "game_time_label": "一日目の朝 0:10",
+            "occurred_tick": 2,
+        }
+        return ActionResultEntry(**{**fields, **overrides})  # type: ignore[arg-type]
+
+    def test_arrival_is_seen_by_self_with_the_line_as_body(self) -> None:
+        """到着の結果は「見た・聞いた」の経路で、主体は本人、本文は行の本文、時刻は tick から秒になる。"""
+        entry = self._entry()
+
+        observation = observation_from_unprompted_result(entry, observer=_NOAH)
+
+        assert observation.route == SeenOrHeard()
+        assert (observation.subject_is_self, observation.subject_name, observation.place) == (
+            True,
+            _NOAH.name,
+            _NOAH.place_name,
+        )
+        assert observation.body == format_action_result_body(entry)
+        assert observation.time == ObservedTime(display="一日目の朝 0:10", seconds=2 * _NOAH.seconds_per_tick)
+
+    @pytest.mark.parametrize(
+        ("overrides", "reason"),
+        [
+            ({"tool_name": "memo_add"}, NotRepresentableReason.BEING_INNER_RECORD),
+            ({"result_summary": "", "action_summary": " "}, NotRepresentableReason.EMPTY_BODY),
+            ({"game_time_label": None}, NotRepresentableReason.MISSING_TIME_LABEL),
+        ],
+        ids=["agent-side-tool", "empty", "no-time-label"],
+    )
+    def test_same_rejections_as_own_action_results(
+        self, overrides: dict[str, object], reason: NotRepresentableReason
+    ) -> None:
+        """記憶の道具、空の本文、時刻の無い結果は、自分の行動の結果と同じ理由で拒む。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            observation_from_unprompted_result(self._entry(**overrides), observer=_NOAH)
+
+        assert raised.value.reason is reason
+
+
+class TestAgentSideToolResult:
+    """メモ・記憶・状況評価のようなエージェント側の道具の結果を、環境の観測として写さない規則を保証する。"""
+
+    def _entry(
+        self, tool_name: str | None, *, result_summary: str = "メモを追加しました（ID: ccd325…）。"
+    ) -> ActionResultEntry:
+        return ActionResultEntry(
+            occurred_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            action_summary=f"{tool_name}()",
+            result_summary=result_summary,
+            success=True,
+            tool_name=tool_name,
+            game_time_label="一日目の朝 0:10",
+        )
+
+    def test_every_catalogued_tool_is_rejected_exactly_when_it_is_not_a_world_action(self) -> None:
+        """道具のカタログの全道具について、環境に働きかける道具 (world_action) だけを写し、それ以外 (メモ・記憶・状況評価) を拒む。道具を足せば自動でこの検査の対象になる。"""
+        definitions = _catalogued_tool_definitions()
+        assert len(definitions) > 50, "カタログの走査が道具を拾えていない"
+
+        for name, category in definitions.items():
+            entry = self._entry(name, result_summary="何かが起きた。")
+            if category is ToolCategory.WORLD_ACTION:
+                observation = observation_from_action_result(entry, call_id="c", observer=_NOAH)
+                assert isinstance(observation.route, OwnActionResult), name
+            else:
+                with pytest.raises(ObservationNotRepresentable) as raised:
+                    observation_from_action_result(entry, call_id="c", observer=_NOAH)
+                assert raised.value.reason is NotRepresentableReason.BEING_INNER_RECORD, name
+                assert raised.value.kind == name
+
+    def test_every_tool_name_constant_is_in_the_catalogue(self) -> None:
+        """道具の名前の定数はすべてカタログに分類がある。カタログに無い道具は、写すか拒むかが決まらないので、分類を足させる。"""
+        names = {
+            value
+            for key, value in vars(tool_constants).items()
+            if key.startswith("TOOL_NAME_") and not key.startswith("TOOL_NAME_PREFIX") and isinstance(value, str)
+        }
+
+        assert names <= set(_catalogued_tool_definitions())
+
+    def test_agent_side_check_comes_before_the_empty_body_check(self) -> None:
+        """エージェント側の道具の結果は、本文が空でも、空だからではなく Being 自身の記録として拒む。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            observation_from_action_result(self._entry("memo_done", result_summary=""), call_id="c", observer=_NOAH)
+
+        assert raised.value.reason is NotRepresentableReason.BEING_INNER_RECORD
+
+    @pytest.mark.parametrize("tool_name", ["interact", "speak", "wait", "world_inspect_item"])
+    def test_environment_tool_result_is_still_representable(self, tool_name: str) -> None:
+        """環境の道具の結果は、これまでどおり本文を持つ自分の行動の結果として写す。"""
+        observation = observation_from_action_result(
+            self._entry(tool_name, result_summary="箱を開けた。"), call_id="c", observer=_NOAH
+        )
+
+        assert isinstance(observation.route, OwnActionResult)
+        assert "箱を開けた。" in observation.body
+
+    def test_result_without_tool_name_is_still_representable(self) -> None:
+        """道具の名前が無い結果 (古い snapshot から戻したものなど) は、見分けられないので写す。"""
+        observation = observation_from_action_result(
+            self._entry(None, result_summary="箱を開けた。"), call_id="c", observer=_NOAH
+        )
+
+        assert isinstance(observation.route, OwnActionResult)
+
+
+class TestResultFromActionResult:
+    """1 手の結果を、環境に働きかける道具なら自分の行動の結果の観測に、記憶の道具なら記憶の結果 (MemoryOperationOutcome) に写す規則を保証する (design_decisions D1824-9)。"""
+
+    def _entry(self, tool_name: str | None, **overrides: Any) -> ActionResultEntry:
+        fields: dict[str, Any] = {
+            "occurred_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "action_summary": f"{tool_name}()",
+            "result_summary": "メモを追加しました（ID: ccd325…）。",
+            "success": True,
+            "tool_name": tool_name,
+            "game_time_label": "一日目の朝 0:10",
+            "occurred_tick": 2,
+        }
+        fields.update(overrides)
+        return ActionResultEntry(**fields)
+
+    def test_every_catalogued_tool_becomes_an_observation_or_a_memory_operation_result(self) -> None:
+        """道具のカタログの全道具について、環境に働きかける道具 (world_action) は自分の行動の結果の観測に、それ以外 (メモ・記憶・状況評価) は記憶の結果になる。どちらも渡した呼び出しの ID と起きた順を持つ。"""
+        order = OccurrenceOrder(environment="浜辺の村", value=1.5)
+
+        for name, category in _catalogued_tool_definitions().items():
+            result = result_from_action_result(self._entry(name), call_id="c", observer=_NOAH, order=order)
+            if category is ToolCategory.WORLD_ACTION:
+                assert isinstance(result, ObservedOutcome), name
+                assert result.observation.route == OwnActionResult(call_id="c", succeeded=True), name
+            else:
+                assert isinstance(result, MemoryOperationOutcome), name
+                assert (result.call_id, result.order) == ("c", order), name
+
+    def test_memory_operation_result_keeps_the_line_body_and_time(self) -> None:
+        """記憶の結果の本文は、直近の出来事の行から時刻と心の声を除いた文。時刻は表示と、記録した tick から求めた秒を持つ。"""
+        entry = self._entry("memo_add")
+
+        result = result_from_action_result(entry, call_id="c", observer=_NOAH)
+
+        assert result == MemoryOperationOutcome(
+            call_id="c",
+            body=format_action_result_body(entry),
+            time=ObservedTime(display="一日目の朝 0:10", seconds=2 * _NOAH.seconds_per_tick),  # type: ignore[operator]
+        )
+
+    @pytest.mark.parametrize(
+        ("overrides", "reason"),
+        [
+            ({"action_summary": " ", "result_summary": " "}, NotRepresentableReason.EMPTY_BODY),
+            ({"game_time_label": None}, NotRepresentableReason.MISSING_TIME_LABEL),
+        ],
+        ids=["empty-body", "no-time-label"],
+    )
+    def test_memory_operation_result_without_body_or_time_is_not_representable(
+        self, overrides: dict[str, Any], reason: NotRepresentableReason
+    ) -> None:
+        """記憶の道具の結果でも、本文が空か時刻が無ければ写せない。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            result_from_action_result(self._entry("memo_add", **overrides), call_id="c", observer=_NOAH)
+
+        assert (raised.value.reason, raised.value.kind) == (reason, "memo_add")
+
+
+class TestLapseBodyAndTime:
+    """1 手を出せなかったときに環境が残す行 (迷い、一瞬の空白) から、出せなかったことの本文と時刻を取り出す規則を保証する (design_decisions D1824-9)。"""
+
+    def _entry(self, **overrides: Any) -> ActionResultEntry:
+        fields: dict[str, Any] = {
+            "occurred_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "action_summary": "迷い",
+            "result_summary": "何をするか決めきれず、時間が過ぎた。",
+            "success": False,
+            "tool_name": "迷い",
+            "game_time_label": "一日目の朝 0:10",
+            "occurred_tick": 2,
+        }
+        fields.update(overrides)
+        return ActionResultEntry(**fields)
+
+    def test_body_is_the_line_and_time_has_seconds(self) -> None:
+        """本文は直近の出来事の行から時刻と心の声を除いた文。時刻は表示と、記録した tick から求めた秒を持つ。"""
+        entry = self._entry()
+
+        body, time = lapse_body_and_time(entry, observer=_NOAH)
+
+        assert body == format_action_result_body(entry)
+        assert time == ObservedTime(display="一日目の朝 0:10", seconds=2 * _NOAH.seconds_per_tick)  # type: ignore[operator]
+
+    @pytest.mark.parametrize(
+        ("overrides", "reason"),
+        [
+            ({"action_summary": " ", "result_summary": " "}, NotRepresentableReason.EMPTY_BODY),
+            ({"game_time_label": " "}, NotRepresentableReason.MISSING_TIME_LABEL),
+        ],
+        ids=["empty-body", "no-time-label"],
+    )
+    def test_line_without_body_or_time_is_not_representable(
+        self, overrides: dict[str, Any], reason: NotRepresentableReason
+    ) -> None:
+        """本文が空か時刻が無ければ写せない。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            lapse_body_and_time(self._entry(**overrides), observer=_NOAH)
+
+        assert raised.value.reason is reason
+
+
+def _catalogued_tool_definitions() -> dict[str, ToolCategory]:
+    """道具のカタログのモジュールにある定義と、関数で作る assess_situation と episode_recall の分類を集める。"""
+    found: dict[str, ToolCategory] = {}
+    for module_info in pkgutil.iter_modules(tool_catalog.__path__):
+        module = importlib.import_module(f"{tool_catalog.__name__}.{module_info.name}")
+        for value in vars(module).values():
+            if isinstance(value, ToolDefinitionDto):
+                found[value.name] = value.category
+    assess = assess_situation_definition()
+    found[assess.name] = assess.category
+    recall = episode_recall_definition(max_handles=1)
+    found[recall.name] = recall.category
+    return found
+
+
+class TestBodyIfSubjectUnknownFromGame:
+    """ゲームの観測が持つ名前を伏せた版を、契約の観測の本文に写すことを保証する。"""
+
+    def test_anonymous_view_becomes_body_if_subject_unknown(self) -> None:
+        """話し手の名前と伏せた版を持つ話し声は、伏せた版の本文を body_if_subject_unknown に写す。"""
+        output = ObservationOutput(
+            prose="カイが言った: 「水場は北だ」",
+            structured=_speech(),
+            observation_category="social",
+            subject_name="カイ",
+            if_subject_unknown=SubjectUnknownView(
+                prose="誰かが言った: 「水場は北だ」",
+                structured={"type": "player_spoke", "content": "水場は北だ"},
+            ),
+        )
+
+        observation = _translate(output)
+
+        assert observation.subject_name == "カイ"
+        assert observation.body_if_subject_unknown == "誰かが言った: 「水場は北だ」"
+
+    def test_observation_without_view_has_no_alternate_body(self) -> None:
+        """伏せた版を持たない観測は、body_if_subject_unknown が None になる。"""
+        assert _translate(_output(_speech())).body_if_subject_unknown is None
+
+    def test_view_is_not_copied_when_subject_is_unknown_or_self(self) -> None:
+        """伏せた版を持っていても、本文から話し手が分からない観測と、自分が話し手の観測には body_if_subject_unknown を付けない (付けると契約が拒んで観測が失われる)。"""
+        view = SubjectUnknownView(prose="誰かが言った: 「水場は北だ」", structured={"type": "player_spoke"})
+        hidden_name = ObservationOutput(
+            prose="声がした。",
+            structured=_speech(),
+            observation_category="social",
+            subject_name="カイ",
+            if_subject_unknown=view,
+        )
+        own = ObservationOutput(
+            prose="ノアが言った: 「水場は北だ」",
+            structured=_speech(speaker="ノア", speaker_player_id=2),
+            observation_category="social",
+            subject_name="ノア",
+            if_subject_unknown=view,
+        )
+
+        assert _translate(hidden_name).body_if_subject_unknown is None
+        assert _translate(own).body_if_subject_unknown is None
+
+
+class TestWithheldFromStrangersFromGame:
+    """ゲームの観測が持つ「知らない受け手には届けない」印を、契約の観測に写すことを保証する (#1531)。"""
+
+    def _remote_revive(self) -> ObservationOutput:
+        return ObservationOutput(
+            prose="遠くで誰かが動けるようになった気配がした。",
+            structured={"type": "player_revived", "actor": "カイ", "proximity": "remote_or_unknown"},
+            observation_category="social",
+            schedules_turn=True,
+            subject_name="カイ",
+            if_subject_unknown=WithheldFromStrangers(),
+        )
+
+    def test_mark_becomes_withheld_if_subject_unknown(self) -> None:
+        """届けない印を持つ他者の観測は、withheld_if_subject_unknown が True になり、伏せた本文は持たない。"""
+        observation = _translate(self._remote_revive())
+
+        assert observation.withheld_if_subject_unknown is True
+        assert observation.body_if_subject_unknown is None
+
+    def test_observation_without_mark_is_not_withheld(self) -> None:
+        """印を持たない観測は、withheld_if_subject_unknown が False になる。"""
+        assert _translate(_output(_speech())).withheld_if_subject_unknown is False
+
+    def test_mark_is_not_copied_when_the_subject_is_the_observer(self) -> None:
+        """自分が主体の観測には印を写さない (写すと契約が拒んで観測が失われる)。"""
+        own = ObservationOutput(
+            prose="ノアは救助された。",
+            structured={"type": "player_revived", "actor": "ノア"},
+            observation_category="social",
+            subject_name="ノア",
+            if_subject_unknown=WithheldFromStrangers(),
+        )
+
+        assert _translate(own).withheld_if_subject_unknown is False
+
+
+class TestOccurrenceOrderIsCarried:
+    """写す関数が、渡された起きた順を観測にそのまま入れることを保証する (design_decisions D1824-8)。"""
+
+    def test_every_translation_carries_the_given_order(self) -> None:
+        """観測、自分の行動の結果、1 手と同じ手番に届かない結果、繰り返しの警告のどれも、渡した起きた順を持つ。"""
+        order = OccurrenceOrder(environment="浜辺の村", value=1.5)
+        result = ActionResultEntry(
+            occurred_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            action_summary="待った",
+            result_summary="様子を見た",
+            success=True,
+            tool_name="wait",
+            game_time_label="一日目の朝 0:10",
+        )
+
+        observations = [
+            observation_from_game(
+                ObservationOutput(prose="鐘が鳴った", structured={"type": "distant_cue_appeared"}),
+                tick=None,
+                game_time_label="一日目の朝 0:10",
+                observer=_NOAH,
+                order=order,
+            ),
+            observation_from_game(
+                ObservationOutput(prose="同じ行動が続いている", structured={"loop_guard": True}),
+                tick=None,
+                game_time_label="一日目の朝 0:10",
+                observer=_NOAH,
+                order=order,
+            ),
+            observation_from_action_result(result, call_id="c", observer=_NOAH, order=order),
+            observation_from_unprompted_result(result, observer=_NOAH, order=order),
+        ]
+
+        assert [o.order for o in observations] == [order] * 4

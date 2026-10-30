@@ -59,16 +59,8 @@ def _movement_events_of(graph):
     ``place_entity`` の Entered を掴んでしまう (実際に一度掴んだ)。
     """
     events = graph.get_events()
-    left = next(
-        e
-        for e in events
-        if isinstance(e, EntityLeftSpotEvent) and e.spot_id == _CORRIDOR
-    )
-    entered = next(
-        e
-        for e in events
-        if isinstance(e, EntityEnteredSpotEvent) and e.spot_id == _ENGINE
-    )
+    left = next(e for e in events if isinstance(e, EntityLeftSpotEvent) and e.spot_id == _CORRIDOR)
+    entered = next(e for e in events if isinstance(e, EntityEnteredSpotEvent) and e.spot_id == _ENGINE)
     return left, entered
 
 

@@ -98,8 +98,7 @@ def _make_strategy(entity_spot_mapping: dict[int, int]) -> SpotGraphRecipientStr
 
     graph = MagicMock()
     graph.entity_spot_mapping.return_value = {
-        EntityId.create(eid): SpotId(sid)
-        for eid, sid in entity_spot_mapping.items()
+        EntityId.create(eid): SpotId(sid) for eid, sid in entity_spot_mapping.items()
     }
 
     repo = MagicMock()
@@ -263,9 +262,7 @@ class TestFormatterMonsterAppeared:
 class TestFormatterMonsterLeft:
     """MonsterLeftSpotEvent の prose 生成。"""
 
-    def test_environment_observation_includes_monster_name(
-        self, formatter: SpotGraphObservationFormatter
-    ) -> None:
+    def test_environment_observation_includes_monster_name(self, formatter: SpotGraphObservationFormatter) -> None:
         """姿が消える文体で environment カテゴリの観測が返る。"""
         event = MonsterLeftSpotEvent.create(
             aggregate_id=GRAPH_ID,

@@ -77,9 +77,7 @@ class TestPlayerPerceptionPolicy:
 
     def test_living_cannot_perceive_departed_but_departed_can_perceive_both(self) -> None:
         """有効時は生者→幽霊だけを遮り、幽霊→生者・幽霊を許す。"""
-        policy = PlayerPerceptionPolicy(
-            outcome_registry=_registry(), departed_agents_enabled=True
-        )
+        policy = PlayerPerceptionPolicy(outcome_registry=_registry(), departed_agents_enabled=True)
 
         assert policy.can_perceive_player(PlayerId(1), PlayerId(2)) is False
         assert policy.can_perceive_player(PlayerId(2), PlayerId(1)) is True
@@ -87,22 +85,16 @@ class TestPlayerPerceptionPolicy:
 
     def test_spot_effect_actor_uses_the_same_perception_matrix(self) -> None:
         """actor_entity_id を持つ公開効果も、生者へ幽霊の実行者を漏らさない。"""
-        policy = PlayerPerceptionPolicy(
-            outcome_registry=_registry(), departed_agents_enabled=True
-        )
+        policy = PlayerPerceptionPolicy(outcome_registry=_registry(), departed_agents_enabled=True)
         event = SimpleNamespace(actor_entity_id=EntityId.create(2))
 
         assert policy.can_receive_event(PlayerId(1), event) is False
         assert policy.can_receive_event(PlayerId(2), event) is True
 
     @pytest.mark.parametrize("field_name", sorted(_ACTOR_ENTITY_ID_FIELDS))
-    def test_every_known_actor_field_uses_the_perception_matrix(
-        self, field_name: str
-    ) -> None:
+    def test_every_known_actor_field_uses_the_perception_matrix(self, field_name: str) -> None:
         """既知の actor 欄は表記が異なっても、すべて同じ知覚行列を通る。"""
-        policy = PlayerPerceptionPolicy(
-            outcome_registry=_registry(), departed_agents_enabled=True
-        )
+        policy = PlayerPerceptionPolicy(outcome_registry=_registry(), departed_agents_enabled=True)
         event = SimpleNamespace(**{field_name: EntityId.create(2)})
 
         assert policy.can_receive_event(PlayerId(1), event) is False
@@ -117,21 +109,13 @@ class TestPlayerPerceptionPolicy:
         """
         actual_field_names: set[str] = set()
         for event_type in ObservedEventRegistry().get_all_event_types():
-            actual_field_names.update(
-                field.name
-                for field in fields(event_type)
-                if _contains_entity_id(field.type)
-            )
+            actual_field_names.update(field.name for field in fields(event_type) if _contains_entity_id(field.type))
 
-        assert actual_field_names == (
-            _ACTOR_ENTITY_ID_FIELDS | _NON_ACTOR_ENTITY_ID_FIELDS
-        )
+        assert actual_field_names == (_ACTOR_ENTITY_ID_FIELDS | _NON_ACTOR_ENTITY_ID_FIELDS)
 
     def test_actorless_world_event_is_outside_the_player_plane_matrix(self) -> None:
         """天候のように actor の無い出来事は、観測者の層にかかわらず遮らない。"""
-        policy = PlayerPerceptionPolicy(
-            outcome_registry=_registry(), departed_agents_enabled=True
-        )
+        policy = PlayerPerceptionPolicy(outcome_registry=_registry(), departed_agents_enabled=True)
 
         assert policy.can_receive_event(PlayerId(1), SimpleNamespace()) is True
         assert policy.can_receive_event(PlayerId(2), SimpleNamespace()) is True
@@ -140,8 +124,6 @@ class TestPlayerPerceptionPolicy:
         """湧かせる位置規則の無い EJECTED は、第1版の幽霊層へ入れない。"""
         outcomes = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         outcomes.set_outcome(PlayerId(1), PlayerOutcomeEnum.EJECTED)
-        policy = PlayerPerceptionPolicy(
-            outcome_registry=outcomes, departed_agents_enabled=True
-        )
+        policy = PlayerPerceptionPolicy(outcome_registry=outcomes, departed_agents_enabled=True)
 
         assert policy.plane_of(PlayerId(1)) is PlayerPerceptionPlane.LIVING

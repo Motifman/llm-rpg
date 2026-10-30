@@ -9,6 +9,7 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
 @dataclass(frozen=True)
 class MonsterMp:
     """モンスターのMP値オブジェクト"""
+
     value: int
     max_mp: int
 
@@ -16,9 +17,7 @@ class MonsterMp:
         if self.max_mp < 0:
             raise MonsterStatsValidationException(f"max_mp must be non-negative: {self.max_mp}")
         if self.value > self.max_mp:
-            raise MonsterStatsValidationException(
-                f"MP ({self.value}) cannot exceed max_mp ({self.max_mp})"
-            )
+            raise MonsterStatsValidationException(f"MP ({self.value}) cannot exceed max_mp ({self.max_mp})")
         if self.value < 0:
             raise MonsterStatsValidationException(f"MP cannot be negative: {self.value}")
 

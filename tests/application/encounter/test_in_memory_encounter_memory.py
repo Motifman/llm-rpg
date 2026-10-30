@@ -107,9 +107,7 @@ class TestObserve:
             EncounterRecordValidationException,
         )
 
-        with pytest.raises(
-            EncounterRecordValidationException, match="current_tick"
-        ):
+        with pytest.raises(EncounterRecordValidationException, match="current_tick"):
             memory.observe(kai, noa_key, current_tick=-1)
 
     def test_current_tick_int_bool_raises_exception(
@@ -124,9 +122,7 @@ class TestObserve:
             EncounterRecordValidationException,
         )
 
-        with pytest.raises(
-            EncounterRecordValidationException, match="current_tick"
-        ):
+        with pytest.raises(EncounterRecordValidationException, match="current_tick"):
             memory.observe(kai, noa_key, current_tick=True)  # type: ignore[arg-type]
 
     def test_player_id_record_independent(
@@ -151,12 +147,8 @@ class TestObserve:
         kai: PlayerId,
     ) -> None:
         """同一 identifier でも kind が違えば別物として扱う。"""
-        as_player = memory.observe(
-            kai, EncounterKey.player("noa"), current_tick=10
-        )
-        as_event = memory.observe(
-            kai, EncounterKey.event("noa"), current_tick=42
-        )
+        as_player = memory.observe(kai, EncounterKey.player("noa"), current_tick=10)
+        as_event = memory.observe(kai, EncounterKey.event("noa"), current_tick=42)
         assert as_player.is_first is True
         assert as_event.is_first is True  # 別の key として first 扱い
 
@@ -268,9 +260,7 @@ class TestRecordsFor:
         kai: PlayerId,
     ) -> None:
         """snapshot codec が EncounterKey で iterate しやすくする。"""
-        memory.observe(
-            kai, EncounterKey.event("storm_arrives"), current_tick=5
-        )
+        memory.observe(kai, EncounterKey.event("storm_arrives"), current_tick=5)
         records = memory.get_records_for(kai)
         assert len(records) == 1
         key = next(iter(records.keys()))

@@ -1,3 +1,2 @@
 from .skill_deck_progress_aggregate import SkillDeckProgressAggregate
 from .skill_loadout_aggregate import SkillLoadoutAggregate
-

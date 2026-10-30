@@ -204,36 +204,28 @@ class TestAnUncertainChoiceLeavesTheNameAlone:
 
     def test_a_no_match_answer_does_not_replace_anything(self) -> None:
         """「該当なし」が選ばれたら置き換えない。"""
-        resolution, _ = _rescued(
-            "gather", _wheat_field(), _RecordingPort(chosen=NO_MATCH_OPTION)
-        )
+        resolution, _ = _rescued("gather", _wheat_field(), _RecordingPort(chosen=NO_MATCH_OPTION))
 
         assert resolution.value == "gather"
         assert resolution.source is ActionNameSource.UNRESOLVED
 
     def test_a_low_probability_does_not_replace_anything(self) -> None:
         """選んだ選択肢の確率が閾値未満なら置き換えない。"""
-        resolution, _ = _rescued(
-            "gather", _wheat_field(), _RecordingPort(probability=0.4)
-        )
+        resolution, _ = _rescued("gather", _wheat_field(), _RecordingPort(probability=0.4))
 
         assert resolution.value == "gather"
         assert resolution.source is ActionNameSource.UNRESOLVED
 
     def test_a_low_confidence_does_not_replace_anything(self) -> None:
         """confidence が閾値未満なら置き換えない。確率だけを見ない。"""
-        resolution, _ = _rescued(
-            "gather", _wheat_field(), _RecordingPort(confidence=0.3)
-        )
+        resolution, _ = _rescued("gather", _wheat_field(), _RecordingPort(confidence=0.3))
 
         assert resolution.value == "gather"
         assert resolution.source is ActionNameSource.UNRESOLVED
 
     def test_the_judgment_is_recorded_even_when_it_is_not_taken(self) -> None:
         """採らなかった判断も、確率と閾値と採否が残る。"""
-        resolution, _ = _rescued(
-            "gather", _wheat_field(), _RecordingPort(probability=0.4)
-        )
+        resolution, _ = _rescued("gather", _wheat_field(), _RecordingPort(probability=0.4))
 
         assert resolution.judgment is not None
         assert resolution.judgment.chosen == "reap_wheat"
@@ -247,9 +239,7 @@ class TestAnUnavailablePortFallsBackLoudly:
 
     def test_a_failing_port_leaves_the_written_name(self) -> None:
         """ポートが失敗したら置き換えず、従来の失敗経路へ落ちる。"""
-        resolution, _ = _rescued(
-            "gather", _wheat_field(), _RecordingPort(raises=True)
-        )
+        resolution, _ = _rescued("gather", _wheat_field(), _RecordingPort(raises=True))
 
         assert resolution.value == "gather"
         assert resolution.source is ActionNameSource.UNRESOLVED
@@ -259,9 +249,7 @@ class TestAnUnavailablePortFallsBackLoudly:
 
         同じに潰すと、OFF の run と全件 fallback の run が trace で見分けられない。
         """
-        resolution, _ = _rescued(
-            "gather", _wheat_field(), _RecordingPort(raises=True)
-        )
+        resolution, _ = _rescued("gather", _wheat_field(), _RecordingPort(raises=True))
 
         assert resolution.judgment is not None
         assert resolution.judgment.unavailable_reason is not None
@@ -273,16 +261,12 @@ class TestSemanticResolverCompatibility:
 
     def test_an_outside_answer_is_an_explicit_backend_failure(self) -> None:
         """候補にない回答は該当なしと混同せず、判断器の契約違反として残す。"""
-        resolution, _ = _rescued(
-            "gather", _wheat_field(), _RecordingPort(chosen="fly")
-        )
+        resolution, _ = _rescued("gather", _wheat_field(), _RecordingPort(chosen="fly"))
         assert resolution.value == "gather"
         assert resolution.judgment.unavailable_reason == "invalid_response"
 
     @pytest.mark.parametrize("confidence", [None, 0.7])
-    def test_probability_at_threshold_is_accepted(
-        self, confidence: float | None
-    ) -> None:
+    def test_probability_at_threshold_is_accepted(self, confidence: float | None) -> None:
         """確率が閾値ちょうどなら、確信度が省略または閾値以上の回答を採用する。"""
         resolution, _ = _rescued(
             "gather",
@@ -295,6 +279,7 @@ class TestSemanticResolverCompatibility:
 
     def test_missing_answer_is_recorded(self) -> None:
         """質問の回答が欠けた場合は ANSWER_MISSING を残し、置き換えない。"""
+
         class MissingPort(_RecordingPort):
             def judge(self, state, questions):
                 return {}
@@ -308,26 +293,27 @@ class TestSemanticResolverCompatibility:
         port = _RecordingPort(chosen=NO_MATCH_OPTION)
         rescue = ActionNameRescue(port=port, min_confidence=0.7)
         shore = ToolRuntimeTargetDto(
-            label="OBJ3", kind="spot_graph_object", display_name="浜辺",
+            label="OBJ3",
+            kind="spot_graph_object",
+            display_name="浜辺",
             available_interactions=("collect_shellfish",),
             interaction_labels=(("collect_shellfish", "貝を集める"),),
         )
         for target in (_wheat_field(), shore):
-            rescue.rescue(
-                pick_action_name("gather", target), target=target, inner_thought=None
-            )
+            rescue.rescue(pick_action_name("gather", target), target=target, inner_thought=None)
         assert set(next(iter(port.questions[0].values())).options) == {
-            "reap_wheat", "water_field", NO_MATCH_OPTION,
+            "reap_wheat",
+            "water_field",
+            NO_MATCH_OPTION,
         }
         assert set(next(iter(port.questions[1].values())).options) == {
-            "collect_shellfish", NO_MATCH_OPTION,
+            "collect_shellfish",
+            NO_MATCH_OPTION,
         }
 
     def test_no_match_keeps_its_evidence(self) -> None:
         """該当なしでも確率・確信度・所要時間・出所を記録する。"""
-        resolution, _ = _rescued(
-            "gather", _wheat_field(), _RecordingPort(chosen=NO_MATCH_OPTION)
-        )
+        resolution, _ = _rescued("gather", _wheat_field(), _RecordingPort(chosen=NO_MATCH_OPTION))
         assert resolution.judgment.chosen is None
         assert resolution.judgment.probability == 0.97
         assert resolution.judgment.confidence == 0.96
@@ -343,9 +329,7 @@ class TestSemanticResolverCompatibility:
 
     def test_an_unlabelled_action_can_still_be_selected(self) -> None:
         """表示ラベルがない候補も操作名を説明として渡し、選択できる。"""
-        resolution, port = _rescued(
-            "gather", replace(_wheat_field(), interaction_labels=()), _RecordingPort()
-        )
+        resolution, port = _rescued("gather", replace(_wheat_field(), interaction_labels=()), _RecordingPort())
         assert resolution.value == "reap_wheat"
         question = next(iter(port.questions[0].values()))
         assert question.options["reap_wheat"] == "reap_wheat"
@@ -366,11 +350,11 @@ class TestSemanticResolverCompatibility:
 
     def test_missing_probability_is_rejected(self) -> None:
         """選択した候補の確率が欠けていれば、確信度が高くても採用しない。"""
+
         class MissingProbabilityPort(_RecordingPort):
             def judge(self, state, questions):
                 return {
-                    name: replace(answer, probabilities={})
-                    for name, answer in super().judge(state, questions).items()
+                    name: replace(answer, probabilities={}) for name, answer in super().judge(state, questions).items()
                 }
 
         resolution, _ = _rescued("gather", _wheat_field(), MissingProbabilityPort())

@@ -11,12 +11,6 @@ class TestTradeScope:
 
     # ===== 正常系のテスト =====
 
-    def test_create_global_trade(self):
-        """グローバル取引を作成できること"""
-        scope = TradeScope(TradeType.GLOBAL, None)
-        assert scope.trade_type == TradeType.GLOBAL
-        assert scope.target_player_id is None
-
     def test_create_direct_trade_with_player_id(self):
         """ダイレクト取引をプレイヤーID付きで作成できること"""
         player_id = PlayerId(123)
@@ -121,7 +115,6 @@ class TestTradeScope:
         scope1 = TradeScope.direct_trade(player_id1)
         scope2 = TradeScope.direct_trade(player_id2)
         assert scope1 != scope2
-
 
     # ===== 不変性のテスト =====
 

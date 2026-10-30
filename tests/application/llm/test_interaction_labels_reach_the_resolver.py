@@ -39,7 +39,6 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphObjectEntry,
     SpotGraphPlayerSnapshotDto,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 def _current_state(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
@@ -47,23 +46,6 @@ def _current_state(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
         player_id=1,
         player_name="アオイ",
         current_spot_id=snap.current_spot_id,
-        current_spot_name=snap.current_spot_name,
-        current_spot_description=snap.current_spot_description,
-        x=None,
-        y=None,
-        z=None,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="晴れ",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=0,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=snap,
     )
 
@@ -108,12 +90,8 @@ class TestInteractionLabelsReachTheResolver:
     def test_public_interaction_label_is_carried_to_the_target(self) -> None:
         """表示に display_label が出た操作は、同じ action_name との対が target の interaction_labels に載る。"""
         snap = _wheat_field(
-            SpotGraphInteractionEntry(
-                action_name="reap_wheat", display_label="麦を刈り取る"
-            ),
-            SpotGraphInteractionEntry(
-                action_name="water_field", display_label="水をやる"
-            ),
+            SpotGraphInteractionEntry(action_name="reap_wheat", display_label="麦を刈り取る"),
+            SpotGraphInteractionEntry(action_name="water_field", display_label="水をやる"),
         )
 
         text, targets = _build(snap)
@@ -181,11 +159,7 @@ class TestInteractionLabelsReachTheResolver:
                     name="鎌",
                     description="",
                     quantity=1,
-                    interactions=(
-                        SpotGraphInteractionEntry(
-                            action_name="sharpen_scythe", display_label="刃を研ぐ"
-                        ),
-                    ),
+                    interactions=(SpotGraphInteractionEntry(action_name="sharpen_scythe", display_label="刃を研ぐ"),),
                 ),
             ),
         )
@@ -220,9 +194,7 @@ class TestInteractionLabelsReachTheResolver:
                     entity_id=2,
                     display_name="ハル",
                     action_entries=(
-                        SpotGraphInteractionEntry(
-                            action_name="tend_to_player", display_label="介抱して起こす"
-                        ),
+                        SpotGraphInteractionEntry(action_name="tend_to_player", display_label="介抱して起こす"),
                     ),
                 ),
             ),

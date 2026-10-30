@@ -20,15 +20,11 @@ def page_session() -> SnsPageSessionService:
 @pytest.fixture
 def reply_service() -> MagicMock:
     service = MagicMock()
-    service.create_reply = MagicMock(
-        return_value=CommandResultDto(success=True, message="リプライを作成しました。")
-    )
+    service.create_reply = MagicMock(return_value=CommandResultDto(success=True, message="リプライを作成しました。"))
     return service
 
 
-def _handler(
-    reply_service: MagicMock, page_session: SnsPageSessionService
-) -> Any:
+def _handler(reply_service: MagicMock, page_session: SnsPageSessionService) -> Any:
     executor = SnsToolExecutor(
         reply_service=reply_service,
         sns_page_session=page_session,
@@ -46,9 +42,7 @@ class TestReplyParentResolution:
         page_session.issue_post_ref(1, 7)
         ref = next(iter(page_session.get_state(1).ref_to_post_id.keys()))
 
-        result = _handler(reply_service, page_session)(
-            1, {"content": "やあ", "parent_post_ref": ref}
-        )
+        result = _handler(reply_service, page_session)(1, {"content": "やあ", "parent_post_ref": ref})
 
         assert result.success
         command = reply_service.create_reply.call_args.args[0]
@@ -62,9 +56,7 @@ class TestReplyParentResolution:
         page_session.issue_reply_ref(1, 9)
         ref = next(iter(page_session.get_state(1).ref_to_reply_id.keys()))
 
-        result = _handler(reply_service, page_session)(
-            1, {"content": "やあ", "parent_reply_ref": ref}
-        )
+        result = _handler(reply_service, page_session)(1, {"content": "やあ", "parent_reply_ref": ref})
 
         assert result.success
         command = reply_service.create_reply.call_args.args[0]

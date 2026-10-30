@@ -10,15 +10,23 @@ from ai_rpg_world.application.social.exceptions.base_exception import Applicatio
 class ReplyQueryException(ApplicationException):
     """リプライ検索関連の例外"""
 
-    def __init__(self, message: str, error_code: str | None = None, reply_id: int | None = None, post_id: int | None = None, user_id: int | None = None, **context: Any) -> None:
+    def __init__(
+        self,
+        message: str,
+        error_code: str | None = None,
+        reply_id: int | None = None,
+        post_id: int | None = None,
+        user_id: int | None = None,
+        **context: Any,
+    ) -> None:
         # 既存の動作を維持しつつ、新しい基底クラスに適合
         all_context = context.copy()
         if reply_id is not None:
-            all_context['reply_id'] = reply_id
+            all_context["reply_id"] = reply_id
         if post_id is not None:
-            all_context['post_id'] = post_id
+            all_context["post_id"] = post_id
         if user_id is not None:
-            all_context['user_id'] = user_id
+            all_context["user_id"] = user_id
         super().__init__(message, error_code, **all_context)
 
 
@@ -36,7 +44,9 @@ class ReplyAccessDeniedException(ReplyQueryException):
 
     def __init__(self, reply_id: int, user_id: int, reason: str | None = None):
         if reason:
-            message = f"リプライへのアクセス権限がありません。reply_id: {reply_id}, user_id: {user_id}, reason: {reason}"
+            message = (
+                f"リプライへのアクセス権限がありません。reply_id: {reply_id}, user_id: {user_id}, reason: {reason}"
+            )
         else:
             message = f"リプライへのアクセス権限がありません。reply_id: {reply_id}, user_id: {user_id}"
         super().__init__(message, "REPLY_ACCESS_DENIED", reply_id=reply_id, user_id=user_id)
@@ -53,5 +63,7 @@ class InvalidReplyIdException(ReplyQueryException):
 class ReplyQueryAccessException(ReplyQueryException):
     """リプライ検索関連のアクセス例外"""
 
-    def __init__(self, message: str, reply_id: int | None = None, post_id: int | None = None, user_id: int | None = None):
+    def __init__(
+        self, message: str, reply_id: int | None = None, post_id: int | None = None, user_id: int | None = None
+    ):
         super().__init__(message, "REPLY_QUERY_ACCESS_ERROR", reply_id=reply_id, post_id=post_id, user_id=user_id)

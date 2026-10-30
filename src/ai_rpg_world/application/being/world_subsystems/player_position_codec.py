@@ -31,10 +31,7 @@ class PlayerPositionSubsystemCodec(WorldSubsystemCodec):
         entries: list[dict[str, Any]] = []
         spot_graph_repo = getattr(runtime, "_spot_graph_repo", None)
         if spot_graph_repo is None:
-            raise RuntimeError(
-                "runtime._spot_graph_repo not found; "
-                "PlayerPositionSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._spot_graph_repo not found; PlayerPositionSubsystemCodec requires it")
         graph = spot_graph_repo.find_graph()
         # 全 player について現 spot_id を集める。
         for pid in runtime.get_player_ids():
@@ -54,10 +51,7 @@ class PlayerPositionSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.domain.world_graph.value_object.entity_id import (
             EntityId,
@@ -68,10 +62,7 @@ class PlayerPositionSubsystemCodec(WorldSubsystemCodec):
 
         spot_graph_repo = getattr(runtime, "_spot_graph_repo", None)
         if spot_graph_repo is None:
-            raise RuntimeError(
-                "runtime._spot_graph_repo not found; "
-                "PlayerPositionSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._spot_graph_repo not found; PlayerPositionSubsystemCodec requires it")
         graph = spot_graph_repo.find_graph()
 
         for entry in data.get("entries", []):
@@ -100,14 +91,11 @@ class PlayerPositionSubsystemCodec(WorldSubsystemCodec):
             # で先に弾かれているはずだが、保険として明示)。
             if new_spot_id not in graph._spots:
                 raise RuntimeError(
-                    f"PlayerPositionSubsystemCodec: spot_id={spot_id_raw!r} "
-                    f"not in scenario graph; scenario mismatch?"
+                    f"PlayerPositionSubsystemCodec: spot_id={spot_id_raw!r} not in scenario graph; scenario mismatch?"
                 )
 
             graph._entity_spot[entity_id] = new_spot_id
-            presence = graph._presences.get(
-                new_spot_id, SpotPresence.empty(new_spot_id)
-            )
+            presence = graph._presences.get(new_spot_id, SpotPresence.empty(new_spot_id))
             graph._presences[new_spot_id] = presence.add(entity_id)
 
 

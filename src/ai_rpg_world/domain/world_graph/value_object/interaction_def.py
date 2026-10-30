@@ -94,21 +94,15 @@ class InteractionDef:
     cooldown_ticks: int = 0
     cooldown_group: str | None = None
     cooldown_scope: InteractionCooldownScope = InteractionCooldownScope.ACTOR
-    allowed_actor_planes: tuple[InteractionActorPlane, ...] = (
-        InteractionActorPlane.LIVING,
-    )
+    allowed_actor_planes: tuple[InteractionActorPlane, ...] = (InteractionActorPlane.LIVING,)
     hide_when_flag_preconditions_fail: bool = False
 
     def __post_init__(self) -> None:
         """会議開始を通常効果と同じinteractionへ混在させない。"""
-        has_meeting_call = any(
-            effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING
-            for effect in self.effects
-        )
+        has_meeting_call = any(effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING for effect in self.effects)
         if has_meeting_call and len(self.effects) != 1:
             raise InteractionEffectValidationException(
-                "CALL_MEETING は単独の効果として宣言してください。"
-                "会議開始は通常効果とは別のcommandです"
+                "CALL_MEETING は単独の効果として宣言してください。会議開始は通常効果とは別のcommandです"
             )
 
     def allows_actor_plane(self, plane: InteractionActorPlane) -> bool:

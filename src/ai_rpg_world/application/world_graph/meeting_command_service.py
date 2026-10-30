@@ -93,20 +93,14 @@ class MeetingCommandService:
         player_ids_provider: Callable[[], Iterable[PlayerId]],
         current_tick_provider: Callable[[], int],
         player_name_provider: Callable[[PlayerId], str],
-        command_scope_factory: CommandScopeFactoryPort[
-            MeetingCommandRepositoryProviderPort
-        ],
+        command_scope_factory: CommandScopeFactoryPort[MeetingCommandRepositoryProviderPort],
         meeting_committed_observer: Callable[[GamePhaseState], None],
         world_flag_state: MutableWorldFlagState,
         effect_service: WorldGraphEffectService,
         ongoing_conditions: Iterable[MeetingOngoingCondition],
-        condition_resolution_observer: Callable[
-            [MeetingResolutionNotice], None
-        ],
+        condition_resolution_observer: Callable[[MeetingResolutionNotice], None],
         player_outcome_registry: PlayerOutcomeRegistry,
-        meeting_ended_observer: Callable[
-            [GamePhaseState, GamePhaseState, str], None
-        ],
+        meeting_ended_observer: Callable[[GamePhaseState, GamePhaseState, str], None],
     ) -> None:
         self._meeting_enabled = meeting_enabled
         self._game_phase_store = game_phase_store
@@ -162,9 +156,7 @@ class MeetingCommandService:
                         aggregate_type="SpotGraphAggregate",
                         voter_player_id=voter_player_id,
                         voter_display_name=self._player_name_provider(voter_player_id),
-                        remaining_voter_count=sum(
-                            1 for player_id in eligible if not store.has_voted(player_id)
-                        ),
+                        remaining_voter_count=sum(1 for player_id in eligible if not store.has_voted(player_id)),
                     )
                 )
                 if all(store.has_voted(player_id) for player_id in eligible):
@@ -218,19 +210,15 @@ class MeetingCommandService:
     ) -> tuple[GamePhaseState, GamePhaseState, str]:
         store = self._game_phase_store
         ballots = {
-            PlayerId(voter): (None if target is None else PlayerId(target))
-            for voter, target in store.ballots.items()
+            PlayerId(voter): (None if target is None else PlayerId(target)) for voter, target in store.ballots.items()
         }
         vote_result = resolve_vote(ballots)
         graph = repositories.spot_graph.find_graph()
         ejected_player_id: PlayerId | None = None
-        if (
-            vote_result.ejected_player_id is not None
-            and self._player_outcome_registry.set_outcome(
-                vote_result.ejected_player_id,
-                PlayerOutcomeEnum.EJECTED,
-                notify_callbacks=False,
-            )
+        if vote_result.ejected_player_id is not None and self._player_outcome_registry.set_outcome(
+            vote_result.ejected_player_id,
+            PlayerOutcomeEnum.EJECTED,
+            notify_callbacks=False,
         ):
             ejected_player_id = vote_result.ejected_player_id
             graph.unplace_entity(EntityId.create(int(vote_result.ejected_player_id)))
@@ -246,8 +234,7 @@ class MeetingCommandService:
                 ),
                 ejected_player_id=ejected_player_id,
                 counts_by_display_name={
-                    self._player_name_provider(player_id): count
-                    for player_id, count in vote_result.counts.items()
+                    self._player_name_provider(player_id): count for player_id, count in vote_result.counts.items()
                 },
                 skip_count=vote_result.skip_count,
                 ballots_by_display_name={
@@ -273,9 +260,7 @@ class MeetingCommandService:
         reason: str,
     ) -> tuple[GamePhaseState, GamePhaseState]:
         meeting_state = self._game_phase_store.current
-        state = self._game_phase_store.end_meeting(
-            tick=int(self._current_tick_provider()), reason=reason
-        )
+        state = self._game_phase_store.end_meeting(tick=int(self._current_tick_provider()), reason=reason)
         self._fallen_body_registry.clear()
         collect_event(
             GamePhaseChangedEvent.create(
@@ -289,16 +274,10 @@ class MeetingCommandService:
         )
         return meeting_state, state
 
-    def _eligible_voters(
-        self, repositories: MeetingCommandRepositoryProviderPort
-    ) -> tuple[PlayerId, ...]:
-        with self._player_life_query.using_player_status_repository(
-            repositories.player_statuses
-        ):
+    def _eligible_voters(self, repositories: MeetingCommandRepositoryProviderPort) -> tuple[PlayerId, ...]:
+        with self._player_life_query.using_player_status_repository(repositories.player_statuses):
             return tuple(
-                player_id
-                for player_id in self._player_ids_provider()
-                if self._player_life_query.can_vote(player_id)
+                player_id for player_id in self._player_ids_provider() if self._player_life_query.can_vote(player_id)
             )
 
     def _observe_committed_end(
@@ -355,9 +334,7 @@ class MeetingCommandService:
                     message="緊急招集はもう使ってしまった。二度は呼べない。",
                     error_code="EMERGENCY_BUTTON_SPENT",
                 )
-            elif store.is_meeting_on_cooldown(
-                tick=int(self._current_tick_provider())
-            ):
+            elif store.is_meeting_on_cooldown(tick=int(self._current_tick_provider())):
                 result = LlmCommandResultDto(
                     success=False,
                     message="さっき話し合いが終わったばかりだ。今は誰も応じない。",
@@ -458,8 +435,7 @@ class MeetingCommandService:
     def _has_active_emergency_button_blocker(self) -> bool:
         active_flags = self._world_flag_state.as_frozen_set()
         return any(
-            condition.blocks_emergency_button
-            and condition.flag in active_flags
+            condition.blocks_emergency_button and condition.flag in active_flags
             for condition in self._ongoing_conditions
         )
 
@@ -476,9 +452,7 @@ class MeetingCommandService:
     ]:
         graph = repositories.spot_graph.find_graph()
         try:
-            reporter_spot = graph.get_entity_spot(
-                EntityId.create(int(reporter_player_id))
-            )
+            reporter_spot = graph.get_entity_spot(EntityId.create(int(reporter_player_id)))
         except Exception:
             return (
                 LlmCommandResultDto(
@@ -489,25 +463,16 @@ class MeetingCommandService:
                 None,
                 (),
             )
-        with self._player_life_query.using_player_status_repository(
-            repositories.player_statuses
-        ):
-            target_has_body = self._player_life_query.has_reportable_body(
-                target_player_id
-            )
+        with self._player_life_query.using_player_status_repository(repositories.player_statuses):
+            target_has_body = self._player_life_query.has_reportable_body(target_player_id)
         body = self._fallen_body_registry.find(target_player_id)
         if target_has_body:
             if body is None:
-                raise RuntimeError(
-                    "reportable body has no fallen-body record: "
-                    f"player_id={int(target_player_id)}"
-                )
+                raise RuntimeError(f"reportable body has no fallen-body record: player_id={int(target_player_id)}")
             target_spot = body.spot_id
         else:
             try:
-                target_spot = graph.get_entity_spot(
-                    EntityId.create(int(target_player_id))
-                )
+                target_spot = graph.get_entity_spot(EntityId.create(int(target_player_id)))
             except Exception:
                 return (
                     LlmCommandResultDto(
@@ -637,12 +602,8 @@ class MeetingCommandService:
         repositories: MeetingCommandRepositoryProviderPort,
     ) -> SpotGraphAggregate:
         graph = repositories.spot_graph.find_graph()
-        target_spot = graph.get_entity_spot(
-            EntityId.create(int(initiator_player_id))
-        )
-        with self._player_life_query.using_player_status_repository(
-            repositories.player_statuses
-        ):
+        target_spot = graph.get_entity_spot(EntityId.create(int(initiator_player_id)))
+        with self._player_life_query.using_player_status_repository(repositories.player_statuses):
             for player_id in self._player_ids_provider():
                 if int(player_id) == int(initiator_player_id):
                     continue

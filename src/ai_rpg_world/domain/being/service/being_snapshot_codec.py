@@ -11,7 +11,7 @@ PR #462 §2.1 R1: 「all-or-nothing で復元の完全性を保証 (部分復元
   保持する。未指定なら v1 互換の snapshot (memory_payload_json=None) になる
 - ``decode(snapshot)``: BeingSnapshot から Being 集約を復元
   - snapshot version が現 codec で読めない値なら ``BeingSnapshotVersionException``
-  - memory_kind 文字列が認識できなければ ``BeingSnapshotIncompleteException``
+  - 廃止したsemantic宣言だけを除き、ほかのmemory_kind文字列が認識できなければ ``BeingSnapshotIncompleteException``
   - その他 VO レベルの形式エラーは VO 自身のドメイン例外 (BeingId 等) で検出
 
 Phase 4 Step 4-1: memory payload は本 codec ではオペーク扱い。実際の memory
@@ -38,6 +38,8 @@ from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
+_REMOVED_MEMORY_KIND = "semantic"
+
 
 class BeingSnapshotCodec:
     """Being 集約 ↔ BeingSnapshot の変換ドメインサービス。
@@ -48,9 +50,7 @@ class BeingSnapshotCodec:
     encode は ``memory_payload_json`` の有無で v1 / v2 を切り替える。
     """
 
-    SUPPORTED_VERSIONS: frozenset[int] = frozenset(
-        {LEGACY_SNAPSHOT_VERSION_V1, CURRENT_SNAPSHOT_VERSION}
-    )
+    SUPPORTED_VERSIONS: frozenset[int] = frozenset({LEGACY_SNAPSHOT_VERSION_V1, CURRENT_SNAPSHOT_VERSION})
 
     @staticmethod
     def encode(
@@ -70,13 +70,8 @@ class BeingSnapshotCodec:
         """
         if not isinstance(being, Being):
             raise TypeError(f"being must be Being, got {type(being).__name__}")
-        if memory_payload_json is not None and not isinstance(
-            memory_payload_json, str
-        ):
-            raise TypeError(
-                "memory_payload_json must be str or None, "
-                f"got {type(memory_payload_json).__name__}"
-            )
+        if memory_payload_json is not None and not isinstance(memory_payload_json, str):
+            raise TypeError(f"memory_payload_json must be str or None, got {type(memory_payload_json).__name__}")
 
         attachment = being.attachment
         world_id_value: int | None = None
@@ -94,12 +89,16 @@ class BeingSnapshotCodec:
             identity_first_person=being.identity.first_person,
             attachment_world_id=world_id_value,
             attachment_player_id=player_id_value,
-            declared_memory_kinds=tuple(
-                sorted(k.value for k in being.declared_memory_kinds)
-            ),
+            declared_memory_kinds=tuple(sorted(k.value for k in being.declared_memory_kinds)),
             snapshot_version=CURRENT_SNAPSHOT_VERSION,
             memory_payload_json=memory_payload_json,
         )
+
+    @staticmethod
+    def removed_declared_memory_kind_counts(snapshot: BeingSnapshot) -> dict[str, int]:
+        """廃止済みの宣言の出現数を返す。記憶本文の件数は扱わない。"""
+        count = snapshot.declared_memory_kinds.count(_REMOVED_MEMORY_KIND)
+        return {_REMOVED_MEMORY_KIND: count} if count else {}
 
     @staticmethod
     def decode(snapshot: BeingSnapshot) -> Being:
@@ -112,9 +111,7 @@ class BeingSnapshotCodec:
         version 検査の不一致は ``BeingSnapshotVersionException``。
         """
         if not isinstance(snapshot, BeingSnapshot):
-            raise TypeError(
-                f"snapshot must be BeingSnapshot, got {type(snapshot).__name__}"
-            )
+            raise TypeError(f"snapshot must be BeingSnapshot, got {type(snapshot).__name__}")
 
         if snapshot.snapshot_version not in BeingSnapshotCodec.SUPPORTED_VERSIONS:
             raise BeingSnapshotVersionException(
@@ -125,13 +122,9 @@ class BeingSnapshotCodec:
 
         # v1 snapshot に memory payload が紛れていたら整合性エラー (codec の
         # 信頼性を担保)。
-        if (
-            snapshot.snapshot_version == LEGACY_SNAPSHOT_VERSION_V1
-            and snapshot.memory_payload_json is not None
-        ):
+        if snapshot.snapshot_version == LEGACY_SNAPSHOT_VERSION_V1 and snapshot.memory_payload_json is not None:
             raise BeingSnapshotIncompleteException(
-                "v1 snapshot must not carry memory_payload_json; "
-                "use snapshot_version=2 for memory payload"
+                "v1 snapshot must not carry memory_payload_json; use snapshot_version=2 for memory payload"
             )
 
         being_id = BeingId(snapshot.being_id_value)
@@ -145,13 +138,9 @@ class BeingSnapshotCodec:
             # BeingSnapshot.__post_init__ が「両 None or 両非 None」を保証して
             # いるので本来到達不能だが、python -O で assert が剥がれた場合の
             # 安全側として明示ガードする (= 黙って partial state を通さない)。
-            if (
-                snapshot.attachment_world_id is None
-                or snapshot.attachment_player_id is None
-            ):
+            if snapshot.attachment_world_id is None or snapshot.attachment_player_id is None:
                 raise BeingSnapshotIncompleteException(
-                    "has_attachment is True but attachment ids are None "
-                    "(BeingSnapshot invariant violated)"
+                    "has_attachment is True but attachment ids are None (BeingSnapshot invariant violated)"
                 )
             attachment = BeingAttachment(
                 world_id=WorldId(snapshot.attachment_world_id),
@@ -161,10 +150,12 @@ class BeingSnapshotCodec:
         kinds: list[MemoryKind] = []
         valid_values = {k.value for k in MemoryKind}
         for raw in snapshot.declared_memory_kinds:
+            # 記憶本文とは別の宣言だけを移行する。未知の値は引き続き拒否する。
+            if raw == _REMOVED_MEMORY_KIND:
+                continue
             if raw not in valid_values:
                 raise BeingSnapshotIncompleteException(
-                    f"unknown memory_kind value in snapshot: {raw!r} "
-                    f"(known: {sorted(valid_values)})"
+                    f"unknown memory_kind value in snapshot: {raw!r} (known: {sorted(valid_values)})"
                 )
             kinds.append(MemoryKind(raw))
 

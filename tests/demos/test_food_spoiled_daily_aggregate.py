@@ -17,15 +17,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "survival_island_v2.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 @pytest.fixture
 def runtime():
     from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+
     rt = create_world_runtime(SCENARIO_PATH)
     return rt
 
@@ -46,6 +44,7 @@ def _capture_observations(runtime) -> list[Any]:
 def _make_spoiled_event(spec_id: int, instance_id: int, spec_name: str):
     from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
     from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+
     return (ItemInstanceId.create(instance_id), ItemSpecId.create(spec_id), spec_name)
 
 
@@ -53,24 +52,19 @@ class TestSameDayAggregation:
     """同じ day 内で複数 tick に分散して腐っても 1 件にまとまる。"""
 
     def test_day_three_tick_flush_before_emit(
-        self, runtime,
+        self,
+        runtime,
     ) -> None:
         """tick 5, 6, 7 (= day 0) に 1 個ずつ腐っても、buffer に貯まるだけで
         即 emit はされない。"""
         captured = _capture_observations(runtime)
         # tick を 5/6/7 と進めながら spoiled batch を 3 回投入
         runtime.current_tick = lambda: 5  # type: ignore[method-assign]
-        runtime._append_food_spoiled_batch_observation(
-            [_make_spoiled_event(101, 1, "野いちご")]
-        )
+        runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, 1, "野いちご")])
         runtime.current_tick = lambda: 6  # type: ignore[method-assign]
-        runtime._append_food_spoiled_batch_observation(
-            [_make_spoiled_event(101, 2, "野いちご")]
-        )
+        runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, 2, "野いちご")])
         runtime.current_tick = lambda: 7  # type: ignore[method-assign]
-        runtime._append_food_spoiled_batch_observation(
-            [_make_spoiled_event(101, 3, "野いちご")]
-        )
+        runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, 3, "野いちご")])
         # まだ day 境界に達していない → buffer 内のみ、emit 0 件
         food_obs = [o for _, o in captured if (o.structured or {}).get("type") == "food_spoiled"]
         assert len(food_obs) == 0
@@ -84,20 +78,17 @@ class TestSameDayAggregation:
         captured = _capture_observations(runtime)
         runtime.current_tick = lambda: 5  # type: ignore[method-assign]
         for iid in (1, 2, 3):
-            runtime._append_food_spoiled_batch_observation(
-                [_make_spoiled_event(101, iid, "野いちご")]
-            )
+            runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, iid, "野いちご")])
         # advance_tick が day 0 → day 1 を跨ぐ tick まで進める
         # ticks_per_day=48 なので tick 48 で day 1。simulation_service が tick を
         # 進める前提なので、stub する。
         from ai_rpg_world.domain.common.value_object import WorldTick
+
         runtime._simulation_service.tick = MagicMock(return_value=WorldTick(48))
         runtime.advance_tick()
         # flush 後、food_spoiled obs が player 数だけ届く (4 players)
         food_obs = [(pid, o) for pid, o in captured if (o.structured or {}).get("type") == "food_spoiled"]
-        assert len(food_obs) == 4, (
-            f"day 境界で 4 player に flush されるべき: actual={len(food_obs)}"
-        )
+        assert len(food_obs) == 4, f"day 境界で 4 player に flush されるべき: actual={len(food_obs)}"
         prose = food_obs[0][1].prose
         assert "野いちご" in prose
         assert "3" in prose
@@ -110,14 +101,11 @@ class TestSameDayAggregation:
         captured = _capture_observations(runtime)
         runtime.current_tick = lambda: 5  # type: ignore[method-assign]
         for iid in range(1, 6):
-            runtime._append_food_spoiled_batch_observation(
-                [_make_spoiled_event(101, iid, "野いちご")]
-            )
+            runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, iid, "野いちご")])
         for iid in range(10, 12):
-            runtime._append_food_spoiled_batch_observation(
-                [_make_spoiled_event(102, iid, "椰子の実")]
-            )
+            runtime._append_food_spoiled_batch_observation([_make_spoiled_event(102, iid, "椰子の実")])
         from ai_rpg_world.domain.common.value_object import WorldTick
+
         runtime._simulation_service.tick = MagicMock(return_value=WorldTick(48))
         runtime.advance_tick()
         food_obs = [(pid, o) for pid, o in captured if (o.structured or {}).get("type") == "food_spoiled"]
@@ -139,14 +127,10 @@ class TestDayBoundaryFlush:
         captured = _capture_observations(runtime)
         runtime.current_tick = lambda: 5  # type: ignore[method-assign]
         for iid in (1, 2):
-            runtime._append_food_spoiled_batch_observation(
-                [_make_spoiled_event(101, iid, "野いちご")]
-            )
+            runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, iid, "野いちご")])
         # day 1 に進めて新規 spoilage を投入 (=暗黙の day 切り替え)
         runtime.current_tick = lambda: 50  # type: ignore[method-assign]
-        runtime._append_food_spoiled_batch_observation(
-            [_make_spoiled_event(102, 10, "椰子の実")]
-        )
+        runtime._append_food_spoiled_batch_observation([_make_spoiled_event(102, 10, "椰子の実")])
         # day 0 分 (野いちご 2 個) は flush 済、day 1 分 (椰子の実 1 個) は
         # buffer に居る
         food_obs = [o for _, o in captured if (o.structured or {}).get("type") == "food_spoiled"]
@@ -172,6 +156,54 @@ class TestEmptyBuffer:
         """pending が None でも advance tick は safe。"""
         # ここでは _pending_spoiled_day を作っていない状態で advance_tick
         from ai_rpg_world.domain.common.value_object import WorldTick
+
         runtime._simulation_service.tick = MagicMock(return_value=WorldTick(50))
         # 何も raise しない
         runtime.advance_tick()
+
+
+@pytest.fixture
+def runtime_without_day_night():
+    from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+
+    return create_world_runtime(SCENARIO_PATH.parent / "market_town_v1.json")
+
+
+class TestDayBoundaryWithoutDayNight:
+    """昼夜を宣言しない世界でも、「今日」の区切りが時計の 1 日 (5 分/tick で 288 tick) と一致する (#1576)。"""
+
+    def test_spoilage_within_one_clock_day_is_not_flushed_at_tick_24(
+        self,
+        runtime_without_day_night,
+    ) -> None:
+        """昼夜の無い世界で tick 5 と tick 30 に腐っても、時計ではまだ同じ日なので知らせは届かない。"""
+        runtime = runtime_without_day_night
+        captured = _capture_observations(runtime)
+        runtime.current_tick = lambda: 5  # type: ignore[method-assign]
+        runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, 1, "野いちご")])
+
+        runtime.current_tick = lambda: 30  # type: ignore[method-assign]
+        runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, 2, "野いちご")])
+
+        food_obs = [o for _, o in captured if (o.structured or {}).get("type") == "food_spoiled"]
+        assert food_obs == []
+        assert len(runtime._pending_spoiled[101]["instance_ids"]) == 2
+
+    def test_crossing_tick_288_flushes_the_day(self, runtime_without_day_night) -> None:
+        """昼夜の無い世界で、tick 287 までに腐った分は、tick 288 (時計で翌日 0:00) に進んだときに 1 件にまとめて届く。"""
+        from ai_rpg_world.domain.common.value_object import WorldTick
+
+        runtime = runtime_without_day_night
+        captured = _capture_observations(runtime)
+        runtime.current_tick = lambda: 287  # type: ignore[method-assign]
+        runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, 1, "野いちご")])
+        runtime._simulation_service.tick = MagicMock(return_value=WorldTick(287))
+        runtime.advance_tick()
+        assert [o for _, o in captured if (o.structured or {}).get("type") == "food_spoiled"] == []
+
+        runtime._simulation_service.tick = MagicMock(return_value=WorldTick(288))
+        runtime.advance_tick()
+
+        food_obs = [o for _, o in captured if (o.structured or {}).get("type") == "food_spoiled"]
+        assert food_obs
+        assert "今日は野いちごが1個腐った" in food_obs[0].prose

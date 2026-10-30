@@ -45,9 +45,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI, _SENA, _KUZE, _AOI = (PlayerId(i) for i in (1, 2, 3, 4))
 
@@ -65,6 +63,33 @@ _ADVERTISED_TOOLS = {"give_item", "tend_to_player"}
 _TOOL_NAMES = sorted(defn.name for defn, _ in get_spot_graph_specs())
 
 
+def _all_tool_identifiers() -> set[str]:
+    """どのカタログのツールかを問わず、ツールの名前と、接頭辞を外した名前。
+
+    今の世界のツールだけを見ると、**今の世界に無いツール**の名前を勧める文が
+    素通りする。実際 `ITEM_TRANSFER_SLOT_IS_EMPTY` が `inspect_target` を勧めていた。
+    """
+    import ai_rpg_world.application.llm.tool_constants as constants
+
+    prefixes = [
+        value
+        for key, value in vars(constants).items()
+        if key.startswith("TOOL_NAME_PREFIX_") and isinstance(value, str) and value
+    ]
+    names: set[str] = set()
+    for key, value in vars(constants).items():
+        if key.startswith("TOOL_NAME_") and not key.startswith("TOOL_NAME_PREFIX_") and isinstance(value, str):
+            names.add(value)
+            names.update(value[len(prefix) :] for prefix in prefixes if value.startswith(prefix))
+    return names
+
+
+def _names(text: str, name: str) -> bool:
+    import re
+
+    return re.search(rf"(?<![A-Za-z_]){re.escape(name)}(?![A-Za-z_])", text) is not None
+
+
 class _PromptCaptureClient:
     def __init__(self) -> None:
         self.messages = []
@@ -74,6 +99,18 @@ class _PromptCaptureClient:
         self.messages = messages
         self.tools = tools
         return {"name": "wait", "arguments": {}}
+
+
+def _payload_tools(runtime, player_id: PlayerId) -> list:
+    """1 ターン目に LLM へ渡るツールの定義 (説明文と引数の説明を含む)。"""
+    client = _PromptCaptureClient()
+    _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=client,
+    ).run_phase_a(player_id)
+    return client.tools
 
 
 def _auto_prompt(runtime, player_id: PlayerId) -> tuple[str, list[str]]:
@@ -149,9 +186,7 @@ class TestNoDisabledToolIsAdvertisedAnywhere:
             assert tool_name not in observation, observation
 
     @pytest.mark.parametrize("tool_name", _TOOL_NAMES)
-    def test_auto_instruction_names_exactly_the_tools_in_the_actual_payload(
-        self, tmp_path, tool_name
-    ) -> None:
+    def test_auto_instruction_names_exactly_the_tools_in_the_actual_payload(self, tmp_path, tool_name) -> None:
         """auto の末尾指示は実 payload から作り、無効化した名前を宣伝しない。"""
         runtime = create_world_runtime(
             _world_with_only(tmp_path, tool_name),
@@ -164,6 +199,21 @@ class TestNoDisabledToolIsAdvertisedAnywhere:
         assert tool_name not in prompt
         for payload_name in payload_names:
             assert f'"{payload_name}"' in prompt
+
+    @pytest.mark.parametrize("tool_name", _TOOL_NAMES)
+    def test_no_other_tool_description_names_the_disabled_tool(self, tmp_path, tool_name) -> None:
+        """1 つずつ無効化して、LLM に渡るほかのツールの説明文と引数の説明に、その名前が残らない。
+
+        プロンプト本文だけを見ていると、ツールの説明文が無いツールを勧めても
+        素通りする。実際 use_item の説明が give_item を、attack の説明が
+        travel_to を勧めていた。
+        """
+        runtime = create_world_runtime(_world_with_only(tmp_path, tool_name))
+
+        tools = _payload_tools(runtime, _MORI)
+
+        assert tools
+        assert not _names(json.dumps(tools, ensure_ascii=False), tool_name)
 
     def test_the_advertised_set_is_exactly_what_we_expect(self, tmp_path) -> None:
         """全ツールを有効にしたとき、名前が出るのは既知の集合ちょうど。
@@ -196,7 +246,7 @@ class TestNoDisabledToolIsAdvertisedAnywhere:
         assert advertised == _ADVERTISED_TOOLS
 
     def test_no_remediation_text_names_a_tool(self) -> None:
-        """失敗時の対処文が、ツール識別子を名指ししない。
+        """失敗時の対処文が、どのカタログのツール識別子も名指ししない。
 
         対処文はプロンプトに載るが、**呼び出し口が 77 か所あり**露出判断を
         渡せない。名指しをやめることで、どの世界でも嘘にならないようにする。
@@ -208,9 +258,16 @@ class TestNoDisabledToolIsAdvertisedAnywhere:
             DEFAULT_REMEDIATION_BY_ERROR_CODE,
         )
 
-        for code, text in DEFAULT_REMEDIATION_BY_ERROR_CODE.items():
-            for name in _TOOL_NAMES:
-                assert name not in text, (code, name, text)
+        identifiers = _all_tool_identifiers()
+        assert set(_TOOL_NAMES) <= identifiers
+        offenders = [
+            (code, name)
+            for code, text in DEFAULT_REMEDIATION_BY_ERROR_CODE.items()
+            for name in sorted(identifiers)
+            if _names(text, name)
+        ]
+
+        assert offenders == []
 
 
 class TestTheDrillNoLongerOffersTending:
@@ -262,14 +319,8 @@ def _agent_facing_texts() -> list[tuple[str, str]]:
         DEFAULT_REMEDIATION_BY_ERROR_CODE,
     )
 
-    texts = [
-        (f"remediation:{code}", text)
-        for code, text in DEFAULT_REMEDIATION_BY_ERROR_CODE.items()
-    ]
-    texts += [
-        (f"tool_catalog:{defn.name}", str(defn.description))
-        for defn, _ in get_spot_graph_specs()
-    ]
+    texts = [(f"remediation:{code}", text) for code, text in DEFAULT_REMEDIATION_BY_ERROR_CODE.items()]
+    texts += [(f"tool_catalog:{defn.name}", str(defn.description)) for defn, _ in get_spot_graph_specs()]
     return texts
 
 
@@ -308,9 +359,41 @@ class TestAdviceDoesNotNameAToolThatMightNotExist:
         import re
 
         offenders = [
-            (where, text) for where, text in _agent_facing_texts()
+            (where, text)
+            for where, text in _agent_facing_texts()
             for verb in verbs
             if re.search(rf"(?<![A-Za-z_]){verb}(?![A-Za-z_])", text)
         ]
 
         assert offenders == []
+
+
+class TestTheExhaustedRefusalNamesNoTool:
+    """疲労で重い行動を断る文が、ツールの名前を出さないことを保証する。
+
+    この文は対処文の表ではなく実行器の中で組み立てるので、表を見る走査に
+    入っていなかった。`wait` / `use_item` / `speech` を名前で勧めていて、
+    そのツールが無い世界では打てない手を勧める。
+    """
+
+    def test_neither_message_nor_remediation_names_a_tool(self, monkeypatch) -> None:
+        """疲労が限界で travel_to を断られたとき、本文にも対処文にも、どのカタログのツール名も出ない。"""
+        from types import SimpleNamespace
+
+        from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+        from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
+
+        runtime = create_world_runtime(_DRILL)
+        executor = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
+            llm_client=StubLlmClient(None),
+        )._spot_graph_executor
+        monkeypatch.setattr(executor, "_get_status", lambda player_id: SimpleNamespace(is_exhausted=lambda: True))
+
+        refusal = executor._is_exhausted_and_block(int(_MORI), TOOL_NAME_SPOT_GRAPH_TRAVEL_TO)
+
+        assert refusal is not None and refusal.error_code == "EXHAUSTED"
+        text = f"{refusal.message}\n{refusal.remediation}"
+        assert [name for name in sorted(_all_tool_identifiers()) if _names(text, name)] == []

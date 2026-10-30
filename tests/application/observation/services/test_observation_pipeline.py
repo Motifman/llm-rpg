@@ -21,7 +21,6 @@ from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
     PlayerGoldEarnedEvent,
-    PlayerLocationChangedEvent,
 )
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
@@ -30,18 +29,11 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
-)
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
     InMemoryDataStore,
-)
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
@@ -65,10 +57,7 @@ def _make_status(
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=SpotId(spot_id),
-            current_coordinate=Coordinate(0, 0, 0),
-        ),
+        current_spot_id=SpotId(spot_id),
         attention_level=attention_level,
     )
 
@@ -85,14 +74,9 @@ class TestObservationPipelineNormal:
         return InMemoryPlayerStatusRepository(data_store=data_store)
 
     @pytest.fixture
-    def physical_map_repo(self, data_store):
-        return InMemoryPhysicalMapRepository(data_store=data_store)
-
-    @pytest.fixture
-    def resolver(self, status_repo, physical_map_repo):
+    def resolver(self, status_repo):
         return create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
         )
 
     @pytest.fixture
@@ -107,9 +91,7 @@ class TestObservationPipelineNormal:
             player_status_repository=status_repo,
         )
 
-    def test_returns_outputs_for_resolved_recipients(
-        self, pipeline, status_repo
-    ):
+    def test_returns_outputs_for_resolved_recipients(self, pipeline, status_repo):
         """resolver が返した配信先について formatter が output を返すとリストに含まれる（正常）"""
         status_repo.save(_make_status(1, spot_id=1))
         event = PlayerGoldEarnedEvent.create(
@@ -126,30 +108,21 @@ class TestObservationPipelineNormal:
         assert isinstance(result[0][1], ObservationOutput)
         assert "100" in result[0][1].prose
 
-    def test_returns_multiple_outputs_when_multiple_recipients(
-        self, pipeline, status_repo
-    ):
+    def test_returns_multiple_outputs_when_multiple_recipients(self, pipeline, status_repo):
         """複数配信先のとき、各プレイヤー向け出力が返る（正常）"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=1))
-        event = PlayerLocationChangedEvent.create(
+        event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(0, 0, 0),
         )
 
         result = pipeline.run(event)
 
-        assert len(result) == 1
-        assert result[0][0] == PlayerId(1)
-        assert "現在地" in result[0][1].prose
+        assert len(result) == 2
+        assert {pid for pid, _ in result} == {PlayerId(1), PlayerId(2)}
 
-    def test_player_downed_remote_recipient_gets_scheduled_observation(
-        self, pipeline, status_repo
-    ):
+    def test_player_downed_remote_recipient_gets_scheduled_observation(self, pipeline, status_repo):
         """別 spot の player が倒れても既知 player に届き、反応用に schedules_turn=True になる。"""
         status_repo.save(_make_status(1, spot_id=1))
         status_repo.save(_make_status(2, spot_id=2))
@@ -210,9 +183,7 @@ class TestObservationPipelineBoundary:
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = [PlayerId(1)]
         mock_formatter = MagicMock()
-        mock_formatter.format.return_value = ObservationOutput(
-            "x", {}, schedules_turn=False, breaks_movement=False
-        )
+        mock_formatter.format.return_value = ObservationOutput("x", {}, schedules_turn=False, breaks_movement=False)
         pipeline = ObservationPipeline(
             resolver=mock_resolver,
             formatter=mock_formatter,
@@ -228,15 +199,11 @@ class TestObservationPipelineBoundary:
     def test_uses_status_attention_level_when_repository_returns_status(self):
         """リポジトリが status を返すとき、その attention_level で formatter を呼ぶ（正常）"""
         status_repo = MagicMock()
-        status_repo.find_by_id.return_value = _make_status(
-            1, spot_id=1, attention_level=AttentionLevel.FILTER_SOCIAL
-        )
+        status_repo.find_by_id.return_value = _make_status(1, spot_id=1, attention_level=AttentionLevel.FILTER_SOCIAL)
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = [PlayerId(1)]
         mock_formatter = MagicMock()
-        mock_formatter.format.return_value = ObservationOutput(
-            "x", {}, schedules_turn=False, breaks_movement=False
-        )
+        mock_formatter.format.return_value = ObservationOutput("x", {}, schedules_turn=False, breaks_movement=False)
         pipeline = ObservationPipeline(
             resolver=mock_resolver,
             formatter=mock_formatter,
@@ -255,9 +222,7 @@ class TestObservationPipelineBoundary:
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = [PlayerId(1)]
         mock_formatter = MagicMock()
-        mock_formatter.format.return_value = ObservationOutput(
-            "x", {}, schedules_turn=False, breaks_movement=False
-        )
+        mock_formatter.format.return_value = ObservationOutput("x", {}, schedules_turn=False, breaks_movement=False)
         pipeline = ObservationPipeline(
             resolver=mock_resolver,
             formatter=mock_formatter,
@@ -307,9 +272,7 @@ class TestObservationPipelineExceptions:
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = [PlayerId(1)]
         mock_formatter = MagicMock()
-        mock_formatter.format.return_value = ObservationOutput(
-            "x", {}, schedules_turn=False, breaks_movement=False
-        )
+        mock_formatter.format.return_value = ObservationOutput("x", {}, schedules_turn=False, breaks_movement=False)
         pipeline = ObservationPipeline(
             resolver=mock_resolver,
             formatter=mock_formatter,

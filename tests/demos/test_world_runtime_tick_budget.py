@@ -3,7 +3,7 @@
 で LLM プロンプトに配線するかを検証する。
 
 責務:
-- コードはメタ情報「残り行動可能 tick」しか流さない (WIN 条件はシナリオ責務)
+- コードはメタ情報「時間切れまで」の残り時間しか流さない (WIN 条件はシナリオ責務)
 - TICK_LIMIT が無いシナリオでは None のまま (セクションごと出さない)
 """
 
@@ -13,27 +13,22 @@ from pathlib import Path
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-_SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "relay_puzzle_demo.json"
-)
+_SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "forbidden_library_demo.json"
 
 
 class TestTickBudgetWiring:
-    """relay_puzzle_demo は TICK_LIMIT=50 を持つので残量が計算される。"""
+    """forbidden_library_demo は TICK_LIMIT=80 を持つので残量が計算される。"""
 
     def test_initial_budget_equals_scenario_limit(self) -> None:
         """tick=0 の初期状態では残量 = scenario の tick_limit。"""
         rt = create_world_runtime(_SCENARIO_PATH)
-        assert rt._compute_tick_budget_remaining() == 50
+        assert rt._compute_tick_budget_remaining() == 80
 
     def test_budget_decreases_as_tick_advances(self) -> None:
         """内部 tick を進めると残量が減る。"""
         rt = create_world_runtime(_SCENARIO_PATH)
         rt._tick = 10
-        assert rt._compute_tick_budget_remaining() == 40
+        assert rt._compute_tick_budget_remaining() == 70
 
     def test_budget_clamped_to_zero_when_exceeded(self) -> None:
         """tick が limit を超えても負にはならない (0 にクランプ)。"""
@@ -48,4 +43,5 @@ class TestTickBudgetWiring:
         player_ids = rt.get_player_ids()
         assert player_ids, "シナリオに player_spawn が無い"
         text = rt.build_observation(player_ids[0])
-        assert "残り行動可能 tick: 50" in text
+        assert "時間切れまで: あと 400 分" in text
+        assert "残り行動可能 tick" not in text

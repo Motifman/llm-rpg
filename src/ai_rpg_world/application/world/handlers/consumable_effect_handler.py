@@ -14,7 +14,6 @@ from ai_rpg_world.application.world.exceptions.consumable_effect_exception impor
     ItemSpecNotFoundForConsumableEffectException,
     PlayerNotFoundForConsumableEffectException,
 )
-from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -32,6 +31,7 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+from ai_rpg_world.eventing import EventHandler
 
 
 class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
@@ -94,9 +94,7 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
             event.item_spec_id,
         )
 
-    def _apply_effect_to_status(
-        self, effect: ItemEffect, player_status: PlayerStatusAggregate
-    ) -> None:
+    def _apply_effect_to_status(self, effect: ItemEffect, player_status: PlayerStatusAggregate) -> None:
         """効果データを PlayerStatusAggregate に反映する。効果の種類ごとに適切なメソッドを呼ぶ。"""
         if isinstance(effect, HealEffect):
             player_status.heal_hp(effect.amount)

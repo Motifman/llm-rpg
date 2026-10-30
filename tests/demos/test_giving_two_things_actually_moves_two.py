@@ -32,10 +32,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "market_town_v3_board.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v3_board.json"
 
 _GIVER = 3
 _TAKER = 5
@@ -58,8 +55,10 @@ def _hand(runtime: Any, player_id: int, count: int) -> None:
     grant_item_specs_to_inventory(
         PlayerId(player_id),
         tuple(ItemSpecId.create(spec) for _ in range(count)),
-        runtime._item_repo, runtime._item_spec_repo,
-        runtime._player_inventory_repo, overflow_sink=IGNORE_OVERFLOW,
+        runtime._item_repo,
+        runtime._item_spec_repo,
+        runtime._player_inventory_repo,
+        overflow_sink=IGNORE_OVERFLOW,
     )
 
 
@@ -88,7 +87,8 @@ def _give(runtime: Any, *, quantity: Any = None) -> Any:
     if quantity is not None:
         entry["quantity"] = quantity
     return _executor(runtime)._give_item(
-        _GIVER, {"gives_resolved": [entry], "inner_thought": "渡す"},
+        _GIVER,
+        {"gives_resolved": [entry], "inner_thought": "渡す"},
     )
 
 

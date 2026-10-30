@@ -42,14 +42,12 @@ class PlayerAudienceQueryService(IPlayerAudienceQueryPort):
             return [
                 PlayerId(entity_id.value)
                 for entity_id, graph_spot_id in entity_spot.items()
-                if graph_spot_id == spot_id
-                and entity_id.value in known_player_ids
+                if graph_spot_id == spot_id and entity_id.value in known_player_ids
             ]
         return [
             s.player_id
             for s in all_statuses
-            if s.current_spot_id is not None
-            and s.current_spot_id.value == spot_id.value
+            if s.current_spot_id is not None and s.current_spot_id.value == spot_id.value
         ]
 
     def all_known_players(self) -> list[PlayerId]:

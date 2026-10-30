@@ -62,10 +62,7 @@ class ScenarioPredicateEvaluator:
                 failed_path=(),
             )
         if isinstance(predicate, TickAtLeastPredicate):
-            if (
-                not isinstance(context, TickPredicateContext)
-                or context.current_tick is None
-            ):
+            if not isinstance(context, TickPredicateContext) or context.current_tick is None:
                 return PredicateResult.context_missing(
                     failed_predicate=predicate,
                     failed_path=(),
@@ -78,10 +75,7 @@ class ScenarioPredicateEvaluator:
                 failed_path=(),
             )
         if isinstance(predicate, EntityAtSpotPredicate):
-            if (
-                not isinstance(context, EntityPlacementPredicateContext)
-                or context.entity_locations is None
-            ):
+            if not isinstance(context, EntityPlacementPredicateContext) or context.entity_locations is None:
                 return PredicateResult.context_missing(
                     failed_predicate=predicate,
                     failed_path=(),
@@ -94,20 +88,13 @@ class ScenarioPredicateEvaluator:
                 failed_path=(),
             )
         if isinstance(predicate, EntityCountAtSpotAtLeastPredicate):
-            if (
-                not isinstance(context, EntityPlacementPredicateContext)
-                or context.entity_locations is None
-            ):
+            if not isinstance(context, EntityPlacementPredicateContext) or context.entity_locations is None:
                 return PredicateResult.context_missing(
                     failed_predicate=predicate,
                     failed_path=(),
                     required_context={"entity_locations"},
                 )
-            present_count = sum(
-                1
-                for spot_id in context.entity_locations.values()
-                if spot_id == predicate.spot_id
-            )
+            present_count = sum(1 for spot_id in context.entity_locations.values() if spot_id == predicate.spot_id)
             if present_count >= predicate.required_count:
                 return PredicateResult.satisfied()
             return PredicateResult.not_satisfied(
@@ -115,10 +102,7 @@ class ScenarioPredicateEvaluator:
                 failed_path=(),
             )
         if isinstance(predicate, ItemSpecOwnedPredicate):
-            if (
-                not isinstance(context, OwnedItemSpecsPredicateContext)
-                or context.owned_item_spec_ids is None
-            ):
+            if not isinstance(context, OwnedItemSpecsPredicateContext) or context.owned_item_spec_ids is None:
                 return PredicateResult.context_missing(
                     failed_predicate=predicate,
                     failed_path=(),
@@ -131,48 +115,33 @@ class ScenarioPredicateEvaluator:
                 failed_path=(),
             )
         if isinstance(predicate, ItemSpecCountAtLeastPredicate):
-            if (
-                not isinstance(context, ItemSpecCountsPredicateContext)
-                or context.item_spec_counts is None
-            ):
+            if not isinstance(context, ItemSpecCountsPredicateContext) or context.item_spec_counts is None:
                 return PredicateResult.context_missing(
                     failed_predicate=predicate,
                     failed_path=(),
                     required_context={"item_spec_counts"},
                 )
-            if (
-                context.item_spec_counts.get(predicate.item_spec_id, 0)
-                >= predicate.required_count
-            ):
+            if context.item_spec_counts.get(predicate.item_spec_id, 0) >= predicate.required_count:
                 return PredicateResult.satisfied()
             return PredicateResult.not_satisfied(
                 failed_predicate=predicate,
                 failed_path=(),
             )
         if isinstance(predicate, StateValuesMatchPredicate):
-            if (
-                not isinstance(context, StateValuesPredicateContext)
-                or context.state_values is None
-            ):
+            if not isinstance(context, StateValuesPredicateContext) or context.state_values is None:
                 return PredicateResult.context_missing(
                     failed_predicate=predicate,
                     failed_path=(),
                     required_context={"state_values"},
                 )
-            if all(
-                context.state_values.get(key) == value
-                for key, value in predicate.required_values.items()
-            ):
+            if all(context.state_values.get(key) == value for key, value in predicate.required_values.items()):
                 return PredicateResult.satisfied()
             return PredicateResult.not_satisfied(
                 failed_predicate=predicate,
                 failed_path=(),
             )
         if isinstance(predicate, StateIntAtLeastPredicate):
-            if (
-                not isinstance(context, StateValuesPredicateContext)
-                or context.state_values is None
-            ):
+            if not isinstance(context, StateValuesPredicateContext) or context.state_values is None:
                 return PredicateResult.context_missing(
                     failed_predicate=predicate,
                     failed_path=(),
@@ -188,10 +157,7 @@ class ScenarioPredicateEvaluator:
                 failed_path=(),
             )
         if isinstance(predicate, WeatherTypeIsPredicate):
-            if (
-                not isinstance(context, WeatherTypePredicateContext)
-                or context.current_weather_type is None
-            ):
+            if not isinstance(context, WeatherTypePredicateContext) or context.current_weather_type is None:
                 return PredicateResult.context_missing(
                     failed_predicate=predicate,
                     failed_path=(),

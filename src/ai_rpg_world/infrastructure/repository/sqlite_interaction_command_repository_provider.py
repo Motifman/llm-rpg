@@ -68,40 +68,30 @@ class SqliteInteractionCommandRepositoryProvider:
         connection = unit_of_work.connection
         self._spot_graph = cast(
             ISpotGraphRepository,
-            ScopeBoundRepository(
-                SqliteSpotGraphRepository.for_shared_unit_of_work(connection), guard
-            ),
+            ScopeBoundRepository(SqliteSpotGraphRepository.for_shared_unit_of_work(connection), guard),
         )
         self._spot_interiors = cast(
             ISpotInteriorRepository,
-            ScopeBoundRepository(
-                SqliteSpotInteriorRepository.for_shared_unit_of_work(connection), guard
-            ),
+            ScopeBoundRepository(SqliteSpotInteriorRepository.for_shared_unit_of_work(connection), guard),
         )
         self._player_inventories = cast(
             PlayerInventoryRepository,
             ScopeBoundRepository(
-                SqlitePlayerInventoryWriteRepository.for_shared_unit_of_work(
-                    connection, event_sink=sink
-                ),
+                SqlitePlayerInventoryWriteRepository.for_shared_unit_of_work(connection, event_sink=sink),
                 guard,
             ),
         )
         self._player_statuses = cast(
             PlayerStatusRepository,
             ScopeBoundRepository(
-                SqlitePlayerStatusWriteRepository.for_shared_unit_of_work(
-                    connection, event_sink=sink
-                ),
+                SqlitePlayerStatusWriteRepository.for_shared_unit_of_work(connection, event_sink=sink),
                 guard,
             ),
         )
         self._items = cast(
             ItemRepository,
             ScopeBoundRepository(
-                SqliteItemWriteRepository.for_shared_unit_of_work(
-                    connection, event_sink=sink
-                ),
+                SqliteItemWriteRepository.for_shared_unit_of_work(connection, event_sink=sink),
                 guard,
             ),
         )
@@ -159,10 +149,7 @@ class SqliteInteractionCommandRepositoryProviderFactory:
     ) -> SqliteInteractionCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, SqliteUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "SQLite interaction providerには"
-                "SqliteUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("SQLite interaction providerにはSqliteUnitOfWorkTransactionAdapterが必要です")
         return SqliteInteractionCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

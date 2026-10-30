@@ -7,4 +7,5 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 class PlayerInventoryRepository(Repository[PlayerInventoryAggregate, PlayerId]):
     """プレイヤーインベントリリポジトリインターフェース"""
+
     pass

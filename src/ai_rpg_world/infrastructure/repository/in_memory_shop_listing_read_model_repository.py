@@ -23,13 +23,9 @@ class InMemoryShopListingReadModelRepository(ShopListingReadModelRepository):
         """listing_idで出品リストを検索"""
         return self._listings.get(entity_id)
 
-    def find_by_ids(
-        self, entity_ids: list[ShopListingId]
-    ) -> list[ShopListingReadModel]:
+    def find_by_ids(self, entity_ids: list[ShopListingId]) -> list[ShopListingReadModel]:
         """listing_idのリストで出品リストを検索"""
-        return [
-            s for lid in entity_ids for s in [self._listings.get(lid)] if s is not None
-        ]
+        return [s for lid in entity_ids for s in [self._listings.get(lid)] if s is not None]
 
     def save(self, entity: ShopListingReadModel) -> ShopListingReadModel:
         """出品リストを保存"""

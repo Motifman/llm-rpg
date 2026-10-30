@@ -33,10 +33,7 @@ class PlayerOutcomeSubsystemCodec(WorldSubsystemCodec):
     def _registry(runtime: Any) -> PlayerOutcomeRegistry:
         registry = getattr(runtime, "_player_outcome_registry", None)
         if not isinstance(registry, PlayerOutcomeRegistry):
-            raise RuntimeError(
-                "runtime._player_outcome_registry not found; "
-                "PlayerOutcomeSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._player_outcome_registry not found; PlayerOutcomeSubsystemCodec requires it")
         return registry
 
     def capture(self, runtime: Any) -> dict[str, Any]:
@@ -48,14 +45,12 @@ class PlayerOutcomeSubsystemCodec(WorldSubsystemCodec):
             missing = sorted(expected_ids - set(outcomes))
             extra = sorted(set(outcomes) - expected_ids)
             raise RuntimeError(
-                "player outcome registry does not match runtime players: "
-                f"missing={missing!r}, extra={extra!r}"
+                f"player outcome registry does not match runtime players: missing={missing!r}, extra={extra!r}"
             )
         return {
             "schema_version": SCHEMA_VERSION,
             "entries": [
-                {"player_id": player_id, "outcome": outcomes[player_id].value}
-                for player_id in sorted(outcomes)
+                {"player_id": player_id, "outcome": outcomes[player_id].value} for player_id in sorted(outcomes)
             ],
         }
 
@@ -63,10 +58,7 @@ class PlayerOutcomeSubsystemCodec(WorldSubsystemCodec):
         """callback を発火させず、検証後に registry 全体を置換する。"""
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         entries = data.get("entries")
         if not isinstance(entries, list):
             raise ValueError(f"{SUBSYSTEM_KEY} entries must be a list")
@@ -77,16 +69,12 @@ class PlayerOutcomeSubsystemCodec(WorldSubsystemCodec):
                 raise ValueError(f"{SUBSYSTEM_KEY} entry must be an object")
             player_id = PlayerId(int(entry["player_id"]))
             if player_id in restored:
-                raise ValueError(
-                    f"{SUBSYSTEM_KEY} duplicate player_id={int(player_id)}"
-                )
+                raise ValueError(f"{SUBSYSTEM_KEY} duplicate player_id={int(player_id)}")
             outcome_raw = entry.get("outcome")
             try:
                 outcome = PlayerOutcomeEnum(outcome_raw)
             except (TypeError, ValueError) as exc:
-                raise ValueError(
-                    f"{SUBSYSTEM_KEY} unknown outcome={outcome_raw!r}"
-                ) from exc
+                raise ValueError(f"{SUBSYSTEM_KEY} unknown outcome={outcome_raw!r}") from exc
             restored[player_id] = outcome
 
         self._registry(runtime).replace_all(restored)

@@ -12,8 +12,8 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -26,30 +26,20 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
 )
-from ai_rpg_world.application.llm.services.in_memory_stagnation_reasoning_latch import (
-    InMemoryStagnationReasoningLatch,
-)
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
     PromptDatasetCaptureSink,
 )
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
-    TOOL_NAME_MEMO_ADD,
-    TOOL_NAME_MEMO_DONE,
-    TOOL_NAME_MEMO_LIST,
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_EPISODES,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
-    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
@@ -61,9 +51,6 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
-    SemanticMemoryEntry,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -72,32 +59,15 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
     _WorldLlmWiring,
 )
 
-_SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "forbidden_library_demo.json"
-)
+_SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "forbidden_library_demo.json"
 _SCENARIOS_DIR = _SCENARIO_PATH.parent
-_FIXTURE_SCENARIOS_DIR = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
-)
+_FIXTURE_SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
 
 
 @pytest.fixture()
 def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep these contract tests independent from the caller's shell env."""
-    for key in (
-        "LLM_EPISODIC_ENABLED",
-        "LLM_EPISODIC_SUBJECTIVE_ENABLED",
-        "SEMANTIC_PASSIVE_TOP_K",
-        "SEMANTIC_LLM_GIST_ENABLED",
-        "SEMANTIC_SEARCH_ENABLED",
-        "SHORT_TERM_MEMORY_KIND",
-        "PROMPT_SECTION_ORDER",
-        "LLM_TOOL_MODE",
-        "MEMO_TOOLS_ENABLED",
-    ):
+    for key in ():
         monkeypatch.delenv(key, raising=False)
 
 
@@ -117,50 +87,11 @@ def _create_runtime(
 
 
 def _user_prompt_text(prompt: dict) -> str:
-    return "\n".join(
-        m.get("content", "")
-        for m in prompt.get("messages", [])
-        if m.get("role") == "user"
-    )
+    return "\n".join(m.get("content", "") for m in prompt.get("messages", []) if m.get("role") == "user")
 
 
 def _system_prompt_text(prompt: dict) -> str:
-    return "\n".join(
-        m.get("content", "")
-        for m in prompt.get("messages", [])
-        if m.get("role") == "system"
-    )
-
-
-def _seed_semantic_learning(runtime, player_id, text: str) -> None:
-    stack = runtime._episodic_stack
-    being = runtime.aux_being_resolver.resolve_being_id(
-        runtime._aux_being_default_world_id, player_id
-    )
-    assert being is not None
-    assert stack.semantic_memory_store is not None
-    stack.semantic_memory_store.add_by_being(
-        being,
-        SemanticMemoryEntry(
-            entry_id="contract-semantic-entry",
-            player_id=int(player_id.value),
-            being_id=being,
-            text=text,
-            evidence_episode_ids=("contract-episode",),
-            confidence=0.8,
-            created_at=datetime.now(timezone.utc),
-            importance_score=8,
-            tags=("contract",),
-        ),
-    )
-
-
-class _PromotionSpy:
-    def __init__(self) -> None:
-        self.calls: list[tuple[int, BeingId]] = []
-
-    def on_after_tool_turn(self, player_id: int, being_id: BeingId) -> None:
-        self.calls.append((player_id, being_id))
+    return "\n".join(m.get("content", "") for m in prompt.get("messages", []) if m.get("role") == "system")
 
 
 class _OrderedActionStoreSpy:
@@ -182,44 +113,6 @@ class _OrderedActionStoreSpy:
             "result_summary": result_summary,
             **kwargs,
         }
-
-
-class _OrderedChunkCoordinatorSpy:
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-        self.calls: list[PlayerId] = []
-
-    def after_action_recorded(self, player_id: PlayerId, being_id: BeingId) -> None:
-        self.events.append("chunk")
-        self.calls.append(player_id)
-
-
-class _OrderedPromotionSpy:
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-        self.calls: list[tuple[int, BeingId]] = []
-
-    def on_after_tool_turn(self, player_id: int, being_id: BeingId) -> None:
-        self.events.append("promotion")
-        self.calls.append((player_id, being_id))
-
-
-class _RaisingChunkCoordinatorSpy:
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-
-    def after_action_recorded(self, player_id: PlayerId, being_id: BeingId) -> None:
-        self.events.append("chunk")
-        raise RuntimeError("chunk failed")
-
-
-class _RaisingPromotionSpy:
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-
-    def on_after_tool_turn(self, player_id: int, being_id: BeingId) -> None:
-        self.events.append("promotion")
-        raise RuntimeError("promotion failed")
 
 
 class _LoopGuardSpy:
@@ -248,20 +141,15 @@ class _ContractRuntime:
     def __init__(self, events: list[str] | None = None) -> None:
         self._obs_buffer = DefaultObservationContextBuffer()
         recent_event_store = UnifiedRecentEventStore()
-        self._short_term_memory = DefaultSlidingWindowMemory(
-            event_store=recent_event_store
-        )
-        self._action_result_store = DefaultActionResultStore(
-            event_store=recent_event_store
-        )
+        self._short_term_memory = SummarizingShortTermMemory(event_store=recent_event_store)
+        self._action_result_store = DefaultActionResultStore(event_store=recent_event_store)
         self.events = events if events is not None else []
         self.action_results: list[dict] = []
         self.trace_recorder = None
         self._runtime_config = ResolvedLlmRuntimeConfig.for_tests()
+        self._player_life_query = SimpleNamespace(can_take_turn=lambda player_id: True)
 
-    def build_full_prompt(
-        self, player_id: PlayerId, *, action_instruction: str | None = None
-    ) -> dict:
+    def build_full_prompt(self, player_id: PlayerId, *, action_instruction: str | None = None) -> dict:
         instruction = action_instruction or "user"
         return {
             "messages": [
@@ -312,7 +200,7 @@ class _ContractRuntime:
     def current_tick(self) -> int:
         return 7
 
-    def resolve_turn_reasoning_effort(self, player_id: PlayerId) -> None:
+    def advance_memory_turn(self, player_id: PlayerId) -> None:
         return None
 
     def get_player_ids(self) -> list[PlayerId]:
@@ -330,17 +218,13 @@ class _ContractRuntime:
         tool_name: str,
         success: bool = True,
         error_code: str | None = None,
-        scene_boundary: bool = False,
         inner_thought: str | None = None,
-        expected_result: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
         argument_fingerprint: str | None = None,
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
     ) -> None:
         # 実 escape _record_action_result (U2) と同じ subjective kwargs を受ける。
-        self.events.extend(["append", "chunk", "promotion"])
+        self.events.append("append")
         self._action_result_store.append(
             player_id,
             action_summary,
@@ -350,9 +234,6 @@ class _ContractRuntime:
             tool_name=tool_name,
             argument_fingerprint=argument_fingerprint,
             inner_thought=inner_thought,
-            expected_result=expected_result,
-            intention=intention,
-            emotion_hint=emotion_hint,
             identifier_arguments=identifier_arguments,
             free_text_argument_names=free_text_argument_names,
         )
@@ -364,11 +245,7 @@ class _ContractRuntime:
                 "tool_name": tool_name,
                 "success": success,
                 "error_code": error_code,
-                "scene_boundary": scene_boundary,
                 "inner_thought": inner_thought,
-                "expected_result": expected_result,
-                "intention": intention,
-                "emotion_hint": emotion_hint,
                 "identifier_arguments": dict(identifier_arguments or {}),
                 "free_text_argument_names": free_text_argument_names,
             }
@@ -394,11 +271,8 @@ class _ReasonFirstRuntime(_ContractRuntime):
         self.reason_first_two_step_enabled = lambda player_id: True
         self.trace_recorder = _TraceRecorderSpy()
         self.tool_schema_modes: list[str] = []
-        self.reasoning_effort_calls = 0
 
-    def get_tool_definitions(
-        self, *, tool_schema_mode: str = "legacy", player_id=None
-    ) -> list[ToolDefinitionDto]:
+    def get_tool_definitions(self, *, tool_schema_mode: str = "legacy", player_id=None) -> list[ToolDefinitionDto]:
         self.tool_schema_modes.append(tool_schema_mode)
         tools = [
             ToolDefinitionDto(
@@ -416,28 +290,18 @@ class _ReasonFirstRuntime(_ContractRuntime):
                         "type": "object",
                         "properties": {
                             "inner_thought": {"type": "string"},
-                            "expected_result": {"type": "string"},
                         },
-                        "required": ["inner_thought", "expected_result"],
+                        "required": ["inner_thought"],
                     },
                 )
             )
         return tools
-
-    def resolve_turn_reasoning_effort(self, player_id: PlayerId) -> None:
-        self.reasoning_effort_calls += 1
-        return None
 
 
 class _GatedReasonFirstRuntime(_ReasonFirstRuntime):
     def __init__(self) -> None:
         super().__init__()
         self.reason_first_two_step_enabled = True
-        self.stagnation_band = "none"
-        self._stagnation_reasoning_latch = InMemoryStagnationReasoningLatch()
-
-    def _resolve_stagnation_band_value(self, player_id: PlayerId) -> str:
-        return self.stagnation_band
 
 
 _SESSION_ID_NOT_PASSED = object()
@@ -468,9 +332,7 @@ class _SequencedLlmClient:
                 "reasoning_effort": reasoning_effort,
                 "call_phase": call_phase,
                 "session_id_present": session_id is not _SESSION_ID_NOT_PASSED,
-                "session_id": (
-                    None if session_id is _SESSION_ID_NOT_PASSED else session_id
-                ),
+                "session_id": (None if session_id is _SESSION_ID_NOT_PASSED else session_id),
             }
         )
         response = self._responses.pop(0)
@@ -573,15 +435,11 @@ def test_disabled_session_id_is_omitted_from_every_llm_invocation(
 ) -> None:
     """設定を無効にすると、空値でなく session_id キーワード自体を送らない。"""
     runtime = _ReasonFirstRuntime()
-    runtime._runtime_config = ResolvedLlmRuntimeConfig.for_tests(
-        llm_session_id_enabled=False
-    )
+    runtime._runtime_config = ResolvedLlmRuntimeConfig.for_tests(llm_session_id_enabled=False)
     client = _reason_first_success_client()
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     wiring.run_turn(PlayerId(1))
@@ -598,10 +456,8 @@ def test_reason_first_phases_share_one_player_session_id(
     wiring = _reason_first_wiring(runtime, client)
     wiring.llm_session_run_id = "run034"
     wiring.llm_session_world_id = "station_drill"
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     wiring.run_turn(PlayerId(1))
@@ -644,21 +500,16 @@ def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
 
     assert "【現在地と周囲】" in user
     assert "【直近の出来事】" in user
-    assert "【関連する学び】" not in user
     assert "visible_tile_map" not in user
     assert "current_terrain_type" not in user
     assert "travel_to" in tool_names
-    assert "memory_recall_episodes" not in tool_names
-    assert runtime._episodic_stack is None
 
 
 def test_synchronized_action_groups_expose_no_tool_of_their_own(
     clean_runtime_env: None,
 ) -> None:
     """同期アクショングループを宣言しても専用ツールは出ず、interact が入口になる。"""
-    runtime = _create_runtime(
-        scenario_path=_FIXTURE_SCENARIOS_DIR / "sync_levers_demo.json"
-    )
+    runtime = _create_runtime(scenario_path=_FIXTURE_SCENARIOS_DIR / "sync_levers_demo.json")
 
     tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
 
@@ -680,74 +531,41 @@ def _tool_by_name_from(definitions: list[ToolDefinitionDto], name: str) -> ToolD
     raise AssertionError(f"tool {name} not found")
 
 
-def test_reinterpretation_off_leaves_episodic_stack_without_coordinator(
+def test_being_provisioning_failure_stops_runtime_creation(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """U3: episodic ON / reinterpretation OFF では coordinator は組まれない (従来挙動)。"""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
-    assert runtime._episodic_stack is not None
-    assert runtime._episodic_stack.reinterpretation_coordinator is None
-    assert runtime._episodic_stack.recall_buffer_store is None
+    """Being の用意に失敗すると、create_world_runtime はどの player かを示す RuntimeError で止まる。
 
-
-def test_reinterpretation_on_builds_coordinator_without_completion_under_stub(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """U3: reinterpretation ON で coordinator が組まれる。stub client なので completion は
-    None になり、prompt 用 recall_buffer_store は None のまま (graceful)。"""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, episodic_reinterpretation_enabled=True
-        )
-    )
-    stack = runtime._episodic_stack
-    assert stack is not None
-    assert stack.reinterpretation_coordinator is not None
-    assert stack.reinterpretation_journal is not None
-    # stub client = completion 無し → prompt は recall buffer を覗かない
-    assert stack.recall_buffer_store is None
-
-
-def test_being_provisioning_failure_does_not_break_runtime_creation(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """R2c-2 (ii): Being provisioning が失敗しても create_world_runtime は
-    例外を出さず runtime を返す (factory graceful)。
-
-    退役した LlmAgentTurnRunner は per-turn provisioning を try/except していたが、
-    escape factory は scenario load 時の ensure_attached を try/except して runtime
-    作成を継続する。その graceful を回帰固定する (失敗時 episode は書かれないが
-    runtime 自体は壊れない)。"""
+    以前は失敗しても runtime を返した (失うのは episode の記録だけだった)。#1520 で
+    誰を知っているかを Being が持つようになり、用意できないと入るときの紹介が落ちて
+    【知っている人】が消える。実験の条件が run のどこにも残らないまま変わるので、
+    壊れた状態で始めない。"""
     from ai_rpg_world.application.being.being_provisioning_service import (
         BeingProvisioningService,
     )
-
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
 
     def _boom(self, player_id):
         raise RuntimeError("provision boom")
 
     monkeypatch.setattr(BeingProvisioningService, "ensure_attached", _boom)
 
-    # 例外を出さずに runtime が返ること (= factory graceful)
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
-    assert runtime is not None
-    # provisioning 失敗は握り潰され、episodic stack 自体の構築は継続する
-    assert runtime._episodic_stack is not None
+    with pytest.raises(RuntimeError, match="player_id=") as excinfo:
+        _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
+    assert "provision boom" in str(excinfo.value.__cause__)
 
 
-def test_expected_result_policy_off_exposes_no_prediction_field(
+def test_no_tool_or_system_prompt_offers_the_prediction_field(
     clean_runtime_env: None,
 ) -> None:
-    """U2 後続 v0: policy off (既定) では expected_result が schema にも prompt にも出ない。"""
-    runtime = _create_runtime()  # for_tests default = off
-    explore = _tool_by_name(runtime, TOOL_NAME_SPOT_GRAPH_EXPLORE)
-    assert "expected_result" not in explore.parameters["properties"]
+    """行動ごとの結果の予想 expected_result は #1631 で消したので、どのツールの schema にも system prompt にも出ない。"""
+    runtime = _create_runtime()
+    for mode in ("legacy", "reason_first"):
+        for definition in runtime.get_tool_definitions(tool_schema_mode=mode, for_every_player=True):
+            assert "expected_result" not in definition.parameters.get("properties", {}), (
+                mode,
+                definition.name,
+            )
     player_id = runtime.get_player_ids()[0]
     system = "\n".join(
         m.get("content", "")
@@ -757,59 +575,11 @@ def test_expected_result_policy_off_exposes_no_prediction_field(
     assert "expected_result" not in system
 
 
-def test_expected_result_policy_optional_exposes_field_not_required(
-    clean_runtime_env: None,
-) -> None:
-    """v0: optional で対象4ツールに expected_result が出るが required にならない。非対象には出ない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="optional")
-    )
-    for name in (
-        TOOL_NAME_SPOT_GRAPH_EXPLORE,
-        TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-        TOOL_NAME_SPOT_GRAPH_INTERACT,
-        TOOL_NAME_SPOT_GRAPH_WAIT,
-    ):
-        defn = _tool_by_name(runtime, name)
-        assert "expected_result" in defn.parameters["properties"], name
-        assert "expected_result" not in defn.parameters.get("required", []), name
-    # 非対象 tool (listen) には露出しない = 露出範囲 = 記録配線範囲
-    listen = _tool_by_name(runtime, TOOL_NAME_SPOT_GRAPH_LISTEN)
-    assert "expected_result" not in listen.parameters["properties"]
-    # prompt にも予測ルール行が出る
-    player_id = runtime.get_player_ids()[0]
-    system = "\n".join(
-        m.get("content", "")
-        for m in runtime.build_full_prompt(player_id).get("messages", [])
-        if m.get("role") == "system"
-    )
-    assert "expected_result" in system
-
-
-def test_expected_result_policy_required_makes_field_required(
-    clean_runtime_env: None,
-) -> None:
-    """v0: required で対象4ツールの required に expected_result が入る。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
-    )
-    for name in (
-        TOOL_NAME_SPOT_GRAPH_EXPLORE,
-        TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-        TOOL_NAME_SPOT_GRAPH_INTERACT,
-        TOOL_NAME_SPOT_GRAPH_WAIT,
-    ):
-        defn = _tool_by_name(runtime, name)
-        assert "expected_result" in defn.parameters["required"], name
-
-
 def test_reason_first_tool_mode_adds_assessment_and_strips_action_subjective_fields(
     clean_runtime_env: None,
 ) -> None:
     """reason_first toolset だけ assess_situation を足し、行動 tool の主観入力を外す。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
-    )
+    runtime = _create_runtime()
 
     legacy_names = [d.name for d in runtime.get_tool_definitions(for_every_player=True)]
     reason_first_tools = runtime.get_tool_definitions(
@@ -824,8 +594,7 @@ def test_reason_first_tool_mode_adds_assessment_and_strips_action_subjective_fie
     assert reason_first_names[:-1] == legacy_names
 
     assess = _tool_by_name_from(reason_first_tools, TOOL_NAME_ASSESS_SITUATION)
-    assert "inner_thought" in assess.parameters["required"]
-    assert "expected_result" in assess.parameters["required"]
+    assert assess.parameters["required"] == ["inner_thought"]
 
     explore = _tool_by_name_from(reason_first_tools, TOOL_NAME_SPOT_GRAPH_EXPLORE)
     assert "inner_thought" not in explore.parameters["properties"]
@@ -841,28 +610,17 @@ def test_reason_first_action_phase_omits_assessment_tool_and_keeps_action_schema
     runtime = _ReasonFirstRuntime()
     client = _reason_first_success_client()
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     result = wiring.run_turn(PlayerId(1))
 
     assert result.success is True
-    assess_tools = [
-        tool["function"]["name"]
-        for tool in client.calls[0]["tools"]
-    ]
-    action_tools = [
-        tool["function"]["name"]
-        for tool in client.calls[1]["tools"]
-    ]
+    assess_tools = [tool["function"]["name"] for tool in client.calls[0]["tools"]]
+    action_tools = [tool["function"]["name"] for tool in client.calls[1]["tools"]]
     legacy_tools = [
-        tool["function"]["name"]
-        for tool in wiring._build_tools_payload(
-            PlayerId(1), tool_schema_mode="legacy"
-        )
+        tool["function"]["name"] for tool in wiring._build_tools_payload(PlayerId(1), tool_schema_mode="legacy")
     ]
     assert TOOL_NAME_ASSESS_SITUATION in assess_tools
     assert assess_tools[-1] == TOOL_NAME_ASSESS_SITUATION
@@ -870,38 +628,11 @@ def test_reason_first_action_phase_omits_assessment_tool_and_keeps_action_schema
     assert assess_tools[:-1] == action_tools
     assert action_tools == legacy_tools
     action_explore = next(
-        tool
-        for tool in client.calls[1]["tools"]
-        if tool["function"]["name"] == TOOL_NAME_SPOT_GRAPH_EXPLORE
+        tool for tool in client.calls[1]["tools"] if tool["function"]["name"] == TOOL_NAME_SPOT_GRAPH_EXPLORE
     )
     properties = action_explore["function"]["parameters"].get("properties", {})
     assert "inner_thought" not in properties
     assert "expected_result" not in properties
-
-
-def test_reason_first_tool_mode_preserves_goal_revision_fields(
-    clean_runtime_env: None,
-) -> None:
-    """reason_first でも goal_update / goal_outcome は行動 tool から落とさない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            expected_result_policy="required",
-            goal_store_enabled=True,
-            goal_revision_enabled=True,
-        )
-    )
-
-    explore = _tool_by_name_from(
-        runtime.get_tool_definitions(
-            tool_schema_mode="reason_first",
-            for_every_player=True,
-        ),
-        TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    )
-
-    assert "goal_update" in explore.parameters["properties"]
-    assert "goal_outcome" in explore.parameters["properties"]
 
 
 def _reason_first_success_client() -> _SequencedLlmClient:
@@ -911,7 +642,6 @@ def _reason_first_success_client() -> _SequencedLlmClient:
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "反復失敗を避けて別手を選ぶ。",
-                    "expected_result": "新しい展開になる。",
                 },
             },
             {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
@@ -919,28 +649,22 @@ def _reason_first_success_client() -> _SequencedLlmClient:
     )
 
 
-def test_reason_first_feature_flag_off_keeps_one_step_even_with_strong_stagnation(
+def test_reason_first_feature_flag_off_keeps_one_step(
     clean_runtime_env: None,
 ) -> None:
-    """flag OFF では停滞 strong でも reason-first へ入らず、既存 1段階経路を使う。"""
+    """flag OFF では reason-first へ入らず、既存 1段階経路を使う。"""
     runtime = _GatedReasonFirstRuntime()
     runtime.reason_first_two_step_enabled = False
-    runtime.stagnation_band = "strong"
-    client = _SequencedLlmClient(
-        [{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
-    )
+    client = _SequencedLlmClient([{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}])
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     result = wiring.run_turn(PlayerId(1))
 
     assert result.success is True
     assert [call["call_phase"] for call in client.calls] == ["one_step"]
-    assert runtime.reasoning_effort_calls == 1
 
 
 def test_auto_uses_payload_names_and_retries_one_no_tool_call(
@@ -952,19 +676,15 @@ def test_auto_uses_payload_names_and_retries_one_no_tool_call(
         llm_tool_choice="auto",
         llm_reasoning_effort="minimal",
     )
-    client = _SequencedLlmClient(
-        [None, {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
-    )
+    client = _SequencedLlmClient([None, {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}])
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
         short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     result = wiring.run_turn(PlayerId(1))
@@ -973,9 +693,7 @@ def test_auto_uses_payload_names_and_retries_one_no_tool_call(
     assert [call["tool_choice"] for call in client.calls] == ["auto", "auto"]
     first_names = [tool["function"]["name"] for tool in client.calls[0]["tools"]]
     first_user = client.calls[0]["messages"][-1]["content"]
-    assert first_user.endswith(
-        "tools=" + ",".join(first_names) + "\n必ずツールを呼ぶ"
-    )
+    assert first_user.endswith("tools=" + ",".join(first_names) + "\n必ずツールを呼ぶ")
     assert "必ずツールを呼ぶ" in first_user
     assert client.calls[1]["messages"][-1]["content"].endswith(
         "文章での回答は受け取れません。いま呼べるツールを必ず 1 つ呼び出してください。"
@@ -1006,97 +724,18 @@ def test_required_no_tool_call_keeps_the_existing_single_attempt(
 def test_reason_first_feature_flag_on_without_existing_trigger_keeps_one_step(
     clean_runtime_env: None,
 ) -> None:
-    """flag ON だけでは常時2段階にせず、既存の反復失敗・停滞状態が無ければ1段階のまま。"""
+    """flag ON だけでは常時2段階にせず、繰り返しの警告と同じ失敗の反復が無ければ1段階のまま。"""
     runtime = _GatedReasonFirstRuntime()
-    client = _SequencedLlmClient(
-        [{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
-    )
+    client = _SequencedLlmClient([{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}])
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     result = wiring.run_turn(PlayerId(1))
 
     assert result.success is True
     assert [call["call_phase"] for call in client.calls] == ["one_step"]
-
-
-def test_reason_first_gates_on_stagnation_strong_and_skips_band_reasoning(
-    clean_runtime_env: None,
-) -> None:
-    """停滞 strong では reason-first を優先し、熟考付き1段階の effort 解決は呼ばない。"""
-    runtime = _GatedReasonFirstRuntime()
-    runtime.stagnation_band = "strong"
-    player_id = PlayerId(1)
-    runtime._stagnation_reasoning_latch.arm(player_id)
-    client = _SequencedLlmClient(
-        [
-            {
-                "name": TOOL_NAME_ASSESS_SITUATION,
-                "arguments": {
-                    "inner_thought": "反復失敗を避けて別手を選ぶ。",
-                    "expected_result": "新しい展開になる。",
-                },
-            },
-            {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
-            {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
-        ]
-    )
-    wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
-    )
-
-    result = wiring.run_turn(player_id)
-
-    assert result.success is True
-    assert [call["call_phase"] for call in client.calls] == ["assess_phase", "action_phase"]
-    assert runtime.reasoning_effort_calls == 0
-    assert runtime._stagnation_reasoning_latch.is_armed(player_id) is False
-    started = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STARTED
-    ]
-    assert started[-1]["gate_reason"] == "stagnation_strong"
-
-    second_result = wiring.run_turn(player_id)
-
-    assert second_result.success is True
-    assert [call["call_phase"] for call in client.calls] == [
-        "assess_phase",
-        "action_phase",
-        "one_step",
-    ]
-    assert runtime.reasoning_effort_calls == 1
-
-
-def test_reason_first_does_not_gate_on_stagnation_strong_without_fresh_reflect_latch(
-    clean_runtime_env: None,
-) -> None:
-    """band が strong でも reflect 注入直後のラッチが無ければ1段階のまま。"""
-    runtime = _GatedReasonFirstRuntime()
-    runtime.stagnation_band = "strong"
-    client = _SequencedLlmClient(
-        [{"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
-    )
-    wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
-    )
-
-    result = wiring.run_turn(PlayerId(1))
-
-    assert result.success is True
-    assert [call["call_phase"] for call in client.calls] == ["one_step"]
-    assert runtime.reasoning_effort_calls == 1
 
 
 def test_reason_first_gates_on_recent_same_failure_from_action_result_store(
@@ -1117,10 +756,8 @@ def test_reason_first_gates_on_recent_same_failure_from_action_result_store(
         )
     client = _reason_first_success_client()
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
 
     result = wiring.run_turn(player_id)
@@ -1131,9 +768,7 @@ def test_reason_first_gates_on_recent_same_failure_from_action_result_store(
         "action_phase",
     ]
     started = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STARTED
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STARTED
     ]
     assert started[-1]["gate_reason"] == "recent_same_failure"
 
@@ -1145,10 +780,8 @@ def test_reason_first_gates_on_loop_guard_warning_signal_once(
     runtime = _GatedReasonFirstRuntime()
     client = _reason_first_success_client()
     wiring = _reason_first_wiring(runtime, client)
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
     player_id = PlayerId(1)
     for _ in range(4):
@@ -1166,9 +799,7 @@ def test_reason_first_gates_on_loop_guard_warning_signal_once(
         "action_phase",
     ]
     started = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STARTED
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STARTED
     ]
     assert started[-1]["gate_reason"] == "loop_guard_warning"
 
@@ -1179,8 +810,6 @@ def test_reason_first_gated_turn_writes_assess_and_action_phase_prompt_dataset_r
 ) -> None:
     """gated reason-first 発火時は prompt dataset に assess/action の2 phase を保存する。"""
     runtime = _GatedReasonFirstRuntime()
-    runtime.stagnation_band = "strong"
-    runtime._stagnation_reasoning_latch.arm(PlayerId(1))
     runtime.aux_being_resolver = _AuxBeingResolverStub()
     runtime.aux_being_default_world_id = WorldId(1)
     client = _reason_first_success_client()
@@ -1196,21 +825,21 @@ def test_reason_first_gated_turn_writes_assess_and_action_phase_prompt_dataset_r
         llm_client=client,
         prompt_dataset_sink=sink,
     )
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
-            success=True, message="探索した。"
-        )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
     )
+    for _ in range(4):
+        wiring.tool_call_loop_guard.record_and_check(
+            PlayerId(1),
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            {"target_label": "湧水の口"},
+        )
 
     result = wiring.run_turn(PlayerId(1))
 
     assert result.success is True
     calls_path = tmp_path / "prompt_dataset" / "calls.jsonl"
-    rows = [
-        json.loads(line)
-        for line in calls_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    rows = [json.loads(line) for line in calls_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert [row["phase"] for row in rows] == ["assess_phase", "action_phase"]
     assert rows[0]["request"]["kwargs"]["tool_choice"] == {
         "type": "function",
@@ -1221,19 +850,15 @@ def test_reason_first_gated_turn_writes_assess_and_action_phase_prompt_dataset_r
         row["toolset_id"]: row
         for row in (
             json.loads(line)
-            for line in (tmp_path / "prompt_dataset" / "toolsets.jsonl")
-            .read_text(encoding="utf-8")
-            .splitlines()
+            for line in (tmp_path / "prompt_dataset" / "toolsets.jsonl").read_text(encoding="utf-8").splitlines()
             if line.strip()
         )
     }
     assess_tool_names = [
-        tool["function"]["name"]
-        for tool in toolsets[rows[0]["request"]["kwargs"]["tools_ref"]]["tools"]
+        tool["function"]["name"] for tool in toolsets[rows[0]["request"]["kwargs"]["tools_ref"]]["tools"]
     ]
     action_tool_names = [
-        tool["function"]["name"]
-        for tool in toolsets[rows[1]["request"]["kwargs"]["tools_ref"]]["tools"]
+        tool["function"]["name"] for tool in toolsets[rows[1]["request"]["kwargs"]["tools_ref"]]["tools"]
     ]
     assert TOOL_NAME_ASSESS_SITUATION in assess_tool_names
     assert TOOL_NAME_ASSESS_SITUATION not in action_tool_names
@@ -1250,7 +875,6 @@ def test_reason_first_two_step_injects_assessment_before_action_execution(
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "水源は一度失敗したので周囲を見直す。",
-                    "expected_result": "新しい発見があるはずだ。",
                 },
             },
             {
@@ -1284,30 +908,20 @@ def test_reason_first_two_step_injects_assessment_before_action_execution(
         "function": {"name": TOOL_NAME_ASSESS_SITUATION},
     }
     assert client.calls[1]["tool_choice"] == "required"
-    assert TOOL_NAME_ASSESS_SITUATION in {
-        tool["function"]["name"] for tool in client.calls[0]["tools"]
-    }
-    assert TOOL_NAME_ASSESS_SITUATION not in {
-        tool["function"]["name"] for tool in client.calls[1]["tools"]
-    }
+    assert TOOL_NAME_ASSESS_SITUATION in {tool["function"]["name"] for tool in client.calls[0]["tools"]}
+    assert TOOL_NAME_ASSESS_SITUATION not in {tool["function"]["name"] for tool in client.calls[1]["tools"]}
     assert "水源は一度失敗したので周囲を見直す。" in client.calls[1]["messages"][-1]["content"]
     assert "実行する行動 tool を1つ選ぶ" in client.calls[1]["messages"][-1]["content"]
     assert captured_arguments["inner_thought"] == "水源は一度失敗したので周囲を見直す。"
-    assert captured_arguments["expected_result"] == "新しい発見があるはずだ。"
     kinds = [kind for kind, _ in runtime.trace_recorder.records]
     assert TraceEventKind.REASON_FIRST_STARTED in kinds
     assert TraceEventKind.REASON_FIRST_ASSESSED in kinds
     assert TraceEventKind.REASON_FIRST_ACTION_SELECTED in kinds
     assert TraceEventKind.REASON_FIRST_ASSESSMENT_INJECTED in kinds
     reason_first_payloads = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if str(kind).startswith("reason_first_")
+        payload for kind, payload in runtime.trace_recorder.records if str(kind).startswith("reason_first_")
     ]
-    turn_ids = {
-        payload.get("reason_first_turn_id")
-        for payload in reason_first_payloads
-    }
+    turn_ids = {payload.get("reason_first_turn_id") for payload in reason_first_payloads}
     assert len(turn_ids) == 1
     assert next(iter(turn_ids))
 
@@ -1325,9 +939,8 @@ def test_reason_first_step1_retries_once_then_returns_no_op_without_action(
     )
     wiring = _reason_first_wiring(runtime, client)
     executed: list[str] = []
-    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
-        lambda player_id, arguments, runtime_context: executed.append("executed")
-        or LlmCommandResultDto(success=True, message="実行された。")
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        executed.append("executed") or LlmCommandResultDto(success=True, message="実行された。")
     )
 
     result = wiring.run_turn(PlayerId(1))
@@ -1342,14 +955,11 @@ def test_reason_first_step1_retries_once_then_returns_no_op_without_action(
     ]
     assert len(runtime.action_results) == 1
     assert runtime.action_results[0]["action_summary"] == "迷い"
-    assert runtime.action_results[0]["result_summary"] == (
-        "何をするか決めきれず、時間が過ぎた。"
-    )
+    assert runtime.action_results[0]["result_summary"] == ("何をするか決めきれず、時間が過ぎた。")
     assert runtime.action_results[0]["tool_name"] == "迷い"
     assert runtime.action_results[0]["error_code"] is None
     failed = [
-        payload for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
     ]
     assert failed[-1]["phase"] == "assess_phase"
     assert failed[-1]["final"] is True
@@ -1367,7 +977,6 @@ def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_acti
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "一度失敗したので状況を見直す。",
-                    "expected_result": "次は探索できる。",
                 },
             },
             {
@@ -1398,18 +1007,14 @@ def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_acti
         "assess_phase",
         "action_phase",
     ]
-    assert runtime._short_term_memory._event_store.completed_turn_count(
-        PlayerId(1)
-    ) == 1
+    assert runtime._short_term_memory._event_store.completed_turn_count(PlayerId(1)) == 1
     assert executed == [
         {
             "inner_thought": "一度失敗したので状況を見直す。",
-            "expected_result": "次は探索できる。",
         }
     ]
     failed = [
-        payload for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
     ]
     assert failed[0]["phase"] == "assess_phase"
     assert failed[0]["reason"] == "invoke_exception"
@@ -1417,6 +1022,28 @@ def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_acti
     kinds = [kind for kind, _ in runtime.trace_recorder.records]
     assert TraceEventKind.REASON_FIRST_ASSESSED in kinds
     assert TraceEventKind.REASON_FIRST_ACTION_SELECTED in kinds
+
+
+def test_reason_first_step1_exception_twice_is_a_failed_call_retried_next_tick(
+    clean_runtime_env: None,
+) -> None:
+    """step1 の呼び出しが 2 回とも例外で落ちたら、呼び出しの失敗 (LLM_API_FAILED) として返し、その人を次の wave の pending に戻す (#1595)。"""
+    runtime = _ReasonFirstRuntime()
+    client = _SequencedLlmClient([RuntimeError("timed out"), RuntimeError("timed out")])
+    wiring = _reason_first_wiring(runtime, client)
+
+    result = wiring.run_turn(PlayerId(1))
+    wiring.llm_turn_trigger._account_result(1, result)
+
+    assert result.error_code == "LLM_API_FAILED"
+    assert 1 in wiring.llm_turn_trigger.pending_player_ids
+    failed = [
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+    ]
+    assert [(f["reason"], f["final"]) for f in failed] == [
+        ("invoke_exception", False),
+        ("invoke_exception", True),
+    ]
 
 
 def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
@@ -1430,14 +1057,12 @@ def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "まず評価する。",
-                    "expected_result": "探索する。",
                 },
             },
             {
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "まだ評価する。",
-                    "expected_result": "何もしない。",
                 },
             },
         ]
@@ -1453,14 +1078,11 @@ def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
     assert client.calls[1]["call_phase"] == "action_phase"
     assert len(runtime.action_results) == 1
     assert runtime.action_results[0]["action_summary"] == "迷い"
-    assert runtime.action_results[0]["result_summary"] == (
-        "何をするか決めきれず、時間が過ぎた。"
-    )
+    assert runtime.action_results[0]["result_summary"] == ("何をするか決めきれず、時間が過ぎた。")
     assert runtime.action_results[0]["tool_name"] == "迷い"
     assert runtime.action_results[0]["error_code"] is None
     failed = [
-        payload for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
     ]
     assert failed[-1]["phase"] == "action_phase"
     assert failed[-1]["returned_tool"] == TOOL_NAME_ASSESS_SITUATION
@@ -1469,13 +1091,11 @@ def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
     assert failed[-1]["reason_first_turn_id"]
 
 
-def test_reason_first_prediction_uses_shared_action_recording_path(
+def test_reason_first_action_prompt_places_assessment_before_target_arguments(
     clean_runtime_env: None,
 ) -> None:
-    """reason_first の予測は内部注入後、legacy と同じ action 記録経路で保存される。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
-    )
+    """reason_first の行動段階の user 文面は、評価・選べる対象引数・最後の指示の順に並び、行動は共有の記録経路で保存される。"""
+    runtime = _create_runtime()
     runtime.reason_first_two_step_enabled = lambda player_id: True
     player_id = runtime.get_player_ids()[0]
     client = _SequencedLlmClient(
@@ -1484,7 +1104,6 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "周囲を見れば出口の手がかりが増える。",
-                    "expected_result": "出口の手がかりが見つかる。",
                 },
             },
             {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
@@ -1502,7 +1121,6 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
     assert result.success is True
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE
-    assert entry.expected_result == "出口の手がかりが見つかる。"
     assert [call["call_phase"] for call in client.calls] == [
         "assess_phase",
         "action_phase",
@@ -1511,54 +1129,10 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
     action_user = client.calls[1]["messages"][-1]["content"]
     assert "【現在選べる対象引数】" not in assess_user
     assert "【現在選べる対象引数】" in action_user
-    final_instruction = (
-        "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
-        "inner_thought / expected_result は再生成しない。"
-    )
+    final_instruction = "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。inner_thought は再生成しない。"
     assert action_user.endswith(final_instruction)
-    assert action_user.index("【行動前の状況評価】") < action_user.index(
-        "【現在選べる対象引数】"
-    )
-    assert action_user.index("【現在選べる対象引数】") < action_user.index(
-        final_instruction
-    )
-
-
-@pytest.mark.parametrize("expected_result_policy", ["off", "optional"])
-def test_reason_first_without_assessment_prediction_records_none_through_shared_path(
-    clean_runtime_env: None,
-    expected_result_policy: str,
-) -> None:
-    """reason_first でも予測が無い評価なら、共有 action 記録経路の expected_result は None のまま。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            expected_result_policy=expected_result_policy
-        )
-    )
-    runtime.reason_first_two_step_enabled = lambda player_id: True
-    player_id = runtime.get_player_ids()[0]
-    client = _SequencedLlmClient(
-        [
-            {
-                "name": TOOL_NAME_ASSESS_SITUATION,
-                "arguments": {"inner_thought": "まず周囲を確認する。"},
-            },
-            {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
-        ]
-    )
-    wiring = _WorldLlmWiring(
-        runtime=runtime,
-        observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
-        llm_client=client,
-    )
-
-    result = wiring.run_turn(player_id)
-
-    assert result.success is True
-    entry = runtime._action_result_store.get_recent(player_id, 1)[0]
-    assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE
-    assert entry.expected_result is None
+    assert action_user.index("【行動前の状況評価】") < action_user.index("【現在選べる対象引数】")
+    assert action_user.index("【現在選べる対象引数】") < action_user.index(final_instruction)
 
 
 def test_world_runtime_build_full_prompt_uses_shared_default_prompt_builder(
@@ -1575,272 +1149,23 @@ def test_world_runtime_build_full_prompt_uses_shared_default_prompt_builder(
     assert builder is runtime._get_or_build_default_prompt_builder()
 
 
-def test_episodic_stack_gate_follows_config_not_env(
+def test_old_memo_tools_are_not_offered(
     clean_runtime_env: None,
 ) -> None:
-    """#558 MEDIUM-1 後続: env 未設定でも explicit config.episodic_enabled だけで
-    stack が立つ。親 gate を env 直読みから config 単一窓口に寄せた回帰テスト。
-
-    clean_runtime_env が LLM_EPISODIC_ENABLED を消すので、env 経路では立たない。
-    config だけで立つことが、env と config を別解釈する silent failure の不在を示す。"""
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
-    assert runtime._episodic_stack is not None
-    # episodic OFF の config なら立たない (= gate が config を見ている裏付け)
-    off = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=False))
-    assert off._episodic_stack is None
-
-
-def test_episodic_on_exposes_episode_recall_with_semantic_default_off(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """episodic stack だけでは能動記憶ツールを露出せず、露出フラグを実験条件にする。"""
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
-
-    stack = runtime._episodic_stack
-    assert stack is not None
-    assert stack.chunk_coordinator is not None
-    assert stack.passive_recall is not None
-    assert stack.noun_matcher is not None
-    assert stack.semantic_passive_recall is None
-    assert stack.semantic_passive_top_k == 0
-    assert stack.episodic_semantic_promotion is None
-    assert stack.semantic_memory_store is None
-    assert stack.memory_link_store is None
-
-    tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
-    assert TOOL_NAME_MEMORY_RECALL_EPISODES not in tool_names
-    assert TOOL_NAME_MEMORY_EXPLORE_RELATED not in tool_names
-    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-
-
-@pytest.mark.parametrize(
-    ("flag_name", "tool_name"),
-    [
-        ("episodic_recall_enabled", TOOL_NAME_MEMORY_RECALL_EPISODES),
-        ("episodic_explore_related_enabled", TOOL_NAME_MEMORY_EXPLORE_RELATED),
-        ("semantic_search_enabled", TOOL_NAME_MEMORY_SEARCH_SEMANTIC),
-    ],
-)
-def test_memory_tool_exposure_flags_hide_tools_when_false(
-    clean_runtime_env: None,
-    flag_name: str,
-    tool_name: str,
-) -> None:
-    """各能動記憶ツールは対応する露出フラグが false のとき LLM に出ない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            **{flag_name: False},
-        )
-    )
-
-    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
-
-    assert tool_name not in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
-
-
-@pytest.mark.parametrize(
-    ("flag_name", "tool_name"),
-    [
-        ("episodic_recall_enabled", TOOL_NAME_MEMORY_RECALL_EPISODES),
-        ("episodic_explore_related_enabled", TOOL_NAME_MEMORY_EXPLORE_RELATED),
-        ("semantic_search_enabled", TOOL_NAME_MEMORY_SEARCH_SEMANTIC),
-    ],
-)
-def test_memory_tool_exposure_flags_show_tools_when_executor_is_wired(
-    clean_runtime_env: None,
-    flag_name: str,
-    tool_name: str,
-) -> None:
-    """露出フラグ true かつ必要な記憶スタックがあるときだけ能動記憶ツールを LLM に出す。"""
-    extra_config: dict[str, object] = {}
-    if flag_name == "episodic_explore_related_enabled":
-        # memory_explore_related は prompt に出る afterglow handle を入口にする。
-        # そのため executor 構築には link store だけでなく afterglow store も必要。
-        extra_config = {
-            "recall_slot_enabled": True,
-            "afterglow_enabled": True,
-        }
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            **{flag_name: True},
-            **extra_config,
-        )
-    )
-
-    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
-
-    assert tool_name in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
-
-
-@pytest.mark.parametrize(
-    ("flag_name", "tool_name", "env_name"),
-    [
-        (
-            "episodic_recall_enabled",
-            TOOL_NAME_MEMORY_RECALL_EPISODES,
-            "EPISODIC_RECALL_ENABLED",
-        ),
-        (
-            "episodic_explore_related_enabled",
-            TOOL_NAME_MEMORY_EXPLORE_RELATED,
-            "EPISODIC_EXPLORE_RELATED_ENABLED",
-        ),
-        (
-            "semantic_search_enabled",
-            TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
-            "SEMANTIC_SEARCH_ENABLED",
-        ),
-    ],
-)
-def test_memory_tool_flag_true_without_memory_stack_fails_fast(
-    clean_runtime_env: None,
-    flag_name: str,
-    tool_name: str,
-    env_name: str,
-) -> None:
-    """露出フラグ true なのに前提 executor が無い構成は、黙って無効化せず起動時に落とす。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=False,
-            **{flag_name: True},
-        )
-    )
-
-    with pytest.raises(RuntimeError) as exc_info:
-        runtime.get_tool_definitions(for_every_player=True)
-
-    message = str(exc_info.value)
-    assert env_name in message
-    assert tool_name in message
-
-
-def test_memory_explore_related_flag_true_without_afterglow_fails_fast(
-    clean_runtime_env: None,
-) -> None:
-    """memory_explore_related は prompt の handle を解決するため、afterglow 無しでは露出しない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            episodic_explore_related_enabled=True,
-            recall_slot_enabled=True,
-            afterglow_enabled=False,
-        )
-    )
-
-    with pytest.raises(RuntimeError) as exc_info:
-        runtime.get_tool_definitions(for_every_player=True)
-
-    message = str(exc_info.value)
-    assert "EPISODIC_EXPLORE_RELATED_ENABLED" in message
-    assert TOOL_NAME_MEMORY_EXPLORE_RELATED in message
-
-
-def test_memory_tool_flag_true_without_executor_fails_during_wiring_validation(
-    clean_runtime_env: None,
-) -> None:
-    """露出設定の不整合は runtime_manager の整合性検証でも警告に丸めず起動を止める。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=False,
-            semantic_search_enabled=True,
-        )
-    )
-
-    with pytest.raises(RuntimeError) as exc_info:
-        _WorldLlmWiring(
-            runtime=runtime,
-            observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
-            llm_client=StubLlmClient(None),
-        )
-
-    message = str(exc_info.value)
-    assert "SEMANTIC_SEARCH_ENABLED" in message
-    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in message
-
-
-def test_memo_tools_default_visible_in_get_tool_definitions(
-    clean_runtime_env: None,
-) -> None:
-    """既定では既存 run 互換で memo_add / memo_list / memo_done を LLM に露出する。"""
+    """既定の設定で、古いメモの道具 memo_add / memo_list / memo_done は LLM に出ず、環境の道具は出る。"""
     runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
 
     tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
-    assert {TOOL_NAME_MEMO_ADD, TOOL_NAME_MEMO_LIST, TOOL_NAME_MEMO_DONE} <= tool_names
+    assert {"memo_add", "memo_list", "memo_done"} & tool_names == set()
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
 
 
-def test_memo_tools_flag_false_hides_only_memo_tools(
+def test_memo_completion_hint_service_is_built_with_the_memo_book(
     clean_runtime_env: None,
 ) -> None:
-    """MEMO_TOOLS_ENABLED=false は memo tool だけを隠し、記憶本体と他 tool は残す。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            episodic_recall_enabled=True,
-            semantic_passive_top_k=3,
-            memo_tools_enabled=False,
-        )
-    )
-
-    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
-
-    assert TOOL_NAME_MEMO_ADD not in tool_names
-    assert TOOL_NAME_MEMO_LIST not in tool_names
-    assert TOOL_NAME_MEMO_DONE not in tool_names
-    assert TOOL_NAME_MEMORY_RECALL_EPISODES in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert runtime._episodic_stack is not None
-    assert runtime._episodic_stack.passive_recall is not None
-    assert runtime._episodic_stack.semantic_passive_recall is not None
-
-
-def test_memo_tools_flag_false_hides_active_memo_section_from_prompt(
-    clean_runtime_env: None,
-) -> None:
-    """memo tool 非露出時は未完了 memo section も消し、使えない memo_done へ誘導しない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            memo_tools_enabled=False,
-        )
-    )
-    runtime._wire_auxiliary_tool_stack()
-    being_id = runtime.aux_being_resolver.resolve_being_id(
-        runtime.aux_being_default_world_id,
-        PlayerId(1),
-    )
-    assert being_id is not None
-    runtime._todo_store.add_by_being(being_id, "山頂で狼煙を上げる")
-
-    prompt = runtime.build_full_prompt(PlayerId(1))
-    system_text = _system_prompt_text(prompt)
-    user_text = _user_prompt_text(prompt)
-
-    assert TOOL_NAME_MEMO_ADD not in system_text
-    assert TOOL_NAME_MEMO_LIST not in system_text
-    assert TOOL_NAME_MEMO_DONE not in system_text
-    assert "【進行中のメモ】" not in user_text
-    assert "山頂で狼煙を上げる" not in user_text
-
-
-def test_memo_tools_flag_false_disables_memo_completion_hint_service(
-    clean_runtime_env: None,
-) -> None:
-    """memo tool 非露出時は memo 完了 hint も作らず、存在しない memo_done を促さない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(memo_tools_enabled=False)
-    )
+    """メモ帳はいつも入るので、そのやることが済んだかの知らせのサービスも、設定を書かずに組んだ runtime でいつも組まれる。"""
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
 
     wiring = _WorldLlmWiring(
         runtime=runtime,
@@ -1849,260 +1174,7 @@ def test_memo_tools_flag_false_disables_memo_completion_hint_service(
         llm_client=StubLlmClient(None),
     )
 
-    assert wiring.memo_completion_hint_service is None
-
-
-def test_pure_spot_graph_mode_hides_memory_tools_before_individual_flags(
-    clean_runtime_env: None,
-) -> None:
-    """pure_spot_graph mode では個別フラグより粗い補助ツール遮断を優先する。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            tool_mode="pure_spot_graph",
-            episodic_enabled=False,
-            semantic_search_enabled=True,
-        )
-    )
-
-    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
-
-    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in tool_names
-    assert TOOL_NAME_MEMORY_RECALL_EPISODES not in tool_names
-    assert TOOL_NAME_MEMORY_EXPLORE_RELATED not in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
-
-
-def test_scenario_and_config_tool_exposure_gates_share_get_tool_definitions(
-    clean_runtime_env: None,
-) -> None:
-    """シナリオ由来のツール除外と設定由来の記憶ツール露出を同じ一覧で決める。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            semantic_search_enabled=True,
-        ),
-        scenario_path=_SCENARIOS_DIR / "survival_island_v4_coop.json",
-    )
-
-    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
-
-    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
-
-
-def test_semantic_config_wires_world_runtime_stack_and_prompt_learning(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """SEMANTIC config enables stores, links, promotion, and prompt learning."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    monkeypatch.delenv("SEMANTIC_PASSIVE_TOP_K", raising=False)
-    monkeypatch.delenv("SEMANTIC_LLM_GIST_ENABLED", raising=False)
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            semantic_passive_top_k=3,
-            semantic_llm_gist_enabled=False,
-        )
-    )
-    player_id = runtime.get_player_ids()[0]
-    stack = runtime._episodic_stack
-
-    assert stack is not None
-    assert stack.semantic_passive_top_k == 3
-    assert stack.semantic_passive_recall is not None
-    assert stack.episodic_semantic_promotion is not None
-    assert stack.semantic_memory_store is not None
-    assert stack.memory_link_store is not None
-
-    _seed_semantic_learning(
-        runtime,
-        player_id,
-        "CONTRACT_SEMANTIC_MARKER: 禁書庫ではノアの沈黙が手がかりになる",
-    )
-    prompt = runtime.build_full_prompt(player_id)
-    user = _user_prompt_text(prompt)
-
-    assert "【関連する学び】" in user
-    assert "CONTRACT_SEMANTIC_MARKER" in user
-
-
-def test_action_result_recording_runs_semantic_promotion_hook_when_enabled(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """world_runtime's action path calls the semantic promotion hook after chunk write."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
-        )
-    )
-    player_id = runtime.get_player_ids()[0]
-    spy = _PromotionSpy()
-    runtime._episodic_stack = replace(
-        runtime._episodic_stack,
-        episodic_semantic_promotion=spy,
-    )
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 周囲を確認する",
-        "CONTRACT_RESULT: 禁書庫の静けさを確認した",
-        tool_name="contract_probe",
-    )
-
-    being = runtime.aux_being_resolver.resolve_being_id(
-        runtime._aux_being_default_world_id, player_id
-    )
-    assert being is not None
-    assert spy.calls == [(player_id.value, being)]
-
-
-def test_record_action_result_preserves_escape_hook_order(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """escape runtime records action first, then chunk, then semantic promotion."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
-        )
-    )
-    player_id = runtime.get_player_ids()[0]
-    events: list[str] = []
-    store = _OrderedActionStoreSpy(events)
-    chunk = _OrderedChunkCoordinatorSpy(events)
-    promotion = _OrderedPromotionSpy(events)
-
-    runtime._action_result_store = store
-    runtime._episodic_stack = replace(
-        runtime._episodic_stack,
-        chunk_coordinator=chunk,
-        episodic_semantic_promotion=promotion,
-    )
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 静けさを確認した",
-        "CONTRACT_RESULT: 記録した",
-        tool_name="contract_probe",
-    )
-
-    assert events == ["append", "chunk", "promotion"]
-    # U1: _record_action_result は共有 ActionResultRecorder に委譲し、recorder は
-    # 全フィールドを既定値込みで append に渡す。escape が意味的に渡すフィールドが
-    # 含まれていることを subset で固定する (完全一致は呼び出し形の過剰指定)。
-    assert {
-        "player_id",
-        "action_summary",
-        "result_summary",
-        "occurred_at",
-        "tool_name",
-        "success",
-        "error_code",
-        "scene_boundary",
-        "occurred_tick",
-        "game_time_label",
-    } <= set(store.kwargs)
-    assert store.kwargs["occurred_at"].tzinfo is timezone.utc
-    assert store.kwargs["tool_name"] == "contract_probe"
-    assert store.kwargs["game_time_label"] == runtime._time_label()
-    # escape は当面 subjective fields を渡さない (#553 baseline / U2 で配線)
-    assert store.kwargs["expected_result"] is None
-    assert store.kwargs["intention"] is None
-    assert store.kwargs["emotion_hint"] is None
-    being = runtime.aux_being_resolver.resolve_being_id(
-        runtime._aux_being_default_world_id, player_id
-    )
-    assert being is not None
-    assert chunk.calls == [player_id]
-    assert promotion.calls == [(player_id.value, being)]
-
-
-def test_record_action_result_skips_memory_hooks_when_episodic_stack_absent(
-    clean_runtime_env: None,
-) -> None:
-    runtime = _create_runtime()
-    player_id = runtime.get_player_ids()[0]
-    events: list[str] = []
-    runtime._action_result_store = _OrderedActionStoreSpy(events)
-    runtime._episodic_stack = None
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 待機した",
-        "CONTRACT_RESULT: 何も起きなかった",
-        tool_name="contract_probe",
-    )
-
-    assert events == ["append"]
-
-
-def test_record_action_result_skips_promotion_when_not_configured(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
-    player_id = runtime.get_player_ids()[0]
-    events: list[str] = []
-    runtime._action_result_store = _OrderedActionStoreSpy(events)
-    runtime._episodic_stack = replace(
-        runtime._episodic_stack,
-        chunk_coordinator=_OrderedChunkCoordinatorSpy(events),
-        episodic_semantic_promotion=None,
-    )
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 周囲を見た",
-        "CONTRACT_RESULT: 記録した",
-        tool_name="contract_probe",
-    )
-
-    assert events == ["append", "chunk"]
-
-
-def test_record_action_result_keeps_action_success_when_memory_hooks_fail(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Chunk/promotion failures are logged but do not block the action record."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
-        )
-    )
-    player_id = runtime.get_player_ids()[0]
-    events: list[str] = []
-    runtime._episodic_stack = replace(
-        runtime._episodic_stack,
-        chunk_coordinator=_RaisingChunkCoordinatorSpy(events),
-        episodic_semantic_promotion=_RaisingPromotionSpy(events),
-    )
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 失敗する記憶 hook を通る",
-        "CONTRACT_RESULT: action 自体は完了した",
-        tool_name="contract_probe",
-    )
-
-    assert events == ["chunk", "promotion"]
-    entries = runtime._action_result_store.get_recent(player_id, 10)
-    assert len(entries) == 1
-    assert entries[0].action_summary == "CONTRACT_ACTION: 失敗する記憶 hook を通る"
-    assert entries[0].success is True
+    assert wiring.memo_completion_hint_service is not None
 
 
 def test_phase_b_runs_loop_guard_after_escape_recording_hooks(
@@ -2141,7 +1213,7 @@ def test_phase_b_runs_loop_guard_after_escape_recording_hooks(
     )
 
     assert result.success is True
-    assert events == ["append", "chunk", "promotion", "loop_guard"]
+    assert events == ["append", "loop_guard"]
 
 
 def test_phase_b_records_tool_trace_payload_in_action_result_trace(
@@ -2182,9 +1254,7 @@ def test_phase_b_records_tool_trace_payload_in_action_result_trace(
     )
 
     action_results = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.ACTION_RESULT
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.ACTION_RESULT
     ]
     assert len(action_results) == 1
     payload = action_results[0]
@@ -2239,9 +1309,7 @@ def test_phase_b_keeps_action_result_trace_when_tool_trace_payload_uses_reserved
     )
 
     action_results = [
-        payload
-        for kind, payload in runtime.trace_recorder.records
-        if kind == TraceEventKind.ACTION_RESULT
+        payload for kind, payload in runtime.trace_recorder.records if kind == TraceEventKind.ACTION_RESULT
     ]
     assert len(action_results) == 1
     payload = action_results[0]
@@ -2300,9 +1368,7 @@ def test_phase_b_preserves_single_domain_action_log_for_successful_core_tools(
     )
 
     assert result.success is True
-    assert [entry["action_summary"] for entry in runtime.action_results] == [
-        domain_summary
-    ]
+    assert [entry["action_summary"] for entry in runtime.action_results] == [domain_summary]
     assert not runtime.action_results[0]["action_summary"].startswith(f"{tool_name}(")
 
 
@@ -2373,9 +1439,7 @@ def _recent_action_result_lines(user_prompt: str) -> list[str]:
 
 def _infrastructure_vocabulary_violations(user_prompt: str) -> list[str]:
     return [
-        line
-        for line in _recent_action_result_lines(user_prompt)
-        if _INFRASTRUCTURE_VOCABULARY.search(line) is not None
+        line for line in _recent_action_result_lines(user_prompt) if _INFRASTRUCTURE_VOCABULARY.search(line) is not None
     ]
 
 
@@ -2410,9 +1474,7 @@ def test_api_failure_reaches_the_actual_prompt_only_in_world_words(
     user_prompt = _user_prompt_text(runtime.build_full_prompt(player_id))
 
     assert result.error_code == "LLM_API_FAILED"
-    assert result.trace_payload == {
-        "technical_error_detail": "litellm.Timeout: network retry failed"
-    }
+    assert result.trace_payload == {"technical_error_detail": "litellm.Timeout: network retry failed"}
     _assert_recent_action_results_use_world_words(user_prompt)
     assert "一瞬の空白" in user_prompt
     assert "意識が途切れ、この間の自分の行動を思い出せない。" in user_prompt
@@ -2447,9 +1509,7 @@ def test_infrastructure_failure_cue_name_is_also_a_world_word(
     )
 
     assert runtime.action_results[0]["tool_name"] == "一瞬の空白"
-    assert _INFRASTRUCTURE_VOCABULARY.search(
-        runtime.action_results[0]["tool_name"]
-    ) is None
+    assert _INFRASTRUCTURE_VOCABULARY.search(runtime.action_results[0]["tool_name"]) is None
 
 
 def test_tool_execution_exception_keeps_diagnostics_out_of_the_actual_prompt(
@@ -2480,9 +1540,7 @@ def test_tool_execution_exception_keeps_diagnostics_out_of_the_actual_prompt(
 
     assert result.error_code == "LLM_TOOL_EXECUTION_FAILED"
     assert result.message == "行動が形にならないまま、時間が過ぎた。"
-    assert result.trace_payload == {
-        "technical_error_detail": "litellm.ToolCrash: traceback timeout"
-    }
+    assert result.trace_payload == {"technical_error_detail": "litellm.ToolCrash: traceback timeout"}
     assert runtime._action_result_store.get_recent(player_id, 1)[0].error_code is None
     _assert_recent_action_results_use_world_words(user_prompt)
 
@@ -2518,9 +1576,7 @@ def test_api_exception_detail_remains_in_prompt_dataset_only(
 
     rows = [
         json.loads(line)
-        for line in (
-            tmp_path / "prompt_dataset" / "turn_results.jsonl"
-        ).read_text(encoding="utf-8").splitlines()
+        for line in (tmp_path / "prompt_dataset" / "turn_results.jsonl").read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     assert rows[0]["result"] == {
@@ -2562,11 +1618,11 @@ def test_phase_b_records_unsupported_tool_failure_with_raw_tool_summary(
     assert entry["error_code"] == "UNSUPPORTED_TOOL"
 
 
-def test_phase_b_generic_failure_preserves_expected_result_for_prediction_line(
+def test_phase_b_generic_failure_passes_subjective_fields_to_the_record(
     clean_runtime_env: None,
 ) -> None:
-    """#552 PR-A: sanitizer が JSON から予測を落とすので、失敗 (unsupported) 経路でも
-    構造化 expected_result を _record_action_result に渡し、失敗行の [予測:] を守る。"""
+    """sanitizer が JSON から主観入力を落とすので、失敗 (unsupported) 経路でも
+    inner_thought を構造化フィールドとして _record_action_result に渡す。"""
     player_id = PlayerId(1)
     runtime = _ContractRuntime()
     wiring = _wiring_for_contract_runtime(runtime)
@@ -2578,9 +1634,7 @@ def test_phase_b_generic_failure_preserves_expected_result_for_prediction_line(
                 "name": "contract_unknown_tool",
                 "arguments": {
                     "probe": "x",
-                    "expected_result": "未知ツールでも何か起きる",
-                    "intention": "試しに呼ぶ",
-                    "emotion_hint": "curiosity",
+                    "inner_thought": "試しに呼ぶ",
                 },
             },
         )
@@ -2588,27 +1642,8 @@ def test_phase_b_generic_failure_preserves_expected_result_for_prediction_line(
 
     entry = runtime.action_results[0]
     # JSON からは落ちるが構造化フィールドには残る
-    assert "expected_result" not in entry["action_summary"]
-    assert entry["expected_result"] == "未知ツールでも何か起きる"
-    assert entry["intention"] == "試しに呼ぶ"
-    # その entry を recent-events 行にすると失敗行に [予測:] が出る
-    from ai_rpg_world.application.llm.contracts.chunk_encoding import (
-        format_action_result_line_for_recent_events,
-    )
-    from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-
-    line = format_action_result_line_for_recent_events(
-        ActionResultEntry(
-            occurred_at=datetime.now(timezone.utc),
-            action_summary=entry["action_summary"],
-            result_summary=entry["result_summary"],
-            success=False,
-            error_code=entry["error_code"],
-            expected_result=entry["expected_result"],
-        )
-    )
-    assert "[予測: 未知ツールでも何か起きる]" in line
-    assert "[失敗]" in line
+    assert "inner_thought" not in entry["action_summary"]
+    assert entry["inner_thought"] == "試しに呼ぶ"
 
 
 def test_direct_explore_records_natural_language_action_summary(
@@ -2624,9 +1659,7 @@ def test_direct_explore_records_natural_language_action_summary(
     entry = entries[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE
     assert entry.success is True
-    assert entry.expected_result is None
-    assert entry.intention is None
-    assert entry.emotion_hint is None
+    assert entry.inner_thought is None
     assert entry.argument_fingerprint is None
     assert entry.should_reschedule is False
     assert entry.omit_result_in_prompt is False
@@ -2634,7 +1667,7 @@ def test_direct_explore_records_natural_language_action_summary(
     assert not entry.action_summary.startswith(f"{TOOL_NAME_SPOT_GRAPH_EXPLORE}(")
 
 
-def test_direct_travel_start_records_scene_boundary_and_tick(
+def test_direct_travel_start_records_travel_result_and_tick(
     clean_runtime_env: None,
 ) -> None:
     runtime = _create_runtime()
@@ -2642,9 +1675,7 @@ def test_direct_travel_start_records_scene_boundary_and_tick(
     tick_before = runtime.current_tick()
     graph = runtime._spot_graph_repo.find_graph()
     current_spot_id = graph.get_entity_spot(EntityId.create(int(player_id.value)))
-    destination = next(
-        iter(graph.iter_outgoing_connections_from(current_spot_id))
-    ).to_spot_id
+    destination = next(iter(graph.iter_outgoing_connections_from(current_spot_id))).to_spot_id
     destination_key = runtime.id_mapper.get_str("spot", destination.value)
     from_name = runtime.get_player_spot_name(player_id)
     destination_name = graph.get_spot(destination).name
@@ -2656,12 +1687,8 @@ def test_direct_travel_start_records_scene_boundary_and_tick(
     entry = entries[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
     assert entry.success is True
-    assert entry.scene_boundary is True
     assert entry.occurred_tick == tick_before
-    assert (
-        entry.action_summary
-        == f"「{from_name}」から「{destination_name}」へ向かって出発した"
-    )
+    assert entry.action_summary == f"「{from_name}」から「{destination_name}」へ向かって出発した"
     assert "移動中" in entry.result_summary
 
 
@@ -2672,17 +1699,10 @@ def test_direct_explore_carries_subjective_fields_when_passed(
     runtime = _create_runtime()
     player_id = runtime.get_player_ids()[0]
 
-    runtime.do_explore(
-        player_id,
-        expected_result="周囲に出口の手がかりがある",
-        intention="出口を探す",
-        emotion_hint="curiosity",
-    )
+    runtime.do_explore(player_id, inner_thought="出口を探そう")
 
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
-    assert entry.expected_result == "周囲に出口の手がかりがある"
-    assert entry.intention == "出口を探す"
-    assert entry.emotion_hint == "curiosity"
+    assert entry.inner_thought == "出口を探そう"
 
 
 def test_direct_travel_carries_subjective_fields_when_passed(
@@ -2693,24 +1713,18 @@ def test_direct_travel_carries_subjective_fields_when_passed(
     player_id = runtime.get_player_ids()[0]
     graph = runtime._spot_graph_repo.find_graph()
     current_spot_id = graph.get_entity_spot(EntityId.create(int(player_id.value)))
-    destination = next(
-        iter(graph.iter_outgoing_connections_from(current_spot_id))
-    ).to_spot_id
+    destination = next(iter(graph.iter_outgoing_connections_from(current_spot_id))).to_spot_id
     destination_key = runtime.id_mapper.get_str("spot", destination.value)
 
     runtime.do_move(
         player_id,
         destination_key,
-        expected_result="廊下に出られる",
-        intention="次の部屋へ進む",
-        emotion_hint="determination",
+        inner_thought="次の部屋へ進もう",
     )
 
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
-    assert entry.expected_result == "廊下に出られる"
-    assert entry.intention == "次の部屋へ進む"
-    assert entry.emotion_hint == "determination"
+    assert entry.inner_thought == "次の部屋へ進もう"
 
 
 def test_explore_handler_threads_subjective_args_into_record(
@@ -2723,13 +1737,11 @@ def test_explore_handler_threads_subjective_args_into_record(
     SpotGraphToolExecutor._explore を wire adapter でラップしたもの) 経由。
     subjective 記録経路は同じ ``runtime.do_explore`` に委譲するので、record 内容
     のアサーションは変わらない。
-
-    露出スキーマが OFF でも、handler は arguments dict から直接読むため、
-    arguments に値が入れば記録に届く (= スキーマ露出 PR が入った瞬間に流れる配線)。
     """
     from ai_rpg_world.application.llm.tool_constants import (
         TOOL_NAME_SPOT_GRAPH_EXPLORE,
     )
+
     runtime = _create_runtime()
     player_id = runtime.get_player_ids()[0]
     wiring = _WorldLlmWiring(
@@ -2744,9 +1756,6 @@ def test_explore_handler_threads_subjective_args_into_record(
         player_id,
         {
             "inner_thought": "周囲を見る",
-            "expected_result": "出口の手がかりが見つかる",
-            "intention": "出口を探す",
-            "emotion_hint": "curiosity",
             "say_inline": "何かないか見てみよう",
         },
         ToolRuntimeContextDto.empty(),
@@ -2754,68 +1763,8 @@ def test_explore_handler_threads_subjective_args_into_record(
 
     assert result.success is True
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
-    assert entry.expected_result == "出口の手がかりが見つかる"
-    assert entry.intention == "出口を探す"
-    assert entry.emotion_hint == "curiosity"
+    assert entry.inner_thought == "周囲を見る"
     assert entry.free_text_argument_names == ("say_inline",)
-
-
-def test_explore_handler_records_none_subjective_when_args_absent(
-    clean_runtime_env: None,
-) -> None:
-    """U2: 露出 OFF の現状 (arguments に subjective キー無し) では全 None で記録され挙動不変。
-
-    PR-θ2 (経路統合) 後: handler は ``_tool_handlers`` から取得する。
-    """
-    from ai_rpg_world.application.llm.tool_constants import (
-        TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    )
-    runtime = _create_runtime()
-    player_id = runtime.get_player_ids()[0]
-    wiring = _WorldLlmWiring(
-        runtime=runtime,
-        observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
-        llm_client=StubLlmClient(None),
-    )
-
-    handler = wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE]
-    handler(
-        player_id,
-        {"inner_thought": "周囲を見る"},
-        ToolRuntimeContextDto.empty(),
-    )
-
-    entry = runtime._action_result_store.get_recent(player_id, 1)[0]
-    assert entry.expected_result is None
-    assert entry.intention is None
-    assert entry.emotion_hint is None
-
-
-def test_semantic_env_does_not_override_explicit_config_off(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """world_runtime semantic flags follow ResolvedLlmRuntimeConfig, not direct env reads."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "5")
-    monkeypatch.setenv("SEMANTIC_LLM_GIST_ENABLED", "1")
-
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            semantic_passive_top_k=0,
-            semantic_llm_gist_enabled=False,
-        )
-    )
-    stack = runtime._episodic_stack
-
-    assert stack is not None
-    assert stack.semantic_passive_top_k == 0
-    assert stack.semantic_passive_recall is None
-    assert stack.semantic_memory_store is None
-    assert stack.memory_link_store is None
 
 
 def test_experiment_wiring_stub_exposes_current_world_runtime_snapshot_surface(
@@ -2824,43 +1773,14 @@ def test_experiment_wiring_stub_exposes_current_world_runtime_snapshot_surface(
 ) -> None:
     from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
 
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
 
     stub = _wiring_stub_from_world_runtime(runtime)
 
-    assert stub.memo_store is runtime._todo_store
-    assert stub.episodic_episode_store is runtime._episodic_stack.episode_store
-    assert stub.semantic_memory_store is None
-    assert stub.memory_link_store is None
-    assert stub.episodic_recall_buffer_store is None
-    assert stub.episodic_reinterpretation_journal_store is None
+    assert not hasattr(stub, "memo_store")
+    assert not hasattr(stub, "episodic_episode_store")
     assert stub.being_attachment_resolver is runtime.aux_being_resolver
     assert stub.being_repository is runtime._aux_being_repository
-
-
-def test_experiment_wiring_stub_exposes_semantic_stores_when_enabled(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """experiment snapshot surface includes semantic and link stores after #547."""
-    from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
-
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
-        )
-    )
-
-    stub = _wiring_stub_from_world_runtime(runtime)
-
-    assert stub.semantic_memory_store is runtime._episodic_stack.semantic_memory_store
-    assert stub.memory_link_store is runtime._episodic_stack.memory_link_store
-    assert stub.semantic_memory_store is not None
-    assert stub.memory_link_store is not None
 
 
 # ── R2a: escape run_phase_b の trace 発火カバレッジ ──
@@ -2878,11 +1798,7 @@ class _CapturingRecorder:
     def record(self, kind, *, tick=None, player_id=None, **payload):
         from types import SimpleNamespace
 
-        self.events.append(
-            SimpleNamespace(
-                kind=str(kind), tick=tick, player_id=player_id, payload=dict(payload)
-            )
-        )
+        self.events.append(SimpleNamespace(kind=str(kind), tick=tick, player_id=player_id, payload=dict(payload)))
         return None
 
     def close(self) -> None:
@@ -3011,7 +1927,7 @@ def test_phase_b_records_memo_hint_trace(
     wiring = _wiring_for_contract_runtime(runtime)
 
     class _StubHintService:
-        def detect(self, being_id, action_summary, message):
+        def detect(self, being_id, action_summary, message, *, excluded_ids=()):
             # #1322: detect は検出結果を返す。hint の有無とは別に、問うた判断と
             # 縮退の理由を同じ戻り値で運ぶ。
             return SimpleNamespace(

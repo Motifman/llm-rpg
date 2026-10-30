@@ -18,7 +18,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_FORBIDDEN_LIBRARY = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 
 _ACTOR = PlayerId(1)
 _VICTIM = PlayerId(2)
@@ -43,11 +43,13 @@ _STRIKE_DOWN = {
             "failure_message": "相手の役割が条件に合わない。",
         },
     ],
-    "effects": [{
-        "effect_type": "APPLY_DAMAGE",
-        "target": "TARGET_PLAYER",
-        "parameters": {"damage": 999},
-    }],
+    "effects": [
+        {
+            "effect_type": "APPLY_DAMAGE",
+            "target": "TARGET_PLAYER",
+            "parameters": {"damage": 999},
+        }
+    ],
 }
 
 _STRIKE_DOWN_IN_LIGHT = {
@@ -72,16 +74,18 @@ _STRIKE_DOWN_IN_LIGHT = {
 @pytest.fixture()
 def runtime(tmp_path: Path):
     """暗所限定・ナイフ必須の対人 action を宣言し、二人を同席させた runtime。"""
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
-    scenario["item_specs"].append({
-        "id": "knife",
-        "name": "ナイフ",
-        "description": "よく研がれている。",
-        "category": "TOOL",
-    })
+    scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
+    scenario["item_specs"].append(
+        {
+            "id": "knife",
+            "name": "ナイフ",
+            "description": "よく研がれている。",
+            "category": "TOOL",
+        }
+    )
     scenario["players"][0].setdefault("initial_items", []).append("knife")
     scenario["player_interactions"] = [_STRIKE_DOWN, _STRIKE_DOWN_IN_LIGHT]
-    path = tmp_path / "relay_with_strike.json"
+    path = tmp_path / "library_with_strike.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
     rt = create_world_runtime(path)
@@ -96,9 +100,7 @@ def runtime(tmp_path: Path):
 class TestHintsReachTheCoLocatedPlayerRow:
     """同席者行に、条件つきの action 候補が出る。"""
 
-    def test_available_and_blocked_actions_are_rendered_on_separate_lines(
-        self, runtime
-    ) -> None:
+    def test_available_and_blocked_actions_are_rendered_on_separate_lines(self, runtime) -> None:
         """成立する対人操作は行末、不成立の操作は次の「いまできない」へ分ける。
 
         ラベルは **行ごと** に持つ (snapshot 単位の 1 本のタプルではない)。
@@ -109,19 +111,13 @@ class TestHintsReachTheCoLocatedPlayerRow:
         player_row = lines[row_index]
         blocked_row = lines[row_index + 1]
 
-        assert (
-            '人目の前で襲う → "strike_down_in_light"（暗い場所不可・ナイフが要る）'
-            in player_row
-        )
+        assert '人目の前で襲う → "strike_down_in_light"（暗い場所不可・ナイフが要る）' in player_row
         assert "いまは" not in player_row
         assert blocked_row == (
-            '      いまできない: 背後から襲う → "strike_down"'
-            "（暗い場所のみ・ナイフが要る・いまは薄暗い）"
+            '      いまできない: 背後から襲う → "strike_down"（暗い場所のみ・ナイフが要る・いまは薄暗い）'
         )
 
-    def test_target_secret_never_appears_in_either_player_action_line(
-        self, runtime
-    ) -> None:
+    def test_target_secret_never_appears_in_either_player_action_line(self, runtime) -> None:
         """対象の秘匿条件は候補にも阻害理由にも漏らさない。"""
         observation = runtime.build_observation(_ACTOR)
 

@@ -43,9 +43,7 @@ def _migration_v1(conn: sqlite3.Connection) -> None:
     )
 
 
-_PERSONAL_LISTING_MIGRATIONS = (
-    SqliteMigration(version=1, apply=_migration_v1),
-)
+_PERSONAL_LISTING_MIGRATIONS = (SqliteMigration(version=1, apply=_migration_v1),)
 
 
 def init_personal_trade_listing_read_model_schema(conn: sqlite3.Connection) -> None:

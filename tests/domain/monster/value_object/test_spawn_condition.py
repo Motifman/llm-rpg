@@ -80,10 +80,13 @@ class TestSpawnCondition:
                 time_band=None,
                 required_area_traits=frozenset({SpotTraitEnum.LAVA, SpotTraitEnum.DUNGEON_DEPTH}),
             )
-            assert condition.is_satisfied(
-                TimeOfDay.DAY,
-                area_traits={SpotTraitEnum.LAVA, SpotTraitEnum.DUNGEON_DEPTH, SpotTraitEnum.OTHER},
-            ) is True
+            assert (
+                condition.is_satisfied(
+                    TimeOfDay.DAY,
+                    area_traits={SpotTraitEnum.LAVA, SpotTraitEnum.DUNGEON_DEPTH, SpotTraitEnum.OTHER},
+                )
+                is True
+            )
 
         def test_required_area_traits_missing_returns_false(self):
             """area_traits に required が欠けていると False"""
@@ -91,9 +94,7 @@ class TestSpawnCondition:
                 time_band=None,
                 required_area_traits=frozenset({SpotTraitEnum.LAVA, SpotTraitEnum.DUNGEON_DEPTH}),
             )
-            assert condition.is_satisfied(
-                TimeOfDay.DAY, area_traits={SpotTraitEnum.LAVA}
-            ) is False
+            assert condition.is_satisfied(TimeOfDay.DAY, area_traits={SpotTraitEnum.LAVA}) is False
             assert condition.is_satisfied(TimeOfDay.DAY, area_traits=None) is False
 
         def test_all_conditions_and(self):
@@ -103,23 +104,35 @@ class TestSpawnCondition:
                 preferred_weather=frozenset({WeatherTypeEnum.RAIN}),
                 required_area_traits=frozenset({SpotTraitEnum.LAVA}),
             )
-            assert condition.is_satisfied(
-                TimeOfDay.NIGHT,
-                weather_type=WeatherTypeEnum.RAIN,
-                area_traits={SpotTraitEnum.LAVA},
-            ) is True
-            assert condition.is_satisfied(
-                TimeOfDay.DAY,
-                weather_type=WeatherTypeEnum.RAIN,
-                area_traits={SpotTraitEnum.LAVA},
-            ) is False
-            assert condition.is_satisfied(
-                TimeOfDay.NIGHT,
-                weather_type=WeatherTypeEnum.CLEAR,
-                area_traits={SpotTraitEnum.LAVA},
-            ) is False
-            assert condition.is_satisfied(
-                TimeOfDay.NIGHT,
-                weather_type=WeatherTypeEnum.RAIN,
-                area_traits=frozenset(),
-            ) is False
+            assert (
+                condition.is_satisfied(
+                    TimeOfDay.NIGHT,
+                    weather_type=WeatherTypeEnum.RAIN,
+                    area_traits={SpotTraitEnum.LAVA},
+                )
+                is True
+            )
+            assert (
+                condition.is_satisfied(
+                    TimeOfDay.DAY,
+                    weather_type=WeatherTypeEnum.RAIN,
+                    area_traits={SpotTraitEnum.LAVA},
+                )
+                is False
+            )
+            assert (
+                condition.is_satisfied(
+                    TimeOfDay.NIGHT,
+                    weather_type=WeatherTypeEnum.CLEAR,
+                    area_traits={SpotTraitEnum.LAVA},
+                )
+                is False
+            )
+            assert (
+                condition.is_satisfied(
+                    TimeOfDay.NIGHT,
+                    weather_type=WeatherTypeEnum.RAIN,
+                    area_traits=frozenset(),
+                )
+                is False
+            )

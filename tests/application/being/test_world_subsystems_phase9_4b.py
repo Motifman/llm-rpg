@@ -24,17 +24,13 @@ class TestWeatherCodec:
     """weather_holder["state"] の往復。"""
 
     def test_capture_restore_round_trip(self) -> None:
-        src_holder = {
-            "state": WeatherState(weather_type=WeatherTypeEnum.RAIN, intensity=0.8)
-        }
+        src_holder = {"state": WeatherState(weather_type=WeatherTypeEnum.RAIN, intensity=0.8)}
         src_runtime = SimpleNamespace(_current_weather=src_holder)
         captured = WeatherSubsystemCodec().capture(src_runtime)
         assert captured["state"]["weather_type"] == "RAIN"
         assert captured["state"]["intensity"] == 0.8
 
-        dst_holder = {
-            "state": WeatherState(weather_type=WeatherTypeEnum.CLEAR, intensity=1.0)
-        }
+        dst_holder = {"state": WeatherState(weather_type=WeatherTypeEnum.CLEAR, intensity=1.0)}
         dst_runtime = SimpleNamespace(_current_weather=dst_holder)
         WeatherSubsystemCodec().restore(dst_runtime, captured)
         assert dst_holder["state"].weather_type == WeatherTypeEnum.RAIN
@@ -59,9 +55,7 @@ class TestWeatherCodec:
     def test_unsupported_schema_version_raises_exception_2(self) -> None:
         """未サポート schemaversion は例外。"""
         with pytest.raises(ValueError, match="schema_version"):
-            WeatherSubsystemCodec().restore(
-                SimpleNamespace(), {"schema_version": 999}
-            )
+            WeatherSubsystemCodec().restore(SimpleNamespace(), {"schema_version": 999})
 
     def test_round_trip_continues_weather_random_sequence(self) -> None:
         """snapshot再開後の次天候は連続実行と同じ乱数位置から決まる。"""
@@ -250,9 +244,7 @@ class TestDayNightCodec:
             _time_provider=_StubTimeProvider(30),
         )
         # capture 結果は問わず restore できる (= 再計算なので)
-        DayNightSubsystemCodec().restore(
-            runtime, {"schema_version": 1, "phase_name": "ignored"}
-        )
+        DayNightSubsystemCodec().restore(runtime, {"schema_version": 1, "phase_name": "ignored"})
         assert stage._current.phase_name == "NIGHT"
         assert cycle.lookup_calls == [30]
 
@@ -261,13 +253,33 @@ class TestDayNightCodec:
         runtime = SimpleNamespace(_day_night_stage=None)
         captured = DayNightSubsystemCodec().capture(runtime)
         assert captured["phase_name"] is None
-        DayNightSubsystemCodec().restore(
-            runtime, {"schema_version": 1, "phase_name": None}
-        )  # no error
+        DayNightSubsystemCodec().restore(runtime, {"schema_version": 1, "phase_name": None})  # no error
 
     def test_unsupported_schema_version_raises_exception(self) -> None:
         """未サポート schemaversion は例外。"""
         with pytest.raises(ValueError, match="schema_version"):
-            DayNightSubsystemCodec().restore(
-                SimpleNamespace(), {"schema_version": 999}
-            )
+            DayNightSubsystemCodec().restore(SimpleNamespace(), {"schema_version": 999})
+
+    def test_restore_raises_when_stage_lacks_cycle_instead_of_keeping_stale_phase(
+        self,
+    ) -> None:
+        """stage に _cycle が無いとき、restore は AttributeError を投げ、復元前の phase のまま黙って進めない。"""
+        stage = SimpleNamespace(_current=_StubTimeOfDay("MORNING"))
+        runtime = SimpleNamespace(
+            _day_night_stage=stage,
+            _time_provider=_StubTimeProvider(30),
+        )
+
+        with pytest.raises(AttributeError, match="_cycle"):
+            DayNightSubsystemCodec().restore(runtime, {"schema_version": 1, "phase_name": None})
+
+    def test_restore_raises_when_runtime_lacks_time_provider(self) -> None:
+        """昼夜の stage があるのに _time_provider が無いとき、restore は AttributeError を投げ、再計算を黙って飛ばさない。"""
+        stage = SimpleNamespace(
+            _cycle=_StubCycle({30: _StubTimeOfDay("NIGHT")}),
+            _current=_StubTimeOfDay("MORNING"),
+        )
+        runtime = SimpleNamespace(_day_night_stage=stage)
+
+        with pytest.raises(AttributeError, match="_time_provider"):
+            DayNightSubsystemCodec().restore(runtime, {"schema_version": 1, "phase_name": None})
