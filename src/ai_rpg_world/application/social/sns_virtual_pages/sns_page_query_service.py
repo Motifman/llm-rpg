@@ -183,8 +183,9 @@ class SnsPageQueryService:
 
         thread = self._reply_query.get_reply_thread(root_id, viewer_user_id)
         root_line = self._post_line(player_id, thread.post)
+        replies, has_more = _slice_page(thread.replies[st.offset : st.offset + st.limit + 1], st.limit)
         reply_lines: list[SnsReplyLineSnapshotDto] = []
-        for r in thread.replies:
+        for r in replies:
             rr = self._page_session.issue_reply_ref(player_id, r.reply_id)
             author_ref: str | None = None
             if not r.is_deleted:
@@ -206,7 +207,7 @@ class SnsPageQueryService:
         return SnsVirtualPageSnapshotDto(
             page_kind=SnsVirtualPageKind.POST_DETAIL,
             snapshot_generation=gen,
-            paging=SnsPagingSnapshotDto(offset=0, limit=1, has_more=False),
+            paging=self._paging(st, has_more),
             post_detail=body,
         )
 
