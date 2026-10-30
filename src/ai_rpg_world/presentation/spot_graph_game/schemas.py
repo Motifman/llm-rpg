@@ -51,7 +51,6 @@ class CharacterDetailResponse(CharacterSummaryResponse):
     strengths: str = ""
     weaknesses: str = ""
     interpersonal_tendency: str = ""
-    behavioral_rules: list[str] = Field(default_factory=list)
 
 
 class CharacterCreateRequest(BaseModel):
@@ -66,7 +65,6 @@ class CharacterCreateRequest(BaseModel):
     strengths: str = ""
     weaknesses: str = ""
     interpersonal_tendency: str = ""
-    behavioral_rules: list[str] = Field(default_factory=list)
 
 
 class CharacterUpdateRequest(BaseModel):
@@ -81,7 +79,6 @@ class CharacterUpdateRequest(BaseModel):
     strengths: str | None = None
     weaknesses: str | None = None
     interpersonal_tendency: str | None = None
-    behavioral_rules: list[str] | None = None
 
 
 class CharacterListResponse(BaseModel):

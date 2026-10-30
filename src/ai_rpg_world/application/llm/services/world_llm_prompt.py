@@ -29,8 +29,6 @@ class CharacterPromptInput:
     strengths: str = ""
     weaknesses: str = ""
     interpersonal_tendency: str = ""
-    # LLM 行動上の自責ルール（短い箇条書き）。非空のときのみペルソナブロックに「行動ルール」として載る。
-    behavioral_rules: tuple[str, ...] = ()
 
 
 # シナリオ metadata.description はネタバレを含み得るため、LLM 初期文脈では使わず
@@ -125,8 +123,6 @@ def build_persona_block_from_character(
     if appearance:
         bg_parts.append(f"外見: {appearance[:500]}")
 
-    brules = [s.strip() for s in character.behavioral_rules if isinstance(s, str) and s.strip()][:6]
-
     persona = AgentPersonaDto(
         character_id=character.character_id,
         display_name=character.name,
@@ -138,11 +134,8 @@ def build_persona_block_from_character(
         taboos=tuple(taboo_parts[:6]) if taboo_parts else (),
         background_summary=" ".join(bg_parts).strip(),
         fragmented_memories=fragmented,
-        behavioral_rules=tuple(brules),
-        relationship_hints=(),
     )
-    # 空なら「行動ルール」節は出ない（FragmentBuilder は非空のときだけ列挙する）。
-    policy = policy or PersonaPromptPolicy(include_behavioral_rules=True)
+    policy = policy or PersonaPromptPolicy()
     builder = PersonaPromptFragmentBuilder(policy)
     return builder.build(persona)
 
@@ -159,10 +152,8 @@ def _fallback_persona_block(display_name: str) -> str:
         taboos=(),
         background_summary="この局面の探索者として行動する。",
         fragmented_memories=(),
-        behavioral_rules=(),
-        relationship_hints=(),
     )
-    return PersonaPromptFragmentBuilder(PersonaPromptPolicy(include_behavioral_rules=True)).build(persona)
+    return PersonaPromptFragmentBuilder(PersonaPromptPolicy()).build(persona)
 
 
 _PAST_EVENTS_RULE = (

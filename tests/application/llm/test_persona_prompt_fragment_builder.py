@@ -19,8 +19,6 @@ def test_persona_prompt_fragment_includes_enabled_sections() -> None:
         taboos=("自分が本物ではないと断定しない",),
         background_summary="門の前に立っている少女。",
         fragmented_memories=("白い廊下", "誰かの名前を呼んだ感覚"),
-        behavioral_rules=("分からないことは分からないと言う",),
-        relationship_hints=("ユーザーの声を知らない声として受け取る",),
     )
 
     text = PersonaPromptFragmentBuilder().build(persona)

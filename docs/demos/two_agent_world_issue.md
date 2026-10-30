@@ -75,8 +75,7 @@ curl -X POST http://127.0.0.1:8080/api/characters \
     "values": "真実を知りたい",
     "strengths": "観察眼",
     "weaknesses": "暗所恐怖",
-    "interpersonal_tendency": "やや人見知り",
-    "behavioral_rules": ["むやみに大声を出さない"]
+    "interpersonal_tendency": "やや人見知り"
   }'
 ```
 
