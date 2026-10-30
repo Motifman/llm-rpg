@@ -219,3 +219,29 @@ def test_failure_observer_is_mandatory() -> None:
         AsyncEventExecutor()
     with pytest.raises(TypeError):
         AsyncEventExecutor(failure_observer=None)
+
+
+def test_apply_failure_does_not_stop_the_rest_of_the_results() -> None:
+    """結果の反映が失敗しても、application_failed を知らせて例外を投げず、同じ宛先の残りの結果と、終了時の全員の反映を続ける。"""
+    failures = []
+    applied: list[int] = []
+    executor = AsyncEventExecutor(failure_observer=failures.append, max_workers=1)
+
+    def apply(value: int) -> None:
+        if value == 1:
+            raise RuntimeError("apply failed")
+        applied.append(value)
+
+    for key, number in (("a", 1), ("a", 2), ("b", 3)):
+        executor.submit(
+            key=key,
+            event=DomainEvent(number, datetime.now(timezone.utc)),
+            handler=lambda e: e.event_id,
+            apply_result=apply,
+        )
+    executor.shutdown(timeout=2)
+
+    executor.apply_all_results()
+
+    assert sorted(applied) == [2, 3]
+    assert [(f.reason, f.key, str(f.error)) for f in failures] == [("application_failed", "a", "apply failed")]
