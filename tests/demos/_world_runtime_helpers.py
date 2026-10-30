@@ -59,9 +59,7 @@ def create_world_runtime_session(
         runtime_config=runtime_config,
     )
     char = mgr.create_character(CharacterCreateRequest(name=character_name))
-    summary = mgr.create_session(
-        SessionCreateRequest(world_id=world_id, character_ids=[char.id])
-    )
+    summary = mgr.create_session(SessionCreateRequest(world_id=world_id, character_ids=[char.id]))
     state = mgr._sessions[summary.session_id]
     if stub is not None:
         state.llm_wiring.llm_client = stub

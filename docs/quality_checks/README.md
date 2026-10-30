@@ -29,6 +29,9 @@ material:
 したがって **prompt を変えたら `uv run pytest -m quality` を回し、
 `docs/quality_checks/` の変更を一緒に commit してください。**
 
+`-m quality` は実 API を呼びません。実 endpoint を叩くプローブは `live_api`
+marker に分けてあります (`docs/llm_provider_selection.md` の「実呼び出しのプローブ」)。
+
 この検査は **CI のまっさらな checkout を前提にしています**。手元の作業
 ツリーが汚れている状態で同じ検査をすると、無関係な変更で誤爆します。
 
@@ -36,22 +39,20 @@ material:
 
 | ID | テスト | doc | 目的 |
 |---|---|---|---|
-| `yesterday_v1` | `tests/quality/test_yesterday_v1.py` | `yesterday_v1_baseline.md` | 「昨日何してた?」に答えられるか (= 自伝的時系列 / 能動想起) |
-| `prediction_v1` | `tests/quality/test_prediction_v1.py` | `prediction_v1_baseline.md` | 予測が外れた経験が次の予測を変えるか (= 予測→学習ループ / 不在#3) |
-| `sign_hearsay_v1` | `tests/quality/test_sign_hearsay_v1.py` | `sign_hearsay_v1_baseline.md` | 看板を読んだ観測が P9 伝聞抽出の入力に乗るか (#714 看板 primitive の follow-up) |
+| `yesterday_v1` | (Issue #1631 で外した) | `yesterday_v1_baseline.md` | 「昨日何してた?」に答えられるか (= 自伝的時系列 / 能動想起) |
+| `prediction_v1` | (Issue #1631 で外した) | `prediction_v1_baseline.md` | 予測が外れた経験が次の予測を変えるか (= 予測→学習ループ / 不在#3) |
 
 ## 使い方
 
 ```bash
-# シナリオを 1 つ走らせて prompt dump を生成
-uv run pytest tests/quality/test_yesterday_v1.py -m quality
+# quality の検査をまとめて走らせ、dump を再生成する
+uv run pytest -m quality
 
 # quality は既定で除外されるため、パス指定だけでは実行されない
-uv run pytest tests/quality/test_yesterday_v1.py
+uv run pytest tests/quality/test_scenario_state_display_inventory.py
 
-# 結果は docs/quality_checks/yesterday_v1_<variant>.prompt.txt に
-# 上書き保存される。git diff で「前回 PR から prompt がどう変わったか」
-# が確認できる
+# 結果は docs/quality_checks/ の dump に上書き保存される。git diff で
+# 「前回 PR から prompt がどう変わったか」が確認できる
 ```
 
 dump の中身を読んで、対応する baseline `.md` の末尾に短い所感を追記

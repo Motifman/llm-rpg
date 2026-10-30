@@ -2,7 +2,6 @@
 TradeDetailQueryService専用のアプリケーション例外
 """
 
-
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.domain.common.exception import DomainException
 
@@ -32,10 +31,7 @@ class TradeDetailQueryApplicationException(ApplicationException):
         Returns:
             TradeDetailQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Trade not found: {trade_id}",
-            trade_id=trade_id
-        )
+        return cls(f"Trade not found: {trade_id}", trade_id=trade_id)
 
     @classmethod
     def item_statistics_not_found(cls, item_spec_id: int) -> "TradeDetailQueryApplicationException":
@@ -47,10 +43,7 @@ class TradeDetailQueryApplicationException(ApplicationException):
         Returns:
             TradeDetailQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Item statistics not found: {item_spec_id}",
-            item_spec_id=item_spec_id
-        )
+        return cls(f"Item statistics not found: {item_spec_id}", item_spec_id=item_spec_id)
 
     @classmethod
     def invalid_trade_id(cls, trade_id: int) -> "TradeDetailQueryApplicationException":
@@ -62,7 +55,4 @@ class TradeDetailQueryApplicationException(ApplicationException):
         Returns:
             TradeDetailQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Invalid trade ID: {trade_id}",
-            trade_id=trade_id
-        )
+        return cls(f"Invalid trade ID: {trade_id}", trade_id=trade_id)

@@ -22,7 +22,7 @@ snapshot を取れるようにする統合層。
 - snapshot file のレイアウト: ``<dir>/<being_id>.json`` (1 Being = 1 file)。
   CLI と互換 (= ``scripts/being_snapshot_cli.py`` で個別に処理可能)
 - ``capture_all`` は **全 player を順に処理し、各失敗は単独 warning** とする。
-  「ある player の memo が壊れている → 他の player の snapshot を諦める」
+  「ある player の記憶が壊れている → 他の player の snapshot を諦める」
   を避けるため (= 実験データの最大救済)
 - ``restore_all`` は逆に **1 つでも失敗したら例外** にする (= 中途半端な
   状態で experiment を始めない fail-fast)
@@ -78,7 +78,6 @@ from ai_rpg_world.application.being.world_subsystems import (
     PlayerNeedsSubsystemCodec,
     PlayerOutcomeSubsystemCodec,
     PlayerPositionSubsystemCodec,
-    PlayerPursuitStateSubsystemCodec,
     PlayerSpotNavigationStateSubsystemCodec,
     PlayerStateDictSubsystemCodec,
     PlayerVitalsSubsystemCodec,
@@ -102,6 +101,7 @@ from ai_rpg_world.domain.world.value_object.world_id import (
 logger = logging.getLogger(__name__)
 
 EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
+    "public_sns",
     # Phase 9-2
     "world_tick",
     "player_position",
@@ -129,7 +129,6 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     # Phase 9-4a
     "player_active_effects",
     "player_attention_level",
-    "player_pursuit_state",
     "player_spot_navigation_state",
     # Phase 9-4b
     "weather",
@@ -153,136 +152,6 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     "pending_trade_offer",
     "market_board",
 )
-
-
-def _empty_memo_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_memo_store import (
-        InMemoryMemoStore,
-    )
-
-    return InMemoryMemoStore()
-
-
-def _empty_semantic_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
-        InMemorySemanticMemoryStore,
-    )
-
-    return InMemorySemanticMemoryStore()
-
-
-def _empty_memory_link_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
-        InMemoryMemoryLinkStore,
-    )
-
-    return InMemoryMemoryLinkStore()
-
-
-def _empty_recall_buffer_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-        InMemoryEpisodicRecallBufferStore,
-    )
-
-    return InMemoryEpisodicRecallBufferStore()
-
-
-def _empty_journal_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-        InMemoryEpisodicReinterpretationJournalStore,
-    )
-
-    return InMemoryEpisodicReinterpretationJournalStore()
-
-
-def _empty_episode_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-        InMemorySubjectiveEpisodeStore,
-    )
-
-    return InMemorySubjectiveEpisodeStore()
-
-
-def _empty_recall_slot_store() -> Any:
-    """PR-G: snapshot 配線時に slot が未配線なら空 in-memory store で代用する。"""
-    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-        InMemoryEpisodicRecallSlotStore,
-    )
-
-    return InMemoryEpisodicRecallSlotStore()
-
-
-def _empty_afterglow_store() -> Any:
-    """PR-G: snapshot 配線時に afterglow が未配線なら空 in-memory store で代用する。"""
-    from ai_rpg_world.application.llm.services.afterglow_store import (
-        InMemoryAfterglowStore,
-    )
-
-    return InMemoryAfterglowStore()
-
-
-def _empty_recall_habituation_store() -> Any:
-    """PR-G: snapshot 配線時に habituation が未配線なら空 in-memory store で代用する。"""
-    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-        InMemoryEpisodicRecallHabituationStore,
-    )
-
-    return InMemoryEpisodicRecallHabituationStore()
-
-
-def _empty_belief_evidence_buffer_store() -> Any:
-    """U2 (証拠台帳統一設計): snapshot 配線時に belief evidence buffer が
-    未配線 (= flag OFF) なら空 in-memory store で代用する。"""
-    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-        InMemoryBeliefEvidenceBufferStore,
-    )
-
-    return InMemoryBeliefEvidenceBufferStore()
-
-
-def _empty_recall_success_store() -> Any:
-    """U9b (予測誤差統一設計 部品5・想起の信用割り当て): snapshot 配線時に
-
-    的中側 sidecar が未配線 (= flag OFF) なら空 in-memory store で代用する。"""
-    from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-        InMemoryEpisodicRecallSuccessStore,
-    )
-
-    return InMemoryEpisodicRecallSuccessStore()
-
-
-def _empty_pending_prediction_store() -> Any:
-    """U10a (予測誤差統一設計 部品6・pending prediction): snapshot 配線時に
-
-    pending prediction store が未配線 (= flag OFF) なら空 in-memory store で
-    代用する (checklist #27)。"""
-    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
-        InMemoryPendingPredictionStore,
-    )
-
-    return InMemoryPendingPredictionStore()
-
-
-def _empty_goal_journal_store() -> Any:
-    """P5 (目的層): snapshot 配線時に goal store が未配線 (= flag OFF) なら
-
-    空 in-memory store で代用する (checklist #27)。"""
-    from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
-        InMemoryGoalJournalStore,
-    )
-
-    return InMemoryGoalJournalStore()
-
-
-def _empty_stagnation_pressure_store() -> Any:
-    """P-U2 (停滞感 store): snapshot 配線時に停滞感 store が未配線 (= flag OFF)
-
-    なら空 in-memory store で代用する (checklist #27)。"""
-    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
-        InMemoryStagnationPressureStore,
-    )
-
-    return InMemoryStagnationPressureStore()
 
 
 @dataclass(frozen=True)
@@ -315,12 +184,13 @@ class RestoreAllReport:
     # Phase 7 (Issue #470): 各 snapshot ファイルから読み取った metadata。
     # ``source_scenario`` が現 scenario と異なる場合は別シナリオへの
     # cross-transfer (= わざと許容、warning ログのみ)。
-    metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = field(
-        default_factory=dict
-    )
+    metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = field(default_factory=dict)
     cross_scenario_transfers: list[tuple[BeingId, str, str]] = field(
         default_factory=list
     )  # (being_id, source_scenario, current_scenario)
+    # 消した部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない。
+    removed_memory_key_counts: dict[BeingId, dict[str, int]] = field(default_factory=dict)
+    removed_declared_memory_kind_counts: dict[BeingId, dict[str, int]] = field(default_factory=dict)
 
 
 def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
@@ -332,7 +202,10 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
     restore したいが、本 PR の vitals codec は ``hp_max`` を直接保存して
     いるので順序非依存。
     """
+    from ai_rpg_world.application.being.world_subsystems.public_sns_codec import PublicSnsSubsystemCodec
+
     return [
+        PublicSnsSubsystemCodec(),
         # Phase 9-2
         WorldTickSubsystemCodec(),
         PlayerPositionSubsystemCodec(),
@@ -356,7 +229,6 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         # Phase 9-4a (PlayerStatusAggregate combat/navigation sub-state)
         PlayerActiveEffectsSubsystemCodec(),
         PlayerAttentionLevelSubsystemCodec(),
-        PlayerPursuitStateSubsystemCodec(),
         PlayerSpotNavigationStateSubsystemCodec(),
         # Phase 9-4b (world-side time/weather; day_night は tick 復元後に再計算)
         WeatherSubsystemCodec(),
@@ -398,141 +270,30 @@ class ExperimentSnapshotSession:
     ) -> None:
         # **必須** store: 「これがなければ snapshot 自体が意味を持たない」もの。
         # being_repository / resolver はないと that's that.
-        required_fields = ("being_repository", "being_attachment_resolver")
-        missing_required = [
-            name
-            for name in required_fields
-            if getattr(wiring_result, name, None) is None
-        ]
+        # 知り合いの記録・目次つきのエピソード・メモ帳・記憶のターン数・短期記憶は runtime が常に持つ。
+        # 空で代用すると、再開した Being が会った相手や書いた記憶を忘れたまま、配線漏れと
+        # 見分けられない。
+        required_fields = (
+            "being_repository",
+            "being_attachment_resolver",
+            "acquaintance_store",
+            "being_episode_store",
+            "being_memo_store",
+            "memory_turn_clock",
+            "being_short_term_memory_store",
+        )
+        missing_required = [name for name in required_fields if getattr(wiring_result, name, None) is None]
         if missing_required:
-            raise RuntimeError(
-                "wiring_result is missing required handle(s) for snapshot: "
-                f"{missing_required}."
-            )
-
-        # 任意 store: 「未配線なら空 in-memory store で代用」する。world_runtime
-        # runtime のように semantic / memory_link / recall_buffer / journal を
-        # 使わない構成でも snapshot を取れるようにするため (= 空の payload に
-        # なるが file の整合性は保たれる)。memo / episode は普段使うので強く
-        # 期待するが、None でも fallback できる方が安全。
-        memo_store = wiring_result.memo_store or _empty_memo_store()
-        semantic_store = (
-            wiring_result.semantic_memory_store or _empty_semantic_store()
-        )
-        memory_link_store = (
-            wiring_result.memory_link_store or _empty_memory_link_store()
-        )
-        recall_buffer_store = (
-            wiring_result.episodic_recall_buffer_store
-            or _empty_recall_buffer_store()
-        )
-        journal_store = (
-            wiring_result.episodic_reinterpretation_journal_store
-            or _empty_journal_store()
-        )
-        episode_store = (
-            wiring_result.episodic_episode_store or _empty_episode_store()
-        )
-        # PR-G: 想起階層 (slot / afterglow / habituation) は wiring_result が
-        # 露出していないことが多い (= episodic_stack が enable のときだけ wire
-        # される) ので、未配線なら空 in-memory store にフォールバックする。
-        recall_slot_store = (
-            getattr(wiring_result, "recall_slot_store", None)
-            or _empty_recall_slot_store()
-        )
-        afterglow_store = (
-            getattr(wiring_result, "afterglow_store", None)
-            or _empty_afterglow_store()
-        )
-        recall_habituation_store = (
-            getattr(wiring_result, "recall_habituation_store", None)
-            or _empty_recall_habituation_store()
-        )
-        # U2 (証拠台帳統一設計): belief evidence buffer も未配線なら空
-        # in-memory store にフォールバックする (= flag OFF の run でも
-        # snapshot 自体は壊れず「空の payload」で整合性が保たれる)。
-        belief_evidence_buffer_store = (
-            getattr(wiring_result, "belief_evidence_buffer_store", None)
-            or _empty_belief_evidence_buffer_store()
-        )
-        # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar も
-        # 未配線なら空 in-memory store にフォールバックする (checklist #27)。
-        recall_success_store = (
-            getattr(wiring_result, "recall_success_store", None)
-            or _empty_recall_success_store()
-        )
-        # U10a (予測誤差統一設計 部品6・pending prediction): pending prediction
-        # store も未配線なら空 in-memory store にフォールバックする
-        # (checklist #27)。
-        pending_prediction_store = (
-            getattr(wiring_result, "pending_prediction_store", None)
-            or _empty_pending_prediction_store()
-        )
-        # P5 (目的層): goal store も未配線なら空 in-memory store にフォール
-        # バックする (checklist #27)。
-        goal_journal_store = (
-            getattr(wiring_result, "goal_journal_store", None)
-            or _empty_goal_journal_store()
-        )
-        # P-U2 (停滞感 store): 停滞感 store も未配線なら空 in-memory store に
-        # フォールバックする (checklist #27)。
-        stagnation_pressure_store = (
-            getattr(wiring_result, "stagnation_pressure_store", None)
-            or _empty_stagnation_pressure_store()
-        )
-
-        # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す
-        # = 「snapshot 取ったけど semantic は空だった」のデバッグ材料。
-        fallback_used = [
-            name
-            for name in (
-                "memo_store",
-                "semantic_memory_store",
-                "memory_link_store",
-                "episodic_recall_buffer_store",
-                "episodic_reinterpretation_journal_store",
-                "episodic_episode_store",
-                # PR-G: 想起階層 3 store も fallback 監視対象に入れる。配線漏れで
-                # 空 store にフォールバックしたことを後追いできるようにする。
-                "recall_slot_store",
-                "afterglow_store",
-                "recall_habituation_store",
-                # U2: belief evidence buffer も同じ監視対象に入れる。
-                "belief_evidence_buffer_store",
-                # U9b: 的中側 sidecar も同じ監視対象に入れる。
-                "recall_success_store",
-                # U10a: pending prediction store も同じ監視対象に入れる。
-                "pending_prediction_store",
-                # P5: goal store も同じ監視対象に入れる。
-                "goal_journal_store",
-                # P-U2: 停滞感 store も同じ監視対象に入れる。
-                "stagnation_pressure_store",
-            )
-            if getattr(wiring_result, name, None) is None
-        ]
-        if fallback_used:
-            logger.info(
-                "snapshot session: using empty in-memory fallback for stores: %s "
-                "(wiring did not expose these; payload entries will be empty)",
-                fallback_used,
-            )
+            raise RuntimeError(f"wiring_result is missing required handle(s) for snapshot: {missing_required}.")
 
         self._memory_snapshot = BeingMemorySnapshotService(
-            memo_store=memo_store,
-            semantic_store=semantic_store,
-            memory_link_store=memory_link_store,
-            recall_buffer_store=recall_buffer_store,
-            reinterpretation_journal_store=journal_store,
-            episodic_episode_store=episode_store,
-            recall_slot_store=recall_slot_store,
-            afterglow_store=afterglow_store,
-            recall_habituation_store=recall_habituation_store,
-            belief_evidence_buffer_store=belief_evidence_buffer_store,
-            recall_success_store=recall_success_store,
-            pending_prediction_store=pending_prediction_store,
-            goal_journal_store=goal_journal_store,
-            stagnation_pressure_store=stagnation_pressure_store,
+            acquaintance_store=wiring_result.acquaintance_store,
+            being_episode_store=wiring_result.being_episode_store,
+            being_memo_store=wiring_result.being_memo_store,
+            memory_turn_clock=wiring_result.memory_turn_clock,
+            being_short_term_memory_store=wiring_result.being_short_term_memory_store,
         )
+        self._memory_turn_clock = wiring_result.memory_turn_clock
         self._gateway = BeingSnapshotFileGateway()
         self._capture_use_case = CaptureBeingSnapshotToFileUseCase(
             being_repository=wiring_result.being_repository,
@@ -561,6 +322,16 @@ class ExperimentSnapshotSession:
     @property
     def snapshot_dir(self) -> Path:
         return self._snapshot_dir
+
+    def memory_turns(self, being_ids: Sequence[BeingId]) -> list[dict[str, Any]]:
+        """SNAPSHOT_SAVE / SNAPSHOT_LOAD の trace に載せる、Being ごとの記憶のターン数。"""
+        return [
+            {
+                "being_id": being_id.value,
+                "memory_turn": self._memory_turn_clock.current_turn(being_id),
+            }
+            for being_id in being_ids
+        ]
 
     # ---- Phase 9-1: world snapshot ----------------------------------------
     def capture_world(
@@ -602,16 +373,17 @@ class ExperimentSnapshotSession:
         (= world は scenario 依存なので別 scenario への load は不可)。
         """
         if not self._world_gateway.exists_in(input_dir):
+            if getattr(runtime, "_public_sns_data_store", None) is not None:
+                from ai_rpg_world.application.being.world_state_snapshot import WorldStateSnapshotCoverageError
+
+                raise WorldStateSnapshotCoverageError("公開SNSの再開には内容と不変識別子を持つworld.jsonが必要です")
             logger.info(
-                "no world.json in %s; skipping world state restore "
-                "(legacy snapshot directory)",
+                "no world.json in %s; skipping world state restore (legacy snapshot directory)",
                 input_dir,
             )
             return None
         snapshot = self._world_gateway.read(input_dir)
-        migrated_subsystems = migrate_legacy_recent_event_subsystems(
-            snapshot.subsystems
-        )
+        migrated_subsystems = migrate_legacy_recent_event_subsystems(snapshot.subsystems)
         if migrated_subsystems is not snapshot.subsystems:
             snapshot = WorldStateSnapshot(
                 source_scenario=snapshot.source_scenario,
@@ -638,9 +410,7 @@ class ExperimentSnapshotSession:
         """``being_id`` の snapshot file path を返す。"""
         return self._snapshot_dir / f"{being_id.value}.json"
 
-    def _resolve_player_being_ids(
-        self, player_ids: Sequence[PlayerId]
-    ) -> list[_PlayerSnapshotMapping]:
+    def _resolve_player_being_ids(self, player_ids: Sequence[PlayerId]) -> list[_PlayerSnapshotMapping]:
         """``player_ids`` を ``(player_id, being_id, file_path)`` に変換する。
 
         attach されていない player は warning ログを出してスキップ。
@@ -650,8 +420,7 @@ class ExperimentSnapshotSession:
             being_id = self._resolver.resolve_being_id(self._world_id, pid)
             if being_id is None:
                 logger.warning(
-                    "no being attached to player_id=%s in world=%s; "
-                    "skipping snapshot for this player",
+                    "no being attached to player_id=%s in world=%s; skipping snapshot for this player",
                     pid.value,
                     self._world_id.value,
                 )
@@ -696,9 +465,7 @@ class ExperimentSnapshotSession:
         )
         for m in mappings:
             try:
-                self._capture_use_case.execute(
-                    m.being_id, m.file_path, metadata=metadata
-                )
+                self._capture_use_case.execute(m.being_id, m.file_path, metadata=metadata)
                 succeeded.append(m.being_id)
                 logger.info(
                     "snapshot captured: being_id=%s file=%s",
@@ -746,23 +513,19 @@ class ExperimentSnapshotSession:
         転送する use case を許容)。
         """
         if not input_dir.exists():
-            raise FileNotFoundError(
-                f"snapshot dir does not exist: {input_dir}"
-            )
+            raise FileNotFoundError(f"snapshot dir does not exist: {input_dir}")
         if not input_dir.is_dir():
             raise NotADirectoryError(f"not a directory: {input_dir}")
 
         # ファイル名順で読み込む = 決定的な順序にする (= 復元が冪等)。
         # Phase 9-1: ``world.json`` は別 path (= WorldStateSnapshot) なので
         # Being restore のループからは除外する。
-        files = sorted(
-            p
-            for p in input_dir.iterdir()
-            if p.suffix == ".json" and p.name != "world.json"
-        )
+        files = sorted(p for p in input_dir.iterdir() if p.suffix == ".json" and p.name != "world.json")
         restored: list[BeingId] = []
         metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = {}
         cross_transfers: list[tuple[BeingId, str, str]] = []
+        removed_memory_key_counts: dict[BeingId, dict[str, int]] = {}
+        removed_declared_memory_kind_counts: dict[BeingId, dict[str, int]] = {}
         for path in files:
             # metadata は restore_use_case の中では読まないので、別途 gateway
             # から読む (= 失敗しても restore 本体は続行 = silent failure 防止
@@ -779,6 +542,10 @@ class ExperimentSnapshotSession:
 
             result = self._restore_use_case.execute(path)
             restored.append(result.being_id)
+            if result.removed_memory_key_counts:
+                removed_memory_key_counts[result.being_id] = result.removed_memory_key_counts
+            if result.removed_declared_memory_kind_counts:
+                removed_declared_memory_kind_counts[result.being_id] = result.removed_declared_memory_kind_counts
             metadata_by_being[result.being_id] = metadata
             logger.info(
                 "snapshot restored: being_id=%s file=%s memory_restored=%s",
@@ -813,6 +580,8 @@ class ExperimentSnapshotSession:
             restored=restored,
             metadata_by_being=metadata_by_being,
             cross_scenario_transfers=cross_transfers,
+            removed_memory_key_counts=removed_memory_key_counts,
+            removed_declared_memory_kind_counts=removed_declared_memory_kind_counts,
         )
 
 

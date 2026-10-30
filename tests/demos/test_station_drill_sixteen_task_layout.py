@@ -8,9 +8,7 @@ from pathlib import Path
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _ASSIGNED = {
     "mori": {
@@ -83,9 +81,7 @@ def _task_series(raw: dict) -> dict[tuple[str, str], list[dict]]:
                     prefix = action
                 if any(
                     effect.get("effect_type") == "SET_FLAG"
-                    and str(effect.get("parameters", {}).get("flag_name", "")).startswith(
-                        "task_"
-                    )
+                    and str(effect.get("parameters", {}).get("flag_name", "")).startswith("task_")
                     for candidate in obj.get("interactions", [])
                     for effect in candidate.get("effects", [])
                 ):
@@ -126,23 +122,16 @@ class TestSixteenTaskPlacement:
             if player["initial_state"].get("role") == "crew"
         }
 
-        assert duty_by_player == {
-            player_id: spec["duty"] for player_id, spec in _ASSIGNED.items()
-        }
+        assert duty_by_player == {player_id: spec["duty"] for player_id, spec in _ASSIGNED.items()}
         for player_id, spec in _ASSIGNED.items():
             assert spec["tasks"] <= set(series), player_id
             for task in spec["tasks"]:
-                real_steps = [
-                    step
-                    for step in series[task]
-                    if not step["action_name"].endswith("_pretend")
-                ]
+                real_steps = [step for step in series[task] if not step["action_name"].endswith("_pretend")]
                 assert len(real_steps) == 3
                 assert all(
                     any(
                         condition.get("condition_type") == "PLAYER_STATE_IS"
-                        and condition.get("required_state", {}).get("duty")
-                        == spec["duty"]
+                        and condition.get("required_state", {}).get("duty") == spec["duty"]
                         for condition in step.get("preconditions", [])
                     )
                     for step in real_steps
@@ -184,9 +173,7 @@ class TestSixteenTaskCopy:
     def test_end_condition_requires_twelve_of_the_sixteen_task_flags(self) -> None:
         """終了条件は16個の異なる task flag のうち12個を要求する。"""
         task_end = next(
-            condition
-            for condition in _raw()["game_end_conditions"]["win"]
-            if condition["type"] == "FLAGS_SET_AT_LEAST"
+            condition for condition in _raw()["game_end_conditions"]["win"] if condition["type"] == "FLAGS_SET_AT_LEAST"
         )
 
         assert len(task_end["required_flags"]) == 16
@@ -204,17 +191,11 @@ class TestSixteenTaskCopy:
             ("ユラ", "温室", "栽培棚", "燃料庫", "加温系"),
             ("サキ", "観測室", "観測記録", "物資庫", "棚卸し帳"),
         )
-        player_id_by_name = {
-            spawn.name: PlayerId(spawn.player_id)
-            for spawn in runtime.scenario.player_spawns
-        }
+        player_id_by_name = {spawn.name: PlayerId(spawn.player_id) for spawn in runtime.scenario.player_spawns}
 
         for name, *terms in expected:
             prompt = "\n".join(
-                str(message["content"])
-                for message in runtime.build_full_prompt(player_id_by_name[name])[
-                    "messages"
-                ]
+                str(message["content"]) for message in runtime.build_full_prompt(player_id_by_name[name])["messages"]
             )
             assert all(term in prompt for term in terms)
             assert "16 件の点検のうち 12 件" in prompt
@@ -290,6 +271,5 @@ class TestSixteenTaskCopy:
         for obj in retired.values():
             assert obj["interactions"] == []
             assert not any(
-                invitation in obj["description"]
-                for invitation in ("必要がある", "定期的に確かめる", "照合するため")
+                invitation in obj["description"] for invitation in ("必要がある", "定期的に確かめる", "照合するため")
             )

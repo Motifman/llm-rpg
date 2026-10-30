@@ -64,18 +64,14 @@ class InMemoryInteractionCommandRepositoryProvider:
         guard = self._require_active
         facade = CommandContextUnitOfWorkFacade(unit_of_work, context)
         store = unit_of_work.data_store
-        self._spot_graph = cast(
-            ISpotGraphRepository, ScopeBoundRepository(spot_graph, guard)
-        )
+        self._spot_graph = cast(ISpotGraphRepository, ScopeBoundRepository(spot_graph, guard))
         self._spot_interiors = cast(
             ISpotInteriorRepository,
             ScopeBoundRepository(InMemorySpotInteriorRepository(data_store=store), guard),
         )
         self._player_inventories = cast(
             PlayerInventoryRepository,
-            ScopeBoundRepository(
-                InMemoryPlayerInventoryRepository(store, facade), guard
-            ),
+            ScopeBoundRepository(InMemoryPlayerInventoryRepository(store, facade), guard),
         )
         self._player_statuses = cast(
             PlayerStatusRepository,
@@ -85,9 +81,7 @@ class InMemoryInteractionCommandRepositoryProvider:
             ItemRepository,
             ScopeBoundRepository(InMemoryItemRepository(store, facade), guard),
         )
-        self._item_specs = cast(
-            ItemSpecRepository, ScopeBoundRepository(item_specs, guard)
-        )
+        self._item_specs = cast(ItemSpecRepository, ScopeBoundRepository(item_specs, guard))
 
     @property
     def spot_graph(self) -> ISpotGraphRepository:
@@ -147,10 +141,7 @@ class InMemoryInteractionCommandRepositoryProviderFactory:
     ) -> InMemoryInteractionCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "インメモリinteraction providerには"
-                "InMemoryUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("インメモリinteraction providerにはInMemoryUnitOfWorkTransactionAdapterが必要です")
         return InMemoryInteractionCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

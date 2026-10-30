@@ -24,9 +24,7 @@ from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
-_DRILL = (
-    Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 _KUZE = PlayerId(3)
 _ROOMS = (
     "observatory",
@@ -47,25 +45,19 @@ def runtime():
 
 
 def _terminal_spec(runtime) -> ItemSpecId:
-    return ItemSpecId.create(
-        runtime.id_mapper.get_int("item_spec", "control_terminal")
-    )
+    return ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "control_terminal"))
 
 
 def _all_room_lighting(runtime) -> tuple[LightingEnum, ...]:
     graph = runtime._spot_graph_repo.find_graph()
     return tuple(
-        graph.get_spot(
-            SpotId.create(runtime.id_mapper.get_int("spot", spot_name))
-        ).atmosphere.lighting
+        graph.get_spot(SpotId.create(runtime.id_mapper.get_int("spot", spot_name))).atmosphere.lighting
         for spot_name in _ROOMS
     )
 
 
 def _world_cooldown_tick(runtime, action_name: str) -> int | None:
-    action_def = runtime._interaction_service._item_interaction_def(
-        _terminal_spec(runtime), action_name
-    )
+    action_def = runtime._interaction_service._item_interaction_def(_terminal_spec(runtime), action_name)
     assert action_def is not None
     return runtime._interaction_cooldown_store.last_success_tick(
         _KUZE,
@@ -76,9 +68,7 @@ def _world_cooldown_tick(runtime, action_name: str) -> int | None:
 
 def _bulkhead_panel_state(runtime) -> dict[str, object]:
     spot_id = SpotId.create(runtime.id_mapper.get_int("spot", "observatory"))
-    object_id = SpotObjectId.create(
-        runtime.id_mapper.get_int("object", "bulkhead_panel")
-    )
+    object_id = SpotObjectId.create(runtime.id_mapper.get_int("object", "bulkhead_panel"))
     interior = runtime._spot_interior_repo.find_by_spot_id(spot_id)
     assert interior is not None
     panel = interior.get_object(object_id)
@@ -93,9 +83,7 @@ def test_success_event_observes_committed_graph_and_cooldown(runtime) -> None:
     dispatcher = scope_factory._sync_dispatcher
     dispatcher.register_after_commit(
         BaseDomainEvent,
-        lambda _: observations.append(
-            (_all_room_lighting(runtime), _world_cooldown_tick(runtime, "cut_power"))
-        ),
+        lambda _: observations.append((_all_room_lighting(runtime), _world_cooldown_tick(runtime, "cut_power"))),
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
@@ -116,9 +104,7 @@ def test_required_event_failure_rolls_back_graph_cooldown_and_delivery(runtime) 
     dispatcher = scope_factory._sync_dispatcher
     dispatcher.register_required_before_commit(
         BaseDomainEvent,
-        lambda event, context: (_ for _ in ()).throw(
-            RuntimeError("item interaction sync failed")
-        ),
+        lambda event, context: (_ for _ in ()).throw(RuntimeError("item interaction sync failed")),
     )
     dispatcher.register_after_commit(
         BaseDomainEvent,

@@ -30,9 +30,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
@@ -109,9 +107,7 @@ class TestVotingClosesTheMeeting:
 
         assert result.success is False
 
-    def test_vote_tool_disappears_for_the_player_who_already_voted(
-        self, runtime
-    ) -> None:
+    def test_vote_tool_disappears_for_the_player_who_already_voted(self, runtime) -> None:
         """投票済みの本人には vote を出さず、会議で話す手段は残す。
 
         投票先は変更できないため、投票後の vote は選べても必ず
@@ -119,10 +115,7 @@ class TestVotingClosesTheMeeting:
         """
         runtime.cast_vote(_MORI, _KUZE)
 
-        offered = {
-            definition.name
-            for definition in runtime.get_tool_definitions(player_id=_MORI)
-        }
+        offered = {definition.name for definition in runtime.get_tool_definitions(player_id=_MORI)}
 
         assert "vote" not in offered
         assert "speak" in offered
@@ -137,10 +130,7 @@ class TestVotingClosesTheMeeting:
             llm_client=StubLlmClient(None),
         )
 
-        offered = {
-            tool["function"]["name"]
-            for tool in wiring._build_tools_payload(_MORI)
-        }
+        offered = {tool["function"]["name"] for tool in wiring._build_tools_payload(_MORI)}
 
         assert "vote" not in offered
         assert "speak" in offered
@@ -149,10 +139,7 @@ class TestVotingClosesTheMeeting:
         """他人が投票しても、未投票の本人には vote を残す。"""
         runtime.cast_vote(_MORI, _KUZE)
 
-        offered = {
-            definition.name
-            for definition in runtime.get_tool_definitions(player_id=_SENA)
-        }
+        offered = {definition.name for definition in runtime.get_tool_definitions(player_id=_SENA)}
 
         assert "vote" in offered
 
@@ -165,10 +152,7 @@ class TestVotingClosesTheMeeting:
         """全体整合検査では、1人が投票済みでも未投票者の vote を残す。"""
         runtime.cast_vote(_MORI, _KUZE)
 
-        offered = {
-            definition.name
-            for definition in runtime.get_tool_definitions(for_every_player=True)
-        }
+        offered = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
         assert "vote" in offered
 
@@ -223,9 +207,7 @@ class TestVotingProgressIsPublicWithoutRevealingTheTarget:
             "remaining_voter_count": 3,
         }
 
-    def test_voter_does_not_receive_a_duplicate_progress_observation(
-        self, runtime
-    ) -> None:
+    def test_voter_does_not_receive_a_duplicate_progress_observation(self, runtime) -> None:
         """投票した本人はツール結果で知るため、同じ進捗観測を重ねない。"""
         runtime.cast_vote(_MORI, _KUZE)
 
@@ -250,10 +232,7 @@ class TestEjection:
         runtime.cast_vote(_AOI, _KUZE)
         runtime.cast_vote(_KUZE, _MORI)
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(_KUZE)
-            is PlayerOutcomeEnum.EJECTED
-        )
+        assert runtime._player_outcome_registry.get_outcome(_KUZE) is PlayerOutcomeEnum.EJECTED
 
     def test_a_tie_ejects_nobody(self, runtime) -> None:
         """割れたら誰も追放されない (クゼ 2 票・モリ 2 票)。"""
@@ -262,10 +241,7 @@ class TestEjection:
         runtime.cast_vote(_KUZE, _MORI)
         runtime.cast_vote(_AOI, _MORI)
 
-        outcomes = [
-            runtime._player_outcome_registry.get_outcome(p)
-            for p in (_MORI, _SENA, _KUZE, _AOI)
-        ]
+        outcomes = [runtime._player_outcome_registry.get_outcome(p) for p in (_MORI, _SENA, _KUZE, _AOI)]
         assert PlayerOutcomeEnum.EJECTED not in outcomes
 
 
@@ -405,9 +381,7 @@ class TestTheProseMatchesWhatActuallyHappened:
 
         assert "最多票が同数" in self._prose(runtime)
 
-    def test_skips_outnumbering_a_named_target_are_not_called_a_split(
-        self, runtime
-    ) -> None:
+    def test_skips_outnumbering_a_named_target_are_not_called_a_split(self, runtime) -> None:
         """棄権が名指しの最多票以上なら、票割れではなく棄権を理由にする。"""
         runtime.cast_vote(_MORI, _KUZE)
         runtime.cast_vote(_SENA, None)

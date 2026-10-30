@@ -1,6 +1,7 @@
 """
 InMemoryTradeReadModelRepository - TradeReadModelを使用するインメモリ実装
 """
+
 import random
 from copy import deepcopy
 from datetime import datetime, timedelta
@@ -69,7 +70,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=100,
             requested_gold=500,
             status=TradeStatus.ACTIVE,
-            created_at=base_time - timedelta(hours=2)
+            created_at=base_time - timedelta(hours=2),
         )
         self._trades[TradeId(1)] = sword_trade
 
@@ -91,7 +92,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=100,
             requested_gold=1200,
             status=TradeStatus.ACTIVE,
-            created_at=base_time - timedelta(hours=1, minutes=30)
+            created_at=base_time - timedelta(hours=1, minutes=30),
         )
         self._trades[TradeId(2)] = staff_trade
 
@@ -113,7 +114,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=None,
             requested_gold=150,
             status=TradeStatus.ACTIVE,
-            created_at=base_time - timedelta(hours=1)
+            created_at=base_time - timedelta(hours=1),
         )
         self._trades[TradeId(3)] = potion_trade
 
@@ -135,7 +136,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=100,
             requested_gold=5000,
             status=TradeStatus.ACTIVE,
-            created_at=base_time - timedelta(minutes=45)
+            created_at=base_time - timedelta(minutes=45),
         )
         self._trades[TradeId(4)] = rare_armor_trade
 
@@ -157,7 +158,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=100,
             requested_gold=300,
             status=TradeStatus.ACTIVE,
-            created_at=base_time - timedelta(minutes=30)
+            created_at=base_time - timedelta(minutes=30),
         )
         self._trades[TradeId(5)] = shield_trade
 
@@ -179,7 +180,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=100,
             requested_gold=250,
             status=TradeStatus.COMPLETED,
-            created_at=base_time - timedelta(hours=3)
+            created_at=base_time - timedelta(hours=3),
         )
         self._trades[TradeId(6)] = completed_trade
 
@@ -201,7 +202,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=None,
             requested_gold=800,
             status=TradeStatus.COMPLETED,
-            created_at=base_time - timedelta(hours=2, minutes=30)
+            created_at=base_time - timedelta(hours=2, minutes=30),
         )
         self._trades[TradeId(7)] = another_completed_trade
 
@@ -223,7 +224,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=None,
             requested_gold=400,
             status=TradeStatus.CANCELLED,
-            created_at=base_time - timedelta(hours=4)
+            created_at=base_time - timedelta(hours=4),
         )
         self._trades[TradeId(8)] = cancelled_trade
 
@@ -245,7 +246,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=None,
             requested_gold=50,
             status=TradeStatus.ACTIVE,
-            created_at=base_time - timedelta(minutes=15)
+            created_at=base_time - timedelta(minutes=15),
         )
         self._trades[TradeId(9)] = cheap_trade
 
@@ -267,7 +268,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=100,
             requested_gold=15000,
             status=TradeStatus.ACTIVE,
-            created_at=base_time - timedelta(minutes=5)
+            created_at=base_time - timedelta(minutes=5),
         )
         self._trades[TradeId(10)] = epic_trade
 
@@ -290,7 +291,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=100,
             requested_gold=750,
             status=TradeStatus.ACTIVE,
-            created_at=base_time - timedelta(hours=1, minutes=45)
+            created_at=base_time - timedelta(hours=1, minutes=45),
         )
         self._trades[TradeId(11)] = hero_trade_2
 
@@ -312,7 +313,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=100,
             requested_gold=3000,
             status=TradeStatus.ACTIVE,
-            created_at=base_time - timedelta(hours=1, minutes=15)
+            created_at=base_time - timedelta(hours=1, minutes=15),
         )
         self._trades[TradeId(12)] = mage_trade_2
 
@@ -334,7 +335,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=None,
             requested_gold=600,
             status=TradeStatus.COMPLETED,
-            created_at=base_time - timedelta(hours=1, minutes=30)
+            created_at=base_time - timedelta(hours=1, minutes=30),
         )
         self._trades[TradeId(13)] = herbalist_completed
 
@@ -356,7 +357,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=None,
             requested_gold=2500,
             status=TradeStatus.COMPLETED,
-            created_at=base_time - timedelta(hours=2)
+            created_at=base_time - timedelta(hours=2),
         )
         self._trades[TradeId(14)] = hunter_completed
 
@@ -378,17 +379,30 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=100,
             requested_gold=1800,
             status=TradeStatus.CANCELLED,
-            created_at=base_time - timedelta(hours=3, minutes=30)
+            created_at=base_time - timedelta(hours=3, minutes=30),
         )
         self._trades[TradeId(15)] = guardian_cancelled
 
-    def _create_sample_trade(self, trade_id: int, seller_id: int, seller_name: str,
-                           buyer_id: int | None, buyer_name: str | None,
-                           item_instance_id: int, item_name: str, item_quantity: int,
-                           item_type: ItemType, item_rarity: Rarity,
-                           item_description: str, item_equipment_type: EquipmentType | None,
-                           durability_current: int | None, durability_max: int | None,
-                           requested_gold: int, status: TradeStatus, created_at: datetime) -> TradeReadModel:
+    def _create_sample_trade(
+        self,
+        trade_id: int,
+        seller_id: int,
+        seller_name: str,
+        buyer_id: int | None,
+        buyer_name: str | None,
+        item_instance_id: int,
+        item_name: str,
+        item_quantity: int,
+        item_type: ItemType,
+        item_rarity: Rarity,
+        item_description: str,
+        item_equipment_type: EquipmentType | None,
+        durability_current: int | None,
+        durability_max: int | None,
+        requested_gold: int,
+        status: TradeStatus,
+        created_at: datetime,
+    ) -> TradeReadModel:
         """サンプル取引を作成するヘルパーメソッド"""
         return TradeReadModel.create_from_trade_and_item(
             trade_id=TradeId(trade_id),
@@ -407,7 +421,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             durability_max=durability_max,
             requested_gold=TradeRequestedGold(requested_gold),
             status=status,
-            created_at=created_at
+            created_at=created_at,
         )
 
     # Repository基本メソッドの実装
@@ -441,7 +455,9 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         return list(self._trades.values())
 
     # TradeReadModelRepository特有メソッドの実装
-    def find_recent_trades(self, limit: int = 10, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
+    def find_recent_trades(
+        self, limit: int = 10, cursor: TradeCursor | None = None
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """最新の取引を取得（カーソルベースページング）"""
         all_trades = list(self._trades.values())
 
@@ -451,8 +467,9 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         if cursor:
             filtered_trades = []
             for trade in all_trades:
-                if (trade.created_at < cursor.created_at or
-                    (trade.created_at == cursor.created_at and trade.trade_id > cursor.trade_id)):
+                if trade.created_at < cursor.created_at or (
+                    trade.created_at == cursor.created_at and trade.trade_id > cursor.trade_id
+                ):
                     filtered_trades.append(trade)
             all_trades = filtered_trades
 
@@ -463,18 +480,18 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         next_cursor = None
         if len(all_trades) > limit and len(result_trades) > 0:
             last_trade = result_trades[-1]
-            next_cursor = TradeCursor(
-                created_at=last_trade.created_at,
-                trade_id=int(last_trade.trade_id)
-            )
+            next_cursor = TradeCursor(created_at=last_trade.created_at, trade_id=int(last_trade.trade_id))
 
         return result_trades, next_cursor
 
-    def find_trades_for_player(self, player_id: PlayerId, limit: int = 10, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
+    def find_trades_for_player(
+        self, player_id: PlayerId, limit: int = 10, cursor: TradeCursor | None = None
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """プレイヤー宛の取引を取得（カーソルベースページング）"""
         # プレイヤーが関与している取引（出品者または購入者）を検索
         player_trades = [
-            trade for trade in self._trades.values()
+            trade
+            for trade in self._trades.values()
             if trade.seller_id == int(player_id) or trade.buyer_id == int(player_id)
         ]
 
@@ -484,8 +501,9 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         if cursor:
             filtered_trades = []
             for trade in player_trades:
-                if (trade.created_at < cursor.created_at or
-                    (trade.created_at == cursor.created_at and trade.trade_id > cursor.trade_id)):
+                if trade.created_at < cursor.created_at or (
+                    trade.created_at == cursor.created_at and trade.trade_id > cursor.trade_id
+                ):
                     filtered_trades.append(trade)
             player_trades = filtered_trades
 
@@ -496,10 +514,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         next_cursor = None
         if len(player_trades) > limit and len(result_trades) > 0:
             last_trade = result_trades[-1]
-            next_cursor = TradeCursor(
-                created_at=last_trade.created_at,
-                trade_id=int(last_trade.trade_id)
-            )
+            next_cursor = TradeCursor(created_at=last_trade.created_at, trade_id=int(last_trade.trade_id))
 
         return result_trades, next_cursor
 
@@ -511,9 +526,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
     ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """出品者の ACTIVE 取引のみを取得（カーソルベースページング）"""
         selling_trades = [
-            trade
-            for trade in self._trades.values()
-            if trade.seller_id == int(seller_id) and trade.is_active
+            trade for trade in self._trades.values() if trade.seller_id == int(seller_id) and trade.is_active
         ]
 
         _sort_read_models_newest_first_tie_break_trade_id(selling_trades)
@@ -521,12 +534,8 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         if cursor:
             filtered_trades = []
             for trade in selling_trades:
-                if (
-                    trade.created_at < cursor.created_at
-                    or (
-                        trade.created_at == cursor.created_at
-                        and trade.trade_id > cursor.trade_id
-                    )
+                if trade.created_at < cursor.created_at or (
+                    trade.created_at == cursor.created_at and trade.trade_id > cursor.trade_id
                 ):
                     filtered_trades.append(trade)
             selling_trades = filtered_trades
@@ -543,7 +552,9 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
 
         return result_trades, next_cursor
 
-    def find_active_trades(self, limit: int = 50, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
+    def find_active_trades(
+        self, limit: int = 50, cursor: TradeCursor | None = None
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """アクティブな取引を取得（カーソルベースページング）"""
         active_trades = [trade for trade in self._trades.values() if trade.is_active]
 
@@ -553,8 +564,9 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         if cursor:
             filtered_trades = []
             for trade in active_trades:
-                if (trade.created_at < cursor.created_at or
-                    (trade.created_at == cursor.created_at and trade.trade_id > cursor.trade_id)):
+                if trade.created_at < cursor.created_at or (
+                    trade.created_at == cursor.created_at and trade.trade_id > cursor.trade_id
+                ):
                     filtered_trades.append(trade)
             active_trades = filtered_trades
 
@@ -565,14 +577,13 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         next_cursor = None
         if len(active_trades) > limit and len(result_trades) > 0:
             last_trade = result_trades[-1]
-            next_cursor = TradeCursor(
-                created_at=last_trade.created_at,
-                trade_id=int(last_trade.trade_id)
-            )
+            next_cursor = TradeCursor(created_at=last_trade.created_at, trade_id=int(last_trade.trade_id))
 
         return result_trades, next_cursor
 
-    def search_trades(self, filter: TradeSearchFilter, limit: int = 20, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
+    def search_trades(
+        self, filter: TradeSearchFilter, limit: int = 20, cursor: TradeCursor | None = None
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """フィルタ条件で取引を検索（カーソルベースページング）"""
         all_trades = list(self._trades.values())
 
@@ -588,8 +599,9 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         if cursor:
             cursor_filtered_trades = []
             for trade in filtered_trades:
-                if (trade.created_at < cursor.created_at or
-                    (trade.created_at == cursor.created_at and trade.trade_id > cursor.trade_id)):
+                if trade.created_at < cursor.created_at or (
+                    trade.created_at == cursor.created_at and trade.trade_id > cursor.trade_id
+                ):
                     cursor_filtered_trades.append(trade)
             filtered_trades = cursor_filtered_trades
 
@@ -600,10 +612,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         next_cursor = None
         if len(filtered_trades) > limit and len(result_trades) > 0:
             last_trade = result_trades[-1]
-            next_cursor = TradeCursor(
-                created_at=last_trade.created_at,
-                trade_id=int(last_trade.trade_id)
-            )
+            next_cursor = TradeCursor(created_at=last_trade.created_at, trade_id=int(last_trade.trade_id))
 
         return result_trades, next_cursor
 
@@ -626,7 +635,9 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
 
         # 装備タイプフィルタ
         if filter.equipment_types:
-            if trade.item_equipment_type is None or trade.item_equipment_type not in [et.value for et in filter.equipment_types]:
+            if trade.item_equipment_type is None or trade.item_equipment_type not in [
+                et.value for et in filter.equipment_types
+            ]:
                 return False
 
         # 価格範囲フィルタ

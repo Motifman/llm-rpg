@@ -1,6 +1,5 @@
 """InMemoryMonsterTemplateRepository - MonsterTemplate のインメモリ実装"""
 
-
 from ai_rpg_world.domain.monster.repository.monster_repository import (
     MonsterTemplateRepository,
     MonsterTemplateWriter,

@@ -158,10 +158,7 @@ class SqliteTradeCommandRepositoryProviderFactory:
     ) -> SqliteTradeCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, SqliteUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "SQLite取引repository providerには"
-                "SqliteUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("SQLite取引repository providerにはSqliteUnitOfWorkTransactionAdapterが必要です")
         return SqliteTradeCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

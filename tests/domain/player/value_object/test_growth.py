@@ -53,7 +53,9 @@ class TestGrowth:
         required_exp = self.exp_table.get_required_exp_for_level(5)
         insufficient_exp = required_exp - 1
 
-        with pytest.raises(GrowthValidationException, match=f"total_exp {insufficient_exp} is insufficient for level 5"):
+        with pytest.raises(
+            GrowthValidationException, match=f"total_exp {insufficient_exp} is insufficient for level 5"
+        ):
             Growth(level=5, total_exp=insufficient_exp, exp_table=self.exp_table)
 
     def test_gain_exp_zero_returns_same_growth_no_level_up(self):
@@ -104,7 +106,7 @@ class TestGrowth:
         """一度に複数レベルアップする場合"""
         growth = Growth(level=1, total_exp=0, exp_table=self.exp_table)
 
-        # レベル2: 100, レベル3: 282, 合計382経験値が必要
+        # 累積282でレベル3、累積519でレベル4に到達する
         # 400経験値を獲得
         new_growth, leveled_up = growth.gain_exp(400)
 
@@ -112,19 +114,35 @@ class TestGrowth:
         assert new_growth.total_exp == 400
         assert leveled_up
 
-    def test_gain_exp_from_mid_level(self):
-        """レベル2から経験値を獲得する場合"""
-        # レベル2の状態からスタート
-        level2_exp = self.exp_table.get_required_exp_for_level(2)  # 100
-        growth = Growth(level=2, total_exp=level2_exp, exp_table=self.exp_table)
+    @pytest.mark.parametrize(
+        "curve_values, level2_exp, additional_exp",
+        [
+            pytest.param((100.0, 1.5, 0.0), 100, 182, id="original_default_curve"),
+            pytest.param((200.0, 1.0, 0.5), 330, 170, id="nondefault_curve"),
+        ],
+    )
+    def test_gain_exp_from_mid_level(self, curve_values, level2_exp, additional_exp):
+        """非初期状態からの加算は指定曲線を保つ新値を返し、元の全項目を変えない。"""
+        exp_table = ExpTable(*curve_values)
+        growth = Growth(level=2, total_exp=level2_exp, exp_table=exp_table)
 
-        # さらに182経験値獲得（レベル3に到達する分）
-        additional_exp = 182
         new_growth, leveled_up = growth.gain_exp(additional_exp)
 
         assert new_growth.level == 3
         assert new_growth.total_exp == level2_exp + additional_exp
         assert leveled_up
+        assert new_growth is not growth
+        assert (growth.level, growth.total_exp) == (2, level2_exp)
+        assert (
+            growth.exp_table.base_exp,
+            growth.exp_table.exponent,
+            growth.exp_table.level_offset,
+        ) == curve_values
+        assert (
+            new_growth.exp_table.base_exp,
+            new_growth.exp_table.exponent,
+            new_growth.exp_table.level_offset,
+        ) == curve_values
 
     def test_gain_exp_negative_amount_raises_error(self):
         """負の経験値を獲得しようとした場合エラーが発生すること"""

@@ -115,9 +115,7 @@ def _listing_cursor_sql(cursor: ListingCursor | None) -> tuple[str, list[Any]]:
 
 
 class SqliteGlobalMarketListingReadModelRepository(GlobalMarketListingReadModelRepository):
-    def __init__(
-        self, connection: sqlite3.Connection, *, _commits_after_write: bool
-    ) -> None:
+    def __init__(self, connection: sqlite3.Connection, *, _commits_after_write: bool) -> None:
         self._conn = connection
         self._commits_after_write = _commits_after_write
         if connection.row_factory is not sqlite3.Row:
@@ -125,15 +123,11 @@ class SqliteGlobalMarketListingReadModelRepository(GlobalMarketListingReadModelR
         init_global_market_listing_read_model_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteGlobalMarketListingReadModelRepository:
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteGlobalMarketListingReadModelRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteGlobalMarketListingReadModelRepository:
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteGlobalMarketListingReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
     def find_by_id(self, entity_id: TradeId) -> GlobalMarketListingReadModel | None:
@@ -193,9 +187,7 @@ class SqliteGlobalMarketListingReadModelRepository(GlobalMarketListingReadModelR
         return cur.rowcount > 0
 
     def find_all(self) -> list[GlobalMarketListingReadModel]:
-        cur = self._conn.execute(
-            "SELECT * FROM global_market_listing_read_models ORDER BY trade_id ASC"
-        )
+        cur = self._conn.execute("SELECT * FROM global_market_listing_read_models ORDER BY trade_id ASC")
         return [_row_to_model(r) for r in cur.fetchall()]
 
     def find_listings(

@@ -14,13 +14,7 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
-_MODULE_PATH = (
-    Path(__file__).resolve().parents[3]
-    / ".claude"
-    / "skills"
-    / "trace-analysis"
-    / "extract_metrics.py"
-)
+_MODULE_PATH = Path(__file__).resolve().parents[3] / ".claude" / "skills" / "trace-analysis" / "extract_metrics.py"
 _spec = importlib.util.spec_from_file_location("extract_metrics", _MODULE_PATH)
 assert _spec is not None and _spec.loader is not None
 extract_metrics = importlib.util.module_from_spec(_spec)
@@ -79,9 +73,7 @@ class TestTheRescueCountsAreReportedWithTheirOutcome:
 
     def test_an_unavailable_judgment_is_counted_apart(self) -> None:
         """判断を得られなかった件数は別に数える。接続を直す話になるので。"""
-        metrics = _metrics(
-            [_judgment(accepted=False, unavailable_reason="TYPED_JUDGMENT_RATE_LIMITED")]
-        )
+        metrics = _metrics([_judgment(accepted=False, unavailable_reason="TYPED_JUDGMENT_RATE_LIMITED")])
 
         assert metrics["unavailable"] == 1
         assert metrics["below_threshold"] == 0

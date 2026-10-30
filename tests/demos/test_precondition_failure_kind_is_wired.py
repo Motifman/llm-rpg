@@ -53,9 +53,7 @@ def _classified_kinds(loaded) -> dict:
         for obj in interior.objects:
             for interaction in obj.interactions:
                 for condition in interaction.preconditions:
-                    kind = classify_precondition_failure(
-                        condition, bindings=loaded.reactive_object_state_bindings
-                    )
+                    kind = classify_precondition_failure(condition, bindings=loaded.reactive_object_state_bindings)
                     counts[kind] = counts.get(kind, 0) + 1
     return counts
 
@@ -72,9 +70,7 @@ class TestTheDeclarationsReachTheClassifier:
         """
         loaded = _load(name)
 
-        assert loaded.reactive_object_state_bindings, (
-            f"{name} が reactive_object_state_bindings を宣言していません。"
-        )
+        assert loaded.reactive_object_state_bindings, f"{name} が reactive_object_state_bindings を宣言していません。"
 
     @pytest.mark.parametrize("name", _TIME_RECOVERING_SCENARIOS)
     def test_time_recovering_conditions_are_recognised(self, name: str) -> None:
@@ -143,9 +139,7 @@ class TestTheExecutorReceivesTheBindings:
             reactive_object_state_bindings=loaded.reactive_object_state_bindings,
         )
 
-        assert executor._reactive_object_state_bindings == (
-            loaded.reactive_object_state_bindings
-        )
+        assert executor._reactive_object_state_bindings == (loaded.reactive_object_state_bindings)
 
 
 class TestTheAuthorsWordingNoLongerDecides:
@@ -168,12 +162,9 @@ class TestTheAuthorsWordingNoLongerDecides:
             for interaction in obj.interactions
             for condition in interaction.preconditions
             if condition.condition_type is InteractionConditionTypeEnum.OBJECT_STATE
-            and classify_precondition_failure(condition, bindings=bindings)
-            is PreconditionFailureKind.TIME_RECOVERING
+            and classify_precondition_failure(condition, bindings=bindings) is PreconditionFailureKind.TIME_RECOVERING
         )
 
         rewritten = dataclasses.replace(target, failure_message="ぜんぜん違う言い方。")
 
-        assert classify_precondition_failure(rewritten, bindings=bindings) is (
-            PreconditionFailureKind.TIME_RECOVERING
-        )
+        assert classify_precondition_failure(rewritten, bindings=bindings) is (PreconditionFailureKind.TIME_RECOVERING)

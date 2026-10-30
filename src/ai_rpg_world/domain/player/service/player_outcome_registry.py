@@ -103,7 +103,9 @@ class PlayerOutcomeRegistry:
             except Exception:
                 _logger.exception(
                     "outcome callback failed for player_id=%s (%s → %s)",
-                    int(player_id), old_outcome.value, new_outcome.value,
+                    int(player_id),
+                    old_outcome.value,
+                    new_outcome.value,
                 )
 
     def all_resolved(self) -> bool:
@@ -115,19 +117,13 @@ class PlayerOutcomeRegistry:
 
     def unresolved_player_ids(self) -> list[PlayerId]:
         """まだ UNRESOLVED のプレイヤー ID のリスト。"""
-        return [
-            PlayerId(pid)
-            for pid, o in self._outcomes.items()
-            if o is PlayerOutcomeEnum.UNRESOLVED
-        ]
+        return [PlayerId(pid) for pid, o in self._outcomes.items() if o is PlayerOutcomeEnum.UNRESOLVED]
 
     def snapshot(self) -> dict[int, PlayerOutcomeEnum]:
         """全プレイヤーの現在 outcome を不変な dict として返す (デバッグ・ログ用)。"""
         return dict(self._outcomes)
 
-    def replace_all(
-        self, outcomes: Mapping[PlayerId, PlayerOutcomeEnum]
-    ) -> None:
+    def replace_all(self, outcomes: Mapping[PlayerId, PlayerOutcomeEnum]) -> None:
         """同じ player 集合の outcome を callback 無しで一括置換する。
 
         snapshot 復元は過去の確定を新しい出来事として通知しない。部分的な
@@ -137,13 +133,9 @@ class PlayerOutcomeRegistry:
         replacement: dict[int, PlayerOutcomeEnum] = {}
         for player_id, outcome in outcomes.items():
             if not isinstance(player_id, PlayerId):
-                raise PlayerOutcomeRegistryValidationException(
-                    f"player_id must be PlayerId: {player_id!r}"
-                )
+                raise PlayerOutcomeRegistryValidationException(f"player_id must be PlayerId: {player_id!r}")
             if not isinstance(outcome, PlayerOutcomeEnum):
-                raise PlayerOutcomeRegistryValidationException(
-                    f"outcome must be PlayerOutcomeEnum: {outcome!r}"
-                )
+                raise PlayerOutcomeRegistryValidationException(f"outcome must be PlayerOutcomeEnum: {outcome!r}")
             replacement[int(player_id)] = outcome
 
         current_ids = set(self._outcomes)
@@ -152,8 +144,7 @@ class PlayerOutcomeRegistry:
             missing = sorted(current_ids - replacement_ids)
             extra = sorted(replacement_ids - current_ids)
             raise PlayerOutcomeRegistryValidationException(
-                "player outcome replacement set mismatch: "
-                f"missing={missing!r}, extra={extra!r}"
+                f"player outcome replacement set mismatch: missing={missing!r}, extra={extra!r}"
             )
 
         self._outcomes = replacement

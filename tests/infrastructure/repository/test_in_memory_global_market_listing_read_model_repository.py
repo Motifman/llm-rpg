@@ -1,6 +1,7 @@
 """
 InMemoryGlobalMarketListingReadModelRepositoryのテスト
 """
+
 from datetime import datetime, timedelta
 
 import pytest
@@ -71,7 +72,7 @@ class TestInMemoryGlobalMarketListingReadModelRepository:
             created_at=datetime.now(),
             durability_current=100,
             durability_max=100,
-            requested_gold=1000
+            requested_gold=1000,
         )
 
         # 保存
@@ -235,9 +236,7 @@ class TestInMemoryGlobalMarketListingReadModelRepository:
         """複数のフィルタ条件（ステータス含む）を組み合わせた検索ができる"""
         # EQUIPMENTタイプで、価格が1000以上、ACTIVEステータスの出品を検索
         filter_condition = TradeSearchFilter(
-            item_types=[ItemType.EQUIPMENT],
-            min_price=1000,
-            statuses=[TradeStatus.ACTIVE]
+            item_types=[ItemType.EQUIPMENT], min_price=1000, statuses=[TradeStatus.ACTIVE]
         )
         listings, cursor = self.repository.find_listings(filter_condition, limit=20)
 
@@ -276,14 +275,10 @@ class TestInMemoryGlobalMarketListingReadModelRepository:
         # 1ページ目の最後の出品より2ページ目の最初の出品の方が古いことを確認
         assert first_page[-1].created_at >= second_page[0].created_at
 
-
     def test_find_listings_combined_filters(self):
         """複数のフィルタ条件を組み合わせた検索ができる"""
         # EQUIPMENTタイプで、価格が1000以上の出品を検索
-        filter_condition = TradeSearchFilter(
-            item_types=[ItemType.EQUIPMENT],
-            min_price=1000
-        )
+        filter_condition = TradeSearchFilter(item_types=[ItemType.EQUIPMENT], min_price=1000)
         listings, cursor = self.repository.find_listings(filter_condition, limit=20)
 
         # 全ての出品が条件を満たしていることを確認
@@ -322,10 +317,7 @@ class TestInMemoryGlobalMarketListingReadModelRepository:
     def test_count_listings_combined_filters(self):
         """複数のフィルタ条件を組み合わせたカウントができる"""
         # EQUIPMENTタイプで、価格が1000以上の出品をカウント
-        filter_condition = TradeSearchFilter(
-            item_types=[ItemType.EQUIPMENT],
-            min_price=1000
-        )
+        filter_condition = TradeSearchFilter(item_types=[ItemType.EQUIPMENT], min_price=1000)
         count = self.repository.count_listings(filter_condition)
 
         # 対応する出品を取得して比較

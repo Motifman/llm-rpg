@@ -12,8 +12,8 @@ from enum import Enum
 
 
 class NeedType(Enum):
-    HUNGER = "HUNGER"      # 空腹: tick経過で増加、食事で回復
-    FATIGUE = "FATIGUE"    # 疲労: tick経過・行動で増加、睡眠で回復
+    HUNGER = "HUNGER"  # 空腹: tick経過で増加、食事で回復
+    FATIGUE = "FATIGUE"  # 疲労: tick経過・行動で増加、睡眠で回復
 
 
 #: 欲求 → 表示上の呼び名。**全件持つ (網羅テストが縛る)。**
@@ -35,16 +35,14 @@ class AgentNeed:
     """単一の欲求の値オブジェクト。"""
 
     need_type: NeedType
-    value: int       # 0 = 完全に満たされている, max_value = 限界
+    value: int  # 0 = 完全に満たされている, max_value = 限界
     max_value: int
 
     def __post_init__(self) -> None:
         if self.max_value <= 0:
             raise ValueError(f"max_value must be positive: {self.max_value}")
         if self.value < 0 or self.value > self.max_value:
-            raise ValueError(
-                f"value must be 0..{self.max_value}: {self.value}"
-            )
+            raise ValueError(f"value must be 0..{self.max_value}: {self.value}")
 
     @classmethod
     def create(cls, need_type: NeedType, value: int, max_value: int) -> AgentNeed:

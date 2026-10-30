@@ -30,9 +30,7 @@ class TestReadTickLoopConfig:
         enabled, _ = _read_tick_loop_config()
         assert enabled is False
 
-    def test_invalid_float_string_falls_back(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_invalid_float_string_falls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """float() で raise する文字列は default に fallback。"""
         monkeypatch.setenv("SPOT_GRAPH_TICK_INTERVAL_SEC", "not_a_number")
         _, interval = _read_tick_loop_config()
@@ -50,17 +48,13 @@ class TestReadTickLoopConfig:
         _, interval = _read_tick_loop_config()
         assert interval == _DEFAULT_TICK_INTERVAL_SEC
 
-    def test_positive_infinity_falls_back(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_positive_infinity_falls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """+inf は default に fallback。"""
         monkeypatch.setenv("SPOT_GRAPH_TICK_INTERVAL_SEC", "inf")
         _, interval = _read_tick_loop_config()
         assert interval == _DEFAULT_TICK_INTERVAL_SEC
 
-    def test_valid_value_passes_through(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_valid_value_passes_through(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """有効な値はそのまま使われる。"""
         monkeypatch.setenv("SPOT_GRAPH_TICK_INTERVAL_SEC", "2.5")
         _, interval = _read_tick_loop_config()

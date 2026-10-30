@@ -212,6 +212,8 @@ class TestSkillRecipientStrategySupports:
 
     def test_supports_returns_false_for_unknown_event(self, strategy):
         """未知のイベントでは False"""
+
         class UnknownEvent:
             pass
+
         assert strategy.supports(UnknownEvent()) is False

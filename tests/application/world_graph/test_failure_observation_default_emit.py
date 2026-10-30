@@ -30,7 +30,7 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 class TestEventCarriesFailureReason:
     """`SpotObjectInteractionFailedEvent.failure_reason` を保持できる。"""
 
-    def test_default_None(self) -> None:
+    def test_default_none(self) -> None:
         ev = SpotObjectInteractionFailedEvent.create(
             aggregate_id=SpotGraphId.create(1),
             aggregate_type="SpotGraphAggregate",
@@ -68,6 +68,7 @@ class TestFormatterAutoComposesProse:
         from ai_rpg_world.application.observation.services.formatters._spot_graph_object_handler import (
             SpotGraphObjectHandler,
         )
+
         ctx = MagicMock()
         ctx.spot_graph_repository = None
         h = SpotGraphObjectHandler.__new__(SpotGraphObjectHandler)
@@ -252,20 +253,31 @@ class TestServiceDedupThrottle:
 
         obj_id = SpotObjectId.create(100)
         obj = SpotObject(
-            object_id=obj_id, name="狼煙台", description="d",
-            object_type=SpotObjectTypeEnum.OTHER, state={}, interactions=(),
+            object_id=obj_id,
+            name="狼煙台",
+            description="d",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={},
+            interactions=(),
             is_visible=True,
         )
         interior = SpotInterior(
-            sub_locations=(), objects=(obj,),
-            ground_items=(), discoverable_items=(),
+            sub_locations=(),
+            objects=(obj,),
+            ground_items=(),
+            discoverable_items=(),
         )
         graph = MagicMock()
         graph.graph_id = SpotGraphId.create(1)
         for _ in range(3):
             service._maybe_emit_failure_observation(
-                interior=interior, object_id=obj_id, action_name="x",
-                entity_id=EntityId.create(1), spot_id=SpotId.create(1),
-                graph=graph, failure_reason="r", current_tick=None,
+                interior=interior,
+                object_id=obj_id,
+                action_name="x",
+                entity_id=EntityId.create(1),
+                spot_id=SpotId.create(1),
+                graph=graph,
+                failure_reason="r",
+                current_tick=None,
             )
         assert service._event_publisher.publish_all.call_count == 3

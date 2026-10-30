@@ -60,11 +60,17 @@ _PLAYER_TRADE_TOOLS = frozenset({"trade_offer", "trade_accept", "trade_decline"}
 #: 出したり消したりすると、エージェントから見て世界の可能性が揺れる。板の
 #: 手前まで来ているのに選択肢に無い、という形も生まれる。同席は実行時の失敗
 #: (`MARKET_BOARD_NOT_HERE`) として返す — 商人と同じ流儀。
-_MARKET_TOOLS = frozenset({
-    "market_view",
-    "market_list_item", "market_buy", "market_reprice", "market_cancel",
-    "market_bid", "market_sell",
-})
+_MARKET_TOOLS = frozenset(
+    {
+        "market_view",
+        "market_list_item",
+        "market_buy",
+        "market_reprice",
+        "market_cancel",
+        "market_bid",
+        "market_sell",
+    }
+)
 
 #: 会議機構を宣言したシナリオでだけ出すツール。
 #:
@@ -89,7 +95,7 @@ _MEETING_TOOLS = frozenset({"vote", "report_body"})
 #:
 #: 蘇生の無い世界 (`grace_ticks: 0`) は、シナリオが `disabled_tools` で
 #: 落とす。engine 側でここから外すと、蘇生のある世界を壊す。
-PHASE_COMMON_TOOLS = frozenset({"speak", "listen", "wait", "tend_to_player"})
+PHASE_COMMON_TOOLS = frozenset({"speak", "listen", "wait", "tend_to_player", "sns_read", "sns_publish"})
 
 #: 死亡した本人に出してよいツール。フェーズの判断と重ねて使う。
 #:
@@ -103,14 +109,11 @@ DEPARTED_TOOLS = frozenset({"speak", "travel_to", "interact", "listen", "wait"})
 #:
 #: ``listen`` と ``tend_to_player`` は状態やシナリオで落ちうるため含めない。
 #: 状態依存の名前をここへ混ぜると、一つ消えただけで後続の長い定義すべてが
-#: プレフィックスキャッシュから外れる。spot / memory という定義元を越えた
+#: プレフィックスキャッシュから外れる。定義元を越えた
 #: 最終順序なので、呼び出し側へ同じ列を書き写さない。
 ALWAYS_PRESENT_TOOL_ORDER = (
     "wait",
     "speak",
-    "memo_add",
-    "memo_list",
-    "memo_done",
 )
 
 #: 常在ブロック以後で、状態により出入りする既知ツールの順序。
@@ -140,6 +143,8 @@ _CONDITIONAL_TOOL_ORDER = (
     "market_sell",
     "report_body",
     "vote",
+    "sns_read",
+    "sns_publish",
 )
 
 _PAYLOAD_TOOL_ORDER = ALWAYS_PRESENT_TOOL_ORDER + _CONDITIONAL_TOOL_ORDER
@@ -171,6 +176,7 @@ class ToolExposure:
     merchants_declared: bool = False
     player_trade_declared: bool = False
     market_declared: bool = False
+    public_sns_declared: bool = False
 
     @classmethod
     def from_scenario(cls, scenario: Any, *, meeting_declared: bool) -> ToolExposure:
@@ -187,21 +193,21 @@ class ToolExposure:
             # 緑のまま通る**。「宣言したつもりが効いていない」を作るのは
             # この PR が直している穴そのもの。
             raise TypeError(
-                "scenario.disabled_tools は tuple / list / set で渡してください: "
-                f"{type(disabled).__name__}"
+                f"scenario.disabled_tools は tuple / list / set で渡してください: {type(disabled).__name__}"
             )
         return cls(
             disabled_by_scenario=frozenset(disabled),
             meeting_declared=bool(meeting_declared),
             merchants_declared=bool(getattr(scenario, "merchants", ()) or ()),
-            player_trade_declared=bool(
-                getattr(scenario, "player_trade_enabled", False)
-            ),
+            player_trade_declared=bool(getattr(scenario, "player_trade_enabled", False)),
             market_declared=getattr(scenario, "market", None) is not None,
+            public_sns_declared=bool(getattr(scenario, "public_sns_enabled", False)),
         )
 
     def is_exposed(self, tool_name: str) -> bool:
         """この世界に ``tool_name`` が存在するか。"""
+        if tool_name in {"sns_read", "sns_publish"} and not self.public_sns_declared:
+            return False
         if tool_name in self.disabled_by_scenario:
             return False
         if tool_name in _MEETING_TOOLS and not self.meeting_declared:
@@ -250,18 +256,14 @@ class ToolExposure:
         既定の入口はこちら。
         """
         exposed = [
-            name
-            for name in names
-            if self.is_exposed(name)
-            and (not departed or self.is_available_to_departed(name))
+            name for name in names if self.is_exposed(name) and (not departed or self.is_available_to_departed(name))
         ]
         return (
             tuple(n for n in exposed if self.is_phase_common(n)),
             tuple(
                 n
                 for n in exposed
-                if self.is_available_in_phase(n, in_meeting=in_meeting)
-                and not (n == "vote" and voting_completed)
+                if self.is_available_in_phase(n, in_meeting=in_meeting) and not (n == "vote" and voting_completed)
             ),
         )
 
@@ -278,8 +280,7 @@ class ToolExposure:
         死者の書き分けに使うための問いなので。
         """
         return cls.is_available_to_departed(tool_name) and (
-            cls.is_phase_common(tool_name)
-            or cls.is_available_in_phase(tool_name, in_meeting=in_meeting)
+            cls.is_phase_common(tool_name) or cls.is_available_in_phase(tool_name, in_meeting=in_meeting)
         )
 
     @staticmethod
@@ -296,7 +297,7 @@ class ToolExposure:
         入れ替わるのは末尾だけにしたい (先頭がプレフィックスキャッシュに
         残る)。共通と固有を 1 つの判定に混ぜると、この並びが崩れる。
 
-        ``memo_add`` などの記憶ツールは実験設定から別経路で追加され、
+        ``episode_recall`` などの記憶ツールは実験設定から別経路で追加され、
         ``split_for_phase`` を通らない。そのため、このメソッドが ``False`` を
         返しても、記憶ツールを有効にした実際の会議 payload には残る。
         """

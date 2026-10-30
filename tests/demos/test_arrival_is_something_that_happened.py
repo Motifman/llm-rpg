@@ -28,10 +28,7 @@ import pytest
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_RACE = (
-    pathlib.Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "offering_race_v2.json"
-)
+_RACE = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "offering_race_v2.json"
 _GAREN = PlayerId(1)
 
 
@@ -131,9 +128,7 @@ class TestGoingWhereYouAlreadyAreIsNotAFailure:
 
         assert target.spot_id == race.id_mapper.get_int("spot", "festival_square")
 
-    def test_the_current_spot_is_not_advertised_as_a_choice(
-        self, race: Any
-    ) -> None:
+    def test_the_current_spot_is_not_advertised_as_a_choice(self, race: Any) -> None:
         """現在地は移動先の候補としてプロンプトに出さない (**負の対照**)。
 
         救済のための別名であって、選択肢を増やす意図ではない。出すと
@@ -141,10 +136,7 @@ class TestGoingWhereYouAlreadyAreIsNotAFailure:
         """
         text = race.build_full_prompt(_GAREN)["messages"][-1]["content"]
 
-        connections = [
-            line for line in text.splitlines() if line.strip().startswith("- ")
-            and "→" in line
-        ]
+        connections = [line for line in text.splitlines() if line.strip().startswith("- ") and "→" in line]
 
         assert connections, "接続先の行が無い (検査が空振りする)"
         assert not any("祭りの広場" in line for line in connections), connections

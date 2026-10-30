@@ -65,8 +65,6 @@ _LIGHTING_LABELS: dict[str, str] = {
 }
 
 
-
-
 #: 網羅テストが見る (enum, 表) の組。**表を足したらここにも足す。**
 #:
 #: `world_vocabulary.DISPLAY_TABLES` と同じ形。あちらは「暗い」、こちらは
@@ -145,9 +143,7 @@ def _time_of_day(
     return f"{label}{suffix}" if label else None
 
 
-def _weather(
-    cond: InteractionCondition, _items: Any, _objstate: Any, _phase_label: Any, *, suffix: str
-) -> str | None:
+def _weather(cond: InteractionCondition, _items: Any, _objstate: Any, _phase_label: Any, *, suffix: str) -> str | None:
     if not cond.required_weather_type:
         return None
     label = label_weather_type(cond.required_weather_type)
@@ -156,9 +152,7 @@ def _weather(
     return f"{label}{suffix}" if label else None
 
 
-def _lighting(
-    cond: InteractionCondition, _items: Any, _objstate: Any, _phase_label: Any, *, suffix: str
-) -> str | None:
+def _lighting(cond: InteractionCondition, _items: Any, _objstate: Any, _phase_label: Any, *, suffix: str) -> str | None:
     if not cond.required_lighting:
         return None
     label = label_lighting(cond.required_lighting)
@@ -186,9 +180,7 @@ def _object_state_int(
     _phase_label: Any,
 ) -> str | None:
     text: str | None = (
-        object_state_requirement_text_resolver(cond)
-        if object_state_requirement_text_resolver is not None
-        else None
+        object_state_requirement_text_resolver(cond) if object_state_requirement_text_resolver is not None else None
     )
     if text:
         return text
@@ -208,16 +200,11 @@ def _object_state_int(
 #: `test_interaction_condition_hint_table.py` が落ちる。
 #: 否定専用の種別 → 対になる肯定側の種別。表の組み立てにだけ使う。
 _LEGACY_NEGATED_PAIRS = {
-    InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT:
-        InteractionConditionTypeEnum.TIME_OF_DAY_IS,
-    InteractionConditionTypeEnum.WEATHER_IS_NOT:
-        InteractionConditionTypeEnum.WEATHER_IS,
-    InteractionConditionTypeEnum.SPOT_LIGHTING_IS_NOT:
-        InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
-    InteractionConditionTypeEnum.AT_SPOT_IS_NOT:
-        InteractionConditionTypeEnum.AT_SPOT_IS,
-    InteractionConditionTypeEnum.TARGET_HAS_NO_ITEM:
-        InteractionConditionTypeEnum.TARGET_HAS_ITEM,
+    InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT: InteractionConditionTypeEnum.TIME_OF_DAY_IS,
+    InteractionConditionTypeEnum.WEATHER_IS_NOT: InteractionConditionTypeEnum.WEATHER_IS,
+    InteractionConditionTypeEnum.SPOT_LIGHTING_IS_NOT: InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
+    InteractionConditionTypeEnum.AT_SPOT_IS_NOT: InteractionConditionTypeEnum.AT_SPOT_IS,
+    InteractionConditionTypeEnum.TARGET_HAS_NO_ITEM: InteractionConditionTypeEnum.TARGET_HAS_ITEM,
 }
 
 _HINT_RENDERERS: dict[InteractionConditionTypeEnum, tuple[Any, Any]] = {
@@ -258,16 +245,24 @@ for _legacy, _base in _LEGACY_NEGATED_PAIRS.items():
 
 
 def required_parameter_hints(interaction: InteractionDef) -> tuple[str, ...]:
-    """effect 宣言が必須にする interaction parameter を表示用ヒントにする。
+    """前提条件と effect が実行時に parameters から読むキーを表示用ヒントにする。
 
-    ``WRITE_PLAYER_TEXT`` の実行側と同じく ``text_param_key`` の既定値は
-    ``text``。同じキーを要求する effect が複数あっても表示は一度にする。
+    ``PUZZLE_INPUT_MATCH`` は ``puzzle_input_key``、``WRITE_PLAYER_TEXT`` は
+    ``text_param_key`` (既定は ``text``) を読む。同じキーを複数が要求しても
+    表示は一度にする。
     """
+    keys: list[Any] = [
+        cond.puzzle_input_key
+        for cond in interaction.preconditions
+        if cond.condition_type == InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH
+    ]
+    keys += [
+        effect.parameters.get("text_param_key", "text")
+        for effect in interaction.effects
+        if effect.effect_type == InteractionEffectTypeEnum.WRITE_PLAYER_TEXT
+    ]
     hints: list[str] = []
-    for effect in interaction.effects:
-        if effect.effect_type != InteractionEffectTypeEnum.WRITE_PLAYER_TEXT:
-            continue
-        raw_key = effect.parameters.get("text_param_key", "text")
+    for raw_key in keys:
         if not isinstance(raw_key, str) or not raw_key.strip():
             continue
         hint = f"{quote_tool_argument(raw_key.strip())} が要る"

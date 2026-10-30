@@ -98,3 +98,6 @@ class TestRequiresReadWithStateCondition:
         # 読んだ + state条件OK → 詳細
         read_obj = obj.with_detail_read(1)
         assert "秘密のメモ" in read_obj.resolved_description(frozenset(), viewer_entity_id=1)
+        for state in ({"unlocked": False}, {}):
+            locked = read_obj.with_state(state)
+            assert locked.resolved_description(frozenset(), viewer_entity_id=1) == "鍵のかかった日記がある。"

@@ -49,9 +49,7 @@ def test_each_tick_records_all_spot_occupancies_and_player_travel_totals() -> No
     assert sum(row["player_count"] for row in metrics[-1]["spot_occupancy"]) == 8
     assert metrics[0]["cumulative_travel_ticks_by_player"]["1"] == 1
     assert metrics[1]["cumulative_travel_ticks_by_player"]["1"] == 2
-    assert set(metrics[-1]["cumulative_travel_ticks_by_player"]) == {
-        str(int(pid)) for pid in runtime.get_player_ids()
-    }
+    assert set(metrics[-1]["cumulative_travel_ticks_by_player"]) == {str(int(pid)) for pid in runtime.get_player_ids()}
 
 
 def test_spot_occupancy_excludes_a_fallen_body_and_departed_player() -> None:

@@ -30,9 +30,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI, _SENA, _KUZE, _AOI = (PlayerId(i) for i in (1, 2, 3, 4))
 
@@ -89,9 +87,7 @@ def _meeting_status_line(text: str) -> str:
 
 def _make_dead(runtime, player_id: PlayerId, spot_name: str) -> None:
     spot = SpotId.create(runtime.id_mapper.get_int("spot", spot_name))
-    runtime._fallen_body_registry.record(
-        player_id, spot, WorldTick(runtime.current_tick())
-    )
+    runtime._fallen_body_registry.record(player_id, spot, WorldTick(runtime.current_tick()))
     status = runtime._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
     runtime._player_status_repo.save(status)
@@ -117,9 +113,7 @@ class TestNoProseUrgesAToolThatIsNotOffered:
     """会議中のどの視点でも、出していないツールの行動を本文が勧めない。"""
 
     @pytest.mark.parametrize("urgent", (False, True), ids=("early", "urgent"))
-    @pytest.mark.parametrize(
-        "player_id", (_MORI, _SENA, _AOI), ids=("voted", "ghost", "not_voted")
-    )
+    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI), ids=("voted", "ghost", "not_voted"))
     def test_prompt_urges_only_offered_tools_during_a_meeting(
         self, meeting_with_a_ghost_and_a_voter, player_id, urgent
     ) -> None:
@@ -136,29 +130,21 @@ class TestNoProseUrgesAToolThatIsNotOffered:
 class TestThoseWhoCannotActAreToldWhy:
     """行動を勧めない代わりに、いまそれができない事情を本文が伝える。"""
 
-    def test_voter_is_told_they_already_voted(
-        self, meeting_with_a_ghost_and_a_voter
-    ) -> None:
+    def test_voter_is_told_they_already_voted(self, meeting_with_a_ghost_and_a_voter) -> None:
         """投票済みの人の本文には、自分はもう投票したことと結果を待つことが書かれる。"""
         text, _ = _prompt_and_offered_tools(meeting_with_a_ghost_and_a_voter, _MORI)
 
         assert "自分はもう投票した" in _meeting_status_line(text)
 
-    def test_ghost_is_told_they_can_move_again_after_the_meeting(
-        self, meeting_with_a_ghost_and_a_voter
-    ) -> None:
+    def test_ghost_is_told_they_can_move_again_after_the_meeting(self, meeting_with_a_ghost_and_a_voter) -> None:
         """会議中の死者の幽霊ルールには、会議が終われば移動と点検に戻れることが書かれる。"""
         text, _ = _prompt_and_offered_tools(meeting_with_a_ghost_and_a_voter, _SENA)
 
         assert "話し合いが終われば" in _ghost_rule(text)
 
-    def test_ghost_is_told_they_cannot_vote(
-        self, meeting_with_a_ghost_and_a_voter
-    ) -> None:
+    def test_ghost_is_told_they_cannot_vote(self, meeting_with_a_ghost_and_a_voter) -> None:
         """会議中の死者には vote を出さないので、幽霊ルールにも投票できないと書かれる。"""
-        text, offered = _prompt_and_offered_tools(
-            meeting_with_a_ghost_and_a_voter, _SENA
-        )
+        text, offered = _prompt_and_offered_tools(meeting_with_a_ghost_and_a_voter, _SENA)
 
         assert "vote" not in offered
         assert "投票はできない" in _ghost_rule(text)
@@ -167,20 +153,14 @@ class TestThoseWhoCannotActAreToldWhy:
 class TestTheUrgingStillReachesThoseWhoCanAct:
     """行動できる人には従来どおり勧める。上の検査が空振りしないための正の対照。"""
 
-    def test_player_who_has_not_voted_is_urged_before_the_deadline(
-        self, meeting_with_a_ghost_and_a_voter
-    ) -> None:
+    def test_player_who_has_not_voted_is_urged_before_the_deadline(self, meeting_with_a_ghost_and_a_voter) -> None:
         """未投票の人には vote を渡し、締切が遠いうちは打ち切りの帰結が書かれる。"""
-        text, offered = _prompt_and_offered_tools(
-            meeting_with_a_ghost_and_a_voter, _AOI
-        )
+        text, offered = _prompt_and_offered_tools(meeting_with_a_ghost_and_a_voter, _AOI)
 
         assert "vote" in offered
         assert "投票しないまま打ち切られると" in _meeting_status_line(text)
 
-    def test_player_who_has_not_voted_is_urged_near_the_deadline(
-        self, meeting_with_a_ghost_and_a_voter
-    ) -> None:
+    def test_player_who_has_not_voted_is_urged_near_the_deadline(self, meeting_with_a_ghost_and_a_voter) -> None:
         """未投票の人には、締切が近いと「いま投票しないと」の促しが書かれる。"""
         runtime = meeting_with_a_ghost_and_a_voter
         _make_deadline_urgent(runtime)
@@ -223,10 +203,7 @@ class TestTheMeetingAnnouncementMatchesOfferedTools:
         prose = _meeting_start_prose(runtime, _AOI)
         _, offered = _prompt_and_offered_tools(runtime, _AOI)
 
-        assert prose == (
-            "クゼが緊急招集をかけた。全員が集まる。"
-            "ここでできるのは、話すことと投票だけになった。"
-        )
+        assert prose == ("クゼが緊急招集をかけた。全員が集まる。ここでできるのは、話すことと投票だけになった。")
         assert "vote" in offered
 
     def test_ghost_is_told_they_can_only_speak_and_listen(self) -> None:

@@ -10,6 +10,7 @@ class QuestReward:
     ゴールド、経験値、アイテム（ItemSpecId, quantity）のリスト。
     プレイヤー発行分は Phase 2 で発行時に予約する。
     """
+
     gold: int
     exp: int
     item_rewards: tuple[tuple[ItemSpecId, int], ...]  # (item_spec_id, quantity)

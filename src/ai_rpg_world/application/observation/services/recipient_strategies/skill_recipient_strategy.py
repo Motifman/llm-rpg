@@ -90,4 +90,3 @@ class SkillRecipientStrategy(IRecipientResolutionStrategy):
         if owner_id is None:
             return []
         return [PlayerId(owner_id)]
-

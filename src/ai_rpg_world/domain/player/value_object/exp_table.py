@@ -11,6 +11,7 @@ class ExpTable:
     レベルnに到達するための累積経験値を計算する。
     累積経験値曲線をパラメトリックに調整可能。
     """
+
     base_exp: float  # 基本経験値量
     exponent: float  # 指数（成長曲線の傾き）
     level_offset: float = 0.0  # レベルオフセット

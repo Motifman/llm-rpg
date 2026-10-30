@@ -121,7 +121,9 @@ class TradeAggregate(AggregateRoot):
         if self.seller_id == buyer_id:
             raise CannotAcceptOwnTradeException(f"Cannot accept trade with yourself: {self.seller_id}, {buyer_id}")
         if self.is_direct_trade() and self.trade_scope.target_player_id != buyer_id:
-            raise CannotAcceptTradeWithOtherPlayerException(f"Cannot accept trade with other player: {self.trade_scope.target_player_id}, {buyer_id}")
+            raise CannotAcceptTradeWithOtherPlayerException(
+                f"Cannot accept trade with other player: {self.trade_scope.target_player_id}, {buyer_id}"
+            )
 
         self.buyer_id = buyer_id
         self.status = TradeStatus.COMPLETED
@@ -145,7 +147,9 @@ class TradeAggregate(AggregateRoot):
         if self.status != TradeStatus.ACTIVE:
             raise InvalidTradeStatusException(f"Trade is already completed or cancelled: {self.status}")
         if self.seller_id != player_id:
-            raise CannotCancelTradeWithOtherPlayerException(f"Cannot cancel trade with other player: {self.seller_id}, {player_id}")
+            raise CannotCancelTradeWithOtherPlayerException(
+                f"Cannot cancel trade with other player: {self.seller_id}, {player_id}"
+            )
         self.status = TradeStatus.CANCELLED
 
         # ドメインイベント発行
@@ -164,9 +168,7 @@ class TradeAggregate(AggregateRoot):
                 f"Cannot decline own trade: seller {self.seller_id}, decliner {decliner_id}"
             )
         if not self.is_direct_trade():
-            raise CannotDeclineTradeException(
-                f"Only direct trades can be declined: trade_scope={self.trade_scope}"
-            )
+            raise CannotDeclineTradeException(f"Only direct trades can be declined: trade_scope={self.trade_scope}")
         if self.trade_scope.target_player_id != decliner_id:
             raise CannotDeclineTradeException(
                 f"Only the target player can decline: target={self.trade_scope.target_player_id}, decliner={decliner_id}"

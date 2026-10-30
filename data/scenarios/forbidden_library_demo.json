@@ -537,7 +537,7 @@
                   },
                   {
                     "effect_type": "SET_FLAG",
-                    "parameters": {"flag_name": "puzzle_solved", "value": true}
+                    "parameters": {"flag_name": "puzzle_solved"}
                   },
                   {
                     "effect_type": "SHOW_MESSAGE",

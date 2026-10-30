@@ -32,16 +32,12 @@ class TestSwitchTabPageRestriction:
 
     def test_switch_tab_off_my_trades_is_learnable(self) -> None:
         sess = MagicMock()
-        sess.get_state.return_value = MagicMock(
-            page_kind=TradeVirtualPageKind.MARKET
-        )
+        sess.get_state.return_value = MagicMock(page_kind=TradeVirtualPageKind.MARKET)
         executor = TradeToolExecutor(
             sns_mode_session=MagicMock(),
             trade_page_session=sess,
         )
-        result = executor._execute_switch_tab(
-            player_id=1, args={"tab": "incoming"}
-        )
+        result = executor._execute_switch_tab(player_id=1, args={"tab": "incoming"})
         _assert_learnable(result, "TRADE_PAGE_NOT_SUPPORTED")
         # remediation 含む遷移ヒント
         assert "my_trades" in result.message
@@ -112,7 +108,5 @@ class TestAllFailuresHaveLearnableShape:
             / "trade_executor.py"
         ).read_text(encoding="utf-8")
         for m in re.finditer(r"success=False", src):
-            window = src[m.start(): m.start() + 600]
-            assert "error_code" in window, (
-                f"bare success=False at pos {m.start()}: {window[:200]!r}"
-            )
+            window = src[m.start() : m.start() + 600]
+            assert "error_code" in window, f"bare success=False at pos {m.start()}: {window[:200]!r}"

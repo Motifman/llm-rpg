@@ -1,10 +1,7 @@
 import pytest
 
-from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
 from ai_rpg_world.domain.player.enum.player_enum import Element
-from ai_rpg_world.domain.skill.enum.skill_enum import SkillHitPatternType
 from ai_rpg_world.domain.skill.exception.skill_exceptions import SkillSpecValidationException
-from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 
@@ -20,10 +17,6 @@ class TestSkillSpec:
             "cast_lock_ticks": 1,
             "cooldown_ticks": 6,
             "power_multiplier": 1.5,
-            "hit_pattern": SkillHitPattern.single_pulse(
-                pattern_type=SkillHitPatternType.MELEE,
-                shape=HitBoxShape.single_cell(),
-            ),
         }
         base.update(overrides)
         return SkillSpec(**base)

@@ -1,4 +1,3 @@
-
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -6,17 +5,18 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 class Spot:
     """意味的な場所（宿屋、村の広場等）"""
+
     def __init__(
         self,
         spot_id: SpotId,
         name: str,
         description: str,
         category: SpotCategoryEnum = SpotCategoryEnum.OTHER,
-        parent_id: SpotId | None = None
+        parent_id: SpotId | None = None,
     ):
         if not name:
             raise SpotNameEmptyException("Spot name cannot be empty")
-            
+
         self._spot_id = spot_id
         self._name = name
         self._description = description
@@ -38,12 +38,14 @@ class Spot:
     @property
     def description(self) -> str:
         return self._description
-    
+
     @property
     def category(self) -> SpotCategoryEnum:
         return self._category
-    
-    def update_info(self, name: str | None = None, description: str | None = None, category: SpotCategoryEnum | None = None) -> None:
+
+    def update_info(
+        self, name: str | None = None, description: str | None = None, category: SpotCategoryEnum | None = None
+    ) -> None:
         if name is not None:
             if not name:
                 raise SpotNameEmptyException("Spot name cannot be empty")

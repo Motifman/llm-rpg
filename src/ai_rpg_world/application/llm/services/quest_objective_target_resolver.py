@@ -15,9 +15,14 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
     from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
 
-_ALLOWED_QUEST_OBJECTIVE_TYPES = frozenset({
-    "kill_monster", "obtain_item", "reach_spot", "kill_player",
-})
+_ALLOWED_QUEST_OBJECTIVE_TYPES = frozenset(
+    {
+        "kill_monster",
+        "obtain_item",
+        "reach_spot",
+        "kill_player",
+    }
+)
 
 
 class QuestObjectiveTargetResolver:

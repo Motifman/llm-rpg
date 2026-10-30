@@ -12,9 +12,7 @@ class SkillLoadoutId:
 
     def __post_init__(self) -> None:
         if self.value <= 0:
-            raise SkillLoadoutIdValidationException(
-                f"Skill loadout ID must be positive: {self.value}"
-            )
+            raise SkillLoadoutIdValidationException(f"Skill loadout ID must be positive: {self.value}")
 
     @classmethod
     def create(cls, value: int | str) -> "SkillLoadoutId":
@@ -22,9 +20,7 @@ class SkillLoadoutId:
             try:
                 parsed = int(value)
             except ValueError as exc:
-                raise SkillLoadoutIdValidationException(
-                    f"Invalid skill loadout id: {value}"
-                ) from exc
+                raise SkillLoadoutIdValidationException(f"Invalid skill loadout id: {value}") from exc
             return cls(parsed)
         return cls(value)
 
@@ -33,4 +29,3 @@ class SkillLoadoutId:
 
     def __str__(self) -> str:
         return str(self.value)
-

@@ -24,7 +24,6 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -33,16 +32,13 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 def _make_status(
     player_id: int,
-    spot_id: int = 1,
+    spot_id: int | None = 1,
     coord: Coordinate = None,
-    navigation_state: PlayerNavigationState | None = None,
+    current_spot_id: SpotId | None = None,
 ) -> PlayerStatusAggregate:
     if coord is None:
         coord = Coordinate(0, 0, 0)
-    nav = navigation_state or PlayerNavigationState.from_parts(
-        current_spot_id=SpotId(spot_id),
-        current_coordinate=coord,
-    )
+    nav = current_spot_id or (SpotId(spot_id) if spot_id is not None else None)
     exp_table = ExpTable(100, 1.5)
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
@@ -54,12 +50,60 @@ def _make_status(
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        navigation_state=nav,
+        current_spot_id=nav,
     )
 
 
 class TestPlayerSpeechApplicationService:
     """発言アプリケーションサービスの正常・例外ケース"""
+
+    @pytest.mark.parametrize("channel", list(SpeechChannel))
+    def test_speak_without_coordinate_publishes_from_current_spot(self, channel):
+        """座標がなくスポットだけある場合、各発言種別をその場所から発行できる。"""
+        status = _make_status(
+            1,
+            current_spot_id=SpotId(7),
+        )
+        repo = MagicMock()
+        repo.find_by_id.return_value = status
+        pub = MagicMock()
+        svc = PlayerSpeechApplicationService(repo, pub)
+
+        svc.speak(
+            SpeakCommand(
+                speaker_player_id=1,
+                content="  ここにいる  ",
+                channel=channel,
+                target_player_id=2 if channel == SpeechChannel.WHISPER else None,
+            )
+        )
+
+        (event,) = pub.publish_all.call_args.args[0]
+        assert event.spot_id == SpotId(7)
+        assert event.channel == channel
+        assert event.content == "ここにいる"
+
+    def test_departed_speaker_without_coordinate_uses_departed_spot(self):
+        """座標のない離脱者の発言は、現在のスポットではなく離脱前の場所から発行する。"""
+        status = _make_status(
+            1,
+            current_spot_id=SpotId(7),
+        )
+        status._is_down = True
+        repo = MagicMock()
+        repo.find_by_id.return_value = status
+        pub = MagicMock()
+        svc = PlayerSpeechApplicationService(
+            repo,
+            pub,
+            departed_speaker_checker=lambda pid: True,
+            departed_spot_provider=lambda pid: SpotId(3),
+        )
+
+        svc.speak(SpeakCommand(speaker_player_id=1, content="ここだよ", channel=SpeechChannel.SAY))
+
+        (event,) = pub.publish_all.call_args.args[0]
+        assert event.spot_id == SpotId(3)
 
     def test_speak_say_publishes_event(self):
         """発言（SAY）でイベントが1件発行されること"""
@@ -131,7 +175,7 @@ class TestPlayerSpeechApplicationService:
 
     def test_speak_location_not_set_raises(self):
         """現在地未設定のプレイヤーで発言すると PlayerLocationNotSetException"""
-        status = _make_status(1, spot_id=1, navigation_state=PlayerNavigationState.empty())
+        status = _make_status(1, spot_id=None)
         repo = MagicMock()
         repo.find_by_id.return_value = status
         pub = MagicMock()
@@ -210,9 +254,7 @@ class TestPlayerSpeechApplicationService:
         # 残る (再放出/再試行 semantics の要)。clear を publish 前や finally に移すと
         # ここで消えるため、その退行を固定する。
         assert status.get_events() != []
-        assert any(
-            isinstance(e, PlayerSpokeEvent) for e in status.get_events()
-        )
+        assert any(isinstance(e, PlayerSpokeEvent) for e in status.get_events())
 
     def test_speak_when_downed_raises(self):
         """ダウン状態のプレイヤーが発言すると SpeechCommandException"""
@@ -230,3 +272,19 @@ class TestPlayerSpeechApplicationService:
             svc.speak(SpeakCommand(speaker_player_id=1, content="help", channel=SpeechChannel.SAY))
 
         pub.publish_all.assert_not_called()
+
+    def test_speak_when_downed_keeps_domain_error_code(self):
+        """ダウン状態で断られた SpeechCommandException は、ドメイン例外の error_code (PLAYER.DOWNED) を引き継ぐ。"""
+        status = _make_status(1, spot_id=1)
+        status._is_down = True
+        repo = MagicMock()
+        repo.find_by_id.return_value = status
+        svc = PlayerSpeechApplicationService(
+            player_status_repository=repo,
+            event_publisher=MagicMock(),
+        )
+
+        with pytest.raises(SpeechCommandException) as caught:
+            svc.speak(SpeakCommand(speaker_player_id=1, content="help", channel=SpeechChannel.SAY))
+
+        assert caught.value.error_code == "PLAYER.DOWNED"

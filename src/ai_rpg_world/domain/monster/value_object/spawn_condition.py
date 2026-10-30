@@ -14,6 +14,7 @@ class SpawnCondition:
     スポーン／リスポーンを実行する条件。
     時間帯・天候・エリア特性で AND 判定する。
     """
+
     time_band: TimeOfDay | None = None
     preferred_weather: frozenset[WeatherTypeEnum] | None = None  # 許容する天候。None で無視
     required_area_traits: frozenset[SpotTraitEnum] | None = None  # 必要なエリア特性。None で無視

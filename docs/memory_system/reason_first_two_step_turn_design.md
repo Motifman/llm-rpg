@@ -181,6 +181,8 @@ scratchpad probe で確認済み (3/3 assess_situation。`"required"` だと自�
 する flag ではない。flag が OFF なら既存 1 段階経路だけを使う。flag が ON の場合も Phase A
 入口で上記 shared state を読んだときだけ 2 段階へ入る。
 
+**その後**: `REASON_FIRST_TWO_STEP_ENABLED` のキーは、記憶ではない設定の片付け (#1631) の #1797 で消した。今は `LLM_TOOL_CHOICE=auto` のときだけ OFF で、それ以外はいつも ON になる。ON のときに Phase A 入口の shared state を読んで 2 段階へ入る条件は変えていない。
+
 停滞 band strong は既存の band-gated reasoning と同じ入力を使うが、両方を同時には焚かない。
 reason-first 側も band だけでは発火させず、既存の `_stagnation_reasoning_latch` が armed の
 ときだけ発火する。つまり「停滞 reflect 注入直後の 1 行動だけ」という band-gated reasoning の
@@ -188,6 +190,8 @@ reason-first 側も band だけでは発火させず、既存の `_stagnation_re
 `resolve_turn_reasoning_effort` は呼ばない。reason-first 経路ではこの既存 consume 経路に乗らない
 ため、`stagnation_strong` gate で 2 段階へ入った時点でラッチを消費する。これにより「2 段階 +
 reasoning 付き 1 段階」の二重発火と、strong band 継続中の毎 turn 2 段階発火を避ける。
+
+> 停滞 band strong の発火条件 (`stagnation_strong`) は、熟考ラッチ (`STAGNATION_REASONING_ENABLED`) と一緒に、記憶の部品の撤去 (#1631) の #1659 で消した。いまの発火条件は loop_guard の警告と、直近 2 件の同じ失敗だけ。
 
 実装上の分岐面は Phase A に閉じる。reason-first の step2 action arguments へ step1 の
 `inner_thought` / `expected_result` を内部注入し、Phase B 以降 (tool 実行 / ActionResult /

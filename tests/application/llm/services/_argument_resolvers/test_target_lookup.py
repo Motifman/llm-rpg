@@ -18,12 +18,14 @@ def _t(label: str, kind: str, name: str) -> ToolRuntimeTargetDto:
 
 
 def _index() -> TargetIndex:
-    return TargetIndex({
-        "O1": _t("O1", "spot_graph_object", "貝の岩棚"),
-        "O2": _t("O2", "spot_graph_object", "リン"),
-        "P1": _t("P1", "spot_graph_player", "リン"),
-        "M1": _t("M1", "spot_graph_monster", "大型カニ"),
-    })
+    return TargetIndex(
+        {
+            "O1": _t("O1", "spot_graph_object", "貝の岩棚"),
+            "O2": _t("O2", "spot_graph_object", "リン"),
+            "P1": _t("P1", "spot_graph_player", "リン"),
+            "M1": _t("M1", "spot_graph_monster", "大型カニ"),
+        }
+    )
 
 
 class TestLookupOutcomes:
@@ -73,10 +75,12 @@ class TestInternalLabelsAreOnlyAWayOutOfAmbiguity:
 
     def test_a_display_name_wins_over_an_internal_label_of_the_same_text(self) -> None:
         """表示名と内部ラベルが同じ文字列なら表示名を採る。当人が見ているのは名前の方。"""
-        index = TargetIndex({
-            "P1": _t("P1", "spot_graph_player", "O1"),
-            "O1": _t("O1", "spot_graph_object", "岩"),
-        })
+        index = TargetIndex(
+            {
+                "P1": _t("P1", "spot_graph_player", "O1"),
+                "O1": _t("O1", "spot_graph_object", "岩"),
+            }
+        )
 
         out = index.lookup("O1", accept_kinds=("spot_graph_player", "spot_graph_object"))
 
@@ -87,7 +91,13 @@ class TestInternalLabelsAreOnlyAWayOutOfAmbiguity:
 class TestLabelForms:
     def test_forms_keep_order_and_drop_duplicates(self) -> None:
         """丸写し行から、そのまま・ラベル・名前の順で形が出て、同じ形は 1 度だけ。"""
-        assert label_forms("S2: 禁書扉 → 館長書斎") == ["S2: 禁書扉 → 館長書斎", "S2", "館長書斎", "禁書扉 → 館長書斎", "禁書扉"]
+        assert label_forms("S2: 禁書扉 → 館長書斎") == [
+            "S2: 禁書扉 → 館長書斎",
+            "S2",
+            "館長書斎",
+            "禁書扉 → 館長書斎",
+            "禁書扉",
+        ]
 
     def test_blank_has_no_forms(self) -> None:
         assert label_forms("   ") == []

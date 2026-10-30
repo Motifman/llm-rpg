@@ -25,7 +25,6 @@ def set_runtime_manager(manager: GameRuntimeManager) -> None:
 def get_runtime_manager() -> GameRuntimeManager:
     if _manager is None:
         raise RuntimeError(
-            "GameRuntimeManager has not been initialised. "
-            "Call set_runtime_manager() during application startup."
+            "GameRuntimeManager has not been initialised. Call set_runtime_manager() during application startup."
         )
     return _manager

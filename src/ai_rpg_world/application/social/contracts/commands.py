@@ -6,6 +6,7 @@ from ai_rpg_world.domain.sns.enum import PostVisibility, UserRelationshipType
 @dataclass(frozen=True)
 class CreateUserCommand:
     """ユーザー作成コマンド"""
+
     user_name: str
     display_name: str
     bio: str
@@ -14,6 +15,7 @@ class CreateUserCommand:
 @dataclass(frozen=True)
 class GetUserProfilesCommand:
     """ユーザープロフィール取得コマンド"""
+
     viewer_user_id: int
     relationship_type: UserRelationshipType
 
@@ -21,6 +23,7 @@ class GetUserProfilesCommand:
 @dataclass(frozen=True)
 class UpdateUserProfileCommand:
     """ユーザープロフィール更新コマンド"""
+
     user_id: int
     new_display_name: str | None = None
     new_bio: str | None = None
@@ -29,6 +32,7 @@ class UpdateUserProfileCommand:
 @dataclass(frozen=True)
 class FollowUserCommand:
     """ユーザーフォローコマンド"""
+
     follower_user_id: int
     followee_user_id: int
 
@@ -36,6 +40,7 @@ class FollowUserCommand:
 @dataclass(frozen=True)
 class UnfollowUserCommand:
     """ユーザーフォロー解除コマンド"""
+
     follower_user_id: int
     followee_user_id: int
 
@@ -43,6 +48,7 @@ class UnfollowUserCommand:
 @dataclass(frozen=True)
 class BlockUserCommand:
     """ユーザーブロックコマンド"""
+
     blocker_user_id: int
     blocked_user_id: int
 
@@ -50,6 +56,7 @@ class BlockUserCommand:
 @dataclass(frozen=True)
 class UnblockUserCommand:
     """ユーザーブロック解除コマンド"""
+
     blocker_user_id: int
     blocked_user_id: int
 
@@ -57,6 +64,7 @@ class UnblockUserCommand:
 @dataclass(frozen=True)
 class SubscribeUserCommand:
     """ユーザーサブスクライブコマンド"""
+
     subscriber_user_id: int
     subscribed_user_id: int
 
@@ -64,6 +72,7 @@ class SubscribeUserCommand:
 @dataclass(frozen=True)
 class UnsubscribeUserCommand:
     """ユーザーサブスクライブ解除コマンド"""
+
     subscriber_user_id: int
     subscribed_user_id: int
 
@@ -71,6 +80,7 @@ class UnsubscribeUserCommand:
 @dataclass(frozen=True)
 class CreatePostCommand:
     """ポスト作成コマンド"""
+
     user_id: int
     content: str
     visibility: PostVisibility = PostVisibility.PUBLIC
@@ -79,6 +89,7 @@ class CreatePostCommand:
 @dataclass(frozen=True)
 class LikePostCommand:
     """ポストいいねコマンド"""
+
     post_id: int
     user_id: int
 
@@ -86,6 +97,7 @@ class LikePostCommand:
 @dataclass(frozen=True)
 class DeletePostCommand:
     """ポスト削除コマンド"""
+
     post_id: int
     user_id: int
 
@@ -93,6 +105,7 @@ class DeletePostCommand:
 @dataclass(frozen=True)
 class CreateReplyCommand:
     """リプライ作成コマンド"""
+
     user_id: int
     content: str
     visibility: PostVisibility = PostVisibility.PUBLIC
@@ -103,6 +116,7 @@ class CreateReplyCommand:
 @dataclass(frozen=True)
 class LikeReplyCommand:
     """リプライいいねコマンド"""
+
     reply_id: int
     user_id: int
 
@@ -110,6 +124,7 @@ class LikeReplyCommand:
 @dataclass(frozen=True)
 class DeleteReplyCommand:
     """リプライ削除コマンド"""
+
     reply_id: int
     user_id: int
 
@@ -117,6 +132,7 @@ class DeleteReplyCommand:
 @dataclass(frozen=True)
 class MarkNotificationAsReadCommand:
     """通知既読コマンド"""
+
     user_id: int
     notification_id: int
 
@@ -124,4 +140,5 @@ class MarkNotificationAsReadCommand:
 @dataclass(frozen=True)
 class MarkAllNotificationsAsReadCommand:
     """全通知既読コマンド"""
+
     user_id: int

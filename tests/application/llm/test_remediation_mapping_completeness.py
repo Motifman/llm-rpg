@@ -79,11 +79,7 @@ class TestNewlyAddedRemediationCodes:
     def test_unsupported_tool_remediation_tool(self) -> None:
         """typo / 未配線 tool の呼び出し → 有効 tool 一覧の確認を示唆。"""
         msg = get_remediation("UNSUPPORTED_TOOL")
-        assert (
-            "tool" in msg.lower()
-            or "ツール" in msg
-            or "利用可能" in msg
-        )
+        assert "tool" in msg.lower() or "ツール" in msg or "利用可能" in msg
 
     def test_attack_failed_remediation_target_state(self) -> None:
         """attack が失敗 → 対象状態 (死骸 / 逃走 / 距離) の確認を示唆。"""

@@ -242,9 +242,7 @@ def test_mark_notification_read_resolves_notification_ref(
     page_session.issue_notification_ref(1, 55)
     ref = next(iter(page_session.get_state(1).ref_to_notification_id.keys()))
     notification_command_service = MagicMock()
-    notification_command_service.mark_notification_as_read.return_value = MagicMock(
-        success=True, message="ok"
-    )
+    notification_command_service.mark_notification_as_read.return_value = MagicMock(success=True, message="ok")
     ex = SnsToolExecutor(
         sns_page_session=page_session,
         sns_page_query_service=page_query,

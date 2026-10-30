@@ -51,54 +51,33 @@ class InteractionCooldownSubsystemCodec(WorldSubsystemCodec):
                 for player_id, actions in actor_snapshot.items()
                 for action_name, tick in actions.items()
             ],
-            "world_entries": [
-                [str(action_name), int(tick)]
-                for action_name, tick in world_snapshot.items()
-            ],
+            "world_entries": [[str(action_name), int(tick)] for action_name, tick in world_snapshot.items()],
         }
 
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version not in {1, SCHEMA_VERSION}:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected 1 or {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected 1 or {SCHEMA_VERSION})")
         store = getattr(runtime, "_interaction_cooldown_store", None)
         if store is None:
             return
         # schema 1 は actor scope だけを ``entries`` に保存していた。既存の
         # snapshot を world scope の空記録として明示的に移行する。
-        raw_entries = (
-            data.get("entries", [])
-            if version == 1
-            else data.get("actor_entries", [])
-        )
+        raw_entries = data.get("entries", []) if version == 1 else data.get("actor_entries", [])
         if not isinstance(raw_entries, list):
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} entries must be a list, got {type(raw_entries)}"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} entries must be a list, got {type(raw_entries)}")
         entries = []
         for entry in raw_entries:
             if not isinstance(entry, (list, tuple)) or len(entry) != 3:
-                raise ValueError(
-                    f"{SUBSYSTEM_KEY} entry must be [player_id, action_name, tick], "
-                    f"got {entry!r}"
-                )
+                raise ValueError(f"{SUBSYSTEM_KEY} entry must be [player_id, action_name, tick], got {entry!r}")
             entries.append((int(entry[0]), str(entry[1]), int(entry[2])))
         raw_world_entries = [] if version == 1 else data.get("world_entries", [])
         if not isinstance(raw_world_entries, list):
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} world_entries must be a list, "
-                f"got {type(raw_world_entries)}"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} world_entries must be a list, got {type(raw_world_entries)}")
         world_entries = []
         for entry in raw_world_entries:
             if not isinstance(entry, (list, tuple)) or len(entry) != 2:
-                raise ValueError(
-                    f"{SUBSYSTEM_KEY} world entry must be [action_name, tick], "
-                    f"got {entry!r}"
-                )
+                raise ValueError(f"{SUBSYSTEM_KEY} world entry must be [action_name, tick], got {entry!r}")
             world_entries.append((str(entry[0]), int(entry[1])))
         store.replace_all(entries, world_entries)
 

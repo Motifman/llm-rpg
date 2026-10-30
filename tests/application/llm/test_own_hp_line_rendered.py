@@ -41,18 +41,14 @@ class TestOwnHpLineRendered:
 
     def test_hp_line_rendered_in_state_section(self) -> None:
         """hp_line があると「身体の状態」section に HP 行が出る。"""
-        lines = _render_state_section(
-            _make_snapshot(hp_line="HP: 消耗（48/100）、前回 -12")
-        )
+        lines = _render_state_section(_make_snapshot(hp_line="HP: 消耗（48/100）、前回 -12"))
         joined = "\n".join(lines)
         assert "身体の状態:" in joined
         assert "HP: 消耗（48/100）、前回 -12" in joined
 
     def test_hp_line_precedes_need_lines(self) -> None:
         """HP 行は空腹・疲労より前 (= 本人が真っ先に読む位置) に出る。"""
-        lines = _render_state_section(
-            _make_snapshot(hp_line="HP: 良好（100/100）")
-        )
+        lines = _render_state_section(_make_snapshot(hp_line="HP: 良好（100/100）"))
         hp_idx = next(i for i, l in enumerate(lines) if "HP:" in l)
         hunger_idx = next(i for i, l in enumerate(lines) if "空腹" in l)
         assert hp_idx < hunger_idx
@@ -64,9 +60,7 @@ class TestOwnHpLineRendered:
 
     def test_state_section_shown_even_if_only_hp(self) -> None:
         """need_lines が空でも hp_line だけで「身体の状態」section が出る。"""
-        lines = _render_state_section(
-            _make_snapshot(hp_line="HP: 瀕死（10/100）、前回 -30", need_lines=())
-        )
+        lines = _render_state_section(_make_snapshot(hp_line="HP: 瀕死（10/100）、前回 -30", need_lines=()))
         joined = "\n".join(lines)
         assert "身体の状態:" in joined
         assert "HP: 瀕死（10/100）、前回 -30" in joined

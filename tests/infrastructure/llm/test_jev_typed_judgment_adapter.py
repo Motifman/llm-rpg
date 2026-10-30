@@ -100,13 +100,9 @@ class TestTheRequestCarriesEveryQuestionAtOnce:
 
         def handler(request: httpx.Request) -> httpx.Response:
             sent.append(json.loads(request.content))
-            return httpx.Response(
-                200, json={"answers": {"q": {"type": "noul", "noul": 0.5}}}
-            )
+            return httpx.Response(200, json={"answers": {"q": {"type": "noul", "noul": 0.5}}})
 
-        _adapter(handler).judge(
-            {"actor": "アオイ"}, {"q": NoulQuestion(instructions="a")}
-        )
+        _adapter(handler).judge({"actor": "アオイ"}, {"q": NoulQuestion(instructions="a")})
 
         assert sent[0]["model"] == "typesafe/jev-1.13"
         assert sent[0]["state"] == {"actor": "アオイ"}
@@ -117,9 +113,7 @@ class TestTheRequestCarriesEveryQuestionAtOnce:
 
         def handler(request: httpx.Request) -> httpx.Response:
             seen.append(request)
-            return httpx.Response(
-                200, json={"answers": {"q": {"type": "noul", "noul": 0.5}}}
-            )
+            return httpx.Response(200, json={"answers": {"q": {"type": "noul", "noul": 0.5}}})
 
         _adapter(handler).judge("x", {"q": NoulQuestion(instructions="a")})
 
@@ -205,9 +199,7 @@ class TestEachQuestionTypeIsWrittenInTheWireForm:
 
     def test_a_score_carries_its_levels_in_order(self) -> None:
         """Score は criteria に段階を低い方から並べた配列で載せる。"""
-        written = self._sent_question(
-            ScoreQuestion(instructions="切迫度", levels=["低", "中", "高"])
-        )
+        written = self._sent_question(ScoreQuestion(instructions="切迫度", levels=["低", "中", "高"]))
 
         assert written == {
             "type": "score",
@@ -221,9 +213,9 @@ class TestTheAnswerIsMappedToTheResultType:
 
     def test_a_noul_answer_has_no_confidence(self) -> None:
         """Noul の応答は確率だけなので、confidence は None になる。"""
-        answers = _adapter(
-            _answers({"answers": {"q": {"type": "noul", "noul": 0.42}}})
-        ).judge("x", {"q": NoulQuestion(instructions="a")})
+        answers = _adapter(_answers({"answers": {"q": {"type": "noul", "noul": 0.42}}})).judge(
+            "x", {"q": NoulQuestion(instructions="a")}
+        )
 
         assert answers["q"].value == 0.42
         assert answers["q"].confidence is None
@@ -276,9 +268,9 @@ class TestTheAnswerIsMappedToTheResultType:
 
     def test_every_answer_is_labelled_as_coming_from_jev(self) -> None:
         """source が jev になり、stub の結果と trace 上で区別できる。"""
-        answers = _adapter(
-            _answers({"answers": {"q": {"type": "noul", "noul": 0.42}}})
-        ).judge("x", {"q": NoulQuestion(instructions="a")})
+        answers = _adapter(_answers({"answers": {"q": {"type": "noul", "noul": 0.42}}})).judge(
+            "x", {"q": NoulQuestion(instructions="a")}
+        )
 
         assert answers["q"].source is JudgmentSource.JEV
         assert answers["q"].latency_ms >= 0.0
@@ -289,9 +281,7 @@ class TestFailuresAreRaisedInsteadOfDefaulted:
 
     def test_a_missing_answer_is_a_failure(self) -> None:
         """要求した質問の答えが返らなければ例外になる (黙って欠かさない)。"""
-        adapter = _adapter(
-            _answers({"answers": {"q": {"type": "noul", "noul": 0.5}}})
-        )
+        adapter = _adapter(_answers({"answers": {"q": {"type": "noul", "noul": 0.5}}}))
 
         with pytest.raises(TypedJudgmentUnavailableException):
             adapter.judge(
@@ -304,14 +294,10 @@ class TestFailuresAreRaisedInsteadOfDefaulted:
 
     def test_an_answer_of_the_wrong_type_is_a_failure(self) -> None:
         """Choice を問って Noul が返るような食い違いは例外になる。"""
-        adapter = _adapter(
-            _answers({"answers": {"q": {"type": "noul", "noul": 0.5}}})
-        )
+        adapter = _adapter(_answers({"answers": {"q": {"type": "noul", "noul": 0.5}}}))
 
         with pytest.raises(TypedJudgmentUnavailableException):
-            adapter.judge(
-                "x", {"q": ChoiceQuestion(instructions="a", options={"o": None})}
-            )
+            adapter.judge("x", {"q": ChoiceQuestion(instructions="a", options={"o": None})})
 
     def test_an_answer_whose_label_disagrees_with_its_payload_is_a_failure(
         self,
@@ -322,18 +308,14 @@ class TestFailuresAreRaisedInsteadOfDefaulted:
         ので、**型の札を見ていないと通ってしまう**。札と中身が食い違うのは
         接続先の契約が変わった合図なので、黙って読み進めない。
         """
-        adapter = _adapter(
-            _answers({"answers": {"q": {"type": "choice", "noul": 0.5}}})
-        )
+        adapter = _adapter(_answers({"answers": {"q": {"type": "choice", "noul": 0.5}}}))
 
         with pytest.raises(TypedJudgmentUnavailableException):
             adapter.judge("x", {"q": NoulQuestion(instructions="a")})
 
     def test_an_http_error_is_a_failure(self) -> None:
         """401 のような HTTP エラーは例外になる。"""
-        adapter = _adapter(
-            lambda _request: httpx.Response(401, json={"error": {"message": "no"}})
-        )
+        adapter = _adapter(lambda _request: httpx.Response(401, json={"error": {"message": "no"}}))
 
         with pytest.raises(TypedJudgmentUnavailableException):
             adapter.judge("x", {"q": NoulQuestion(instructions="a")})
@@ -386,23 +368,17 @@ class TestRateLimitsAreRetriedWithinTheGivenBudget:
         def handler(_request: httpx.Request) -> httpx.Response:
             status = statuses.pop(0)
             if status == 200:
-                return httpx.Response(
-                    200, json={"answers": {"q": {"type": "noul", "noul": 0.5}}}
-                )
+                return httpx.Response(200, json={"answers": {"q": {"type": "noul", "noul": 0.5}}})
             return httpx.Response(status, json={"error": {"message": "slow down"}})
 
-        answers = _adapter(handler, retry_attempts=1, sleeps=sleeps).judge(
-            "x", {"q": NoulQuestion(instructions="a")}
-        )
+        answers = _adapter(handler, retry_attempts=1, sleeps=sleeps).judge("x", {"q": NoulQuestion(instructions="a")})
 
         assert answers["q"].value == 0.5
         assert len(sleeps) == 1
 
     def test_running_out_of_retries_is_a_failure(self) -> None:
         """再試行の上限を使い切ったら例外になる。無限に粘らない。"""
-        adapter = _adapter(
-            lambda _request: httpx.Response(429, text="slow down"), retry_attempts=1
-        )
+        adapter = _adapter(lambda _request: httpx.Response(429, text="slow down"), retry_attempts=1)
 
         with pytest.raises(TypedJudgmentUnavailableException):
             adapter.judge("x", {"q": NoulQuestion(instructions="a")})
@@ -416,8 +392,6 @@ class TestRateLimitsAreRetriedWithinTheGivenBudget:
             return httpx.Response(422, text="bad question")
 
         with pytest.raises(TypedJudgmentUnavailableException):
-            _adapter(handler, retry_attempts=3).judge(
-                "x", {"q": NoulQuestion(instructions="a")}
-            )
+            _adapter(handler, retry_attempts=3).judge("x", {"q": NoulQuestion(instructions="a")})
 
         assert len(calls) == 1

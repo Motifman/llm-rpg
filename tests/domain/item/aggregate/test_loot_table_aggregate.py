@@ -36,7 +36,7 @@ class TestLootTableAggregate:
         # min_quantityが0以下
         with pytest.raises(QuantityValidationException, match="Min quantity must be positive"):
             LootEntry(ItemSpecId(1), weight=10, min_quantity=0)
-        
+
         # max_quantityがmin_quantity未満
         with pytest.raises(QuantityValidationException, match="cannot be less than min quantity"):
             LootEntry(ItemSpecId(1), weight=10, min_quantity=5, max_quantity=4)
@@ -51,7 +51,7 @@ class TestLootTableAggregate:
         """確定的な抽選のテスト"""
         entry = LootEntry(ItemSpecId(1), weight=100, min_quantity=2, max_quantity=2)
         table = LootTableAggregate(1, [entry])
-        
+
         result = table.roll()
         assert result is not None
         assert result.item_spec_id == ItemSpecId(1)
@@ -60,6 +60,7 @@ class TestLootTableAggregate:
     def test_roll_empty_table_raises_exception(self):
         """空のテーブル作成時に例外が投げられるテスト"""
         from ai_rpg_world.domain.item.exception.item_exception import LootTableValidationException
+
         with pytest.raises(LootTableValidationException):
             LootTableAggregate(1, [])
 
@@ -68,13 +69,13 @@ class TestLootTableAggregate:
         entry1 = LootEntry(ItemSpecId(101), weight=90)
         entry2 = LootEntry(ItemSpecId(102), weight=10)
         table = LootTableAggregate(2, [entry1, entry2])
-        
+
         results = {101: 0, 102: 0}
         iterations = 1000
         for _ in range(iterations):
             res = table.roll()
             results[res.item_spec_id.value] += 1
-            
+
         # 統計的に90:10に近いことを確認（緩めのマージン）
         assert 800 < results[101] < 1000
         assert 0 < results[102] < 200
@@ -83,8 +84,8 @@ class TestLootTableAggregate:
         """entriesプロパティの不変性テスト"""
         entry = LootEntry(ItemSpecId(1), weight=10)
         table = LootTableAggregate(1, [entry])
-        
+
         entries = table.entries
         entries.append(LootEntry(ItemSpecId(2), weight=20))
-        
+
         assert len(table.entries) == 1

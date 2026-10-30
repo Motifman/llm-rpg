@@ -6,6 +6,7 @@ from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
 @dataclass(frozen=True)
 class OfferItemCommand:
     """アイテム出品コマンド"""
+
     seller_id: int
     item_instance_id: int
     slot_id: int
@@ -17,6 +18,7 @@ class OfferItemCommand:
 @dataclass(frozen=True)
 class AcceptTradeCommand:
     """取引受諾コマンド"""
+
     trade_id: int
     buyer_id: int
 
@@ -24,6 +26,7 @@ class AcceptTradeCommand:
 @dataclass(frozen=True)
 class CancelTradeCommand:
     """取引キャンセルコマンド"""
+
     trade_id: int
     player_id: int
 
@@ -31,5 +34,6 @@ class CancelTradeCommand:
 @dataclass(frozen=True)
 class DeclineTradeCommand:
     """取引拒否コマンド"""
+
     trade_id: int
     decliner_id: int

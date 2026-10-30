@@ -23,3 +23,6 @@ class GameEndResult:
     # Phase E-3c: 個別 outcome の snapshot ({player_id_int: outcome})。
     # None なら本結果は per-player モードではない (集団判定 / 続行中)。
     player_outcomes: Mapping[int, PlayerOutcomeEnum] | None = field(default=None)
+    # #1516: teams のあるシナリオで、終了時に決まったチームごとの勝敗
+    # ({team_id: WIN / LOSE / DRAW})。teams の無い世界と続行中は None。
+    team_results: Mapping[str, GameResultEnum] | None = field(default=None)

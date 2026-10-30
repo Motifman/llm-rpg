@@ -12,6 +12,7 @@ class SlotId:
     インベントリのスロットを識別するための値オブジェクト。
     0以上の整数値のみを許可する。
     """
+
     value: int
 
     def __post_init__(self) -> None:
@@ -21,9 +22,7 @@ class SlotId:
                 f"SlotId must be an integer, got {type(self.value)}: {self.value}"
             )
         if self.value < 0:
-            raise PlayerInventorySlotIdValidationException(
-                f"SlotId must be >= 0, got {self.value}"
-            )
+            raise PlayerInventorySlotIdValidationException(f"SlotId must be >= 0, got {self.value}")
 
     @classmethod
     def create(cls, value: int) -> SlotId:

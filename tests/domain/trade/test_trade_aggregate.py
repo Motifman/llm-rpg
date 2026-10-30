@@ -250,38 +250,6 @@ class TestTradeAggregate:
             assert trade.buyer_id is None
             assert trade.version == 0
 
-        def test_create_trade_adds_trade_offered_event(
-            self,
-            trade_id: TradeId,
-            seller_id: PlayerId,
-            offered_item_id: ItemInstanceId,
-            requested_gold: TradeRequestedGold,
-            created_at: datetime,
-            global_trade_scope: TradeScope,
-        ):
-            """新規取引作成時にTradeOfferedEventが発行される"""
-            # When
-            trade = TradeAggregate.create_new_trade(
-                trade_id=trade_id,
-                seller_id=seller_id,
-                offered_item_id=offered_item_id,
-                requested_gold=requested_gold,
-                created_at=created_at,
-                trade_scope=global_trade_scope,
-                listing_projection=_trade_listing_projection(),
-            )
-
-            # Then
-            events = trade.get_events()
-            assert len(events) == 1
-            assert isinstance(events[0], TradeOfferedEvent)
-            assert events[0].aggregate_id == trade_id
-            assert events[0].aggregate_type == "TradeAggregate"
-            assert events[0].seller_id == seller_id
-            assert events[0].offered_item_id == offered_item_id
-            assert events[0].requested_gold == requested_gold
-            assert events[0].trade_scope == global_trade_scope
-
     class TestIsActive:
         """is_activeメソッドのテスト"""
 
@@ -316,9 +284,7 @@ class TestTradeAggregate:
     class TestIsForPlayer:
         """is_for_playerメソッドのテスト"""
 
-        def test_global_trade_always_returns_false(
-            self, active_global_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_global_trade_always_returns_false(self, active_global_trade: TradeAggregate, buyer_id: PlayerId):
             """グローバル取引は常にFalseを返す"""
             # When & Then
             assert active_global_trade.is_for_player(buyer_id) is False
@@ -361,9 +327,7 @@ class TestTradeAggregate:
             # When & Then
             assert active_direct_trade.can_be_accepted_by(other_player_id) is False
 
-        def test_global_trade_other_player_can_accept(
-            self, active_global_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_global_trade_other_player_can_accept(self, active_global_trade: TradeAggregate, buyer_id: PlayerId):
             """グローバル取引は他のプレイヤーが受け入れられる"""
             # When & Then
             assert active_global_trade.can_be_accepted_by(buyer_id) is True
@@ -379,9 +343,7 @@ class TestTradeAggregate:
     class TestAcceptBy:
         """accept_byメソッドのテスト"""
 
-        def test_successful_acceptance_of_global_trade(
-            self, active_global_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_successful_acceptance_of_global_trade(self, active_global_trade: TradeAggregate, buyer_id: PlayerId):
             """グローバル取引の受託が成功する"""
             # When
             active_global_trade.accept_by(buyer_id, "Buyer", _trade_listing_projection())
@@ -425,19 +387,6 @@ class TestTradeAggregate:
             with pytest.raises(CannotAcceptTradeWithOtherPlayerException):
                 active_direct_trade.accept_by(other_player_id, "Other", _trade_listing_projection())
 
-        def test_accept_adds_trade_accepted_event(self, active_global_trade: TradeAggregate, buyer_id: PlayerId):
-            """取引受託時にTradeAcceptedEventが発行される"""
-            # When
-            active_global_trade.accept_by(buyer_id, "Buyer", _trade_listing_projection())
-
-            # Then
-            events = active_global_trade.get_events()
-            assert len(events) == 1
-            assert isinstance(events[0], TradeAcceptedEvent)
-            assert events[0].aggregate_id == active_global_trade.trade_id
-            assert events[0].aggregate_type == "TradeAggregate"
-            assert events[0].buyer_id == buyer_id
-
         def test_accept_cancelled_trade_raises_exception(self, cancelled_trade: TradeAggregate, buyer_id: PlayerId):
             """キャンセル済み取引を受託しようとすると例外が発生する"""
             # When & Then
@@ -475,21 +424,6 @@ class TestTradeAggregate:
             with pytest.raises(CannotCancelTradeWithOtherPlayerException):
                 active_global_trade.cancel_by(buyer_id)
 
-        def test_cancel_adds_trade_cancelled_event(self, active_global_trade: TradeAggregate):
-            """取引キャンセル時にTradeCancelledEventが発行される"""
-            # Given
-            seller_id = active_global_trade.seller_id
-
-            # When
-            active_global_trade.cancel_by(seller_id)
-
-            # Then
-            events = active_global_trade.get_events()
-            assert len(events) == 1
-            assert isinstance(events[0], TradeCancelledEvent)
-            assert events[0].aggregate_id == active_global_trade.trade_id
-            assert events[0].aggregate_type == "TradeAggregate"
-
         def test_cancel_cancelled_trade_raises_exception(self, cancelled_trade: TradeAggregate):
             """キャンセル済み取引を再度キャンセルしようとすると例外が発生する"""
             # Given
@@ -502,9 +436,7 @@ class TestTradeAggregate:
     class TestDecline:
         """decline_by（取引拒否）のテスト"""
 
-        def test_decline_by_target_player_succeeds(
-            self, active_direct_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_decline_by_target_player_succeeds(self, active_direct_trade: TradeAggregate, buyer_id: PlayerId):
             """直接取引の宛先が断るとステータスがCANCELLEDになる"""
             # When
             active_direct_trade.decline_by(buyer_id)
@@ -513,9 +445,7 @@ class TestTradeAggregate:
             assert active_direct_trade.status == TradeStatus.CANCELLED
             assert not active_direct_trade.is_active()
 
-        def test_decline_by_seller_raises_exception(
-            self, active_direct_trade: TradeAggregate, seller_id: PlayerId
-        ):
+        def test_decline_by_seller_raises_exception(self, active_direct_trade: TradeAggregate, seller_id: PlayerId):
             """出品者が断ろうとするとCannotDeclineTradeExceptionが発生する"""
             # When & Then
             with pytest.raises(CannotDeclineTradeException):
@@ -529,46 +459,28 @@ class TestTradeAggregate:
             with pytest.raises(CannotDeclineTradeException):
                 active_direct_trade.decline_by(other_player_id)
 
-        def test_decline_global_trade_raises_exception(
-            self, active_global_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_decline_global_trade_raises_exception(self, active_global_trade: TradeAggregate, buyer_id: PlayerId):
             """グローバル取引を断ろうとするとCannotDeclineTradeExceptionが発生する"""
             # When & Then
             with pytest.raises(CannotDeclineTradeException):
                 active_global_trade.decline_by(buyer_id)
 
-        def test_decline_completed_trade_raises_exception(
-            self, completed_trade: TradeAggregate, buyer_id: PlayerId
-        ):
+        def test_decline_completed_trade_raises_exception(self, completed_trade: TradeAggregate, buyer_id: PlayerId):
             """完了済み取引を断ろうとするとInvalidTradeStatusExceptionが発生する"""
             # When & Then
             with pytest.raises(InvalidTradeStatusException):
                 completed_trade.decline_by(buyer_id)
 
-        def test_decline_adds_trade_declined_event(
+        def test_trade_declined_event_contains_all_fields(
             self, active_direct_trade: TradeAggregate, buyer_id: PlayerId
         ):
-            """取引拒否時にTradeDeclinedEventが発行される"""
+            """直接取引の宛先による辞退は辞退者IDを持つTradeDeclinedEventを1件だけ発行する。"""
             # When
             active_direct_trade.decline_by(buyer_id)
 
             # Then
             events = active_direct_trade.get_events()
             assert len(events) == 1
-            assert isinstance(events[0], TradeDeclinedEvent)
-            assert events[0].aggregate_id == active_direct_trade.trade_id
-            assert events[0].aggregate_type == "TradeAggregate"
-            assert events[0].decliner_id == buyer_id
-
-        def test_trade_declined_event_contains_all_fields(
-            self, active_direct_trade: TradeAggregate, buyer_id: PlayerId
-        ):
-            """TradeDeclinedEventが全てのフィールドを含む"""
-            # When
-            active_direct_trade.decline_by(buyer_id)
-
-            # Then
-            events = active_direct_trade.get_events()
             event = events[0]
             assert isinstance(event, TradeDeclinedEvent)
             assert event.aggregate_id == active_direct_trade.trade_id
@@ -661,7 +573,7 @@ class TestTradeAggregate:
             created_at: datetime,
             global_trade_scope: TradeScope,
         ):
-            """TradeOfferedEventが全てのフィールドを含む"""
+            """公開取引の作成は出品情報と投影用情報を持つTradeOfferedEventを1件だけ発行する。"""
             # When
             trade = TradeAggregate.create_new_trade(
                 trade_id=trade_id,
@@ -675,6 +587,7 @@ class TestTradeAggregate:
 
             # Then
             events = trade.get_events()
+            assert len(events) == 1
             event = events[0]
             assert isinstance(event, TradeOfferedEvent)
             assert event.aggregate_id == trade_id
@@ -686,20 +599,21 @@ class TestTradeAggregate:
             assert event.listing_projection == _trade_listing_projection()
             assert event.trade_created_at == created_at
             # 基底クラスのフィールドも確認
-            assert hasattr(event, 'occurred_at')
-            assert hasattr(event, 'event_id')
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")
 
         def test_trade_accepted_event_contains_all_fields(
             self,
             active_global_trade: TradeAggregate,
             buyer_id: PlayerId,
         ):
-            """TradeAcceptedEventが全てのフィールドを含む"""
+            """公開取引の受託は買い手と投影用情報を持つTradeAcceptedEventを1件だけ発行する。"""
             # When
             active_global_trade.accept_by(buyer_id, "Buyer", _trade_listing_projection())
 
             # Then
             events = active_global_trade.get_events()
+            assert len(events) == 1
             event = events[0]
             assert isinstance(event, TradeAcceptedEvent)
             assert event.aggregate_id == active_global_trade.trade_id
@@ -712,11 +626,11 @@ class TestTradeAggregate:
             assert event.trade_created_at == active_global_trade.created_at
             assert event.listing_projection == _trade_listing_projection()
             # 基底クラスのフィールドも確認
-            assert hasattr(event, 'occurred_at')
-            assert hasattr(event, 'event_id')
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")
 
         def test_trade_cancelled_event_contains_all_fields(self, active_global_trade: TradeAggregate):
-            """TradeCancelledEventが全てのフィールドを含む"""
+            """出品者の取消は取引IDを持つTradeCancelledEventを1件だけ発行する。"""
             # Given
             seller_id = active_global_trade.seller_id
 
@@ -725,11 +639,11 @@ class TestTradeAggregate:
 
             # Then
             events = active_global_trade.get_events()
+            assert len(events) == 1
             event = events[0]
             assert isinstance(event, TradeCancelledEvent)
             assert event.aggregate_id == active_global_trade.trade_id
             assert event.aggregate_type == "TradeAggregate"
             # 基底クラスのフィールドも確認
-            assert hasattr(event, 'occurred_at')
-            assert hasattr(event, 'event_id')
-
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")

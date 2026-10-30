@@ -1,4 +1,5 @@
 """ショップリスト（集約内エンティティ）"""
+
 from dataclasses import dataclass
 
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -14,6 +15,7 @@ class ShopListing:
     在庫は持たない。在庫は紐づく ItemInstance の quantity で表現し、
     ItemRepository 側の ItemAggregate で管理する。
     """
+
     listing_id: ShopListingId
     item_instance_id: ItemInstanceId
     price_per_unit: ShopListingPrice

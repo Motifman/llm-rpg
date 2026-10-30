@@ -26,9 +26,7 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
 _logger = logging.getLogger(__name__)
 
 
-def apply_change_item_instance_state(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_change_item_instance_state(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     visibility = resolve_visibility(effect)
     p = effect.parameters
     updates = p.get("state_updates")
@@ -40,8 +38,7 @@ def apply_change_item_instance_state(
         return
     if ctx.acting_item_aggregate is None:
         _logger.warning(
-            "CHANGE_ITEM_INSTANCE_STATE: caller did not provide acting_item_aggregate; "
-            "skipping state merge"
+            "CHANGE_ITEM_INSTANCE_STATE: caller did not provide acting_item_aggregate; skipping state merge"
         )
         return
     before_state = dict(ctx.acting_item_aggregate.state)
@@ -58,9 +55,7 @@ def apply_change_item_instance_state(
     )
 
 
-def apply_record_item_instance_state_tick(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_record_item_instance_state_tick(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     p = effect.parameters
     state_key = p.get("state_key")
     if not isinstance(state_key, str) or not state_key:
@@ -71,8 +66,7 @@ def apply_record_item_instance_state_tick(
         return
     if ctx.current_tick is None:
         _logger.warning(
-            "RECORD_ITEM_INSTANCE_STATE_TICK: caller did not provide current_tick; "
-            "skipping write to state[%r]",
+            "RECORD_ITEM_INSTANCE_STATE_TICK: caller did not provide current_tick; skipping write to state[%r]",
             state_key,
         )
         return
@@ -86,9 +80,7 @@ def apply_record_item_instance_state_tick(
     ctx.acting_item_aggregate.merge_state({state_key: int(ctx.current_tick.value)})
 
 
-def apply_change_target_item_instance_state(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_change_target_item_instance_state(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     visibility = resolve_visibility(effect)
     p = effect.parameters
     updates = p.get("state_updates")
@@ -100,8 +92,7 @@ def apply_change_target_item_instance_state(
         return
     if ctx.target_item_aggregate is None:
         _logger.warning(
-            "CHANGE_TARGET_ITEM_INSTANCE_STATE: caller did not provide target_item_aggregate; "
-            "skipping state merge"
+            "CHANGE_TARGET_ITEM_INSTANCE_STATE: caller did not provide target_item_aggregate; skipping state merge"
         )
         return
     before_state = dict(ctx.target_item_aggregate.state)
@@ -118,9 +109,7 @@ def apply_change_target_item_instance_state(
     )
 
 
-def apply_record_target_item_instance_state_tick(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_record_target_item_instance_state_tick(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     p = effect.parameters
     state_key = p.get("state_key")
     if not isinstance(state_key, str) or not state_key:
@@ -131,8 +120,7 @@ def apply_record_target_item_instance_state_tick(
         return
     if ctx.current_tick is None:
         _logger.warning(
-            "RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: caller did not provide current_tick; "
-            "skipping write to state[%r]",
+            "RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: caller did not provide current_tick; skipping write to state[%r]",
             state_key,
         )
         return

@@ -89,9 +89,7 @@ def advice_for(kind: str, tool_is_exposed: ToolIsExposed | None) -> str:
     if preface:
         parts.append(preface)
     moves = [
-        f"{lead} {tool}"
-        for tool, lead in _KIND_MOVES.get(kind, ())
-        if tool_is_exposed is None or tool_is_exposed(tool)
+        f"{lead} {tool}" for tool, lead in _KIND_MOVES.get(kind, ()) if tool_is_exposed is None or tool_is_exposed(tool)
     ]
     if moves:
         parts.append("、".join(moves) + " を使う。")

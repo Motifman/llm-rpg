@@ -40,7 +40,7 @@ memory 系のツールが入らないので、正しく分類されている `me
 
 ## 名前で指すとは
 
-`interact.action_name` が手本。「『現在の状況』の対象行にある『使える操作』から、
+`interact.action_name` が手本。「【現在地と周囲】の対象行にある『使える操作』から、
 ``""`` で囲まれた値をそのまま 1 つ選んで渡す」。**プロンプトに出ている文字列を
 そのまま渡させる**ので、推測の余地が無い。
 """
@@ -109,9 +109,9 @@ class TestTheSweepActuallyReadsTheTools:
 
         既知の正例が見えていることを確かめる。走査が別のものを見ていたら落ちる。
         """
-        assert any(
-            arg == "action_name" for _, arg, _ in _PROPERTIES
-        ), f"action_name が見つかりません。走査できた引数: {sorted({a for _, a, _ in _PROPERTIES})}"
+        assert any(arg == "action_name" for _, arg, _ in _PROPERTIES), (
+            f"action_name が見つかりません。走査できた引数: {sorted({a for _, a, _ in _PROPERTIES})}"
+        )
 
 
 class TestNoToolArgumentIsAnInternalId:
@@ -122,9 +122,7 @@ class TestNoToolArgumentIsAnInternalId:
         [(t, a) for t, a, _ in _PROPERTIES],
         ids=[f"{t}.{a}" for t, a, _ in _PROPERTIES],
     )
-    def test_the_argument_name_does_not_look_like_an_id(
-        self, tool_name: str, argument: str
-    ) -> None:
+    def test_the_argument_name_does_not_look_like_an_id(self, tool_name: str, argument: str) -> None:
         """引数名が `_id` / `_ids` で終わらない。
 
         ID を渡させると、プロンプトに出ていないものを指定させることになる。
@@ -162,14 +160,9 @@ class TestNoToolDescriptionAsksForAnId:
         description = str(schema.get("description", ""))
         found = [w for w in _ID_WORDS if w in description]
 
-        assert not found, (
-            f"{tool_name}.{argument} の説明文が {found} を要求しています: "
-            f"{description!r}"
-        )
+        assert not found, f"{tool_name}.{argument} の説明文が {found} を要求しています: {description!r}"
 
-    @pytest.mark.parametrize(
-        "definition", _DEFINITIONS, ids=[d.name for d in _DEFINITIONS]
-    )
+    @pytest.mark.parametrize("definition", _DEFINITIONS, ids=[d.name for d in _DEFINITIONS])
     def test_the_tool_description_does_not_mention_an_id(self, definition: Any) -> None:
         """ツール本体の説明文にも「ID」「識別子」が出ない。"""
         description = str(definition.description or "")

@@ -41,13 +41,9 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
-_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _JIN, _SAKI = (
-    PlayerId(i) for i in range(1, 9)
-)
+_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _JIN, _SAKI = (PlayerId(i) for i in range(1, 9))
 
 
 class TestEjectingTheImpostorIsAWin:

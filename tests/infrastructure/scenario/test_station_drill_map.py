@@ -17,9 +17,7 @@ from ai_rpg_world.infrastructure.scenario.spot_map_validator import (
     validate_spot_map,
 )
 
-_SCENARIO_PATH = (
-    Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO_PATH = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 _KEY_SPOTS = (
     KeySpotRequirement("hall", severity="error"),
     KeySpotRequirement("machine_room", severity="error"),
@@ -80,9 +78,7 @@ def raw_station() -> dict[str, Any]:
 class TestStationDrillMapTopology:
     """九区画の座標・接続と、重要地点への冗長経路を保証する。"""
 
-    def test_all_nine_indoor_spots_load_at_the_declared_coordinates(
-        self, raw_station: dict[str, Any]
-    ) -> None:
+    def test_all_nine_indoor_spots_load_at_the_declared_coordinates(self, raw_station: dict[str, Any]) -> None:
         """九区画は設計座標どおりに読み込め、すべて屋内かつ初期照明 BRIGHT である。"""
         loaded = ScenarioLoader().load_from_file(_SCENARIO_PATH)
         loaded_spots = list(loaded.graph.iter_spot_nodes())
@@ -99,21 +95,15 @@ class TestStationDrillMapTopology:
         assert set(spots) == set(_POSITIONS)
         assert loaded_positions == _POSITIONS
         assert all(raw_spot["is_outdoor"] is False for raw_spot in raw_station["spots"])
-        assert all(
-            raw_spot["atmosphere"]["lighting"] == "BRIGHT"
-            for raw_spot in raw_station["spots"]
-        )
+        assert all(raw_spot["atmosphere"]["lighting"] == "BRIGHT" for raw_spot in raw_station["spots"])
 
-    def test_thirteen_edges_preserve_the_existing_five_travel_ticks(
-        self, raw_station: dict[str, Any]
-    ) -> None:
+    def test_thirteen_edges_preserve_the_existing_five_travel_ticks(self, raw_station: dict[str, Any]) -> None:
         """接続は設計した 13 辺で、既存 5 辺の移動時間を変更しない。"""
         connections = {edge["id"]: edge for edge in raw_station["connections"]}
 
         assert len(connections) == 13
         assert {
-            edge_id: connections[edge_id]["travel_ticks"]
-            for edge_id in _EXISTING_CONNECTION_TICKS
+            edge_id: connections[edge_id]["travel_ticks"] for edge_id in _EXISTING_CONNECTION_TICKS
         } == _EXISTING_CONNECTION_TICKS
         assert {
             edge_id: (edge["from"], edge["to"], edge["travel_ticks"])
@@ -121,9 +111,7 @@ class TestStationDrillMapTopology:
             if edge_id in _NEW_CONNECTIONS
         } == _NEW_CONNECTIONS
 
-    def test_validator_reports_no_warning_with_both_key_spots(
-        self, raw_station: dict[str, Any]
-    ) -> None:
+    def test_validator_reports_no_warning_with_both_key_spots(self, raw_station: dict[str, Any]) -> None:
         """hall と machine_room を重要地点として検査しても、単一辺・単一地点喪失を含む警告が無い。"""
         result = validate_spot_map(
             raw_station,
@@ -172,9 +160,7 @@ class TestStationDrillMapTopology:
         """各重要地点を単一路に変えた反例では、同じ検査設定が到達不能リスクを名指しする。"""
         single_route = deepcopy(raw_station)
         single_route["connections"] = [
-            edge
-            for edge in single_route["connections"]
-            if edge["id"] not in removed_connections
+            edge for edge in single_route["connections"] if edge["id"] not in removed_connections
         ]
 
         result = validate_spot_map(
@@ -182,16 +168,10 @@ class TestStationDrillMapTopology:
             MapValidationConfig(start_spot_id="observatory", key_spots=_KEY_SPOTS),
         )
 
-        key_spot_issues = [
-            issue
-            for issue in result.errors
-            if issue.code == "KEY_SPOT_SINGLE_EDGE_ROUTE"
-        ]
+        key_spot_issues = [issue for issue in result.errors if issue.code == "KEY_SPOT_SINGLE_EDGE_ROUTE"]
         assert any(key_spot in issue.spots for issue in key_spot_issues)
 
-    def test_hall_has_the_unique_maximum_degree_of_five(
-        self, raw_station: dict[str, Any]
-    ) -> None:
+    def test_hall_has_the_unique_maximum_degree_of_five(self, raw_station: dict[str, Any]) -> None:
         """集会室は次数 5 の唯一の中心で、追加接続が中心性を別区画へ移さない。"""
         degrees: Counter[str] = Counter()
         for edge in raw_station["connections"]:
@@ -199,30 +179,21 @@ class TestStationDrillMapTopology:
             degrees[edge["to"]] += 1
 
         assert degrees["hall"] == 5
-        assert [spot_id for spot_id, degree in degrees.items() if degree == 5] == [
-            "hall"
-        ]
+        assert [spot_id for spot_id, degree in degrees.items() if degree == 5] == ["hall"]
 
 
 class TestStationDrillMapExpansionScope:
     """新規区画の設備を保ちつつ、後続のタスク再配置が指定範囲に収まることを保証する。"""
 
-    def test_new_spots_contain_the_declared_non_task_objects(
-        self, raw_station: dict[str, Any]
-    ) -> None:
+    def test_new_spots_contain_the_declared_non_task_objects(self, raw_station: dict[str, Any]) -> None:
         """新規五区画には設計した設備と、その設備に属する追加物体だけがある。"""
         spots = {spot["id"]: spot for spot in raw_station["spots"]}
 
         assert {
-            spot_id: {
-                obj["id"] for obj in spots[spot_id]["interior"]["objects"]
-            }
-            for spot_id in _NEW_SPOT_OBJECTS
+            spot_id: {obj["id"] for obj in spots[spot_id]["interior"]["objects"]} for spot_id in _NEW_SPOT_OBJECTS
         } == _NEW_SPOT_OBJECTS
 
-    def test_new_spots_set_only_the_eight_relocated_task_flags(
-        self, raw_station: dict[str, Any]
-    ) -> None:
+    def test_new_spots_set_only_the_eight_relocated_task_flags(self, raw_station: dict[str, Any]) -> None:
         """新規五区画には指定された8件だけがあり、旧4室のタスクを混ぜない。"""
         spots = {spot["id"]: spot for spot in raw_station["spots"]}
         task_flags = {
@@ -232,9 +203,7 @@ class TestStationDrillMapExpansionScope:
             for interaction in obj.get("interactions", [])
             for effect in interaction.get("effects", [])
             if effect.get("effect_type") == "SET_FLAG"
-            and str(effect.get("parameters", {}).get("flag_name", "")).startswith(
-                "task_"
-            )
+            and str(effect.get("parameters", {}).get("flag_name", "")).startswith("task_")
         }
 
         assert task_flags == {

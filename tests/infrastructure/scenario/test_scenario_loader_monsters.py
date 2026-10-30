@@ -29,8 +29,13 @@ def _minimal_template(template_id: str = "wild_dog") -> dict:
         "race": "WOLF",
         "faction": "ENEMY",
         "base_stats": {
-            "max_hp": 30, "max_mp": 0, "attack": 8, "defense": 4,
-            "speed": 6, "critical_rate": 0.05, "evasion_rate": 0.1,
+            "max_hp": 30,
+            "max_mp": 0,
+            "attack": 8,
+            "defense": 4,
+            "speed": 6,
+            "critical_rate": 0.05,
+            "evasion_rate": 0.1,
         },
         "reward": {"exp": 10, "gold": 0},
         "respawn": {"interval_ticks": 50, "auto": True},
@@ -51,7 +56,8 @@ class TestParseMonsterTemplates:
         loader = ScenarioLoader()
         mapper = ScenarioIdMapper()
         templates, _ = parse_monsters_block(
-            {"templates": [_minimal_template()]}, mapper,
+            {"templates": [_minimal_template()]},
+            mapper,
         )
         assert len(templates) == 1
         st = templates[0]
@@ -108,15 +114,18 @@ class TestParseMonsterTemplates:
     ) -> None:
         """状態異常宣言の4項目が、文字列を残さずドメイン値へ変換される。"""
         raw = _minimal_template()
-        raw["attack_status_effects"] = [{
-            "effect_type": "poison",
-            "chance": 0.6,
-            "duration_ticks": 10,
-            "value": 1.5,
-        }]
+        raw["attack_status_effects"] = [
+            {
+                "effect_type": "poison",
+                "chance": 0.6,
+                "duration_ticks": 10,
+                "value": 1.5,
+            }
+        ]
 
         templates, _ = parse_monsters_block(
-            {"templates": [raw]}, ScenarioIdMapper(),
+            {"templates": [raw]},
+            ScenarioIdMapper(),
         )
 
         effect = templates[0].template.attack_status_effects[0]
@@ -128,18 +137,24 @@ class TestParseMonsterTemplates:
     def test_missing_attack_status_effects_becomes_empty_tuple(self) -> None:
         """状態異常宣言を省略したテンプレートは、効果なしの空タプルになる。"""
         templates, _ = parse_monsters_block(
-            {"templates": [_minimal_template()]}, ScenarioIdMapper(),
+            {"templates": [_minimal_template()]},
+            ScenarioIdMapper(),
         )
 
         assert templates[0].template.attack_status_effects == ()
 
     @pytest.mark.parametrize(
         "attack_status_effects",
-        ["poison", ["poison"], [{"effect_type": "unknown", "chance": 0.5, "duration_ticks": 3}],
-         [{"effect_type": "poison", "chance": 2.0, "duration_ticks": 3}]],
+        [
+            "poison",
+            ["poison"],
+            [{"effect_type": "unknown", "chance": 0.5, "duration_ticks": 3}],
+            [{"effect_type": "poison", "chance": 2.0, "duration_ticks": 3}],
+        ],
     )
     def test_invalid_attack_status_effect_declaration_fails_loading(
-        self, attack_status_effects: object,
+        self,
+        attack_status_effects: object,
     ) -> None:
         """一覧形状・種別・値域が不正なら、JSON経路付きで読み込みを中止する。"""
         raw = _minimal_template()
@@ -150,7 +165,8 @@ class TestParseMonsterTemplates:
             match=r"monsters\.templates\[0\]\.attack_status_effects",
         ):
             parse_monsters_block(
-                {"templates": [raw]}, ScenarioIdMapper(),
+                {"templates": [raw]},
+                ScenarioIdMapper(),
             )
 
 
@@ -172,21 +188,6 @@ class TestParseMonsterPlacements:
         assert isinstance(p, ScenarioMonsterPlacement)
         assert p.template_string_id == "wild_dog"
         assert p.spot_string_id == "deep_forest"
-        assert p.coordinate_x == 0
-
-    def test_coordinate_xyz_zero(self) -> None:
-        """coordinate を渡さなくても (0,0,0) で構築できる。"""
-        loader = ScenarioLoader()
-        _, placements = parse_monsters_block(
-            {
-                "templates": [_minimal_template()],
-                "initial_placements": [{"template": "wild_dog", "spot": "deep_forest"}],
-            },
-            ScenarioIdMapper(),
-        )
-        assert placements[0].coordinate_x == 0
-        assert placements[0].coordinate_y == 0
-        assert placements[0].coordinate_z == 0
 
     def test_template_empty_string_scenario_load_error(self) -> None:
         """template が空文字なら ScenarioLoadError。"""

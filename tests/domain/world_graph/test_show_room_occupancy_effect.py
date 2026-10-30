@@ -28,7 +28,4 @@ def test_effect_carries_one_runtime_occupancy_request_without_static_text() -> N
 
     assert result.messages == ()
     assert len(result.room_occupancy_display_specs) == 1
-    assert (
-        result.room_occupancy_display_specs[0].scope
-        == "living_players_and_fallen_bodies"
-    )
+    assert result.room_occupancy_display_specs[0].scope == "living_players_and_fallen_bodies"

@@ -88,17 +88,12 @@ def after_a_hidden_kill():
 
     darken_spot(runtime)
 
-    before = {
-        int(p): len(runtime._obs_buffer.get_observations(p)) for p in _ELSEWHERE
-    }
+    before = {int(p): len(runtime._obs_buffer.get_observations(p)) for p in _ELSEWHERE}
     runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
     for _ in range(_TICKS_AFTER_THE_KILL):
         runtime.advance_tick()
 
-    received = {
-        int(p): runtime._obs_buffer.get_observations(p)[before[int(p)] :]
-        for p in _ELSEWHERE
-    }
+    received = {int(p): runtime._obs_buffer.get_observations(p)[before[int(p)] :] for p in _ELSEWHERE}
     return runtime, received
 
 
@@ -121,9 +116,7 @@ class TestNothingAboutTheKillReachesThoseElsewhere:
     """離れた者の観測に、殺しの痕跡が一切残らない。"""
 
     @pytest.mark.parametrize("name", [_VICTIM_NAME, _KILLER_NAME])
-    def test_neither_the_victim_nor_the_killer_is_named(
-        self, after_a_hidden_kill, name
-    ) -> None:
+    def test_neither_the_victim_nor_the_killer_is_named(self, after_a_hidden_kill, name) -> None:
         """被害者の名前も加害者の名前も現れない。
 
         離れた 2 人は集会室に居続けるので、この 2 人の名前が観測に出る
@@ -133,13 +126,9 @@ class TestNothingAboutTheKillReachesThoseElsewhere:
 
         for player_id in _ELSEWHERE:
             for entry in received[int(player_id)]:
-                assert name not in _searchable_text(entry), (
-                    f"{player_id} に漏れた: {_searchable_text(entry)}"
-                )
+                assert name not in _searchable_text(entry), f"{player_id} に漏れた: {_searchable_text(entry)}"
 
-    def test_the_killers_player_id_does_not_leak_through_structured(
-        self, after_a_hidden_kill
-    ) -> None:
+    def test_the_killers_player_id_does_not_leak_through_structured(self, after_a_hidden_kill) -> None:
         """加害者を指す player_id が structured に現れない。
 
         prose を隠しても、機械可読な側に id が残っていれば隠せていない。
@@ -152,9 +141,7 @@ class TestNothingAboutTheKillReachesThoseElsewhere:
                 structured = entry.output.structured
                 assert "killer_player_id" not in structured, structured
 
-    def test_the_death_is_not_described_in_any_wording(
-        self, after_a_hidden_kill
-    ) -> None:
+    def test_the_death_is_not_described_in_any_wording(self, after_a_hidden_kill) -> None:
         """死や負傷を表す語が、どの言い回しでも現れない。
 
         名前を伏せたまま「遠くで誰かが倒れた気配がした」を配ると、**居場所を
@@ -177,17 +164,13 @@ class TestTheInvariantIsNotVacuous:
     死んでいるのか区別が付かなくなる。
     """
 
-    def test_those_elsewhere_still_receive_other_observations(
-        self, after_a_hidden_kill
-    ) -> None:
+    def test_those_elsewhere_still_receive_other_observations(self, after_a_hidden_kill) -> None:
         """離れた者も、殺し以外の観測は受け取っている。"""
         _, received = after_a_hidden_kill
 
         assert any(received[int(p)] for p in _ELSEWHERE)
 
-    def test_someone_at_the_scene_does_learn_of_it(
-        self, after_a_hidden_kill
-    ) -> None:
+    def test_someone_at_the_scene_does_learn_of_it(self, after_a_hidden_kill) -> None:
         """現場に来た者には届く。
 
         隠しすぎて**誰にも届かない**なら、通報も会議も起こらずゲームが

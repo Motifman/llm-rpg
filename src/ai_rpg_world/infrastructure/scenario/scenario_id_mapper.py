@@ -32,17 +32,13 @@ class _Namespace:
         try:
             return self._str_to_int[string_id]
         except KeyError:
-            raise ScenarioIdMappingError(
-                f"Unknown string ID: {string_id!r}"
-            ) from None
+            raise ScenarioIdMappingError(f"Unknown string ID: {string_id!r}") from None
 
     def get_str(self, numeric_id: int) -> str:
         try:
             return self._int_to_str[numeric_id]
         except KeyError:
-            raise ScenarioIdMappingError(
-                f"Unknown numeric ID: {numeric_id}"
-            ) from None
+            raise ScenarioIdMappingError(f"Unknown numeric ID: {numeric_id}") from None
 
     def contains_str(self, string_id: str) -> bool:
         return string_id in self._str_to_int
@@ -52,7 +48,12 @@ class ScenarioIdMapper:
     """名前空間ごとに独立した文字列⇔数値 ID マッピングを管理する。"""
 
     _NAMESPACES = (
-        "spot", "connection", "object", "sub_location", "item_spec", "player",
+        "spot",
+        "connection",
+        "object",
+        "sub_location",
+        "item_spec",
+        "player",
         # Phase B-2a: モンスター種別 ID。シナリオ JSON 内の文字列 ("wild_dog" 等)
         # を MonsterTemplateId(int) に対応付ける。
         "monster_template",
@@ -84,6 +85,5 @@ class ScenarioIdMapper:
             return self._ns[namespace]
         except KeyError:
             raise ScenarioIdMappingError(
-                f"Unknown namespace: {namespace!r}. "
-                f"Valid namespaces: {sorted(self._NAMESPACES)}"
+                f"Unknown namespace: {namespace!r}. Valid namespaces: {sorted(self._NAMESPACES)}"
             ) from None

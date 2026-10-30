@@ -18,6 +18,7 @@ from ai_rpg_world.application.observation.services.formatters.trade_formatter im
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.monster.event.monster_events import MonsterCreatedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeAcceptedEvent,
@@ -29,7 +30,6 @@ from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
-from ai_rpg_world.domain.world.event.harvest_events import HarvestStartedEvent
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 _TRADE_FMT_TS = datetime(2024, 1, 1, 12, 0, 0)
@@ -134,9 +134,7 @@ class TestTradeObservationFormatterTradeOffered:
         agg = MagicMock()
         agg.item_spec.item_spec_id.value = 901
         item_repo.find_by_id.return_value = agg
-        ctx = _make_context(
-            player_profile_repository=profile_repo, item_repository=item_repo
-        )
+        ctx = _make_context(player_profile_repository=profile_repo, item_repository=item_repo)
         formatter = TradeObservationFormatter(ctx)
 
         event = TradeOfferedEvent.create(
@@ -273,19 +271,14 @@ class TestTradeObservationFormatterUnknownEvent:
 
     def test_returns_none_for_unknown_event(self, formatter):
         """対象外イベントは None。"""
+
         class UnknownEvent:
             pass
+
         out = formatter.format(UnknownEvent(), PlayerId(1))
         assert out is None
 
-    def test_returns_none_for_harvest_event(self, formatter):
-        """Harvest イベントは None。"""
-        event = HarvestStartedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="Harvest",
-            actor_id=WorldObjectId(1),
-            target_id=WorldObjectId(2),
-            finish_tick=WorldTick(10),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is None
+    def test_returns_none_for_monster_created_event(self, formatter):
+        """担当外のモンスター作成イベントは観測文を作らない。"""
+        event = MonsterCreatedEvent.__new__(MonsterCreatedEvent)
+        assert formatter.format(event, PlayerId(1)) is None

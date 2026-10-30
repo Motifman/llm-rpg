@@ -7,6 +7,7 @@ from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 
 class LootTableRepository(ReadRepository[LootTableAggregate, LootTableId], ABC):
     """ドロップテーブルのリポジトリインターフェース"""
+
     pass
 
 

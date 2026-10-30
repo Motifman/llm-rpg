@@ -38,7 +38,9 @@ class SqliteRecipeRepository(RecipeRepository):
         return build_recipe(row=row, ingredient_rows=list(ingredient_rows))
 
     def find_by_id(self, entity_id: RecipeId) -> RecipeAggregate | None:
-        return self._decode_row(self._conn.execute("SELECT * FROM game_recipes WHERE recipe_id = ?", (int(entity_id),)).fetchone())
+        return self._decode_row(
+            self._conn.execute("SELECT * FROM game_recipes WHERE recipe_id = ?", (int(entity_id),)).fetchone()
+        )
 
     def find_by_ids(self, entity_ids: list[RecipeId]) -> list[RecipeAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
@@ -46,19 +48,15 @@ class SqliteRecipeRepository(RecipeRepository):
     def find_all(self) -> list[RecipeAggregate]:
         return [
             decoded
-            for row in self._conn.execute(
-                "SELECT * FROM game_recipes ORDER BY recipe_id ASC"
-            ).fetchall()
+            for row in self._conn.execute("SELECT * FROM game_recipes ORDER BY recipe_id ASC").fetchall()
             if (decoded := self._decode_row(row)) is not None
         ]
 
     def find_by_result_item(self, item_spec_id: ItemSpecId) -> list[RecipeAggregate]:
-        rows = self._conn.execute("SELECT * FROM game_recipes WHERE result_item_spec_id = ? ORDER BY recipe_id ASC", (int(item_spec_id),)).fetchall()
-        return [
-            decoded
-            for row in rows
-            if (decoded := self._decode_row(row)) is not None
-        ]
+        rows = self._conn.execute(
+            "SELECT * FROM game_recipes WHERE result_item_spec_id = ? ORDER BY recipe_id ASC", (int(item_spec_id),)
+        ).fetchall()
+        return [decoded for row in rows if (decoded := self._decode_row(row)) is not None]
 
     def find_by_ingredient(self, item_spec_id: ItemSpecId) -> list[RecipeAggregate]:
         rows = self._conn.execute(
@@ -71,11 +69,7 @@ class SqliteRecipeRepository(RecipeRepository):
             """,
             (int(item_spec_id),),
         ).fetchall()
-        return [
-            decoded
-            for row in rows
-            if (decoded := self._decode_row(row)) is not None
-        ]
+        return [decoded for row in rows if (decoded := self._decode_row(row)) is not None]
 
     def save(self, entity: RecipeAggregate) -> RecipeAggregate:
         raise NotImplementedError("SqliteRecipeRepository is read-only. Use SqliteRecipeWriter.")
@@ -108,7 +102,9 @@ class SqliteRecipeWriter(RecipeWriter):
         if self._commits_after_write:
             return
         if not self._conn.in_transaction:
-            raise RuntimeError("for_shared_unit_of_work で生成した writer の書き込みは、アクティブなトランザクション内（with uow）で実行してください")
+            raise RuntimeError(
+                "for_shared_unit_of_work で生成した writer の書き込みは、アクティブなトランザクション内（with uow）で実行してください"
+            )
 
     def replace_recipe(self, recipe: RecipeAggregate) -> None:
         self._assert_shared_transaction_active()
@@ -122,12 +118,21 @@ class SqliteRecipeWriter(RecipeWriter):
                 result_quantity = excluded.result_quantity,
                 description = excluded.description
             """,
-            (int(recipe.recipe_id), recipe.name, int(recipe.result.item_spec_id), int(recipe.result.quantity), recipe.description),
+            (
+                int(recipe.recipe_id),
+                recipe.name,
+                int(recipe.result.item_spec_id),
+                int(recipe.result.quantity),
+                recipe.description,
+            ),
         )
         self._conn.execute("DELETE FROM game_recipe_ingredients WHERE recipe_id = ?", (int(recipe.recipe_id),))
         self._conn.executemany(
             "INSERT INTO game_recipe_ingredients (recipe_id, ingredient_item_spec_id, quantity) VALUES (?, ?, ?)",
-            [(int(recipe.recipe_id), int(ingredient.item_spec_id), int(ingredient.quantity)) for ingredient in recipe.ingredients],
+            [
+                (int(recipe.recipe_id), int(ingredient.item_spec_id), int(ingredient.quantity))
+                for ingredient in recipe.ingredients
+            ],
         )
         self._finalize_write()
 

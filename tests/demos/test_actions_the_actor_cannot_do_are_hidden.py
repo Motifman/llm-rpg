@@ -45,12 +45,10 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
-_MORI = PlayerId(1)   # crew
-_KUZE = PlayerId(3)   # keeper
+_MORI = PlayerId(1)  # crew
+_KUZE = PlayerId(3)  # keeper
 
 #: 全員が集会室に居る状態で観測すれば、同席者行が 3 人ぶん出る。
 _KILL_LABEL = "人を襲う"
@@ -62,11 +60,7 @@ def runtime():
 
 
 def _rows_offering_the_kill(runtime, player_id: PlayerId) -> list[str]:
-    return [
-        line.strip()
-        for line in runtime.build_observation(player_id).splitlines()
-        if _KILL_LABEL in line
-    ]
+    return [line.strip() for line in runtime.build_observation(player_id).splitlines() if _KILL_LABEL in line]
 
 
 class TestTheKillIsOnlyOfferedToWhoCanDoIt:
@@ -84,11 +78,7 @@ class TestTheKillIsOnlyOfferedToWhoCanDoIt:
         """
         # 人数を焼き付けない。**シナリオに人を足すたびに落ちる**のは、
         # このテストが見たいこと (襲えるのはインポスターだけか) と関係が無い。
-        crew_count = sum(
-            1
-            for p in runtime.scenario.player_spawns
-            if p.initial_state.get("role") == "crew"
-        )
+        crew_count = sum(1 for p in runtime.scenario.player_spawns if p.initial_state.get("role") == "crew")
 
         assert len(_rows_offering_the_kill(runtime, _KUZE)) == crew_count
 
@@ -142,17 +132,13 @@ class TestOnlyTheActorsOwnStateIsUsed:
 
     def test_a_matching_actor_state_passes(self) -> None:
         """自分の状態が条件と一致すれば出る。"""
-        idef = _Idef(
-            _Cond(InteractionConditionTypeEnum.PLAYER_STATE_IS, {"role": "keeper"})
-        )
+        idef = _Idef(_Cond(InteractionConditionTypeEnum.PLAYER_STATE_IS, {"role": "keeper"}))
 
         assert _offerable(idef, {"role": "keeper"}) is True
 
     def test_a_mismatching_actor_state_hides_it(self) -> None:
         """自分の状態が条件と違えば出ない。"""
-        idef = _Idef(
-            _Cond(InteractionConditionTypeEnum.PLAYER_STATE_IS, {"role": "keeper"})
-        )
+        idef = _Idef(_Cond(InteractionConditionTypeEnum.PLAYER_STATE_IS, {"role": "keeper"}))
 
         assert _offerable(idef, {"role": "crew"}) is False
 
@@ -163,11 +149,7 @@ class TestOnlyTheActorsOwnStateIsUsed:
         自身の状態を見るようにした変更が、うっかり対象側にも及んでいない
         ことを確かめる。
         """
-        idef = _Idef(
-            _Cond(
-                InteractionConditionTypeEnum.TARGET_PLAYER_STATE_IS, {"role": "crew"}
-            )
-        )
+        idef = _Idef(_Cond(InteractionConditionTypeEnum.TARGET_PLAYER_STATE_IS, {"role": "crew"}))
 
         assert _offerable(idef, {"role": "keeper"}) is True
 
@@ -206,9 +188,7 @@ class TestCallersThatDoNotPassTheActorState:
         既存の呼び出しを黙って壊さないため。役割条件を持つ行為が出たまま
         になるだけで、いままでと同じ挙動に留まる。
         """
-        idef = _Idef(
-            _Cond(InteractionConditionTypeEnum.PLAYER_STATE_IS, {"role": "keeper"})
-        )
+        idef = _Idef(_Cond(InteractionConditionTypeEnum.PLAYER_STATE_IS, {"role": "keeper"}))
 
         assert (
             PlayerInteractionApplicationService._is_offerable(

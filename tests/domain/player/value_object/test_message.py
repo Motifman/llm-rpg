@@ -18,7 +18,7 @@ class TestMessage:
             sender_name="Alice",
             recipient_id=20,
             content="Hello, World!",
-            timestamp=timestamp
+            timestamp=timestamp,
         )
 
         assert message.message_id == 1
@@ -37,20 +37,20 @@ class TestMessage:
             sender_name="  Alice  ",
             recipient_id=20,
             content="  Hello, World!  ",
-            timestamp=timestamp
+            timestamp=timestamp,
         )
 
         assert message.sender_name == "Alice"
         assert message.content == "Hello, World!"
 
-    def test_direct_instantiation_negative_message_id(self):
-        """message_idが負の値の場合"""
+    def test_direct_instantiation_zero_message_id(self):
+        """message_idが0なら専用の理由付き例外で拒否する。"""
         timestamp = datetime(2024, 1, 1, 12, 0, 0)
         with pytest.raises(MessageValidationException, match="メッセージIDは正の数値である必要があります"):
             Message(0, 10, "Alice", 20, "Hello", timestamp)
 
-    def test_direct_instantiation_negative_sender_id(self):
-        """sender_idが負の値の場合"""
+    def test_direct_instantiation_zero_sender_id(self):
+        """sender_idが0なら専用の理由付き例外で拒否する。"""
         timestamp = datetime(2024, 1, 1, 12, 0, 0)
         with pytest.raises(MessageValidationException, match="送信者IDは正の数値である必要があります"):
             Message(1, 0, "Alice", 20, "Hello", timestamp)
@@ -67,8 +67,8 @@ class TestMessage:
         with pytest.raises(MessageValidationException, match="送信者名は空にできません"):
             Message(1, 10, "   ", 20, "Hello", timestamp)
 
-    def test_direct_instantiation_negative_recipient_id(self):
-        """recipient_idが負の値の場合"""
+    def test_direct_instantiation_zero_recipient_id(self):
+        """recipient_idが0なら専用の理由付き例外で拒否する。"""
         timestamp = datetime(2024, 1, 1, 12, 0, 0)
         with pytest.raises(MessageValidationException, match="受信者IDは正の数値である必要があります"):
             Message(1, 10, "Alice", 0, "Hello", timestamp)
@@ -143,8 +143,20 @@ class TestMessage:
         expected = f"Message(id=1, from=Alice, to_player=20, content='{'A' * 50}...')"
         assert str(message) == expected
 
-    def test_equality(self):
-        """等価性比較のテスト"""
+    @pytest.mark.parametrize(
+        "different_fields",
+        [
+            (2, 10, "Alice", 20, "Hello", datetime(2024, 1, 1, 12, 0, 0)),
+            (1, 15, "Alice", 20, "Hello", datetime(2024, 1, 1, 12, 0, 0)),
+            (1, 10, "Bob", 20, "Hello", datetime(2024, 1, 1, 12, 0, 0)),
+            (1, 10, "Alice", 30, "Hello", datetime(2024, 1, 1, 12, 0, 0)),
+            (1, 10, "Alice", 20, "Goodbye", datetime(2024, 1, 1, 12, 0, 0)),
+            (1, 10, "Alice", 20, "Hello", datetime(2024, 1, 2, 12, 0, 0)),
+        ],
+        ids=["message-id", "sender-id", "sender-name", "recipient-id", "content", "timestamp"],
+    )
+    def test_equality(self, different_fields):
+        """全項目が同じ値は同値で、どの1項目が違っても同値にはならない。"""
         timestamp = datetime(2024, 1, 1, 12, 0, 0)
         message1 = Message.create(1, 10, "Alice", 20, "Hello", timestamp)
         message2 = Message.create(1, 10, "Alice", 20, "Hello", timestamp)
@@ -155,6 +167,7 @@ class TestMessage:
         assert message1 != message3
         assert message1 != message4
         assert message1 != "not message"
+        assert message1 != Message.create(*different_fields)
 
     def test_hash(self):
         """ハッシュ値のテスト"""
@@ -164,14 +177,26 @@ class TestMessage:
         message3 = Message.create(2, 10, "Alice", 20, "Hello", timestamp)
 
         assert hash(message1) == hash(message2)
-        assert hash(message1) != hash(message3)
 
         # setで使用可能
         message_set = {message1, message2, message3}
         assert len(message_set) == 2
+        assert message2 in message_set
+        assert message3 in message_set
 
-    def test_immutability(self):
-        """不変性のテスト"""
+    @pytest.mark.parametrize(
+        ("field", "replacement"),
+        [
+            ("message_id", 2),
+            ("sender_id", 15),
+            ("sender_name", "Bob"),
+            ("recipient_id", 30),
+            ("content", "Changed"),
+            ("timestamp", datetime(2024, 1, 2, 12, 0, 0)),
+        ],
+    )
+    def test_immutability(self, field, replacement):
+        """読取操作は値を変えず、公開項目への外部代入は拒否して全項目を保持する。"""
         timestamp = datetime(2024, 1, 1, 12, 0, 0)
         message1 = Message.create(1, 10, "Alice", 20, "Hello", timestamp)
 
@@ -179,6 +204,9 @@ class TestMessage:
         message1.display()
         message1.get_content_length()
         message1.is_from_player(10)
+
+        with pytest.raises(AttributeError):
+            setattr(message1, field, replacement)
 
         assert message1.message_id == 1
         assert message1.sender_id == 10

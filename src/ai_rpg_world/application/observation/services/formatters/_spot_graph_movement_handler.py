@@ -27,7 +27,9 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
     """移動系イベントの formatter。"""
 
     def format(
-        self, event: Any, recipient_player_id: PlayerId,
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
     ) -> ObservationOutput | None:
         if isinstance(event, EntityEnteredSpotEvent):
             return self._format_entity_entered(event, recipient_player_id)
@@ -40,7 +42,9 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         return None
 
     def _format_entity_entered(
-        self, event: EntityEnteredSpotEvent, recipient_id: PlayerId,
+        self,
+        event: EntityEnteredSpotEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         if self._is_self(event.entity_id, recipient_id):
             return None
@@ -57,7 +61,8 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             from_spot_name = self._resolve_spot_name(event.from_spot_id)
             from_spot_id_value = event.from_spot_id.value
             connection_name = self._resolve_connection_name(
-                event.from_spot_id, event.spot_id,
+                event.from_spot_id,
+                event.spot_id,
             )
         prose = self._declared_prose(event, actor) or self._compose_entered_prose(
             actor=actor,
@@ -70,9 +75,7 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             "spot_name": spot,
             "spot_id_value": event.spot_id.value,
         }
-        if not declaration_hides_actor(
-            getattr(event, "observation_message", None)
-        ):
+        if not declaration_hides_actor(getattr(event, "observation_message", None)):
             structured["actor"] = actor
         if from_spot_name is not None:
             structured["from_spot_name"] = from_spot_name
@@ -81,7 +84,9 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         if connection_name is not None:
             structured["connection_name"] = connection_name
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social",
+            prose=prose,
+            structured=structured,
+            observation_category="social",
         )
 
     @staticmethod
@@ -101,7 +106,9 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         return message.replace("{actor}", actor)
 
     def _format_entity_left(
-        self, event: EntityLeftSpotEvent, recipient_id: PlayerId,
+        self,
+        event: EntityLeftSpotEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         if self._is_self(event.entity_id, recipient_id):
             return None
@@ -111,7 +118,8 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         # になる。``to_spot_id`` は ``EntityLeftSpotEvent`` 必須フィールド。
         to_spot_name = self._resolve_spot_name(event.to_spot_id)
         connection_name = self._resolve_connection_name(
-            event.spot_id, event.to_spot_id,
+            event.spot_id,
+            event.to_spot_id,
         )
         prose = self._declared_prose(event, actor) or self._compose_left_prose(
             actor=actor,
@@ -123,14 +131,14 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             "to_spot_name": to_spot_name,
             "to_spot_id_value": event.to_spot_id.value,
         }
-        if not declaration_hides_actor(
-            getattr(event, "observation_message", None)
-        ):
+        if not declaration_hides_actor(getattr(event, "observation_message", None)):
             structured["actor"] = actor
         if connection_name is not None:
             structured["connection_name"] = connection_name
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social",
+            prose=prose,
+            structured=structured,
+            observation_category="social",
         )
 
     @staticmethod
@@ -144,10 +152,7 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         """進入観測の prose を組み立てる (フォールバックを段階化)。"""
         # 接続名と進入元の両方が解決できる場合は最も情報量の多い文を返す
         if from_spot_name and connection_name:
-            return (
-                f"{actor}が「{from_spot_name}」から〈{connection_name}〉を通って"
-                f"{spot_name}にやってきた。"
-            )
+            return f"{actor}が「{from_spot_name}」から〈{connection_name}〉を通って{spot_name}にやってきた。"
         if from_spot_name:
             return f"{actor}が「{from_spot_name}」から{spot_name}にやってきた。"
         # from_spot_id が None (= 初期配置) のときは従来通り
@@ -166,14 +171,13 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         if not to_spot_name or to_spot_name == "不明なスポット":
             return f"{actor}がこのスポットを去った。"
         if connection_name:
-            return (
-                f"{actor}が〈{connection_name}〉を抜けて"
-                f"「{to_spot_name}」へ去っていった。"
-            )
+            return f"{actor}が〈{connection_name}〉を抜けて「{to_spot_name}」へ去っていった。"
         return f"{actor}が「{to_spot_name}」へ去っていった。"
 
     def _resolve_connection_name(
-        self, from_spot_id: Any, to_spot_id: Any,
+        self,
+        from_spot_id: Any,
+        to_spot_id: Any,
     ) -> str | None:
         """``from_spot_id`` → ``to_spot_id`` の接続の通り名を返す (見つからなければ None)。
 
@@ -196,7 +200,9 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         return None
 
     def _format_explored(
-        self, event: SpotExploredEvent, recipient_id: PlayerId,
+        self,
+        event: SpotExploredEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         if self._is_self(event.entity_id, recipient_id):
             return None
@@ -214,7 +220,9 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         )
 
     def _format_prepared_action(
-        self, event: SpotPlayerPreparedActionEvent, recipient_id: PlayerId,
+        self,
+        event: SpotPlayerPreparedActionEvent,
+        recipient_id: PlayerId,
     ) -> ObservationOutput | None:
         # アクター本人は自身の prepare 操作結果をツール側で受け取るため除外。
         if self._is_self(event.entity_id, recipient_id):
@@ -229,5 +237,7 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             "message": event.observation_message,
         }
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social",
+            prose=prose,
+            structured=structured,
+            observation_category="social",
         )

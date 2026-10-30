@@ -42,9 +42,7 @@ class EncounterKey:
 
     #: 既知の kind 一覧。未知 kind を拒否するのではなく、後方互換を保ちつつ
     #: 「想定されている kind」を明示するための参考値。
-    KNOWN_KINDS: ClassVar[frozenset[str]] = frozenset(
-        {"player", "spot", "event", "object", "weather", "emotion"}
-    )
+    KNOWN_KINDS: ClassVar[frozenset[str]] = frozenset({"player", "spot", "event", "object", "weather", "emotion"})
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, str):
@@ -58,13 +56,10 @@ class EncounterKey:
         if not identifier.strip():
             raise EncounterKeyValidationException("identifier must be non-empty")
         if _SEPARATOR in kind:
-            raise EncounterKeyValidationException(
-                f"kind must not contain {_SEPARATOR!r} (kind={kind!r})"
-            )
+            raise EncounterKeyValidationException(f"kind must not contain {_SEPARATOR!r} (kind={kind!r})")
         if _SEPARATOR in identifier:
             raise EncounterKeyValidationException(
-                f"identifier must not contain {_SEPARATOR!r} "
-                f"(identifier={identifier!r})"
+                f"identifier must not contain {_SEPARATOR!r} (identifier={identifier!r})"
             )
 
     @property
@@ -99,9 +94,7 @@ class EncounterKey:
         if not isinstance(canonical, str):
             raise EncounterKeyValidationException("canonical must be str")
         if _SEPARATOR not in canonical:
-            raise EncounterKeyValidationException(
-                f"canonical must contain {_SEPARATOR!r} (got {canonical!r})"
-            )
+            raise EncounterKeyValidationException(f"canonical must contain {_SEPARATOR!r} (got {canonical!r})")
         kind, identifier = canonical.split(_SEPARATOR, 1)
         # __post_init__ で validation される
         return cls(kind=kind, identifier=identifier)

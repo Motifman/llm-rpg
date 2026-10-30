@@ -54,6 +54,7 @@ class _CommandContextEventPublisher:
     def publish_all(self, events: Any) -> None:
         self._context.collect_all(events)
 
+
 #: gold の増減 trace で使う出所。商人との売買 (merchant_buy / merchant_sell) と
 #: 並ぶ 3 つ目の源泉。
 TRADE_GOLD_SOURCE = "trade_settle"
@@ -69,58 +70,42 @@ class TradePartnerNotHereError(PlayerTradeException):
     error_code = "TRADE_PARTNER_NOT_HERE"
 
     def __init__(self, *, partner_name: str = "その相手") -> None:
-        super().__init__(
-            f"{partner_name}はこの場所に居ません。"
-            "取引は同じ場所に居るときだけ持ちかけられます。"
-        )
+        super().__init__(f"{partner_name}はこの場所に居ません。取引は同じ場所に居るときだけ持ちかけられます。")
 
 
 class TradeItemNotOwnedError(PlayerTradeException):
     error_code = "TRADE_ITEM_NOT_OWNED"
 
     def __init__(self, *, item_name: str, quantity: int, owned: int) -> None:
-        super().__init__(
-            f"{item_name}を{quantity}つ差し出そうとしましたが、"
-            f"いま出せるのは{owned}つです。"
-        )
+        super().__init__(f"{item_name}を{quantity}つ差し出そうとしましたが、いま出せるのは{owned}つです。")
 
 
 class TradeGoldNotEnoughError(PlayerTradeException):
     error_code = "TRADE_GOLD_NOT_ENOUGH"
 
     def __init__(self, *, needed: int, available: int) -> None:
-        super().__init__(
-            f"{needed}G を差し出そうとしましたが、いま使えるのは{available}G です。"
-        )
+        super().__init__(f"{needed}G を差し出そうとしましたが、いま使えるのは{available}G です。")
 
 
 class TradeUnknownItemError(PlayerTradeException):
     error_code = "TRADE_UNKNOWN_ITEM"
 
     def __init__(self, *, item_label: str) -> None:
-        super().__init__(
-            f"この世界に「{item_label}」という品はありません。名前を確かめてください。"
-        )
+        super().__init__(f"この世界に「{item_label}」という品はありません。名前を確かめてください。")
 
 
 class TradeDuplicateOfferError(PlayerTradeException):
     error_code = "TRADE_DUPLICATE_OFFER"
 
     def __init__(self, *, partner_name: str) -> None:
-        super().__init__(
-            f"{partner_name}へは既に取引を持ちかけています。"
-            "返事を待つか、流れるのを待ってください。"
-        )
+        super().__init__(f"{partner_name}へは既に取引を持ちかけています。返事を待つか、流れるのを待ってください。")
 
 
 class NoOfferForYouError(PlayerTradeException):
     error_code = "TRADE_NO_OFFER_FOR_YOU"
 
     def __init__(self) -> None:
-        super().__init__(
-            "あなたに持ちかけられている取引はありません。"
-            "誰かが持ちかけるのを待ってください。"
-        )
+        super().__init__("あなたに持ちかけられている取引はありません。誰かが持ちかけるのを待ってください。")
 
 
 class AmbiguousOfferError(PlayerTradeException):
@@ -138,10 +123,7 @@ class TradeAskNotMetError(PlayerTradeException):
     error_code = "TRADE_ASK_NOT_MET"
 
     def __init__(self, *, missing: str) -> None:
-        super().__init__(
-            f"求められているものが足りません ({missing})。"
-            "集めてから受け直せます (申し出は残っています)。"
-        )
+        super().__init__(f"求められているものが足りません ({missing})。集めてから受け直せます (申し出は残っています)。")
 
 
 class TradeSelfInventoryFullError(PlayerTradeException):
@@ -266,16 +248,12 @@ class PlayerTradeService:
             raise TradeDuplicateOfferError(partner_name=self._name_of(target))
 
         gives = TradeSide(
-            items=tuple(
-                (int(entry["item_spec_id"]), int(entry["quantity"]))
-                for entry in gives_items
-            ),
+            items=tuple((int(entry["item_spec_id"]), int(entry["quantity"])) for entry in gives_items),
             gold=int(gives_gold),
         )
         asks = TradeSide(
             items=tuple(
-                (self._item_spec_id_by_label(entry["item_label"]), int(entry["quantity"]))
-                for entry in asks_item_labels
+                (self._item_spec_id_by_label(entry["item_label"]), int(entry["quantity"])) for entry in asks_item_labels
             ),
             gold=int(asks_gold),
         )
@@ -298,7 +276,10 @@ class PlayerTradeService:
     # ── 返事 ────────────────────────────────────────────────────────────
 
     def accept(
-        self, target: PlayerId, *, offerer: PlayerId | None = None,
+        self,
+        target: PlayerId,
+        *,
+        offerer: PlayerId | None = None,
     ) -> TradeSettlement:
         """持ちかけられた取引を受け、その場で交換する。"""
         if not self._command_bound:
@@ -332,7 +313,10 @@ class PlayerTradeService:
         )
 
     def decline(
-        self, target: PlayerId, *, offerer: PlayerId | None = None,
+        self,
+        target: PlayerId,
+        *,
+        offerer: PlayerId | None = None,
     ) -> PendingTradeOffer:
         """持ちかけられた取引を断る。相手の凍結はここで解ける。"""
         if not self._command_bound:
@@ -378,7 +362,9 @@ class PlayerTradeService:
     # ── 内部 ────────────────────────────────────────────────────────────
 
     def _offer_for(
-        self, target: PlayerId, offerer: PlayerId | None,
+        self,
+        target: PlayerId,
+        offerer: PlayerId | None,
     ) -> PendingTradeOffer:
         candidates = self._offers.list_for_target(target)
         if not candidates:
@@ -389,15 +375,15 @@ class PlayerTradeService:
                     return cast("PendingTradeOffer", offer)
             raise NoOfferForYouError()
         if len(candidates) > 1:
-            raise AmbiguousOfferError(
-                offerer_names=[
-                    self._name_of(offer.offerer_player_id) for offer in candidates
-                ]
-            )
+            raise AmbiguousOfferError(offerer_names=[self._name_of(offer.offerer_player_id) for offer in candidates])
         return cast("PendingTradeOffer", candidates[0])
 
     def _publish(
-        self, offer: PendingTradeOffer, *, kind: str, actor: PlayerId,
+        self,
+        offer: PendingTradeOffer,
+        *,
+        kind: str,
+        actor: PlayerId,
     ) -> None:
         """交渉の 1 手を世界の出来事として出す。
 
@@ -412,11 +398,7 @@ class PlayerTradeService:
             PlayerTradeOfferEvent,
         )
 
-        partner = (
-            offer.target_player_id
-            if actor == offer.offerer_player_id
-            else offer.offerer_player_id
-        )
+        partner = offer.target_player_id if actor == offer.offerer_player_id else offer.offerer_player_id
         graph = self._graph.find_graph()
         try:
             spot_id = graph.get_entity_spot(EntityId.create(int(actor)))
@@ -440,10 +422,7 @@ class PlayerTradeService:
 
     def _describe(self, side: TradeSide) -> str:
         """片側の中身を、観測の文面に載る短い日本語にする。"""
-        parts = [
-            f"{self._item_display_name(spec_id)} {quantity}つ"
-            for spec_id, quantity in side.items
-        ]
+        parts = [f"{self._item_display_name(spec_id)} {quantity}つ" for spec_id, quantity in side.items]
         if side.gold:
             parts.append(f"{side.gold}G")
         return "と".join(parts) if parts else "何も"
@@ -464,7 +443,8 @@ class PlayerTradeService:
             available = self._freeze.available_gold(offerer)
             if available < gives.gold:
                 raise TradeGoldNotEnoughError(
-                    needed=gives.gold, available=available,
+                    needed=gives.gold,
+                    available=available,
                 )
         # 品は数え上げの時点で凍結ぶんが除かれている
         # (count_owned_item_instances_by_spec が予約済みの instance を飛ばす)。
@@ -521,7 +501,9 @@ class PlayerTradeService:
                 continue
             if is_offerer:
                 raise TradeReceiverInventoryFullError(
-                    partner_name=self._name_of(offerer), needed=needed, free=room,
+                    partner_name=self._name_of(offerer),
+                    needed=needed,
+                    free=room,
                 )
             raise TradeSelfInventoryFullError(needed=needed, free=room)
 
@@ -556,7 +538,11 @@ class PlayerTradeService:
         if not spec_ids:
             return
         grant_item_specs_to_inventory(
-            receiver, spec_ids, self._items, self._item_specs, self._inventories,
+            receiver,
+            spec_ids,
+            self._items,
+            self._item_specs,
+            self._inventories,
             overflow_sink=self._overflow_sink,
         )
 
@@ -597,11 +583,7 @@ class PlayerTradeService:
 
 def _spec_ids_of(side: TradeSide) -> tuple[ItemSpecId, ...]:
     """片側の品を、1 個 1 要素の並びにする。"""
-    return tuple(
-        ItemSpecId.create(spec_id)
-        for spec_id, quantity in side.items
-        for _ in range(quantity)
-    )
+    return tuple(ItemSpecId.create(spec_id) for spec_id, quantity in side.items for _ in range(quantity))
 
 
 def _item_count(side: TradeSide) -> int:

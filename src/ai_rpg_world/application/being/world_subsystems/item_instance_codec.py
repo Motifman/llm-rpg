@@ -61,8 +61,7 @@ def _advance_item_instance_id_sequence(repo: Any, max_seen_id: int) -> None:
             ("item_instance_id", max_seen_id),
         )
         conn.execute(
-            "UPDATE game_sequences SET next_value = ? "
-            "WHERE name = ? AND next_value < ?",
+            "UPDATE game_sequences SET next_value = ? WHERE name = ? AND next_value < ?",
             (max_seen_id, "item_instance_id", max_seen_id),
         )
         if getattr(repo, "_commits_after_write", False):
@@ -79,19 +78,12 @@ class ItemInstanceSubsystemCodec(WorldSubsystemCodec):
     def capture(self, runtime: Any) -> dict[str, Any]:
         repo = getattr(runtime, "_item_repo", None)
         if repo is None:
-            raise RuntimeError(
-                "runtime._item_repo not found; "
-                "ItemInstanceSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._item_repo not found; ItemInstanceSubsystemCodec requires it")
         entries: list[dict[str, Any]] = []
         # ItemRepository が ``find_all`` を持つので enumerate 可能。
         for aggregate in repo.find_all():
             inst = aggregate.item_instance
-            durability_current = (
-                int(inst.durability.current)
-                if inst.durability is not None
-                else None
-            )
+            durability_current = int(inst.durability.current) if inst.durability is not None else None
             entries.append(
                 {
                     "item_instance_id": int(inst.item_instance_id.value),
@@ -122,10 +114,7 @@ class ItemInstanceSubsystemCodec(WorldSubsystemCodec):
 
         repo = getattr(runtime, "_item_repo", None)
         if repo is None:
-            raise RuntimeError(
-                "runtime._item_repo not found; "
-                "ItemInstanceSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._item_repo not found; ItemInstanceSubsystemCodec requires it")
 
         max_seen_id = 0
         for entry in data.get("entries", []):
@@ -157,8 +146,7 @@ class ItemInstanceSubsystemCodec(WorldSubsystemCodec):
                     raise RuntimeError(
                         "item_instance restore: item_instance_id=%s not found in "
                         "repo and item_spec_id=%r cannot be resolved "
-                        "(snapshot vs scenario mismatch)"
-                        % (iid.value, spec_id_raw)
+                        "(snapshot vs scenario mismatch)" % (iid.value, spec_id_raw)
                     )
                 from ai_rpg_world.domain.item.aggregate.item_aggregate import (
                     ItemAggregate,
@@ -192,8 +180,7 @@ class ItemInstanceSubsystemCodec(WorldSubsystemCodec):
                 aggregate = repo.find_by_id(iid)
                 if aggregate is None:
                     raise RuntimeError(
-                        "item_instance restore: created item_instance_id="
-                        f"{iid.value} but repo.find_by_id returned None"
+                        f"item_instance restore: created item_instance_id={iid.value} but repo.find_by_id returned None"
                     )
             inst = aggregate.item_instance
             if spec_id_raw is not None:
@@ -220,8 +207,7 @@ class ItemInstanceSubsystemCodec(WorldSubsystemCodec):
                     # する場合、snapshot と現シナリオの静的定義が食い違っている。
                     raise RuntimeError(
                         "set_quantity failed for item_instance_id=%s: %s; "
-                        "snapshot does not match current ItemSpec"
-                        % (iid.value, exc)
+                        "snapshot does not match current ItemSpec" % (iid.value, exc)
                     ) from exc
 
             # durability: 現値だけ復元。max は spec 由来で変えない。

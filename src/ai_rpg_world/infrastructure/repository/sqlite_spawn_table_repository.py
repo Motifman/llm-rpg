@@ -91,15 +91,11 @@ class SqliteSpawnTableWriter(SpawnTableWriter):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteSpawnTableWriter:
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteSpawnTableWriter:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteSpawnTableWriter:
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteSpawnTableWriter:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
@@ -147,7 +143,9 @@ class SqliteSpawnTableWriter(SpawnTableWriter):
                     int(slot.template_id),
                     slot.weight,
                     slot.max_concurrent,
-                    None if slot.condition is None or slot.condition.time_band is None else slot.condition.time_band.value,
+                    None
+                    if slot.condition is None or slot.condition.time_band is None
+                    else slot.condition.time_band.value,
                 )
                 for index, slot in enumerate(table.slots)
             ],

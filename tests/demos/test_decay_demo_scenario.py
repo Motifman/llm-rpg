@@ -53,13 +53,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "tests"
-    / "fixtures"
-    / "scenarios"
-    / "decay_demo.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "decay_demo.json"
 
 
 @pytest.fixture
@@ -146,9 +140,7 @@ class TestDecayDemoScenario:
         # tick 1-9: まだ rusty にならない（経過 1-9 < 10）
         for t in range(1, 10):
             binding_stage.run(WorldTick(t))
-            assert _sword_state(interior_repo, loaded)["rust_level"] == "clean", (
-                f"tick={t} で早期に錆びた"
-            )
+            assert _sword_state(interior_repo, loaded)["rust_level"] == "clean", f"tick={t} で早期に錆びた"
         # tick 10: 0+10=10、predicate true → rusty
         binding_stage.run(WorldTick(10))
         assert _sword_state(interior_repo, loaded)["rust_level"] == "rusty"
@@ -180,9 +172,7 @@ class TestDecayDemoScenario:
         # tick 6-14: 経過 1-9 < 10 なので clean のまま
         for t in range(6, 15):
             binding_stage.run(WorldTick(t))
-            assert _sword_state(interior_repo, loaded)["rust_level"] == "clean", (
-                f"tick={t} で早期に錆びた"
-            )
+            assert _sword_state(interior_repo, loaded)["rust_level"] == "clean", f"tick={t} で早期に錆びた"
         # tick 15: 5+10=15 で predicate true → rusty
         binding_stage.run(WorldTick(15))
         assert _sword_state(interior_repo, loaded)["rust_level"] == "rusty"

@@ -41,9 +41,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 #: モリ(灯り) / セナ / クゼ(インポスター) / アオイ / ハギ(灯り)
 _MORI, _SENA, _KUZE, _AOI, _HAGI = (PlayerId(i) for i in range(1, 6))
 
@@ -83,11 +81,7 @@ def _runtime_with_strike_lighting(tmp_path: Path, *lighting: tuple[str, str]):
     for idef in data["player_interactions"]:
         if idef["action_name"] != "strike_down":
             continue
-        others = [
-            cond
-            for cond in idef["preconditions"]
-            if not cond["condition_type"].startswith("SPOT_LIGHTING_IS")
-        ]
+        others = [cond for cond in idef["preconditions"] if not cond["condition_type"].startswith("SPOT_LIGHTING_IS")]
         idef["preconditions"] = others + [
             {
                 "condition_type": condition_type,
@@ -104,15 +98,9 @@ def _runtime_with_strike_lighting(tmp_path: Path, *lighting: tuple[str, str]):
 def _row(runtime, viewer: PlayerId, target_name: str) -> str:
     """人物の本体行と、直後の「いまできない」行を一続きで返す。"""
     lines = runtime.build_observation(viewer).splitlines()
-    index = next(
-        index
-        for index, line in enumerate(lines)
-        if f'"{target_name}"' in line
-    )
+    index = next(index for index, line in enumerate(lines) if f'"{target_name}"' in line)
     selected = [lines[index].strip()]
-    if index + 1 < len(lines) and lines[index + 1].strip().startswith(
-        "いまできない:"
-    ):
+    if index + 1 < len(lines) and lines[index + 1].strip().startswith("いまできない:"):
         selected.append(lines[index + 1].strip())
     return "\n".join(selected)
 
@@ -120,11 +108,7 @@ def _row(runtime, viewer: PlayerId, target_name: str) -> str:
 def _action_text(row: str, action_name: str) -> str:
     """人物の二段表示から、指定した対人 action の表示だけを取り出す。"""
     actions = row.replace("\n", "、").split("、")
-    selected = next(
-        action
-        for action in actions
-        if f'"{action_name}"' in action
-    )
+    selected = next(action for action in actions if f'"{action_name}"' in action)
     if "いまできない:" in selected:
         return selected.split("いまできない:", 1)[1].strip()
     if "[" in selected:
@@ -141,9 +125,7 @@ class TestTheRowSaysWhenTheLightIsWrong:
         **run 011 でここが空白だった。** インポスターは 3 回選んで 3 回
         弾かれている。
         """
-        runtime = _runtime_with_strike_lighting(
-            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
-        )
+        runtime = _runtime_with_strike_lighting(tmp_path, ("SPOT_LIGHTING_IS", "DARK"))
         row = _action_text(_row(runtime, _KUZE, "モリ"), "strike_down")
 
         assert "strike_down" in row
@@ -155,9 +137,7 @@ class TestTheRowSaysWhenTheLightIsWrong:
         **「常に付く」でもこのテストの片割れは通る**ので、付かない側を
         必ず一緒に見る。付きっぱなしだと、暗い所でも襲えないと読める。
         """
-        runtime = _runtime_with_strike_lighting(
-            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
-        )
+        runtime = _runtime_with_strike_lighting(tmp_path, ("SPOT_LIGHTING_IS", "DARK"))
         darken_spot(runtime)
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
@@ -173,22 +153,16 @@ class TestTheRowSaysWhenTheLightIsWrong:
         灯りは仕事の道具であると同時に身を守る手段で、**この関係が行から
         読めることに意味がある**。
         """
-        runtime = _runtime_with_strike_lighting(
-            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
-        )
+        runtime = _runtime_with_strike_lighting(tmp_path, ("SPOT_LIGHTING_IS", "DARK"))
         darken_spot(runtime)
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
-        assert "いまは" not in _action_text(
-            _row(runtime, _KUZE, "セナ"), "strike_down"
-        )
+        assert "いまは" not in _action_text(_row(runtime, _KUZE, "セナ"), "strike_down")
 
         _take_lantern(runtime, _MORI)
         _move(runtime, _MORI, "corridor")  # ランタン持ち
 
-        assert "いまは薄暗い" in _action_text(
-            _row(runtime, _KUZE, "セナ"), "strike_down"
-        )
+        assert "いまは薄暗い" in _action_text(_row(runtime, _KUZE, "セナ"), "strike_down")
 
     def test_the_declared_condition_is_still_shown(self, tmp_path) -> None:
         """宣言のほうの「暗い場所のみ」は消さない。
@@ -196,9 +170,7 @@ class TestTheRowSaysWhenTheLightIsWrong:
         いまの状況だけ書いて宣言を消すと、**なぜできないのかが分からず**、
         暗い所へ移るという次の手に繋がらない。
         """
-        runtime = _runtime_with_strike_lighting(
-            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
-        )
+        runtime = _runtime_with_strike_lighting(tmp_path, ("SPOT_LIGHTING_IS", "DARK"))
         row = _row(runtime, _KUZE, "モリ")
 
         assert "暗い場所のみ" in row
@@ -212,18 +184,14 @@ class TestBothPolaritiesOfTheLightingConditionAreRead:
     評価する。
     """
 
-    def test_a_forbidden_lighting_says_the_room_is_that_way_now(
-        self, tmp_path
-    ) -> None:
+    def test_a_forbidden_lighting_says_the_room_is_that_way_now(self, tmp_path) -> None:
         """「暗い所では不可」の条件で暗い部屋に居ると、行が「いまは暗い」と書く。
 
         極性を読まずに要求値の集合として扱うと、``DARK`` が集合に入って
         いるため暗い部屋では成立と誤読され、**断りが消える**。実行時は弾く
         ので「選べるのに必ず失敗する手」に戻る。
         """
-        runtime = _runtime_with_strike_lighting(
-            tmp_path, ("SPOT_LIGHTING_IS_NOT", "DARK")
-        )
+        runtime = _runtime_with_strike_lighting(tmp_path, ("SPOT_LIGHTING_IS_NOT", "DARK"))
         darken_spot(runtime)
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
@@ -233,16 +201,12 @@ class TestBothPolaritiesOfTheLightingConditionAreRead:
         assert "strike_down" in row
         assert "いまは暗い" in row
 
-    def test_a_forbidden_lighting_stays_silent_where_it_is_allowed(
-        self, tmp_path
-    ) -> None:
+    def test_a_forbidden_lighting_stays_silent_where_it_is_allowed(self, tmp_path) -> None:
         """「暗い所では不可」の条件で明るい部屋に居ると、断りが付かない。
 
         **「常に付く」でも上のテストは通る**ので、付かない側を一緒に見る。
         """
-        runtime = _runtime_with_strike_lighting(
-            tmp_path, ("SPOT_LIGHTING_IS_NOT", "DARK")
-        )
+        runtime = _runtime_with_strike_lighting(tmp_path, ("SPOT_LIGHTING_IS_NOT", "DARK"))
 
         row = _action_text(_row(runtime, _KUZE, "モリ"), "strike_down")
 
@@ -265,9 +229,7 @@ class TestEveryLightingConditionMustHold:
             ("SPOT_LIGHTING_IS_NOT", "DIM"),
         )
 
-    def test_one_satisfied_condition_does_not_excuse_the_other(
-        self, tmp_path
-    ) -> None:
+    def test_one_satisfied_condition_does_not_excuse_the_other(self, tmp_path) -> None:
         """薄暗い部屋では、「明るくない」を満たしていても断りが付く。
 
         灯りを持つ人が居る通路は薄暗い。「明るくない」は満たすが「薄暗くない」
@@ -304,9 +266,7 @@ class TestEveryLightingConditionMustHold:
 class TestABrokenLightingLookupDoesNotBecomeASilentPass:
     """明るさを引けないとき、断りだけ黙って消えることがない。"""
 
-    def test_a_failing_resolver_drops_the_row_instead_of_the_hint(
-        self, tmp_path, caplog
-    ) -> None:
+    def test_a_failing_resolver_drops_the_row_instead_of_the_hint(self, tmp_path, caplog) -> None:
         """明るさ解決が例外で落ちると、同席者行の action 候補ごと消えて警告が残る。
 
         断りだけ消して行を出すと、**明るい部屋で「いつでも襲える」と読める**
@@ -317,16 +277,12 @@ class TestABrokenLightingLookupDoesNotBecomeASilentPass:
         なるが、現在状態そのものを落とすより軽い。
         """
 
-        runtime = _runtime_with_strike_lighting(
-            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
-        )
+        runtime = _runtime_with_strike_lighting(tmp_path, ("SPOT_LIGHTING_IS", "DARK"))
 
         def _broken(_spot):
             raise RuntimeError("照明 resolver の配線が壊れている")
 
-        runtime._player_interaction_service._effective_lighting_resolver.resolve = (
-            _broken
-        )
+        runtime._player_interaction_service._effective_lighting_resolver.resolve = _broken
 
         with caplog.at_level("WARNING"):
             row = _row(runtime, _KUZE, "モリ")
@@ -386,18 +342,13 @@ class TestNothingLeaksThroughTheNewHint:
         表示が同じことを確かめる。インポスターを複数にしたとき、表示だけで
         相方が判明する回帰をここで止める。
         """
-        runtime = _runtime_with_strike_lighting(
-            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
-        )
+        runtime = _runtime_with_strike_lighting(tmp_path, ("SPOT_LIGHTING_IS", "DARK"))
         sena_status = runtime._player_status_repo.find_by_id(_SENA)
         sena_status.merge_state({"role": "keeper"})
         runtime._player_status_repo.save(sena_status)
 
         hints = {
-            name: _action_text(
-                _row(runtime, _KUZE, name), "strike_down"
-            )
-            for name in ("モリ", "セナ", "アオイ", "ハギ")
+            name: _action_text(_row(runtime, _KUZE, name), "strike_down") for name in ("モリ", "セナ", "アオイ", "ハギ")
         }
 
         assert len(set(hints.values())) == 1, hints

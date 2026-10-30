@@ -23,7 +23,6 @@ from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEven
 from ai_rpg_world.domain.player.exception import PlayerDownedException, SpeechValidationException
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 _Result = TypeVar("_Result")
@@ -32,7 +31,7 @@ _Result = TypeVar("_Result")
 class PlayerSpeechApplicationService:
     """
     プレイヤーが誰に・どの方法で発言するかを指定し、発言を実行する。
-    同一スポットかつ一定範囲内のプレイヤーに観測として届けるのは観測ハンドラ側で行う。
+    スポット間の音伝播に従って観測を届けるのは観測ハンドラ側で行う。
     """
 
     def __init__(
@@ -48,17 +47,15 @@ class PlayerSpeechApplicationService:
         self._departed_spot_provider = departed_spot_provider
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         try:
             return operation()
         except SpeechApplicationException:
             raise
         except (PlayerDownedException, SpeechValidationException) as e:
-            raise SpeechCommandException(str(e), **context) from e
+            raise SpeechCommandException(str(e), error_code=e.error_code, **context) from e
         except DomainException as e:
-            raise SpeechCommandException(str(e), **context) from e
+            raise SpeechCommandException(str(e), error_code=e.error_code, **context) from e
         except Exception as e:
             self._logger.error(
                 "Unexpected error in %s: %s",
@@ -74,7 +71,7 @@ class PlayerSpeechApplicationService:
     def speak(self, command: SpeakCommand) -> None:
         """
         発言を実行する。
-        発言者の現在地（spot_id, coordinate）をリポジトリから取得し、
+        発言者の現在のスポット（spot_id）をリポジトリから取得し、
         集約で検証・イベント発火後、イベントを発行する。
         """
         self._execute_with_error_handling(
@@ -92,7 +89,7 @@ class PlayerSpeechApplicationService:
         if status is None:
             raise PlayerNotFoundException(command.speaker_player_id)
 
-        if status.current_spot_id is None or status.current_coordinate is None:
+        if status.current_spot_id is None:
             raise PlayerLocationNotSetException(command.speaker_player_id)
 
         target_player_id: PlayerId | None = None
@@ -101,17 +98,11 @@ class PlayerSpeechApplicationService:
                 raise SpeechCommandException("囁きの場合は宛先プレイヤーを指定してください")
             target_player_id = PlayerId(command.target_player_id)
 
-        if (
-            status.is_down
-            and self._departed_speaker_checker is not None
-            and self._departed_speaker_checker(speaker_id)
-        ):
+        if status.is_down and self._departed_speaker_checker is not None and self._departed_speaker_checker(speaker_id):
             if not command.content or not command.content.strip():
                 raise SpeechValidationException("発言内容を空にできません")
             departed_spot = (
-                self._departed_spot_provider(speaker_id)
-                if self._departed_spot_provider is not None
-                else None
+                self._departed_spot_provider(speaker_id) if self._departed_spot_provider is not None else None
             )
             if departed_spot is None:
                 raise PlayerLocationNotSetException(command.speaker_player_id)
@@ -122,7 +113,6 @@ class PlayerSpeechApplicationService:
                     content=command.content.strip(),
                     channel=command.channel,
                     spot_id=departed_spot,
-                    speaker_coordinate=status.current_coordinate,
                     target_player_id=target_player_id,
                 )
             )
@@ -131,7 +121,6 @@ class PlayerSpeechApplicationService:
                 content=command.content,
                 channel=command.channel,
                 spot_id=status.current_spot_id,
-                speaker_coordinate=status.current_coordinate,
                 target_player_id=target_player_id,
             )
 

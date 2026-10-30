@@ -29,12 +29,9 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 _TOWN = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 
 _INITIAL_ORDERS = [
-    {"merchant": "gustav", "side": "sell", "item_spec": "bread",
-     "quantity": 1, "unit_price": 24},
-    {"merchant": "gustav", "side": "sell", "item_spec": "bread",
-     "quantity": 1, "unit_price": 20},
-    {"merchant": "gustav", "side": "buy", "item_spec": "herb",
-     "quantity": 2, "unit_price": 7},
+    {"merchant": "gustav", "side": "sell", "item_spec": "bread", "quantity": 1, "unit_price": 24},
+    {"merchant": "gustav", "side": "sell", "item_spec": "bread", "quantity": 1, "unit_price": 20},
+    {"merchant": "gustav", "side": "buy", "item_spec": "herb", "quantity": 2, "unit_price": 7},
 ]
 
 
@@ -60,10 +57,7 @@ def _build(tmp_path: Path, *, with_orders: bool = True) -> Any:
 
 
 def _snapshot_rows(recorder: _Recorder) -> list[dict[str, Any]]:
-    return [
-        r for r in recorder.records
-        if r["kind"] == "market_activity" and r.get("market_event") == "board_snapshot"
-    ]
+    return [r for r in recorder.records if r["kind"] == "market_activity" and r.get("market_event") == "board_snapshot"]
 
 
 class TestTheBoardIsWrittenDownWhenTheRecorderArrives:
@@ -104,10 +98,7 @@ class TestTheBoardIsWrittenDownWhenTheRecorderArrives:
 
         runtime.set_trace_recorder(recorder)
 
-        listed = [
-            r for r in recorder.records
-            if r["kind"] == "market_activity" and r.get("market_event") == "listed"
-        ]
+        listed = [r for r in recorder.records if r["kind"] == "market_activity" and r.get("market_event") == "listed"]
         assert listed == []
 
     def test_an_empty_board_records_nothing(self, tmp_path: Path) -> None:
@@ -138,9 +129,7 @@ class TestTheBoardCanBeRebuiltFromTheTraceAlone:
 
         rebuilt = _rebuild_board(recorder.records)
 
-        assert sorted(rebuilt) == sorted(
-            (o["side"], o["unit_price"], o["quantity"]) for o in _INITIAL_ORDERS
-        )
+        assert sorted(rebuilt) == sorted((o["side"], o["unit_price"], o["quantity"]) for o in _INITIAL_ORDERS)
 
     def test_a_settlement_can_be_traced_back_to_its_order(self, tmp_path: Path) -> None:
         """約定が、復元した板の注文に辿れる。
@@ -162,20 +151,23 @@ class TestTheBoardCanBeRebuiltFromTheTraceAlone:
         lena = PlayerId(1)
         herb = runtime._item_spec_repo.find_by_name("薬草").item_spec_id.value
         grant_item_specs_to_inventory(
-            lena, (ItemSpecId.create(herb),), runtime._item_repo,
-            runtime._item_spec_repo, runtime._player_inventory_repo,
+            lena,
+            (ItemSpecId.create(herb),),
+            runtime._item_repo,
+            runtime._item_spec_repo,
+            runtime._player_inventory_repo,
             overflow_sink=IGNORE_OVERFLOW,
         )
 
         runtime._market_service.sell_best(
-            lena, item_label="薬草", quantity=1, current_tick=runtime.current_tick(),
+            lena,
+            item_label="薬草",
+            quantity=1,
+            current_tick=runtime.current_tick(),
         )
 
         known = _known_order_ids(recorder.records)
-        settled = [
-            r for r in recorder.records
-            if r["kind"] == "market_activity" and r.get("market_event") == "settled"
-        ]
+        settled = [r for r in recorder.records if r["kind"] == "market_activity" and r.get("market_event") == "settled"]
         assert len(settled) == 1
         assert settled[0]["resting_order_id"] in known, (
             "約定が、trace にある注文へ辿れない (初期注文が記録されていない)"

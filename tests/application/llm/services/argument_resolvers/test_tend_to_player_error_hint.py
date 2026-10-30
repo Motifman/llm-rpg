@@ -85,18 +85,12 @@ class TestTendToPlayerResolverErrorMessage:
         # 対象名は含まれる
         assert "ノア" in msg, "対象名がエラーに含まれない"
         # 「同じ場所」または「別の場所」または類似の場所制約表現がある
-        assert (
-            "同じ場所" in msg
-            or "同じスポット" in msg
-            or "この場所" in msg
-        ), (
+        assert "同じ場所" in msg or "同じスポット" in msg or "この場所" in msg, (
             f"tend_to_player の同 spot 制約が message で説明されていない: {msg}"
         )
         # 「倒れている」もヒントとして含まれる (target が候補にない場合は
         # spot 違いか未 down かの両方の可能性)
-        assert "倒れて" in msg, (
-            f"「倒れている」条件が説明されていない: {msg}"
-        )
+        assert "倒れて" in msg, f"「倒れている」条件が説明されていない: {msg}"
 
     def test_preserves_error_code_invalid_target_label(self) -> None:
         """既存の error_code は変えない (LLM の学習パスと remediation mapping

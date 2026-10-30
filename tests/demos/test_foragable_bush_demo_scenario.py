@@ -37,9 +37,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """デモ規則は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
@@ -77,13 +77,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "tests"
-    / "fixtures"
-    / "scenarios"
-    / "foragable_bush_demo.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "foragable_bush_demo.json"
 
 
 @pytest.fixture
@@ -202,7 +196,9 @@ class TestForagableBushDemoScenario:
         """harvest で野いちご 1 個を入手し、茂みは available=false + last_harvest_tick 記録になる。"""
         loaded, interior_repo, inventory_repo, item_repo, app, _ = forage
         app.execute_interaction(
-            _player_id(loaded), _bush_id(loaded), "harvest",
+            _player_id(loaded),
+            _bush_id(loaded),
+            "harvest",
             current_tick=WorldTick(3),
         )
         assert _berry_count(inventory_repo, item_repo, loaded) == 1
@@ -215,11 +211,17 @@ class TestForagableBushDemoScenario:
         loaded, _, _, _, app, _ = forage
         # 1 度目の harvest で available=false に
         app.execute_interaction(
-            _player_id(loaded), _bush_id(loaded), "harvest", current_tick=WorldTick(3),
+            _player_id(loaded),
+            _bush_id(loaded),
+            "harvest",
+            current_tick=WorldTick(3),
         )
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _bush_id(loaded), "harvest", current_tick=WorldTick(4),
+                _player_id(loaded),
+                _bush_id(loaded),
+                "harvest",
+                current_tick=WorldTick(4),
             )
 
     def test_bush_regrows_after_offset_and_allows_second_harvest(self, forage) -> None:
@@ -227,21 +229,25 @@ class TestForagableBushDemoScenario:
         loaded, interior_repo, inventory_repo, item_repo, app, binding_stage = forage
         # 1 回目
         app.execute_interaction(
-            _player_id(loaded), _bush_id(loaded), "harvest", current_tick=WorldTick(3),
+            _player_id(loaded),
+            _bush_id(loaded),
+            "harvest",
+            current_tick=WorldTick(3),
         )
         # tick 4-10: 経過 1-7 < 8 なので available=false 維持
         for t in range(4, 11):
             binding_stage.run(WorldTick(t))
-            assert _bush_state(interior_repo, loaded)["available"] is False, (
-                f"tick={t} で早期再生"
-            )
+            assert _bush_state(interior_repo, loaded)["available"] is False, f"tick={t} で早期再生"
         # tick 11: 3+8=11、predicate true → available=true
         binding_stage.run(WorldTick(11))
         assert _bush_state(interior_repo, loaded)["available"] is True
 
         # 2 回目 harvest 成功
         app.execute_interaction(
-            _player_id(loaded), _bush_id(loaded), "harvest", current_tick=WorldTick(12),
+            _player_id(loaded),
+            _bush_id(loaded),
+            "harvest",
+            current_tick=WorldTick(12),
         )
         assert _berry_count(inventory_repo, item_repo, loaded) == 2
         assert _bush_state(interior_repo, loaded)["available"] is False

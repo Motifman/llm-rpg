@@ -43,9 +43,7 @@ def attach_social_sqlite_repositories(
         users=SqliteSnsUserRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
         posts=SqlitePostRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
         replies=SqliteReplyRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
-        notifications=SqliteSnsNotificationRepository.for_shared_unit_of_work(
-            connection, event_sink=event_sink
-        ),
+        notifications=SqliteSnsNotificationRepository.for_shared_unit_of_work(connection, event_sink=event_sink),
     )
 
 

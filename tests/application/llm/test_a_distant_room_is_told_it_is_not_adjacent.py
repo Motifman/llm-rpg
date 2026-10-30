@@ -47,15 +47,25 @@ class _CountingPort(ITypedJudgmentPort):
     def judge(self, state: str | Mapping[str, Any] | Sequence[Any], questions: Mapping[str, Question]):
         self.calls += 1
         return {
-            name: JudgmentResult(value="通信室", probabilities={"通信室": 0.99}, confidence=0.9, source=JudgmentSource.JEV, latency_ms=1.0)
+            name: JudgmentResult(
+                value="通信室",
+                probabilities={"通信室": 0.99},
+                confidence=0.9,
+                source=JudgmentSource.JEV,
+                latency_ms=1.0,
+            )
             for name in questions
         }
 
 
 def _context(*, distant: tuple[str, ...] = ("機関室", "観測室")) -> ToolRuntimeContextDto:
     targets: dict[str, ToolRuntimeTargetDto] = {
-        "S1": DestinationToolRuntimeTargetDto(label="S1", kind="spot_graph_destination", display_name="通信室", spot_id=4),
-        "S2": DestinationToolRuntimeTargetDto(label="S2", kind="spot_graph_destination", display_name="連絡通路", spot_id=5),
+        "S1": DestinationToolRuntimeTargetDto(
+            label="S1", kind="spot_graph_destination", display_name="通信室", spot_id=4
+        ),
+        "S2": DestinationToolRuntimeTargetDto(
+            label="S2", kind="spot_graph_destination", display_name="連絡通路", spot_id=5
+        ),
     }
     return ToolRuntimeContextDto(targets=targets, distant_spot_names=distant)
 

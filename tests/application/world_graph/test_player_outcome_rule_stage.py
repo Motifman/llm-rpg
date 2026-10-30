@@ -32,9 +32,7 @@ def _rule(*, once: bool = True) -> PlayerOutcomeRule:
     return PlayerOutcomeRule(
         rule_id="rescue_ship",
         trigger=ScenarioEventCondition(condition_type="TICK_AT_LEAST", tick=10),
-        player_conditions=(
-            ScenarioEventCondition(condition_type="PLAYER_AT_SPOT", spot_id=100),
-        ),
+        player_conditions=(ScenarioEventCondition(condition_type="PLAYER_AT_SPOT", spot_id=100),),
         outcome=PlayerOutcomeEnum.RESCUED,
         once=once,
     )
@@ -72,9 +70,7 @@ def _stage(
             rules=(_rule(once=once),),
             outcome_registry=registry,
             condition_evaluator=evaluator,
-            progress_store=(
-                progress or InMemorySpotGraphScenarioEventProgressStore()
-            ),
+            progress_store=(progress or InMemorySpotGraphScenarioEventProgressStore()),
             graph_provider=MagicMock(return_value=MagicMock()),
             player_ids=player_ids,
             command_scope_factory=factory,
@@ -114,9 +110,7 @@ class TestPlayerOutcomeRuleStage:
         """確定区間未配線ならonce進捗を読む前にstageを拒否する。"""
         evaluator = MagicMock()
         progress = MagicMock()
-        progress.is_fired.side_effect = AssertionError(
-            "未配線時に進捗を読んではならない"
-        )
+        progress.is_fired.side_effect = AssertionError("未配線時に進捗を読んではならない")
         stage = PlayerOutcomeRuleStageService(
             rules=(_rule(),),
             outcome_registry=PlayerOutcomeRegistry.new_for_players([PlayerId(1)]),
@@ -149,10 +143,8 @@ class TestPlayerOutcomeRuleStage:
         evaluator = MagicMock()
         evaluator.evaluate_diagnostic.return_value = _evaluation(True, _rule().trigger)
         player_condition = _rule().player_conditions[0]
-        evaluator.evaluate_all_diagnostic_for_player.side_effect = (
-            lambda *args, **kwargs: _evaluation(
-                kwargs["target_player_id"] == PlayerId(1), player_condition
-            )
+        evaluator.evaluate_all_diagnostic_for_player.side_effect = lambda *args, **kwargs: _evaluation(
+            kwargs["target_player_id"] == PlayerId(1), player_condition
         )
         stage, registry = _stage(evaluator=evaluator)
 
@@ -166,16 +158,12 @@ class TestPlayerOutcomeRuleStage:
         evaluator = MagicMock()
         evaluator.evaluate_diagnostic.return_value = _evaluation(True, _rule().trigger)
         player_condition = _rule().player_conditions[0]
-        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
-            False, player_condition
-        )
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(False, player_condition)
         progress = InMemorySpotGraphScenarioEventProgressStore()
         stage, registry = _stage(evaluator=evaluator, progress=progress)
 
         stage.run(WorldTick(10))
-        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
-            True, player_condition
-        )
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(True, player_condition)
         stage.run(WorldTick(11))
 
         assert registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
@@ -186,15 +174,11 @@ class TestPlayerOutcomeRuleStage:
         evaluator = MagicMock()
         evaluator.evaluate_diagnostic.return_value = _evaluation(True, _rule().trigger)
         player_condition = _rule().player_conditions[0]
-        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
-            False, player_condition
-        )
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(False, player_condition)
         stage, registry = _stage(evaluator=evaluator, once=False)
 
         stage.run(WorldTick(10))
-        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
-            True, player_condition
-        )
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(True, player_condition)
         stage.run(WorldTick(11))
 
         assert registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.RESCUED
@@ -204,9 +188,7 @@ class TestPlayerOutcomeRuleStage:
         """既に確定した結果は対象者評価から除外し、別の結果で上書きしない。"""
         evaluator = MagicMock()
         evaluator.evaluate_diagnostic.return_value = _evaluation(True, _rule().trigger)
-        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
-            True, _rule().player_conditions[0]
-        )
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(True, _rule().player_conditions[0])
         stage, registry = _stage(evaluator=evaluator)
         registry.set_outcome(PlayerId(1), PlayerOutcomeEnum.DEAD)
 
@@ -214,8 +196,7 @@ class TestPlayerOutcomeRuleStage:
 
         assert registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.DEAD
         evaluated = [
-            call.kwargs["target_player_id"]
-            for call in evaluator.evaluate_all_diagnostic_for_player.call_args_list
+            call.kwargs["target_player_id"] for call in evaluator.evaluate_all_diagnostic_for_player.call_args_list
         ]
         assert evaluated == [PlayerId(2)]
 
@@ -223,9 +204,7 @@ class TestPlayerOutcomeRuleStage:
         """同名の scenario_event が発火済みでも個人結果規則の機会を奪わない。"""
         evaluator = MagicMock()
         evaluator.evaluate_diagnostic.return_value = _evaluation(True, _rule().trigger)
-        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
-            True, _rule().player_conditions[0]
-        )
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(True, _rule().player_conditions[0])
         progress = InMemorySpotGraphScenarioEventProgressStore()
         progress.mark_fired("rescue_ship")
         stage, registry = _stage(evaluator=evaluator, progress=progress)

@@ -94,28 +94,22 @@ class TestPlayerOutcomeRules:
     """救助 2 回 (3 日目・4 日目) / 5 日目に漂流確定。"""
 
     def test_rescue_at_two_ticks(self, loaded) -> None:
-        assert tuple(
-            rule.trigger.tick for rule in loaded.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        ) == (144, 192)
+        assert tuple(rule.trigger.tick for rule in loaded.player_outcome_rules if rule.outcome.value == "RESCUED") == (
+            144,
+            192,
+        )
 
     def test_stranded_at_day_five(self, loaded) -> None:
-        assert next(
-            rule.trigger.tick for rule in loaded.player_outcome_rules
-            if rule.outcome.value == "STRANDED"
-        ) == 240
+        assert (
+            next(rule.trigger.tick for rule in loaded.player_outcome_rules if rule.outcome.value == "STRANDED") == 240
+        )
 
     def test_summit_and_signal_flag_unchanged(self, loaded) -> None:
         """救助の解決条件 (山頂スポット・狼煙 flag・飢餓 2/tick) は v2 と共通。"""
-        rescue = next(
-            rule for rule in loaded.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        )
+        rescue = next(rule for rule in loaded.player_outcome_rules if rule.outcome.value == "RESCUED")
         summit_id = loaded.id_mapper.get_int("spot", "summit")
         assert any(c.spot_id == summit_id for c in rescue.player_conditions)
-        assert any(
-            c.flag_name == "signal_fire_lit" for c in rescue.player_conditions
-        )
+        assert any(c.flag_name == "signal_fire_lit" for c in rescue.player_conditions)
         assert loaded.needs_config.starvation_damage_per_tick == 2
 
 
@@ -126,10 +120,7 @@ class TestCoopGateOnSignalFire:
         """light_signal の precondition に PLAYERS_AT_SPOT (2 人以上) がある。
         1 人では点火できない = 最低 2 人の協力がクリアの必要条件になる。"""
         inter = _find_interaction(raw, "summit", "signal_fire_pit", "light_signal")
-        gates = [
-            c for c in inter["preconditions"]
-            if c.get("condition_type") == "PLAYERS_AT_SPOT"
-        ]
+        gates = [c for c in inter["preconditions"] if c.get("condition_type") == "PLAYERS_AT_SPOT"]
         assert len(gates) == 1
         assert gates[0]["required_player_count"] == 2
         assert gates[0].get("failure_message")
@@ -167,9 +158,7 @@ class TestDistributedKnowledge:
         """大樫の樹に登ると山頂ルート (川沿いの内陸チェーン) の全容が分かる。"""
         inter = _find_interaction(raw, "tall_oak", "oak_climb", "climb")
         msgs = " ".join(
-            e["parameters"].get("message", "")
-            for e in inter["effects"]
-            if e["effect_type"] == "SHOW_MESSAGE"
+            e["parameters"].get("message", "") for e in inter["effects"] if e["effect_type"] == "SHOW_MESSAGE"
         )
         for kw in ("河口", "川の上流", "高地の泉", "山麓"):
             assert kw in msgs, f"ルート断片に {kw} が無い"
@@ -178,9 +167,7 @@ class TestDistributedKnowledge:
         """崖の見張り台の scout_sea で救助船の正確な日程 (3 日目・4 日目) が分かる。"""
         inter = _find_interaction(raw, "cliff_lookout", "cliff_vantage", "scout_sea")
         msgs = " ".join(
-            e["parameters"].get("message", "")
-            for e in inter["effects"]
-            if e["effect_type"] == "SHOW_MESSAGE"
+            e["parameters"].get("message", "") for e in inter["effects"] if e["effect_type"] == "SHOW_MESSAGE"
         )
         assert "3日目" in msgs and "4日目" in msgs
 
@@ -188,9 +175,7 @@ class TestDistributedKnowledge:
         """洞窟の壁画で材料の必要量 (流木 3・枯れ葉 2) が分かる。"""
         inter = _find_interaction(raw, "cave_inner", "signal_mural", "examine_mural")
         msgs = " ".join(
-            e["parameters"].get("message", "")
-            for e in inter["effects"]
-            if e["effect_type"] == "SHOW_MESSAGE"
+            e["parameters"].get("message", "") for e in inter["effects"] if e["effect_type"] == "SHOW_MESSAGE"
         )
         assert "流木" in msgs and "3" in msgs and "枯れ葉" in msgs and "2" in msgs
 
@@ -245,15 +230,16 @@ class TestBaseScenariosNotModified:
     def test_v2_unchanged(self) -> None:
         v2 = ScenarioLoader().load_from_file(str(_V2_PATH))
         assert v2.metadata.estimated_ticks == 384
-        assert tuple(
-            rule.trigger.tick for rule in v2.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        ) == (192, 288, 336)
+        assert tuple(rule.trigger.tick for rule in v2.player_outcome_rules if rule.outcome.value == "RESCUED") == (
+            192,
+            288,
+            336,
+        )
 
     def test_v2_short_unchanged(self) -> None:
         short = ScenarioLoader().load_from_file(str(_V2_SHORT_PATH))
         assert short.metadata.estimated_ticks == 192
-        assert tuple(
-            rule.trigger.tick for rule in short.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        ) == (96, 144)
+        assert tuple(rule.trigger.tick for rule in short.player_outcome_rules if rule.outcome.value == "RESCUED") == (
+            96,
+            144,
+        )

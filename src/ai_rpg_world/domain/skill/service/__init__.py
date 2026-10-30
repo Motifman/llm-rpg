@@ -1,2 +1,1 @@
 from .skill_proposal_domain_service import SkillProposalDomainService
-

@@ -44,15 +44,12 @@ _STATE_ENUM_BY_KIND: dict[PassageKindEnum, type[Enum]] = {
 # シナリオ側で `traversable: true` の override を指定すればよい。
 _DEFAULT_TABLE: dict[tuple[PassageKindEnum, str], tuple[bool, float]] = {
     (PassageKindEnum.OPEN, OpenStateEnum.OPEN.value): (True, 1.0),
-
     (PassageKindEnum.WALL, WallStateEnum.INTACT.value): (False, 0.1),
     (PassageKindEnum.WALL, WallStateEnum.CRACKED.value): (False, 0.4),
     (PassageKindEnum.WALL, WallStateEnum.BROKEN.value): (True, 1.0),
-
     (PassageKindEnum.DOOR, DoorStateEnum.LOCKED.value): (False, 0.5),
     (PassageKindEnum.DOOR, DoorStateEnum.CLOSED.value): (False, 0.6),
     (PassageKindEnum.DOOR, DoorStateEnum.OPEN.value): (True, 1.0),
-
     (PassageKindEnum.BARRIER, BarrierStateEnum.ACTIVE.value): (False, 1.0),
     (PassageKindEnum.BARRIER, BarrierStateEnum.INACTIVE.value): (True, 1.0),
 }
@@ -65,17 +62,14 @@ def _validate_state_for_kind(kind: PassageKindEnum, state: str) -> None:
     valid = {m.value for m in enum_cls}
     if state not in valid:
         raise PassageValidationException(
-            f"Invalid state '{state}' for passage kind {kind.value}. "
-            f"Allowed: {sorted(valid)}"
+            f"Invalid state '{state}' for passage kind {kind.value}. Allowed: {sorted(valid)}"
         )
 
 
 def _default_for(kind: PassageKindEnum, state: str) -> tuple[bool, float]:
     key = (kind, state)
     if key not in _DEFAULT_TABLE:
-        raise PassageValidationException(
-            f"No default values registered for ({kind.value}, {state})"
-        )
+        raise PassageValidationException(f"No default values registered for ({kind.value}, {state})")
     return _DEFAULT_TABLE[key]
 
 
@@ -131,41 +125,26 @@ class Passage:
     def __post_init__(self) -> None:
         _validate_state_for_kind(self.kind, self.state)
         if not 0.0 <= self.sound_permeability <= 1.0:
-            raise PassageValidationException(
-                f"sound_permeability must be in [0.0, 1.0]: {self.sound_permeability}"
-            )
+            raise PassageValidationException(f"sound_permeability must be in [0.0, 1.0]: {self.sound_permeability}")
         seen_states: set[str] = set()
         for override in self.state_overrides:
             _validate_state_for_kind(self.kind, override.state)
             if override.state in seen_states:
-                raise PassageValidationException(
-                    f"Duplicate passage override for state: {override.state}"
-                )
+                raise PassageValidationException(f"Duplicate passage override for state: {override.state}")
             seen_states.add(override.state)
-            if (
-                override.sound_permeability is not None
-                and not 0.0 <= override.sound_permeability <= 1.0
-            ):
+            if override.sound_permeability is not None and not 0.0 <= override.sound_permeability <= 1.0:
                 raise PassageValidationException(
-                    "sound_permeability override must be in [0.0, 1.0]: "
-                    f"{override.sound_permeability}"
+                    f"sound_permeability override must be in [0.0, 1.0]: {override.sound_permeability}"
                 )
 
         # 直接コンストラクタを使う復元経路でも、既定値との差は現在 state の
         # 作家宣言として保持する。これが無いと一度の with_state で静かに消える。
         default_t, default_s = _default_for(self.kind, self.state)
-        if self.state not in seen_states and (
-            self.traversable != default_t
-            or self.sound_permeability != default_s
-        ):
+        if self.state not in seen_states and (self.traversable != default_t or self.sound_permeability != default_s):
             inferred = PassageStateOverride(
                 state=self.state,
                 traversable=(self.traversable if self.traversable != default_t else None),
-                sound_permeability=(
-                    self.sound_permeability
-                    if self.sound_permeability != default_s
-                    else None
-                ),
+                sound_permeability=(self.sound_permeability if self.sound_permeability != default_s else None),
             )
             object.__setattr__(
                 self,
@@ -196,12 +175,16 @@ class Passage:
         next_traversable = (
             (traversable if traversable != default_t else None)
             if traversable is not None
-            else previous.traversable if previous is not None else None
+            else previous.traversable
+            if previous is not None
+            else None
         )
         next_sound = (
             (sound_permeability if sound_permeability != default_s else None)
             if sound_permeability is not None
-            else previous.sound_permeability if previous is not None else None
+            else previous.sound_permeability
+            if previous is not None
+            else None
         )
         if next_traversable is not None or next_sound is not None:
             overrides[state] = PassageStateOverride(
@@ -217,18 +200,14 @@ class Passage:
             kind=kind,
             state=state,
             traversable=(
-                selected.traversable
-                if selected is not None and selected.traversable is not None
-                else default_t
+                selected.traversable if selected is not None and selected.traversable is not None else default_t
             ),
             sound_permeability=(
                 selected.sound_permeability
                 if selected is not None and selected.sound_permeability is not None
                 else default_s
             ),
-            state_overrides=tuple(
-                sorted(overrides.values(), key=lambda item: item.state)
-            ),
+            state_overrides=tuple(sorted(overrides.values(), key=lambda item: item.state)),
         )
 
     # ---- factories ---------------------------------------------------
@@ -331,15 +310,11 @@ class Passage:
         try:
             kind = PassageKindEnum(kind_str)
         except ValueError as exc:
-            raise PassageValidationException(
-                f"Unknown passage.kind: {kind_str}"
-            ) from exc
+            raise PassageValidationException(f"Unknown passage.kind: {kind_str}") from exc
 
         traversable_override = raw.get("traversable")
         sound_override = raw.get("sound_permeability")
-        sound_value: float | None = (
-            float(sound_override) if sound_override is not None else None
-        )
+        sound_value: float | None = float(sound_override) if sound_override is not None else None
         state_overrides = cls._parse_state_overrides(raw.get("overrides"))
         if kind is PassageKindEnum.OPEN:
             return cls._build(
@@ -389,9 +364,7 @@ class Passage:
         parsed: list[PassageStateOverride] = []
         for state, values in raw.items():
             if not isinstance(values, Mapping):
-                raise PassageValidationException(
-                    f"passage.overrides.{state} must be an object"
-                )
+                raise PassageValidationException(f"passage.overrides.{state} must be an object")
             traversable = values.get("traversable")
             sound = values.get("sound_permeability")
             parsed.append(

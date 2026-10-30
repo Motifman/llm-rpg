@@ -70,9 +70,7 @@ class _FixedPort(ITypedJudgmentPort):
         questions: Mapping[str, Question],
     ) -> Mapping[str, JudgmentResult]:
         if self._raises:
-            raise TypedJudgmentUnavailableException(
-                "timed out", error_code="TYPED_JUDGMENT_TRANSPORT_FAILED"
-            )
+            raise TypedJudgmentUnavailableException("timed out", error_code="TYPED_JUDGMENT_TRANSPORT_FAILED")
         name = next(iter(questions))
         return {
             name: JudgmentResult(
@@ -97,9 +95,7 @@ class _RecordingTrace:
         player_id: int | None = None,
         **payload: Any,
     ) -> Any:
-        self.events.append(
-            {"kind": kind, "tick": tick, "player_id": player_id, **payload}
-        )
+        self.events.append({"kind": kind, "tick": tick, "player_id": player_id, **payload})
         return None
 
     def of_kind(self, kind: str) -> list[dict[str, Any]]:
@@ -133,15 +129,11 @@ def _call(
 ) -> tuple[LlmCommandResultDto, list[dict[str, Any]]]:
     seen: list[dict[str, Any]] = []
 
-    def raw_handler(
-        _player_id: int, resolved: dict[str, Any], _context: Any
-    ) -> LlmCommandResultDto:
+    def raw_handler(_player_id: int, resolved: dict[str, Any], _context: Any) -> LlmCommandResultDto:
         seen.append(resolved)
         return LlmCommandResultDto(success=True, message=success_message)
 
-    rescue = (
-        ActionNameRescue(port=port, min_confidence=0.7) if port is not None else None
-    )
+    rescue = ActionNameRescue(port=port, min_confidence=0.7) if port is not None else None
     handler = adapt_executor_handler_with_resolver(
         raw_handler,
         TOOL_NAME_SPOT_GRAPH_INTERACT,

@@ -7,9 +7,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 
 def test_runtime_injects_monster_spawn_scope_and_shared_loadout_store() -> None:
     """条件付きmonster配置はscopeを使い、loadoutも共有storeへ保存する。"""
-    runtime = create_world_runtime(
-        Path("data/scenarios/survival_island_v2_short.json")
-    )
+    runtime = create_world_runtime(Path("data/scenarios/survival_island_v2_short.json"))
 
     stage = runtime._simulation_service._monster_spawn_stage
     assert stage is not None

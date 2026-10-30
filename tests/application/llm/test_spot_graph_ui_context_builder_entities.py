@@ -18,7 +18,6 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphNearbyEntityEntry,
     SpotGraphPlayerSnapshotDto,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 def _make_dto(*entities: SpotGraphNearbyEntityEntry) -> PlayerCurrentStateDto:
@@ -33,23 +32,6 @@ def _make_dto(*entities: SpotGraphNearbyEntityEntry) -> PlayerCurrentStateDto:
         player_id=1,
         player_name="P",
         current_spot_id=1,
-        current_spot_name="広間",
-        current_spot_description="",
-        x=None,
-        y=None,
-        z=None,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="晴れ",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=0,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=snap,
     )
 
@@ -86,14 +68,10 @@ class TestNearbyEntityLabeling:
 
         assert (
             "同じ場所にいるプレイヤー: "
-            "(倒れていない相手には give_item で所持品を直接渡せる)"
-            in result.current_state_text
+            "(倒れていない相手には give_item で所持品を直接渡せる)" in result.current_state_text
         )
         assert '- "リン"' in result.current_state_text
-        assert (
-            '- "リン" (give_item で所持アイテムを直接渡せる相手)'
-            not in result.current_state_text
-        )
+        assert '- "リン" (give_item で所持アイテムを直接渡せる相手)' not in result.current_state_text
         assert "他のプレイヤーはこのスポットにいない" not in result.current_state_text
 
     def test_give_item_affordance_header_is_rendered_once_for_multiple_players(self) -> None:
@@ -114,12 +92,8 @@ class TestNearbyEntityLabeling:
     def test_dead_or_down_players_do_not_show_give_item_affordance(self) -> None:
         """死亡・ダウン中の行には、直接渡せる相手という affordance を出さない。"""
         dto = _make_dto(
-            SpotGraphNearbyEntityEntry(
-                entity_id=2, display_name="リン", is_dead=True
-            ),
-            SpotGraphNearbyEntityEntry(
-                entity_id=3, display_name="カイト", is_down=True
-            ),
+            SpotGraphNearbyEntityEntry(entity_id=2, display_name="リン", is_dead=True),
+            SpotGraphNearbyEntityEntry(entity_id=3, display_name="カイト", is_down=True),
         )
 
         result = SpotGraphUiContextBuilder().build("base", dto)

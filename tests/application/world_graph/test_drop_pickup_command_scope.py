@@ -145,18 +145,14 @@ class _CommitObservation:
     ground_item_present: bool
 
 
-def _build_service(
-    *, fail_interior_save: bool = False, item_on_ground: bool = False
-):
+def _build_service(*, fail_interior_save: bool = False, item_on_ground: bool = False):
     store = InMemoryDataStore()
     inventories = InMemoryPlayerInventoryRepository(store)
     items = InMemoryItemRepository(store)
     interiors = InMemorySpotInteriorRepository(data_store=store)
     graph = InMemorySpotGraphRepository(_make_graph_with_player(SPOT_ID, (PLAYER_ID,)))
 
-    item = ItemAggregate.create(
-        items.generate_item_instance_id(), _make_item_spec(), quantity=1
-    )
+    item = ItemAggregate.create(items.generate_item_instance_id(), _make_item_spec(), quantity=1)
     items.save(item)
     inventory = PlayerInventoryAggregate.create_new_inventory(PLAYER_ID)
     if not item_on_ground:
@@ -176,7 +172,7 @@ def _build_service(
     interiors.save(SPOT_ID, interior)
 
     observations: list[_CommitObservation] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def observe_committed(event: object) -> None:
         committed_inventory = inventories.find_by_id(PLAYER_ID)
@@ -185,13 +181,9 @@ def _build_service(
             _CommitObservation(
                 event_type=type(event),
                 inventory_item_present=(
-                    committed_inventory.get_item_instance_id_by_slot(SlotId(0))
-                    == item.item_instance_id
+                    committed_inventory.get_item_instance_id_by_slot(SlotId(0)) == item.item_instance_id
                 ),
-                ground_item_present=(
-                    committed_interior.find_ground_item(item.item_instance_id)
-                    is not None
-                ),
+                ground_item_present=(committed_interior.find_ground_item(item.item_instance_id) is not None),
             )
         )
 
@@ -203,9 +195,7 @@ def _build_service(
             guarantee=DeliveryGuarantee.BEST_EFFORT,
         )
 
-    provider_factory: object = InMemoryItemTransferCommandRepositoryProviderFactory(
-        graph
-    )
+    provider_factory: object = InMemoryItemTransferCommandRepositoryProviderFactory(graph)
     if fail_interior_save:
         provider_factory = _FailingProviderFactory(provider_factory)
     scope_factory = CommandScopeFactory(
@@ -230,16 +220,12 @@ def test_drop_commits_inventory_and_ground_before_observation() -> None:
 
     assert inventories.find_by_id(PLAYER_ID).get_item_instance_id_by_slot(SlotId(0)) is None
     assert interiors.find_by_spot_id(SPOT_ID).find_ground_item(item_id) is not None
-    assert observations == [
-        _CommitObservation(PlayerDroppedItemEvent, False, True)
-    ]
+    assert observations == [_CommitObservation(PlayerDroppedItemEvent, False, True)]
 
 
 def test_drop_interior_failure_rolls_back_inventory_ground_and_observation() -> None:
     """dropの地面保存失敗時は所持品も地面も戻して観測を出さない。"""
-    service, inventories, interiors, item_id, observations = _build_service(
-        fail_interior_save=True
-    )
+    service, inventories, interiors, item_id, observations = _build_service(fail_interior_save=True)
 
     with pytest.raises(RuntimeError, match="interior save failed"):
         service.drop_item(PLAYER_ID, SlotId(0))
@@ -251,17 +237,13 @@ def test_drop_interior_failure_rolls_back_inventory_ground_and_observation() -> 
 
 def test_pickup_commits_inventory_and_ground_before_observation() -> None:
     """pickup成功時は取得と地面除去を確定してから観測を配送する。"""
-    service, inventories, interiors, item_id, observations = _build_service(
-        item_on_ground=True
-    )
+    service, inventories, interiors, item_id, observations = _build_service(item_on_ground=True)
 
     service.pickup_item(PLAYER_ID, item_id)
 
     assert inventories.find_by_id(PLAYER_ID).get_item_instance_id_by_slot(SlotId(0)) == item_id
     assert interiors.find_by_spot_id(SPOT_ID).find_ground_item(item_id) is None
-    assert observations == [
-        _CommitObservation(PlayerPickedUpItemEvent, True, False)
-    ]
+    assert observations == [_CommitObservation(PlayerPickedUpItemEvent, True, False)]
 
 
 def test_pickup_interior_failure_rolls_back_inventory_ground_and_observation() -> None:

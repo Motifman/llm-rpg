@@ -8,7 +8,10 @@ import pytest
 # observation.contracts.interfaces と prompt_builder_config の循環 import を避けるため、
 # observation formatter を直接 import する単体テストでは prompt_builder を先に初期化する。
 from ai_rpg_world.application.llm.services import prompt_builder as _prompt_builder  # noqa: F401
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+from ai_rpg_world.application.observation.contracts.dtos import (
+    SubjectUnknownView,
+    WithheldFromStrangers,
+)
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
@@ -19,32 +22,23 @@ from ai_rpg_world.application.observation.services.formatters.player_formatter i
     PlayerObservationFormatter,
 )
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.event.inventory_events import (
-    InventorySlotOverflowEvent,
     ItemAddedToInventoryEvent,
-    ItemDroppedFromInventoryEvent,
-    ItemEquippedEvent,
-    ItemUnequippedEvent,
+    ItemRemovedFromInventoryEvent,
 )
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
-    PlayerGoldEarnedEvent,
-    PlayerGoldPaidEvent,
     PlayerLevelUpEvent,
-    PlayerLocationChangedEvent,
     PlayerRevivedEvent,
 )
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 from ai_rpg_world.domain.skill.event.skill_events import SkillEquippedEvent
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 
@@ -53,6 +47,7 @@ def _make_context(
     spot_repository=None,
     player_profile_repository=None,
     item_repository=None,
+    event_removal_messages=None,
 ) -> ObservationFormatterContext:
     """テスト用の ObservationFormatterContext を生成。"""
     name_resolver = ObservationNameResolver(
@@ -69,6 +64,7 @@ def _make_context(
     return ObservationFormatterContext(
         name_resolver=name_resolver,
         item_repository=item_repository,
+        event_removal_messages=event_removal_messages or {},
     )
 
 
@@ -87,63 +83,6 @@ class TestPlayerObservationFormatterCreation:
         formatter = PlayerObservationFormatter(ctx)
         assert hasattr(formatter, "format")
         assert callable(formatter.format)
-
-
-class TestPlayerObservationFormatterPlayerLocationChanged:
-    """PlayerLocationChangedEvent のフォーマットテスト"""
-
-    def test_self_returns_current_location_prose(self):
-        """本人向けは「現在地: 〇〇」を返す。"""
-        spot_repo = MagicMock()
-        spot = MagicMock()
-        spot.name = "町の広場"
-        spot_repo.find_by_id.return_value = spot
-        ctx = _make_context(spot_repository=spot_repo)
-        formatter = PlayerObservationFormatter(ctx)
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "現在地" in out.prose
-        assert "町の広場" in out.prose
-        assert out.structured.get("type") == "current_location"
-        assert out.observation_category == "self_only"
-
-    def test_other_player_returns_entered_spot_prose(self):
-        """他プレイヤー向けは「〇〇がこのスポットにやってきました。」"""
-        spot_repo = MagicMock()
-        spot = MagicMock()
-        spot.name = "洞窟入口"
-        spot_repo.find_by_id.return_value = spot
-        profile_repo = MagicMock()
-        profile = MagicMock()
-        profile.name.value = "Bob"
-        profile_repo.find_by_id.return_value = profile
-        ctx = _make_context(
-            spot_repository=spot_repo,
-            player_profile_repository=profile_repo,
-        )
-        formatter = PlayerObservationFormatter(ctx)
-        event = PlayerLocationChangedEvent.create(
-            aggregate_id=PlayerId(2),
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=SpotId(1),
-            old_coordinate=Coordinate(0, 0, 0),
-            new_spot_id=SpotId(2),
-            new_coordinate=Coordinate(1, 1, 0),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "Bob" in out.prose
-        assert "やってきました" in out.prose
-        assert out.structured.get("type") == "player_entered_spot"
-        assert out.observation_category == "social"
 
 
 class TestPlayerObservationFormatterPlayerDowned:
@@ -269,9 +208,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
             (None, False),
         ),
     )
-    def test_third_party_identity_follows_effective_lighting(
-        self, lighting, reveals_killer
-    ):
+    def test_third_party_identity_follows_effective_lighting(self, lighting, reveals_killer):
         """同室でも身元を出すのは BRIGHT / DIM だけで、不明を含む残りは伏せる。"""
         ctx = self._make_ctx_with_positions(
             recipient_spot=SpotId(5),
@@ -298,9 +235,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_lighting_resolution_failure_hides_the_killer(self):
         """実効照明の解決に失敗しても、例外を漏らさず加害者の身元を伏せる。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5))
         ctx.effective_lighting_resolver.resolve.side_effect = RuntimeError("broken")
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
@@ -318,9 +253,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_missing_lighting_resolver_hides_the_killer(self):
         """実効照明 resolver が未注入でも、同室の加害者の身元を伏せる。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5))
         ctx = replace(ctx, effective_lighting_resolver=None)
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
@@ -338,9 +271,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_third_party_same_spot_as_killer_includes_killer_name(self):
         """observer が killer と同 spot なら、加害者を主語にした能動態で伝える。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5))
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),  # victim
@@ -355,9 +286,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_third_party_different_spot_from_killer_hides_killer_name(self):
         """observer が killer と別 spot なら killer 名は prose に出ない。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(99), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(99), victim_spot=SpotId(5))
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
@@ -377,9 +306,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_third_party_position_unknown_hides_killer_name(self):
         """位置不明 (graph 未注入 等) は安全側に倒し、詳細でなく気配文にする。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=None, killer_spot=None
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=None, killer_spot=None)
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
@@ -396,9 +323,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_remote_player_downed_uses_distant_prose_without_actor_name(self):
         """別 spot の down 観測は詳細目撃でなく、名前を伏せた遠隔の気配文になる。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(9), killer_spot=None, victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(9), killer_spot=None, victim_spot=SpotId(5))
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
@@ -417,9 +342,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_third_party_killer_still_outputs_victim_prose(self):
         """killer 不明 (event.killer_player_id=None) は victim 名のみで prose 出す。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5))
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
@@ -434,9 +357,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
 
     def test_death_without_a_declared_witness_message_keeps_engine_prose(self):
         """宣言文を伴わない死では、同室の第三者へ engine の説明を残す。"""
-        ctx = self._make_ctx_with_positions(
-            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
-        )
+        ctx = self._make_ctx_with_positions(recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5))
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
@@ -532,6 +453,96 @@ class TestPlayerObservationFormatterPlayerRevived:
         assert out.structured["proximity"] == "remote_or_unknown"
 
 
+class TestBodyStateForRecipientsWhoDoNotKnowTheSubject:
+    """倒れた・復帰した観測が、主体を知らない受け手向けの版を持つことを保証する (#1531)。
+
+    遠くの気配は、名前を伏せても誰かがいることが分かるので届けない。
+    同じ場所の観測は、姿は見えているので「誰か」に伏せて届ける。
+    """
+
+    def _ctx(self, recipient_spot):
+        return TestPlayerObservationFormatterPlayerDownedKillerVisibility()._make_ctx_with_positions(
+            recipient_spot=recipient_spot, killer_spot=SpotId(5), victim_spot=SpotId(5)
+        )
+
+    def _downed(self, killer_player_id=None):
+        return PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=killer_player_id,
+        )
+
+    def _revived(self):
+        return PlayerRevivedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            hp_recovered=50,
+            total_hp=100,
+        )
+
+    def test_remote_downed_is_withheld_from_strangers(self):
+        """別の場所で倒れた気配は、倒れた人の名前と、知らない受け手には届けない印を持つ。"""
+        out = PlayerObservationFormatter(self._ctx(SpotId(9))).format(self._downed(), PlayerId(100))
+
+        assert out is not None
+        assert out.subject_name == "Victor"
+        assert isinstance(out.if_subject_unknown, WithheldFromStrangers)
+
+    def test_remote_revived_is_withheld_from_strangers(self):
+        """別の場所で動けるようになった気配は、復帰した人の名前と、知らない受け手には届けない印を持つ。"""
+        out = PlayerObservationFormatter(self._ctx(SpotId(9))).format(self._revived(), PlayerId(100))
+
+        assert out is not None
+        assert out.subject_name == "Victor"
+        assert isinstance(out.if_subject_unknown, WithheldFromStrangers)
+
+    def test_same_spot_downed_hides_the_victim(self):
+        """同じ場所で倒れた観測の伏せた版は「誰か」が倒れたと書き、structured に倒れた人の名前を残さない。"""
+        out = PlayerObservationFormatter(self._ctx(SpotId(5))).format(self._downed(), PlayerId(100))
+
+        assert out is not None
+        assert out.subject_name == "Victor"
+        assert out.if_subject_unknown == SubjectUnknownView(
+            prose="誰かが倒れて動かなくなった。",
+            structured={
+                "type": "player_downed",
+                "killer_visible_to_recipient": False,
+                "proximity": "same_spot",
+            },
+        )
+
+    def test_same_spot_downed_by_a_visible_killer_hides_only_the_victim(self):
+        """加害者が見えているときの伏せた版は、倒れた人だけを「誰か」にし、加害者の名前と番号は残す。"""
+        out = PlayerObservationFormatter(self._ctx(SpotId(5))).format(
+            self._downed(killer_player_id=PlayerId(2)), PlayerId(100)
+        )
+
+        assert isinstance(out.if_subject_unknown, SubjectUnknownView)
+        assert out.if_subject_unknown.prose == "Aliceが誰かを倒した。"
+        assert out.if_subject_unknown.structured["killer_player_id"] == 2
+        assert "actor" not in out.if_subject_unknown.structured
+
+    def test_same_spot_revived_hides_the_actor(self):
+        """同じ場所で復帰した観測の伏せた版は「誰か」が復帰したと書き、structured に復帰した人の名前を残さない。"""
+        out = PlayerObservationFormatter(self._ctx(SpotId(5))).format(self._revived(), PlayerId(100))
+
+        assert out is not None
+        assert out.subject_name == "Victor"
+        assert out.if_subject_unknown == SubjectUnknownView(
+            prose="誰かが復帰しました。",
+            structured={"type": "player_revived", "proximity": "same_spot"},
+        )
+
+    def test_own_downed_and_revived_have_no_alternate_view(self):
+        """自分が倒れた・復帰した観測は、主体を知らない受け手向けの版を持たない。"""
+        formatter = PlayerObservationFormatter(self._ctx(SpotId(5)))
+
+        for event in (self._downed(), self._revived()):
+            out = formatter.format(event, PlayerId(1))
+            assert out is not None
+            assert (out.subject_name, out.if_subject_unknown) == (None, None)
+
+
 class TestPlayerObservationFormatterPlayerLevelUp:
     """PlayerLevelUpEvent のフォーマットテスト"""
 
@@ -598,7 +609,7 @@ class TestPlayerObservationFormatterItemAddedToInventory:
         assert out is not None
         assert out.structured.get("item_spec_id_value") == 888
 
-    def test_fallback_when_repository_None(self):
+    def test_fallback_when_repository_none(self):
         """item_repository なしのとき「何かのアイテムを入手」"""
         ctx = _make_context()
         formatter = PlayerObservationFormatter(ctx)
@@ -611,6 +622,67 @@ class TestPlayerObservationFormatterItemAddedToInventory:
         assert out is not None
         assert "何かのアイテム" in out.prose
         assert "入手" in out.prose
+
+
+def _item_repo_with(name: str, spec_id_value: int) -> MagicMock:
+    item_repo = MagicMock()
+    agg = MagicMock()
+    agg.item_spec.name = name
+    agg.item_spec.item_spec_id.value = spec_id_value
+    agg.quantity = 1
+    item_repo.find_by_id.return_value = agg
+    return item_repo
+
+
+def _removed_event(*, by_world_event: bool = False) -> ItemRemovedFromInventoryEvent:
+    return ItemRemovedFromInventoryEvent.create(
+        aggregate_id=PlayerId(1),
+        aggregate_type="PlayerInventoryAggregate",
+        item_instance_id=ItemInstanceId.create(1),
+        by_world_event=by_world_event,
+    )
+
+
+class TestPlayerObservationFormatterItemRemovedFromInventory:
+    """効果・出来事・売買で持ち物から外れた品を、捨てたとは言わずに本人へ伝えることを保証する。"""
+
+    def test_removed_item_is_named_and_not_called_dropped(self):
+        """品の定義に文が無いとき「{品名}が手もとからなくなった。」と伝え、「捨て」と言わない。"""
+        ctx = _make_context(item_repository=_item_repo_with("カンテラの油", 7))
+        formatter = PlayerObservationFormatter(ctx)
+
+        out = formatter.format(_removed_event(), PlayerId(1))
+
+        assert out is not None
+        assert out.prose == "カンテラの油が手もとからなくなった。"
+        assert out.structured == {"type": "item_removed", "item_name": "カンテラの油", "item_spec_id_value": 7}
+        assert out.observation_category == "self_only"
+
+    def test_event_removal_message_replaces_the_default_when_a_world_event_removed_it(self):
+        """シナリオの出来事で外れたとき (by_world_event=True)、品の定義の文 (event_removal_messages) があれば、その文をそのまま伝える。"""
+        ctx = _make_context(
+            item_repository=_item_repo_with("カンテラの灯", 9),
+            event_removal_messages={9: "カンテラの灯が燃え尽きた。"},
+        )
+        formatter = PlayerObservationFormatter(ctx)
+
+        out = formatter.format(_removed_event(by_world_event=True), PlayerId(1))
+
+        assert out is not None
+        assert out.prose == "カンテラの灯が燃え尽きた。"
+
+    def test_event_removal_message_is_not_used_when_an_action_removed_it(self):
+        """人の操作 (奪う・渡す・使う) で外れたときは、品の定義の文があっても既定の文にする。奪われた灯を「燃え尽きた」と伝えないため。"""
+        ctx = _make_context(
+            item_repository=_item_repo_with("カンテラの灯", 9),
+            event_removal_messages={9: "カンテラの灯が燃え尽きた。"},
+        )
+        formatter = PlayerObservationFormatter(ctx)
+
+        out = formatter.format(_removed_event(by_world_event=False), PlayerId(1))
+
+        assert out is not None
+        assert out.prose == "カンテラの灯が手もとからなくなった。"
 
 
 class TestPlayerObservationFormatterPlayerSpoke:
@@ -630,7 +702,6 @@ class TestPlayerObservationFormatterPlayerSpoke:
             content="こんにちは",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
@@ -655,7 +726,7 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
         profile_repo.find_by_id.return_value = profile
         return _make_context(player_profile_repository=profile_repo)
 
-    def test_self_say_returns_None(self):
+    def test_self_say_returns_none(self):
         """SAY を自分自身に対しては formatter が None を返す。"""
         ctx = self._make_speaker_ctx()
         formatter = PlayerObservationFormatter(ctx)
@@ -665,12 +736,11 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
             content="私は廊下で待機する",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
         )
         out = formatter.format(event, PlayerId(2))  # 話者本人
         assert out is None
 
-    def test_self_shout_returns_None(self):
+    def test_self_shout_returns_none(self):
         """SHOUT も同様に話者本人には届けない。"""
         ctx = self._make_speaker_ctx()
         formatter = PlayerObservationFormatter(ctx)
@@ -680,12 +750,11 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
             content="助けて！",
             channel=SpeechChannel.SHOUT,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
         )
         out = formatter.format(event, PlayerId(2))
         assert out is None
 
-    def test_self_whisper_returns_None(self):
+    def test_self_whisper_returns_none(self):
         """WHISPER も話者本人には届けない (action_result_store で十分)。"""
         ctx = self._make_speaker_ctx()
         formatter = PlayerObservationFormatter(ctx)
@@ -695,7 +764,6 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
             content="内緒だよ",
             channel=SpeechChannel.WHISPER,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
             target_player_id=PlayerId(3),
         )
         out = formatter.format(event, PlayerId(2))
@@ -711,7 +779,6 @@ class TestPlayerObservationFormatterPlayerSpokeSelfSuppression:
             content="こんにちは",
             channel=SpeechChannel.SAY,
             spot_id=SpotId(1),
-            speaker_coordinate=Coordinate(0, 0, 0),
         )
         out = formatter.format(event, PlayerId(1))  # 別人 recipient
         assert out is not None
@@ -728,7 +795,7 @@ class TestPlayerObservationFormatterUnknownEvent:
     def formatter(self):
         return PlayerObservationFormatter(_make_context())
 
-    def test_returns_None_for_skill_event(self, formatter):
+    def test_returns_none_for_skill_event(self, formatter):
         """Skill イベントは None。"""
         event = SkillEquippedEvent.create(
             aggregate_id=SkillLoadoutId(1),

@@ -33,9 +33,7 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 
-_TOWN = (
-    pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
-)
+_TOWN = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _BREAD_SPEC = "bread"
 
 
@@ -54,8 +52,11 @@ def _town(tmp_path: pathlib.Path, initial_orders: list, **market: Any) -> Any:
 
 def _bid(**overrides: Any) -> dict[str, Any]:
     order = {
-        "merchant": "gustav", "side": "buy", "item_spec": _BREAD_SPEC,
-        "quantity": 5, "unit_price": 12,
+        "merchant": "gustav",
+        "side": "buy",
+        "item_spec": _BREAD_SPEC,
+        "quantity": 5,
+        "unit_price": 12,
     }
     order.update(overrides)
     return order
@@ -69,9 +70,7 @@ def _only_order(runtime: Any) -> Any:
 class TestAnOrderCanDeclareItsOwnLifetime:
     """初期注文は、板ぜんたいの既定と別の寿命を持てる。"""
 
-    def test_without_a_declaration_it_uses_the_board_default(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_without_a_declaration_it_uses_the_board_default(self, tmp_path: pathlib.Path) -> None:
         """寿命を書かない注文は、板の既定 (24 手番) で流れる。
 
         既定を変えると、v3.5 と比べられなくなる。**既存の宣言の意味は
@@ -87,9 +86,7 @@ class TestAnOrderCanDeclareItsOwnLifetime:
 
         assert _only_order(runtime).expires_at_tick == 999
 
-    def test_it_is_still_there_after_the_board_default_has_passed(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_it_is_still_there_after_the_board_default_has_passed(self, tmp_path: pathlib.Path) -> None:
         """板の既定を過ぎても、宣言した注文は流れない。
 
         **これが目的そのもの。** 買い注文が run の途中で消えると、そのあとに
@@ -106,19 +103,20 @@ class TestAnOrderCanDeclareItsOwnLifetime:
 
         全部が居座るようになっていたら、この宣言は何も足していない。
         """
-        runtime = _town(tmp_path, [
-            _bid(expires_in_ticks=999),
-            _bid(side="sell", unit_price=24, quantity=1),
-        ])
+        runtime = _town(
+            tmp_path,
+            [
+                _bid(expires_in_ticks=999),
+                _bid(side="sell", unit_price=24, quantity=1),
+            ],
+        )
 
         runtime._market_service.expire_orders(current_tick=40)
 
         (left,) = runtime._market_service.board().orders
         assert left.side.value == "buy"
 
-    def test_a_lifetime_the_world_cannot_have_is_refused_at_startup(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_a_lifetime_the_world_cannot_have_is_refused_at_startup(self, tmp_path: pathlib.Path) -> None:
         """0 以下の寿命を書くと、起動時に落ちる。
 
         黙って既定へ倒すと、作者は「すぐ流れる注文」を宣言したつもりで
@@ -133,9 +131,7 @@ class TestAnOrderCanDeclareItsOwnLifetime:
 class TestTheStandingBidMakesACrossingPossible:
     """居座る買い注文があると、あとから出た売り注文と同じ品に並ぶ。"""
 
-    def test_a_later_listing_meets_the_bid_that_is_still_there(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_a_later_listing_meets_the_bid_that_is_still_there(self, tmp_path: pathlib.Path) -> None:
         """買い注文が流れたあとに出る売り注文でも、同じ品に並ぶ。
 
         v3.4 で実際に起きたすれ違い (買い t25 に流れる / 売り t31 に出る) が、
@@ -153,14 +149,20 @@ class TestTheStandingBidMakesACrossingPossible:
         lena = PlayerId(1)
         spec_id = runtime._item_spec_repo.find_by_name("焼きたてのパン").item_spec_id.value
         grant_item_specs_to_inventory(
-            lena, (ItemSpecId.create(spec_id),), runtime._item_repo,
-            runtime._item_spec_repo, runtime._player_inventory_repo,
+            lena,
+            (ItemSpecId.create(spec_id),),
+            runtime._item_repo,
+            runtime._item_spec_repo,
+            runtime._player_inventory_repo,
             overflow_sink=IGNORE_OVERFLOW,
         )
         runtime._market_service.expire_orders(current_tick=31)
 
         runtime._market_service.place_sell_order(
-            lena, item_label="焼きたてのパン", quantity=1, unit_price=8,
+            lena,
+            item_label="焼きたてのパン",
+            quantity=1,
+            unit_price=8,
             current_tick=31,
         )
 

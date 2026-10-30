@@ -52,11 +52,16 @@ def town(tmp_path: Path) -> Any:
     raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     for pid, name in (("tom", "トム"), ("mina", "ミナ")):
-        raw["players"].append({
-            "id": pid, "name": name, "spawn_spot": spawn,
-            "initial_items": [], "initial_gold": 500,
-            "persona_prompt": f"あなたは{name}。",
-        })
+        raw["players"].append(
+            {
+                "id": pid,
+                "name": name,
+                "spawn_spot": spawn,
+                "initial_items": [],
+                "initial_gold": 500,
+                "persona_prompt": f"あなたは{name}。",
+            }
+        )
     raw["market"] = {"board_spot": "market_square"}
     path = tmp_path / "market_town_v1.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -83,17 +88,16 @@ def _give(runtime: Any, player_id: PlayerId, label: str, count: int = 1) -> None
 def _list_bread(runtime: Any, seller: PlayerId, *, quantity: int, price: int) -> Any:
     _give(runtime, seller, _BREAD, quantity)
     return runtime._market_service.place_sell_order(
-        seller, item_label=_BREAD, quantity=quantity, unit_price=price,
+        seller,
+        item_label=_BREAD,
+        quantity=quantity,
+        unit_price=price,
         current_tick=runtime.current_tick(),
     )
 
 
 def _market_events(runtime: Any) -> list[dict[str, Any]]:
-    return [
-        payload
-        for kind, payload in runtime._trace_recorder.records
-        if kind == "market_activity"
-    ]
+    return [payload for kind, payload in runtime._trace_recorder.records if kind == "market_activity"]
 
 
 def _price_series(runtime: Any, item_name: str, kinds: tuple[str, ...]) -> list[tuple[int, int]]:
@@ -130,7 +134,10 @@ class TestEveryMoveOnTheBoardLeavesALine:
         """
         _list_bread(town, _LENA, quantity=2, price=20)
         town._market_service.reprice_order(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=18,
+            _LENA,
+            item_label=_BREAD,
+            side=MarketOrderSide.SELL,
+            new_unit_price=18,
         )
 
         event = _market_events(town)[-1]
@@ -147,7 +154,10 @@ class TestEveryMoveOnTheBoardLeavesALine:
         """
         _list_bread(town, _LENA, quantity=1, price=18)
         town._market_service.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         event = _market_events(town)[-1]
@@ -162,7 +172,9 @@ class TestEveryMoveOnTheBoardLeavesALine:
         """取り下げが残る。"""
         _list_bread(town, _LENA, quantity=1, price=20)
         town._market_service.cancel_by(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL,
+            _LENA,
+            item_label=_BREAD,
+            side=MarketOrderSide.SELL,
         )
 
         assert _market_events(town)[-1]["market_event"] == "cancelled"
@@ -191,7 +203,10 @@ class TestASweepLeavesOneLinePerFill:
         _list_bread(town, _MINA, quantity=2, price=20)
 
         town._market_service.buy_best(
-            _TOM, item_label=_BREAD, quantity=3, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=3,
+            current_tick=town.current_tick(),
         )
 
         settled = [e for e in _market_events(town) if e["market_event"] == "settled"]
@@ -206,10 +221,16 @@ class TestThePriceSeriesCanBeRebuilt:
         """値付けの推移 (出品と値の付け直し) が時系列になる。"""
         _list_bread(town, _LENA, quantity=3, price=25)
         town._market_service.reprice_order(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=22,
+            _LENA,
+            item_label=_BREAD,
+            side=MarketOrderSide.SELL,
+            new_unit_price=22,
         )
         town._market_service.reprice_order(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=19,
+            _LENA,
+            item_label=_BREAD,
+            side=MarketOrderSide.SELL,
+            new_unit_price=19,
         )
 
         series = _price_series(town, _BREAD, ("listed", "repriced"))
@@ -220,11 +241,17 @@ class TestThePriceSeriesCanBeRebuilt:
         """約定の時系列 (実際にいくらで売れたか) が引ける。"""
         _list_bread(town, _LENA, quantity=1, price=25)
         town._market_service.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
         _list_bread(town, _MINA, quantity=1, price=19)
         town._market_service.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         series = _price_series(town, _BREAD, ("settled",))
@@ -239,7 +266,10 @@ class TestThePriceSeriesCanBeRebuilt:
         """
         _list_bread(town, _LENA, quantity=1, price=25)
         town._market_service.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+            _TOM,
+            item_label=_BREAD,
+            quantity=1,
+            current_tick=town.current_tick(),
         )
 
         assert len(_price_series(town, _BREAD, ("listed", "repriced"))) == 1
@@ -250,7 +280,10 @@ class TestThePriceSeriesCanBeRebuilt:
         _list_bread(town, _LENA, quantity=1, price=25)
         _give(town, _MINA, _HERB, 1)
         town._market_service.place_sell_order(
-            _MINA, item_label=_HERB, quantity=1, unit_price=8,
+            _MINA,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=8,
             current_tick=town.current_tick(),
         )
 

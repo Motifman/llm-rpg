@@ -1,4 +1,5 @@
 """ギルド金庫リポジトリインターフェース"""
+
 from abc import abstractmethod
 
 from ai_rpg_world.domain.common.repository import Repository

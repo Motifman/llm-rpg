@@ -6,11 +6,7 @@ import pytest
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.quest.exceptions import QuestRewardGrantException
 from ai_rpg_world.application.quest.handlers.quest_progress_handler import (
-    ConversationEndedQuestProgressHandler,
-    GatewayTriggeredQuestProgressHandler,
     ItemAddedToInventoryQuestProgressHandler,
-    ItemTakenFromChestQuestProgressHandler,
-    LocationEnteredQuestProgressHandler,
     MonsterDiedQuestProgressHandler,
     PlayerDownedQuestProgressHandler,
 )
@@ -18,33 +14,18 @@ from ai_rpg_world.application.quest.services.quest_progress_reaction_service imp
     QuestProgressReactionService,
 )
 from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
-)
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
 from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType
-from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
 from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
 from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
-from ai_rpg_world.domain.world.event.map_events import (
-    GatewayTriggeredEvent,
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-)
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_quest_repository import (
     InMemoryQuestRepository,
@@ -65,9 +46,9 @@ class TestQuestProgressHandler:
     def create_uow(self, data_store):
         def create():
             return InMemoryUnitOfWork(
-                unit_of_work_factory=create,
                 data_store=data_store,
             )
+
         return create
 
     @pytest.fixture
@@ -132,23 +113,7 @@ class TestQuestProgressHandler:
                 reaction_service=reaction_service,
                 unit_of_work_factory=uow_factory,
             ).handle,
-            handle_item_taken_from_chest=ItemTakenFromChestQuestProgressHandler(
-                reaction_service=reaction_service,
-                unit_of_work_factory=uow_factory,
-            ).handle,
-            handle_location_entered=LocationEnteredQuestProgressHandler(
-                reaction_service=reaction_service,
-                unit_of_work_factory=uow_factory,
-            ).handle,
-            handle_gateway_triggered=GatewayTriggeredQuestProgressHandler(
-                reaction_service=reaction_service,
-                unit_of_work_factory=uow_factory,
-            ).handle,
             handle_item_added_to_inventory=ItemAddedToInventoryQuestProgressHandler(
-                reaction_service=reaction_service,
-                unit_of_work_factory=uow_factory,
-            ).handle,
-            handle_conversation_ended=ConversationEndedQuestProgressHandler(
                 reaction_service=reaction_service,
                 unit_of_work_factory=uow_factory,
             ).handle,
@@ -180,9 +145,7 @@ class TestQuestProgressHandler:
         )
         handler.handle(event)
 
-    def test_handle_advances_objective_when_quest_accepted(
-        self, handler, quest_repository, data_store
-    ):
+    def test_handle_advances_objective_when_quest_accepted(self, handler, quest_repository, data_store):
         """受託中クエストの KILL_MONSTER 目標が進むこと"""
         quest_id = quest_repository.generate_quest_id()
         objectives = [
@@ -343,9 +306,7 @@ class TestQuestProgressHandler:
 
     def test_handle_domain_exception_re_raised(self, handler, quest_repository, data_store):
         """トランザクション内で DomainException が発生した場合はそのまま再送出される"""
-        quest_repository.find_accepted_quests_by_player = Mock(
-            side_effect=DomainException("domain rule violated")
-        )
+        quest_repository.find_accepted_quests_by_player = Mock(side_effect=DomainException("domain rule violated"))
         event = MonsterDiedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
@@ -358,13 +319,9 @@ class TestQuestProgressHandler:
         with pytest.raises(DomainException, match="domain rule violated"):
             handler.handle(event)
 
-    def test_handle_unexpected_exception_raises_system_error(
-        self, handler, quest_repository
-    ):
+    def test_handle_unexpected_exception_raises_system_error(self, handler, quest_repository):
         """トランザクション内で想定外の例外が発生した場合は SystemErrorException にラップされる"""
-        quest_repository.find_accepted_quests_by_player = Mock(
-            side_effect=RuntimeError("unexpected failure")
-        )
+        quest_repository.find_accepted_quests_by_player = Mock(side_effect=RuntimeError("unexpected failure"))
         event = MonsterDiedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
@@ -377,9 +334,7 @@ class TestQuestProgressHandler:
         with pytest.raises(SystemErrorException) as exc_info:
             handler.handle(event)
         assert exc_info.value.original_exception is not None
-        assert isinstance(
-            exc_info.value.original_exception, RuntimeError
-        )
+        assert isinstance(exc_info.value.original_exception, RuntimeError)
 
     def test_handle_reward_grant_failure_when_player_status_not_found(
         self,
@@ -465,6 +420,7 @@ class TestQuestProgressHandler:
         from ai_rpg_world.domain.item.value_object.item_instance_id import (
             ItemInstanceId,
         )
+
         quest = QuestAggregate(
             quest_id=quest_id,
             status=QuestStatus.ACCEPTED,
@@ -572,9 +528,7 @@ class TestQuestProgressHandler:
         handler.handle_player_downed(event)
         # 例外なく完了することのみ確認
 
-    def test_handle_player_downed_advances_objective_when_quest_accepted(
-        self, handler, quest_repository
-    ):
+    def test_handle_player_downed_advances_objective_when_quest_accepted(self, handler, quest_repository):
         """受託中クエストの KILL_PLAYER 目標が進むこと（キラー＝受託者、被害者＝目標）"""
         quest_id = quest_repository.generate_quest_id()
         victim_player_id_value = 2
@@ -663,9 +617,7 @@ class TestQuestProgressHandler:
         player_status_repository.save.assert_called_once()
         player_inventory_repository.save.assert_called_once()
 
-    def test_handle_player_downed_skips_when_no_matching_quest(
-        self, handler, quest_repository
-    ):
+    def test_handle_player_downed_skips_when_no_matching_quest(self, handler, quest_repository):
         """KILL_PLAYER 目標が一致しないクエストは進捗しない"""
         quest_id = quest_repository.generate_quest_id()
         # 目標は「プレイヤー3をキル」、イベントは「プレイヤー2がダウン」
@@ -700,522 +652,6 @@ class TestQuestProgressHandler:
         q = quest_repository.find_by_id(quest_id)
         assert q.objectives[0].current_count == 0
         assert q.status.value == "accepted"
-
-    # --- handle_item_taken_from_chest (TAKE_FROM_CHEST) ---
-
-    def test_handle_item_taken_from_chest_advances_objective_when_quest_accepted(
-        self, handler, quest_repository
-    ):
-        """受託中クエストの TAKE_FROM_CHEST 目標が進むこと"""
-        quest_id = quest_repository.generate_quest_id()
-        spot_id_value = 10
-        chest_id_value = 20
-        acceptor_id = PlayerId(1)
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.TAKE_FROM_CHEST,
-                target_id=spot_id_value,
-                target_id_secondary=chest_id_value,
-                required_count=2,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(acceptor_id)
-        quest_repository.save(quest)
-
-        event = ItemTakenFromChestEvent.create(
-            aggregate_id=SpotId(spot_id_value),
-            aggregate_type="PhysicalMap",
-            spot_id=SpotId(spot_id_value),
-            chest_id=WorldObjectId.create(chest_id_value),
-            actor_id=WorldObjectId.create(1),
-            item_instance_id=ItemInstanceId.create(100),
-            player_id_value=acceptor_id.value,
-        )
-        handler.handle_item_taken_from_chest(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.objectives[0].current_count == 1
-        assert q.status.value == "accepted"
-
-    def test_handle_item_taken_from_chest_completes_quest_and_grants_reward_when_all_done(
-        self,
-        handler,
-        quest_repository,
-        player_status_repository,
-        player_inventory_repository,
-    ):
-        """TAKE_FROM_CHEST 目標が全て達成でクエスト完了し報酬付与が行われること"""
-        quest_id = quest_repository.generate_quest_id()
-        spot_id_value = 10
-        chest_id_value = 20
-        acceptor_id = PlayerId(1)
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.TAKE_FROM_CHEST,
-                target_id=spot_id_value,
-                target_id_secondary=chest_id_value,
-                required_count=1,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(acceptor_id)
-        quest_repository.save(quest)
-
-        mock_status = Mock()
-        mock_inventory = Mock()
-        player_status_repository.find_by_id.return_value = mock_status
-        player_inventory_repository.find_by_id.return_value = mock_inventory
-
-        event = ItemTakenFromChestEvent.create(
-            aggregate_id=SpotId(spot_id_value),
-            aggregate_type="PhysicalMap",
-            spot_id=SpotId(spot_id_value),
-            chest_id=WorldObjectId.create(chest_id_value),
-            actor_id=WorldObjectId.create(1),
-            item_instance_id=ItemInstanceId.create(100),
-            player_id_value=acceptor_id.value,
-        )
-        handler.handle_item_taken_from_chest(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.status.value == "completed"
-        assert q.objectives[0].current_count == 1
-        mock_status.earn_gold.assert_called_once_with(100)
-        mock_status.gain_exp.assert_called_once_with(50)
-        player_status_repository.save.assert_called_once()
-        player_inventory_repository.save.assert_called_once()
-
-    def test_handle_item_taken_from_chest_skips_when_spot_or_chest_mismatch(
-        self, handler, quest_repository
-    ):
-        """TAKE_FROM_CHEST で spot/chest が一致しないクエストは進捗しない"""
-        quest_id = quest_repository.generate_quest_id()
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.TAKE_FROM_CHEST,
-                target_id=10,
-                target_id_secondary=20,
-                required_count=1,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(PlayerId(1))
-        quest_repository.save(quest)
-
-        # 別のチェスト（spot=10, chest=99）から取得
-        event = ItemTakenFromChestEvent.create(
-            aggregate_id=SpotId(10),
-            aggregate_type="PhysicalMap",
-            spot_id=SpotId(10),
-            chest_id=WorldObjectId.create(99),
-            actor_id=WorldObjectId.create(1),
-            item_instance_id=ItemInstanceId.create(100),
-            player_id_value=1,
-        )
-        handler.handle_item_taken_from_chest(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.objectives[0].current_count == 0
-        assert q.status.value == "accepted"
-
-    # --- handle_location_entered (REACH_SPOT / REACH_LOCATION) ---
-
-    def test_handle_location_entered_skips_when_no_player_id(self, handler):
-        """player_id_value が None のとき何もしない"""
-        event = LocationEnteredEvent.create(
-            aggregate_id=LocationAreaId(1),
-            aggregate_type="LocationArea",
-            location_id=LocationAreaId(1),
-            spot_id=SpotId(5),
-            object_id=WorldObjectId.create(999),
-            name="test",
-            description="desc",
-            player_id_value=None,
-        )
-        handler.handle_location_entered(event)
-        # 例外なく完了することのみ確認
-
-    def test_handle_location_entered_advances_reach_spot_when_quest_accepted(
-        self, handler, quest_repository
-    ):
-        """受託中クエストの REACH_SPOT 目標が進むこと"""
-        quest_id = quest_repository.generate_quest_id()
-        spot_id_value = 5
-        acceptor_id = PlayerId(1)
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.REACH_SPOT,
-                target_id=spot_id_value,
-                required_count=2,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(acceptor_id)
-        quest_repository.save(quest)
-
-        event = LocationEnteredEvent.create(
-            aggregate_id=LocationAreaId(10),
-            aggregate_type="LocationArea",
-            location_id=LocationAreaId(10),
-            spot_id=SpotId(spot_id_value),
-            object_id=WorldObjectId.create(1),
-            name="area",
-            description="desc",
-            player_id_value=acceptor_id.value,
-        )
-        handler.handle_location_entered(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.objectives[0].current_count == 1
-        assert q.status.value == "accepted"
-
-    def test_handle_location_entered_advances_reach_location_when_quest_accepted(
-        self, handler, quest_repository
-    ):
-        """受託中クエストの REACH_LOCATION 目標が進むこと"""
-        quest_id = quest_repository.generate_quest_id()
-        location_id_value = 10
-        spot_id_value = 5
-        acceptor_id = PlayerId(1)
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.REACH_LOCATION,
-                target_id=location_id_value,
-                target_id_secondary=spot_id_value,
-                required_count=2,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(acceptor_id)
-        quest_repository.save(quest)
-
-        event = LocationEnteredEvent.create(
-            aggregate_id=LocationAreaId(location_id_value),
-            aggregate_type="LocationArea",
-            location_id=LocationAreaId(location_id_value),
-            spot_id=SpotId(spot_id_value),
-            object_id=WorldObjectId.create(1),
-            name="area",
-            description="desc",
-            player_id_value=acceptor_id.value,
-        )
-        handler.handle_location_entered(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.objectives[0].current_count == 1
-        assert q.status.value == "accepted"
-
-    def test_handle_location_entered_completes_quest_and_grants_reward_when_all_done(
-        self,
-        handler,
-        quest_repository,
-        player_status_repository,
-        player_inventory_repository,
-    ):
-        """REACH_SPOT 目標が全て達成でクエスト完了し報酬付与が行われること"""
-        quest_id = quest_repository.generate_quest_id()
-        spot_id_value = 5
-        acceptor_id = PlayerId(1)
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.REACH_SPOT,
-                target_id=spot_id_value,
-                required_count=1,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(acceptor_id)
-        quest_repository.save(quest)
-
-        mock_status = Mock()
-        mock_inventory = Mock()
-        player_status_repository.find_by_id.return_value = mock_status
-        player_inventory_repository.find_by_id.return_value = mock_inventory
-
-        event = LocationEnteredEvent.create(
-            aggregate_id=LocationAreaId(10),
-            aggregate_type="LocationArea",
-            location_id=LocationAreaId(10),
-            spot_id=SpotId(spot_id_value),
-            object_id=WorldObjectId.create(1),
-            name="area",
-            description="desc",
-            player_id_value=acceptor_id.value,
-        )
-        handler.handle_location_entered(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.status.value == "completed"
-        assert q.objectives[0].current_count == 1
-        mock_status.earn_gold.assert_called_once_with(100)
-        mock_status.gain_exp.assert_called_once_with(50)
-        player_status_repository.save.assert_called_once()
-        player_inventory_repository.save.assert_called_once()
-
-    def test_handle_location_entered_skips_when_no_matching_quest(
-        self, handler, quest_repository
-    ):
-        """REACH_SPOT / REACH_LOCATION 目標が一致しないクエストは進捗しない"""
-        quest_id = quest_repository.generate_quest_id()
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.REACH_SPOT,
-                target_id=99,
-                required_count=1,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(PlayerId(1))
-        quest_repository.save(quest)
-
-        event = LocationEnteredEvent.create(
-            aggregate_id=LocationAreaId(10),
-            aggregate_type="LocationArea",
-            location_id=LocationAreaId(10),
-            spot_id=SpotId(5),
-            object_id=WorldObjectId.create(1),
-            name="area",
-            description="desc",
-            player_id_value=1,
-        )
-        handler.handle_location_entered(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.objectives[0].current_count == 0
-        assert q.status.value == "accepted"
-
-    # --- handle_gateway_triggered (REACH_SPOT) ---
-
-    def test_handle_gateway_triggered_skips_when_no_player_id(self, handler):
-        """player_id_value が None のとき何もしない"""
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(5),
-            object_id=WorldObjectId.create(999),
-            target_spot_id=SpotId(6),
-            landing_coordinate=Coordinate(0, 0),
-            player_id_value=None,
-        )
-        handler.handle_gateway_triggered(event)
-        # 例外なく完了することのみ確認
-
-    def test_handle_gateway_triggered_advances_reach_spot_when_quest_accepted(
-        self, handler, quest_repository
-    ):
-        """受託中クエストの REACH_SPOT 目標が進むこと（着地先スポットで判定）"""
-        quest_id = quest_repository.generate_quest_id()
-        target_spot_id_value = 6
-        acceptor_id = PlayerId(1)
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.REACH_SPOT,
-                target_id=target_spot_id_value,
-                required_count=2,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(acceptor_id)
-        quest_repository.save(quest)
-
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(5),
-            object_id=WorldObjectId.create(1),
-            target_spot_id=SpotId(target_spot_id_value),
-            landing_coordinate=Coordinate(0, 0),
-            player_id_value=acceptor_id.value,
-        )
-        handler.handle_gateway_triggered(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.objectives[0].current_count == 1
-        assert q.status.value == "accepted"
-
-    def test_handle_gateway_triggered_completes_quest_and_grants_reward_when_all_done(
-        self,
-        handler,
-        quest_repository,
-        player_status_repository,
-        player_inventory_repository,
-    ):
-        """REACH_SPOT（ゲート通過）目標が全て達成でクエスト完了し報酬付与が行われること"""
-        quest_id = quest_repository.generate_quest_id()
-        target_spot_id_value = 6
-        acceptor_id = PlayerId(1)
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.REACH_SPOT,
-                target_id=target_spot_id_value,
-                required_count=1,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(acceptor_id)
-        quest_repository.save(quest)
-
-        mock_status = Mock()
-        mock_inventory = Mock()
-        player_status_repository.find_by_id.return_value = mock_status
-        player_inventory_repository.find_by_id.return_value = mock_inventory
-
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(5),
-            object_id=WorldObjectId.create(1),
-            target_spot_id=SpotId(target_spot_id_value),
-            landing_coordinate=Coordinate(0, 0),
-            player_id_value=acceptor_id.value,
-        )
-        handler.handle_gateway_triggered(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.status.value == "completed"
-        assert q.objectives[0].current_count == 1
-        mock_status.earn_gold.assert_called_once_with(100)
-        mock_status.gain_exp.assert_called_once_with(50)
-        player_status_repository.save.assert_called_once()
-        player_inventory_repository.save.assert_called_once()
-
-    def test_handle_gateway_triggered_skips_when_no_matching_quest(
-        self, handler, quest_repository
-    ):
-        """REACH_SPOT 目標が一致しないクエストは進捗しない"""
-        quest_id = quest_repository.generate_quest_id()
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.REACH_SPOT,
-                target_id=99,
-                required_count=1,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(PlayerId(1))
-        quest_repository.save(quest)
-
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(5),
-            object_id=WorldObjectId.create(1),
-            target_spot_id=SpotId(6),
-            landing_coordinate=Coordinate(0, 0),
-            player_id_value=1,
-        )
-        handler.handle_gateway_triggered(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.objectives[0].current_count == 0
-        assert q.status.value == "accepted"
-
-    # --- handle_item_added_to_inventory (OBTAIN_ITEM) ---
 
     def test_handle_item_added_to_inventory_skips_when_item_spec_payload_missing(
         self, handler, quest_repository, item_repository
@@ -1376,134 +812,45 @@ class TestQuestProgressHandler:
         assert q.objectives[0].current_count == 0
         assert q.status.value == "accepted"
 
-    # --- handle_conversation_ended (TALK_TO_NPC) ---
-
-    def test_handle_conversation_ended_advances_talk_to_npc_objective(
-        self, handler, quest_repository
-    ):
-        """ConversationEndedEvent で受託中クエストの TALK_TO_NPC 目標が進むこと"""
-        quest_id = quest_repository.generate_quest_id()
-        npc_id_value = 300
-        acceptor_id = PlayerId(1)
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.TALK_TO_NPC,
-                target_id=npc_id_value,
-                required_count=2,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(acceptor_id)
-        quest_repository.save(quest)
-
-        event = ConversationEndedEvent.create(
-            aggregate_id=acceptor_id,
-            aggregate_type="Conversation",
-            npc_id_value=npc_id_value,
-            end_node_id_value=1,
-        )
-        handler.handle_conversation_ended(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.objectives[0].current_count == 1
-        assert q.status.value == "accepted"  # required_count=2 なので1回会話後はまだ未完了
-
-    def test_handle_conversation_ended_completes_quest_when_all_objectives_done(
+    def test_command_registration_updates_real_quest_after_commit(
         self,
-        handler,
+        reaction_service,
+        uow_factory,
         quest_repository,
-        player_status_repository,
-        player_inventory_repository,
-    ):
-        """TALK_TO_NPC が最後の目標で、会話終了でクエスト完了・報酬付与されること"""
+        data_store,
+    ) -> None:
+        """実際の受け手を新登録で呼ぶと、保存の確定後にだけ受託済みクエストの討伐数が増える。"""
+        from tests.support.command_scope_stack import CommandScopeTestStack
+
+        from ai_rpg_world.infrastructure.events.quest_event_handler_registry import QuestEventHandlerRegistry
+
         quest_id = quest_repository.generate_quest_id()
-        npc_id_value = 301
-        acceptor_id = PlayerId(1)
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.TALK_TO_NPC,
-                target_id=npc_id_value,
-                required_count=1,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=80, exp=40)
-        scope = QuestScope.public_scope()
         quest = QuestAggregate.issue_quest(
             quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
+            objectives=[QuestObjective(QuestObjectiveType.KILL_MONSTER, 101, 2, 0)],
+            reward=QuestReward.of(gold=100, exp=50),
+            scope=QuestScope.public_scope(),
             issuer_player_id=None,
             guild_id=None,
         )
-        quest.accept_by(acceptor_id)
+        quest.accept_by(PlayerId(1))
         quest_repository.save(quest)
-
-        mock_status = Mock()
-        mock_inventory = Mock()
-        player_status_repository.find_by_id.return_value = mock_status
-        player_inventory_repository.find_by_id.return_value = mock_inventory
-
-        event = ConversationEndedEvent.create(
-            aggregate_id=acceptor_id,
-            aggregate_type="Conversation",
-            npc_id_value=npc_id_value,
-            end_node_id_value=1,
+        stack = CommandScopeTestStack(data_store)
+        QuestEventHandlerRegistry(
+            MonsterDiedQuestProgressHandler(reaction_service, uow_factory),
+            PlayerDownedQuestProgressHandler(reaction_service, uow_factory),
+            ItemAddedToInventoryQuestProgressHandler(reaction_service, uow_factory),
+        ).register_command_handlers(stack.dispatcher)
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=0,
+            exp=10,
+            gold=5,
+            template_id=101,
+            killer_player_id=PlayerId(1),
         )
-        handler.handle_conversation_ended(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.status.value == "completed"
-        assert q.objectives[0].current_count == 1
-        mock_status.earn_gold.assert_called_once_with(80)
-        mock_status.gain_exp.assert_called_once_with(40)
-
-    def test_handle_conversation_ended_skips_when_npc_not_target(
-        self, handler, quest_repository
-    ):
-        """TALK_TO_NPC の target_id がイベントの npc_id_value と一致しないクエストは進捗しない"""
-        quest_id = quest_repository.generate_quest_id()
-        acceptor_id = PlayerId(1)
-        objectives = [
-            QuestObjective(
-                objective_type=QuestObjectiveType.TALK_TO_NPC,
-                target_id=999,
-                required_count=1,
-                current_count=0,
-            ),
-        ]
-        reward = QuestReward.of(gold=100, exp=50)
-        scope = QuestScope.public_scope()
-        quest = QuestAggregate.issue_quest(
-            quest_id=quest_id,
-            objectives=objectives,
-            reward=reward,
-            scope=scope,
-            issuer_player_id=None,
-            guild_id=None,
-        )
-        quest.accept_by(acceptor_id)
-        quest_repository.save(quest)
-
-        event = ConversationEndedEvent.create(
-            aggregate_id=acceptor_id,
-            aggregate_type="Conversation",
-            npc_id_value=100,
-            end_node_id_value=1,
-        )
-        handler.handle_conversation_ended(event)
-
-        q = quest_repository.find_by_id(quest_id)
-        assert q.objectives[0].current_count == 0
-        assert q.status.value == "accepted"
+        with stack:
+            stack.publish(event)
+            assert quest_repository.find_by_id(quest_id).objectives[0].current_count == 0
+        assert quest_repository.find_by_id(quest_id).objectives[0].current_count == 1

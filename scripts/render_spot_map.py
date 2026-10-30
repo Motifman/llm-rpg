@@ -335,9 +335,7 @@ def _spots(raw: Mapping[str, Any]) -> list[_Spot]:
                 name=str(name or spot_id),
                 x=x,
                 y=y,
-                area_id=area_id.strip()
-                if isinstance(area_id, str) and area_id.strip()
-                else None,
+                area_id=area_id.strip() if isinstance(area_id, str) and area_id.strip() else None,
             )
         )
     return out
@@ -382,11 +380,7 @@ def _area_world_position(
         raw_y = position.get("y")
         if _is_number(raw_x) and _is_number(raw_y):
             return float(raw_x), float(raw_y)
-    members = [
-        spot
-        for spot in spots
-        if spot.area_id == area_id and spot.x is not None and spot.y is not None
-    ]
+    members = [spot for spot in spots if spot.area_id == area_id and spot.x is not None and spot.y is not None]
     if not members:
         return None, None
     return (
@@ -514,7 +508,7 @@ def _render_edges(
         )
         rows.append(
             f'<text class="edge-label" x="{mid_x:.1f}" y="{mid_y - 6:.1f}">'
-            f'travel_ticks: {html.escape(str(connection.travel_ticks))}</text>'
+            f"travel_ticks: {html.escape(str(connection.travel_ticks))}</text>"
         )
     return "\n        ".join(rows)
 
@@ -581,13 +575,13 @@ def _render_area_legend(areas: Sequence[_Area]) -> str:
 def _render_unpositioned(spots: Sequence[_Spot], *, total_count: int) -> str:
     title = f"未配置 spot: {len(spots)} / {total_count}"
     if not spots:
-        return f"<h2>{title}</h2><p class=\"empty-note\">すべての spot に position があります。</p>"
+        return f'<h2>{title}</h2><p class="empty-note">すべての spot に position があります。</p>'
     rows = "\n".join(
         f'<li data-unpositioned-spot-id="{html.escape(spot.spot_id)}">'
         f"{html.escape(spot.name)} <small>({html.escape(spot.spot_id)})</small></li>"
         for spot in spots
     )
-    return f"<h2>{title}</h2><ol class=\"unpositioned-list\">{rows}</ol>"
+    return f'<h2>{title}</h2><ol class="unpositioned-list">{rows}</ol>'
 
 
 def _render_summary(

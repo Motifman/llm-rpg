@@ -11,20 +11,27 @@ LLM エージェントが**実際に**受け取る観測テキスト・ツール
 from __future__ import annotations
 
 import logging
-import os
 import random
 import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.being.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
+    from ai_rpg_world.application.being.player_short_term_memory_copy import (
+        PlayerShortTermMemoryCopy,
+    )
+    from ai_rpg_world.application.being.recent_events_shadow import RecentEventsShadow
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
         ResolvedLlmRuntimeConfig,
     )
+    from ai_rpg_world.application.observation.being_contract import Observer
     from ai_rpg_world.application.player.services.departed_position_store import (
         DepartedPositionStore,
     )
@@ -39,6 +46,9 @@ if TYPE_CHECKING:
     )
     from ai_rpg_world.application.world_graph.player_interaction_application_service import (
         PlayerInteractionApplicationService,
+    )
+    from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+        WorldTickFailureIsolator,
     )
     from ai_rpg_world.domain.being.value_object.being_id import BeingId
     from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
@@ -66,6 +76,7 @@ class ToolExposureConfigurationError(RuntimeError):
 
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
 )
@@ -76,6 +87,7 @@ from ai_rpg_world.application.llm.contracts.action_argument_classification impor
     ActionArgumentClassificationError,
     unclassified_action_argument_names,
 )
+from ai_rpg_world.application.llm.contracts.aux_llm_call import AuxLlmCallSink
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     LlmUiContextDto,
@@ -91,34 +103,32 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
 )
-from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
-from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
-from ai_rpg_world.application.llm.services.prediction_context_ledger import (
-    PredictionContextLedger,
-)
 from ai_rpg_world.application.llm.services.prompt_argument_contract import (
     PromptArgumentContractError,
     PromptArgumentContractViolation,
     find_prompt_argument_contract_violations,
 )
 from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
-from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
     SpotGraphCurrentStateFormatter,
 )
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     SpotGraphUiContextBuilder,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
+from ai_rpg_world.application.llm.services.tool_catalog.cross_tool_mentions import (
+    without_absent_tool_mentions,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import (
+    with_memo_schema,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.memory import (
+    get_memory_specs,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.public_sns import get_public_sns_definitions
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
-    GOAL_OUTCOME_ABANDONED,
-    GOAL_OUTCOME_ACHIEVED,
     assess_situation_definition,
     strip_reason_first_action_subjective_schema,
-    with_expected_result_schema,
-    with_goal_outcome_schema,
-    with_goal_update_schema,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
@@ -139,18 +149,20 @@ from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_mon
     LlmFailureStreakMonitor,
 )
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_EPISODES,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+    TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-    TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 from ai_rpg_world.application.llm.tool_exposure import ToolExposure
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
+from ai_rpg_world.application.observation.contracts.dtos import (
+    ObservationOutput,
+    SubjectUnknownView,
+    WithheldFromStrangers,
+)
 from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
     HeartbeatObservationEmitter,
 )
@@ -170,6 +182,7 @@ from ai_rpg_world.application.player.services.player_life_query import PlayerLif
 from ai_rpg_world.application.player.services.player_outcome_observation_formatter import (
     PlayerOutcomeObservationFormatter,
 )
+from ai_rpg_world.application.social.public_sns.retained_screen import PublicSnsScreenStore
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
@@ -252,6 +265,7 @@ from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service impo
 )
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
+    SpotTravelBlocked,
 )
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
@@ -285,6 +299,9 @@ from ai_rpg_world.application.world_graph.synchronized_action_registry import (
 from ai_rpg_world.application.world_graph.synchronized_action_resolver_stage_service import (
     SynchronizedActionResolverStageService,
 )
+from ai_rpg_world.application.world_graph.travel_blocked_message import (
+    travel_blocked_cue,
+)
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
     WorldFlagChange,
@@ -292,6 +309,26 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
+from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
+from ai_rpg_world.being.domain.episode import EpisodeRepository
+from ai_rpg_world.being.domain.memo_book import MemoBookRepository
+from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock, MemoryTurnReader
+from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
+from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
+    InMemoryAcquaintanceRepository,
+)
+from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
+    InMemoryEpisodeRepository,
+)
+from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import (
+    InMemoryMemoBookRepository,
+)
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+    InMemoryMemoryTurnClock,
+)
+from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
+    InMemoryShortTermMemoryRepository,
+)
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -299,13 +336,9 @@ from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
-from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
-    STAGNATION_PRESSURE_BAND_NONE,
-    resolve_stagnation_pressure_band,
-)
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel, SpeechChannel
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
 from ai_rpg_world.domain.player.value_object.gold import Gold
@@ -313,14 +346,12 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import PlayerSpotNavigationState
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.trade.value_object.market_reach import (
     MarketReach,
 )
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
@@ -331,8 +362,13 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
+from ai_rpg_world.domain.world_graph.value_object.scenario_team import (
+    decide_team_results,
+)
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.world_flag_registry import WorldFlagRegistry
+from ai_rpg_world.eventing import AsyncEventExecutor, AsyncFailure
+from ai_rpg_world.eventing.dispatcher import EventDispatcher
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
 from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
@@ -351,6 +387,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_skill_loadout_repository i
 )
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import InMemorySpotGraphRepository
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import InMemorySpotInteriorRepository
+from ai_rpg_world.infrastructure.scenario.models import ScenarioDayNightConfig
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     PlayerSpawnConfig,
@@ -385,37 +422,6 @@ class WorldStandaloneNoopLlmTurnTrigger(ILlmTurnTrigger):
         return None
 
 
-def _other_explorer_names_for_world_system_prompt(
-    spawns: tuple[PlayerSpawnConfig, ...],
-    world_character: CharacterPromptInput | None,
-) -> tuple[str, ...]:
-    """【同じ局面にいる者】用の表示名。自身（LLM ペルソナ）に対応するスポーンは含めない。
-
-    シナリオ上の他プレイヤー全員名ではなく、同席する他者のみ述べるため、単体プレイでは空になる。
-    `world_character` 未指定時は `player_spawns[0]` を操作対象（ペルソナのフォールバック名と同じ扱い）とみなし除外する。
-    """
-    if not spawns:
-        return ()
-    self_spawn: PlayerSpawnConfig | None = None
-    if world_character is not None:
-        cid = (world_character.character_id or "").strip()
-        if cid:
-            for s in spawns:
-                if s.string_id == cid:
-                    self_spawn = s
-                    break
-        if self_spawn is None:
-            cname = (world_character.name or "").strip()
-            if cname:
-                for s in spawns:
-                    if s.name == cname:
-                        self_spawn = s
-                        break
-    if self_spawn is None:
-        self_spawn = spawns[0]
-    return tuple(s.name for s in spawns if s is not self_spawn)
-
-
 #: 昼夜サイクルを宣言していない世界の 1 tick あたりの分数。
 #:
 #: ``_time_label`` の後方互換フォールバックと同じ値。**別々に持つと、地図の
@@ -429,7 +435,7 @@ _FALLBACK_MINUTES_PER_TICK = 5
 _MEETING_URGENT_REMAINING_TICKS = 2
 
 
-def _minutes_per_tick(scenario: Any) -> int | None:
+def _minutes_per_tick(scenario: ScenarioLoadResult) -> int | None:
     """1 tick が世界の時計で何分か。
 
     現在時刻の表示 (`深夜 0:05`) と同じ換算を使う。エージェントはその時計を
@@ -438,11 +444,10 @@ def _minutes_per_tick(scenario: Any) -> int | None:
     昼夜サイクルを宣言していない世界は ``_time_label`` と同じ 5 分/tick に
     倒す。時計だけ進んで地図が別単位、という食い違いを作らない。
     """
-    day_night = getattr(scenario, "day_night_config", None)
-    ticks_per_day = getattr(day_night, "ticks_per_day", None) if day_night else None
-    if isinstance(ticks_per_day, int) and ticks_per_day > 0:
-        return (24 * 60) // ticks_per_day
-    return _FALLBACK_MINUTES_PER_TICK
+    day_night = scenario.day_night_config
+    if day_night is None:
+        return _FALLBACK_MINUTES_PER_TICK
+    return (24 * 60) // day_night.cycle.ticks_per_day
 
 
 def _required_task_count(scenario: Any) -> int | None:
@@ -458,64 +463,17 @@ def _required_task_count(scenario: Any) -> int | None:
 
 
 def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
-    """勝敗条件を宣言するシナリオか (= goal あり) を導出する (#526 U5, P5)。
+    """勝敗条件を宣言するシナリオか (= goal あり) を導出する (#526 U5)。
 
-    win/lose/end/player outcome 規則のいずれかがあれば goal 前提の文面・目的層
-    locked=True。
+    win/lose/end/player outcome 規則のいずれかがあれば goal 前提の文面にする。
     既存シナリオは全て game_end_conditions を持つので True になり、system
-    prompt / goal seed の挙動は不変。
+    prompt の挙動は不変。
 
     個人結果規則を持つ島シナリオも含めるのが必須。win/lose 配列だけを見ると
-    「勝敗条件なしの open world」に誤判定され、目的が unlocked (=
-    goal_update で書き換え・清算できる) になってしまう。
-
-    ``build_world_system_prompt`` の safe_intro 判定 (create_world_runtime) と
-    goal 目的層の seed 判定 (WorldRuntime._resolve_objective_via_goal_store)
-    の両方がこの 1 つの導出ロジックを共有する (判定基準の分岐を防ぐ)。
+    「勝敗条件なしの open world」に誤判定される。
     """
     return bool(
-        scenario.win_conditions
-        or scenario.lose_conditions
-        or scenario.end_conditions
-        or scenario.player_outcome_rules
-    )
-
-
-#: `disabled_tools` では落とせないが、**実験設定で落とせる**ツール。
-#:
-#: この分け方には理由がある。ここに並ぶツールは「世界に在るか」ではなく
-#: **「この実験で使うか」**で決まる (同じシナリオを profile 違いで回すときに
-#: 変わるのはこちら)。だから宣言の場所がシナリオではない。
-#:
-#: ただし**止めるだけでは足りない**。「指定できるのは …」だけを返すと、書いた人は
-#: 「この世界では落とせない」と読む。実際は落とせて、場所が違うだけ。
-#: **行き先の無い拒否は、拒否された側に推測を強いる。**
-_TURNED_OFF_BY_EXPERIMENT_CONFIG = {
-    "memo_add": "MEMO_TOOLS_ENABLED",
-    "memo_list": "MEMO_TOOLS_ENABLED",
-    "memo_done": "MEMO_TOOLS_ENABLED",
-    "memory_recall_episodes": "EPISODIC_RECALL_ENABLED",
-    "memory_recall_by_handle": "EPISODIC_RECALL_ENABLED",
-    "memory_explore_related": "EPISODIC_EXPLORE_RELATED_ENABLED",
-    "memory_search_semantic": "SEMANTIC_SEARCH_ENABLED",
-}
-
-
-def _where_to_turn_off_instead(unknown: Any) -> str:
-    """実験設定で落とせる名前が混ざっていたら、その行き先を添える。"""
-    elsewhere = {
-        name: _TURNED_OFF_BY_EXPERIMENT_CONFIG[name]
-        for name in unknown
-        if name in _TURNED_OFF_BY_EXPERIMENT_CONFIG
-    }
-    if not elsewhere:
-        return ""
-    where = ", ".join(
-        f"{name} は実験設定の {flag}=0" for name, flag in sorted(elsewhere.items())
-    )
-    return (
-        f" / なお、これらはシナリオではなく実験設定で落とします: {where}"
-        " (profile または EXPERIMENT_CONFIG に書く)"
+        scenario.win_conditions or scenario.lose_conditions or scenario.end_conditions or scenario.player_outcome_rules
     )
 
 
@@ -592,6 +550,13 @@ class WorldRuntime:
     # Phase E-3: プレイヤー個別 outcome の registry (PlayerId → PlayerOutcomeEnum)。
     # factory は PlayerLifeQuery と同じ instance を構築時に渡す。
     _player_outcome_registry: Any | None = field(default=None, repr=False)
+    _public_sns_data_store: Any = field(default=None, repr=False)
+    _public_sns_read_service: Any = field(default=None, repr=False)
+    _public_sns_command_service: Any = field(default=None, repr=False)
+    _public_sns_executor: Any = field(default=None, repr=False)
+    _public_sns_projection: Any = field(default=None, repr=False)
+    _public_sns_screens: PublicSnsScreenStore = field(default_factory=PublicSnsScreenStore, repr=False)
+    _execution_turns: dict[int, int] = field(default_factory=dict, repr=False)
     _tick: int = 0
     # #375 後続: 食料腐敗の日次集約バッファ (code-review HIGH 指摘)。
     # hasattr ベースの遅延初期化だと IDE/mypy / pickle で扱いにくいので
@@ -605,15 +570,11 @@ class WorldRuntime:
     # per-world の事実なので player ごとではなく runtime に保持し、snapshot
     # で保存する。値は {"active": bool, "initialized": bool,
     # "last_changed_tick": int | None}。
-    _distant_cue_states: dict[str, dict[str, Any]] = field(
-        default_factory=dict, repr=False
-    )
+    _distant_cue_states: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
     # 世界のフェーズ (自由時間 / 会議)。per-world。会議・投票の土台
     # (docs/memory_system/meeting_and_voting_design.md §2.1)。
     # 常にちょうど 1 つのフェーズを持ち、排他は store の遷移メソッドが守る。
-    _game_phase_store: GamePhaseStore = field(
-        default_factory=lambda: GamePhaseStore(), repr=False
-    )
+    _game_phase_store: GamePhaseStore = field(default_factory=lambda: GamePhaseStore(), repr=False)
     # 対人行為の再使用間隔。per-world。tick 基準で PlayerId をキーにするので
     # Being ではなく world snapshot に載る (codec を同じ PR で入れてある)。
     _interaction_cooldown_store: InteractionCooldownStore = field(
@@ -634,18 +595,7 @@ class WorldRuntime:
     # シナリオに複数 player_spawns がある場合は player ごとに persona を埋めた system
     # prompt を持つ。dict が空 / 該当 id 無しなら _world_llm_system_prompt にフォールバック。
     _world_llm_system_prompt: str = field(default="", repr=False)
-    _world_llm_system_prompts_by_player_id: dict[int, str] = field(
-        default_factory=dict, repr=False
-    )
-    _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
-    _todo_tool_executor: TodoToolExecutor | None = field(default=None, repr=False)
-    # U5 (MEMO_DISTILL): memo_done → BeliefEvidence 転記の transcriber。
-    # ``_todo_tool_executor`` は ``set_trace_recorder`` 等で作り直される
-    # (lazy 再構築) ため、transcriber を setter で 1 度差し込むだけだと
-    # 作り直しで静かに失われる (実験 run で MEMO_DISTILL evidence が 0 件に
-    # なる silent failure の原因)。runtime 側に保持し、``_wire_auxiliary_tool_stack``
-    # が executor を作り直すたびに再適用する。型は circular import 回避で Any。
-    _memo_distill_transcriber: Any | None = field(default=None, repr=False)
+    _world_llm_system_prompts_by_player_id: dict[int, str] = field(default_factory=dict, repr=False)
     # create_world_runtime が構築後に差し込む配線。型は circular import 回避で
     # Any。宣言が無いと、代入側の typo を静かに受け入れてしまう。
     _use_item_command_scope_factory: Any | None = field(default=None, repr=False)
@@ -653,95 +603,59 @@ class WorldRuntime:
     _prepare_action_command_scope_factory: Any | None = field(default=None, repr=False)
     _death_grace_timer: Any | None = field(default=None, repr=False)
     _downed_incident_log: Any | None = field(default=None, repr=False)
-    _structured_failure_transcriber: Any | None = field(default=None, repr=False)
-    # P5 (目的層): GOAL_STORE_ENABLED ON のときだけ構築される goal journal store。
-    # OFF なら None (【現在の目的】は従来の静的シナリオ文字列で描画)。
-    # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
-    _goal_journal_store: Any | None = field(default=None, repr=False)
-    # P-U2 (停滞感 store): reflect verdict の畳み込み先カウンタ store。
-    # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
-    _stagnation_pressure_store: Any | None = field(default=None, repr=False)
-    # 案A (band-gated thinking): 停滞 reflect 注入 → 次行動での熟考を橋渡しする
-    # 一発ラッチ。transient (session 内制御信号) なので snapshot 非対象。
-    _stagnation_reasoning_latch: Any | None = field(default=None, repr=False)
+    # #1631: Being ごとの記憶のターン数。1 手ごとに進め、記憶にターン数を付ける
+    # 部品はここから読む。あとから代入し直すと、先に組んだ部品だけが古い時計を
+    # 読み続ける。
+    _memory_turn_clock: MemoryTurnClock = field(default_factory=InMemoryMemoryTurnClock, repr=False)
+    # #1520: Being が会った相手の記録。Being の snapshot に入り、世界の
+    # snapshot には入らない。
+    _acquaintance_store: AcquaintanceRepository = field(default_factory=InMemoryAcquaintanceRepository, repr=False)
+    _player_acquaintances: PlayerAcquaintances | None = field(default=None, repr=False)
+    # #1623: 知り合いの記録と同じく、世界の snapshot には入らない。
+    _being_episode_store: EpisodeRepository = field(default_factory=InMemoryEpisodeRepository, repr=False)
+    # #1626: profile で書き起こしを有効にしたときだけ create_world_runtime が組む。
+    _player_episode_writing: Any | None = field(default=None, repr=False)
+    # #1623: profile で目次を出す設定にしたときだけ create_world_runtime が組む。
+    _being_episode_recall_tool_executor: Any | None = field(default=None, repr=False)
+    _being_episode_index_revision_tool_executor: Any | None = field(default=None, repr=False)
+    # #1628: エピソードと同じく、世界の snapshot には入らない。
+    _being_memo_store: MemoBookRepository = field(default_factory=InMemoryMemoBookRepository, repr=False)
+    # #1824: Being 側の短期記憶。世界の snapshot には入らない。今の短期記憶と並べて
+    # ``_being_short_term_memory_copy`` が書く。
+    _being_short_term_memory_store: ShortTermMemoryRepository = field(
+        default_factory=InMemoryShortTermMemoryRepository, repr=False
+    )
+    # create_world_runtime が組む。phase_b が 1 手を書き留める。
+    _being_short_term_memory_copy: PlayerShortTermMemoryCopy | None = field(default=None, repr=False)
+    # create_world_runtime が組む。プロンプトを組むたびに【直近の出来事】を比べる。
+    _recent_events_shadow: RecentEventsShadow | None = field(default=None, repr=False)
     # reason-first 2段階 turn の有効化。True でも常時 2 段階ではなく、
     # presentation runtime_manager の Phase A 入口で既存 shared state を読んで
     # gated 発火する。下流 execution / episode / prediction 経路は mode 非分岐。
     reason_first_two_step_enabled: bool = field(default=False, repr=False)
-    # P6 (目的の見直し): GOAL_REVISION_ENABLED の解決結果と、goal_update を
-    # 反映する applier。flag OFF / goal store 無しなら applier は None。
-    _goal_revision_enabled: bool = field(default=False, repr=False)
-    _goal_revision_applier: Any | None = field(default=None, repr=False)
-    # H-1 (伝聞の入力衛生 / 横断レビュー): HEARSAY_ENABLED を
-    # BELIEF_EVIDENCE_ENABLED と畳み込んだ実効値。GOAL_REVISION と同じ理由で
-    # runtime に保持する (config ミス時に「実際に何が有効か」を後から読める
-    # ようにする)。
-    _hearsay_enabled: bool = field(default=False, repr=False)
-    # Issue #526 後続: LLM が「思い出そう」と意志して過去 episode を呼び戻す
-    # ``memory_recall_episodes`` tool の executor。``_wire_auxiliary_tool_stack``
-    # 時に episodic_stack が wire されていれば構築。OFF (= 構築されない) なら
-    # tool 定義もリストに出さず、run_llm_auxiliary_tool でも未対応扱い。
-    # 型は ``Optional["EpisodicMemoryRecallToolExecutor"]`` だが circular import
-    # 回避のため lazy import + ``Any`` 注釈にしている (= 既存の lazy executor
-    # 配線と同じパターン)。
-    _memory_recall_tool_executor: Any | None = field(default=None, repr=False)
-    # 能動的にリンク済みエピソードを辿る ``memory_explore_related`` tool の
-    # executor。``EPISODIC_EXPLORE_RELATED_ENABLED`` が true かつ link store
-    # 一式が組めるときだけ LLM に露出する。
-    _memory_explore_related_tool_executor: Any | None = field(
-        default=None, repr=False
-    )
-    # semantic 記憶を能動検索する ``memory_search_semantic`` tool の executor。
-    # ``SEMANTIC_SEARCH_ENABLED`` が true かつ semantic store が組めるときだけ
-    # LLM に露出する。
-    _semantic_memory_search_tool_executor: Any | None = field(
-        default=None, repr=False
-    )
-    # PR-D: afterglow handle から本文を引き戻す ``memory_recall_by_handle``
-    # tool の executor。slot / afterglow / episode_store + 現 tick provider を
-    # 統合する必要があるため、``_wire_auxiliary_tool_stack`` で構築。
-    # 構築されなければ tool 定義もリストに出さず、handler も未対応扱い。
-    _memory_recall_by_handle_tool_executor: Any | None = field(default=None, repr=False)
     # シナリオ実行 trace の recorder。未設定なら NullTraceRecorder にフォールバック
     # (Phase 1d 配線)。
     _trace_recorder: Any = field(default=None, repr=False)
+    _async_event_executor: AsyncEventExecutor | None = field(default=None, repr=False)
+    # 記憶の部品と Jev の呼び出しの記録先 (#1617)。runtime の外で組む Jev も
+    # ここを通すので、create_world_runtime 以外で組んだ runtime では None。
+    _aux_llm_call_sink: Any = field(default=None, repr=False)
+    _world_tick_failure_isolator: WorldTickFailureIsolator | None = field(default=None, repr=False)
     # trace 用の run 内集計。世界状態ではなく観測値なので snapshot へは載せない。
-    _cumulative_travel_ticks_by_player: dict[int, int] = field(
-        default_factory=dict, repr=False
-    )
+    _cumulative_travel_ticks_by_player: dict[int, int] = field(default_factory=dict, repr=False)
     _cumulative_meeting_ticks: int = field(default=0, repr=False)
-    # B-4: LLM に提示するツールセットの mode。``True`` (既定) なら TODO 系も
-    # 含む従来構成、``False`` なら純スポットグラフ + speech のみ。
-    # Issue #155 (TODO 設計の再評価) の判断材料を取るための比較実験用。
-    _include_todo_tools: bool = field(default=True, repr=False)
-    # Prediction (#526 v0): 行動前の予測 expected_result を core action tool の
-    # schema に露出する policy。``"off"`` (露出せず=既定/挙動不変) | ``"optional"``
-    # (schema に出すが必須にしない) | ``"required"`` (毎ターン必須)。factory が
-    # ResolvedLlmRuntimeConfig.expected_result_policy から設定する。
-    _expected_result_policy: str = field(default="off", repr=False)
     # 実験設定の解決済み DTO。遅延構築される component も env を読み直さず、
     # runtime 作成時と同じ設定を見るために保持する。
     _runtime_config: Any | None = field(default=None, repr=False)
     # PR 2 (#227): speech 配信経路統一。PlayerSpokeEvent をドメインイベント
     # として fire し、ObservationPipeline → buffer 経路で配信する。直接
     # broadcast (旧 _append_agent_speech) は廃止。
-    _speech_service: PlayerSpeechApplicationService | None = field(
-        default=None, repr=False
-    )
-    _speech_event_publisher: PipelineEventPublisher | None = field(
-        default=None, repr=False
-    )
+    _speech_service: PlayerSpeechApplicationService | None = field(default=None, repr=False)
+    _speech_event_publisher: PipelineEventPublisher | None = field(default=None, repr=False)
     _observation_appender: ObservationAppender | None = field(default=None, repr=False)
     # turn_scheduler はセッション作成時に create_session で注入される
     # (LlmTurnTrigger と llm_player_resolver は wiring で組み立てる必要があるため)
-    _observation_turn_scheduler: ObservationTurnScheduler | None = field(
-        default=None, repr=False
-    )
-    # Issue #283 後続: episodic memory pipeline (on/off)。
-    # - ``_episodic_stack`` が None なら従来動作 (memory なし)
-    # - 注入されていれば ``_record_action_result`` で chunk が積まれ、
-    #   prompt builder の recall section に過去エピソードが現れる
-    _episodic_stack: Any | None = field(default=None, repr=False)
+    _observation_turn_scheduler: ObservationTurnScheduler | None = field(default=None, repr=False)
     # #404 fix: travel_stage を runtime に保持する。create_session 経路から
     # 「到着時の schedule_turn コールバック」を後付けで注入するため、参照を
     # 露出させる必要がある (simulation_service の中に隠れたままだと外から
@@ -752,18 +666,12 @@ class WorldRuntime:
     # progress reporter が iteration 終端で snapshot + reset する。Phase A の
     # ThreadPoolExecutor で並行 increment され得るため Lock で保護する。
     _llm_call_count: int = field(default=0, repr=False)
-    _llm_call_count_lock: threading.Lock = field(
-        default_factory=threading.Lock, repr=False
-    )
+    _llm_call_count_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     # 連続失敗による run 停止 (層 2)。`_runtime_config` から閾値を読んで遅延
     # 生成する。設定を持たない runtime (presentation 単体テスト等) でも
     # 既定値で動くので、配線漏れが「監視が黙って無効」にならない。
-    _llm_failure_monitor: LlmFailureStreakMonitor | None = field(
-        default=None, repr=False
-    )
-    _llm_failure_monitor_lock: threading.Lock = field(
-        default_factory=threading.Lock, repr=False
-    )
+    _llm_failure_monitor: LlmFailureStreakMonitor | None = field(default=None, repr=False)
+    _llm_failure_monitor_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -781,6 +689,21 @@ class WorldRuntime:
             if p.player_id == int(player_id):
                 return p.name
         return f"Player-{int(player_id)}"
+
+    def round_assignment_trace(self) -> list[dict[str, Any]]:
+        """round_assignment で player に割り当てた枠を、trace に載せる形で返す (#1514)。"""
+        spawns = {p.string_id: p for p in self.scenario.player_spawns}
+        return [
+            {
+                "player_id": int(spawns[a.player_string_id].player_id),
+                "player_name": spawns[a.player_string_id].name,
+                "group_index": a.group_index,
+                "slot_index": a.slot_index,
+                "spawn_spot": a.spawn_spot,
+                "initial_state": dict(a.initial_state),
+            }
+            for a in self.scenario.round_assignments
+        ]
 
     def current_tick(self) -> int:
         return self._time_provider.get_current_tick().value
@@ -818,9 +741,7 @@ class WorldRuntime:
                     threshold = DEFAULT_FAILURE_STREAK_ABORT
                 else:
                     threshold = int(self._runtime_config.llm_failure_streak_abort)
-                self._llm_failure_monitor = LlmFailureStreakMonitor(
-                    threshold=threshold
-                )
+                self._llm_failure_monitor = LlmFailureStreakMonitor(threshold=threshold)
             return self._llm_failure_monitor
 
     def record_llm_outcome(
@@ -836,9 +757,7 @@ class WorldRuntime:
         判定できることが要件で、run 中に trace.jsonl を舐める形にすると
         tick ごとにファイル全体を読むことになる。
         """
-        self._ensure_llm_failure_monitor().record(
-            success=success, error_code=error_code, tick=tick
-        )
+        self._ensure_llm_failure_monitor().record(success=success, error_code=error_code, tick=tick)
 
     def llm_abort_reason(self) -> str | None:
         """恒久障害とみなせるなら停止理由を返す。健全なら None。
@@ -869,9 +788,7 @@ class WorldRuntime:
         except Exception:
             return 0
 
-    def advance_until_player_idle(
-        self, player_id: PlayerId, max_ticks: int = 500
-    ) -> int:
+    def advance_until_player_idle(self, player_id: PlayerId, max_ticks: int = 500) -> int:
         """テスト / デモ用ヘルパ: 指定 player の travel が終わるまで tick を進める。
 
         #404 修正後の ``do_move`` は travel 開始だけして即 return する非同期
@@ -918,13 +835,110 @@ class WorldRuntime:
                 self._flush_pending_food_spoiled()
         self._maybe_close_meeting_on_timeout(tick.value)
         self._record_world_spatial_metrics(tick.value)
+        if self._public_sns_command_service is not None:
+            try:
+                self._public_sns_command_service.retry_pending_notifications(limit=100)
+            except Exception as exc:
+                self._record_world_tick_follow_up_failure(
+                    exc, stage="public_sns.retry_notifications", target_kind="stage"
+                )
         return tick.value
+
+    def _record_world_tick_follow_up_failure(
+        self,
+        exc: Exception,
+        *,
+        stage: str,
+        target_kind: str,
+        target_id: object = None,
+        player_id: int | None = None,
+    ) -> None:
+        """確定済みの処理に続く後処理の失敗を trace に残す (design_decisions D1558)。"""
+        from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+            WorldTickFailureIsolator,
+        )
+        from ai_rpg_world.domain.common.value_object import WorldTick
+
+        isolator = self._world_tick_failure_isolator or WorldTickFailureIsolator.fail_fast()
+        isolator.record_continued_failure(
+            exc,
+            stage=stage,
+            tick=WorldTick(self.current_tick()),
+            target_kind=target_kind,
+            target_id=target_id,
+            player_id=player_id,
+        )
 
     def _record_committed_player_travel_tick(self, player_id: PlayerId) -> None:
         """確定済みの player 移動 1 tick を実験指標へ反映する。"""
         player_id_value = int(player_id)
         self._cumulative_travel_ticks_by_player[player_id_value] = (
             self._cumulative_travel_ticks_by_player.get(player_id_value, 0) + 1
+        )
+
+    def _report_travel_blocked(self, player_id: PlayerId, blocked: SpotTravelBlocked) -> None:
+        """区間が閉じて移動を取りやめたことを、本人の観測・trace・行動履歴に残す。
+
+        到着の行が無いと本人が移動中だと思い込むのと同じで (到着の履歴の
+        hook を参照)、出発の行だけが残ると取りやめたことに気づけない。
+        観測は手番を積むためにも要る。止まった本人は到着の観察者を通らない。
+        観測を最初に出し、trace の記録の失敗は個別に握る。trace の失敗で
+        本人への観測と手番まで失うと、止まったことを知らないまま手番も来ない。
+        """
+        cue = travel_blocked_cue(blocked)
+        self._emit_observation_directly(
+            player_id,
+            ObservationOutput(
+                prose=cue,
+                structured={
+                    "type": "travel_blocked",
+                    "connection_name": blocked.connection_name,
+                    "message": cue,
+                },
+                observation_category="self_only",
+                schedules_turn=True,
+                breaks_movement=False,
+            ),
+        )
+        graph = self._spot_graph_repo.find_graph()
+        from_name = graph.get_spot(blocked.from_spot_id).name
+        to_name = graph.get_spot(blocked.to_spot_id).name
+        destination_name = graph.get_spot(blocked.destination_spot_id).name
+        recorder = self._trace_recorder
+        if recorder is not None:
+            from ai_rpg_world.application.trace import TraceEventKind
+
+            try:
+                recorder.record(
+                    TraceEventKind.TRAVEL_BLOCKED,
+                    tick=self.current_tick(),
+                    player_id=int(player_id),
+                    connection_id=blocked.connection_id.value,
+                    connection_name=blocked.connection_name,
+                    passage_kind=blocked.passage_kind,
+                    passage_state=blocked.passage_state,
+                    reason=blocked.reason.value,
+                    condition_message=blocked.condition_message,
+                    from_spot_id=blocked.from_spot_id.value,
+                    from_spot_name=from_name,
+                    to_spot_id=blocked.to_spot_id.value,
+                    to_spot_name=to_name,
+                    destination_spot_id=blocked.destination_spot_id.value,
+                    destination_spot_name=destination_name,
+                )
+            except Exception:
+                logger.exception(
+                    "TRAVEL_BLOCKED trace record failed: player=%s connection=%s",
+                    int(player_id),
+                    blocked.connection_id.value,
+                )
+        self._record_action_result(
+            player_id,
+            f"{blocked.connection_name}の先へ進めず、「{destination_name}」への移動を取りやめた",
+            f"「{from_name}」にとどまっている。ここから次の行動を選べる。",
+            tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            success=False,
+            error_code="TRAVEL_BLOCKED",
         )
 
     def _record_world_spatial_metrics(self, tick: int) -> None:
@@ -957,9 +971,7 @@ class WorldRuntime:
             travel_scope="all_players_including_departed",
             spot_occupancy=occupancy,
             cumulative_travel_ticks_by_player={
-                str(int(player_id)): self._cumulative_travel_ticks_by_player.get(
-                    int(player_id), 0
-                )
+                str(int(player_id)): self._cumulative_travel_ticks_by_player.get(int(player_id), 0)
                 for player_id in self.get_player_ids()
             },
         )
@@ -982,12 +994,50 @@ class WorldRuntime:
             raise RuntimeError("MeetingCommandService is not wired")
         service.resolve_and_end(reason=reason)
 
+    @property
+    def async_event_executor(self) -> AsyncEventExecutor:
+        """受け手を登録する側が共有する、本人ごとの実行基盤を返す。"""
+        if self._async_event_executor is None:
+            raise RuntimeError("非同期の配送が組み立てられていません")
+        return self._async_event_executor
+
+    def _record_async_delivery_failure(self, failure: AsyncFailure) -> None:
+        recorder = self._trace_recorder
+        if recorder is None:
+            raise RuntimeError("非同期の配送の失敗を記録する trace がありません")
+        event = recorder.record(
+            TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED,
+            tick=self.current_tick(),
+            reason=failure.reason,
+            recipient_key=str(failure.key),
+            event_id=failure.event.event_id,
+            event_type=type(failure.event).__name__,
+            handler=getattr(failure.handler, "__qualname__", type(failure.handler).__name__),
+            error_type=type(failure.error).__name__ if failure.error is not None else None,
+            error_message=str(failure.error) if failure.error is not None else None,
+        )
+        if event.seq < 0:
+            raise RuntimeError("非同期の配送の失敗が trace に保存されませんでした")
+
+    def apply_async_results(self, player_id: PlayerId) -> None:
+        """ターンの入口で、本人の ID の文字列を宛先とする結果を反映する。"""
+        if self._async_event_executor is not None:
+            acting = self._acting_being_for(player_id)
+            if acting is not None:
+                self._async_event_executor.apply_results(acting.being_id.value)
+
+    def shutdown_async_events(self) -> None:
+        """受付停止と期限付き待機の後、保存より前に完了した結果を反映する。"""
+        if self._async_event_executor is not None:
+            assert self._runtime_config is not None
+            self._async_event_executor.shutdown(timeout=self._runtime_config.async_event_shutdown_timeout_seconds)
+            self._async_event_executor.apply_all_results()
+
     def set_trace_recorder(self, recorder: Any) -> None:
         """シナリオ実行 trace の recorder を後から差し込む (Phase 1d 配線)。
 
         ``create_session`` などで world_runtime を構築した後に
-        外側から trace を有効化する用途。memo executor は lazy 構築なので
-        既に作成済みでもこのフィールドが反映される。
+        外側から trace を有効化する用途。
         """
         self._trace_recorder = recorder
         # 市場の値動きは trace が一次データになる。recorder が差し込まれた
@@ -995,11 +1045,10 @@ class WorldRuntime:
         market_service = getattr(self, "_market_service", None)
         if market_service is not None:
             market_service.set_trace_recorder(recorder, self.current_tick)
-        # 既に memo executor が wire 済みなら作り直してから recorder を行き渡らせる
-        if self._todo_tool_executor is not None:
-            self._todo_tool_executor = None
-            self._wire_auxiliary_tool_stack()
-        # 短期記憶の構築時点では recorder が未確定なので、L4 / L5 と圧縮発火の
+        player_interaction_service = getattr(self, "_player_interaction_service", None)
+        if player_interaction_service is not None:
+            player_interaction_service.set_trace_recorder(recorder, self.current_tick)
+        # 短期記憶の構築時点では recorder が未確定なので、L4 と圧縮発火の
         # trace provider をここで注入する。実装差は getattr で吸収する。
         set_recorder = getattr(self._short_term_memory, "set_trace_recorder_provider", None)
         if callable(set_recorder):
@@ -1012,27 +1061,15 @@ class WorldRuntime:
     def trace_recorder(self) -> Any:
         return self._trace_recorder
 
-    def shutdown(self, timeout: float | None = None) -> None:
-        """非同期スケジューラ等の in-flight ジョブを drain して資源を解放する。
+    @property
+    def world_tick_failure_isolator(self) -> WorldTickFailureIsolator | None:
+        return self._world_tick_failure_isolator
 
-        PR #309: ``ThreadPoolEpisodicSubjectiveScheduler`` が裏で走っている
-        LLM 補完を、ゲーム終了時に終わらせるための hook。``timeout`` 秒経っても
-        終わらないジョブは諦めて cancel する (= テンプレ既定値が store に
-        残るだけで損失は限定的)。
-
-        本メソッドは複数回呼ばれても安全 (scheduler 側でも is_shutdown flag を
-        持つ)。``timeout=None`` (既定) は完了まで無期限待機。
-        """
-        stack = self._episodic_stack
-        if stack is None:
-            return
-        scheduler = stack.subjective_completion_scheduler
-        if scheduler is None:
-            return
-        try:
-            scheduler.shutdown(timeout=timeout)
-        except Exception:
-            logger.exception("episodic subjective scheduler shutdown failed")
+    def world_tick_failure_counts(self) -> dict[str, int]:
+        """世界の tick で取りやめた (fail_fast なら止めた) 1 体ぶんの処理の件数を段ごとに返す。"""
+        if self._world_tick_failure_isolator is None:
+            return {}
+        return self._world_tick_failure_isolator.failure_counts()
 
     def set_tool_call_loop_guard(self, guard: Any) -> None:
         """``ToolCallLoopGuardService`` を後から注入する。
@@ -1047,9 +1084,7 @@ class WorldRuntime:
         self._injected_tool_call_loop_guard = guard
         self._cached_default_prompt_builder: Any | None = None
 
-    def set_simulation_llm_turn_trigger(
-        self, trigger: ILlmTurnTrigger | None
-    ) -> None:
+    def set_simulation_llm_turn_trigger(self, trigger: ILlmTurnTrigger | None) -> None:
         """ティック後の :meth:`ILlmTurnTrigger.run_scheduled_turns` に使う実装を差し替える。
 
         プレゼン層の ``_WorldLlmWiring`` など、実際に LLM を起動するトリガに
@@ -1057,18 +1092,14 @@ class WorldRuntime:
         """
         self._simulation_service.set_llm_turn_trigger(trigger)
 
-    def set_simulation_heartbeat_emitter(
-        self, emitter: HeartbeatObservationEmitter | None
-    ) -> None:
+    def set_simulation_heartbeat_emitter(self, emitter: HeartbeatObservationEmitter | None) -> None:
         """ティック後の heartbeat emitter を注入する（未設定なら送信しない）。
 
         ``SpotGraphSimulationApplicationService`` の post-tick フックに委譲する。
         """
         self._simulation_service.set_heartbeat_emitter(emitter)
 
-    def set_observation_turn_scheduler(
-        self, scheduler: ObservationTurnScheduler | None
-    ) -> None:
+    def set_observation_turn_scheduler(self, scheduler: ObservationTurnScheduler | None) -> None:
         """speech などの observation で recipient のターンを積むスケジューラを注入する。
 
         ``create_session`` が ``ObservationTurnScheduler`` を組み立てた後に
@@ -1094,11 +1125,7 @@ class WorldRuntime:
         """
         if self._speech_service is None:
             return
-        target_id = (
-            int(target_player_id.value)
-            if target_player_id is not None
-            else None
-        )
+        target_id = int(target_player_id.value) if target_player_id is not None else None
         self._speech_service.speak(
             SpeakCommand(
                 speaker_player_id=int(speaker_player_id.value),
@@ -1209,8 +1236,7 @@ class WorldRuntime:
             # run 中の記録失敗で実験データまで失わない。ただし
             # 表記の破れを静かにしないよう warning は必ず残す。
             logger.warning(
-                "prompt argument contract violation trace recording failed "
-                "(player_id=%s)",
+                "prompt argument contract violation trace recording failed (player_id=%s)",
                 player_id.value,
                 exc_info=True,
             )
@@ -1266,8 +1292,7 @@ class WorldRuntime:
                 )
         if failures:
             raise PromptArgumentContractError(
-                "LLM prompt の tool 引数候補が引用符つきで表示されていません:\n"
-                + "\n".join(failures)
+                "LLM prompt の tool 引数候補が引用符つきで表示されていません:\n" + "\n".join(failures)
             )
 
     def _validate_action_argument_classification_at_startup(self) -> None:
@@ -1288,24 +1313,15 @@ class WorldRuntime:
         definitions.extend(
             defn
             for defn, _ in get_memory_specs(
-                todo_enabled=True,
-                memo_enabled=True,
-                episodic_explore_related_enabled=True,
-                semantic_search_enabled=True,
-                episodic_recall_enabled=True,
-                recall_by_handle_enabled=True,
+                episode_recall_max_handles=1,
+                episode_index_revision_enabled=True,
             )
         )
-        definitions.append(
-            assess_situation_definition(
-                expected_result_policy=self._expected_result_policy
-            )
-        )
+        definitions.append(assess_situation_definition())
         missing = unclassified_action_argument_names(definitions)
         if missing:
             raise ActionArgumentClassificationError(
-                "行動履歴での扱いが未分類の tool 引数があります: "
-                + ", ".join(missing)
+                "行動履歴での扱いが未分類の tool 引数があります: " + ", ".join(missing)
             )
 
     def _compute_task_progress_line(self) -> str | None:
@@ -1396,9 +1412,7 @@ class WorldRuntime:
         # 促すのは vote を実際に出す相手だけ。投票済みの人や死者にも促して
         # いた run では、促しに従って vote を選び TOOL_NOT_OFFERED_NOW で
         # 手番を捨てていた。
-        _, phase_tools = self._split_spot_tool_names_for(
-            ("vote",), player_id=player_id, in_meeting=True
-        )
+        _, phase_tools = self._split_spot_tool_names_for(("vote",), player_id=player_id, in_meeting=True)
         if "vote" not in phase_tools:
             if self._game_phase_store.has_voted(player_id):
                 parts.append("自分はもう投票した。あとは結果を待つ")
@@ -1434,6 +1448,7 @@ class WorldRuntime:
         from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
             GameEndConditionTypeEnum,
         )
+
         limits: list[int] = []
         for lc in self.scenario.lose_conditions:
             if lc.condition_type != GameEndConditionTypeEnum.TICK_LIMIT:
@@ -1446,31 +1461,19 @@ class WorldRuntime:
         return max(0, min(limits) - self._tick)
 
     def _build_minimal_player_state_dto(
-        self, player_id: PlayerId, snap: Any,
+        self,
+        player_id: PlayerId,
+        snap: Any,
     ) -> PlayerCurrentStateDto:
         time_label = self._time_label()
         return PlayerCurrentStateDto(
             player_id=int(player_id),
             player_name=self.get_player_name(player_id),
             current_spot_id=None,
-            current_spot_name=snap.current_spot_name,
-            current_spot_description=snap.current_spot_description,
-            x=None, y=None, z=None,
-            current_player_count=0,
-            current_player_ids=set(),
-            connected_spot_ids=set(),
-            connected_spot_names=set(),
-            weather_type="不明",
-            weather_intensity=0.0,
-            current_terrain_type=None,
-            visible_objects=[],
-            view_distance=0,
-            available_moves=None,
-            total_available_moves=None,
-            attention_level=AttentionLevel.FULL,
             spot_graph_snapshot=snap,
             current_game_time_label=time_label,
             tick_budget_remaining=self._compute_tick_budget_remaining(),
+            minutes_per_tick=_minutes_per_tick(self.scenario),
             meeting_status_line=self._compute_meeting_status_line(player_id),
             task_progress_line=self._compute_task_progress_line(),
             game_phase=self._game_phase_store.current.phase,
@@ -1486,15 +1489,11 @@ class WorldRuntime:
         """
         cached = getattr(self, "_tool_exposure_cache", None)
         if cached is None:
-            cached = ToolExposure.from_scenario(
-                self.scenario, meeting_declared=self._meeting_enabled
-            )
+            cached = ToolExposure.from_scenario(self.scenario, meeting_declared=self._meeting_enabled)
             self._tool_exposure_cache = cached
         return cached
 
-    def _without_tools_the_scenario_disabled(
-        self, definitions: list[ToolDefinitionDto]
-    ) -> list[ToolDefinitionDto]:
+    def _without_tools_the_scenario_disabled(self, definitions: list[ToolDefinitionDto]) -> list[ToolDefinitionDto]:
         """シナリオが「この世界では出さない」と宣言したツールを落とす。
 
         **世界の中身に無いものを出さない。** モンスターの居ない世界に
@@ -1534,13 +1533,12 @@ class WorldRuntime:
         # 何も落とさない。
         if not isinstance(disabled, tuple) or not disabled:
             return ()
-        known = {defn.name for defn, _ in get_spot_graph_specs()}
+        known = {defn.name for defn, _ in get_spot_graph_specs()} | {d.name for d in get_public_sns_definitions()}
         unknown = [name for name in disabled if name not in known]
         if unknown:
             raise ToolExposureConfigurationError(
                 "disabled_tools に実在しないツール名があります: "
                 f"{', '.join(unknown)} / 指定できるのは: {', '.join(sorted(known))}"
-                + _where_to_turn_off_instead(unknown)
             )
         return tuple(disabled)
 
@@ -1554,13 +1552,6 @@ class WorldRuntime:
     ) -> list[ToolDefinitionDto]:
         """LLM に渡されるツール定義（OpenAI tools 形式）を返す。
 
-        ``_include_todo_tools=False`` の場合は TODO 系 (todo_add / todo_list /
-        todo_complete) を除外し、spot_graph_* + speech (say / whisper) のみ
-        を返す。LLM が「TODO 操作の連打」に逃げない条件で挙動を比較するため
-        の純スポットグラフモード (B-4 / Issue #155 の判断材料)。
-        この粗いモードでは個別の記憶ツール露出フラグも評価せず、補助ツール
-        全体を隠す。
-
         ツール露出の強制点はこのメソッドに集約する。シナリオ由来の
         ツール露出 (会議・商人・市場の宣言) と、設定由来の記憶系ツール露出を同じ
         場所で決めることで、「なぜ tool が LLM に出ないか」の追跡点を分散させない。
@@ -1571,7 +1562,7 @@ class WorldRuntime:
 
         ``tool_schema_mode="legacy"`` は従来互換。``"reason_first"`` では
         ``assess_situation`` を加え、行動 tool から step1 所有の
-        ``inner_thought`` / ``expected_result`` だけを外す。
+        ``inner_thought`` だけを外す。
 
         reason_first では ``assess_situation`` を必ず末尾に置く。action_phase
         は末尾の評価 tool だけを落とすため、先頭の行動 tool 定義ブロックを
@@ -1585,17 +1576,12 @@ class WorldRuntime:
         audience_count = int(player_id is not None) + int(for_every_player)
         if audience_count != 1:
             raise ValueError(
-                "get_tool_definitions は player_id または "
-                "for_every_player=True のどちらか一方を必要とします"
+                "get_tool_definitions は player_id または for_every_player=True のどちらか一方を必要とします"
             )
         if tool_schema_mode not in {"legacy", "reason_first"}:
             raise ValueError("tool_schema_mode must be 'legacy' or 'reason_first'")
         spot = self._build_spot_tool_definitions(tool_schema_mode)
-        in_meeting = (
-            self._game_phase_store.is_meeting()
-            if as_meeting_phase is None
-            else bool(as_meeting_phase)
-        )
+        in_meeting = self._game_phase_store.is_meeting() if as_meeting_phase is None else bool(as_meeting_phase)
         # 2 つの問いを両方通す入口を使う。片方だけ呼ぶと無効化が効かない。
         by_name = {d.name: d for d in spot}
         common_names, phase_names = self._split_spot_tool_names_for(
@@ -1603,18 +1589,8 @@ class WorldRuntime:
         )
         common_spot = [by_name[n] for n in common_names]
         phase_spot = [by_name[n] for n in phase_names]
-        assessment = (
-            [
-                assess_situation_definition(
-                    expected_result_policy=self._expected_result_policy
-                )
-            ]
-            if tool_schema_mode == "reason_first"
-            else []
-        )
-        definitions = common_spot + phase_spot
-        if self._include_todo_tools:
-            definitions += self._build_memory_tool_definitions()
+        assessment = [assess_situation_definition()] if tool_schema_mode == "reason_first" else []
+        definitions = common_spot + phase_spot + self._build_memory_tool_definitions()
         by_name = {definition.name: definition for definition in definitions}
         ordered_names = self.tool_exposure.order_for_payload(by_name.keys())
         return [by_name[name] for name in ordered_names] + assessment
@@ -1635,169 +1611,156 @@ class WorldRuntime:
         return self.tool_exposure.split_for_phase(
             names,
             in_meeting=in_meeting,
-            voting_completed=(
-                player_id is not None
-                and in_meeting
-                and self._game_phase_store.has_voted(player_id)
-            ),
-            departed=(
-                player_id is not None
-                and self._player_perception_policy.is_departed(player_id)
-            ),
+            voting_completed=(player_id is not None and in_meeting and self._game_phase_store.has_voted(player_id)),
+            departed=(player_id is not None and self._player_perception_policy.is_departed(player_id)),
         )
 
-    def _build_spot_tool_definitions(
-        self, tool_schema_mode: str
-    ) -> list[ToolDefinitionDto]:
+    def _build_spot_tool_definitions(self, tool_schema_mode: str) -> list[ToolDefinitionDto]:
         """この世界に在る spot tool を、フェーズを問わずすべて返す。
 
         並べ替えとフェーズの出し分けは呼び出し側。ここは「在るか無いか」
         だけを決める。
         """
         spot = [
-            self._with_goal_update_if_enabled(
-                self._with_expected_result_if_enabled(defn)
-            )
-            for defn, _ in get_spot_graph_specs()
+            self._with_being_memo_if_enabled(defn)
+            for defn in [*(d for d, _ in get_spot_graph_specs()), *get_public_sns_definitions()]
         ]
         # 「この世界に存在するツールか」は ToolExposure が一括で答える。
         # 同時行動 / 会議機構 / シナリオの無効化宣言を 3 つ別々に書いて
         # いたが、**プロンプト本文の側から同じ判断を参照できなかった**。
         # 集めた結果、状態ビルダーからも同じ答えを引ける。
         exposure = self.tool_exposure
-        spot = [defn for defn in spot if exposure.is_exposed(defn.name)]
+        spot = [
+            without_absent_tool_mentions(defn, exposure.is_exposed) for defn in spot if exposure.is_exposed(defn.name)
+        ]
         if tool_schema_mode == "reason_first":
             spot = [strip_reason_first_action_subjective_schema(d) for d in spot]
         return spot
 
     def _build_memory_tool_definitions(self) -> list[ToolDefinitionDto]:
-        """実験設定が要求する記憶系ツールを返す。
+        """記憶系ツール (episode_recall / episode_revise_index) を返す。
 
-        **世界ではなく実験の設定**で決まるので `ToolExposure` には置かない。
-        同じシナリオを profile 違いで回すときに変わるのがこちら。
+        世界ではなく記憶の部品で決まるので `ToolExposure` には置かない。
+        create_world_runtime で組んだ runtime には常に出す (#1631)。
 
-        設定が true なのに実行器が組めていなければ fail-fast する。黙って
-        false へ縮退すると、比較実験で「有効にしたつもりが無効だった」に
-        なる。
+        実行器が組めていなければ fail-fast する。黙って出さないと、
+        常に出すはずの道具が run から消えたことに気づけない。
         """
-        # Issue #526 後続: tool を expose するタイミングで auxiliary stack を
-        # 確実に wire しておく (= 「定義は出すが handler が無い」状態を防ぐ)。
-        # idempotent なので毎回呼んで OK。
-        if self._episodic_stack is not None:
-            self._wire_auxiliary_tool_stack()
         cfg = self._runtime_config
-        episodic_recall_enabled = self._resolve_requested_memory_tool_enabled(
-            requested=bool(getattr(cfg, "episodic_recall_enabled", False)),
-            executor=self._memory_recall_tool_executor,
-            tool_name=TOOL_NAME_MEMORY_RECALL_EPISODES,
-            flag_name="EPISODIC_RECALL_ENABLED",
-        )
-        episodic_explore_related_enabled = (
-            self._resolve_requested_memory_tool_enabled(
-                requested=bool(
-                    getattr(cfg, "episodic_explore_related_enabled", False)
-                ),
-                executor=self._memory_explore_related_tool_executor,
-                tool_name=TOOL_NAME_MEMORY_EXPLORE_RELATED,
-                flag_name="EPISODIC_EXPLORE_RELATED_ENABLED",
-            )
-        )
-        semantic_search_enabled = self._resolve_requested_memory_tool_enabled(
-            requested=bool(getattr(cfg, "semantic_search_enabled", False)),
-            executor=self._semantic_memory_search_tool_executor,
-            tool_name=TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
-            flag_name="SEMANTIC_SEARCH_ENABLED",
-        )
+        episode_index_revision_enabled = self._episode_index_enabled()
+        episode_recall_max_handles = None
+        if episode_index_revision_enabled:
+            if (
+                self._being_episode_recall_tool_executor is None
+                or self._being_episode_index_revision_tool_executor is None
+            ):
+                raise ToolExposureConfigurationError(
+                    f"{TOOL_NAME_EPISODE_RECALL} and {TOOL_NAME_EPISODE_REVISE_INDEX} are "
+                    "always offered (#1631), but their executors are not wired; build the "
+                    "runtime with create_world_runtime"
+                )
+            assert cfg is not None
+            episode_recall_max_handles = cfg.being_episode_recall_max_handles
         return [
             defn
             for defn, _ in get_memory_specs(
-                todo_enabled=True,
-                memo_enabled=bool(getattr(cfg, "memo_tools_enabled", True)),
-                episodic_explore_related_enabled=episodic_explore_related_enabled,
-                semantic_search_enabled=semantic_search_enabled,
-                episodic_recall_enabled=episodic_recall_enabled,
-                recall_by_handle_enabled=(
-                    self._memory_recall_by_handle_tool_executor is not None
-                ),
+                episode_recall_max_handles=episode_recall_max_handles,
+                episode_index_revision_enabled=episode_index_revision_enabled,
             )
         ]
 
+    def _episode_index_parts_named_in_system_prompt(self) -> tuple[bool, bool]:
+        """システムプロンプトが指してよい (【思い出せる出来事】, ``episode_recall``) を返す (#1623)。
 
-
-
-    @staticmethod
-    def _resolve_requested_memory_tool_enabled(
-        *,
-        requested: bool,
-        executor: Any | None,
-        tool_name: str,
-        flag_name: str,
-    ) -> bool:
-        """設定 true の記憶ツールに実行器が無ければ起動時に落とす。
-
-        false のときは実行器があっても expose しない。true のときに実行器が
-        無いまま黙って false へ縮退すると、比較実験で「条件を変えたつもりが
-        変わっていない」静かな失敗になる。
+        ツールは #1616 と同じく、実際に出すツールの一覧から決める。
         """
-        if not requested:
-            return False
-        if executor is None:
-            raise ToolExposureConfigurationError(
-                f"{flag_name}=true requires an executor for {tool_name}, "
-                "but the runtime memory stack is not wired. Enable the required "
-                "episodic/semantic prerequisites or turn the flag off."
+        offered = {definition.name for definition in self.get_tool_definitions(for_every_player=True)}
+        return self._episode_index_enabled(), TOOL_NAME_EPISODE_RECALL in offered
+
+    def _episode_index_enabled(self) -> bool:
+        # create_world_runtime で組んだ runtime には、目次と書き起こしが常に入る (#1631)。
+        return self._runtime_config is not None
+
+    def episode_index_text(self, player_id: PlayerId) -> str:
+        """【思い出せる出来事】の本体。出すたびに、出した呼び名を trace に残す (#1623)。
+
+        本人の Being が引けなければ空文字で、欄を出さない。
+        """
+        from ai_rpg_world.application.observation.being_contract import (
+            environment_entry_for_player,
         )
-        return True
-
-    def _memo_tools_enabled(self) -> bool:
-        """memo ツールを LLM に露出する設定か。
-
-        露出を切る実験腕では、tool 定義だけでなく prompt の未完了 memo section
-        も同時に止める。存在しない memo_done への誘導を残さないため。
-        """
-        return bool(getattr(self._runtime_config, "memo_tools_enabled", True))
-
-    # Prediction (#526 v0): expected_result 露出の対象 tool。記録経路 (do_* →
-    # _record_action_result) に subjective を配線済みの core action だけに限定する
-    # (= 露出範囲と structured 保存範囲を一致させる)。listen / item 系 / attack
-    # 等は generic 記録経路が未配線なので露出しない。
-    _EXPECTED_RESULT_TARGET_TOOLS = frozenset(
-        {
-            TOOL_NAME_SPOT_GRAPH_EXPLORE,
-            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-            TOOL_NAME_SPOT_GRAPH_INTERACT,
-            TOOL_NAME_SPOT_GRAPH_WAIT,
-        }
-    )
-
-    def _with_expected_result_if_enabled(
-        self, definition: ToolDefinitionDto
-    ) -> ToolDefinitionDto:
-        """policy が off 以外かつ対象 tool なら expected_result を schema に足す。
-
-        off (既定) では definition をそのまま返す = 挙動不変。optional は properties
-        にのみ、required は required にも追加する。
-        """
-        if self._expected_result_policy == "off":
-            return definition
-        if definition.name not in self._EXPECTED_RESULT_TARGET_TOOLS:
-            return definition
-        return with_expected_result_schema(
-            definition, required=self._expected_result_policy == "required"
+        from ai_rpg_world.being.application.episode_index_text import (
+            format_episode_index,
+        )
+        from ai_rpg_world.being.domain.episode_index_selection import (
+            RecalledRisesToTop,
         )
 
-    def _with_goal_update_if_enabled(
-        self, definition: ToolDefinitionDto
-    ) -> ToolDefinitionDto:
-        """P6/P8: GOAL_REVISION_ENABLED ON なら world-action tool に optional な
+        acting = self._acting_being_for(player_id)
+        if acting is None:
+            return ""
+        cfg = self._runtime_config
+        assert cfg is not None
+        selection = RecalledRisesToTop()
+        episodes = self._being_episode_store.list_by_being(acting.being_id)
+        shown = selection.select(episodes, limit=cfg.being_episode_index_limit)
+        try:
+            self._trace_recorder.record(
+                TraceEventKind.EPISODE_INDEX_SHOWN,
+                tick=self.current_tick(),
+                player_id=int(player_id.value),
+                being_id=acting.being_id.value,
+                order="recalled_rises_to_top",
+                limit=cfg.being_episode_index_limit,
+                total_count=len(episodes),
+                shown_handles=[e.handle for e in shown],
+            )
+        except Exception:
+            logger.exception("trace recorder.record raised for EPISODE_INDEX_SHOWN; skipping")
+        return format_episode_index(
+            shown,
+            current_environment_name=environment_entry_for_player(self.scenario, player_id).environment_name,
+        )
 
-        ``goal_update`` (立て直し) と ``goal_outcome`` (清算) を足す。**run 全体で
-        常時**適用するので tick 間で schema は byte 不変 (設計判断 #1 遵守)。
-        OFF (既定) では definition をそのまま返す。
+    def _being_memo_enabled(self) -> bool:
+        # create_world_runtime で組んだ runtime には、メモ帳が常に入る (#1631)。
+        return self._runtime_config is not None
+
+    def memo_episode_source_offered(self) -> bool:
+        """メモの出どころにエピソードの呼び名を選ばせるか (#1628)。
+
+        本人が呼び名を知るのは【思い出せる出来事】からなので、目次を出す設定でだけ選ばせる (#1623)。
         """
-        if not self._goal_revision_enabled:
+        return self._episode_index_enabled()
+
+    def _with_being_memo_if_enabled(self, definition: ToolDefinitionDto) -> ToolDefinitionDto:
+        """メモ帳が有効なら、環境の tool に ``memo`` を足す (#1628)。
+
+        付ける範囲は予期の引数と同じで、記憶の tool と ``assess_situation`` には付けない。
+        run 全体で同じ定義を出すので、ターンをまたいで変わらない。
+        """
+        if not self._being_memo_enabled():
             return definition
-        return with_goal_outcome_schema(with_goal_update_schema(definition))
+        return with_memo_schema(definition, episode_source_offered=self.memo_episode_source_offered())
+
+    def being_memo_text(self, player_id: PlayerId) -> str:
+        """【メモ】の本体。本人の Being が引けなければ空文字で、欄を出さない。"""
+        from ai_rpg_world.being.application.memo_book_text import format_memo_book
+
+        acting = self._acting_being_for(player_id)
+        if acting is None:
+            return ""
+        return format_memo_book(
+            self._being_memo_store.get(acting.being_id),
+            current_environment_name=self.environment_name_for(player_id),
+        )
+
+    def environment_name_for(self, player_id: PlayerId) -> str:
+        from ai_rpg_world.application.observation.being_contract import (
+            environment_entry_for_player,
+        )
+
+        return environment_entry_for_player(self.scenario, player_id).environment_name
 
     # ── 観測パイプライン: イベントを処理して各プレイヤーに配信 ──
 
@@ -1847,49 +1810,12 @@ class WorldRuntime:
             return
         # tz-aware UTC で統一: HeartbeatObservationEmitter /
         # ActionFailedObservationEmitter が aware を発行するため、world_runtime
-        # 経路の naive と混ざると EpisodicChunkCoordinator の obs_slice
-        # フィルタで TypeError になる。詳細: docs/episodic_memory フォローアップ。
-        appender.append(
-            player_id, output, datetime.now(timezone.utc), self._time_label()
-        )
+        # 経路の naive と混ざると時刻の比較で TypeError になる。
+        if not appender.append(player_id, output, datetime.now(timezone.utc), self._time_label()):
+            return
         scheduler = self._observation_turn_scheduler
         if scheduler is not None:
             scheduler.maybe_schedule(player_id, output)
-
-    def _get_prediction_context_ledger(self) -> PredictionContextLedger | None:
-        """予測誤差統一設計 U1 の ``PredictionContextLedger`` を lazy 構築・共有する。
-
-        ``DefaultPromptBuilder`` (発行元) と ``ActionResultRecorder``
-        (消費元) が同じ instance を参照する必要があるため、
-        ``_cached_default_prompt_builder`` と同じ lazy キャッシュパターンで
-        world_runtime が唯一の owner になる。
-
-        ``ResolvedLlmRuntimeConfig.prediction_context_id_enabled`` で default OFF
-        (共通規約 §0: 新機構は明示的に有効化しない限り動かさない)。OFF の間は
-        None を返し、builder / recorder 側は ledger 未注入と同じ経路
-        (= prediction_context_id は常に None) を通る。
-        """
-        sentinel_computed = getattr(
-            self, "_prediction_context_ledger_computed", False
-        )
-        if sentinel_computed:
-            return getattr(self, "_prediction_context_ledger_instance", None)
-
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_prediction_context_id_state,
-        )
-
-        cfg = getattr(self, "_runtime_config", None)
-        enabled = (
-            bool(cfg.prediction_context_id_enabled)
-            if cfg is not None
-            else False
-        )
-        log_prediction_context_id_state(enabled)
-        ledger = PredictionContextLedger() if enabled else None
-        self._prediction_context_ledger_instance = ledger
-        self._prediction_context_ledger_computed = True
-        return ledger
 
     def _record_action_result(
         self,
@@ -1902,13 +1828,9 @@ class WorldRuntime:
         free_text_argument_names: tuple[str, ...] = (),
         success: bool = True,
         error_code: str | None = None,
-        scene_boundary: bool = False,
         inner_thought: str | None = None,
-        expected_result: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> None:
-        """action_result_store に 1 件積み、episodic chunk_coordinator を起動する。
+        """action_result_store に 1 件積む。
 
         ``tool_name`` は必須引数: 第20回実験で「episode_cues に常に
         ``action:unknown_tool`` が立つ」問題が観測されたため、呼び出し側で
@@ -1916,29 +1838,12 @@ class WorldRuntime:
         ``success`` / ``error_code`` も同様に「常に ``outcome:success`` が立つ」
         ノイズの原因なので、失敗を検知できる経路は明示的に渡す。
 
-        ``scene_boundary``: その行動がエピソード記憶の「シーン切り替え」を
-        意味するかどうか。cognitive science の "doorway effect" を反映して、
-        spot 遷移成功時は True を渡すと chunk が閉じやすくなる (Issue #311 後続)。
-
-        ``inner_thought`` / ``expected_result`` / ``intention`` / ``emotion_hint``: LLM が行動前に
-        宣言した主観入力 (予測 / 目的 / 感情)。予測誤差駆動の学習ループ
-        (#526) の入力。do_* 経由で raw args 由来の値が渡る (U2)。露出スキーマが
-        OFF の間は全 None なので記録挙動は不変。
+        ``inner_thought``: LLM が行動前に書いた独白。do_* 経由で raw args 由来の
+        値が渡る (U2)。
         """
-        # U1 (#526 後続): append → chunk write → semantic promotion (escape baseline
-        # の順序・error isolation) を共有 ActionResultRecorder に委譲する。挙動は
-        # #553 で contract 化済みで不変。subjective fields (expected_result 等) は
-        # U2 で do_* → ここ → recorder と配線した (露出 OFF の間は None)。
+        # U1 (#526 後続): store への append を共有 ActionResultRecorder に委譲する。
         # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)。
-        # 予測誤差統一設計 U1: prompt_builder.build() が発行した
-        # prediction_context_id をこの record() が consume できるよう、
-        # builder と同じ ledger instance を共有する。
-        recorder = ActionResultRecorder(
-            self._action_result_store,
-            logger=logger,
-            prediction_context_ledger=self._get_prediction_context_ledger(),
-        )
-        acting = self._acting_being_for(player_id)
+        recorder = ActionResultRecorder(self._action_result_store)
         recorder.record(
             player_id,
             action_summary=action_summary,
@@ -1949,43 +1854,18 @@ class WorldRuntime:
             free_text_argument_names=free_text_argument_names,
             success=success,
             error_code=error_code,
-            scene_boundary=scene_boundary,
             inner_thought=inner_thought,
-            expected_result=expected_result,
-            intention=intention,
-            emotion_hint=emotion_hint,
-            # Issue #311 後続: bucket 内 actions の tick 差で TEMPORAL_GAP 判定するため
             occurred_tick=self.current_tick(),
             # 描画時刻から相対ラベルを再計算せず、記録時の世界時刻を固定する。
             game_time_label=self._time_label(),
-            episodic_stack=self._episodic_stack if acting is not None else None,
-            being_id=acting.being_id if acting is not None else None,
         )
 
-    def _drain_buffer_to_short_term_memory(self, player_id: PlayerId) -> list[ObservationEntry]:
-        """観測バッファを短期記憶へ移し、溢れた観測を返す。"""
-        drained = self._obs_buffer.drain(player_id)
-        if not drained:
-            return []
-        return self._short_term_memory.append_all(player_id, drained)
+    def _wire_being_stack(self) -> None:
+        """プレイヤーに結びつく Being の保存先・用意・解決を、まだ無ければ組む。
 
-    def _wire_auxiliary_tool_stack(self) -> None:
-        """TODO ツール実行器を遅延初期化する。
-
-        Phase 3 Step 3a-3: memo は being_id 経路必須なので、ここで
-        ``BeingRepository`` + ``BeingAttachmentResolver`` + provisioning を
-        構築する。executor 自体は Resolver を持たず、
-        ``run_llm_auxiliary_tool`` が ``ensure_attached`` のあと
-        ``resolve_being_id`` して ``ActingBeing`` を handler に渡す。
-
-        Issue #526 後続: episodic_stack が wire 済なら memory_recall_episodes
-        の executor も組み立てる (idempotent)。
+        記憶の部品はどれも Being を単位に持つ (#1631)。
         """
-        # 既に両方 wire 済ならスキップ。recall executor は episodic_stack の
-        # 注入タイミング次第で「todo は wire 済だが recall がまだ」になり得る
-        # ため、各々の None check で個別に判定する。
-        if self._todo_tool_executor is not None:
-            self._wire_memory_recall_executor_if_possible()
+        if hasattr(self, "_aux_being_repository"):
             return
         from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
@@ -2000,144 +1880,14 @@ class WorldRuntime:
             InMemoryBeingRepository,
         )
 
-        if not hasattr(self, "_aux_being_repository"):
-            self._aux_being_repository = InMemoryBeingRepository()
-            self._aux_being_provisioning = BeingProvisioningService(
-                self._aux_being_repository
-            )
-            self._aux_being_resolver = BeingAttachmentResolver(
-                self._aux_being_repository
-            )
-            self._aux_being_default_world_id = DEFAULT_SINGLE_WORLD_ID
-
-        self._todo_tool_executor = TodoToolExecutor(
-            self._todo_store,
-            short_term_memory=self._short_term_memory,
-            action_result_store=self._action_result_store,
-            current_tick_provider=self.current_tick,
-            trace_recorder=self._trace_recorder,
-        )
-        # U5 (MEMO_DISTILL): executor を作り直したら memo_distill transcriber を
-        # 再適用する。これがないと set_trace_recorder 等の作り直し経路で
-        # transcriber が静かに失われる (実験 run で memo→evidence 蒸留が
-        # 0 件になっていた原因)。create_world_runtime が transcriber を
-        # 構築して runtime._memo_distill_transcriber に格納した後の作り直しで
-        # 効く (初回 wire 時点では None なので no-op)。
-        if self._memo_distill_transcriber is not None:
-            self._todo_tool_executor.set_memo_distill_transcriber(
-                self._memo_distill_transcriber
-            )
-        self._wire_memory_recall_executor_if_possible()
-
-    def _wire_memory_recall_executor_if_possible(self) -> None:
-        """記憶系の能動ツール executor を idempotent に組み立てる。
-
-        episodic_stack が無いと episode store / noun_matcher にアクセス
-        できないため、その場合は executor を作らない。LLM への露出可否は
-        ``get_tool_definitions`` で runtime config と executor の AND として
-        決める。``_aux_being_resolver`` / ``_aux_being_default_world_id`` は
-        ``_wire_auxiliary_tool_stack`` 内で先に初期化される前提。
-
-        PR-D fix: 旧実装は冒頭で ``_memory_recall_tool_executor`` の有無で
-        早期 return していたが、それだと PR-D で追加した
-        ``_memory_recall_by_handle_tool_executor`` の build が
-        ``recall_episodes`` 既存時にスキップされ、tool は spec に出るのに
-        handler が登録されないため LLM が呼ぶと「未対応のツールです」が
-        返る silent failure になっていた。早期 return を外し、各 executor の
-        個別 idempotent ガードに任せる形に変える。
-        """
-        if self._episodic_stack is None:
-            return
-        if not hasattr(self, "_aux_being_resolver"):
-            return
-        from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_tool_executor import (
-            EpisodicMemoryRecallToolExecutor,
-        )
-        from ai_rpg_world.application.llm.services.subjective_time import utc_now
-
-        # idempotent ガード: 既に build 済なら再構築しない (= 既存挙動を保つ)
-        if self._memory_recall_tool_executor is None:
-            self._memory_recall_tool_executor = EpisodicMemoryRecallToolExecutor(
-                episode_store=self._episodic_stack.episode_store,
-                noun_matcher=self._episodic_stack.noun_matcher,
-                time_provider=utc_now,
-            )
-
-        if self._memory_explore_related_tool_executor is None:
-            link_store = getattr(self._episodic_stack, "memory_link_store", None)
-            link_service = getattr(self._episodic_stack, "link_service", None)
-            afterglow_store = getattr(self._episodic_stack, "afterglow_store", None)
-            recall_slot_store = getattr(
-                self._episodic_stack,
-                "recall_slot_store",
-                None,
-            )
-            if (
-                link_store is not None
-                and link_service is not None
-                and afterglow_store is not None
-                and recall_slot_store is not None
-            ):
-                from ai_rpg_world.application.llm.services.executors.episodic_memory_explore_tool_executor import (
-                    EpisodicMemoryExploreToolExecutor,
-                )
-
-                self._memory_explore_related_tool_executor = (
-                    EpisodicMemoryExploreToolExecutor(
-                        episode_store=self._episodic_stack.episode_store,
-                        link_store=link_store,
-                        link_service=link_service,
-                        afterglow_store=afterglow_store,
-                        slot_store=recall_slot_store,
-                    )
-                )
-
-        if self._semantic_memory_search_tool_executor is None:
-            semantic_store = getattr(
-                self._episodic_stack, "semantic_memory_store", None
-            )
-            if semantic_store is not None:
-                from ai_rpg_world.application.llm.services.executors.semantic_memory_search_tool_executor import (
-                    SemanticMemorySearchToolExecutor,
-                )
-
-                self._semantic_memory_search_tool_executor = (
-                    SemanticMemorySearchToolExecutor(
-                        semantic_store,
-                    )
-                )
-
-        # PR-D: memory_recall_by_handle (afterglow handle → 本文 + slot 再注入)。
-        # afterglow_store + slot_store が両方揃っていなければ意味がないので
-        # 構築をスキップ (= LLM にも見せず handler も登録しない、graceful fallback)。
-        afterglow_store = getattr(self._episodic_stack, "afterglow_store", None)
-        slot_store = getattr(self._episodic_stack, "recall_slot_store", None)
-        if (
-            self._memory_recall_by_handle_tool_executor is None
-            and afterglow_store is not None
-            and slot_store is not None
-        ):
-            from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_by_handle_tool_executor import (
-                EpisodicMemoryRecallByHandleToolExecutor,
-            )
-            self._memory_recall_by_handle_tool_executor = (
-                EpisodicMemoryRecallByHandleToolExecutor(
-                    episode_store=self._episodic_stack.episode_store,
-                    afterglow_store=afterglow_store,
-                    slot_store=slot_store,
-                    slot_capacity=getattr(
-                        self._episodic_stack, "recall_slot_capacity", 4
-                    ),
-                    current_tick_provider=lambda: self.current_tick(),
-                )
-            )
+        self._aux_being_repository = InMemoryBeingRepository()
+        self._aux_being_provisioning = BeingProvisioningService(self._aux_being_repository)
+        self._aux_being_resolver = BeingAttachmentResolver(self._aux_being_repository)
+        self._aux_being_default_world_id = DEFAULT_SINGLE_WORLD_ID
 
     @property
     def aux_being_resolver(self) -> Any:
-        """Phase 3 Step 3a-3: auxiliary tool stack の ``_aux_being_resolver`` 公開。
-        ``_acting_being_for`` 等が ``_wire_auxiliary_tool_stack`` 経由で Being を
-        解決する。``_wire_auxiliary_tool_stack`` を呼んでいないと None。
-        """
+        """``_aux_being_resolver`` の公開。``_wire_being_stack`` を呼んでいないと None。"""
         return getattr(self, "_aux_being_resolver", None)
 
     @property
@@ -2145,30 +1895,76 @@ class WorldRuntime:
         """Phase 3 Step 3a-3: aux Being の default WorldId 公開アクセサ。"""
         return getattr(self, "_aux_being_default_world_id", None)
 
-    def _acting_being_for(self, player_id: PlayerId) -> ActingBeing | None:
-        self._wire_auxiliary_tool_stack()
-        self._aux_being_provisioning.ensure_attached(player_id)
-        being_id = self._aux_being_resolver.resolve_being_id(
-            self._aux_being_default_world_id, player_id
+    def advance_memory_turn(self, player_id: PlayerId) -> int | None:
+        """エージェントの 1 手を受け取ったときに、Being のターン数を 1 進める (#1440)。
+
+        Being に結びつかないプレイヤーなら進めずに None を返す。
+        """
+        acting = self._acting_being_for(player_id)
+        if acting is None:
+            return None
+        return self._memory_turn_clock.advance_turn(acting.being_id)
+
+    def note_being_memories_restored(self, being_ids: Sequence[BeingId]) -> None:
+        """Being の記憶を snapshot から戻した。【直近の出来事】の影に知らせる。"""
+        if self._recent_events_shadow is not None:
+            for being_id in being_ids:
+                self._recent_events_shadow.note_restored(being_id)
+
+    def _on_short_term_compacted(self, player_id: PlayerId, entries: Sequence[Any]) -> None:
+        """今の短期記憶が古いターンを畳んだ。エピソードを書き、【直近の出来事】の影に知らせる。"""
+        if self._recent_events_shadow is not None:
+            self._recent_events_shadow.note_compacted(player_id)
+        self._write_compacted_episodes(player_id, entries)
+
+    def _write_compacted_episodes(self, player_id: PlayerId, entries: Sequence[Any]) -> None:
+        from ai_rpg_world.application.being.player_episode_writing import (
+            TRIGGER_COMPACTION,
         )
+
+        if self._player_episode_writing is None:
+            raise RuntimeError("episode writing is not wired; build the runtime with create_world_runtime")
+        self._player_episode_writing.write(player_id, entries, trigger=TRIGGER_COMPACTION)
+
+    def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
+        """環境を離れるとき (run の終わり) に、まだ畳まれていない出来事からエピソードを書く (#1626)。
+
+        書き起こしを有効にしていなければ何もしない。``skip_reason`` を渡すと書かずに、
+        プレイヤーごとにその理由を trace に残す。
+        """
+        if self._player_episode_writing is None:
+            return
+        from ai_rpg_world.application.being.player_episode_writing import TRIGGER_LEAVING
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
+        )
+
+        memory = self._short_term_memory
+        if not isinstance(memory, SummarizingShortTermMemory):
+            raise RuntimeError("episode writing needs SummarizingShortTermMemory")
+        for player_id in self.get_player_ids():
+            if skip_reason is not None:
+                self._player_episode_writing.skip(player_id, trigger=TRIGGER_LEAVING, reason=skip_reason)
+                continue
+            self._player_episode_writing.write(
+                player_id,
+                memory.uncompacted_entries(player_id),
+                trigger=TRIGGER_LEAVING,
+            )
+
+    def _acting_being_for(self, player_id: PlayerId) -> ActingBeing | None:
+        self._wire_being_stack()
+        self._aux_being_provisioning.ensure_attached(player_id)
+        being_id = self._aux_being_resolver.resolve_being_id(self._aux_being_default_world_id, player_id)
         if being_id is None:
             return None
         return ActingBeing(player_id=player_id, being_id=being_id)
 
-    def run_llm_auxiliary_tool(
-        self, player_id: PlayerId, name: str, arguments: dict[str, Any]
-    ) -> LlmCommandResultDto:
-        """TODO 系ツール および memory_recall_episodes を実行する。
+    def run_llm_auxiliary_tool(self, player_id: PlayerId, name: str, arguments: dict[str, Any]) -> LlmCommandResultDto:
+        """エピソードの道具を実行する。
 
-        Phase 3 Step 3a-3: memo handler を起動する前に player_id に Being が
-        attach されていることを保証する (= TodoToolExecutor が being_id 経路を
-        通れるようにする)。
-
-        Issue #526 後続: ``memory_recall_episodes`` も同じ aux Being 経路で
-        動くため、handler 辞書に merge する。executor が wire されていない
-        (= ``_episodic_stack=None``) なら memory_recall は未対応扱いになる。
+        handler を起動する前に player_id に Being が attach されていることを保証する。
         """
-        self._wire_auxiliary_tool_stack()
         acting = self._acting_being_for(player_id)
         if acting is None:
             return LlmCommandResultDto(
@@ -2176,30 +1972,20 @@ class WorldRuntime:
                 message="Being is not attached to this player.",
                 error_code="INVALID_STATE",
             )
-        assert self._todo_tool_executor is not None
-        handlers: dict[str, Any] = dict(self._todo_tool_executor.get_handlers())
+        handlers: dict[str, Any] = {}
 
         def _merge_handlers(next_handlers: dict[str, Any]) -> None:
             # サイレント上書き防止: 将来 executor が増えたとき同名 tool が
             # 出ると後勝ちで挙動が変わるため、明示的に衝突を検出する。
             overlap = handlers.keys() & next_handlers.keys()
             if overlap:
-                raise RuntimeError(
-                    f"tool handler name collision in aux stack: {sorted(overlap)}"
-                )
+                raise RuntimeError(f"tool handler name collision in aux stack: {sorted(overlap)}")
             handlers.update(next_handlers)
 
-        if self._memory_recall_tool_executor is not None:
-            _merge_handlers(self._memory_recall_tool_executor.get_handlers())
-        if self._memory_explore_related_tool_executor is not None:
-            _merge_handlers(
-                self._memory_explore_related_tool_executor.get_handlers()
-            )
-        if self._semantic_memory_search_tool_executor is not None:
-            _merge_handlers(self._semantic_memory_search_tool_executor.get_handlers())
-        # PR-D: recall_by_handle も同じ aux 経路で動かす。
-        if self._memory_recall_by_handle_tool_executor is not None:
-            _merge_handlers(self._memory_recall_by_handle_tool_executor.get_handlers())
+        if self._being_episode_recall_tool_executor is not None:
+            _merge_handlers(self._being_episode_recall_tool_executor.get_handlers())
+        if self._being_episode_index_revision_tool_executor is not None:
+            _merge_handlers(self._being_episode_index_revision_tool_executor.get_handlers())
         handler = handlers.get(name)
         if handler is None:
             return LlmCommandResultDto(
@@ -2208,34 +1994,6 @@ class WorldRuntime:
                 error_code="UNSUPPORTED_TOOL",
             )
         return cast(LlmCommandResultDto, handler(acting, arguments))
-
-    def _format_active_memos(self, player_id: PlayerId, *, stale_age_ticks: int = 20) -> str:
-        """LLM が memo_add で固定した未完了 memo を整形する。空なら ""。
-
-        本家 PromptBuilder と同じロジックを共有するため、active_memos_formatter
-        に委譲する (Issue #227 後続レビュー HIGH-2: drift 防止)。
-
-        memo は Being 単位で持つ (Issue #470 Phase 3)。player_id から BeingId を
-        解決できない配線では、出す memo が決まらないので空を返す。
-        """
-        from ai_rpg_world.application.llm.services.active_memos_formatter import (
-            format_active_memos,
-        )
-
-        resolver = getattr(self, "_aux_being_resolver", None)
-        world_id = getattr(self, "_aux_being_default_world_id", None)
-        if resolver is None or world_id is None:
-            return ""
-        being_id = resolver.resolve_being_id(world_id, player_id)
-        if being_id is None:
-            return ""
-
-        entries = self._todo_store.list_uncompleted_by_being(being_id)
-        return format_active_memos(
-            entries,
-            current_tick=self.current_tick(),
-            stale_age_ticks=stale_age_ticks,
-        )
 
     # ── 完全プロンプト構築 ──
 
@@ -2247,9 +2005,7 @@ class WorldRuntime:
     # 廃屋探索に陥った原因)。詳細は docs/memory_system/prefix_cache_v3_deep_analysis.md。
     # consumer 側 (_resolve_scenario_llm_objective_text) で空チェックを行い
     # fail-fast する。fallback も置かない (シナリオごとに勝利条件が違うため)。
-    _ESCAPE_GAME_ACTION_INSTRUCTION = (
-        "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
-    )
+    _ESCAPE_GAME_ACTION_INSTRUCTION = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
 
     @classmethod
     def escape_game_action_instruction(cls, tool_names: Sequence[str]) -> str:
@@ -2286,7 +2042,7 @@ class WorldRuntime:
                     "LLM の objective section に埋め込む勝利条件文を scenario JSON の "
                     "metadata.llm_objective_text に追加するか、全プレイヤーに "
                     "players[].objective を書いてください "
-                    "(例: \"- 山頂の狼煙台で火を上げ、救助船 (4日目/6日目/7日目) を待つ\")"
+                    '(例: "- 山頂の狼煙台で火を上げ、救助船 (4日目/6日目/7日目) を待つ")'
                 )
         return text
 
@@ -2300,15 +2056,9 @@ class WorldRuntime:
         spawns = self.scenario.player_spawns
         if not spawns:
             return ["<no player_spawns>"]
-        return [
-            spawn.string_id
-            for spawn in spawns
-            if not (spawn.objective or "").strip()
-        ]
+        return [spawn.string_id for spawn in spawns if not (spawn.objective or "").strip()]
 
-    def _resolve_player_objective_text(
-        self, player_id: PlayerId, scenario_text: str
-    ) -> str:
+    def _resolve_player_objective_text(self, player_id: PlayerId, scenario_text: str) -> str:
         """目的層 G6: そのプレイヤーの初期目的文を解決する。
 
         優先順は persona_prompt と揃える: ``players[].objective`` があれば
@@ -2337,348 +2087,11 @@ class WorldRuntime:
             field,
         )
 
-    def _resolve_player_goal_locked(self, player_id: PlayerId) -> bool:
-        """目的層 G6: そのプレイヤーの初期目的を locked にするかを解決する。
-
-        ``players[].goal_locked`` が明示されていればそれを優先し、未指定なら
-        従来どおり ``_scenario_has_goal(self.scenario)`` に従う (挙動不変)。
-
-        spawn が見つからない player_id で呼ばれた場合はシナリオ由来の値へ縮退
-        するが、``_resolve_player_objective_text`` と同じ理由で warning を残す。
-        """
-        for spawn in self.scenario.player_spawns:
-            if spawn.player_id != player_id.value:
-                continue
-            if spawn.goal_locked is not None:
-                return spawn.goal_locked
-            return _scenario_has_goal(self.scenario)
-        self._warn_unknown_player_spawn(player_id, "goal_locked")
-        return _scenario_has_goal(self.scenario)
-
-    def _resolve_objective_via_goal_store(
-        self, player_id: PlayerId, fallback_text: str
-    ) -> str:
-        """P5 (目的層 G1): goal store の active 目的を【現在の目的】に描画する。
-
-        遅延 seed: その being にまだ目的が無ければ、シナリオ目的文を
-        ``origin=scenario`` で 1 度だけ seed する。描画結果は常に
-        ``fallback_text`` と同一 (seed 直後の active はまだ改訂されていない
-        ので) = 既存シナリオの挙動不変。store 未構築・being 未解決なら安全に
-        fallback_text。
-
-        locked は ``_scenario_has_goal(self.scenario)`` に連動させる
-        (HIGH-3 回帰対応)。終了条件のあるシナリオ (win/lose/end や
-        player_outcome_rules がある) は locked=True (従来どおり、シナリオの
-        終了条件だけが目的の達成/失敗を決める)。勝敗条件を持たない open
-        world (persistent_world_demo 等) は locked=False とし、エージェント
-        自身が goal_update (言い直し) / goal_outcome (清算) で目的を
-        書き換えられるようにする。以前は locked=True を全シナリオに固定して
-        いたため、目的文なしの run が作れない (open world も含め全 run が
-        必ず何らかの目的文を持つ) ことも重なって、P6 (言い直し) / P8 (清算)
-        の実効経路がどのシナリオでも到達不能になっていた。
-        """
-        store = self._goal_journal_store
-        if store is None:
-            return fallback_text
-        resolver = getattr(self, "_aux_being_resolver", None)
-        world_id = getattr(self, "_aux_being_default_world_id", None)
-        if resolver is None or world_id is None:
-            return fallback_text
-        being_id = resolver.resolve_being_id(world_id, player_id)
-        if being_id is None:
-            return fallback_text
-        from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
-            render_current_goal,
-        )
-
-        active = store.get_active_by_being(being_id)
-        if active is not None:
-            return render_current_goal(active)
-        # 未 seed: シナリオ目的があれば locked で 1 度だけ積む (P5)。fallback_text は
-        # シナリオ目的文なので、seed 後の描画は従来の静的文字列と同一 (挙動不変)。
-        # P6: seed する目的が無い (open world) 場合は未定表示になる。
-        from uuid import uuid4
-
-        from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
-            GOAL_ORIGIN_SCENARIO,
-            GOAL_STATUS_ACTIVE,
-            GoalEntry,
-        )
-
-        if not fallback_text.strip():
-            return render_current_goal(None)
-        try:
-            tick = self.current_tick()
-        except Exception:
-            tick = 0
-        store.add_by_being(
-            being_id,
-            GoalEntry(
-                goal_id=f"goal-{uuid4().hex}",
-                player_id=int(player_id.value),
-                text=fallback_text,
-                status=GOAL_STATUS_ACTIVE,
-                locked=self._resolve_player_goal_locked(player_id),
-                origin=GOAL_ORIGIN_SCENARIO,
-                created_tick=tick if isinstance(tick, int) else 0,
-                created_at=datetime.now(timezone.utc),
-            ),
-        )
-        return render_current_goal(store.get_active_by_being(being_id))
-
-    def _emit_goal_observation(self, player_id: PlayerId, message: str) -> None:
-        """P6: 目的まわりの観測 (locked 拒否など) を本人に 1 件届ける。
-
-        goal_update が locked で拒否されたことを silent にせず意識に返すための
-        経路 (§4 G2)。food/weather 観測と同じ ``_emit_observation_directly``。
-        """
-        output = ObservationOutput(
-            prose=message,
-            structured={"type": "goal_revision"},
-            observation_category="self_only",
-            schedules_turn=False,
-            breaks_movement=False,
-        )
-        self._emit_observation_directly(player_id, output)
-
-    def _emit_reflect_observation(
-        self, player_id: PlayerId, message: str, verdict: str = "stalled"
-    ) -> None:
-        """P4/P7: 固着パスの reflect (停滞 / 達成 / 乖離の気づき) を「ふと振り返ると
-
-        …」の内省観測として本人に届ける。無意識が感覚を上げ、意識が (P6 の
-        goal_update で) 決断する分担。loop_guard 警告と同じ observation buffer
-        経路。verdict は種別として structured に載せる (達成の気づきを P6 の
-        見直しや P8 の清算が拾えるようにする)。ここでは goal store には触れない。
-        """
-        output = ObservationOutput(
-            prose=message,
-            structured={"type": "goal_reflect", "verdict": verdict},
-            observation_category="self_only",
-            schedules_turn=False,
-            breaks_movement=False,
-        )
-        self._emit_observation_directly(player_id, output)
-        # 案A (band-gated thinking): 停滞 (stalled/misaligned) の気づきが実際に
-        # 注入された「その場」で熟考ラッチを arm する。cap を通った注入だけが
-        # ここに来るので、鼓動 (stall_min_interval) をそのまま熟考の間引きに
-        # 流用できる。次行動の run_phase_a が band==strong を条件に consume する。
-        # achieved (前進) では焚かない。latch が無い (flag OFF) ときは no-op。
-        latch = getattr(self, "_stagnation_reasoning_latch", None)
-        if latch is not None and verdict in ("stalled", "misaligned"):
-            latch.arm(player_id)
-
-    def _resolve_stagnation_band_value(self, player_id: PlayerId) -> str:
-        """player の停滞感カウンタ → band を best-effort で解決する (案A 用)。
-
-        store / being resolver / being が欠けるときは none に縮退する
-        (熟考しない = 安全側)。表出側の closure と役割は同じだが、行動経路の
-        consumer が別なので小さなヘルパとして独立させる。
-        """
-        from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
-            STAGNATION_PRESSURE_BAND_NONE,
-            resolve_stagnation_pressure_band,
-        )
-
-        store = getattr(self, "_stagnation_pressure_store", None)
-        resolver = getattr(self, "_aux_being_resolver", None)
-        world_id = getattr(self, "_aux_being_default_world_id", None)
-        if store is None or resolver is None or world_id is None:
-            return STAGNATION_PRESSURE_BAND_NONE
-        being_id = resolver.resolve_being_id(world_id, player_id)
-        if being_id is None:
-            return STAGNATION_PRESSURE_BAND_NONE
-        return resolve_stagnation_pressure_band(store.get_by_being(being_id))
-
-    def resolve_turn_reasoning_effort(self, player_id: PlayerId) -> str | None:
-        """案A: この行動で reasoning (熟考) を焚くべきか判断し effort or None を返す。
-
-        敵対的レビュー HIGH 2 対応: ここは**決定のみ**で、ラッチの消費も trace も
-        しない (副作用は invoke 成功後の ``commit_turn_reasoning_engaged`` に寄せる)。
-        停滞ラッチを peek し (= 「停滞注入直後の 1 行動」判定)、band==strong のとき
-        だけ effort を返す。band が strong 未満なら焚かないので、古いラッチをここで
-        畳んで残さない (「注入直後の 1 行動」の意味を保つ)。flag OFF (ラッチ未構築)
-        のときは何もせず None。
-
-        invoke が失敗して commit されなかった場合、strong のラッチは armed のまま
-        残るため次行動で再挑戦でき、熟考機会を焼失させない。
-        """
-        latch = getattr(self, "_stagnation_reasoning_latch", None)
-        if latch is None:
-            return None
-        if not latch.is_armed(player_id):
-            return None
-        from ai_rpg_world.domain.memory.goal.service.stagnation_reasoning_policy import (
-            resolve_stagnation_reasoning_effort,
-        )
-
-        band = self._resolve_stagnation_band_value(player_id)
-        effort = resolve_stagnation_reasoning_effort(band, fresh_reflect=True)
-        if effort is None:
-            # band < strong: 焚かないので古いフラグをここで畳む (次行動に持ち越さない)。
-            latch.consume(player_id)
-        return effort
-
-    def commit_turn_reasoning_engaged(
-        self, player_id: PlayerId, effort: str
-    ) -> None:
-        """案A: 熟考付き行動 (invoke) が成立した後に呼ぶ。ラッチを消費し
-        ``AGENT_REASONING_ENGAGED`` trace を 1 件残す。
-
-        敵対的レビュー HIGH 2 対応: ラッチ消費と trace を invoke 成功後まで遅らせる
-        ことで、(1) invoke 失敗時に熟考の一発権を焼失させず、(2) trace の意味を
-        「実際に行動選択へ投入された熟考」に一致させる (tool-calling 経路では思考
-        本文は返らないので、同 tick の LLM metrics の reasoning_tokens と突き合わせて
-        「どれだけ熟考したか」を見る)。
-        """
-        latch = getattr(self, "_stagnation_reasoning_latch", None)
-        if latch is None:
-            return
-        # 防御: ラッチが立っていなければ (= 既に消費済み / 経路不整合) trace を
-        # 出さない。二重 commit や想定外の呼び出しで「熟考していないのに engaged」
-        # の偽陽性を出さないためのガード。通常経路では resolve が effort を返した
-        # 直後に呼ばれるので armed のはず。
-        if not latch.consume(player_id):
-            return
-        band = self._resolve_stagnation_band_value(player_id)
-        self._emit_agent_reasoning_engaged_trace(player_id, band, effort)
-
-    def abandon_turn_reasoning(self, player_id: PlayerId) -> None:
-        """案A 餓死ループ修正: 熟考ターンの invoke が失敗 (例外 / tool_call なし)
-        したときに呼ぶ。熟考の一発権 (latch) を消費して「同条件での再試行」を止める。
-
-        これをしないと、詰まった (band=strong) agent の熟考リクエストが失敗し続ける
-        たびに latch が armed のまま残り、毎行動 same-condition で失敗を繰り返して
-        餓死する (実 run v3coop_stagnation_002 で P3 が tick42 以降 38 連続失敗)。
-        reasoning は実行成立していないので AGENT_REASONING_ENGAGED trace は出さない。
-        """
-        latch = getattr(self, "_stagnation_reasoning_latch", None)
-        if latch is None:
-            return
-        latch.consume(player_id)
-
-    def _emit_agent_reasoning_engaged_trace(
-        self, player_id: PlayerId, band: str, effort: str
-    ) -> None:
-        """案A: 熟考を焚いた事実 (いつ・なぜ) を trace に残す。recorder 不在なら no-op。"""
-        recorder = getattr(self, "_trace_recorder", None)
-        if recorder is None:
-            return
-        being_id_value: str | None = None
-        resolver = getattr(self, "_aux_being_resolver", None)
-        world_id = getattr(self, "_aux_being_default_world_id", None)
-        if resolver is not None and world_id is not None:
-            being_id = resolver.resolve_being_id(world_id, player_id)
-            if being_id is not None:
-                being_id_value = being_id.value
-        try:
-            from ai_rpg_world.application.trace.events import TraceEventKind
-
-            recorder.record(
-                TraceEventKind.AGENT_REASONING_ENGAGED,
-                tick=self.current_tick(),
-                player_id=player_id.value,
-                being_id=being_id_value,
-                band=band,
-                effort=effort,
-                trigger="fresh_reflect",
-            )
-        except Exception:
-            # 敵対的レビュー LOW: これは実験の効果測定用 trace なので、記録失敗を
-            # debug で握ると穴が見えにくい。turn は壊さないが warning で気づける
-            # ようにする。
-            logger.warning(
-                "AGENT_REASONING_ENGAGED trace record failed for player_id=%s; skipping",
-                player_id.value,
-                exc_info=True,
-            )
-
-    def _reflect_objective_provider(self, player_id: PlayerId) -> str | None:
-        """P4/P7: reflect の監査対象となる現在の目的文を返す (best-effort、
-
-        読み取りのみ)。監査対象は goal store の active 目的に一本化する: active が
-        あればその文 (シナリオ目的が locked で seed 済み、または P6 で本人が
-        立て直した自己目的)。まだ active が無い場合のみシナリオ目的文へ縮退する
-        が、これは seed される内容と同一なので監査対象は変わらない。どちらも
-        解決できなければ None (目的が無ければ reflect は判断しない)。この経路は
-        副作用 (seed) を起こさない — seed は 【現在の目的】描画側が担う。
-        """
-        store = self._goal_journal_store
-        if store is not None:
-            resolver = getattr(self, "_aux_being_resolver", None)
-            world_id = getattr(self, "_aux_being_default_world_id", None)
-            if resolver is not None and world_id is not None:
-                being_id = resolver.resolve_being_id(world_id, player_id)
-                if being_id is not None:
-                    active = store.get_active_by_being(being_id)
-                    if active is not None:
-                        return str(active.text)
-        try:
-            # 目的層 G6: 縮退先も player ごとに解決する。ここが共通文のままだと、
-            # 個別目的を持つプレイヤーが seed 前に「他人の目的」で監査される。
-            return self._resolve_player_objective_text(
-                player_id, self._resolve_scenario_llm_objective_text()
-            )
-        except Exception:
-            return None
-
-    def apply_goal_update_if_present(
-        self, player_id: PlayerId, arguments: dict[str, Any]
-    ) -> None:
-        """P6/P8: world-action tool の引数の goal_update / goal_outcome を反映する。
-
-        orchestrator (runtime_manager の run_phase_b) が tool 実行後に呼ぶ。
-        GOAL_REVISION_ENABLED OFF / goal store 無し / どちらも空なら no-op
-        (= 導入前と挙動一致)。being 未解決も no-op。goal_update は立て直し、
-        goal_outcome (achieved / abandoned) は清算 (P8)。
-        """
-        applier = self._goal_revision_applier
-        if applier is None:
-            return
-        if not isinstance(arguments, dict):
-            return
-        goal_update = arguments.get("goal_update")
-        goal_outcome = arguments.get("goal_outcome")
-        has_update = isinstance(goal_update, str) and bool(goal_update.strip())
-        has_outcome = goal_outcome in (GOAL_OUTCOME_ACHIEVED, GOAL_OUTCOME_ABANDONED)
-        if not has_update and not has_outcome:
-            return
-        resolver = getattr(self, "_aux_being_resolver", None)
-        world_id = getattr(self, "_aux_being_default_world_id", None)
-        if resolver is None or world_id is None:
-            return
-        being_id = resolver.resolve_being_id(world_id, player_id)
-        if being_id is None:
-            return
-        try:
-            applier.apply(
-                being_id,
-                player_id,
-                goal_update_text=goal_update if has_update else None,
-                goal_outcome=goal_outcome if has_outcome else None,
-            )
-        except Exception:
-            logger.exception(
-                "apply_goal_update_if_present failed for player_id=%s",
-                player_id.value,
-            )
-
     # Issue #227 後続 HIGH-3 改善: stateless formatter / strategy を class-level
     # に持ち、build_full_prompt の毎回 new を避ける + 本家 DefaultPromptBuilder と
     # 同じインスタンスタイプを使うことを明示する。
-    _recent_events_formatter: ClassVar[DefaultRecentEventsFormatter] = (
-        DefaultRecentEventsFormatter()
-    )
-    # PR #445: _context_strategy は env (PROMPT_SECTION_ORDER) を尊重するため
-    # **instance field に格上げ**。ClassVar の hard-coded default だと
-    # run_scenario_experiment が env を読んで run_start trace に書くのに、
-    # 実体は無視するという 3 つ目の config-init split silent failure を起こす。
-    # PR #438 の Run A (legacy) はこの bug で実際は stable_to_volatile で
-    # 動いていた可能性が高い。create_world_runtime 末尾で env から作って
-    # 注入する。
-    _context_strategy: SectionBasedContextFormatStrategy = field(
-        default_factory=SectionBasedContextFormatStrategy
-    )
+    _recent_events_formatter: ClassVar[DefaultRecentEventsFormatter] = DefaultRecentEventsFormatter()
+    _context_strategy: SectionBasedContextFormatStrategy = field(default_factory=SectionBasedContextFormatStrategy)
 
     def _get_or_build_default_prompt_builder(self) -> DefaultPromptBuilder:
         """本家 DefaultPromptBuilder のインスタンスを lazy 構築してキャッシュする。
@@ -2695,7 +2108,6 @@ class WorldRuntime:
             DefaultPromptBuilder,
         )
         from ai_rpg_world.application.llm.services.prompt_builder_config import (
-            EpisodicRecallConfig,
             PromptBuilderCoreServices,
             PromptLimits,
             PromptSectionProviders,
@@ -2710,7 +2122,6 @@ class WorldRuntime:
         core = PromptBuilderCoreServices(
             observation_buffer=self._obs_buffer,
             short_term_memory=self._short_term_memory,
-            action_result_store=self._action_result_store,
             recent_event_store=self._recent_event_store,
             world_query_service=WorldRuntimeQueryAdapter(self),
             player_profile_repository=WorldProfileRepositoryAdapter(self),
@@ -2719,98 +2130,41 @@ class WorldRuntime:
             context_format_strategy=self._context_strategy,
             system_prompt_builder=WorldSystemPromptBuilder(self),
             available_tools_provider=WorldAvailableToolsProvider(),
+            recent_events_projection=(self._public_sns_projection.project if self._public_sns_projection else None),
+            recent_events_shadow=(
+                self._recent_events_shadow.compare if self._recent_events_shadow is not None else None
+            ),
         )
         # objective_text は scenario.metadata.llm_objective_text を 1 度だけ解決する。
         # 空のとき ValueError が立つので、prompt builder 構築時点で fail-fast。
         # lambda 内で resolve すると毎ターン呼ばれて重複ログ + 同一例外を投げる
         # ことになるため、ここで closure キャプチャする。
         resolved_objective_text = self._resolve_scenario_llm_objective_text()
-        # P5 (目的層 G1): 常に goal-aware provider を差し込む。goal store が未構築
-        # (GOAL_STORE_ENABLED OFF = self._goal_journal_store is None) のとき
-        # _resolve_objective_via_goal_store は静的シナリオ文字列をそのまま返す
-        # (= 挙動不変)。store 構築 (flag 解決) は create_world_runtime のメモリ
-        # 配線側で行い、ここでは provider 設置だけ (prompt builder 構築が LLM
-        # 有効時にしか走らないため、store 構築をここに置くと flag が効かない)。
         sections = PromptSectionProviders(
-            # 目的層 G6: fallback は player ごとに解決する。players[].objective が
-            # あればその人だけ別の目的文で seed され、無ければ従来どおり
-            # シナリオ共通文になる。
-            objective_text_provider=lambda pid: self._resolve_objective_via_goal_store(
-                pid, self._resolve_player_objective_text(pid, resolved_objective_text)
+            # 目的層 G6: players[].objective があればその人だけ別の目的文に
+            # なり、無ければシナリオ共通文になる。
+            objective_text_provider=lambda pid: self._resolve_player_objective_text(pid, resolved_objective_text),
+            being_memo_text_provider=(self.being_memo_text if self._being_memo_enabled() else None),
+            known_people_text_provider=(
+                self._player_acquaintances.known_people_text if self._player_acquaintances is not None else None
             ),
-            memo_store=self._todo_store if self._memo_tools_enabled() else None,
+            episode_index_text_provider=(self.episode_index_text if self._episode_index_enabled() else None),
         )
         limits = PromptLimits(
-            tile_map_enabled=False,
             default_action_instruction=self._ESCAPE_GAME_ACTION_INSTRUCTION,
         )
-        # Issue #283 後続: episodic stack が注入されていれば、prompt builder の
-        # passive_recall + noun_matcher を有効化する。未注入なら従来挙動
-        # (recall section が出ない)。
-        episodic_config = EpisodicRecallConfig()
-        if self._episodic_stack is not None:
-            # #526 後続: stack に semantic passive recall があれば
-            # 【関連する学び】section を出すために渡す (default OFF では None/0)。
-            # U3: stack に reinterpretation (段1) があれば、想起時に journal を覗いて
-            # 再解釈後テキストで recall を上書きし、想起 episode を recall_buffer に
-            # 積む配線を有効化する (default OFF では全 None で従来挙動)。
-            _reinterp_coord = self._episodic_stack.reinterpretation_coordinator
-            episodic_config = EpisodicRecallConfig(
-                passive_recall=self._episodic_stack.passive_recall,
-                noun_matcher=self._episodic_stack.noun_matcher,
-                # 想起→強化 (recall_count 加算 / CO_RECALL / ヘブ則) の配線。
-                # これが無いと想起されても recall_count が 0 のままで、semantic
-                # 昇格ゲート (recall_count>=3) を永遠に超えられない
-                # (memory_full_002 実験で発覚)。
-                memory_link_service=self._episodic_stack.link_service,
-                semantic_passive_recall=self._episodic_stack.semantic_passive_recall,
-                semantic_passive_top_k=self._episodic_stack.semantic_passive_top_k,
-                recall_buffer_store=self._episodic_stack.recall_buffer_store,
-                reinterpretation_journal_store=self._episodic_stack.reinterpretation_journal,
-                turn_index_provider=(
-                    _reinterp_coord.current_turn_index
-                    if _reinterp_coord is not None
-                    else None
-                ),
-                # #526 段階 2: 慣化 sidecar。stack で enable された時のみ非 None。
-                recall_habituation_store=self._episodic_stack.recall_habituation_store,
-                recall_habituation_decay_window_ticks=(
-                    self._episodic_stack.recall_habituation_decay_window_ticks
-                ),
-                # #526 段階 3: 想起スロット sidecar。stack で enable された
-                # 時のみ非 None。retrieve 側にも別注入されている (同 store)。
-                recall_slot_store=self._episodic_stack.recall_slot_store,
-                recall_slot_cooldown_ticks=(
-                    self._episodic_stack.recall_slot_cooldown_ticks
-                ),
-                # #526 段階 3 PR-C: afterglow store。stack で enable された
-                # 時のみ非 None。retrieve 側にも同一 store が注入されている。
-                afterglow_store=self._episodic_stack.afterglow_store,
-                # U10a (予測誤差統一設計 部品6・pending prediction): stack で
-                # enable された時のみ非 None。書込みは chunk_coordinator /
-                # scheduler 側 (build_episodic_stack / 上の wiring 参照)。
-                pending_prediction_store=self._episodic_stack.pending_prediction_store,
-            )
         builder = DefaultPromptBuilder(
             core,
             sections=sections,
             limits=limits,
-            episodic=episodic_config,
             ui_context_builder=self._ui_context_builder,
             current_tick_provider=lambda: self.current_tick(),
-            # Issue #283 後続: recall trace を可視化するため、trace_recorder を
-            # provider 経由で渡す (set_trace_recorder で後から差し込まれる)。
+            # trace_recorder は provider 経由で渡す (set_trace_recorder で後から差し込まれる)。
             trace_recorder_provider=lambda: self._trace_recorder,
             # presentation 層で先に組まれている loop_guard (record_and_check の
             # 呼び出し主) を peek_streak 用にも共有する。``None`` のままなら
             # instruction 末尾の警告 prefix は出ない。
-            tool_call_loop_guard=getattr(
-                self, "_injected_tool_call_loop_guard", None
-            ),
-            # 予測誤差統一設計 U1: _record_action_result の ActionResultRecorder
-            # と同じ ledger instance を共有し、この builder が発行した
-            # prediction_context_id を consume できるようにする。
-            prediction_context_ledger=self._get_prediction_context_ledger(),
+            tool_call_loop_guard=getattr(self, "_injected_tool_call_loop_guard", None),
         )
         self._cached_default_prompt_builder = builder
         return builder
@@ -2824,7 +2178,7 @@ class WorldRuntime:
         """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。
 
         Issue #227 後続 HIGH-3 Part 2: 本家 DefaultPromptBuilder.build() に統合した。
-        section 組み立て・recent_events・active_memos・tile-map field 制御は
+        section 組み立て・recent_events・tile-map field 制御は
         DefaultPromptBuilder 内部で処理される。world_runtime 固有の部分は adapter
         (default_prompt_builder_adapters.py) 経由で注入する:
         - WorldQuery 相当: build_llm_context + _build_minimal_player_state_dto
@@ -2846,21 +2200,25 @@ class WorldRuntime:
         旧 shape を期待する caller は messages[0]["content"] / messages[1]["content"]
         への参照に書き換える必要がある。
         """
-        self._wire_auxiliary_tool_stack()
+        self._wire_being_stack()
+        if self._public_sns_command_service is not None:
+            try:
+                self._public_sns_command_service.retry_pending_notifications(limit=100)
+            except Exception:
+                logger.exception("公開SNSの通知再送が未完了です")
         # observation buffer の drain は DefaultPromptBuilder.build() 内で行われる
 
         tail_sections = tuple(
             section
             for section in (
+                self._public_sns_screen_text(player_id),
                 self._format_ongoing_conditions(),
                 self._format_time_since_last_gathering(),
             )
             if section
         )
         if tail_sections:
-            tail_instruction = (
-                action_instruction or self._ESCAPE_GAME_ACTION_INSTRUCTION
-            )
+            tail_instruction = action_instruction or self._ESCAPE_GAME_ACTION_INSTRUCTION
             action_instruction = "\n\n".join((*tail_sections, tail_instruction))
 
         builder = self._get_or_build_default_prompt_builder()
@@ -2874,31 +2232,43 @@ class WorldRuntime:
 
         return {
             "messages": result["messages"],
-            "tools": [
-                d.name for d in self.get_tool_definitions(player_id=player_id)
-            ],
+            "tools": [d.name for d in self.get_tool_definitions(player_id=player_id)],
             "tool_runtime_context": ctx.tool_runtime_context,
             "action_instruction": result["action_instruction"],
-            # U1: このターンに発行された prediction_context_id をそのまま
-            # 露出する (実際の consume は _record_action_result → ledger 経由
-            # で player_id をキーに行われるため、呼び出し側がこの値を渡す
-            # 必要は無いが、後続 PR のデバッグ・trace 突き合わせ用に残す)。
-            "prediction_context_id": result.get("prediction_context_id"),
+            "sns_shown_notification_ids": result.get("sns_shown_notification_ids", ()),
+            "sns_screen_generation": getattr(self._public_sns_screens.get(int(player_id)), "generation", None),
         }
+
+    def _public_sns_header_text(self, player_id: PlayerId) -> str:
+        store = self._public_sns_data_store
+        if store is None:
+            return ""
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
+
+        user = store.sns_users.get(UserId(int(player_id)))
+        if user is None:
+            return ""
+        own_id = f"sns:{store.sns_public_namespace}:user:{user.identity_token}"
+        pending = self._public_sns_projection.pending_count(int(player_id))
+        return f"【公開SNS】自分: {user.profile.display_name} / 人物: {own_id}\n未表示通知: {pending}件。受信箱で確認できます。"
+
+    def _public_sns_screen_text(self, player_id: PlayerId) -> str:
+        header = self._public_sns_header_text(player_id)
+        if not header:
+            return ""
+        screen = self._public_sns_screens.get(int(player_id))
+        status = self._public_sns_screens.presentation_status(int(player_id))
+        return header + "\n" + status + ("\n" + screen.text if screen else "")
 
     def _format_ongoing_conditions(self) -> str:
         """成立中の異常だけを、最終指示の直前へ置ける本文に整形する。"""
         active_flags = self._world_flag_state.as_frozen_set()
         messages = [
-            condition.message
-            for condition in self.scenario.ongoing_conditions
-            if condition.flag in active_flags
+            condition.message for condition in self.scenario.ongoing_conditions if condition.flag in active_flags
         ]
         if not messages:
             return ""
-        return "\n".join(
-            ["【進行中の異常】", *(f"- {message}" for message in messages)]
-        )
+        return "\n".join(["【進行中の異常】", *(f"- {message}" for message in messages)])
 
     def _format_time_since_last_gathering(self) -> str:
         """自由時間なら、直近の集合からの経過を世界の分数で返す。
@@ -2922,7 +2292,9 @@ class WorldRuntime:
     # ── アクション実行 ──
 
     def _object_display_name_at_player_spot(
-        self, player_id: PlayerId, object_str_id: str,
+        self,
+        player_id: PlayerId,
+        object_str_id: str,
     ) -> str:
         try:
             obj_int = self.id_mapper.get_int("object", object_str_id)
@@ -2943,15 +2315,15 @@ class WorldRuntime:
             return object_str_id
 
     def do_interact(
-        self, player_id: PlayerId, object_str_id: str, action_name: str,
+        self,
+        player_id: PlayerId,
+        object_str_id: str,
+        action_name: str,
         *,
         interaction_parameters: dict[str, Any] | None = None,
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        expected_result: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> SpotInteractionResultDto:
         obj_int = self.id_mapper.get_int("object", object_str_id)
         obj_id = SpotObjectId.create(obj_int)
@@ -2967,8 +2339,11 @@ class WorldRuntime:
         # do_interact) はここを通るので、current_tick を必ず渡す。渡し忘れると
         # 採取源が再生せず永久枯渇する (reactive_binding も pool 化で削除済み)。
         from ai_rpg_world.domain.common.value_object import WorldTick
+
         result = self._interaction_service.execute_interaction(
-            player_id, obj_id, action_name,
+            player_id,
+            obj_id,
+            action_name,
             interaction_parameters=interaction_parameters,
             current_tick=WorldTick(self.current_tick()),
         )
@@ -2989,38 +2364,23 @@ class WorldRuntime:
         self._evaluate_distant_cue_appearances()
         # SpotInteractionResultDto は現状 success フラグを持たない (messages から
         # しか判定できない)。fail 検出経路がドメイン側に出来るまで暫定で True 固定。
-        fallback_identifiers, fallback_free_text_names = (
-            project_action_arguments_for_history(
-                {
-                    "target_label": obj_label,
-                    "action_name": action_name,
-                    **(
-                        {"parameters": interaction_parameters}
-                        if interaction_parameters is not None
-                        else {}
-                    ),
-                }
-            )
+        fallback_identifiers, fallback_free_text_names = project_action_arguments_for_history(
+            {
+                "target_label": obj_label,
+                "action_name": action_name,
+                **({"parameters": interaction_parameters} if interaction_parameters is not None else {}),
+            }
         )
         self._record_action_result(
             player_id,
             f"「{obj_label}」で{action_display_label}",
             result_text,
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
-            identifier_arguments=(
-                identifier_arguments
-                if identifier_arguments is not None
-                else fallback_identifiers
-            ),
+            identifier_arguments=(identifier_arguments if identifier_arguments is not None else fallback_identifiers),
             free_text_argument_names=(
-                free_text_argument_names
-                if identifier_arguments is not None
-                else fallback_free_text_names
+                free_text_argument_names if identifier_arguments is not None else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            expected_result=expected_result,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
@@ -3034,9 +2394,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        expected_result: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> SpotInteractionResultDto:
         """手元の道具に宣言された操作を実行し、通常の interact として記録する。"""
         from ai_rpg_world.domain.common.value_object import WorldTick
@@ -3051,38 +2408,23 @@ class WorldRuntime:
             current_tick=WorldTick(self.current_tick()),
         )
         self._process_graph_events()
-        fallback_identifiers, fallback_free_text_names = (
-            project_action_arguments_for_history(
-                {
-                    "target_label": item_label,
-                    "action_name": action_name,
-                    **(
-                        {"parameters": interaction_parameters}
-                        if interaction_parameters is not None
-                        else {}
-                    ),
-                }
-            )
+        fallback_identifiers, fallback_free_text_names = project_action_arguments_for_history(
+            {
+                "target_label": item_label,
+                "action_name": action_name,
+                **({"parameters": interaction_parameters} if interaction_parameters is not None else {}),
+            }
         )
         self._record_action_result(
             player_id,
             f"「{item_label}」で{result.action_display_label}",
             "; ".join(result.messages) if result.messages else "完了",
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
-            identifier_arguments=(
-                identifier_arguments
-                if identifier_arguments is not None
-                else fallback_identifiers
-            ),
+            identifier_arguments=(identifier_arguments if identifier_arguments is not None else fallback_identifiers),
             free_text_argument_names=(
-                free_text_argument_names
-                if identifier_arguments is not None
-                else fallback_free_text_names
+                free_text_argument_names if identifier_arguments is not None else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            expected_result=expected_result,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
@@ -3103,7 +2445,7 @@ class WorldRuntime:
             voters.append(pid)
         return voters
 
-    def cast_vote(self, voter_player_id: PlayerId, target_player_id: Any=None) -> Any:
+    def cast_vote(self, voter_player_id: PlayerId, target_player_id: Any = None) -> Any:
         """会議で 1 票を投じる。``target_player_id`` が None なら棄権。
 
         全員が投じ終えたら、その場で集計して会議を閉じる。
@@ -3197,11 +2539,7 @@ class WorldRuntime:
             lambda tick: self._game_phase_store.begin_meeting(
                 tick=tick,
                 trigger=trigger,
-                initiator_player_id=(
-                    int(initiator_player_id)
-                    if initiator_player_id is not None
-                    else None
-                ),
+                initiator_player_id=(int(initiator_player_id) if initiator_player_id is not None else None),
             ),
             trigger=trigger,
             initiator_player_id=initiator_player_id,
@@ -3367,16 +2705,18 @@ class WorldRuntime:
                 who = ""
         if self._speech_event_publisher is not None:
             graph = self._spot_graph_repo.find_graph()
-            self._speech_event_publisher.publish_all([
-                GamePhaseChangedEvent.create(
-                    aggregate_id=graph.graph_id,
-                    aggregate_type="SpotGraphAggregate",
-                    old_phase=old_phase,
-                    new_phase=state.phase,
-                    trigger=trigger,
-                    initiator_display_name=who,
-                )
-            ])
+            self._speech_event_publisher.publish_all(
+                [
+                    GamePhaseChangedEvent.create(
+                        aggregate_id=graph.graph_id,
+                        aggregate_type="SpotGraphAggregate",
+                        old_phase=old_phase,
+                        new_phase=state.phase,
+                        trigger=trigger,
+                        initiator_display_name=who,
+                    )
+                ]
+            )
         return state
 
     def available_player_action_names(self, actor_player_id: PlayerId) -> tuple[str, ...]:
@@ -3397,16 +2737,24 @@ class WorldRuntime:
             ),
         )
 
+    def set_target_item_name_rescue(self, rescue: Any | None) -> None:
+        """人を対象にした操作で、品名を相手の所持品から意味で読み替える判断を注入する (D1641)。"""
+        self._player_interaction_service.set_item_name_rescue(rescue)
+
+    @property
+    def target_item_name_rescue(self) -> Any | None:
+        return self._player_interaction_service.item_name_rescue
+
     def do_interact_with_player(
-        self, actor_player_id: PlayerId, target_player_id: PlayerId, action_name: str,
+        self,
+        actor_player_id: PlayerId,
+        target_player_id: PlayerId,
+        action_name: str,
         *,
         interaction_parameters: dict[str, Any] | None = None,
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        expected_result: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> Any:
         """同じ場所にいるプレイヤーを対象にした interaction を実行する。
 
@@ -3415,6 +2763,7 @@ class WorldRuntime:
         (docs/memory_system/interpersonal_interaction_design.md §3.2)。
         """
         from ai_rpg_world.domain.common.value_object import WorldTick
+
         svc = self._player_interaction_service
         result = svc.execute(
             actor_player_id,
@@ -3425,50 +2774,33 @@ class WorldRuntime:
         )
         self._process_graph_events()
         target_label = next(
-            (
-                s.name
-                for s in self.scenario.player_spawns
-                if int(s.player_id) == int(target_player_id)
-            ),
+            (s.name for s in self.scenario.player_spawns if int(s.player_id) == int(target_player_id)),
             f"プレイヤー({int(target_player_id)})",
         )
-        fallback_identifiers, fallback_free_text_names = (
-            project_action_arguments_for_history(
-                {
-                    "target_label": target_label,
-                    "action_name": action_name,
-                    **(
-                        {"parameters": interaction_parameters}
-                        if interaction_parameters is not None
-                        else {}
-                    ),
-                }
-            )
+        fallback_identifiers, fallback_free_text_names = project_action_arguments_for_history(
+            {
+                "target_label": target_label,
+                "action_name": action_name,
+                **({"parameters": interaction_parameters} if interaction_parameters is not None else {}),
+            }
         )
         self._record_action_result(
             actor_player_id,
             f"「{target_label}」に対して{result.action_display_label}",
             "; ".join(result.messages) if result.messages else "完了",
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
-            identifier_arguments=(
-                identifier_arguments
-                if identifier_arguments is not None
-                else fallback_identifiers
-            ),
+            identifier_arguments=(identifier_arguments if identifier_arguments is not None else fallback_identifiers),
             free_text_argument_names=(
-                free_text_argument_names
-                if identifier_arguments is not None
-                else fallback_free_text_names
+                free_text_argument_names if identifier_arguments is not None else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            expected_result=expected_result,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
     def do_drop_item(
-        self, player_id: PlayerId, slot_id_value: int,
+        self,
+        player_id: PlayerId,
+        slot_id_value: int,
     ) -> ItemTransferResult:
         """指定スロットのアイテムを現在地に落とす。
 
@@ -3477,6 +2809,7 @@ class WorldRuntime:
         action_result_store に追記して履歴に残すまでを行う。
         """
         from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
         result = self._item_transfer_service.drop_item(player_id, SlotId(slot_id_value))
         result_text = "; ".join(result.messages) if result.messages else "落とした"
         # ItemTransferResult は現状 success フラグなし (例外は service 側で投げる)。
@@ -3490,7 +2823,9 @@ class WorldRuntime:
         return result
 
     def do_pickup_item(
-        self, player_id: PlayerId, item_instance_id_value: int,
+        self,
+        player_id: PlayerId,
+        item_instance_id_value: int,
     ) -> ItemTransferResult:
         """現在地の地面アイテムを拾う。
 
@@ -3499,8 +2834,10 @@ class WorldRuntime:
         tool では将来ラベル (例: G1, G2) で参照させる予定だがそれは別 PR。
         """
         from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+
         result = self._item_transfer_service.pickup_item(
-            player_id, ItemInstanceId.create(item_instance_id_value),
+            player_id,
+            ItemInstanceId.create(item_instance_id_value),
         )
         result_text = "; ".join(result.messages) if result.messages else "拾い上げた"
         self._record_action_result(
@@ -3548,9 +2885,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        expected_result: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> SpotExplorationResultDto:
         spot_name = self.get_player_spot_name(player_id)
         result = self._exploration_service.explore_once(player_id)
@@ -3566,9 +2900,6 @@ class WorldRuntime:
             identifier_arguments=identifier_arguments,
             free_text_argument_names=free_text_argument_names,
             inner_thought=inner_thought,
-            expected_result=expected_result,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
@@ -3580,9 +2911,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        expected_result: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> None:
         """目的地へ向けて移動を開始する (#404 fix: ネスト advance_tick を排除)。
 
@@ -3642,22 +2970,14 @@ class WorldRuntime:
                 identifier_arguments=(
                     identifier_arguments
                     if identifier_arguments is not None
-                    else project_action_arguments_for_history(
-                        {"destination_label": dest_name}
-                    )[0]
+                    else project_action_arguments_for_history({"destination_label": dest_name})[0]
                 ),
                 free_text_argument_names=free_text_argument_names,
                 inner_thought=inner_thought,
-                expected_result=expected_result,
-                intention=intention,
-                emotion_hint=emotion_hint,
             )
             return
 
-        # 移動開始の action result を記録する。scene_boundary は「scene を変える
-        # 意思決定」の時点で立てる (cognitive science の doorway effect は意図
-        # 形成の瞬間 + 物理的境界通過の両方が関係するが、本実装では tool call
-        # 時点を chunk 境界として扱う)。start_travel_to_spot が成功している以上
+        # 移動開始の action result を記録する。start_travel_to_spot が成功している以上
         # 経路は確保されていて、advance_spot_travel_one_tick が異常終了しない
         # 限り必ず arrival する。
         self._record_action_result(
@@ -3668,16 +2988,10 @@ class WorldRuntime:
             identifier_arguments=(
                 identifier_arguments
                 if identifier_arguments is not None
-                else project_action_arguments_for_history(
-                    {"destination_label": dest_name}
-                )[0]
+                else project_action_arguments_for_history({"destination_label": dest_name})[0]
             ),
             free_text_argument_names=free_text_argument_names,
-            scene_boundary=True,
             inner_thought=inner_thought,
-            expected_result=expected_result,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
 
     def do_wait(self, player_id: PlayerId, reason: str = "") -> int:
@@ -3831,9 +3145,7 @@ class WorldRuntime:
                 new_active=active,
                 initialized_before=initialized_before,
                 visible_recipient_count=len(deliveries),
-                delivery_skipped_reason=(
-                    "no_visible_recipients" if not deliveries else None
-                ),
+                delivery_skipped_reason=("no_visible_recipients" if not deliveries else None),
             )
 
     def _is_distant_cue_active(self, cue: Any) -> bool | None:
@@ -3862,9 +3174,7 @@ class WorldRuntime:
     def _find_distant_cue_source_object(self, object_id: Any) -> Any:
         try:
             if not isinstance(object_id, SpotObjectId):
-                object_id = SpotObjectId.create(
-                    int(getattr(object_id, "value", object_id))
-                )
+                object_id = SpotObjectId.create(int(getattr(object_id, "value", object_id)))
         except Exception:
             return None
         graph = self._spot_graph_repo.find_graph()
@@ -3948,9 +3258,7 @@ class WorldRuntime:
                 prominence=float(getattr(area, "prominence", 0.0)),
                 x=getattr(getattr(area, "position", None), "x", None),
                 y=getattr(getattr(area, "position", None), "y", None),
-                distant_descriptions=dict(
-                    getattr(area, "distant_descriptions", {}) or {}
-                ),
+                distant_descriptions=dict(getattr(area, "distant_descriptions", {}) or {}),
             )
             for area in getattr(self.scenario, "areas", ())
         )
@@ -4013,9 +3321,7 @@ class WorldRuntime:
             )
 
     def _record_distant_cue_skipped(self, *, cue: Any, reason: str) -> None:
-        """debug profile のときだけ cue 境界検出の skipped 理由を trace に残す。"""
-        if not bool(getattr(self._state_builder, "_distant_view_trace_enabled", False)):
-            return
+        """cue 境界検出の skipped 理由を trace に残す。"""
         recorder = self._trace_recorder
         if recorder is None:
             return
@@ -4029,9 +3335,7 @@ class WorldRuntime:
                 origin_area_id=str(getattr(cue, "origin_area_id", "")),
                 skipped_reasons=[reason],
                 source_kind=str(getattr(getattr(cue, "source", None), "kind", "")),
-                source_state_key=str(
-                    getattr(getattr(cue, "source", None), "state_key", "")
-                ),
+                source_state_key=str(getattr(getattr(cue, "source", None), "state_key", "")),
             )
         except Exception:
             logger.warning(
@@ -4116,7 +3420,7 @@ class WorldRuntime:
             「野いちごが3つ腐った。」 (同 tick 内のみ aggregate)
             → 1 日に渡って 8 個が別 tick で腐ると 8 件の観測が走る
 
-        新 (本 PR): 日 (24 tick) を跨いで pending buffer に貯め、日境界
+        新 (本 PR): 1 日を跨いで pending buffer に貯め、日境界
         または game-end の直前に **1 日分まとめて** flush する:
             「今日は野いちごが5個、椰子の実が2個腐った。」
 
@@ -4126,14 +3430,10 @@ class WorldRuntime:
             return
         # 当日分の buffer に積む。flush は day boundary で行う (下記参照)。
         # field 化済 (#375 後続レビュー対応): 遅延 hasattr 初期化を廃止。
-        # 当日 day index を計算 (cycle が無いシナリオは tick そのまま使う)
         ticks_per_day = self._ticks_per_day_or_default()
         current_day = self.current_tick() // max(1, ticks_per_day)
         # 日が変わっていたら前日分を flush してから新日のバッファに積む
-        if (
-            self._pending_spoiled_day is not None
-            and self._pending_spoiled_day != current_day
-        ):
+        if self._pending_spoiled_day is not None and self._pending_spoiled_day != current_day:
             self._flush_pending_food_spoiled()
         self._pending_spoiled_day = current_day
         for instance_id, spec_id, spec_name in spoiled:
@@ -4149,17 +3449,11 @@ class WorldRuntime:
             entry["instance_ids"].append(int(instance_id.value))
 
     def _ticks_per_day_or_default(self) -> int:
-        """day_night_config があればそこから ticks_per_day を取り、無ければ 24。"""
-        cfg = getattr(self.scenario, "day_night_config", None)
+        """「今日」の区切りを、エージェントが見ている時計の 1 日にそろえる (#1576)。"""
+        cfg = self.scenario.day_night_config
         if cfg is None:
-            return 24
-        try:
-            cycle = cfg.cycle
-            if cycle is None:
-                return 24
-            return int(cycle.ticks_per_day)
-        except AttributeError:
-            return 24
+            return (24 * 60) // _FALLBACK_MINUTES_PER_TICK
+        return cfg.cycle.ticks_per_day
 
     def _flush_pending_food_spoiled(self) -> None:
         """day boundary 等で pending 腐敗バッファを 1 件の集約観測として配信する。
@@ -4231,30 +3525,113 @@ class WorldRuntime:
     # ── ゲーム終了判定 ──
 
     def check_game_end(self) -> GameEndResult:
-        # END_ON_ALL_DOWN はシナリオ内の勝敗規則ではなく、実験を行動不能状態で
-        # 回し続けないための外的停止。個人結果規則や end 条件の有無に関係なく、
-        # 宣言された世界の判定より先に一つの入口で評価する。
+        # 全員が行動不能なときの停止はシナリオ内の勝敗規則ではなく、実験を行動不能
+        # 状態で回し続けないための外的停止。世界の判定が成立した tick では世界の
+        # 終了理由を残すため、外的停止は世界の判定が続行のときだけ見る
+        # (design_decisions 43)。終了理由の文字列は、設定で切り替えていた頃の
+        # run と同じ grep で拾えるように変えない。
+        world_end = self._check_game_end_collective_mode()
+        if world_end.is_ended:
+            return world_end
         registry = self._player_outcome_registry
-        if (
-            self._should_end_on_all_down()
-            and registry is not None
-            and self._all_players_unable_to_act(registry)
-        ):
+        if registry is not None and self._all_players_unable_to_act(registry):
             return GameEndResult(
                 is_ended=True,
                 result=None,
-                reason=(
-                    "外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない "
-                    "(全員 down または outcome 確定済み)"
-                ),
+                reason=("外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない (全員 down または outcome 確定済み)"),
                 player_outcomes=registry.snapshot(),
+                team_results=(self._decide_team_results() if self.scenario.teams else None),
             )
-        return self._check_game_end_collective_mode()
+        return world_end
 
-    def _should_end_on_all_down(self) -> bool:
-        """END_ON_ALL_DOWN による外的停止が有効かを返す。"""
-        cfg = getattr(self, "_runtime_config", None)
-        return bool(getattr(cfg, "end_on_all_down", False))
+    def _decide_team_results(self) -> Mapping[str, GameResultEnum]:
+        """いまの世界で各チームの勝利条件を評価し、チームの勝敗を決める。"""
+        satisfied, _ = self._satisfied_teams()
+        return decide_team_results(self.scenario.teams, satisfied)
+
+    def _satisfied_teams(self) -> tuple[frozenset[str], Mapping[str, str]]:
+        """勝利条件が成立したチームの id と、チームごとの判定の理由を返す。
+
+        成立しなかったチームの理由は、最後に評価した条件の理由 (何が足りないか)。
+        """
+        graph = self._spot_graph_repo.find_graph()
+        flags = self._world_flag_state.as_frozen_set()
+        player_ids = self.get_player_ids()
+        from ai_rpg_world.domain.common.value_object import WorldTick
+
+        tick = WorldTick(self._tick)
+        player_states = self._collect_player_states(player_ids)
+        player_outcomes = self._collect_player_outcomes(player_ids)
+        satisfied: list[str] = []
+        reasons: dict[str, str] = {}
+        for team in self.scenario.teams:
+            for condition in team.win_conditions:
+                result = self._game_end_evaluator.evaluate(
+                    graph,
+                    condition,
+                    flags,
+                    player_ids,
+                    tick,
+                    player_states=player_states,
+                    player_outcomes=player_outcomes,
+                    result_on_match=GameResultEnum.WIN,
+                    team_member_ids=team.member_player_ids,
+                )
+                reasons[team.team_id] = result.reason
+                if result.is_ended:
+                    satisfied.append(team.team_id)
+                    break
+        return frozenset(satisfied), reasons
+
+    def team_result_trace(self, end_result: GameEndResult) -> dict[str, Any] | None:
+        """終了時のチームの勝敗と個人の結果を、trace の team_result の payload にする。"""
+        from ai_rpg_world.domain.player.enum.player_outcome_enum import (
+            PlayerOutcomeEnum,
+        )
+
+        team_results = end_result.team_results
+        if not end_result.is_ended or team_results is None:
+            return None
+        registry = self._player_outcome_registry
+        _, team_reasons = self._satisfied_teams()
+        team_of: dict[int, str] = {}
+        teams_payload: list[dict[str, Any]] = []
+        for team in self.scenario.teams:
+            result = team_results[team.team_id]
+            teams_payload.append(
+                {
+                    "team_id": team.team_id,
+                    "name": team.name,
+                    "result": result.value,
+                    "satisfied": result is not GameResultEnum.LOSE,
+                    "reason": team_reasons[team.team_id],
+                    "member_player_ids": [int(pid) for pid in team.member_player_ids],
+                    "member_player_string_ids": [
+                        self.id_mapper.get_str("player", int(pid)) for pid in team.member_player_ids
+                    ],
+                }
+            )
+            for pid in team.member_player_ids:
+                team_of[int(pid)] = team.team_id
+        players_payload: list[dict[str, Any]] = []
+        for pid in self.get_player_ids():
+            team_id = team_of[int(pid)]
+            outcome = registry.get_outcome(pid) if registry is not None else PlayerOutcomeEnum.UNRESOLVED
+            players_payload.append(
+                {
+                    "player_id": int(pid),
+                    "player_string_id": self.id_mapper.get_str("player", int(pid)),
+                    "player_name": self.get_player_name(pid),
+                    "team_id": team_id,
+                    "outcome": outcome.value,
+                    "result": team_results[team_id].value,
+                }
+            )
+        return {
+            "reason": end_result.reason,
+            "teams": teams_payload,
+            "players": players_payload,
+        }
 
     def _all_players_unable_to_act(self, registry: Any) -> bool:
         """全 player が outcome 確定済み、または unresolved でも down 済みかを返す。"""
@@ -4276,6 +3653,7 @@ class WorldRuntime:
         flags = self._world_flag_state.as_frozen_set()
         player_ids = self.get_player_ids()
         from ai_rpg_world.domain.common.value_object import WorldTick
+
         tick = WorldTick(self._tick)
         # 陣営条件 (SURVIVING_PLAYERS_WITH_STATE_AT_MOST) の判定材料。
         # 役割は PlayerStatusAggregate.state、生死は outcome registry が持つ。
@@ -4285,52 +3663,84 @@ class WorldRuntime:
         from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
             GameEndConditionTypeEnum,
         )
+
         all_end_conditions = (
             *self.scenario.win_conditions,
             *self.scenario.lose_conditions,
             *self.scenario.end_conditions,
         )
         needs_faction_inputs = any(
-            c.condition_type in (
+            c.condition_type
+            in (
                 GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST,
                 GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE,
             )
             for c in all_end_conditions
         )
         needs_outcome_inputs = needs_faction_inputs or any(
-            c.condition_type
-            is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED
-            for c in all_end_conditions
+            c.condition_type is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED for c in all_end_conditions
         )
-        player_states = (
-            self._collect_player_states(player_ids) if needs_faction_inputs else None
-        )
-        player_outcomes = (
-            self._collect_player_outcomes(player_ids) if needs_outcome_inputs else None
-        )
+        player_states = self._collect_player_states(player_ids) if needs_faction_inputs else None
+        player_outcomes = self._collect_player_outcomes(player_ids) if needs_outcome_inputs else None
+        if self.scenario.teams:
+            # チームの win を end より先に見る。勝ちが決まった tick に end も
+            # 成立していても、勝ったチームを負けにしない。
+            satisfied, team_reasons = self._satisfied_teams()
+            if satisfied:
+                return GameEndResult(
+                    is_ended=True,
+                    result=None,
+                    reason=" / ".join(
+                        f"{team.name}: {team_reasons[team.team_id]}"
+                        for team in self.scenario.teams
+                        if team.team_id in satisfied
+                    ),
+                    player_outcomes=self._collect_player_outcomes(player_ids),
+                    team_results=decide_team_results(self.scenario.teams, satisfied),
+                )
         for wc in self.scenario.win_conditions:
             result = self._game_end_evaluator.evaluate(
-                graph, wc, flags, player_ids, tick,
-                player_states=player_states, player_outcomes=player_outcomes,
+                graph,
+                wc,
+                flags,
+                player_ids,
+                tick,
+                player_states=player_states,
+                player_outcomes=player_outcomes,
                 result_on_match=GameResultEnum.WIN,
             )
             if result.is_ended:
                 return result
         for lc in self.scenario.lose_conditions:
             result = self._game_end_evaluator.evaluate(
-                graph, lc, flags, player_ids, tick,
-                player_states=player_states, player_outcomes=player_outcomes,
+                graph,
+                lc,
+                flags,
+                player_ids,
+                tick,
+                player_states=player_states,
+                player_outcomes=player_outcomes,
                 result_on_match=GameResultEnum.LOSE,
             )
             if result.is_ended:
                 return result
         for ec in self.scenario.end_conditions:
             result = self._game_end_evaluator.evaluate(
-                graph, ec, flags, player_ids, tick,
-                player_states=player_states, player_outcomes=player_outcomes,
+                graph,
+                ec,
+                flags,
+                player_ids,
+                tick,
+                player_states=player_states,
+                player_outcomes=player_outcomes,
                 result_on_match=None,
             )
             if result.is_ended:
+                if self.scenario.teams:
+                    return replace(
+                        result,
+                        team_results=decide_team_results(self.scenario.teams, frozenset()),
+                    )
                 return result
         return GameEndResult(is_ended=False, result=None, reason="ゲーム続行中")
 
@@ -4351,10 +3761,27 @@ class WorldRuntime:
         from ai_rpg_world.domain.player.enum.player_outcome_enum import (
             PlayerOutcomeEnum,
         )
+
         registry = self._player_outcome_registry
         if registry is None:
             return {int(pid): PlayerOutcomeEnum.UNRESOLVED for pid in player_ids}
         return {int(pid): registry.get_outcome(pid) for pid in player_ids}
+
+    def _being_observer(self, player_id: PlayerId) -> Observer:
+        """契約の観測に写すときの、受け取る本人の事実。盤にいない人の場所は分からないとする。"""
+        from ai_rpg_world.application.observation.being_contract import Observer
+
+        try:
+            place_name: str | None = self.get_player_spot_name(player_id)
+        except Exception:
+            place_name = None
+        minutes = _minutes_per_tick(self.scenario)
+        return Observer(
+            player_id=player_id,
+            name=self.get_player_name(player_id),
+            place_name=place_name,
+            seconds_per_tick=None if minutes is None else float(minutes * 60),
+        )
 
     def get_player_spot_name(self, player_id: PlayerId) -> str:
         graph = self._spot_graph_repo.find_graph()
@@ -4389,17 +3816,6 @@ class WorldRuntime:
         return str(value)
 
 
-_LLM_TOOL_MODE_DEFAULT = "default"
-_LLM_TOOL_MODE_PURE_SPOT_GRAPH = "pure_spot_graph"
-
-
-def _build_context_format_strategy_from_config(
-    cfg: ResolvedLlmRuntimeConfig,
-) -> SectionBasedContextFormatStrategy:
-    """resolved config から context format strategy を組む。"""
-    return SectionBasedContextFormatStrategy(section_order=cfg.prompt_section_order)
-
-
 def _build_short_term_memory(
     cfg: ResolvedLlmRuntimeConfig,
     *,
@@ -4407,6 +3823,8 @@ def _build_short_term_memory(
     world_character: CharacterPromptInput | None,
     persona_block: str,
     event_store: UnifiedRecentEventStore,
+    aux_llm_call_sink: AuxLlmCallSink | None,
+    on_compacted: Callable[[PlayerId, Sequence[Any]], None] | None = None,
 ) -> IShortTermMemory:
     """PR #451 (PR 6/6): 短期記憶を **「全部揃ってから 1 回 build」** で作る。
 
@@ -4421,8 +3839,8 @@ def _build_short_term_memory(
     新構造 (本 PR):
       1. cfg + scenario + persona から LLM client / summary services /
          persona resolver を **構築時点で全部揃える**
-      2. ``SummarizingShortTermMemory(summary_service=X, long_summary_service=Y,
-         persona_resolver=Z)`` を ctor 一発で組む
+      2. ``SummarizingShortTermMemory(summary_service=X, persona_resolver=Z)``
+         を ctor 一発で組む
       3. ``set_summary_services`` 経由の後注入経路は廃止
 
     trace_recorder / current_tick は runtime instance に依存するため、別経路
@@ -4435,23 +3853,6 @@ def _build_short_term_memory(
         world_character: 操作対象キャラ (rich persona を割り当てる対象)
         persona_block: world_character 由来の persona テキスト
     """
-    from ai_rpg_world.application.llm.wiring.feature_flags import (
-        SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
-        log_short_term_memory_kind_state,
-    )
-
-    log_short_term_memory_kind_state(cfg.short_term_memory_kind)
-    if cfg.short_term_memory_kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
-        return DefaultSlidingWindowMemory(
-            event_store=event_store,
-            turn_cap=cfg.short_term_memory_turn_cap,
-            compact_turn_count=cfg.short_term_memory_turn_compact_count,
-        )
-
-    # rolling_summary 経路: LLM 経路を **構築時点で揃える**
-    from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
-        ShortTermMemoryLongSummaryService,
-    )
     from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
         ShortTermMemorySummaryService,
     )
@@ -4464,39 +3865,99 @@ def _build_short_term_memory(
     from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
     summary_service = None
-    long_summary_service = None
     persona_resolver = None
     if cfg.llm_client_kind == "litellm":
         try:
-            client = create_llm_client_from_config(cfg)
+            client = create_llm_client_from_config(cfg, aux_call_sink=aux_llm_call_sink)
         except Exception:
             logger.exception("LLM client factory failed; short-term LLM services disabled")
             client = None
         if isinstance(client, LiteLLMClient):
             summary_service = ShortTermMemorySummaryService(client)
-            long_summary_service = ShortTermMemoryLongSummaryService(client)
             persona_resolver = _build_persona_resolver(
                 scenario=scenario,
                 world_character=world_character,
                 persona_block=persona_block,
             )
             logger.info(
-                "short-term memory: LLM 経路を ctor 注入 (rolling_summary + LiteLLM)。"
-                "L4 / L5 は LLM 圧縮で生成される。"
+                "short-term memory: LLM 経路を ctor 注入 (rolling_summary + LiteLLM)。L4 は LLM 圧縮で生成される。"
             )
         else:
             logger.info(
                 "LLM_CLIENT=litellm が未取得。short-term memory は template fallback "
-                "only で動作 (L4 / L5 の LLM 圧縮は無効)。"
+                "only で動作 (L4 の LLM 圧縮は無効)。"
             )
 
     return SummarizingShortTermMemory(
         summary_service=summary_service,
-        long_summary_service=long_summary_service,
         persona_resolver=persona_resolver,
         event_store=event_store,
-        turn_cap=cfg.short_term_memory_turn_cap,
-        compact_turn_count=cfg.short_term_memory_turn_compact_count,
+        on_compacted=on_compacted,
+    )
+
+
+def _wire_backstory_writing(
+    cfg: ResolvedLlmRuntimeConfig,
+    *,
+    runtime: WorldRuntime,
+    dispatcher: EventDispatcher[None],
+    being_id_of: Callable[[PlayerId], BeingId | None],
+    persona_of_player: Callable[[int], tuple[str, str]],
+) -> None:
+    """短期記憶が頼んだいきさつを、非同期の配送で作り、その Being のターンの始めに入れる (design_decisions D1824-12)。"""
+    from ai_rpg_world.application.being.being_backstory_writing import BeingBackstoryWriting
+    from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
+        IShortTermMemorySummaryCompletionPort,
+    )
+    from ai_rpg_world.application.llm.services.stub_backstory_completion import (
+        stub_backstory_completion,
+    )
+    from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+        create_llm_client_from_config,
+    )
+    from ai_rpg_world.being.domain.short_term_memory import BackstoryAsked
+    from ai_rpg_world.being.infrastructure.llm_backstory_writer import LlmBackstoryWriter
+    from ai_rpg_world.eventing import AsyncDelivery
+    from ai_rpg_world.eventing.delivery import DeliveryChannel, DeliveryGuarantee
+
+    complete_json: Callable[[list[dict[str, str]]], Any]
+    if cfg.llm_client_kind == "litellm":
+        client = create_llm_client_from_config(cfg, aux_call_sink=runtime._aux_llm_call_sink)
+        if not isinstance(client, IShortTermMemorySummaryCompletionPort):
+            raise RuntimeError("backstory writing needs an LLM client that can write summaries")
+        complete_json = client.complete_short_term_summary_json
+    else:
+        complete_json = stub_backstory_completion
+
+    def _persona_of_being(being_id: BeingId) -> tuple[str, str]:
+        for player_id in runtime.get_player_ids():
+            if being_id_of(player_id) == being_id:
+                return persona_of_player(int(player_id.value))
+        raise LookupError(f"no player acts as {being_id.value}")
+
+    writing = BeingBackstoryWriting(
+        writer=LlmBackstoryWriter(complete_json),
+        store=runtime._being_short_term_memory_store,
+        persona_of=_persona_of_being,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
+    dispatcher.register_after_commit(
+        BackstoryAsked,
+        writing.note_person,
+        channel=DeliveryChannel.AUXILIARY,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    dispatcher.register_after_commit(
+        BackstoryAsked,
+        writing.write,
+        channel=DeliveryChannel.AUXILIARY,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+        asynchronous=AsyncDelivery(
+            executor=runtime.async_event_executor,
+            recipient_key=lambda event: event.being_id.value,
+            apply_result=writing.apply,
+        ),
     )
 
 
@@ -4509,7 +3970,7 @@ def _build_persona_resolver(
     """player_id -> (name, persona_block) を引ける callable を組む。
 
     旧 _wire_short_term_llm_services 内に inline されていたロジックを抽出。
-    subjective scheduler wiring と同じ規則:
+    規則:
         - world_character 指定 player には rich persona
         - それ以外は fallback persona
     """
@@ -4522,9 +3983,7 @@ def _build_persona_resolver(
                 if (ec_cid and s.string_id == ec_cid) or (ec_name and s.name == ec_name):
                     name_persona_by_pid[int(s.player_id)] = (s.name, persona_block)
                 else:
-                    fallback = build_persona_block_from_character(
-                        None, fallback_display_name=s.name
-                    )
+                    fallback = build_persona_block_from_character(None, fallback_display_name=s.name)
                     name_persona_by_pid[int(s.player_id)] = (s.name, fallback)
         else:
             for s in scenario.player_spawns:
@@ -4536,13 +3995,79 @@ def _build_persona_resolver(
     return _resolver
 
 
+def _record_meetings_at_spawn(scenario: ScenarioLoadResult, acquaintances: PlayerAcquaintances) -> None:
+    """初期配置で同じ場所にいた相手とは、最初から顔を合わせている。
+
+    人が入ってきた観測は配置のあとにしか出ないので、初期配置の同席はここで記録する。
+    """
+    spawns_by_spot: dict[int, list[PlayerSpawnConfig]] = {}
+    for spawn in scenario.player_spawns:
+        spawns_by_spot.setdefault(spawn.spawn_spot_id.value, []).append(spawn)
+    for spawns in spawns_by_spot.values():
+        for spawn in spawns:
+            for other in spawns:
+                if other is not spawn:
+                    acquaintances.record_meeting(PlayerId(spawn.player_id), other.name)
+
+
+def _build_player_episode_writing(
+    cfg: ResolvedLlmRuntimeConfig,
+    *,
+    runtime: WorldRuntime,
+    turn_reader: MemoryTurnReader,
+    persona_of: Callable[[int], tuple[str, str]],
+) -> Any:
+    """#1626: 書き起こしの部品を組む。LiteLLM が組めなければ起動を止める。"""
+    from ai_rpg_world.application.being.player_episode_writing import (
+        PlayerEpisodeWriting,
+    )
+    from ai_rpg_world.application.llm.services.stub_episode_writing_completion import (
+        StubEpisodeWritingCompletion,
+    )
+    from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+        create_llm_client_from_config,
+    )
+    from ai_rpg_world.application.observation.being_contract import (
+        environment_entry_for_player,
+    )
+    from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
+    from ai_rpg_world.being.infrastructure.llm_episode_writer import (
+        EpisodeWritingCompletion,
+        LlmEpisodeWriter,
+    )
+
+    completion: EpisodeWritingCompletion
+    if cfg.llm_client_kind == "litellm":
+        client = create_llm_client_from_config(cfg, aux_call_sink=runtime._aux_llm_call_sink)
+        if not isinstance(client, EpisodeWritingCompletion):
+            raise RuntimeError("episode writing needs an LLM client that can write episodes")
+        completion = client
+    else:
+        completion = StubEpisodeWritingCompletion()
+
+    def _being_id_of(player_id: PlayerId) -> BeingId | None:
+        acting = runtime._acting_being_for(player_id)
+        return acting.being_id if acting is not None else None
+
+    return PlayerEpisodeWriting(
+        writer=LlmEpisodeWriter(completion),
+        add_episodes=AddEpisodesToMemory(runtime._being_episode_store),
+        being_id_of=_being_id_of,
+        turn_reader=turn_reader,
+        environment_name_of=lambda pid: environment_entry_for_player(runtime.scenario, pid).environment_name,
+        persona_of=persona_of,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
+
+
 def create_world_runtime(
     scenario_path: Path,
     *,
     world_character: CharacterPromptInput | None = None,
     llm_turn_trigger: ILlmTurnTrigger | None = None,
-    include_todo_tools: bool | None = None,
     config: ResolvedLlmRuntimeConfig | None = None,
+    round_number: int = 1,
 ) -> WorldRuntime:
     """シナリオ JSON からゲームランタイムを構築する。
 
@@ -4550,15 +4075,13 @@ def create_world_runtime(
         llm_turn_trigger: 省略時は :class:`WorldStandaloneNoopLlmTurnTrigger`。
             スポットグラフのティック後フック用。プレゼン層のセッションでは
             ``runtime.set_simulation_llm_turn_trigger(…)`` で本物に差し替え可能。
-        include_todo_tools: ``True`` で TODO 系を含める従来構成、``False`` で
-            純スポットグラフモード (TODO 系を除外、speech は残す)。``None``
-            (既定) の場合は環境変数 ``LLM_TOOL_MODE`` から解決する。Issue #155
-            (TODO 設計の再評価) の判断材料を取るための比較実験用。
         config: PR #448 (PR 3/6): LLM runtime 設定の単一窓口。省略時は
             ``ResolvedLlmRuntimeConfig.from_mapping()`` で空設定から既定値を
             resolve。entrypoint (run_scenario_experiment 等) で既に
             from_mapping() 済みの cfg を渡せば、**run_start trace と
             実 wiring の同一性を構造で保証する**ための引数。
+        round_number: 同じシナリオを繰り返し遊ぶときの回の番号 (#1514)。
+            シナリオの ``round_assignment`` を、シードとこの番号で割り当てる。
     """
     # 引数 cfg が来ていればそれを使う。来ていなければ空設定の既定値で構築する。
     # 実験に意味を持つ設定は環境変数から読まない。
@@ -4569,12 +4092,36 @@ def create_world_runtime(
     if config is None:
         config = ResolvedLlmRuntimeConfig.from_mapping()
 
-    loader = ScenarioLoader()
-    scenario = loader.load_from_file(scenario_path)
-
-    fallback_name = (
-        scenario.player_spawns[0].name if scenario.player_spawns else "探索者"
+    from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+        WorldTickFailureIsolator,
+        WorldTickFailurePolicy,
     )
+
+    world_tick_failure_isolator = WorldTickFailureIsolator(
+        policy=WorldTickFailurePolicy.parse(config.world_tick_failure_policy),
+        # recorder は set_trace_recorder で後から入るので、呼ばれた時点の値を見る。
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+    )
+    _record_after_commit_failure = world_tick_failure_isolator.after_commit_failure_observer(
+        tick_provider=lambda: runtime.current_tick(),
+    )
+    from ai_rpg_world.application.llm.services.aux_llm_call_trace_sink import (
+        AuxLlmCallTraceSink,
+    )
+
+    aux_llm_call_sink = AuxLlmCallTraceSink(
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
+
+    loader = ScenarioLoader()
+    scenario = loader.load_from_file(
+        scenario_path,
+        random_seed=config.scenario_random_seed,
+        round_number=round_number,
+    )
+
+    fallback_name = scenario.player_spawns[0].name if scenario.player_spawns else "探索者"
     persona_block = build_persona_block_from_character(
         world_character,
         fallback_display_name=fallback_name,
@@ -4583,7 +4130,6 @@ def create_world_runtime(
     # win/lose/outcome のいずれかがあれば goal 前提の文面、無ければ永続世界として
     # escape/goal 前提 (脱出できない / 勝利条件・最終目的) を中立化する。既存シナリオは
     # 全て game_end_conditions を持つので has_goal=True となり prompt は不変。
-    # 目的層の goal seed (locked 判定) とロジックを共有する (_scenario_has_goal)。
     _has_goal = _scenario_has_goal(scenario)
     safe_intro = safe_world_intro_text(scenario.metadata, has_goal=_has_goal)
     # 見取り図・陣営の内訳・点検の割り当ては **シナリオのデータから組み立てる**。
@@ -4613,18 +4159,24 @@ def create_world_runtime(
     )
     if briefing:
         safe_intro = f"{safe_intro}\n\n{briefing}" if safe_intro else briefing
-    participants = _other_explorer_names_for_world_system_prompt(
-        scenario.player_spawns, world_character
-    )
-    system_prompt_text = build_world_system_prompt(
-        world_title=scenario.metadata.title,
-        persona_block=persona_block,
-        safe_intro=safe_intro,
-        participant_names=participants,
-        enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
-        expected_result_policy=config.expected_result_policy,
-        has_goal=_has_goal,
-    )
+
+    # 記憶の指示は、組み上がった runtime が実際に出す欄とツールに合わせる (#1616)。
+    # そのため組み立ては runtime を作り終えたあと (この関数の末尾) で行う。
+    def _world_system_prompt(
+        persona: str,
+        *,
+        episode_index_shown: bool,
+        episode_recall_offered: bool,
+    ) -> str:
+        return build_world_system_prompt(
+            world_title=scenario.metadata.title,
+            persona_block=persona,
+            safe_intro=safe_intro,
+            has_goal=_has_goal,
+            limits_actions=scenario.metadata.limits_actions,
+            episode_index_shown=episode_index_shown,
+            episode_recall_offered=episode_recall_offered,
+        )
 
     # Issue #264 第16回実験 fix: シナリオに player_spawns がある場合、
     # 各 player に persona を埋めた system prompt を個別に構築する。
@@ -4642,8 +4194,9 @@ def create_world_runtime(
     #   - spawn.persona_prompt が設定されていれば最優先
     #   - world_character がこの spawn を指していれば rich persona
     #   - それ以外は fallback persona (= スポーン名から生成された最小ペルソナ)
-    #   - participant_names は各 player から見た「自分以外の探索者」のリスト
-    system_prompts_by_player_id: dict[int, str] = {}
+    #   - 誰を知っているかは system prompt に書かない。入るときの紹介として
+    #     Being に渡し、毎ターンのメッセージの【知っている人】に出す (#1520)
+    personas_by_player_id: dict[int, str] = {}
     if scenario.player_spawns:
         # world_character に一致する spawn を特定
         world_spawn: PlayerSpawnConfig | None = None
@@ -4656,20 +4209,7 @@ def create_world_runtime(
                     break
 
         for spawn in scenario.player_spawns:
-            # この spawn から見た「他者」名リスト。仲間の印はここで世界内の
-            # 表示へ解決し、role の生値を汎用 prompt builder へ渡さない。
             viewer_role = str(spawn.initial_state.get("role") or "")
-            reveals_allies = viewer_role in scenario.mutually_known_roles
-            other_names = tuple(
-                (
-                    f"{other.name} (あなたと同じ側)"
-                    if reveals_allies
-                    and other.initial_state.get("role") == viewer_role
-                    else other.name
-                )
-                for other in scenario.player_spawns
-                if other is not spawn
-            )
             # この spawn のペルソナ (優先度):
             #   1. spawn.persona_prompt (Phase E): シナリオ JSON で個別宣言された
             #      ペルソナ。多 player シナリオの第一選択肢
@@ -4690,17 +4230,7 @@ def create_world_runtime(
             role_persona = scenario.role_personas.get(viewer_role)
             if role_persona:
                 this_persona = f"{this_persona}\n\n{role_persona}"
-            system_prompts_by_player_id[int(spawn.player_id)] = (
-                build_world_system_prompt(
-                    world_title=scenario.metadata.title,
-                    persona_block=this_persona,
-                    safe_intro=safe_intro,
-                    participant_names=other_names,
-                    enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
-                    expected_result_policy=config.expected_result_policy,
-                    has_goal=_has_goal,
-                )
-            )
+            personas_by_player_id[int(spawn.player_id)] = this_persona
 
     data_store = InMemoryDataStore()
 
@@ -4718,10 +4248,7 @@ def create_world_runtime(
         # consume_effect が無いアイテムは従来通り QUEST (素材・装備・道具)。
         # ItemSpec.__post_init__ の invariant: consume_effect は CONSUMABLE 時
         # のみ非 None で居られる。
-        item_type = (
-            ItemType.CONSUMABLE if item_def.consume_effect is not None
-            else ItemType.QUEST
-        )
+        item_type = ItemType.CONSUMABLE if item_def.consume_effect is not None else ItemType.QUEST
         spec = ItemSpec(
             item_spec_id=item_def.spec_id,
             name=item_def.name,
@@ -4778,15 +4305,20 @@ def create_world_runtime(
     for spawn in scenario.player_spawns:
         pid = PlayerId(spawn.player_id)
         exp_table = ExpTable(base_exp=100.0, exponent=1.5)
-        # PR 2 (#227): PlayerSpeechApplicationService が status.current_coordinate
-        # を要求 (タイル系の SpeechRecipientStrategy 用) するため、spot_graph
-        # でも sentinel として Coordinate(0,0,0) を埋める。
-        # SpotGraphSpeechRecipientStrategy は coordinate を読まないので値は
-        # 影響しない。
         status = PlayerStatusAggregate(
             player_id=pid,
-            base_stats=BaseStats(max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05),
-            stat_growth_factor=StatGrowthFactor(hp_factor=1.0, mp_factor=1.0, attack_factor=1.0, defense_factor=1.0, speed_factor=1.0, critical_rate_factor=0.0, evasion_rate_factor=0.0),
+            base_stats=BaseStats(
+                max_hp=100, max_mp=50, attack=10, defense=10, speed=10, critical_rate=0.05, evasion_rate=0.05
+            ),
+            stat_growth_factor=StatGrowthFactor(
+                hp_factor=1.0,
+                mp_factor=1.0,
+                attack_factor=1.0,
+                defense_factor=1.0,
+                speed_factor=1.0,
+                critical_rate_factor=0.0,
+                evasion_rate_factor=0.0,
+            ),
             exp_table=exp_table,
             growth=Growth(level=1, total_exp=0, exp_table=exp_table),
             # シナリオが宣言した所持金の初期値。宣言しなければ 0 で、
@@ -4795,10 +4327,7 @@ def create_world_runtime(
             hp=Hp(value=100, max_hp=100),
             mp=Mp(value=50, max_mp=50),
             stamina=Stamina(value=100, max_stamina=100),
-            navigation_state=PlayerNavigationState.from_parts(
-                current_spot_id=spawn.spawn_spot_id,
-                current_coordinate=Coordinate(0, 0, 0),
-            ),
+            current_spot_id=spawn.spawn_spot_id,
             spot_navigation_state=PlayerSpotNavigationState.at_rest(spawn.spawn_spot_id),
             # シナリオが宣言した初期 state (役割・印など) をそのまま載せる。
             #
@@ -4840,12 +4369,8 @@ def create_world_runtime(
             graph.place_entity(eid, spawn.spawn_spot_id)
         # PR4: 初回 spawn の spot encounter を直接記録する (handler 経由では
         # 拾えない、上のコメント参照)。tick は 0 (= scenario 開始時点)。
-        spawn_spot_str_id = scenario.id_mapper.get_str(
-            "spot", spawn.spawn_spot_id.value
-        )
-        encounter_memory.observe(
-            pid, EncounterKey.spot(spawn_spot_str_id), 0
-        )
+        spawn_spot_str_id = scenario.id_mapper.get_str("spot", spawn.spawn_spot_id.value)
+        encounter_memory.observe(pid, EncounterKey.spot(spawn_spot_str_id), 0)
 
     # ── Phase B-2a: モンスターの初期配置 ──
     # シナリオで宣言された MonsterTemplate を template repo に登録し、
@@ -4856,10 +4381,6 @@ def create_world_runtime(
     monster_template_repo = InMemoryMonsterTemplateRepository()
     skill_loadout_repo = InMemorySkillLoadoutRepository(data_store)
     if scenario.monster_templates or scenario.monster_placements:
-        # NOTE: Coordinate / WorldTick はモジュールトップで import 済 (player
-        # setup でも使われている)。ここでローカル import すると Python の
-        # 関数スコープ規則で「local variable referenced before assignment」
-        # になり、上の player 初期化を壊す。
         from ai_rpg_world.domain.common.value_object import WorldTick
         from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
             MonsterAggregate,
@@ -4871,14 +4392,11 @@ def create_world_runtime(
         from ai_rpg_world.domain.skill.value_object.skill_loadout_id import (
             SkillLoadoutId,
         )
-        from ai_rpg_world.domain.world.value_object.world_object_id import (
-            WorldObjectId,
-        )
 
         for st in scenario.monster_templates:
             monster_template_repo.save(st.template)
 
-        # MonsterId / WorldObjectId / SkillLoadoutId の単純な incrementing
+        # MonsterId / SkillLoadoutId の単純な incrementing
         # 採番。本サービスはシナリオ起動時の 1 回だけしか呼ばれないので
         # in-memory counter で十分。
         monster_counter = 1
@@ -4890,22 +4408,14 @@ def create_world_runtime(
             if placement.spawn_condition is not None and not placement.spawn_condition.is_always:
                 continue
             template = next(
-                (
-                    st.template
-                    for st in scenario.monster_templates
-                    if st.string_id == placement.template_string_id
-                ),
+                (st.template for st in scenario.monster_templates if st.string_id == placement.template_string_id),
                 None,
             )
             if template is None:
-                raise ValueError(
-                    f"monster placement references unknown template: "
-                    f"{placement.template_string_id}"
-                )
+                raise ValueError(f"monster placement references unknown template: {placement.template_string_id}")
             spot_int = scenario.id_mapper.get_int("spot", placement.spot_string_id)
             spot_id = SpotId.create(spot_int)
             monster_id = MonsterId(monster_counter)
-            world_object_id = WorldObjectId(1_000_000 + monster_counter)
             loadout = SkillLoadoutAggregate.create(
                 loadout_id=SkillLoadoutId(loadout_counter),
                 owner_id=monster_counter,
@@ -4916,13 +4426,7 @@ def create_world_runtime(
             monster = MonsterAggregate.reconstitute(
                 monster_id=monster_id,
                 template=template,
-                world_object_id=world_object_id,
                 skill_loadout=loadout,
-                coordinate=Coordinate(
-                    x=placement.coordinate_x,
-                    y=placement.coordinate_y,
-                    z=placement.coordinate_z,
-                ),
                 spot_id=spot_id,
                 current_tick=WorldTick(0),
             )
@@ -4965,6 +4469,7 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import (
         InMemoryLootTableRepository,
     )
+
     loot_table_repo = InMemoryLootTableRepository()
     for lt_def in scenario.loot_tables:
         entries = [
@@ -4976,24 +4481,28 @@ def create_world_runtime(
             )
             for loot_entry in lt_def.entries
         ]
-        loot_table_repo.save(LootTableAggregate.create(
-            loot_table_id=LootTableId.create(lt_def.table_id),
-            entries=entries,
-            name=lt_def.name,
-        ))
+        loot_table_repo.save(
+            LootTableAggregate.create(
+                loot_table_id=LootTableId.create(lt_def.table_id),
+                entries=entries,
+                name=lt_def.name,
+            )
+        )
     # effect_service に loot_table_repo を注入。
+    from ai_rpg_world.application.world_runtime.world_random import world_random
     from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
         SpotInteractionService,
     )
     from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
         WorldGraphEffectService,
     )
+
+    _seed = config.scenario_random_seed
     _effect_service = WorldGraphEffectService(
         loot_table_repository=loot_table_repo,
+        random_source=world_random(_seed, round_number, "loot"),
         ongoing_condition_resolutions={
-            condition.flag: condition.resolution
-            for condition in scenario.ongoing_conditions
-            if condition.resolution
+            condition.flag: condition.resolution for condition in scenario.ongoing_conditions if condition.resolution
         },
     )
     _interaction_domain_service = SpotInteractionService(effect_service=_effect_service)
@@ -5050,9 +4559,7 @@ def create_world_runtime(
         # するために repo を渡す。これまで None だったため damage_specs が
         # 黙って捨てられていた (廃屋の崩れた梁 / 岩礁の縁 等が flavor 止まり)。
         player_status_repository=player_status_repo,
-        player_display_name_resolver=lambda pid: player_name_map.get(
-            int(pid), f"プレイヤー({int(pid)})"
-        ),
+        player_display_name_resolver=lambda pid: player_name_map.get(int(pid), f"プレイヤー({int(pid)})"),
         departed_position_store=departed_position_store,
         player_perception_policy=player_perception_policy,
         item_interaction_registry=scenario.item_interaction_registry,
@@ -5074,6 +4581,7 @@ def create_world_runtime(
     from ai_rpg_world.application.world_graph.spot_effective_lighting_resolver import (
         SpotEffectiveLightingResolver,
     )
+
     # 対人行為の再使用間隔。world 局所の状態なので Being ではなく world
     # snapshot に載る (InteractionCooldownSubsystemCodec)。
     interaction_cooldown_store = InteractionCooldownStore()
@@ -5114,7 +4622,7 @@ def create_world_runtime(
         overflow_sink=ground_overflow_sink,
     )
     # spot-graph 世界専用の drop/pickup サービス。
-    # tile-map 時代の ItemDroppedFromInventoryDropHandler は
+    # タイルマップで品を落とす旧受け手は
     # physical_map 依存で world_runtime では発火しないため、本サービスが
     # SpotInterior.ground_items に直接書き込んで spot-graph 経路で
     # 拾えるようにする。LLM tool 配線とイベント/観測統合はフォロー
@@ -5139,7 +4647,7 @@ def create_world_runtime(
         InMemoryUnitOfWorkTransactionFactory,
     )
 
-    item_transfer_dispatcher = CommandEventDispatcher()
+    item_transfer_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     for item_transfer_event_type in (
         PlayerDroppedItemEvent,
         PlayerGaveItemEvent,
@@ -5155,15 +4663,14 @@ def create_world_runtime(
         InMemoryUnitOfWorkTransactionFactory(data_store),
         sync_dispatcher=item_transfer_dispatcher,
         after_commit_handoff=item_transfer_dispatcher,
-        repository_provider_factory=(
-            InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)
-        ),
+        repository_provider_factory=(InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)),
     )
     item_transfer_service = SpotGraphItemTransferService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         item_transfer_command_scope_factory=item_transfer_scope_factory,
     )
+
     def _observe_expired_trade_offer(event: Any) -> None:
         """流れた取引を当事者へ知らせる。
 
@@ -5176,9 +4683,7 @@ def create_world_runtime(
 
         graph = spot_graph_repo.find_graph()
         try:
-            spot_id = graph.get_entity_spot(
-                EntityId.create(int(event.offerer_player_id))
-            )
+            spot_id = graph.get_entity_spot(EntityId.create(int(event.offerer_player_id)))
         except Exception:
             return
         pipeline_event_publisher.publish_all(
@@ -5187,12 +4692,8 @@ def create_world_runtime(
                     aggregate_id=graph.graph_id,
                     aggregate_type="SpotGraphAggregate",
                     entity_id=EntityId.create(int(event.target_player_id)),
-                    partner_entity_id=EntityId.create(
-                        int(event.offerer_player_id)
-                    ),
-                    offerer_entity_id=EntityId.create(
-                        int(event.offerer_player_id)
-                    ),
+                    partner_entity_id=EntityId.create(int(event.offerer_player_id)),
+                    offerer_entity_id=EntityId.create(int(event.offerer_player_id)),
                     spot_id=spot_id,
                     kind="expired",
                     gives_text=_describe_trade_side(event.gives),
@@ -5201,7 +4702,7 @@ def create_world_runtime(
             )
         )
 
-    trade_offer_expiry_stage = TradeOfferExpiryStage()
+    trade_offer_expiry_stage = TradeOfferExpiryStage(failure_isolator=world_tick_failure_isolator)
     player_trade_service = PlayerTradeService(
         pending_trade_offer_store=pending_trade_offer_store,
         trade_freeze_service=trade_freeze_service,
@@ -5214,9 +4715,7 @@ def create_world_runtime(
         entity_name_resolver=lambda entity_id: _resolve_entity_name(entity_id),
         # 期限は世界の広さで決まるのでシナリオが持つ。書かれていなければ
         # サービス側の既定に任せる (既定値を 2 箇所に置かない)。
-        **_optional_kwarg(
-            "expires_in_ticks", scenario.player_trade_offer_expires_in_ticks
-        ),
+        **_optional_kwarg("expires_in_ticks", scenario.player_trade_offer_expires_in_ticks),
         overflow_sink=refuse_overflow("同席取引の決済"),
     )
     market_board_store = InMemoryMarketBoardStore(
@@ -5259,7 +4758,10 @@ def create_world_runtime(
     # 期限を過ぎた注文を毎 tick 片付ける。**これを繋がないと、期限は
     # 宣言されているのに注文が永久に板へ残る** (v3 run で t33 の出品が
     # t80 まで生きていた)。
-    market_order_expiry_stage = MarketOrderExpiryStage(market_service=market_service)
+    market_order_expiry_stage = MarketOrderExpiryStage(
+        market_service=market_service,
+        failure_isolator=world_tick_failure_isolator,
+    )
     if scenario.market is not None:
         # 板が空だと相場感がゼロから始まり、最初の値付けが当てずっぽうになる。
         # 商人名義で数量有限の注文を置いておくと、売れれば自然に消える。
@@ -5297,54 +4799,6 @@ def create_world_runtime(
     def _resolve_entity_name(entity_id: int) -> str:
         return player_name_map.get(entity_id, f"プレイヤー({entity_id})")
 
-    # P-U3/P-U4 (停滞感の表出): 自己・他者の両方が共有する 1 本の provider。
-    # ``runtime`` / ``runtime._stagnation_pressure_store`` は本関数の後段で
-    # 構築される (state_builder は runtime インスタンス生成より前に組み立てる
-    # 既存の配線順)。closure は呼び出し時に free variable ``runtime`` を
-    # enclosing scope から遅延解決するので、実際に snapshot が build される
-    # 時点 (= create_world_runtime 完了後のリクエスト処理中) には
-    # ``runtime._aux_being_resolver`` / ``runtime._stagnation_pressure_store``
-    # は解決済みになっている。
-    #
-    # STAGNATION_PRESSURE_ENABLED が OFF のときは
-    # ``runtime._stagnation_pressure_store`` が None のままなので、この
-    # provider は常に none を返す (= 導入前とプロンプト完全一致)。
-    # episodic pipeline 自体が OFF (LLM_EPISODIC_ENABLED=0) で
-    # ``_aux_being_resolver`` が未構築の経路も同様に none へ縮退する。
-    #
-    # 呼び出し対象は自分自身 (P-U3) だけでなく builder の nearby ループが
-    # 引く他 player (P-U4) も含むため、関数名は「自己」に限定しない
-    # (旧名 ``_resolve_own_stagnation_band`` は誤解を招くため改名した)。
-    #
-    # store は組めているのに being が未解決 (= resolve_being_id が None) の
-    # ケースは、player が being に未 attach 等で正当に起こりうる一方、配線
-    # 漏れでも同じ none 縮退になり見分けが付かない。ログが無いと「停滞感が
-    # 永久に出ない」を「前進中で count==0」と区別できず、この機能が守りたい
-    # 「静かな失敗を弾く」という方針に反するので、player_id ごとに 1 回だけ
-    # 診断用の warning を残す (毎 tick 溢れさせないためのスロットル)。
-    # store 自体が None (= 機能無効) のときは何も出さない。
-    _stagnation_being_unresolved_warned: set[int] = set()
-
-    def _resolve_stagnation_band_for_player(player_id: int) -> str:
-        resolver = getattr(runtime, "_aux_being_resolver", None)
-        world_id = getattr(runtime, "_aux_being_default_world_id", None)
-        store = getattr(runtime, "_stagnation_pressure_store", None)
-        if resolver is None or world_id is None or store is None:
-            return STAGNATION_PRESSURE_BAND_NONE
-        being_id = resolver.resolve_being_id(world_id, PlayerId(player_id))
-        if being_id is None:
-            if player_id not in _stagnation_being_unresolved_warned:
-                _stagnation_being_unresolved_warned.add(player_id)
-                logger.warning(
-                    "stagnation_band_provider: player_id=%s に attach 済みの "
-                    "being が見つからず band は none に縮退する "
-                    "(この player については以後再警告しない)",
-                    player_id,
-                )
-            return STAGNATION_PRESSURE_BAND_NONE
-        count = store.get_by_being(being_id)
-        return resolve_stagnation_pressure_band(count)
-
     def _resolve_item_state(item_instance_id_value: int) -> dict[str, Any] | None:
         """Phase D-3a: instance_id から state dict を引く軽量 resolver。
 
@@ -5352,9 +4806,10 @@ def create_world_runtime(
         dict lookup なので毎 prompt 構築で叩いても問題なし。
         """
         from ai_rpg_world.domain.item.value_object.item_instance_id import (
-            ItemInstanceId as _IID,
+            ItemInstanceId,
         )
-        item = item_repo.find_by_id(_IID(item_instance_id_value))
+
+        item = item_repo.find_by_id(ItemInstanceId(item_instance_id_value))
         return dict(item.state) if item is not None else None
 
     def _build_inventory(pid: PlayerId) -> tuple[Any, ...]:
@@ -5371,6 +4826,7 @@ def create_world_runtime(
         seen_groups: dict[tuple[int, bool], list[Any]] = {}
         for slot_id in range(inv._max_slots):
             from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
             iid = inv.get_item_instance_id_by_slot(SlotId(slot_id))
             if iid is None:
                 continue
@@ -5393,11 +4849,7 @@ def create_world_runtime(
                     if item_spec_definition is not None
                     else (item.item_spec.usage_hint or "")
                 )
-                category_value = (
-                    item_spec_definition.category
-                    if item_spec_definition is not None
-                    else ""
-                )
+                category_value = item_spec_definition.category if item_spec_definition is not None else ""
                 seen_groups[key] = [
                     name,
                     0,
@@ -5448,9 +4900,7 @@ def create_world_runtime(
 
     # 光源アイテムを自動検出
     light_source_item_spec_ids = frozenset(
-        spec.item_spec_id
-        for spec in item_spec_repo.find_all()
-        if spec.is_light_source
+        spec.item_spec_id for spec in item_spec_repo.find_all() if spec.is_light_source
     )
 
     def _owned_item_spec_ids_provider(entity_id: int) -> frozenset[Any]:
@@ -5459,7 +4909,9 @@ def create_world_runtime(
             return frozenset()
         return collect_owned_item_spec_ids_from_inventory(inv, item_repo)
 
-    def _build_phase_label_resolver(day_night_config: Any) -> Any:
+    def _build_phase_label_resolver(
+        day_night_config: ScenarioDayNightConfig | None,
+    ) -> Callable[[str], str | None] | None:
         """シナリオが宣言した昼夜フェーズから「名前 → 呼び名」の解決器を作る。
 
         宣言が無い (昼夜サイクルを使わない世界) なら None を返し、時刻帯ヒントは
@@ -5470,11 +4922,7 @@ def create_world_runtime(
         """
         if day_night_config is None:
             return None
-        labels = {
-            phase.name: phase.display_text
-            for phase in day_night_config.cycle.phases
-            if phase.display_text
-        }
+        labels = {phase.name: phase.display_text for phase in day_night_config.cycle.phases if phase.display_text}
         return labels.get if labels else None
 
     def _build_monster_view_provider_for_runtime(_monster_repo: Any) -> Any:
@@ -5486,14 +4934,12 @@ def create_world_runtime(
         from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
             build_monster_view_provider,
         )
+
         return build_monster_view_provider(_monster_repo)
 
     def _describe_trade_side(side: Any) -> str:
         """取引の片側を、人が読める短い形にする。"""
-        parts = [
-            f"{_resolve_item_spec_name(spec_id)} {quantity}つ"
-            for spec_id, quantity in side.items
-        ]
+        parts = [f"{_resolve_item_spec_name(spec_id)} {quantity}つ" for spec_id, quantity in side.items]
         if side.gold:
             parts.append(f"{side.gold}G")
         return "・".join(parts) if parts else "なし"
@@ -5507,7 +4953,10 @@ def create_world_runtime(
         current = time_provider.get_current_tick().value
         return tuple(
             SpotGraphTradeOfferEntry(
-                offerer_name=_resolve_entity_name(int(offer.offerer_player_id)),
+                # 申し出た人は一覧と同じ呼び方で出す。応じる対象の名前と揃える (#1581)。
+                offerer_name=player_acquaintances.call_name(
+                    PlayerId(player_id), PlayerId(int(offer.offerer_player_id))
+                ),
                 gives_text=_describe_trade_side(offer.gives),
                 asks_text=_describe_trade_side(offer.asks),
                 remaining_ticks=max(0, offer.expires_at_tick - current),
@@ -5518,6 +4967,7 @@ def create_world_runtime(
     def _resolve_item_spec_name(spec_id_value: int) -> str:
         """item_spec_id → 表示名解決。地面アイテムの prompt 表示などで使う。"""
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId as _ISpecId
+
         spec = item_spec_repo.find_by_id(_ISpecId.create(spec_id_value))
         if spec is None:
             return ""
@@ -5538,10 +4988,7 @@ def create_world_runtime(
         appearance = str(getattr(entry, "appearance", "") or "").strip()
         appearance_suffix = f" {appearance}" if appearance else ""
         output = ObservationOutput(
-            prose=(
-                f"{entry.display_name}が同じ場所にいることに気づいた。"
-                f"{appearance_suffix}"
-            ).strip(),
+            prose=(f"{entry.display_name}が同じ場所にいることに気づいた。{appearance_suffix}").strip(),
             structured={
                 "type": "monster_encountered",
                 "monster_id": int(entry.monster_id),
@@ -5554,9 +5001,7 @@ def create_world_runtime(
         )
         runtime._emit_observation_directly(pid, output)
 
-    def _observe_fallen_body_for_player(
-        player_id: int, victim_entity_id: int, victim_name: str, is_dead: bool
-    ) -> None:
+    def _observe_fallen_body_for_player(player_id: int, victim_entity_id: int, victim_name: str, is_dead: bool) -> None:
         """初めて見た「倒れている人」を observation として届ける。
 
         **同席者行に出ているだけでは、気づいた瞬間が無い。** 行は毎 tick
@@ -5583,25 +5028,34 @@ def create_world_runtime(
         if encounter_memory.lookup(pid, key) is not None:
             return
         encounter_memory.observe(pid, key, _current_tick_provider())
+
+        def found_prose(name: str) -> str:
+            if is_dead:
+                return f"{name}が倒れているのを見つけた。動かない。"
+            return f"{name}が倒れているのを見つけた。"
+
         name = victim_name or "誰か"
-        prose = (
-            f"{name}が倒れているのを見つけた。動かない。"
-            if is_dead
-            else f"{name}が倒れているのを見つけた。"
-        )
+        prose = found_prose(name)
         # cue が読むのは int の spot_id_value。get_player_spot_id は trace 用の
         # 文字列を返すので使えない。
         body = runtime._fallen_body_registry.find(PlayerId(int(victim_entity_id)))
         spot_id_value = int(body.spot_id) if body is not None else None
         structured = {
             "type": "fallen_body_found",
-            # actor / spot_id_value は episodic cue が読む key。ここを外すと
-            # 「誰の」「どこで」が記憶の索引に乗らない。
             "actor": name,
             "is_dead": bool(is_dead),
         }
         if spot_id_value is not None:
             structured["spot_id_value"] = spot_id_value
+        # 体は見えているので届けるが、会っていない相手なら名前は分からない。
+        if_subject_unknown = (
+            SubjectUnknownView(
+                prose=found_prose("誰か"),
+                structured={k: v for k, v in structured.items() if k != "actor"},
+            )
+            if victim_name
+            else None
+        )
         runtime._emit_observation_directly(
             pid,
             ObservationOutput(
@@ -5611,6 +5065,8 @@ def create_world_runtime(
                 schedules_turn=True,
                 # 死体を見つけたら足は止まる。移動を続けるほうが不自然。
                 breaks_movement=True,
+                subject_name=victim_name or None,
+                if_subject_unknown=if_subject_unknown,
             ),
         )
 
@@ -5629,16 +5085,14 @@ def create_world_runtime(
     # prompt の状態組み立てへ渡す。これにより「同じ側」と表示した相手への
     # 必ず失敗する襲撃候補を消しつつ、raw の role 語彙を表示層へ持ち込まない。
     _role_by_player_id = {
-        int(spawn.player_id): str(spawn.initial_state.get("role") or "")
-        for spawn in scenario.player_spawns
+        int(spawn.player_id): str(spawn.initial_state.get("role") or "") for spawn in scenario.player_spawns
     }
     _mutually_known_roles = frozenset(scenario.mutually_known_roles)
 
     def _is_known_ally(actor_player_id: PlayerId, target_player_id: PlayerId) -> bool:
         actor_role = _role_by_player_id.get(int(actor_player_id), "")
         return bool(
-            actor_role in _mutually_known_roles
-            and _role_by_player_id.get(int(target_player_id), "") == actor_role
+            actor_role in _mutually_known_roles and _role_by_player_id.get(int(target_player_id), "") == actor_role
         )
 
     state_builder = SpotGraphCurrentStateBuilder(
@@ -5649,21 +5103,18 @@ def create_world_runtime(
         player_perception_policy=player_perception_policy,
         departed_position_store=departed_position_store,
         entity_name_resolver=_resolve_entity_name,
+        viewer_name_resolver=lambda viewer_id, other_id: player_acquaintances.call_name(
+            PlayerId(viewer_id), PlayerId(other_id)
+        ),
         inventory_builder=_build_inventory,
         weather_provider=lambda: weather_holder["state"],
         world_flags_provider=world_flag_state.as_frozen_set,
         light_source_item_spec_ids=light_source_item_spec_ids,
         owned_item_spec_ids_provider=_owned_item_spec_ids_provider,
         item_spec_name_resolver=_resolve_item_spec_name,
-        time_of_day_provider=(
-            day_night_stage.current_time_of_day
-            if day_night_stage is not None
-            else None
-        ),
+        time_of_day_provider=(day_night_stage.current_time_of_day if day_night_stage is not None else None),
         monster_view_provider=(
-            _build_monster_view_provider_for_runtime(monster_repo)
-            if scenario.monster_placements
-            else None
+            _build_monster_view_provider_for_runtime(monster_repo) if scenario.monster_placements else None
         ),
         # Phase D-3a: 地面アイテムの spoiled 表示。instance_id から state dict を
         # 引く軽量 resolver。InMemoryItemRepository.find_by_id は dict lookup なので
@@ -5671,7 +5122,6 @@ def create_world_runtime(
         item_state_resolver=_resolve_item_state,
         current_tick_provider=_current_tick_provider,
         minutes_per_tick=_minutes_per_tick(scenario),
-        stagnation_band_provider=_resolve_stagnation_band_for_player,
         areas=scenario.areas,
         distant_cues=scenario.distant_cues,
         # 経済統合 Phase 1: 商人の宣言。空なら商人節も所持金行も出ない
@@ -5682,7 +5132,6 @@ def create_world_runtime(
         # 自分宛ての申し出を状況確認へ出す。accept / decline は常時露出なので、
         # 見えていないと受けようがない。
         incoming_trade_offers_provider=_incoming_trade_offers_for,
-        distant_view_trace_enabled=config.distant_view_trace_enabled,
         trace_recorder_provider=lambda: getattr(runtime, "_trace_recorder", None),
         visible_monster_observer=_observe_visible_monster_for_player,
         fallen_body_observer=_observe_fallen_body_for_player,
@@ -5694,9 +5143,7 @@ def create_world_runtime(
         # 列挙は識別子が要るので、そちらは
         # ``available_action_names`` を使い続ける
         # (world_runtime.available_player_action_names)。
-        player_action_entries_provider=(
-            player_interaction_service.available_action_entries_for
-        ),
+        player_action_entries_provider=(player_interaction_service.available_action_entries_for),
         known_ally_checker=_is_known_ally,
         # 組み込みツールを行に宣伝する前に、この世界に在るかを訊く。
         # 訊かずに出していたため、`disabled_tools` で消したはずの
@@ -5709,12 +5156,13 @@ def create_world_runtime(
         ),
         # 手番を記録する効果が書く本人 state の key を、宣言から導出して伏せる。
         # 物体 state と同じ判断 (書く宣言があるなら出さない)。名前を当てにいく
-        # 形には戻さない。
+        # 形には戻さない。`hidden` と宣言した属性も本人に見せない (#1546)。
         hidden_player_state_keys=build_recorded_player_state_tick_keys(
             list(scenario.graph.iter_spot_nodes()),
             scenario.interiors,
             scenario.player_interactions,
-        ),
+        )
+        | scenario.player_attribute_specs.hidden_names(),
         # 変えられない属性を注記へ届ける。宣言の無い世界では空なので、
         # prompt は 1 ビットも変わらない。
         player_attribute_specs=scenario.player_attribute_specs,
@@ -5723,35 +5171,22 @@ def create_world_runtime(
     # 物体操作の待ち時間を行に添える。#964 で対人行に足したのと同じ判断で、
     # 待ちが見えないと「選べるのに必ず失敗する手」になる (#860)。
     state_builder.set_object_cooldown_hint_provider(
-        lambda player_id, object_id, interaction: (
-            interaction_service.cooldown_wait_hint(
-                player_id, object_id, interaction, _current_tick_provider()
-            )
+        lambda player_id, object_id, interaction: interaction_service.cooldown_wait_hint(
+            player_id, object_id, interaction, _current_tick_provider()
         )
     )
     state_builder.set_item_cooldown_hint_provider(
-        lambda player_id, item_spec_id, interaction: (
-            interaction_service.item_cooldown_wait_hint(
-                player_id, item_spec_id, interaction, _current_tick_provider()
-            )
+        lambda player_id, item_spec_id, interaction: interaction_service.item_cooldown_wait_hint(
+            player_id, item_spec_id, interaction, _current_tick_provider()
         )
     )
 
     # ── 観測パイプライン構築 ──
-    # Issue #227 PR-5 (tile-map 除去): physical_map_repository=None で resolver を
-    # 組み立てる。tile-map 依存の strategy (Pursuit / Monster / Combat / Harvest /
-    # Default の世界座標フォールバック) は world_runtime では関連 event が発火しないため
-    # inert で、resolver 内部の NullWorldObjectToPlayerResolver で安全に処理される。
-    # PlayerSpokeEvent は SpotGraphSpeechRecipientStrategy (hop-based) で処理される。
-    #
-    # WARN: 将来 tile-map ベースの event (Pursuit/Monster/Combat/Harvest 等) を
-    # world_runtime に持ち込む場合は、physical_map_repository を実装した上で渡す必要がある。
     obs_resolver = create_observation_recipient_resolver(
         player_status_repository=player_status_repo,
         player_life_query=player_life_query,
         player_perception_policy=player_perception_policy,
         departed_position_store=departed_position_store,
-        physical_map_repository=None,
         spot_graph_repository=spot_graph_repo,
     )
 
@@ -5769,14 +5204,9 @@ def create_world_runtime(
     _effective_lighting_resolver = SpotEffectiveLightingResolver(
         spot_graph_repository=spot_graph_repo,
         entity_has_light_source=lambda entity_id: bool(
-            light_source_item_spec_ids
-            & _owned_item_spec_ids_provider(entity_id)
+            light_source_item_spec_ids & _owned_item_spec_ids_provider(entity_id)
         ),
-        time_of_day_provider=(
-            day_night_stage.current_time_of_day
-            if day_night_stage is not None
-            else None
-        ),
+        time_of_day_provider=(day_night_stage.current_time_of_day if day_night_stage is not None else None),
         weather_provider=lambda: weather_holder.get("state"),
     )
     obs_formatter = ObservationFormatter(
@@ -5784,12 +5214,16 @@ def create_world_runtime(
         spot_graph_repository=spot_graph_repo,
         monster_repository=monster_repo if scenario.monster_placements else None,
         spot_interior_repository=spot_interior_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        event_removal_messages={
+            item_def.spec_id.value: item_def.event_removal_message
+            for item_def in scenario.item_spec_definitions
+            if item_def.event_removal_message
+        },
         departed_position_store=departed_position_store,
         departed_player_checker=player_perception_policy.is_departed,
-        downed_self_becomes_departed=(
-            scenario.departed_agents_enabled
-            and scenario.death_semantics.grace_ticks == 0
-        ),
+        downed_self_becomes_departed=(scenario.departed_agents_enabled and scenario.death_semantics.grace_ticks == 0),
         effective_lighting_resolver=_effective_lighting_resolver,
     )
     obs_formatter._name_resolver.player_name = lambda pid: player_name_map.get(  # type: ignore[assignment]
@@ -5804,7 +5238,7 @@ def create_world_runtime(
     recent_event_store = UnifiedRecentEventStore()
     obs_buffer = DefaultObservationContextBuffer(event_store=recent_event_store)
     # PR #451 (PR 6/6): 短期記憶を「全部揃ってから 1 回 build」式に統合。
-    # LLM 経路 (summary_service / long_summary_service / persona_resolver) は
+    # LLM 経路 (summary_service / persona_resolver) は
     # 旧来 setter で後注入していたが、ctor 注入に統一して呼び忘れ silent failure
     # を構造で排除。trace_recorder / current_tick は runtime instance に依存する
     # ため別経路 (set_trace_recorder) で差し替え (NullObject 経由で安全)。
@@ -5814,6 +5248,9 @@ def create_world_runtime(
         world_character=world_character,
         persona_block=persona_block,
         event_store=recent_event_store,
+        aux_llm_call_sink=aux_llm_call_sink,
+        # runtime はこのあとで組むが、畳むのは tick が始まってからなので間に合う。
+        on_compacted=lambda pid, entries: runtime._on_short_term_compacted(pid, entries),
     )
     action_result_store = DefaultActionResultStore(event_store=recent_event_store)
     # encounter_memory は上 (spawn loop 直前) で生成済 (PR4)。
@@ -5847,6 +5284,7 @@ def create_world_runtime(
         player_status_repository=player_status_repo,
         movement_service=movement_service,
         travel_context=travel_context,
+        failure_isolator=world_tick_failure_isolator,
     )
     travel_stage.set_departed_checker(player_perception_policy.is_departed)
 
@@ -5865,6 +5303,7 @@ def create_world_runtime(
         try:
             spot_name = runtime.get_player_spot_name(player_id)
         except Exception:
+            # 盤から外れた人は場所の名前を持たない。到着の行を書かないだけの正常な経路。
             logger.debug(
                 "arrival history: spot name unavailable for player %s",
                 player_id.value,
@@ -5877,11 +5316,14 @@ def create_world_runtime(
                 f"「{spot_name}」に到着した。ここから次の行動を選べる。",
                 tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
                 success=True,
-                scene_boundary=True,
             )
-        except Exception:
-            logger.exception(
-                "arrival history hook failed for player %s", player_id.value
+        except Exception as exc:
+            runtime._record_world_tick_follow_up_failure(
+                exc,
+                stage="travel.arrival_history",
+                target_kind="player",
+                target_id=player_id.value,
+                player_id=player_id.value,
             )
 
     travel_stage.add_arrival_observer(_record_arrival_in_history)
@@ -5898,20 +5340,10 @@ def create_world_runtime(
     # 評価器は scenario_event_stage と reactive_binding_stage で共有する。
     # weather_state_provider を渡すことで WEATHER_IS 条件が解ける。
     # Phase D-1: PROBABILITY 条件評価用の random.Random を注入する。
-    # 実験設定に scenario_random_seed があれば seed 注入で再現性を確保、
-    # 無ければ非決定的 (デフォルト random.Random()) で運用する。
-    _scenario_random = (
-        random.Random(config.scenario_random_seed)
-        if config.scenario_random_seed is not None
-        else random.Random()
-    )
-    # 天候は条件評価と消費順を共有しない独立streamにする。一方で比較実験の
-    # 再現性は同じseedから得る必要があるため、文字列namespaceを付けて導出する。
-    _weather_random = (
-        random.Random(f"weather:{config.scenario_random_seed}")
-        if config.scenario_random_seed is not None
-        else random.Random()
-    )
+    # 天候は条件評価と消費順を共有しない別の乱数にする。どちらもシードと回の
+    # 番号から作る (world_random)。シードが無ければ非決定的。
+    _scenario_random = world_random(_seed, round_number, "scenario")
+    _weather_random = world_random(_seed, round_number, "weather")
     condition_evaluator = ScenarioConditionEvaluator(
         world_flag_state=world_flag_state,
         spot_interior_repository=spot_interior_repo,
@@ -5924,10 +5356,9 @@ def create_world_runtime(
     )
     # recorder は runtime 構築後にも差し替えられるため、値を固定せず実行時に
     # 解決する。同じ評価結果を判定と trace に使い、確率条件を再評価しない。
-    predicate_trace_emitter = ScenarioPredicateTraceEmitter(
-        lambda: getattr(runtime, "_trace_recorder", None)
-    )
+    predicate_trace_emitter = ScenarioPredicateTraceEmitter(lambda: getattr(runtime, "_trace_recorder", None))
     scenario_event_stage = SpotGraphScenarioEventStageService(
+        failure_isolator=world_tick_failure_isolator,
         scenario_events=scenario.scenario_events,
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -5949,12 +5380,14 @@ def create_world_runtime(
         predicate_trace_emitter=predicate_trace_emitter,
     )
     reactive_object_state_stage = ReactiveObjectStateBindingStageService(
+        failure_isolator=world_tick_failure_isolator,
         bindings=scenario.reactive_object_state_bindings,
         condition_evaluator=condition_evaluator,
         predicate_trace_emitter=predicate_trace_emitter,
     )
     sync_action_registry = SynchronizedActionRegistry(world_flag_state)
     sync_resolver_stage = SynchronizedActionResolverStageService(
+        failure_isolator=world_tick_failure_isolator,
         groups=scenario.synchronized_action_groups,
         registry=sync_action_registry,
         world_flag_state=world_flag_state,
@@ -5964,20 +5397,16 @@ def create_world_runtime(
         weather_state_provider=lambda: weather_holder["state"],
         weather_state_setter=lambda s: weather_holder.__setitem__("state", s),
         update_interval_ticks=(
-            weather_config.update_interval_ticks
-            if weather_config is not None and weather_config.enabled
-            else 6
+            weather_config.update_interval_ticks if weather_config is not None and weather_config.enabled else 6
         ),
         random_source=_weather_random,
     )
-    time_provider = InMemoryGameTimeProvider(initial_tick=0)
+    time_provider: InMemoryGameTimeProvider = InMemoryGameTimeProvider(initial_tick=0)
     # PR #2 状態異常 surface: state_builder の current_tick_provider が
     # 参照する holder を埋める。
     _time_provider_holder["provider"] = time_provider
     sim_llm_trigger: ILlmTurnTrigger = (
-        llm_turn_trigger
-        if llm_turn_trigger is not None
-        else WorldStandaloneNoopLlmTurnTrigger()
+        llm_turn_trigger if llm_turn_trigger is not None else WorldStandaloneNoopLlmTurnTrigger()
     )
     # tick 経過で空腹 / 疲労が緩やかに増加するステージ。survival_island のような
     # 長期サバイバルでは生存圧の本体になる。world_runtime v1 (廃病院) でも
@@ -6006,6 +5435,7 @@ def create_world_runtime(
     from ai_rpg_world.application.world_graph.status_effects_tick_stage_service import (
         StatusEffectsTickStageService,
     )
+
     status_effects_stage = StatusEffectsTickStageService()
 
     # Phase B-2a: モンスター攻撃のオーケストレーターと behavior tick service。
@@ -6027,16 +5457,19 @@ def create_world_runtime(
             spot_graph_repository=spot_graph_repo,
             monster_repository=monster_repo,
             player_status_repository=player_status_repo,
+            random_source=world_random(_seed, round_number, "attack").random,
             # PR-K: event_publisher は runtime 構築後に pipeline_event_publisher
             # が用意されてから setter で後付け注入する (= needs_decay_stage
             # 等と同じ pattern)。bind 前は致命攻撃で events が積まれても publish
             # されない (= 旧挙動互換)。
         )
         monster_behavior_service = SpotMonsterBehaviorTickService(
+            failure_isolator=world_tick_failure_isolator,
             spot_graph_repository=spot_graph_repo,
             monster_repository=monster_repo,
             player_status_repository=player_status_repo,
             attack_orchestrator=monster_attack_orchestrator,
+            random_source=world_random(_seed, round_number, "monster_behavior"),
             world_flags_provider=world_flag_state.as_frozen_set,
             spot_interior_repository=spot_interior_repo,
         )
@@ -6056,8 +5489,7 @@ def create_world_runtime(
         # に対する動的 spawn / despawn stage。static placement (B-2a 経路) で
         # 既に置いたインスタンスは触らず、条件付き placement だけを動かす。
         conditional_placements = [
-            p for p in scenario.monster_placements
-            if p.spawn_condition is not None and not p.spawn_condition.is_always
+            p for p in scenario.monster_placements if p.spawn_condition is not None and not p.spawn_condition.is_always
         ]
         if conditional_placements:
             from ai_rpg_world.application.world_graph.spot_graph_monster_spawn_stage_service import (
@@ -6068,65 +5500,38 @@ def create_world_runtime(
             slots = []
             for i, placement in enumerate(conditional_placements):
                 template = next(
-                    (
-                        st.template
-                        for st in scenario.monster_templates
-                        if st.string_id == placement.template_string_id
-                    ),
+                    (st.template for st in scenario.monster_templates if st.string_id == placement.template_string_id),
                     None,
                 )
                 if template is None:
-                    raise ValueError(
-                        f"monster placement references unknown template: "
-                        f"{placement.template_string_id}"
-                    )
+                    raise ValueError(f"monster placement references unknown template: {placement.template_string_id}")
                 spot_int = scenario.id_mapper.get_int("spot", placement.spot_string_id)
-                slot_key = (
-                    f"{placement.template_string_id}@{placement.spot_string_id}#{i}"
-                )
+                slot_key = f"{placement.template_string_id}@{placement.spot_string_id}#{i}"
                 spawn_condition = placement.spawn_condition
-                slots.append(MonsterSpawnSlot(
-                    slot_key=slot_key,
-                    template=template,
-                    spot_id=SpotId.create(spot_int),
-                    coordinate=Coordinate(
-                        x=placement.coordinate_x,
-                        y=placement.coordinate_y,
-                        z=placement.coordinate_z,
-                    ),
-                    day_night_phase_names=(
-                        spawn_condition.day_night_phase_names
-                        if spawn_condition is not None
-                        else ()
-                    ),
-                    required_flags=(
-                        spawn_condition.required_flags if spawn_condition is not None else ()
-                    ),
-                    forbidden_flags=(
-                        spawn_condition.forbidden_flags if spawn_condition is not None else ()
-                    ),
-                    weather_type_names=(
-                        spawn_condition.weather_type_names
-                        if spawn_condition is not None
-                        else ()
-                    ),
-                ))
+                slots.append(
+                    MonsterSpawnSlot(
+                        slot_key=slot_key,
+                        template=template,
+                        spot_id=SpotId.create(spot_int),
+                        day_night_phase_names=(
+                            spawn_condition.day_night_phase_names if spawn_condition is not None else ()
+                        ),
+                        required_flags=(spawn_condition.required_flags if spawn_condition is not None else ()),
+                        forbidden_flags=(spawn_condition.forbidden_flags if spawn_condition is not None else ()),
+                        weather_type_names=(spawn_condition.weather_type_names if spawn_condition is not None else ()),
+                    )
+                )
 
             monster_spawn_service = SpotGraphMonsterSpawnStageService(
+                failure_isolator=world_tick_failure_isolator,
                 slots=tuple(slots),
                 monster_repository=monster_repo,
                 skill_loadout_repository=skill_loadout_repo,
                 spot_graph_repository=spot_graph_repo,
-                time_of_day_provider=(
-                    day_night_stage.current_time_of_day
-                    if day_night_stage is not None
-                    else None
-                ),
+                time_of_day_provider=(day_night_stage.current_time_of_day if day_night_stage is not None else None),
                 flags_provider=world_flag_state.as_frozen_set,
                 weather_type_provider=lambda: (
-                    weather_holder["state"].weather_type.name
-                    if weather_holder.get("state") is not None
-                    else None
+                    weather_holder["state"].weather_type.name if weather_holder.get("state") is not None else None
                 ),
             )
             monster_spawn_stage = monster_spawn_service
@@ -6154,15 +5559,12 @@ def create_world_runtime(
     # 後段で PipelineEventPublisher + handler を bind し、broadcast callback も追加する。
     from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
     from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+
     # 同 spot の DEAD (終局・復活不可) player を「(死亡している)」と区別表示する
     # ため、DEAD 判定を state_builder に配線する。state_builder は outcome_registry
     # より先に構築されるので、構築時ではなく setter で後付けする。
-    state_builder.set_dead_player_checker(
-        lambda pid: outcome_registry.get_outcome(pid).is_eliminated
-    )
-    travel_stage.set_eliminated_checker(
-        lambda pid: outcome_registry.get_outcome(pid).is_eliminated
-    )
+    state_builder.set_dead_player_checker(lambda pid: outcome_registry.get_outcome(pid).is_eliminated)
+    travel_stage.set_eliminated_checker(lambda pid: outcome_registry.get_outcome(pid).is_eliminated)
     item_transfer_service.set_player_outcome_registry(outcome_registry)
 
     # Issue #621: ダウン → DEAD の 30 tick 猶予機構。
@@ -6177,8 +5579,10 @@ def create_world_runtime(
     from ai_rpg_world.application.player.services.player_death_grace_timer import (
         PlayerDeathGraceTimer,
     )
+
     death_grace_timer = PlayerDeathGraceTimer()
     death_grace_stage = PlayerDeathGraceTickStage(
+        failure_isolator=world_tick_failure_isolator,
         outcome_registry=outcome_registry,
         grace_timer=death_grace_timer,
         fallen_body_registry=fallen_body_registry,
@@ -6202,6 +5606,7 @@ def create_world_runtime(
         )
 
         player_outcome_rule_stage = PlayerOutcomeRuleStageService(
+            failure_isolator=world_tick_failure_isolator,
             rules=scenario.player_outcome_rules,
             outcome_registry=outcome_registry,
             condition_evaluator=condition_evaluator,
@@ -6244,10 +5649,77 @@ def create_world_runtime(
         # 名前解決される)。runtime = WorldRuntime(...) が直後で実行される
         # 順序になっており、tick 開始までには確実に bound される。
         graph_event_flusher=_flush_graph_events,
+        failure_isolator=world_tick_failure_isolator,
     )
 
-    runtime = WorldRuntime(
+    memory_turn_clock = InMemoryMemoryTurnClock()
+    acquaintance_store = InMemoryAcquaintanceRepository()
+
+    def _being_id_of(player_id: PlayerId) -> BeingId | None:
+        resolver: BeingAttachmentResolver | None = runtime.aux_being_resolver
+        if resolver is None:
+            return None
+        return resolver.resolve_being_id(runtime.aux_being_default_world_id, player_id)
+
+    def _players_share_a_spot(a: PlayerId, b: PlayerId) -> bool:
+        """世界に居ない人 (死んで場所を離れた人など) は、誰とも同じ場所にいない。"""
+        from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+            EntityNotInGraphException,
+        )
+
+        graph = spot_graph_repo.find_graph()
+        try:
+            return graph.get_entity_spot(EntityId.create(int(a.value))) == graph.get_entity_spot(
+                EntityId.create(int(b.value))
+            )
+        except EntityNotInGraphException:
+            return False
+
+    player_acquaintances: PlayerAcquaintances = PlayerAcquaintances(
+        store=acquaintance_store,
+        being_id_of=_being_id_of,
+        turn_reader=memory_turn_clock,
+        environment_name=scenario.metadata.title,
+        names_by_player_id={int(spawn.player_id): spawn.name for spawn in scenario.player_spawns},
+        appearances_by_player_id={
+            int(spawn.player_id): spawn.appearance for spawn in scenario.player_spawns if spawn.appearance is not None
+        },
+        co_present=_players_share_a_spot,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
+
+    # Being の保存先は、保存するときにためたイベントをこの配り手に渡す (design_decisions D1837 の 6)。
+    from ai_rpg_world.application.being.short_term_memory_event_traces import (
+        ShortTermMemoryEventTraces,
+    )
+    from ai_rpg_world.being.domain.short_term_memory import FoldForced, StaleBackstoryDiscarded
+    from ai_rpg_world.eventing.delivery import DeliveryChannel, DeliveryGuarantee
+
+    being_dispatcher: EventDispatcher[None] = EventDispatcher(failure_observer=_record_after_commit_failure)
+    short_term_memory_event_traces = ShortTermMemoryEventTraces(
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
+    being_dispatcher.register_after_commit(
+        FoldForced,
+        short_term_memory_event_traces.fold_forced,
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    being_dispatcher.register_after_commit(
+        StaleBackstoryDiscarded,
+        short_term_memory_event_traces.backstory_discarded,
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+
+    runtime: WorldRuntime = WorldRuntime(
         scenario=scenario,
+        _being_episode_store=InMemoryEpisodeRepository(handoff=being_dispatcher.handoff),
+        _being_memo_store=InMemoryMemoBookRepository(handoff=being_dispatcher.handoff),
+        _being_short_term_memory_store=InMemoryShortTermMemoryRepository(handoff=being_dispatcher.handoff),
+        _aux_llm_call_sink=aux_llm_call_sink,
         _meeting_enabled=scenario.meeting_enabled,
         _interaction_cooldown_store=interaction_cooldown_store,
         _game_phase_store=game_phase_store,
@@ -6285,9 +5757,9 @@ def create_world_runtime(
         _ui_context_builder=SpotGraphUiContextBuilder(
             encounter_memory=encounter_memory,
             current_tick_provider=lambda: runtime.current_tick(),
-            spot_str_id_resolver=lambda spot_int: scenario.id_mapper.get_str(
-                "spot", spot_int
-            ),
+            spot_str_id_resolver=lambda spot_int: scenario.id_mapper.get_str("spot", spot_int),
+            acquaintances=player_acquaintances,
+            executed_turn_provider=lambda pid: runtime._execution_turns.get(int(pid.value), 0),
         ),
         _obs_pipeline=obs_pipeline,
         _obs_buffer=obs_buffer,
@@ -6295,10 +5767,12 @@ def create_world_runtime(
         _short_term_memory=short_term_memory,
         _action_result_store=action_result_store,
         _encounter_memory=encounter_memory,
-        # PR #448 (PR 3/6): cfg.prompt_section_order を使う (= env を再読しない)
-        _context_strategy=_build_context_format_strategy_from_config(config),
+        _memory_turn_clock=memory_turn_clock,
+        _acquaintance_store=acquaintance_store,
+        _player_acquaintances=player_acquaintances,
         _time_provider=time_provider,
         _simulation_service=simulation_service,
+        _world_tick_failure_isolator=world_tick_failure_isolator,
         _travel_stage=travel_stage,
         _player_outcome_registry=outcome_registry,
         _scenario_event_stage=scenario_event_stage,
@@ -6312,31 +5786,14 @@ def create_world_runtime(
         # monster placements の無いシナリオでは両方とも None のまま。
         _monster_repo=monster_repo if scenario.monster_placements else None,
         _attack_orchestrator=monster_attack_orchestrator,
-        _world_llm_system_prompt=system_prompt_text,
-        _world_llm_system_prompts_by_player_id=system_prompts_by_player_id,
-        _include_todo_tools=(
-            include_todo_tools
-            if include_todo_tools is not None
-            else config.tool_mode != _LLM_TOOL_MODE_PURE_SPOT_GRAPH
-        ),
-        # Prediction (#526 v0): expected_result 露出 policy を config から設定。
-        _expected_result_policy=config.expected_result_policy,
         reason_first_two_step_enabled=config.reason_first_two_step_enabled,
         _runtime_config=config,
     )
-    travel_stage.set_on_travel_tick_committed(
-        runtime._record_committed_player_travel_tick
-    )
+    travel_stage.set_on_travel_tick_committed(runtime._record_committed_player_travel_tick)
+    travel_stage.add_blocked_observer(runtime._report_travel_blocked)
     world_flag_state.set_change_callback(runtime._record_world_flag_change)
-    scenario_event_stage.set_message_callback(
-        runtime._append_scenario_event_observation
-    )
-    # ── PR 2/6 (#227): 任意の DomainEvent を ObservationPipeline 経由で配信する ──
-    # PR 2 では PlayerSpokeEvent 用に InMemoryEventPublisher を使い handler を
-    # 個別登録していたが、PR 6 で interaction_service など他経路の event も
-    # pipeline に流す必要が出たため、event 型ごとの登録ではなく「全 event
-    # を pipeline へ流す」publisher に置き換える。chore (#240 後続) で
-    # module-level に切り出し。
+    scenario_event_stage.set_message_callback(runtime._append_scenario_event_observation)
+    # 発言と操作など、直接発行する経路も同じ観測のパイプラインへ流す。
     # Issue #276: 観測 trace 可視化のため、buffer に積むタイミングで
     # ``TraceEventKind.OBSERVATION`` を記録する。trace_recorder は
     # ``set_trace_recorder`` で後から差し込まれるので provider 経由で参照。
@@ -6352,9 +5809,13 @@ def create_world_runtime(
         buffer=obs_buffer,
         trace_recorder_provider=lambda: runtime._trace_recorder,
         current_tick_provider=runtime.current_tick,
-        observers=[encounter_collector.on_observation],
+        observers=[
+            encounter_collector.on_observation,
+            player_acquaintances.on_observation,
+        ],
+        recipient_view=player_acquaintances.view_for,
     )
-    pipeline_event_publisher = PipelineEventPublisher(runtime)
+    pipeline_event_publisher: PipelineEventPublisher = PipelineEventPublisher(runtime)
 
     # Phase E-3: プレイヤー個別 outcome の event-driven 配線。
     # registry は既に simulation_service 構築前に作成済み。ここでは broadcast
@@ -6364,9 +5825,7 @@ def create_world_runtime(
         PlayerDownedOutcomeHandler,
     )
 
-    outcome_observation_formatter = PlayerOutcomeObservationFormatter(
-        scenario.metadata.player_outcome_messages
-    )
+    outcome_observation_formatter = PlayerOutcomeObservationFormatter(scenario.metadata.player_outcome_messages)
 
     def _broadcast_outcome_change(
         player_id: PlayerId,
@@ -6388,6 +5847,9 @@ def create_world_runtime(
         )
         if message is None:
             return  # UNRESOLVED への遷移は通常起きないが防御的に skip
+        # 救助・取り残し・死亡は、名前を伏せても知らない誰かがいることが分かって
+        # しまう。追放は会議の場で全員が見て決めたことなので、全員へ届ける。
+        withheld_from_strangers = new_outcome is not PlayerOutcomeEnum.EJECTED
         output = ObservationOutput(
             prose=message,
             structured={
@@ -6400,6 +5862,8 @@ def create_world_runtime(
             observation_category="environment",
             schedules_turn=True,
             breaks_movement=False,
+            subject_name=actor_name if withheld_from_strangers else None,
+            if_subject_unknown=(WithheldFromStrangers() if withheld_from_strangers else None),
         )
         # 死は世界の設定に従う。追放は常に全員へ。
         #
@@ -6410,10 +5874,7 @@ def create_world_runtime(
         #
         # 追放は会議の場で全員が見て決めたことなので、隠す理由が無い。
         # 殺害と追放で扱いを分ける。
-        if (
-            new_outcome is PlayerOutcomeEnum.DEAD
-            and not scenario.death_semantics.announce_globally
-        ):
+        if new_outcome is PlayerOutcomeEnum.DEAD and not scenario.death_semantics.announce_globally:
             return
         for pid in runtime.get_player_ids():
             runtime._emit_observation_directly(pid, output)
@@ -6430,6 +5891,7 @@ def create_world_runtime(
         RemoveFallenBodyOnReviveHandler,
     )
     from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
+
     class _MarkKillerAsHavingSeenTheBody:
         """倒した本人に「その死体を見つけた」を出さないようにする。
 
@@ -6458,16 +5920,17 @@ def create_world_runtime(
                     EncounterKey(kind="body", identifier=f"player_{int(victim)}"),
                     int(runtime.current_tick()),
                 )
-            except Exception:
-                logger.warning(
-                    "加害者への死体発見抑止に失敗した (killer=%s victim=%s)",
-                    killer, victim, exc_info=True,
+            except Exception as exc:
+                runtime._record_world_tick_follow_up_failure(
+                    exc,
+                    stage="player_downed.killer_saw_body",
+                    target_kind="player",
+                    target_id=int(killer),
+                    player_id=int(killer),
                 )
 
     # 加害者の遭遇記録は確定後の最善努力処理。身体・猶予の正本更新には使わない。
-    pipeline_event_publisher.register_handler(
-        PlayerDownedEvent, _MarkKillerAsHavingSeenTheBody()
-    )
+    pipeline_event_publisher.register_handler(PlayerDownedEvent, _MarkKillerAsHavingSeenTheBody())
     record_fallen_body_handler = RecordFallenBodyHandler(
         registry=fallen_body_registry,
         spot_graph_repository=spot_graph_repo,
@@ -6484,19 +5947,17 @@ def create_world_runtime(
     from ai_rpg_world.application.player.handlers.player_revived_post_hoc_observation_handler import (
         PlayerRevivedPostHocObservationHandler,
     )
-    _caregiver_name_by_pid = {
-        int(spawn.player_id): spawn.name for spawn in scenario.player_spawns
-    }
+
+    _caregiver_name_by_pid = {int(spawn.player_id): spawn.name for spawn in scenario.player_spawns}
     # 倒れている間に自分が対象になった行為の預かり先。倒れている player は
     # observation の宛先から外れる (Phase 4) ので、その瞬間には配れない。
     # 復活時に post hoc summary へ載せる。
     from ai_rpg_world.application.player.services.downed_incident_log import (
         DownedIncidentLog,
     )
+
     downed_incident_log = DownedIncidentLog()
-    remove_fallen_body_handler = RemoveFallenBodyOnReviveHandler(
-        fallen_body_registry
-    )
+    remove_fallen_body_handler = RemoveFallenBodyOnReviveHandler(fallen_body_registry)
     pipeline_event_publisher.register_handler(
         PlayerRevivedEvent,
         PlayerRevivedPostHocObservationHandler(
@@ -6514,6 +5975,7 @@ def create_world_runtime(
     from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
         PlayerInteractedWithPlayerEvent,
     )
+
     pipeline_event_publisher.register_handler(
         PlayerInteractedWithPlayerEvent,
         TargetedWhileDownRecorder(
@@ -6541,9 +6003,7 @@ def create_world_runtime(
     spot_arrival_encounter_handler = SpotArrivalEncounterHandler(
         memory=encounter_memory,
         current_tick_provider=runtime.current_tick,
-        spot_str_id_resolver=lambda spot_int: runtime.id_mapper.get_str(
-            "spot", spot_int
-        ),
+        spot_str_id_resolver=lambda spot_int: runtime.id_mapper.get_str("spot", spot_int),
     )
     pipeline_event_publisher.register_handler(
         _EntityEnteredSpotEvent,
@@ -6636,7 +6096,7 @@ def create_world_runtime(
                 event_id=event.event_id,
             )
 
-    interaction_dispatcher = CommandEventDispatcher()
+    interaction_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     interaction_dispatcher.register_required_before_commit(
         PlayerDownedEvent,
         _apply_player_lifecycle_before_commit,
@@ -6662,7 +6122,7 @@ def create_world_runtime(
     )
     from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 
-    use_item_dispatcher = CommandEventDispatcher()
+    use_item_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
 
     def _apply_consumable_effect_before_commit(event: Any, context: Any) -> None:
         repositories = context.repositories
@@ -6823,16 +6283,14 @@ def create_world_runtime(
         ),
         sync_dispatcher=interaction_dispatcher,
         after_commit_handoff=interaction_dispatcher,
-        repository_provider_factory=(
-            InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
-        ),
+        repository_provider_factory=(InMemoryPlayerStatusTickCommandRepositoryProviderFactory()),
     )
     needs_decay_stage.set_command_scope_factory(player_status_tick_scope_factory)
     status_effects_stage.set_command_scope_factory(player_status_tick_scope_factory)
     if food_spoilage_stage is not None:
         from ai_rpg_world.domain.item.event.item_event import ItemSpoiledEvent
 
-        food_spoilage_dispatcher = CommandEventDispatcher()
+        food_spoilage_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
         food_spoilage_dispatcher.register_after_commit(
             ItemSpoiledEvent,
             lambda event: runtime._append_food_spoiled_batch_observation(
@@ -6845,14 +6303,12 @@ def create_world_runtime(
             InMemoryUnitOfWorkTransactionFactory(data_store),
             sync_dispatcher=food_spoilage_dispatcher,
             after_commit_handoff=food_spoilage_dispatcher,
-            repository_provider_factory=(
-                InMemoryFoodSpoilageCommandRepositoryProviderFactory()
-            ),
+            repository_provider_factory=(InMemoryFoodSpoilageCommandRepositoryProviderFactory()),
         )
         food_spoilage_stage.set_command_scope_factory(food_spoilage_scope_factory)
     from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
 
-    trade_offer_expiry_dispatcher = CommandEventDispatcher()
+    trade_offer_expiry_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     trade_offer_expiry_dispatcher.register_after_commit(
         TradeOfferExpiredEvent,
         _observe_expired_trade_offer,
@@ -6869,14 +6325,10 @@ def create_world_runtime(
         sync_dispatcher=trade_offer_expiry_dispatcher,
         after_commit_handoff=trade_offer_expiry_dispatcher,
         repository_provider_factory=(
-            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(
-                pending_trade_offer_store
-            )
+            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(pending_trade_offer_store)
         ),
     )
-    trade_offer_expiry_stage.set_command_scope_factory(
-        trade_offer_expiry_scope_factory
-    )
+    trade_offer_expiry_stage.set_command_scope_factory(trade_offer_expiry_scope_factory)
     market_order_expiry_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
@@ -6886,13 +6338,9 @@ def create_world_runtime(
         ),
         sync_dispatcher=interaction_dispatcher,
         after_commit_handoff=interaction_dispatcher,
-        repository_provider_factory=(
-            InMemoryMarketOrderExpiryCommandRepositoryProviderFactory()
-        ),
+        repository_provider_factory=(InMemoryMarketOrderExpiryCommandRepositoryProviderFactory()),
     )
-    market_order_expiry_stage.set_command_scope_factory(
-        market_order_expiry_scope_factory
-    )
+    market_order_expiry_stage.set_command_scope_factory(market_order_expiry_scope_factory)
     if player_outcome_rule_stage is not None:
         player_outcome_rule_scope_factory: CommandScopeFactory[Any] = CommandScopeFactory(
             RollbackParticipantTransactionFactory(
@@ -6906,9 +6354,7 @@ def create_world_runtime(
             sync_dispatcher=interaction_dispatcher,
             after_commit_handoff=interaction_dispatcher,
         )
-        player_outcome_rule_stage.set_command_scope_factory(
-            player_outcome_rule_scope_factory
-        )
+        player_outcome_rule_stage.set_command_scope_factory(player_outcome_rule_scope_factory)
     death_grace_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
@@ -6921,9 +6367,7 @@ def create_world_runtime(
         ),
         sync_dispatcher=interaction_dispatcher,
         after_commit_handoff=interaction_dispatcher,
-        repository_provider_factory=(
-            InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
-        ),
+        repository_provider_factory=(InMemoryPlayerStatusTickCommandRepositoryProviderFactory()),
     )
     death_grace_stage.set_command_scope_factory(death_grace_scope_factory)
     scenario_event_scope_factory = CommandScopeFactory(
@@ -6973,7 +6417,7 @@ def create_world_runtime(
         SynchronizedActionMessageEvent,
     )
 
-    synchronized_action_dispatcher = CommandEventDispatcher()
+    synchronized_action_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     synchronized_action_dispatcher.register_after_commit(
         ConnectionStateChangedEvent,
         lambda event: pipeline_event_publisher.publish_all((event,)),
@@ -7007,9 +6451,7 @@ def create_world_runtime(
             )
         ),
     )
-    sync_resolver_stage.set_command_scope_factory(
-        synchronized_action_scope_factory
-    )
+    sync_resolver_stage.set_command_scope_factory(synchronized_action_scope_factory)
     from ai_rpg_world.domain.world_graph.event.environment_event import (
         SpotGraphDayNightPhaseChangedEvent,
         SpotGraphWeatherChangedEvent,
@@ -7018,7 +6460,7 @@ def create_world_runtime(
         TimeOfDayChangedEvent,
     )
 
-    weather_dispatcher = CommandEventDispatcher()
+    weather_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     if weather_config is None or weather_config.announce_changes:
         weather_dispatcher.register_after_commit(
             SpotGraphWeatherChangedEvent,
@@ -7038,23 +6480,25 @@ def create_world_runtime(
     )
     environment_stage.set_command_scope_factory(weather_scope_factory)
     if day_night_stage is not None:
-        day_night_dispatcher = CommandEventDispatcher()
+        day_night_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
         if day_night_config is not None and day_night_config.announce_changes:
 
             def _observe_day_night_transition(
                 event: SpotGraphDayNightPhaseChangedEvent,
             ) -> None:
                 graph = spot_graph_repo.find_graph()
-                pipeline_event_publisher.publish_all((
-                    TimeOfDayChangedEvent.create(
-                        aggregate_id=graph.graph_id,
-                        aggregate_type="SpotGraphAggregate",
-                        old_phase_name=event.old_time.phase_name,
-                        new_phase_name=event.new_time.phase_name,
-                        new_display_text=event.new_time.display_text,
-                        new_is_dark=event.new_time.is_dark,
-                    ),
-                ))
+                pipeline_event_publisher.publish_all(
+                    (
+                        TimeOfDayChangedEvent.create(
+                            aggregate_id=graph.graph_id,
+                            aggregate_type="SpotGraphAggregate",
+                            old_phase_name=event.old_time.phase_name,
+                            new_phase_name=event.new_time.phase_name,
+                            new_display_text=event.new_time.display_text,
+                            new_is_dark=event.new_time.is_dark,
+                        ),
+                    )
+                )
 
             day_night_dispatcher.register_after_commit(
                 SpotGraphDayNightPhaseChangedEvent,
@@ -7093,9 +6537,7 @@ def create_world_runtime(
                 )
             ),
         )
-        monster_behavior_service.set_command_scope_factory(
-            monster_behavior_scope_factory
-        )
+        monster_behavior_service.set_command_scope_factory(monster_behavior_scope_factory)
     if monster_spawn_stage is not None:
         monster_spawn_scope_factory = CommandScopeFactory(
             RollbackParticipantTransactionFactory(
@@ -7188,11 +6630,9 @@ def create_world_runtime(
             )
             for condition in scenario.ongoing_conditions
         ),
-        condition_resolution_observer=lambda notice: (
-            runtime._publish_meeting_condition_resolution(
-                notice.flag,
-                notice.messages,
-            )
+        condition_resolution_observer=lambda notice: runtime._publish_meeting_condition_resolution(
+            notice.flag,
+            notice.messages,
         ),
         player_outcome_registry=outcome_registry,
         meeting_ended_observer=runtime._record_meeting_ended,
@@ -7203,13 +6643,9 @@ def create_world_runtime(
     # day_night_stage / weather_holder が無いシナリオでは provider は None の
     # ままで、該当 condition は「不在として fail」になる (silent skip 回避)。
     if day_night_stage is not None:
-        interaction_service.set_time_of_day_phase_provider(
-            lambda: day_night_stage.current_time_of_day().phase_name
-        )
+        interaction_service.set_time_of_day_phase_provider(lambda: day_night_stage.current_time_of_day().phase_name)
     _weather_type_provider = lambda: (
-        weather_holder["state"].weather_type.value
-        if weather_holder.get("state") is not None
-        else None
+        weather_holder["state"].weather_type.value if weather_holder.get("state") is not None else None
     )
     interaction_service.set_weather_type_provider(_weather_type_provider)
     # PR 3: 対人経路にも同じ provider を配線する。物体経路にだけ入れると
@@ -7232,9 +6668,7 @@ def create_world_runtime(
             trigger=trigger,
         )
     )
-    player_interaction_service.set_effective_lighting_resolver(
-        _effective_lighting_resolver
-    )
+    player_interaction_service.set_effective_lighting_resolver(_effective_lighting_resolver)
     market_service.set_event_publisher(pipeline_event_publisher)
     # 取り落としが誰にも見えないと、採取の結果が手元に無い理由が本人にも
     # 分からない。publisher は runtime を組み終えてからしか作れないので、
@@ -7262,947 +6696,96 @@ def create_world_runtime(
     runtime._downed_incident_log = downed_incident_log
     runtime._observation_appender = observation_appender
 
-    # Issue #283 後続: episodic memory pipeline の on/off。
-    # episodic ON のときだけ scenario load 時に matcher + chunk coordinator +
-    # passive recall を組み立てる。OFF なら従来動作。
-    # PR #330: シナリオ非依存の builder に統一。world_episodic_wiring 経由の
-    # 旧 alias も後方互換で生きているが、application 層から直接 import する。
-    # #558 MEDIUM-1 後続: 親 gate を env 直読み (is_episodic_enabled) から
-    # config.episodic_enabled に寄せ、ResolvedLlmRuntimeConfig 単一窓口に揃えた。
-    # config=None のときは from_mapping() が空 mapping を解決する (= env は読まず
-    # 全 default = episodic OFF)。実験経路 (run_scenario_experiment.py) は profile
-    # から明示 config を組んで渡すため env に依存しない。explicit config が effect
-    # するので「同 env を 2 経路で別解釈する」silent failure を構造で防げる。
-    from ai_rpg_world.application.llm.wiring.episodic_stack import (
-        build_episodic_stack,
+    # 会った相手は Being が覚えるので、初期配置の同席を記録する前に全員の Being を用意する。
+    # 下の起動時の検査は画面を組んで知り合いの記録を読むので、その前に済ませる。
+    # prompt dataset の各行も being_id を要るので、それより先に組む。
+    # 用意に失敗したら起動を止める。誰を知っているかはプロンプトの前提なので、
+    # 欠けたまま走ると、実験の条件が run のどこにも残らないまま変わる。
+    runtime._async_event_executor = AsyncEventExecutor(
+        failure_observer=runtime._record_async_delivery_failure,
+        max_workers=config.async_event_workers,
+        max_pending=config.async_event_max_pending,
     )
-    # 敵対的レビュー HIGH 1: 「episodic を前提にする機能群」の fail-fast を親 gate の
-    # 外に出す。P-U1 (GOAL_STAGNATION_EVIDENCE) / P-U2 (STAGNATION_PRESSURE) / 案A
-    # (STAGNATION_REASONING) はいずれも episodic pipeline (固着パス / 停滞感 store /
-    # 熟考ラッチ) の内側でしか配線されない。従来これらの相互ガードは
-    # `if config.episodic_enabled:` の内側にあったため、LLM_EPISODIC_ENABLED を
-    # 立て忘れたまま各 flag を ON にすると、ブロックごと skip されて fail-fast すら
-    # 走らず「flag は立てたのに機能が一生動かず警告も出ない」静かな失敗になっていた
-    # (本 PR 群が売りにする「起動時 fail-fast」に正面から反する)。episodic 前提の
-    # flag が 1 つでも ON なら、親 gate に入る前にここで LLM_EPISODIC_ENABLED を要求
-    # して落とす。
-    if not config.episodic_enabled:
-        _episodic_dependent_flags = {
-            "GOAL_STAGNATION_EVIDENCE_ENABLED": (
-                config.goal_stagnation_evidence_enabled
-            ),
-            "STAGNATION_PRESSURE_ENABLED": config.stagnation_pressure_enabled,
-            "STAGNATION_REASONING_ENABLED": config.stagnation_reasoning_enabled,
-        }
-        _on_but_orphaned = [
-            name for name, enabled in _episodic_dependent_flags.items() if enabled
-        ]
-        if _on_but_orphaned:
-            raise ValueError(
-                f"{', '.join(_on_but_orphaned)}=1 だが LLM_EPISODIC_ENABLED が OFF の"
-                "ため episodic pipeline (固着パス / 停滞感 store / 熟考ラッチ) が丸ごと"
-                "構築されず、これらの機能が一生動かない (静かな失敗)。"
-                "LLM_EPISODIC_ENABLED=1 も設定してください。"
-            )
-    # prompt dataset は記憶機能ではないが、各行へ安定した being_id を保存する。
-    # episodic の親 gate に入れると lean profile では最初の LLM 呼び出しまで
-    # resolver が未配線になり、記録だけが失敗する。capture 自身の要件として
-    # 補助 Being を起動時に構築し、全参加者を fail-fast で provision する。
-    if config.prompt_dataset_capture_enabled:
-        runtime._wire_auxiliary_tool_stack()
-        for s in getattr(scenario, "player_spawns", ()):
-            runtime._aux_being_provisioning.ensure_attached(
-                PlayerId(int(s.player_id))
-            )
-    if config.episodic_enabled:
-        # Phase 3 Step 3e-3: ChunkCoordinator / Scheduler / passive_recall は
-        # episode_store 経路で being_id 必須化済。world_runtime の aux Being 配線
-        # を早期に確立し、各 player_spawn 分の Being を provision しておく。
-        if not config.prompt_dataset_capture_enabled:
-            runtime._wire_auxiliary_tool_stack()
-            for s in getattr(scenario, "player_spawns", ()):
-                try:
-                    runtime._aux_being_provisioning.ensure_attached(
-                        PlayerId(int(s.player_id))
-                    )
-                except Exception:
-                    logger.exception(
-                        "world_runtime: Being provision failed for player_id=%s (chunk "
-                        "coordinator は silent skip するが、episode が書かれない)",
-                        s.player_id,
-                    )
-
-        # Issue #295 後続: LLM 主観文付与の opt-in 配線。
-        # LLM_EPISODIC_SUBJECTIVE_ENABLED (default on, #308) かつ LiteLLMClient
-        # が取れるときだけ chunk write 後に裏で LLM が走り、interpreted /
-        # recall_text を上書きする。失敗時は #305 でテンプレ既定値が draft に
-        # 入っているのでそのまま流れる。
-        # PR #309: 同期で LLM を待つとゲーム tick が止まる (1〜3 秒)。
-        # ThreadPoolEpisodicSubjectiveScheduler で裏に逃がし、完了時に
-        # episode_store を同じ episode_id で上書きする (Pattern A:
-        # Fire-and-forget + eventual consistency)。
-        subjective_scheduler = None
-        persona_provider: Callable[[PlayerId], str] | None = None
-        shared_episode_store = None  # scheduler が wire されたときだけ事前生成
-        # U2 (証拠台帳統一設計 / default OFF): BELIEF_EVIDENCE_ENABLED のときだけ
-        # evidence buffer + transcriber を構築する。「配線 (wire) と有効化
-        # (enable) の分離」規約に従い、OFF なら None のまま扱う (= 転記コード
-        # パス自体は通るが不活性)。
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_belief_attribution_enabled_state,
-            log_belief_consolidation_enabled_state,
-            log_belief_evidence_enabled_state,
-            log_error_driven_reinterpretation_enabled_state,
-            log_error_gated_encoding_enabled_state,
-            log_hearsay_enabled_state,
-            log_memo_distill_enabled_state,
-            log_pending_prediction_enabled_state,
-            log_recall_hit_boost_enabled_state,
-            log_salience_structured_failure_enabled_state,
-            log_state_collapse_evidence_enabled_state,
-            log_unconscious_context_enabled_state,
-        )
-
-        _belief_evidence_enabled = config.belief_evidence_enabled
-        log_belief_evidence_enabled_state(_belief_evidence_enabled)
-        # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default OFF): 実効的には
-        # reinterpretation_enabled (段1) と PREDICTION_CONTEXT_ID_ENABLED (U1) の
-        # 両方が ON でないと stamp 対象の recall observation が無く安全に縮退する。
-        _error_driven_reinterpretation_enabled = (
-            config.error_driven_reinterpretation_enabled
-        )
-        log_error_driven_reinterpretation_enabled_state(
-            _error_driven_reinterpretation_enabled
-        )
-        # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default OFF): U9a と
-        # 対称に、的中側 (思い出したから当たった) を recall ranking boost に
-        # 還流する。実効的には reinterpretation_enabled (段1) と
-        # PREDICTION_CONTEXT_ID_ENABLED (U1) の両方が ON でないと record_hit
-        # 対象の recall observation が無く安全に縮退する。
-        # 強さ (strength=1) と cap (RECALL_HIT_BOOST_DEFAULT_CAP) は小さく
-        # 始める前提の定数 (habituation_strength と同じく env 非公開。
-        # 「当たる記憶」の固定化を防ぐための上限)。
-        _recall_hit_boost_enabled = config.recall_hit_boost_enabled
-        log_recall_hit_boost_enabled_state(_recall_hit_boost_enabled)
-        _recall_hit_boost_strength = 1
-        # U4 (予測誤差統一設計 部品3 / default OFF): attribution + CONFIRMATION。
-        # 実効的には U1 (PREDICTION_CONTEXT_ID_ENABLED) が ON でないと belief_ids
-        # が流れてこないが、ここでは独立に flag を解決するだけに留める
-        # (U1 flag OFF のまま本 flag だけ ON でも in_context_belief_ids は常に
-        # 空になり安全に縮退する)。
-        _belief_attribution_enabled = config.belief_attribution_enabled
-        log_belief_attribution_enabled_state(_belief_attribution_enabled)
-        # P4 (reflect): 固着パスに目的への前進評価を足すか。
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_goal_reflect_enabled_state,
-            log_goal_stagnation_evidence_enabled_state,
-            log_stagnation_pressure_enabled_state,
-            log_stagnation_reasoning_enabled_state,
-        )
-
-        _goal_reflect_enabled = config.goal_reflect_enabled
-        log_goal_reflect_enabled_state(_goal_reflect_enabled)
-        # P-U1 (目的停滞の evidence 化): reflect の stalled/misaligned verdict を
-        # goal: 軸の evidence に変換するか。
-        _goal_stagnation_evidence_enabled = config.goal_stagnation_evidence_enabled
-        log_goal_stagnation_evidence_enabled_state(_goal_stagnation_evidence_enabled)
-        # P-U2 (停滞感 store): reflect verdict を停滞感カウンタに畳み込むか。
-        _stagnation_pressure_enabled = config.stagnation_pressure_enabled
-        log_stagnation_pressure_enabled_state(_stagnation_pressure_enabled)
-        # 案A (band-gated thinking): 停滞 strong の局面で reflect 注入直後の 1 行動に
-        # reasoning を焚くか。
-        _stagnation_reasoning_enabled = config.stagnation_reasoning_enabled
-        log_stagnation_reasoning_enabled_state(_stagnation_reasoning_enabled)
-        # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
-        # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
-        # どちらか一方でも ON なら buffer store 自体は作る。
-        _belief_consolidation_enabled = config.belief_consolidation_enabled
-        log_belief_consolidation_enabled_state(_belief_consolidation_enabled)
-        # 敵対的レビュー HIGH-1 fail-fast: P-U1 (goal_stagnation_evidence) /
-        # P-U2 (stagnation_pressure) はどちらも BeliefConsolidationCoordinator
-        # (固着パス) 経由でしか動かないが、その coordinator 自体は
-        # belief_consolidation_enabled が ON のときしか構築されない
-        # (episodic_stack.py の `if belief_consolidation_enabled and
-        # belief_evidence_buffer_store is not None` 分岐)。coordinator
-        # コンストラクタ内の fail-fast (goal_reflect_enabled 必須等) は
-        # coordinator が実際に構築されたときにしか働かないため、それより前の
-        # ここで相互ガードしないと「flag を ON にしたのに coordinator が
-        # 一度も作られず、カウンタも evidence 化も一生 0 のまま、警告すら出ない」
-        # 静かな失敗になる (本 PR 群が売りにする「起動時 fail-fast で弾く」に
-        # 正面から反する)。
-        if _goal_stagnation_evidence_enabled and not _belief_consolidation_enabled:
-            raise ValueError(
-                "GOAL_STAGNATION_EVIDENCE_ENABLED=1 だが BELIEF_CONSOLIDATION_ENABLED "
-                "が OFF のため固着パス (BeliefConsolidationCoordinator) が構築されず、"
-                "reflect の stalled/misaligned verdict を evidence 化する経路が丸ごと"
-                "動かない (静かな失敗)。BELIEF_CONSOLIDATION_ENABLED=1 も設定してください。"
-            )
-        if _stagnation_pressure_enabled and not _belief_consolidation_enabled:
-            raise ValueError(
-                "STAGNATION_PRESSURE_ENABLED=1 だが BELIEF_CONSOLIDATION_ENABLED が "
-                "OFF のため固着パス (BeliefConsolidationCoordinator) が構築されず、"
-                "reflect verdict を停滞感カウンタに畳み込む経路が丸ごと動かない "
-                "(静かな失敗)。BELIEF_CONSOLIDATION_ENABLED=1 も設定してください。"
-            )
-        # 案A fail-fast: band-gated thinking は band (STAGNATION_PRESSURE) と
-        # reflect 注入 (= ラッチ武装, GOAL_REFLECT) の両方に依存する。どちらか
-        # 欠けると「flag を ON にしたのに熟考が一生焚かれず警告も出ない」静かな
-        # 失敗になるため起動時に弾く。
-        if _stagnation_reasoning_enabled and not _stagnation_pressure_enabled:
-            raise ValueError(
-                "STAGNATION_REASONING_ENABLED=1 だが STAGNATION_PRESSURE_ENABLED が "
-                "OFF のため band (strong 判定) が供給されず、熟考ゲートが一生発火"
-                "しない (静かな失敗)。STAGNATION_PRESSURE_ENABLED=1 も設定してください。"
-            )
-        if _stagnation_reasoning_enabled and not _goal_reflect_enabled:
-            raise ValueError(
-                "STAGNATION_REASONING_ENABLED=1 だが GOAL_REFLECT_ENABLED が OFF の"
-                "ため reflect 注入 (= 熟考ラッチの武装トリガ) が起きず、熟考ゲートが"
-                "一生発火しない (静かな失敗)。GOAL_REFLECT_ENABLED=1 も設定してください。"
-            )
-        # U6: salience 判定 + STRUCTURED_FAILURE 転記 (default OFF)。他 2 flag
-        # 同様、同じ evidence buffer を共有するので ON なら buffer store を作る
-        # 条件に加える。
-        _salience_structured_failure_enabled = (
-            config.salience_structured_failure_enabled
-        )
-        log_salience_structured_failure_enabled_state(
-            _salience_structured_failure_enabled
-        )
-        # PR-D (状態破綻を高 salience evidence として記憶化 / default OFF):
-        # is_down への遷移と hunger max 到達を STATE_COLLAPSE 転記する。他の
-        # salience 系 flag と同じ evidence buffer を共有するので、ON なら
-        # buffer store を作る条件に加える。判定は既存の状態遷移そのものであり
-        # LLM 呼び出しは追加しない (structured_failure と同じ「転記のみ」方針)。
-        _state_collapse_evidence_enabled = config.state_collapse_evidence_enabled
-        log_state_collapse_evidence_enabled_state(_state_collapse_evidence_enabled)
-        # U8 (予測誤差統一設計 部品2・誤差ゲート付き符号化 / default OFF):
-        # 境界 (2a, chunk_coordinator へ伝播) + 解像度 (2b, 下の subjective
-        # service 構築時に salience_enabled と合わせて評価) を一括ゲートする。
-        # evidence buffer とは無関係な独立 flag なので buffer store 条件には
-        # 加えない。
-        _error_gated_encoding_enabled = config.error_gated_encoding_enabled
-        log_error_gated_encoding_enabled_state(_error_gated_encoding_enabled)
-        # U5: MEMO_DISTILL 転記 (default ON)。memo を手帳で終わらせず
-        # semantic evidence へ蒸留するため、明示 OFF でだけ止める。
-        # 他 3 flag 同様、同じ evidence
-        # buffer を共有するので ON なら buffer store を作る条件に加える。
-        _memo_distill_enabled = config.memo_distill_enabled
-        log_memo_distill_enabled_state(_memo_distill_enabled)
-        # U7 (予測誤差統一設計 / 無意識コンテキスト / default OFF): belief top-K +
-        # L5 を chunk 主観補完 LLM に渡すか。他 flag と独立 (evidence buffer は
-        # 使わない = 読み取り専用の追加コンテキストなので buffer store 条件には
-        # 加えない)。
-        _unconscious_context_enabled = config.unconscious_context_enabled
-        log_unconscious_context_enabled_state(_unconscious_context_enabled)
-        # U10a (予測誤差統一設計 部品6・pending prediction / default OFF):
-        # 抽出・保持・再浮上を一括ゲートする。evidence buffer とは無関係な
-        # 独立 flag (別の per-Being store を使う) なので buffer store 条件には
-        # 加えない。
-        _pending_prediction_enabled = config.pending_prediction_enabled
-        log_pending_prediction_enabled_state(_pending_prediction_enabled)
-        _hearsay_requested = config.hearsay_enabled
-        # H-1 (伝聞の入力衛生 / 横断レビュー): HEARSAY は BELIEF_EVIDENCE_ENABLED
-        # (evidence buffer + transcriber) が前提。抽出側 (chunk 補完 LLM の
-        # heard_claims 節) だけ ON で転記側の transcriber が無いと、抽出コスト
-        # (prompt 節 + LLM 出力) を払うだけで転記点
-        # (_record_belief_evidence_if_applicable) が transcriber None のため
-        # 黙って捨てる「誘うのに黙って捨てる」静かな失敗になる (MEMO_DISTILL
-        # 事件の構造再演)。GOAL_REVISION×GOAL_STORE (直下) と同じパターンで、
-        # BELIEF_EVIDENCE が OFF なら HEARSAY も実効 OFF に畳み、抽出コストも
-        # 払わないようにする。
-        if _hearsay_requested and not _belief_evidence_enabled:
-            logger.warning(
-                "HEARSAY_ENABLED=1 だが BELIEF_EVIDENCE_ENABLED が OFF のため "
-                "伝聞の抽出・転記は無効化される (belief evidence transcriber が "
-                "前提)。BELIEF_EVIDENCE_ENABLED=1 も設定してください。"
-            )
-        _hearsay_enabled = _hearsay_requested and _belief_evidence_enabled
-        log_hearsay_enabled_state(_hearsay_enabled)
-        # GOAL_REVISION_ENABLED と同様、畳み込んだ実効値を runtime にも保持する
-        # (テストや後続処理が「実際に何が有効か」を config ミスに関わらず
-        # 一箇所から読めるようにする)。
-        runtime._hearsay_enabled = _hearsay_enabled
-        # P5 (目的層 G1): GOAL_STORE_ENABLED ON のとき goal store を構築し
-        # runtime に保持する。【現在の目的】provider (prompt builder 側) と実験
-        # snapshot stub がここから拾う。OFF なら None のまま (静的シナリオ文字列)。
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_goal_store_enabled_state,
-        )
-
-        _goal_store_enabled = config.goal_store_enabled
-        log_goal_store_enabled_state(_goal_store_enabled)
-        if _goal_store_enabled:
-            from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
-                InMemoryGoalJournalStore,
-            )
-
-            runtime._goal_journal_store = InMemoryGoalJournalStore()
-        # P6 (目的の見直し / G2): GOAL_REVISION_ENABLED ON かつ goal store が
-        # あるとき、goal_update を反映する applier を構築する。goal store が
-        # 無ければ改訂しようがないので何もしない (revision は store が前提)。
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_goal_revision_enabled_state,
-        )
-
-        _goal_revision_requested = config.goal_revision_enabled
-        # revision は goal store が前提。GOAL_REVISION_ENABLED だけ ON で
-        # GOAL_STORE_ENABLED が OFF だと、goal_update を schema に露出しつつ
-        # applier が無く「誘うのに黙って捨てる」= 静かな失敗 (本 PR が撤回した
-        # まさにその挙動を config ミスで再現) になる。両者を畳んで、store が
-        # 無ければ revision も実効 OFF にし、schema 露出も起きないようにする。
-        if _goal_revision_requested and runtime._goal_journal_store is None:
-            logger.warning(
-                "GOAL_REVISION_ENABLED=1 だが GOAL_STORE_ENABLED が OFF のため "
-                "目的の改訂は無効化される (goal store が前提)。GOAL_STORE_ENABLED=1 "
-                "も設定してください。"
-            )
-        runtime._goal_revision_enabled = (
-            _goal_revision_requested and runtime._goal_journal_store is not None
-        )
-        log_goal_revision_enabled_state(runtime._goal_revision_enabled)
-        # P8: 目的の清算 (goal_outcome) が起きたとき belief evidence へ転記する
-        # transcriber は、この下で BELIEF 系 flag 依存で後から構築される。U7 と
-        # 同じ遅延 holder で applier に渡し、transcriber 確定後に中身を埋める
-        # (belief 経路が OFF のときは None のまま = 転記なしで清算だけ行う)。
-        _goal_settlement_transcriber_holder: list[Any] = [None]
-        if runtime._goal_revision_enabled:
-            from ai_rpg_world.application.llm.services.goal_revision_applier import (
-                GoalRevisionApplier,
-            )
-
-            runtime._goal_revision_applier = GoalRevisionApplier(
-                cast(Any, runtime._goal_journal_store),
-                observation_sink=runtime._emit_goal_observation,
-                current_tick_provider=runtime.current_tick,
-                now_provider=lambda: datetime.now(timezone.utc),
-                settlement_transcriber_provider=(
-                    lambda: _goal_settlement_transcriber_holder[0]
-                ),
-                trace_recorder_provider=lambda: runtime._trace_recorder,
-            )
-        # U7: subjective service の構築 (この少し下) は semantic スタック構築
-        # (build_episodic_stack 呼び出し、この関数のずっと下) より先に走るため、
-        # belief 取得に使う SemanticPassiveRecallService をこの時点ではまだ
-        # 作れない (semantic_memory_store が未確定)。provider は「呼ばれた瞬間に
-        # このリストの中身を見る」遅延解決にし、build_episodic_stack が返した
-        # semantic_memory_store で後から埋める (下の「U7: 無意識コンテキスト用
-        # semantic recall service を確定させる」ブロックを参照)。
-        _unconscious_context_semantic_recall_holder: list[Any] = [None]
-        belief_evidence_buffer_store = None
-        belief_evidence_transcriber = None
-        if (
-            _belief_evidence_enabled
-            or _belief_consolidation_enabled
-            or _salience_structured_failure_enabled
-            or _memo_distill_enabled
-            or _state_collapse_evidence_enabled
-        ):
-            from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-                InMemoryBeliefEvidenceBufferStore,
-            )
-
-            belief_evidence_buffer_store = InMemoryBeliefEvidenceBufferStore()
-            if _belief_evidence_enabled:
-                from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
-                    BeliefEvidenceTranscriber,
-                )
-
-                # P3 (CONFIRMATION 関連性ゲート): belief_id → (tags, text) を
-                # semantic store から遅延ルックアップする provider。CONFIRMATION
-                # 転記時 (run 中) には episodic_stack / semantic store が確定して
-                # いるので、参照を lambda で遅延評価する。store 未構築 / belief
-                # 不在なら None を返し、ゲートは安全側 (積まない) に倒れる。
-                # 注: in_context_belief_ids に流れる id は passive recall 時点の
-                # entry_id (prompt_builder が c.entry.entry_id で採る) であり、
-                # lineage の belief_id ではない。revise 済み belief は
-                # entry_id != belief_id になる (新 entry が別 entry_id を持ち
-                # belief_id だけ継ぐ) ため、必ず entry_id で照合する
-                # (belief_id で照合すると revise 済み belief が永久に一致しなくなる)。
-                def _belief_axis_lookup(being_id: Any, recalled_entry_id: Any) -> Any:
-                    stack = runtime._episodic_stack
-                    store = getattr(stack, "semantic_memory_store", None) if stack else None
-                    if store is None:
-                        return None
-                    try:
-                        entries = store.list_for_being(being_id)
-                    except Exception:
-                        logger.warning(
-                            "belief_axis_lookup: semantic_store.list_for_being "
-                            "failed; CONFIRMATION ゲートは安全側 (None) に倒れる",
-                            exc_info=True,
-                        )
-                        return None
-                    for entry in entries:
-                        if entry.entry_id == recalled_entry_id:
-                            return (tuple(entry.tags), entry.text)
-                    return None
-
-                belief_evidence_transcriber = BeliefEvidenceTranscriber(
-                    belief_evidence_buffer_store,
-                    trace_recorder_provider=lambda: runtime._trace_recorder,
-                    current_tick_provider=runtime.current_tick,
-                    belief_axis_provider=_belief_axis_lookup,
-                )
-                # P8: goal 清算の転記も同じ transcriber が担う。上で先に構築した
-                # GoalRevisionApplier の遅延 holder をここで埋める。
-                _goal_settlement_transcriber_holder[0] = belief_evidence_transcriber
-        # P-U2 (停滞感 store): ON のときだけ in-memory store を構築し、
-        # BeliefConsolidationCoordinator に注入する。runtime に保持するのは
-        # snapshot stub (_wiring_stub_from_world_runtime) から拾えるように
-        # するため (checklist #27。goal_journal_store と同じ扱い)。
-        runtime._stagnation_pressure_store = None
-        if _stagnation_pressure_enabled:
-            from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
-                InMemoryStagnationPressureStore,
-            )
-
-            runtime._stagnation_pressure_store = InMemoryStagnationPressureStore()
-        # 案A (band-gated thinking): ON のときだけラッチを構築する。
-        # ``_emit_reflect_observation`` が停滞注入時に arm し、run_phase_a が
-        # 次行動で consume する。transient なので snapshot には載せない。
-        runtime._stagnation_reasoning_latch = None
-        if _stagnation_reasoning_enabled:
-            from ai_rpg_world.application.llm.services.in_memory_stagnation_reasoning_latch import (
-                InMemoryStagnationReasoningLatch,
-            )
-
-            runtime._stagnation_reasoning_latch = InMemoryStagnationReasoningLatch()
-        if config.episodic_subjective_enabled:
-            from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
-                EpisodicChunkSubjectiveFieldsService,
-            )
-            from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import (
-                ThreadPoolEpisodicSubjectiveScheduler,
-            )
-            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_config,
-            )
-            from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-
-            try:
-                _client = create_llm_client_from_config(config)
-            except Exception:
-                logger.exception("LLM client factory failed; subjective service disabled")
-                _client = None
-            if isinstance(_client, LiteLLMClient):
-                # subjective service は scheduler 内部に閉じ込める。
-                # episode_store は build_episodic_stack 内で作るが、
-                # scheduler に渡す必要があるので先に作ってから stack 構築側に
-                # 渡したい — が wiring の都合で一旦同じ store を共有する経路
-                # にしておく (= scheduler は episode_store への参照を持ち、
-                # stack 側も同じ store を使う)。
-                # 簡潔さ優先で「stack を組んでから scheduler を作って差し戻す」
-                # 二段階構築は避け、ここで store を先に作って両方に渡す。
-                from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-                    InMemorySubjectiveEpisodeStore,
-                )
-
-                shared_episode_store = InMemorySubjectiveEpisodeStore()
-                # U7: provider 自体は _unconscious_context_enabled が False でも
-                # 常に None のまま渡して構わない (service 側で「配線と有効化の
-                # 分離」を担保済み)。ON のときだけ実体を組む。belief を読む
-                # SemanticPassiveRecallService はこの時点でまだ確定していない
-                # (semantic_memory_store は build_episodic_stack がこの後で
-                # 構築する) ため、holder 経由の遅延解決にする。L5 (self_image /
-                # world_view) は RollingSummary 使用時のみ短期記憶が
-                # get_long_summary_text を実装するので、無ければ渡さない
-                # (= 従来通り省略される)。
-                _unconscious_context_provider = None
-                if _unconscious_context_enabled:
-                    from ai_rpg_world.application.llm.wiring.unconscious_context_provider import (
-                        build_unconscious_context_provider,
-                    )
-
-                    _get_long_summary_text = getattr(
-                        short_term_memory, "get_long_summary_text", None
-                    )
-                    _long_summary_text_provider = (
-                        (
-                            lambda pid, _f=_get_long_summary_text: _f(
-                                PlayerId(pid)
-                            )
-                        )
-                        if callable(_get_long_summary_text)
-                        else None
-                    )
-                    _unconscious_context_provider = build_unconscious_context_provider(
-                        semantic_recall_service_provider=(
-                            lambda: _unconscious_context_semantic_recall_holder[0]
-                        ),
-                        resolve_being=lambda pid: (
-                            runtime._aux_being_resolver.resolve_being_id(
-                                runtime._aux_being_default_world_id, pid
-                            )
-                            if runtime._aux_being_resolver is not None
-                            and runtime._aux_being_default_world_id is not None
-                            else None
-                        ),
-                        long_summary_text_provider=_long_summary_text_provider,
-                    )
-                # U6: flag OFF なら salience_enabled=False (= system prompt が
-                # 導入前と byte 同一)。
-                # U8 (部品2b): error_gated_encoding_enabled は
-                # salience_enabled が False のときは無効化される (連動先の
-                # salience が存在しないため。_build_system_prompt 側で保証)。
-                _subjective_service = EpisodicChunkSubjectiveFieldsService(
-                    _client,
-                    salience_enabled=_salience_structured_failure_enabled,
-                    unconscious_context_provider=_unconscious_context_provider,
-                    unconscious_context_enabled=_unconscious_context_enabled,
-                    error_gated_encoding_enabled=_error_gated_encoding_enabled,
-                    pending_prediction_enabled=_pending_prediction_enabled,
-                    hearsay_enabled=_hearsay_enabled,
-                )
-                # scheduler と chunk_coordinator (= stack) が同じ store を
-                # 共有することで、worker が書き込んだ merged episode を
-                # passive_recall が読める ( = Pattern A の整合性条件)。
-                # Phase 3 Step 3e-3: scheduler は episode_store を being_id 経路で
-                # 触る。being_id は chunk_coordinator から submit 引数で渡される。
-                subjective_scheduler = ThreadPoolEpisodicSubjectiveScheduler(
-                    _subjective_service,
-                    shared_episode_store,
-                    max_workers=1,
-                    max_queue_size=100,
-                    trace_recorder_provider=lambda: runtime._trace_recorder,
-                    current_tick_provider=runtime.current_tick,
-                    # U2: 非同期経路 (worker thread) の完了点。flag OFF なら
-                    # None のまま (= 従来動作と完全互換)。
-                    belief_evidence_transcriber=belief_evidence_transcriber,
-                    # U4: default False。attribution + CONFIRMATION の計算自体を
-                    # 行うかどうか (transcriber が None なら本来無関係だが、
-                    # 明示的に flag を伝播しておく)。
-                    belief_attribution_enabled=_belief_attribution_enabled,
-                    # U9a: default False。recall_buffer_store 自体は
-                    # build_episodic_stack がこの後で構築するため、この時点では
-                    # 未確定 (= None のまま)。build_episodic_stack 完了後に
-                    # set_recall_buffer_store で差し込む (下の「U9a: recall_buffer
-                    # を scheduler に後から差し込む」ブロックを参照)。
-                    error_driven_reinterpretation_enabled=(
-                        _error_driven_reinterpretation_enabled
-                    ),
-                    # U9b: default False。recall_success_store 自体は
-                    # build_episodic_stack がこの後で構築するため、この時点では
-                    # 未確定 (= None のまま)。build_episodic_stack 完了後に
-                    # set_recall_success_store で差し込む (下の「U9b:
-                    # recall_success_store を scheduler に後から差し込む」
-                    # ブロックを参照)。
-                    recall_hit_boost_enabled=_recall_hit_boost_enabled,
-                    # U10a: default False。pending_prediction_store 自体は
-                    # build_episodic_stack がこの後で構築するため、この時点
-                    # では未確定 (= None のまま)。build_episodic_stack 完了後に
-                    # set_pending_prediction_store で差し込む。
-                    pending_prediction_enabled=_pending_prediction_enabled,
-                )
-                # 各 player の persona_block を player_id 引きで返す provider。
-                # world_character (= 操作対象) は rich persona、その他は spawn 名
-                # 由来の fallback persona になっている system_prompts_by_player_id
-                # と同じ規則で組み立てる。
-                _persona_by_pid: dict[int, str] = {}
-                if len(scenario.player_spawns) > 1 and world_character is not None:
-                    ec_cid = (world_character.character_id or "").strip()
-                    ec_name = (world_character.name or "").strip()
-                    for s in scenario.player_spawns:
-                        if (ec_cid and s.string_id == ec_cid) or (ec_name and s.name == ec_name):
-                            _persona_by_pid[int(s.player_id)] = persona_block
-                        else:
-                            _persona_by_pid[int(s.player_id)] = (
-                                build_persona_block_from_character(
-                                    None, fallback_display_name=s.name
-                                )
-                            )
-                elif scenario.player_spawns:
-                    # 単独 spawn (旧来構成) や world_character 未指定: 全 player に
-                    # 既存の persona_block を流用 (fallback 含む)
-                    for s in scenario.player_spawns:
-                        _persona_by_pid[int(s.player_id)] = persona_block
-                persona_provider = lambda pid, _d=_persona_by_pid: _d.get(int(pid.value), "")
-            else:
-                logger.info(
-                    "LLM_EPISODIC_SUBJECTIVE_ENABLED=1 だが LiteLLMClient 未使用 "
-                    "(LLM_CLIENT=litellm が必要)。subjective scheduler を無効化。"
-                )
-        # #526 後続: semantic 拡張のフラグ解決。world_runtime でも
-        # SEMANTIC_PASSIVE_TOP_K / SEMANTIC_LLM_GIST_ENABLED で「学びを作る
-        # (promotion) / 出す (passive recall)」を on/off できるようにする。
-        # 既定 OFF (top_k=0 / gist off) で従来の episodic-only 動作を保つ。
-        # フラグは env を直読みせず ResolvedLlmRuntimeConfig (= config) から取る。
-        # こうしないと create_world_runtime(config=...) の明示 config が
-        # semantic だけ無視され、短期記憶など他設定との config 契約が崩れる。
-        _semantic_top_k = config.semantic_passive_top_k
-        _semantic_gist_enabled = config.semantic_llm_gist_enabled
-        # U3b: 固着パスは belief journal (semantic_memory_store) への書き込みを
-        # 前提とするため、他の semantic 系フラグが OFF でも semantic スタック
-        # 自体は組む必要がある。U7 (無意識コンテキスト) も同じ理由で強制する:
-        # belief top-K を読むには semantic_memory_store が要るため、
-        # SEMANTIC_PASSIVE_TOP_K=0 のまま UNCONSCIOUS_CONTEXT_ENABLED だけ ON
-        # にしても semantic スタックが組まれないと belief が一切取れない。
-        # 能動記憶ツール (memory_search_semantic / memory_explore_related) も
-        # semantic_memory_store / memory_link_store を前提とするため、露出フラグ
-        # が ON のときは同じスタックを組む。tool 定義の露出自体は
-        # get_tool_definitions() が config と executor の AND で決める。
-        _semantic_enabled = (
-            _semantic_top_k > 0
-            or _semantic_gist_enabled
-            or _belief_consolidation_enabled
-            or _unconscious_context_enabled
-            or config.semantic_search_enabled
-            or config.episodic_explore_related_enabled
-        )
-        _semantic_gist_service = None
-        _semantic_persona_resolver = None
-        if _semantic_enabled:
-            _names_by_pid = {
-                int(s.player_id): (s.name or "") for s in scenario.player_spawns
-            }
-            # persona resolver: player_id(int) → (player_name, persona_block)。
-            # gist prompt / promotion が persona を載せるために使う。
-            _semantic_persona_resolver = (
-                lambda pid_int, _n=_names_by_pid, _p=persona_block: (
-                    _n.get(int(pid_int), ""),
-                    _p,
-                )
-            )
-            # gist は短期記憶 builder と同じく config.llm_client_kind で gate する
-            # (config が stub なのに env 側で litellm が動く余地を残さない)。
-            if _semantic_gist_enabled and config.llm_client_kind == "litellm":
-                # R2c-1: full wiring 本体 (wiring/__init__) の private helper でなく、
-                # 抽出済みの optional_llm_services から取る (= wiring/__init__ からの
-                # symbol 依存を廃止)。import-time に wiring/__init__ がロードされる依存は
-                # R2c-2 の __init__ 軽量化 (full wiring 本体削除) で解消する。
-                from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                    create_llm_client_from_config,
-                )
-                from ai_rpg_world.application.llm.wiring.optional_llm_services import (
-                    optional_semantic_gist_service,
-                )
-
-                try:
-                    _gist_client = create_llm_client_from_config(config)
-                except Exception:
-                    logger.exception(
-                        "LLM client factory failed; semantic gist disabled"
-                    )
-                    _gist_client = None
-                if _gist_client is not None:
-                    _semantic_gist_service = optional_semantic_gist_service(
-                        _gist_client, True
-                    )
-        # #526 / U3: 段1 (エピソード再解釈) の opt-in 配線。
-        # LLM_EPISODIC_REINTERPRETATION_ENABLED かつ LiteLLMClient が取れるときだけ
-        # completion port (= LLM) を渡す。flag ON でも client が stub なら completion
-        # は None になり、coordinator は構築されるが再解釈 LLM は走らない
-        # (prompt も recall_buffer を覗かない = graceful)。env 直読みせず config から取る。
-        _reinterpretation_enabled = config.episodic_reinterpretation_enabled
-        _reinterpretation_completion = None
-        if _reinterpretation_enabled and config.llm_client_kind == "litellm":
-            # R2c-1: 抽出済み optional_llm_services から取る (wiring/__init__ の
-            # private helper symbol 依存を廃止。import-time 依存は R2c-2 で解消)。
-            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_config,
-            )
-            from ai_rpg_world.application.llm.wiring.optional_llm_services import (
-                optional_episodic_reinterpretation_completion,
-            )
-
-            try:
-                _reinterp_client = create_llm_client_from_config(config)
-            except Exception:
-                logger.exception(
-                    "LLM client factory failed; episodic reinterpretation disabled"
-                )
-                _reinterp_client = None
-            if _reinterp_client is not None:
-                _reinterpretation_completion = (
-                    optional_episodic_reinterpretation_completion(
-                        _reinterp_client, None
-                    )
-                )
-        # U3b: 固着パスの completion port。BELIEF_CONSOLIDATION_ENABLED かつ
-        # litellm client が取れるときだけ実 LLM を配線する。client が stub
-        # (llm_client_kind != "litellm") のときは coordinator 自体は構築される
-        # が completion=None のまま (= flush が no-op、evidence は buffer に
-        # 溜まり続けるだけの安全な縮退)。
-        _belief_consolidation_completion = None
-        if _belief_consolidation_enabled and config.llm_client_kind == "litellm":
-            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_config,
-            )
-            from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-
-            try:
-                _belief_consolidation_client = create_llm_client_from_config(config)
-            except Exception:
-                logger.exception(
-                    "LLM client factory failed; belief consolidation disabled"
-                )
-                _belief_consolidation_client = None
-            if isinstance(_belief_consolidation_client, LiteLLMClient):
-                _belief_consolidation_completion = _belief_consolidation_client
-        runtime._episodic_stack = build_episodic_stack(
-            scenario=scenario,
-            graph=spot_graph_repo.find_graph(),
-            observation_buffer=obs_buffer,
-            short_term_memory=short_term_memory,
-            action_result_store=action_result_store,
-            # trace_recorder は set_trace_recorder で後から差し込まれるので
-            # provider 経由で参照。chunk 書き込みごとに
-            # TraceEventKind.EPISODIC_CHUNK_WRITTEN が記録される。
-            trace_recorder_provider=lambda: runtime._trace_recorder,
-            current_tick_provider=runtime.current_tick,
-            subjective_completion_scheduler=subjective_scheduler,
-            persona_block_provider=persona_provider,
-            # H-2 (自己言及ループ / 横断レビュー): chunk 主観補完が抽出した
-            # heard_claims から「話者 = 聞き手本人」を弾くための本人名。
-            # scenario.player_spawns から名前解決する既存 API を再利用する
-            # (persona_block_provider と同じ player_id 引きの provider 形)。
-            player_name_provider=runtime.get_player_name,
-            episode_store=shared_episode_store,
-            # semantic 有効時は link / promotion が build_episodic_memory_stack で
-            # 組まれる (BeingId は各 caller 入口で渡す)。
-            semantic_enabled=_semantic_enabled,
-            semantic_passive_top_k=_semantic_top_k,
-            semantic_gist_service=_semantic_gist_service,
-            semantic_persona_resolver=_semantic_persona_resolver,
-            reinterpretation_enabled=_reinterpretation_enabled,
-            reinterpretation_completion=_reinterpretation_completion,
-            # #526 段階 2: 慣化ペナルティ (default off)
-            recall_habituation_enabled=config.recall_habituation_enabled,
-            recall_habituation_decay_window_ticks=(
-                config.recall_habituation_decay_window_ticks
-            ),
-            # #526 段階 3 + PR-A: 想起スロット (working memory / default off)
-            recall_slot_enabled=config.recall_slot_enabled,
-            recall_slot_capacity=config.recall_slot_capacity,
-            recall_slot_insert_per_tick=config.recall_slot_insert_per_tick,
-            recall_slot_max_residence=config.recall_slot_max_residence,
-            recall_slot_cooldown_ticks=config.recall_slot_cooldown_ticks,
-            recall_slot_insert_score_threshold=(
-                config.recall_slot_insert_score_threshold
-            ),
-            # #526 段階 3 PR-C: afterglow index (= ぼんやり覚えてる 1 行見出し)
-            afterglow_enabled=config.afterglow_enabled,
-            afterglow_capacity=config.afterglow_capacity,
-            afterglow_max_residence=config.afterglow_max_residence,
-            # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
-            # world_object 名を index できるようにする。SpotNode.interior は
-            # 実 runtime では None で保管され、別 repository に格納されている。
-            spot_interior_repo=spot_interior_repo,
-            # #526 後続 C2: chunk write 時の player 現在状況 (場所 / 視界 object
-            # / 同席者) を episode の固定 cue として焼き付けるための provider。
-            # runtime.build_llm_context(pid).tool_runtime_context を返す lambda
-            # を渡す。例外ハンドリングは builder 側で graceful に行う。
-            runtime_context_provider=lambda pid: runtime.build_llm_context(
-                pid
-            ).tool_runtime_context,
-            # U2 (証拠台帳統一設計): 同期経路用に transcriber を渡す (実際に
-            # 発火するのは chunk_subjective_fields_service 注入時のみ。本
-            # runtime の既定経路は非同期 scheduler なので通常は素通り)。store
-            # 自体は snapshot 用に stack へ公開する。
-            belief_evidence_transcriber=belief_evidence_transcriber,
-            belief_evidence_buffer_store=belief_evidence_buffer_store,
-            # U3b (固着パス): default OFF。ON のときのみクラスタ昇格が
-            # FAMILIARITY 転用モードになり、BeliefConsolidationCoordinator が
-            # 構築される。
-            belief_consolidation_enabled=_belief_consolidation_enabled,
-            belief_consolidation_completion=_belief_consolidation_completion,
-            # U4 (予測誤差統一設計 部品3): 同期経路 (chunk_coordinator) 用。
-            # 非同期経路 (scheduler) には上で個別に渡し済み。
-            belief_attribution_enabled=_belief_attribution_enabled,
-            # P4 (reflect): 固着 LLM に目的への前進評価を足す。監査対象の目的文と
-            # 内省観測 sink を provider で渡す (goal store 差し替えは P7)。
-            goal_reflect_enabled=_goal_reflect_enabled,
-            objective_text_provider=runtime._reflect_objective_provider,
-            reflect_observation_sink=runtime._emit_reflect_observation,
-            # P-U1 (目的停滞の evidence 化): ON のときだけ stalled/misaligned の
-            # reflect verdict を goal: 軸の高 salience evidence に変換する。
-            goal_stagnation_evidence_enabled=_goal_stagnation_evidence_enabled,
-            # P-U2 (停滞感 store): ON のときだけ reflect verdict を停滞感カウンタ
-            # に畳み込む。store は上で構築済み (runtime._stagnation_pressure_store)。
-            stagnation_pressure_enabled=_stagnation_pressure_enabled,
-            stagnation_pressure_store=runtime._stagnation_pressure_store,
-            # P10 (伝聞の固着判断): ON のとき固着 LLM に伝聞節を足し、shortlist に
-            # 話者 belief を載せ、HEARSAY 支持を confidence 半分に数える。抽出側
-            # (P9) と同じ HEARSAY_ENABLED で連動させる (抽出だけ ON で固着側が
-            # 素通しになる中途半端な状態を作らない)。
-            hearsay_enabled=_hearsay_enabled,
-            # U9a (誤差駆動再解釈): 同期経路 (chunk_coordinator) 用。非同期経路
-            # (scheduler) は recall_buffer 確定後に下で set_recall_buffer_store
-            # を呼んで差し込む (scheduler 自体は build_episodic_stack より先に
-            # 構築済のため、コンストラクタでは渡せない)。
-            error_driven_reinterpretation_enabled=(
-                _error_driven_reinterpretation_enabled
-            ),
-            # U8 (部品2a): chunk_coordinator (同期・非同期共通の境界判定) に
-            # decide_chunk_boundary への flag 伝播を頼む。
-            error_gated_boundary_enabled=_error_gated_encoding_enabled,
-            # U9b (想起の信用割り当て・的中側): 同期経路 (chunk_coordinator) と
-            # passive_recall 両方に的中側 sidecar を配線する。非同期経路
-            # (scheduler) は recall_success_store 確定後に下で
-            # set_recall_success_store を呼んで差し込む。
-            recall_hit_boost_enabled=_recall_hit_boost_enabled,
-            recall_hit_boost_strength=_recall_hit_boost_strength,
-            # U10a (pending prediction): 同期経路 (chunk_coordinator) と
-            # store 自体の構築を build_episodic_stack に任せる。非同期経路
-            # (scheduler) は下で set_pending_prediction_store により差し込む。
-            pending_prediction_enabled=_pending_prediction_enabled,
-            episodic_promotion_force_full_scan=(
-                config.episodic_promotion_force_full_scan
-            ),
-            episodic_promotion_expansion_hops=(
-                config.episodic_promotion_expansion_hops
-            ),
-            # episode store の永続化先。subjective 経路は shared_episode_store を
-            # 先に組んで渡すため resolve_default はそれを尊重する (db_path 未使用)。
-            # config の __post_init__ が「db_path + subjective」の無視組み合わせを
-            # fail-fast 済みなので、ここに来る db_path は非 subjective 経路のみ。
-            subjective_episode_db_path=config.subjective_episode_db_path,
-        )
-
-        # U9a: recall_buffer を scheduler に後から差し込む。
-        # subjective_scheduler は build_episodic_stack より先に構築されている
-        # ため (Pattern A の episode_store 共有と同じ理由)、recall_buffer が
-        # 確定するこの時点で set_recall_buffer_store により差し込む。
-        # ``recall_buffer_store`` は reinterpretation_completion が無いと None
-        # のまま (= 再解釈 LLM が走らず stamp しても意味が無いので同じ条件で
-        # 縮退させる)。
-        if subjective_scheduler is not None:
-            subjective_scheduler.set_recall_buffer_store(
-                runtime._episodic_stack.recall_buffer_store
-            )
-            # U9b: recall_success_store も同じ理由で後から差し込む。
-            subjective_scheduler.set_recall_success_store(
-                runtime._episodic_stack.recall_success_store
-            )
-            # U10a: pending_prediction_store も同じ理由で後から差し込む。
-            subjective_scheduler.set_pending_prediction_store(
-                runtime._episodic_stack.pending_prediction_store
-            )
-
-        # U7: 無意識コンテキスト用 semantic recall service を確定させる。
-        # build_episodic_stack が semantic_enabled=True のときに初めて
-        # semantic_memory_store を構築するため (この関数のずっと上、subjective
-        # service 構築時点ではまだ存在しない)、ここで holder に実体を積む。
-        # provider (build_unconscious_context_provider が返す closure) は
-        # 呼ばれる瞬間にこの holder を見るので、以降の chunk 補完から belief が
-        # 引けるようになる。semantic_memory_store が None (= 何らかの理由で
-        # semantic スタックが組まれなかった) なら holder は None のままで、
-        # provider は belief 無し (空文字) に安全に縮退する。
-        if (
-            _unconscious_context_enabled
-            and runtime._episodic_stack.semantic_memory_store is not None
-        ):
-            from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
-                SemanticPassiveRecallService,
-            )
-
-            _unconscious_context_semantic_recall_holder[0] = SemanticPassiveRecallService(
-                runtime._episodic_stack.semantic_memory_store,
-            )
-
-        # U6 (STRUCTURED_FAILURE): flag ON のときだけ transcriber を作り
-        # runtime に公開する。runtime_manager (presentation 層) が
-        # tool_call_loop_guard.record_and_check() の戻り値
-        # (CrossTickFailureTrigger) を見て being_id を解決し、本 transcriber
-        # を呼ぶ (= loop_guard 自身は being 解決ロジックを持たない設計)。
-        # episode_store は build_episodic_stack が確定させた共有 store
-        # (subjective 未配線時も内部で新規生成されるため必ず非 None)。
-        runtime._structured_failure_transcriber = None
-        if _salience_structured_failure_enabled and belief_evidence_buffer_store is not None:
-            from ai_rpg_world.application.llm.services.structured_failure_evidence_transcriber import (
-                StructuredFailureEvidenceTranscriber,
-            )
-
-            runtime._structured_failure_transcriber = (
-                StructuredFailureEvidenceTranscriber(
-                    belief_evidence_buffer_store,
-                    runtime._episodic_stack.episode_store,
-                    trace_recorder_provider=lambda: runtime._trace_recorder,
-                    current_tick_provider=runtime.current_tick,
-                )
-            )
-
-        # PR-D (STATE_COLLAPSE): flag ON のときだけ transcriber を作り、
-        # 1) PlayerDownedEvent / PlayerRevivedEvent の side handler として
-        #    pipeline_event_publisher に登録する (is_down 遷移フック)
-        # 2) needs_decay_stage に後付け注入する (hunger max 到達フック)
-        # being 解決は世界内で 1 か所に閉じる (aux_being_resolver 経由)。
-        if _state_collapse_evidence_enabled and belief_evidence_buffer_store is not None:
-            from ai_rpg_world.application.llm.services.state_collapse_evidence_transcriber import (
-                StateCollapseEvidenceTranscriber,
-            )
-            from ai_rpg_world.application.player.handlers.player_downed_state_collapse_evidence_handler import (
-                PlayerDownedStateCollapseEvidenceHandler,
-            )
-            from ai_rpg_world.application.player.handlers.player_revived_state_collapse_evidence_handler import (
-                PlayerRevivedStateCollapseEvidenceHandler,
-            )
-
-            state_collapse_transcriber = StateCollapseEvidenceTranscriber(
-                belief_evidence_buffer_store,
-                runtime._episodic_stack.episode_store,
-                trace_recorder_provider=lambda: runtime._trace_recorder,
-                current_tick_provider=runtime.current_tick,
-            )
-
-            def _resolve_state_collapse_being_id(
-                player_id: PlayerId,
-            ) -> BeingId | None:
-                resolver = getattr(runtime, "_aux_being_resolver", None)
-                world_id = getattr(runtime, "_aux_being_default_world_id", None)
-                if resolver is None or world_id is None:
-                    return None
-                return cast(BeingId, resolver.resolve_being_id(world_id, player_id))
-
-            pipeline_event_publisher.register_handler(
-                PlayerDownedEvent,
-                PlayerDownedStateCollapseEvidenceHandler(
-                    transcriber=state_collapse_transcriber,
-                    being_id_resolver=_resolve_state_collapse_being_id,
-                ),
-            )
-            pipeline_event_publisher.register_handler(
-                PlayerRevivedEvent,
-                PlayerRevivedStateCollapseEvidenceHandler(
-                    transcriber=state_collapse_transcriber,
-                    being_id_resolver=_resolve_state_collapse_being_id,
-                ),
-            )
-            needs_decay_stage.set_state_collapse_evidence_wiring(
-                state_collapse_transcriber, _resolve_state_collapse_being_id
-            )
-
-        # U5 (MEMO_DISTILL): flag ON のときだけ transcriber を作り、既に
-        # 構築済の _todo_tool_executor (= _wire_auxiliary_tool_stack() が本
-        # ブロックより前で呼ばれるため belief_evidence_buffer_store 確定前に
-        # 作られている) へ post-hoc に差し込む。executor 自身が memo_done
-        # 成功時に record_from_memo を呼ぶ (loop_guard 経由の STRUCTURED_FAILURE
-        # と異なり presentation 層の仲介は不要)。episode_store は
-        # build_episodic_stack が確定させた共有 store。
-        if _memo_distill_enabled and belief_evidence_buffer_store is not None:
-            from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (
-                MemoDistillEvidenceTranscriber,
-            )
-
-            memo_distill_transcriber = MemoDistillEvidenceTranscriber(
-                belief_evidence_buffer_store,
-                runtime._episodic_stack.episode_store,
-                trace_recorder_provider=lambda: runtime._trace_recorder,
-                current_tick_provider=runtime.current_tick,
-            )
-            # runtime に保持し、以後 _wire_auxiliary_tool_stack が executor を
-            # 作り直しても (set_trace_recorder 等) 再適用されるようにする。
-            # これがないと build 後の set_trace_recorder で transcriber が
-            # 静かに失われていた (memo_done 28 件に対し evidence 0 件)。
-            runtime._memo_distill_transcriber = memo_distill_transcriber
-            if runtime._todo_tool_executor is not None:
-                runtime._todo_tool_executor.set_memo_distill_transcriber(
-                    memo_distill_transcriber
-                )
-
+    runtime._wire_being_stack()
+    for spawn in scenario.player_spawns:
+        try:
+            runtime._aux_being_provisioning.ensure_attached(PlayerId(int(spawn.player_id)))
+        except Exception as exc:
+            raise RuntimeError(f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を渡せない") from exc
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
     # (setter 呼び忘れ silent failure を構造で排除)。
+
+    runtime._wire_being_stack()
+    from ai_rpg_world.application.observation.being_contract import (
+        environment_entry_for_player,
+    )
+
+    for spawn in scenario.player_spawns:
+        player_id = PlayerId(int(spawn.player_id))
+        player_acquaintances.receive_entry(player_id, environment_entry_for_player(scenario, player_id))
+    _record_meetings_at_spawn(scenario, player_acquaintances)
+    from ai_rpg_world.application.llm.services.executors.being_episode_index_revision_tool_executor import (
+        BeingEpisodeIndexRevisionToolExecutor,
+    )
+    from ai_rpg_world.application.llm.services.executors.being_episode_recall_tool_executor import (
+        BeingEpisodeRecallToolExecutor,
+    )
+
+    runtime._being_episode_recall_tool_executor = BeingEpisodeRecallToolExecutor(
+        repository=runtime._being_episode_store,
+        turn_reader=memory_turn_clock,
+        max_handles=config.being_episode_recall_max_handles,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
+    runtime._being_episode_index_revision_tool_executor = BeingEpisodeIndexRevisionToolExecutor(
+        repository=runtime._being_episode_store,
+        turn_reader=memory_turn_clock,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
+    from ai_rpg_world.application.being.player_short_term_memory_copy import (
+        PlayerShortTermMemoryCopy,
+    )
+
+    runtime._being_short_term_memory_copy = PlayerShortTermMemoryCopy(
+        store=runtime._being_short_term_memory_store,
+        being_id_of=_being_id_of,
+        turn_reader=memory_turn_clock,
+        observer_of=runtime._being_observer,
+        environment_of=runtime.environment_name_for,
+        current_tick_provider=lambda: runtime.current_tick(),
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+    )
+    recent_event_store.add_append_listener(runtime._being_short_term_memory_copy.on_appended)
+    from ai_rpg_world.application.being.recent_events_shadow import RecentEventsShadow
+
+    runtime._recent_events_shadow = RecentEventsShadow(
+        store=runtime._being_short_term_memory_store,
+        being_id_of=_being_id_of,
+        projection_active=lambda: runtime._public_sns_projection is not None,
+        current_tick_provider=lambda: runtime.current_tick(),
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+    )
+    persona_of_player = _build_persona_resolver(
+        scenario=scenario,
+        world_character=world_character,
+        persona_block=persona_block,
+    )
+    runtime._player_episode_writing = _build_player_episode_writing(
+        config,
+        runtime=runtime,
+        turn_reader=memory_turn_clock,
+        persona_of=persona_of_player,
+    )
+    _wire_backstory_writing(
+        config,
+        runtime=runtime,
+        dispatcher=being_dispatcher,
+        being_id_of=_being_id_of,
+        persona_of_player=persona_of_player,
+    )
 
     # disabled_tools の名前が実在するかを、ここで確かめる。
     #
@@ -8210,9 +6793,26 @@ def create_world_runtime(
     # presentation 層の起動時検査まで遅れる。**シナリオの書き間違いは
     # シナリオを読んだ直後に落としたい。** run を 1 本流し終えてから
     # 「無効化したつもりが出たままだった」と気付くのが最悪の形。
+    from ai_rpg_world.application.world_runtime.public_sns_wiring import wire_public_sns
+
+    wire_public_sns(runtime)
     runtime._validate_disabled_tool_names()
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()
+    episode_index_shown, episode_recall_offered = runtime._episode_index_parts_named_in_system_prompt()
+    runtime._world_llm_system_prompt = _world_system_prompt(
+        persona_block,
+        episode_index_shown=episode_index_shown,
+        episode_recall_offered=episode_recall_offered,
+    )
+    runtime._world_llm_system_prompts_by_player_id = {
+        player_id: _world_system_prompt(
+            persona,
+            episode_index_shown=episode_index_shown,
+            episode_recall_offered=episode_recall_offered,
+        )
+        for player_id, persona in personas_by_player_id.items()
+    }
     return runtime
 
 

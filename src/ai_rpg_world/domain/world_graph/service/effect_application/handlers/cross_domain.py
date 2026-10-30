@@ -66,9 +66,7 @@ def apply_apply_damage(effect: InteractionEffect, ctx: EffectApplicationState) -
             target_bucket=ctx.target_damage_specs,
             target_player_status=ctx.target_player_status,
         )
-        dmg_bucket.append(
-            DamageSpec(damage=damage_val, message=msg, visibility=visibility)
-        )
+        dmg_bucket.append(DamageSpec(damage=damage_val, message=msg, visibility=visibility))
         ctx.summaries.append(
             AppliedEffectSummary(
                 kind=AppliedEffectKind.DAMAGE,
@@ -78,9 +76,7 @@ def apply_apply_damage(effect: InteractionEffect, ctx: EffectApplicationState) -
         )
 
 
-def apply_apply_status_effect(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_apply_status_effect(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     visibility = resolve_visibility(effect)
     p = effect.parameters
     effect_type_name = str(p.get("status_effect_type", ""))
@@ -99,9 +95,7 @@ def apply_apply_status_effect(
             AppliedEffectSummary(
                 kind=AppliedEffectKind.STATUS_EFFECT,
                 visibility=visibility,
-                description=(
-                    f"{effect_type_name} の状態異常 (値={value}, {duration_ticks} ticks)"
-                ),
+                description=(f"{effect_type_name} の状態異常 (値={value}, {duration_ticks} ticks)"),
                 target_ref=effect_type_name,
             )
         )
@@ -121,16 +115,10 @@ def apply_teleport_entity(effect: InteractionEffect, ctx: EffectApplicationState
             TeleportSpec(
                 target_spot_id=target_spot_id,
                 visibility=visibility,
-                departure_observation_message=_declared(
-                    "departure_observation_message"
-                ),
-                departure_observation_message_in_dark=_declared(
-                    "departure_observation_message_in_dark"
-                ),
+                departure_observation_message=_declared("departure_observation_message"),
+                departure_observation_message_in_dark=_declared("departure_observation_message_in_dark"),
                 arrival_observation_message=_declared("arrival_observation_message"),
-                arrival_observation_message_in_dark=_declared(
-                    "arrival_observation_message_in_dark"
-                ),
+                arrival_observation_message_in_dark=_declared("arrival_observation_message_in_dark"),
             )
         )
         ctx.summaries.append(
@@ -143,9 +131,7 @@ def apply_teleport_entity(effect: InteractionEffect, ctx: EffectApplicationState
         )
 
 
-def apply_change_atmosphere(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_change_atmosphere(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     visibility = resolve_visibility(effect)
     p = effect.parameters
     spot_id = int(p.get("spot_id", 0))
@@ -170,9 +156,7 @@ def apply_change_atmosphere(
         )
 
 
-def apply_create_connection(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_create_connection(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     visibility = resolve_visibility(effect)
     p = effect.parameters
     from_sid = int(p.get("from_spot_id", 0))
@@ -181,8 +165,7 @@ def apply_create_connection(
     if from_sid > 0 and to_sid > 0 and conn_name:
         if "passage" not in p:
             _logger.warning(
-                "CREATE_CONNECTION effect for '%s' is missing 'passage' "
-                "block; defaulting to Passage.open()",
+                "CREATE_CONNECTION effect for '%s' is missing 'passage' block; defaulting to Passage.open()",
                 conn_name,
             )
         ctx.create_connection_specs.append(
@@ -201,24 +184,18 @@ def apply_create_connection(
             AppliedEffectSummary(
                 kind=AppliedEffectKind.CONNECTION_CREATED,
                 visibility=visibility,
-                description=(
-                    f"スポット {from_sid} と {to_sid} を結ぶ接続「{conn_name}」が現れた"
-                ),
+                description=(f"スポット {from_sid} と {to_sid} を結ぶ接続「{conn_name}」が現れた"),
                 target_ref=conn_name,
             )
         )
 
 
-def apply_destroy_connection(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_destroy_connection(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     visibility = resolve_visibility(effect)
     p = effect.parameters
     cid = int(p.get("connection_id", 0))
     if cid > 0:
-        ctx.destroy_connection_specs.append(
-            DestroyConnectionSpec(connection_id=cid, visibility=visibility)
-        )
+        ctx.destroy_connection_specs.append(DestroyConnectionSpec(connection_id=cid, visibility=visibility))
         ctx.summaries.append(
             AppliedEffectSummary(
                 kind=AppliedEffectKind.CONNECTION_DESTROYED,
@@ -252,9 +229,7 @@ def apply_satisfy_need(effect: InteractionEffect, ctx: EffectApplicationState) -
         )
 
 
-def apply_change_passage_state(
-    effect: InteractionEffect, ctx: EffectApplicationState
-) -> None:
+def apply_change_passage_state(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
     visibility = resolve_visibility(effect)
     p = effect.parameters
     cid_raw = p.get("connection_id")

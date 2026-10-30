@@ -20,6 +20,7 @@ dependencies = [
     "pytest==8.4.1",
     "pytest-cov==6.2.1",
     "pytest-xdist==3.6.1",
+    "pytest-split==0.11.0",
     "PyYAML==6.0.1",
     "tomli==2.2.1",
     "typing_extensions==4.14.1",
@@ -59,8 +60,12 @@ line-length = 120
 [tool.ruff.lint]
 # 既定のルールセットは 15,000 件以上を報告する。緑にできた分類だけを
 # ここへ足し、CI を常に緑に保つ。分類を増やす PR と、違反を潰す PR は分ける。
-select = ["E9", "F811", "F821", "I", "RUF", "UP"]
+select = ["E9", "F811", "F821", "I", "N", "RUF", "UP"]
 ignore = [
+    # 例外の名前の末尾を Error にする。このリポジトリは XxxException で揃えていて、
+    # ドメイン例外の基底 (<Context>DomainException) もこの形で名前を付けている。
+    "N818",
+
     # Union[X, Y] を X | Y にする。実行時に評価される位置 (型エイリアスの代入、
     # 基底クラスの添字) で使われている 5 件が残っており、変換すると
     # types.UnionType になって typing.Union と挙動が分かれる。1 件ずつ確かめて
@@ -109,9 +114,6 @@ ignore = [
 # default_factory へ移すと「毎回作り直す必要がある」と読めてしまうので、
 # 不変であることをここに書く。
 extend-immutable-calls = [
-    "ai_rpg_world.domain.combat.value_object.hit_box_shape.RelativeCoordinate",
-    "ai_rpg_world.domain.combat.value_object.hit_box_velocity.HitBoxVelocity.zero",
-    "ai_rpg_world.domain.world.value_object.movement_cost.MovementCost.normal",
 ]
 
 [tool.mypy]
@@ -124,13 +126,13 @@ strict = true
 follow_imports = "silent"
 # src 配下は全レイヤーが対象。
 files = [
+    "src/ai_rpg_world/eventing",
     "src/ai_rpg_world/domain",
+    "src/ai_rpg_world/being",
     "src/ai_rpg_world/application/being",
     "src/ai_rpg_world/application/common",
-    "src/ai_rpg_world/application/conversation",
     "src/ai_rpg_world/application/encounter",
     "src/ai_rpg_world/application/guild",
-    "src/ai_rpg_world/application/harvest",
     "src/ai_rpg_world/application/intent",
     "src/ai_rpg_world/application/inventory",
     "src/ai_rpg_world/application/llm",

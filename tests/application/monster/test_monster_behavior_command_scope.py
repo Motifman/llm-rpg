@@ -39,9 +39,7 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 )
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -152,12 +150,10 @@ def _build():
     monster = MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=_template(),
-        world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
             SkillLoadoutId(1), owner_id=101, normal_capacity=0, awakened_capacity=0
         ),
         status=MonsterStatusEnum.ALIVE,
-        coordinate=Coordinate(0, 0, 0),
         spot_id=SPOT_ID,
         spawned_at_tick=WorldTick(0),
     )
@@ -185,7 +181,7 @@ def _build():
         spot_interior_repository=interiors,
     )
     observed: list[tuple[str, float, int]] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def observe(event: BaseDomainEvent) -> None:
         committed_monster = monsters.find_by_id(monster.monster_id)
@@ -216,11 +212,7 @@ def _build():
         ),
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
-        repository_provider_factory=(
-            InMemoryMonsterBehaviorCommandRepositoryProviderFactory(
-                spot_graph=graph
-            )
-        ),
+        repository_provider_factory=(InMemoryMonsterBehaviorCommandRepositoryProviderFactory(spot_graph=graph)),
     )
     service.set_command_scope_factory(scope_factory)
     return service, monsters, interiors, graph, observed
@@ -261,9 +253,7 @@ def test_public_tick_uses_only_scope_bound_repositories() -> None:
     legacy_monsters.save.side_effect = AssertionError("legacy monster saved")
     legacy_players.find_by_id.side_effect = AssertionError("legacy player read")
     legacy_players.save.side_effect = AssertionError("legacy player saved")
-    legacy_interiors.find_by_spot_id.side_effect = AssertionError(
-        "legacy interior read"
-    )
+    legacy_interiors.find_by_spot_id.side_effect = AssertionError("legacy interior read")
     legacy_interiors.save.side_effect = AssertionError("legacy interior saved")
     service._spot_graph_repository = legacy_graph
     service._monster_repository = legacy_monsters
@@ -308,9 +298,7 @@ def test_forage_graph_save_failure_rolls_back_all_resources() -> None:
     assert monster is not None
     assert interior is not None
     assert monster.hunger == 0.0
-    assert [item.item_instance_id for item in interior.ground_items] == [
-        ItemInstanceId(1)
-    ]
+    assert [item.item_instance_id for item in interior.ground_items] == [ItemInstanceId(1)]
     assert graph.find_graph().get_events() == []
     assert service._random.getstate() == random_before
     assert observed == []
@@ -322,12 +310,10 @@ def test_later_monster_failure_keeps_earlier_monster_commit() -> None:
     second = MonsterAggregate(
         monster_id=MonsterId.create(102),
         template=_template(),
-        world_object_id=WorldObjectId.create(9002),
         skill_loadout=SkillLoadoutAggregate.create(
             SkillLoadoutId(2), owner_id=102, normal_capacity=0, awakened_capacity=0
         ),
         status=MonsterStatusEnum.ALIVE,
-        coordinate=Coordinate(0, 0, 0),
         spot_id=SPOT_ID,
         spawned_at_tick=WorldTick(0),
     )
@@ -371,7 +357,5 @@ def test_later_monster_failure_keeps_earlier_monster_commit() -> None:
     assert interior_after is not None
     assert first_after.hunger == pytest.approx(0.2)
     assert second_after.hunger == 0.0
-    assert [item.item_instance_id for item in interior_after.ground_items] == [
-        ItemInstanceId(2)
-    ]
+    assert [item.item_instance_id for item in interior_after.ground_items] == [ItemInstanceId(2)]
     assert observed == [("MonsterAteGroundItemEvent", pytest.approx(0.2), 1)]

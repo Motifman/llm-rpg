@@ -85,9 +85,7 @@ class TradeEventJsonSerializer:
     def serialize(self, event: DomainEvent) -> bytes:
         """対応する取引イベントをUTF-8 JSONへ変換する。"""
         if not isinstance(event, _SUPPORTED_EVENT_TYPES):
-            raise TypeError(
-                f"対応していない取引イベントです: {type(event).__name__}"
-            )
+            raise TypeError(f"対応していない取引イベントです: {type(event).__name__}")
         payload: dict[str, Any] = {
             "schema_version": _SCHEMA_VERSION,
             "event_type": type(event).__name__,
@@ -95,9 +93,7 @@ class TradeEventJsonSerializer:
             "occurred_at": _datetime_to_string(event.occurred_at, "occurred_at"),
             "aggregate_id": int(event.aggregate_id),
             "aggregate_type": str(event.aggregate_type),
-            "occurred_tick": (
-                None if event.occurred_tick is None else event.occurred_tick.value
-            ),
+            "occurred_tick": (None if event.occurred_tick is None else event.occurred_tick.value),
         }
         if isinstance(event, TradeOfferedEvent):
             payload.update(
@@ -147,10 +143,7 @@ class TradeEventJsonSerializer:
             raise ValueError("取引イベントpayloadはUTF-8 JSONである必要があります") from error
         raw = _require_mapping(decoded, "取引イベントpayload")
         if _require_int(raw.get("schema_version"), "schema_version") != _SCHEMA_VERSION:
-            raise ValueError(
-                "未対応の取引イベントschema versionです: "
-                f"{raw.get('schema_version')!r}"
-            )
+            raise ValueError(f"未対応の取引イベントschema versionです: {raw.get('schema_version')!r}")
         if _require_string(raw.get("event_type"), "event_type") != event_type.__name__:
             raise ValueError("payloadのevent_typeと復元先の型が一致しません")
         event_id_raw = _require_string(raw.get("event_id"), "event_id")
@@ -162,55 +155,33 @@ class TradeEventJsonSerializer:
             "occurred_at": _require_datetime(raw.get("occurred_at"), "occurred_at"),
             "aggregate_id": TradeId(_require_int(raw.get("aggregate_id"), "aggregate_id")),
             "aggregate_type": _require_string(raw.get("aggregate_type"), "aggregate_type"),
-            "occurred_tick": (
-                None if occurred_tick is None else WorldTick(occurred_tick)
-            ),
+            "occurred_tick": (None if occurred_tick is None else WorldTick(occurred_tick)),
         }
         if event_type is TradeOfferedEvent:
             return TradeOfferedEvent(
                 **common,
                 seller_id=PlayerId(_require_int(raw.get("seller_id"), "seller_id")),
-                offered_item_id=ItemInstanceId(
-                    _require_int(raw.get("offered_item_id"), "offered_item_id")
-                ),
-                requested_gold=TradeRequestedGold.of(
-                    _require_int(raw.get("requested_gold"), "requested_gold")
-                ),
+                offered_item_id=ItemInstanceId(_require_int(raw.get("offered_item_id"), "offered_item_id")),
+                requested_gold=TradeRequestedGold.of(_require_int(raw.get("requested_gold"), "requested_gold")),
                 trade_scope=self._dict_to_scope(raw.get("trade_scope")),
-                listing_projection=self._dict_to_listing(
-                    raw.get("listing_projection")
-                ),
-                trade_created_at=_require_datetime(
-                    raw.get("trade_created_at"), "trade_created_at"
-                ),
+                listing_projection=self._dict_to_listing(raw.get("listing_projection")),
+                trade_created_at=_require_datetime(raw.get("trade_created_at"), "trade_created_at"),
             )
         if event_type is TradeAcceptedEvent:
             return TradeAcceptedEvent(
                 **common,
                 buyer_id=PlayerId(_require_int(raw.get("buyer_id"), "buyer_id")),
-                buyer_display_name=_require_string(
-                    raw.get("buyer_display_name"), "buyer_display_name"
-                ),
-                listing_projection=self._dict_to_listing(
-                    raw.get("listing_projection")
-                ),
+                buyer_display_name=_require_string(raw.get("buyer_display_name"), "buyer_display_name"),
+                listing_projection=self._dict_to_listing(raw.get("listing_projection")),
                 seller_id=PlayerId(_require_int(raw.get("seller_id"), "seller_id")),
-                offered_item_id=ItemInstanceId(
-                    _require_int(raw.get("offered_item_id"), "offered_item_id")
-                ),
-                requested_gold=TradeRequestedGold.of(
-                    _require_int(raw.get("requested_gold"), "requested_gold")
-                ),
-                trade_created_at=_require_datetime(
-                    raw.get("trade_created_at"), "trade_created_at"
-                ),
+                offered_item_id=ItemInstanceId(_require_int(raw.get("offered_item_id"), "offered_item_id")),
+                requested_gold=TradeRequestedGold.of(_require_int(raw.get("requested_gold"), "requested_gold")),
+                trade_created_at=_require_datetime(raw.get("trade_created_at"), "trade_created_at"),
             )
         if event_type is TradeDeclinedEvent:
             return TradeDeclinedEvent(
                 **common,
-                decliner_id=PlayerId(
-                    _require_int(raw.get("decliner_id"), "decliner_id")
-                ),
+                decliner_id=PlayerId(_require_int(raw.get("decliner_id"), "decliner_id")),
             )
         return TradeCancelledEvent(**common)
 
@@ -218,11 +189,7 @@ class TradeEventJsonSerializer:
     def _scope_to_dict(scope: TradeScope) -> dict[str, Any]:
         return {
             "trade_type": scope.trade_type.value,
-            "target_player_id": (
-                None
-                if scope.target_player_id is None
-                else int(scope.target_player_id)
-            ),
+            "target_player_id": (None if scope.target_player_id is None else int(scope.target_player_id)),
         }
 
     @staticmethod
@@ -231,9 +198,7 @@ class TradeEventJsonSerializer:
         trade_type = TradeType(_require_string(raw.get("trade_type"), "trade_type"))
         target = raw.get("target_player_id")
         if trade_type is TradeType.DIRECT:
-            return TradeScope.direct_trade(
-                PlayerId(_require_int(target, "target_player_id"))
-            )
+            return TradeScope.direct_trade(PlayerId(_require_int(target, "target_player_id")))
         if target is not None:
             raise ValueError("global tradeのtarget_player_idはnullである必要があります")
         return TradeScope.global_trade()
@@ -247,11 +212,7 @@ class TradeEventJsonSerializer:
             "item_type": listing.item_type.value,
             "item_rarity": listing.item_rarity.value,
             "item_description": listing.item_description,
-            "item_equipment_type": (
-                None
-                if listing.item_equipment_type is None
-                else listing.item_equipment_type.value
-            ),
+            "item_equipment_type": (None if listing.item_equipment_type is None else listing.item_equipment_type.value),
             "durability_current": listing.durability_current,
             "durability_max": listing.durability_max,
         }
@@ -261,31 +222,17 @@ class TradeEventJsonSerializer:
         raw = _require_mapping(raw, "listing_projection")
         equipment = raw.get("item_equipment_type")
         return TradeListingProjection(
-            seller_display_name=_require_string(
-                raw.get("seller_display_name"), "seller_display_name"
-            ),
+            seller_display_name=_require_string(raw.get("seller_display_name"), "seller_display_name"),
             item_name=_require_string(raw.get("item_name"), "item_name"),
             item_quantity=_require_int(raw.get("item_quantity"), "item_quantity"),
             item_type=ItemType(_require_string(raw.get("item_type"), "item_type")),
-            item_rarity=Rarity(
-                _require_string(raw.get("item_rarity"), "item_rarity")
-            ),
-            item_description=_require_string(
-                raw.get("item_description"), "item_description", allow_empty=True
-            ),
+            item_rarity=Rarity(_require_string(raw.get("item_rarity"), "item_rarity")),
+            item_description=_require_string(raw.get("item_description"), "item_description", allow_empty=True),
             item_equipment_type=(
-                None
-                if equipment is None
-                else EquipmentType(
-                    _require_string(equipment, "item_equipment_type")
-                )
+                None if equipment is None else EquipmentType(_require_string(equipment, "item_equipment_type"))
             ),
-            durability_current=_require_optional_int(
-                raw.get("durability_current"), "durability_current"
-            ),
-            durability_max=_require_optional_int(
-                raw.get("durability_max"), "durability_max"
-            ),
+            durability_current=_require_optional_int(raw.get("durability_current"), "durability_current"),
+            durability_max=_require_optional_int(raw.get("durability_max"), "durability_max"),
         )
 
 

@@ -35,15 +35,15 @@ _Result = TypeVar("_Result")
 class ReplyQueryService:
     """リプライ検索サービス"""
 
-    def __init__(self, post_repository: PostRepository, user_repository: UserRepository, reply_repository: ReplyRepository):
+    def __init__(
+        self, post_repository: PostRepository, user_repository: UserRepository, reply_repository: ReplyRepository
+    ):
         self._post_repository = post_repository
         self._user_repository = user_repository
         self._reply_repository = reply_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -53,16 +53,14 @@ class ReplyQueryService:
         except SnsDomainException as e:
             raise ApplicationExceptionFactory.create_from_domain_exception(
                 e,
-                user_id=context.get('user_id'),
-                target_user_id=context.get('viewer_user_id'),
-                post_id=context.get('post_id'),
-                reply_id=context.get('reply_id')
+                user_id=context.get("user_id"),
+                target_user_id=context.get("viewer_user_id"),
+                post_id=context.get("post_id"),
+                reply_id=context.get("reply_id"),
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra=context)
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def _get_user_profile_info(self, user_id: UserId) -> dict[str, Any]:
         """ユーザーのプロフィール情報を取得"""
@@ -88,10 +86,12 @@ class ReplyQueryService:
             is_replied_by_viewer=False,
             mentioned_users=[],
             is_deleted=True,
-            deletion_message="このポストは削除されています"
+            deletion_message="このポストは削除されています",
         )
 
-    def _convert_reply_to_dto(self, reply: "ReplyAggregate", viewer_user_id: UserId, author_profile_info: dict[str, Any], depth: int = 0) -> ReplyDto:
+    def _convert_reply_to_dto(
+        self, reply: "ReplyAggregate", viewer_user_id: UserId, author_profile_info: dict[str, Any], depth: int = 0
+    ) -> ReplyDto:
         """ReplyAggregateをReplyDtoに変換（削除リプライ対応）"""
         display_info = reply.get_display_info(viewer_user_id)
 
@@ -115,7 +115,7 @@ class ReplyQueryService:
                 is_deleted=True,
                 deletion_message="このリプライは削除されています",
                 depth=depth,
-                has_replies=display_info["has_replies"]
+                has_replies=display_info["has_replies"],
             )
         else:
             # 通常のリプライ
@@ -144,7 +144,7 @@ class ReplyQueryService:
         replies: list["ReplyAggregate"],
         viewer_user: "UserAggregate",
         viewer_id: UserId,
-        author_user_map: dict[UserId, "UserAggregate"] | None = None
+        author_user_map: dict[UserId, "UserAggregate"] | None = None,
     ) -> list[ReplyDto]:
         """リプライの権限チェックとDTO変換を行う共通メソッド"""
         result = []
@@ -170,8 +170,12 @@ class ReplyQueryService:
                 continue
 
             # 権限チェック（削除リプライも特別に許可）
-            can_view_reply = (not reply.deleted and PostVisibilityDomainService.can_view_reply(reply, viewer_user, reply_author)) or \
-                           (reply.deleted and PostVisibilityDomainService.can_view_deleted_reply_for_thread(reply, viewer_user, reply_author))
+            can_view_reply = (
+                not reply.deleted and PostVisibilityDomainService.can_view_reply(reply, viewer_user, reply_author)
+            ) or (
+                reply.deleted
+                and PostVisibilityDomainService.can_view_deleted_reply_for_thread(reply, viewer_user, reply_author)
+            )
 
             if can_view_reply:
                 author_profile_info = author_profile_cache[author_user_id]
@@ -180,18 +184,18 @@ class ReplyQueryService:
 
         return result
 
-    def get_replies_by_post_id(self, post_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[ReplyDto]:
+    def get_replies_by_post_id(
+        self, post_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0
+    ) -> list[ReplyDto]:
         """ポストへのリプライ一覧を取得（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_replies_by_post_id_impl(post_id, viewer_user_id, limit, offset),
-            context={
-                "action": "get_replies_by_post_id",
-                "post_id": post_id,
-                "viewer_user_id": viewer_user_id
-            }
+            context={"action": "get_replies_by_post_id", "post_id": post_id, "viewer_user_id": viewer_user_id},
         )
 
-    def _get_replies_by_post_id_impl(self, post_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[ReplyDto]:
+    def _get_replies_by_post_id_impl(
+        self, post_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0
+    ) -> list[ReplyDto]:
         """ポストへのリプライ一覧を取得の実装"""
         # オブジェクトを作成（ドメイン層でバリデーション）
         target_post_id = PostId(post_id)
@@ -222,11 +226,7 @@ class ReplyQueryService:
         """ポストとそのリプライのツリー構造を取得（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_reply_thread_impl(post_id, viewer_user_id, max_depth),
-            context={
-                "action": "get_reply_thread",
-                "post_id": post_id,
-                "viewer_user_id": viewer_user_id
-            }
+            context={"action": "get_reply_thread", "post_id": post_id, "viewer_user_id": viewer_user_id},
         )
 
     def _get_reply_thread_impl(self, post_id: int, viewer_user_id: int, max_depth: int = 3) -> ReplyThreadDto:
@@ -251,8 +251,12 @@ class ReplyQueryService:
             raise ReplyAccessDeniedException(post_id, viewer_user_id, "ポストの著者が見つかりません")
 
         # ポストの閲覧権限チェック（削除されている場合も特別に許可）
-        can_view_post = (not post.deleted and PostVisibilityDomainService.can_view_post(post, viewer_user, post_author_user)) or \
-                       (post.deleted and PostVisibilityDomainService.can_view_deleted_post_for_reply_thread(post, viewer_user, post_author_user))
+        can_view_post = (
+            not post.deleted and PostVisibilityDomainService.can_view_post(post, viewer_user, post_author_user)
+        ) or (
+            post.deleted
+            and PostVisibilityDomainService.can_view_deleted_post_for_reply_thread(post, viewer_user, post_author_user)
+        )
 
         if not can_view_post:
             raise ReplyAccessDeniedException(post_id, viewer_user_id, "ポストの閲覧権限がありません")
@@ -276,7 +280,7 @@ class ReplyQueryService:
                 is_liked_by_viewer=post.is_liked_by_user(viewer_id),
                 is_replied_by_viewer=False,  # ポストには直接リプライできない
                 mentioned_users=list(post.mentioned_users()),
-                is_deleted=post.deleted
+                is_deleted=post.deleted,
             )
 
         # リプライツリーを取得（削除済みを含む）
@@ -292,7 +296,7 @@ class ReplyQueryService:
         reply_tree: dict[Any, list["ReplyAggregate"]],
         viewer_user: "UserAggregate",
         viewer_id: UserId,
-        current_depth: int = 0
+        current_depth: int = 0,
     ) -> list[ReplyDto]:
         """リプライツリーをフラットなDTOリストに変換"""
         result: list[ReplyDto] = []
@@ -328,8 +332,12 @@ class ReplyQueryService:
                     continue
 
                 # 権限チェック（削除リプライも特別に許可）
-                can_view_reply = (not reply.deleted and PostVisibilityDomainService.can_view_reply(reply, viewer_user, author_user)) or \
-                               (reply.deleted and PostVisibilityDomainService.can_view_deleted_reply_for_thread(reply, viewer_user, author_user))
+                can_view_reply = (
+                    not reply.deleted and PostVisibilityDomainService.can_view_reply(reply, viewer_user, author_user)
+                ) or (
+                    reply.deleted
+                    and PostVisibilityDomainService.can_view_deleted_reply_for_thread(reply, viewer_user, author_user)
+                )
 
                 if can_view_reply:
                     author_profile_info = author_profile_cache[reply.author_user_id]
@@ -341,6 +349,7 @@ class ReplyQueryService:
 
         # ルートレベルのリプライから開始
         from ai_rpg_world.domain.sns.value_object import PostId
+
         root_post_id = next((k for k in reply_tree.keys() if isinstance(k, PostId)), None)
         if root_post_id:
             process_replies(root_post_id, 0)
@@ -351,11 +360,7 @@ class ReplyQueryService:
         """個別のリプライを取得（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_reply_by_id_impl(reply_id, viewer_user_id),
-            context={
-                "action": "get_reply_by_id",
-                "reply_id": reply_id,
-                "viewer_user_id": viewer_user_id
-            }
+            context={"action": "get_reply_by_id", "reply_id": reply_id, "viewer_user_id": viewer_user_id},
         )
 
     def _get_reply_by_id_impl(self, reply_id: int, viewer_user_id: int) -> ReplyDto | None:
@@ -393,14 +398,12 @@ class ReplyQueryService:
         """ユーザーのリプライ一覧を取得（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_user_replies_impl(user_id, viewer_user_id, limit, offset),
-            context={
-                "action": "get_user_replies",
-                "user_id": user_id,
-                "viewer_user_id": viewer_user_id
-            }
+            context={"action": "get_user_replies", "user_id": user_id, "viewer_user_id": viewer_user_id},
         )
 
-    def _get_user_replies_impl(self, user_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[ReplyDto]:
+    def _get_user_replies_impl(
+        self, user_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0
+    ) -> list[ReplyDto]:
         """ユーザーのリプライ一覧を取得の実装"""
         # オブジェクトを作成（ドメイン層でバリデーション）
         target_user_id = UserId(user_id)

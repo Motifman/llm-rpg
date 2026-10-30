@@ -1,6 +1,5 @@
 """SNS 系ツールの定義。"""
 
-
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.services.availability_resolvers import (
@@ -46,8 +45,7 @@ SNS_ENTER_PARAMETERS = {
 SNS_ENTER_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_ENTER,
     description=(
-        "ゲーム内の SNS アプリを開きます（実認証ではありません）。"
-        "開くと SNS モード用ツールが利用可能になります。"
+        "ゲーム内の SNS アプリを開きます（実認証ではありません）。開くと SNS モード用ツールが利用可能になります。"
     ),
     parameters=SNS_ENTER_PARAMETERS,
 )

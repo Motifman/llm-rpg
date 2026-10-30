@@ -82,53 +82,46 @@ def _apply(*effects: InteractionEffect, target_player=None):
 class TestTargetPlayerItemBuckets:
     """GIVE_ITEM / REMOVE_ITEM の宛先が ``target`` で振り分けられる。"""
 
-    def test_remove_item_on_target_goes_to_target_bucket(self) -> None:
-        """``target=TARGET_PLAYER`` の REMOVE_ITEM は対象バケットに積まれ、
-        行為者バケットは空のままになる。"""
-        result = _apply(
-            _item_effect(
-                InteractionEffectTypeEnum.REMOVE_ITEM, 7, EffectTarget.TARGET_PLAYER
+    @pytest.mark.parametrize(
+        ("effects", "expected"),
+        [
+            (((InteractionEffectTypeEnum.REMOVE_ITEM, 7, EffectTarget.TARGET_PLAYER),), ((), (), (), (7,))),
+            (((InteractionEffectTypeEnum.GIVE_ITEM, 7, EffectTarget.ACTOR),), ((7,), (), (), ())),
+            (
+                (
+                    (InteractionEffectTypeEnum.REMOVE_ITEM, 7, EffectTarget.TARGET_PLAYER),
+                    (InteractionEffectTypeEnum.GIVE_ITEM, 7, EffectTarget.ACTOR),
+                ),
+                ((7,), (), (), (7,)),
             ),
-            target_player=_player_status(),
+            (
+                (
+                    (InteractionEffectTypeEnum.REMOVE_ITEM, 8, EffectTarget.ACTOR),
+                    (InteractionEffectTypeEnum.GIVE_ITEM, 9, EffectTarget.TARGET_PLAYER),
+                ),
+                ((), (8,), (9,), ()),
+            ),
+        ],
+    )
+    def test_transfers_keep_actor_and_target_buckets_separate(self, effects, expected) -> None:
+        """単独・複合の授受は宣言した行為者/対象者と付与/削除の4列へ分離される。"""
+        result = _apply(*(_item_effect(*effect) for effect in effects), target_player=_player_status())
+        actual = (
+            result.item_spec_ids_to_grant,
+            result.item_spec_ids_to_remove,
+            result.target_item_spec_ids_to_grant,
+            result.target_item_spec_ids_to_remove,
         )
-        assert [s.value for s in result.target_item_spec_ids_to_remove] == [7]
-        assert result.item_spec_ids_to_remove == ()
-
-    def test_give_item_on_actor_still_goes_to_actor_bucket(self) -> None:
-        """``target=ACTOR`` (既定) の GIVE_ITEM は従来どおり行為者バケット。"""
-        result = _apply(
-            _item_effect(
-                InteractionEffectTypeEnum.GIVE_ITEM, 7, EffectTarget.ACTOR
-            ),
-            target_player=_player_status(),
-        )
-        assert [s.value for s in result.item_spec_ids_to_grant] == [7]
-        assert result.target_item_spec_ids_to_grant == ()
-
-    def test_take_pattern_splits_into_two_buckets(self) -> None:
-        """奪う (対象から REMOVE、行為者に GIVE) が 2 つのバケットに分かれる。
-
-        これが同じバケットに入ると自分から自分へ移す no-op になる。
-        """
-        result = _apply(
-            _item_effect(
-                InteractionEffectTypeEnum.REMOVE_ITEM, 7, EffectTarget.TARGET_PLAYER
-            ),
-            _item_effect(
-                InteractionEffectTypeEnum.GIVE_ITEM, 7, EffectTarget.ACTOR
-            ),
-            target_player=_player_status(),
-        )
-        assert [s.value for s in result.target_item_spec_ids_to_remove] == [7]
-        assert [s.value for s in result.item_spec_ids_to_grant] == [7]
-        assert result.item_spec_ids_to_remove == ()
-        assert result.target_item_spec_ids_to_grant == ()
+        assert tuple(tuple(spec.value for spec in bucket) for bucket in actual) == expected
 
 
 class TestTargetPlayerMissing:
     """対象プレイヤーが渡されていないのに ``TARGET_PLAYER`` が指定された場合。"""
 
-    def test_raises_instead_of_falling_back_to_actor(self) -> None:
+    @pytest.mark.parametrize(
+        "effect_type", [InteractionEffectTypeEnum.REMOVE_ITEM, InteractionEffectTypeEnum.GIVE_ITEM]
+    )
+    def test_raises_instead_of_falling_back_to_actor(self, effect_type) -> None:
         """行為者バケットへフォールバックせず、例外で止まる。
 
         フォールバックすると「奪ったつもりが自分の持ち物を失う」という、
@@ -137,7 +130,7 @@ class TestTargetPlayerMissing:
         with pytest.raises(InteractionEffectValidationException):
             _apply(
                 _item_effect(
-                    InteractionEffectTypeEnum.REMOVE_ITEM,
+                    effect_type,
                     7,
                     EffectTarget.TARGET_PLAYER,
                 ),

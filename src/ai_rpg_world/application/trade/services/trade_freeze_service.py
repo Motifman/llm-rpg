@@ -64,9 +64,7 @@ class TradeFreezeService:
             pending_trade_offer_store=self._offers,
             player_inventory_repository=player_inventory_repository,
             player_status_repository=(
-                player_status_repository
-                if player_status_repository is not None
-                else self._statuses
+                player_status_repository if player_status_repository is not None else self._statuses
             ),
             item_repository=item_repository,
         )
@@ -108,7 +106,9 @@ class TradeFreezeService:
             for _ in range(quantity):
                 appearances = inventory_item_appearances(inventory, self._items)
                 found = inventory.find_available_slot_by_item_spec_id_and_spoilage(
-                    ItemSpecId.create(spec_id), False, appearances,
+                    ItemSpecId.create(spec_id),
+                    False,
+                    appearances,
                 )
                 if not found.found:
                     break

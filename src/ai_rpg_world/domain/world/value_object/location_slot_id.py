@@ -1,4 +1,5 @@
 """LocationSlotId - ロケーションスロットの複合識別子（SpotId + LocationAreaId）"""
+
 from dataclasses import dataclass
 from typing import Union
 
@@ -13,6 +14,7 @@ class LocationSlotId:
     (SpotId, LocationAreaId) の複合キー。1ロケーション = 1集約の ID として使用する。
     不変条件は SpotId / LocationAreaId の正の整数検証に委譲する。
     """
+
     spot_id: SpotId
     location_area_id: LocationAreaId
 
@@ -32,5 +34,9 @@ class LocationSlotId:
     ) -> "LocationSlotId":
         """SpotId / LocationAreaId または int から作成"""
         sid = spot_id if isinstance(spot_id, SpotId) else SpotId.create(spot_id)
-        lid = location_area_id if isinstance(location_area_id, LocationAreaId) else LocationAreaId.create(location_area_id)
+        lid = (
+            location_area_id
+            if isinstance(location_area_id, LocationAreaId)
+            else LocationAreaId.create(location_area_id)
+        )
         return cls(spot_id=sid, location_area_id=lid)

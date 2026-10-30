@@ -41,7 +41,15 @@ class _FixedPort(ITypedJudgmentPort):
 
     def judge(self, state: str | Mapping[str, Any] | Sequence[Any], questions: Mapping[str, Question]):
         name = next(iter(questions))
-        return {name: JudgmentResult(value=self._chosen, probabilities={self._chosen: self._probability}, confidence=0.92, source=JudgmentSource.JEV, latency_ms=120.0)}
+        return {
+            name: JudgmentResult(
+                value=self._chosen,
+                probabilities={self._chosen: self._probability},
+                confidence=0.92,
+                source=JudgmentSource.JEV,
+                latency_ms=120.0,
+            )
+        }
 
 
 class _RecordingTrace:
@@ -56,10 +64,26 @@ class _RecordingTrace:
 
 
 def _context() -> ToolRuntimeContextDto:
-    return ToolRuntimeContextDto(targets={
-        "O1": ToolRuntimeTargetDto(label="O1", kind="spot_graph_object", display_name="東の祭壇", world_object_id=11, available_interactions=("offer",), interaction_labels=(("offer", "供物を捧げる"),)),
-        "O2": ToolRuntimeTargetDto(label="O2", kind="spot_graph_object", display_name="西の祭壇", world_object_id=12, available_interactions=("offer",), interaction_labels=(("offer", "供物を捧げる"),)),
-    })
+    return ToolRuntimeContextDto(
+        targets={
+            "O1": ToolRuntimeTargetDto(
+                label="O1",
+                kind="spot_graph_object",
+                display_name="東の祭壇",
+                world_object_id=11,
+                available_interactions=("offer",),
+                interaction_labels=(("offer", "供物を捧げる"),),
+            ),
+            "O2": ToolRuntimeTargetDto(
+                label="O2",
+                kind="spot_graph_object",
+                display_name="西の祭壇",
+                world_object_id=12,
+                available_interactions=("offer",),
+                interaction_labels=(("offer", "供物を捧げる"),),
+            ),
+        }
+    )
 
 
 def _call(written: str, *, port: ITypedJudgmentPort | None, trace: _RecordingTrace | None = None):
@@ -71,12 +95,15 @@ def _call(written: str, *, port: ITypedJudgmentPort | None, trace: _RecordingTra
 
     rescue = TargetLabelRescue(port=port, min_confidence=0.85) if port is not None else None
     handler = adapt_executor_handler_with_resolver(
-        raw_handler, TOOL_NAME_SPOT_GRAPH_INTERACT,
+        raw_handler,
+        TOOL_NAME_SPOT_GRAPH_INTERACT,
         SpotGraphArgumentResolver(target_label_rescue=rescue),
         trace_recorder_provider=(lambda: trace) if trace is not None else None,
         current_tick_provider=(lambda: 7) if trace is not None else None,
     )
-    result = handler(PlayerId(3), {"target_label": written, "action_name": "offer", "inner_thought": "祭壇に捧げる"}, _context())
+    result = handler(
+        PlayerId(3), {"target_label": written, "action_name": "offer", "inner_thought": "祭壇に捧げる"}, _context()
+    )
     return result, seen
 
 

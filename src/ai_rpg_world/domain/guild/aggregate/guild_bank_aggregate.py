@@ -1,4 +1,5 @@
 """ギルド金庫集約（GuildId と 1:1）。Phase 5 で金庫（ゴールド）を管理。倉庫（アイテム）は将来拡張。"""
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildBankDepositedEvent,

@@ -47,9 +47,7 @@ async def get_event_log(
     return log
 
 
-@router.get(
-    "/inventory/{character_id}", response_model=InventoryResponse
-)
+@router.get("/inventory/{character_id}", response_model=InventoryResponse)
 async def get_inventory(session_id: str, character_id: str) -> InventoryResponse:
     manager = get_runtime_manager()
     inv = manager.get_inventory(session_id, character_id)

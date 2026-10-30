@@ -35,9 +35,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """デモ規則は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_initial_items_to_inventory,
 )
@@ -93,13 +93,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "tests"
-    / "fixtures"
-    / "scenarios"
-    / "blessed_pilgrim_demo.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "blessed_pilgrim_demo.json"
 
 
 def _build_player_status(player_id: PlayerId, spawn_spot_id: SpotId, initial_state: dict) -> PlayerStatusAggregate:
@@ -162,14 +156,15 @@ def shrine():
         pid = PlayerId(spawn.player_id)
         # Phase 4-D-2 PR 3: scenario JSON `players[].initial_state` を
         # PlayerStatusAggregate.state に渡してから永続化する。
-        status_repo.save(
-            _build_player_status(pid, spawn.spawn_spot_id, dict(spawn.initial_state))
-        )
+        status_repo.save(_build_player_status(pid, spawn.spawn_spot_id, dict(spawn.initial_state)))
         inventory_repo.save(PlayerInventoryAggregate(player_id=pid))
         if spawn.initial_items:
             grant_initial_items_to_inventory(
-                pid, spawn.initial_items,
-                item_repo, item_spec_repo, inventory_repo,
+                pid,
+                spawn.initial_items,
+                item_repo,
+                item_spec_repo,
+                inventory_repo,
                 overflow_sink=IGNORE_OVERFLOW,
             )
 
@@ -232,7 +227,9 @@ class TestBlessedPilgrimDemo:
         incense = _incense_instances(inv_repo, item_repo, loaded)[0]
 
         app.execute_interaction(
-            _player_id(loaded), _altar_id(loaded), "pray",
+            _player_id(loaded),
+            _altar_id(loaded),
+            "pray",
             current_tick=WorldTick(5),
             acting_item_instance_id=incense,
         )
@@ -251,19 +248,25 @@ class TestBlessedPilgrimDemo:
         # 祈祷前: 扉は PLAYER_STATE_IS で拒否
         with pytest.raises(InteractionNotAllowedException, match="祈祷を済ませていない"):
             app.execute_interaction(
-                _player_id(loaded), _door_id(loaded), "enter_sanctum",
+                _player_id(loaded),
+                _door_id(loaded),
+                "enter_sanctum",
             )
 
         # 祈祷を済ませる
         app.execute_interaction(
-            _player_id(loaded), _altar_id(loaded), "pray",
+            _player_id(loaded),
+            _altar_id(loaded),
+            "pray",
             current_tick=WorldTick(7),
             acting_item_instance_id=incense,
         )
 
         # 祈祷後: 扉が開く
         app.execute_interaction(
-            _player_id(loaded), _door_id(loaded), "enter_sanctum",
+            _player_id(loaded),
+            _door_id(loaded),
+            "enter_sanctum",
         )
 
     def test_used_incense_cannot_pray_again(self, shrine) -> None:
@@ -272,7 +275,9 @@ class TestBlessedPilgrimDemo:
         incense = _incense_instances(inv_repo, item_repo, loaded)[0]
 
         app.execute_interaction(
-            _player_id(loaded), _altar_id(loaded), "pray",
+            _player_id(loaded),
+            _altar_id(loaded),
+            "pray",
             current_tick=WorldTick(3),
             acting_item_instance_id=incense,
         )
@@ -282,7 +287,9 @@ class TestBlessedPilgrimDemo:
         # (将来 message を変えたとき、誤った代替パターンに silent pass しないため)
         with pytest.raises(InteractionNotAllowedException, match="焚き切"):
             app.execute_interaction(
-                _player_id(loaded), _altar_id(loaded), "pray",
+                _player_id(loaded),
+                _altar_id(loaded),
+                "pray",
                 current_tick=WorldTick(4),
                 acting_item_instance_id=incense,
             )

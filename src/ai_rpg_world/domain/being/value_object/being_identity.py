@@ -46,9 +46,7 @@ class BeingIdentity:
             )
         stripped = value.strip()
         if not stripped:
-            raise BeingIdentityValidationException(
-                f"BeingIdentity.{field_name} must be non-empty"
-            )
+            raise BeingIdentityValidationException(f"BeingIdentity.{field_name} must be non-empty")
         return stripped
 
 

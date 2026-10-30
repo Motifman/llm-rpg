@@ -61,9 +61,7 @@ class SpotGraphSpeechRecipientStrategy(IRecipientResolutionStrategy):
             if departed is not None:
                 return departed
         try:
-            return self._spot_graph_repository.find_graph().get_entity_spot(
-                EntityId.create(int(player_id))
-            )
+            return self._spot_graph_repository.find_graph().get_entity_spot(EntityId.create(int(player_id)))
         except EntityNotInGraphException:
             return None
 
@@ -82,9 +80,7 @@ class SpotGraphSpeechRecipientStrategy(IRecipientResolutionStrategy):
         speaker_spot = self._player_spot(speaker_player_id)
         if speaker_spot is None:
             return []
-        player_id_values: set[int] = {
-            s.player_id.value for s in self._player_status_repository.find_all()
-        }
+        player_id_values: set[int] = {s.player_id.value for s in self._player_status_repository.find_all()}
         result: list[PlayerId] = []
         seen: set[int] = set()
 
@@ -110,9 +106,7 @@ class SpotGraphSpeechRecipientStrategy(IRecipientResolutionStrategy):
         )
         if not speaker_is_departed:
             speaker_eid = EntityId.create(int(speaker_player_id))
-            for recipient in self._sound_propagation.resolve_recipients(
-                speaker_eid, volume, graph
-            ):
+            for recipient in self._sound_propagation.resolve_recipients(speaker_eid, volume, graph):
                 if recipient.entity_id.value not in player_id_values:
                     continue
                 recipient_player_id = PlayerId.create(recipient.entity_id.value)
@@ -135,8 +129,6 @@ class SpotGraphSpeechRecipientStrategy(IRecipientResolutionStrategy):
             listener_spot = self._player_spot(recipient_player_id)
             if listener_spot is None:
                 continue
-            if self._sound_propagation.outcome_between_spots(
-                speaker_spot, listener_spot, volume, graph
-            ) is not None:
+            if self._sound_propagation.outcome_between_spots(speaker_spot, listener_spot, volume, graph) is not None:
                 add(recipient_player_id)
         return result

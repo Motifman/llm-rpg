@@ -1,620 +1,109 @@
 # 設計判断 / 設計思想集
 
-本ドキュメントは、実装の **「なぜこの形になっているか」** を集約した参考資料。
-新機能を追加するとき、まずここを読んで既存の哲学と衝突しないかを確認する。
-日々の実験 (#356 〜 #413 等) を通じて生まれた判断を、コードコメントに散らさず
-ここに集める。
+設計判断の本文は [design_decisions/](design_decisions/) に、1件1ファイルで保存する。
+実装前に関係する判断と [エージェント設計原則](agent_design_principles.md) を読む。
 
-新しい判断を追加する場合:
-- 「**何を**」「**なぜ**」「**どうしないと壊れるか**」の 3 点セットで書く
-- 個別の PR / Issue 番号を添えて trace 可能にする
-- 後から「やめた」場合は削除でなく取り消し線で残し、理由を併記する
+## 判断を追加・更新する
 
----
+- 新しい判断は `docs/design_decisions/D<issue番号>.md` に作る。同じIssueで2件目以降なら `D<issue番号>-2.md`、`D<issue番号>-3.md` とする。
+- 同じIssueで並行して書く場合は、枝番号を担当ごとにあらかじめ割り当てる。
+- 見出しは `## D1448. 判断の題名` の形にし、ファイル名とIDを一致させる。既存の1〜238の番号と本文は維持する。
+- 「何を」「なぜ」「どうしないと壊れるか」を書き、関連するIssue・PRを添える。取り消した判断も削除せず、理由を追記する。
+- 参照は個別ファイルへのリンクを使う。文章でIDを書く場合は `design_decisions D1448` とし、GitHubのIssueへ飛ぶ `#1448` と混同しない。
+- **新規追加では、この索引へ追記しない。** 個別ファイルの追加だけで完了する。全件は [フォルダー](design_decisions/) から探せる。
+- 下の一覧は移行済みの判断への互換入口。既存のこのファイルへのリンクや見出しへのリンクも引き続き使える。
 
 ## 1. Prefix cache を守るため、system prompt と tool list は tick 間で不変にする
 
-**何を**: 1 ターン目と 2 ターン目で system prompt の文字列と tool list (= 並び順 + 各 tool の JSON Schema) を **完全一致** させる。
-
-**なぜ**:
-- LLM API (OpenAI / Anthropic / litellm 経由の vLLM 等) は、prefix が一致する prompt の入力 token を **キャッシュして実質無料化** する仕組みを持つ。長い system prompt + tool definitions は普通 4-8K token あり、これがキャッシュに乗るか乗らないかで wall time / cost が桁違いになる
-- LLM のターンは数百回繰り返されるので、prefix を壊した瞬間に **全 turn が cold cache** になり 1 run のレイテンシが数倍になる
-
-**どうしないと壊れるか**:
-- 「疲労 85+ のとき system prompt 末尾に『朦朧としている』を追加する」のような **動的注入** はやらない
-- ツールを動的に表示/非表示にする (`if status.fatigue >= 100: tools.pop("travel_to")` 等) もやらない
-- 状態依存の情報は **prompt 後半のプレイヤー状態セクション** (= 毎 turn 変わる前提のところ) に乗せる
-
-**どこでこの判断が出てきたか**:
-- 実験 #28 / #29 で `cached_tokens=0` (prefix cache hit 0%) を観測 → wall time スパイクの 1 要因
-- PR β (疲労ライフサイクル) でユーザ feedback: 「システムプロンプトはなるべく変えないようにしたい」
-
----
+[本文](design_decisions/1.md)
 
 ## 2. 致命的に詰む状態を作らない (例: 疲労 100 でも use_item は通す)
 
-**何を**: ゲーム内で「**取れる手段が完全にゼロ**」になる状態を構造的に避ける。
-例えば疲労 100 で動けない時でも、`use_item` / `wait` / `speech` のような **回復ループに乗るためのツール** は必ず通せるようにする。
-
-**なぜ**:
-- LLM agent はランダム探索ではなく「最良の手」を 1 つ選ぶ。詰みは無限ループ (同じ tool 呼び続ける) や silent crash になりやすい
-- TRPG / survival シナリオでは「**仲間に助けてもらう**」「**食料で持ち直す**」が物語の核。完全詰みは物語を殺す
-- 「動けないが、座ったまま回復行動はできる」というモデルは、現実の人間にも適合する直感的な設計
-
-**どうしないと壊れるか**:
-- 疲労 100 で use_item を block すると、食料を持っていても食えずに餓死。inventory に解決手段があるのに使えない構造は LLM が困惑する
-- HP 0 (DEAD) も同様: dead player に対するアクションは全部 silent にする (#363 で対処)、ただし他 player から見れば「倒れている」観測は届く
-
-**どこでこの判断が出てきたか**:
-- PR β (疲労ライフサイクル) の設計議論で「100 のとき use_item を block するか」→ ユーザ判断「絶対通す」
-
----
+[本文](design_decisions/2.md)
 
 ## 3. 揮発ラベル (S1 / I2 / P3) を捨て、名前 + ordinal で対象指定する
 
-**何を**: prompt 上に `S1: 扉 → 玄関` のような tick 内で振り直される連番ラベルを出さない。代わりに `- 扉 → 玄関` の名前直書き形式で、同名衝突時のみ `#1` / `#2` で disambiguate する。
-
-**なぜ**:
-- ラベルは **揮発的**: 同じ `I2` が次 turn で別アイテムを指す
-- memo / episodic memory に「`I2` を渡した」と書かれると **再構築不能** (記憶汚染)
-- 名前直書きなら過去 turn のメモがそのまま意味を持つ ("玄関に移動した" は tick を跨いで読める)
-
-**どうしないと壊れるか**:
-- 第13/14 回実験のリン「閲覧室 ↔ 入口広間」bouncing がこの構造的原因 (#229 で部分対処 → PR #421 / #425 で完全対処)
-- 新規 tool を作るときも `*_label` 引数を増やさず「対象の名前」を渡す設計に揃える
-
-**どこでこの判断が出てきたか**:
-- 実験 #29 OFF 分析の feedback「ラベルをやめる」 → PR #421 / #425
-
----
+[本文](design_decisions/3.md)
 
 ## 4. travel / wait は「ツール内で tick を進めない」モデルにする
 
-**何を**:
-- `travel_to` ツールは travel state を立てて即返り、その後の world tick で 1 leg ずつ進む。移動中の player は `_can_player_act` filter で turn を skip し、到着時に再起床する
-- `spot_graph_wait` ツールも同様に「今ターンは行動を控える」という意思決定だけを記録し、`advance_tick` は呼ばない (#471)
-
-**なぜ**:
-- 旧 `do_move` は内部で `advance_tick × 200` のネストループを回し、1 driver tick = 656 秒 / 134 LLM call というスパイクを生んでいた (#404)
-- 旧 `do_wait` も nested `advance_tick` を 1 回呼んでおり、`_run_post_tick_hooks` → `run_scheduled_turns` → 他プレイヤー LLM ターン → `spot_graph_wait` → `do_wait` … の再帰カスケードを起こしていた。L run で 1 driver iteration 内に world tick が +104 ジャンプし、`MAX_WORLD_TICKS=140` を黙ってバイパス (#471)
-- driver loop の `while current_tick < max_world_ticks` ガードは **iteration 先頭でしか効かない**ため、ネストカスケード中は上限を守れない
-
-**どうしないと壊れるか**:
-- ツール / handler / observation hook の中で `advance_tick` / `simulation.tick` を呼ぶ設計を持ち込まない。世界時計の更新は **外側の experiment loop / driver thread だけが触る** という不変条件
-- wait は「skip ターン」記録だけにする。「tick を 1 進めるショートカット」として使う設計にすると #471 と同じ再帰カスケードが復活する
-- 移動中の player の turn を空回りさせない (heartbeat / observation 経路で wake up しないよう `is_traveling` フィルタを通す)
-
-**どこでこの判断が出てきたか**:
-- 実験 #28 partial run の 656 秒スパイク → #404 / #405 (travel non-blocking) / #407 (per-agent idle timer)
-- 実験 #468 L run の 1878 秒スパイク / +104 tick ジャンプ → #471 (do_wait nested advance 除去)
-
----
+[本文](design_decisions/4.md)
 
 ## 5. silent failure を「構造」で塞ぐ (例外ハンドリングだけに頼らない)
 
-**何を**: 致命的な状態破綻 (orphan item / 状態不整合 / 順序逆転) は、例外 catch ではなく **コードの順序や事前ガード** で塞ぐ。
-
-**なぜ**:
-- 例外で catch すると失敗が prose に出ず、LLM も気づかない (= silent)
-- 順序由来の破綻は再現条件が見えにくく、trace を grep しないと原因が辿れない
-
-**例**:
-- `give_item` で receiver が満杯の場合: 事前に `is_inventory_full()` チェック → 失敗時は ItemTransferException を投げる。送り手から先に抜いてから receiver に渡そうとして失敗するパスを作らない (#400)
-- `use_item` で quantity=0 になった時: `inventory.save` → `item_repository.delete` の順に固定。逆順だと delete 成功 / inv save 失敗で orphan instance が残る (#400)
-- `ItemUsedEvent` を `publish_all` で必ず流す: aggregate に積んで捨てない (#400)
-
-**どうしないと壊れるか**:
-- 似たような silent failure は実走で必ず再発する。「catch して握りつぶす」は使わない
-- `try/except: pass` を書きそうになったら、本当に握りつぶしていい理由 (= 親 action と独立 / fail-safe で続行が望ましい) を comment に書く
-
-**どこでこの判断が出てきたか**:
-- 実験 #28 のアイテム系 silent failure 群 → #400
-
----
+[本文](design_decisions/5.md)
 
 ## 6. 後方互換を過度に守らない
 
-**何を**: 「旧 API も残しておく」「旧フラグも動くようにしておく」のような移行層を、明確な必要性がない限り作らない。
-
-**なぜ**:
-- 後方互換層はそれ自体が **継続的に維持** されるべき表面積になり、テストの組み合わせ爆発を生む
-- LLM の運用 (= 自分たちで動かしているだけ) では、外部 client 互換性のような重い制約がない
-- 旧経路を切り捨てる方が、コードが単純になり読み手にも実装者にも親切
-
-**どうしないと壊れるか**:
-- 大きな refactor が「片落ち」状態 (新旧両方が動く中途半端な状態) で凍結すると、後で誰も触れなくなる
-- PR #409 (MAX_TICKS → MAX_WORLD_TICKS) は完全 rename にした。env レベルでは旧 `EXPERIMENT_MAX_TICKS` を 1 段だけ backstop で読むが、それ以上の互換層は作らない
-
-**どこでこの判断が出てきたか**:
-- CLAUDE.md の repo ルールにも明記 ("後方互換を過度に守らない")
-- PR #404 系列の `MAX_TICKS` rename
-
----
+[本文](design_decisions/6.md)
 
 ## 7. heartbeat は「最低発火頻度の floor」ではなく「最大沈黙時間の ceiling」
 
-**何を**: 全 agent を `N tick おきに必ず起こす` という旧 heartbeat ではなく、`N tick 何も起きなかったら 1 回だけ起こす` という per-agent idle timer 方式にする。
-
-**なぜ**:
-- 旧 heartbeat (5 tick おき全員起床) は、event 駆動で active な agent にまで heartbeat を届けて空回り turn を量産していた
-- 1 driver tick で 4 player × ceil(20/5) = 約 20 回の不要な LLM 呼び出しが乗っていた
-
-**どうしないと壊れるか**:
-- event 駆動の起床経路 (`schedules_turn=True` 観測) が網羅されていないと、idle_timeout (デフォルト 6 tick) まで重要な変化に気づかない
-- `schedules_turn` の audit は重要 (#412): HP 変化 / モンスター出現 / 発話 / アイテム overflow / 救助到達 / アイテムの受け渡し (drop / pickup / give) / etc. を漏れなく `schedules_turn=True` に揃える必要がある
-- アイテム移動 3 種は初回 audit から漏れていた。v4 第 3 回 run で「`say_inline` を伴う受け渡しは発話観測が同席者を起こすので回るが、黙って渡すと相手が idle_timeout まで気づかない」と判明して追加した。audit 表の正本は `tests/application/observation/test_schedules_turn_audit.py` の docstring
-
-**どこでこの判断が出てきたか**:
-- 実験 #28 wall time スパイクの分析 → #407 (per-agent idle timer) + #412 (schedules_turn audit)
-
----
+[本文](design_decisions/7.md)
 
 ## 8. 状態依存の表示は「プレイヤー状態セクション」に出す
 
-**何を**: 「疲労が限界」「HP 危険域」「中毒中」など、状態に応じた情報を LLM に伝える必要がある場合、**system prompt は触らず**、毎 turn 再生成されるプレイヤー状態セクション (= snapshot を文字列に展開する箇所) で表現する。
-
-**なぜ**:
-- 設計判断 #1 (prefix cache) と直結
-- プレイヤー状態セクションは元々 turn ごとに変動する前提なので、追加情報を載せても prefix cache を壊さない
-
-**どうしないと壊れるか**:
-- 状態依存ヒントを system prompt に注入すると prefix cache が完全に死ぬ
-- 状態セクションが長くなりすぎると LLM が読み切らなくなる懸念はあるので、要約 / 優先度設定を併用する
-
-**どこでこの判断が出てきたか**:
-- PR β (疲労ライフサイクル) の設計議論
-
----
+[本文](design_decisions/8.md)
 
 ## 10. 実験 env の不正値は silent fallback せず fail-fast
 
-**何を**: `PROMPT_SECTION_ORDER` / `SHORT_TERM_MEMORY_KIND` / `SHORT_TERM_MEMORY_SCHEDULER_MODE` / `SEMANTIC_PASSIVE_TOP_K` / 各種 bool 系 env 等の **解決層**で、未知の値が来たら warning + default に縮退 (silent fallback) ではなく **`ValueError` を投げて即停止**する。
-
-**なぜ**:
-- 短縮形や typo (例: `SHORT_TERM_MEMORY_KIND=rolling` ← 正しくは `rolling_summary`) が silent fallback されると、**実験が間違った設定で走る**
-- 長 tick の実験では「数時間走らせて trace を見るまで気づけない」状態になる (PR #433 で実際に発生: Parasail A/B 実験 Run B が rolling のつもりで sliding_window だった)
-- 不正値は **shell の export ミス / 別の env を混同 / Makefile 引数の typo** など。実験者が意図して入れる事はほぼ無い → 黙って受理する価値より、即時 fail させて打ち直す方が安全
-
-**どう実装するか**:
-- enum 系 (`section_order`, `memory_kind`, `scheduler_mode`): 未知文字列で `ValueError(env_name + bad_value + valid_list)`
-- 数値系 (`semantic_passive_top_k`): 非整数 / 負数で `ValueError`
-- bool 系 (`_parse_bool_env`): TRUTHY と FALSY 両方の明示集合を持ち、どちらにも該当しない値で `ValueError`
-- **未設定 / 空文字** は意図的な「default 採用」と解釈し、引き続き default を返す (この決定は維持)
-
-**どうしないと壊れるか**:
-- 同じ実験を何度もやり直すコストが膨らむ + 結果の信用も落ちる
-- typo の発見が trace を grep するまで遅れる → 設計判断のフィードバックループが鈍る
-
-**どこでこの判断が出てきたか**:
-- PR #433 で「Parasail A/B 実験 Run B は sliding_window だった」事実が `run_start` payload から判明 → PR #434 で対策
-
----
+[本文](design_decisions/10.md)
 
 ## 11. 設定は単一 DTO で集約、構築は「全部揃ってから 1 回 build」
 
-**何を**: env / scenario JSON / 引数由来の設定は `ResolvedLlmRuntimeConfig` のような **1 つの frozen DTO** に集約してから wiring に渡す。サービスは **「依存が揃ってから ctor で全部注入」** で構築し、setter で後注入する経路は作らない。
-
-**なぜ**:
-- 「env を 2 箇所で別解釈する」silent failure が大量発生した (PR #439 / PR #446: section_order や memory_kind が trace に書かれた値と実体でズレる)
-- 「setter で後注入する Future work が忘れられる」silent failure も発生した (PR #444: `set_summary_services` setter は作ったが呼び出し側 wiring が未実装で 1 ヶ月放置 → 実機実験で L4/L5 が全件 template fallback)
-- 「`Optional[X] = None` + 後注入」は呼び忘れを型エラーに昇格できない設計上の弱点
-
-**どう実装するか**:
-- env を読むのは `ResolvedLlmRuntimeConfig.from_env()` の 1 箇所だけ。entrypoint で 1 度だけ呼び、cfg を引数で渡し回す
-- cfg は frozen dataclass。構築後の改変を封じる
-- `to_trace_dict()` で trace 用 dict を出すとき API key は `***` にマスク
-- 不正値は `ValueError` で fail-fast (= 設計判断 10 と併用)
-- サービス構築は `_build_*(cfg, *args)` 形式で、依存物 (llm_client / persona_resolver) を ctor で全部受け取る
-- setter は禁止ではないが、Optional dependency に対して使ったら **同時に「呼ばないと動かない場面」を構造的に作らない**こと
-
-**どうしないと壊れるか**:
-- 2 箇所目の env 解釈が必ずいつか追加される → silent failure 再発
-- setter の呼び忘れが型チェックや CI で捕まらない → 実機実験で初めて発覚
-- 「動いてるように見える別モード」が増える
-
-**どこでこの判断が出てきたか**:
-- PR #439 / #441 / #444 / #446 の 4 連続 silent failure
-- architect レビュー (PR #444 後) → リファクタリング 6 PR (#446 / #447 / #448 / #449 / #450 / #451) で構造的対処
-
----
+[本文](design_decisions/11.md)
 
 ## 12. Future work は xfail-strict pytest で可視化する
 
-**何を**: 「次の PR で対応する」という TODO を、**コメントではなく `@pytest.mark.xfail(strict=True, reason="PR #N: ...")`** で表現する。
-
-**なぜ**:
-- PR #439 で `set_summary_services` setter を作ったが「後で wiring が呼ぶ」が忘れられ PR #444 まで放置された
-- リポジトリ内に散在する `# TODO` / `# 後で` / `# 仮` コメントは grep しないと発見できず、レビュー時にも見落とされる
-- pytest なら CI で必ず実行され、強い可視性がある
-
-**どう実装するか**:
-- 「将来の PR で動くべきテスト」を `xfail(strict=True)` で書く。strict=True なので、対応した瞬間に "expected fail but passed" で CI が落ち、修正完了を強制 unmark させる
-- reason に PR 番号 / target PR を必ず明記
-- 例 (架空):
-  ```python
-  @pytest.mark.xfail(strict=True, reason="PR #439: setter is wired but no caller yet (target: PR #444)")
-  def test_rolling_summary_llm_path_is_actually_wired_in_production():
-      ...
-  ```
-
-**どうしないと壊れるか**:
-- `# 後で` コメントが恒久放置される
-- レビュー時に「ここ後で誰かが直すから OK」と通された scope split が忘れられる
-
-**どこでこの判断が出てきたか**:
-- PR #439 → PR #444 の 1 ヶ月放置事案
-- architect レビュー (PR #444 後)
-
----
+[本文](design_decisions/12.md)
 
 ## 13. memory caller の Being 未解決時挙動は「役割」で分岐する
 
-**何を**: Being / Resolver / WorldId のいずれかが未注入 / 未 provision で memory store の being_id 経路を引けないとき、caller の挙動は **役割によって 3 種類** を使い分ける。
-
-| caller の役割 | 未解決時の挙動 | 理由 |
-|---|---|---|
-| LLM-visible tool (例: `SemanticMemorySearchToolExecutor`) | **fail-fast** (`INVALID_STATE` で `success=False`) | 「該当 0 件」と「内部状態未準備」を LLM が区別できないと、誤った判断につながる |
-| turn の副作用 (例: `EpisodicSemanticClusterPromotionService`) | **silent no-op** | promotion 失敗で turn を止めない。次回 turn で再試行できる |
-| prompt 強化 (例: `SemanticPassiveRecallService`) | **graceful empty list** | side feature なので turn を止めない。 wiring 漏れは別途 wiring level の test で塞ぐ責務 |
-
-**なぜ**:
-- すべて fail-fast にすると prompt 系の side feature で turn が落ちる
-- すべて silent にすると LLM が「該当なし」と誤認して間違った行動を取る
-- すべて graceful にすると wiring 漏れが本番で見えなくなる
-- 「caller がどう失敗してほしいか」は本質的に **caller 側の関心** なので Repository 側でなく caller で判定する
-
-**どうしないと壊れるか**:
-- 一律 silent: LLM-visible tool で「該当なし」と「内部 bug」が判別不能になり、誤判断が trace から追えない
-- 一律 fail-fast: passive recall や promotion の小さな失敗で turn 全体が止まる
-
-**残るリスク**: graceful empty (passive recall) は wiring 漏れを隠す可能性がある。これは wiring-level test (= Resolver+WorldId が必ず注入される) で補完する責務とし、本 caller では「prompt が痩せるだけ」の縮退に留める。
-
-**どこでこの判断が出てきたか**:
-- PR #491 / #492 (Phase 3 Step 3b-2 / 3b-3 = semantic legacy 撤去)
-- code-reviewer (MEDIUM-1) でも「Optional 設計は wiring 漏れを隠しうる」と指摘あり、トレードオフ込みで採用
-
----
+[本文](design_decisions/13.md)
 
 ## 14. promotion_frontier は Phase 3 Step 3c の scope 外 (= player_id keyed のまま)
 
-**何を**: ``EpisodicPromotionFrontier`` は ``memory_link`` / ``recall_buffer`` /
-``reinterpretation_journal`` の 3 連携 store とは別レイヤーで、現状は
-player_id keyed のまま残す。``EpisodicMemoryLinkApplicationService`` から frontier
-に追記するとき、Resolver で BeingId → player_id を逆引きする
-``_player_id_for(being_id)`` helper を経由する。
-
-**なぜ**:
-- frontier は「次回 promotion で対象にすべき episode_id の集合」を保持する
-  小さな in-memory ストア。run 跨ぎ identity を保つ必要が無く、Being 化の
-  優先度が低い
-- Step 3c は 3 store の being_id keyed 移行に集中するスコープで、frontier
-  まで含めると変更範囲が膨らみすぎる
-- 「caller 入口で being_id を 1 度だけ解決する」 resolve-once パターンを
-  維持するには、frontier への追記時のみ player_id が必要 → 逆引き helper で
-  橋渡しする方が、frontier 自体を Being 化するより安く済む
-
-**どうしないと壊れるか**:
-- frontier ごと一気に Being 化しようとすると、関連 service (
-  ``EpisodicSemanticClusterPromotionService.drain`` / ``add`` /
-  ``EpisodicMemoryLinkApplicationService.note_promotion_frontier_episodes``) を
-  すべて同時に書き換える羽目になり、PR が肥大化してレビュー困難になる
-- 逆引き helper を撤去し忘れると「Resolver の余分な lookup が turn ごとに
-  走る」 dead code が残る
-
-**どこでこの判断が出てきたか**:
-- PR #495 (Phase 3 Step 3c-3) のレビュー指摘 MEDIUM-2
-- 後続 Phase で frontier を being_id 化したら ``_player_id_for`` helper は
-  撤去する
-
----
+[本文](design_decisions/14.md)
 
 ## 15. BeingSnapshot v2 は memory payload を「オペーク JSON」として持つ
 
-**何を**: BeingSnapshot に memory payload を載せるとき、各 memory context
-(memo / semantic / memory_link / recall_buffer / reinterpretation_journal /
-episodic_episode) の VO や aggregate を直接フィールド化せず、`memory_payload_json:
-str | None` という **オペーク な JSON 文字列** として保持する。JSON の内訳
-schema は application 層の `BeingMemorySnapshotService` (Phase 4-2) が版管理
-する。
-
-**なぜ**:
-- `domain/being/` から各 memory context の VO へ依存すると、本来独立すべき
-  bounded context 間に逆方向の import が走る (= snapshot のために being が
-  全 memory 文脈を知る必要が出る)
-- memory store の内部 schema は将来も増減 / 改変が見込まれる (現状でも 5
-  store ある)。VO field として固定すると BeingSnapshot version が memory
-  schema の変更ごとに上がってしまい、Being 集約 root と memory の責務が
-  混ざる
-- オペーク JSON なら「Being 集約 root の不変条件」と「memory schema の版
-  管理」を別軸で進化させられる (= 関心の分離)
-
-**どうしないと壊れるか**:
-- snapshot を VO 直入れにすると、新しい memory context が増えるたびに
-  domain/being 配下の import 行と snapshot_version がドミノ式に動く
-- 逆向き import が増えると将来の context 分離 (例: memory パッケージ独立化)
-  が困難になる
-- v1 (memory なし) と v2 (memory あり) を別 schema で扱うことで、Phase 2 で
-  保存済みの v1 snapshot を後方互換で読み続けられる (= 既存 SQLite 行を
-  捨てずに済む)
-
-**どこでこの判断が出てきたか**:
-- Phase 4 Step 4-1 着手時 (= 本 PR)
-- 既存 `BeingSnapshot` docstring の「(b) 後で payload field を増やす」方針
-  を具体化する形
-
----
+[本文](design_decisions/15.md)
 
 ## 21. world snapshot は scenario 一致を hard-error で要求する (= cross-scenario load は不可)
 
-**何を**: ``WorldStateSnapshot`` の ``source_scenario`` が現 scenario と
-異なる場合、``restore`` で ``WorldStateScenarioMismatchError`` を投げて
-**fail-fast** する。memory snapshot の cross-scenario transfer (warning のみ)
-とは **正反対の方針**。
-
-**なぜ**:
-- world state は scenario と密結合 (= ``spot_id`` / ``item_spec`` /
-  ``scenario_events`` がすべて scenario 定義に依存)。別 scenario に load
-  しても spot_id が存在しない等の壊れ方をする
-- memory はキャラクターの「経験」なので scenario 跨ぎが意味を持つ (= 同じ
-  キャラを別世界に転送)。world state は逆に「世界そのもの」なので、
-  別世界の状態を持ち込むのは矛盾
-- 両者が **別ファイル** (``being_*.json`` と ``world.json``) に分かれて
-  いることで、cross-scenario use case は「Being snapshot のみコピー、
-  world.json は転送先のものを別途用意」という運用で実現できる
-
-**どうしないと壊れるか**:
-- world snapshot を warning のみで通すと、別 scenario の world state を
-  load した後 advance_tick で「存在しない spot_id を踏む」等の見えにくい
-  エラーを引き起こす
-- memory を hard-error にすると user の「同じキャラを別世界に転送する」
-  use case (= 設計判断 #19 で許容済) が壊れる
-
-**どこでこの判断が出てきたか**:
-- Phase 9-1 着手時 (= 本 PR)、user との議論で「world は scenario 一致
-  fail-fast」を確認
-
----
+[本文](design_decisions/21.md)
 
 ## 23. monster / quest codec は Phase 9-5 では未実装 (= 実需要待ち)
 
-**何を**: ``world_subsystems/`` に ``MonsterAggregateSubsystemCodec`` /
-``QuestProgressSubsystemCodec`` は存在しない。``MonsterAggregate`` は HP /
-位置 / aggro / pursuit_state 等 15+ field の deep nested aggregate で、quest
-も同様の構造を持つ。書けば書ける (Phase 9-3b の戦略 C パターン適用可能) が、
-**現在 resume が必要とされている scenario (decay_demo / survival_island_v2)
-が monster combat / quest を core mechanic にしていない** ため、未実装で
-defer する。
-
-**なぜ**:
-- 必要のない codec を書くと「scenario JSON は変えてないのに codec の static
-  metadata 部分が肥大化」する負債が生まれる
-- monster / quest を使う scenario が登場した時に、その scenario の実需要に
-  合わせて codec を書く方が schema が現実に即する
-- Phase 9 の本来のゴール (= make experiment で resume が機能する) は 21
-  subsystem で達成済
-
-**どうしないと壊れるか**:
-- 「将来必要かも」で全 aggregate に codec を書くと test と本体の維持コスト
-  が累積する (= YAGNI 違反)
-- 一方で「monster / quest を使う scenario で snapshot を取る」と、Phase 9-1
-  設計判断 #22 により未登録 subsystem は forward-compat で skip され、resume
-  時に monster/quest だけ scenario 初期状態に戻る (= 既知の制限として明示)
-
-**どこでこの判断が出てきたか**:
-- Phase 9-5 着手時 (= 本 PR)
-- code-reviewer subagent の指摘 (= 「実需要待ちは妥当だが docs に明記すべき」)
-- monster / quest を使う scenario が登場したら ``world_subsystems/`` に
-  codec 追加 + ``_default_world_subsystem_codecs()`` に 1 行追加するだけ
-
----
+[本文](design_decisions/23.md)
 
 ## 22. world snapshot は subsystem ごとに codec を持ち、登録外は forward-compat で skip
 
-**何を**: ``WorldStateSnapshotService`` は ``WorldSubsystemCodec`` を複数
-登録できる構造にし、各 codec は独立して ``capture`` / ``restore`` を担当。
-JSON 内 ``subsystems`` dict の各 key (= ``player_status`` / ``spot_interior``
-等) が codec の ``subsystem_key`` と紐づく。
-
-**登録外 subsystem は ``info`` ログを残して skip する** (= 例外を投げない)。
-
-**なぜ**:
-- world state は多くの独立した subsystem (player / spot / weather /
-  monster / ...) の集合体で、scenario によって使う subsystem が異なる
-- Phase 9-2 以降で 1 subsystem ずつ追加していく長期計画。新 subsystem が
-  入る前の旧 snapshot を新 code で load できるよう、後方互換を保つ
-- 逆に「新 snapshot を旧 code で load」(= 旧 code には codec 未登録) で
-  fail-fast すると、forward 互換が壊れて運用が硬直する
-- 各 subsystem の ``schema_version`` は codec 自身が管理 (= 中央集権でなく
-  分散)。``WorldStateSnapshot`` 自体の ``schema_version`` は「subsystems
-  dict の構造形式」の version だけを表す
-
-**どうしないと壊れるか**:
-- 「新 snapshot を旧 code で読む」が hard-error だと、Phase 9-2 が
-  リリースされるまで Phase 9-3 以降の snapshot が使えなくなる
-- 「subsystem を 1 つの hard-coded list で管理」する案だと、新 subsystem
-  追加のたびに既存 code を変える必要がある (= 結合度が上がる)
-
-**どこでこの判断が出てきたか**:
-- Phase 9-1 着手時 (= 本 PR)
-- 既存 ``BeingSnapshotCodec.SUPPORTED_VERSIONS`` の単純な version 集合と
-  違い、world は **2 階層** (snapshot 自体の version + subsystem ごとの
-  内部 version) になるので、別アプローチが必要だった
-
----
+[本文](design_decisions/22.md)
 
 ## 20. snapshot の schema 進化は (a) 厳格モード — 未サポート version は load 失敗
 
-**何を**: ``BeingSnapshot.snapshot_version`` および ``memory_payload_json``
-の ``schema_version`` が現行 supported 集合に含まれない場合、**load 経路で
-fail-fast で例外を投げる**。``BeingSnapshotCodec.SUPPORTED_VERSIONS`` /
-``SUPPORTED_PAYLOAD_SCHEMA_VERSIONS`` をシングルソース。
-
-``RestoreBeingSnapshotFromFileUseCase.execute`` は ``repo.save_snapshot``
-の前に明示的に version をチェックする (= 部分状態を repo に残さない)。
-
-**なぜ**:
-- run 途中再開の想定 use case は「同じ code バージョン同士で save / load」。
-  schema が変わるほど離れた run を救う必要性は低い
-- migration ルートを書くと「v1→v2 で意味の変質」が silent に起きうる
-  (= 旧 file の値が新 schema で別の意味になる)。データを救うより data
-  integrity を優先する
-- 「(c) best-effort」(= 未知 field 無視 + 欠落 default 補完) は柔軟だが、
-  「snapshot は完全な再現を保証する」設計判断 (= all-or-nothing #15) に反する
-
-**どうしないと壊れるか**:
-- v1 のまま新 code で load → ``snapshot_version=1`` を ``Codec.SUPPORTED_VERSIONS
-  = {1, 2}`` のままにしておけば読める。互換性のために旧 version も
-  ``SUPPORTED`` に **明示的に残す**。これは方針 (a) 厳格 と矛盾しない
-  (= unsupported なら fail-fast、supported なら通る)
-- 「migration が必要になったら」: ``SUPPORTED_VERSIONS`` を変えずに新 codec
-  クラス (``BeingSnapshotCodecV3`` 等) を追加する案を検討。本 PR scope 外
-
-**どこでこの判断が出てきたか**:
-- Phase 8 着手時 (= 本 PR)、user が「一旦 (a) で行こう」と明示
-
----
+[本文](design_decisions/20.md)
 
 ## 19. snapshot ファイルは scenario 名メタデータを持ち、別シナリオ転送は warning だけで許容する
 
-**何を**: snapshot JSON の root に ``_metadata`` ブロックを追加し、
-``source_scenario`` (= 取得時のシナリオ名) と ``captured_at`` (= UTC ISO 8601)
-を埋め込む。restore 時に現 scenario と ``source_scenario`` が異なる場合は
-warning + trace event (``snapshot_load`` の payload に
-``cross_scenario_transfers``) で記録するが、**エラーにはしない**。
-
-**なぜ**:
-- 「同じキャラクターを別シナリオに転送して前の memory を引き継ぐ」use case
-  が将来ありうる (= forest_world でやり遂げた agent を desert_world に
-  送り込んで挙動を見る、等)
-- ただし「うっかり別シナリオに load して気付かない」事態は避けたい。
-  warning + trace event で **意図せぬ転送は気付ける** が、意図した転送は
-  そのまま走らせる、というバランス
-- BeingSnapshot VO 本体は触らない (= 「VO は primitive-only」の設計判断
-  #15 と整合)。メタデータは file gateway 層で独立に管理する
-
-**どうしないと壊れるか**:
-- 旧 snapshot ファイル (``_metadata`` キー無し) を後方互換で読めなくなる
-  → ``data.get("_metadata")`` で ``None`` fallback。古い file も読める
-- mismatch を hard error にすると cross-transfer use case が実装できない
-- mismatch を silent に通すと、誤 load を発見できない
-
-**どこでこの判断が出てきたか**:
-- Phase 7 着手時 (= 本 PR)、user が「同じキャラを別世界に転送したい」と
-  明示的に意図を示したこと
-
----
+[本文](design_decisions/19.md)
 
 ## 17. experiment runner の snapshot は escape_game runtime の限定 store だけを拾う
 
-**何を**: ``scripts/run_scenario_experiment.py`` の Phase 6 統合では、
-``_wiring_stub_from_escape_runtime`` が ``EscapeGameRuntime`` の private
-attribute から **拾える分だけ** store を集めて
-``ExperimentSnapshotSession`` に渡す。escape_game runtime には semantic /
-memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそも
-存在しないため、これらは ``None`` で渡され、session 側で空 in-memory store
-に fallback される。
-
-**なぜ**:
-- escape_game runtime は ``EpisodicStack`` (memo + episode のみ) を使う
-  構成で、semantic / memory_link 等の高度 memory pipeline は
-  ``create_llm_agent_wiring`` 経路でしか組まれない
-- ここで「足りない store を後付けで配線する」と既存実験の挙動を変えてしまう
-  (= 既存 trace との比較ができなくなる)
-- 「snapshot に乗らない情報は空 array でも整合性が取れる」のが Phase 4-2b
-  の JSON schema 設計の素敵な性質。fallback で問題が起きない
-
-**どうしないと壊れるか**:
-- 強制配線を入れると prompt 構築 / observation pipeline に副作用が混じる
-- 「拾えない store → silent に snapshot off」だと、後で気付かれず復元に
-  失敗する。info ログで fallback 使用を明示する (= silent failure を構造で
-  防ぐ #5 と整合)
-
-**どこでこの判断が出てきたか**:
-- Phase 6 着手時 (= 本 PR)
-- 将来 escape_game runtime に semantic stores を入れたら、wiring stub の
-  attribute lookup を増やすだけで済む
-
----
+[本文](design_decisions/17.md)
 
 ## 18. snapshot save は SIGINT を flag 化して run 終了経路に合流させる
 
-**何を**: ``run_scenario_experiment.py`` で ``--snapshot-save-dir`` を指定した
-ときだけ SIGINT (Ctrl+C) を ``_interrupted = True`` フラグ立てに変える。
-``KeyboardInterrupt`` を直接 raise させず、main loop が次の iteration で
-正常に break する。break 後の通常終了経路 (= snapshot save + runtime.shutdown)
-を必ず通すため。
-
-**なぜ**:
-- ``runtime.advance_tick()`` の中に LLM 呼び出し / async scheduler / 観測
-  pipeline が絡んでいる。``KeyboardInterrupt`` が突然 raise されると
-  partial state (= 観測が途中で止まる、scheduler が drain されない) で
-  snapshot を取るリスクがある
-- flag 化すれば「現 iteration の advance_tick() が綺麗に終わってから break」
-  になる。snapshot は **整合性の取れた状態** から取れる
-- ``--snapshot-save-dir`` 未指定なら SIGINT ハンドラを触らない (= 既存挙動
-  完全互換)。snapshot を使わない実験では Ctrl+C は引き続き
-  ``KeyboardInterrupt`` を即時 raise する
-
-**どうしないと壊れるか**:
-- グローバルに SIGINT を flag 化すると、snapshot を使わない既存実験の
-  Ctrl+C の即時性が失われる (= ユーザーが Ctrl+C を 2 回押す習慣に行き着く)
-- 直接 ``except KeyboardInterrupt`` で受けると、advance_tick の途中で止まる
-  ので scheduler の drain が呼ばれず ``"recorder is already closed"``
-  RuntimeError が後追いで出る (= 第21回実験の既知 silent failure と同型)
-
-**どこでこの判断が出てきたか**:
-- Phase 6 着手時 (= 本 PR)、user が「実験後にエラーが出られると困る」と
-  明示的に要求した点をきっかけに
-
----
+[本文](design_decisions/18.md)
 
 ## 16. run 途中再開 CLI は 4 SQLite DB + in-memory memo の構成で動く
 
-**何を**: ``scripts/being_snapshot_cli.py`` の ``_build_stack`` は 4 つの SQLite
-ファイル (``being`` / ``memory_graph`` / ``episode`` / ``reinterpretation``) を
-明示引数で取り、memo store だけは ``InMemoryMemoStore`` で新規に作る。
-
-**なぜ**:
-- 5 memory store のうち memo にだけ SQLite 実装がなく、in-memory にしか
-  住んでいない (= Phase 3 までの整理で必要にならなかった)
-- 「memo は持たないと困るが永続化先がない」を解決するのが snapshot JSON。
-  CLI 起動ごとに memo store は新規になるが、 ``capture`` で payload に
-  乗り、``restore`` で書き戻されるので **JSON ファイル自体が memo の
-  永続化媒体** として機能する
-- semantic + memory_link は同一 SQLite ファイルに共住 (=
-  ``apply_memory_graph_migrations`` が両 schema を一括適用) なので CLI も
-  同じ接続を共有
-
-**どうしないと壊れるか**:
-- memo の SQLite 実装を急いで作ると、Phase 5 のマイルストーン (= JSON 経由
-  の途中再開) が遅れる。「memo は in-memory + JSON 経由保存」という整理で
-  最短 path を取る
-- 4 DB の役割を CLI 引数で明示することで、将来 DB 配置が変わっても CLI を
-  作り直す必要がない (= 既存 game DB と同じ path を指定すれば動く)
-
-**どこでこの判断が出てきたか**:
-- Phase 5 着手時 (= 本 PR)
-- 将来 memo SQLite を入れるときは ``--memo-db`` 引数を追加する
-
----
+[本文](design_decisions/16.md)
 
 ## 9. 速度より「LLM の判断ミス」を優先して直す
 
-**何を**: 並列化 / 非同期化 / cache 最適化のような **wall time 改善** より、LLM が誤判断する原因を 1 つずつ潰す方を優先する。
-
-**なぜ**:
-- 並列化済 (#346 Step 1) で wall time はそれなりに改善した
-- LLM の判断ミス (ITEM_NOT_CONSUMABLE / 揮発ラベル誤用 / 救助に向かわない etc.) は実走の物語そのものを壊す
-- 「速いが頭が悪い」より「やや遅いが賢い」方が物語の検証に役立つ
-
-**どうしないと壊れるか**:
-- 「速いから OK」と判断ミスを放置すると、長期的に LLM 出力の信用が落ちる
-- 「もっと速いモデルを使えば解決」と Inference 側に解決を委ねると、シナリオ設計のフィードバックが鈍る
-
-**どこでこの判断が出てきたか**:
-- 実験 #29 OFF 分析の feedback シリーズ (ラベル / アイテム type tag / scenario realism / batch tools / fatigue lifecycle)
-
----
+[本文](design_decisions/9.md)
 
 ## index (時系列)
 
@@ -654,5416 +143,1236 @@ memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそ�
 
 ## 24. ObservationAppender ↔ encounter は observer slot で疎結合
 
-**何を**: ``ObservationAppender`` は ``observers: list[Callable]`` を受け取り、append
-の度に各 observer を呼ぶ。``EncounterObservationCollector`` は collector の
-``on_observation`` を bound method として slot に渡される。``ObservationAppender``
-側は ``encounter`` への import を持たない。
-
-**なぜ**:
-- ``observation`` 層と ``encounter`` 層を疎結合に保つ。``application/`` は単一
-  layer として扱われているが、責務が違うサブシステムを直接 import しないことで
-  「観察を受け取る側 (appender) は観察者 (encounter / metrics / debug) を知らない」
-  形を保てる
-- observer 追加時の負担が低い: 別目的の Callable (例えば trace metrics) を後
-  から差し込みやすい
-- import grpah が浅くなり、循環 import の起こりやすさが下がる (= #25 とも整合)
-
-**どうしないと壊れるか**:
-- ``ObservationAppender`` の constructor で concrete collector を isinstance
-  チェックする pattern を持ち込むと、observation → encounter の hard import が
-  生まれて応用範囲を狭める
-- 後で「append のたびに ○○ もしたい」が来るたびに ``ObservationAppender`` 改修
-  が必要になる
-
-**どこで出てきたか**: PR3 (Encounter Memory wiring) の subagent code-reviewer
-レビューでカップリングを指摘され、Callable slot 化で対応した
-
----
+[本文](design_decisions/24.md)
 
 ## 25. application 層の circular import は test 側で warm-up import で回避 (= 既知債務)
 
-**何を**: ``application/observation/contracts/__init__.py`` が
-``llm.contracts.dtos`` を import し、その先で ``llm/__init__`` 経由で
-``llm.services.agent_orchestrator`` → ``episodic_chunk_coordinator`` →
-``observation.contracts.interfaces`` への参照が走り、partial initialization 中
-の ``observation.contracts.interfaces`` を import しようとして
-``ImportError`` (circular) が起きる。
-
-回避策として、test ファイルでは ``llm.services.*`` を先に import して `llm` 側
-を warm up してから ``observation.contracts.dtos`` を import する。新規 module
-側は ``TYPE_CHECKING`` のみで ``ObservationOutput`` を参照する。
-
-**なぜ債務として残すか**:
-- 本質的な解は ``observation.contracts`` 側の package-level import を遅延化
-  する (= ``__init__.py`` で interfaces を eager import しない) 構造的な改修。
-  これは観測 / llm 双方の import 経路を整理する大きな refactor で、PR3 の
-  スコープを越える
-- 既存テストもこの順序に依存しており、暗黙の前提として運用されている
-- 既知債務として明示化することで、次に再発見した時に同じ調査をやり直さない
-
-**どうしないと壊れるか**:
-- 新規 module で何も考えずに ``ObservationOutput`` を eager import すると、
-  別の import 経路で ``observation.contracts`` を先に初期化する側が circular に
-  巻き込まれる
-- test の import 順序を「アルファベット順に整理する」ような自動 formatter で
-  並べ替えると壊れる (= test 側に明示コメントを残す責務がある)
-
-**どこで出てきたか**: PR3 (Encounter Memory) の collector / test 追加時に再現。
-subagent reviewer が「pre-existing だが新規 file が増えるたびに workaround が
-拡散する」と指摘したのを受けて、債務として明示化
+[本文](design_decisions/25.md)
 
 ## 26. 勝敗は runtime でなくシナリオ専管 → game_end_conditions を書かなければ「永続世界」になる
 
-**何を**: ゲームの勝敗 (win/lose) と終了条件は runtime にハードコードせず、
-シナリオの ``game_end_conditions`` ブロック (``win`` / ``lose`` の条件配列) だけが
-source of truth。``check_game_end`` は ``scenario.win_conditions`` /
-``lose_conditions`` を評価するだけで、**両方が空 (= JSON に ``game_end_conditions``
-を書かない) なら決して ``is_ended=True`` を返さない**。その世界は外的停止
-(driver の ``MAX_WORLD_TICKS``) でしか止まらない「永続世界」になる。
-
-参照シナリオ: ``data/scenarios/persistent_world_demo.json`` (勝敗条件を一切宣言
-しない最小デモ)。回帰固定: ``tests/integration/test_persistent_world.py``。
-
-**なぜこの形か**:
-- escape / survival のような「クリア/失敗で終わる世界」と、勝敗のない「ただ
-  生きる世界」を **同じ turn engine** で両立させたい (経路統一の目的)。勝敗を
-  runtime の前提にすると永続世界が書けなくなる。
-- 勝敗をシナリオ宣言に寄せることで、runtime は「終了条件を評価して報告するだけ」
-  の world 非依存な部品になる (`docs/agent_design_principles.md` の疎結合)。
-- ``ResolvedLlmRuntimeConfig`` (runtime 設定) には勝敗概念のフィールドを **持たせ
-  ない**。config 側に win/lose を足すと、宣言しない永続世界にも勝敗が漏れる。
-  これも ``test_persistent_world.py`` で固定する。
-
-**どうしないと壊れるか**:
-- escape 固有の集団 WIN/LOSE や outcome 判定を runtime のデフォルト挙動として
-  再注入すると、``game_end_conditions`` を書かないシナリオが勝手に終了したり、
-  永続世界の prompt に「脱出できない」等の勝敗前提テキストが漏れる
-  (後者は別途 escape prompt の world 中立化で扱う)。
-
-**どこで出てきたか**: 経路統一アーク U5。「勝敗なく永続的な世界を実現したい」と
-いう要望に対し、capability は既にあった (空条件 → 終了しない) が、それを行使する
-シナリオもテストも無かったため、参照シナリオ + 回帰テスト + 本項で固定した。
+[本文](design_decisions/26.md)
 
 ## 27. 新しい per-Being store は snapshot に乗せる前提で実装する (4 step checklist)
 
-**何を**: 新しく per-Being scope の state を持つ store (= `BeingId` をキーに
-保持する store) を追加するときは、その時点で `BeingMemorySnapshotService`
-への配線まで含めて 1 PR にまとめる。「あとで足す」と後回しにすると、長走
-実験の終了 → 再開で連続性が静かに壊れる silent failure になる。
-
-実際 PR #580 (想起スロット) / #588 (afterglow) / #526 段階 2 (慣化) は
-追加時に snapshot への追従が忘れられたまま main に入り、半年弱気付けな
-かった。PR-F (#593) / PR-G (#594) で構造的 fail-fast と既存 3 store の
-追従を入れたあと、次は「追加し忘れの再発を docs で 1 段目止める」のが本項。
-
-**手順 (= 新 store 追加 PR でやること)**:
-
-1. `BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS` に新 key を追加
-   - 1 store = 1 key が原則。値の形が dict だが list 規約に合わせるため
-     split が必要なら 2 key にしてよい (例: slot は entries と cooldown)
-2. `BeingMemorySnapshotService.__init__` に新 store の引数を追加 (keyword-only)
-   - Protocol 越しに渡せるなら `runtime_checkable` Protocol を使い、
-     `isinstance()` で wiring 漏れを early detection する
-3. `capture()` の payload dict に新 key の生成ロジックを追加
-   - VO ↔ dict の codec は `_memory_payload_codecs.py` に集める
-   - 1 を足して 3 を忘れると初回 capture で `SnapshotCoverageError` が
-     起動時に投げられる (= PR-F の fail-fast)
-4. `restore()` のデコード + 書き戻しを追加
-   - store interface に `replace_all_by_being(...)` を必ず生やす。中身が
-     空なら being の state を pop して「capture 時に空だった状態と完全に
-     同じ姿で復元される」よう揃える
-   - 実装の参照先: `InMemoryEpisodicRecallSlotStore.replace_all_by_being`
-     (slot + cooldown) / `InMemoryAfterglowStore.replace_all_by_being`
-     (entries のみ) / `InMemoryEpisodicRecallHabituationStore.replace_all_by_being`
-     (mapping)。戻り値は `None`。
-   - 1 を足して 4 を忘れると restore で `BeingMemoryPayloadFormatError` に
-     化け、これも起動時に止まる
-
-**追加で守ること**:
-
-- `ExperimentSnapshotSession` の `fallback_used` ログ対象に新 store の属性名
-  を追加する (= wiring 漏れで空 store が静かに使われる状態に気付ける)
-- store interface に capture 用の read API (`list_all_by_being` 等) が
-  無ければ追加する
-- snapshot CLI (`scripts/being_snapshot_cli.py`) が新 store にアクセスできない
-  in-memory sidecar なら、`cmd_save` で warning を残してユーザに「CLI 経由
-  では dump されない」事実を伝える
-
-**どうしないと壊れるか**:
-
-- 1-4 のうちどれかを忘れると、`capture()` または `restore()` のどちらかが
-  fail-fast で止まる。**全部を忘れた場合は構造で検出できない** ので、本項の
-  チェックリストが最後の砦になる
-- 「あとで snapshot 対応する」と後回しにすると、間に走った長走実験の trace
-  に「想起階層の連続性が壊れた事実」が混入する。データに混入したノイズは
-  後から取り除けない
-
-**どこで出てきたか**: PR #594 (PR-G) で 3 store ぶんの追従漏れを一度に
-解消した際、それ以前の 3 store を追加した一連の経路 (#580 / #583 が想起
-スロット、#588 が afterglow、Issue #526 段階 2 が慣化 store) すべてが本
-手順を踏んでいなかったことが判明したため、再発防止として本項を追加。
+[本文](design_decisions/27.md)
 
 ## 28. 実験に意味を持つ設定は profile/config だけから入れる
 
-**何を**: LLM 実験の挙動を変える設定は、`data/experiment_profiles/*.json`
-または `--experiment-config` の `runtime_config` だけから
-`ResolvedLlmRuntimeConfig` に解決する。環境変数から同じ値を入れる互換経路は
-作らない。例外は API キー、サーバのホスト/ポート、ローカル DB パスのような
-秘密情報または実行基盤の設定に限る。
-
-**なぜこの形か**:
-
-- 1 つの値に複数の入力経路があると、run_start trace に残った値と実 runtime の
-  値がずれる。過去の rolling_summary / prompt section / provider routing 系の
-  静かな失敗はこの形で起きた。
-- 実 LLM run はコストが高い。外側 shell に残った古い環境変数が混ざるだけで、
-  比較不能な run ができてしまう。
-- profile/config は成果物として `experiment.config.source.json` と
-  `experiment.config.resolved.json` に保存できる。環境変数の履歴を後から完全に
-  復元するより、入力を 1 本にする方が事故が少ない。
-
-**実装上の決まり**:
-
-- `run_scenario_experiment.py` は profile/config を process env に注入しない。
-  `runtime_config` の mapping を直接 `ResolvedLlmRuntimeConfig.from_mapping(...)`
-  に渡す。
-- `create_world_runtime(..., config=cfg)` / `GameRuntimeManager(runtime_config=cfg)`
-  / `create_llm_client_from_config(cfg)` のように、解決済み config を引数で渡す。
-- 低レベル resolver は `env=None` でも `os.environ` を読まない。テストや移行用に
-  mapping を渡す場合だけ、その mapping を読む。
-- 新しい実験設定を足すときは、`ResolvedLlmRuntimeConfig`、profile、manifest、
-  配線契約テストを同じ PR に含める。
-
-**どうしないと壊れるか**:
-
-- 「後方互換」として `LLM_*` や `BELIEF_*` を環境変数から読む経路を戻すと、
-  profile に書いた条件と実 runtime の条件が分岐する。
-- `LiteLLMClient` 内部で provider / model / reasoning / timeout を環境変数から
-  読むと、manifest に残らないコスト条件が混ざる。
-- 並列度や idle timeout も観測結果に影響しうるため、実験 run では config に
-  固定して trace に残す。
-
-**どこで出てきたか**: `v3coop_stagnation_001` / `002` 相当の「全部盛り」
-実験条件を profile 化する作業中、ユーザから「API キー以外の env 入力経路は
-廃止したい。一つの値に複数経路があることで過去にも苦しんだ」と指摘された。
-そのため、後方互換よりも経路の単一化を優先する判断として固定した。
+[本文](design_decisions/28.md)
 
 ## 29. 再開境界で未通知観測を勝手に flush しない
 
-**何を**: snapshot capture の直前に、日次集約などの未通知バッファを
-強制 flush しない。未通知バッファ自体を world snapshot の subsystem として
-保存・復元し、既存の tick 境界条件で後から配信する。
-
-**なぜこの形か**:
-
-- capture 前 flush は、連続 run なら日付境界で出る観測を snapshot 時刻に前倒し
-  してしまう。これは resume run と連続 run の観測時刻をずらす。
-- 観測駆動の LLM では、観測時刻のズレ自体が次の行動を変える。状態を保存する
-  ために観測の発生時刻を変えるのは、再開品質として筋が悪い。
-- 未通知バッファは「世界状態そのもの」ではなくても、未来に配信される予定の
-  観測であり、実験の解釈に影響する。
-
-**実装上の決まり**:
-
-- `WorldRuntime._pending_spoiled` / `_pending_spoiled_day` のような
-  未通知バッファは、専用 `WorldSubsystemCodec` で保存・復元する。
-- codec は flush を呼ばない。復元後、既存の `advance_tick` / 日付境界処理に
-  任せる。
-- 追加時は「capture → restore 後に既存 flush 経路で観測が失われない」ことを
-  テストで固定する。
-
-**どうしないと壊れるか**:
-
-- snapshot save が日付境界前に走ると、resume 後に「今日は X が腐った」という
-  未通知観測が消える。食料管理の観察 run では、LLM が腐敗に気づく機会が
-  静かに失われる。
-- 逆に capture 前 flush にすると、観測は消えないが時刻が変わり、連続 run と
-  resume run の比較可能性が落ちる。
-
-**どこで出てきたか**: `belief_goal_full` の 200 tick 観察前に
-snapshot/resume を主経路にできるかレビューした際、`_pending_spoiled` が
-snapshot 対象外であることが見つかった。食料・腐敗が今回の重要観察対象なので、
-flush ではなく codec による保存を採用した。
+[本文](design_decisions/29.md)
 
 ## 30. ローカルLLMはレプリカ単位で常駐管理し、実験を同じレプリカへ固定する
 
-**何を**: v108のGemma 4 31BはH100 1枚につき1つの独立レプリカとして
-GPU 0〜3、8100〜8103番へ固定する。プロセス寿命はユーザーsystemdで管理し、
-異常終了時の再起動、HTTP死活確認、安全停止時の要求排出を共通の管理入口へ
-集約する。実験を接続するときは、1 runの全要求を同じレプリカへ固定する。
-
-**なぜこの形か**:
-
-- 31Bの量子化モデルはH100 1枚に収まるため、4枚をテンソル並列で束ねるより、
-  独立レプリカ4個の方が複数実験の総処理量と故障分離に向く。
-- vLLMのプレフィックスキャッシュとKVキャッシュはレプリカ間で共有されない。
-  要求ごとの単純なラウンドロビンでは、同じ実験の共通プロンプトが4台へ散る。
-- 夜間実験では端末やCodexの会話寿命と推論サーバーの寿命を分離する必要がある。
-  systemdへ寄せることで、開始、準備完了、異常再起動、正常停止の意味を一つにする。
-- 停止前に`/metrics`の実行中・待機中要求を確認すれば、処理途中の要求を
-  「終了したように見せる」静かな失敗を避けられる。
-
-**どうしないと壊れるか**:
-
-- `nohup`や端末上の親スクリプトだけで常駐させると、ログアウト、親プロセス終了、
-  部分的な異常終了時の状態が曖昧になる。
-- HTTP死活確認1回の失敗ですぐ再起動すると、起動時コンパイルや一時的な高負荷を
-  障害と誤認する。連続失敗にだけ反応する。
-- メトリクス欠落を要求0へ縮退すると、壊れたサーバーを排出完了と誤認して停止する。
-- 推論サーバーの安全停止だけでは新しい実験の投入競合を防げない。後続の実験
-  起動器では「新規割り当て停止」を要求排出より先に行う。
-
-**どこで出てきたか**: v108のH100 4枚を使い、OpenRouterに依存せず複数の
-長走実験を夜間に自走させる運用を検討した際、単純なロードバランサーでは
-キャッシュ局所性と実験ごとの性能解釈が崩れることを確認したため。
+[本文](design_decisions/30.md)
 
 ## 31. テレポートの秘匿性は visibility ではなく「誰が居たか」で決まる
 
-`TELEPORT_ENTITY` 効果 (隠し通路・ベント・魔法陣) を実装するにあたり、移動が
-第三者に見えるかどうかを何で決めるかを選んだ。
-
-**採用**: 出発スポットと到着スポットの presence だけで決まる。`teleport_entity`
-は `move_entity` と同じ `EntityLeftSpotEvent` / `EntityEnteredSpotEvent` を
-発火し、既存の観測経路がそれぞれのスポットの居合わせた者へ配る。誰も居なければ
-誰にも観測されない = 秘密の移動が成立する。
-
-**棄却**: `InteractionEffect.visibility` (ACTOR_DIRECT / PUBLIC_OBSERVABLE /
-HIDDEN) で制御する案。物理的にその場に居る者が「消えた人」を見落とす表現は
-不自然で、`HIDDEN` を許すと「目の前から人が消えたのに誰も気づかない」世界に
-なる。他の効果 (ダメージ・状態異常) は身体の内側で起きるので visibility が
-意味を持つが、移動は外形的な事実である。
-
-ただし visibility を書いても黙って無視されると「HIDDEN にしたから見られない」
-と誤解したまま秘密の移動を期待されるので、`TELEPORT_ENTITY` に visibility を
-書いたシナリオは **読み込み時に `ScenarioLoadError` で落とす**。効かない設定を
-黙って受け取らない。
-
-同じ理由で、行き先 (`parameters.target_spot`) を欠いた `TELEPORT_ENTITY` も
-読み込み時に落とす。domain 側は `spot_id <= 0` なら spec を作らない実装なので、
-放置すると「書いたのに何も起きない」静かな失敗になる。`target_spot` を effect の
-直下 (parameters の外) に書いた場合も同様に無言で消えるため、両方を弾く。
-
-### 現在地と同じスポットへのテレポートは no-op
-
-出発していないのに `EntityLeftSpotEvent` を流すと、同席者に幽霊のような出入りが
-観測される。例外にはしない (ランダム転送などで正当に起こりうるため)。
-
-### 複数 tick 移動との衝突は未解決 (既知の制約)
-
-`PlayerSpotNavigationState` は本集約とは別に「どの接続を辿っている途中か」を
-保持する。移動中の entity をテレポートさせると、次の `advance_spot_travel_one_tick`
-が「接続の始点に居ない」として `EntityNotAtSpotException` を投げる。
-
-現在この経路は踏めない。`teleport_entity` の呼び出し元は interact だけで、
-行為者自身しか飛ばせず、移動中のプレイヤーはターンが回らないためである。ただし
-この不変条件は別の層 (ターン割り当て) が担保しており、`teleport_entity` 自身は
-何も知らない。**他者を飛ばす効果や trap 由来のテレポートを足すときは、呼び出し
-側で移動状態を先に解消すること。** 症状は
-`tests/domain/world_graph/aggregate/test_spot_graph_teleport_entity.py` の
-`TestTeleportVersusConnectionMovement` が固定している。
+[本文](design_decisions/31.md)
 
 ## 32. 環境変化 (CHANGE_ATMOSPHERE) は部分更新にする
 
-`CHANGE_ATMOSPHERE` 効果 (停電・気温変化・危険度上昇) の適用にあたり、
-`SpotAtmosphere` をまるごと置き換えるか、指定項目だけ差し替えるかを選んだ。
-
-**採用**: 部分更新。`update_spot_atmosphere` は渡された項目だけを差し替え、
-指定しなかった項目 (`sound_ambient` / `smell` / `sound_intensity` など) は元の
-値を保つ。停電で明るさだけ変えたいときに環境音や匂いまで既定値へ巻き戻ると、
-その spot の描写が静かに壊れるため。`SpotNode` も `SpotAtmosphere` も frozen
-なので `dataclasses.replace` を二段重ねる。
-
-**棄却**: spec の内容でまるごと差し替える案。シナリオ作者が「明るさだけ変えた
-つもり」で全部を消す事故が避けられない。
-
-### 未設定 spot の既定は BRIGHT
-
-`atmosphere` を持たない spot に `hazard_level` だけを指定した場合、明るさは
-既定の `BRIGHT` が入る。「未設定 = 明るい」を安全側の既定とする — 暗いと視認
-(`monster_visibility_service`) や戦闘の判定が変わるので、書かれていない spot を
-勝手に暗くしない。
-
-なお `hazard_description` を `None` に戻す (クリアする) 用途には非対応。
-部分更新は「渡した項目だけ差し替える」ため、`None` は「指定なし」と区別できない。
-クリアが必要になったら別途 sentinel を設計する。
-
-### イベントは発火しない
-
-環境変化の観測は interaction 側の `AppliedEffectSummary(kind=ATMOSPHERE_UPDATE)`
-が `SpotPublicEffectObservedEvent` として同 spot の第三者へ届ける。集約側でも
-イベントを出すと同じ変化が二重に観測される (#812 で直した interact の二重発火と
-同型)。
-
-### 読み込み時に弾くもの
-
-`#31` (テレポート) と同じ方針で、書いたのに何も起きない経路を loader で塞ぐ。
-
-- `parameters.target_spot` が無い: domain 側は `spot_id <= 0` なら spec を作らない
-- `lighting` / `temperature` が enum 名として未知: 綴り間違いが実行時まで気づけない
-- 変更項目が 1 つも無い: 何も変えない宣言は書き忘れとみなす
-
-いずれも `ScenarioLoadError`。効かない設定を黙って受け取らない。
-
-### interaction と scenario_events の両方から適用する
-
-停電や気温低下は「誰かが操作した結果」だけでなく「時刻や条件で世界の側が変わる」
-形でも起きる。`SpotGraphScenarioEventStageService` でも `atmosphere_update_specs`
-を消費し、ON_TICK で照明を落とす表現を書けるようにした。
-
-一方 `TELEPORT_ENTITY` は scenario_events では意味を持てない (行為者が居ないので
-誰を飛ばすか決まらない)。黙って捨てると気づけないので、この経路で宣言された
-場合は警告ログを残す。
+[本文](design_decisions/32.md)
 
 ## 33. 能動想起ツールは測定条件が整うまで profile 側で OFF にする
 
-`SEMANTIC_SEARCH_ENABLED` と `EPISODIC_EXPLORE_RELATED_ENABLED` は、もともと
-「`memory_search_semantic` / `memory_explore_related` を LLM に露出する」
-設定として profile に書かれていた。しかし実験 runtime 側の露出制御が未配線で、
-過去 run ではどちらのツールも一度も LLM に提示されていなかった。つまり true と
-宣言していたが、実験条件としては実質 OFF だった。
-
-#851 で露出制御が実際に効くようになったため、profile の true をそのまま残すと
-次の run から突然 2 つの能動想起ツールが増える。これは正しい実装挙動ではあるが、
-直近 run との比較条件を変え、さらに memo ツール表示制御の A/B 実験と干渉する。
-どちらもターンを消費する能動想起であり、memo を減らして行動枠を返す効果を測る
-局面では逆方向の圧力になる。
-
-そのため `belief_goal_full` と `ablation_base` では、当面
-`SEMANTIC_SEARCH_ENABLED=false` / `EPISODIC_EXPLORE_RELATED_ENABLED=false`
-に明示する。これは「宣言したのに効いていなかった」状態から「意図して切っている」
-状態へ移すための変更である。`EPISODIC_RECALL_ENABLED` は run 003 で実際に使われた
-既存条件なので true のまま維持する。能動検索・関連探索は、後でまとまりとして
-評価するときに profile で再度有効化する。
+[本文](design_decisions/33.md)
 
 ## 34. memo A/B は「蒸留ありの手帳」と「手帳なし」を比較する
 
-v4 第3回 run では `memo_add` / `memo_done` / `memo_list` が全行動の約15%を
-占めた。memo section の文字量は小さい一方、1ターン1ツール制約では memo を書いた
-ターンに移動・探索・会話ができない。記憶システムが強くなった状態で、この手帳枠が
-まだ必要かを測るため、`belief_goal_full` を基準にした A/B profile を分ける。
-
-採用する腕は2本にする。A は `belief_goal_memo_ab_keep_memo` で、
-`MEMO_TOOLS_ENABLED=true` のまま memo tool を露出し、`MEMO_DISTILL_ENABLED=true`
-により `memo_done` を semantic 記憶の `BeliefEvidence` へ蒸留する。これは
-docs/memory_system/short_term_memory_design.md が想定していた「memo = 目標・計画層」
-を実際に動かす腕である。B は `belief_goal_memo_ab_hide_memo` で、
-`MEMO_TOOLS_ENABLED=false` により memo tool と未完了 memo section、memo 完了 hint を
-隠す。記憶本体 (episodic / semantic / passive recall / rolling summary) は止めない。
-
-`ablation_base` は stagnation reasoning を落とした比較土台であり、memo A/B とは目的が
-違う。したがって memo A/B の2 profile は `belief_goal_full` 系として置き、互いの差分は
-`MEMO_TOOLS_ENABLED` の1キーだけにする。#33 で OFF にした
-`SEMANTIC_SEARCH_ENABLED=false` / `EPISODIC_EXPLORE_RELATED_ENABLED=false` は両腕で維持し、
-能動想起ツールの増加を memo 実験に混ぜない。
-
-memo A/B の scenario は `survival_island_v4_coop.json` に固定する。v4 第3回 run との
-比較可能性を保つためであり、v3 には position / area / distant cue が無く #35 の
-「拠点から山影が見える」変更が効かないためである。run 時の `SCENARIO=` 上書きには
-頼らず、profile を読めば実験条件が分かる状態にする。
+[本文](design_decisions/34.md)
 
 ## 35. `is_outdoor` 未宣言の屋内扱いは validator で見える化する
 
-`SpotNode.is_outdoor` は既定 false のまま維持する。洞窟・廃屋・小屋など、空や
-遠景が見えない spot を壊さないためである。一方で、未宣言が黙って屋内扱いになると、
-遠景 (`distant_view`) や天候表示が抑止され、症状は「なぜか目標が見えない」として
-しか表れない。
-
-v4 第3回 run では、最長滞在拠点だった `hidden_cove` が `is_outdoor` 未宣言で屋内扱い
-になり、拠点から山影が一度も見えていなかった。description 上は海に開けた入江であり、
-屋内意図は読み取れないため、v3/v4 では `is_outdoor: true` を明示する。ただし v3 は
-position / area / distant cue が未整備なので、この宣言だけでは遠景は出ない。v3 側の
-宣言は、将来 v3 に遠景材料を足したときに同じ屋内抑止を再発させないための前準備である。
-
-v4 ではこの変更により、次の本命 run で拠点から「切り立った山影」が見える。run 003
-との比較では、この目標 cue の露出条件が変わったことを明記する。
-
-既定値は変えず、`validate_spot_map` が屋内扱い spot と `is_outdoor` 未宣言 spot を
-info / metrics に出す。シナリオ作者が map 検査時に「本当に屋内扱いでよいか」を確認
-できるようにし、既存シナリオの意味を反転させない。
+[本文](design_decisions/35.md)
 
 ## 36. object.state の prompt 表示は scenario 側で宣言し、未宣言値は隠さない
 
-`SpotObject.state` は interaction の前提条件や effect の真実源であり、`opened=false`
-や `lit=false` のような値がそのまま prompt に出ると、エージェントには意味の薄い
-内部表現として見える。一方で、状態表示をコード側で key ごとに決めると、シナリオ固有の
-文脈 (「宝箱はまだ開いていない」「狼煙台に火はついていない」など) を失う。
-
-そのため `StateDisplayRule(key, value, text)` を scenario の object に宣言し、
-`visible_state()` が一致する key/value を日本語 tag に変換する。`available=false`
-だけを `unavailable_hint` で特別扱いしていた既存設計を一般化した形であり、
-`available` も明示 `state_display` があればそちらを優先する。
-
-重要なのは、宣言の無い key/value を隠さないこと。key に rule があっても現在値に
-対応する rule が無い場合は、従来どおり raw state を出す。ここで隠すと、
-シナリオ作者の宣言漏れが prompt からもテストからも見えなくなり、再び静かな失敗になる。
-v4 だけは hard audit で raw state を禁止し、他シナリオは quality テストで棚卸しする。
-
-値比較では `False == 0` / `True == 1` を同一扱いしない。bool state と数値 state は
-別概念なので、型を含む同一性キーで rule を照合する。
-
-累積カウンタは完全一致だけでは上限の次の値で raw state に戻るため、整数下限の
-`at_least` ルールも許可する。完全一致を最優先し、該当しない場合だけ、現在値以下の
-`at_least` のうち最大閾値を使う。閾値に届かない値や整数以外には規則を広げず、従来
-どおり raw state を出す。これにより「3 本以上なら次の判断は同じ」という表示はまとめ
-つつ、宣言漏れを隠す #36 の安全策は維持する。bool は整数下限の対象にしない。
+[本文](design_decisions/36.md)
 
 ## 37. いまできない object action は候補から消さず、選べる行動とは別行に出す
 
-object 行の `[...]` は LLM にとって「ここから action_name を選ぶ」欄として働く。
-その中に `search(棚を調べた後)` のような現在必ず失敗する action を並べると、
-選べる行動に見える。一方で、候補から消すと説明文だけが操作を誘う状態になり、
-存在しない action_name を発明する実測がある。
-
-そのため、`SpotGraphInteractionEntry` ではヒントを 2 種に分ける。
-
-- `condition_hints`: 時刻・天候・明るさのような宣言由来の制約。選べる行動欄の
-  `action(夜不可)` に残す
-- `blocking_hints`: OBJECT_STATE や OBJECT_STOCK_AT_LEAST のように、現在値を読んだ
-  結果いま満たしていない理由。`[...]` から外し、`いまできない:` 行へ出す
-
-`ToolRuntimeTargetDto.available_interactions` は表示とは独立して、従来どおり全
-action_name を持つ。これは resolver の入力候補であり、prompt の整形都合で削っては
-いけない。表示は「選べるもの」と「いまできないもの」を分けるが、解決可能な候補集合は
-変えない。
-
-同席者への `give_item` 手がかりも、各 player 行に同じ文を繰り返さず見出しへ集約する。
-ただし死亡・ダウン中の相手には渡せないため、見出し文は「倒れていない相手には」と
-条件を含める。行ごとの死亡・ダウン表示と所持品表示は維持する。
+[本文](design_decisions/37.md)
 
 ## 38. action_name は意味ラベルで補い、多義語は動詞 + 目的語へ寄せる
 
-interaction には `display_label` が既に宣言されており、観測側では「持ち物を奪う」の
-ような意味表示に使われていた。しかし選択前の prompt では `action_name` だけが出ており、
-エージェントは裸の識別子から意味を推測していた。`take` を「診る・手当てする」と解釈し、
-失敗文を読んでも治療行為だという前提が剥がれなかったのは、この非対称が原因である。
-
-そのため、選択前の表示でも `display_label` を必須の意味情報として扱う。空や
-`action_name` と同一の `display_label` は、意味を持つ文字列が無いのと同じなので
-監査で落とす。欠落・空白は `ScenarioLoader` で読み込み時に止め、KeyError や後段の
-別エラーに流さない。
-
-ただし表示だけでは足りない。LLM が実際に tool 引数へ渡すのは `action_name` であり、
-介入実験でもラベルを添えた側が `take` と書き続けた。そのため action 名自体も
-「動詞 + 目的語」に寄せる。`loot_from_downed` のように前提条件の一部を名前へ埋め込むと、
-立っている相手に撃つことが名前の時点で矛盾になる。
-
-改名前の段階では、多義語 denylist を quality 棚卸しとして置く。既存シナリオにはまだ
-違反が残るため通常 CI では落とさず、改名 PR で違反を消してから hard audit に昇格する。
-改名後は `take` / `search` / `light` などの裸動詞を通常監査で落とす。新しい
-interaction を足すときは、`search_wreck_hold` や `loot_from_downed` のように
-動詞と対象を名前に含める。
+[本文](design_decisions/38.md)
 
 ## 39. 実験モデルは版固定 ID を使い、接続先の能力は実呼び出しで確かめる
 
-**何を**: OpenRouter 経由の実験では、特定の版を指すモデル ID を profile に固定する。
-DeepSeek V4 Flash の 2026-07-31 更新版は、新しい `belief_goal_v4` profile から
-`deepseek/deepseek-v4-flash-0731` を使う。接続先は、同モデルを fp8 で提供し、
-`tool_choice=required` の実呼び出しに成功する Cloudflare に固定する。既存 profile は
-過去の実験意図を表す記録なので書き換えず、新しい実験条件には新しい profile を足す。
-
-**なぜ**:
-
-- DeepSeek 直結 API の `deepseek-v4-flash` は常に最新版を指す。一方、OpenRouter は
-  4月版を `deepseek/deepseek-v4-flash`、7月31日版を
-  `deepseek/deepseek-v4-flash-0731` と別 ID にしている。この版固定により、実験の
-  途中で同じ ID の中身が黙って変わり、過去 run と比較できなくなる事故を避けられる。
-- 7月31日版の DeepSeek 公式 endpoint は `supported_parameters` に
-  `tool_choice` を掲げながら、`required` と特定関数指定を 404 で拒否した。
-  `supported_parameters` は接続先の宣言であって、値ごとの動作保証ではない。
-  実験で必須の値は、本番と同じ provider 固定・reasoning 無効・tool schema で
-  実際に呼び出して確かめる必要がある。
-- `tool_choice=auto` に下げると tool call の無い応答を許し、エージェントが1回の
-  起動を黙って失う静かな失敗になる。Cloudflare は総当たりした接続先のうち、
-  fp8 と `required` を両立した唯一の選択肢だった。DeepInfra も `required` は通るが
-  fp4 のため、モデル品質を上げる目的に合わない。
-- Cloudflare の cache read 単価は DeepSeek 公式の10倍だが、run 004 の実測量では
-  200 tick あたり約 0.10 USD の増加に収まる。速度、prompt 単価、completion 単価、
-  キャッシュ動作は同等だったため許容した。
-
-**どうしないと壊れるか**:
-
-- 日付の無い可変 ID を固定版だとみなすと、モデル更新時点を後から特定できず、
-  同じ profile 名の run 同士が比較不能になる。
-- 既存 profile を新しいモデルへ上書きすると、過去 run がどの条件と意図で設計されたかを
-  profile 自体から読めなくなる。`experiment.config.resolved.json` が実測条件を残していても、
-  profile が担う実験計画の履歴は代替できない。
-- `supported_parameters` だけを見て対応済みと判断すると、実行時の 404 を
-  profile 読み込みや単体テストで検出できない。外部 endpoint の能力差には、通常の
-  試験から除外した `tests/quality/` の実呼び出しプローブを置く。
-- DeepSeek 公式が `required` に対応した後も Cloudflare 固定を惰性で残さない。
-  プローブは「まだ拒否される」間だけ成功し、対応した瞬間に失敗して再検討を促す。
-- 新しいモデル条件を既存 profile 群へ一括反映しない。新しい profile と継承元の差を
-  テストで限定し、意図していない設定差や継承元の書き換えを許さない。
-
-**どこで出てきたか**: DeepSeek V4 Flash 0731 への更新調査と接続先の総当たりを
-行い、公開メタデータと実際の `tool_choice=required` 対応が一致しないことを確認した
-PR #898。
-
-**追記 (2026-09-23)**: 0731 版の DeepInfra は fp8 に変わっていた。provider の
-対応状況は予告なく変わるので、選ぶときの条件と確かめ方は
-[llm_provider_selection.md](llm_provider_selection.md) にまとめ、この節の provider の
-記述はその時点の記録として読む。
+[本文](design_decisions/39.md)
 
 ## 40. `CALL_MEETING.trigger` は宣言値を実行まで運び、未知値へ縮退しない
 
-`CALL_MEETING` の `parameters.trigger` は、会議状態と観測に残る招集理由である。
-domain の効果結果までは値を保持していたが、application の callback が行為者しか
-受け取らず、`WorldRuntime` が常に `emergency_button` を記録していた。この形では
-シナリオに別の値を書いても成功扱いのまま宣言が消える。
-
-そのため callback の契約を `(player_id, trigger)` とし、効果結果から
-`begin_meeting` まで同じ値を運ぶ。効果側で既定値を補わず、省略・未知値は loader と
-domain の両方で拒否する。許可値は domain の `CALL_MEETING_EFFECT_TRIGGERS` を
-単一の出所とし、現在は `emergency_button` だけを認める。
-
-`body_report` は死体との同席や重複報告を検査する別の招集入口であり、
-`CALL_MEETING` の許可値には含めない。まだ存在しない2種類目の effect trigger のために
-回数・クールダウンの規則表は先回りして作らず、実際の宣言を追加するときに、その値と
-規則と試験を同時に追加する。
+[本文](design_decisions/40.md)
 
 ## 41. 差し替え口の単体試験だけでなく、本物の接続を通す
 
-モンスター攻撃の状態異常は、`SpotAttackOrchestrator` に provider を差せる設計と
-確率適用の単体試験を持っていた。しかし実runtimeの provider は
-`monster.template_id` という存在しない属性を読み、例外を空の候補へ縮退させていた。
-実際の属性は `monster.template.template_id` であり、2026-06-21の一括改名以降、
-狼・野犬・毒蛇・大型カニの状態異常は一度も発火していなかった。
-
-差し替え口 (seam) を用意して単体試験することは、効果適用ロジックの検証には有効で
-ある。しかしスタブを直接差す試験だけでは、production の組み立てが正しい provider を
-接続しているかは保証できない。差し替え可能な設計ほど、少なくとも1本は本物のloaderと
-runtime組み立てを通り、公開入口の最終的な振る舞いを観測する試験が必要である。
-
-モンスター攻撃では `execute_monster_attack` からプレイヤーの `active_effects` までを
-観測し、4テンプレートの効果種別・確率境界・持続tick・強度を固定する。既知
-テンプレートの効果が欠ければ公開入口の試験が失敗するため、配線不良を成功扱いの
-まま通さない。
-
-この修正以降は、狼・野犬が50%で12 tickの出血、毒蛇が60%で10 tickの毒、
-大型カニが35%で8 tickの出血を実際に付与する。生存難易度が上がるため、修正前の
-runと比較するときは実験条件の差として明記する。
+[本文](design_decisions/41.md)
 
 ## 42. モンスター固有の攻撃能力はテンプレート宣言を単一の出所にする
 
-攻撃時状態異常の種別・確率・継続tick・強度は、モンスターの識別子をruntimeの
-固定辞書へ照合して決めず、`MonsterTemplate.attack_status_effects` に宣言する。
-識別子の逆引きproviderは、テンプレート定義と実行規則を別々に発展させ、実在しない
-属性参照を空の効果へ縮退させた直接原因だったため、互換経路を残さず削除する。
-
-`ScenarioLoader` は文字列の `effect_type` を `StatusEffectType` へ変換し、確率の
-値域、正の継続tick、数値の強度を起動時に検証する。実行時に未知種別を無視したり、
-確率や継続tickを丸めたりしない。ロード済みテンプレートはすでに有効なので、
-`SpotAttackOrchestrator` は宣言を直接確率判定するだけにする。新しいモンスターは
-コードの対応表を変えず、JSON宣言だけで新しい状態異常能力を持てる。
-
-静的定義をSQLiteへ保存する経路でも同じ一覧を正規化した子表へ保存し、順序を含めて
-復元する。シナリオから直接起動する経路だけを直してSQLite経路を空にすると、起動方法で
-能力が分岐するためである。状態異常を持たないテンプレートは空タプルで表し、旧provider
-や別形式への分岐は置かない。
-
-この全面移行では、同じ4種を含む島シナリオ5本すべてへ宣言を追加する。過去シナリオの
-hashは変わるが、二重経路を残して数週間後に別々の仕様へ発展させないことを優先する。
-過去runの実測条件は各runの `experiment.config.resolved.json` とscenario hashで確認する。
+[本文](design_decisions/42.md)
 
 ## 43. 個人結果・終了・生存圧を別々の宣言にし、旧一体型経路を残さない
 
-島シナリオの救助判定は、救助時刻・狼煙・山頂在席・取り残し期限・飢餓ダメージを
-`outcome_resolution` という一つの専用設定にまとめ、runtime の固定サービスが解釈して
-いた。この形では救助以外の個人結果を持つ新しいシナリオを追加するたびに、シナリオと
-コードを一緒に変える必要がある。
-
-個人結果は `player_outcome_rules`、混合集団結果の終了は
-`game_end_conditions.end`、生存圧は `needs` に分ける。個人結果規則の発火条件には
-既存の `ScenarioEventCondition` と `ScenarioConditionEvaluator` を再利用し、
-`trigger` と `player_conditions` を分離する。前者は救助船のような機会が来たか、後者は
-その機会の対象者を表す。対象者が0人でも `once` の機会は消費済みにし、後から同じ船を
-利用できないようにする。発火済み状態は既存の scenario event 進捗ストアに保存し、
-snapshot 再開でも再発火させない。
-
-RESCUED / STRANDED / DEAD が混在する世界終了を `win` や `lose` に置くと宣言が嘘に
-なるため、中立の `end` 配列で `ALL_PLAYER_OUTCOMES_RESOLVED` を宣言する。対象者0人を
-全員確定とみなさず、終了条件を持たない永続世界は自動終了させない。
-
-旧 `outcome_resolution` は互換経路として残さない。4本の島シナリオを一度に新形式へ
-移し、旧設定型・旧サービス・runtime 分岐を削除し、旧キーは読み込み時に明示的に拒否
-する。過去シナリオの hash は変わるが、過去 run の実測条件は各 run の
-`experiment.config.resolved.json` と scenario hash で確認する。二つの経路を並存させて
-別々に発展させるより、シナリオ作者が使う入口を一つに保つことを優先する。
-
-`END_ON_ALL_DOWN` は世界内の勝敗や個人結果を決める規則ではなく、全員が行動不能な
-実験を回し続けないための外的停止として扱う。特定の個人結果モードへ埋め込まず、
-`check_game_end` の共通入口でシナリオ宣言より先に評価する。終了理由には設定名を含め、
-世界内の `game_end_conditions` が成立した終了と後から区別できるようにする。
+[本文](design_decisions/43.md)
 
 ## 44. ツール露出は世界・フェーズ・本人状態を公開入口で合成する
 
-run 011 では、投票済みのエージェントへ次のターンでも `vote` が提示され、
-`ALREADY_VOTED` が 2 回発生した。`GamePhaseStore` は投票済みを把握していたが、
-`get_tool_definitions()` と実際の LLM payload 生成が `player_id` を受け取らず、
-本人固有の利用可否を判断できなかった。
-
-投票後は票を変更できないため、本人にとって `vote` は「選べるが必ず失敗する手」になる。
-この判定を prompt builder や実行器へ個別に足さず、`ToolExposure.split_for_phase` を
-静的な世界宣言・会議フェーズ・本人の投票状態を合成する単一の入口とする。
-`get_tool_definitions(player_id=...)` から最終的な LLM payload まで同じ本人 ID を運び、
-投票済み本人からだけ `vote` を外す。未投票者の `vote` と全員の `speak` は残す。
-
-`get_tool_definitions` は、本人向けの `player_id` と起動時の全員検査向けの
-`for_every_player=True` のどちらか一方を必須とする。対象を省略した呼び出しを
-全員向けとして扱うと、本人状態の運び忘れが従来動作へ黙って縮退し、今回と同じ
-欠陥を再導入できるためである。`ToolExposure.split_for_phase` の
-`voting_completed` も既定値を持たせず、呼び出し側が本人状態を明示する。
-
-本人状態には生死も加わった。死者に出すツールの集合 (`DEPARTED_TOOLS`) を runtime から
-`ToolExposure` へ移し、`split_for_phase` は必須引数 `departed` で受ける。幽霊ルール・
-会議の状況行・会議開始の観測も同じ判断 (`offers_to_departed` と
-`_split_spot_tool_names_for`) から文を決め、会議中の死者や投票済みの人に、出していない
-`travel_to` / `interact` / `vote` を勧めない。`departed` に既定値を置くと、渡し忘れが
-生者扱いへ黙って縮退し、死者に出さないツールが payload にも本文にも戻るためである。
-
-投票の進捗は `MeetingVoteCastEvent` で全参加者に知らせるが、イベント自体に投票先を
-持たせない。締切前に公開するのは投票者名と残り人数だけであり、構造化観測や trace の
-別経路から投票先が漏れるのを防ぐ。投票者本人はツール結果で把握しているため配信対象から
-外し、同じ事実による重複観測と余分な自己起床を作らない。
+[本文](design_decisions/44.md)
 
 ## 45. scenario event の世界文脈条件は既存の語義と状態の出所を再利用する
 
-妨害の進行停止と複数人での解除をシナリオから宣言できるよう、
-`ScenarioEventCondition` に `GAME_PHASE_IS` と `PLAYERS_AT_SPOT` を加える。
-別の条件評価器は作らず、scenario event・reactive binding・個人結果規則が共有する
-`ScenarioConditionEvaluator` に集約する。条件名と評価分岐の網羅性は
-`KNOWN_CONDITION_TYPES` の双方向監査で固定し、未知名を永久に偽の条件として通さない。
-
-`GAME_PHASE_IS.game_phase` は `GamePhase.value` の既知値だけを読み込み時に許可する。
-評価時は `WorldRuntime` と同じ唯一の `GamePhaseStore` を provider 経由で読み、未配線を
-`False` に縮退させず構成エラーとして止める。別 store を作ると、会議へ遷移しても条件が
-自由時間を見続けるためである。
-
-人数条件には新しい `PLAYER_COUNT_AT_SPOT` を作らない。interaction 条件に既にある
-`PLAYERS_AT_SPOT` を scenario event でも同じ意味で使い、`target_spot` の
-`graph.presence_at(...).present_entity_ids` が必要人数以上なら成立する。必要人数の既定値は
-既存と同じ2人とする。`PlayerStatusRepository` と突き合わせると「その場に居る」の出所が
-二つになり、同じ語が利用箇所ごとに異なる意味を持つため採らない。
-
-この語義では down 状態の人物も在席数に含む。これは妨害操作に適した人物を意味するから
-ではなく、既存の `PLAYERS_AT_SPOT` と意味を分岐させないためである。将来「動ける人数」が
-必要になった場合は、既存語の意味を静かに変更せず、`is_down` を除外する別の条件として
-意図を名前に表す。
-
-どちらの条件も engine 内部の述語であり、tick や秘密の状態をプロンプトへ直接表示しない。
-新しい永続状態も持たないため snapshot の追加配線は不要である。
+[本文](design_decisions/45.md)
 
 ## 46. 物体の存在・操作の公開・視認性を同じ空集合へ潰さない
 
-物体が現在地に存在すること、その行為者へ公開できる操作があること、暗さの中で
-物体を視認できることは別の事実である。公開操作が0件という理由だけで物体を
-resolver候補から外すと、目の前に存在する物体へ「この場所に無い」と返してしまう。
-一方、世界に操作が1件も宣言されていない情景用物体は、従来どおりinteract候補に
-しない。
-
-行為者の `PLAYER_STATE_IS` により全操作を伏せた物体は、操作名を空のまま対象として
-解決する。未定義の操作名を送られた場合も、秘密の操作名や件数を列挙せず、条件に
-宣言された本人向け `failure_message` だけを返す。これにより「担当ではない」という
-次の判断材料を届けつつ、偽装版の存在は漏らさない。
-
-暗さで見えない物体はresolver候補へ入れない。現在状態を作る同じ視認判定から、
-暗さで伏せた名前を内部contextへ運び、LLMがその名前を指定した場合だけ
-「暗くて見えない」と返す。候補一覧へ名前を出したり、暗所でも操作を実行可能に
-したりはしない。これにより、不存在と視界不良を同じ失敗文へ潰さず、灯りを探す
-行動へつなげる。
+[本文](design_decisions/46.md)
 
 ## 47. 提示後の状況変化と一覧外の選択を同じ失敗へ潰さない
 
-LLM の判断はプレイヤーごとに並列で作り、世界への適用は順番に行う。同じ tick の
-先行者が会議を始めると、後続者が自由時間の一覧から正しく選んだ `interact` でも、
-適用時には会議中なので実行できない。このとき「一覧に出ているものから選ぶこと」と
-返すのは、本人が実際に見た一覧と矛盾する。
-
-「いま使えるか」は従来どおり `get_tool_definitions` を唯一の出所として実行時に判定する。
-「選んだ時点で一覧に載っていたか」は `_LlmPhaseAResult.tools_payload` に保持された、実際に
-LLM へ送った内容だけを出所とする。prompt 時の条件を後から引き直す経路は作らない。
-
-現在は使えず、送信済み一覧には載っていた場合を `TOOL_BECAME_UNAVAILABLE` とし、状況が
-変わったため実行できないことを伝える。最初から一覧に無かった場合は従来の
-`TOOL_NOT_OFFERED_NOW` と案内を維持する。両者は本人の選択の正しさも、trace で分析すべき
-原因も異なるため、同じ error code にまとめない。どちらも次 tick に起こし、変化後の一覧
-から選び直せるようにする。
+[本文](design_decisions/47.md)
 
 ## 48. 襲撃の可否と目撃可能性を分け、派生 action は待ち時間を共有する
 
-暗所だけで襲撃できる規則では、光源を持つ本人が部屋を `DARK` から `DIM` へ変える
-だけで襲撃を受けなくなる。同室全体が明るくなること自体は光の性質として正しいが、
-灯りが本人を無敵にするのは社会的推理の駆け引きにならない。一方、襲撃の
-`witness_policy` が常に `ACTOR_ONLY` だと、明るい場所に第三者が居ても加害者を
-目撃できず、「居合わせた者にしか見えない」という公開説明とも食い違う。
-
-襲撃できるかと、誰の仕業か特定できるかを別の問いとして扱う。暗所用の
-`strike_down` は従来どおり匿名かつ第三者へ対人観測を出さない。暗所以外で使う
-`strike_down_in_light` は `SAME_SPOT` とし、居合わせた者へ加害者名と対象名を
-届ける。暗所へ匿名の目撃文は足さない。倒れた身体の発見だけを情報源として残し、
-襲撃だったと即座に確定させないためである。灯りは免疫ではなく、その場で起きた
-ことに加害者の名前を与える道具になる。
-
-明暗の action を別々に宣言しても、再使用間隔は一つである。同じ意味の action を
-交互に使って待ち時間を迂回できないよう、`InteractionDef.cooldown_group` を共有キー
-として宣言し、省略時だけ従来の `action_name` へ戻す。対人操作と物体操作の両方が
-このキーを読み、物体操作では従来どおり object id も組み合わせる。待ち時間ストアを
-分けず、既存 snapshot の文字列キー形式も変えない。
-
-`cooldown_group` は空文字や `object:` 接頭辞を読み込み時に拒否する。後者は物体操作の
-内部キーに予約済みで、許すと対人と物体の待ち時間が静かに衝突するためである。
-既存 snapshot では、group が旧 action 名と異なる宣言だけキーが変わり、その行為の
-過去の待ち時間が一度失われる。`station_drill` は既存 action 名の `strike_down` を group
-に使うため、暗所襲撃の保存済み待ち時間は維持される。
-
-エージェントへ灯りの意味を伝える経路は、prompt に出ない item description に頼らない。
-全員が読める当番表の `read_board` 結果へ共有規則を置く。item description も作者向け
-宣言として実態に合わせるが、エージェントへの伝達を担ったとはみなさない。
+[本文](design_decisions/48.md)
 
 ## 49. tool にそのまま渡せる文字列だけを引用符で囲む
 
-run 016 / 017 で、LLM が action の意味ラベルや、条件ヒントまで含む
-表示行を `action_name` に送り、計 8 件失敗した。物体名・人名・移動先名は
-引用符つきだったが、action だけが `当番表を読む (read_board)` のように
-「渡す値」と「渡さない説明」を同じ括弧に入れていた。
-
-プロンプトの規約を「引用符で囲まれた文字列だけが、tool 引数へそのまま
-渡せる値」とする。action は `当番表を読む → "read_board"`、必須パラメータは
-`"text" が要る`、接続は `"集会室の扉" → "連絡通路"` と表す。意味ラベルや
-条件ヒントは引用符で囲まない。
-
-整形処理ごとのテストだけでは、新しい表示経路の書き忘れを止められない。
-`build_llm_context` が同時に作る `current_state_text` と `tool_runtime_context` を照合し、
-全 target の `display_name` と `available_interactions` が引用符つきで本文にあることを
-確かめる。起動時は全 player を検査して落とし、run 中は実験データを失わないよう
-`prompt_argument_contract_violation` trace に残して続行する。
-
-起動時検査の snapshot 構築では、monster や倒れた人の初回観測通知を一時的に
-止める。検査は読み取り専用であり、Encounter Memory の「一度きり」を先に消費
-してはならない。observer は検査終了時に必ず復元し、最初の prompt 構築で通常どおり
-観測と `schedules_turn` を発火させる。
-
-除外リストは持たない。暗所で伏せた物体は snapshot 構築時に落ち、targets に登録
-されないため検査入力に現れない。将来それを targets に載せるなら、本文から
-指定できない候補を作ることになるため、この検査が止めるのが正しい。
-この変更は tick ごとに変わる `current_state_text` の書式だけを変え、プレフィックス
-キャッシュに載る静的セクションは変えない。
+[本文](design_decisions/49.md)
 
 ## 50. 直近の出来事の時刻は記録時の世界内絶対時刻で固定する
 
-「直近の出来事」は一度追加した行が変わらない安定した接頭辞として設計されている。
-しかし描画時刻から「たった今 / 数分前 / さっき」を毎回計算すると、同じ entry の
-本文が時間経過だけで書き換わる。この不変条件を回復するため、観測と行動結果へ
-記録時の `game_time_label` を焼き込み、描画側は保存済みのラベルだけを使う。
-
-相対ラベルを記録時に凍結する案は採らない。実 run
-`v4coop_0731_007` の 6,983 行を測ると、凍結ラベルと描画時点の本来のラベルが
-食い違う行は 4,143 行 (59.3%)、行動行では 3,669 / 4,980 行 (73.7%) だった。
-「たった今」のまま古くなる文面は安定していても嘘になる。世界内絶対時刻なら、
-記録後に変わらず、エージェントが暮らす世界の時間としても正しい。
-
-調査で絶対時刻が欠けていたのは、通常の観測ではなく4つの配線だった。行動結果、
-heartbeat、行動失敗、ループ警告の各境界で時刻または provider を必須にし、5つ目の
-渡し忘れを既定の `None` へ縮退させない。旧 prompt の欠落479行は heartbeat 207行、
-行動失敗261行、ループ警告11行で、通常の trace 観測416件には欠落がなかった。
-
-この判断が保証するのは「追加済みの行本文が後から変わらないこと」と「時刻表現が
-真実であること」だけである。行動結果ストアは最新20件のスライディングウィンドウで、
-追加のたびに先頭行が落ちるため、この変更単独でプレフィックスキャッシュの命中率が
-上がるとは主張しない。
+[本文](design_decisions/50.md)
 
 ## 51. 観測と行動結果は記録時から一つの時系列へ置く
 
-観測と行動結果は届く入口が違うため別々のストアに保存され、描画時にだけ時刻順へ
-合流していた。この分割は記憶の意味によるものではなく、観測は15件でL4へ畳む一方、
-行動は20件の窓から古いものを落とすという別々の政策を生んだ。中期記憶へ自分の行動が
-一件も渡らない原因にもなっていた。
-
-記録時の表現を `UnifiedRecentEventEntry` に統一する。共通の外枠は
-`occurred_at`、`game_time_label`、`kind` だけとし、観測と行動結果の固有項目は既存DTOを
-payloadとして保持する。18項目ある行動DTOを平坦化して観測へ多数の `None` を持たせない。
-既存の消費側には種類別の読み取り口を渡し、この段階では描画件数、観測15件でのL4生成、
-行動・観測それぞれの保持上限を変えない。「格納場所の統一」と「窓の政策変更」を別PRに
-して、本文の変化がどちらに由来するかを切り分けられるようにする。
-
-`DefaultPromptBuilder` には統一ストアを必須依存として明示的に渡す。旧2リストから描画する
-退避経路は残さない。任意配線やprivate属性の検査で旧経路へ縮退できると、後続で窓の政策を
-変えたときに「変えたつもりが効いていない」状態が静かに生まれるためである。
-
-world snapshot は `recent_event_store` 一つだけを保存する。旧
-`sliding_window`、`observation_buffer`、`action_result_store` の3 payloadは復元入口で
-新形式へ変換してから、通常の厳格なsubsystem網羅検査へ渡す。一部だけ存在する旧形式や、
-旧形式と新形式の同居は部分復元を招くため拒否する。保存は新形式だけとし、旧形式を
-再生産しない。
+[本文](design_decisions/51.md)
 
 ## 52. prompt dataset の Being 配線を episodic 記憶から独立させる
 
-prompt dataset の各行は、世界内 player ではなく継続する主体を表す `being_id` を必須と
-する。しかし従来は、この ID を解決する補助 Being 配線が episodic 記憶の有効化に
-偶然依存していた。そのため記憶を省いた lean profile では、記録を有効にすると設定検証で
-拒否され、run 016 / 017 の prompt を後から再生できなかった。
-
-記録機能と記憶機能は別の関心事として扱う。`PROMPT_DATASET_CAPTURE_ENABLED` が有効なら、
-episodic 記憶が無効でも `create_world_runtime` の起動中に補助 Being を配線し、全参加者を
-provision する。設定上の相互依存は削除し、最初の LLM 呼び出しより前に実際の `being_id`
-を解決できない構成は起動時に止める。capture が無効で episodic 記憶も無効なら、従来どおり
-この配線は遅延したままとし、公開 tool の集合や世界の振る舞いは変えない。
+[本文](design_decisions/52.md)
 
 ## 53. semantic top-K は選抜順位と表示順を分ける
 
-`【関連する学び】` の候補は recency、importance、relevance の score で top-K を
-選ぶ。recency は描画時刻で変わるため、同じ集合でも候補の順位だけが入れ替わり、
-プロンプト本文が変わっていた。見出しは関連度順を約束しておらず、表示順位を
-エージェントへ伝える意味もない。
-
-選抜は従来どおり score 順で行い、表示だけを `entry_id` 順へ固定する。同じ集合なら
-時間が進んでも同じ文字列になり、集合が変われば本文も変わる。score 順を失うのではなく、
-選抜と描画へ別々の責務を持たせる判断である。
-
-`stable_to_volatile` では、実測で 36〜62% 変化する semantic top-K を L4 より上へ
-置かない。安定した L4 と直近出来事の先頭を先に置き、予測の後ろで
-`【関連する学び】`、`【関連する記憶】`、その本文に内包される想起見出しをまとめる。
-直近の出来事が想起を引き起こすという読み順にも合う。`legacy` は A/B 比較用の旧順序
-そのものに価値があるため変更しない。この変更は原則との不整合と順位の揺れを直すが、
-キャッシュ改善量は実測前に主張しない。
+[本文](design_decisions/53.md)
 
 ## 54. 直近の出来事は自分のターンを単位に、まとめて畳む
 
-観測と行動結果を一つのストアへ統一しても、観測15件と行動20件という旧来の別々な
-表示政策を残すと、流入の多い観測のほうが先に消え、自分の行動だけが長く残る。
-出来事の種類を一方だけ数えて窓を決めず、前回の自分のターン完了から今回の完了までを
-一つの bucket とし、直近 N bucket を同じ時系列で保持する。
-
-境界は episodic 再解釈の内側ではなく、直列・並列の両方が通る LLM wave の決算地点に
-置く。reason-first の複数回の評価と行動は一つの判断なので1ターン、自己再スケジュールで
-別 wave に進めば別ターンとする。短期記憶の全実装が `complete_turn` を必須実装するため、
-lean profile や新しい実装で通知が黙って消える任意配線は作らない。
-
-窓は毎ターン最古を落とすスライド方式にしない。既定では cap 20ターンまで追記し、到達時に
-古い10ターンをまとめてL4へ畳み、残る10ターンから再び積む。これにより先頭が変わるのは
-10ターンに一度となり、畳んだ直後も窓が空にならない。cap と畳む数は profile で変更できるが、
-`0 < 畳む数 < cap` を起動時に強制する。
-
-この段階のL4入力は従来どおり観測だけとし、行動を含める変更は別に測る。ターン bucket の
-見出しも prompt へ出さず、表示は従来の一つの時系列を保つ。この判断が保証するのは窓の
-単位と先頭の安定性であり、プレフィックスキャッシュの改善量は実 run の前に主張しない。
+[本文](design_decisions/54.md)
 
 ## 55. L4 へ観測と自分の行動を一つの時系列で渡す
 
-観測だけを L4 入力にすると、自分の行動はターン窓から外れた時点で短期記憶から消え、
-中期記憶には周囲の出来事から推測した行動しか残らない。観測を受けて行動した因果を保つ
-ため、畳んだターン群の `UnifiedRecentEventEntry` を種類で分けず、`occurred_at` 順の
-一つの時系列として L4 生成へ渡す。
-
-入力行は【直近の出来事】と同じ描画規則を使う。これにより、エージェントが読んだ出来事と
-要約器が読んだ出来事を同じ表記で比較でき、行動には `[行動]` の区別も残る。見出しには
-畳んだターン数と出来事数を併記し、観測だけ・行動だけのターンも同じ入口で扱う。
-
-この段階では L4 の system prompt と出力形式を変えない。何を優先して残すかは入力を実際に
-通した結果を見てから別に決める。LLM 失敗時の template fallback も通常入力と同じ統一時系列
-を使い、失敗したときだけ行動が消える差を作らない。L5 は引き続き退避された L4 一件だけを
-入力とする。
+[本文](design_decisions/55.md)
 
 ## 56. 行動履歴の tool 引数は引数名で分類して構造化保存する
 
-行動の自然文表示は意味を読み返すためのもので、tool に渡した値を復元する材料ではない。
-表示名と正規名が異なる interaction では、自然文を写したエージェントが
-`action_name` の解決に失敗した。特定の tool だけを補修すると同じ問題が別の引数で
-再発するため、JSON Schema の property 名を単位に扱いを分類する。
-
-完全一致が必要な名前・列挙値・構造化値は `identifier_arguments` に文字列として保存し、
-配列内部の名前も引用符を含む正規 JSON のまま保つ。自由文は履歴を重複して肥大化させず、
-呼び出し形を示せるよう `free_text_argument_names` に引数名だけを残す。
-`inner_thought` と `expected_result` は直後の専用行に既に出るため省略する。分類は tool 名で
-分岐せず、同名の引数には同じ規則を適用する。
-
-露出可能な tool catalog の全 property は起動時に分類漏れを検査する。検査は実行器の
-配線確認とは分離し、分類忘れと別の構成不備を同じ失敗へ潰さない。成功した core action と
-generic な失敗経路の両方が同じ射影関数を通り、snapshot は構造化した値を保存する。旧 payload
-には存在しないため空へ倒し、復元できない引数を捏造しない。この段階では記録だけを変え、
-プロンプトへの表示は別 PR で扱う。
+[本文](design_decisions/56.md)
 
 ## 57. 行動履歴は意味の表示と再利用できる呼び出しを併記する
 
-行動の自然文は物語として読み返せる表示名を優先する。一方、表示名は tool の正規引数とは
-限らず、引用符で囲むと「そのまま引数へ写せる値」という prompt の規約に反する。
-自然文を内部名だけの機械的な表記へ戻さず、全行動の直後に `呼び出し:` の続き行を置いて
-二つの目的を分ける。
-
-完全一致が必要な文字列は JSON の引用符で囲み、配列内の文字列も引用符を保つ。自由文は
-値を再掲せず、`content=本文` のように引用符なしの日本語プレースホルダで書く。
-`inner_thought` と `expected_result` は既存の専用行を使い、呼び出しには重複させない。
-成功した行動は引数が無くても `listen()` のように必ず表示し、行動ごとに省略規則を
-推測させない。失敗した行動は例外とし、通らなかった値を引用符つきの手本として
-残さない。失敗行には `[失敗]`、`error_code`、復帰文が並ぶため、省略理由はその場で
-読める。
-
-続き行は既存の行動エントリと一緒に一度だけ描画し、別 section や描画時刻への依存を
-増やさない。後続 entry の追記で既存行は変わらず、ターン窓の先頭安定性を保つ。
-自然文側では対象名の引用符だけを残し、tool へ渡せない interaction の表示名からは
-引用符を外す。
-
-tool の静的な説明や失敗後の復帰文に、シナリオに存在するとは限らない
-`action_name` の具体例は書かない。run 018 では静的に例示した名前をモデルが写し、
-実際には宣言されていない操作を繰り返した。使える名前の真実の出所は毎回の
-「現在の状況」の対象行だけとし、静的文面はそこの引用値をそのまま写す規則だけを伝える。
+[本文](design_decisions/57.md)
 
 ## 58. 個別 outcome を world snapshot の独立 subsystem として保存する
 
-`PlayerOutcomeRegistry` の `DEAD` / `EJECTED` / `RESCUED` / `STRANDED` は、
-勝敗上の確定状態である。身体の可動状態を表す `is_down` や、graph の配置からは
-正しく復元できない。`is_down=True` は死亡確定前の蘇生可能な状態でもあり、
-未配置は追放だけでなく初期未配置でもあり得るためである。
-
-個別 outcome は `player_vitals` へ混ぜず、`player_outcome` world subsystem として
-独立保存する。復元は `set_outcome` を再実行せず、player 集合を検証した後に
-callback 無しで registry 全体を置換する。再開時に過去の死亡・追放を新しい観測や
-trace として再通知しないためである。
-
-この subsystem より前の world snapshot には outcome を推定する情報が無い。
-分からない値を `UNRESOLVED` として補うと、死者や追放者が勝敗・投票母数へ戻った
-壊れた世界で実験を続けてしまう。そのため完全な再開形式の top-level
-`schema_version` を 3 に上げ、旧版の strict restore は理由を示して開始前に拒否する。
-通常の非 strict 読み込みは調査・互換用途として旧版を引き続き受理するが、実験再開
-には使わない。
+[本文](design_decisions/58.md)
 
 ## 59. world flag は状態の反復ではなく変化を因果つきで記録する
 
-作業完了などの `SET_FLAG` は観測を生まない場合があり、最終状態や登場人物の発言だけ
-では、どの行動で何が進んだかを実験後に確かめられない。flag を変更する各サービスで
-個別に trace を書くと、新しい変更経路を足したときに観測だけを忘れる。そのため
-`MutableWorldFlagState` を単一の絞り点とし、変更前後の集合差分を flag ごとの
-`world_flag_changed` として通知する。
-
-変更経路と行為者は状態だけから復元できないため、`add` / `remove` /
-`replace_from_interaction` は `WorldFlagMutationContext` を必須とする。行為者が存在しない
-経路でも `None` を明記させ、呼び出し元の渡し忘れを既定値で隠さない。同じ値への再設定は
-記録せず、複数 flag が変われば安定した順序で一件ずつ記録する。現在の状態の集計はこの
-変化列から分析側で作り、毎 tick 同じ値を重ねて因果を薄めない。
-
-snapshot 復元も同じ状態置換 API を通すが、過去の成立を新しい出来事として再通知しては
-ならない。復元側は `snapshot_restore` という変更元を明示し、状態オブジェクトではなく
-trace への配線で除外する。これにより差分検出の真実の源を一つに保ちつつ、復元と実行中の
-変化を混同しない。
+[本文](design_decisions/59.md)
 
 ## 60. 生死状態は一つの層へ潰さず、問いごとの query で読む
 
-プレイヤーの生死に関する判断は、手番、世界観測、投票資格、通報できる身体で意味が
-異なる。`is_down` と `PlayerOutcomeEnum` を各入口で別々に読むと、新しい状態を足した
-とき一部だけが古い規則を使い続ける。一方、すべてを「活動中か」という一つの真偽値へ
-潰すと、現在でも意図して異なる答えを返している状態を壊す。
-
-そのため `PlayerLifeQuery` に問いを分け、各公開入口は同じ instance を共有する。
-`can_take_turn` は確定済み outcome 全般と `status.can_act()` を見る。
-`can_receive_world_observation` と `has_reportable_body` は現在の `is_down` を見る。
-`can_vote` は `is_eliminated` と身体の有無を見る。特に `RESCUED` / `STRANDED` は手番を
-持たないが投票資格を持つため、`can_take_turn` を投票判定へ流用しない。移動中の手番抑止は
-生死の問いではないので、従来どおり手番入口に残す。
-
-追放者は `is_down=False` なので、世界観測の受信条件だけを見れば受信可能である。実際に観測が
-届かず身体も通報されないのは、graph から配置が消えて宛先や対象として見つからないためで
-ある。この偶然の守りを query の規則として捏造しない。将来、去った主体へ別の位置を与える
-ときは、知覚や身体の規則を明示的に変える必要がある。
-
-この整理では活動中、蘇生可能な昏倒、死亡確定、追放、救助、取り残しの六状態について、
-query 自体の答えと実際の公開入口を同時に固定する。query の単体試験だけでは、正しく作った
-判定が本番配線から呼ばれない欠陥を検出できないためである。この段階では層の概念や幽霊の
-手番を導入せず、既存の振る舞いを変えない。
+[本文](design_decisions/60.md)
 
 ## 61. 終局結果の世界固有文はシナリオが宣言する
 
-`DEAD` / `EJECTED` / `RESCUED` / `STRANDED` は世界を跨いで使う結果であり、汎用ランタイム
-の語彙である。一方、「島に取り残された」「宇宙船へ帰還した」のような場所・世界観を含む
-通知文はシナリオの表現である。結果の意味と、その世界でどう語るかを同じ層へ置かない。
-
-シナリオ固有の文型は `metadata.player_outcome_messages` に結果名ごとに宣言し、未宣言時は
-場所を決めつけない汎用文を使う。文型は `{player_name}` だけを許可し、未知の結果、未知の
-置換項目、書式指定、変換指定、人物名を含まない文型は読込時に拒否する。実行時に不正な
-文型を握りつぶしたり、別世界の既定文へ縮退させたりしない。
-
-文の整形は application の小さなサービスへ置き、`WorldRuntime` は読込済みの表示方針を
-渡して結果文を受け取るだけにする。通知範囲、構造化観測、起床指定は表示文とは別の判断
-なので、文型の差し替えに連動させない。新しい舞台で既存 outcome を使うとき、世界固有の
-名詞を汎用ランタイムへ条件分岐として追加しない。
+[本文](design_decisions/61.md)
 
 ## 62. 確率条件の乱数位置は世界状態として保存する
 
-`PROBABILITY` 条件は scenario event、reactive binding、player outcome rule が
-一つの乱数源を共有し、条件木の短絡順に値を消費する。seed だけを設定へ残しても、
-snapshot 再開時に乱数列の先頭へ戻るため、連続実行とは異なる出来事が発火する。
-したがって完全な world snapshot は seed ではなく `random.Random.getstate()` が
-表す現在位置を独立 subsystem として保存する。
+[本文](design_decisions/62.md)
 
-乱数源は特定の評価器の非公開属性ではなく `WorldRuntime` が所有し、評価器には同じ
-実体を注入する。復元時も新しい乱数源へ差し替えず、既に各 stage が参照している実体に
-`setstate()` する。これにより条件評価器を共通基盤へ置き換えても、保存形式と所有境界を
-維持できる。
-
-内部状態は pickle ではなく、版、整数列、ガウス分布用キャッシュを明示した JSON として
-保存する。復元値は別の実体で完全に検証してから本番の乱数源へ適用し、壊れた入力で
-稼働中の位置を半端に変えない。この状態を欠く旧 world snapshot は確率的な因果を再現
-できないため、完全な再開形式を top-level `schema_version=6` とし、旧版の strict restore
-は開始前に理由つきで拒否する。
 ## 63. 述語評価は真偽値の互換入口より内側で理由を保持する
 
-条件評価を真偽値だけで返すと、正常な未成立、評価入力の不足、評価器の未対応がすべて
-`False` へ潰れる。呼び出し側は発火しなかった理由を観測できず、interaction では判定時に
-分かっていた失敗条件を一度捨て、後から表示文を手掛かりに推測する問題も起きた。
+[本文](design_decisions/63.md)
 
-用途を跨ぐ評価結果は、成立可否に加えて `reason_code`、失敗した述語、根からの子番号列、
-不足した文脈名、任意の失敗文を持つ `PredicateResult` で表す。成立結果に失敗情報を混ぜる、
-文脈不足なのに不足項目を示さない、といった矛盾は値オブジェクトの構築時に拒否する。
-`failed_path=()` は根そのもの、`(1, 2)` は2番目の子の3番目の子を表し、将来の trace と
-合成条件でも同じ規則を使う。
-
-既存利用側を一度に壊さないため、各評価器では `PredicateResult` を返す入口を正本とし、
-従来の真偽値や tuple はそこからの薄い射影として段階移行する。最初の移行対象は、すでに
-失敗条件を返す必要があった interaction の前提条件とする。公開済みの `can_interact` と
-`evaluate_preconditions` の戻り値は保ち、実行経路は正本の結果から例外へ失敗条件を運ぶ。
-
-この段階では既存の未成立を新たに文脈不足へ分類せず、ゲーム挙動を変えない。scenario
-条件へ適用するときは、`NOT` が文脈不足を真へ反転しない規則、AND / OR の短絡順、確率条件
-の乱数消費数、reactive binding と一度限りの player outcome rule が文脈不足をどう扱うかを
-試験で固定してから移行する。
 ## 64. 判定に文字列を使わない。値を持っているなら値を渡す
 
-**何を**: 分岐の判定材料に、自分たちが組み立てた表示文やシナリオ作者の自由文を
-使わない。判定に要る値を持っている層から、値のまま渡す。
-
-同じ形の欠陥が 2 箇所にあり、どちらも「値はあるのに文字列から読み直す」だった。
-
-**#380 (系統1): シナリオ作者の自由文に依存していた**
-
-`interact` の失敗 remediation を `failure_message` の日本語キーワード
-(`"採り尽く"` `"枯渇"` `"すでに"` 等) で切り替えていた。`failure_message` は
-「エージェントに読ませる文」として書かれているのに、分類キーとしても二重に使われて
-いた。作者は自分の言い回しがシステムの分岐を変えることを知らない。
-
-実測すると当たっても外れても害だった。実 run 43 本の 679 件のうち「時間で回復」は
-251 件で、**キーワードに当たるのは 31 件だけ、しかもその 31 件は全部逆の助言**だった
-(作者が「風がまた運んでくるのを待つしかない」と書いた上から「別の場所を選べ」を
-重ねていた)。同じ壁に 96 回当たっている run がある。
-
-判定した瞬間は条件の種別・対象・要求値を知っているのに、`(False, message)` の文字列
-だけ返していた。失敗した条件を例外に載せ、`reactive_bindings` と突き合わせて区分する
-形に変えた。
-
-**系統2: 自分たちの表示文に依存していた**
-
-想起の検索語を決めるのに `need_lines` (`"空腹: 危険（68/100）"`) を
-`line.startswith("空腹") and ("高い" in line or "危険" in line)` で読み直していた。
-`AgentNeed.need_type` と `is_high` がその判定そのものを持っている。`("高い" or "危険")`
-は `is_high` (>= 0.6) と完全に等価で、既にある述語を文字列で再実装していた。
-
-**なぜ**: 表示文は変わる。言い回しを整えるリファクタリングで分岐が黙って変わり、
-テストは通る。シナリオ作者の自由文なら、作者が結合を知らないまま挙動を変える。
-
-**どう守るか**:
-
-- 判定材料は値のまま運ぶ (`failed_condition` / `need_states`)
-- 閾値を写さない。`is_high` のような述語があるならそれに委ねる。写すと片方だけ古くなる
-- **配線が抜けても例外が出ない**ことに注意する。材料が届かなくても既定へ倒れるだけ
-  なので、実 runtime を通して「材料が実際に載っているか」を見る試験を別に置く
-  (#1050 では材料を運ぶのをやめる変異が 39 passed で素通りした)
-
-**関連**: #380 / #1050 / 系統2。判定ではなく**呼び名の所有者**をどこに置くかは別の
-論点で、#1054 と判断 #61 を参照。
+[本文](design_decisions/64.md)
 
 ## 65. enum で分岐するなら表にする。2 分岐は静かに嘘をつく
 
-**何を**: enum の値で表示や挙動を分けるとき、`if x == A else B` の 2 分岐を書かず
-`dict[Enum, ...]` の表にして、enum 全件を覆う網羅テストを付ける。
-
-**なぜ**: 2 分岐は「A 以外を全部 B として扱う」。値が 2 つしかない間は偶然正しく、
-3 つ目を足した瞬間に静かに嘘をつく。
-
-実例として `AgentNeed.describe` が `"空腹" if need_type == HUNGER else "疲労"` だった。
-渇き (THIRST) を足すと **「疲労: 危険」と表示される**。`NeedType` が 2 つだから偶然
-正しかっただけである。
-
-同型の問題を `interaction_condition_hint_text` でも直した。そちらは表だったが
-`.get(value, value)` で**未知値に生値を返して**いたため、enum が増えるとプロンプトへ
-内部識別子が漏れた (判断 #61 の ID 露出方針の裏口)。
-
-**どう守るか**:
-
-- `(enum, 表)` の組を module 定数として公開し、網羅テストがそれを走査する
-- **走査リスト自体が縮む形も塞ぐ**。`interaction_condition_hint_text` では走査対象から
-  表を 1 つ外す変異が 139 passed で素通りした。モジュール内の `_*_LABELS` を数え上げて
-  突き合わせる形にした
-- **未知値を静かに倒さない**。生値を返す / 既定値へ倒すのではなく、`KeyError` で落とす。
-  `NeedType` が 2 つの間は 2 分岐へ戻す変異が挙動として等価なので、**倒れ方の違い**
-  だけが検出できる差になる
-
-**関連**: #1045 / 系統2。判断 #61 (終局結果の世界固有文) と #1043 の「ID を
-プロンプトに出さない」方針の裏口を塞ぐ位置にある。判断 #64 と対になる
-(あちらは「文字列で判定するな」、こちらは「分岐は表にせよ」)。
+[本文](design_decisions/65.md)
 
 ## 66. 内部 ID をプロンプトへ出さない。露出は総当たりで見張る
 
-**何を**: LLM に出すツール引数で内部 ID を要求しない。指させるのは**プロンプトに
-表示されている名前**だけにする。露出ツール全件を総当たりして、引数名が `_id` /
-`_ids` で終わらないこと、説明文に「ID」「識別子」が出ないことを検査する。
-
-**なぜ**: 判断 #3 (揮発ラベルを捨て名前で指す) の帰結だが、**ID 露出は静かな失敗の
-入口そのもの**だった。#853 の実例。
-
-`prepare_action` は `action_id` を要求し、説明文は「準備するアクション**ID**（操作
-対象に表示される協力アクション名）」と書いていた。**表示されていないものを指定せよ
-と言っていた**ので、エージェントは推測するしかない。そして推測は `success=True` で
-返り、同期登録は黙って skip されていた。3 つが重なって
-
-    宣言が到達不能 → 推測せざるを得ない → 推測は成功と返る → でも何も起きない
-
-という完全な静かな失敗になっていた。名前で指す形にすると、指せる値は必ず表示されて
-いるものになり、**入口が閉じる**。
-
-実測すると、露出中の 16 ツールのうち ID を要求していたのは `prepare_action` だけ
-だった。方針は他で守られていて、1 つだけ抜けていた。**だから 1 件直すのではなく、
-次に足す人が同じことをできない形にする。**
-
-**どう守るか**: `tests/application/llm/test_tool_schemas_do_not_expose_internal_ids.py`
-が `get_spot_graph_specs()` の全件を回す。例外表は空にしてあり、作るときは理由を
-書く。休眠文脈 (`quest` / `shop` / `trade`) にも ID 露出があるが、この集合に入らない
-ので配線するときに直す。
-
-**関連**: 判断 #3 / #853。ラベル表からの ID 漏れは判断 #65 で塞いだ。
+[本文](design_decisions/66.md)
 
 ## 67. 想定外例外の発生位置は引数で受け、呼び方を AST で縛る
 
-**何を**: 想定外例外を LLM に伏せて trace に残すヘルパは、発生位置 (`location`) と
-段 (`stage`) を引数で受ける。ハードコードしない。そのうえで**全呼び出し箇所を AST で
-検査**し、`location` が囲っている関数のどれかの名前と一致することを縛る。
-
-**なぜ**: #846 は `location` を `"_use_item"` でハードコードしていた。use_item だけ
-に入れた仕組みなので当時は足りたが、他のハンドラへ広げるとハンドラごとに同じ関数を
-複製することになる。
-
-引数にすると**引数化そのものが新しい静かな失敗を作る**。コピー元の `location` を
-貼り替え忘れると trace が嘘の場所を指し、**動くしテストも落ちない**。`_use_item` を
-調べても該当経路が無い、という形で人間の時間だけが溶ける。
-
-実行時には検証できない。この関数を通るのは例外経路だけで、全経路を通す試験が書ける
-なら #847 自体が要らない。だから**ソースの構造**を見る。
-
-**課す制約 5 つ**:
-
-| 制約 | なぜ |
-|---|---|
-| `location` は文字列リテラル | trace の値から呼び出し箇所へ grep で辿れる |
-| `location` は囲っている関数のどれかの名前と一致 | 貼り替え忘れを止める |
-| `stage` は文字列リテラル | 同上 |
-| 同一 `location` 内で `stage` が重複しない | 2 つそろって場所が一意に決まる |
-| ヘルパ名を変数や `partial` に束ねない | 束ねると `location` のリテラルが消え、**上の全部が無効になる** |
-
-最後の 1 つが一番効く。`partial(_unexpected_exception_result, location="_totally_wrong")`
-を置くと嘘の location が **13 passed で通った**。C で同じリテラルが 30〜40 個並ぶと
-必ず束ねたくなるので、束ねること自体を禁じる。**冗長にリテラルを書き写す形を強制
-する**のが方針で、束ねたくなったら試験を消すのではなく見張り方を先に設計し直す。
-
-**location の定義**: 例外を**捕まえた関数の名前**。ツール名でもハンドラ名でもない。
-委譲先の helper で捕まえたなら helper の名前を書く。`trace.jsonl` の値をそのまま
-grep すればソースの `try` に着く、という対応を保つため。
-
-**関連**: #846 / #847 / `docs/exception_boundary_design.md` §5。
+[本文](design_decisions/67.md)
 
 ## 68. 宣言したのに効かない形は、読み込み時か corpus 監査で落とす
 
-**何を**: シナリオの宣言が「書いたのに効かない」状態を、実行時に静かに縮退させず
-**宣言した時点**で落とす。読み込み時に落とせないもの (既存シナリオを壊す等) は、
-corpus 全体を走査する監査テストで落とす。
-
-**なぜ**: 実行時の縮退は誰にも見えない。#383 / #853 / #1045 が同じ形だった。
-
-**warning は構造ではない。** `scripts/run_scenario_experiment.py` の logging は
-`format="%(message)s"` で FileHandler も無く、警告は run 冒頭の stderr に**レベル名
-なしの 1 行**として流れるだけで `OUT` 配下には残らない。
-`docs/trace_observability_review.md` の手順で run 後に確認しても検出できない。
-
-だから #383 では warning を足したうえで、`data/scenarios` と
-`tests/fixtures/scenarios` を全走査して落とす監査テストを別に置いた。既存の
-`test_interaction_action_name_audit.py` と同じ形である。
-
-**警告の粒度を先に測る。** #383 の issue は「状態更新があるのに narrative が無い」
-向きごとに警告する案だった。実装前に数えると **59 件警告し、うち 48 件が主要実験
-シナリオから出た**。それらは資源の枯渇で、interact の結果として本人に伝わるため
-narrative を書かないのが正しい。**ノイズを出すと人が警告を無視するようになり、
-検出器が死ぬ。** 「binding 全体が無音のときだけ」に絞ると 7 件、主要実験シナリオ
-から 0 件になった。
-
-**意図的な無音は明示させる。** `narrative_on_true: ""` を書けば通す。空文字は挙動上
-無音と同じだが、**書き忘れではないという意思表示**になる。出荷シナリオで警告が
-鳴り続ける状態は上のノイズと同じ害があるので放置しない。
-
-**関連**: #843 (前例) / #383 / #853 / #1045。
+[本文](design_decisions/68.md)
 
 ## 69. 呼び名の所有者は「値の集合を誰が決めるか」で分ける
 
-**何を**: 表示の呼び名をコードが持つか、シナリオが宣言するかは、**その値の集合を誰が
-増やせるか**で決める。
-
-| 概念 | 値の集合を決めるのは | 呼び名の所有者 |
-|---|---|---|
-| 天候 / 明るさ / 気温 | engine の enum | コード (既定) |
-| 時刻帯 | **シナリオ** (`DayNightPhaseDef` は自由命名) | **シナリオ** (`display_text`) |
-
-**なぜ**: シナリオが値を増やせるなら、コードの表は必ず追いつかない。実際に腐って
-いた。`v3_coop` / `v4_coop` が `predawn`(未明) を宣言しているのに、コードの表は
-`morning / noon / afternoon / evening / night` で、**`predawn` が無く `afternoon` は
-どのシナリオも宣言していなかった**。両方向にずれていた。`predawn` を条件に書いた
-瞬間 `"predawnのみ"` と生値が出る。判断 #61 (終局結果の文はシナリオが宣言する) と
-同じ「写しは腐る」である。
-
-**未知値の扱いは選ばずに済ませる。** 表示側で「生値を出す / ヒントを落とす」の
-どちらを選んでも悪い (前者は ID 漏れ、後者は実在する制約を隠す)。**未知値がそこへ
-来ないようにする**のが正しい。`required_lighting` は既に `LightingEnum` 名を loader
-で検証していたのに、**天候と時刻帯だけ素通りしていた**。天候は enum 名、時刻帯は
-そのシナリオが宣言したフェーズ名と照合する形へ揃えた。
-
-**残っている論点**: 「engine の enum なのに呼び名はシナリオが持つ」case が判断 #61
-にある (`PlayerOutcomeEnum`)。この表と #61 を分ける基準は「**別の舞台で嘘になるか**」
-で、#61 の本文にその線が書かれている。独立した判断として明文化するのは #1054 で扱う。
-
-**関連**: 判断 #61 / #1045 / #1054。
+[本文](design_decisions/69.md)
 
 ## 70. シナリオ述語の trace は実際の根評価を一度だけ記録する
 
-**何を**: scenario event、reactive object / passage binding、player outcome rule が
-実際に行った述語の根評価ごとに、`scenario_predicate_evaluated` を 1 件記録する。
-成立可否だけでなく、用途と所有者、失敗した条件種別と経路、不足文脈、実際に消費した
-確率値を残す。
-
-**なぜ**: 発火した効果だけでは、条件不成立・文脈不足・確率抽選外れのどれで未発火に
-なったかを区別できない。一方、trace のために述語を再評価すると、`PROBABILITY` が
-乱数を余分に消費し、観測を有効にしただけで世界の進行が変わる。
-
-**どう守るか**:
-
-- 各実行段階は診断つき評価入口を 1 回だけ呼び、同じ `PredicateResult` を分岐と trace に使う
-- 確率値は評価したその場で保存する。乱数状態の複製や trace 用の再評価は行わない
-- AND / OR の短絡で未評価だった確率条件は記録しない。確率 0 / 1 は従来どおり 1 回引く
-- once 発火済み、チェーン待ち、確定済みプレイヤーなど、述語自体を評価しなかった
-  方針上のスキップはこの trace に混ぜない
-- 記録器は provider から実行時に解決し、`set_trace_recorder` による後付け・差替えへ追従する
-- trace の取得・書込み失敗は警告に留め、世界処理を停止させない
-- 重複排除や変化時だけの記録は行わない。未発火理由の時系列を失い、再開境界を跨ぐ
-  新しい状態管理が必要になるためである
-
-この trace 自体は世界状態を持たない。確率列の再開連続性は判断 #62 の
-`scenario_predicate_rng` が担う。
-
-**関連**: #1046 / 判断 #62 / 判断 #63。
+[本文](design_decisions/70.md)
 
 ## 71. 共通述語は意味が同じ葉から移し、用途固有の出口は残す
 
-**何を**: 条件系を共通化するとき、名前や比較演算が似ているだけで一つの型へまとめない。
-複数用途で対象・入力・真理値が同じ葉だけを型付き述語へ昇格し、各用途の失敗文、勝敗、
-効果、評価順は用途側に残す。
-
-最初の対象は `FLAG_SET` とする。scenario event系、game end、interaction、通路条件、
-発見条件の5経路で、いずれも「完全一致する名前が世界フラグ集合に含まれるか」という意味が同じ
-だからである。各経路は既存DTOを共通の `FlagSetPredicate` へ変換し、共通評価核の結果を
-既存の戻り値へ戻す。
-
-**なぜ**: 一度に全条件を統合すると、同じ名前に隠れていた対象範囲の違いまで潰してしまう。
-たとえば場所条件は、scenarioの世界評価では任意のentity、対象者評価では本人、game end
-では明示されたplayer集合のANY/ALLを意味する。単一の `AT_SPOT` へまとめるとどれかが嘘に
-なる。探索回数も比較は `>=` だが世界tickではない。
-
-**どう守るか**:
-
-- 共通述語は種類ごとのfrozen dataclassとし、任意項目の集合を新しい名前で作り直さない
-- 評価文脈では `None`（未配線）と空集合（正当な状態）を区別する
-- 共通評価核は表示文・勝敗・traceを持たず、`PredicateResult`だけを返す
-- 通常の不成立だけを用途固有の結果へ戻す。入力不足・評価器未対応は通常不成立へ
-  潰さず、構造化結果を返せない用途ではドメイン例外で即時停止する
-- 旧入口では失敗述語を元のDTOへ写し戻し、traceの型と経路を変えない
-- 合成条件・短絡・確率乱数は既存評価器に残し、決定的な葉だけを委譲する
-- 場所条件は対象範囲を別の型で表せるようにしてから移す
-
-**関連**: #1046 / 判断 #63 / 判断 #70。
+[本文](design_decisions/71.md)
 
 ## 72. tick比較は同じ時間軸と境界を持つ用途だけ共通化する
 
-**何を**: scenario条件の `TICK_AT_LEAST` と game end条件の `TICK_LIMIT` は、
-どちらも世界の現在tickが整数閾値以上かを判定するため、`TickAtLeastPredicate` と
-`TickPredicateContext` を共通の判定核へ追加する。等号を含む比較、用途固有の勝敗・
-理由文、scenario traceの旧条件種別と失敗経路は維持する。
-
-**なぜ**: 比較演算が `>=` というだけで探索回数やobject stateの経過tickまでまとめると、
-時間軸や不足値の意味が違う条件を同じ型へ押し込むことになる。共通化の単位は演算子ではなく、
-「同じ入力を同じ対象範囲で読む」という意味で決める。
-
-**どう守るか**:
-
-- `TickPredicateContext` は `WorldTick` だけを持ち、flags等の任意項目を増やさない
-- `current_tick=None` は通常未成立ではなく文脈不足として返す
-- `ScenarioEventCondition.tick=None` と game endの入力欠落は各旧入口の契約を維持する
-- loaderが現在受理する非整数・負数の厳格化は、共通化と混ぜず別PRで扱う
-- `TICK_BETWEEN`、`TICK_MODULO`、`OBJECT_STATE_TICK_AT_LEAST`、探索回数、会議上限は
-  時間軸または意味が異なるため、この移行へ含めない
-
-**関連**: #1046 / 判断 #71。
+[本文](design_decisions/72.md)
 
 ## 76. SQLiteのシナリオ宣言は全フィールドを同じschemaで往復させる
 
-**何を**: `InteractionCondition` のSQLite用JSON変換は、dataclassの全フィールドを
-単一の変換表から符号化・復号する。新しい条件項目を含むSpotInteriorはschema v2として
-保存し、復号側は既存のv1とv2を受理する。
-
-**なぜ**: 条件へ項目を追加してもcodecが追従せず、`required_quantity`、時間帯、天候、
-対象者条件などが再起動後だけ既定値へ戻っていた。新形式をschema v1のまま保存すると、
-旧実装も受理して同じ欠落を再発させる。また、`bool`や文字列を整数IDへ暗黙変換すると、
-壊れた保存データが別の正しい条件に見えてしまう。
-
-**どう守るか**:
-
-- dataclassのフィールド集合と変換表のキー集合を構造試験で一致させる
-- 符号化と復号で別々の項目一覧を持たない
-- v1で存在しない項目だけはdataclassの既定値へ戻して後方互換を保つ
-- 新規保存はschema v2とし、未知schemaは即時拒否する
-- JSONの型違反、無効enum、無効IDは `SpotGraphStateDecodeError` へ統一する
-
-**関連**: #1046 / 判断 #5 / 判断 #10。
+[本文](design_decisions/76.md)
 
 ## 77. 通知と効果経路を追加したSQLite宣言は新しいschemaを発行する
 
-**何を**: `InteractionDef` の対象者通知と `InteractionEffect` の可視性・作用先を
-SQLite用JSONへ保存する。これらを含むSpotInteriorはschema v3として保存し、復号側は
-v1・v2・v3を受理する。
-
-**なぜ**: 復元後に `notify_target` が無効化されるだけでなく、`EffectTarget.TARGET_PLAYER`
-が既定の `ACTOR` へ戻ると、対象者へ向けた効果が行為者本人へ適用され得る。schema v2を
-再利用すると、v2まで知る旧実装が新項目を黙って捨てるため、意味追加ごとに版を進める。
-
-**どう守るか**:
-
-- v1・v2で項目が無い場合だけ従来の通知・可視性・作用先の既定値へ戻す
-- v3では対象者通知、対象者文面、効果可視性、効果対象を完全に往復する
-- 不正なJSON型と未知enumは `SpotGraphStateDecodeError` で停止する
-- 新しい意味を持つ項目を追加するとき、既存readerが受理するschema番号を再利用しない
-
-**関連**: 判断 #76。
+[本文](design_decisions/77.md)
 
 ## 73. 場所条件は対象範囲を用途側で選び、共通核では型を分ける
 
-**何を**: 場所条件を単一の `AT_SPOT` と mode の組に畳まず、明示したentity本人を
-見る `EntityAtSpotPredicate` と、通常entityの在席数を見る
-`EntityCountAtSpotAtLeastPredicate` に分ける。どのentityを対象にするか、ANY / ALLの
-どちらで集約するかは、対象範囲を知る用途側に残す。
+[本文](design_decisions/73.md)
 
-**なぜ**: 既存の条件名は対象範囲を正確に表していない。scenarioの世界評価における
-`PLAYER_AT_SPOT` と `PLAYERS_AT_SPOT` はplayer repositoryと照合せず、graph上の通常
-`EntityId`を数える。対象者評価の `PLAYER_AT_SPOT` は指定player本人だけを見る。一方、
-game endの `ANY_AT_SPOT` / `ALL_AT_SPOT` は明示された`player_ids`だけを対象にする。
-名前だけで一つにすると、非player entityで勝敗が決まる、または既存scenarioが発火しなく
-なる。
-
-**どう守るか**:
-
-- `EntityPlacementPredicateContext` は `EntityId` から `SpotId` への防御コピーを持つ
-- `None` は文脈不足、空mapping・未配置entity・未知spotは判明済みの通常不成立とする
-- world-scope `PLAYER_AT_SPOT` は在席数1、`PLAYERS_AT_SPOT` は明示人数または既定2へ写す
-- player-scope `PLAYER_AT_SPOT` は本人の `EntityAtSpotPredicate` へ写す
-- game endは明示player全員を本人位置の述語で評価し、ANY / ALLと空集合拒否を用途側で行う
-- 未配置playerは通常不一致とし、down / outcomeによる対象補正を新たに加えない
-- scenario側の共通結果は旧DTOへ写し戻し、traceの条件種別・失敗経路を維持する
-- loader、JSON、snapshot、SQLite、interactionの `PLAYERS_AT_SPOT` はこの移行で変更しない
-
-**関連**: #1046 / 判断 #70 / 判断 #71。
 ## 74. 同期操作の準備は通常操作の可否と異なる参加者を要求する
 
-(#218 で入口を `interact` に統合した。以下の `prepare_action` は内部の準備経路を指す。)
-
-**何を**: `prepare_action` は現在地に同名 interaction を持つ対象物が一つだけあり、
-その interaction の通常の前提条件を満たす場合だけ登録する。同じ同期グループの別の
-required action を同じ player が準備済みなら、二つ目は理由つきで拒否する。
-resolver も、操作名が揃っていても準備者が重複していれば完成させない。
-
-**なぜ**: 準備だけが対象物・現在地・前提条件を見ないと、別室から操作でき、通常の
-`interact` では拒否される者も協力者として数えられる。また action 名だけを数えると、
-一人が二つの役割を順に準備して「二人が揃う」作業を一人で完成できる。
-
-前提条件は協力操作用に書き写さず、通常操作と同じ
-`SpotInteractionService.evaluate_preconditions_result` を非破壊で呼ぶ。二つ目を記録だけ
-して完成に数えない案は、本人に失敗が見えず相方を待ち続けるため採らない。同じ action
-の再準備だけは、待ち合わせ窓を更新する既存の用途として許す。
+[本文](design_decisions/74.md)
 
 ## 75. 数量を持たない所持条件は解決済み品目集合への所属として共通化する
 
-**何を**: scenarioの `HAS_ITEM`、passageの `ITEM_REQUIRED`、discoveryの
-`HAS_ITEM`、interactionの `TARGET_HAS_ITEM` / `TARGET_HAS_NO_ITEM` は、上流で解決した
-品目集合に `ItemSpecId` が含まれるかを `ItemSpecOwnedPredicate` と
-`OwnedItemSpecsPredicateContext` で共通評価する。誰の所持集合を渡すか、否定条件をどう
-扱うか、失敗文を何にするかは用途側に残す。
-
-**なぜ**: これらは通常スロットと装備スロットを含む同じ品目集合への所属判定だが、
-interactionの行為者側 `HAS_ITEM` / `HAS_ITEMS` は通常スロットにある消費可能instanceの
-個数を比較する。名前だけで一つにすると、装備中の鍵が通行条件を満たさなくなる、または
-消費用の数量へ装備品を数えるという挙動変更が起きる。
-
-**どう守るか**:
-
-- 共通文脈の `None` は未配線、空集合は配線済みの未所持として区別する
-- scenarioの世界評価はplayerごとに判定し、複数人の所持を合算しない
-- 対象者の所持集合や参照品目が未解決なら、`TARGET_HAS_NO_ITEM` でも成立へ反転しない
-- 共通核の入力不足・未対応は通常不成立へ潰さず、旧DTOへ写すか即時停止する
-- inventoryから解決できないitem instanceを黙って除く既存挙動は、この共通化で変更しない
-- `consume_item`、数量条件、trapの数量無視、interaction条件のSQLite復元欠損は別課題とする
-
-**関連**: #1046 / 判断 #71。
+[本文](design_decisions/75.md)
 
 ## 79. state完全一致は対象の選択と分離して共通化する
 
-**何を**: scenarioの `OBJECT_STATE` と、interactionのobject・item instance・
-player state条件は、要求mappingの全キーを現在stateの値と比較する
-`StateValuesMatchPredicate` / `StateValuesPredicateContext` へ委譲する。
+[本文](design_decisions/79.md)
 
-**なぜ**: 判定自体は6経路ですべて `current_state.get(key) == expected` だが、対象は
-世界内object、操作object、使う側・使われる側item、使う側・使われる側playerと異なる。
-対象範囲まで共通述語へ入れると、巨大な任意文脈へ戻る。用途側が正しいstate snapshotを
-選び、共通核は同じ値比較だけを担う。
-
-**どう守るか**:
-
-- 要求mappingと現在stateは入れ子を含めて防御コピーする
-- 現在stateの余分なキーは無視し、空の要求mappingは従来どおり成立とする
-- 要求値が`None`ならキー欠落とも一致する既存の`dict.get`意味を変更しない
-- state未配線は通常不成立でなく文脈不足として返す
-- scenario側は元DTOへ写し戻し、traceの条件種別・失敗経路を維持する
-- interaction側は対象選択、作者文面、最初の失敗条件を維持する
-- 整数下限、経過tick、備蓄再生、loaderの必須値厳格化は別変更とする
-
-**関連**: #1046 / 判断 #71。
 ## 78. 罠定義と屋外属性をSQLite再開後も保持する
 
-**何を**: `SpotNode.is_outdoor`、`SpotNode.traps`、`SpotObject.trap` をSQLite用JSONへ
-保存する。ノード側の意味追加を含むグラフ集約はschema v3、物体罠を含む
-`SpotInterior`はschema v4として保存し、それぞれ過去の版も読み込めるようにする。
-
-**なぜ**: 罠はドメインモデルに存在していてもcodecから抜けており、SQLiteへ保存して
-再開すると宣言そのものが消えていた。`is_outdoor`も同じ経路で既定の`False`へ戻る。
-既存readerが受理する版番号を再利用すると、新しいpayloadを古い実装が正常扱いして
-項目を捨てるため、グラフ集約とinteriorの双方で版を進める。
-
-**どう守るか**:
-
-- `TrapDef` のtrigger、効果、解除条件、可視性、反復、発見難易度を完全に往復する
-- 効果と解除条件は既存の `InteractionEffect` / `InteractionCondition` codecを再利用する
-- `TrapDef` の全フィールドとcodec出力キーを構造試験で一致させる
-- 過去版で項目が無い場合だけ、屋外`False`・罠なしの従来既定へ戻す
-- 不正な配列、真偽値、整数、未知triggerは `SpotGraphStateDecodeError` で停止する
-- この判断は永続化だけを扱い、scenario loader・発火stage・解除数量判定は別変更とする
-
-**関連**: 判断 #76 / 判断 #77。
+[本文](design_decisions/78.md)
 
 ## 136. 複数陣営では固定人数でなく現在の生存人数を比較する
 
-**何を**: `SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE` は、
-`required_state` を満たす生存者数が `comparison_state` を満たす生存者数以下に
-なったとき成立する。既存の固定閾値条件
-`SURVIVING_PLAYERS_WITH_STATE_AT_MOST` は別用途のため残す。
-
-**なぜ**: インポスターが一人なら「クルーが一人以下」は両陣営が同数という条件と
-一致する。しかしインポスターが二人になると、固定値を二人へ変えた条件は、一人が
-追放されてもクルー二人で敗北させる。比較すべきなのは初期人数でなく、現在生きている
-両陣営の人数である。
-
-**どう守るか**:
-
-- `required_state` が左辺、`comparison_state` が右辺で、左辺が右辺以下なら成立する
-- `PlayerOutcomeEnum.is_eliminated` が真の死亡者・追放者はどちらの人数にも含めない
-- DEAD の幽霊が作業を続けられても、生存人数には含めない
-- 左右に同じ state を指定すると常に成立するため、構築時に拒否する
-- 初期人数が零か、将来どう変化するかは静的に断定できないため、一般の達成可能性は
-  読み込み時に推測しない
-- 条件型は成立した事実だけを表し、WIN / LOSE は置かれた配列から呼び出し側が渡す
+[本文](design_decisions/136.md)
 
 ## 137. 役職の相互開示はシナリオが宣言し、役職語彙は表示層へ渡さない
 
-**何を**: シナリオの `mutually_known_roles` に書かれた role の人物は、
-同じ role の他者を「あなたと同じ側」と表示する。宣言されていない role には
-印を作らない。
-
-**なぜ**: 複数人の秘匿陣営では味方を知るかがゲームの規則であり、engine の
-全世界共通規則ではない。一方、`role=keeper` のような内部語彙を prompt builder へ
-渡すと、役職名の漏洩や crew への誤配信を後段で防ぐ必要が生じる。
-
-**どう守るか**:
-
-- loader は宣言 role に二人以上いることを確かめ、誰にも印が付かない静かな失敗を止める
-- runtime が見る側ごとに開示を解決し、prompt builder には確定済みの世界内表示名だけを渡す
-- 対人候補には役割値でなく「既知の相方」という真偽だけを渡し、相方へ必ず失敗する襲撃を出さない
-- 宣言集合が空の既存シナリオは、従来の名前表示をそのまま保つ
-- crew は宣言集合に入れず、crew 同士の印から秘匿陣営を逆算できないようにする
+[本文](design_decisions/137.md)
 
 ## 80. 数量付き所持条件は解決済み品目別個数の比較として共通化する
 
-**何を**: interactionで使う側の `HAS_ITEM` / `HAS_ITEMS` は、上流で解決した
-品目別instance数を `ItemSpecCountAtLeastPredicate` と
-`ItemSpecCountsPredicateContext` で共通評価する。`HAS_ITEMS` は宣言順に品目ごとの
-述語を評価し、一種でも必要数に届かなければ元の条件を不成立とする。
-
-**なぜ**: この二条件は同じ「品目ごとの個数が必要数以上」という比較を重複して
-持っていた。一方、判断 #75 の所持条件は装備を含む品目集合への所属であり、数量条件は
-通常スロットのinstance数だけを見る。既存の `ItemSpecOwnedPredicate` に数量を足すと、
-装備品を個数へ含める誤った意味になるため、別の型付き述語として分離する。
-
-**どう守るか**:
-
-- 共通文脈の `None` は未配線、空mappingは配線済みの0個として区別する
-- 品目別個数は `ItemSpecId` と0以上の整数だけを受け入れ、防御コピーする
-- 必要数はboolを除く正整数とし、共通核の評価不能は通常の所持不足へ縮退させない
-- `owned_item_spec_counts` が省略された必要数1の条件は、既存どおり品目集合から各1個へ戻す
-- `HAS_ITEMS` の重複品目は合算せず、宣言された各要素へ同じ必要数を適用する
-- 既存の失敗文、最初の失敗条件、装備除外、stack数量を数えない意味は変更しない
-- 予約中品目と `REMOVE_ITEM` の整合、trapの数量判定、消費の原子性は別課題とする
-- 判定は決定的で新しい永続状態を持たないため、traceとsnapshot形式は追加しない
-
-**関連**: #1046 / 判断 #71 / 判断 #75。
+[本文](design_decisions/80.md)
 
 ## 81. 整数state下限は対象解決と分離して共通化する
 
-**何を**: scenarioとinteractionの `OBJECT_STATE_INT_AT_LEAST` は、対象objectを
-用途側で解決した後、`StateIntAtLeastPredicate` と既存の
-`StateValuesPredicateContext` で同じ整数下限判定を行う。
-
-**なぜ**: 両経路はstateの同じキーを読み、キー欠落または整数以外を0として閾値と
-比較していた。一方、scenarioは世界全体からobjectを探し、interactionは操作objectか
-明示target objectを選ぶ。対象選択まで共通核へ持ち込むと、用途固有のrepositoryや
-任意対象を文脈へ詰め込むことになるため、共通核は解決済みstateの値だけを読む。
-
-**どう守るか**:
-
-- 共通述語の `state_key` は空でない文字列、閾値はboolを除く整数とする
-- キー欠落と整数以外の現在値は、従来どおり文脈不足でなく0として比較する
-- Pythonでboolが整数である既存意味と、scenarioの0・負閾値はこの変更では直さない
-- interactionの必要数は従来どおり最低1へ補正し、数量入り失敗文を用途側に残す
-- scenarioのobject不存在は `spot_object` 不足、interactionの対象不足は既存の通常不成立とする
-- 共通核の入力不足・未対応は通常不成立へ潰さず、元DTOへ写すか即時停止する
-- scenarioの合成条件、失敗経路、確率条件の短絡と乱数消費順、trace payloadを維持する
-- typed predicateは評価時の一時値なのでSQLite・snapshot形式を変更しない
-- loaderの必須値厳格化、経過tick、備蓄再生、天候条件は別変更とする
-
-**関連**: #1046 / 判断 #71 / 判断 #79。
+[本文](design_decisions/81.md)
 
 ## 82. 遠隔道具の明示対象は世界全体から解決し、解決不能を成功扱いしない
 
-**何を**: 道具操作の効果が `object_id` を明示した場合は、その物体の所有室を
-世界全体から解決する。前提条件は使う側の現在地で評価し、効果と保存だけを対象物の
-所有室へ適用する。対象が見つからない場合と、一操作が複数室の物体を指す場合は
-`ApplicationException` で停止する。
-
-**なぜ**: run 030 の tick 11 で、連絡通路にいたクゼは集会室の隔壁盤へ
-`seal_bulkhead` を実行し、成功文も受け取った。しかし効果処理は使う側の部屋だけを
-探索したため `sealed_at_tick` は一度も記録されず、tick 12 にセナとアオイが扉を
-通過して会議を開いた。盤を遠隔操作する宣言と、効果の対象探索範囲が食い違い、
-何も変えていないのに成功と返す静かな失敗だった。
-
-**どう守るか**:
-
-- 前提条件の `SPOT_*` は使う側の現在地を見続け、遠隔対象の部屋へ意味を変えない
-- 明示した物体が一室に収まる場合だけ、その室の `SpotInterior` へ効果を適用して保存する
-- 対象物が存在しなければ、成功文や待ち時間を発生させる前に停止する
-- 複数室へ物体効果を適用する操作は、原子性と保存先が定義されるまで許可しない
-- 解決失敗と複数室指定は、それぞれ例外型と文面を試験で固定する
+[本文](design_decisions/82.md)
 
 ## 83. scenarioの列挙値は実行時の不成立へ縮退させず読込時に拒否する
 
-**何を**: scenario述語の `WEATHER_IS.weather_type` は、シナリオ読込時に
-`WeatherTypeEnum.value` と完全一致する文字列だけを受理する。欠落、`null`、文字列以外、
-未知値、大小文字違い、前後空白は、述語の位置と許容値を含む `ScenarioLoadError` で拒否する。
-
-**なぜ**: 従来は値をそのまま `ScenarioEventCondition` へ渡し、実行時に現在天候の文字列と
-比較していた。そのため `STROM` のような誤記やfield欠落が通常の条件不成立に見え、
-scenario event、reactive binding、player outcome ruleが永久に発火しなくても原因を発見
-できなかった。空白除去や大文字化で補正すると誤記を静かに別の意味へ変えるため、補正せず
-作者へ修正を求める。
-
-**どう守るか**:
-
-- 共通のscenario条件parserで検査し、合成条件を含む全利用箇所へ同じ契約を適用する
-- enumの名前ではなく、評価器が比較する `.value` を正本とする
-- loaderを迂回した直接DTO構築とruntimeの防御的な不成立処理は変更しない
-- interactionの `required_weather_type`、monster spawn、環境初期値は別スキーマとして扱う
-- 正しい列挙値、誤記、型違い、欠落、合成条件と各利用箇所のpathを試験で固定する
-- 読込時に停止するため、新しいtraceやsnapshot状態は追加しない
-
-**関連**: #1046 / 判断 #10 / 判断 #65 / 判断 #71。
+[本文](design_decisions/83.md)
 
 ## 84. 天候条件は正の一致だけを共通化し、否定と失敗文は用途側に残す
 
-**何を**: scenarioの `WEATHER_IS` とinteractionの `WEATHER_IS` / `WEATHER_IS_NOT`
-は、`WeatherTypeIsPredicate` と `WeatherTypePredicateContext` で同じ列挙値一致を判定する。
-共通核は正条件だけを持ち、現在天候と要求天候が同じ `WeatherTypeEnum` なら成立、異なれば
-通常不成立、現在天候が未配線なら文脈不足を返す。
-
-**なぜ**: 正の一致判定は両用途で同じだが、不足時の出口は異なる。scenarioはprovider未配線を
-`weather_state` の文脈不足としてtraceへ残し、interactionは既存の作者文面またはprovider不足文を
-返す。また `WEATHER_IS_NOT` が共通結果の `is_satisfied=False` をそのまま反転すると、通常不一致
-だけでなく文脈不足や評価器未対応まで操作可能へ変わる。
-
-**どう守るか**:
-
-- 共通述語と文脈は文字列でなく `WeatherTypeEnum` を受け取る
-- interactionの否定は `require_satisfaction` で正常な真偽へ射影した後だけ反転する
-- scenarioは共通結果を元の `ScenarioEventCondition` へ写し戻し、失敗経路とtrace種別を保つ
-- providerの呼出し回数、例外処理、既存の失敗文、前提条件の宣言順は用途側で維持する
-- loaderを迂回した未知文字列は、このリファクタでは従来の完全一致比較へ戻す
-- 天候強度、時間帯、照明、monster spawnの許容天候集合は別の意味なので含めない
-- typed predicateは評価時の一時値であり、SQLite・snapshot・trace形式を変更しない
-
-**関連**: #1046 / 判断 #63 / 判断 #71 / 判断 #83。
+[本文](design_decisions/84.md)
 
 ## 86. 共通述語基盤は決定的な葉と用途表を完成境界とする
 
-**何を**: #1046 の共通述語基盤は、意味が同じ決定的な葉を型付きの評価核へ集約し、
-既存用途が対象選択・合成・表示を担う形を完成形とする。共通述語の型一覧、評価器の分岐、
-利用用途表を双方向の構造試験で照合し、新しい型が未対応のまま永久不成立へ落ちることを防ぐ。
-
-**なぜ**: 当初案には AND / OR / NOT を含む共通構文木と巨大な評価文脈も含まれていた。
-しかし既存の合成条件は短絡順、確率乱数、失敗経路、traceを所有し、interactionやgame end
-では合成後の出口も異なる。これらまで一つへ寄せると、同じ名前に隠れた対象範囲や不足時の
-意味を再び潰す。共通化によるレバレッジは、同じ入力を同じ真理値で読む葉を一度実装する
-ことで得られており、合成構文木の統合は完成条件にしない。
-
-**どう守るか**:
-
-- `ScenarioPredicate` と `PredicateContext` は実行時型一覧と一致させる
-- 全述語型を `ScenarioPredicateEvaluator` の分岐と利用用途表へ必ず登録する
-- 利用用途表は設計・構造監査の正本とし、用途固有DTOの実行時検証を二重化しない
-- monster spawnの必須・禁止フラグと許容天候も既存の共通葉へ委譲する
-- 否定は通常の成立・不成立だけを反転し、文脈不足・未対応を成立へ変えない
-- 昼夜、探索回数、備蓄再生、経過tick、勝敗集約など、同義でない条件は用途側に残す
-- scenario event系の合成・確率・traceと共有乱数snapshotは判断 #62 / #70 のまま維持する
-- `TrapEvaluationService` の数量条件と発火配線、monster spawn loaderの文字列強制変換は
-  独立した不具合として扱い、共通化の完了に混ぜない
-
-**関連**: #1046 / 判断 #62 / 判断 #70 / 判断 #71〜#84。
+[本文](design_decisions/86.md)
 
 ## 85. 同時性はフェーズの意味に合わせ、比較 run に必要な量を trace へ残す
 
-**何を**: 自由時間の LLM wave は Phase A を並列にして同 tick の行動を互いに
-見せない。会議の逐次化は `LLM_MEETING_SERIAL_TURNS` で明示した比較 run だけにし、
-既定は会議も並列にする。逐次化した場合は prompt 構築から一人ずつ実行して先行発言を
-後続者へ見せる。実行順を変えるために system prompt や toolset は変更しない。
-
-同時に、マップと会議の変更を実走後に判定できるよう、各 tick の全室在室数、
-各人の累積移動 tick、会議区間と累積会議 tick、短期記憶圧縮の前後量を trace
-へ残す。圧縮発火は L4 要約の生成結果とは別の事実として記録する。
-
-**なぜ**: 自由時間を逐次化すると wave 内の順番が襲撃や移動の有利不利を作る。
-一方、会議を並列にすると全員が同 tick の他者発言を読まずに話し、8 人でも
-積み上がる対話が tick 数ぶんしか生まれない。ただし run 029〜033 の実測では、会議の
-逐次化は 8 人で約 4 倍の実時間を要する見込みだった。混線は tick を浪費するが議論を
-壊してはいなかったため、既定は並列とし、逐次化は比較条件として残す。
-
-9 室化と 80 tick 化では、作業が進まない原因を空間分散、移動負担、会議占有、
-記憶圧縮から切り分ける必要がある。最終状態だけでは因果を復元できないため、
-分析に必要な量を発火地点で記録する。
-
-**どう守るか**:
-
-- 設定を明示した会議だけ実効 worker 数を1にし、自由時間の worker 数は変えない
-- 逐次会議の後続 prompt に同 tick 発言が入り、既定の並列会議と自由時間には
-  入らないことを対で試す
-- 同一フェーズの system prompt と toolset の sha256 が worker 数で変わらず、
-  フェーズ境界の toolset は実物どおり異なることを試す
-- 在室数は無人室を含む全室を毎 tick 出し、移動は到着 tick も数える
-- 会議は開始と終了を別 event にし、未終了 run でも開始を失わない
-- 要約あり・なしの両短期記憶が同じ圧縮 trace 契約を持つ
+[本文](design_decisions/85.md)
 
 ## 87. 長走比較では短期記憶だけを要約し、補助 JSON 呼び出しは熟考しない
 
-**何を**: `station_drill_lean` と `station_drill_thinking` は 80 tick の長走に備えて
-`SHORT_TERM_MEMORY_KIND=rolling_summary` を使う。エピソード記憶、信念、目標、
-意味記憶は無効のまま維持する。`complete_episode_subjective_json` を共有する補助 JSON
-呼び出しは、agent turn の `LLM_REASONING_EFFORT` にかかわらず `none` で送る。
-
-**なぜ**: `sliding_window` は畳んだ古いターンを要約せず捨てる。80 tick では圧縮が
-複数回起きるため、序盤の殺害や所在を失う。一方、信念・目標なども同時に有効化すると、
-run の変化を短期要約へ帰属できない。JSON 抽出は行動選択ではなく、熟考を足す理由がなく、
-`json_object` と thinking の組合せは provider 互換性も悪化させる。
-
-**どう守るか**:
-
-- lean の 80 tick、`rolling_summary`、他の記憶機能無効をリテラルで試験する
-- thinking は provider・agent turn の reasoning・並列 worker 以外を lean と揃える
-- JSON 経路の実送信 kwargs に `reasoning_effort` が無く、reasoning / thinking の
-  無効化 block が入ることを試験する
-- 補助抽出用の設定項目は増やさず、熟考比較が必要になった時点で別途判断する
-- 圧縮発火は `SHORT_TERM_MEMORY_COMPACTED`、要約結果は既存 trace で観測する
+[本文](design_decisions/87.md)
 
 ## 88. REMOVE_ITEMは予約されていない具体instanceを全量確保してから消費する
 
-**何を**: `REMOVE_ITEM` の消費可能個数には予約中のinstanceを含めない。削除時は
-要求された品目の多重集合に対して、通常スロット上の未予約instanceを全量ぶん先に
-計画し、すべて確保できた場合だけまとめて削除する。
-
-**なぜ**: 従来は数量判定が予約品を含み、削除は同品目の先頭slotへ `drop_item`
-していた。先頭が取引・クエスト用に予約済みなら、後方に未予約品があっても例外になり、
-複数個の途中で失敗すれば一部だけ消費された。予約は別の操作が所有する排他的な確保であり、
-一般のinteractionが消費可能な所持数として扱ってはならない。
-
-**どう守るか**:
-
-- 消費可能個数は通常slotだけを数え、装備品と予約品を除外する
-- 削除計画は具体的な `SlotId` と `ItemInstanceId` を保持し、同じinstanceを二重に選ばない
-- 全量を確保できなければinventoryを変更しない
-- 適用直前にslot、instance、予約状態を再確認し、計画が古ければ変更せず失敗する
-- 効果宣言から削除要求だけを副作用なしで先に解決し、状態変更やloot抽選より前に検証する
-- 道具・物体・対人interactionは、行為者・対象の削除全量を確保してから効果を適用する
-- scenario eventは全プレイヤーへの最善努力という既存契約を維持し、各inventory内だけ全量消費にする
-- リポジトリ保存失敗まで含む複数集約の完全な原子性は、共有Unit of Workの課題として分離する
-
-**関連**: 判断 #75 / 判断 #80。
+[本文](design_decisions/88.md)
 
 ## 89. 時間制限つき妨害は発動・警報・協力解除・締切を別の宣言で持つ
 
-**何を**: station_drill の燃料凍結は、遠隔操作が開始時刻を物体へ記録し、
-scenario event が全員への段階警報・解除告知・9手番後の敗北を担い、同期操作が
-別室の二人による解除を担う。同期操作の `on_timeout` は片方が準備した後の
-やり直しだけに使い、誰も動かなかった場合を含む全体締切には使わない。
-
-**なぜ**: `on_timeout` は最初の prepare が無ければ始まらない。締切まで同じ機構へ
-押し込むと、全員が妨害を無視したときだけ永久に敗北しない静かな失敗になる。
-また、フラグ前提は既定では阻害理由つきで操作名を残すため、平常時から解氷操作を
-宣伝する。時限ギミックだけが明示的に候補を伏せる属性を持ち、既存の公開条件は
-変えない。一度だけの開始警報では作業中に忘れられるため、40分・30分・20分・
-10分の四段階で全員を起こす。告げた危機を取り消さない静かな失敗を避けるため、
-解除も参加者向けの現場文とは別に全員へ一度だけ告知する。
-
-**どう守るか**:
-
-- 発動は `fuel_frozen` と `frozen_at_tick` を同じ成功操作で記録する
-- 段階警報と締切は `fuel_restored` / `fuel_lost` の未成立を要求する一回限りの event にする
-- 解除時は `fuel_restored` を見る別 event が、準備に参加しなかった者にも告知する
-- 解除は異なる二人・別室・準備時点を1手番目と数える3手番の同期窓を要求する
-- 平常時と解除後は弁の操作を隠し、凍結中だけ表示する
-- 当番表は平常時から二つの弁と二人で分かれる非常手順を教える
-- 燃料圧計は生の手番を伏せ、世界時計と同じ分換算で残り時間を示す
-- `fuel_lost` を勝敗条件の真実源とし、放置時の敗北を実 runtime で試す
+[本文](design_decisions/89.md)
 
 ## 90. 在室数は用途別の範囲を明示し、動的表示はアプリケーション層で解く
 
-**何を**: 区画別の人数集計は `collect_spot_occupancy` に集約し、社会密度の
-trace は `meeting_eligible_players`、所内位置表示盤は
-`living_players_and_fallen_bodies` を明示する。表示盤は生存者と遺体を同じ
-一反応として数え、幽霊を数えず、名前を返さない。
-
-`SHOW_ROOM_OCCUPANCY` は domain 層で静的な文を作らず、動的表示要求だけを結果へ
-載せる。application 層が操作時点の graph・生死・遺体を読んで本人向けの文にする。
-
-**なぜ**: trace の人数は社会密度を測るため、遺体を含めると会話可能な人数を
-誤る。一方、表示盤から遺体を除くと、未発見の遺体へ向かう手掛かりが消える。
-「人数」という語だけで一つの関数へ固定すると、片方の都合で範囲を変えたときに
-もう片方も黙って変わる。
-
-また、domain 層には全 player の位置、生死、遺体 registry が無い。そこへ参照を
-持ち込むと境界を壊し、シナリオ読み込み時に人数を文へ焼くと実行時の世界とずれる。
-要求を越境結果へ載せることで、宣言できるのに表示されない静かな失敗も配線不在の
-例外として止められる。
-
-**どう守るか**:
-
-- 集計範囲は enum で選び、遺体範囲には registry の注入を必須にする
-- 全区画を宣言順に出し、無人室も 0 として残す
-- 表示文は区画名と反応数だけにし、player 名を混ぜない
-- 実 runtime でクルーとインポスターの両方が使えることを試す
-- 遺体を一人と数え、別位置にいる同じ死者の幽霊を二重に数えないことを試す
-- 同席者には表示内容でなく、表示盤を見た行為だけを届ける
+[本文](design_decisions/90.md)
 
 ## 91. OpenRouter の会話固定 ID は run・世界・player から作り、本文へ混ぜない
 
-**何を**: エージェントの主ターンを OpenRouter へ送るとき、run・世界・player の
-組から作った 256 文字以下の `session_id` をトップレベルの送信値へ載せる。同じ
-player の評価段・行動段・会議・自由時間では同じ値を使い、player または run が
-違えば別の値にする。長すぎる識別子は組全体をハッシュ化する。
-
-**なぜ**: `session_id` が無い場合、毎手番変わる最初の user メッセージによって
-別会話と判定され、暗黙のプレフィックスキャッシュが効く配信先へ固定されにくい。
-会話 ID を本文へ追記すると、守りたい接頭辞そのものが変わる。フェーズごとに ID を
-分けても、会議の入口と出口で配信先の固定が切れてしまう。
-
-**どう守るか**:
-
-- `messages` を加工せず、LiteLLM のトップレベル引数として送る
-- OpenRouter 以外には送らず、未対応引数を持ち込まない
-- 実験 run は出力先の run 名、通常セッションは衝突しないセッション ID を使う
-- 補助 JSON 呼び出しは主ターンと接頭辞が異なり、同時実行で配信先を揺らすため共有しない
-- 同一 player の連続呼び出し、別 player、別 run、評価段と行動段を試験する
+[本文](design_decisions/91.md)
 
 ## 92. 再発動する時限事象は状態を解除し、経過時刻の窓で各周期を識別する
 
-**何を**: 一時的な世界フラグを外す汎用効果 `CLEAR_FLAG` を `SET_FLAG` と対で
-用意する。station_drill の燃料凍結は、発動時に前回の復旧・告知フラグを解除し、
-復旧時に凍結中フラグを解除する。25手番の待ち時間後は再び発動できる。
-
-段階警報は scenario event の永続的な `once` 記録に依存せず、物体へ上書きした
-`frozen_at_tick` からの経過時刻が各段の狭い窓に入ったときだけ発火する。復旧告知は
-`fuel_announced` を周期の先頭で解除し、告知と同時に立てることで周期ごとに一度にする。
-
-**なぜ**: 一度きりの札は run 034 で最後まで温存され、妨害として機能しなかった。
-単に event の `once` を外すと、成立条件が真である全 tick に同じ警報が繰り返される。
-警報ごとの発火済みフラグを増やすと、段数に比例した状態の消し戻しが必要になり、
-二度目だけ一段が鳴らない静かな失敗を作りやすい。開始時刻を毎周期上書きし、経過時刻の
-窓で識別すれば、周期番号や段別 bookkeeping を持たずに同じ宣言を再利用できる。
-
-**どう守るか**:
-
-- `CLEAR_FLAG` は対象が無くても冪等に成功し、他の世界フラグを変えない
-- 同期操作でも `CLEAR_FLAG` を正式対応し、復旧時に `fuel_frozen` を外す
-- 初段を含む四段警報は各周期で一度ずつ全員へ届く
-- 復旧告知は参加者以外にも各周期で一度だけ届く
-- 待ち時間中の再発動は拒否し、25手番の境界で再び許可する
-- 二度目を放置した場合も9手番後に同じ敗北条件へ到達する
-- 事象を跨ぐ永久状態である `fuel_lost` は解除せず、敗北の真実源を維持する
-
-**関連**: 判断 #89。
+[本文](design_decisions/92.md)
 
 ## 93. persona の役職知識は世界の事実に限り、立ち回りを代行しない
 
-**何を**: persona に役職固有の能力を説明するときは、能力・世界への帰結・解除条件
-までを記し、その情報をどう利用するかという立ち回りは書かない。station_drill の
-燃料凍結では、発動できる者、放置時の敗北、二室の弁を二人で同時に開ける復旧要件を
-伝える一方、待ち伏せる場所や狙う相手は本人の判断に残す。
-
-**なぜ**: run 035 で燃料凍結が使われなかった直接の原因は、操作名だけが見えて
-帰結と復旧要件が persona に無かったことだった。一方、修正案に立ち回りまで書くと、
-次の run で使われても「事実から本人が戦術を導いたか」を測れない。停電では暗所と
-目撃の関係だけを伝えた結果、クゼ自身が利用法を導けていたため、同じ情報境界に揃える。
-
-**どう守るか**:
-
-- 能力の陽性試験は、所有者と相方が帰結・復旧要件を知ることを確認する
-- 所有能力と相方の知識を分け、端末を持たない者へ操作能力を与えない
-- 全 player の人物紹介より後ろを検査し、段落内・末尾のどちらへ足した立ち回りも止める
-- 禁止語は待機・待ち伏せ・標的指定・移動指示・選択代行を表す語を含める
+[本文](design_decisions/93.md)
 
 ## 94. 人物固有文と役職共通知識を分離し、固定順で system prompt へ連結する
 
-**何を**: シナリオは `players[].persona_prompt` に人物固有の性格・職掌・動機を、
-`role_personas[role]` に陣営の能力・制約・世界知識を宣言する。runtime は人物文を先、
-役職文を後ろの固定順で一度だけ連結する。`role_personas` 未宣言の既存シナリオは従来の
-人物文だけを使う。
-
-**なぜ**: station_drill では persona の大半が役職ごとの複製で、能力追加時に片方だけ
-更新される静かな失敗が起きた。共通知識を一箇所へ束ねれば、同じ役職の全員へ構造的に
-届く。一方、現在の所持品から system 文を動的生成すると、譲渡・落下で不変な接頭辞が
-変わり、既に得た能力知識まで消える。そのため端末の操作候補は所持品行へ追従させるが、
-端末を扱えるという人物固有の知識は所有者の人物文へ残す。
-
-クルーへ燃料凍結の知識を平常時から共通配信はしない。当番表を読んだ者だけが事前に
-非常手順を知り、未読の者は最初の警報で初めて知るという差を残すためである。日常から
-想定される停電の知識と、初めて起きる燃料凍結の非常手順は同じ事前知識として扱わない。
-
-**どう守るか**:
-
-- `role_personas` の型・空文・player が持たない role を読み込み時に拒否する
-- クルー六人とインポスター二人で、人物文の後ろに同一役職文が一度だけ続くことを試す
-- 異なる role の共通知識を相互に混ぜない
-- runtime の再構築、tick、現在の所持品で八人の system prompt hash を変えない
-- 移行前とのバイト同一性は、文面を組み替えていないクルー六人の既知 hash で固定する
-- クゼとジンは能力・帰結・復旧要件を保ったうえで、人物文と共通文の順へ意図的に組み替える
-- 未宣言のシナリオは空 mapping として既存の `persona_prompt` 経路を保つ
+[本文](design_decisions/94.md)
 
 ## 95. tools payload は状態不変の常在ブロックを先頭へ固定する
 
-**何を**: `wait`、`speak`、`memo_add`、`memo_list`、`memo_done` を tools
-payload の先頭へ固定順で置く。並び順の正本は `ToolExposure` に一つだけ持ち、
-スポット・記憶ツールの合成後と死亡フィルタ後に適用する。状態で落ちうる `listen` と
-`tend_to_player` は常在ブロックへ入れない。幽霊にも `listen` を残す。
-
-**なぜ**: run 035 では幽霊化した三回だけ、先頭の `listen` が死亡フィルタで消え、
-tools JSON 12,039文字の共通接頭辞が31文字まで縮んだ。会議や投票の遷移で接頭辞が
-残っていたのは、共通ブロックの意図が構造化されていたからではなく、偶然先頭が一致した
-ためだった。観測しかできない幽霊に環境音を聞く手段が無い一方、ほぼ失敗する
-`interact` が残る質感の逆転も同時に直す。
-
-**どう守るか**:
-
-- 生存自由時間、生存会議の投票前後、幽霊自由時間、幽霊会議の実 payload を検査する
-- 五状態すべてで先頭五ツールの名前と順序が完全一致することを試す
-- 幽霊には `listen` を出し、取得・譲渡・遺体報告は引き続き出さない
-- 合併集合で全フェーズの定義を固定せず、`vote` など使えない手を別フェーズへ宣伝しない
-- user prompt の節順は変えず、追記式の出来事が作る既存の安定接頭辞を保つ
+[本文](design_decisions/95.md)
 
 ## 96. 熟考と required が両立しない provider は tool_choice を実験条件として切り替える
 
-**何を**: 1段階ターンの `tool_choice` を `required` または `auto` として profile に
-宣言できるようにする。既定は従来どおり `required` とし、`auto` では実際の tools
-payload から作った名前一覧と「文章だけで答えない」という指示を user prompt 末尾へ置く。
-ツールが返らなければ末尾だけを強めて一度だけ再試行し、それでも返らなければ従来の
-`NO_TOOL_CALL` として行動履歴へ残す。
+[本文](design_decisions/96.md)
 
-**なぜ**: DeepSeek は熟考と `tool_choice="required"` を同時に拒否する一方、同じ
-モデルでも provider によってプレフィックスキャッシュの安定性が大きく違う。静かに
-`auto` へ降格すると run の実条件が宣言と食い違うため、明示的な比較条件にする必要が
-ある。文章指示へツール名を手書きすると、無効化や状態による露出変更後も存在しない
-ツールを宣伝する過去の静かな失敗が再発する。
-
-reason-first の第1段は named `tool_choice` を使う。DeepSeek の熟考との両立を実 API で
-確認していないため、`auto` profile では実効無効にし、その結果を resolved config に
-残す。頻度が低い経路を推測で有効にするより、測定条件を復元できることを優先する。
-
-**どう守るか**:
-
-- 未指定と既存 profile は `required` のままにし、未知値は起動前に拒否する
-- `auto` の末尾に載る名前集合を、API へ渡す実 payload と一致させる
-- 各ツールを一つずつ無効化し、payload と末尾指示の双方から消えることを試す
-- `NO_TOOL_CALL` の再試行は `auto` だけ一回に固定し、`required` は一回のままにする
-- 複数 tool call は先頭だけ実行し、捨てた件数と全 tool 名の返却順を
-  `LLM_CALL` metrics に残す。引数は実行済みと誤読されるため残さない
-- DeepSeek 比較 profile は thinking profile から provider と tool_choice だけを変える
 ## 97. 待ち時間の共有単位は役職ではなく interaction が宣言する
 
-**何を**: `InteractionDef.cooldown_scope` は `actor` (既定) または `world` を取り、
-`actor` は従来どおり行為者ごと、`world` は行為者を問わず同じ行為キーの成功 tick を
-一つだけ持つ。engine は役職や陣営を知らず、共有すべき操作をシナリオが選ぶ。
-
-**なぜ**: run 036 では制御端末を持つクゼの追放後、相方のジンから妨害三種がすべて
-消え、終盤五手番で点検六件が進んだ。一方、単に端末を二人へ配るだけでは、行為者別の
-待ち時間を交互に使って妨害を連射できる。陣営を engine に持ち込まずにこの二つを同時に
-解くには、待ち時間の共有単位を宣言側の性質にする必要がある。
-
-**どう守るか**:
-
-- 未指定は `actor` とし、既存シナリオの二人の対人行為を独立したまま保つ
-- `world` は実際の候補表示と実行拒否の両方で、別の行為者にも残り時間を適用する
-- 未知値は読み込み時に拒否し、`actor` へ黙って縮退させない
-- actor/world の記録を world snapshot schema 2 で分け、schema 1 は actor 記録として読む
-- SQLite の `InteractionDef` 往復でも `world` を既定値へ戻さない
+[本文](design_decisions/97.md)
 
 ## 98. 操作名の救済案内は候補表示と同じ露出集合から作る
 
-**何を**: 物体の操作名を誤ったときに返す「利用可能な操作」は、役割・世界状態に加え
-`allowed_actor_planes` も候補表示と同じ共通関数で絞る。存在層が合わない実行拒否は
-専用例外と `precondition_failure_kind=actor_plane` で区別し、幽霊には生きた体が要る
-理由と、続けられる自分の担当・共通点検を伝える。
-
-**なぜ**: run 037 では幽霊の候補から `restore_power` が消えていた一方、誤った操作名の
-案内が正解を五回教えた。次の手番で正解を呼ぶと曖昧な文で拒否され、二手番を続けて
-失った。候補と救済が別の集合を使うと、伏せた名前をエラー経路から学べる。拒否理由まで
-曖昧だと「死後は何もできない」と誤解し、意図して残した点検まで諦めうる。
-
-**どう守るか**:
-
-- 幽霊の候補と誤入力時の案内の双方から、生者専用操作を落とす
-- 同じ操作を生者には候補と案内の双方で残し、「常に空」への縮退を止める
-- 正しい生者専用操作を幽霊が直接呼んだ実結果で、理由と残る能力を確認する
-- `restore_power` は `allowed_actor_planes: [LIVING]` を明示し、既定値へ戻さない
-- 幽霊が自分の担当と共通点検を続けられる既存の挙動は変えない
+[本文](design_decisions/98.md)
 
 ## 99. 進行中の異常はシナリオが宣言し、追記式の出来事より後ろへ表示する
 
-**何を**: シナリオは `ongoing_conditions` に世界フラグ、全員へ見せる事実文を
-宣言する。runtime は成立中のフラグだけを
-`【進行中の異常】` として、実際のユーザープロンプトの最終指示直前へ毎ターン表示する。
-生存者と幽霊で表示経路を分けない。
-
-**なぜ**: run 034 / 037 では停電が全時間の約九割続いたが、機関室に居ない者は
-主配電盤の存在も復旧方法も継続して読めなかった。発生時の一度きりの観測だけでは、
-長い作業や会議の間に異常と解除方法を見失う。一方、異常一覧を
-`【直近の出来事】` より前へ置くと、状態が変わるたびに追記式の長い安定接頭辞まで
-プレフィックスキャッシュから外れる。元から変動する末尾へ置けば、世界状態を常時
-知らせても既存の安定領域を壊さない。
-
-**どう守るか**:
-
-- エンジンは停電や燃料という固有名詞を知らず、flag と文面の対応をシナリオから読む
-- 宣言項目の未知キー、空文字、初期値にも `SET_FLAG` にも無い flag は読み込み時に拒否する
-- 成立中の宣言が無ければ見出しごと省略し、空の異常一覧を毎ターン出さない
-- 実際に組み上がったユーザープロンプトで、直近の出来事より後かつ最終指示の直前を検査する
-- 異常の状態遷移は `resolution` に一度だけ宣言し、会議などの解除経路はそれを参照する
+[本文](design_decisions/99.md)
 
 ## 100. 会議による異常解除は明示効果で宣言し、遷移成功後だけ適用する
 
-**何を**: `ongoing_conditions[].resolution` に異常を解く flag 効果を一度だけ宣言し、
-同期修理と会議は `RESOLVE_ONGOING_CONDITION` で同じ状態遷移を参照する。
-`on_meeting_start` の有無を「会議で解ける」の唯一の宣言にする。効果は会議遷移が
-成功した直後の `after_apply` で適用し、会議固有の結果文は生存者と幽霊を含む全員へ届ける。
-
-**なぜ**: run 037 では燃料凍結中の遺体報告で会議に入り、移動手段が消えたまま締切を
-迎えた。本家と同じく会議で致命的妨害を解く必要がある。一方、同期操作 group を名前で
-探索して効果を流用すると、宣言間に見えない結合が生まれる。修理と会議へ同じ flag 効果を
-複製すると、片方だけ更新される二重管理になる。一方、観測文まで共通化すると、会議では
-誰も触っていないレバーを「噛み合った」と記憶へ流す。状態遷移だけを異常側へ集約し、
-経路ごとの語りは各経路に残す。
-
-**どう守るか**:
-
-- `resolution` は flag 効果だけを持ち、自身の flag を `CLEAR_FLAG` することまで読み込み時に確かめる
-- `RESOLVE_ONGOING_CONDITION` の参照先に `resolution` が無ければ起動前に拒否する
-- 会議で扱えない物体効果などは警告で捨てず、読み込み時に拒否する
-- 遺体報告と緊急招集の双方で同じ会議開始境界を通す
-- 遷移拒否時は効果も通知も適用せず、停電のように効果を宣言しない異常は残す
-- 同期操作と会議解除で妨害 flag は一致させ、観測文は互いの原因を捏造しない別文にする
+[本文](design_decisions/100.md)
 
 ## 101. 緊急招集を塞ぐ異常は全項目が明示し、遺体報告とは入口を分ける
 
-**何を**: `ongoing_conditions[].blocks_emergency_button` を既定値なしの必須真偽値とし、
-成立中の異常に `true` が一つでもあれば緊急招集ボタンを拒否する。停電と燃料凍結は
-`true`、時間で自動復帰する隔壁は本家の扉妨害と同じ例外として `false` を宣言する。
-遺体報告はこの判定を通さず、異常中でも会議を始められる。
-
-**なぜ**: 本家では扉以外の妨害中に緊急ボタンを押せない一方、遺体報告は常に可能で、
-致命的妨害を会議開始時に解く。既定を `true` にすると、異常を追加した人が項目を
-書き忘れても一見正しく動き、例外にしたい妨害だけが静かにボタンを塞ぐ。現時点で
-`ongoing_conditions` を使うのは station_drill だけなので、全項目の明示を要求しても
-互換性の費用は無く、宣言だけ読んで規則を判断できる。
-
-隔壁は `sealed_at_tick` から 4 tick 後に自動で上がる。発動時に
-`bulkhead_sealed` を立て、同じ時計の一手番窓でフラグを降ろすことで、通路の実状態と
-異常一覧を同じ寿命に揃える。
-
-**どう守るか**:
-
-- 停電・凍結中は実際のボタン操作結果で拒否理由と遺体報告の代替を返し、持ち札を減らさない
-- 隔壁中と異常なしではボタンが従来どおり会議を開始する
-- 停電中の遺体報告は会議を開始し、停電自体は残す
-- 全条件に `blocks_emergency_button` の明示を要求し、文字列などの暗黙変換を拒否する
-- 隔壁フラグと二つの通路が同じ 4 tick 境界で復帰することを確かめる
+[本文](design_decisions/101.md)
 
 ## 102. 道具の妨害間隔は品目内の共有名と世界共有を直交させる
 
-**何を**: 道具 interaction でも `cooldown_group` を受け入れ、待ち時間キーを
-`(ItemSpecId, cooldown_key)` にする。station_drill の停電と燃料凍結は同じ group と
-25 tick を宣言し、隔壁は group に入れず10 tick の独立した待ち時間を持つ。三操作とも
-`cooldown_scope: world` を維持する。
-
-**なぜ**: 本家では扉以外の妨害は一つ使うと他の妨害も待ちに入り、扉だけが独立して短い。
-これまでの制御端末は操作名ごとに独立していたため、停電直後に燃料凍結を続けて使えた。
-また端末を二人へ配った後は、行為者別の待ち時間なら相方が同じ制約を迂回できる。
-`cooldown_group` は行為をまたぐ問い、`cooldown_scope` は行為者をまたぐ問いなので、
-どちらかへ統合せず直交させる。25 / 10 は本家の非扉30秒 / 扉17秒の比を、既存の最長値
-25 tick を上限として写した第一版である。停電は10から25へ長くなるため、頻度は run で
-改めて測る。
-
-**どう守るか**:
-
-- 停電と凍結を両方向に続けて実行し、別の行為者でも実結果が拒否されることを確かめる
-- 隔壁の前後では非扉妨害を続けて実行でき、group へ紛れ込まないことを確かめる
-- snapshot 復元後も、停電で始まった待ち時間が相方の凍結を拒むことを確かめる
-- group 未指定の既存道具操作は action_name ごとに独立したまま保つ
-- group 名は ItemSpecId で名前空間を分け、別品目の同名 group を誤共有しない
+[本文](design_decisions/102.md)
 
 ## 103. 配信先固定は既定を保ったまま実験設定で送信自体を外せるようにする
 
-**何を**: `LLM_SESSION_ID_ENABLED` を解決済み実験設定へ追加し、既定は従来どおり
-`true` とする。`false` のときは空文字や `None` を送らず、LiteLLM のリクエストから
-`session_id` キー自体を省く。比較 profile は `station_drill_deepseek_auto` からこの
-一項目だけを変える。
-
-**なぜ**: run 037 では API タイムアウト 19 件の 90% がアオイとユラへ集中し、二人は
-tick 9 以降の呼び出しの 76% が失敗した。OpenRouter の配信先固定が劣化した処理系へ
-player を貼り付け続けた可能性と、キャッシュ率への効果を一度に比較するには、会話 ID の
-生成方法ではなく送信の有無だけを変える必要がある。空値を送ると値検査で run 開始後に
-失敗しうるため、無効化はキーの省略として表現する。
-
-**どう守るか**:
-
-- 未設定は `true`、未知の真偽値は起動前に拒否し、解決済み設定にも実効値を残す
-- 実際の LLM 呼び出し境界で、無効時に `session_id` キーワードが存在しないことを確かめる
-- prompt dataset の `request.kwargs` でも、有効時だけキーが残ることを確かめる
-- 比較 profile 全体を基準 profile から組み立て、差が一項目を超えたら試験で止める
+[本文](design_decisions/103.md)
 
 ## 104. 売買ツールは商人の宣言でゲートし、負の宣言と対にする
 
-**何を**: `merchants` を宣言したシナリオでだけ `buy_item` / `sell_item` を露出する。
-判断は `ToolExposure._ECONOMY_TOOLS` に置き、会議機構 (`_MEETING_TOOLS`) と同じ形にする。
-`disabled_tools` は宣言のある世界から個別に落とすためにそのまま効く (売れるが買えない町を
-engine を触らずに書ける)。
-
-**なぜ**: 商人の居ない世界に売買が並ぶと、対象候補が永久に空なのに毎ターン選択肢へ載る。
-モンスターの居ない世界の `attack` で 3 手を捨てた形と同型で、`disabled_tools` が
-「世界の中に無いものを出さない」ための**負の宣言**なら、経済のように「宣言した世界にだけ
-現れる」機構には**正の宣言**が要る。両者は排他ではなく、正で出した上で負で個別に落とせる。
-
-判断の置き場所は 1 つに保つ。露出可否がプロンプト本文側にも散ると、宣言が半分しか効かない
-状態 (`tend_to_player` で踏んだ形) に戻る。
-
-**どう守るか**:
-
-- 宣言のある世界で両ツールが payload に出て、宣言の無い世界では出ないことを確かめる
-- `disabled_tools` で買いだけ落としたとき、売りが残ることを確かめる
-- 落としたツール名がプロンプト本文にも出ないことを、全ツール総当たりの既存試験で見張る
-- 常在ブロック (`ALWAYS_PRESENT_TOOL_ORDER`) には足さず、条件付きブロックの末尾側へ置く
+[本文](design_decisions/104.md)
 
 ## 105. 場所の失敗と品の失敗を同じ error_code へ畳まない
 
-**何を**: 売買の失敗を原因ごとに分ける。商人が同席していないのは `MERCHANT_NOT_AT_SPOT`、
-その商人が扱っていないのは `BUY_ITEM_NOT_SOLD_HERE` / `SELL_ITEM_NOT_BOUGHT_HERE`。
-同席商人が 0 人かどうかを、品名の突き合わせより**先に**判定する。
-
-**なぜ**: 文面はどちらも「この場所では買えない」に見えるが、次の一手は「移動する」と
-「品名を読み直す」で違う。同じコードに畳むと、trace の未発火理由を集計したときに
-移動の問題と読み違いが混ざり、「エージェントは売買の失敗から学べるか」を測れない。
-実装の都合 (解決段階と実行段階で失敗を作る層が違う) を、観測できる分類へ持ち込まない。
-
-**どう守るか**:
-
-- 同席商人ゼロで買うと場所の失敗、商人が居て扱っていない品なら品の失敗になることを固定する
-- 失敗文には次の判断に要る値を載せる (不足額・扱う品と価格・所持数)
-- 対処文にツール名を書かない。世界ごとに落とせるので、名指しすると嘘になる
+[本文](design_decisions/105.md)
 
 ## 106. 金銭が動くツールは部分成功を作らない
 
-**何を**: `buy_item` / `sell_item` は数量ぶんすべて成立するか、1 つも成立せずに失敗するかの
-どちらかにする。`give_item` の配列バッチ + 部分成功とは挙動が違うので、両ツールの
-description にその違いを 1 行ずつ書く。
-
-**なぜ**: 部分成功を許すと、1 回の呼び出しが何 gold 動かしたのかが結果から逆算しないと
-決まらず、run 全体の通貨の流入・流出を trace から集計できなくなる。`give_item` に部分成功が
-あるのは、複数の相手へ配る操作で 1 件の失敗が他を止める方が不便だからで、**金額が 1 つに
-定まることの価値がそれを上回る**のが売買側の事情になる。
-
-支払いより先に持ち物の空きを確かめるのも同じ理由。逆順にすると、入らなかったときに払った
-金を戻す処理が要り、途中で壊れる余地を作る。
-
-**どう守るか**:
-
-- 所持金が足りないとき、金も持ち物も動かないことを確かめる
-- 空きが足りないとき、支払う前に失敗することを確かめる
-- 成立した売買の trace payload に、source と増減と単価を残す
+[本文](design_decisions/106.md)
 
 ## 107. 曖昧な対象は engine が代わりに選ばない
 
-**何を**: 同じ品を複数の商人が扱うとき、engine は最安 (買い) や最高 (売り) を自動で選ばず、
-候補と価格を添えて `MERCHANT_AMBIGUOUS` で返す。行為者は `merchant_label` で相手を指定する。
-
-**なぜ**: どの商人と取引するかは、価格差のある世界では意思決定そのものになる。engine が
-勝手に選ぶと「安い方を選んだ」という判断がエージェントの経験から消える。曖昧失敗 →
-明示指定の 2 手はコストだが、判断の質感を優先する。失敗文に各商人の価格を載せておけば、
-次の 1 手で判断まで終えられるのでコストは 1 手に収まる。
-
-商人は `#N` の ordinal ではなく名前で指す。ordinal は「同名の対象が一覧に並ぶ」表示に
-対する道具で、商人節は商人ごとに品を束ねる構造なので前提が違う。
-
-**どう守るか**:
-
-- 同じ品を 2 人が扱うとき、価格つきで選択を促して何も動かないことを確かめる
-- `merchant_label` を指定すれば、その商人の価格で成立することを確かめる
+[本文](design_decisions/107.md)
 
 ## 108. 宣言だけ先に入れる PR は、配線で自動失効する猶予リストで通す
 
-**何を**: `test_loader_config_fields_are_consumed` に `_PENDING_CONSUMERS` を置く。
-「読まれなくてよい」`_ALLOWED_UNCONSUMED` とは別の表で、**まだ読んでいないだけ**の
-フィールドを、読む予定の PR を理由に書いて一時的に許す。配線が済むと
-`test_pending_consumers_are_removed_once_wired` が落ち、表から消さないと緑にならない。
-
-**なぜ**: 宣言 → 表示 → 実行を別々の PR に割ると、宣言だけが入った時点では本番経路が
-そのフィールドを読まない。この状態は「シナリオに書いても効かない」guard (#830 / #840) に
-必ず引っかかるが、許可リストへ入れると「あとで使う」を理由に無期限で積める抜け道になる。
-猶予そのものを許しつつ、**期限を人の記憶ではなく試験に持たせる**。
-
-なお、ありふれた名前 (`spot_id` / `price` など) は guard 自身が認める穴 (同名フィールドの
-衝突) で「読まれている」と数えられるため、この表に載せると誤って失効する。載せずに、
-読まれない事実をコメントで残す。
-
-**どう守るか**:
-
-- 猶予リストの各項目に、実在するフィールドと空でない理由があることを確かめる
-- 配線済みの項目が残っていたら落とす (次のフィールドの漏れが猶予の陰に隠れないように)
-- 分割の理由を書けない項目は載せない。「あとで使う」は理由にしない
+[本文](design_decisions/108.md)
 
 ## 109. 基盤障害は時間を失った事実だけを世界内の記憶へ残す
 
-**何を**: LLM 呼び出し例外、二度目の行動未選択、reason-first の最終失敗、ツール実行例外は、
-本人の行動結果へ技術的原因を書かない。本人には「一瞬の空白」「迷い」「行動が形にならず
-時間が過ぎた」という世界の中で観測できる結果だけを残す。`error_code`、例外文字列、
-ライブラリ名は返却 DTO、trace、prompt dataset に残して運用上の診断に使う。
-
-**なぜ**: run 038 では 182 呼び出し中 118 件の user prompt に `error_code=` または
-`litellm` が入り、世界に存在しない API や通信障害が本人の経験として蓄積された。失敗した
-turn を隠すと静かな失敗になる一方、「疲労」「寒さ」のような架空の原因を補うと、その原因を
-世界の事実として推論してしまう。失った時間は残し、原因の分類だけを観測境界の外へ出す。
-
-通常の `travel_to` や `restore_power` は、次の呼び出しに必要な世界とモデルの契約なので
-残す。禁止語の検査はプロンプト全文ではなく、本人の経験になる【直近の出来事】の `[行動]`
-行だけを対象にする。
-
-**どう守るか**:
-
-- 実 runtime で API 例外とツール実行例外を起こし、組み上がった user prompt の行動結果に
-  技術語彙が無いことを確かめる
-- 同じ失敗の返却 DTO と prompt dataset には診断コードと例外詳細が残ることを確かめる
-- 既知の旧文面を検出器へ渡して違反行そのものを得ることで、対象抽出が空でも緑になる
-  空振りを防ぐ
+[本文](design_decisions/109.md)
 
 ## 138. 出来事の同一性を、prompt の見た目に依存させない
 
-**何を**: `episode_id` の fingerprint から、描画済みのテキスト (直近の出来事の
-箇条書き `observed`、結果の要約文、ツール結果の message) を外す。材料は
-「誰が・いつ・何の道具で・成否は」だけにする。付け方の版は id の**接尾辞**
-`#e2` で示し、旧 id と機械的に見分けられるようにする。
-
-**なぜ**: 以前は fingerprint に `observed` が入っており、**表示を変えると同じ
-出来事の id が変わっていた**。実例は 2 つあり、どちらも表示の改善が目的の
-変更だった。
-
-- `c051a47a` (行動履歴に呼び出し形式を併記する): 行が 1 つ増えただけで id が変わる
-- `5cf1b9b4` (直近の出来事の時刻表記を固定する): `[昨日]` ラベルが消えて id が変わる
-
-調査時点でこれが壊す経路は無かった。snapshot は id をそのまま書き出して読み
-戻し、主観補完は draft の id を持ち回り、開いたチャンクの bucket は snapshot に
-含まれないので再エンコードも起きない。**壊れるのは再エンコードを伴う機能
-(replay / バックフィル / 版を跨ぐ分析) を足したときで、そのとき気付ける保証が
-無い。** 同一性の定義に表示を混ぜているのが根本なので、先に材料を絞る。
-
-版を**接頭辞にしない**のは、afterglow の handle が `episode_id` の先頭 6 文字
-から作られるため。先頭を版で潰すと実質 3 文字しか残らず、1 being 数十件の
-episode で誕生日衝突が起きて想起が別の出来事を引き当てる (実資産の最大は
-64 件/being)。接尾辞なら handle は uuid 部分から作られたままで、`endswith` で
-版を判別できる。
-
-旧 id の資産 (58 ファイル・1,777 件) とは断絶する。断絶自体は避けられないので、
-**どちらの版か目で分かる**ことを優先した。
-
-**どう守るか**:
-
-- 観測文や結果要約の文言を書き換えても id が変わらないことを確かめる
-- 誰が・いつ・何の道具で・成否が変わると id が変わることを確かめる (識別子として機能する)
-- 新 id が接尾辞を持ち、旧 id と機械的に区別できることを確かめる
-- 版が handle の桁を食っていないこと (新旧混在で handle が一意に引ける) を確かめる
-- 材料を減らして衝突が増えていないことを、実 snapshot の全 episode で数える
+[本文](design_decisions/138.md)
 
 ## 110. 招集の判断材料には集合後の経過だけを末尾で渡す
 
-**何を**: 会議を使う世界の自由時間では、最後の会議終了からの経過を世界の分数で
-user prompt の末尾へ出す。会議前の初期区間だけは「ここでの行動が始まってから」と
-言い分け、存在しない前回会議を捏造しない。会議中は、いま全員が集まっているため節を
-省く。前回会議の終了理由や、招集を勧める文は出さない。
-
-**なぜ**: run 039 までの 4 run で緊急招集ボタンは一度も試されなかった。ボタン自体は
-集会室で prompt に出ていた一方、「最後に集合してからどれだけ経ったか」が無く、長い
-空白を招集の判断材料にできなかった。押させるのではなく、時計から分かる事実だけを渡し、
-使うかどうかは本人に残す。
-
-起点は既存の `GamePhaseStore` にある現在の自由時間区間を使う。初期区間の
-`trigger is None` と会議後の区間を区別でき、snapshot に新しい状態を重複して持たずに済む。
-表示は毎 tick 変わるため、追記式の【直近の出来事】より前には置かず、
-【進行中の異常】とともに最終指示直前の可変部分へ置く。
-
-**どう守るか**:
-
-- 会議終了直後から自由時間を進め、世界の分数が増えることを実 prompt で確かめる
-- 会議中は節が無く、会議前は run 開始からの経過だと言い分ける
-- 幽霊にも同じ事実が届くことを確かめる
-- 実 prompt の文字位置で、【直近の出来事】より後かつ最終指示の直前にあることを確かめる
+[本文](design_decisions/110.md)
 
 ## 111. CI は固定した依存で振る舞いを試し、リポジトリ検査を別 job にする
 
-**何を**: CI の通常試験と品質検査は、対応下限の Python 3.10 だけで
-`uv.lock` を更新せずに同期して実行する。内部ホスト名の漏洩検査は pytest から外し、
-checkout 全体を直接走査する `secret-leak` job にする。指数バックオフを確認する試験は
-待ち時間を注入し、実時間を 14 秒消費せず呼び出された秒数を検査する。
-
-**なぜ**: 新しい Python だけで通っても対応下限で通る保証にはならず、2 版の同一試験は
-runner 消費だけを倍にしていた。無固定の pip 解決は確認時点で既存 `uv.lock` より 20 余りの
-間接依存を新しい版へ進めており、CI と手元で別の環境を作る原因になっていた。lock を
-真実源にすれば、CI の都度依存が動くこともない。
-
-漏洩走査はロジックの振る舞いではなくリポジトリの状態を検査する gate であり、pytest に
-置くと全件時間の 31% を占めたうえ、失敗理由も「テスト失敗」に埋もれる。独立 job なら
-通常試験と並列に走り、守りを残したまま job 名で原因を読める。
-
-**どう守るか**:
-
-- workflow を構文として読み、main push と全 pull request に `secret-leak` があることを確かめる
-- `secret-leak` が pytest でなく走査スクリプトを直接呼ぶことを確かめる
-- 通常試験と品質検査の Python 3.10、setup-uv、locked sync、frozen run を固定する
-- 注入した 0.05 秒が 0.05 / 0.10 秒の待ちになり、既定値は 2 秒のままかを確かめる
+[本文](design_decisions/111.md)
 
 ## 112. 商人は世界の外との出入り口で、世界の中に物を溜めない
 
-**何を**: 商人が受け取った品は世界から消え、商人へ払った gold も世界から消える。
-商人は在庫を持たない。Phase 1 で商人の gold を無限にしたのと同じ扱いを、品の側にも
-そのまま伸ばす。
-
-**なぜ**: gold が無限に湧くのと品が消えるのは、別々の都合ではなく**同じ一本の理由**
-から出ている。商人は世界の境界であって、世界の中の主体ではない。片側だけ決めると、
-もう片側で「では受け取った品はどこへ行ったのか」が宙に浮く。
-
-在庫を持たせる案は却下した。商人が買った品をエージェントが買い戻せる形になり、
-「商人を経由した転売」が最短の稼ぎ方になる。エージェント同士の板で価格が形成される
-ところを見たいのに、商人が値の緩衝材になってしまう。
-
-エージェントの側から見ると、**消えたのか商人が持っているのかは区別できない**
-(観測に出るのは「グスタフが薬草を 7G で買い取った」だけ)。区別できない以上、engine は
-最も単純な形を選び、それを doc とコードのコメントに明示する。暗黙にしないことが要点。
+[本文](design_decisions/112.md)
 
 ## 113. 板は自動で約定させない。交差は潰さず機会として残す
 
-**何を**: 市場の板に売り 20G と買い 22G が並んでも、engine は約定させない。
-どちらも板に残り、誰かが自分の手番で受けたときだけ取引が成立する。
-
-**なぜ**: **線は「手番の外か」ではなく「引き金に人が居るか」**にある。
-
-| 形 | 可否 | なぜ |
-|---|---|---|
-| 誰かが自分の注文を取ったから動いた | よい | **引き金に人が居る**。通知も届く |
-| engine が両者を勝手に選んで約定させた | だめ | **引き金に誰も居ないので、裁定に気づく機会が消える** |
-
-当初は「手番の外で持ち物が変わると、知らないうちに世界が変わったことになる」と
-書いていた。**これは広すぎる。** その理由だと、板越しの遠隔約定 (自分が居ない場所で
-自分の品が売れる) まで禁じることになるが、それは既に動いていて、通知も届いている。
-世界が自分の手番の外で変わってよく、**変えた人が居て、変わったことが観測として
-届けばよい**。市場の教科書からは外れるが、ここでは取引が誰かの決定として起きること
-の方が優先する。
-
-結果として値の交差した注文が板に残る。これは欠陥ではなく**観測対象**である。
-「18G で買えて 20G で売れる」と表示に並んだとき、それに気づいて取れるエージェントが
-居るか — 裁定取引を自力で発見できるかという観測点になる。
-
-人間が trace を読むと「約定漏れのバグ」に見えるので、集約の docstring と計画 doc の
-両方に意図を書いた。`test_a_crossing_pair_stays_on_the_board` が正の対照で、
-自動約定を足した瞬間に落ちる。
+[本文](design_decisions/113.md)
 
 ## 114. 市場の値は「注文の向き」ではなく「見る人が打てる手」で名づける
 
-**何を**: 板の行が持つ値を `best_sell_price` / `best_buy_price` ではなく
-`buy_price_gold` / `sell_price_gold` (見る人が払う単価 / 受け取る単価) にする。
-表示も「18G で買える (出品 3件) / 15G で売れる (買い注文 2件)」と、その人が次に
-打てる手の言葉で書く。読み出しは必ず見る人を引数に取る (`rows_for(viewer)`)。
-
-**なぜ**: 板に出ている**売り注文は、見る人にとっては「買える」**で、注文の向きと
-打てる手は逆になる。名前が注文の向きのままだと読む側が毎回変換することになり、
-売り手視点と買い手視点が混線する。実装でも向きの反転は 1 箇所に閉じてコメントを置く。
-
-文面の方は、人間が読んで「買い 1件」を過去の約定か未来の意思表示か取り違えたのが
-発端。人間が迷う文面はエージェントも迷う。行動の言葉に寄せると、市場の状態を自分の
-行動へ翻訳する一段が要らなくなり、交差も一目で読める。
-
-見る人を引数に取るのは将来のためだけではない。**自分の注文は自分で受けられない**ので、
-自分の注文を除いた値でないと「自分には買えない値」を相場として読ませることになる。
+[本文](design_decisions/114.md)
 
 ## 115. 板に預けたものが返せないときは、消さずに引き取り待ちで残す
 
-**何を**: 市場の注文が期限切れになったとき、預かっていた品を持ち主へ返せない
-(所持品が満杯) 場合は、板に「引き取り待ち」として残す。他人には見せず、持ち主には
-状態つきで見せる。約定の側は断る相手が居るので、受ける前に空きを確かめて断る。
-
-**なぜ**: `PlayerInventoryAggregate.acquire_item` は満杯だと**黙って品を捨てる**
-(溢れイベントを出して return する)。市場でそのまま使うと「代金だけ払って品が消える」
-という最悪の形の静かな失敗になる。
-
-返却の側は断る相手が居ないので、同じ手が使えない。消すと預けた品が黙って消え、
-溢れさせると所持品の不変条件が壊れる。板に残すのが唯一、何も失わない形になる。
-
-持ち主には見せる理由は、見えないと**期限切れの通知を 1 回見落とした時点で取り戻す
-手がかりが消える**から。他人に見せない理由は、買えないものを見せないため。
+[本文](design_decisions/115.md)
 
 ## 116. 板の注文は「同じ品目・同じ向きで 1 件まで」を状態の側で守る
 
-**何を**: 同じ品目・同じ向きの自分の注文を、板に 1 件までしか置けないようにする。
-引き取り待ちの注文もこの 1 件に数える。制限はツールではなくサービス (状態を持つ層)
-に置く。
-
-**なぜ**: 2 件あると取り下げ・値の付け直しが「品目 + 向き」でどちらを指すのか決まらず、
-板の状態そのものが壊れる。番号 (#N) で指す形は「表示に出ている名前をそのまま渡す」
-規約から外れるので採らない。
-
-ツール側だけで禁じると、ツール以外の呼び出し元 (テスト・将来のコード・別の入口) が
-曖昧な状態を作れてしまう。**不変条件はツールの都合ではない**ので、状態を持つ層で守る。
-
-断り文は「既に出ている (取り下げるか値を変える)」と「先に預けたままのものを引き取る」
-で分ける。次の一手が違うものを同じエラーコードに畳まない (#105 と同じ判断)。
+[本文](design_decisions/116.md)
 
 ## 117. 外部の変化には適応し、自分の誤りには従わない
 
-**何を**: 板から買うとき、**出ている数が足りなければ買えるだけ買う**が、
-**所持金が足りなければ 1 つも買わない**。同じ「求めたとおりにできない」でも、
-構えを揃えない。
-
-**なぜ**: 何が変わったのかが違う。板の中身は**他人の手番で変わる外の世界**で、
-「3 つあると思ったら 2 つだった」は自分の誤りではない。あるだけ買うのが自然で、
-断ると「もう一度読んで、数を直して、また呼ぶ」で 2 手番を失う。
-
-所持金は**自分で見えている自分の状態**なので、足りないのは自分の計算違いである。
-黙って数を減らして成立させると、意図と違う買い物が成立する。「3 つ買う」と決めた
-判断は「2 つでもよい」を含んでいない。
-
-どちらの場合も、結果には**求めた数と買えた数の両方**を残す。買えた数だけだと、
-読む側は自分の意図が満たされたかを判断できない。
-
-この線引きは市場に限らない。**外の世界の変化には黙って適応してよいが、本人の
-指定が本人の持っている情報と矛盾しているときは、勝手に解釈して実行しない。**
+[本文](design_decisions/117.md)
 
 ## 118. 同じ量が動くなら、どのツールから動いても同じ形で記録する
-**何を**: 所持金の変化 (`gold_delta` / `gold_after` / `gold_change_source`) は、
-ツールごとに書かない。**dispatch でツール呼び出しを包み、前後の所持金を測って
-残す。** 動いていなければ何も足さない。
 
-**なぜ**: この 3 項目を出していたのは商人ツール (`buy_item` / `sell_item`) だけ
-だった。板を通した売買は 7G 増えても記録が 1 行も出ず、実 run
-(`market_town_v3_first`) の分析で所持金の台帳が組めなかった。同席取引
-(`trade_accept`) も `gold_after` だけ落ちていた。**商人ツールだけが出していたのは、
-先に作ったからで設計判断ではない。**
-
-ツールの側に書いて回ると 2 つ壊れる。
-
-1. **書き忘れが静かに漏れる。** 例外は出ない。run が終わって「所持金の推移が
-   引けない」で初めて気づく
-2. **「どのツールが gold を動かすか」という知識が、分析器の側へ漏れる。**
-   分析器はツールの一覧を持つことになり、ツールを 1 つ足すたびに壊れる
-
-包む側で測れば、将来クエスト報酬や戦利品で gold が動いても、同じ経路を通る限り
-自動で残る。**足す人は何も知らなくてよい。**
-
-ここで効いているのは**規則を人に守らせるのではなく、構造で守る**という形である。
-「全ツールが記録する」と規則で書くと、各ツールに責務が残り、選び忘れの余地が
-消えない。包む側に置いた時点で、守るべき人がいなくなる。
-
-出どころの名前だけは handler の申告を使う (`merchant_buy` のような意味のある名前を
-ツール名で潰さない)。**数字は必ず測った側を使う** — 申告は書いた時点の想定で、
-実際は世界で起きたこと。台帳を組むのは後者でなければならない。
-
-読めなかったことを 0 と書かない。**動かなかったのと区別がつかなくなる。**
-
-同じ形は品の移動にもあった (`item_name` を結果に入れているのは市場ツールだけで、
-対面の品名が分析側から取れない)。**「同じものが動くなら同じ形で記録する」は
-gold に限った話ではない。**
+[本文](design_decisions/118.md)
 
 ## 119. 食料腐敗の進行ルールは Item 集約に置く
 
-**何を**: 腐敗の進行ルール (`acquired_at_tick` 遅延初期化、閾値判定、`spoiled=True`)
-は `ItemAggregate.advance_spoilage` に置く。`FoodSpoilageStageService` は走査と
-永続化だけを担当し、初回腐敗の観測材料は集約が`ItemSpoiledEvent`として積む。
-
-**なぜ**: いつ腐るかはアイテム個体のライフサイクルである。application の stage に
-置くと、別の境界づけられた文脈や別経路が同じルールを再実装しやすい。
-
-**どうしないと壊れるか**: `use_item` / 表示 / 取引が `state['spoiled']` を読む一方、
-進行だけ stage に残ると「いつ腐るか」の真実源が分裂する。
+[本文](design_decisions/119.md)
 
 ## 120. 腐敗食の消費数値は Item ドメインで計算する
 
-**何を**: 腐敗食を食べたときの HP ダメージ (10) と空腹回復の半分 (`int` 切り捨て)
-は `spoiled_consumption_outcome` が計算する。`PlayerStatus` への適用と LLM 向け
-メッセージは executor が行う。
-
-**なぜ**: 「腐って食べると何が起きるか」はアイテムのルールなのに、LLM executor
-が定数と HUNGER 抽出を持っていた。計算と適用を分けると、将来の handler やデモが
-同じ数値を参照できる。
-
-**どうしないと壊れるか**: 別経路が同じ定数を再実装し、10 と 0.5 が分裂する。
-新鮮パスの `ConsumableUsedEvent` 経路と腐敗パスの数値がずれても気付きにくい。
+[本文](design_decisions/120.md)
 
 ## 121. 世界の厳しさは宣言で決める。既定は据え置く
 
-**何を**: 空腹と疲労の進み方を `needs.hunger_per_tick` / `needs.fatigue_per_tick`
-としてシナリオから宣言できるようにした。**宣言しない世界は 1 ミリも変わらない**
-(空腹 +1 / 疲労は自然増加なし)。
-
-**なぜ**: 宣言できないと、シナリオ側で希少性を作れない。市場の v3 run では
-**80 手番 × +1 = 最大 80 で、上限 100 に届く経路が存在しなかった**。つまり
-パンの必要量は 0 個で、全員が**必要がないのに食べていた**。
-
-このとき run 分析は「空腹が弱かった」と読んでいたが、正しくは「**空腹という力が
-最初から働いていない**」である。**分子だけを見て「弱かった」と読み、上限に届く
-経路があるかを確かめていなかった。** 分母を見ずに分子を読む形の一例である。
-
-既定を据え置くのは比較のため。既定が動くと**過去の run と比べられなくなる**。
-
-**空腹だけ 0 を弾く。** 0 を通すと「空腹の無い世界」が黙って出来上がる。空腹が
-要らない世界は `needs` 節ごと書かなければよい (既定は据え置き) ので、**0 は
-書き間違いの形しか持たない**。疲労は既定がそもそも 0 なので、0 を弾くと既定値を
-宣言で表現できなくなる。**同じ節でも、既定が違えば許す範囲も違う。**
-
-宣言を読めることと、宣言が効くことは別である。設定に値が入っていても、世界を
-組むところで渡し忘れれば既定のまま進み、**変えたつもりで変わっていない run** に
-なる。例外は出ないので、run が終わってからでないと気づけない。だから試験は
-**実際に手番を進めて、宣言どおりに増えること**まで見る。
+[本文](design_decisions/121.md)
 
 ## 122. 疲労の行為コストと限界時ブロックはドメイン政策に置く
 
-**何を**: 行為種別ごとの疲労増減量と、疲労 100 で止める行為種別は
-`FatigueExertionPolicy` (値オブジェクト) に集約する。LLM ツール名から
-`ExertionKind` への写像だけ `SpotGraphToolExecutor` (application) に残す。
-
-**なぜ**: 同じルールが LLM executor のクラス定数にしか無いと、別経路
-(将来の非 LLM 入口・テスト・別 executor) がコスト無し実行や block 忘れを
-起こしやすい。疲労の「どの行為で何点」「限界で何を止める」は個体の状態
-(`PlayerStatusAggregate`) ではなく世界の政策である。
-
-**どうしないと壊れるか**: prefix cache のために tool list は不変のまま、
-実行時だけ止める判断 (#1 / #2) の数値が executor に埋もれ、wait 回復 20 と
-attack +5 の関係が読めなくなる。連続待機の回帰ガードも executor 定数参照
-から外れると、弱い値への逆戻りを検知しにくくなる。
+[本文](design_decisions/122.md)
 
 ## 123. 欲求 tick の増加と限界ダメージは PlayerStatus が持つ
 
-**何を**: 欲求の自然増加と、飢餓・疲労限界の毎 tick HP ダメージ判定は
-``PlayerStatusAggregate.apply_needs_decay_tick`` が持つ。
-``SpotGraphNeedsDecayStageService`` は走査・保存・イベント配信・
-evidence 配線だけを担当する。
-
-**なぜ**: 「空腹が限界なら毎 tick HP が減る」は個体の状態ルールなのに、
-application stage に閾値判定まで埋もれていた。別経路が同じ判定を再実装すると、
-95 (疲労限界ダメージ) と max (飢餓) と 0=無効 (既存シナリオ) が分裂する。
-
-**どうしないと壊れるか**: ダウン中スキップ、``increase_need`` 後即 starvation
-判定、``starvation_damage_per_tick=0`` で既存シナリオ不変、という条件が
-stage に散在すると読み取れなくなる。
+[本文](design_decisions/123.md)
 
 ## 139. 読めなかった値を、既定値として黙って返さない
 
-**何を**: 現在の世界時刻が読めなかったとき、0 を返す前に必ず警告を残す。時刻の
-提供者を呼ぶ経路は、まず提供者、次に runtime の順に試し、**どちらも駄目なら
-そう言う**。
-
-**なぜ**: 実 run で、持ちかけた取引の提案が**次の手番で流れた**。3 回連続で
-流れ、4 回目でようやく成立している。エージェント側は正しく動いていて
-(「こっちが返事をする前に流れちまった」)、機構が壊れていた。
-
-原因は、時刻の提供者のメソッド名が `get_current_tick` なのに `current_tick` を
-呼んでいたこと。**`AttributeError` を握り潰して 0 を返していた**ので、板の注文も
-取引の提案も期限が「世界の開始から N 手番後」になっていた。
-
-**0 は、時刻としては正当な値である。** だから「読めなかった 0」と「本当に 0」が
-区別できない。区別できない既定値を黙って返すのは、**失敗を成功の形に変換して
-いる**のと同じ。
-
-集約の計算式 (`created_tick + expires_in_ticks`) は正しく、**集約の単体試験は
-全部通っていた**。壊れていたのは「何を渡すか」の側で、そこには試験が無かった。
-**部分が全部正しくても、繋いだ全体は違いうる。**
+[本文](design_decisions/139.md)
 
 ## 140. 期限を宣言したら、期限が来る経路まで繋ぐ
 
-**何を**: 板の注文の期限切れを片付ける tick stage を、取引の提案の片付けと
-並べて置く。
-
-**なぜ**: 片付ける処理 (`MarketService.expire_orders`) は書いてあったが、
-**どこからも呼ばれていなかった**。期限は宣言されているのに注文が永久に板へ
-残り、v3 の実 run では t33 に出した注文が t80 まで生きて値の付け直しまで
-受けていた。
-
-**「期限がある」と宣言した世界で期限が来ないのは、世界が嘘をついている**状態
-である。出した人は「置いておけばいつか流れる」と思って板を離れる。
-
-書いただけで呼ばれていないコードは、**動いていないのに存在する**ので、探しても
-「実装済み」に見える。同じ形は他にもありうるので、**期限まわりは 1 か所に
-まとめて置く** — 次に足す人が、隣に並んでいるものを見て気づけるように。
+[本文](design_decisions/140.md)
 
 ## 124. プロンプトのテンプレートに、特定の世界の固有名詞を書かない
 
-**何を**: 全シナリオで共有されるプロンプトのテンプレートには、その世界に属する
-固有名詞を書かない。書くなら、世界の側から渡す。
-
-**なぜ**: 長期記憶 (L5) を作らせるテンプレートに、漂流島シナリオ時代の文言が
-残っていた。
-
-```
-"world_view": "この島について 2-3 文で (narrative voice)"
-```
-
-市場町の run で **long summary 9 件すべてに「島」が出現**し、その出力は
-【自己像と世界観】として**毎ターンのプロンプトに注入**されていた。エージェントは
-市場町にいながら「ここは島だ」と読まされ続けた。
-
-**シナリオにも system prompt にも「島」は 1 件も無い。** 世界を汚染していたのは
-テンプレートだけで、**世界の側をいくら調べても原因が出てこない**形になる。
-
-見つけにくさが本質的である。テンプレートは全 run で共有されるので、**間違った
-世界の run でだけ症状が出る**。しかも long summary は長い run でしか発火しない
-ので、短い run では現れない。
-
-検査は置いたが、**網羅ではない**。既知の語の一覧を見るだけで、新しいシナリオの
-固有名詞は自動では増えない。**規則そのものは機械で証明できない**ので、一度混入した
-語が戻ってこないことだけを保証する仕掛けとして置いてある。
+[本文](design_decisions/124.md)
 
 ## 125. 発話ぼかしの発火は is_severely_fatigued が決める
 
-**何を**: 発話ぼかしの発火は ``PlayerStatusAggregate.is_severely_fatigued()`` が
-決める。語を伏字化する確率と正規表現は ``speech_executor`` の演出として残す。
+[本文](design_decisions/125.md)
 
-**なぜ**: 疲労 85 以上で呂律が回らないのは個体の身体状態なのに、
-``speech_executor`` が閾値 85 を再定義していた。severe の意味が executor と
-集約で分裂すると、プロンプトの「severe で朦朧」と実発話がずれる。
-
-**どうしないと壊れるか**: 集約側だけ 85 を動かしても発話は古いまま。身体状態の
-ルールを直したつもりが、他者が聞く発話だけ変わらない。
 ## 141. できないことは、できない理由の粒度で見せる
 
-**何を**: 職能や世界の状態で操作がすべて落ちた物体には、操作一覧の代わりに
-「いまのあなたに扱える操作はない」と注記する。**存在層 (幽霊など) が理由のときは
-注記しない。**
-
-**なぜ**: 実 run の `INTERACTION_ACTION_NOT_FOUND` 5 件 (失敗の半分) は全件が同じ
-形だった。職能が合わないと操作の一覧が**角括弧ごと消える**。ところが system prompt
-は「表示された操作の中から選べ」と指示している。**表示が 1 つも無いのに選べと
-言われた**エージェントは、`examine` のような動詞を発明する。
-
-決定的なのは、**時間で戻らないことは既に注記されていた**こと
-(「今は採れない・時間を置けば戻る」)。**時間ゲートは注記され、職能ゲートは
-注記されない。この非対称だけが原因**だった。
-
-### 理由を断定しない
-
-注記に「あなたの仕事では扱えない」と書くと、**理由が職能でないときに嘘になる**。
-同じ経路で世界の状態でも落ちる。書くのは「扱えない」という事実だけにする。
-
-### 理由によって、見せてよいものが違う
-
-存在層が理由のときは注記自体を出さない。出すと**「生者にだけ見える操作がある」
-ことを漏らす**。そのため builder では「役割・世界状態だけで判定した集合」と
-「存在層まで含めた集合」を別々に持つ。**一緒くたにすると、見せない理由まで
-見せてしまう。**
-
-### 拒否の文は、2 つの誤読を両方塞ぐ
-
-送った名前に触れないと「実在するが権限が無い」と読んで同じ名前で再試行する。
-名前の話だけで終えると「名前を直せば通る」と読む。**その名前が無いことと、名前を
-変えても通らないことを、両方言う。**
+[本文](design_decisions/141.md)
 
 ## 126. 言葉が自然に書ける形を、世界の側が受け取れるようにする
 
-**何を**: `give_item` の各要素に `quantity` を足し、頼まれた数だけ渡す。手元が
-足りなければ**渡せるだけ渡し、頼んだ数と渡した数の両方を返す**。
-
-**なぜ**: 実 run で、焼き手が `quantity: 2` を指定し「ふたつとも持ってけ」と
-言ったのに **1 個しか動かなかった**。しかも部分失敗としても記録されず、
-**合計 2 個のパンが、両者に気づかれないまま移動しなかった**。
-
-原因は、`gives` の要素に `quantity` が**存在しなかった**こと。engine は知らない
-引数を黙って捨て、1 要素 = 1 個の設計どおり 1 個動かして成功を返した。
-**丸めていたのではなく、最初から見ていなかった。**
-
-ここで効いているのは、**schema が「2 個渡す」を表現できないのに、エージェントは
-自然にそう書いた**という食い違いである。言葉の側が正しく、世界の側が追いついて
-いなかった。「2 要素に分けて書け」と教える道もあったが、それは**世界の都合に
-言語を合わせさせる**形になる。
-
-### 未知の引数を黙って捨てる問題は、これに限らない
-
-今回は `quantity` だったが、**エージェントが発明した引数はすべて黙殺される**。
-成功が返るので、独白と結果の食い違いは trace を精読しないと見えない。**別の
-問題として残っている** (学習可能な形で無視する = 結果に「受け取れなかった引数」を
-出すのが正しい)。
+[本文](design_decisions/126.md)
 
 ## 127. 申告は真実ではなく期待として使い、実測と照合する
 
-**何を**: ツールは「この人たちの所持金が動くはず」を申告する
-(`gold_affected_player_ids`)。**数字の真実は測った結果**で、申告は照合にだけ使う。
-食い違えば警告を出す。
-
-**なぜ**: 所持金を「呼び出した人の財布」だけ測っていたので、二者間の取引で
-**受け取った側の行が 1 件も出なかった**。台帳は差額から逆算するしかなく、
-**逆算が要る時点で「どのツールが誰の gold を動かすか」の知識が分析器へ戻って
-いる**。
-
-素直な直し方は「ツールが影響を受けた人を申告し、その人を測る」だが、これだと
-**申告漏れが静かな失敗になる**。申告に無い人の gold が動いても、誰も測らないので
-誰も気づかない。
-
-そこで**測るのは全員**にして、申告は**期待**として残した。申告と実測が食い違えば
-警告が出るので、**申告漏れそのものが検出できる**。申告が負債から検査に変わる。
-
-「申告に無い人の gold が動いた」は、どこかで意図しない移動が起きているという
-ことなので、**まさに検出したい事故**である。
-
-### 全員測るのは、いまの人数だから
-
-人数が増えたら「申告された人だけ測る」形へ移す判断が要る。ただし**この理由が
-消えていると、後の人が「非効率だ」と思って申告ベースへ変え、申告漏れが静かな
-失敗として復活する**。移すなら、申告漏れを別の方法で検出できるようにしてから。
+[本文](design_decisions/127.md)
 
 ## 128. 相手が居ないことを、自分が動けないことと書かない
 
-**何を**: 板の表示で「売れない (買い注文なし)」「買えない (出品なし)」をやめ、
-「買い注文なし (出品して待てる)」「出品なし (買い注文を出して待てる)」にする。
-
-**なぜ**: 実 run で、焼き手がパンを持ち空腹 88 の状態でこう書いている。
-
-> 掲示板にはパンの買い注文がないから、手持ちのパンを売っても買い手がつかない
-> ——となると、自分で薬草を摘めるようになるのが一番確実な道だ。
-
-**彼女は板で売る可能性を検討したうえで棄却している。** 棄却の根拠は「買い注文が
-ない」。しかし**出品は買い注文の有無と関係ない** — 出品は買い手を待つ行為である。
-
-「自分が何をできるかで書く」という原則自体は正しかったが、**「売れない」が売り側の
-口を塞がれたと読ませた**。実際には「いま即座に売れる買い注文は無い」だけ。買い注文が
-尽きた手番以降、この行は **66 手番にわたり全員に「パンは売れない」と表示し続けた**。
-板の前でパンを 2 つ以上持っていた手番が 16 回あり、**出品は起こりえた**。
-
-**打てる手を塞いで見せる方が、冗長よりはるかに悪い。**
-
-買い側も同じ形をしていたので同時に直した (`market_bid` は 2 つの run で 0 回)。
-**片側で見つけた誤読は、鏡像側も必ず確かめる。**
-
-### 統計だけでは、この原因に辿り着かない
-
-出品 0 回という数字からは「希少だから手放さない」まで読めるが、**なぜ起きなかった
-かは独白にしか書いていない**。0 だった軸については、その行動を検討した独白を探す。
+[本文](design_decisions/128.md)
 
 ## 129. 失敗文は「何が駄目か」だけでなく「次にどこへ行けばよいか」を言う
 
-**何を**: 助言に**道具の名前を書かない**。識別子だけでなく、その道具を指す日常語も
-書かない。書くなら露出判断を通す。
-
-**なぜ**: 「相手が別アイテムを **drop** するのを待つか」という助言が 4 か所にあった。
-`drop_item` を落とした世界では**打てない手を勧める**ことになる。
-
-**無効化のラチェットは全件緑だった。** `test_disabled_tools_vanish_from_the_prompt`
-は助言文も見ているが、**識別子 (`drop_item`) しか照合していない**。実際の文は
-**動詞だけ** (`drop`) で書かれていて素通りした。
-
-**ラチェットが守備範囲を偽っていた**とも言える。名前は「プロンプトから消える」なので、
-読む人は日常語も含むと思う。実際は含まない。**名前に実装を合わせる**方向で広げた。
-
-### 限界を書いておく
-
-日常語の一覧は手で書く。「拾う」「置く」のような日本語の言い換えは捕まらない。
-**これは網羅ではなく、一度踏んだ形が戻らないための仕掛け**である。
-
-### 併せて: 止めるだけでなく、行き先を言う
-
-`disabled_tools` に memo を書くと、fail-fast は「指定できるのは: attack, ...」と
-**できないこと**を言うが、「memo は実験設定で落とす」とは言わない。止めてくれたのは
-正しいが、**次にどこへ行けばよいかが無い**。
-
-`INVALID_DESTINATION_LABEL` が「有効な destination_label: "市場の広場"」と**正解を
-列挙している**のが最良の形で、他の失敗文もここへ寄せる価値がある。**行き先の無い
-拒否は、拒否された側に推測を強いる。**
+[本文](design_decisions/129.md)
 
 ## 130. 遠さの段階は、それぞれ違うものを届ける
 
-**何を**: 隣から漏れ聞こえる言葉 (MUFFLED) は、全文ではなく**断片** (先頭 20 文字 +
-「…」) にする。
-
-**なぜ**: 聞こえ方は 3 段階あるのに、真ん中が近いほうと同じだった。
-
-| | 直す前 | 妥当か |
-|---|---|---|
-| CLEAR (同じ場所) | 全文 | ○ |
-| **MUFFLED (隣の部屋)** | **全文** | **×** |
-| FAINT (さらに遠い) | 内容を伏せる | ○ |
-
-**「遠くの声が聞こえる」と言いながら、完全な書き起こしを渡していた。** 段階が
-3 つあるのに、実質 2 つしか機能していない。
-
-**隣の部屋の会話を一言一句知っている世界では、移動して話を聞きに行く理由が薄く
-なる。** これは節約の話ではなく、世界の壊れ方の話である。
-
-断片の長さは、**誰が何の話をしているかは分かり、中身までは分からない**量にする。
-全部伏せると FAINT と区別がつかなくなり、また段階が減る。
-
-### prose と構造化側を食い違わせない
-
-prose だけ切って構造化側に全文を残すと、**記憶や分析にだけ完全な書き起こしが残る**。
-どちらが本当に聞こえたのか分からなくなるので、両方を同じ断片にする。
-
-**節約はおまけである。** 実測では 1 手番あたり 890 文字ぶん減るが、金額で正当化
-すると、後の人が「効果が小さいから戻そう」と考える。**質感のための変更が、たまたま
-節約にもなった**が正しい順序。
+[本文](design_decisions/130.md)
 
 ## 131. 同じ身体に付く Being の一意性は、取り出した列に対する判定である
 
-**なぜ**: ``BeingAttachmentResolver`` が ``BeingRepository`` をコンストラクタで持ち、
-``find_all_attached_to`` / ``find_by_id`` していた。ドメインサービスがリポジトリの
-ラッパーになっていた。同一 (world, player) に attach 中の Being が 0..1 かという
-横断ルールは世界のルールだが、永続化からの取り出しは application の仕事である。
+[本文](design_decisions/131.md)
 
-**何を**:
-
-- 永続化からの取得は application 層の ``BeingAttachmentResolver`` に置く
-- 0 / 1 / 2件以上の判定は ``unique_attached_being``（domain、リポジトリ無しの純関数）
-- ``Being.attach`` は「1 Being の attachment 高々 1」を守る。横断の一意性は取り出した
-  列に対する判定
-- 公開メソッド名（``resolve_attached_being`` / ``resolve_being_id`` /
-  ``resolve_player_id``）は変えない。想起ツール等 40 ファイル超の呼び出し入口を壊さない
-
-**設計判断**: 集約単体では「同じ身体に複数 Being が付いていないか」を試せない。
-Repository が返した列を domain の純関数で判定し、application が両者を組み立てる。
 ## 142. 観戦用の所持品一覧は application 照会が公開走査を使う
 
-**何を**: 観戦 HTTP `GET /sessions/{id}/inventory/{character_id}` の所持品一覧は、
-`PlayerInventoryQueryService.list_held_items` が `iter_occupied_slots()` で読み、
-同じ `item_spec_id` の個数をまとめる。
-
-**なぜ**: この経路だけ presentation が所持品集約の `_max_slots` を直接読み、
-`SlotId` ループでスロット走査まで HTTP 層でやっていた。LLM 向け所持品表示を
-application 照会へ寄せたあとも、観戦 API だけ内部表現に依存したまま残っていた。
-スロット表現を変えると観戦だけ壊れる。
-
-**presentation に残すもの**: セッション解決、player の数値 ID 変換、
-`id_mapper` による `item_spec_id` の文字列化。集約内部フィールドは読まない。
-
-**プロンプト用 `_build_inventory` とは揃えない**: そちらは
-`(spec_id, is_spoiled)` で行を分ける。観戦 HTTP は spec_id だけでまとめる。
-腐敗と新鮮を分ける必要が観戦側には無い。
-
-**装備スロットは出さない**: 走査は所持スロットの `iter_occupied_slots()` のみ。
-inventory 集約が無い、または空のときは空一覧を返す（セッション無しだけ 404）。
+[本文](design_decisions/142.md)
 
 ## 132. 記憶ツールの BeingId は手番入口で一度だけ決める
 
-**何を**: memo / recall / explore / semantic search の aux ツール executor は
-``ActingBeing``（``player_id`` + ``being_id`` の対）を受け取る。
-``BeingAttachmentResolver`` は executor が持たない。
-
-**なぜ**: 変換は ``PlayerId → BeingId`` の一種類なのに、各 executor が
-``BeingAttachmentResolver`` を注入され、付着の一意性まで葉が知っていた。
-PR #1209 で判定を domain へ移したあとも、変換そのものは 40 ファイル超に
-複製されていた。
-
-**入口**: ``WorldRuntime.run_llm_auxiliary_tool`` が ``ensure_attached`` の
-直後に ``resolve_being_id`` し、``ActingBeing`` として handler に渡す。
-未付着は入口の ``being_id is None`` だけが ``INVALID_STATE`` を返す。
-
-**まだ残る Resolver 利用**: prompt_builder / chunk / 信念 / hint service は
-今回触らない。次切片で prompt の記憶節へ ``BeingId`` を渡す。
-
-**置かないもの**: スレッド局所の「いまの Being」状態。入口で決めた対を
-引数で渡すだけにする。
+[本文](design_decisions/132.md)
 
 ## 133. プロンプト組み立ての BeingId は手番入口で一度だけ決める
 
-**何を**: `IPromptBuilder.build` は `ActingBeing` を受け取る。
-`DefaultPromptBuilder` は `BeingAttachmentResolver` を持たない。
-
-**なぜ**: 手番は `PlayerId`、経験は `BeingId`。builder が葉で付着を引くと、
-aux ツール (#132) と同じ変換が本編ターンにも複製される。
-
-**入口**: `WorldRuntime.build_full_prompt` が `_acting_being_for` で一度決める。
-`run_llm_auxiliary_tool` も同じ helper を使う。
-
-**まだ残る Resolver 利用**: 受動想起 retrieve / chunk / 信念 / hint は
-エピソードが持つ being_id、または呼び出し側から BeingId を渡す次切片。
+[本文](design_decisions/133.md)
 
 ## 134. 受動想起と chunk は呼び出し側の BeingId を使う
 
-**何を**: `retrieve` と `after_action_recorded` / scheduler `submit` は
-`BeingId` を引数で受け取る。これらのサービスは `BeingAttachmentResolver` を持たない。
-
-**なぜ**: プロンプト入口 (#133) で既に `ActingBeing` があるのに、想起と
-chunk が葉で付着を引き直していた。エピソード VO はまだ `player_id` しか
-持たないので、今は引数で渡す（VO への being_id 追加は別切片）。
-
-**入口**: prompt 節は build 済みの being_id。chunk は
-`WorldRuntime._record_action_result` の `_acting_being_for`。
+[本文](design_decisions/134.md)
 
 ## 135. 応答として書かれた文を、常時出る注記に流用しない
 
-**判断**: シナリオが条件ごとに書く `failure_message` は、**その操作を呼んだ人
-ひとりへの応答**である。一覧に常時出る注記へ流用しない。注記は engine が型を
-持ち、**作者が書いた語 (値の呼び名) だけ**を差し込んで組む。
-
-**なぜ**: 実際に描画して分かった。市場町の文面は
-
-> 窯の火加減も捏ね方も分からない。パンを焼けるのは**あの人**だけだ。
-
-呼び出しへの応答としては完結している。ところが常時表示の注記に置くと、
-
-- 「あの人」が誰か分からない。**注記は「では誰なら」に答える位置にいる**のに、
-  その問いに答えていない
-- 焼き手は 2 人 (トム・ノラ) いるのに単数で書かれている。**シナリオの事実と
-  食い違う**
-- 刈り手の行にも同じ文が出る
-
-書かれた場所と使う場所がずれた文面の流用で、`tend_to_player` / `give_item` で
-踏んだ形 (プロンプト本文がツールを宣伝し続ける) の親戚である。
-
-**engine が決め打ちしてよいのは型だけ**: 出すのは `<値の呼び名>だけが扱える`。
-一度 `<呼び名>の仕事` にしかけて差し戻した。生業なら通るが、`race` を同じ経路に
-通すと **「エルフの仕事」** になる。属性の種類を engine が決め打ちすると嘘になる。
-
-呼び名が宣言されていなければ `いまのあなたには扱えない` に落とす。ここで
-「あなたの生業では」と書くと、生業以外の属性で同じ嘘をつく。**世界が名前を
-持っていないものを、engine が代わりに名付けない。**
-
-**伏せた属性が混ざっても、公開されたぶんはそのまま出す**: 「伏せた属性が
-混ざっていたら全部伏せる」にすると、**公開側の出力が伏せた属性の有無で変わり、
-そこから伏せた属性の存在が読める**。伏せ方が伏せていることを漏らす形で、これは
-伏せる仕組み全般に効く。
-
-**関連**: #1197 (注記は理由を断定しない) は撤回していない。engine が理由を
-**推測しない**規律であって、**作者が宣言した呼び名を伝えない**という意味では
-なかった。
-
-**残る穴**: 注記は物体単位なので、使える操作が 1 つでも残ると、落ちた操作の
-存在自体が見えない。摘み手は石窯に「パンを焼く」があることを知る道が無い。
-`docs/agents_reaching_past_the_world.md` の「教わることができない」と同じ根で、
-今回は解いていない。
+[本文](design_decisions/135.md)
 
 ## 143. 値の呼び名は、全部に付けるか 1 つも付けないか
 
-**判断**: `player_attributes[].values` の呼び名は、**全部に付けるか、1 つも
-付けないか**の二択にする。一部の値にだけ付ける形は用意しない。
-
-```json
-"values": {"picker": "摘み手", "baker": "焼き手", "reaper": "刈り手"}  // 全部
-"values": ["picker", "baker", "reaper"]                              // 1 つも無し
-"values": {"picker": null, "baker": "焼き手"}                         // 書けない
-```
-
-**なぜ**: PR 4 (`values` の検証) で列挙が実質的に義務になったので、この制約が
-初めて効くようになった。「呼び名を付けたい値が 1 つあると、実際に使う値すべてに
-呼び名を付けなければならない」。
-
-書けるようにしなかった理由は、**同じ属性の中で行の形が変わる**こと。呼び名の
-ある値では `[焼き手だけが扱える]`、無い値では `[いまのあなたには扱えない]` に
-なり、読み手には**その違いに意味があるように見える**。実際には作者が書いたか
-書かなかったかでしかない。
-
-#1220 で型を選んだとき「書いたか書かなかったかが、文の形として漏れない」ことを
-利点として採った。属性の単位でその性質を保つ。
-
-**この判断を見直す条件**: 値が多く、そのうち 1 つだけが行を制御する属性が実際に
-出てきたとき。いま同梱シナリオで `values` を宣言しているのは市場町の生業だけで、
-3 つとも呼び名が要る。**困っている実例が出るまで形を増やさない。**
+[本文](design_decisions/143.md)
 
 ## 144. memo 完了 hint は呼び出し側の BeingId を使う
 
-**何を**: `MemoCompletionHintService.detect` / `augment_result_summary` は
-`BeingId` を引数で受け取る。このサービスは `BeingAttachmentResolver` を持たない。
-
-**なぜ**: 手番入口 (#133) と行動記録 (#134) で既に対があるのに、hint だけが
-葉で付着を引き直していた。
-
-**入口**: `run_phase_b` が `WorldRuntime._acting_being_for` で一度決めて渡す。
-未付着なら hint だけ skip し、行動結果は残す。
+[本文](design_decisions/144.md)
 
 ## 145. 信念固着と再解釈は呼び出し側の BeingId を使う
 
-**何を**: `BeliefConsolidationCoordinator` と
-`EpisodicReinterpretationCoordinator` の `after_turn_completed` /
-`flush_player` は `PlayerId` と `BeingId` を両方受け取る。これらの
-サービスは `BeingAttachmentResolver` を持たない。手番カウンタは
-`player_id`、evidence / recall / journal は `being_id`。
-
-**なぜ**: 手番入口 (#133) と行動記録 (#134) で既に対があるのに、
-ターン完了 sidecar だけが葉で付着を引き直していた。
-
-**入口**: `WorldLlmTurnTrigger` が `_acting_being_for` で一度決めて渡す。
-未付着なら sidecar だけ skip し、手番は止めない。
+[本文](design_decisions/145.md)
 
 ## 146. 記憶リンクとクラスタ昇格は呼び出し側の BeingId を使う
 
-**何を**: `EpisodicMemoryLinkApplicationService` と
-`EpisodicSemanticClusterPromotionService` は `BeingId` を引数で受け取る。
-これらのサービスは `BeingAttachmentResolver` を持たない。昇格フロンティアは
-まだ `player_id` keyed。
-
-**なぜ**: chunk (#134) と prompt (#133) と探索ツール (#132) で既に対があるのに、
-link / promotion だけが葉で付着を引き直していた。
-
-**入口**: chunk の `on_episode_committed`、prompt の受動想起候補、
-`ActionResultRecorder` の `on_after_tool_turn`、explore の `ActingBeing`。
+[本文](design_decisions/146.md)
 
 ## 147. Unit of Workは永続化に絞り、CommandScopeがcommand完了を統括する
 
-**何を**: 1回のアプリケーションコマンドは1つの `CommandScope` で実行する。
-`UnitOfWork` はtransaction開始、同じtransaction資源の提供、commit、rollbackだけを担う。
-イベント収集、同期ハンドラの収束処理、commit後配送は、それぞれ操作単位collector、
-dispatcher、handoffへ分離し、`CommandScope`が順序を統括する。
-
-**なぜ**: 現行はUoW、`TransactionalScope`、repository、`EventPublisher`がそれぞれ
-確定処理の一部を持ち、インメモリとSQLiteでも保存時期が異なる。repositoryの生成方法に
-よって独自commitの有無が変わるため、同じcommandでも部分更新やrollback後配送を
-構造的に防げなかった。
-
-**どう守るか**:
-
-- scope参加repositoryは同じtransaction資源から生成し、独自commit / rollbackを禁止する
-- 同期ハンドラは現在のscopeへ参加し、外部配送や新しいtransactionを開始しない
-- rollback時は操作単位collectorを破棄し、commit後配送を開始しない
-- commit後配送失敗でcommit済み状態をrollbackしたことにしない
-- 再試行が必要な配送はdomain状態と同じtransactionでoutboxへ保存する
-- 暗黙の入れ子scopeを拒否し、commit後ハンドラだけが新しいscopeを開始できる
-- インメモリとSQLiteへ同じ原子性契約試験を適用する
-- 詳細な状態遷移、失敗時契約、移行表は
-  `docs/refactor_plans/command_scope_contract.md` を正本とする
-
-**関連**: #1094 / #1095 / 判断 #88。
+[本文](design_decisions/147.md)
 
 ## 148. 新CommandScopeはtransaction状態機械だけを本番配線の外で先に固める
 
-**何を**: 新しい `CommandScope` は、イベントAPIを持たない `TransactionPort` だけに依存し、
-begin、commit、rollback、暗黙の入れ子拒否を一方向の状態機械として実装する。最初のPRでは
-既存の `TransactionalScope`やapplication serviceへ接続せず、transactionの失敗契約をfakeで固定する。
-
-**なぜ**: transaction状態とイベント収束を一度に入れると、commit失敗の問題と配送順序の問題を
-同じ差分で調べることになる。既存UoWへ直接新しい完了処理を接続した場合も、repository参加方法の
-差まで同時に変わり、原子性基盤の不具合を用途回帰から切り分けられない。
-
-**どう守るか**:
-
-- `TransactionPort`へイベント収集・配送APIを追加しない
-- command本体とcommitの失敗だけがrollbackを開始する
-- rollback失敗時は主例外とrollback例外を一つのapplication例外に保持する
-- 暗黙の入れ子scopeは`ContextVar`でtransaction開始前に拒否する
-- collector、同期dispatcher、commit後handoffは次の積み上げPRで追加する
-- 既存UoW adapterと共通永続化試験はその後の積み上げPRで追加する
-- 本番traceは最初の縦断移行時にobserver portから追加し、状態機械単体では状態を増やさない
-
-**関連**: #1094 / #1097 / 判断 #147。
+[本文](design_decisions/148.md)
 
 ## 149. 同期イベントはCommandContextへ戻し、commit後handoffは元scopeの外で開始する
 
-**何を**: `CommandContext`は既存の`DomainEventCollector`を操作単位で所有し、同期dispatcherが
-生成した追加イベントも同じ入口へ戻す。`CommandScope`はqueueが空になるまで同期処理した後に
-commitし、commit成功後だけ確定済みイベント列を`AfterCommitHandoffPort`へ渡す。
-
-**なぜ**: Unit of Workがイベント処理件数やcommit済みイベントを持つと、永続化方式と配送方式が
-再び結合する。一方、handoff中まで元scopeを有効扱いすると、commit後処理が開く正当な独立commandも
-暗黙の入れ子として拒否される。
-
-**どう守るか**:
-
-- event idの重複排除は1回のcommand全体で維持する
-- 同期dispatcher例外と処理件数上限超過はcommitせずrollbackする
-- commit失敗時はhandoffを一度も呼ばない
-- commit成功直後に元の`CommandContext`と入れ子ガードを閉じてからhandoffする
-- handoff失敗はcommit済みを表す専用例外で観測可能にし、commit済みtransactionをrollbackしない
-- この段階のhandoffは差替え点であり、outbox recordの同時永続化は後続PRで追加する
-
-**関連**: #1094 / #1097 / 判断 #147 / 判断 #148。
+[本文](design_decisions/149.md)
 
 ## 150. 既存Unit of Workの自動rollbackをtransaction専用commitから分離する
 
-**何を**: `InMemoryUnitOfWork`と`SqliteUnitOfWork`へ、同期イベント配送と自動rollbackを行わない
-`commit_transaction`を追加する。`CommandScope`用adapterはこの入口だけを使い、commit失敗後の
-rollback判断を`CommandScope`へ一元化する。
-
-**なぜ**: 既存`commit`は内部で同期dispatcherとrollbackまで実行する。これをそのまま
-`TransactionPort`へ渡すと、rollback失敗が主例外を隠し、`CommandScope`が確定順序を統括できない。
-また、snapshot元のないインメモリ実装は保留操作の途中失敗を戻せず、SQLiteと同じ原子性を名乗れない。
-
-**どう守るか**:
-
-- 既存`commit`の互換動作は維持し、内部から`commit_transaction`を呼ぶ
-- `commit_transaction`失敗時はtransactionをactiveのまま残す
-- begin途中失敗はactive状態と排他を残さず、rollback失敗後のUoW・接続・共有storeは使用不能にする
-- SQLiteのcommit成功後にconnection解放だけが失敗した場合は、commit済み後処理失敗としてrollbackしない
-- インメモリsnapshotは共有storeの全業務状態を構造的に網羅し、同じstore上の同時transactionを拒否する
-- adapterは旧`sync_event_dispatcher`が設定されたUnit of Workを拒否する
-- インメモリadapterはrollback用`data_store`がない構成を拒否する
-- 旧Unit of Work側に未回収イベントが残る場合は、保留operation実行後も再検査してcommitせず、`CommandContext`への移行を要求する
-- インメモリとSQLiteへ同じ複数書込み・rollback・transaction外書込み拒否試験を適用する
-- scope専用repositoryの生成とread-your-writesの横断試験は次の積み上げPRで追加する
-
-**関連**: #1094 / #1097 / 判断 #147 / 判断 #148 / 判断 #149。
+[本文](design_decisions/150.md)
 
 ## 151. scope専用repositoryはtransaction開始後にproviderから一度だけ生成する
 
-**何を**: `CommandScope`はtransaction開始後、用途別の`RepositoryProvider`を一度だけ生成して
-`CommandContext`へ結び付ける。SQLite取引commandでは、取引、inventory、status、profile、itemの
-書込みrepositoryを同じconnectionの共有UoWモードで生成する。providerと取得済みrepositoryは、
-scope終了後の読取り・書込みをともに拒否する。
-
-**なぜ**: constructor注入されたrepositoryと、各所で任意に呼ばれる
-`for_shared_unit_of_work(connection)`を併用すると、同じcommand内に独自commit版や別connectionが
-混ざってもapplication serviceから判別できない。また書込みだけをscope外で拒否しても、終了後の
-repository読取りを許すと閉じた接続や次commandの状態へ静かに依存する。
-
-**どう守るか**:
-
-- provider生成に失敗した場合はcommand本体を開始せずtransactionをrollbackする
-- provider factoryへ`CommandScope`が実際に開始した`TransactionPort`を渡し、factory自身には
-  別のUnit of Workを保持させない。SQLite用途ではadapterから同一`SqliteUnitOfWork`を取得し、
-  異なるtransaction実装との組合せはprovider生成時に拒否する
-- providerは接続をapplication serviceへ公開せず、用途に必要なdomain repositoryだけを返す
-- repository呼出しのたびにscopeとtransactionの有効性を検査し、取得済みメソッドの後利用も拒否する
-- scope内ではsave直後のfindで同じ未commit変更を読めるようにする
-- 別connectionにはcommit成功まで変更を見せず、例外終了では複数repositoryの変更をまとめて破棄する
-- repositoryが回収した集約イベントは、対応するSQL書込みが成功した後に限って、旧Unit of Workへ
-  残さず`CommandContext`へ移す。保存失敗をcommand側が処理しても、未保存集約のイベントを
-  同期処理やcommit後handoffへ流さない
-- 単独書込み版はfixture、migration、管理用commandの明示的な入口として分離したまま残す
-- 最初は取引書込みrepository群だけを縦に通し、用途ごとの移行PRでproviderを追加する
-
-**関連**: #1094 / #1102 / 判断 #147〜#150。
+[本文](design_decisions/151.md)
 
 ## 152. application commandはscope factoryだけを保持してrepositoryを操作中に取得する
 
-**何を**: `TradeCommandService`を最初の縦断移行対象とし、5つの書込みrepositoryと旧
-`UnitOfWork`のconstructor注入を廃止する。serviceは`CommandScopeFactoryPort`だけを保持し、
-offer、accept、cancel、declineの各呼出しで新しいscopeを1つ生成して、
-`CommandContext.repositories`から取引用途のrepository束を取得する。
-
-**なぜ**: providerが同一transactionのrepositoryを生成できても、application serviceが古い
-repositoryをフィールドに保持したままでは、操作中にscope外のrepositoryを混ぜられる。逆に
-`CommandScope`自体をserviceへ使い回し注入すると、一方向状態機械の終了済みscopeを次commandで
-再利用してしまう。commandごとのfactoryを唯一の入口にすれば、transactionとrepositoryの寿命を
-同時に揃えられる。
-
-**どう守るか**:
-
-- `CommandScopeFactory`は呼出しごとに新しい`TransactionPort`とNEW状態のscopeを生成する
-- 取引serviceは旧`UnitOfWork`と個別repositoryを属性に持たない
-- インメモリproviderは永続化操作を元UoWへ委譲し、集約イベントだけを`CommandContext`へ移す
-- SQLite providerは前判断どおり、scopeが開始した同じUoWのconnectionだけを使う
-- インメモリとSQLiteへ同じ取引コマンド試験を適用し、正常結果と用途固有例外を維持する
-- 同期処理失敗は取引・採番・予約をrollbackし、commit後handoff失敗は
-  `CommandPostCommitException`のまま上位へ伝えて再実行可能な業務失敗と区別する
-- 現時点で本番composition rootに存在しない取引command配線は新設せず、契約と両永続化実装の
-  縦断試験までをこの移行単位とする
-
-**関連**: #1094 / #1105 / 判断 #148〜#151。
+[本文](design_decisions/152.md)
 
 ## 153. CommandScopeのイベント処理はcommit前必須処理とcommit後配送の二相に限定する
 
-**何を**: 新しいcommand確定境界では、従来の`is_synchronous: bool`や用途別に増えた5相を使わず、
-handlerを`register_required_before_commit`または`register_after_commit`のどちらかへ登録する。
-commit後配送は実行時期とは別に、用途を`DeliveryChannel`、必要な保証を`DeliveryGuarantee`で表す。
-
-**なぜ**: transaction内で実行する正当な理由は、その処理の失敗時にcommand全体を戻す必要があること
-だけである。失敗してもcommandを続ける補助処理や観測をcommit前に置くと、未確定状態の外部露出、
-rollback後の偽の成功観測、handler順序への依存を招く。過去の同期観測がcommit前の集約状態を必要と
-する場合は、その事実をdomain eventへ載せてcommit後に処理できる契約へ直すべきであり、専用の
-transaction相を恒久化しない。一方、commit後処理の「何のためか」と「失敗時に再試行するか」は
-独立した判断なので、相の名前へ混ぜず二つの軸で表す。
-
-**どう守るか**:
-
-- commit前には、失敗を伝播して`CommandScope`にrollbackさせる必須handlerだけを実行する
-- 観測、read model、別コンテキスト連携、補助処理は、確定状態へ追随するcommit後配送に置く
-- `DeliveryChannel`は`OBSERVATION`、`READ_MODEL`、`INTEGRATION`、`AUXILIARY`を区別する
-- `DeliveryGuarantee.DURABLE_RETRY`の失敗は`CommandPostCommitException`として業務失敗と区別する。
-  現段階では再試行可能な失敗として顕在化し、永続化と自動再送は後続outbox PRで完成させる
-- `DeliveryGuarantee.BEST_EFFORT`の失敗はwarningと失敗observerへ残し、後続配送を続ける
-- 同じイベント・同じ側のhandlerは登録順で実行する
-- 既存`EventPublisher`入口は段階移行中の互換面として残し、新しい`CommandScope`配線からは使用しない
-- 取引read model更新を最初の`READ_MODEL + DURABLE_RETRY`登録とし、旧publisher向けの非同期指定は
-  移行完了まで互換面として維持する
-
-**関連**: #1094 / #1107 / 判断 #147〜#152。
+[本文](design_decisions/153.md)
 
 ## 154. scope参加repositoryの集約イベントはCommandContextだけへ移す
 
-**何を**: `CommandScope`へ移行した取引commandでは、インメモリとSQLiteのrepositoryが保存後に
-回収する集約イベントを、共通の`CommandContextAggregateEventSink`から`CommandContext`へ移す。
-旧`UnitOfWork`のpending event列は永続化操作の都合で残っていても、この経路のイベント正本には
-使わない。
-
-**なぜ**: 永続化方式ごとにイベント回収を実装すると、片方だけclear時期、重複排除、終了後利用の
-扱いが変わり得る。またインメモリproviderが`__getattr__`で旧`UnitOfWork`を全面透過すると、
-repository変更時に`add_events`へ逆流しても構造的に止められない。outboxへ保存する前に、1 commandの
-確定イベント列を一つへ固定する必要がある。
-
-**どう守るか**:
-
-- 共通sinkはscopeとtransactionが有効な間だけ収集を許可する
-- 全イベントを`CommandContext`へ渡せた後だけaggregateのevent queueを空にする
-- 同じ`event_id`の重複排除と宣言順維持は`CommandContext`を正本にする
-- SQLite repositoryはSQL成功後にだけ共通sinkを呼び、保存失敗時の幽霊イベントを作らない
-- インメモリ用facadeは永続化に必要なUoW操作だけを明示委譲し、`__getattr__`や`add_events`を公開しない
-- 両永続化方式で旧UoWのpending event列が空のまま、同期処理とcommit後handoffへ一度だけ届くことを
-  試験する
-- 今回は取引commandだけを縦に通し、他用途は対応する`CommandScope`移行PRで同じsinkへ接続する
-
-**関連**: #1094 / #1112 / 判断 #149〜#153。
+[本文](design_decisions/154.md)
 
 ## 155. 再送必須イベントは業務状態と同じtransactionでoutboxへ保存する
 
-**何を**: `CommandScope`は同期必須handlerが収束した後、commit後登録のうち
-`DeliveryGuarantee.DURABLE_RETRY`を持つイベントをtransactional outboxへ登録してから
-業務状態をcommitする。SQLiteでは`command_event_outbox`をgame write schemaに置き、取引イベント
-4種をschema version付きJSONとして保存する。
-
-**なぜ**: commit後handoffの失敗を専用例外で区別できても、再試行元がプロセス内のイベント参照
-だけでは再起動時に失われる。一方、業務状態のcommit後にoutbox行を別保存すると、その間の停止で
-「取引は確定したが配送予定がない」状態になる。同期処理収束後、同じtransactionへ先に登録すれば、
-業務状態と配送予定を同時にcommitまたはrollbackできる。
-
-**どう守るか**:
-
-- outbox対象はイベント型の固定表ではなく、`CommandEventDispatcher`の登録済み配送保証から導出する
-- `BEST_EFFORT`だけのイベントはoutboxへ保存しない
-- 現段階では既存のcommit後即時handoffを維持し、成功後だけ対応行を`delivered`へ更新する
-- handoff失敗時は業務状態を戻さずoutbox行を`pending`のまま残し、`CommandPostCommitException`を返す
-- 配達済み記録の失敗はhandoff失敗と混同せず、同例外の`outbox_error`へ保持する
-- outboxの単位はevent idとし、同じevent idを重複保存しない。再配送は少なくとも一回になり得るため、
-  durable handlerはevent idに対して冪等であることを前提にする
-- payloadは対象bounded contextの明示codecで型付き値へ復元し、未知version・不正JSON・暗黙型変換を
-  読込み時に拒否する
-- v32以前の取引日時はタイムゾーンを保持していないため、migrationで壁時計値を変えず
-  UTC付きへ正規化する。解釈できない日時は推測せずmigrationを失敗させる
-- 今回は取引commandの縦断経路までとし、未配送行を取得するworker、試行回数、間隔、dead letterは
-  次のPRで追加する
-
-**関連**: #1094 / #1114 / 判断 #153 / 判断 #154。
+[本文](design_decisions/155.md)
 
 ## 156. outbox workerは登録順に1件ずつ再配送する
 
-**何を**: `OutboxWorker.run_once` は`pending`行を単調増加の`outbox_id`順で
-一定件数取得し、明示codec registryで型付きイベントへ復元して
-`DURABLE_RETRY` handlerだけへ渡す。handler成功後にその1行を`delivered`へ更新する。
-
-**なぜ**: 複数行をまとめて配達済みにすると、中間のhandler失敗で成功済み行まで再送される範囲が
-不必要に広がる。一方、一時失敗後も後続行を先に配送すると、同じ投影先の古いイベントが
-後から適用され得る。1件ずつ確定し、一時失敗でその実行を停止することで順序を保つ。
-
-**どう守るか**:
-
-- event typeはDB値から動的importせず、起動時に登録した型とcodecだけを許可する
-- 対象となる`DURABLE_RETRY` handlerが0件なら成功扱いにせず、`pending`を維持して構成漏れを顕在化する
-- 未知event type・未対応schema・不正payloadは`rejected`へ隔離し、同じ入力を無限再試行しない
-- handler例外は一時失敗として`pending`を維持し、試行回数・時刻・理由を残して後続配送を停める
-- handler成功後・配達済み更新前に停止する可能性は残るため、配送保証は少なくとも1回であり、
-  handlerはevent idに対して冪等である必要がある
-- 今回は単一workerの`run_once`を契約とし、複数worker間のlease、指数backoff、最大試行回数、
-  rejected行の再投入運用は後続PRに分ける
-
-**関連**: #1094 / #1114 / #1118 / 判断 #155。
+[本文](design_decisions/156.md)
 
 ## 157. read model投影はconsumer inboxと同じtransactionで確定する
 
-**何を**: 取引read modelのdurable handlerは、安定した`consumer_id`と`event_id`の組を
-`event_consumer_inbox`へ記録し、その行の新規取得に成功した場合だけ投影を実行する。
-SQLiteではinbox行とread model更新を同じtransactionで確定し、インメモリでも失敗時に
-read modelを投影前へ戻す。
-
-**なぜ**: outbox workerの配送は少なくとも1回であり、handler成功後・outboxの配達済み更新前に
-停止すると同じeventが再配送される。read modelだけを再更新すると、将来の加算投影や通知投影で
-二重反映が起きる。一方、投影後に別transactionで処理済みを記録すると、その間の停止を防げない。
-
-**どう守るか**:
-
-- 一意性は`(consumer_id, event_id)`で持ち、同じeventを別consumerが処理することは許す
-- `consumer_id`はhandler実装ごとの版付き固定値とし、名前変更で意図せず再投影しない
-- handlerはrepositoryやtransactionを保持せず、`TradeProjectionExecutorPort`へ投影関数を渡す
-- SQLite executorが毎回新しいtransactionと、そのconnectionに参加するrepositoryを組み立てる
-- 投影失敗時はinbox行もread model更新も残さず、同じeventを再試行可能にする
-- 成功ログはexecutorが正常終了し、commitが完了した後だけ出す
-- 遅延した`Offered`は既存モデルを上書きせず、終端状態から`ACTIVE`へ巻き戻さない
-- read model不在のcancel/declineは前提投影不足としてrollbackし、後続の再配送で自己修復可能にする
-- 外部API呼出しなどtransactionで戻せない副作用はprojection内へ追加しない
-
-**関連**: #1094 / #1118 / #1120 / 判断 #155 / 判断 #156。
+[本文](design_decisions/157.md)
 
 ## 158. outbox再配送はprocessの生存期間に属する有界loopで駆動する
 
-**何を**: `GAME_DB_PATH`を持つFastAPI processは起動時に取引outbox workerを組み立て、
-起動直後と一定間隔ごとに最大件数を制限して再配送する。同期SQLite処理はasyncioのevent loopから
-executorへ逃がし、1回の配送失敗はwarningへ残して次の周期で再試行する。
-
-**なぜ**: `OutboxWorker.run_once`を手動でしか呼べない状態では、再起動後に残った`pending`行が
-永続化されていても自動回復しない。一方、1回の失敗をサーバ停止へ波及させると、一時的な投影障害が
-ゲーム全体の可用性を奪う。processの起動・停止と同じ境界で単一loopを所有すれば、通常の即時配送を
-維持しながら未配送分だけを継続的に回復できる。
-
-**どう守るか**:
-
-- 1回の実行は`batch_limit`件までとし、空になるまで占有し続けない
-- 同一loop内では前回の`run_once`終了後にだけ次を始め、重複実行しない
-- start/stopは冪等とし、shutdown時は実行中の1回に終了猶予を与える
-- `GAME_DB_PATH`未設定のインメモリ構成ではloopを作らない
-- 配送失敗は握り潰さずwarningに例外情報を残すが、次回再試行とゲームserverは止めない
-- 現段階の排他は1process内だけである。複数process・複数hostで動かす前に、outbox行を
-  原子的にclaimするowner・lease期限をSQLite store契約へ追加する
-- 指数backoff、最大試行回数、dead letter運用は配送頻度と障害方針を決める別PRへ分ける
-
-**関連**: #1094 / #1118 / #1120 / #1124 / 判断 #155 / 判断 #156 / 判断 #157。
+[本文](design_decisions/158.md)
 
 ## 159. outbox一時失敗は順序を保ったまま間隔を広げ、上限で隔離する
 
-**何を**: 一時失敗した`pending`行は、失敗回数に応じて1秒から最大5分まで
-指数的に次回試行を遅らせる。既定で12回失敗した行は`dead_letter`へ隔離し、
-後続イベントの配送を再開する。試行回数、次回試行時刻、最終理由、隔離時刻は
-SQLiteへ保存する。
-
-**なぜ**: handlerや投影DBの障害中に毎秒同じ行を再配送すると、復旧を促すどころか
-DB・外部依存・ログへ追加負荷をかける。また、回復不能な一時失敗が先頭に残り続けると、
-登録順を守るために全後続イベントが永久に止まる。待機で負荷を抑え、有限回で隔離すれば、
-失敗したpayloadと理由を失わずに通常配送を回復できる。
-
-**どう守るか**:
-
-- 待機中の最古`pending`行がある場合は、期限到来済みの後続行も取得しない
-- 待機時間は永続化し、process再起動で即時再試行へ戻さない
-- 最大試行回数に達した場合だけ`dead_letter`とし、同じworker実行で後続へ進む
-- 復元不能なpayloadを表す`rejected`と、配送試行を使い切った`dead_letter`を区別する
-- 隔離件数は定期loopの完了ログに残し、最終理由と時刻はDBから調査できるようにする
-- 手動再投入と管理画面、複数process間のclaim/leaseは別の運用PRで追加する
-
-**関連**: #1094 / #1126 / 判断 #156 / 判断 #158。
+[本文](design_decisions/159.md)
 
 ## 160. 更新commandの横展開は実利用される複数集約操作を一つずつ移す
 
-**何を**: 取引で確立した `CommandScope` を他用途へ広げる最初の対象は、
-`SpotGraphItemTransferService.give_item` とする。送り手・受け手の所持品、品目、
-プレイヤー状態、位置をcommand専用providerから取得し、2つの所持品保存を同じ
-transactionで確定する。`PlayerGaveItemEvent` は同じscopeへ収集し、commit成功後だけ
-観測パイプラインへ最善努力で渡す。
-
-**なぜ**: `give_item` は実際のLLMツール経路で使われ、送り手保存後に受け手保存が失敗すると
-アイテムが片側だけから消える。影響が現実的でありながら、書込み対象は共有
-`InMemoryDataStore`または同じSQLite接続上の2つのinventoryに限定できる。一方、
-`drop_item`と`pickup_item`は`SpotInterior`と`SpotGraph`のインメモリ永続化境界も同時に
-設計し直す必要があるため、同じPRへ混ぜない。
-
-**どう守るか**:
-
-- command内の書込みrepositoryは開始済みtransactionから生成し、長寿命repositoryを使わない
-- SQLite providerは全repositoryで同じ接続を共有し、独自commitを無効にする
-- インメモリproviderは共有storeのsnapshot transactionへ両inventoryを参加させる
-- 受け手側保存が失敗した場合は、先に行った送り手側更新もrollbackする
-- 成功観測はcommit前に配信せず、rollback時には一件も配信しない
-- scope終了後のrepository再利用を拒否する
-- 観測は `OBSERVATION + BEST_EFFORT` とし、read model用outboxへ保存しない
-- 公開`give_item`は`CommandScopeFactory`を必須とし、未配線ならrepository参照前に拒否する
-- 長寿命のinventory・item・status repositoryと直接publisherはserviceに保持しない
-- 次段階で`drop_item` / `pickup_item`のインメモリ永続化資源をscope参加可能にして移行する
-
-**関連**: #1094 / #1131 / 判断 #147 / 判断 #151〜#159。
+[本文](design_decisions/160.md)
 
 ## 161. drop/pickupは所持品とSpotInteriorを同じtransactionで確定する
 
-**何を**: `SpotGraphItemTransferService.drop_item`と`pickup_item`を、`give_item`と同じ
-`CommandScope`へ移す。更新対象の`PlayerInventory`と`SpotInterior`はcommand専用providerから取得し、
-どちらか一方の保存に失敗した場合は両方をrollbackする。`SpotGraph`はプレイヤー位置と`graph_id`の
-参照にしか使わないため、providerでは読み取り専用契約として公開する。
-
-**なぜ**: dropで所持品だけが消えて地面へ置かれない場合はアイテムが消失し、pickupで地面だけから
-消えて所持品へ入らない場合も同じく消失する。逆順の部分確定や再試行は複製にもつながる。
-`give_item`で確立したcommand境界を使えば、所持品と地面を同じ成功・失敗単位にできる。一方、
-`SpotGraph`まで書込み可能なrepositoryとして公開すると、将来の変更が意図せずこのtransactionへ
-混入するため、現在必要な読み取り能力だけに狭める。
-
-**どう守るか**:
-
-- インメモリの`SpotInterior`を共有`InMemoryDataStore`のsnapshot対象へ移す
-- SQLiteの`SpotInterior`は開始済みUoWと同じconnectionから生成し、独自commitを無効にする
-- drop/pickupはscope内のrepository集合だけを使い、長寿命repositoryへ書き込まない
-- 公開drop/pickupは`CommandScopeFactory`未配線時にrepository参照前で拒否する
-- `PlayerDroppedItemEvent`と`PlayerPickedUpItemEvent`はscopeへ収集し、commit後だけ観測として配送する
-- 地面保存の失敗時に、先行したinventory変更・地面変更・成功観測がすべて残らないことを
-  インメモリとSQLiteの両方で試験する
-- `SpotGraph`は`find_graph`だけを持つ読み取り専用portとしてproviderから公開する
-- 経路探索や地面一覧取得などのqueryは従来どおりtransaction外で実行する
-
-**関連**: #1094 / #1133 / 判断 #160。
+[本文](design_decisions/161.md)
 
 ## 162. repository外の世界内可変状態も同じcommandのrollbackへ参加させる
 
-**何を**: interactionのようにrepositoryと世界内の可変storeを同時更新するcommandでは、
-repository外の資源を `RollbackParticipantPort` として基底transactionへ合成する。
-参加資源はsnapshot前からcommand完了まで資源単位の所有権を保持し、基底transactionまたは
-commandが失敗した場合は登録と逆順で開始前へ戻す。
-
-**なぜ**: `SpotInteractionApplicationService` はinventoryや`SpotInterior`だけでなく、
-world flag、spot graph、待ち時間、退場者位置なども直接変更する。repositoryだけを
-`CommandScope`へ移すと、永続化はrollbackしたのに外側の状態だけが残る新しい部分反映を作る。
-一方、tick全体を一つのtransactionに広げると排他時間と巻戻し範囲が大きすぎるため、
-一つの業務commandが実際に変更する資源だけを明示的に参加させる。
-
-**どう守るか**:
-
-- 参加資源は資源同一性の固定順で占有し、snapshotからcommit/rollback完了まで別commandを待たせる
-- 参加資源を占有してから基底transactionを開始し、全commandで同じ取得順を守る
-- 合成transactionの多段化は認めず、一つのadapterが全参加資源の重複検査と取得順を所有する
-- 同じ実資源を複数adapter経由で二重登録しない
-- command失敗とcommit失敗では、基底transactionの後に参加資源を逆順で復元する
-- 基底transactionのbegin途中失敗では、まだsnapshotを取っていない参加資源へ触れない
-- durable commit後のcleanup失敗では、確定した参加資源を復元しない
-- repository providerとoutboxは合成transactionを共通入口で剥がし、実際に開始した基底資源へ参加する
-- 一つの資源の復元失敗後も残りを試し、失敗した資源を使用不能にする
-- transaction rollback失敗と全参加資源の復元失敗を同じ例外から診断できるよう保持する
-- この基盤だけではinteractionを移行済みとせず、具体資源adapterと用途別差分試験を後続PRで追加する
-
-**関連**: #1094 / #1137 / 判断 #147〜#161。
+[本文](design_decisions/162.md)
 
 ## 163. interactionの外部状態と通知を同じ確定境界へ参加させる
 
-**何を**: 通常の物体interactionが直接変更する `MutableWorldFlagState`、
-`InteractionCooldownStore`、`DepartedPositionStore`、インメモリspot graphを、
-一組のrollback参加資源として構築する。各資源はcommand開始時のdeep snapshotを持ち、
-失敗時は状態と集約event queueを含めて開始前へ戻す。
-
-world flagの変更通知は状態変更時に即時配信せず、参加資源がcommand中だけ保留する。
-commit後は元の順序で通知し、rollback後は捨てる。これにより、状態が戻ったのに
-`WORLD_FLAG_CHANGED` traceだけが残る偽の成功観測を作らない。
-
-**なぜ**: repositoryのrollbackだけでは、graph上の移動・接続、世界flag、待ち時間、
-退場者位置が部分的に残る。さらにworld flag callbackはtraceへ直結しているため、状態だけ
-snapshotへ戻しても観測上の嘘が残る。更新と観測を同じ確定境界へ揃える必要がある。
-
-**どう守るか**:
-
-- 4資源を一つのbuilderから固定して組み立て、同じparticipant群を全commandで再利用する
-- rollbackではflag・actor/world待ち時間・退場者位置・graph本体とevent queueを復元する
-- flag callbackはtransaction内で呼ばず、基底commit後だけ宣言順に渡す
-- callbackを含む復元・解放失敗では参加資源をpoisonし、後続commandで再利用しない
-- `CALL_MEETING`は別command呼出しなのでsnapshot資源へ偽装せず、後続の用途配線で扱う
-- このPRではinteraction本体をまだ接続せず、次のPRでrepository providerとイベント収集を移す
-
-**関連**: #1094 / #1137 / 判断 #162。
+[本文](design_decisions/163.md)
 
 ## 164. 通常の物体interactionはrepositoryと外部状態を一つのcommandで確定する
 
-**何を**: `CALL_MEETING` を含まない通常の物体interactionは、操作ごとに新しい
-`CommandScope`を開く。spot graph、`SpotInterior`、player inventory、player status、
-item、item specのrepositoryは、scopeが開始した同じUnit of Workから生成する。
-world flag、待ち時間、退場者位置、インメモリspot graphは判断#163のrollback参加資源として
-同じcommandへ加える。
-
-成功eventは操作中に外へ配信せず`CommandContext`へ集め、全状態のcommit後だけ既存の
-観測pipelineへ渡す。前提条件による拒否は成功eventではないため、rollback完了後に確定状態を
-読み直して失敗観測を一度だけ発行する。
-
-**なぜ**: 従来の物体interactionは複数repositoryとrepository外の世界状態を順番に保存し、
-途中失敗時に一部だけ残り得た。さらに成功eventがcommitより先に配信されると、同期処理や
-永続化が失敗してrollbackした操作を観測者だけが成功として記憶する。更新対象と成功観測を
-同じ確定境界へ揃える必要がある。
-
-`CALL_MEETING`は会議開始という別commandを呼び出すため、この段階では既存経路へ残す。
-外側interactionのtransaction中に内側commandを始める形へ押し込まず、会議開始を独立した
-commandとして分離してから移行する。
-
-**どう守るか**:
-
-- providerは実際に開始した基底transactionからだけ生成し、別Unit of Workの誤配線を許さない
-- scope終了後のrepository再利用を拒否する
-- repository保存失敗とcommit前必須処理失敗では、repositoryと4つの参加資源を開始前へ戻す
-- world flag callbackと成功eventはcommit後だけ外へ出し、rollback時は破棄する
-- 前提条件失敗の観測はrollback後の確定状態から作り、成功eventと混ぜない
-- インメモリとSQLiteのproviderは同じ用途portを実装し、SQLite writerの独自commitを無効にする
-- `CALL_MEETING`を含む操作はscopeへ入れず、後続PRで会議command境界を明示してから移行する
-
-**関連**: #1094 / #1137 / 判断 #151 / 判断 #153 / 判断 #162 / 判断 #163。
+[本文](design_decisions/164.md)
 
 ## 165. 道具に宣言したinteractionも物体操作と同じcommandで確定する
 
-**何を**: `CALL_MEETING`を含まない道具interactionは、通常の物体interactionと同じ
-`CommandScope`、repository provider、rollback参加資源を使う。所持道具の解決、遠隔物体を
-含む`SpotInterior`、inventory、item、player status、spot graph、world flag、待ち時間、
-退場者位置を一つのcommandとして確定し、成功eventはcommit後だけ既存pipelineへ渡す。
-
-**なぜ**: 制御端末のような道具操作は、手元のitemだけでなく別室の物体状態や全室の照明、
-接続、所持品、player状態を同時に変えられる。従来の長寿命repositoryを順番に保存する経路では、
-遠隔物体を保存した後のgraph保存失敗などで一部だけが残り、観測だけが成功する可能性もあった。
-通常の物体操作用に確立した境界を再利用し、同じ失敗規則に揃える。
-
-**どう守るか**:
-
-- command内の全repositoryは、scopeが開始した同じUnit of Workから取得する
-- world flag、待ち時間、退場者位置、インメモリspot graphは同じrollback参加資源を再利用する
-- 遠隔`SpotInterior`を保存した後のgraph保存失敗でも、物体状態と待ち時間を開始前へ戻す
-- commit前必須処理の失敗ではgraph変更・待ち時間・成功eventを残さない
-- commit後handlerが読む時点では、repositoryと外部状態の両方が確定済みである
-- `CALL_MEETING`は別commandを起動するため既存経路に残し、入れ子transactionへ押し込まない
-
-**関連**: #1094 / #1137 / 判断 #162〜#164。
+[本文](design_decisions/165.md)
 
 ## 166. 対人interactionは二者の状態と観測を一つのcommandで確定する
 
-**何を**: `CALL_MEETING`を含まない対人interactionは、通常の物体・道具interactionと
-同じ`CommandScope`、repository provider、rollback参加資源を使う。使う側と使われる側の
-inventory・player status、item、spot graph、world flag、待ち時間を一つのcommandとして
-確定し、`PlayerDownedEvent`と成功観測はcommit後だけ既存pipelineへ渡す。
-
-**なぜ**: 対人操作は、使われる側から品物を削除した後に使う側への保存が失敗するなど、
-二つの集約を跨いだ途中失敗が起きる。従来の長寿命repositoryを順番に保存する経路では、
-品物が消失・複製したり、rollbackした攻撃を観測者だけが成功として記憶したりする可能性が
-あった。二者の更新と成功観測を同じ確定境界へ揃える必要がある。
-
-**どう守るか**:
-
-- command内の全repositoryはscopeが開始した同じUnit of Workから取得する
-- 更新対象となるplayer statusはscope内から読み、二者の保存を同じtransactionへ参加させる
-- 身体として扱うかは既存の`PlayerLifeQuery`へ集約し、用途ごとの生死規則を増やさない
-- 対象inventory保存後に使う側inventory保存が失敗しても、両方を開始前へ戻す
-- commit前必須処理が失敗した場合は、HP・昏倒・待ち時間・成功eventを残さない
-- `PlayerDownedEvent`と`PlayerInteractedWithPlayerEvent`はcommit後だけ配送する
-- world flag、待ち時間、退場者位置、インメモリspot graphは既存のrollback参加資源を再利用する
-- `CALL_MEETING`は別commandを起動するため既存経路に残し、入れ子transactionへ押し込まない
-
-**関連**: #1094 / #1137 / 判断 #162〜#165。
+[本文](design_decisions/166.md)
 
 ## 167. 会議開始は通常interactionから独立したcommandとして扱う
 
-**何を**: `CALL_MEETING`は一つの`InteractionDef`で唯一の効果としてだけ許可する。
-loaderと`InteractionDef`の両方で、通常効果との混在を構築時に拒否する。緊急招集と
-遺体報告の処理は`MeetingCommandService`へ移し、`WorldRuntime`の公開入口は同serviceへ
-委譲する。会議中の投票進行とフェーズ遷移の正本は、今回も`WorldRuntime`に残す。
-
-**なぜ**: `CALL_MEETING`は物体状態の変更の一種ではない。招集回数の消費、全playerの
-移動終了と集合、遺体記録、ゲームフェーズ遷移を伴う別のcommandである。通常interactionの
-効果列へ混ぜると、外側のtransaction中に内側の会議commandを開始する入れ子構造になり、
-どこまでを一緒にrollbackするかが曖昧になる。悪い過去挙動を互換性として残さず、宣言時点で
-一つのcommandへ分ける。
-
-**どう守るか**:
-
-- loaderは`CALL_MEETING`と別効果を含むシナリオをpath付き`ScenarioLoadError`で拒否する
-- 直接構築も`InteractionEffectValidationException`で拒否し、loader迂回の抜け道を残さない
-- `WorldRuntime.call_emergency_meeting`と`report_body`は専用serviceへの薄い委譲にする
-- 既存の戻り値、エラーコード、集合、遺体記録、フェーズ遷移の順序は変更しない
-- この段階では`begin_meeting`をruntime callbackとして渡し、次段階で会議command全体を
-  `CommandScope`へ接続する
-
-**関連**: #1094 / #1137 / 判断 #162〜#166。
+[本文](design_decisions/167.md)
 
 ## 168. 会議開始の状態と観測を一つのcommandで確定する
 
-**何を**: 緊急招集と死体報告は専用`CommandScope`を開き、`GamePhaseStore`、
-spot graph、player statusを一つのcommandとして確定する。会議開始の
-`GamePhaseChangedEvent`は操作中に直接配信せず`CommandContext`へ集め、commit後だけ
-既存の観測pipelineへ渡す。
-
-**なぜ**: 会議開始は、緊急ボタン消費または死体の報告済み記録、全生存者の集合、
-移動状態の終了、フェーズ遷移を順に変更する。途中のstatus保存や必須イベント処理が失敗した
-とき、一部だけ残ると「会議は始まらないのに持ち札だけ失う」「graphでは集合済みなのに
-古い移動経路が再開する」「自由時間のまま会議開始観測だけ届く」という矛盾になる。
-
-**どう守るか**:
-
-- graphとplayer statusはscopeが開始した同じUnit of Work由来のproviderからだけ取得する
-- `GamePhaseStore`は現在フェーズ、履歴、使用済みボタン、報告済み身体、投票をまとめて復元する
-- spot graphはrollback参加資源とし、status保存失敗では全playerの位置も開始前へ戻す
-- 集合中のrepository保存失敗は警告へ潰さずcommand全体を失敗させる
-- 会議開始eventはcommit前必須処理を通し、成功時だけ確定後配送する
-- trace記録はscope正常終了後に行い、失敗しても確定済み会議を業務失敗として返さない
-- `CALL_MEETING`は前提条件の評価後に専用scopeだけで完結し、会議確定後に外側interactionの
-  保存・成功観測・待ち時間処理を続けない
-- ボタン操作の成功観測は`GamePhaseChangedEvent`へ一本化し、入れ子transactionと二重確定を避ける
-
-会議終了と投票は別commandであり、この判断では開始二入口だけを移行する。
-
-**関連**: #1094 / #1137 / 判断 #162〜#167。
+[本文](design_decisions/168.md)
 
 ## 169. 投票・追放・会議終了を一つのcommandで確定する
 
-**何を**: 一票の記録と進捗通知を`MeetingCommandService`の`CommandScope`へ移す。
-最後の一票または時間切れでは、票の集計、追放outcome、spot graphからの退場、
-倒れた身体の消去、自由時間への遷移までを同じcommandとして確定する。
-`MeetingVoteCastEvent`、`MeetingVoteResolvedEvent`、`GamePhaseChangedEvent`は
-`CommandContext`へ集め、commit後だけ既存の観測pipelineへ渡す。
-
-**なぜ**: 従来は票を先に記録し、進捗を即時配信した後で追放と会議終了を順に実行していた。
-graph保存や同期処理が失敗すると「最後の票だけ残る」「追放outcomeだけ確定する」
-「会議中なのに終了観測だけ届く」という部分適用が起こり得た。さらにoutcome callbackは
-即時発火するため、状態だけをsnapshot復元してもrollbackした追放観測が外へ漏れる。
-
-**どう守るか**:
-
-- `GamePhaseStore`は票・フェーズ・報告済み身体をまとめて開始前へ戻す
-- `PlayerOutcomeRegistry`はoutcomeを参加資源にし、command中はcallbackを発火させない
-- 追放callbackは`MeetingVoteResolvedEvent`の確定後handlerから通知し、
-  最後の投票 → 集計 → 追放outcome → 会議終了の観測順を守る
-- spot graph保存失敗を警告へ潰さず、追放を含むcommand全体をrollbackする
-- `FallenBodyRegistry`を参加資源にし、会議終了処理の失敗で身体を消さない
-- 最後の一票では進捗、集計結果、フェーズ遷移を宣言順に集め、確定後だけ配送する
-- 沈黙・tick上限でも現在票を同じ経路で集計し、手動終了は集計せず終了だけを確定する
-- 会議時間の累積と終了traceはscope正常終了後に更新し、trace失敗をcommand失敗へ変えない
-
-**関連**: #1094 / #1241 / 判断 #168。
+[本文](design_decisions/169.md)
 
 ## 170. SpotGraph移動は1 player・1操作ごとに確定する
 
-**何を**: 移動開始、1 world tick分の進行、同一spot内のsub-location変更、
-移動中断・復元をそれぞれ`CommandScope`で囲む。`PlayerStatus`は同じ
-Unit of Work由来のrepositoryから保存し、spot graphと退場者位置はrollback参加資源とする。
-これら5つの公開更新入口は`CommandScopeFactory`未配線時にrepositoryへ触れる前に拒否し、
-規則試験もrepositoryを明示した試験用scopeを通す。
-
-**なぜ**: `travel_ticks=0`の区間が連続すると1 tickで複数の接続を渡る。
-従来は渡るたびにgraphまたは退場者位置を書き換え、最後にnavigation stateを
-保存していた。2区間目の通行判定やstatus保存が失敗すると、位置だけ進み
-移動予約が古いままという矛盾が残る。
-
-**どう守るか**:
-
-- 複数crossingはすべての通行条件再検査と状態更新が通ったときだけ一括確定する
-- graphが生成した移動eventは`CommandContext`へ移し、commit後だけ宣言順に配送する
-- 到着callbackは各playerの移動command終了直後に呼び、後続playerの失敗で失わない
-- spot遭遇記録は確定後の`EntityEnteredSpotEvent`だけから行い、callbackと二重計上しない
-- ダウン・追放時の予約破棄と、別toolによる中断も同じ移動serviceのcommandを使う
-- 公開更新入口から長寿命repositoryへ直接保存する退避経路を残さない
-- world tick全体は一つのtransactionにせず、playerごとの移動を独立に確定する
-- passageの`consume_item`は副作用設計が別に必要なため、この移行では実装しない
-
-**関連**: #1094 / #1242 / 判断 #168〜#169。
+[本文](design_decisions/170.md)
 
 ## 171. world tickは順序だけを所有し、確定はstageまたはcommandへ分ける
 
-**何を**: `SpotGraphSimulationApplicationService`からtick全体を囲む旧`UnitOfWork`を
-外す。世界時刻を一度進めた後、stageを宣言順に呼ぶcoordinatorとし、更新の確定と
-event収集は各stageまたはその内側のcommandが所有する。最初の代表移行として
-`StatusEffectsTickStageService`を一つの`CommandScope`へ移す。
-
-**なぜ**: 本番で渡していた旧`InMemoryUnitOfWork`は共有data storeを持たず、stageが
-直接変更するrepositoryやstoreをrollbackできなかった。一方、移動は既にplayerごとの
-独立commandとして内側でcommitする。外側にtick全体のtransactionがあるように見せると、
-実際には戻らない状態を戻るものと誤認させ、独立commit済みの前段まで同じtickで再実行する
-危険がある。
-
-**どう守るか**:
-
-- tick開始時に時刻を一度進め、後段失敗でも戻さず同じtickを自動再試行しない
-- 失敗時も`WorldRuntime`のtickミラーを時刻源へ同期し、残り時間と終了判定を分裂させない
-- 完了済みの前段は残し、失敗commandだけが自分の状態と成功eventをrollbackする
-- 累積移動tickはplayerごとの移動command確定直後に記録し、後段失敗でも失わない
-- stage失敗では依存する後段とpost-tick hookを実行せず、呼出し側へ例外を返す
-- `StatusEffectsTickStageService`は全player statusを一括保存し、保存失敗では全員分を戻す
-- `PlayerDownedEvent`等は`CommandContext`へ集め、player status確定後だけ配送する
-- 公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryと直接publisherへ戻る
-  旧経路を残さない
-- 未移行stageは `docs/refactor_plans/world_tick_commit_boundaries.md` の表で危険と移行単位を明示する
-- tick全体を一つのSQLite transactionにする変更は行わない
-
-**関連**: #1094 / #1243 / 判断 #147〜#170。
+[本文](design_decisions/171.md)
 
 ## 172. needs decayはplayer status確定後にevidenceへ転記する
 
-**何を**: `SpotGraphNeedsDecayStageService`を、状態異常stageと共有する
-player status用`CommandScope`へ移す。全playerの空腹・疲労・飢餓ダメージを一括保存し、
-`PlayerDownedEvent`等は確定後だけ配送する。空腹限界のevidenceはscope正常終了後に転記する。
-
-**なぜ**: 従来は空腹限界evidenceをplayer status保存より先に書いていた。後続の一括保存が
-失敗すると、実際の空腹はrollbackされたのに記憶だけ「空腹が限界に達した」と残り得た。
-また旧publisherへの直接配送は、保存と成功観測の確定境界をコード上で保証できなかった。
-
-**どう守るか**:
-
-- 空腹・疲労・飢餓ダメージは全player分を一つのplayer status transactionで保存する
-- 一括保存失敗では全playerのneeds・HP・集約eventを開始前へ戻す
-- 集約eventは`CommandContext`へ集め、player status確定後だけ既存pipelineへ渡す
-- evidence転記はscope正常終了後に行い、rollback時には呼ばない
-- commit後cleanup失敗ではstatusは確定済みなのでevidenceを追随させてから元例外を返す
-- evidence転記自体の失敗は従来どおり警告に留め、確定済みplayer statusを戻さない
-- 公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryと直接publisherへ戻る
-  旧経路を残さない。更新規則の単体試験はrepositoryを明示してprivate helperを検証する
-
-**関連**: #1094 / #1243 / 判断 #171。
+[本文](design_decisions/172.md)
 
 ## 173. scenario eventはevent定義1件ごとに世界状態と進捗を確定する
 
-**何を**: `SpotGraphScenarioEventStageService`の発火単位を、一つの
-`ScenarioEventDef`を処理する`CommandScope`へ移す。flag、interior、graph、item、
-inventoryと、once・chainのprogressを同じ確定境界へ入れる。graphの集約eventは
-`CommandContext`へ収集し、message callbackはscope終了後に呼ぶ。
+[本文](design_decisions/173.md)
 
-**なぜ**: 従来はflag、interior、graph、inventoryを順に直接保存した後でonce記録と
-chain予約を更新していた。後段のitem付与や進捗更新が失敗すると、世界の一部だけが
-変わったままeventは未発火扱いとなり、次tickで同じ効果を再適用する危険があった。
-messageも保存途中で呼ばれ得る構造では、rollback済みの出来事を観測として残してしまう。
-
-**どう守るか**:
-
-- 条件評価は現在の確定状態をscope外で行い、成立したeventだけcommandを開始する
-- eventの効果、once記録、chain予約・解除を一つのscope内で更新する
-- 途中失敗ではflag、interior、graph、item、inventory、progressを開始前へ戻す
-- 同じtickの複数eventは別commandとし、先行eventの確定結果を後続失敗で戻さない
-- graphの集約eventは確定後だけ既存pipelineへ宣言順に配送する
-- message callbackはcommit後の最善努力とし、失敗しても確定済み世界を戻さない
-- commit後cleanup失敗でもmessageを確定状態へ追随させてから元例外を返す
-- item overflowはscope内repositoryとevent収集口へ束縛し、地面だけの部分確定を防ぐ
-- event定義がある公開stageは`CommandScopeFactory`を必須とし、未配線なら進捗・graph・
-  条件評価へ触れる前に拒否する。直接repositoryを更新する旧経路は残さない
-
-**関連**: #1094 / #1243 / 判断 #171〜#172。
 ## 174. 主観エピソードに経験の主体 BeingId を載せる
 
-**何を**: `SubjectiveEpisode` に必須フィールド `being_id: BeingId` を追加する。
-`player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
-食い違う書き込みは `put_by_being` で失敗する。
-
-**なぜ**: store は既に Being 単位のキーなのに、葉の記録は `player_id` だけを
-持ち、経験の主体が永続化の面から消えていた。chunk / action draft builder は
-呼び出し側の `BeingId` を VO に刻む。`ChunkEncodingInput` には載せない
-(世界の手番ウィンドウであり、経験の主体ではない)。
-
-**旧データ**: snapshot / SQLite payload に `being_id` キーが無い行は、ファイル
-または行の Being から復元する。payload と fallback の両方があり不一致なら
-失敗する (黙って片方を採用しない)。
-
-**この PR で触らない**: `EpisodicPromotionFrontier` のキー変更、retrieve /
-`on_episode_committed` 等の `being_id` 引数削除、他 VO の `player_id` 置換。
+[本文](design_decisions/174.md)
 
 ## 175. 昇格フロンティアは BeingId で分ける
 
-**何を**: `EpisodicPromotionFrontier` のキーを `player_id: int` から `BeingId`
-に変更する。`add` / `add_many` / `drain` はすべて呼び出し側が決めた
-`BeingId` を使う。`MemoryLink.player_id` や `acting.player_id.value` を
-フロンティアのキーに使わない。
-
-**なぜ**: link / promotion サービスは #146 で呼び出し側の `BeingId` を使う
-ようになったが、昇格フロンティアだけが手番の数字 keyed のまま残っていた。
-`on_after_tool_turn` はグラフを `being_id` で組み立てる一方 `drain(player_id)`
-しており、`_hebbian_strengthen_existing` は `MemoryLink.player_id` を
-フロンティアに入れていた。経験の主体は `BeingId` なので seed バッファも
-同じ軸に揃える。
-
-**snapshot には載せない**: フロンティアはランタイムの一時バッファのまま。
-長走実験の再開で seed を復元する必要はない。
-
-**この PR で触らない**: `MemoryLink.player_id` / `SemanticMemoryEntry.player_id`
-の型変更、retrieve / `on_episode_committed` 等の `being_id` 引数削除、
-`SubjectiveEpisode` の再設計。
+[本文](design_decisions/175.md)
 
 ## 176. エピソードがある経路では BeingId を VO から読む
 
-**何を**: `SubjectiveEpisode` を既に受け取る公開入口
-(`on_episode_committed`、主観補完 scheduler の `submit`、chunk coordinator
-の `_put_episode` 以降の sidecar) から、呼び出し側の `being_id` 引数を
-削除する。store キーと sidecar は `episode.being_id` / `draft.being_id` を
-一次にする。
-
-**なぜ**: #174 で VO に `being_id` が必須になったあとも、同じ Being を
-引数でもう一度渡しており、引数と VO が食い違う余地が残っていた。エピソード
-が刻済みなら経験の主体は記録から読む。
-
-**残す**: エピソードがまだ無い入口 (`after_action_recorded`、retrieve、
-`MemoCompletionHintService.detect`、`on_passive_recall_candidates` 等) の
-`being_id`。`put_by_being(being_id, episode)` の store 契約もそのまま。
+[本文](design_decisions/176.md)
 
 ## 177. 記憶リンクに経験の主体 BeingId を載せる
 
-**何を**: `MemoryLink` に必須フィールド `being_id: BeingId` を追加する。
-`player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
-食い違う書き込みは `upsert_link_by_being` / `replace_all_by_being` で失敗
-する。
-
-**なぜ**: store は既に Being 単位のキーなのに、葉の記録は `player_id` だけを
-持ち、経験の主体が永続化の面から消えていた。#174 の主観エピソードと同じ型を
-`MemoryLink` に載せる。`EpisodicMemoryLinkApplicationService._put_fresh_link`
-は呼び出し側の `being_id` を VO に刻む。
-
-**旧データ**: snapshot payload に `being_id` キーが無い行は、restore 時の
-snapshot Being から復元する。payload と fallback の両方があり不一致なら
-失敗する (黙って片方を採用しない)。SQLite 行は既存の `being_id_value` 列から
-VO に復元する (スキーマ変更は不要)。
-
-**この PR で触らない**: `SemanticMemoryEntry.player_id` 他の記憶 VO、
-`SubjectiveEpisode.player_id` の削除、`on_passive_recall_candidates` の
-`being_id` 引数削除、未使用 `player_id` 引数の掃除。
+[本文](design_decisions/177.md)
 
 ## 178. monster spawnはslot 1件ごとに確定する
 
-**何を**: `SpotGraphMonsterSpawnStageService`の条件付き配置を、一つの
-`MonsterSpawnSlot`を処理する`CommandScope`へ移す。monster、skill loadout、graph、
-slot対応と内部採番を同じ確定境界へ入れ、graphのspawn / despawn eventは確定後だけ
-既存pipelineへ渡す。
-
-**なぜ**: 従来はloadout、monster、graph、slot対応を順に直接更新していた。後段の
-graph保存などが失敗すると、使われないloadoutやmonsterだけが残り、slotは未配置のため
-次tickで別IDの実体を重ねて作る危険があった。またskill loadoutだけが共有data store外に
-あり、既存のインメモリtransactionではrollbackできなかった。
-
-**どう守るか**:
-
-- 条件評価は確定状態を読むだけなのでscope外で行い、spawn / despawnが必要なslotだけcommandを開始する
-- skill loadout repositoryもmonster等と同じ`InMemoryDataStore`から生成する
-- graphとstageのslot対応・内部採番をrollback参加資源にし、保存失敗時は開始前へ戻す
-- IDはscopeで戻せる内部counterだけを使い、外部factoryとの併用は構築時に拒否する
-- graph eventはrepository保存成功後に`CommandContext`へ収集し、commit後だけ配送する
-- 複数slotは別commandとし、先行slotの確定結果を後続slotの失敗で戻さない
-- 既に別経路でgraphから除去されたmonsterだけはslotを空へ同期し、その他のdespawn例外は隠さない
-- slotsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryへ
-  直接書き込む旧経路を残さない。slotsが空のときだけ副作用なしで終了する
-
-monster behaviorは攻撃、移動、採食などで更新資源が異なるため、このslot境界へ混ぜず、
-monster 1体の行動単位として次段で移行する。
-
-**関連**: #1094 / #1243 / 判断 #171〜#173。
+[本文](design_decisions/178.md)
 
 ## 179. monster behaviorはmonster 1体ごとに確定する
 
-**何を**: `SpotMonsterBehaviorTickService`の攻撃、移動、採食などを、monster
-1体を処理する`CommandScope`へ移す。monster、player status、interior、graphを
-同じ確定境界へ入れ、行動が生んだeventは確定後だけ既存pipelineへ渡す。
-
-**なぜ**: 従来は1回のstageで全monsterを順番に直接更新していた。後続のgraph保存
-などが失敗すると、空腹やHP、地面itemだけが変わる部分適用が起こり得た。また後続
-monsterの失敗が、先に完了したmonsterの行動まで失敗に見せる構造だった。
-
-**どう守るか**:
-
-- tick開始時に対象monster IDを確定し、ID昇順で1体ずつcommandを開始する
-- monster、player status、interiorはscopeから得たrepositoryだけで更新する
-- graphと行動乱数状態をrollback参加資源にし、攻撃状態異常の抽選も同じ乱数へ
-  束縛して、途中失敗では開始前へ戻す
-- `SpotAttackOrchestrator`もcommandごとに複製し、同じscopeのrepositoryとevent収集口へ束縛する
-- graph eventはcommand開始前の列を保持し、そのmonsterが追加したsuffixだけを収集する
-- 複数monsterは別commandとし、先行monsterの確定結果を後続monsterの失敗で戻さない
-- 群れ行動のtick内cacheは従来どおり共有し、同じtick内の判断順序を変えない
-- 公開`tick` APIは`CommandScopeFactory`を必須とし、未配線時はgraphや
-  repositoryへ触れる前に拒否する。直接更新の旧経路は残さない
-
-**関連**: #1094 / #1243 / 判断 #178。
+[本文](design_decisions/179.md)
 
 ## 180. reactive objectはbindingごと、passageはstage全体で確定する
 
-**何を**: reactive objectはbinding 1件を一つの`CommandScope`、reactive
-passageは全bindingを一つの`CommandScope`として処理する。両stageは同じscope
-factoryを共有し、interior、graph、確率条件の乱数列、成功eventを確定境界へ入れる。
-
-**なぜ**: objectはbindingごとに別のobject stateを更新するため、後続bindingの失敗で
-先行bindingを戻す必要がない。一方passageは正逆接続を一つの論理接続として扱い、
-stage内で重複観測を抑制するため、全bindingをまとめて確定する必要がある。従来は
-objectのinterior保存後にgraph eventが未確定のまま残り、passageも複数接続を変更した
-後の保存失敗でgraph参照へ部分状態が漏れ得た。
-
-**どう守るか**:
-
-- objectはbinding 1件ごとにscope由来interior / graph repositoryを使う
-- passageは全bindingの接続変更と重複通知抑制を一つのscopeへ入れる
-- graphと共有`ScenarioConditionEvaluator`の乱数列を同じrollback参加資源にする
-- 各commandが追加したgraph eventだけを収集し、以前のstageが残したeventを横取りしない
-- 成功eventはinterior / graphの確定後だけ既存pipelineへ配送する
-- 後続object bindingの失敗は先行bindingの確定状態と観測を戻さない
-- object bindingsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryを
-  constructorへ保持せずscope由来repositoryだけを使う。bindingsが空のときだけ副作用なしで終了する
-- passage bindingsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryへ
-  直接書き込む旧経路を残さない。bindingsが空のときだけ副作用なしで終了する
-
-**関連**: #1094 / #1243 / 判断 #179。
+[本文](design_decisions/180.md)
 
 ## 181. synchronized actionはgroupごとに確定する
 
-**何を**: `SynchronizedActionResolverStageService`は、一つの同期行動groupを一つの
-`CommandScope`として処理する。準備状態を表すworld flag、同期効果のworld flag、
-graph上の通路変更と成功eventを同じ確定境界へ入れる。
-
-**なぜ**: 従来は全groupを一つのgraph参照へ順番に適用し、最後に一度だけ保存して
-いた。また成功messageはgraph保存より先に通知していた。このため、後続groupや最後の
-保存が失敗すると、先行groupの成功まで失敗に見えたり、実際には戻った通路変更を成功と
-通知したりする余地があった。
-
-**どう守るか**:
-
-- group 1件ごとにscope由来graph repositoryを使い、world flagとgraphを同時に戻せるようにする
-- 完了・期限切れで準備flagを消す処理も同じscopeへ入れ、効果だけ確定する状態を作らない
-- groupが追加したgraph eventだけを収集し、前段stageが残したeventはそのまま保持する
-- 成功messageは専用eventとして同じ`CommandContext`へ収集し、command確定後にだけ通知する
-- 後続groupの失敗は、先に確定したgroupの状態・event・messageを戻さない
-- groupsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryと直接callbackを持たない
-- groupsが空のときだけscope・registry・world flagへ触れず副作用なしで終了する
-
-**関連**: #1094 / #1243 / 判断 #180。
+[本文](design_decisions/181.md)
 
 ## 182. 天候と昼夜は遷移ごとに独立して確定する
 
-**何を**: `SpotGraphEnvironmentStageService`の天候更新と
-`SpotGraphDayNightStageService`の昼夜更新を、それぞれ一つの`CommandScope`へ
-移す。天候は現状態と専用乱数位置、昼夜は現在の`TimeOfDay`をrollback参加資源にする。
-
-**なぜ**: 従来は状態を先に書き換えてからcallbackを直接呼んでいた。後続処理が
-失敗したときの確定単位がなく、天候抽選で消費した乱数も戻せなかった。また天候は
-モジュール全体の乱数を使っており、snapshot再開後の抽選列を継続できなかった。
-
-**どう守るか**:
-
-- 天候更新間隔に到達したtickだけcommandを開始し、現天候と専用`random.Random`を一緒に戻す
-- 昼夜は毎tickの`TimeOfDay`更新を一つのcommandとし、commit失敗では開始前へ戻す
-- 天候・昼夜の変更は`CommandContext`へeventとして収集し、専用dispatcherがscope終了後だけ通知する
-- commit済み後処理失敗でも確定済みeventを通知してから元の`CommandPostCommitException`を維持する
-- `WeatherSubsystemCodec`をschema v2へ上げ、天候専用乱数位置も保存・復元する
-- 旧schema v1は現天候だけを復元し、起動済みruntimeの乱数位置は変更しない
-- `WeatherSimulationService`の直接利用は従来のモジュール乱数を維持し、stageだけ専用乱数を渡す
-
-天候と昼夜は順序上連続していても別の世界状態であり、片方の観測失敗や後段失敗で
-もう片方を戻す理由はないため、scopeは共有しない。
-
-**関連**: #1094 / #1243 / 判断 #181。
+[本文](design_decisions/182.md)
 
 ## 183. 食料劣化は全対象itemをstage単位で確定する
 
-**何を**: `FoodSpoilageStageService`の1回の`run`を一つの`CommandScope`へ
-移し、そのtickで進行する全`ItemAggregate`を同じtransactionで保存する。
-`ItemSpoiledEvent`はscope終了後に専用dispatcherが日次観測バッファへ渡す。
-
-**なぜ**: 従来はitemを一件ずつ保存し、その場で個別callbackを呼んでいた。後続itemの
-保存に失敗すると、先行itemだけが腐り、stage全体は失敗を返す部分適用になり得た。
-また最終保存前に「腐った」という観測が出るため、rollback後の状態と観測が矛盾する
-余地があった。同tickの腐敗は一括観測へ集約されるため、確定単位もstage全体が自然で
-ある。
-
-**どう守るか**:
-
-- 本番runtimeはscope由来の`ItemRepository`だけで全対象itemを走査・保存する
-- 一件でも保存や同期処理に失敗したら、同tickで変更した全itemを開始前へ戻す
-- 腐敗eventは全item保存後にだけ配送し、通知失敗で確定済みitemを戻さない
-- commit済みcleanup失敗でもeventを配送してから`CommandPostCommitException`を維持する
-- 腐敗の進行規則は従来どおり`ItemAggregate.advance_spoilage`を唯一の正本にする
-- 腐敗対象がある公開`run()`はscopeを必須とし、旧repository・callbackを保持しない
-
-**関連**: #1094 / #1243 / 判断 #119 / 判断 #182。
+[本文](design_decisions/183.md)
 
 ## 184. 期限切れ取引提案はoffer一件単位で予約解除と一緒に確定する
 
-**何を**: `TradeOfferExpiryStage`が検出した期限切れ提案を、一件ごとに独立した
-`CommandScope`へ移す。pending offer storeをrollback参加資源、offererのinventoryと
-itemをscope内repositoryとして扱い、提案削除とitem予約解除を同時に確定する。
-
-**なぜ**: 従来は予約解除を先に行う順序により、途中失敗を次tickで自己修復できる
-形にしていた。しかし予約解除後に提案削除が失敗すると、そのtick中は「生きている
-提案なのに品を使える」という中間状態が残る。順序による回復可能性は安全網として
-有用だが、同じ操作の二状態を一緒に確定できるなら中間状態自体を作らない方がよい。
-
-**どう守るか**:
-
-- 期限判定と処理順は従来どおりoffer ID順にし、期限内の提案には触れない
-- offer一件の予約解除・inventory保存・pending store削除を一つのscopeへ入れる
-- 後続offerが失敗しても、先に確定したofferの期限切れは戻さない
-- 期限切れ観測は各offerのcommit後に観測pipelineへ直接、最善努力で通知する。
-  tick末のgraph event flushへ預けると、後続offer失敗時に先行offerの観測まで
-  滞留するため、offer単位の確定境界と配送境界を揃える
-- commit済みcleanup失敗では観測後に元の`CommandPostCommitException`を維持する
-- pending storeのsnapshotは提案集合と次IDを厳密に保持する
-- 候補取得もscope由来のpending storeだけで行い、各offerのscope内で現在も期限切れか再確認する
-- 公開`run()`はscopeを必須とし、長寿命pending store・凍結service・直接callbackを保持しない
-- `TradeOfferExpiredEvent`をcommand contextへ収集し、専用dispatcherがcommit後に観測pipelineへ渡す
-
-**関連**: #1094 / #1243 / 判断 #87 / 判断 #183。
+[本文](design_decisions/184.md)
 
 ## 185. 期限切れ市場注文はorder一件単位で預り資産と一緒に確定する
 
-**何を**: `MarketOrderExpiryStage`が検出した期限切れ注文を、一件ごとに独立した
-`CommandScope`へ移す。market board storeをrollback参加資源、返却先のinventory・
-player status・itemをscope内repositoryとして扱い、板の削除または引き取り待ち化と
-預り品・預りgoldの返却を同時に確定する。
-
-**なぜ**: 従来の`MarketService.expire_orders`は複数注文の預り資産を順に返し、
-最後に板全体を一度だけ保存していた。途中注文で失敗すると、先行注文は資産だけ
-返却済みなのに板へ残り、次tickで同じ資産を二重返却し得る。stageが例外を警告へ
-変えるため、世界はその不整合を抱えたまま進行していた。
-
-**どう守るか**:
-
-- 期限判定は板のsnapshotからorder ID順に行い、各order内で現在も期限切れか再確認する
-- 売り注文はitem生成・inventory返却・板更新、買い注文はgold返却・板更新を同じscopeへ入れる
-- 所持品が満杯なら品を失わず、従来どおり引き取り待ちへの遷移だけを確定する
-- 通常失敗したorderは開始前へ戻して次tickで再試行し、独立した後続orderは処理を続ける
-- 先行orderの確定は後続orderの失敗で戻さない
-- 期限切れ観測と市場traceは各orderのcommit後だけ最善努力で通知する
-- commit済みcleanup失敗では観測後に`CommandPostCommitException`を維持し、資源を再利用させない
-- market board snapshotは板と次order IDを厳密に保持する
-- 公開stageと`MarketService.expire_orders` / `expire_order`は`CommandScopeFactory`を
-  必須とし、未配線なら板を読む前に拒否する
-- 公開一括入口も注文ごとに独立したscopeを作り、実更新はscope由来repositoryを
-  受け取るprivate処理だけへ集約する
-
-**関連**: #1094 / #1243 / 判断 #115 / 判断 #140 / 判断 #184。
+[本文](design_decisions/185.md)
 
 ## 186. プレイヤー結果規則は発火rule単位で全対象と進捗を確定する
 
-**何を**: `PlayerOutcomeRuleStageService`の条件評価、適格な未確定player全員の
-outcome遷移、一度限りの発火進捗を、rule一件ごとの`CommandScope`へ移す。
-`PlayerOutcomeRegistry`、`InMemorySpotGraphScenarioEventProgressStore`、
-`ScenarioConditionEvaluator`の確率乱数をrollback参加資源にする。
-
-**なぜ**: 従来は適格playerを順に`set_outcome`し、全員の処理後に進捗を記録して
-いた。途中のplayer評価や最後の進捗記録で失敗すると、先行playerだけ結果と通知が
-確定した一方でruleは未消費になり、次tickに同じ機会を再評価する部分確定が残った。
-
-当初の監査表では「playerとruleの一組」を確定単位としていたが、once ruleは対象者が
-ゼロでも機会を消費し、同じ発火機会に複数playerが適格になり得る。playerごとに進捗を
-確定すると、先行playerの成功後に後続playerが失敗した場合、その後続playerだけが機会を
-永久に失う。したがって、発火時点の適格player集合とrule進捗を一つの業務不変条件として
-扱う。
-
-**どう守るか**:
-
-- 発火済みのonce ruleはscope開始前にskipし、資源所有権の取得後にも再確認して
-  待機中に確定した同じruleを二重評価しない
-- triggerとplayer条件の評価もscope内で行い、失敗時は消費した確率乱数を戻す
-- ruleで許可するoutcomeは、この境界だけで世界状態を完結できる`RESCUED`と
-  `STRANDED`に限る。退場位置やgraph更新を要する`DEAD` / `EJECTED`は読込時に拒否する
-- outcome更新ではcallbackを抑止し、全outcomeとprogressのcommit後に元のplayer順で通知する
-- 対象者がゼロでも、triggerが成立したonce ruleは従来どおり発火済みにする
-- 通常失敗はrule全体を開始前へ戻す。先行ruleの確定は後続ruleの失敗で戻さない
-- commit済みcleanup失敗では確定outcomeを通知してから`CommandPostCommitException`を維持する
-- 条件traceは成功観測ではなく評価試行の診断なので、従来どおり評価時点で記録する
-- 規則がある公開stageは`CommandScopeFactory`を必須とし、未配線なら進捗を読む前に
-  拒否する。outcomeとonce進捗を直接更新する旧callback経路は残さない
-
-**関連**: #1094 / #1243 / 判断 #70 / 判断 #114 / 判断 #169 / 判断 #185。
+[本文](design_decisions/186.md)
 
 ## 187. 死亡猶予の期限到達はplayer単位で結果・timer・退場位置を確定する
 
-**何を**: `PlayerDeathGraceTickStage`が検出した期限超過playerを、一人ごとの
-`CommandScope`へ移す。`PlayerOutcomeRegistry`、`PlayerDeathGraceTimer`、
-`FallenBodyRegistry`、`DepartedPositionStore`をrollback参加資源にし、`DEAD`遷移、
-pending削除、身体位置を起点にした退場位置を一緒に確定する。
-
-**なぜ**: 従来は`set_outcome(DEAD)`がcallbackを即時実行し、そのcallbackが退場位置と
-観測を更新した後にgrace timerを掃除していた。timer掃除や後続playerで失敗すると、
-死亡結果・退場位置・観測だけが残り、pendingも次tickの再試行対象も不整合になり得た。
-また、期限超過一覧の取得後に蘇生されても、古い候補を再確認せず死亡確定できた。
-
-**どう守るか**:
-
-- 期限超過一覧の順序を維持しつつ、player一人ごとに独立scopeを作る
-- scope取得後にtimerのpending・期限と正本`PlayerStatus.is_down`を再確認する。蘇生済みなら
-  `DEAD`にせず、個別handler失敗で残ったpendingと身体記録だけを同じscopeで掃除する
-- outcome callbackを抑止して`DEAD`・pending削除・退場位置をcommit前に揃える
-- outcome registryのcallbackから退場位置変更を除き、commit後の観測だけを残す
-- 身体記録が無い場合は従来どおり`DEAD`とpending削除を確定し、退場位置未設定を
-  commit後に警告する
-- 通常失敗はそのplayerだけ開始前へ戻す。先行playerの死亡確定は後続playerの失敗で戻さない
-- commit済みcleanup失敗では確定済みoutcomeを通知してから
-  `CommandPostCommitException`を維持する
-- 公開stageは`CommandScopeFactory`を必須とし、未配線ならtimerを読む前に拒否する。
-  直接構築から死亡結果だけを更新できる旧callback経路は残さない
-- `PlayerOutcomeRegistry.set_outcome(DEAD)`の直接呼出しは結果だけを変える低水準操作とし、
-  退場位置を暗黙に補完しない。世界状態を伴う死亡確定はdeath grace commandが所有する
-
-**関連**: #1094 / #1243 / 判断 #114 / 判断 #169 / 判断 #186。
+[本文](design_decisions/187.md)
 
 ## 188. 探索は発見回数・室内・付与品・観測を一度に確定する
 
-**何を**: 本番の`SpotExplorationApplicationService.explore_once`を
-`CommandScope`へ移し、探索回数、発見済み状態、生成品、所持品、満杯時に足元へ
-落とす品を同じ失敗境界へ入れる。`SpotExploredEvent`と溢れ観測はcommit後だけ配送する。
-
-**なぜ**: 従来は探索回数を先に増やし、室内保存、品物生成、所持保存を順に行っていた。
-後段が失敗すると探索回数や発見済み状態だけが残り、再試行しても報酬を得られない、
-または状態に存在しない発見を観測する部分確定が起こり得た。
-
-**どう守るか**:
-
-- 探索回数storeをrollback参加資源にし、共有`InMemoryDataStore`のrepository更新と揃える
-- `GroundOverflowSink`はscope由来repositoryと`CommandContext`へ束縛し直す
-- 成功観測は発見状態と品物付与のcommit後にだけ配送する
-- 公開`explore_once`はscope factory未配線ならrepositoryへ触れる前に停止し、
-  探索規則の単体試験だけが`_explore_with_repositories`を直接使う
-- world flagは探索条件の読取専用であり、このcommandの変更資源には含めない
-
-**関連**: #1094 / #1244 / 判断 #87 / 判断 #114 / 判断 #187。
+[本文](design_decisions/188.md)
 
 ## 189. 同席取引は提案・承諾・辞退をそれぞれ一度に確定する
 
-**何を**: 現行`WorldRuntime`が使う`PlayerTradeService`の`offer`、`accept`、
-`decline`を、一操作ごとの`CommandScope`へ移す。pending offer storeをrollback参加資源、
-二者のinventory・status・itemをscope内repositoryとし、取引観測はcommit後に配送する。
-
-**なぜ**: 提案はstore登録後に品物を予約し、承諾は予約解除後に二者の品物と所持金を
-順に動かし、辞退は予約解除後にstoreから提案を消していた。途中失敗すると、提案の
-無い予約、品物だけ動いた決済、辞退済みなのに予約中といった部分確定が残り得た。
-
-**どう守るか**:
-
-- 提案ではID払い出し・store登録・差し出す品の予約を同時に確定する
-- 承諾では予約解除・二者の品物・所持金・提案削除を同時に確定する
-- 辞退では予約解除と提案削除を同時に確定する
-- `TradeFreezeService`もcommand内のinventory・status・itemを使い、長寿命repositoryを迂回しない
-- 成功観測は同じ`CommandContext`へ収集し、commit前には外へ出さない
-- 公開更新入口はscope未配線なら依存へ触れる前に停止し、規則実行はscope用の内部複製だけに許す
-
-**関連**: #1094 / #1244 / 判断 #87 / 判断 #114 / 判断 #184 / 判断 #188。
+[本文](design_decisions/189.md)
 
 ## 190. NPC商人との売買は支払・品物・観測を一度に確定する
 
-**何を**: `SpotGraphMerchantTradeService.buy`と`sell`を、一回の売買ごとの
-`CommandScope`へ移す。playerのstatus・inventory・itemをscope内repositoryから取得し、
-取引中の凍結額・予約品を読む`TradeFreezeService`も同じrepositoryへ束縛する。
-
-**なぜ**: 購入は所持金を保存してから品物を生成・付与し、売却は品物を所持から外して
-から所持金を保存していた。後半が失敗すると、支払ったのに品物が無い、品物を失ったのに
-代金が増えない部分確定が残り得た。成功観測も確定前に直接配送されていた。
-
-**どう守るか**:
-
-- 購入では支払・品物生成・所持保存を同時に確定する
-- 売却では所持からの除去・所持金加算を同時に確定する
-- pending offer storeも読取中の凍結状態を安定させるため同じ資源所有権へ参加させる
-- `PlayerTradedWithMerchantEvent`は`CommandContext`へ収集してcommit後にだけ配送する
-- 商人の在庫と所持金は従来どおり無限かつ状態を持たないため、変更資源に加えない
-- 公開更新入口はscope未配線なら依存へ触れる前に停止し、規則実行はscope用の内部複製だけに許す
-
-**関連**: #1094 / #1244 / 判断 #114 / 判断 #189。
+[本文](design_decisions/190.md)
 
 ## 191. 市場注文の預託・値付け・返却は操作ごとに確定する
 
-**何を**: playerによる売り注文・買い注文の掲載、値付け直し、取り下げを、
-一回の公開操作ごとの`CommandScope`へ移す。板と採番をrollback参加資源とし、
-inventory・status・itemはscope内repositoryだけで更新する。
-
-**なぜ**: 板は品またはgoldを先に預かる。掲載後半の板保存、買い注文の値上げ、
-取り下げ後半の板保存が失敗すると、預けた資産と板の注文が食い違い得た。
-成功観測と価格traceも確定前に出るため、失敗した注文が価格履歴へ残る余地があった。
-
-**どう守るか**:
-
-- 板、次の注文ID、品、goldを同じrollback境界へ載せる
-- pending trade offerも同じ資源所有権へ載せ、対人取引へ提示中のgoldを
-  `TradeFreezeService.available_gold`で差し引いて二重利用を拒否する
-- `MarketBoardActivityEvent`は`CommandContext`へ収集してcommit後にだけ配送する
-- 市場traceは操作中に保留し、commit後またはcommit済み後処理失敗時にだけ転記する
-- 複数注文を受ける`buy_best` / `sell_best`と直接の`take_order`は、複数約定を
-  一括確定する次の段階で移す
-- 商人名義の初期注文はworld構築中に置かれ、player資産を動かさないため対象外とする
-- player資産を動かす公開更新入口はscope未配線なら依存へ触れる前に停止する
-
-**関連**: #1094 / #1244 / 判断 #114 / 判断 #190。
+[本文](design_decisions/191.md)
 
 ## 192. 一回の市場操作が生む複数約定はまとめて確定する
 
-**何を**: `take_order`、`buy_best`、`sell_best`を市場更新用`CommandScope`へ
-接続する。`buy_best` / `sell_best`が複数注文を順に受けても、外側の公開操作が
-一つのscopeを所有し、内側の各`take_order`は同じrepositoryと板を使う。
-
-**なぜ**: 価格順に複数注文を受ける途中で後半が失敗すると、先頭の約定だけが
-成立し、呼び出しは失敗を返す部分確定が起こり得た。満杯の遠隔買い手へ品を
-渡す経路は板の足元へ品を置くため、地面とその観測も同じ問題を持っていた。
-
-**どう守るか**:
-
-- 一回の`buy_best` / `sell_best`が動かす全注文、全playerのgold・inventory、
-  item実体、板と採番を一つのrollback境界へ載せる
-- `take_order`を直接呼ぶ場合も一約定を同じ境界へ載せる
-- `GroundOverflowSink.bind_to_command`で板の足元への配送をscope内の
-  graph・interior・itemと`CommandContext`へ束縛する
-- 全約定の観測はcommit後に宣言順で配送し、価格traceもcommit後に転記する
-- 対人取引へ提示中のgoldは判断#191と同じ`TradeFreezeService`で差し引く
-
-**関連**: #1094 / #1244 / 判断 #114 / 判断 #191。
+[本文](design_decisions/192.md)
 
 ## 193. アイテム消費と消費効果は同じ確定区間で適用する
 
-**何を**: 本番`spot_graph_use_item`を専用`CommandScope`へ接続し、itemの数量、
-inventory slot、PlayerStatusへの消費効果と疲労回復を一操作として確定する。
-`ConsumableUsedEvent`はcommit前必須処理で状態効果を適用した後、commit後の観測へ
-同じeventを引き渡す。
-
-**なぜ**: 旧経路は品物を先に保存・削除してから`ConsumableUsedEvent`をpipelineへ
-直接配送し、pipeline side handlerが別の更新としてPlayerStatusへ効果を適用していた。
-効果保存が失敗すると品物だけが減り、逆に確定前の観測や後段の疲労回復失敗も
-一操作の成否へ追随しなかった。
-
-**どう守るか**:
-
-- item・inventory・PlayerStatusは同じscope由来repositoryだけで更新する
-- 通常の消費効果は`ConsumableUsedEvent`のcommit前必須handlerとして適用する
-- 腐敗品の直接ダメージと疲労回復も失敗を握らず、操作全体をrollbackする
-- pipelineから状態変更handlerを外し、確定後は観測だけを配送する
-- LLMの短発話はscope終了後に行い、失敗した消費を発話しない
-- `SpotGraphToolExecutor._use_item`はscope factory未配線なら`NOT_WIRED`で拒否し、
-  scope外でitem・inventory・statusを更新する旧入口を#1244で撤去する
-
-**関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #192。
+[本文](design_decisions/193.md)
 
 ## 194. 介抱による復活と復活イベントは同じ確定区間へ載せる
 
-**何を**: 本番`spot_graph_tend_to_player`を`CommandScope`へ接続し、対象の
-`PlayerStatusAggregate.revive`、status保存、`PlayerRevivedEvent`収集を一操作として
-確定する。短発話とeventの外部配送はscope正常終了後にだけ行う。
-
-**なぜ**: 旧経路はstatusを長寿命repositoryへ保存してからeventをpipelineへ直接
-配送していた。保存失敗をDTOへ変換すると、repository実装によっては復活だけが漏れ、
-逆に確定前の復活観測が出る余地もあった。前提条件違反も通常returnなので、scopeを
-正常commitさせず明示的にrollbackへ写す必要がある。
-
-**どう守るか**:
-
-- actorとtargetはscope由来のPlayerStatus repositoryから読み直す
-- 成功時だけstatusと`PlayerRevivedEvent`をcommitし、失敗DTOは内部例外でrollbackする
-- `PlayerRevivedEvent`は確定後に既存pipelineへ渡し、復活済みstatusを観測できる
-- `say_inline`はscope終了後に行い、失敗した介抱を発話しない
-- FallenBodyとdeath grace timerは判断#196で同じscopeのrollback参加資源となり、
-  status遷移と一緒に確定する
-- `SpotGraphToolExecutor._tend_to_player`はscope factory未配線なら`NOT_WIRED`で
-  拒否し、復活statusだけを部分確定できる旧入口を#1244で撤去する
-
-**関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #193。
+[本文](design_decisions/194.md)
 
 ## 195. 協力行動の二種類の準備記録は一緒に確定する
 
-(#218 で入口を `interact` に統合した。準備経路自体はここに書いたとおり。)
-
-**何を**: 本番`spot_graph_prepare_action`を`CommandScope`へ接続し、互換用の
-`prepared:{action}:{player}` flagと、猶予窓判定用の
-`sync_prep:{action}:{player}:{tick}` flagを一操作として確定する。準備観測は
-両方のflagがcommitした後にだけ配送する。
-
-**なぜ**: 旧経路は二種類のflagを順番に直接更新していた。後半のtick付き登録が
-失敗すると、操作は失敗を返す一方で互換flagだけが残り、別のinteraction条件が
-準備済みと誤認できた。`SpotPlayerPreparedActionEvent`も更新中にpipelineへ直接
-渡され、観測が確定状態より先行し得た。
-
-**どう守るか**:
-
-- world flagをrollback参加資源として占有し、二種類の準備記録をまとめて戻す
-- graph参照はscope由来の読取口を使い、準備eventは`CommandContext`へ収集する
-- 失敗DTOは内部例外へ写してscopeをrollbackし、部分的なflagを残さない
-- 準備観測のhandlerから両flagの確定状態を読めることを試験で固定する
-- `SpotGraphToolExecutor._prepare_action`はscope factory未配線なら`NOT_WIRED`で
-  拒否し、実処理はscope内部の`_execute_prepare_action_in_scope`だけが呼ぶ
-
-**関連**: #1094 / #1244 / 判断 #114 / 判断 #194。
+[本文](design_decisions/195.md)
 
 ## 196. ダウン・蘇生は身体と死亡猶予まで一度に確定する
 
-**何を**: `PlayerDownedEvent`と`PlayerRevivedEvent`に伴うFallenBodyと
-`PlayerDeathGraceTimer`の更新を、イベントを生んだ`CommandScope`のcommit前必須処理へ
-移す。PlayerStatus、身体、猶予タイマーを同じ失敗境界で確定し、外部観測はcommit後に
-だけ配送する。
-
-**なぜ**: 旧経路はPlayerStatusを確定した後、`PipelineEventPublisher`の最善努力
-side handlerで身体と猶予を別々に変更していた。登録・取消の片方が失敗すると、倒れて
-いるのに死亡期限が無い、蘇生済みなのに期限到達で死亡する、といった回復不能な状態が
-残った。確定後に同じ状態handlerを再実行する経路も、古いeventが新しいepisodeを
-上書きする原因になる。
-
-**どう守るか**:
-
-- interaction、道具使用、needs・状態異常tick、scenario event、monster行動の各scopeで
-  同じ身体・猶予参加資源を共有する
-- 身体記録・猶予登録・身体削除・猶予取消の失敗はPlayerStatusを含む操作全体を戻す
-- 本番のpipelineから身体・猶予の正本更新を外す。#1244で互換アダプタも撤去し、
-  `PipelineEventPublisher`は身体・猶予を補正しない観測専用の出口にする
-- commit前の猶予取消で失神時間を失わないよう、取消時の起点tickを復活event_idへ
-  一度だけ引き渡し、commit後のpost hoc観測が消費する
-- テストがダウン状態を直接準備する場合はPlayerStatus・身体・猶予を明示して作り、
-  `publish_all`を状態更新コマンドの代わりに使わない
-
-**関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #187 / 判断 #194。
+[本文](design_decisions/196.md)
 
 ## 197. 旧確定経路は許可表を縮めながら撤去する
 
-**何を**: #1244の最終撤去では、`CommandScopeFactory`を保持するapplication serviceを
-「scope必須」と「未配線時に旧更新へ戻る残存経路」へ機械的に分類する。旧
-`domain.common.unit_of_work.UnitOfWork`を直接使うmoduleと、`UnitOfWorkFactory`経由で
-生成するmoduleも別の許可表へ固定し、現行のruntime・LLM・presentationから再接続しない。
-
-**なぜ**: 本番composition rootへfactoryを注入しただけでは、直接構築や将来の配線漏れで
-長寿命repository・直接publisherへ静かに戻れる。反対に、未接続の旧bounded contextを
-spot-graph runtimeの撤去と一括で消すと、現在の機能境界を越えた大きな変更になる。
-「通常は新経路を通る」と「旧経路が存在しない」を区別し、残件を数えられる正本が必要である。
-
-**どう守るか**:
-
-- `docs/refactor_plans/uow_legacy_command_path_inventory.md`を人間向け正本とする
-- 構造試験でscope所有serviceの分類、旧UnitOfWork・factory import一覧、本番composition
-  rootの再exportを含むimport graphと旧client classの構築禁止を双方向に検査する
-- 移行PRごとに残存許可表から対象を除き、未配線拒否をrepository接触前に試験する
-- query、純粋な観測生成、fixture・移行・管理用書込みを更新commandと混同しない
-- 残存許可表が空になってから全scenario構築と全体試験を行い、#1244を閉じる
-
-**関連**: #1094 / #1244 / 判断 #147〜#196。
+[本文](design_decisions/197.md)
 
 ## 198. player statusのtick stageはscope未配線を拒否する
 
-**何を**: `SpotGraphNeedsDecayStageService`と`StatusEffectsTickStageService`から、
-長寿命`PlayerStatusRepository`と直接publisherを撤去する。公開`run()`は
-`CommandScopeFactory`を必須とし、未配線なら状態へ触れる前に拒否する。
-
-**なぜ**: 本番runtimeがfactoryを注入していても、直接構築時に旧repositoryへ戻れる限り、
-将来の配線漏れが非原子的な更新として静かに動く。旧publisherはPlayerStatus確定前のevent
-配送を再導入でき、判断#171・#172で作った身体・死亡猶予を含む確定境界を迂回する。
-
-**どう守るか**:
-
-- constructorは更新規則とevidence依存だけを受け、repository・publisherを保持しない
-- 公開`run()`はscope由来repositoryだけで全playerを一括更新する
-- aggregate eventはrepositoryのevent sinkから`CommandContext`へ集め、確定後だけ配送する
-- 未配線拒否、全員rollback、確定後event、commit済みcleanup時のevidence追随を試験する
-- 純粋なneeds・状態異常規則はprivate helperへrepositoryを明示して検証する
-
-**関連**: #1094 / #1244 / 判断 #171 / 判断 #172 / 判断 #197。
+[本文](design_decisions/198.md)
 
 ## 199. 食料劣化の公開入口はscopeと集約eventだけを使う
 
-**何を**: `FoodSpoilageStageService`から長寿命`ItemRepository`、個別callback、
-一括callbackを撤去する。腐敗対象がある公開`run()`は`CommandScopeFactory`を必須とし、
-`ItemAggregate`が積む`ItemSpoiledEvent`を専用dispatcherで確定後に日次観測へ渡す。
-
-**なぜ**: 本番配線がscopeを使っていても旧repository入口が残れば、直接構築や将来の
-配線漏れで全item一括rollbackを迂回できる。callbackは保存処理と通知処理を同じserviceへ
-再結合し、確定前観測や`CommandPostCommitException`時の通知漏れを再導入しやすい。
-
-**どう守るか**:
-
-- 腐敗対象が空なら依存へ触れず終了し、対象があればrepository接触前に未配線を拒否する
-- 腐敗規則とevent生成を`ItemAggregate.advance_spoilage`へ置き、stageは走査・保存だけを行う
-- 専用dispatcherは全itemのcommit後にeventを日次観測バッファへ渡す
-- 保存失敗では全itemとevent配送を戻し、確定後handler失敗では状態を戻さない
-- 構造棚卸しではfood spoilageを残存許可表からscope必須表へ移す
-
-**関連**: #1094 / #1244 / 判断 #119 / 判断 #183 / 判断 #197。
+[本文](design_decisions/199.md)
 
 ## 200. 取引提案期限切れの公開入口はscope由来storeだけを使う
 
-**何を**: `TradeOfferExpiryStage`から長寿命pending store、`TradeFreezeService`、
-直接observerを撤去する。候補取得とofferごとの再確認・予約解除・削除をscope由来の
-依存だけで行い、`TradeOfferExpiredEvent`を確定後に専用dispatcherへ渡す。
-
-**なぜ**: 候補取得だけを確定区間の外へ残すと、別commandが先に承諾・辞退した提案を
-古いsnapshotから期限切れにできる。直接callbackも、commit済みcleanup失敗や後続offerの
-失敗時に通知漏れ・二重通知を作りやすい。更新と通知の所有者をoffer単位のcommandへ
-揃えれば、先行offerの確定を維持したまま後続offerだけを戻せる。
-
-**どう守るか**:
-
-- 公開`run()`はscope未配線を状態参照前に拒否する
-- 最初のscopeで候補IDだけを取得し、offerごとのscopeで現在状態と期限を再確認する
-- providerが公開するpending storeは、同じrollback participantの資源であることを検証する
-- 予約解除、pending store削除、`TradeOfferExpiredEvent`収集を同じscopeへ入れる
-- 観測失敗で確定済みofferを戻さず、後続offer失敗でも先行offerの通知を失わない
-- 構造棚卸しではtrade offer expiryを残存許可表からscope必須表へ移す
-
-**関連**: #1094 / #1244 / 判断 #87 / 判断 #184 / 判断 #197。
+[本文](design_decisions/200.md)
 
 ## 201. 天候・昼夜の公開入口はscopeと確定後eventだけを使う
 
-**何を**: `SpotGraphEnvironmentStageService`と`SpotGraphDayNightStageService`から
-直接callbackと未配線時の更新経路を撤去する。更新対象tickの公開`run()`は
-`CommandScopeFactory`を必須とし、天候・昼夜の変更を専用eventとして収集する。
-
-**なぜ**: 本番がscopeを注入していても、未配線時に状態を直接更新できれば、将来の
-配線漏れで天候状態・乱数位置・昼夜位置のrollbackを静かに迂回できる。callbackをstageへ
-残すと、状態更新と観測配送が再び結合し、確定前通知や確定後例外時の通知漏れを作りやすい。
-
-**どう守るか**:
-
-- 天候は更新間隔外のtickだけ副作用なしで終了し、更新対象tickではstate参照前に未配線を拒否する
-- 昼夜は毎tickの更新前に未配線を拒否する
-- stageは`SpotGraphWeatherChangedEvent`または`SpotGraphDayNightPhaseChangedEvent`を収集するだけにする
-- 本番composition rootの専用dispatcherが、設定された場合だけ確定後観測へ変換する
-- callback handlerの失敗は最善努力として警告化し、確定済み世界状態を戻さない
-- 構造棚卸しではweather・day-nightを残存許可表からscope必須表へ移す
-
-天候のprovider / setterと昼夜の現在値はrollback・snapshotの対象となるstage自身の状態境界であり、
-観測用の長寿命依存ではないため残す。
-
-**関連**: #1094 / #1244 / 判断 #182 / 判断 #197。
+[本文](design_decisions/201.md)
 
 ## 202. reactive objectと同期行動の公開入口はscopeだけを使う
 
-**何を**: `ReactiveObjectStateBindingStageService`と
-`SynchronizedActionResolverStageService`から、未配線時の長寿命repository更新を撤去する。
-同期行動の`SHOW_MESSAGE`も直接callbackではなく専用eventとして確定区間へ収集する。
-
-**なぜ**: 本番配線が正しくても直接更新入口が残ると、将来の配線漏れや直接構築で
-interior・graph・world flag・prepare消去のrollbackを静かに迂回できる。message callbackを
-stageが所有すると、状態確定と観測配送が別の成功条件になり、確定前通知を再導入しやすい。
-
-**どう守るか**:
-
-- bindings / groupsが空のときだけscope不要の副作用なし終了を許す
-- 更新対象がある場合はrepository・条件評価・registryへ触れる前に未配線を拒否する
-- reactive objectはconstructorへgraph / interior repositoryを受け取らず、bindingごとにscope由来repositoryを使う
-- synchronized actionはconstructorへgraph / interior repositoryとmessage callbackを受け取らない
-- `SynchronizedActionMessageEvent`をgraph eventの後に収集し、専用dispatcherが確定後に参加者観測へ変換する
-- 構造棚卸しでは両stageを残存許可表からscope必須表へ移す
-
-**関連**: #1094 / #1244 / 判断 #180 / 判断 #181 / 判断 #197。
+[本文](design_decisions/202.md)
 
 ## 203. monster behaviorの公開tickはscopeを必須とする
 
-**何を**: `SpotMonsterBehaviorTickService.tick`から、`CommandScopeFactory`未配線時に
-長寿命repositoryを直接更新する旧経路を撤去する。未配線ならgraphを読む前に
-明示例外で停止する。
-
-**なぜ**: 本番runtimeがfactoryを注入していても、直接構築で旧経路へ戻れる限り、
-将来の配線漏れが攻撃・移動・採食の部分適用と確定前観測を静かに復活させる。
-monster単位で作った確定境界を公開入口の唯一の更新経路にする必要がある。
-
-**どう守るか**:
-
-- 公開`tick`は最初にfactoryを検査し、未配線ならrepositoryとorchestratorへ触れない
-- tick開始時のID一覧も読取り専用scopeのgraphから取得し、各monsterの
-  更新は必ず別のscope由来repositoryで行う
-- 攻撃・採食・移動の規則試験はprivateなロード済み規則入口に寄せ、
-  公開入口の配線契約と混同しない
-- 構造棚卸しでmonster behaviorを残存許可表からscope必須表へ移す
-
-**関連**: #1094 / #1244 / 判断 #179 / 判断 #197。
+[本文](design_decisions/203.md)
 
 ## 204. 取引系の公開更新入口はscope未配線を拒否する
 
-**何を**: `PlayerTradeService`、`SpotGraphMerchantTradeService`、`MarketService`から、
-`CommandScopeFactory`未配線時に長寿命repositoryで更新する旧経路を撤去する。公開更新は
-scopeを必須とし、scope用の内部複製だけが束縛済みrepositoryで取引規則を実行する。
-
-**なぜ**: 本番runtimeがfactoryを注入していても、直接構築時の更新fallbackが残れば、
-将来の配線漏れで提案の予約、二者決済、商人売買、市場の預託・約定を部分確定へ戻せる。
-さらにplayer tradeとmerchant tradeの長寿命publisherはscope経路では使われず、確定前配送を
-再導入できる不要な接続口になっていた。
-
-**どう守るか**:
-
-- player tradeの提案・承諾・辞退、merchant tradeの購入・売却、市場のplayer資産を動かす
-  公開更新は、factory未配線ならrepository・store・publisherへ触れる前に停止する
-- scope用内部複製を明示し、その複製だけが既存の規則本体を実行する
-- player tradeとmerchant tradeの長寿命publisher setterをcomposition rootから撤去し、
-  成功eventは`CommandContextEventPublisher`だけへ収集する
-- market order expiryの確定後観測口と、world構築時の商人初期注文は更新fallbackではないため維持する
-- 構造棚卸しで3サービスを残存許可表からscope必須表へ移す
-
-**関連**: #1094 / #1244 / 判断 #184 / 判断 #189 / 判断 #190 / 判断 #191 / 判断 #192 / 判断 #197。
+[本文](design_decisions/204.md)
 
 ## 205. interactionの公開更新入口はscope未配線を拒否する
 
-**何を**: `SpotInteractionApplicationService`の物体・道具操作と
-`PlayerInteractionApplicationService`の対人操作から、factory未配線時に長寿命repositoryと
-直接publisherで実行する旧経路を撤去する。
-
-**なぜ**: 本番配線が正しくても直接更新fallbackが残れば、将来の配線漏れでinterior、graph、
-inventory、status、world flag、cooldownの一括rollbackと確定後観測を静かに迂回できる。
-とくにinteractionは現在のシナリオの中心なので、公開入口を唯一の確定経路へ固定する必要がある。
-
-**どう守るか**:
-
-- 物体・道具・対人の公開更新は、factory未配線ならrepository・publisherへ触れる前に停止する
-- 成功eventはscope内の`CommandContextEventPublisher`だけへ収集する
-- 物体操作の前提条件拒否だけは、rollback後の確定状態を伝える観測として専用publisherへ渡す
-- `CALL_MEETING`はfactory配線を確認した後、通常interaction scopeを開始せず
-  `MeetingCommandService`の専用scopeだけで完結する
-- 対人interactionでは意味を持たなかった`CALL_MEETING`特例を削除し、通常のscope経路へ統一する
-- 構造棚卸しの残存許可表を空にし、両serviceをscope必須表へ移す
-
-**関連**: #1094 / #1244 / 判断 #117 / 判断 #166 / 判断 #167 / 判断 #197。
+[本文](design_decisions/205.md)
 
 ## 206. #1244完了後は任意の確定区間fallbackを認めない
 
-**何を**: 本番commandの旧確定経路を撤去した最終状態を、全出荷シナリオの実構築試験と
-ASTによる構造棚卸しの二層で固定する。
-
-**なぜ**: 個別serviceの試験だけでは、シナリオ条件によって生成されるstageの配線漏れや、
-新しい更新serviceを許可表へ分類し忘れる静かな失敗を検出できない。一方、実構築だけでは
-未使用の旧clientや直接構築fallbackの再導入を検出できないため、両方が必要である。
-
-**どう守るか**:
-
-- `data/scenarios/*.json`を列挙し、各runtimeに存在する更新service・stageのfactory接続を検査する
-- `use_item`、`tend_to_player`、`prepare_action`のruntime所有factoryも同じ試験で検査する
-- application全体のscope factory所有moduleを必須経路表と双方向比較する
-- 任意fallback許可表は空集合を明示的な契約とし、再導入には設計判断の更新を要求する
-- 旧`UnitOfWork` client 39ファイルは未接続library面として固定し、本番compositionからの
-  構築をAST import graphで禁止する
-
-**関連**: #1094 / #1244 / 判断 #153 / 判断 #197 / 判断 #205。
+[本文](design_decisions/206.md)
 
 ## 207. gold を減らす効果は、前提条件とのペアを読み込みで強制する
 
-**何を**: `DEPOSIT_GOLD_TO_OBJECT` (行為者の gold を object.state の累積値へ
-移す効果) を持つ interaction は、同じ操作に `PLAYER_GOLD_AT_LEAST` の
-`gold_threshold` が納める総額以上で書かれていないと `ScenarioLoadError` に
-なる。
-
-**なぜ**: 支払いは application 層が効果の適用後に行う。前提条件で額を受け
-止めないと「カウンタは保存されたのに払えない」という部分成功 (= 金銭が動く
-ツールは部分成功なし、の違反) が宣言だけで作れてしまう。宣言だけで成立する
-規則は run ではなく読み込みで止める (#1225 / #1227 と同じ向き)。
-
-**なぜ item (DEPOSIT_ITEM_TO_OBJECT) には同じ強制が無いか**: 品物の減算は
-効果内で予約数と加算数を同じ値から作るうえ、実際の除去可否は永続化前の
-runtime ガード (`_require_removable_items`) が全量を検査する。gold には
-「予約」に相当する中間状態が無いので、静的なペアで先に受け止める。
-
-**支払いの適用位置**: カウンタの保存 (interior save) の直後、ダメージ等の
-後段より前。かつ**後段も保存する同じ集約インスタンスに対して**行う — repo は
-clone を返すので、別インスタンスで払うと後段の保存が支払いを打ち消す。
-
-**凍結との関係**: `PLAYER_GOLD_AT_LEAST` は生の所持金を見る。同席取引に
-出して凍結中の gold は素通りするため、永続化の前に `available_gold`
-(凍結差し引き、TradeFreezeService の規約) の第二ガードを通す。板 (#1265)・
-商人と同じ形。
+[本文](design_decisions/207.md)
 
 ## 208. 意味記憶エントリに経験の主体 BeingId を載せる
 
-**何を**: `SemanticMemoryEntry` に必須フィールド `being_id: BeingId` を追加する。
-`player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
-食い違う書き込みは `add_by_being` / `replace_all_by_being` /
-`supersede_by_being` で失敗する。
-
-**なぜ**: semantic store は既に Being 単位のキーなのに、葉の記録は
-`player_id` だけを持ち、経験の主体が永続化の面から消えていた。#174 の
-主観エピソード / #177 の記憶リンクと同じ型を `SemanticMemoryEntry` に載せる。
-`EpisodicSemanticClusterPromotionService` と
-`BeliefConsolidationCoordinator` は呼び出し側の `being_id` を VO に刻む。
-
-**旧データ**: snapshot payload に `being_id` キーが無い行は、restore 時の
-snapshot Being から復元する。payload と fallback の両方があり不一致なら
-失敗する (黙って片方を採用しない)。SQLite 行は既存の `being_id_value` 列から
-VO に復元する (スキーマ変更は不要)。
-
-**この PR で触らない**: `MemoryLink` / `SubjectiveEpisode.player_id` の削除、
-再解釈 / 想起観測 / Goal / L4 / L5 の `player_id`、`on_after_tool_turn` 等の
-`being_id` 引数削除、SQLite スキーマ変更。
+[本文](design_decisions/208.md)
 
 ## 209. 再解釈エントリに経験の主体 BeingId を載せる
 
-**何を**: `EpisodicReinterpretationEntry` に必須フィールド `being_id: BeingId`
-を追加する。`player_id` は手番の身体として残す。store の一次キーと VO の
-`being_id` が食い違う書き込みは `put_active_by_being` / `replace_all_by_being`
-で失敗する。
-
-**なぜ**: journal store は既に Being 単位のキーなのに、葉の記録は
-`player_id` だけを持ち、経験の主体が永続化の面から消えていた。#174 の
-主観エピソード / #177 の記憶リンクと同じ型を載せる。
-`EpisodicReinterpretationCoordinator._apply_updates` は呼び出し側の
-`being_id` を VO に刻む。
-
-**旧データ**: snapshot payload に `being_id` キーが無い行は、restore 時の
-snapshot Being から復元する。payload と fallback の両方があり不一致なら
-失敗する (黙って片方を採用しない)。SQLite の `payload_json` も同契約で、
-キー無しは store 行の `being_id_value` から fallback する (スキーマ変更は不要)。
-
-**この PR で触らない**: `EpisodicRecallObservation` への being_id 載せ、
-`SubjectiveEpisode.player_id` 削除、Goal / L4 / L5。
-
+[本文](design_decisions/209.md)
 
 ## 210. 履歴には、次に真似しても通る形だけを残す
 
-**何を**: resolver が崩れた表記 (quote つきラベル、表示行の丸ごとコピー) を
-救って成功させたとき、行動履歴 (`identifier_arguments`) には**生の入力ではなく
-解決に使った正規値**を残す。resolver は `canonical_identifiers()` で「生値と
-違う識別値」だけを集め、`_with_inner_thought(canonical=...)` で出力に載せる。
-dispatch が回収して履歴の射影に反映し、**generic 経路 (do_* を通らない tool)
-にも同じ射影を届ける**。
-
-**なぜ**: 救済と履歴は対で設計しないと崩れが増える。供物競争 run では、quote
-つきの `destination_label` が resolver に救われて成功し、その生値が履歴に
-積まれ、以降ずっと同じ崩れた形で送られ続けた。**成功例として見えるものが、
-次のターンの手本になる。**
-
-**救済の範囲**: 表示を写したときの表記の崩れだけ。表示に無い名前の発明 (65 run で 111 件の
-主因) は救わない — 対象の `available_interactions` に一致した候補だけを採り、
-外れたら従来どおり「その操作はありません + 利用可能な一覧」で失敗させる。
-救うと「適当に書いても通る」を教えることになる。
-
-**raw args は変更しない**。入力 dict は fingerprint と行動要約のフォールバック
-表示にも使われるので、内部キーを混ぜると別の場所へ漏れる。
+[本文](design_decisions/210.md)
 
 ## 211. wall-time cap は呼び出し元を実際に解放しないと意味がない
 
-**何を**: `_call_with_wall_cap` の `ThreadPoolExecutor` を `with` で囲まない。
-`finally` で `shutdown(wait=False)` する。
-
-**なぜ**: `with` の退出は `shutdown(wait=True)` なので、cap で例外を投げても
-下位 call の完了までブロックする。「hard cap」と名乗りながら待ち時間を 1 秒も
-縮めていなかった (実測: cap 0.5s / call 3s で、例外は 0.5s・退出は 3.0s)。
-供物競争 run では 13 件がこれで待ち切り、run 時間の 16% を占めていた。
-
-**テストの教訓**: 既存テストは「cap で例外が出るか」しか見ておらず、この欠陥を
-素通りさせていた。**時間で守る性質は、時間を測って固定する。**
+[本文](design_decisions/211.md)
 
 ## 212. 交換比率が判定に効く世界でないと、値段の話は始まらない
 
-**何を**: 敵対する 2 組に**非対称な供物**を課す。供物競争 v2 は東が薬草 4 + 45G、
-西が麦束 3 + 60G で、必要量も gold も揃えない。産物は組で分かれていて、自組の
-産物は自分の祭壇に納められない。
-
-**なぜ**: v2 の初版は両組に同じ供物を課していた。この形だと**1:1 交換が判定に
-中立**で、交換しても勝敗が動かない。エージェントは交換の必要を認めるが、比率を
-考える理由がどこにも無いので、永遠に引き分けに向かう。
-
-非対称にしたあとの run (`offering_race_v2_second`) の t78、セラ (西) の発話。
-
-> 交換レートは 1 対 1……いや、麦束 1 本につき薬草 1 本＋10G でどうだ？ お前たちは
-> 薬草が 4 本と 45G 必要だ。こっちは麦束 3 本と 60G が必要だ。計算が合うだろ
-
-**両組の必要量を突き合わせて 1:1 が不利だと判断し、gold を上乗せしている。**
-
-**根拠の限界**: 対称版 v2 の run は無い (欠陥は run 前のレビューで見つけたので、
-回さずに直した)。対称なのは v1 (`offering_race_first`) だけで、こちらは供物構成も
-gold の必要額も違い、**自組の産物を自分の祭壇に納められる**。「対称性だけが違う
-2 本」の比較ではない。言えるのは、v1 の speak 全 7 件に比率・価格の対案が 0 件で、
-非対称版で初めて出たこと。さらに非対称版でも v2 初回 run にはこの型の発話が無く、
-**観測は 1 件**である。
-
-**教訓**: 「取引が要る」だけでは値付けは生まれない。**取引の条件が結果を変える**
-ことまで作らないと、交渉は「交換しよう」で止まる。仮説として扱い、次の run で
-同じ型が出るかを見る。
+[本文](design_decisions/212.md)
 
 ## 213. 世界の刻限はシナリオが持つ。`max_world_ticks` はループの上限でしかない
 
-**何を**: run 長を変えるときは、**シナリオの `game_end_conditions.lose.TICK_LIMIT`**
-と、それに紐づく `scenario_events` の `TICK_AT_LEAST` (判定発火) を動かす。profile の
-`max_world_ticks` は同じ値に揃える。
-
-**なぜ**: `run_scenario_experiment.py` は毎 tick `check_game_end()` を見て break する。
-`max_world_ticks` は**ループが回れる上限**で、世界を延ばす手ではない。エージェント
-に見える「残り行動可能 tick」も `TICK_LIMIT` から作られる。
-
-供物競争 v2 の run 長を 80 → 140 にしようとして、**profile だけ書き換えた**。run は
-t80 で終わり、プロンプトの残り時間も 80 のままになる。**値を書いたのに何も起きない**
-形の静かな失敗で、レビューで指摘されるまで気づかなかった。
-
-**揃っていないと 2 方向に壊れる**。profile が短いと判定 tick に届かず勝敗が付かない。
-profile が長いと余りが空回りする。
-
-**構造で守る**:
-
-1. `test_the_loop_cap_matches_the_scenario_deadline` — profile の `max_world_ticks` と
-   シナリオの `TICK_LIMIT` の一致を固定する
-2. `test_the_judgment_compares_enemy_produce_then_gold` — 判定 tick を `TICK_LIMIT - 1`
-   から導く。刻限だけ動かすと落ちる
-3. `test_the_metadata_names_the_real_deadline` — `metadata.description` と
-   `estimated_ticks` が名乗る刻限を `TICK_LIMIT` に固定する。**エージェントはこの
-   数字を読まない** (`description` はネタバレを含むので LLM へ渡さず、`llm_public_intro`
-   / `llm_objective_text` は「刻限までに」と書いて数字を持たない)。守るのは人間側の
-   読み物で、run の条件を誤って読まないため。実際に刻限を 140 にした変更で両方
-   80 のまま置いていかれた
-
-**窮乏は run 長に依らない**: 供物競争の窮乏は gold 側 (総量 80G 固定に対し必要 105G)
-に寄せてある。材料は再生するので run を伸ばせば収穫は増えるが、**gold の総量は動か
-ない**ので取引の必然性は緩まない。伸ばすときにここを再設計する必要はない。
-
-**天候の通知が増える**: `update_interval_ticks: 30` は run 長に対する比率が変わるので、
-天候変化は約 2 回から約 4 回になる。通知は `schedules_turn=True` で全員の手番を起こす
-ので、**全体で 2 回ぶん手番が天候に食われる**。行動密度を数えるときの分母に入る。
-
-**ただし空腹は run 長に依る**: このシナリオは `needs` を宣言しておらず、既定の
-`hunger_per_tick=1` / `starvation_damage_per_tick=0` で走る。t100 前後で空腹が上限に
-達し、**食料アイテムが世界に無い**ので最後の 40 tick は全員が空腹限界の身体状態を
-読み続ける。HP は減らないが、身体状態が観察に出続けることの影響は分かっていない。
-run 長を伸ばすときの既知の副作用として残す。
+[本文](design_decisions/213.md)
 
 ## 214. 恒久的な LLM 障害は「サーバが名乗る理由」ではなく「治らなさ」で判定する
 
-**何を**: LLM 呼び出しの失敗に対して、**retry は例外の種類で決め、run を止めるかは
-連続失敗の回数で決める**。2 つを混ぜない。
-
-| 問い | 答える場所 | 判断材料 |
-|---|---|---|
-| この呼び出しを再試行するか | `litellm_client._is_retryable_transient_error` | 例外の種類 (429 / 5xx) |
-| この run を止めるか | `LlmFailureStreakMonitor` | **retry を尽くした後**の連続失敗数 |
-
-**なぜ**: 供物競争 140 tick run は t47 で OpenRouter のクレジットが尽きた。失敗
-74 件のうち **クレジット由来の 68 件はすべて `in_flight_budget_exhausted` を名乗って
-いた** (残り 6 件は wall-time cap の Timeout) — OpenRouter の文言では「in-flight が
-捌ければ直る」= 一時エラーである。実際は残高 0 で、待っても永久に直らなかった。
-**サーバが名乗る理由と、本当に回復するかは一致しない。**
-
-理由で分類して retry を足すのは逆効果でもある。この 68 件を 3 回ずつ retry すると
-2+4+8 秒 × 68 = **約 16 分の空回りが増えるだけで、1 件も回復しない**。
-
-**閾値 8 の校正**: `var/runs/` の 68 run で最長連続失敗を数えた。
-
-| | 最長連続失敗 |
-|---|---|
-| 健全な 65 run | 0〜4 |
-| DigitalOcean 速度崩壊 (成功率 12%) | 35 |
-| 認証ミス (成功率 0%) | 45 |
-| クレジット切れ (成功率 51%) | 64 |
-
-8 は下側に 2 倍 (8 = 2×4)、上側に 4.4 倍 (35/8) の余裕を持って分離する。**過去
-68 run に対して誤検知 0・見逃し 0。** `LLM_FAILURE_STREAK_ABORT` で変更でき、0 で無効。
-
-**件数だけでは足りない**。8 エージェント run は 1 tick に最大 9 件呼ぶので、
-「全員が同時に 1 回落ちる」だけで閾値に届く。しかも履歴の失敗の主因は wall-time cap
-の Timeout (343 件中 168 件) で、**これは retry 対象外なので provider が数十秒遅く
-なった瞬間のバーストはそのまま監視に届く**。そこで**連続が 2 つ以上の tick に
-またがること**を条件に足した。壊れた 3 本の最初の 8 連続はそれぞれ 4 / 2 / 2 tick に
-またがるので、検出は 1 本も失わない。
-
-**1 体だけが恒久的に落ちる場合は守っていない** (context length 超過など)。ただし
-他の 7 体が動いていれば成功が挟まって streak が切れるので、連続が伸びる時点で
-run 全体が既に止まっている。「2 人以上にまたがること」を足すと 1 人世界で永久に
-止まらなくなるので、入れなかった。
-
-**止めた理由は trip した瞬間に凍結する**。並列 Phase A では停止を決めたあとに
-遅れて成功が着地し、生のカウンタは 0 に戻る。凍結しないと**止まるのに「0 件連続で
-失敗した ()」が report と trace に載る**。
-
-**既存の砦では足りなかった**: `_classify_llm_run_health` は **成功が 0 件**のとき
-だけ働く。壊れた 3 本のうち捕まえるのは認証ミス (成功率 0%) の 1 本だけで、
-**途中で死んだ run は前半の成功に隠れて通過する**。
-
-**outcome を分ける**: 自ら打ち切った run は `LLM_ABORTED`。`LLM_FAILURE` は
-「1 件も成功しなかった」の意味で既に使っているので、混ぜると過去 run の読みが
-変わる。どちらも成果物は残し (実験データを守る)、終了コードは 1 を返す。
+[本文](design_decisions/214.md)
 
 ## 215. 呼び出しの健全さは report の冒頭に出す
 
-**何を**: `report.md` の冒頭の箇条書きに `llm calls: 150 (成功 76 / 51%)` を必ず出す。
-失敗があるときだけ error_code の内訳を節にする。
-
-**なぜ**: 140 tick run の report はこう書いていた。
-
-```
-- outcome: **LOSE**
-- last tick: 140 / max world ticks: 140
-| player_id | actions | successes | failures |
-| 1         | 20      | 20        | 0        |
-```
-
-**呼び出しの半分が落ちたことが 1 文字も出ていない。** しかも `failures` 列は tool の
-失敗なので、**呼び出しが届かなかったぶんは行動として数えられず、失敗率が高いほど
-report がきれいになる**という逆転があった。`llm_call_count` / `llm_success_count` は
-計算されて `RUN_END` trace には載っていたが、**人が最初に開く report.md には
-出していなかった**。
-
-`make experiment` の `[done]` 行にも出す。**閾値未満の「じわ荒れ」(319 件中 57 件
-落ちて最長連続 2、など) は層 2 では永久に捕まらない**ので、そこはこの 2 か所だけが
-砦になる。
-
-**停止 (#214) と両方要る**。停止だけだと閾値未満の run が黙る。可視化だけだと次も
-82 tick 空回りする。
+[本文](design_decisions/215.md)
 
 ## 216. LLM境界ではcommit済み後処理失敗を成功として伝える
 
-**何を**: `CommandPostCommitException`をLLMツール結果へ写すときは、
-`success=True`と専用の`COMMAND_COMMITTED_POST_PROCESSING_FAILED`を返す。
-messageには「世界へ反映済み」「同じ操作を繰り返さない」を明記し、
-`should_reschedule=False`を維持する。
-
-**なぜ**: この例外が示すのは業務失敗ではなく、commit後のcleanup・handoff・outbox
-処理の異常である。`SYSTEM_ERROR`へ縮退すると「再度お試しください」という対処が付き、
-アイテム消費、準備、介抱、取引、市場注文のような非冪等操作を二重実行させる。
-また、Phase Bが失敗と解釈すると、新しい行動のために中断していた移動まで復元し、
-確定済み世界状態と行動履歴を食い違わせる。
-
-**どう守るか**:
-
-- `exception_result`が`CommandPostCommitException`を最初に識別し、通常例外の
-  sanitizer・`SYSTEM_ERROR`対処へ流さない
-- use item、prepare action、tend、対人取引、市場、旧取引画面の各入口で
-  成功・業務拒否・commit前例外・commit後例外を分けて試験する
-- Phase Bにも最終防御を置き、個別executorが例外を上位へ通しても成功を維持する
-- traceにはcleanup・handoff・outboxのどこで失敗したかを例外型だけで残し、
-  内部messageはLLMへ渡さない
-
-**関連**: #1094 / #1245 / 判断 #149 / 判断 #153 / 判断 #155。
+[本文](design_decisions/216.md)
 
 ## 217. 他者の発言で起こすかは、判断の前に規則で守ってから判断に問う
 
-**何を**: 1 人の発言が、その場で聞いた全員を次の tick に起こしていた。会議では
-8 人が毎 tick 全員喋る形になる。聞いた一人ひとりについて「この発言に自分が
-返答する必要があるか」を型付き判断 (Noul) に問い、確率が閾値
-(`TYPED_JUDGMENT_REPLY_GATE_SKIP_BELOW`、既定 0.15) 未満のときだけ起こさない。
-`ObservationTurnScheduler` に `IWakeGate` を挟み、`schedules_turn` を「起床候補」
-と読み替える。formatter は触らない。
-
-**なぜこの形か**:
-
-- 落とすのは低確率側だけ。取りこぼし (返答すべき人を起こさない) は静かな失敗
-  になるので、閾値は小さく置き、run の会話を読んでから動かす。
-- 判断に委ねると壊れるものは、判断の前に規則で守る。囁き、本文に自分の名前が
-  ある発言、一定 tick 発言していない聞き手 (`..._SILENCE_TICKS`、既定 3) は
-  判断を引かずに起こす。実データでは宛先つき質問の 64% で、宛先が同じ tick
-  に喋っていた。ここを判断に任せると「呼ばれても答えない」が trace から
-  見えない形で起きる。
-- `player_spoke` 以外の観測は起動判定の対象外。投票の要求など返答が要る観測は別の
-  型で届くので、構造的に抑制されない。
-- 起こさなくても観測は buffer に残る。appender が scheduler より先に走る
-  (#29 と同じく、観測を捨てて状態を軽くしない)。
-- 判断が得られなければ起こす側へ倒し、`unavailable_reason` を残す。
-
-**trace**: `TYPED_JUDGMENT` の `question=speech_reply_needed` に、聞き手ごとに
-1 件。判定で起こした分も、起こさなかった分も残す。`reason` (`whispered_to_me` /
-`named_in_speech` / `silence_limit` / `judged_needed` / `judged_unneeded` /
-`judgment_unavailable`)、`probability`、`skip_below`、`woke`、`latency_ms`、
-`source` を持つ。残さないと、起動判定の無い run と全件起こした run が見分けられない。
-
-**閾値の経緯**: 0.05 で始めた。Gemma と deepseek (StreamLake) の 2 run、約 650 件
-で Jev の最小値は 0.10 で 1 件も落ちなかった。0.15 未満の 87 件を全部読むと、
-「気象記録、転記しておく」のような作業の宣言と、通路の向こうから聞こえる他人
-宛ての指示だけだった。低確率で次 tick に喋った聞き手は全員、別の観測 (燃料凍結
-の警報) に反応していた。取りこぼしが読み取れなかったので 0.15 へ上げた。答えを
-求める発言は 0.6〜0.9 に付いている。
-
-**その後 (run 005)**: 会議を含む run で読むと、判断の中身は妥当だったが
-**会議の LLM 呼び出しは 1 件も減らなかった**。1 tick に 7 件の発言が届く場では、
-7 件すべてが閾値未満でないと起動を止められない。発言単位の起動判定は会議に効かないので、
-tick 単位の起動判定 (#219) に置き換えた。判断の付き方 (作業の宣言と他人宛ての指示は
-0.1 前後、答えを求める発言は 0.6〜0.9) はそのまま #219 の閾値の根拠になる。
-いまは常時有効で、`TYPED_JUDGMENT_REPLY_GATE_ENABLED=0` で判断ポートを残した
-まま起動判定だけ外せる。
-
-**どこで出てきたか**: Jev (#1319) の 3 つ目の用途。観察 profile は
-`station_drill_reply_gate`。
+[本文](design_decisions/217.md)
 
 ## 218. 二人で合わせる操作の入口は interact に統合する
 
-**何を**: 同期グループ (`synchronized_action_groups`) の required action を
-`interact` に渡すと、その操作の効果を起こさず「自分の側を受け持った」と登録する。
-専用ツール `prepare_action` は消す。登録層 (`prepared:` / `sync_prep:` の 2 フラグを
-CommandScope で確定し、同室者に観測を出す) と tick 終わりの窓判定は変えない
-(#74 / #195)。準備対象の interaction に `effects` を書くと読み込みで落とす。
-
-**なぜこの形か**:
-
-- 実データで別の動詞は選ばれなかった。station_drill の 13 run で `prepare_action`
-  は 0 回。run 003 で弁を触った 5 回は全部 `interact` だった。世界は「レバーに
-  手をかけた」と返しながら何も登録しておらず、tick 11 に両方の弁が揃っていたのに
-  燃料が失われた。
-- 勘違いの原因はツール名ではなく**操作名の出所**にあった。準備対象の操作は
-  対象行に `[解氷弁を開く準備をする → "open_thaw_valve"]` と他の操作と同じ書式で
-  出る。`interact` は「対象行の名前は私に渡せ」と言い、`prepare_action` の
-  action_name の説明は `interact` と一字一句同じだった。2 つの動詞が同じ名前を
-  取り合い、毎ターン使う側が勝つ。
-- 準備は「効果が遅延し、相方が揃うことを条件にした interact」で、エージェントが
-  区別して得るものがない。区別は世界の側の都合なので、世界の側で吸収する。
-- 判断 #74 が「準備は現在地に同名の interaction を持つ対象物が無いと登録しない」
-  と決めた時点で、interaction 定義は名前と前提条件の土台として必須になった。
-  土台を `interact` から実行可能に残すと、今回の飾りの成功が生まれる。だから
-  土台には `effects` を書けなくし、`interact` は名前を見て登録層へ回す。
-
-**どうしないと壊れるか**: 別ツールのまま「使わせる工夫」(表示の区別、interact
-の拒否、説明文の書き直し) をしても、interact を拒否する形は期限つきの場面で
-1 tick を失い、拒否しない形は結局この統合になる。
-
-**関連**: #74 / #195 / #66 (表示されていない名前を指定させない) / #126 (言葉が
-自然に書ける形を世界が受け取る)。run 003 (`station_drill_reply_gate_003`)。
-
+[本文](design_decisions/218.md)
 
 ## 219. 起こすかは観測 1 件ごとでなく、tick の終わりに本人の未読をまとめて問う
 
-**何を**: `run_scheduled_turns` が pending の各人を回す直前に、その人の buffer に
-溜まった未読の観測をまとめて渡し、「いま自分が動く (発言を含む) 必要があるか」を
-Noul で 1 回問う (`TurnGate`、trace は `TYPED_JUDGMENT` の `question=turn_needed`)。
-確率が `TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW` (既定 0.15) 未満なら回さない。観測は
-buffer に残り、次に起きたときに読める。発言単位の起動判定 (#217) は外した。
-
-**なぜこの形か**:
-
-- 会議では 1 tick に 7 件の発言が届く。観測 1 件ごとに問う形では 7 件すべてが
-  不要と判定されないと寝られず、run 005 では 1 件も減らなかった。本人の状況を
-  まとめて 1 回問えば、Jev の呼び出しも 1 tick 最大 8 回 (49 回から) に減る。
-- 「この発言に返答するか」は聞き手の側の話で、「いま動くか」は本人の意思の話。
-  keeper が「今は黙って様子を見る」のも正しい答えになる。エージェントの注意は
-  観測型ごとの真偽 (`schedules_turn`) より、この問いに近い。
-- 判断の前の規則は既存の `observation_category` で書ける。`self_only` (被ダメージ、
-  所持品、行動失敗) と `environment` (警報、フェーズ変化、投票の要求) が 1 件でも
-  あれば判断を引かずに回す。対象は `social` だけが溜まった人。囁き、名指し、
-  沈黙の上限 (`..._SILENCE_TICKS`、既定 3)、未読なし (自己 reschedule) も回す。
-- **会議中は候補の中で少なくとも 1 人を回す** (`meeting_floor`)。会議は沈黙が
-  続くと「話し合いは流れた」で終わる。起動判定のせいで流れた会議は、議論が尽きて
-  流れた会議と trace 上で見分けられない。
-
-**どうしないと壊れるか**: 発言単位のまま閾値を上げても、会議では別の発言で
-起こされるので効かない。会議中の 1 人保証を忘れると、起動判定が会議を静かに終わらせる。
-
-**結果 (run `station_drill_turn_gate_001`)**: 27 tick、会議 2 回で、起動判定の決定 197 件の
-うち起動しなかった人は 0。内訳は名指し 100、本人・世界の観測あり 42、Jev に問った 42
-(確率は最小 0.18、中央値 0.42)、その他 13。会議中に名指しで届いた発言 170 件の
-83% は疑問符付きの本人宛ての質問だった。
-
-**station_drill では、この判定で LLM 呼び出しは減らない。** 会議は「返答の要らない
-人まで起きている」場ではなく、全員が名指しで質問され答える義務を負っている場で、
-会議の外も 8 人全員が毎 tick 点検や移動をしている。発言単位 (#217) は分解能が
-細かすぎて効かず、tick 単位は正しく「全員起きるべき」と言っている。当初の仮説
-「会議は起床の無駄が大きい」は、このシナリオには当てはまらなかった。
-
-起動判定は残す。判定の前に守る条件、trace、会議の 1 人保証は壊れておらず、「全員起こすべき
-だった」と trace で読めることに価値がある。費用を削る手段としては station_drill
-では追わない。名指しでない雑談や独り言が多い世界 (survival_island、market_town)
-で効くかは別の観察課題として残す。Gemma の run では 0.15 未満が 44 件あった。
-
-**関連**: #217 / #404 (schedules_turn の網羅性監査)。
-
+[本文](design_decisions/219.md)
 
 ## 220. 起動判定は規則で素通しさせず、pending の全員を Jev に問う
 
-**何を**: tick 単位の起動判定 (#219) から、判断の前に置いていた規則 (self_only /
-environment の観測があれば回す、囁き、名指し、沈黙の上限、会議中の 1 人保証) を
-すべて外す。pending の全員について未読の観測をまとめて Jev に問い、「本当に不要」
-と判定できた人だけ回さない。囁き・名指し・警報は判断を飛ばす規則ではなく、state に
-分類の見出し付きで渡す材料にする。唯一の例外は未読の観測が無い人で、判断の材料が
-無いのでそのまま回す。設定キー `TYPED_JUDGMENT_TURN_GATE_SILENCE_TICKS` は消す。
-
-**なぜこの形か**:
-
-- 目的は「普通は毎回起動するところに Jev を挟み、本当に不要な場合だけ行動しない」
-  こと。起こす経路は 1 つも足さず、起動判定は pending を減らすだけにする。
-- 規則が判断の出番を奪うと、フィルタとしての Jev を評価できない。run
-  `station_drill_turn_gate_001` では 197 件中 155 件が Jev に届く前に規則で通り、
-  会議で起動判定が効かない原因は名指しの規則だった。名指しの質問に答えるべきかどうかも
-  Jev の判断に含める。
-- 引き継ぎの「自分宛ては必ず起こす」「沈黙の上限」は取りこぼしを防ぐ保険だった。
-  保険を規則で置く代わりに、閾値を低く置き (0.15)、取りこぼしが起きるかを run で
-  読む。起きたら閾値を下げる。
-- 会議の 1 人保証も外す。起動判定のせいで会議が流れるなら、それは trace の
-  `turn_needed` (全員 `judged_unneeded`) で読める。
-
-**関連**: #217 / #219。
-
+[本文](design_decisions/220.md)
 
 ## 221. 起動判定の候補は pending の人ではなく、未読の観測がある人全員
 
-**何を**: tick 単位の起動判定 (#219 / #220) の候補を、「その tick に `schedules_turn` の
-観測を受けて pending に入った人」から「未読の観測が 1 件でもある LLM プレイヤー
-全員」に広げる。pending の人はそのまま候補に残り、順序は pending が先。前の tick に
-寝た人は、新しい観測が届かなくても溜まった未読を見て毎 tick 判断し直される。
-trace の `turn_needed` に `scheduled` (pending に居たか) を足す。
-
-**なぜこの形か**:
-
-- 目的は「普通は毎回起動するところに Jev を挟む」こと。候補を pending に限ると、
-  formatter が観測型ごとに付けた `schedules_turn` の真偽が候補の入口を決め、その
-  後で Jev がふるう二段構えになる。未読があれば毎 tick 判断する形なら、Jev が
-  観測の中身を見て決める一段になる。
-- `schedules_turn` の網羅性を作者が守り続ける必要 (#404 の監査) が薄くなる。
-  付け忘れた観測型でも、未読として Jev の目に入る。
-- 溜まった未読が増えるほど確率は上がりやすく、「そろそろ動くべき」の自然な圧力に
-  なる。heartbeat も未読の 1 件として同じ経路で扱われる。
-- 蓄積と drain は変えない。観測は届いた時点で buffer に積まれ、ターンが回ると
-  prompt 構築が drain して LLM に渡す。回らなければ残る。
-
-**代償**: Jev の呼び出しは pending の人数から未読のある人数に増える (station_drill
-では tick あたり 7.2 → 8 回程度)。
-
-**関連**: #219 / #220 / #404。
-
+[本文](design_decisions/221.md)
 
 ## 222. 起動判定は既定で外し、観察するときだけ入れる
 
-**何を**: `TYPED_JUDGMENT_TURN_GATE_ENABLED` の既定を off にする。
-`TYPED_JUDGMENT_PROVIDER=jev` にしても起動判定は入らず、行動名の読み替えと memo の判定
-だけが動く。起動判定のコード (#219〜#221) は残し、観察するときだけ明示的に true にする。
-
-**なぜこの形か**: station_drill の 4 run (`turn_gate_001`〜`004`) で分かったこと。
-
-- Jev の判定は正確だった。名指しの質問や囁きを起動しなかった誤りは、trace に残した
-  本文で確かめた範囲で 0 件。会議は全員起こし、通路越しの他人の作業報告だけの人は
-  起動しない。
-- 問題は問いの形にある。「届いた観測を受けて動く必要があるか」は反応の問いで、
-  本人のやるべき仕事の残りを見ない。run 004 では crew の大半が tick 9〜38 の 30 tick
-  を寝て過ごし、点検は 50 tick で 10 件 (勝利条件 12 件) にとどまった。本人の目的を
-  材料に足せば直る可能性はあるが、足していくと起動判定が LLM のターンを先取りする
-  2 つ目の小さなエージェントになる。
-- 費用の非対称が大きい。余計に起きる代償は数円で、起きるべき時に寝る代償は物語が
-  止まることで、後者は run が終わるまで気づきにくい。
-
-**この用途で Jev が向く方向**: 「起こさない」ではなく「起こす」側の補助。
-`schedules_turn=False` の観測から「これは起こすべき」を拾うなら、外しても現状維持で、
-当たれば得しかない。
-
-**関連**: #217 / #219 / #220 / #221。
+[本文](design_decisions/222.md)
 
 ## 223. 行動名の意味による救済を semantic-resolver へ委譲する
 
-**何を**: `ActionNameRescue` から `SemanticResolver.resolve` を呼び、対象ごとの
-操作名と意味ラベル、元の入力、対象名、直前の思考を渡す。候補の検査と解決結果の
-組み立てをライブラリへ委譲し、ゲーム側で呼ぶタイミングと trace への変換を担う。
-ツールスキーマは変更せず、動的候補は判断時にだけ渡す。判断 #1 の
-プレフィックスキャッシュと、判断 #37 の候補集合を維持する。
-
-**なぜこの接続か**: 既存の `ITypedJudgmentPort` をライブラリの `Backend` 契約へ
-適合させる。Jev の通信・再試行・設定・stub は引き続き既存ポートを使う。
-ライブラリ付属の `JevPolicy` は確信度を必須とするが、既存の行動名救済は
-確信度が省略された回答を確率だけで評価する。そのためゲーム側に専用の
-`Policy` を置き、確率と、省略されていない確信度が閾値以上なら採用する。
-閾値と等しい場合も採用する。新しい採用モードは今回追加しない。
-
-**保つこと**: 完全一致・表示の正規化で解決した名前や候補のない対象は判断しない。
-`__no_match__` は常に選択肢に含める。採用・確信不足・該当なしの証拠と通信障害の
-理由を既存の trace に残す。置換の通知と履歴上の正式名も従来どおりにする。
-
-**入口で明確化すること**: 空の入力は判断せず元の失敗経路へ返す。説明がない候補は
-操作名を説明に使う。候補外の回答や該当なしの予約値との衝突は `invalid_response`
-として記録し、該当なしと区別する。回答欠落は従来の `ANSWER_MISSING` を維持する。
-
-**依存の再現性**: まだ PyPI 公開前なので、`tool.uv.sources` と `uv.lock` で
-公開 GitHub のマージ済みコミット `f164e0973c0cb6aa59aaa75837107f2a962b4d08` に
-固定する。ローカルの隣接ディレクトリや未マージのデモ用ブランチには依存しない。
-
-**どう守るか**: 救済・通知・trace・設定・セッションへの接続・通信アダプタ・履歴・
-snapshot の回帰試験を実行する。候補の入れ替わり、閾値境界、確信度や確率の欠落、
-該当なしの証拠、候補外の回答、予約値の衝突、空の入力を追加で確認する。
+[本文](design_decisions/223.md)
 
 ## 224. 効かない引数は残さず消し、並び順は契約として試験で固定する
 
-**何を**: `PostRepository.find_by_user_ids` の `sort_by` を、インタフェースと
-2 つの実装から消す。並び順は「作成日時の降順、同じならば `post_id` の降順」に
-固定し、インタフェースのドックストリングへ書く。
-
-**なぜ消すのか**: `sort_by: str = "created_at"` はどの値を渡しても同じ順序を
-返していた。指定できるように見えて効かない引数は、無いより悪い。既定値以外で
-渡している呼び出し元は無く、どのキーが要るかも決まっていない。要件が無いまま
-他のソートキーを実装すると、使われない分岐と試験が増える。必要になった時点で、
-そのときの要件に合わせて足す。その際は受け付けるキーを列挙型で閉じ、文字列を
-そのまま `ORDER BY` へ渡さない。
-
-**並び順のずれ**: SQLite 実装は `post_id DESC` で同時刻を解決していたが、
-インメモリ実装は `created_at` だけで安定ソートしていたため、同時刻では挿入順
-(実質 `post_id` の昇順) になっていた。同じ入力に対して 2 実装が違う順序を返す
-のは静かな失敗になる。インメモリ側を `(created_at, post_id)` の降順へ揃える。
-
-**どう守るか**: 2 実装が共有する契約試験へ、作成日時の降順と、同時刻を
-`post_id` の降順で返すことを確かめる試験を足す。後者はインメモリ実装だけが
-落ちることを確認してから直した。
+[本文](design_decisions/224.md)
 
 ## 225. リポジトリの取得系はドメインの型を返し、実装ごとに変えない
 
-**何を**: `ItemSpecRepository` の取得系は、全実装で `ItemSpec` を返す。読み取り用の
-`ItemSpecReadModel` は返さない。インメモリ実装も内部で `ItemSpec` を保持する。
-
-**なぜこの形か**: インタフェースは `ReadRepository[ItemSpec, ItemSpecId]` を継承して
-`ItemSpec` を返すと宣言していたのに、インメモリ実装だけが読み取り用の型を返していた。
-呼び出し側は読み取り用の型にしか無い `to_item_spec()` を前提にしていたため、SQLite
-配線では `AttributeError` になる。テストがインメモリ実装しか使っていなかったので、
-この不整合は mypy を入れるまで見えていなかった (Issue #1364)。
-
-契約の側を曲げてインタフェースを `ItemSpecReadModel` にする案もあった。採らなかった
-理由は 2 つ。`ItemSpecRepository` は `domain/item/repository` にあり、ドメインの型を
-返すのが層の役割に合う。そして調査の結果、`to_item_spec()` を呼ぶ 7 箇所すべてが
-受け取った直後に `ItemSpec` へ変換しており、読み取り用の型に固有の値を使っている
-呼び出し側は 1 つも無かった。読み取り用の型を返す形を恒久化する根拠が無い。
-
-**副作用として受け入れたこと**: `ItemSpec` は frozen で `__post_init__` が不変条件を
-検証する。読み取り用の型は素の dataclass で検証が無かったため、これまで無検証で
-spec を投入していた経路 (scenario 投入、テストデータ) にも検証が効くようになる。
-これは望ましい方向なので、この変更で受け止めた。
-
-**どう守るか**: 2 実装に同じ ID と条件を与えて、取得系 7 メソッドすべてが `ItemSpec`
-を返すことを確かめる契約試験を置く (`tests/infrastructure/repository/`
-`test_item_spec_repository_contract.py`)。この試験が無かったことが、不整合が長く
-残った直接の原因にあたる。
-
-**同じ形を作らないために**: mypy の対象は `src` だけで、テストは見ていない。実装の
-戻り値を直しても、テストが古い型を投入し続ければ契約は実際には効かず、緑のまま
-空振りになる。リポジトリの契約を変えたら、投入側のテストも合わせて変える。
+[本文](design_decisions/225.md)
 
 ## 226. 値オブジェクトの定義はコードベースに 1 つだけ置く
 
-**何を**: `item_template_id.py` に残っていた 2 つめの `ItemSpecId` を消し、定義を
-`item_spec_id.py` の 1 つに畳む。両者は同じコミットで追加され、例外メッセージの
-文言以外は同一だった。「テンプレート ID」という別概念のための型ではない。
-
-**なぜ消すか**: frozen dataclass の等価比較はクラスが一致しないと `False` を返す。
-同名で中身も同じ値オブジェクトが 2 つあると、`ItemSpecId(1) == ItemSpecId(1)` が
-黙って偽になる。dict のキーや集合の要素として混ざっても例外は出ず、一致しないまま
-処理が進む。静かな失敗であり、import 元を見なければ気付けない。
-
-**どう見つかったか**: mypy strict の導入まで見えていなかった。#1332 で
-`spot_interaction_application_service` に `TYPE_CHECKING` import を足したとき、
-ファイル名 `item_template_id.py` とクラス名 `ItemSpecId` のずれが選び間違いを誘い、
-型検査が食い違いを報告した。import は直したが、同名クラスが 2 つある状態は残っていた。
-
-**保つこと**: `ItemSpecId` の定義はコードベースに 1 つだけ。ファイル名とクラス名を
-ずらさない。ずれていると、import 補完の候補に 2 つ並んだとき正しい方を選ぶ根拠が
-読み手に無くなる。
-
+[本文](design_decisions/226.md)
 
 ## 227. 対象の名前も、候補に当たらなければ意味で選び直す
 
-**何を**: `interact` の `target_label` が候補 (この場所の物・人・手持ちの品) に
-当たらなかったとき、行動名の救済 (#1321、semantic-resolver) と同じ口で Jev に
-問い、確信があれば置き換える。`TargetLabelRescue`、trace は `TYPED_JUDGMENT` の
-`question=target_label_rescue`、置き換えたときは結果文の先頭で「「East Shrine」は
-「東の祭壇」と解釈した。」と当人に見せる。閾値は行動名より高い 0.85
-(`TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE`)。
-
-**なぜこの形か**: 過去 65 run の `INVALID_TARGET_LABEL` 212 件を
-`scripts/jev_target_label_rescue_demo.py` で測った。暗くて見えない 32 件と候補が
-無い 109 件は対象外。候補があった 70 件を Jev に問うと:
-
-- 正しく置き換えた 5 件: 「East Shrine」「东の祭壇」→ 東の祭壇、「漂着物」→ 波が運んだ
-  漂着物、「貝」→ 貝の岩棚 (2 件)。いずれも確率 0.93 以上、確信 0.89 以上
-- 正しく「該当なし」と言った 58 件: 「大型カニ」に「貝の岩棚」、「発電機」に
-  「当番表 / 隔壁盤」、人の名前に流木や船倉。0.95 以上で断っている
-- 誤って置き換えた 4 件: 「古い手記 (前半)」→ 岩肌の刻み跡 / 朽ちた机。手持ちの品を
-  対象物の一覧から選ばせた型で、確率 0.83〜0.99。これは当時 `interact` が手持ちの
-  品を対象に取れなかったことによる。いまは `inventory_item` も候補に入り、名前が
-  そのまま当たるので Jev は呼ばれない
-- 入れ替え対照 70 件で何かを選んだのは 2 件で、どちらも上の 2 つの型
-
-救える件数は 5 / 212 と少ないが、費用は失敗したときだけの Jev 1 回で、置き換える
-べきでない場面を置き換えた例は対照で確かめた範囲で無い。1 tick の損が数件消えるなら
-得しかない。
-
-**問わない場面**: 名前が候補に当たった、候補が空、種別違い (`INVALID_TARGET_KIND`)、
-曖昧 (`AMBIGUOUS_TARGET_LABEL`)。名前の問題でないものは問わない。
-
-**関連**: #1321 / #66 / #218。
-
----
+[本文](design_decisions/227.md)
 
 ## 228. 在るのに種類が違う名前は「無い」と言わず、種類と使うツールを添えて返す
 
-**何を**: 対象の名前を引く resolver を、表示名で 1 回だけ索引を作る
-`TargetIndex` (`_argument_resolvers/target_lookup.py`) に載せ替えた。名前 1 つに
-つき参照 1 回で「当たり / 曖昧 / 種類違い / 無い」の 4 つが同時に出る。別の種別に
-在る名前は `INVALID_TARGET_KIND` で失敗させ、文面は「「大型カニ」はこの場所の敵で、
-対象の名前には使えません。戦うなら attack を使う。有効な対象の名前: 貝の岩棚 / リン」
-の形にする。interact / travel_to の専用の失敗組み立て (tool_dispatch) は、この
-文面を「見つかりません」で上書きしない。
-
-**なぜこの形か**: 過去 83 run の interact の `INVALID_TARGET_LABEL` 194 件のうち
-約 70 件が、敵 (大型カニ・大蛇)、隣の場所 (川の上流・連絡通路)、手持ちの品の
-名前を対象に書いたものだった。従来の `resolve_target` は受け付ける種別しか探さず
-「候補にありません」と返していたので、当人は「大型カニはいない」と誤解し、同じ
-名前を attack や travel_to で試す手を取れなかった。「在るが種類が違う」は規則で
-確定できることで、意味で選び直す (#227) 前に弾くべき最大の群でもある。
-
-**「では何が書けるのか」は失わない**: 以前は KIND の文面に候補一覧が付かないことを
-理由に、別種別の表示名でも LABEL を返していた (test_resolve_target_unified の旧
-docstring)。いまは KIND の文面にも受け付ける種別の候補一覧を必ず添えるので、
-その理由は消えた。
-
-**勧めるツール名は露出判断を通す**: 失敗文に載せるツール名は、シナリオが
-`disabled_tools` で落としたものを宣伝しない (CLAUDE.md「プロンプト本文にツール名を
-書くときは、必ず露出判断を通すこと」)。`SpotGraphArgumentResolver(tool_is_exposed=)`
-に `runtime.tool_exposure.is_exposed` を注入し、無効なツールは文面から落として
-種別だけを伝える。露出判断を持たない最小配線では全ツールを在るものとして扱う。
-
-**内部ラベル (O1 / P2) は最後の逃げ道としてだけ引く**: プロンプトは名前直書きで、
-内部ラベルを出していない (#3)。直近 15 run の引数約 1000 件に内部ラベル形式は
-0 件だった。表示名で当たらなかったときだけ辞書のキーでも引く。物とプレイヤーが
-同じ表示名を持つときは名前では指せず、`AMBIGUOUS_TARGET_LABEL` の文面で内部
-ラベルを案内するのが唯一の出口になるため。辞書のキーそのものは収集・記憶の下書き・
-他のツール族の resolver が識別子として使っているので残す。
-
-**同名は最初の 1 件を黙って採らない**: 同じ種別に同名が複数あるときも `AMBIGUOUS_TARGET_LABEL`
-で失敗させる。以前の行き先解決は最初の 1 件を黙って採っていたが、行き先を取り違えて
-成功として返る方が痛い。プロンプト側は同名を `#N` で区別しているので、通常は起きない。
-
-**関連**: #3 / #227 / #66。
-
----
+[本文](design_decisions/228.md)
 
 ## 229. 名前で対象を引く全ツールが、同じ 3 段の入口を通る
 
-**何を**: 対象名の救済 (#227、`TargetLabelRescue`) を `interact` だけでなく、名前で
-対象を引く全ツール (use_item / drop_item / pickup_item / give_item の品と相手 /
-travel_to) に配線した。resolver 側の入口は `SpotGraphArgumentResolver._resolve_named`
-の 1 つで、段は上から順に決まる。
-
-1. 表示名で当たる、別の種別に在る、同名が複数: 規則で確定する (#228)
-2. どこにも無く候補が空: 問わずに失敗する
-3. どこにも無く候補がある: Jev に「該当なし」を含めて問う
-
-**なぜこの形か**: ミスの型を過去 83 run で分類すると、規則で確定できるのは「種類が
-違う」(約 70 件) と「候補が空」だけで、残り (翻訳・異体字・言い換え・発明) は
-パターンで網羅しきれない。正規化を頑張り続けるより、規則で確定できるものを先に
-弾き、残りを Jev に「該当なし」込みで判断させる方が保守できる。4 ツールの
-過去データで救える件は 0〜1 件だが、SLM に切り替えると表記崩れは増え、費用は
-「候補があるのに当たらなかった」ときの Jev 1 回だけ。
-
-**判断は列で運ぶ**: `TARGET_LABEL_JUDGMENTS_KEY` は dict の list。give_item は
-entry ごとに品と相手の 2 つの名前を引くので、1 回の呼び出しで複数の判断が出る。
-entry が該当なしで失敗しても (部分成功)、その判断は列に残って trace に届く。
-結果文の注釈は採った判断ぶんを最初のものから順に並べる。
-
-**trace で引き分ける**: payload に `tool` と `argument` (「渡す相手の名前」など)
-を足した。1 ツールなら不要だったが、5 ツールになると `question=target_label_rescue`
-だけでは何を選び直したか分からない。Jev の state にも同じ 2 つを入れる。
-
-**travel_to の注意**: 隣接していない既知の部屋 (機関室) を書いた失敗が travel_to の
-主因で、Jev はこれに「該当なし」と言う。途中の部屋に置き換える誤りは 0.85 の閾値と
-「該当なし」の選択肢で抑えるが、本来は「隣接していない」と失敗理由を直すのが筋。
-`dark_hidden_object_names` と同じ流儀で既知の部屋名を context に載せるのは別 PR。
-
-**関連**: #227 / #228 / #1321。
-
----
+[本文](design_decisions/229.md)
 
 ## 230. 隣接していない既知の場所を行き先に書いたら、「見つからない」ではなく「隣接していない」と返す
 
-**何を**: 現在地でも隣でもない世界の場所の名前を `distant_spot_names` として
-snapshot → `ToolRuntimeContextDto` に運び (`dark_hidden_object_names` と同じ流儀で、
-プロンプト本文には出さず失敗理由の照合にだけ使う)、travel_to にその名前が書かれたら
-`DESTINATION_NOT_ADJACENT`「「機関室」はここと隣接していません。有効な接続先: 通信室 /
-連絡通路」で失敗させる。意味で選び直す口 (#229) より先に決め、Jev には問わない。
-
-**なぜこの形か**: travel_to の失敗 51 件 (83 run) のほぼ全部が、目的文や記憶にある
-部屋を隣の場所として書いたものだった。「見つかりません」と返すと当人はその部屋が
-無いと誤解する。Jev に渡すと「機関室へ行きたいなら途中の連絡通路」と置き換える余地が
-あり、当人は注釈を読み飛ばして着いたと思い込みかねない。規則で確定できることは
-規則で確定する。
-
-**経路は教えない**: 「行ける場所」を並べるだけで、機関室への経路は返さない。地図は
-歩いて知るもので、失敗文が案内板になると探索の質感が消える。書かれた名前の存在を
-確かめることになるが、当人が既に書いた名前なので新しい情報は増えない。
-
-**関連**: #228 / #229 / 3 (名前直書き)。
-
----
+[本文](design_decisions/230.md)
 
 ## 231. 存在しない tool 名への提案は、そのターンに送った tool から意味で選び、実行はしない
 
-**何を**: `UNSUPPORTED_TOOL` の失敗文にある「もしかして 'X' ですか?」と「現在使える
-tool」の一覧を、Phase A で実際に送った `tools_payload` から作る。型付き判断が使える
-run では `ToolNameRescue` が「送った tool のどれを意図したか」を `ChoiceQuestion` で
-問い、確信が閾値 (`TYPED_JUDGMENT_TOOL_NAME_MIN_CONFIDENCE`、既定 0.7) 以上なら提案を
-差し替える。該当なし・閾値未満・判断が得られないときは文字の類似度による提案に戻し、
-理由を `TYPED_JUDGMENT` (`question=tool_name_rescue`) に残す。
-
-**なぜ送った一覧からか**: 以前は handler 表の全キーから作っていた。会議中に送った
-7 個に対し、`interact` や `attack`、この世界で出していない `memory_*` まで 33 個を
-失敗文に並べていた。勧めた名前を呼ぶと、今度は `TOOL_NOT_OFFERED_NOW` で落ちる。
-存在しない tool を勧めるのは、無効化しないより悪い (「LLM に出すツールを増やす /
-出し分けるとき」と同じ形)。
-
-**なぜ意味で選ぶか**: 過去 89 run の 24 件は typo より発明された名前に寄っていた。
-`say` は `speak` の `channel`、`gather` は `interact` に操作名を渡すこと。先頭の単語が
-共通しないので類似度では候補が出ない。選択肢の意味には送った説明の 1 行目を使う
-(#38)。`inner_thought` を tool 名として送った崩れ (10 件) のために「該当なし」を必ず
-入れる。
-
-**なぜ実行しないか**: 別の tool として実行するには引数の写し替えが要り、足りない
-引数の扱いが難しい。失敗は失敗のまま返し、提案の中身だけを変える。`suggested` と
-同じ player の次の `action` の `tool` を突き合わせれば、提案どおりに呼んだかを数えられる。
-
-**その後**: 閾値と `TYPED_JUDGMENT_TOOL_NAME_MIN_CONFIDENCE` は外した。「該当なし」以外を
-選べば、確率によらずその tool を提案する。理由は #234。
-
-**関連**: #1318 / #1413 / #223 (semantic-resolver 経由) / #234。
+[本文](design_decisions/231.md)
 
 ## 232. ループ警告の文面は、繰り返しの理由の見立てで選ぶ。見立てで警告は消さない
 
-**何を**: ループ警告が発火したとき、警告の出し口 (`LoopWarningEmitter`) が Jev に
-`ChoiceQuestion` で繰り返しの理由を 1 回問う (`question=loop_diagnosis`)。選択肢は
-達成済み / 状態の取り違え / 前提の欠けた再試行 / 待機 / 返事待ちの再依頼 / 手段の固着 /
-該当なし。採れた理由ごとに、本人が読み落としていそうな世界の事実を並べた文面にする
-(居場所、前の成功、直近の失敗文、届いている観測の件数、同じ内容を伝えた回数)。
-`TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED` の既定は off。
-
-**なぜこの形か**: 今の文面は理由にかかわらず「別の行動を選べ」と命じる。居場所を
-取り違えている人に要るのは「もう土手に居る」という事実で、命令ではない。繰り返しを
-見つけることはコードで確定できるが、なぜ繰り返しているかは確定できない。Jev に向く
-のは後者だけで、件数と tick 差は問わない。
-
-**警告は消さない**: どの理由を選んでも警告は出す。「該当なし」、確信が閾値未満、判断が
-得られない、の 3 つは今の順繰りの文面で出し、`fallback_reason` で分ける。「待機」の
-見立てで警告を消すと、見立てが外れたときに詰まった人に誰も気づかない (#222 と同じ
-非対称)。
-
-**文面に対処のヒントを載せない**: `get_remediation` の文には「別の行動を選んでください」
-のような指示が入っている。理由の文面は事実だけで組む。
-
-**材料**: 繰り返した行動、直近 5 件の行動と結果の文 (発言は内容も)、現在地、いま届いて
-いる観測。本人の目的は入れない (#222)。渡した state は trace にそのまま残す (判断が
-見たものは判断の trace に残す)。
-
-**実 Jev の見立て**: 既存 trace の 4 場面を組み直して問うた
-(`scripts/jev_loop_diagnosis_demo.py`)。閾値 0.7 で 2 場面を採り、どちらも当たった
-(前提の欠けた再試行 0.99、返事待ちの再依頼 0.79)。残る 2 場面は最上位の理由が事実に
-合っていたが閾値未満で縮退した (達成済み 0.64、待機 0.54)。発言内容を材料に入れる
-前は、申し出の言い直しを「達成済み」と外していた。同じ state でも確率は呼ぶたびに
-揺れる (場面 1 で 0.40 と 0.64)。
-
-**その後**: 閾値と `TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE` は外した。縮退は
-「該当なし」と判断が得られないときの 2 つになり、`below_threshold` は無くなった。
-理由は #234。
-
-**関連**: #222 / #1411 / #1412 (意味上の繰り返しの検出器はこの出し口を使う) / #234。
+[本文](design_decisions/232.md)
 
 ## 233. 完全一致で数えられない繰り返しは、直近の行動の窓を Jev に問って足す。件数はコードが持つ
 
-**何を**: ループ警告の 3 つ目の検出器として `SemanticRepeatDetector` を置く。player ごとに
-直近 K 件 (既定 4) の行動の要約と結果の文を持ち、K 件そろったターンに `NoulQuestion` で
-「手段を変えずに同じことを試し続けているか」を 1 回問う (`question=semantic_repeat`)。
-確率が閾値 (既定 0.8) 以上なら `SemanticRepeat` を返し、#232 の出し口と見立てを通る。
-`TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED` の既定は off。
-
-**なぜこの形か**: 完全一致の検出は `(tool 名, fingerprint)` が揃わないと数えない。言い直した
-同じ依頼、操作名や呼び名を変えた同じ失敗、2 つの行動の往復は、どれも連続が切れる。意味が
-同じかをルールで決めるのは難しい。逆に件数と「何件並んだか」はコードで確定できるので、
-Jev には数えさせず、窓の中身が同じ試みかだけを問う。
-
-**重ねて出さない**: 同じ行動で複数の検出器が発火したら、出し口 (`emit_all`) は 1 件だけ
-出す。優先は離れた tick の失敗 (失敗の理由を持つ)、連続の同一行動、意味上の繰り返しの順。
-同じ繰り返しに警告が 2 件届くと待機へ押す力が強くなりすぎ、見立ても 2 回問うことになる。
-`CrossTickFailureTrigger` は、離れた tick の失敗を出したときに返し続ける。捨てた側の判断も
-`TYPED_JUDGMENT` に `exact_match_fired=True` で残す。重なりを後から数えるため。
-
-完全一致の検出が発火したら、その行動を最後に意味上の窓も空にする。完全一致は閾値の倍数で、
-意味上の検出は窓がそろった時点で発火するので、空にしないと隣り合うターンに同じ繰り返しへ
-2 件届く (K=4 で wait を 9 回続けると 3, 4, 6, 8, 9 回目に警告が出た)。
-
-**発火は控えめに**: signal を出したら窓を空にし、新しい行動が K 件溜まるまで問わない。
-閾値未満なら窓は空にせず、次のターンに 1 件ずれた窓をまた問う。既定の文面は、完全一致の
-警告の命令調を引き継がず、事実だけを書く。
-
-**材料**: 行為者の名前と、直近 K 件の行動の要約・成否・結果の文だけ。要約は fingerprint から
-`format_action_summary_for_display` で作るので、発言は内容つきで入り、内心は入らない。本人の
-目的は入れない (#222)。目的の同乗フィールド (`goal_update` / `goal_outcome`) は fingerprint に
-残り、要約の表に無い tool では JSON のまま出るので、要約の前に落とす。結果の文は 200 字で切り、
-trace の窓と渡した窓を同じにする。見立て用の直近 5 件 (`RecentAction`) とは別に持つ。評価に使った要約と
-同じ形に保つため。
-
-**呼ぶ回数**: 検出の問いは 1 ターンに最大 1 回。発火したターンだけ、#232 の見立てがもう 1 回
-問う。見立ては居場所と届いている観測も材料にするので、同じ state にまとめていない。
-
-**実 Jev の確率**: 既存 trace から 20 窓を組み直した (`scripts/jev_semantic_repeat_demo.py`)。
-繰り返しでない窓 8 件の最大は 0.51 (同じ相手へ段階的に進む囁き、椰子の実を拾って食べる往復)。
-完全一致で拾えなかった繰り返し 10 件は、6 件が 0.86〜0.91 (申し出の言い直し、言い換えた
-無い操作、拾い尽くした漂着物、往復 3 種)、4 件が 0.55〜0.71 (操作名を毎回変えた同じ失敗 2 件、
-対象名が要約に出ない古い trace、部屋の往復)。質問の真の側に「同じ理由で拒否され続けている
-場合」を足すと、繰り返しでない窓の最大が 0.62 から 0.51 に下がり、繰り返しの側は変わらな
-かった。閾値 0.8 は繰り返しでない窓の最大から離して置いた値で、trace を読んでから下げる。
-この 20 窓は質問文の調整にも使っており、取り分けた検証用の窓は無い。本番では閾値未満の窓を
-毎ターン 1 件ずらして問うので、問う窓のほとんどは繰り返しでない。繰り返しでない 8 件で誤検出
-0 件という結果では、本番の警告の件数はまだ見積もれない。観察 run の trace で数え直す。
-
-**関連**: #222 / #232 / #1411 / #1412。
+[本文](design_decisions/233.md)
 
 ## 234. Jev の閾値は、誤ったときに行動が実行される問いにだけ残す
 
-**何を**: tool 名の提案 (#231) と繰り返しの理由の判定 (#232) から閾値を外す。
-いちばん確率の高い選択肢をそのまま採り、「該当なし」を選べば採らない。判断が得られない
-とき (例外、答えが無い、選択肢に無い答え) の縮退と trace は残す。確率と確信は trace に
-残し続ける。profile の `TYPED_JUDGMENT_TOOL_NAME_MIN_CONFIDENCE` と
-`TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE` は消し、書くと未知のキーとして起動前に落ちる。
-
-**基準は、誤ったときの損**: 閾値は、判断を誤ったときに行動が実行されてしまう問いを守る
-ためにある。誤っても行動が実行されない問いでは、閾値で採らなかった分だけ、当たっていた
-答えも捨てることになる。
-
-- tool 名の提案: 別の tool として実行はせず、失敗文の「もしかして 'X' ですか?」が
-  変わるだけ。外れても、使える tool の一覧は並べてある
-- 繰り返しの理由の判定: どの理由を選んでも警告は出る。変わるのは警告の文面だけ
-
-**外すと変わる件数**:
-
-- tool 名の提案: 過去 run の 24 件のうち 2 件。`inner_thought` → `travel_to` (0.64) は
-  誤りで、`look_around` → `explore` (0.53) は正しい。誤りの側も、提案が外れるだけで
-  失敗は失敗のまま返る
-- 繰り返しの理由: 観察 run `station_drill_gemma31_loop_jev_001` の 4 件のうち 1 件。
-  会議の告発の言い直しが「同じ手段へのこだわり」(0.65) の文面になる
-
-**残す閾値**: 行動名の置き換え (#223、0.7) と対象名の置き換え (#227、0.85) は、置き換えた
-名前でそのまま行動が実行される。値も 1 つにまとめない。0.85 にまとめると、行動名の救済が
-実際の失敗 99 件で救えていた 71 件が 58 件に減る。0.7 にまとめると、対象名で手持ちの品を
-その場の物に置き換える誤りが 4 件増える。
-
-**はい / いいえの問い**: memo の達成判定と意味上の繰り返し (#233) は、選択肢ではなく確率
-1 つを閾値と比べる形なので、ここでは触らない。後続の PR で選択肢の形に変える予定。
-
-**新しい使い道にも閾値を足さない**: 「待機」と判定した警告を軽くする件 (#1425) は、
-「待機」がいちばん高い選択肢なら軽くする。軽くしても事実は届くので、誤っても文面が
-変わるだけの側に入る。
-
-**関連**: #223 / #227 / #231 / #232 / #233 / #1427。
+[本文](design_decisions/234.md)
 
 ## 235. 動的引数候補の実験は、モデルへ見せる前から同じ真実源を保存する
 
-**何を**: prompt dataset の各 LLM 呼び出しに、`tool_runtime_context` から作った
-ツール・引数別候補 snapshot と、そのまま介入に使える表示文を保存する。基準条件では
-表示文を prompt へ入れない。後段で同じ request を介入なし / 候補表ありの両方へ再生する。
-
-**なぜ**: 既存 dataset は prompt 本文と tool schema を持つが、runtime context を持たない。
-本文から候補名だけを拾っても、対象ごとの `action_name`、非公開候補、配列内の引数との対応を
-完全には復元できない。現在の resolver へ過去出力を流す案も、過去run後の仕様変更を混ぜる。
-呼び出し時点の候補へ文字列照合すれば、当時なら動的引数で拒否されたかを、現在の世界コードを
-実行せずに再集計できる。
-
-**保存する理由**: 集計値だけを残すと、候補表の文面や判定規則を変えたときに分析をやり直せない。
-構造化候補、表示文、request、response、token・費用・待ち時間を生データとして残す。
-
-**候補表へ該当なしは足さない**: 本番案に無い選択肢を実験だけへ足すと別の介入になる。候補外の
-意図に対して別ツールを選ぶか、候補を無理に選ぶかも候補表の実用上の性質として測る。
-
-**関連**: #1429 / #37 / #98 / #210 / #223 / #227。
+[本文](design_decisions/235.md)
 
 ## 236. 動的引数候補は世界説明を置き換えず、行動指示の直前で正規化して再提示する
 
-**何を**: 実際に LLM API へ渡すツール集合と同じ `tool_runtime_context` から、
-対象解決を行う `tool.argument` ごとの候補表を作る。世界の説明やツール定義は残したまま、通常の
-行動選択プロンプトの末尾、行動指示の直前へ表を置く。二段階推論では評価段階へ
-入れず、行動選択段階だけへ入れる。候補が無いときは見出しごと出さない。
+[本文](design_decisions/236.md)
 
-**なぜ**: 現在地の説明にも、接続先や物体の操作は既に書かれている。しかし、
-それらは世界の説明として複数箇所へ分散しており、`destination_label` や
-`action_name` に完全一致で何を書けるかは集約されていない。Issue #1429 の保存済み
-失敗5件へ候補表だけを足した小規模介入では、候補外入力が5件から0件になった。
-4件は候補内の行動へ再計画し、1件は別行動へ退いた。正常5件にも候補外入力は
-生じなかったが、1件は別行動へ変わった。ただし各条件1回の小規模確認であり、
-効果量を確定するものではない。そのため候補表は意味理解の代替ではなく
-「現在指定できる文字列」の正規化として扱う。
+## 237. 信念を作る直前に、形と同じ意味の既存の信念を Jev に 1 回で問う。候補は文だけで絞る
 
-**どうしないと壊れるか**: ツール定義へ動的 enum を埋めると tick ごとに定義が変わり、
-プレフィックスキャッシュを壊す。世界説明を候補表で置き換えると、物体の意味や
-前提条件が消える。APIへ出さないツールの候補まで載せると、存在しない行動を宣伝する。
-評価段階へ載せると、評価専用ツールしか呼べない局面で行動候補を見せることになる。
+[本文](design_decisions/237.md)
 
-**候補の範囲**: 見出しは「現在選べる対象引数」とし、自由文、数量、価格、検索語などは
-含めない。表示名を受ける `TargetIndex` 系と、`P1` / `G1` などのラベルを直接受ける
-`require_target_type` 系を区別し、各 resolver が実際に受理する値を載せる。会議、発話、
-個人間取引、ギルド、ショップ、任務、スキルを含む対象解決ツールを同じ対応表で管理する。
+## 238. 目的の達成 hint は、判断が得られないとき規則へ縮退しない。清算できない目的は問わない
 
-**再分析時の判定**: 「表に表示した値との完全一致」と「当時の resolver なら受理したか」
-を別々に保存する。後者は `label_forms` と `normalize_action_name_candidates` と同じ規則で
-照合し、内部ラベル、引用符、表示行の丸写しを入力ミスとして水増ししない。
+[本文](design_decisions/238.md)
 
-**関連**: #1429 / #1 / #210 / #234。
+## D1439. 予期の状態の変化と、その出来事を、同じ保存の単位で残す
+
+[本文](design_decisions/D1439.md)
+
+## D1463. 環境とエージェントの契約は、欄の段と経路ごとの必須欄を型で表し、本文に無い名前を写さない
+
+[本文](design_decisions/D1463.md)
+
+## D1440. 予期の清算は、ターンの終わりに 1 回だけ問い、保存してから配り、受け取る側に重複を見分けさせる
+
+[本文](design_decisions/D1440.md)
+
+## D1452. 信念と証拠は観測のターン数だけを持ち、状態の変わり方は観測の食い違いから学ぶ
+
+[本文](design_decisions/D1452.md)
+
+## D1441. 予期は環境の tool の引数として一律に書かせ、その手のターンの予期として積む
+
+[本文](design_decisions/D1441.md)
+
+## D1443. 予測の当否の材料は確定した予期だけから積み、受け取る側は受け取り済みの ID を材料と同じ store に持つ
+
+[本文](design_decisions/D1443.md)
+
+## D1484. 予期の根拠は形と同じ呼び出しで 1 件ずつ問い、確定した当否は根拠にだけ返す
+
+[本文](design_decisions/D1484.md)
+
+## D1414. ~~想起は状況の 6 つの欄から、残す欄を選んだマスクごとに引き、結果を混ぜずに持つ~~
+
+[本文](design_decisions/D1414.md)
+
+## D1414-2. 状況の項目は観測の契約に変換してから組み、profile で有効にしたときだけ【関連する学び】を切り替える
+
+[本文](design_decisions/D1414-2.md)
+
+## D1414-3. ~~次のターンの想起で残す欄は、ターンの終わりの清算の呼び出しで毎ターン問い、予期の判定とは分けて読む~~
+
+[本文](design_decisions/D1414-3.md)
+
+## D1414-4. ~~自分の体の状態は、清算の呼び出しで「平常 / 注意 / 危機」の帯に丸め、帯の文を生の本文に足す~~
+
+[本文](design_decisions/D1414-4.md)
+
+## D1414-5. ~~残す欄は、欄を選択肢にした 1 問の確率の上位を固定の件数だけ採り、欄の値を Jev に見せる~~
+
+[本文](design_decisions/D1414-5.md)
+
+## D1414-6. メモ・記憶・状況評価の道具の結果は、環境の観測として写さない
+
+[本文](design_decisions/D1414-6.md)
+
+## D1414-7. 文字の 2 字組は、改行・句読点・空白・記号の区切りをまたいで作らない
+
+[本文](design_decisions/D1414-7.md)
+
+## D1414-8. 想起は状況の全部の項目をつなげた 1 本の問い合わせで引き、上位 3 件を載せる
+
+[本文](design_decisions/D1414-8.md)
+
+## D1498. 信念の絞り込みは文字の 2 字組のままにし、形態素解析の手法は比べた記録だけ残して外す
+
+[本文](design_decisions/D1498.md)
+
+## D1454. 埋め込みの手法は絞り込みの差し替えとして足し、作る部品・ベクトルの索引・縮退を分けて差し替える
+
+[本文](design_decisions/D1454.md)
+
+## D1461. SNSの対象には作成時の不変識別子を保存し、表示参照と分ける
+
+[本文](design_decisions/D1461.md)
+
+## D1460. SNSの作者・親・通知先を、整数だけでなく作成時の対象へ束縛する
+
+[本文](design_decisions/D1460.md)
+
+## D1460-2. 初期のSNS読取は公開だけを、全祖先の権限を確かめて有限件ずつ返す
+
+[本文](design_decisions/D1460-2.md)
+
+## D1459. 公開SNSの投稿・親更新・通知を一つのCommandScopeで確定する
+
+[本文](design_decisions/D1459.md)
+
+## D1459-2. 公開SNSは二つの道具と通常観測に接続し、専用の起動ループを作らない
+
+[本文](design_decisions/D1459-2.md)
+
+## D1509. 外れた予期の材料には、清算に見せた時系列のうち書いてから確定するまでを付け、関係の無い出来事の除き方は信念をまとめる LLM に任せる
+
+[本文](design_decisions/D1509.md)
+
+## D1568. 予期の当否は、決め手が他の人の発言の中身しかないかも同じ呼び出しで問い、そうなら当たりを「まだ分からない」に下げる
+
+[本文](design_decisions/D1568.md)
+
+## D1513. 出来事の条件・操作の前提条件・効果に、種類ごとの許可キーの表を置き、表に無いキーは読み込み時に止める
+
+[本文](design_decisions/D1513.md)
+
+## D1514. 記憶だけを持ち越す回は、実験設定の `snapshot_load_mode: "replay"` で選び、前の回の世界の tick は記憶から外す
+
+[本文](design_decisions/D1514.md)
+
+## D1514-2. 回ごとの役と初期配置は、シナリオの `round_assignment` に枠として書き、シードと回の番号で並べ替える
+
+[本文](design_decisions/D1514-2.md)
+
+## D1514-3. 世界の側の乱数は、用途ごとに、シードと回の番号から作る
+
+[本文](design_decisions/D1514-3.md)
+
+## D1520. 会った相手の記録は Being が持ち、環境の encounter には「この観測はもう出した」の判定だけを残す
+
+[本文](design_decisions/D1520.md)
+
+## D1516. チームの勝敗は `teams[].win` で決め、個人の勝敗は所属チームの勝敗にそろえる。個人結果 (RESCUED など) とは別の軸で残す
+
+[本文](design_decisions/D1516.md)
+
+## D1546. 本人にも見せない属性は `player_attributes` で `hidden` と宣言する。`teams[].member_state` のキーを自動では伏せない
+
+[本文](design_decisions/D1546.md)
+
+## D1531. 名前を伏せても誰かがいると分かる観測は、主体を知らない受け手には届けない
+
+[本文](design_decisions/D1531.md)
+
+## D1557. でたらめに行動するスタブは、エージェントに見えている候補だけから選び、実シナリオの総当たりは CI に入れない
+
+[本文](design_decisions/D1557.md)
+
+## D1559. 移動の途中で区間が閉じたら、例外にせず、その手前で移動を取りやめる
+
+[本文](design_decisions/D1559.md)
+
+## D1558. 世界の tick の 1 体ぶんの例外は、CommandScope の単位で取りやめ、必ず trace と報告に出す
+
+[本文](design_decisions/D1558.md)
+
+## D1558-2. 確定済みの処理に続く後処理の失敗は、取りやめずに trace に残して続ける
+
+[本文](design_decisions/D1558-2.md)
+
+## D1569. 効果や出来事で持ち物から外れた品は、捨てたと言わず品名で伝える。出来事で消えたときの文は品の定義に書く
+
+[本文](design_decisions/D1569.md)
+
+## D1569-2. 前提条件で断られた操作の行も、成功の行と同じく操作の表示名で書く
+
+[本文](design_decisions/D1569-2.md)
+
+## D1569-3. 「行動の総量には限りがある」の行は、シナリオが外せるようにする。既定は従来どおり出す
+
+[本文](design_decisions/D1569-3.md)
+
+## D1581. 名前を知らない相手は見た目で出し、名乗りか、同じ場所で名前を呼ばれるのを聞いたときに名前に切り替える
+
+[本文](design_decisions/D1581.md)
+
+## D1582. 有効な reasoning effort も、OpenRouter の統一の形で `extra_body` に載せる
+
+[本文](design_decisions/D1582.md)
+
+## D1591. 操作が parameters から読むキーは、前提条件のものも効果のものも「が要る」で出す。キーが無いときは番号違いの文を使わず、キーを名指す
+
+[本文](design_decisions/D1591.md)
+
+## D1594. 同じ行動かを比べるとき、行動に添えた発言と、識別値の書き方の揺れを外す
+
+[本文](design_decisions/D1594.md)
+
+## D1596. 「(初めて訪れた)」は、着いてから最初の手番を実行するまでの間だけ付ける
+
+[本文](design_decisions/D1596.md)
+
+## D1595. 呼び出しが失敗した人は次の tick に回し、同じ人の 3 回連続で打ち切る。thinking は出力の上限トークン数で抑える
+
+[本文](design_decisions/D1595.md)
+
+## D1600. 試して学ぶ決まりは、外れ方を足りないものごとに分け、満ちた瞬間を音で知らせる。答えは書かない
+
+[本文](design_decisions/D1600.md)
+
+## D1602. 伝聞から来た信念は、支持の内訳から【関連する学び】に印を付ける。推測の言い方を残すことは指示で頼み、作る前の判定は変えない
+
+[本文](design_decisions/D1602.md)
+
+## D1601. 行動に添えた発言は、行動の結果を問わず dispatch で 1 回出す
+
+[本文](design_decisions/D1601.md)
+
+## D1607. 引数が渡されずに断られた操作は、同じ場所の他の人に失敗として見せない
+
+[本文](design_decisions/D1607.md)
+
+## D1613. 体の届く範囲の前提条件は、試して学ぶ決まりの前提条件より先に確かめる
+
+[本文](design_decisions/D1613.md)
+
+## D1618. 個人結果の規則は、世界の段の中と全員の手番のあとの 2 回判定する
+
+[本文](design_decisions/D1618.md)
+
+## D1616. システムプロンプトの記憶の指示は、組み上がった runtime が実際に出す欄とツールから書き分ける
+
+[本文](design_decisions/D1616.md)
+
+## D1623. 目次つきのエピソードは、ゲームから切り離した別の型で持ち、呼び名は重なったときに新しい側だけを伸ばす
+
+[本文](design_decisions/D1623.md)
+
+## D1626. エピソードは短期記憶を畳むときと環境を離れるときに、要約とは別の呼び出しで本人が書き起こす
+
+[本文](design_decisions/D1626.md)
+
+## D1623-2. エピソードの目次は空でも【思い出せる出来事】として毎ターン出し、呼び名で本文を呼び出す
+
+[本文](design_decisions/D1623-2.md)
+
+## D1623-3. 目次は本人が専用のツールで直し、目次を出す設定ではメモの出どころにエピソードを選ばせる
+
+[本文](design_decisions/D1623-3.md)
+
+## D1628. メモは Being ごとのメモ帳を集約の根にし、分類ごとの件数の上限をメモ帳が守る
+
+[本文](design_decisions/D1628.md)
+
+## D1628-2. メモは環境の tool の省略できる引数 `memo` で書き、崩れた操作だけを外して本人に理由を返す
+
+[本文](design_decisions/D1628-2.md)
+
+## D1597. 成功した自分の行動のあとは次の tick に手番を回す。休むのは wait を選んだときと移動中だけ
+
+[本文](design_decisions/D1597.md)
+
+## D1617. 記憶の部品と Jev の LLM 呼び出しは、行動の `llm_call` と分けて `aux_llm_call` に部品名つきで残す
+
+[本文](design_decisions/D1617.md)
+
+## D1612. 行動に添える一言には、結果ではなくこれから何をするかを書くよう、書き方の案内で頼む
+
+[本文](design_decisions/D1612.md)
+
+## D1641. 人を対象にした操作の品名は、完全一致・部分一致・意味の判断の順で相手の持ち物に当て、当てられないときは「持っていない」と言い切らない
+
+[本文](design_decisions/D1641.md)
+
+## D1631. 短期記憶の既定は rolling_summary にする
+
+[本文](design_decisions/D1631.md)
+
+## D1631-2. OpenRouter の provider を固定したら、送る引数をすべて受け付ける provider にだけ送る
+
+[本文](design_decisions/D1631-2.md)
+
+## D1631-3. 推論の段階を書かない run は minimal で送る
+
+[本文](design_decisions/D1631-3.md)
+
+## D1631-4. 古いメモのうち LLM から見える部分を消し、保存先と過去の trace を読む側は残す
+
+[本文](design_decisions/D1631-4.md)
+
+## D1631-5. 消した部品の snapshot のキーは、拒まずに捨てて件数を trace に残す
+
+[本文](design_decisions/D1631-5.md)
+
+## D1824. 短期記憶は要約の要約 (L5) を作らず、3 世代を超えた要約は捨てる
+
+[本文](design_decisions/D1824.md)
+
+## D1824-2. 短期記憶の要約は【ここまでのいきさつ】として流れと気分だけを持ち、言われた予定と実際にしたことを分けて書かせる
+
+[本文](design_decisions/D1824-2.md)
+
+## D1824-5. 短期記憶の出来事には、それを見る 1 手の番号を付ける
+
+[本文](design_decisions/D1824-5.md)
+
+## D1824-6. Being の snapshot に後から足したキーは、無ければ空として読む
+
+[本文](design_decisions/D1824-6.md)
+
+## D1824-7. 行動の結果は環境が文にして観測の本文に入れ、構造の欄は契約に足さない
+
+[本文](design_decisions/D1824-7.md)
+
+## D1824-8. 観測は、環境の中で起きた順を持つ。順は同じ環境の中でだけ比べられる
+
+[本文](design_decisions/D1824-8.md)
+
+## D1824-9. 短期記憶は、出来事の種類ごとの型と、規則を持つ集約で持つ
+
+[本文](design_decisions/D1824-9.md)
+
+## D1824-10. 【直近の出来事】を Being の側でも作り、今の文と影で比べる
+
+[本文](design_decisions/D1824-10.md)
+
+## D1824-11. 古いターンは、いきさつが届いたときに外す
+
+[本文](design_decisions/D1824-11.md)
+
+## D1824-12. 短期記憶が頼んだいきさつは、裏で作り、その Being のターンの始めに入れる
+
+[本文](design_decisions/D1824-12.md)
+
+## D1652. CI の uv は、配布元からではなく PyPI から固定版を入れる
+
+[本文](design_decisions/D1652.md)
+
+## D1837. ゲームと Being のイベント基盤を一つにする
+
+[本文](design_decisions/D1837.md)
+
+## D1621. エピソードは、自分の目次を持つ集約にする。目次の並びは問い合わせで作る
+
+[本文](design_decisions/D1621.md)
+
+## D1862. 本番のプロンプトからタイル用の問い合わせと整形への参照を外す
+
+[本文](design_decisions/D1862.md)
+
+## D1862-3. ギルド依頼の発行場所はスポットで確認する
+
+[本文](design_decisions/D1862-3.md)
+
+## D1862-4. ショップの購入場所はスポットの一致で確かめる
+
+[本文](design_decisions/D1862-4.md)
+
+## D1862-2. タイルマップ専用のイベント受け手と一括登録を消す
+
+[本文](design_decisions/D1862-2.md)
+
+## D1862-6. 旧タイルの時間進行と専用のモンスター行動を削除する
+
+[本文](design_decisions/D1862-6.md)
+
+## D1862-5. 旧タイル用LLMの入口を消し、UI構築器を明示して渡す
+
+[本文](design_decisions/D1862-5.md)
+
+## D1862-7. タイル上の移動と経路探索を削除し、追跡の領域とスポット移動を残す
+
+[本文](design_decisions/D1862-7.md)
+
+## D1862-8. タイルの宝箱・設置物・品の操作の入口だけを削除する
+
+[本文](design_decisions/D1862-8.md)
+
+## D1862-9. タイル専用の採取・スキル実行を削除し、装備の値は残す
+
+[本文](design_decisions/D1862-9.md)
+
+## D1862-10. 旧タイル用の現在状態問い合わせを、本番の取得契約を残して削除する
+
+[本文](design_decisions/D1862-10.md)
+
+## D1862-11. タイル専用の観測を外し、本番の配信規則を保つ
+
+[本文](design_decisions/D1862-11.md)
+
+## D1862-14. 物理マップは本体に先立ち保存先だけを切り離す
+
+[本文](design_decisions/D1862-14.md)
+
+## D1862-13. タイルの当たり判定を削除し、モンスターのスキル装備の値を残す
+
+[本文](design_decisions/D1862-13.md)
+
+## D1862-12. NPC会話の木と会話終了のクエスト購読を一緒に削除する
+
+[本文](design_decisions/D1862-12.md)

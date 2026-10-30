@@ -91,9 +91,7 @@ class SqliteItemSpecRepository(ItemSpecRepository):
         return items
 
     def find_tradeable_items(self) -> list[ItemSpec]:
-        cur = self._conn.execute(
-            "SELECT * FROM game_item_specs WHERE is_tradeable = 1 ORDER BY item_spec_id ASC"
-        )
+        cur = self._conn.execute("SELECT * FROM game_item_specs WHERE is_tradeable = 1 ORDER BY item_spec_id ASC")
         items: list[ItemSpec] = []
         for row in cur.fetchall():
             decoded = self._decode_row(row)
@@ -203,7 +201,9 @@ class SqliteItemSpecWriter(ItemSpecWriter):
             """,
             [
                 (item_spec_id, effect_id, parent_id, effect_order, effect_kind, amount)
-                for effect_id, parent_id, effect_order, effect_kind, amount in flatten_item_effect(item_spec.consume_effect)
+                for effect_id, parent_id, effect_order, effect_kind, amount in flatten_item_effect(
+                    item_spec.consume_effect
+                )
             ],
         )
         self._finalize_write()

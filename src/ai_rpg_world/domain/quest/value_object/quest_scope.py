@@ -18,7 +18,9 @@ class QuestScope:
             raise QuestScopeValidationException("DIRECT scope requires target_player_id")
         if self.scope_type == QuestScopeType.GUILD_MEMBERS and self.guild_id is None:
             raise QuestScopeValidationException("GUILD_MEMBERS scope requires guild_id")
-        if self.scope_type == QuestScopeType.PUBLIC and (self.target_player_id is not None or self.guild_id is not None):
+        if self.scope_type == QuestScopeType.PUBLIC and (
+            self.target_player_id is not None or self.guild_id is not None
+        ):
             raise QuestScopeValidationException("PUBLIC scope must not have target_player_id or guild_id")
 
     @classmethod

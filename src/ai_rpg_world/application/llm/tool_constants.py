@@ -5,7 +5,6 @@ LLM ツール名のプレフィックスとツール名定数。
 利用可能ツール一覧でカテゴリが分かるようにする。
 """
 
-
 # --- プレフィックス一覧（カテゴリ） ---
 TOOL_NAME_PREFIX_WORLD = "world_"
 TOOL_NAME_PREFIX_MOVE = "move_"
@@ -19,9 +18,7 @@ TOOL_NAME_PREFIX_GUILD = "guild_"
 TOOL_NAME_PREFIX_SHOP = "shop_"
 TOOL_NAME_PREFIX_TRADE = "trade_"
 TOOL_NAME_PREFIX_SNS = "sns_"
-TOOL_NAME_PREFIX_TODO = "todo_"
 TOOL_NAME_PREFIX_MEMO = "memo_"
-TOOL_NAME_PREFIX_MEMORY = "memory_"
 # PR-CC (Y_after_pr639_640 後続): spot_graph_ prefix を廃止し、bare 名で
 # 露出する。理由:
 # - LLM は spot_graph mode / tile_map mode 排他なので、mode ごとに露出する
@@ -67,20 +64,6 @@ TOOL_NAME_PREFIX_DESCRIPTIONS: list[tuple[str, str]] = [
 ]
 
 # --- ツール名（プレフィックス付き） ---
-TOOL_NAME_NO_OP = TOOL_NAME_PREFIX_WORLD + "no_op"
-TOOL_NAME_INSPECT_ITEM = TOOL_NAME_PREFIX_WORLD + "inspect_item"
-TOOL_NAME_INSPECT_TARGET = TOOL_NAME_PREFIX_WORLD + "inspect_target"
-TOOL_NAME_INTERACT_WORLD_OBJECT = TOOL_NAME_PREFIX_WORLD + "interact"
-TOOL_NAME_CHANGE_ATTENTION = TOOL_NAME_PREFIX_WORLD + "change_attention"
-TOOL_NAME_PLACE_OBJECT = TOOL_NAME_PREFIX_WORLD + "place_object"
-TOOL_NAME_DESTROY_PLACEABLE = TOOL_NAME_PREFIX_WORLD + "destroy_placeable"
-TOOL_NAME_DROP_ITEM = TOOL_NAME_PREFIX_WORLD + "drop_item"
-TOOL_NAME_PURSUIT_START = TOOL_NAME_PREFIX_WORLD + "pursue_target"
-TOOL_NAME_PURSUIT_CANCEL = TOOL_NAME_PREFIX_WORLD + "cancel_pursuit"
-# 移動は 1 ツール（set_destination と tick_movement を分けない）。内部で SetDestinationCommand を使用。
-TOOL_NAME_MOVE_TO_DESTINATION = TOOL_NAME_PREFIX_MOVE + "to_destination"
-TOOL_NAME_MOVE_ONE_STEP = TOOL_NAME_PREFIX_MOVE + "one_step"
-TOOL_NAME_CANCEL_MOVEMENT = TOOL_NAME_PREFIX_MOVE + "cancel"
 # Issue #264 後続: 旧 SAY/WHISPER の 2 tool を廃止し、``channel`` 引数を持つ
 # 単一 ``speak`` tool に統合した (SHOUT も同時に LLM へ公開)。
 # ``channel`` は arguments で "whisper" / "say" / "shout" のいずれかを指定する。
@@ -89,16 +72,6 @@ TOOL_NAME_CANCEL_MOVEMENT = TOOL_NAME_PREFIX_MOVE + "cancel"
 # 短縮。``speech`` と ``speak`` の意味重複を解消し、RPG UI 慣習にも合わせる。
 # Python 側の定数名 ``TOOL_NAME_SPEECH`` は grep 継続性のため据え置く。
 TOOL_NAME_SPEECH = "speak"
-TOOL_NAME_HARVEST_START = TOOL_NAME_PREFIX_HARVEST + "start"
-TOOL_NAME_HARVEST_CANCEL = TOOL_NAME_PREFIX_HARVEST + "cancel"
-TOOL_NAME_CONVERSATION_ADVANCE = TOOL_NAME_PREFIX_CONVERSATION + "advance"
-TOOL_NAME_CHEST_STORE = TOOL_NAME_PREFIX_WORLD + "chest_store"
-TOOL_NAME_CHEST_TAKE = TOOL_NAME_PREFIX_WORLD + "chest_take"
-TOOL_NAME_COMBAT_USE_SKILL = TOOL_NAME_PREFIX_COMBAT + "use_skill"
-TOOL_NAME_SKILL_EQUIP = TOOL_NAME_PREFIX_SKILL + "equip"
-TOOL_NAME_SKILL_ACCEPT_PROPOSAL = TOOL_NAME_PREFIX_SKILL + "accept_proposal"
-TOOL_NAME_SKILL_REJECT_PROPOSAL = TOOL_NAME_PREFIX_SKILL + "reject_proposal"
-TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE = TOOL_NAME_PREFIX_SKILL + "activate_awakened_mode"
 TOOL_NAME_QUEST_ACCEPT = TOOL_NAME_PREFIX_QUEST + "accept"
 TOOL_NAME_QUEST_CANCEL = TOOL_NAME_PREFIX_QUEST + "cancel"
 TOOL_NAME_QUEST_APPROVE = TOOL_NAME_PREFIX_QUEST + "approve"
@@ -147,28 +120,10 @@ TOOL_NAME_SNS_OPEN_REF = TOOL_NAME_PREFIX_SNS + "open_ref"
 TOOL_NAME_SNS_PAGE_NEXT = TOOL_NAME_PREFIX_SNS + "page_next"
 TOOL_NAME_SNS_PAGE_REFRESH = TOOL_NAME_PREFIX_SNS + "page_refresh"
 TOOL_NAME_SNS_SWITCH_TAB = TOOL_NAME_PREFIX_SNS + "switch_tab"
-TOOL_NAME_MEMO_ADD = TOOL_NAME_PREFIX_MEMO + "add"
-TOOL_NAME_MEMO_LIST = TOOL_NAME_PREFIX_MEMO + "list"
-TOOL_NAME_MEMO_DONE = TOOL_NAME_PREFIX_MEMO + "done"
-# 後方互換のため旧 TODO 名を memo へのエイリアスとして残す (Issue #188 リネーム)。
-# 既存テスト / docstring の参照を一気に直さなくて済むようにする。
-# 新規コードは TOOL_NAME_MEMO_* を使うこと。
-TOOL_NAME_TODO_ADD = TOOL_NAME_MEMO_ADD
-TOOL_NAME_TODO_LIST = TOOL_NAME_MEMO_LIST
-TOOL_NAME_TODO_COMPLETE = TOOL_NAME_MEMO_DONE
-TOOL_NAME_MEMORY_EXPLORE_RELATED = TOOL_NAME_PREFIX_MEMORY + "explore_related"
-TOOL_NAME_MEMORY_SEARCH_SEMANTIC = TOOL_NAME_PREFIX_MEMORY + "search_semantic"
-# Issue #526 後続: episodic memory の能動 recall ツール (= 「思い出そう」と
-# 意志して過去 episode を取り戻す経路)。passive recall は prompt 構築で
-# 自動で走るが、この tool は LLM が ``about`` + ``time_range`` を渡して
-# 能動的に過去を呼び戻す。
-TOOL_NAME_MEMORY_RECALL_EPISODES = TOOL_NAME_PREFIX_MEMORY + "recall_episodes"
-# Issue #526 後続 PR-D: afterglow index (= ぼんやり覚えてる見出し) から、
-# 「これ詳しく思い出したい」と handle を指定して本文を引き戻す経路。
-# memory_recall_episodes が自由文検索なのに対し、これは prompt 上の handle
-# (``ep_<6 文字>``) を直接指定して 1 件取り出す。slot に再注入されるため
-# 「もう一度鮮明に浮かんだ」状態を構造で実現する。
-TOOL_NAME_MEMORY_RECALL_BY_HANDLE = TOOL_NAME_PREFIX_MEMORY + "recall_by_handle"
+# #1623: 【思い出せる出来事】の目次から、呼び名で本文を呼び出す。
+TOOL_NAME_EPISODE_RECALL = "episode_recall"
+# #1623: 呼び出した本文と目次が合わなかったときに、本人が目次を直す。
+TOOL_NAME_EPISODE_REVISE_INDEX = "episode_revise_index"
 TOOL_NAME_ASSESS_SITUATION = "assess_situation"
 TOOL_NAME_SPOT_GRAPH_TRAVEL_TO = TOOL_NAME_PREFIX_SPOT_GRAPH + "travel_to"
 TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION = TOOL_NAME_PREFIX_SPOT_GRAPH + "set_sub_location"
@@ -218,3 +173,7 @@ SHADOW_TARGET_PREFIX = "__"
 #: **プロンプトの候補には出さない**ので、引用符つき表示の契約検査からも
 #: 除外する (道の名前の shadow は候補に出る名前なので除外しない)。
 HERE_TARGET_LABEL = "__here"
+
+# 公開SNSの入口（旧アプリ操作とは独立）。
+TOOL_NAME_SNS_READ = "sns_read"
+TOOL_NAME_SNS_PUBLISH = "sns_publish"

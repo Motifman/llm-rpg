@@ -23,9 +23,7 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 _SCENARIOS = Path(__file__).resolve().parents[3] / "data" / "scenarios"
-_FIXTURE_SCENARIOS = (
-    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
-)
+_FIXTURE_SCENARIOS = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
 
 #: 会議機構を宣言していないシナリオ。
 _WITHOUT_MEETING = _SCENARIOS / "survival_island_v4_coop.json"
@@ -66,9 +64,7 @@ class TestScenariosWithoutTheDeclaration:
         起動時の dispatch 整合検査がこの手段を使う。ここで出てしまうと、
         会議を持たないシナリオでも handler の有無を問われることになる。
         """
-        assert not (
-            _MEETING_TOOLS & _tool_names(_WITHOUT_MEETING, as_meeting_phase=True)
-        )
+        assert not (_MEETING_TOOLS & _tool_names(_WITHOUT_MEETING, as_meeting_phase=True))
 
     def test_the_toolset_matches_what_it_was_before_the_meeting_work(self) -> None:
         """会議の実装が入る前と同じ tool 一覧に戻っている。
@@ -77,10 +73,22 @@ class TestScenariosWithoutTheDeclaration:
         比較実験の土台なので、集合そのものを固定する。
         """
         expected = {
-            "travel_to", "set_sub_location", "explore", "interact",
-            "use_item", "drop_item", "pickup_item", "give_item",
-            "attack", "listen", "wait", "tend_to_player", "speak",
-            "memo_add", "memo_list", "memo_done",
+            "travel_to",
+            "set_sub_location",
+            "explore",
+            "interact",
+            "use_item",
+            "drop_item",
+            "pickup_item",
+            "give_item",
+            "attack",
+            "listen",
+            "wait",
+            "tend_to_player",
+            "speak",
+            # #1631: 目次つきのエピソードは設定で止められず、常に出る。
+            "episode_recall",
+            "episode_revise_index",
         }
 
         assert _tool_names(_WITHOUT_MEETING) == expected

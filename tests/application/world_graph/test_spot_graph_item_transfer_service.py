@@ -1,6 +1,6 @@
 """SpotGraphItemTransferService の drop / pickup 挙動。
 
-タイルマップ時代の ItemDroppedFromInventoryDropHandler は
+タイルマップで品を落とす旧受け手は
 ``physical_map`` 依存で world_runtime / spot-graph 世界では発火しない。
 本サービスは SpotInterior.ground_items に直接書き込む新経路で、その
 最小往復 (drop → pickup) と境界条件を保証する。
@@ -110,9 +110,7 @@ def _make_item_spec() -> ItemSpec:
 def transfer_service():
     """drop/pickup 経路の最小構築 (player A が SPOT_ID にいて流木を 1 個所持)。"""
     store = InMemoryDataStore()
-    spot_graph_repo = InMemorySpotGraphRepository(
-        _make_graph_with_player(SPOT_ID, (PLAYER_ID,))
-    )
+    spot_graph_repo = InMemorySpotGraphRepository(_make_graph_with_player(SPOT_ID, (PLAYER_ID,)))
     inventory_repo = InMemoryPlayerInventoryRepository(store)
     spot_interior_repo = InMemorySpotInteriorRepository(data_store=store)
     item_repo = InMemoryItemRepository(store)
@@ -131,14 +129,12 @@ def transfer_service():
     inventory.acquire_item(instance_id, item_spec_id_value=item_spec.item_spec_id.value)
     inventory_repo.save(inventory)
     spot_interior_repo.save(SPOT_ID, SpotInterior.empty())
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     scope_factory = CommandScopeFactory(
         InMemoryUnitOfWorkTransactionFactory(store),
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
-        repository_provider_factory=(
-            InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)
-        ),
+        repository_provider_factory=(InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)),
     )
 
     service = SpotGraphItemTransferService(
@@ -164,9 +160,7 @@ def transfer_service_with_target_state(transfer_service):
     status_repo = deps["status_repo"]
     status_repo.save(create_test_status_aggregate(player_id=PLAYER_ID.value))
     status_repo.save(create_test_status_aggregate(player_id=OTHER_PLAYER_ID.value))
-    outcome_registry = PlayerOutcomeRegistry.new_for_players(
-        [PLAYER_ID, OTHER_PLAYER_ID]
-    )
+    outcome_registry = PlayerOutcomeRegistry.new_for_players([PLAYER_ID, OTHER_PLAYER_ID])
     deps["service"].set_player_outcome_registry(outcome_registry)
     deps["status_repo"] = status_repo
     deps["outcome_registry"] = outcome_registry
@@ -198,10 +192,12 @@ class TestSpotGraphItemTransferServiceDrop:
         from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
             SlotIsEmptyError,
         )
+
         deps = transfer_service
         with pytest.raises(SlotIsEmptyError) as excinfo:
             deps["service"].drop_item(PLAYER_ID, SlotId(5))  # 5 番スロットは空
-        assert "所持品" in str(excinfo.value)
+        assert "所持アイテム" in str(excinfo.value)
+        assert "inspect_target" not in str(excinfo.value)
         assert "スロット" not in str(excinfo.value)
 
     def test_raises_drop_player_item_transfer_exception(self, transfer_service):
@@ -220,9 +216,7 @@ class TestSpotGraphItemTransferServiceDrop:
                 quantity=1,
             )
         )
-        orphan_inv.acquire_item(
-            orphan_iid, item_spec_id_value=ITEM_SPEC_ID.value
-        )
+        orphan_inv.acquire_item(orphan_iid, item_spec_id_value=ITEM_SPEC_ID.value)
         deps["inventory_repo"].save(orphan_inv)
         # OTHER_PLAYER_ID は spot_graph に place_entity されていない
         with pytest.raises(ItemTransferException):
@@ -270,14 +264,13 @@ class TestSpotGraphItemTransferServicePickup:
         from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
             GroundItemGoneError,
         )
+
         deps = transfer_service
         nowhere = ItemInstanceId.create(999)
         with pytest.raises(GroundItemGoneError):
             deps["service"].pickup_item(PLAYER_ID, nowhere)
 
-    def test_raises_pickup_self_inventory_pickup_self_inventory_full_error(
-        self, transfer_service
-    ):
+    def test_raises_pickup_self_inventory_pickup_self_inventory_full_error(self, transfer_service):
         """PR-ε: silent overflow を防ぐ事前ガード。地面 item がある状態で
         自分のインベントリを満杯にして pickup を呼ぶと、
         PickupSelfInventoryFullError が raise され、地面 item と自インベントリの
@@ -285,6 +278,7 @@ class TestSpotGraphItemTransferServicePickup:
         from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
             PickupSelfInventoryFullError,
         )
+
         deps = transfer_service
         # まず A が持っている 1 個を地面に落とす → 地面には 1 item
         deps["service"].drop_item(PLAYER_ID, SlotId(0))
@@ -363,15 +357,11 @@ class TestSpotGraphItemTransferServiceGive:
         assert result.item_instance_id == deps["instance_id"]
         assert any("流木" in m for m in result.messages)
 
-    def test_cannot_give_item_to_dead_target(
-        self, transfer_service_with_target_state
-    ):
+    def test_cannot_give_item_to_dead_target(self, transfer_service_with_target_state):
         """死亡済みの相手にはアイテムを渡せず、送り手の所持品は維持される。"""
         deps = transfer_service_with_target_state
         self._add_other_player_to_spot(deps, OTHER_PLAYER_ID)
-        deps["outcome_registry"].set_outcome(
-            OTHER_PLAYER_ID, PlayerOutcomeEnum.DEAD
-        )
+        deps["outcome_registry"].set_outcome(OTHER_PLAYER_ID, PlayerOutcomeEnum.DEAD)
 
         with pytest.raises(TargetIsDeadError):
             deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0))
@@ -381,17 +371,11 @@ class TestSpotGraphItemTransferServiceGive:
         assert a_inv.get_item_instance_id_by_slot(SlotId(0)) == deps["instance_id"]
         assert b_inv.get_item_instance_id_by_slot(SlotId(0)) is None
 
-    def test_cannot_give_item_to_down_target(
-        self, transfer_service_with_target_state
-    ):
+    def test_cannot_give_item_to_down_target(self, transfer_service_with_target_state):
         """倒れている相手にはアイテムを渡せず、送り手の所持品は維持される。"""
         deps = transfer_service_with_target_state
         self._add_other_player_to_spot(deps, OTHER_PLAYER_ID)
-        deps["status_repo"].save(
-            create_test_status_aggregate(
-                player_id=OTHER_PLAYER_ID.value, is_down=True
-            )
-        )
+        deps["status_repo"].save(create_test_status_aggregate(player_id=OTHER_PLAYER_ID.value, is_down=True))
 
         with pytest.raises(TargetIsDownError):
             deps["service"].give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0))
@@ -437,6 +421,7 @@ class TestSpotGraphItemTransferServiceGive:
         from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
             SlotIsEmptyError,
         )
+
         deps = transfer_service
         self._add_other_player_to_spot(deps, OTHER_PLAYER_ID)
         with pytest.raises(SlotIsEmptyError):

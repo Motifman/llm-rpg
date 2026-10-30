@@ -7,6 +7,7 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 @dataclass(frozen=True)
 class StatusEffect:
     """ステータス効果（バフ・デバフ）を表す値オブジェクト"""
+
     effect_type: StatusEffectType
     value: float  # 効果量（1.1なら10%上昇、0.9なら10%減少など）
     expiry_tick: WorldTick  # 有効期限のティック

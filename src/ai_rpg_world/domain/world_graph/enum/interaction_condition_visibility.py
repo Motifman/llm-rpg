@@ -88,9 +88,7 @@ CONDITION_VISIBILITY: dict[InteractionConditionTypeEnum, ConditionVisibility] = 
     InteractionConditionTypeEnum.AT_SPOT_IS_NOT: ConditionVisibility.PUBLIC,
     InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST: ConditionVisibility.PUBLIC,
     # 倒れているかは同席者行に出ている公開事実 (#860)。
-    InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED: (
-        ConditionVisibility.PUBLIC
-    ),
+    InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED: (ConditionVisibility.PUBLIC),
     # 対象の持ち物は**見えていない**。「奪える／奪えない」が候補に出ると、
     # 持ち物を覗いたのと同じ情報が漏れる。倒れた相手を漁る行為 (#837 の
     # loot_from_downed) が該当する。
@@ -106,6 +104,4 @@ def is_hidden(condition_type: InteractionConditionTypeEnum) -> bool:
     条件を足した人が気づかないまま漏らす。逆に倒せば、足し忘れは「候補が
     出ない」として作者に見える。
     """
-    return CONDITION_VISIBILITY.get(condition_type, ConditionVisibility.HIDDEN) is (
-        ConditionVisibility.HIDDEN
-    )
+    return CONDITION_VISIBILITY.get(condition_type, ConditionVisibility.HIDDEN) is (ConditionVisibility.HIDDEN)

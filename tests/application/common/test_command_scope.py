@@ -261,9 +261,7 @@ class TestCommandScopeRollback:
         assert scope.completion is CommandCompletion.ROLLED_BACK
 
     @pytest.mark.parametrize("failure_site", ["command", "commit"])
-    def test_rollback_error_preserves_primary_and_rollback_errors(
-        self, failure_site: str
-    ) -> None:
+    def test_rollback_error_preserves_primary_and_rollback_errors(self, failure_site: str) -> None:
         """commandまたはcommit後のrollback失敗は最初とrollbackの例外を両方保持する。"""
         primary_error = RuntimeError(f"{failure_site} failed")
         rollback_error = RuntimeError("rollback failed")

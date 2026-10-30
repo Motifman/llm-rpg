@@ -30,20 +30,16 @@ from typing import Any
 EVENT_STYLES: dict[str, dict[str, str]] = {
     "action": {"color": "#35d4e6", "label": "ACT"},
     "observation": {"color": "#b89dff", "label": "OBS"},
-    "memo_add": {"color": "#a3e063", "label": "M+"},
-    "memo_done": {"color": "#7fc24a", "label": "M✓"},
     "position_change": {"color": "#65dce8", "label": "MV"},
     "episodic_chunk_written": {"color": "#ffce63", "label": "EW"},
     "episodic_recall": {"color": "#ff9f64", "label": "ER"},
 }
 
 # event kind ごとの表示順 (同 tick 内で並べる順序)。
-# 行動 → 観測 → memo → 位置変化 → episodic の順が読みやすい。
+# 行動 → 観測 → 位置変化 → episodic の順が読みやすい。
 KIND_ORDER = {
     "action": 0,
     "observation": 1,
-    "memo_add": 2,
-    "memo_done": 2,
     "position_change": 3,
     "episodic_chunk_written": 4,
     "episodic_recall": 4,
@@ -78,10 +74,7 @@ def extract_players(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         name = payload.get("player_name") or ""
         if name and not ids[pid]:
             ids[pid] = name
-    return [
-        {"id": pid, "name": ids[pid] or f"P{pid}"}
-        for pid in sorted(ids)
-    ]
+    return [{"id": pid, "name": ids[pid] or f"P{pid}"} for pid in sorted(ids)]
 
 
 def build_cells(
@@ -99,11 +92,13 @@ def build_cells(
             continue
         payload = e.get("payload") or {}
         detail = _summarize(kind, payload)
-        by_player[pid].append({
-            "tick": int(tick),
-            "kind": kind,
-            "detail": detail,
-        })
+        by_player[pid].append(
+            {
+                "tick": int(tick),
+                "kind": kind,
+                "detail": detail,
+            }
+        )
     return by_player
 
 
@@ -122,17 +117,11 @@ def _summarize(kind: str, payload: dict[str, Any]) -> str:
         if isinstance(tool, str) and tool.startswith("speech_"):
             content = (args.get("content") or "").strip()
             target = args.get("target_label") or ""
-            verb = {"speech_say": "say", "speech_whisper": "whisper", "speech_shout": "shout"}.get(
-                tool, "speech"
-            )
+            verb = {"speech_say": "say", "speech_whisper": "whisper", "speech_shout": "shout"}.get(tool, "speech")
             head = f"{verb}"
             if target:
                 head += f"→{target}"
             return f"{head}: 「{content[:160]}」" if content else head
-        # memo 系
-        if tool in ("memo_add",):
-            text = (args.get("content") or args.get("text") or "").strip()
-            return f"memo_add: {text[:160]}"
         # 汎用 action: tool 名 + 主要引数 + inner_thought 先頭
         main_args = []
         for key in (
@@ -161,12 +150,6 @@ def _summarize(kind: str, payload: dict[str, Any]) -> str:
         cat = payload.get("observation_category") or ""
         head = f"[{cat}] " if cat else ""
         return f"{head}{prose[:200]}"
-    if kind == "memo_add":
-        text = (payload.get("content") or "").strip()
-        return f"+ {text[:160]}"
-    if kind == "memo_done":
-        memo_id = str(payload.get("memo_id") or "")[:12]
-        return f"done id={memo_id}"
     if kind == "position_change":
         from_spot = payload.get("from_spot_id") or "spawn"
         to_spot = payload.get("spot_name") or payload.get("to_spot_id") or "?"
@@ -193,9 +176,7 @@ def render_html(
     cells_by_player = build_cells(events)
 
     # tick → player_id → [cell] に再編する。
-    by_tick_player: dict[int, dict[int, list[dict[str, Any]]]] = defaultdict(
-        lambda: defaultdict(list)
-    )
+    by_tick_player: dict[int, dict[int, list[dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
     for pid, cells in cells_by_player.items():
         for c in cells:
             by_tick_player[c["tick"]][pid].append(c)
@@ -223,20 +204,18 @@ def render_html(
                     f'<div class="cell kind-{esc(c["kind"])}" '
                     f'data-kind="{esc(c["kind"])}">'
                     f'<span class="badge" style="background:{style["color"]}">'
-                    f'{esc(style["label"])}</span>'
+                    f"{esc(style['label'])}</span>"
                     f'<span class="text">{esc(c["detail"])}</span>'
-                    f'</div>'
+                    f"</div>"
                 )
             if not cell_html:
                 cell_html = ['<div class="cell empty">—</div>']
-            per_player_cols.append(
-                f'<div class="player-col">{"".join(cell_html)}</div>'
-            )
+            per_player_cols.append(f'<div class="player-col">{"".join(cell_html)}</div>')
         tick_blocks.append(
             f'<div class="tick-row" id="t{t}">'
             f'<div class="tick-label">t={t}</div>'
             f'<div class="player-grid">{"".join(per_player_cols)}</div>'
-            f'</div>'
+            f"</div>"
         )
 
     # player ヘッダー列 (sticky top で表示)
@@ -244,7 +223,7 @@ def render_html(
         f'<div class="player-header">'
         f'<span class="pl-name">{esc(p["name"])}</span>'
         f'<span class="pl-id">#{esc(p["id"])}</span>'
-        f'</div>'
+        f"</div>"
         for p in players
     )
 
@@ -252,7 +231,7 @@ def render_html(
         f'<div class="legend-item">'
         f'<span class="legend-swatch" style="background:{s["color"]}"></span>'
         f'<span class="legend-label">{esc(s["label"])} = {esc(k)}</span>'
-        f'</div>'
+        f"</div>"
         for k, s in EVENT_STYLES.items()
     )
 
@@ -395,7 +374,6 @@ header h1 {{
 /* kind 別の細かい強調 */
 .cell.kind-action .text {{ color: #d8f6ff; }}
 .cell.kind-observation .text {{ color: #d8c8ff; }}
-.cell.kind-memo_add .text, .cell.kind-memo_done .text {{ color: #cee8a8; }}
 .cell.kind-position_change .text {{ color: #c8effd; }}
 .cell.kind-episodic_chunk_written .text,
 .cell.kind-episodic_recall .text {{ color: #ffd9a3; }}
@@ -418,7 +396,7 @@ header h1 {{
   {player_headers_html}
 </div>
 <div class="tick-header">
-  {''.join(tick_blocks)}
+  {"".join(tick_blocks)}
 </div>
 </body>
 </html>
@@ -443,7 +421,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     output = args.output or (args.run_dir / "timeline.html")
     output.write_text(html_text, encoding="utf-8")
-    print(f"[timeline] {output} ({len(html_text)//1024} KB)")
+    print(f"[timeline] {output} ({len(html_text) // 1024} KB)")
     return 0
 
 

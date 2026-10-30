@@ -42,18 +42,21 @@ SPOT_A = SpotId.create(1)
 
 def _make_graph() -> SpotGraphAggregate:
     g = SpotGraphAggregate.empty(GRAPH_ID)
-    g.add_spot(SpotNode(
-        spot_id=SPOT_A,
-        name="A", description="",
-        category=SpotCategoryEnum.OTHER,
-        parent_id=None,
-        atmosphere=SpotAtmosphere(
-            lighting=LightingEnum.BRIGHT,
-            sound_ambient=None,
-            temperature=TemperatureEnum.NORMAL,
-            smell=None,
-        ),
-    ))
+    g.add_spot(
+        SpotNode(
+            spot_id=SPOT_A,
+            name="A",
+            description="",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+            atmosphere=SpotAtmosphere(
+                lighting=LightingEnum.BRIGHT,
+                sound_ambient=None,
+                temperature=TemperatureEnum.NORMAL,
+                smell=None,
+            ),
+        )
+    )
     g.place_monster(MonsterId.create(101), SPOT_A)
     g.clear_events()
     return g
@@ -130,8 +133,11 @@ class TestAttackStatusEffectApplication:
         orch = _make_orchestrator(graph, monster, player)
 
         outcome = orch.execute_monster_attack(
-            attacker_monster=monster, target_player=player,
-            graph=graph, spot_id=SPOT_A, current_tick=WorldTick(10),
+            attacker_monster=monster,
+            target_player=player,
+            graph=graph,
+            spot_id=SPOT_A,
+            current_tick=WorldTick(10),
         )
         assert outcome.executed is True
         player.add_status_effect.assert_not_called()
@@ -143,13 +149,18 @@ class TestAttackStatusEffectApplication:
         player = _make_player()
         # random_source は random() → 0.5 を返す → chance=1.0 > 0.5 で hit
         orch = _make_orchestrator(
-            graph, monster, player,
+            graph,
+            monster,
+            player,
             random_source=lambda: 0.5,
         )
 
         orch.execute_monster_attack(
-            attacker_monster=monster, target_player=player,
-            graph=graph, spot_id=SPOT_A, current_tick=WorldTick(10),
+            attacker_monster=monster,
+            target_player=player,
+            graph=graph,
+            spot_id=SPOT_A,
+            current_tick=WorldTick(10),
         )
         player.add_status_effect.assert_called_once()
         # expiry_tick = 10 + 12 = 22
@@ -162,13 +173,18 @@ class TestAttackStatusEffectApplication:
         monster = _make_monster(effects=(_effect(0.0),))
         player = _make_player()
         orch = _make_orchestrator(
-            graph, monster, player,
+            graph,
+            monster,
+            player,
             random_source=lambda: 0.0,
         )
 
         orch.execute_monster_attack(
-            attacker_monster=monster, target_player=player,
-            graph=graph, spot_id=SPOT_A, current_tick=WorldTick(10),
+            attacker_monster=monster,
+            target_player=player,
+            graph=graph,
+            spot_id=SPOT_A,
+            current_tick=WorldTick(10),
         )
         player.add_status_effect.assert_not_called()
 
@@ -178,13 +194,18 @@ class TestAttackStatusEffectApplication:
         monster = _make_monster(effects=(_effect(0.5),))
         player = _make_player()
         orch = _make_orchestrator(
-            graph, monster, player,
+            graph,
+            monster,
+            player,
             random_source=lambda: 0.3,
         )
 
         orch.execute_monster_attack(
-            attacker_monster=monster, target_player=player,
-            graph=graph, spot_id=SPOT_A, current_tick=WorldTick(10),
+            attacker_monster=monster,
+            target_player=player,
+            graph=graph,
+            spot_id=SPOT_A,
+            current_tick=WorldTick(10),
         )
         player.add_status_effect.assert_called_once()
 
@@ -194,32 +215,44 @@ class TestAttackStatusEffectApplication:
         monster = _make_monster(effects=(_effect(0.5),))
         player = _make_player()
         orch = _make_orchestrator(
-            graph, monster, player,
+            graph,
+            monster,
+            player,
             random_source=lambda: 0.7,
         )
 
         orch.execute_monster_attack(
-            attacker_monster=monster, target_player=player,
-            graph=graph, spot_id=SPOT_A, current_tick=WorldTick(10),
+            attacker_monster=monster,
+            target_player=player,
+            graph=graph,
+            spot_id=SPOT_A,
+            current_tick=WorldTick(10),
         )
         player.add_status_effect.assert_not_called()
 
     def test_multiple_chance_independently_roll(self) -> None:
         """BLEEDING (1.0) + POISON (0.0) → BLEEDING のみ付与。"""
         graph = _make_graph()
-        monster = _make_monster(effects=(
-            _effect(1.0),
-            _effect(0.0, 10, StatusEffectType.POISON),
-        ))
+        monster = _make_monster(
+            effects=(
+                _effect(1.0),
+                _effect(0.0, 10, StatusEffectType.POISON),
+            )
+        )
         player = _make_player()
         orch = _make_orchestrator(
-            graph, monster, player,
+            graph,
+            monster,
+            player,
             random_source=lambda: 0.5,
         )
 
         orch.execute_monster_attack(
-            attacker_monster=monster, target_player=player,
-            graph=graph, spot_id=SPOT_A, current_tick=WorldTick(10),
+            attacker_monster=monster,
+            target_player=player,
+            graph=graph,
+            spot_id=SPOT_A,
+            current_tick=WorldTick(10),
         )
         # bleeding だけ呼ばれる
         assert player.add_status_effect.call_count == 1
@@ -232,13 +265,18 @@ class TestAttackStatusEffectApplication:
         monster = _make_monster(attack=999, effects=(_effect(1.0),))  # 即死
         player = _make_player(is_down_after=True)
         orch = _make_orchestrator(
-            graph, monster, player,
+            graph,
+            monster,
+            player,
             random_source=lambda: 0.0,
         )
 
         outcome = orch.execute_monster_attack(
-            attacker_monster=monster, target_player=player,
-            graph=graph, spot_id=SPOT_A, current_tick=WorldTick(10),
+            attacker_monster=monster,
+            target_player=player,
+            graph=graph,
+            spot_id=SPOT_A,
+            current_tick=WorldTick(10),
         )
         assert outcome.target_incapacitated is True
         player.add_status_effect.assert_not_called()

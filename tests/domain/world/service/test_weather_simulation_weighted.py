@@ -15,19 +15,19 @@ class TestWeatherSimulationWeighted:
         # CLEAR からの遷移を 1000 回試行
         current_state = WeatherState.clear()
         results = {}
-        
+
         iterations = 1000
         for _ in range(iterations):
             next_state = WeatherSimulationService.simulate_next_weather(current_state)
             w_type = next_state.weather_type
             results[w_type] = results.get(w_type, 0) + 1
-            
+
         # CLEAR: 70%, CLOUDY: 25%, FOG: 5% の重み設定
         # 統計的なマージンを持って確認
         assert 600 < results.get(WeatherTypeEnum.CLEAR, 0) < 800
         assert 150 < results.get(WeatherTypeEnum.CLOUDY, 0) < 350
         assert 10 < results.get(WeatherTypeEnum.FOG, 0) < 100
-        
+
         # それ以外の天候は発生しないはず
         allowed = {WeatherTypeEnum.CLEAR, WeatherTypeEnum.CLOUDY, WeatherTypeEnum.FOG}
         for w_type in results.keys():

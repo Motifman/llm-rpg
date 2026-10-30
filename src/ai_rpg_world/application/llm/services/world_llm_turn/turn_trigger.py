@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
-from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
+from ai_rpg_world.application.llm.services.world_llm_turn.types import (
+    LLM_CALL_FAILED_ERROR_CODE,
+    LlmPhaseAResult,
+)
+from ai_rpg_world.application.trace.events import TraceEventKind
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -17,6 +25,17 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.world_llm_turn.wiring import WorldLlmWiring
 
 logger = logging.getLogger(__name__)
+
+#: 同じ人の呼び出しが続けて失敗したとき、次の tick に回すのをやめる回数。
+#: 続くなら一時的な遅れではない。根拠は design_decisions D1595。
+MAX_CONSECUTIVE_LLM_FAILURES = 3
+
+#: 成功した自分の行動のあと、次の tick に回したか回さなかったかの理由 (#1597)。
+FOLLOW_UP_REASON_SUCCEEDED = "succeeded"
+FOLLOW_UP_REASON_REST_CHOSEN = "rest_chosen"
+FOLLOW_UP_REASON_TRAVELING = "traveling"
+FOLLOW_UP_REASON_CANNOT_ACT = "cannot_act"
+
 
 @dataclass
 class WorldLlmTurnTrigger(ILlmTurnTrigger):
@@ -42,6 +61,9 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
     - ``was_no_op=True`` (= LLM が tool を返さなかった)
     - ``should_reschedule=False`` (= 通常成功 or reschedule 不要な失敗)
     - streak が ``max_self_reschedule_streak`` に到達 (= self-loop の強制 stop)
+
+    成功した行動のあとに次の tick へ回すのは、この chain とは別の経路
+    (``_follow_up_after_own_action``、design_decisions D1597) で、streak を触らない。
 
     旧名 ``max_turns`` / ``_turn_counts`` は「TRPG ターン上限」を連想させて
     誤読を招いていたため、PR-I で意味を反映した名前に変更した。
@@ -83,6 +105,8 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
     pending_player_ids: set[int] = field(default_factory=set)
     # 旧名 _turn_counts。pid → 自己 reschedule の連続回数。
     _self_reschedule_streak: dict[int, int] = field(default_factory=dict)
+    max_consecutive_llm_failures: int = MAX_CONSECUTIVE_LLM_FAILURES
+    _llm_failure_streak: dict[int, int] = field(default_factory=dict)
 
     def schedule_turn(self, player_id: PlayerId) -> None:
         """外部要因 (他者観測 / arrival / idle timer 等) による起床。
@@ -110,54 +134,28 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
                     self.pending_player_ids.clear()
                     self._self_reschedule_streak.clear()
                     return
-            except Exception:
+            except Exception as exc:
                 # check_game_end 自体が落ちても turn 実行を続ける fail-safe
-                logger.exception("check_game_end raised; continuing turn execution")
+                self._record_follow_up_failure(exc, "llm_turn.check_game_end", None)
 
-        scheduled = list(self.pending_player_ids)
+        to_run = list(self.pending_player_ids)
         self.pending_player_ids.clear()
-        to_run = list(scheduled)
-        # tick 単位の起動判定: 候補を「未読の観測がある人」全員に広げ、一人ひとりに
-        # ついて未読をまとめて「いま動く必要があるか」を問い、本当に不要と判定
-        # できた人だけ回さない。観測は buffer に残る。前の tick に寝た人は、新しい
-        # 観測が届かなくても溜まった未読で判断し直される。
-        turn_gate = getattr(self.wiring, "turn_gate", None)
-        if turn_gate is not None:
-            to_run = [
-                pid.value for pid in turn_gate.candidates([PlayerId(v) for v in to_run])
-            ]
         # #363 Fix 1b: 行動不可 (is_down / outcome 確定) のプレイヤーを除外。
         # 死亡したプレイヤーが speech 観測などで起こされるケースがあるため、
         # to_run の filter は確実に必要。
         to_run = [pid for pid in to_run if self._can_player_act(pid)]
         if not to_run:
             return
-        if turn_gate is not None:
-            to_run = [
-                pid.value
-                for pid in turn_gate.decide_wave(
-                    [PlayerId(v) for v in to_run],
-                    scheduled=[PlayerId(v) for v in scheduled],
-                )
-            ]
-            if not to_run:
-                return
 
         cfg = getattr(runtime, "_runtime_config", None)
         workers = int(getattr(cfg, "llm_turn_parallel_workers", 0) or 0)
-        # 比較 run で会議を一人ずつ発言させる場合だけ、同じ world tick の
-        # 先行発言を後続者の prompt へ入れる。既定は実時間を守る並列で、
-        # 自由時間は設定にかかわらず wave の同時性を維持する。
-        if bool(getattr(cfg, "llm_meeting_serial_turns", False)) and (
-            runtime._game_phase_store.is_meeting()
-        ):
-            workers = 1
         if workers <= 1 or len(to_run) <= 1:
             # 旧シリアル経路: 並列化を OFF にした / プレイヤーが 1 人だけ。
             # 完全に従来挙動。
             for player_id_value in to_run:
-                result = self.wiring.run_turn(PlayerId(player_id_value))
-                self._account_result(player_id_value, result)
+                with self._turn_unit(player_id_value):
+                    result = self.wiring.run_turn(PlayerId(player_id_value))
+                    self._account_result(player_id_value, result)
             return
 
         # 並列 Phase A: 各プレイヤーの prompt 構築 + LLM 呼び出しを ThreadPool
@@ -168,12 +166,7 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
         max_workers = min(workers, len(to_run))
         phase_a_results: dict[int, LlmPhaseAResult] = {}
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(
-                    self.wiring.run_phase_a, PlayerId(pid_value)
-                ): pid_value
-                for pid_value in to_run
-            }
+            futures = {executor.submit(self.wiring.run_phase_a, PlayerId(pid_value)): pid_value for pid_value in to_run}
             for future in futures:
                 pid_value = futures[future]
                 # 例外は Phase A 内で捕まえて LlmPhaseAResult.exception に
@@ -182,9 +175,7 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
                 try:
                     phase_a_results[pid_value] = future.result()
                 except Exception as exc:
-                    logger.exception(
-                        "Phase A failed for player_id=%s", pid_value
-                    )
+                    logger.exception("Phase A failed for player_id=%s", pid_value)
                     phase_a_results[pid_value] = LlmPhaseAResult(
                         player_id=PlayerId(pid_value),
                         prompt={},
@@ -199,12 +190,39 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             phase_a = phase_a_results.get(pid_value)
             if phase_a is None:
                 continue
-            result = self.wiring.run_phase_b(phase_a)
-            self._account_result(pid_value, result)
+            with self._turn_unit(pid_value):
+                result = self.wiring.run_phase_b(phase_a)
+                self._account_result(pid_value, result)
 
-    def _account_result(
-        self, player_id_value: int, result: LlmCommandResultDto
-    ) -> None:
+    def _isolator(self) -> WorldTickFailureIsolator:
+        isolator = getattr(self.wiring.runtime, "world_tick_failure_isolator", None)
+        return isolator if isolator is not None else WorldTickFailureIsolator.fail_fast()
+
+    def _record_follow_up_failure(self, exc: Exception, stage: str, player_id_value: int | None) -> None:
+        self._isolator().record_continued_failure(
+            exc,
+            stage=stage,
+            tick=WorldTick(int(self.wiring.runtime.current_tick())),
+            target_kind="player" if player_id_value is not None else "stage",
+            target_id=player_id_value,
+            player_id=player_id_value,
+            # ターンは CommandScope 1 回ではないので、何が確定済みかは分からない。
+            committed=None,
+        )
+
+    def _turn_unit(self, player_id_value: int) -> AbstractContextManager[None]:
+        runtime = self.wiring.runtime
+        isolator = self._isolator()
+        return isolator.unit(
+            stage="llm_turn",
+            tick=WorldTick(int(runtime.current_tick())),
+            target_kind="player",
+            target_id=player_id_value,
+            player_id=player_id_value,
+            command_scoped=False,
+        )
+
+    def _account_result(self, player_id_value: int, result: LlmCommandResultDto) -> None:
         """turn 完了後の self-reschedule streak 管理を 1 か所に集約する。
 
         chain を終わらせる条件:
@@ -239,25 +257,85 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             # should_reschedule=True かつ未到達 → streak を累積して chain 継続
             self._self_reschedule_streak[player_id_value] = current_streak
             self.pending_player_ids.add(player_id_value)
+        self._retry_after_llm_failure(player_id_value, result)
+        self._follow_up_after_own_action(player_id_value, result)
         # #346 Step 3 / #404: per-agent idle timer の last 更新。turn が走った
         # = 「いま活動した」なので heartbeat の沈黙タイマーをリセットする。
         # event 駆動で頻繁に動く player には heartbeat が出なくなり、
         # 完全 idle な player だけ idle_timeout 経過後に 1 回起こされる。
         self._note_activity_after_turn(player_id_value)
-        # #526 / U3: 段1 エピソード再解釈の trigger 後半。turn 完了を coordinator に
-        # 通知し、interval 到達時に pending recall batch を LLM 再解釈する。
-        # reinterpretation OFF (coordinator 未構築) では no-op。
-        self._note_turn_for_reinterpretation(player_id_value)
-        # U3b: 固着パス。turn 完了を coordinator に通知し、発火条件
-        # (interval 到達 / cue_signature 反復 / salience=high) を満たした
-        # ときだけ evidence batch を belief journal に統合する。
-        # BELIEF_CONSOLIDATION_ENABLED OFF (coordinator 未構築) では no-op。
-        self._note_turn_for_belief_consolidation(player_id_value)
         # PR-T: 次回 prompt の「身体の状態」差分表示用に need 値を snapshot する。
         # 「前回の自分のターン終了時 → 次回 prompt」までの変化が delta として
         # 表示される (= 自然 decay + 他者観測の影響 + own action 結果)。
         self._snapshot_needs_after_turn(player_id_value)
         self.wiring.short_term_memory.complete_turn(PlayerId(player_id_value))
+
+    def _retry_after_llm_failure(self, player_id_value: int, result: LlmCommandResultDto) -> None:
+        """呼び出しが失敗した人を次の tick に回す (#1595)。
+
+        回さないと、本人を起こす観測が届くか待ち時間のタイマーが切れるまで眠る。
+        続けて失敗したら上限で打ち切り、連続を数え直す。
+        """
+        if result.error_code != LLM_CALL_FAILED_ERROR_CODE:
+            self._llm_failure_streak.pop(player_id_value, None)
+            return
+        streak = self._llm_failure_streak.get(player_id_value, 0) + 1
+        rescheduled = streak < self.max_consecutive_llm_failures
+        if rescheduled:
+            self._llm_failure_streak[player_id_value] = streak
+            self.pending_player_ids.add(player_id_value)
+        else:
+            self._llm_failure_streak.pop(player_id_value, None)
+        self._record_trace(
+            TraceEventKind.LLM_FAILURE_RETRY,
+            player_id_value,
+            consecutive_failures=streak,
+            max_consecutive_failures=self.max_consecutive_llm_failures,
+            rescheduled=rescheduled,
+            error_code=result.error_code,
+        )
+
+    def _follow_up_after_own_action(self, player_id_value: int, result: LlmCommandResultDto) -> None:
+        """成功した自分の行動のあとは、次の tick に手番を回す (#1597)。
+
+        自分の行動の結果も本人への観測として扱う。回さないのは、wait で休むことを
+        選んだときと、時間のかかる移動の途中だけ。移動は着いたときに起こされる。
+        行動の結果で倒れた・去った人は、回しても入口で落ちるので、回さない理由として残す。
+        失敗は ``should_reschedule`` と ``_retry_after_llm_failure`` が受け持つ。
+        """
+        if not result.success or result.was_no_op:
+            return
+        if result.rests_until_woken:
+            reason = FOLLOW_UP_REASON_REST_CHOSEN
+        elif not self.wiring.runtime._player_life_query.can_take_turn(PlayerId(player_id_value)):
+            reason = FOLLOW_UP_REASON_CANNOT_ACT
+        elif self._is_traveling(player_id_value, stage="llm_turn.own_action_follow_up"):
+            reason = FOLLOW_UP_REASON_TRAVELING
+        else:
+            reason = FOLLOW_UP_REASON_SUCCEEDED
+        rescheduled = reason == FOLLOW_UP_REASON_SUCCEEDED
+        if rescheduled:
+            self.pending_player_ids.add(player_id_value)
+        self._record_trace(
+            TraceEventKind.OWN_ACTION_FOLLOW_UP,
+            player_id_value,
+            rescheduled=rescheduled,
+            reason=reason,
+        )
+
+    def _record_trace(self, kind: str, player_id_value: int, **payload: object) -> None:
+        recorder = getattr(self.wiring.runtime, "trace_recorder", None)
+        if recorder is None:
+            return
+        try:
+            recorder.record(
+                kind,
+                tick=int(self.wiring.runtime.current_tick()),
+                player_id=player_id_value,
+                **payload,
+            )
+        except Exception as exc:
+            self._record_follow_up_failure(exc, f"llm_turn.trace.{kind}", player_id_value)
 
     def _snapshot_needs_after_turn(self, player_id_value: int) -> None:
         """PR-T: turn 終了時に当該 player の現在 need 値を「前回」として保存する
@@ -269,75 +347,16 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             return
         try:
             player_status = repo.find_by_id(PlayerId(player_id_value))
-            if player_status is not None and hasattr(
-                player_status, "snapshot_needs_for_delta"
-            ):
+            if player_status is not None and hasattr(player_status, "snapshot_needs_for_delta"):
                 player_status.snapshot_needs_for_delta()
                 # HP の前 turn baseline も同じタイミングで更新する。次 turn の
                 # 「身体の状態」section で HP 増減 (前回 -12 等) を出すため。
                 if hasattr(player_status, "snapshot_hp_for_delta"):
                     player_status.snapshot_hp_for_delta()
                 repo.save(player_status)
-        except Exception:
+        except Exception as exc:
             # snapshot 精度低下は致命ではない (差分が 0 になるだけ)
-            logger.warning(
-                "snapshot_needs_for_delta failed for player_id=%s",
-                player_id_value,
-                exc_info=True,
-            )
-
-    def _note_turn_for_reinterpretation(self, player_id_value: int) -> None:
-        """reinterpretation coordinator に turn 完了を通知する fail-safe ヘルパ。
-
-        coordinator 未配線 (reinterpretation OFF) / 異常系では何もしない
-        (turn 実行自体は壊さない)。``_note_activity_after_turn`` と同じ方式。
-        """
-        stack = getattr(self.wiring.runtime, "_episodic_stack", None)
-        coordinator = (
-            getattr(stack, "reinterpretation_coordinator", None) if stack else None
-        )
-        if coordinator is None:
-            return
-        player_id = PlayerId(player_id_value)
-        acting = self.wiring.runtime._acting_being_for(player_id)
-        if acting is None:
-            return
-        try:
-            coordinator.after_turn_completed(player_id, acting.being_id)
-        except Exception:
-            # 再解釈の失敗は致命ではない (worst case: 再解釈が進まないだけ)。
-            logger.warning(
-                "reinterpretation after_turn_completed failed for player=%s",
-                player_id_value,
-                exc_info=True,
-            )
-
-    def _note_turn_for_belief_consolidation(self, player_id_value: int) -> None:
-        """固着パス coordinator に turn 完了を通知する fail-safe ヘルパ。
-
-        coordinator 未配線 (BELIEF_CONSOLIDATION_ENABLED OFF) / 異常系では
-        何もしない (turn 実行自体は壊さない)。
-        ``_note_turn_for_reinterpretation`` と同じ方式。
-        """
-        stack = getattr(self.wiring.runtime, "_episodic_stack", None)
-        coordinator = (
-            getattr(stack, "belief_consolidation_coordinator", None) if stack else None
-        )
-        if coordinator is None:
-            return
-        player_id = PlayerId(player_id_value)
-        acting = self.wiring.runtime._acting_being_for(player_id)
-        if acting is None:
-            return
-        try:
-            coordinator.after_turn_completed(player_id, acting.being_id)
-        except Exception:
-            # 固着の失敗は致命ではない (worst case: 学びが固着しないだけ)。
-            logger.warning(
-                "belief consolidation after_turn_completed failed for player=%s",
-                player_id_value,
-                exc_info=True,
-            )
+            self._record_follow_up_failure(exc, "llm_turn.needs_snapshot", player_id_value)
 
     def _note_activity_after_turn(self, player_id_value: int) -> None:
         """heartbeat emitter に「player が今ターン走った」を通知する fail-safe ヘルパ。
@@ -353,16 +372,10 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             return
         try:
             current = int(runtime.current_tick())
-            emitter.note_player_activity(
-                PlayerId(player_id_value), WorldTick(current)
-            )
-        except Exception:
+            emitter.note_player_activity(PlayerId(player_id_value), WorldTick(current))
+        except Exception as exc:
             # idle timer の精度低下は致命ではない (worst case 旧来挙動)
-            logger.warning(
-                "note_player_activity failed for player_id=%s",
-                player_id_value,
-                exc_info=True,
-            )
+            self._record_follow_up_failure(exc, "llm_turn.note_activity", player_id_value)
 
     def _can_player_act(self, player_id_value: int) -> bool:
         """#363 Fix 1b: 行動不可なプレイヤーを LLM 経路から除外する。
@@ -377,31 +390,27 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
         が継続し、駆動 tick が膨張した。filter を入れて死亡 player を skip。
         """
         runtime = self.wiring.runtime
-        if not runtime._player_life_query.can_take_turn(
-            PlayerId(player_id_value)
-        ):
+        if not runtime._player_life_query.can_take_turn(PlayerId(player_id_value)):
             return False
         # 移動中の抑止は生死の問いではないため、この入口に残す。
-        status_repo = getattr(runtime, "_player_status_repo", None)
+        # #404 fix: 移動中 (is_traveling=True) の player は LLM ターンを
+        # 回さない。意味論として「移動中は次の意思決定をしない」が自然で、
+        # かつ heartbeat / observation で起こされても turn 実行を空回り
+        # させない。到着時に SpotGraphTravelStageService.on_arrival
+        # 経由で schedule_turn が打たれて再開する。
+        return not self._is_traveling(player_id_value, stage="llm_turn.can_act")
+
+    def _is_traveling(self, player_id_value: int, *, stage: str) -> bool:
+        status_repo = getattr(self.wiring.runtime, "_player_status_repo", None)
         if status_repo is None:
-            return True
+            return False
         try:
             status = status_repo.find_by_id(PlayerId(player_id_value))
             if status is None:
-                return True
-            # #404 fix: 移動中 (is_traveling=True) の player は LLM ターンを
-            # 回さない。意味論として「移動中は次の意思決定をしない」が自然で、
-            # かつ heartbeat / observation で起こされても turn 実行を空回り
-            # させない。到着時に SpotGraphTravelStageService.on_arrival
-            # 経由で schedule_turn が打たれて再開する。
-            nav = status.spot_navigation_state
-            if nav is not None and nav.is_traveling:
                 return False
-            return True
-        except Exception:
-            logger.warning(
-                "player_status_repo.find_by_id failed for player_id=%s; "
-                "falling back to turn-continue", player_id_value,
-                exc_info=True,
-            )
-            return True
+            nav = status.spot_navigation_state
+            return nav is not None and nav.is_traveling
+        except Exception as exc:
+            # 判定できないときはターンを回す側に倒す。
+            self._record_follow_up_failure(exc, stage, player_id_value)
+            return False

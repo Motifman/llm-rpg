@@ -19,10 +19,7 @@ from typing import Any
 
 import pytest
 
-_SCRIPT = (
-    Path(__file__).resolve().parents[3]
-    / ".claude" / "skills" / "trace-analysis" / "market_metrics.py"
-)
+_SCRIPT = Path(__file__).resolve().parents[3] / ".claude" / "skills" / "trace-analysis" / "market_metrics.py"
 
 
 def _load_module():
@@ -51,26 +48,38 @@ def _market(tick: int, event: str, **payload: Any) -> dict[str, Any]:
 
 def _listed(tick, order_id, item, side, price, qty=1, actor="トム"):
     return _market(
-        tick, "listed", order_id=order_id, item_name=item, side=side,
-        unit_price=price, quantity=qty, actor_name=actor,
+        tick,
+        "listed",
+        order_id=order_id,
+        item_name=item,
+        side=side,
+        unit_price=price,
+        quantity=qty,
+        actor_name=actor,
     )
 
 
 def _snapshot(tick, order_id, item, side, price, qty=1, actor="商人"):
     return _market(
-        tick, "board_snapshot", order_id=order_id, item_name=item, side=side,
-        unit_price=price, quantity=qty, actor_name=actor,
+        tick,
+        "board_snapshot",
+        order_id=order_id,
+        item_name=item,
+        side=side,
+        unit_price=price,
+        quantity=qty,
+        actor_name=actor,
     )
 
 
-def _action(tick: int, tool: str, *, success: bool = True, error_code=None,
-            player_id: int = 1, **payload: Any) -> dict[str, Any]:
+def _action(
+    tick: int, tool: str, *, success: bool = True, error_code=None, player_id: int = 1, **payload: Any
+) -> dict[str, Any]:
     return {
         "kind": "action_result",
         "tick": tick,
         "player_id": player_id,
-        "payload": {"tool": tool, "success": success, "error_code": error_code,
-                    **payload},
+        "payload": {"tool": tool, "success": success, "error_code": error_code, **payload},
     }
 
 
@@ -99,9 +108,17 @@ class TestTheBoardIsRebuiltFromTheTrace:
         """`repriced` は単価だけを変え、数量と向きは変えない。"""
         events = [
             _listed(5, 2, "パン", "sell", 15, qty=3),
-            _market(8, "repriced", order_id=2, item_name="パン", side="sell",
-                    unit_price=14, old_unit_price=15, quantity=3,
-                    actor_name="トム"),
+            _market(
+                8,
+                "repriced",
+                order_id=2,
+                item_name="パン",
+                side="sell",
+                unit_price=14,
+                old_unit_price=15,
+                quantity=3,
+                actor_name="トム",
+            ),
         ]
 
         order = mm.replay_board(events)[-1][1][2]
@@ -112,8 +129,7 @@ class TestTheBoardIsRebuiltFromTheTrace:
         """一部だけ約定した注文は、残りの数量を持って板に残る。"""
         events = [
             _listed(5, 2, "パン", "sell", 15, qty=3),
-            _market(6, "settled", resting_order_id=2, item_name="パン",
-                    unit_price=15, quantity=1, taker_side="buy"),
+            _market(6, "settled", resting_order_id=2, item_name="パン", unit_price=15, quantity=1, taker_side="buy"),
         ]
 
         order = mm.replay_board(events)[-1][1][2]
@@ -124,8 +140,7 @@ class TestTheBoardIsRebuiltFromTheTrace:
         """数量を使い切った注文は板から消える。"""
         events = [
             _listed(5, 2, "パン", "sell", 15, qty=1),
-            _market(6, "settled", resting_order_id=2, item_name="パン",
-                    unit_price=15, quantity=1, taker_side="buy"),
+            _market(6, "settled", resting_order_id=2, item_name="パン", unit_price=15, quantity=1, taker_side="buy"),
         ]
 
         assert mm.replay_board(events)[-1][1] == {}
@@ -135,8 +150,9 @@ class TestTheBoardIsRebuiltFromTheTrace:
         """取り下げと期限切れは、どちらも注文を板から取り除く。"""
         events = [
             _listed(5, 2, "パン", "sell", 15),
-            _market(9, event_name, order_id=2, item_name="パン", side="sell",
-                    unit_price=15, quantity=1, actor_name="トム"),
+            _market(
+                9, event_name, order_id=2, item_name="パン", side="sell", unit_price=15, quantity=1, actor_name="トム"
+            ),
         ]
 
         assert mm.replay_board(events)[-1][1] == {}
@@ -153,22 +169,26 @@ class TestTheBoardIsRebuiltFromTheTrace:
             _snapshot(0, 1, "パン", "sell", 24, actor="商人"),
             _snapshot(0, 2, "パン", "sell", 20, actor="商人"),
             _snapshot(0, 3, "薬草", "buy", 7, qty=2, actor="商人"),
-            _market(8, "settled", resting_order_id=3, item_name="薬草",
-                    unit_price=7, quantity=1, taker_side="sell"),
-            _market(17, "settled", resting_order_id=3, item_name="薬草",
-                    unit_price=7, quantity=1, taker_side="sell"),
+            _market(8, "settled", resting_order_id=3, item_name="薬草", unit_price=7, quantity=1, taker_side="sell"),
+            _market(17, "settled", resting_order_id=3, item_name="薬草", unit_price=7, quantity=1, taker_side="sell"),
             _listed(33, 4, "パン", "sell", 15, actor="トム"),
             _listed(35, 5, "パン", "sell", 15, actor="ノラ"),
-            _market(38, "repriced", order_id=4, item_name="パン", side="sell",
-                    unit_price=14, old_unit_price=15, quantity=1,
-                    actor_name="トム"),
+            _market(
+                38,
+                "repriced",
+                order_id=4,
+                item_name="パン",
+                side="sell",
+                unit_price=14,
+                old_unit_price=15,
+                quantity=1,
+                actor_name="トム",
+            ),
         ]
 
         board = mm.replay_board(events)[-1][1]
 
-        assert sorted(
-            (o.item, o.side, o.unit_price, o.quantity) for o in board.values()
-        ) == [
+        assert sorted((o.item, o.side, o.unit_price, o.quantity) for o in board.values()) == [
             ("パン", "sell", 14, 1),
             ("パン", "sell", 15, 1),
             ("パン", "sell", 20, 1),
@@ -242,8 +262,12 @@ class TestItemNamesComeFromTheRequestWhenTheResultOmitsThem:
     def test_an_item_label_from_the_request_counts_as_seen(self, mm) -> None:
         """結果に品名が無くても、その呼び出しの `item_label` から品が分かる。"""
         events = [
-            {"kind": "action", "tick": 4, "player_id": 1,
-             "payload": {"tool": "buy_item", "arguments": {"item_label": "麦束"}}},
+            {
+                "kind": "action",
+                "tick": 4,
+                "player_id": 1,
+                "payload": {"tool": "buy_item", "arguments": {"item_label": "麦束"}},
+            },
             _action(4, "buy_item"),
         ]
 
@@ -257,11 +281,20 @@ class TestItemNamesComeFromTheRequestWhenTheResultOmitsThem:
         1 件目だけ見ると、まとめ渡しの品が静かに落ちる。
         """
         events = [
-            {"kind": "action", "tick": 26, "player_id": 3,
-             "payload": {"tool": "give_item", "arguments": {"gives": [
-                 {"item_label": "パン", "target_player_label": "レナ"},
-                 {"item_label": "麦束", "target_player_label": "カイ"},
-             ]}}},
+            {
+                "kind": "action",
+                "tick": 26,
+                "player_id": 3,
+                "payload": {
+                    "tool": "give_item",
+                    "arguments": {
+                        "gives": [
+                            {"item_label": "パン", "target_player_label": "レナ"},
+                            {"item_label": "麦束", "target_player_label": "カイ"},
+                        ]
+                    },
+                },
+            },
             _action(26, "give_item", player_id=3),
         ]
 
@@ -289,9 +322,15 @@ class TestItemNamesComeFromTheRequestWhenTheResultOmitsThem:
         """
         events = [
             _listed(5, 1, "パン", "sell", 15),
-            {"kind": "action", "tick": 7, "player_id": 2,
-             "payload": {"tool": "give_item", "arguments": {"gives": [
-                 {"item_label": "パン", "target_player_label": "レナ"}]}}},
+            {
+                "kind": "action",
+                "tick": 7,
+                "player_id": 2,
+                "payload": {
+                    "tool": "give_item",
+                    "arguments": {"gives": [{"item_label": "パン", "target_player_label": "レナ"}]},
+                },
+            },
             _action(7, "give_item", player_id=2),
         ]
 
@@ -341,8 +380,7 @@ class TestCrossingSeparatesNeverHappenedFromCouldNotHappen:
 
         crossing = mm.extract_market(events)["g44_crossing"]["crossings"][0]
 
-        assert (crossing["item"], crossing["ask"], crossing["bid"],
-                crossing["gap"]) == ("パン", 12, 18, 6)
+        assert (crossing["item"], crossing["ask"], crossing["bid"], crossing["gap"]) == ("パン", 12, 18, 6)
 
     def test_a_persons_own_two_orders_are_not_a_crossing(self, mm) -> None:
         """同じ人の売りと買いは交差に数えない。**自分の注文は自分で取れない**。
@@ -417,8 +455,7 @@ class TestToolsThatWereOfferedButNeverCalled:
         """
         events = [
             _llm_call(["market_list_item", "market_buy"]),
-            _action(9, "market_list_item", success=False,
-                    error_code="INVENTORY_FULL", item_name="パン"),
+            _action(9, "market_list_item", success=False, error_code="INVENTORY_FULL", item_name="パン"),
         ]
 
         exposure = mm.extract_market(events)["g48_tool_exposure"]

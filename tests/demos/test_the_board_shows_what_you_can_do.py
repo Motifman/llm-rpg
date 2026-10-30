@@ -42,11 +42,16 @@ def _build(tmp_path: Path, *, with_market: bool = True) -> Any:
     raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     for pid, name in (("tom", "トム"), ("mina", "ミナ")):
-        raw["players"].append({
-            "id": pid, "name": name, "spawn_spot": spawn,
-            "initial_items": [], "initial_gold": 300,
-            "persona_prompt": f"あなたは{name}。",
-        })
+        raw["players"].append(
+            {
+                "id": pid,
+                "name": name,
+                "spawn_spot": spawn,
+                "initial_items": [],
+                "initial_gold": 300,
+                "persona_prompt": f"あなたは{name}。",
+            }
+        )
     if with_market:
         raw["players"][0]["initial_gold"] = 300
         raw["market"] = {"board_spot": "market_square"}
@@ -78,7 +83,10 @@ def _give(runtime: Any, player_id: PlayerId, label: str, count: int = 1) -> None
 def _list_bread(runtime: Any, seller: PlayerId, *, quantity: int, price: int) -> Any:
     _give(runtime, seller, _BREAD, quantity)
     return runtime._market_service.place_sell_order(
-        seller, item_label=_BREAD, quantity=quantity, unit_price=price,
+        seller,
+        item_label=_BREAD,
+        quantity=quantity,
+        unit_price=price,
         current_tick=runtime.current_tick(),
     )
 
@@ -100,9 +108,7 @@ def _board(runtime: Any, player_id: PlayerId) -> str:
     )
 
     service = runtime._market_service
-    return market_board_text(
-        service.board_view_for(player_id), service.item_display_name
-    )
+    return market_board_text(service.board_view_for(player_id), service.item_display_name)
 
 
 def _walk_away(runtime: Any, player_id: PlayerId) -> None:
@@ -110,9 +116,7 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
 
     graph = runtime._spot_graph_repo.find_graph()
     here = graph.get_entity_spot(EntityId.create(int(player_id)))
-    elsewhere = next(
-        spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here
-    )
+    elsewhere = next(spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here)
     graph.unplace_entity(EntityId.create(int(player_id)))
     graph.place_entity(EntityId.create(int(player_id)), elsewhere)
     runtime._spot_graph_repo.save(graph)
@@ -288,7 +292,10 @@ class TestTheBuySideAppearsNow:
 
     def _bid(self, runtime: Any, buyer: PlayerId, *, quantity: int, price: int) -> Any:
         return runtime._market_service.place_buy_order(
-            buyer, item_label=_HERB, quantity=quantity, unit_price=price,
+            buyer,
+            item_label=_HERB,
+            quantity=quantity,
+            unit_price=price,
             current_tick=runtime.current_tick(),
         )
 
@@ -349,9 +356,7 @@ class TestTheBuySideAppearsNow:
         assert "あなたの買い注文" in state
         assert "8G" in state
 
-    def test_a_sell_and_a_bid_on_the_same_item_are_two_labelled_rows(
-        self, town: Any
-    ) -> None:
+    def test_a_sell_and_a_bid_on_the_same_item_are_two_labelled_rows(self, town: Any) -> None:
         """同じ品目に売りと買いを出すと、別ラベルの 2 行が並ぶ。
 
         engine は交差を潰さないので両方残るが、**自分で自分に売れる**とは
@@ -359,7 +364,10 @@ class TestTheBuySideAppearsNow:
         """
         _give(town, _LENA, _HERB, 1)
         town._market_service.place_sell_order(
-            _LENA, item_label=_HERB, quantity=1, unit_price=20,
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=20,
             current_tick=town.current_tick(),
         )
         self._bid(town, _LENA, quantity=1, price=5)

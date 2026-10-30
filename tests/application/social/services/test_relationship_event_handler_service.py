@@ -55,8 +55,7 @@ class TestRelationshipEventHandlerService:
     def service(self, user_repository, unit_of_work_factory):
         """テスト用のRelationshipEventHandlerService"""
         return RelationshipEventHandlerService(
-            user_repository=user_repository,
-            unit_of_work_factory=unit_of_work_factory
+            user_repository=user_repository, unit_of_work_factory=unit_of_work_factory
         )
 
     @pytest.fixture
@@ -73,8 +72,6 @@ class TestRelationshipEventHandlerService:
         assert user is not None
         return user
 
-
-
     def test_handle_user_blocked_no_relations(self, service, user_repository, user1, user2):
         """ユーザーブロック時の関係解除 - 関係が存在しない場合"""
         # 関係が存在しないことを確認
@@ -86,7 +83,7 @@ class TestRelationshipEventHandlerService:
             aggregate_id=user1.user_id,
             aggregate_type="UserAggregate",
             blocker_user_id=user1.user_id,
-            blocked_user_id=user2.user_id
+            blocked_user_id=user2.user_id,
         )
 
         # 実行
@@ -114,7 +111,7 @@ class TestRelationshipEventHandlerService:
             aggregate_id=user1.user_id,
             aggregate_type="UserAggregate",
             blocker_user_id=user1.user_id,
-            blocked_user_id=user2.user_id
+            blocked_user_id=user2.user_id,
         )
 
         # 実行
@@ -129,8 +126,8 @@ class TestRelationshipEventHandlerService:
         """ユーザーブロック時の関係解除 - フォロー関係と購読関係の両方が存在する場合"""
         # まずユーザー間にフォロー関係と購読関係を作成
         with user_repository._unit_of_work:
-            user2.follow(UserId(1))    # user2がuser1をフォロー
-            user2.subscribe(UserId(1)) # user2がuser1を購読
+            user2.follow(UserId(1))  # user2がuser1をフォロー
+            user2.subscribe(UserId(1))  # user2がuser1を購読
             user_repository.save(user2)
 
         # 両方の関係が存在することを確認
@@ -143,7 +140,7 @@ class TestRelationshipEventHandlerService:
             aggregate_id=user1.user_id,
             aggregate_type="UserAggregate",
             blocker_user_id=user1.user_id,
-            blocked_user_id=user2.user_id
+            blocked_user_id=user2.user_id,
         )
 
         # 実行
@@ -161,7 +158,7 @@ class TestRelationshipEventHandlerService:
             aggregate_id=UserId(999),
             aggregate_type="UserAggregate",
             blocker_user_id=UserId(999),  # 存在しないユーザー
-            blocked_user_id=UserId(1)
+            blocked_user_id=UserId(1),
         )
 
         # 実行（例外が発生しないことを確認）
@@ -179,7 +176,7 @@ class TestRelationshipEventHandlerServiceImprovements:
     @pytest.fixture
     def unit_of_work_improvements(self):
         """テスト用のUnit of Work"""
-        return InMemoryUnitOfWork(unit_of_work_factory=lambda: InMemoryUnitOfWork(unit_of_work_factory=lambda: InMemoryUnitOfWork()))
+        return InMemoryUnitOfWork()
 
     @pytest.fixture
     def user_repository_improvements(self, unit_of_work_improvements):
@@ -208,34 +205,34 @@ class TestRelationshipEventHandlerServiceImprovements:
     @pytest.fixture
     def service_improvements(self, user_repository_improvements, unit_of_work_improvements):
         """テスト用のRelationshipEventHandlerService"""
+
         # テスト用のファクトリを作成
         class TestUnitOfWorkFactory:
             def create(self):
                 return unit_of_work_improvements
 
         return RelationshipEventHandlerService(
-            user_repository=user_repository_improvements,
-            unit_of_work_factory=TestUnitOfWorkFactory()
+            user_repository=user_repository_improvements, unit_of_work_factory=TestUnitOfWorkFactory()
         )
 
     @pytest.fixture
     def service(self, user_repository, unit_of_work_factory):
         """テスト用のRelationshipEventHandlerService"""
         return RelationshipEventHandlerService(
-            user_repository=user_repository,
-            unit_of_work_factory=unit_of_work_factory
+            user_repository=user_repository, unit_of_work_factory=unit_of_work_factory
         )
 
-    def test_exception_handling_in_relationship_handler(self, service_improvements, user_repository_improvements, caplog):
+    def test_exception_handling_in_relationship_handler(
+        self, service_improvements, user_repository_improvements, caplog
+    ):
         """関係イベントハンドラでの例外処理が正しく動作することを確認"""
-        caplog.set_level(logging.ERROR, logger="ai_rpg_world.application.social.services.relationship_event_handler_service")
+        caplog.set_level(
+            logging.ERROR, logger="ai_rpg_world.application.social.services.relationship_event_handler_service"
+        )
 
         # 正常なユーザーIDを使用するが、リポジトリのsaveメソッドが例外を投げるようにする
         event = SnsUserBlockedEvent.create(
-            aggregate_id=UserId(1),
-            aggregate_type="UserAggregate",
-            blocker_user_id=UserId(1),
-            blocked_user_id=UserId(2)
+            aggregate_id=UserId(1), aggregate_type="UserAggregate", blocker_user_id=UserId(1), blocked_user_id=UserId(2)
         )
 
         # まずユーザー間にフォロー関係を作成
@@ -248,8 +245,10 @@ class TestRelationshipEventHandlerServiceImprovements:
 
         # リポジトリのsaveメソッドをモックして例外を投げるようにする
         original_save = user_repository_improvements.save
+
         def mock_save(user):
             raise Exception("Mock save exception")
+
         user_repository_improvements.save = mock_save
 
         try:
@@ -264,7 +263,9 @@ class TestRelationshipEventHandlerServiceImprovements:
         assert any("Failed to handle event" in record.message for record in caplog.records)
         assert any(record.levelname == "ERROR" for record in caplog.records)
 
-    def test_unit_of_work_integration_in_relationship_handler(self, service_improvements, user_repository_improvements, unit_of_work_improvements):
+    def test_unit_of_work_integration_in_relationship_handler(
+        self, service_improvements, user_repository_improvements, unit_of_work_improvements
+    ):
         """関係イベントハンドラでのUnit of Workが正しく統合されていることを確認"""
         # Unit of Workがトランザクション内であることを確認
         assert not unit_of_work_improvements.is_in_transaction()
@@ -282,7 +283,7 @@ class TestRelationshipEventHandlerServiceImprovements:
             aggregate_id=user1.user_id,
             aggregate_type="UserAggregate",
             blocker_user_id=user1.user_id,
-            blocked_user_id=user2.user_id
+            blocked_user_id=user2.user_id,
         )
 
         # 実行
@@ -294,4 +295,3 @@ class TestRelationshipEventHandlerServiceImprovements:
         # フォロー関係が解除されていることを確認
         updated_user2 = user_repository_improvements.find_by_id(UserId(2))
         assert not updated_user2.is_following(UserId(1))
-

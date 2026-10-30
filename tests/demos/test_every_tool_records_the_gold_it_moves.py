@@ -21,15 +21,13 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (
     WorldLlmWiring,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "market_town_v3_board.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v3_board.json"
 
 
 @pytest.fixture(scope="module")
@@ -39,6 +37,7 @@ def handlers():
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
         short_term_memory=runtime._short_term_memory,
+        llm_client=StubLlmClient(None),
     )
     return dict(wiring._tool_handlers)
 
@@ -61,8 +60,7 @@ class TestNoToolCanMoveGoldWithoutSayingSo:
         **run が終わってから「所持金が引けない」でしか気づけない**。
         """
         unwrapped = sorted(
-            name for name, handler in handlers.items()
-            if not getattr(handler, "records_gold_change", False)
+            name for name, handler in handlers.items() if not getattr(handler, "records_gold_change", False)
         )
 
         assert unwrapped == []
@@ -73,10 +71,7 @@ class TestNoToolCanMoveGoldWithoutSayingSo:
         全数検査だけだと、市場ツールが**そもそも登録されていない**世界でも
         緑になる。塞いだ穴そのものを名指しで見る。
         """
-        market = {
-            name for name in handlers
-            if name.startswith("spot_graph_market") or "market" in name
-        }
+        market = {name for name in handlers if name.startswith("spot_graph_market") or "market" in name}
 
         assert len(market) >= 5
 
@@ -108,6 +103,7 @@ class TestTheWrappingActuallyWatchesEveryone:
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
             short_term_memory=runtime._short_term_memory,
+            llm_client=StubLlmClient(None),
         )
 
         assert seen, "ツールが 1 つも包まれていない"

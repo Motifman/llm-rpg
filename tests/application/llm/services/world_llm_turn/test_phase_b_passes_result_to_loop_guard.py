@@ -31,9 +31,7 @@ def test_the_result_message_reaches_record_and_check(
             )
         ),
     )
-    monkeypatch.setattr(
-        phase_b, "maybe_interrupt_busy", MagicMock(return_value=(False, None))
-    )
+    monkeypatch.setattr(phase_b, "maybe_interrupt_busy", MagicMock(return_value=(False, None)))
     monkeypatch.setattr(phase_b, "record_prompt_dataset_turn_result", MagicMock())
     wiring = MagicMock()
     wiring.runtime.trace_recorder = None

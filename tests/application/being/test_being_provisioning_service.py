@@ -31,16 +31,12 @@ def service(repo: InMemoryBeingRepository) -> BeingProvisioningService:
 class TestConstruction:
     """コンストラクタの型ガード + default 値。"""
 
-    def test_being_repository_can_build(
-        self, repo: InMemoryBeingRepository
-    ) -> None:
+    def test_being_repository_can_build(self, repo: InMemoryBeingRepository) -> None:
         """正常系: Repository を渡せばインスタンス化される。"""
         s = BeingProvisioningService(repo)
         assert s.default_world_id == WorldId(1)
 
-    def test_default_world_id_can_override(
-        self, repo: InMemoryBeingRepository
-    ) -> None:
+    def test_default_world_id_can_override(self, repo: InMemoryBeingRepository) -> None:
         """default_world_id を渡せばそれを使う。"""
         s = BeingProvisioningService(repo, default_world_id=WorldId(7))
         assert s.default_world_id == WorldId(7)
@@ -50,9 +46,7 @@ class TestConstruction:
         with pytest.raises(TypeError, match="being_repository"):
             BeingProvisioningService("not-a-repo")  # type: ignore[arg-type]
 
-    def test_world_id_default_raises_type_error(
-        self, repo: InMemoryBeingRepository
-    ) -> None:
+    def test_world_id_default_raises_type_error(self, repo: InMemoryBeingRepository) -> None:
         """default_world_id の型違反は TypeError。"""
         with pytest.raises(TypeError, match="default_world_id"):
             BeingProvisioningService(repo, default_world_id=1)  # type: ignore[arg-type]
@@ -72,9 +66,7 @@ class TestEnsureAttachedNewBeing:
         being = repo.find_by_id(being_id)
         assert being is not None
         assert being.is_attached is True
-        assert being.attachment == BeingAttachment(
-            world_id=WorldId(1), player_id=PlayerId(2)
-        )
+        assert being.attachment == BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
 
     def test_identity_hint(
         self,
@@ -106,9 +98,7 @@ class TestEnsureAttachedNewBeing:
         service: BeingProvisioningService,
     ) -> None:
         """world_id 指定で default を上書きできる。"""
-        being_id = service.ensure_attached(
-            PlayerId(3), world_id=WorldId(99)
-        )
+        being_id = service.ensure_attached(PlayerId(3), world_id=WorldId(99))
         assert being_id == BeingId("being_w99_p3")
         being = repo.find_by_id(being_id)
         assert being is not None
@@ -187,9 +177,7 @@ class TestEnsureAttachedReattach:
         being = Being(
             being_id=BeingId("being_w1_p2"),
             identity=BeingIdentity(name="既存", first_person="わたし"),
-            attachment=BeingAttachment(
-                world_id=WorldId(1), player_id=PlayerId(99)
-            ),
+            attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(99)),
         )
         repo.save(being)
         # ensure_attached(player_id=2) を呼ぶと既存 Being が player=2 に再 attach
@@ -206,25 +194,20 @@ class TestEnsureAttachedReattach:
 class TestEnsureAttachedTypeGuards:
     """型違反の弾き方。"""
 
-    def test_player_id_raises_type_error(
-        self, service: BeingProvisioningService
-    ) -> None:
+    def test_player_id_raises_type_error(self, service: BeingProvisioningService) -> None:
         """player_id の型違反は TypeError。"""
         with pytest.raises(TypeError, match="player_id"):
             service.ensure_attached(2)  # type: ignore[arg-type]
 
-    def test_world_id_world_id_raises_type_error(
-        self, service: BeingProvisioningService
-    ) -> None:
+    def test_world_id_world_id_raises_type_error(self, service: BeingProvisioningService) -> None:
         """world_id の型違反は TypeError。"""
         with pytest.raises(TypeError, match="world_id"):
             service.ensure_attached(PlayerId(2), world_id=1)  # type: ignore[arg-type]
 
-    def test_being_id_entity_hint_raises_type_error(
-        self, service: BeingProvisioningService
-    ) -> None:
+    def test_being_id_entity_hint_raises_type_error(self, service: BeingProvisioningService) -> None:
         """identity_hint の型違反は TypeError。"""
         with pytest.raises(TypeError, match="identity_hint"):
             service.ensure_attached(
-                PlayerId(2), identity_hint="アダ"  # type: ignore[arg-type]
+                PlayerId(2),
+                identity_hint="アダ",  # type: ignore[arg-type]
             )

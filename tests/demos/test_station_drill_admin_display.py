@@ -39,9 +39,7 @@ def _place(runtime, player_id: PlayerId, spot_name: str) -> None:
 
 
 def _view(runtime, player_id: PlayerId) -> str:
-    result = runtime.do_interact(
-        player_id, "station_occupancy_display", "view_room_occupancy"
-    )
+    result = runtime.do_interact(player_id, "station_occupancy_display", "view_room_occupancy")
     return "\n".join(result.messages)
 
 
@@ -90,9 +88,6 @@ def test_same_room_witness_sees_someone_looking_at_the_display(runtime) -> None:
 
     _view(runtime, _MORI)
 
-    prose = [
-        entry.output.prose
-        for entry in runtime._obs_buffer.get_observations(_SENA)
-    ]
+    prose = [entry.output.prose for entry in runtime._obs_buffer.get_observations(_SENA)]
     assert "モリが位置表示盤を覗き込んでいる。" in prose
     assert not any("集会室:" in message for message in prose)

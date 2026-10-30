@@ -1,0 +1,35 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "two_teams_unaware",
+    "title": "峠の二つの野営地",
+    "description": "互いの存在を知らない二つの班が、峠をはさんだ野営地から始める。",
+    "theme": "test",
+    "difficulty": "easy",
+    "estimated_ticks": 10,
+    "author": "test",
+    "tags": [],
+    "llm_objective_text": "自分の班と野営地を守って過ごす。"
+  },
+  "item_specs": [],
+  "spots": [
+    {"id": "camp_east", "name": "東の野営地", "description": "焚き火の跡がある平地。"},
+    {"id": "pass", "name": "峠", "description": "東西の谷を見下ろす峠。"},
+    {"id": "camp_west", "name": "西の野営地", "description": "岩陰に張られた天幕。"}
+  ],
+  "connections": [
+    {"id": "east_to_pass", "from": "camp_east", "to": "pass", "name": "東の坂道", "travel_ticks": 1, "is_bidirectional": true},
+    {"id": "pass_to_west", "from": "pass", "to": "camp_west", "name": "西の坂道", "travel_ticks": 1, "is_bidirectional": true}
+  ],
+  "players": [
+    {"id": "east_1", "name": "ミナト", "appearance": "青い外套の人", "spawn_spot": "camp_east", "initial_items": [], "knows_at_start": ["east_2"]},
+    {"id": "east_2", "name": "トウカ", "appearance": "弓を背負った人", "spawn_spot": "camp_east", "initial_items": [], "knows_at_start": ["east_1"]},
+    {"id": "west_1", "name": "ゲンジ", "appearance": "髭の濃い大柄な人", "spawn_spot": "camp_west", "initial_items": [], "knows_at_start": ["west_2"]},
+    {"id": "west_2", "name": "サヤ", "appearance": "赤い頭巾の人", "spawn_spot": "camp_west", "initial_items": [], "knows_at_start": ["west_1"]}
+  ],
+  "game_end_conditions": {
+    "lose": {"type": "TICK_LIMIT", "tick_limit": 50}
+  },
+  "initial_flags": [],
+  "scenario_events": []
+}

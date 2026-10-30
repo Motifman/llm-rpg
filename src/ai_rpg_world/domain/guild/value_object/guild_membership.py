@@ -11,6 +11,7 @@ class GuildMembership:
 
     役職に応じ「クエスト承認」等の権限は GuildRole で判定する。
     """
+
     player_id: PlayerId
     role: GuildRole
     joined_at: datetime

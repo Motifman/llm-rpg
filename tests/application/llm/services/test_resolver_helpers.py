@@ -87,9 +87,7 @@ class TestRequireTarget:
     def test_uses_custom_invalid_label_code(self):
         ctx = _make_context()
         with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            require_target(
-                "X99", ctx, "移動先ラベル", invalid_label_code="INVALID_DESTINATION_LABEL"
-            )
+            require_target("X99", ctx, "移動先ラベル", invalid_label_code="INVALID_DESTINATION_LABEL")
         assert exc_info.value.error_code == "INVALID_DESTINATION_LABEL"
 
 
@@ -98,9 +96,7 @@ class TestRequireTargetType:
 
     def test_returns_target_when_type_matches(self):
         ctx = _make_context()
-        result = require_target_type(
-            "P1", ctx, "プレイヤーラベル", (PlayerToolRuntimeTargetDto,)
-        )
+        result = require_target_type("P1", ctx, "プレイヤーラベル", (PlayerToolRuntimeTargetDto,))
         assert result.label == "P1"
         assert isinstance(result, PlayerToolRuntimeTargetDto)
 
@@ -115,18 +111,14 @@ class TestRequireTargetType:
             world_object_id=200,
         )
         with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            require_target_type(
-                "M1", ctx, "プレイヤーラベル", (PlayerToolRuntimeTargetDto,)
-            )
+            require_target_type("M1", ctx, "プレイヤーラベル", (PlayerToolRuntimeTargetDto,))
         assert exc_info.value.error_code == "INVALID_TARGET_KIND"
         assert "使えないラベル" in str(exc_info.value)
 
     def test_raises_when_label_missing_delegates_to_require_target(self):
         ctx = _make_context()
         with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            require_target_type(
-                "X99", ctx, "プレイヤーラベル", (PlayerToolRuntimeTargetDto,)
-            )
+            require_target_type("X99", ctx, "プレイヤーラベル", (PlayerToolRuntimeTargetDto,))
         assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
 
     def test_uses_custom_invalid_kind_code(self):

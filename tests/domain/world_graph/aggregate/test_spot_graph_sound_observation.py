@@ -38,13 +38,17 @@ SPOT_B = SpotId.create(2)
 
 
 def _node(
-    spot_id: SpotId, *,
+    spot_id: SpotId,
+    *,
     intensity: SoundIntensityEnum = SoundIntensityEnum.SILENT,
     ambient: str | None = None,
 ) -> SpotNode:
     return SpotNode(
-        spot_id=spot_id, name=f"spot{spot_id.value}", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=spot_id,
+        name=f"spot{spot_id.value}",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
             lighting=LightingEnum.BRIGHT,
             sound_ambient=ambient,
@@ -81,11 +85,13 @@ class TestPlaceEntityWithSound:
     ) -> None:
         """MODERATEspot で event 発火 intensity と ambient が乗る。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
-        g.add_spot(_node(
-            SPOT_A,
-            intensity=SoundIntensityEnum.MODERATE,
-            ambient="川のせせらぎ",
-        ))
+        g.add_spot(
+            _node(
+                SPOT_A,
+                intensity=SoundIntensityEnum.MODERATE,
+                ambient="川のせせらぎ",
+            )
+        )
         g.clear_events()
 
         entity_id = EntityId.create(7)
@@ -119,17 +125,25 @@ class TestMoveEntityWithSound:
         """移動先 spot の sound を event で観測。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))  # 静か
-        g.add_spot(_node(
-            SPOT_B,
-            intensity=SoundIntensityEnum.FAINT,
-            ambient="風の音",
-        ))
-        g.add_connection(SpotConnection(
-            connection_id=ConnectionId.create(10),
-            from_spot_id=SPOT_A, to_spot_id=SPOT_B,
-            name="path", description="", travel_ticks=1,
-            is_bidirectional=False, passage=Passage.open(),
-        ))
+        g.add_spot(
+            _node(
+                SPOT_B,
+                intensity=SoundIntensityEnum.FAINT,
+                ambient="風の音",
+            )
+        )
+        g.add_connection(
+            SpotConnection(
+                connection_id=ConnectionId.create(10),
+                from_spot_id=SPOT_A,
+                to_spot_id=SPOT_B,
+                name="path",
+                description="",
+                travel_ticks=1,
+                is_bidirectional=False,
+                passage=Passage.open(),
+            )
+        )
         entity_id = EntityId.create(7)
         g.place_entity(entity_id, SPOT_A)
         g.clear_events()  # 入場 event を捨てる (SILENT なので Sound event は無いが念のため)

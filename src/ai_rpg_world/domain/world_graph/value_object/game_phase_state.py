@@ -44,9 +44,7 @@ class GamePhaseState:
 
     def __post_init__(self) -> None:
         if self.started_at_tick < 0:
-            raise GamePhaseTransitionException(
-                f"started_at_tick は 0 以上である必要があります: {self.started_at_tick}"
-            )
+            raise GamePhaseTransitionException(f"started_at_tick は 0 以上である必要があります: {self.started_at_tick}")
         if self.last_activity_tick < self.started_at_tick:
             # ここが崩れると沈黙の経過が負になり、会議が永久に終わらない。
             raise GamePhaseTransitionException(

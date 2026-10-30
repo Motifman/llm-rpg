@@ -127,14 +127,16 @@ class GroundOverflowSink:
             # 落とせなかったことを残す。
             logger.warning(
                 "持ちきれなかった品の落とし先が決まらない: player_id=%s 品数=%s",
-                int(player_id), len(spec_ids),
+                int(player_id),
+                len(spec_ids),
             )
             return
         interior = self._interiors.find_by_spot_id(spot_id)
         if interior is None:
             logger.warning(
                 "地面の無い場所へ落とそうとした: spot_id=%s player_id=%s",
-                spot_id, int(player_id),
+                spot_id,
+                int(player_id),
             )
             return
 
@@ -176,23 +178,21 @@ class GroundOverflowSink:
             PlayerOverflowedItemEvent,
         )
 
-        event_type = (
-            MarketDeliveryLeftAtBoardEvent
-            if self._event_kind == "delivery"
-            else PlayerOverflowedItemEvent
+        event_type = MarketDeliveryLeftAtBoardEvent if self._event_kind == "delivery" else PlayerOverflowedItemEvent
+        self._events.publish_all(
+            [
+                event_type.create(
+                    aggregate_id=graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    entity_id=EntityId.create(int(player_id)),
+                    spot_id=spot_id,
+                    item_instance_id=aggregate.item_instance_id,
+                    item_spec_id=aggregate.item_spec.item_spec_id,
+                    item_name=getattr(aggregate.item_spec, "name", "") or "何か",
+                )
+                for spot_id, aggregate, graph_id in events
+            ]
         )
-        self._events.publish_all([
-            event_type.create(
-                aggregate_id=graph_id,
-                aggregate_type="SpotGraphAggregate",
-                entity_id=EntityId.create(int(player_id)),
-                spot_id=spot_id,
-                item_instance_id=aggregate.item_instance_id,
-                item_spec_id=aggregate.item_spec.item_spec_id,
-                item_name=getattr(aggregate.item_spec, "name", "") or "何か",
-            )
-            for spot_id, aggregate, graph_id in events
-        ])
 
 
 __all__ = [

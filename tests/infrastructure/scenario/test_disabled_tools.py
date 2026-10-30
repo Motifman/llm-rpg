@@ -117,9 +117,7 @@ class TestWorldsWithoutTheDeclaration:
 
     def test_an_absent_declaration_reads_as_empty(self, tmp_path) -> None:
         """宣言そのものが無ければ、何も落とさない。"""
-        scenario = ScenarioLoader().load_from_file(
-            _rewritten(tmp_path, None, source=_WITH_MONSTERS)
-        )
+        scenario = ScenarioLoader().load_from_file(_rewritten(tmp_path, None, source=_WITH_MONSTERS))
 
         assert scenario.disabled_tools == ()
 
@@ -134,9 +132,7 @@ class TestAMisspelledNameStopsTheRun:
         1 本流し終えてから、無駄手の山を見て初めて気付くことになる。
         """
         with pytest.raises(ToolExposureConfigurationError):
-            create_world_runtime(
-                _rewritten(tmp_path, ["tend_to_player", "attaack"])
-            )
+            create_world_runtime(_rewritten(tmp_path, ["tend_to_player", "attaack"]))
 
     def test_the_error_lists_what_can_be_written(self, tmp_path) -> None:
         """エラーが、書ける名前の一覧を示す。
@@ -145,9 +141,7 @@ class TestAMisspelledNameStopsTheRun:
         だけでは同じ間違いを繰り返す。
         """
         with pytest.raises(ToolExposureConfigurationError) as caught:
-            create_world_runtime(
-                _rewritten(tmp_path, ["tend_to_player", "attaack"])
-            )
+            create_world_runtime(_rewritten(tmp_path, ["tend_to_player", "attaack"]))
 
         assert "travel_to" in str(caught.value)
 
@@ -206,8 +200,6 @@ class TestTheDrillDeclaresIt:
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
 
         assert not raw.get("monsters")
-        assert not [
-            s for s in raw["spots"] if s.get("interior", {}).get("sub_locations")
-        ]
+        assert not [s for s in raw["spots"] if s.get("interior", {}).get("sub_locations")]
         for spec in raw["item_specs"]:
             assert "effects" not in spec and "on_use" not in spec, spec["id"]

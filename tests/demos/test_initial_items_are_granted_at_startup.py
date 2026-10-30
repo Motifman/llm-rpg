@@ -31,8 +31,7 @@ def _owned_names(rt, player_id) -> set[str]:
     inv = rt._player_inventory_repo.find_by_id(player_id)
     assert inv is not None
     return {
-        rt._item_spec_repo.find_by_id(s).name
-        for s in collect_owned_item_spec_ids_from_inventory(inv, rt._item_repo)
+        rt._item_spec_repo.find_by_id(s).name for s in collect_owned_item_spec_ids_from_inventory(inv, rt._item_repo)
     }
 
 
@@ -43,8 +42,7 @@ class TestInitialItemsReachThePlayer:
         """v4 の 4 人が、シナリオに宣言されたとおりの品を持って始まる。"""
         rt = create_world_runtime(_V4)
         by_name = {
-            spawn.name: _owned_names(rt, pid)
-            for spawn, pid in zip(rt.scenario.player_spawns, rt.get_player_ids())
+            spawn.name: _owned_names(rt, pid) for spawn, pid in zip(rt.scenario.player_spawns, rt.get_player_ids())
         }
         assert by_name["エイダ"] == {"薬瓶の写真"}
         assert by_name["ノア"] == {"古い徽章"}
@@ -56,9 +54,7 @@ class TestInitialItemsReachThePlayer:
         rt = create_world_runtime(_V4)
         for spawn, pid in zip(rt.scenario.player_spawns, rt.get_player_ids()):
             if spawn.initial_items:
-                assert _owned_names(rt, pid), (
-                    f"{spawn.name} に initial_items が宣言されているのに手ぶら"
-                )
+                assert _owned_names(rt, pid), f"{spawn.name} に initial_items が宣言されているのに手ぶら"
 
     def test_item_count_matches_the_declaration(self) -> None:
         """宣言した個数だけ入る (多くも少なくもならない)。"""
@@ -67,14 +63,9 @@ class TestInitialItemsReachThePlayer:
 
         for spawn, pid in zip(rt.scenario.player_spawns, rt.get_player_ids()):
             inv = rt._player_inventory_repo.find_by_id(pid)
-            filled = sum(
-                1
-                for i in range(inv.max_slots)
-                if inv.get_item_instance_id_by_slot(SlotId(i)) is not None
-            )
+            filled = sum(1 for i in range(inv.max_slots) if inv.get_item_instance_id_by_slot(SlotId(i)) is not None)
             assert filled == len(spawn.initial_items), (
-                f"{spawn.name}: 宣言 {len(spawn.initial_items)} 個に対し "
-                f"{filled} 個入っている"
+                f"{spawn.name}: 宣言 {len(spawn.initial_items)} 個に対し {filled} 個入っている"
             )
 
 
@@ -110,6 +101,4 @@ class TestResumeDoesNotDuplicate:
         fresh = create_world_runtime(_V4)
         codec.restore(fresh, captured)
 
-        assert _owned_names(fresh, pid) == set(), (
-            "復元が置き換えではなく追記になっている。再開のたびに初期品が増える"
-        )
+        assert _owned_names(fresh, pid) == set(), "復元が置き換えではなく追記になっている。再開のたびに初期品が増える"

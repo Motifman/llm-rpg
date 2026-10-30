@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -53,9 +54,7 @@ class EffectApplicationState:
     deposit_gold_specs: list[DepositGoldSpec] = field(default_factory=list)
     passage_specs: list[PassageStateUpdateSpec] = field(default_factory=list)
     meeting_calls: list[str] = field(default_factory=list)
-    room_occupancy_display_specs: list[RoomOccupancyDisplaySpec] = field(
-        default_factory=list
-    )
+    room_occupancy_display_specs: list[RoomOccupancyDisplaySpec] = field(default_factory=list)
     summaries: list[AppliedEffectSummary] = field(default_factory=list)
     current_tick: WorldTick | None = None
     acting_item_aggregate: ItemAggregate | None = None
@@ -66,12 +65,10 @@ class EffectApplicationState:
     acting_player_display_name: str | None = None
     owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None
     loot_table_repository: LootTableRepository | None = None
+    loot_random_source: random.Random | None = None
 
     def replace_object(self, updated: SpotObject) -> None:
         """interior を差し替え、acting_object と同じ id なら同期する。"""
         self.interior = self.interior.replace_object(updated)
-        if (
-            self.acting_object is not None
-            and updated.object_id == self.acting_object.object_id
-        ):
+        if self.acting_object is not None and updated.object_id == self.acting_object.object_id:
             self.acting_object = updated

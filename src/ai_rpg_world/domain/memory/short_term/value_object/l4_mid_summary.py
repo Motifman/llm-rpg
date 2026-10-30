@@ -14,14 +14,14 @@ from datetime import datetime
 
 @dataclass(frozen=True)
 class L4MidSummary:
-    """中期帯 (L4) 1 世代分の主観要約。
+    """中期帯 (L4) 1 世代分の、ここまでのいきさつ。
 
-    Phase 2 (#356 後続): sliding window が 15 raw 件を超えたタイミングで
-    LLM で生成される。3 世代まで保持して prompt §「【最近の流れ】」に出す。
+    短期記憶のターンが上限に達したとき、古いターン群から LLM で生成される。
+    3 世代まで保持して prompt §「【ここまでのいきさつ】」に出す。
 
-    schema 設計指針 (docs §4.1):
-    - **学び / 関係性 / 世界ルール は含めない** (semantic 経路の責務)
-    - **narrative continuity** に絞る (流れ + 気分 + 未解決)
+    schema 設計指針 (#1824):
+    - 持つのは出来事の流れと気分だけ。出来事そのものはエピソードが、やることは
+      メモ帳が持つので、ここでは持たない
     - **永続名のみ** (P1 等のターン局所ラベルを焼かない)
     """
 
@@ -31,7 +31,6 @@ class L4MidSummary:
     generated_at: datetime
     compressed_activity: str
     emotional_summary: str
-    unresolved: tuple[str, ...] = ()
     # template fallback で生成された (= LLM 抽象化が走らなかった) かを表すフラグ。
     # trace / 分析で「LLM 成功率」を出すのに使う。default False。
     is_fallback: bool = False
@@ -49,11 +48,6 @@ class L4MidSummary:
             raise TypeError("compressed_activity must be str")
         if not isinstance(self.emotional_summary, str):
             raise TypeError("emotional_summary must be str")
-        if not isinstance(self.unresolved, tuple):
-            raise TypeError("unresolved must be tuple[str, ...]")
-        for i, item in enumerate(self.unresolved):
-            if not isinstance(item, str):
-                raise TypeError(f"unresolved[{i}] must be str")
         if not isinstance(self.is_fallback, bool):
             raise TypeError("is_fallback must be bool")
 

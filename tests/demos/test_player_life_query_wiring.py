@@ -21,7 +21,7 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmW
 
 _ROOT = Path(__file__).resolve().parents[2]
 _STATION_DRILL = _ROOT / "data" / "scenarios" / "station_drill.json"
-_RELAY_PUZZLE = _ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_FORBIDDEN_LIBRARY = _ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
 
@@ -34,30 +34,18 @@ def _set_life_state(runtime, state: str) -> None:
         status.clear_events()
         runtime._player_status_repo.save(status)
         current_tick = int(runtime.current_tick())
-        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
-            EntityId.create(int(_SENA))
-        )
-        runtime._fallen_body_registry.record(
-            _SENA, spot_id, WorldTick(current_tick)
-        )
-        runtime._death_grace_timer.register(
-            _SENA, downed_at_tick=current_tick
-        )
+        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(_SENA)))
+        runtime._fallen_body_registry.record(_SENA, spot_id, WorldTick(current_tick))
+        runtime._death_grace_timer.register(_SENA, downed_at_tick=current_tick)
         runtime._speech_event_publisher.publish_all(events)
     if state == "dead":
-        runtime._player_outcome_registry.set_outcome(
-            _SENA, PlayerOutcomeEnum.DEAD
-        )
+        runtime._player_outcome_registry.set_outcome(_SENA, PlayerOutcomeEnum.DEAD)
     if state == "ejected":
         assert runtime.eject_player(_SENA) is True
     if state == "rescued":
-        runtime._player_outcome_registry.set_outcome(
-            _SENA, PlayerOutcomeEnum.RESCUED
-        )
+        runtime._player_outcome_registry.set_outcome(_SENA, PlayerOutcomeEnum.RESCUED)
     if state == "stranded":
-        runtime._player_outcome_registry.set_outcome(
-            _SENA, PlayerOutcomeEnum.STRANDED
-        )
+        runtime._player_outcome_registry.set_outcome(_SENA, PlayerOutcomeEnum.STRANDED)
 
 
 def _is_placed(runtime, player_id: PlayerId) -> bool:
@@ -85,9 +73,7 @@ def _passes_observation_gate(runtime, player_id: PlayerId) -> bool:
         aggregate_type="PlayerStatusAggregate",
     )
     resolver = runtime._obs_pipeline._resolver
-    return resolver._without_the_fallen(
-        event_about_someone_else, [player_id]
-    ) == [player_id]
+    return resolver._without_the_fallen(event_about_someone_else, [player_id]) == [player_id]
 
 
 @pytest.mark.parametrize(
@@ -190,14 +176,9 @@ def test_station_drill_preserves_the_four_life_state_answers(
     assert runtime._player_outcome_registry.get_outcome(_SENA) is expected_outcome
     assert status.is_down is expected_is_down
     assert runtime._player_life_query.can_take_turn(_SENA) is expected_turn
-    assert (
-        runtime._player_life_query.can_receive_world_observation(_SENA)
-        is expected_observation
-    )
+    assert runtime._player_life_query.can_receive_world_observation(_SENA) is expected_observation
     assert runtime._player_life_query.can_vote(_SENA) is expected_vote
-    assert (
-        runtime._player_life_query.has_reportable_body(_SENA) is expected_body
-    )
+    assert runtime._player_life_query.has_reportable_body(_SENA) is expected_body
     assert _can_take_llm_turn(runtime, _SENA) is expected_turn
     assert _passes_observation_gate(runtime, _SENA) is expected_observation
     assert _is_placed(runtime, _SENA) is expected_placed
@@ -222,14 +203,10 @@ class TestEveryGateUsesTheSharedQuery:
     def test_observation_exit_uses_can_receive_world_observation(self) -> None:
         """活動中でも query が不可と答えれば他者の観測から除外する。"""
         runtime = create_world_runtime(_STATION_DRILL)
-        runtime._player_life_query.can_receive_world_observation = MagicMock(
-            return_value=False
-        )
+        runtime._player_life_query.can_receive_world_observation = MagicMock(return_value=False)
 
         assert _passes_observation_gate(runtime, _SENA) is False
-        runtime._player_life_query.can_receive_world_observation.assert_called_once_with(
-            _SENA
-        )
+        runtime._player_life_query.can_receive_world_observation.assert_called_once_with(_SENA)
 
     def test_body_report_uses_has_reportable_body(self) -> None:
         """立っている相手でも query が身体ありと答えれば通報入口を通る。"""
@@ -240,28 +217,22 @@ class TestEveryGateUsesTheSharedQuery:
         runtime._player_life_query.has_reportable_body = MagicMock(return_value=True)
 
         assert runtime.report_body(_MORI, _SENA).success is True
-        assert runtime._player_life_query.has_reportable_body.call_args_list[0].args == (
-            _SENA,
-        )
+        assert runtime._player_life_query.has_reportable_body.call_args_list[0].args == (_SENA,)
 
     def test_voter_selection_uses_can_vote(self) -> None:
         """活動中でも query が不可と答えれば投票母数から外す。"""
         runtime = create_world_runtime(_STATION_DRILL)
         original = runtime._player_life_query.can_vote
         runtime._player_life_query.can_vote = MagicMock(
-            side_effect=lambda player_id: (
-                False if player_id == _SENA else original(player_id)
-            )
+            side_effect=lambda player_id: False if player_id == _SENA else original(player_id)
         )
 
         assert _SENA not in runtime.eligible_voters()
         runtime._player_life_query.can_vote.assert_any_call(_SENA)
 
-    def test_player_interaction_records_the_querys_body_answer(
-        self, tmp_path: Path
-    ) -> None:
+    def test_player_interaction_records_the_querys_body_answer(self, tmp_path: Path) -> None:
         """対人行為も status を再導出せず、query の身体判定を event に載せる。"""
-        raw = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        raw = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
         raw["player_interactions"] = [
             {
                 "action_name": "inspect_player",
@@ -297,10 +268,6 @@ class TestEveryGateUsesTheSharedQuery:
 
         runtime.do_interact_with_player(_MORI, _SENA, "inspect_player")
 
-        interaction = next(
-            event
-            for event in seen
-            if isinstance(event, PlayerInteractedWithPlayerEvent)
-        )
+        interaction = next(event for event in seen if isinstance(event, PlayerInteractedWithPlayerEvent))
         assert interaction.target_was_down is True
         runtime._player_life_query.has_reportable_body.assert_called_once_with(_SENA)

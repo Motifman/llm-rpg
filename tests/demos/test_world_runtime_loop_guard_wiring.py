@@ -48,16 +48,12 @@ class TestWorldRuntimeLoopGuardWiring:
         # 1 回目・2 回目では発火しない
         state.llm_wiring.run_turn(target_pid)
         state.llm_wiring.run_turn(target_pid)
-        assert _wait_outputs_only(target_pid, state) == [], (
-            "2 回連続では threshold=3 未満なので発火しないはず"
-        )
+        assert _wait_outputs_only(target_pid, state) == [], "2 回連続では threshold=3 未満なので発火しないはず"
 
         # 3 回目で発火
         state.llm_wiring.run_turn(target_pid)
         warnings = _wait_outputs_only(target_pid, state)
-        assert len(warnings) == 1, (
-            f"3 回目の wait で loop_guard 警告が 1 件出るはず. got={warnings}"
-        )
+        assert len(warnings) == 1, f"3 回目の wait で loop_guard 警告が 1 件出るはず. got={warnings}"
         warning = warnings[0]
         assert warning.output.structured["tool_name"] == "wait"
         assert warning.output.structured["consecutive_count"] == 3
@@ -72,11 +68,13 @@ class TestWorldRuntimeLoopGuardWiring:
         正当な多段移動 (毎ターン違うスポットへ) では loop guard が誤検知しない。
         """
         # ターンごとに違う destination を返す stub
-        calls = iter([
-            {"name": "travel_to", "arguments": {"destination_label": "閲覧室"}},
-            {"name": "travel_to", "arguments": {"destination_label": "入口広間"}},
-            {"name": "travel_to", "arguments": {"destination_label": "カード目録室"}},
-        ])
+        calls = iter(
+            [
+                {"name": "travel_to", "arguments": {"destination_label": "閲覧室"}},
+                {"name": "travel_to", "arguments": {"destination_label": "入口広間"}},
+                {"name": "travel_to", "arguments": {"destination_label": "カード目録室"}},
+            ]
+        )
 
         class _MultiCallStub:
             def invoke(self, *_args, **_kwargs):
@@ -86,9 +84,7 @@ class TestWorldRuntimeLoopGuardWiring:
         target_pid = state.runtime.get_player_ids()[0]
         for _ in range(3):
             state.llm_wiring.run_turn(target_pid)
-        assert _wait_outputs_only(target_pid, state) == [], (
-            "引数が違えば loop_guard は発火しないはず"
-        )
+        assert _wait_outputs_only(target_pid, state) == [], "引数が違えば loop_guard は発火しないはず"
 
     def test_two_consecutive_travel_to_same_destination_trips_loop_guard(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -107,9 +103,7 @@ class TestWorldRuntimeLoopGuardWiring:
         for _ in range(2):
             state.llm_wiring.run_turn(target_pid)
         warnings = _wait_outputs_only(target_pid, state)
-        assert len(warnings) == 1, (
-            f"同一引数の travel_to を 2 回で警告が出るはず. got={warnings}"
-        )
+        assert len(warnings) == 1, f"同一引数の travel_to を 2 回で警告が出るはず. got={warnings}"
         assert warnings[0].output.structured["tool_name"] == "travel_to"
         assert warnings[0].output.structured["consecutive_count"] == 2
 
@@ -131,6 +125,4 @@ class TestWorldRuntimeLoopGuardWiring:
         for _ in range(3):
             state.llm_wiring.run_turn(target_pid)
         assert len(_wait_outputs_only(target_pid, state)) >= 1
-        assert _wait_outputs_only(other_pid, state) == [], (
-            "loop_guard 警告は self_only。他プレイヤーには届かないはず"
-        )
+        assert _wait_outputs_only(other_pid, state) == [], "loop_guard 警告は self_only。他プレイヤーには届かないはず"

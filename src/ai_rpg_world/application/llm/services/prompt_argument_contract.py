@@ -49,8 +49,7 @@ def find_prompt_argument_contract_violations(
         if target_label == HERE_TARGET_LABEL:
             continue
         candidates = (("display_name", target.display_name),) + tuple(
-            ("action_name", action_name)
-            for action_name in target.available_interactions
+            ("action_name", action_name) for action_name in target.available_interactions
         )
         for source, value in candidates:
             value = str(value).strip()

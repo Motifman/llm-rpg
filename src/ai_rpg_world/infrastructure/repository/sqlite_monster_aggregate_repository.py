@@ -13,7 +13,6 @@ from ai_rpg_world.domain.monster.value_object.monster_template_id import Monster
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     allocate_sequence_value,
     init_game_write_schema,
@@ -26,8 +25,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_monster_template_repository i
 from ai_rpg_world.infrastructure.repository.sqlite_skill_loadout_repository import (
     SqliteSkillLoadoutRepository,
 )
-
-_WORLD_OBJECT_SEQUENCE_START = 99_999
 
 
 class SqliteMonsterAggregateRepository(MonsterRepository):
@@ -92,18 +89,6 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
         self._finalize_write()
         return monster_id
 
-    def generate_world_object_id_for_npc(self) -> WorldObjectId:
-        self._assert_shared_transaction_active()
-        world_object_id = WorldObjectId(
-            allocate_sequence_value(
-                self._conn,
-                "world_object_id",
-                initial_value=_WORLD_OBJECT_SEQUENCE_START,
-            )
-        )
-        self._finalize_write()
-        return world_object_id
-
     def find_by_id(self, entity_id: MonsterId) -> MonsterAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_monsters WHERE monster_id = ?",
@@ -116,16 +101,6 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
 
     def find_by_ids(self, entity_ids: list[MonsterId]) -> list[MonsterAggregate]:
         return [x for monster_id in entity_ids for x in [self.find_by_id(monster_id)] if x is not None]
-
-    def find_by_world_object_id(self, world_object_id: WorldObjectId) -> MonsterAggregate | None:
-        cur = self._conn.execute(
-            "SELECT * FROM game_monsters WHERE world_object_id = ?",
-            (int(world_object_id),),
-        )
-        row = cur.fetchone()
-        if row is None:
-            return None
-        return copy.deepcopy(self._build_monster_from_row(row))
 
     def find_by_spot_id(self, spot_id: SpotId) -> list[MonsterAggregate]:
         cur = self._conn.execute(
@@ -140,10 +115,7 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
             "SELECT * FROM game_monsters WHERE pack_id = ? ORDER BY monster_id ASC",
             (str(pack_id.value),),
         )
-        return [
-            copy.deepcopy(self._build_monster_from_row(row))
-            for row in cur.fetchall()
-        ]
+        return [copy.deepcopy(self._build_monster_from_row(row)) for row in cur.fetchall()]
 
     def save(self, entity: MonsterAggregate) -> MonsterAggregate:
         self._assert_shared_transaction_active()
@@ -159,16 +131,18 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
             loadout_repo = SqliteSkillLoadoutRepository.for_shared_unit_of_work(self._conn)
             loadout_repo.save(entity.skill_loadout)
 
-            # 同じ呼び出しを None 判定と値の取り出しで 2 回するのをやめる
-            respawn_coordinate = entity.get_respawn_coordinate()
+            # 旧NOT NULL UNIQUE列だけの互換値。既存行は保持し、新規行にだけ採番する。
+            legacy_object_id = self._conn.execute(
+                "SELECT COALESCE((SELECT world_object_id FROM game_monsters WHERE monster_id = ?), "
+                "(SELECT COALESCE(MAX(world_object_id), 0) + 1 FROM game_monsters))",
+                (int(entity.monster_id),),
+            ).fetchone()[0]
             self._conn.execute(
                 """
                 INSERT INTO game_monsters (
                     monster_id, world_object_id, spot_id, template_id, skill_loadout_id,
                     hp_value, hp_max, mp_value, mp_max, status, last_death_tick,
-                    coordinate_x, coordinate_y, coordinate_z,
                     pack_id, is_pack_leader,
-                    initial_spawn_x, initial_spawn_y, initial_spawn_z,
                     spawned_at_tick,
                     behavior_state, behavior_target_id,
                     behavior_last_known_x, behavior_last_known_y, behavior_last_known_z,
@@ -180,10 +154,9 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     behavior_chase_attacker_ref_player_id,
                     behavior_chase_attacker_ref_monster_id,
                     behavior_chase_started_at_tick,
-                    pursuit_failure_reason, hunger, starvation_timer
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    hunger, starvation_timer
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(monster_id) DO UPDATE SET
-                    world_object_id = excluded.world_object_id,
                     spot_id = excluded.spot_id,
                     template_id = excluded.template_id,
                     skill_loadout_id = excluded.skill_loadout_id,
@@ -193,14 +166,8 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     mp_max = excluded.mp_max,
                     status = excluded.status,
                     last_death_tick = excluded.last_death_tick,
-                    coordinate_x = excluded.coordinate_x,
-                    coordinate_y = excluded.coordinate_y,
-                    coordinate_z = excluded.coordinate_z,
                     pack_id = excluded.pack_id,
                     is_pack_leader = excluded.is_pack_leader,
-                    initial_spawn_x = excluded.initial_spawn_x,
-                    initial_spawn_y = excluded.initial_spawn_y,
-                    initial_spawn_z = excluded.initial_spawn_z,
                     spawned_at_tick = excluded.spawned_at_tick,
                     behavior_state = excluded.behavior_state,
                     behavior_target_id = excluded.behavior_target_id,
@@ -219,13 +186,12 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     behavior_chase_attacker_ref_player_id = excluded.behavior_chase_attacker_ref_player_id,
                     behavior_chase_attacker_ref_monster_id = excluded.behavior_chase_attacker_ref_monster_id,
                     behavior_chase_started_at_tick = excluded.behavior_chase_started_at_tick,
-                    pursuit_failure_reason = excluded.pursuit_failure_reason,
                     hunger = excluded.hunger,
                     starvation_timer = excluded.starvation_timer
                 """,
                 (
                     int(entity.monster_id),
-                    int(entity.world_object_id),
+                    legacy_object_id,
                     int(entity.spot_id) if entity.spot_id is not None else None,
                     int(entity.template.template_id),
                     int(entity.skill_loadout.loadout_id),
@@ -235,14 +201,8 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     entity.mp.max_mp,
                     entity.status.value,
                     None if entity.last_death_tick is None else entity.last_death_tick.value,
-                    None if entity.coordinate is None else entity.coordinate.x,
-                    None if entity.coordinate is None else entity.coordinate.y,
-                    None if entity.coordinate is None else entity.coordinate.z,
                     None if entity.pack_id is None else entity.pack_id.value,
                     1 if entity.is_pack_leader else 0,
-                    None if respawn_coordinate is None else respawn_coordinate.x,
-                    None if respawn_coordinate is None else respawn_coordinate.y,
-                    None if respawn_coordinate is None else respawn_coordinate.z,
                     None if entity.spawned_at_tick is None else entity.spawned_at_tick.value,
                     entity.behavior_state.value,
                     None if entity.behavior_target_id is None else int(entity.behavior_target_id),
@@ -256,22 +216,25 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     entity.behavior_search_timer,
                     entity.behavior_failure_count,
                     # Phase 4a/4b 永続化: spot graph 用 behavior_state 拡張フィールド
-                    None if entity.persistence_last_observed_target_spot_id is None
-                        else int(entity.persistence_last_observed_target_spot_id),
-                    None if entity.persistence_flee_until_tick is None
-                        else entity.persistence_flee_until_tick.value,
+                    None
+                    if entity.persistence_last_observed_target_spot_id is None
+                    else int(entity.persistence_last_observed_target_spot_id),
+                    None if entity.persistence_flee_until_tick is None else entity.persistence_flee_until_tick.value,
                     # AttackerRef は kind 'player'|'monster' + 該当 ID で 3 カラム表現
-                    None if entity.persistence_chase_attacker_ref is None
-                        else entity.persistence_chase_attacker_ref.kind.value,
-                    None if entity.persistence_chase_attacker_ref is None
-                        or not entity.persistence_chase_attacker_ref.is_player
-                        else int(entity.persistence_chase_attacker_ref.player_id or 0),
-                    None if entity.persistence_chase_attacker_ref is None
-                        or not entity.persistence_chase_attacker_ref.is_monster
-                        else int(entity.persistence_chase_attacker_ref.monster_id or 0),
-                    None if entity.persistence_chase_started_at_tick is None
-                        else entity.persistence_chase_started_at_tick.value,
-                    None if entity.pursuit_state is None or entity.pursuit_state.failure_reason is None else entity.pursuit_state.failure_reason.value,
+                    None
+                    if entity.persistence_chase_attacker_ref is None
+                    else entity.persistence_chase_attacker_ref.kind.value,
+                    None
+                    if entity.persistence_chase_attacker_ref is None
+                    or not entity.persistence_chase_attacker_ref.is_player
+                    else int(entity.persistence_chase_attacker_ref.player_id or 0),
+                    None
+                    if entity.persistence_chase_attacker_ref is None
+                    or not entity.persistence_chase_attacker_ref.is_monster
+                    else int(entity.persistence_chase_attacker_ref.monster_id or 0),
+                    None
+                    if entity.persistence_chase_started_at_tick is None
+                    else entity.persistence_chase_started_at_tick.value,
                     entity.hunger,
                     entity._lifecycle_state.starvation_timer,
                 ),
@@ -319,42 +282,6 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     for memory_index, entry in enumerate(entity.behavior_last_known_feed)
                 ],
             )
-            pursuit_state = entity.pursuit_state
-            if pursuit_state is not None and pursuit_state.target_snapshot is not None:
-                self._conn.execute(
-                    """
-                    INSERT INTO game_monster_pursuit_target_snapshots (
-                        monster_id, target_id, spot_id, x, y, z
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        monster_id,
-                        int(pursuit_state.target_snapshot.target_id),
-                        int(pursuit_state.target_snapshot.spot_id),
-                        pursuit_state.target_snapshot.coordinate.x,
-                        pursuit_state.target_snapshot.coordinate.y,
-                        pursuit_state.target_snapshot.coordinate.z,
-                    ),
-                )
-            if pursuit_state is not None and pursuit_state.last_known is not None:
-                self._conn.execute(
-                    """
-                    INSERT INTO game_monster_pursuit_last_known (
-                        monster_id, target_id, spot_id, x, y, z, observed_at_tick
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        monster_id,
-                        int(pursuit_state.last_known.target_id),
-                        int(pursuit_state.last_known.spot_id),
-                        pursuit_state.last_known.coordinate.x,
-                        pursuit_state.last_known.coordinate.y,
-                        pursuit_state.last_known.coordinate.z,
-                        None
-                        if pursuit_state.last_known.observed_at_tick is None
-                        else pursuit_state.last_known.observed_at_tick.value,
-                    ),
-                )
             if began_local_transaction:
                 self._conn.commit()
             else:
@@ -418,22 +345,12 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
             """,
             (monster_id,),
         ).fetchall()
-        pursuit_target_row = self._conn.execute(
-            "SELECT * FROM game_monster_pursuit_target_snapshots WHERE monster_id = ?",
-            (monster_id,),
-        ).fetchone()
-        pursuit_last_known_row = self._conn.execute(
-            "SELECT * FROM game_monster_pursuit_last_known WHERE monster_id = ?",
-            (monster_id,),
-        ).fetchone()
         return build_monster(
             row=row,
             template=template,
             skill_loadout=loadout,
             active_effect_rows=list(active_effect_rows),
             feed_memory_rows=list(feed_memory_rows),
-            pursuit_target_row=pursuit_target_row,
-            pursuit_last_known_row=pursuit_last_known_row,
         )
 
 

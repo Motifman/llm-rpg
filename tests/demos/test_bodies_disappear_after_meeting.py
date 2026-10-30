@@ -28,9 +28,7 @@ def runtime():
 
 
 def _spot_of(runtime, player_id: PlayerId):
-    return runtime._spot_graph_repo.find_graph().get_entity_spot(
-        EntityId.create(int(player_id))
-    )
+    return runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
 
 
 def _make_dead(runtime, player_id: PlayerId) -> None:
@@ -85,9 +83,7 @@ class TestBodiesDisappearAfterMeeting:
         runtime.end_meeting(reason="vote_concluded")
 
         assert runtime._fallen_body_registry.find(_SENA) is None
-        assert runtime._player_outcome_registry.get_outcome(_SENA) is (
-            PlayerOutcomeEnum.DEAD
-        )
+        assert runtime._player_outcome_registry.get_outcome(_SENA) is (PlayerOutcomeEnum.DEAD)
         assert runtime._departed_position_store.find(_SENA) == departed_spot
 
     def test_a_reported_body_disappears_when_its_meeting_ends(self, runtime) -> None:

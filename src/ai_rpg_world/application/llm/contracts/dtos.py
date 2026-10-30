@@ -5,36 +5,39 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from ai_rpg_world.application.common.execution_provenance import ExecutionProvenance
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 
 # 再スケジュール対象とする error_code（1起動1ツール前提で次tickで再試行する）
 # LLM_AUTHENTICATION_ERROR は恒久障害のため除外
-_RESCHEDULE_ERROR_CODES = frozenset({
-    "NO_TOOL_CALL",           # LLM がツールを返さなかった
-    "LLM_API_CALL_FAILED",    # 一時的 API 失敗
-    "LLM_RATE_LIMIT",         # レート制限
-    "INVALID_DESTINATION_LABEL",  # ラベル未解決（次 tick で解消の可能性）
-    # 隣接していない場所は、失敗文に並ぶ隣の場所から即座に選び直せる。
-    "DESTINATION_NOT_ADJACENT",
-    # 前提不足は失敗理由に必要品・状態が出るため、別の行動へ即座に切り替えられる。
-    "INTERACTION_PRECONDITION_FAILED",
-    # 対象名の未解決は移動先名の未解決と同質で、現在の候補一覧から選び直せる。
-    "INVALID_TARGET_LABEL",
-    # 未定義 action は失敗結果に利用可能な action 一覧が出るため、即座に修正できる。
-    "INTERACTION_ACTION_NOT_FOUND",
-    # PR-J: LLM の tool 名 typo (e.g. speech_speech / spot_graph_gather) を救済
-    # する。エラーメッセージに fuzzy suggestion + valid 一覧を載せて agent に
-    # 修正させるため、次 tick での起床が必須。5 連続 typo すれば PR-I の
-    # self-reschedule streak が soft cap として効いて chain は終わる。
-    # ※ PR-I で schedule_turn は streak を一切触らない設計なので、他者観測
-    #   経由の ping-pong が混ざっても streak はリセットされず、典型 typo loop
-    #   は確実に 5 wave で止まる。
-    "UNSUPPORTED_TOOL",
-    # prompt 作成後の位相変更で、提示時には選べた行動が適用時に使えなくなった。
-    # 本人の選択ミスではないが、変化後の一覧から選び直すため次 tick に起こす。
-    "TOOL_BECAME_UNAVAILABLE",
-})
+_RESCHEDULE_ERROR_CODES = frozenset(
+    {
+        "NO_TOOL_CALL",  # LLM がツールを返さなかった
+        "LLM_API_CALL_FAILED",  # 一時的 API 失敗
+        "LLM_RATE_LIMIT",  # レート制限
+        "INVALID_DESTINATION_LABEL",  # ラベル未解決（次 tick で解消の可能性）
+        # 隣接していない場所は、失敗文に並ぶ隣の場所から即座に選び直せる。
+        "DESTINATION_NOT_ADJACENT",
+        # 前提不足は失敗理由に必要品・状態が出るため、別の行動へ即座に切り替えられる。
+        "INTERACTION_PRECONDITION_FAILED",
+        # 対象名の未解決は移動先名の未解決と同質で、現在の候補一覧から選び直せる。
+        "INVALID_TARGET_LABEL",
+        # 未定義 action は失敗結果に利用可能な action 一覧が出るため、即座に修正できる。
+        "INTERACTION_ACTION_NOT_FOUND",
+        # PR-J: LLM の tool 名 typo (e.g. speech_speech / spot_graph_gather) を救済
+        # する。エラーメッセージに fuzzy suggestion + valid 一覧を載せて agent に
+        # 修正させるため、次 tick での起床が必須。5 連続 typo すれば PR-I の
+        # self-reschedule streak が soft cap として効いて chain は終わる。
+        # ※ PR-I で schedule_turn は streak を一切触らない設計なので、他者観測
+        #   経由の ping-pong が混ざっても streak はリセットされず、典型 typo loop
+        #   は確実に 5 wave で止まる。
+        "UNSUPPORTED_TOOL",
+        # prompt 作成後の位相変更で、提示時には選べた行動が適用時に使えなくなった。
+        # 本人の選択ミスではないが、変化後の一覧から選び直すため次 tick に起こす。
+        "TOOL_BECAME_UNAVAILABLE",
+    }
+)
 
 
 def should_reschedule_for_next_tick(dto: "LlmCommandResultDto") -> bool:
@@ -73,6 +76,8 @@ class LlmCommandResultDto:
     should_reschedule: bool = False
     was_no_op: bool = False
     omit_result_in_prompt: bool = False
+    # 成功しても次の tick に手番を回さず、起こされるまで休む。立てるのは wait だけ (#1597)。
+    rests_until_woken: bool = False
     # trace にだけ載せる追加構造情報。LLM prompt / action_result_store へは
     # 流さない。例: batch tool の部分成功件数。
     trace_payload: dict[str, Any] | None = None
@@ -96,6 +101,8 @@ class LlmCommandResultDto:
             raise TypeError("was_no_op must be bool")
         if not isinstance(self.omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
+        if not isinstance(self.rests_until_woken, bool):
+            raise TypeError("rests_until_woken must be bool")
         if self.trace_payload is not None and not isinstance(self.trace_payload, dict):
             raise TypeError("trace_payload must be dict or None")
 
@@ -150,40 +157,12 @@ class ActionResultEntry:
     # 自由文の値は履歴を肥大化させず、呼び出し形を示すため名前だけを残す。
     identifier_arguments: Mapping[str, str] = field(default_factory=dict)
     free_text_argument_names: tuple[str, ...] = ()
-    # 予測→学習ループの主観入力。次ターン feedback (PR1) では expected_result のみ
-    # 使うが、episodic 永続化 (PR2) で intention→episode.why / expected_result→
-    # episode.expected / emotion_hint→episode.felt に配線する。どれも既定 None で
-    # 後方互換 (= world-action 以外の tool / 旧 snapshot)。
-    expected_result: str | None = None
+    # 行動を選ぶ直前の独白。履歴に「心の声」として出す。
     inner_thought: str | None = None
-    intention: str | None = None
-    emotion_hint: str | None = None
-    # Issue #311 後続: エピソード記憶のチャンク境界判定で「シーン切り替え」を
-    # 明示的に伝えるためのヒント。``True`` の action が bucket に入ったら
-    # chunk を閉じる候補とする (cognitive science の "doorway effect" 等を
-    # 反映)。spot 遷移成功や重要な interaction 等の caller が True にする。
-    # 未指定 (False) の action はチャンク化に対して中立 = 従来の境界条件で判定。
-    scene_boundary: bool = False
     # action が起きた時点のゲーム内 tick (記録時点で取れない caller は None)。
-    # ``decide_chunk_boundary`` の TEMPORAL_GAP 判定で bucket 内 actions の
-    # tick 差を見るのに使う (wall-clock では LLM レイテンシで歪むため)。
     occurred_tick: int | None = None
-    # U1 (予測誤差統一設計 部品1): この行動が発生した turn の prompt build 時に
-    # 発行された prediction_context_id。「どのプロンプト (何が in-context
-    # だったか) で立てた予測が、どう外れたか」を後から辿るための紐付けキー。
-    # ``PredictionContextLedger`` が発行し、``ActionResultRecorder.record`` が
-    # consume してここに焼き込む。id が consume されないまま次の build が来た
-    # 場合や、この entry の生成元が prompt build を経由しない場合は None
-    # (= 既定値なので旧 snapshot / 非 LLM caller とも後方互換)。
-    prediction_context_id: str | None = None
-    # U4 (予測誤差統一設計 部品3): この行動の prompt build 時に【関連する学び】
-    # として in-context だった belief_id 群。``PredictionContextLedger.consume``
-    # が返す ``PredictionContext.belief_ids`` を ``ActionResultRecorder.record``
-    # がここへ焼き込む。新規 per-Being store は作らず、この entry に載せたまま
-    # chunk 転記点 (encoding_input.action_results) まで運ぶ設計 (U1 のパターンを
-    # 延長)。ledger 未注入 (U1 flag OFF) や consume 失敗時は空タプル
-    # (= 既定値なので旧 snapshot / 非 LLM caller とも後方互換)。
-    in_context_belief_ids: tuple[str, ...] = ()
+    # 実行境界で確定した要求と当人の手番。dataset IDの代わりを捏造しない。
+    execution_provenance: ExecutionProvenance | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.occurred_at, datetime):
@@ -209,65 +188,24 @@ class ActionResultEntry:
             raise TypeError("free_text_argument_names must be tuple[str, ...]")
         for name in self.free_text_argument_names:
             if not isinstance(name, str) or not name:
-                raise TypeError(
-                    "free_text_argument_names entries must be non-empty str"
-                )
-        if self.argument_fingerprint is not None and not isinstance(
-            self.argument_fingerprint, str
-        ):
+                raise TypeError("free_text_argument_names entries must be non-empty str")
+        if self.argument_fingerprint is not None and not isinstance(self.argument_fingerprint, str):
             raise TypeError("argument_fingerprint must be str or None")
         if not isinstance(self.should_reschedule, bool):
             raise TypeError("should_reschedule must be bool")
-        if self.game_time_label is not None and not isinstance(
-            self.game_time_label, str
-        ):
+        if self.game_time_label is not None and not isinstance(self.game_time_label, str):
             raise TypeError("game_time_label must be str or None")
         if not isinstance(self.omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
-        if self.expected_result is not None and not isinstance(self.expected_result, str):
-            raise TypeError("expected_result must be str or None")
         if self.inner_thought is not None and not isinstance(self.inner_thought, str):
             raise TypeError("inner_thought must be str or None")
-        if self.intention is not None and not isinstance(self.intention, str):
-            raise TypeError("intention must be str or None")
-        if self.emotion_hint is not None and not isinstance(self.emotion_hint, str):
-            raise TypeError("emotion_hint must be str or None")
-        if not isinstance(self.scene_boundary, bool):
-            raise TypeError("scene_boundary must be bool")
         if self.occurred_tick is not None and not isinstance(self.occurred_tick, int):
             raise TypeError("occurred_tick must be int or None")
         if isinstance(self.occurred_tick, bool):
             # bool は int の subclass。tick として誤注入されないよう弾く
             raise TypeError("occurred_tick must not be bool")
-        if self.prediction_context_id is not None and not isinstance(
-            self.prediction_context_id, str
-        ):
-            raise TypeError("prediction_context_id must be str or None")
-        if not isinstance(self.in_context_belief_ids, tuple):
-            raise TypeError("in_context_belief_ids must be tuple[str, ...]")
-        for idx, bid in enumerate(self.in_context_belief_ids):
-            if not isinstance(bid, str) or not bid:
-                raise TypeError(f"in_context_belief_ids[{idx}] must be non-empty str")
-
-
-EMOTION_HINT_VALUES: tuple[str, ...] = (
-    "curiosity",
-    "caution",
-    "fear",
-    "anxiety",
-    "urgency",
-    "relief",
-    "hope",
-    "frustration",
-    "confusion",
-    "trust",
-    "distrust",
-    "determination",
-    "regret",
-    "surprise",
-    "neutral",
-)
-
+        if self.execution_provenance is not None and not isinstance(self.execution_provenance, ExecutionProvenance):
+            raise TypeError("execution_provenance must be ExecutionProvenance or None")
 
 
 @dataclass(frozen=True)
@@ -373,9 +311,7 @@ class ToolRuntimeTargetDto:
             raise TypeError("world_object_id must be int or None")
         if self.spot_id is not None and not isinstance(self.spot_id, int):
             raise TypeError("spot_id must be int or None")
-        if self.tile_location_area_id is not None and not isinstance(
-            self.tile_location_area_id, int
-        ):
+        if self.tile_location_area_id is not None and not isinstance(self.tile_location_area_id, int):
             raise TypeError("tile_location_area_id must be int or None")
         if self.sub_location_id is not None and not isinstance(self.sub_location_id, int):
             raise TypeError("sub_location_id must be int or None")
@@ -401,9 +337,7 @@ class ToolRuntimeTargetDto:
             raise TypeError("interaction_type must be str or None")
         if self.item_instance_id is not None and not isinstance(self.item_instance_id, int):
             raise TypeError("item_instance_id must be int or None")
-        if self.real_item_instance_id is not None and not isinstance(
-            self.real_item_instance_id, int
-        ):
+        if self.real_item_instance_id is not None and not isinstance(self.real_item_instance_id, int):
             raise TypeError("real_item_instance_id must be int or None")
         if self.inventory_slot_id is not None and not isinstance(self.inventory_slot_id, int):
             raise TypeError("inventory_slot_id must be int or None")
@@ -411,9 +345,7 @@ class ToolRuntimeTargetDto:
             raise TypeError("is_spoiled must be bool")
         if self.chest_world_object_id is not None and not isinstance(self.chest_world_object_id, int):
             raise TypeError("chest_world_object_id must be int or None")
-        if self.conversation_choice_index is not None and not isinstance(
-            self.conversation_choice_index, int
-        ):
+        if self.conversation_choice_index is not None and not isinstance(self.conversation_choice_index, int):
             raise TypeError("conversation_choice_index must be int or None")
         if self.skill_loadout_id is not None and not isinstance(self.skill_loadout_id, int):
             raise TypeError("skill_loadout_id must be int or None")
@@ -429,13 +361,9 @@ class ToolRuntimeTargetDto:
             raise TypeError("proposal_id must be int or None")
         if self.target_slot_index is not None and not isinstance(self.target_slot_index, int):
             raise TypeError("target_slot_index must be int or None")
-        if self.target_slot_display_name is not None and not isinstance(
-            self.target_slot_display_name, str
-        ):
+        if self.target_slot_display_name is not None and not isinstance(self.target_slot_display_name, str):
             raise TypeError("target_slot_display_name must be str or None")
-        if self.attention_level_value is not None and not isinstance(
-            self.attention_level_value, str
-        ):
+        if self.attention_level_value is not None and not isinstance(self.attention_level_value, str):
             raise TypeError("attention_level_value must be str or None")
         if self.quest_id is not None and not isinstance(self.quest_id, int):
             raise TypeError("quest_id must be int or None")
@@ -458,9 +386,7 @@ class ToolRuntimeTargetDto:
             raise TypeError("interaction_labels must be tuple")
         for pair in self.interaction_labels:
             if not isinstance(pair, tuple) or len(pair) != 2:
-                raise TypeError(
-                    "interaction_labels must contain (action_name, display_label) pairs"
-                )
+                raise TypeError("interaction_labels must contain (action_name, display_label) pairs")
             if not all(isinstance(x, str) for x in pair):
                 raise TypeError("interaction_labels pairs must contain only str")
         offered = set(self.available_interactions)
@@ -471,10 +397,7 @@ class ToolRuntimeTargetDto:
             # いうずれが起きる。ずれても誰も落ちないので、偽装版の名前が静かに
             # 運ばれる (tests/demos/test_hidden_actions_do_not_leak_through_errors
             # が案内文の側で塞いだのと同じ穴)。構築時に落とす。
-            raise ValueError(
-                "interaction_labels must only label offered actions: "
-                f"{sorted(unknown)}"
-            )
+            raise ValueError(f"interaction_labels must only label offered actions: {sorted(unknown)}")
 
 
 @dataclass(frozen=True)
@@ -693,12 +616,4 @@ class LlmUiContextDto:
 
 
 # ToolAvailabilityContext は PlayerCurrentStateDto をそのまま利用する。
-# ツールの利用可否判定に必要な現在地・接続先・視界・移動先等はすべて PlayerCurrentStateDto に含まれる。
-
-
-# NOTE (Issue #470 Phase 1 PR3):
-# MemoEntry / MemoFulfillmentContext / TodoEntry (旧名 alias) は
-# ``domain/memory/memo/value_object/`` に昇格しました。
-# 新規コードは:
-#     from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-# から import してください。
+# 利用可否判定には場所の文脈・補助情報・アプリ状態を、スポットの表示には spot_graph_snapshot を使う。

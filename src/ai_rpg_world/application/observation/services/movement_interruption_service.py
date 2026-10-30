@@ -40,14 +40,10 @@ class MovementInterruptionService:
             return
         if self._movement_service is None:
             return
-        if self._llm_player_resolver is None or not self._llm_player_resolver.is_llm_controlled(
-            player_id
-        ):
+        if self._llm_player_resolver is None or not self._llm_player_resolver.is_llm_controlled(player_id):
             return
         try:
-            self._movement_service.cancel_movement(
-                CancelMovementCommand(player_id=player_id.value)
-            )
+            self._movement_service.cancel_movement(CancelMovementCommand(player_id=player_id.value))
         except Exception as e:
             self._logger.warning(
                 "Failed to cancel movement for player %s on breaks_movement: %s",

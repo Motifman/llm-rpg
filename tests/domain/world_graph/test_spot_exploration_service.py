@@ -110,9 +110,7 @@ class TestSpotExplorationService:
             ),
         )
 
-        result = SpotExplorationService(
-            predicate_evaluator=common
-        ).explore(
+        result = SpotExplorationService(predicate_evaluator=common).explore(
             SpotInterior((), (), (), (discoverable,)),
             frozenset(),
             1,
@@ -123,32 +121,6 @@ class TestSpotExplorationService:
         predicate, context = common.evaluate.call_args.args
         assert predicate.flag_name == "lights_on"
         assert context.world_flags == frozenset()
-
-    def test_has_item_delegates_resolved_ownership_to_common_evaluator(self):
-        """探索者の所持集合を渡し、未発見物の品目判定だけを共通核へ委譲する。"""
-        common = MagicMock()
-        common.evaluate.return_value = PredicateResult.satisfied()
-        required = ItemSpecId.create(8)
-        reward = ItemSpecId.create(9)
-        discoverable = DiscoverableItem(
-            item_spec_id=reward,
-            discovery_condition=DiscoveryCondition(
-                condition_type=DiscoveryConditionTypeEnum.HAS_ITEM,
-                required_item_spec_id=required,
-            ),
-        )
-
-        result = SpotExplorationService(common).explore(
-            SpotInterior((), (), (), (discoverable,)),
-            frozenset({required}),
-            1,
-            frozenset(),
-        )
-
-        assert result.item_spec_ids_newly_discovered == (reward,)
-        predicate, context = common.evaluate.call_args.args
-        assert predicate.item_spec_id == required
-        assert context.owned_item_spec_ids == frozenset({required})
 
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
     def test_has_item_evaluation_failure_stops_exploration(self, reason):

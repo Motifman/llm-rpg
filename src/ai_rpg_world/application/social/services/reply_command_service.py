@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
 
+from ai_rpg_world.application.common.execution_provenance import current_execution_provenance
 from ai_rpg_world.application.social.contracts.commands import CreateReplyCommand, DeleteReplyCommand, LikeReplyCommand
 from ai_rpg_world.application.social.contracts.dtos import CommandResultDto, ErrorResponseDto
 from ai_rpg_world.application.social.exceptions import (
@@ -39,7 +40,14 @@ _Result = TypeVar("_Result")
 class ReplyCommandService:
     """リプライコマンドサービス"""
 
-    def __init__(self, post_repository: PostRepository, user_repository: UserRepository, reply_repository: ReplyRepository, event_publisher: EventPublisher[DomainEvent], unit_of_work: UnitOfWork):
+    def __init__(
+        self,
+        post_repository: PostRepository,
+        user_repository: UserRepository,
+        reply_repository: ReplyRepository,
+        event_publisher: EventPublisher[DomainEvent],
+        unit_of_work: UnitOfWork,
+    ):
         self._post_repository = post_repository
         self._user_repository = user_repository
         self._reply_repository = reply_repository
@@ -47,9 +55,7 @@ class ReplyCommandService:
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -59,22 +65,15 @@ class ReplyCommandService:
         except ContentOwnershipException as e:
             # リプライの所有権例外はReplyOwnershipExceptionに変換
             raise ReplyOwnershipException(
-                message=str(e),
-                reply_id=e.content_id,
-                user_id=e.user_id,
-                action="delete_reply"
+                message=str(e), reply_id=e.content_id, user_id=e.user_id, action="delete_reply"
             )
         except SnsDomainException as e:
             raise ApplicationExceptionFactory.create_from_domain_exception(
-                e,
-                user_id=context.get('user_id'),
-                reply_id=context.get('reply_id')
+                e, user_id=context.get("user_id"), reply_id=context.get("reply_id")
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra=context)
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def create_reply(self, command: CreateReplyCommand) -> CommandResultDto:
         """リプライを作成（トランザクション境界）"""
@@ -84,8 +83,8 @@ class ReplyCommandService:
                 "action": "create_reply",
                 "user_id": command.user_id,
                 "parent_post_id": command.parent_post_id,
-                "parent_reply_id": command.parent_reply_id
-            }
+                "parent_reply_id": command.parent_reply_id,
+            },
         )
 
     def _create_reply_impl(self, command: CreateReplyCommand) -> CommandResultDto:
@@ -110,7 +109,7 @@ class ReplyCommandService:
                     raise ReplyCreationException(
                         f"親ポストが見つかりません: {command.parent_post_id}",
                         command.user_id,
-                        parent_post_id=command.parent_post_id
+                        parent_post_id=command.parent_post_id,
                     )
             elif command.parent_reply_id is not None:
                 parent_reply_id = ReplyId(command.parent_reply_id)
@@ -119,12 +118,11 @@ class ReplyCommandService:
                     raise ReplyCreationException(
                         f"親リプライが見つかりません: {command.parent_reply_id}",
                         command.user_id,
-                        parent_reply_id=command.parent_reply_id
+                        parent_reply_id=command.parent_reply_id,
                     )
             else:
                 raise ReplyCreationException(
-                    "親ポストまたは親リプライのどちらかを指定する必要があります",
-                    command.user_id
+                    "親ポストまたは親リプライのどちらかを指定する必要があります", command.user_id
                 )
 
             # PostContentの作成（ハッシュタグはドメイン層で自動抽出）
@@ -154,6 +152,12 @@ class ReplyCommandService:
                 reply_content,
                 author_display_name=user_aggregate.profile.display_name,
                 mentioned_user_ids=frozenset(mentioned_ids),
+                author_identity_token=user_aggregate.identity_token,
+                parent_identity_token=parent_post.identity_token
+                if parent_post is not None
+                else parent_reply.identity_token
+                if parent_reply is not None
+                else None,
             )
 
             # リプライを保存
@@ -167,23 +171,19 @@ class ReplyCommandService:
                 parent_reply.add_reply(reply_id)
                 self._reply_repository.save(parent_reply)
 
-            self._logger.info(f"Reply created successfully: reply_id={reply_id.value}, user_id={command.user_id}, parent_post_id={command.parent_post_id}, parent_reply_id={command.parent_reply_id}")
+            self._logger.info(
+                f"Reply created successfully: reply_id={reply_id.value}, user_id={command.user_id}, parent_post_id={command.parent_post_id}, parent_reply_id={command.parent_reply_id}"
+            )
 
             return CommandResultDto(
-                success=True,
-                message="リプライが正常に作成されました",
-                data={"reply_id": reply_id.value}
+                success=True, message="リプライが正常に作成されました", data={"reply_id": reply_id.value}
             )
 
     def like_reply(self, command: LikeReplyCommand) -> CommandResultDto:
         """リプライにいいね"""
         return self._execute_with_error_handling(
             operation=lambda: self._like_reply_impl(command),
-            context={
-                "action": "like_reply",
-                "user_id": command.user_id,
-                "reply_id": command.reply_id
-            }
+            context={"action": "like_reply", "user_id": command.user_id, "reply_id": command.reply_id},
         )
 
     def _like_reply_impl(self, command: LikeReplyCommand) -> CommandResultDto:
@@ -201,9 +201,12 @@ class ReplyCommandService:
                 raise ReplyNotFoundForCommandException(command.reply_id, "like_reply")
 
             # いいね実行
+            provenance = current_execution_provenance()
             reply_aggregate.like_reply(
                 UserId(command.user_id),
                 liker_display_name=user_aggregate.profile.display_name,
+                liker_identity_token=user_aggregate.identity_token,
+                execution_provenance=provenance.to_dict() if provenance else None,
             )
 
             # リプライを保存
@@ -214,18 +217,14 @@ class ReplyCommandService:
             return CommandResultDto(
                 success=True,
                 message="リプライにいいねしました",
-                data={"reply_id": command.reply_id, "user_id": command.user_id}
+                data={"reply_id": command.reply_id, "user_id": command.user_id},
             )
 
     def delete_reply(self, command: DeleteReplyCommand) -> CommandResultDto:
         """リプライを削除"""
         return self._execute_with_error_handling(
             operation=lambda: self._delete_reply_impl(command),
-            context={
-                "action": "delete_reply",
-                "user_id": command.user_id,
-                "reply_id": command.reply_id
-            }
+            context={"action": "delete_reply", "user_id": command.user_id, "reply_id": command.reply_id},
         )
 
     def _delete_reply_impl(self, command: DeleteReplyCommand) -> CommandResultDto:
@@ -272,5 +271,5 @@ class ReplyCommandService:
             return CommandResultDto(
                 success=True,
                 message="リプライが正常に削除されました",
-                data={"reply_id": command.reply_id, "user_id": command.user_id}
-        )
+                data={"reply_id": command.reply_id, "user_id": command.user_id},
+            )

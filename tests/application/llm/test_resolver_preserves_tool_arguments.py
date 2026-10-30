@@ -68,9 +68,7 @@ def _resolve_interact(**extra):
         "inner_thought": "書き残しておく",
         **extra,
     }
-    return SpotGraphArgumentResolver().resolve_args(
-        "interact", args, _object_context()
-    )
+    return SpotGraphArgumentResolver().resolve_args("interact", args, _object_context())
 
 
 class TestInteractionParametersSurvive:
@@ -140,9 +138,7 @@ class TestNoDeclaredArgumentIsSilentlyDropped:
         for key in declared - set(sample):
             sample[key] = "x"
 
-        resolved = SpotGraphArgumentResolver().resolve_args(
-            "interact", sample, _object_context()
-        )
+        resolved = SpotGraphArgumentResolver().resolve_args("interact", sample, _object_context())
 
         dropped = sorted(declared - set(resolved) - self._CANONICALISED)
         assert not dropped, f"resolver が落とした引数: {dropped}"
@@ -224,21 +220,16 @@ class TestEveryExposedToolHasArgumentResolution:
         for definition, _ in get_spot_graph_specs():
             if definition.name == "speak":
                 continue  # speech は別経路 (spot_graph resolver の担当外)
-            takes_label = any(
-                k.endswith("_label") for k in definition.parameters["properties"]
-            )
+            takes_label = any(k.endswith("_label") for k in definition.parameters["properties"])
             if not takes_label:
                 continue
             try:
-                resolved = SpotGraphArgumentResolver().resolve_args(
-                    definition.name, dict(generic), ctx
-                )
+                resolved = SpotGraphArgumentResolver().resolve_args(definition.name, dict(generic), ctx)
             except ToolArgumentResolutionException:
                 continue  # 解決には到達している
             if resolved is None:
                 unresolved.append(definition.name)
 
         assert not unresolved, (
-            f"引数解決に到達しない tool: {unresolved}。"
-            "_SPOT_GRAPH_TOOLS と dispatch 分岐の両方に足してください"
+            f"引数解決に到達しない tool: {unresolved}。_SPOT_GRAPH_TOOLS と dispatch 分岐の両方に足してください"
         )

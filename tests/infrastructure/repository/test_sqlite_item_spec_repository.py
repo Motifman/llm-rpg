@@ -86,15 +86,11 @@ def sqlite_conn() -> sqlite3.Connection:
 
 
 class TestSqliteItemSpecRepository:
-    def test_find_by_id_returns_none_when_empty(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_find_by_id_returns_none_when_empty(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteItemSpecRepository.for_connection(sqlite_conn)
         assert repo.find_by_id(ItemSpecId(1)) is None
 
-    def test_writer_replace_and_find_roundtrip_with_consume_effect(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_writer_replace_and_find_roundtrip_with_consume_effect(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteItemSpecWriter.for_standalone_connection(sqlite_conn)
         repo = SqliteItemSpecRepository.for_connection(sqlite_conn)
         writer.replace_spec(_consumable_spec(1, "回復薬"))
@@ -104,9 +100,7 @@ class TestSqliteItemSpecRepository:
         assert loaded.name == "回復薬"
         assert loaded.consume_effect is not None
 
-    def test_writer_replace_and_find_roundtrip_with_usage_hint(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_writer_replace_and_find_roundtrip_with_usage_hint(self, sqlite_conn: sqlite3.Connection) -> None:
         """usage_hint は name / item_type と同じ静的定義として SQLite に保存復元される。"""
         writer = SqliteItemSpecWriter.for_standalone_connection(sqlite_conn)
         repo = SqliteItemSpecRepository.for_connection(sqlite_conn)
@@ -117,9 +111,7 @@ class TestSqliteItemSpecRepository:
         assert loaded is not None
         assert loaded.usage_hint == "火を扱う場所で interact して使う"
 
-    def test_writer_replace_and_find_roundtrip_with_category(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_writer_replace_and_find_roundtrip_with_category(self, sqlite_conn: sqlite3.Connection) -> None:
         """category は ItemType と別軸の静的定義として SQLite に保存復元される。"""
         writer = SqliteItemSpecWriter.for_standalone_connection(sqlite_conn)
         repo = SqliteItemSpecRepository.for_connection(sqlite_conn)
@@ -131,14 +123,17 @@ class TestSqliteItemSpecRepository:
         assert loaded.item_type == ItemType.QUEST
         assert loaded.category == "LORE"
 
-    def test_finders_use_index_columns(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_finders_use_index_columns(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteItemSpecWriter.for_standalone_connection(sqlite_conn)
         repo = SqliteItemSpecRepository.for_connection(sqlite_conn)
         writer.replace_spec(_equipment_spec(1, "鉄の剣", Rarity.COMMON))
         writer.replace_spec(_equipment_spec(2, "鋼の剣", Rarity.UNCOMMON))
-        writer.replace_spec(_quest_spec(3, "王家の証",))
+        writer.replace_spec(
+            _quest_spec(
+                3,
+                "王家の証",
+            )
+        )
 
         by_type = repo.find_by_type(ItemType.EQUIPMENT)
         by_rarity = repo.find_by_rarity(Rarity.UNCOMMON)
@@ -148,9 +143,7 @@ class TestSqliteItemSpecRepository:
         assert [spec.item_spec_id for spec in by_rarity] == [ItemSpecId(2)]
         assert [spec.item_spec_id for spec in tradeable] == [ItemSpecId(1), ItemSpecId(2)]
 
-    def test_find_by_name_supports_trimmed_lookup(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_find_by_name_supports_trimmed_lookup(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteItemSpecWriter.for_standalone_connection(sqlite_conn)
         repo = SqliteItemSpecRepository.for_connection(sqlite_conn)
         writer.replace_spec(_equipment_spec(1, "鉄の剣", Rarity.COMMON))
@@ -159,16 +152,12 @@ class TestSqliteItemSpecRepository:
         assert loaded is not None
         assert loaded.item_spec_id == ItemSpecId(1)
 
-    def test_shared_writer_requires_active_transaction(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_writer_requires_active_transaction(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteItemSpecWriter.for_shared_unit_of_work(sqlite_conn)
         with pytest.raises(RuntimeError, match="writer"):
             writer.replace_spec(_equipment_spec(1, "鉄の剣", Rarity.COMMON))
 
-    def test_shared_writer_delete_and_read_inside_transaction(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_writer_delete_and_read_inside_transaction(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteItemSpecWriter.for_standalone_connection(sqlite_conn)
         writer.replace_spec(_equipment_spec(1, "鉄の剣", Rarity.COMMON))
 

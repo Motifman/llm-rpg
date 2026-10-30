@@ -1,6 +1,6 @@
 """Jev の接続先が、いま本当にこの契約で答えるかを実呼び出しで確かめる。
 
-`-m quality` を明示したときだけ走る。通常の pytest と CI からは外れる。
+`-m live_api` を明示したときだけ走る。通常の pytest と CI、`-m quality` からは外れる。
 
 ## なぜ実呼び出しが要るか
 
@@ -46,7 +46,7 @@ def _api_key() -> str:
     return ""
 
 
-@pytest.mark.quality
+@pytest.mark.live_api
 def test_jev_answers_three_typed_questions_about_one_japanese_state() -> None:
     """日本語の state に Noul / Choice / Score を 1 回で問うと、3 件とも答えが返る。"""
     api_key = _api_key()
@@ -74,8 +74,7 @@ def test_jev_answers_three_typed_questions_about_one_japanese_state() -> None:
         {
             "rescue": ChoiceQuestion(
                 instructions=(
-                    "書かれた行動名は、対象の操作一覧のどれを意図しているか。"
-                    "どれにも当たらなければ該当なしを選ぶ。"
+                    "書かれた行動名は、対象の操作一覧のどれを意図しているか。どれにも当たらなければ該当なしを選ぶ。"
                 ),
                 options={
                     "reap_wheat": "麦を刈り取る操作",
@@ -110,7 +109,7 @@ def test_jev_answers_three_typed_questions_about_one_japanese_state() -> None:
     assert 0.0 <= answers["urgency"].value <= 2.0
 
 
-@pytest.mark.quality
+@pytest.mark.live_api
 def test_an_invented_action_name_is_rescued_by_the_real_model() -> None:
     """実モデルに問うと、``gather`` が閾値 0.7 を超えて ``reap_wheat`` へ寄る。
 

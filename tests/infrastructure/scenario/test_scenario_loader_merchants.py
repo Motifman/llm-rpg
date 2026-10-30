@@ -89,9 +89,11 @@ class TestMerchantDeclaration:
 
     def test_buy_only_merchant_is_accepted(self) -> None:
         """買い取りだけを行う商人 (sells 省略) は、売値を持たない商人として読み込める。"""
-        scenario = _scenario_with_merchants([
-            _merchant(sells=[], buys=[{"item_spec": "key", "price": 6}]),
-        ])
+        scenario = _scenario_with_merchants(
+            [
+                _merchant(sells=[], buys=[{"item_spec": "key", "price": 6}]),
+            ]
+        )
 
         result = ScenarioLoader().load_from_dict(scenario)
 
@@ -116,10 +118,12 @@ class TestMerchantDeclaration:
 
     def test_two_merchants_may_share_one_spot(self) -> None:
         """同じ spot に商人を 2 人並べられる (spot 単位の一意制約を課さない)。"""
-        scenario = _scenario_with_merchants([
-            _merchant(),
-            _merchant(id="hilda", name="商人ヒルダ"),
-        ])
+        scenario = _scenario_with_merchants(
+            [
+                _merchant(),
+                _merchant(id="hilda", name="商人ヒルダ"),
+            ]
+        )
 
         result = ScenarioLoader().load_from_dict(scenario)
 
@@ -144,10 +148,12 @@ class TestMerchantIdentityValidation:
 
     def test_duplicated_id_is_rejected(self) -> None:
         """同じ id の商人を 2 件宣言すると ScenarioLoadError を投げる。"""
-        scenario = _scenario_with_merchants([
-            _merchant(),
-            _merchant(name="商人ヒルダ"),
-        ])
+        scenario = _scenario_with_merchants(
+            [
+                _merchant(),
+                _merchant(name="商人ヒルダ"),
+            ]
+        )
 
         with pytest.raises(ScenarioLoadError, match="gustav"):
             ScenarioLoader().load_from_dict(scenario)
@@ -166,10 +172,12 @@ class TestMerchantIdentityValidation:
 
     def test_duplicated_name_is_rejected_across_the_whole_scenario(self) -> None:
         """id が違っても表示名が重複する商人はシナリオ全域で拒否する (名前で指す将来の参照が曖昧になるため)。"""
-        scenario = _scenario_with_merchants([
-            _merchant(),
-            _merchant(id="hilda"),
-        ])
+        scenario = _scenario_with_merchants(
+            [
+                _merchant(),
+                _merchant(id="hilda"),
+            ]
+        )
 
         with pytest.raises(ScenarioLoadError, match="商人グスタフ"):
             ScenarioLoader().load_from_dict(scenario)
@@ -199,18 +207,22 @@ class TestMerchantReferenceValidation:
 
     def test_unknown_item_spec_in_sells_is_rejected(self) -> None:
         """sells が実在しない item_spec を参照すると ScenarioLoadError で落ちる。"""
-        scenario = _scenario_with_merchants([
-            _merchant(sells=[{"item_spec": "bread", "price": 10}]),
-        ])
+        scenario = _scenario_with_merchants(
+            [
+                _merchant(sells=[{"item_spec": "bread", "price": 10}]),
+            ]
+        )
 
         with pytest.raises(ScenarioLoadError, match="bread"):
             ScenarioLoader().load_from_dict(scenario)
 
     def test_unknown_item_spec_in_buys_is_rejected(self) -> None:
         """buys が実在しない item_spec を参照すると ScenarioLoadError で落ちる。"""
-        scenario = _scenario_with_merchants([
-            _merchant(sells=[], buys=[{"item_spec": "herb", "price": 6}]),
-        ])
+        scenario = _scenario_with_merchants(
+            [
+                _merchant(sells=[], buys=[{"item_spec": "herb", "price": 6}]),
+            ]
+        )
 
         with pytest.raises(ScenarioLoadError, match="herb"):
             ScenarioLoader().load_from_dict(scenario)
@@ -238,9 +250,11 @@ class TestMerchantPriceListValidation:
     @pytest.mark.parametrize("price", [0, -1])
     def test_non_positive_price_is_rejected(self, price: int) -> None:
         """price が 0 以下のとき ScenarioLoadError を投げる (無料・マイナス価格は宣言できない)。"""
-        scenario = _scenario_with_merchants([
-            _merchant(sells=[{"item_spec": "key", "price": price}]),
-        ])
+        scenario = _scenario_with_merchants(
+            [
+                _merchant(sells=[{"item_spec": "key", "price": price}]),
+            ]
+        )
 
         with pytest.raises(ScenarioLoadError, match="price"):
             ScenarioLoader().load_from_dict(scenario)
@@ -248,33 +262,44 @@ class TestMerchantPriceListValidation:
     @pytest.mark.parametrize("price", ["10", 10.5, None, True])
     def test_non_integer_price_is_rejected(self, price: Any) -> None:
         """price が整数でないとき (文字列・小数・null・真偽値) ScenarioLoadError を投げる。"""
-        scenario = _scenario_with_merchants([
-            _merchant(sells=[{"item_spec": "key", "price": price}]),
-        ])
+        scenario = _scenario_with_merchants(
+            [
+                _merchant(sells=[{"item_spec": "key", "price": price}]),
+            ]
+        )
 
         with pytest.raises(ScenarioLoadError, match="price"):
             ScenarioLoader().load_from_dict(scenario)
 
     def test_duplicated_item_spec_within_sells_is_rejected(self) -> None:
         """同じ商人の sells に同一 item_spec を 2 度書くと、どちらの価格が効くか決まらないので拒否する。"""
-        scenario = _scenario_with_merchants([
-            _merchant(sells=[
-                {"item_spec": "key", "price": 10},
-                {"item_spec": "key", "price": 12},
-            ]),
-        ])
+        scenario = _scenario_with_merchants(
+            [
+                _merchant(
+                    sells=[
+                        {"item_spec": "key", "price": 10},
+                        {"item_spec": "key", "price": 12},
+                    ]
+                ),
+            ]
+        )
 
         with pytest.raises(ScenarioLoadError, match="key"):
             ScenarioLoader().load_from_dict(scenario)
 
     def test_duplicated_item_spec_within_buys_is_rejected(self) -> None:
         """同じ商人の buys に同一 item_spec を 2 度書くと ScenarioLoadError を投げる。"""
-        scenario = _scenario_with_merchants([
-            _merchant(sells=[], buys=[
-                {"item_spec": "key", "price": 6},
-                {"item_spec": "key", "price": 7},
-            ]),
-        ])
+        scenario = _scenario_with_merchants(
+            [
+                _merchant(
+                    sells=[],
+                    buys=[
+                        {"item_spec": "key", "price": 6},
+                        {"item_spec": "key", "price": 7},
+                    ],
+                ),
+            ]
+        )
 
         with pytest.raises(ScenarioLoadError, match="key"):
             ScenarioLoader().load_from_dict(scenario)

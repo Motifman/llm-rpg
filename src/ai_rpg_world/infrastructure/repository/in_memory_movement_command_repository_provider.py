@@ -89,10 +89,7 @@ class InMemoryMovementCommandRepositoryProviderFactory:
     ) -> InMemoryMovementCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "インメモリ移動command providerには"
-                "InMemoryUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("インメモリ移動command providerにはInMemoryUnitOfWorkTransactionAdapterが必要です")
         return InMemoryMovementCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

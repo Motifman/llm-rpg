@@ -20,9 +20,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_FORBIDDEN_LIBRARY = (
-    _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
-)
+_FORBIDDEN_LIBRARY = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 
 
 class TestWorldRuntimeUsesSharedFormatStrategy:
@@ -141,8 +139,6 @@ class TestWorldRuntimeUsesSharedFormatStrategy:
             recent_events_text="Y",
             objective_text=scenario_objective,
             inventory_text="Z",
-            active_memos_text="",
-            relevant_memories_text="",
         )
         assert skeleton.startswith("【現在の目的】")
         assert "【現在地と周囲】" in skeleton

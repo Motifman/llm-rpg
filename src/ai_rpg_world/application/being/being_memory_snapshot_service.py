@@ -1,18 +1,17 @@
-"""BeingMemorySnapshotService — Being 単位で 9 memory store を JSON 1 本に save / restore する。
+"""BeingMemorySnapshotService — Being 単位で memory store を JSON 1 本に save / restore する。
 
 Phase 4 Step 4-2b (Issue #470): run 途中再開 (mid-run resume) を実現するため、
 Phase 4-1 で導入した ``BeingSnapshot.memory_payload_json`` (オペーク JSON)
 の **中身を作る・読む application service** を提供する。
 
-PR-G で対象 store が 6 → 9 に増えた (= 想起階層 slot / afterglow /
-habituation を追加)。新 store を足すときの手順は ``EXPECTED_PAYLOAD_KEYS``
+新 store を足すときの手順は ``EXPECTED_PAYLOAD_KEYS``
 近くの docstring を参照。
 
 責務:
 
-- ``capture(being_id) -> str``: 9 store の状態を読み出し、内部 schema v1 の
+- ``capture(being_id) -> str``: 各 store の状態を読み出し、内部 schema v1 の
   JSON 文字列にシリアライズ
-- ``restore(being_id, payload_json) -> None``: JSON 文字列を 9 store に
+- ``restore(being_id, payload_json) -> None``: JSON 文字列を 各 store に
   bulk overwrite で書き戻す。**best-effort: store ごとに順番に書き戻す
   (cross-store atomicity なし)**。各 store 内では Phase 4-2a の
   ``replace_all_*_by_being`` が single-transaction を保証する
@@ -22,17 +21,7 @@ habituation を追加)。新 store を足すときの手順は ``EXPECTED_PAYLOA
 ```json
 {
   "schema_version": 1,
-  "memo": [...],
-  "semantic_entries": [...],
-  "semantic_cluster_signatures": [...],
-  "memory_links": [...],
-  "recall_buffer_pending": [...],
-  "reinterpretation_journal": [...],
-  "episodic_episodes": [...],
-  "recall_slot_entries": [...],
-  "recall_slot_cooldown": [...],
-  "afterglow_entries": [...],
-  "recall_habituation_last_recalled": [...]
+  ...
 }
 ```
 
@@ -45,7 +34,7 @@ habituation を追加)。新 store を足すときの手順は ``EXPECTED_PAYLOA
 各 store の ``replace_all_*_by_being`` は単一 transaction (sqlite) または
 原子的 dict 操作 (in-memory) で **store 内 atomicity を保証する**。一方
 本 service は **複数 store に跨る atomicity は保証しない** (= 設計判断、
-9 store は独立したリソースで 2-phase commit を導入するコストに見合わない)。
+各 store は独立したリソースで 2-phase commit を導入するコストに見合わない)。
 代わりに:
 
 1. 全 store を順序を決めて書き換える (失敗順序が予測可能)
@@ -68,72 +57,25 @@ from collections.abc import Callable
 from typing import Any
 
 from ai_rpg_world.application.being._memory_payload_codecs import (
-    afterglow_entry_to_dict,
-    belief_evidence_to_dict,
-    dict_to_afterglow_entry,
-    dict_to_belief_evidence,
-    dict_to_episode_hit_count_pair,
-    dict_to_episode_tick_pair,
-    dict_to_goal_entry,
-    dict_to_memo_entry,
-    dict_to_memory_link,
-    dict_to_pending_prediction,
-    dict_to_recall_observation,
-    dict_to_recall_slot_entry,
-    dict_to_reinterpretation_entry,
-    dict_to_semantic_entry,
-    dict_to_subjective_episode,
-    episode_hit_count_pair_to_dict,
-    episode_tick_pair_to_dict,
-    goal_entry_to_dict,
-    memo_entry_to_dict,
-    memory_link_to_dict,
-    pending_prediction_to_dict,
-    recall_observation_to_dict,
-    recall_slot_entry_to_dict,
-    reinterpretation_entry_to_dict,
-    semantic_entry_to_dict,
-    subjective_episode_to_dict,
+    acquaintance_to_dict,
+    being_episode_to_dict,
+    being_memo_to_dict,
+    being_short_term_memory_to_dict,
+    dict_to_acquaintance,
+    dict_to_being_episode,
+    dict_to_being_memo,
+    dict_to_being_short_term_memory,
 )
-from ai_rpg_world.application.llm.services.afterglow_store import IAfterglowStore
-from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-    IEpisodicRecallHabituationStore,
+from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
+from ai_rpg_world.being.domain.episode import EpisodeRepository
+from ai_rpg_world.being.domain.memo_book import MemoBook, MemoBookRepository
+from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock
+from ai_rpg_world.being.domain.short_term_memory import (
+    ShortTermMemory,
+    ShortTermMemoryRepository,
 )
-from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-    IEpisodicRecallSlotStore,
-)
-from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-    IEpisodicRecallSuccessStore,
-)
+from ai_rpg_world.domain.being.exception.being_exceptions import MemoValidationException
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    EpisodicEpisodeRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-    EpisodicRecallBufferRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
-    EpisodicReinterpretationJournalRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
-    MemoryLinkRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
-    PendingPredictionRepository,
-)
-from ai_rpg_world.domain.memory.goal.repository.goal_journal_repository import (
-    GoalJournalRepository,
-)
-from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
-    StagnationPressureRepository,
-)
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
-    BeliefEvidenceBufferRepository,
-)
-from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
-    SemanticMemoryRepository,
-)
 
 CURRENT_PAYLOAD_SCHEMA_VERSION: int = 1
 SUPPORTED_PAYLOAD_SCHEMA_VERSIONS: frozenset[int] = frozenset({1})
@@ -156,9 +98,7 @@ def _decode_list(
         try:
             out.append(decoder(item))
         except (KeyError, ValueError, TypeError) as exc:
-            raise BeingMemoryPayloadFormatError(
-                f"payload[{key!r}][{idx}] is malformed: {exc!r}"
-            ) from exc
+            raise BeingMemoryPayloadFormatError(f"payload[{key!r}][{idx}] is malformed: {exc!r}") from exc
     return out
 
 
@@ -201,7 +141,7 @@ def _validate_snapshot_payload_coverage(
 
 
 class BeingMemorySnapshotService:
-    """9 memory store の状態を Being 単位で JSON 1 本に save / restore する。
+    """memory store の状態を Being 単位で JSON 1 本に save / restore する。
 
     ステートレス: 全 store を constructor で受け取り、``capture`` / ``restore``
     のみが副作用を持つ。
@@ -213,6 +153,8 @@ class BeingMemorySnapshotService:
     2. ``__init__`` に新 store の引数を追加
     3. ``capture()`` の payload dict に新 key の生成ロジックを追加
     4. ``restore()`` のデコード / 書き戻しに新 key を追加
+    5. 足す前の snapshot も読めるようにするなら ``ADDED_PAYLOAD_KEYS`` にも足す
+       (design_decisions D1824-6)
 
     1 だけ足して 3 を忘れると、初回 capture() で ``SnapshotCoverageError``
     が起動時に投げられ silent failure を構造的に防ぐ。
@@ -220,208 +162,62 @@ class BeingMemorySnapshotService:
 
     # PR-F: 本 service が emit / accept する payload key の SSOT。
     # 新 store を足す PR は、ここに 1 行追加 + capture/restore 更新で揃える。
-    # PR-G: 想起階層 (slot / afterglow / habituation) 3 store ぶん 4 key を追加。
-    # slot は entries と cooldown を別 key に split (= 既存 restore() の
-    # ``isinstance(list)`` 検証規約に合わせるため)。
-    # U2 (証拠台帳統一設計): belief_evidence_buffer store 1 key を追加。
-    # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar
-    # (recall_success_hit_count) 1 key を追加。
-    EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
-        "memo",
-        "semantic_entries",
-        "semantic_cluster_signatures",
-        "memory_links",
-        "recall_buffer_pending",
-        "reinterpretation_journal",
-        "episodic_episodes",
-        "recall_slot_entries",
-        "recall_slot_cooldown",
-        "afterglow_entries",
-        "recall_habituation_last_recalled",
-        "belief_evidence_buffer",
-        "recall_success_hit_count",
-        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測
-        # (約束) の per-Being state。
-        "pending_predictions",
-        # P5 (目的層): 目的 journal の per-Being state (belief journal と同型)。
-        "goal_journal",
-        # P-U2 (停滞感 store): 停滞感カウンタの per-Being state。scalar な
-        # ため list 1 要素 (0 なら空 list) で運ぶ (他 key と同じ list 規約に揃える)。
-        "stagnation_pressure_count",
-    })
+    EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset(
+        {
+            "memory_turn",
+            "acquaintances",
+            "being_episodes",
+            "being_memo_book",
+            "being_short_term_memory",
+        }
+    )
+    # 後から足したキー。足す前に保存した snapshot には無いので、無ければ空として読む。
+    ADDED_PAYLOAD_KEYS: frozenset[str] = frozenset(
+        {
+            "being_short_term_memory",
+        }
+    )
 
     def __init__(
         self,
         *,
-        memo_store: MemoRepository,
-        semantic_store: SemanticMemoryRepository,
-        memory_link_store: MemoryLinkRepository,
-        recall_buffer_store: EpisodicRecallBufferRepository,
-        reinterpretation_journal_store: EpisodicReinterpretationJournalRepository,
-        episodic_episode_store: EpisodicEpisodeRepository,
-        recall_slot_store: IEpisodicRecallSlotStore,
-        afterglow_store: IAfterglowStore,
-        recall_habituation_store: IEpisodicRecallHabituationStore,
-        belief_evidence_buffer_store: BeliefEvidenceBufferRepository,
-        recall_success_store: IEpisodicRecallSuccessStore,
-        pending_prediction_store: PendingPredictionRepository,
-        goal_journal_store: GoalJournalRepository,
-        stagnation_pressure_store: StagnationPressureRepository,
+        acquaintance_store: AcquaintanceRepository,
+        being_episode_store: EpisodeRepository,
+        being_memo_store: MemoBookRepository,
+        memory_turn_clock: MemoryTurnClock,
+        being_short_term_memory_store: ShortTermMemoryRepository,
     ) -> None:
-        if not isinstance(memo_store, MemoRepository):
-            raise TypeError("memo_store must be MemoRepository")
-        if not isinstance(semantic_store, SemanticMemoryRepository):
-            raise TypeError("semantic_store must be SemanticMemoryRepository")
-        if not isinstance(memory_link_store, MemoryLinkRepository):
-            raise TypeError("memory_link_store must be MemoryLinkRepository")
-        if not isinstance(recall_buffer_store, EpisodicRecallBufferRepository):
-            raise TypeError(
-                "recall_buffer_store must be EpisodicRecallBufferRepository"
-            )
-        if not isinstance(
-            reinterpretation_journal_store, EpisodicReinterpretationJournalRepository
-        ):
-            raise TypeError(
-                "reinterpretation_journal_store must be EpisodicReinterpretationJournalRepository"
-            )
-        if not isinstance(episodic_episode_store, EpisodicEpisodeRepository):
-            raise TypeError(
-                "episodic_episode_store must be EpisodicEpisodeRepository"
-            )
-        # PR-G: 想起階層 3 store は Protocol 一致を isinstance() で確認する
-        # (runtime_checkable Protocol)。
-        if not isinstance(recall_slot_store, IEpisodicRecallSlotStore):
-            raise TypeError(
-                "recall_slot_store must implement IEpisodicRecallSlotStore"
-            )
-        if not isinstance(afterglow_store, IAfterglowStore):
-            raise TypeError("afterglow_store must implement IAfterglowStore")
-        if not isinstance(
-            recall_habituation_store, IEpisodicRecallHabituationStore
-        ):
-            raise TypeError(
-                "recall_habituation_store must implement "
-                "IEpisodicRecallHabituationStore"
-            )
-        if not isinstance(
-            belief_evidence_buffer_store, BeliefEvidenceBufferRepository
-        ):
-            raise TypeError(
-                "belief_evidence_buffer_store must be BeliefEvidenceBufferRepository"
-            )
-        if not isinstance(recall_success_store, IEpisodicRecallSuccessStore):
-            raise TypeError(
-                "recall_success_store must implement IEpisodicRecallSuccessStore"
-            )
-        if not isinstance(pending_prediction_store, PendingPredictionRepository):
-            raise TypeError(
-                "pending_prediction_store must be PendingPredictionRepository"
-            )
-        if not isinstance(goal_journal_store, GoalJournalRepository):
-            raise TypeError("goal_journal_store must be GoalJournalRepository")
-        if not isinstance(stagnation_pressure_store, StagnationPressureRepository):
-            raise TypeError(
-                "stagnation_pressure_store must be StagnationPressureRepository"
-            )
-        self._memo = memo_store
-        self._semantic = semantic_store
-        self._memory_link = memory_link_store
-        self._recall_buffer = recall_buffer_store
-        self._reinterpretation_journal = reinterpretation_journal_store
-        self._episodic_episode = episodic_episode_store
-        self._recall_slot = recall_slot_store
-        self._afterglow = afterglow_store
-        self._recall_habituation = recall_habituation_store
-        self._belief_evidence_buffer = belief_evidence_buffer_store
-        self._recall_success = recall_success_store
-        self._pending_prediction = pending_prediction_store
-        self._goal_journal = goal_journal_store
-        self._stagnation_pressure = stagnation_pressure_store
+        if not isinstance(acquaintance_store, AcquaintanceRepository):
+            raise TypeError("acquaintance_store must be AcquaintanceRepository")
+        if not isinstance(being_episode_store, EpisodeRepository):
+            raise TypeError("being_episode_store must be EpisodeRepository")
+        if not isinstance(being_memo_store, MemoBookRepository):
+            raise TypeError("being_memo_store must be MemoBookRepository")
+        if not isinstance(memory_turn_clock, MemoryTurnClock):
+            raise TypeError("memory_turn_clock must be MemoryTurnClock")
+        if not isinstance(being_short_term_memory_store, ShortTermMemoryRepository):
+            raise TypeError("being_short_term_memory_store must be ShortTermMemoryRepository")
+        self._acquaintance = acquaintance_store
+        self._being_episode = being_episode_store
+        self._being_memo = being_memo_store
+        self._memory_turn_clock = memory_turn_clock
+        self._being_short_term_memory = being_short_term_memory_store
 
     def capture(self, being_id: BeingId) -> str:
-        """10 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
+        """各 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         payload: dict[str, Any] = {
             "schema_version": CURRENT_PAYLOAD_SCHEMA_VERSION,
-            "memo": [
-                memo_entry_to_dict(e)
-                for e in self._memo.list_all_by_being(being_id)
-            ],
-            "semantic_entries": [
-                semantic_entry_to_dict(e)
-                for e in self._semantic.list_for_being(being_id)
-            ],
-            "semantic_cluster_signatures": list(
-                self._semantic.list_cluster_signatures_by_being(being_id)
-            ),
-            "memory_links": [
-                memory_link_to_dict(ln)
-                for ln in self._memory_link.list_all_links_for_being(being_id)
-            ],
-            "recall_buffer_pending": [
-                recall_observation_to_dict(o)
-                for o in self._recall_buffer.list_pending_by_being(being_id)
-            ],
-            "reinterpretation_journal": [
-                reinterpretation_entry_to_dict(e)
-                for e in self._reinterpretation_journal.list_all_by_being(being_id)
-            ],
-            "episodic_episodes": [
-                subjective_episode_to_dict(ep)
-                for ep in self._episodic_episode.list_all_by_being(being_id)
-            ],
-            # PR-G: 想起階層の per-Being state を snapshot に乗せる。
-            "recall_slot_entries": [
-                recall_slot_entry_to_dict(e)
-                for e in self._recall_slot.get_slot(being_id)
-            ],
-            "recall_slot_cooldown": [
-                episode_tick_pair_to_dict(eid, tick)
-                for eid, tick in self._recall_slot.get_cooldown_until(being_id).items()
-            ],
-            "afterglow_entries": [
-                afterglow_entry_to_dict(e)
-                for e in self._afterglow.get_index(being_id)
-            ],
-            "recall_habituation_last_recalled": [
-                episode_tick_pair_to_dict(eid, tick)
-                for eid, tick in self._recall_habituation.list_all_by_being(
-                    being_id
-                ).items()
-            ],
-            # U2 (証拠台帳統一設計): evidence buffer の per-Being state。
-            "belief_evidence_buffer": [
-                belief_evidence_to_dict(e)
-                for e in self._belief_evidence_buffer.list_all_by_being(being_id)
-            ],
-            # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar
-            # の per-Being state。
-            "recall_success_hit_count": [
-                episode_hit_count_pair_to_dict(eid, hit_count)
-                for eid, hit_count in self._recall_success.list_all_by_being(
-                    being_id
-                ).items()
-            ],
-            # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の
-            # 予測 (約束) の per-Being state。
-            "pending_predictions": [
-                pending_prediction_to_dict(p)
-                for p in self._pending_prediction.list_all_by_being(being_id)
-            ],
-            # P5 (目的層): 目的 journal の per-Being state。
-            "goal_journal": [
-                goal_entry_to_dict(e)
-                for e in self._goal_journal.list_all_by_being(being_id)
-            ],
         }
-        # P-U2 (停滞感 store): 停滞感カウンタ。0 は空 list (= 他 store の
-        # 「空状態 = 空 list」規約に揃える)。LOW-1 (敵対的レビュー指摘):
-        # get_by_being を条件式と値の両方で 2 回呼んでいたのを 1 度読んだ値に
-        # 束ねる形に直した (挙動は不変)。
-        stagnation_pressure_count = self._stagnation_pressure.get_by_being(being_id)
-        payload["stagnation_pressure_count"] = (
-            [stagnation_pressure_count] if stagnation_pressure_count else []
+        memory_turn = self._memory_turn_clock.current_turn(being_id)
+        payload["memory_turn"] = [memory_turn] if memory_turn else []
+        payload["acquaintances"] = [acquaintance_to_dict(a) for a in self._acquaintance.list_by_being(being_id)]
+        payload["being_episodes"] = [being_episode_to_dict(e) for e in self._being_episode.list_by_being(being_id)]
+        payload["being_memo_book"] = [being_memo_to_dict(m) for m in self._being_memo.get(being_id).memos]
+        short_term_memory = self._being_short_term_memory.get(being_id)
+        payload["being_short_term_memory"] = (
+            [] if short_term_memory.is_empty() else [being_short_term_memory_to_dict(short_term_memory)]
         )
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
         # しているか起動時に確認する。新 store を追加して EXPECTED に key を
@@ -433,7 +229,7 @@ class BeingMemorySnapshotService:
         return json.dumps(payload, ensure_ascii=False)
 
     def restore(self, being_id: BeingId, payload_json: str) -> None:
-        """payload JSON を 9 store に bulk overwrite で書き戻す。
+        """payload JSON を 各 store に bulk overwrite で書き戻す。
 
         **store ごとに順番に書き戻す best-effort 動作**。各 store 内では
         ``replace_all_*_by_being`` が single transaction で atomic だが、
@@ -453,178 +249,78 @@ class BeingMemorySnapshotService:
         try:
             payload = json.loads(payload_json)
         except json.JSONDecodeError as exc:
-            raise BeingMemoryPayloadFormatError(
-                f"payload_json is not valid JSON: {exc}"
-            ) from exc
+            raise BeingMemoryPayloadFormatError(f"payload_json is not valid JSON: {exc}") from exc
 
         if not isinstance(payload, dict):
-            raise BeingMemoryPayloadFormatError(
-                f"payload root must be object, got {type(payload).__name__}"
-            )
+            raise BeingMemoryPayloadFormatError(f"payload root must be object, got {type(payload).__name__}")
 
         version = payload.get("schema_version")
         if version not in SUPPORTED_PAYLOAD_SCHEMA_VERSIONS:
             raise BeingMemoryPayloadSchemaError(
-                f"schema_version={version!r} is not supported "
-                f"(supported: {sorted(SUPPORTED_PAYLOAD_SCHEMA_VERSIONS)})"
+                f"schema_version={version!r} is not supported (supported: {sorted(SUPPORTED_PAYLOAD_SCHEMA_VERSIONS)})"
             )
 
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を一括 validate。
         # 新 store を追加して EXPECTED に key を足したが restore() の検証を
         # 忘れた場合に備え、欠落キーは SnapshotCoverageError ではなく従来通り
         # BeingMemoryPayloadFormatError で報告する (= 形式エラーの一種)。
+        payload = {
+            **{key: [] for key in self.ADDED_PAYLOAD_KEYS if key not in payload},
+            **payload,
+        }
         for key in sorted(self.EXPECTED_PAYLOAD_KEYS):
             if key not in payload:
-                raise BeingMemoryPayloadFormatError(
-                    f"payload missing required key: {key!r}"
-                )
+                raise BeingMemoryPayloadFormatError(f"payload missing required key: {key!r}")
             if not isinstance(payload[key], list):
-                raise BeingMemoryPayloadFormatError(
-                    f"payload[{key!r}] must be list, got {type(payload[key]).__name__}"
-                )
+                raise BeingMemoryPayloadFormatError(f"payload[{key!r}] must be list, got {type(payload[key]).__name__}")
 
         # 形式 validation はここまで。以降は VO へのデコード → bulk write。
         # 個別 VO 構築中の KeyError / ValueError / TypeError は本 service の
         # 例外型に wrap する (= 呼出側が一律 BeingMemoryPayloadFormatError で
         # catch できる)。store 書き戻し中の I/O 例外は素通しさせる
         # (= silent failure を作らない、呼出側に伝播する)。
-        memo_entries = _decode_list(
-            payload["memo"], dict_to_memo_entry, "memo"
-        )
-        semantic_entries = _decode_list(
-            payload["semantic_entries"],
-            lambda d: dict_to_semantic_entry(d, fallback_being_id=being_id),
-            "semantic_entries",
-        )
-        cluster_signatures = [str(s) for s in payload["semantic_cluster_signatures"]]
-        memory_links = _decode_list(
-            payload["memory_links"],
-            lambda d: dict_to_memory_link(d, fallback_being_id=being_id),
-            "memory_links",
-        )
-        recall_observations = _decode_list(
-            payload["recall_buffer_pending"],
-            dict_to_recall_observation,
-            "recall_buffer_pending",
-        )
-        journal_entries = _decode_list(
-            payload["reinterpretation_journal"],
-            lambda d: dict_to_reinterpretation_entry(d, fallback_being_id=being_id),
-            "reinterpretation_journal",
-        )
-        episodes = _decode_list(
-            payload["episodic_episodes"],
-            lambda d: dict_to_subjective_episode(d, fallback_being_id=being_id),
-            "episodic_episodes",
-        )
-        # PR-G: 想起階層のデコード。slot は entries と cooldown を別 list で
-        # 受け取り、cooldown と habituation は (episode_id, tick) ペアの list。
-        slot_entries = _decode_list(
-            payload["recall_slot_entries"],
-            dict_to_recall_slot_entry,
-            "recall_slot_entries",
-        )
-        cooldown_pairs = _decode_list(
-            payload["recall_slot_cooldown"],
-            dict_to_episode_tick_pair,
-            "recall_slot_cooldown",
-        )
-        afterglow_entries = _decode_list(
-            payload["afterglow_entries"],
-            dict_to_afterglow_entry,
-            "afterglow_entries",
-        )
-        habituation_pairs = _decode_list(
-            payload["recall_habituation_last_recalled"],
-            dict_to_episode_tick_pair,
-            "recall_habituation_last_recalled",
-        )
-        # U2 (証拠台帳統一設計): evidence buffer のデコード。
-        belief_evidences = _decode_list(
-            payload["belief_evidence_buffer"],
-            dict_to_belief_evidence,
-            "belief_evidence_buffer",
-        )
-        # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar の
-        # デコード。(episode_id, hit_count) ペアの list。
-        recall_success_pairs = _decode_list(
-            payload["recall_success_hit_count"],
-            dict_to_episode_hit_count_pair,
-            "recall_success_hit_count",
-        )
-        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
-        # デコード。
-        pending_predictions = _decode_list(
-            payload["pending_predictions"],
-            dict_to_pending_prediction,
-            "pending_predictions",
-        )
-        # P5 (目的層): 目的 journal のデコード。
-        goal_entries = _decode_list(
-            payload["goal_journal"],
-            dict_to_goal_entry,
-            "goal_journal",
-        )
-        # P-U2 (停滞感 store): カウンタのデコード。list が空なら 0、要素があれば
-        # 先頭値を採用する (capture 側は常に 0 or 1 要素で emit するため)。
-        stagnation_pressure_raw = payload["stagnation_pressure_count"]
-        if len(stagnation_pressure_raw) > 1:
+        memory_turn_raw = payload["memory_turn"]
+        if len(memory_turn_raw) > 1 or not all(
+            isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in memory_turn_raw
+        ):
             raise BeingMemoryPayloadFormatError(
-                "payload['stagnation_pressure_count'] must have at most 1 element, "
-                f"got {len(stagnation_pressure_raw)}"
+                f"payload['memory_turn'] must be [] or [positive int], got {memory_turn_raw!r}"
             )
+        memory_turn = memory_turn_raw[0] if memory_turn_raw else 0
+        acquaintances = _decode_list(payload["acquaintances"], dict_to_acquaintance, "acquaintances")
+        acquaintance_keys = [(a.environment_name, a.name) for a in acquaintances]
+        if len(set(acquaintance_keys)) != len(acquaintance_keys):
+            raise BeingMemoryPayloadFormatError("payload['acquaintances'] has the same person twice")
+        being_episodes = _decode_list(
+            payload["being_episodes"],
+            lambda data: dict_to_being_episode(data, being_id=being_id),
+            "being_episodes",
+        )
+        for field_name in ("episode_id", "handle"):
+            values = [getattr(e, field_name) for e in being_episodes]
+            if len(set(values)) != len(values):
+                raise BeingMemoryPayloadFormatError(f"payload['being_episodes'] has the same {field_name} twice")
+        being_memos = _decode_list(payload["being_memo_book"], dict_to_being_memo, "being_memo_book")
         try:
-            stagnation_pressure_count = (
-                int(stagnation_pressure_raw[0]) if stagnation_pressure_raw else 0
-            )
-        except (TypeError, ValueError) as exc:
+            being_memo_book = MemoBook(being_id, memos=tuple(being_memos))
+        except MemoValidationException as exc:
+            raise BeingMemoryPayloadFormatError(f"payload['being_memo_book'] is not a valid memo book: {exc}") from exc
+        short_term_raw = payload["being_short_term_memory"]
+        if len(short_term_raw) > 1:
             raise BeingMemoryPayloadFormatError(
-                f"payload['stagnation_pressure_count'][0] is malformed: {exc!r}"
-            ) from exc
-
-        # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない、
-        # memory_link / reinterpretation_journal / recall_buffer は episode に
-        # 参照するが、本 service は参照整合性まで保証しない (= 各 store 独立)。
-        self._memo.replace_all_by_being(being_id, memo_entries)
-        self._semantic.replace_all_by_being(
-            being_id, semantic_entries, cluster_signatures
+                f"payload['being_short_term_memory'] must be [] or [one memory], got {len(short_term_raw)} items"
+            )
+        short_term_memories = _decode_list(
+            short_term_raw,
+            lambda data: dict_to_being_short_term_memory(data, being_id=being_id),
+            "being_short_term_memory",
         )
-        self._memory_link.replace_all_by_being(being_id, memory_links)
-        self._recall_buffer.replace_all_pending_by_being(
-            being_id, recall_observations
-        )
-        self._reinterpretation_journal.replace_all_by_being(
-            being_id, journal_entries
-        )
-        self._episodic_episode.replace_all_by_being(being_id, episodes)
-        # PR-G: 想起階層の bulk overwrite。
-        self._recall_slot.replace_all_by_being(
-            being_id, slot_entries, dict(cooldown_pairs)
-        )
-        self._afterglow.replace_all_by_being(being_id, afterglow_entries)
-        self._recall_habituation.replace_all_by_being(
-            being_id, dict(habituation_pairs)
-        )
-        # U2 (証拠台帳統一設計): evidence buffer の bulk overwrite。
-        self._belief_evidence_buffer.replace_all_by_being(
-            being_id, belief_evidences
-        )
-        # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar の
-        # bulk overwrite。
-        self._recall_success.replace_all_by_being(
-            being_id, dict(recall_success_pairs)
-        )
-        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
-        # bulk overwrite。
-        self._pending_prediction.replace_all_by_being(
-            being_id, pending_predictions
-        )
-        # P5 (目的層): 目的 journal の bulk overwrite。
-        self._goal_journal.replace_all_by_being(being_id, goal_entries)
-        # P-U2 (停滞感 store): カウンタの bulk overwrite。
-        self._stagnation_pressure.replace_all_by_being(
-            being_id, stagnation_pressure_count
-        )
+        short_term_memory = short_term_memories[0] if short_term_memories else ShortTermMemory.empty(being_id)
+        self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
+        self._acquaintance.replace_all_by_being(being_id, acquaintances)
+        self._being_episode.replace_all_by_being(being_id, being_episodes)
+        self._being_memo.replace_all_by_being(being_memo_book)
+        self._being_short_term_memory.replace_all_by_being(short_term_memory)
 
 
 __all__ = [

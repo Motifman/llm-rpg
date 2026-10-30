@@ -6,17 +6,13 @@ import sqlite3
 from collections import defaultdict
 from collections.abc import Iterable
 
-from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape, RelativeCoordinate
-from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
-from ai_rpg_world.domain.combat.value_object.hit_effect import HitEffect, HitEffectType
 from ai_rpg_world.domain.player.enum.player_enum import Element, Race
 from ai_rpg_world.domain.skill.aggregate.skill_deck_progress_aggregate import SkillDeckProgressAggregate
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import AwakenState, SkillLoadoutAggregate
-from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillHitPatternType, SkillProposalType
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 from ai_rpg_world.domain.skill.value_object.skill_deck import SkillDeck
 from ai_rpg_world.domain.skill.value_object.skill_deck_exp_table import SkillDeckExpTable
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
-from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern, SkillHitTimelineSegment
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.skill.value_object.skill_proposal import SkillProposal
@@ -28,40 +24,7 @@ def build_skill_spec(
     row: sqlite3.Row,
     required_skill_rows: Iterable[int],
     slayer_race_rows: Iterable[str],
-    hit_effect_rows: Iterable[tuple[str, int, float, float]],
-    segment_rows: Iterable[sqlite3.Row],
-    coordinate_rows: Iterable[sqlite3.Row],
 ) -> SkillSpec:
-    coords_by_segment: dict[int, list[RelativeCoordinate]] = defaultdict(list)
-    for coord_row in coordinate_rows:
-        coords_by_segment[int(coord_row["segment_index"])].append(
-            RelativeCoordinate(
-                dx=int(coord_row["dx"]),
-                dy=int(coord_row["dy"]),
-                dz=int(coord_row["dz"]),
-            )
-        )
-    segments = []
-    for segment_row in segment_rows:
-        segment_index = int(segment_row["segment_index"])
-        segments.append(
-            SkillHitTimelineSegment(
-                start_offset_ticks=int(segment_row["start_offset_ticks"]),
-                duration_ticks=int(segment_row["duration_ticks"]),
-                shape=HitBoxShape(coords_by_segment[segment_index]),
-                velocity=HitBoxVelocity(
-                    dx=float(segment_row["velocity_dx"]),
-                    dy=float(segment_row["velocity_dy"]),
-                    dz=float(segment_row["velocity_dz"]),
-                ),
-                spawn_offset=RelativeCoordinate(
-                    dx=int(segment_row["spawn_dx"]),
-                    dy=int(segment_row["spawn_dy"]),
-                    dz=int(segment_row["spawn_dz"]),
-                ),
-                segment_power_multiplier=float(segment_row["segment_power_multiplier"]),
-            )
-        )
     return SkillSpec(
         skill_id=SkillId(int(row["skill_id"])),
         name=row["name"],
@@ -70,23 +33,10 @@ def build_skill_spec(
         cast_lock_ticks=int(row["cast_lock_ticks"]),
         cooldown_ticks=int(row["cooldown_ticks"]),
         power_multiplier=float(row["power_multiplier"]),
-        hit_pattern=SkillHitPattern(
-            pattern_type=SkillHitPatternType(row["pattern_type"]),
-            timeline_segments=tuple(segments),
-        ),
         mp_cost=row["mp_cost"],
         stamina_cost=row["stamina_cost"],
         hp_cost=row["hp_cost"],
         slayer_races=tuple(Race(race) for race in slayer_race_rows),
-        hit_effects=tuple(
-            HitEffect(
-                effect_type=HitEffectType(effect_type),
-                duration_ticks=duration_ticks,
-                intensity=intensity,
-                chance=chance,
-            )
-            for effect_type, duration_ticks, intensity, chance in hit_effect_rows
-        ),
         required_skill_ids=tuple(SkillId(skill_id) for skill_id in required_skill_rows),
         is_awakened_deck_only=bool(row["is_awakened_deck_only"]),
         targeting_range=int(row["targeting_range"]),
@@ -140,9 +90,7 @@ def build_skill_deck_progress(
 ) -> SkillDeckProgressAggregate:
     required_by_proposal: dict[int, list[SkillId]] = defaultdict(list)
     for required_row in required_skill_rows:
-        required_by_proposal[int(required_row["proposal_id"])].append(
-            SkillId(int(required_row["skill_id"]))
-        )
+        required_by_proposal[int(required_row["proposal_id"])].append(SkillId(int(required_row["skill_id"])))
     proposals = [
         SkillProposal(
             proposal_id=int(proposal_row["proposal_id"]),
@@ -169,4 +117,3 @@ def build_skill_deck_progress(
         capacity_bonus_by_level={level: bonus for level, bonus in capacity_bonus_rows},
         pending_proposals=proposals,
     )
-

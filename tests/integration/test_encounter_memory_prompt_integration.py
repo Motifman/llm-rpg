@@ -19,12 +19,7 @@ from ai_rpg_world.application.llm.services.action_result_store import (  # noqa:
     DefaultActionResultStore,
 )
 
-_SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "forbidden_library_demo.json"
-)
+_SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "forbidden_library_demo.json"
 
 
 def _create_runtime():
@@ -67,67 +62,78 @@ class TestCurrentSpotFamiliarityE2E:
         assert "現在地: 閲覧室 (初めて訪れた)" in section, section
 
 
-class TestNearbyPlayerFamiliarityE2E:
-    """初対面の player に対して「初めて会った」が出る。"""
+def _take_a_turn(runtime, player_id) -> None:
+    """本番と同じ実行の入口 (``run_phase_b``) から、その場で待つ 1 手を実行する。"""
+    from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+    from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
+    from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
-    def test_spot_player_rendered(self) -> None:
-        """同 spot 初対面 player に初めて会った注記が出る。"""
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=StubLlmClient(None),
+    )
+    wiring.run_phase_b(
+        LlmPhaseAResult(
+            player_id=player_id,
+            prompt=runtime.build_full_prompt(player_id),
+            tools_payload=[],
+            tool_call={"name": "wait", "arguments": {"inner_thought": "様子を見る"}},
+            exception=None,
+        )
+    )
+
+
+class TestFirstVisitNoteLastsOneTurn:
+    """「(初めて訪れた)」が着いた最初のターンだけに付くことを保証する (#1596)。"""
+
+    def test_the_note_stays_while_the_first_turn_has_not_run(self) -> None:
+        """着いてから手番を実行するまでは、プロンプトを何度組んでも「(初めて訪れた)」が付く。"""
         runtime = _create_runtime()
-        pids = runtime.get_player_ids()
-        kaito = pids[0]
-        rin = pids[1]
-        # entity_entered_spot 観測を rin に直接届けて「カイトが来た」を encounter にする
-        from datetime import datetime, timezone
+        kaito = runtime.get_player_ids()[0]
 
-        from ai_rpg_world.application.observation.contracts.dtos import (
-            ObservationOutput,
-        )
+        sections = [_current_state_section(_user_prompt_text(runtime, kaito)) for _ in range(2)]
 
-        output = ObservationOutput(
-            prose="カイトがやってきた。",
-            structured={
-                "type": "entity_entered_spot",
-                "actor": "カイト",
-                "spot_name": "閲覧室",
-            },
-            observation_category="social",
-            schedules_turn=False,
-            breaks_movement=False,
-        )
-        # 観測を rin に届ける (= 注: rin の同 spot に kaito が visible になる
-        # わけではないので、prompt の「同じ場所にいるプレイヤー」リストには出ない。
-        # encounter memory にだけ記録される。本テストでは encounter 記録の
-        # 結果として、もし kaito が同 spot に居れば familiarity が出ることを
-        # 確認するが、実際は kaito は別 spot なので「他のプレイヤーはこの
-        # スポットにいない」のままになる。)
-        runtime._observation_appender.append(
-            rin, output, datetime.now(timezone.utc), None
-        )
+        assert all("現在地: 入口広間 (初めて訪れた)" in s for s in sections), sections
 
-        # kaito を rin の spot に動かして同 spot に居させる
+    def test_the_note_is_gone_on_the_next_turn_at_the_same_spot(self) -> None:
+        """着いた場所で 1 手を実行すると、同じ場所に留まった次のターンの現在地には「(初めて訪れた)」が付かない。"""
+        runtime = _create_runtime()
+        kaito = runtime.get_player_ids()[0]
+
+        _take_a_turn(runtime, kaito)
+
+        section = _current_state_section(_user_prompt_text(runtime, kaito))
+        assert "現在地: 入口広間\n" in section + "\n", section
+        assert "(初めて訪れた)" not in section, section
+
+    def test_another_players_turn_does_not_clear_the_note(self) -> None:
+        """別の player が手番を実行しても、まだ手番を実行していない player の「(初めて訪れた)」は残る。"""
+        runtime = _create_runtime()
+        kaito, rin = runtime.get_player_ids()[:2]
+
+        _take_a_turn(runtime, rin)
+
+        section = _current_state_section(_user_prompt_text(runtime, kaito))
+        assert "現在地: 入口広間 (初めて訪れた)" in section, section
+
+
+class TestNearbyPlayerFamiliarityE2E:
+    """別々の場所から始めた二人が顔を合わせると、双方の【現在地と周囲】で相手に「初めて会った」が付く。"""
+
+    def test_both_sides_see_first_meeting_after_one_walks_in(self) -> None:
+        """カイトがリンのいる閲覧室へ歩いて入ると、入った側のカイトにも、いた側のリンにも、相手の名前に (初めて会った) が付く。"""
+        runtime = _create_runtime()
+        kaito, rin = runtime.get_player_ids()[:2]
+
         runtime.do_move(kaito, "reading_room")
-        # 注: do_move 直後では travel state を立てて即 return する設計 (#404)
-        # advance_until_player_idle で travel を完了させる
         runtime.advance_until_player_idle(kaito)
 
-        # この時点で kaito は rin の spot (reading_room) に居る (PR3 spawn 後は
-        # observation pipeline で rin に entity_entered_spot が届くため
-        # encounter は二重記録になる可能性あり)
-        section = _current_state_section(_user_prompt_text(runtime, rin))
-        # PR-N (task #30): graph_event_flusher が tick 末尾で graph events を
-        # PipelineEventPublisher に流すようになったため、kaito の travel 完了で
-        # 発火する PlayerEnteredSpotEvent が rin に届き、encounter が 2 回目以降
-        # にカウントされる。結果として「初めて会った」注記が常に出るとは限らない
-        # (= 直前に同じ kaito の到着観測が rin に届いていれば first encounter
-        # ではなくなる)。本テストでは encounter 自体が記録されていることを
-        # 別経路で確認する。
-        from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
-            EncounterKey,
-        )
-        assert (
-            runtime._encounter_memory.lookup(rin, EncounterKey.player("カイト"))
-            is not None
-        )
+        rin_section = _current_state_section(_user_prompt_text(runtime, rin))
+        kaito_section = _current_state_section(_user_prompt_text(runtime, kaito))
+        assert '"カイト" (初めて会った)' in rin_section, rin_section
+        assert '"リン" (初めて会った)' in kaito_section, kaito_section
 
 
 class TestPromptRegressionForViewer:

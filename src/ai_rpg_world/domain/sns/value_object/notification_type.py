@@ -3,6 +3,7 @@ from enum import Enum
 
 class NotificationType(Enum):
     """通知タイプ"""
+
     FOLLOW = "follow"
     MENTION = "mention"
     LIKE = "like"

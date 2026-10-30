@@ -1,4 +1,5 @@
 """LocationEstablishmentAggregate のテスト"""
+
 import pytest
 
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
@@ -51,12 +52,8 @@ class TestLocationEstablishmentAggregate:
             assert len(slot.get_events()) == 0
 
         def test_create_different_locations_different_ids(self):
-            s1 = LocationEstablishmentAggregate.create(
-                SpotId.create(1), LocationAreaId.create(1)
-            )
-            s2 = LocationEstablishmentAggregate.create(
-                SpotId.create(2), LocationAreaId.create(1)
-            )
+            s1 = LocationEstablishmentAggregate.create(SpotId.create(1), LocationAreaId.create(1))
+            s2 = LocationEstablishmentAggregate.create(SpotId.create(2), LocationAreaId.create(1))
             assert s1.id != s2.id
 
     class TestClaim:
@@ -75,7 +72,9 @@ class TestLocationEstablishmentAggregate:
             slot.claim(EstablishmentType.SHOP, 10)
             with pytest.raises(LocationAlreadyOccupiedException) as exc_info:
                 slot.claim(EstablishmentType.GUILD, 20)
-            assert "already occupied" in str(exc_info.value).lower() or "LOCATION_ALREADY_OCCUPIED" in str(exc_info.value)
+            assert "already occupied" in str(exc_info.value).lower() or "LOCATION_ALREADY_OCCUPIED" in str(
+                exc_info.value
+            )
 
         def test_claim_guild_success(self, spot_id, location_area_id):
             slot = LocationEstablishmentAggregate.create(spot_id, location_area_id)

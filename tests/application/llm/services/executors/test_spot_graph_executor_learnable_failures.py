@@ -37,9 +37,7 @@ from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group impo
 )
 
 
-def _build_executor(
-    *, sync_action_groups: tuple[SynchronizedActionGroup, ...] = ()
-) -> SpotGraphToolExecutor:
+def _build_executor(*, sync_action_groups: tuple[SynchronizedActionGroup, ...] = ()) -> SpotGraphToolExecutor:
     """最小限の wiring で executor を構築する (state mutation はテストしない)。
 
     `time_provider` を渡すのは、`prepare_action` が「登録できない構成では成功を
@@ -61,9 +59,7 @@ def _build_executor(
         player_inventory_repository=MagicMock(),
         item_repository=MagicMock(),
         sync_action_groups=sync_action_groups,
-        time_provider=MagicMock(
-            get_current_tick=MagicMock(return_value=MagicMock(value=1))
-        ),
+        time_provider=MagicMock(get_current_tick=MagicMock(return_value=MagicMock(value=1))),
     )
 
 
@@ -135,11 +131,7 @@ class TestCommandPostCommitBoundary:
         setattr(
             executor,
             factory_attribute,
-            _scope_factory_with_exit_error(
-                CommandPostCommitException(
-                    cleanup_error=RuntimeError("cleanup failed")
-                )
-            ),
+            _scope_factory_with_exit_error(CommandPostCommitException(cleanup_error=RuntimeError("cleanup failed"))),
         )
         setattr(
             executor,
@@ -183,9 +175,7 @@ class TestCommandPostCommitBoundary:
     def test_pre_commit_system_error_remains_failure(self) -> None:
         """commit前の想定外例外は従来どおりSYSTEM_ERRORで失敗させる。"""
         executor = _build_executor()
-        executor._use_item_command_scope_factory = _scope_factory_with_exit_error(
-            RuntimeError("commit failed")
-        )
+        executor._use_item_command_scope_factory = _scope_factory_with_exit_error(RuntimeError("commit failed"))
         executor._execute_use_item_in_scope = MagicMock(
             return_value=LlmCommandResultDto(success=True, message="未確定")
         )
@@ -277,9 +267,7 @@ class TestTravelToInvalidArgs:
     def test_non_integer_destination_is_learnable(self) -> None:
         """non-int も learnable な形式で返る。"""
         executor = _build_executor()
-        result = executor._travel_to(
-            player_id=1, args={"destination_spot_id": "abc"}
-        )
+        result = executor._travel_to(player_id=1, args={"destination_spot_id": "abc"})
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
 
 
@@ -294,17 +282,13 @@ class TestSetSubLocationInvalidArgs:
 class TestInteractInvalidArgs:
     def test_missing_action_name_is_learnable(self) -> None:
         executor = _build_executor()
-        result = executor._interact(
-            player_id=1, args={"object_id": 5, "action_name": ""}
-        )
+        result = executor._interact(player_id=1, args={"object_id": 5, "action_name": ""})
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
         assert "action_name" in result.message
 
     def test_zero_object_id_is_learnable(self) -> None:
         executor = _build_executor()
-        result = executor._interact(
-            player_id=1, args={"object_id": 0, "action_name": "examine"}
-        )
+        result = executor._interact(player_id=1, args={"object_id": 0, "action_name": "examine"})
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
 
 
@@ -339,9 +323,7 @@ class TestUseItemInventoryResolutionFailures:
         executor = _build_executor()
         inv = MagicMock(spec=PlayerInventoryAggregate)
         inv.iter_occupied_slots.return_value = []
-        inv.find_available_slot_by_item_spec_id_and_spoilage.return_value = (
-            AvailableSlotLookup()
-        )
+        inv.find_available_slot_by_item_spec_id_and_spoilage.return_value = AvailableSlotLookup()
         executor._player_inventory_repository.find_by_id.return_value = inv
 
         result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 1})
@@ -355,15 +337,11 @@ class TestUseItemInventoryResolutionFailures:
         executor = _build_executor()
         inv = MagicMock(spec=PlayerInventoryAggregate)
         inv.iter_occupied_slots.return_value = []
-        inv.find_available_slot_by_item_spec_id_and_spoilage.return_value = (
-            AvailableSlotLookup(
-                slot_id=SlotId(1), item_instance_id=ItemInstanceId(7001)
-            )
+        inv.find_available_slot_by_item_spec_id_and_spoilage.return_value = AvailableSlotLookup(
+            slot_id=SlotId(1), item_instance_id=ItemInstanceId(7001)
         )
         executor._player_inventory_repository.find_by_id.return_value = inv
-        executor._item_repository.find_by_id.side_effect = RuntimeError(
-            "internal wiring token=secret"
-        )
+        executor._item_repository.find_by_id.side_effect = RuntimeError("internal wiring token=secret")
 
         result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 1})
 
@@ -371,10 +349,7 @@ class TestUseItemInventoryResolutionFailures:
         assert "internal wiring" not in result.message
         assert "token=secret" not in result.message
         assert result.trace_payload is not None
-        assert (
-            result.trace_payload["tool_exception_location"]
-            == "_execute_use_item_in_scope"
-        )
+        assert result.trace_payload["tool_exception_location"] == "_execute_use_item_in_scope"
         assert result.trace_payload["tool_exception_stage"] == "item_lookup"
         assert result.trace_payload["tool_exception_type"] == "RuntimeError"
 
@@ -411,9 +386,7 @@ class TestPrepareActionRejectsAnUndeclaredName:
         """宣言に無い名前を渡すと、成功ではなく学習可能な失敗が返る。"""
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._execute_prepare_action_in_scope(
-            player_id=1, args={"action_name": "レバーを引く"}
-        )
+        result = executor._execute_prepare_action_in_scope(player_id=1, args={"action_name": "レバーを引く"})
 
         _assert_learnable_failure(result, "INTERACTION_ACTION_NOT_FOUND")
 
@@ -425,9 +398,7 @@ class TestPrepareActionRejectsAnUndeclaredName:
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._execute_prepare_action_in_scope(
-            player_id=1, args={"action_name": "レバーを引く"}
-        )
+        result = executor._execute_prepare_action_in_scope(player_id=1, args={"action_name": "レバーを引く"})
 
         assert "できるようになった" not in result.message
         assert "合わせれば動く" not in result.message
@@ -440,26 +411,24 @@ class TestPrepareActionRejectsAnUndeclaredName:
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._execute_prepare_action_in_scope(
-            player_id=1, args={"action_name": "レバーを引く"}
-        )
+        result = executor._execute_prepare_action_in_scope(player_id=1, args={"action_name": "レバーを引く"})
 
         assert "left" in result.message
         assert "right" in result.message
 
     def test_a_declared_name_still_succeeds(self) -> None:
-        """宣言済みの名前は従来どおり成功する (正の対照)。
+        """宣言済みの名前は従来どおり成功する (正の対照)。成功の文は操作名を語らない。
 
-        これが無いと「常に失敗させる」実装でも上の 3 件が通ってしまう。
+        これが無いと「常に失敗させる」実装でも上の 3 件が通ってしまう。操作名は
+        呼び出しの値で、受け持ったことを伝える文に出すと本人の経験として記憶へ流れる。
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._execute_prepare_action_in_scope(
-            player_id=1, args={"action_name": "left"}
-        )
+        result = executor._execute_prepare_action_in_scope(player_id=1, args={"action_name": "left"})
 
         assert result.success is True, result.message
-        assert "left" in result.message
+        assert "受け持った" in result.message
+        assert "left" not in result.message
 
 
 class TestPrepareActionDoesNotSucceedWhenItCannotRegister:
@@ -480,9 +449,7 @@ class TestPrepareActionDoesNotSucceedWhenItCannotRegister:
         executor = _build_executor(sync_action_groups=(_sync_group(),))
         executor._time_provider = None
 
-        result = executor._execute_prepare_action_in_scope(
-            player_id=1, args={"action_name": "left"}
-        )
+        result = executor._execute_prepare_action_in_scope(player_id=1, args={"action_name": "left"})
 
         _assert_learnable_failure(result)
         assert "準備をした" not in result.message
@@ -495,9 +462,7 @@ class TestPrepareActionValidationLeak:
         """同期グループが無い構成で準備の内部経路を呼んでも、学習可能に拒否する。"""
         executor = _build_executor()
 
-        result = executor._execute_prepare_action_in_scope(
-            player_id=1, args={"action_name": "left"}
-        )
+        result = executor._execute_prepare_action_in_scope(player_id=1, args={"action_name": "left"})
 
         _assert_learnable_failure(result, "UNSUPPORTED_TOOL")
         assert "二人で合わせる操作" in result.message
@@ -511,9 +476,7 @@ class TestPrepareActionValidationLeak:
         求めていたが、その引数名自体が無くなった。
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
-        result = executor._execute_prepare_action_in_scope(
-            player_id=1, args={"action_name": ""}
-        )
+        result = executor._execute_prepare_action_in_scope(player_id=1, args={"action_name": ""})
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
         assert "action_name" in result.message
 
@@ -540,9 +503,7 @@ class TestPrepareActionValidationLeak:
                 logging.WARNING,
                 logger="ai_rpg_world.application.llm.services.failure_helpers",
             ):
-                result = executor._execute_prepare_action_in_scope(
-                    player_id=1, args={"action_name": "left"}
-                )
+                result = executor._execute_prepare_action_in_scope(player_id=1, args={"action_name": "left"})
         finally:
             mod.PreparedActionRegistry = original  # type: ignore[attr-defined]
 

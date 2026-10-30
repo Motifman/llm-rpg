@@ -56,7 +56,9 @@ class TestLocationPredicates:
         [(1, SpotId.create(1)), (EntityId.create(1), 1), (None, SpotId.create(1))],
     )
     def test_entity_at_spot_rejects_untyped_ids(
-        self, entity_id: object, spot_id: object,
+        self,
+        entity_id: object,
+        spot_id: object,
     ) -> None:
         """本人位置の述語はEntityIdとSpotId以外を構築時に拒否する。"""
         with pytest.raises(ScenarioPredicateValidationException):
@@ -64,12 +66,14 @@ class TestLocationPredicates:
 
     @pytest.mark.parametrize("required_count", [0, -1, True, 1.5, "2"])
     def test_entity_count_rejects_non_positive_or_non_integer_threshold(
-        self, required_count: object,
+        self,
+        required_count: object,
     ) -> None:
         """在席数の閾値はboolを除く正整数だけを受理する。"""
         with pytest.raises(ScenarioPredicateValidationException):
             EntityCountAtSpotAtLeastPredicate(
-                SpotId.create(1), required_count,  # type: ignore[arg-type]
+                SpotId.create(1),
+                required_count,  # type: ignore[arg-type]
             )
 
     def test_location_predicates_preserve_typed_values(self) -> None:

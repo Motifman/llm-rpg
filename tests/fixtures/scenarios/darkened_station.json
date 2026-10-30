@@ -121,8 +121,7 @@
                     "effect_type": "WRITE_PLAYER_TEXT",
                     "parameters": {
                       "target_object": "duty_board",
-                      "state_key": "note",
-                      "prompt_parameter": "text"
+                      "text_param_key": "text"
                     }
                   }
                 ]
@@ -140,7 +139,6 @@
                     "effect_type": "SHOW_PLAYER_TEXT",
                     "parameters": {
                       "target_object": "duty_board",
-                      "state_key": "note",
                       "empty_message": "余白にはまだ何も書かれていない。"
                     }
                   }

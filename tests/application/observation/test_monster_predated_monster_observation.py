@@ -68,9 +68,7 @@ class TestRecipientStrategy:
 
     def test_spot_all_players(self) -> None:
         """actor / target どちらも monster なので player の self 除外なし。"""
-        registry = ObservedEventRegistry(
-            event_to_strategy={MonsterPredatedMonsterInSpotEvent: "spot_graph"}
-        )
+        registry = ObservedEventRegistry(event_to_strategy={MonsterPredatedMonsterInSpotEvent: "spot_graph"})
         graph = MagicMock()
         graph.entity_spot_mapping.return_value = {
             EntityId.create(1): SPOT_A,
@@ -95,11 +93,10 @@ class TestRecipientStrategy:
 
 def _make_ctx() -> ObservationFormatterContext:
     name_resolver = MagicMock(spec=ObservationNameResolver)
-    name_resolver.monster_name_by_monster_id.side_effect = (
-        lambda mid: {WOLF.value: "灰色のオオカミ", RABBIT.value: "ウサギ"}.get(
-            mid.value, "?"
-        )
-    )
+    name_resolver.monster_name_by_monster_id.side_effect = lambda mid: {
+        WOLF.value: "灰色のオオカミ",
+        RABBIT.value: "ウサギ",
+    }.get(mid.value, "?")
     return ObservationFormatterContext(
         name_resolver=name_resolver,
         item_repository=None,
@@ -126,9 +123,7 @@ class TestFormatter:
     def test_prose(self) -> None:
         """target_incapacitated=True で「{attacker}が{prey}を仕留めた」。"""
         formatter = SpotGraphObservationFormatter(_make_ctx())
-        result = formatter.format(
-            _make_event(target_incapacitated=True), PlayerId(1)
-        )
+        result = formatter.format(_make_event(target_incapacitated=True), PlayerId(1))
 
         assert result is not None
         assert "仕留めた" in result.prose

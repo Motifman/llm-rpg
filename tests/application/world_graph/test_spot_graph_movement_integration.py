@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import pytest
 from tests.domain.player.aggregate.test_player_status_aggregate import create_test_status_aggregate
+from tests.support.trace_recorders import CollectingTraceRecorder
 
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import (
     SpotGraphTravelStageService,
+)
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+    WorldTickFailurePolicy,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -25,6 +31,12 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    SpotTravelUnreachableException,
+)
+from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service import (
+    SpotGraphNavigationService,
+)
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
@@ -231,9 +243,7 @@ def test_first_arrival_callback_survives_a_later_player_failure() -> None:
                 raise RuntimeError("second player failed")
             status = player_repo.find_by_id(player_id)
             assert status is not None
-            status.set_spot_navigation_state(
-                PlayerSpotNavigationState.at_rest(SpotId.create(2))
-            )
+            status.set_spot_navigation_state(PlayerSpotNavigationState.at_rest(SpotId.create(2)))
             player_repo.save(status)
 
     arrived: list[int] = []
@@ -269,20 +279,14 @@ class TestTravelStageEliminatedPlayer:
             _FixedContext(items=frozenset(), flags=frozenset()),
         )
         stage.set_eliminated_checker(lambda player_id: player_id == PlayerId(1))
-        svc.start_travel_to_spot(
-            PlayerId(1), SpotId.create(2), frozenset(), frozenset()
-        )
+        svc.start_travel_to_spot(PlayerId(1), SpotId.create(2), frozenset(), frozenset())
 
         stage.run(WorldTick(1))
 
         player = player_repo.find_by_id(PlayerId(1))
         assert player is not None
-        assert player.spot_navigation_state == PlayerSpotNavigationState.at_rest(
-            SpotId.create(1)
-        )
-        assert graph_repo.find_graph().get_entity_spot(
-            EntityId.create(1)
-        ) == SpotId.create(1)
+        assert player.spot_navigation_state == PlayerSpotNavigationState.at_rest(SpotId.create(1))
+        assert graph_repo.find_graph().get_entity_spot(EntityId.create(1)) == SpotId.create(1)
 
     def test_active_player_still_advances_reserved_travel(self) -> None:
         """退場していない移動中 player は、従来どおり次の spot へ進む。"""
@@ -297,20 +301,14 @@ class TestTravelStageEliminatedPlayer:
             _FixedContext(items=frozenset(), flags=frozenset()),
         )
         stage.set_eliminated_checker(lambda _player_id: False)
-        svc.start_travel_to_spot(
-            PlayerId(1), SpotId.create(2), frozenset(), frozenset()
-        )
+        svc.start_travel_to_spot(PlayerId(1), SpotId.create(2), frozenset(), frozenset())
 
         stage.run(WorldTick(1))
 
         player = player_repo.find_by_id(PlayerId(1))
         assert player is not None
-        assert player.spot_navigation_state == PlayerSpotNavigationState.at_rest(
-            SpotId.create(2)
-        )
-        assert graph_repo.find_graph().get_entity_spot(
-            EntityId.create(1)
-        ) == SpotId.create(2)
+        assert player.spot_navigation_state == PlayerSpotNavigationState.at_rest(SpotId.create(2))
+        assert graph_repo.find_graph().get_entity_spot(EntityId.create(1)) == SpotId.create(2)
 
 
 class TestTravelStageOnArrival:
@@ -332,7 +330,9 @@ class TestTravelStageOnArrival:
         ctx = _FixedContext(items=frozenset(), flags=frozenset())
         arrived: list[int] = []
         stage = SpotGraphTravelStageService(
-            player_repo, svc, ctx,
+            player_repo,
+            svc,
+            ctx,
             on_arrival=lambda pid: arrived.append(pid.value),
         )
 
@@ -353,7 +353,9 @@ class TestTravelStageOnArrival:
         ctx = _FixedContext(items=frozenset(), flags=frozenset())
         arrived: list[int] = []
         stage = SpotGraphTravelStageService(
-            player_repo, svc, ctx,
+            player_repo,
+            svc,
+            ctx,
             on_arrival=lambda pid: arrived.append(pid.value),
         )
 
@@ -381,7 +383,7 @@ class TestTravelStageOnArrival:
         assert arrived == [1]
 
     def test_on_arrival_exception_does_not_fail_travel_stage(self) -> None:
-        """コールバック失敗は他 player の advance を止めない (fail-safe)。"""
+        """isolate でコールバックが失敗しても移動は完了し、失敗は travel.arrival_observer として trace に残る。"""
         graph = _line_graph_three_spots(travel_ticks=1)
         graph_repo = InMemorySpotGraphRepository(graph)
         player_repo = InMemoryPlayerStatusRepository()
@@ -393,10 +395,19 @@ class TestTravelStageOnArrival:
         def boom(pid):
             raise RuntimeError("notify boom")
 
-        stage = SpotGraphTravelStageService(player_repo, svc, ctx, on_arrival=boom)
+        recorder = CollectingTraceRecorder()
+        stage = SpotGraphTravelStageService(
+            player_repo,
+            svc,
+            ctx,
+            on_arrival=boom,
+            failure_isolator=WorldTickFailureIsolator(
+                policy=WorldTickFailurePolicy.ISOLATE,
+                trace_recorder_provider=lambda: recorder,
+            ),
+        )
 
         svc.start_travel_to_spot(PlayerId(1), SpotId.create(2), frozenset(), frozenset())
-        # 例外を呑む (fail-safe) のでテストが通る
         stage.run(WorldTick(1))
 
         # 到着自体はちゃんと完了している (travel_stage の本体は走り切る)
@@ -404,3 +415,67 @@ class TestTravelStageOnArrival:
         assert p is not None
         assert p.spot_navigation_state is not None
         assert not p.spot_navigation_state.is_traveling
+        assert [e.payload["stage"] for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)] == [
+            "travel.arrival_observer"
+        ]
+
+
+class TestUnreachableTravelMessageHidesSpotIds:
+    """移動を始められないときの文が、内部のスポット番号を含まない普通の文になることを保証する。"""
+
+    def test_destination_without_route_reports_plain_sentence_without_spot_ids(self) -> None:
+        """経路の無い目的地を指定すると、番号も場所の名前も含まない「その先へは行けない。」で失敗する。"""
+        graph = _line_graph_three_spots()
+        graph.add_spot(_node(19))
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+        svc = _movement_service(graph_repo, player_repo)
+
+        with pytest.raises(SpotTravelUnreachableException) as excinfo:
+            svc.start_travel_to_spot(PlayerId(1), SpotId.create(19), frozenset(), frozenset())
+
+        assert str(excinfo.value) == "その先へは行けない。"
+
+    def test_flooded_connection_on_the_only_route_reports_plain_sentence_without_spot_ids(
+        self,
+    ) -> None:
+        """唯一の経路の通路が通れなくなる (水で沈むなど) と、同じ行き先の指定が「その先へは行けない。」で失敗する。"""
+        graph = _line_graph_three_spots()
+        flooded = graph.get_connection(ConnectionId.create(2))
+        graph.set_connection_passage(ConnectionId.create(2), replace(flooded.passage, traversable=False))
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+        svc = _movement_service(graph_repo, player_repo)
+
+        with pytest.raises(SpotTravelUnreachableException) as excinfo:
+            svc.start_travel_to_spot(PlayerId(1), SpotId.create(3), frozenset(), frozenset())
+
+        assert str(excinfo.value) == "その先へは行けない。"
+
+    def test_route_leg_without_passable_connection_reports_plain_sentence_without_spot_ids(
+        self,
+    ) -> None:
+        """経路の途中に通れる接続が見つからないときも、番号を含まない「その先へは行けない。」で失敗する。"""
+        graph = _line_graph_three_spots()
+        graph.add_spot(_node(19))
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+
+        class _RouteThroughMissingLeg(SpotGraphNavigationService):
+            def calculate_route(self, graph, from_spot_id, to_spot_id):
+                return [from_spot_id, SpotId.create(19)]
+
+        svc = SpotGraphMovementApplicationService(
+            graph_repo,
+            player_repo,
+            navigation_service=_RouteThroughMissingLeg(),
+            command_scope_factory=_DirectScopeFactory(graph_repo, player_repo),
+        )
+
+        with pytest.raises(SpotTravelUnreachableException) as excinfo:
+            svc.start_travel_to_spot(PlayerId(1), SpotId.create(19), frozenset(), frozenset())
+
+        assert str(excinfo.value) == "その先へは行けない。"

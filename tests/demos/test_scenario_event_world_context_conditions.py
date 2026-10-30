@@ -12,12 +12,7 @@ from pathlib import Path
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "scenarios"
-    / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 
 def _scenario_with_probe(tmp_path: Path, condition: dict) -> Path:
@@ -33,7 +28,6 @@ def _scenario_with_probe(tmp_path: Path, condition: dict) -> Path:
                     "effect_type": "SET_FLAG",
                     "parameters": {
                         "flag_name": "world_context_runtime_probe_fired",
-                        "value": True,
                     },
                 }
             ],
@@ -45,10 +39,7 @@ def _scenario_with_probe(tmp_path: Path, condition: dict) -> Path:
 
 
 def _probe_fired(runtime) -> bool:
-    return (
-        "world_context_runtime_probe_fired"
-        in runtime._world_flag_state.as_frozen_set()
-    )
+    return "world_context_runtime_probe_fired" in runtime._world_flag_state.as_frozen_set()
 
 
 class TestGamePhaseConditionRuntimeWiring:
@@ -93,9 +84,7 @@ class TestPlayersAtSpotConditionRuntimeWiring:
 
         assert _probe_fired(runtime) is True
 
-    def test_event_does_not_fire_when_required_players_are_missing(
-        self, tmp_path
-    ) -> None:
+    def test_event_does_not_fire_when_required_players_are_missing(self, tmp_path) -> None:
         """8人しか居ない集会室では、必要人数9人の出来事は発火しない。
 
         発火する側だけでは、条件を常に真にしても公開入口の試験が通る。

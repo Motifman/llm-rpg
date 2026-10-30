@@ -34,6 +34,7 @@ from ai_rpg_world.application.player.services.player_life_query import PlayerLif
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.declared_observation_message import (
     declared_observation_message_for_lighting,
 )
@@ -58,6 +59,13 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_item_specs_to_inventory,
     plan_item_removals_from_inventory,
     remove_items_of_specs_from_inventory,
+)
+from ai_rpg_world.application.world_graph.target_item_name_resolution import (
+    HeldItem,
+    ItemNameOutcome,
+    ItemNameRescuer,
+    TargetItemNameResolution,
+    resolve_target_item_name,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
@@ -105,6 +113,10 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
+from ai_rpg_world.domain.world_graph.value_object.unresolved_item_name import (
+    UNRESOLVED_ITEM_NAME_KEY,
+    UnresolvedItemNameReason,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.command_scope import CommandContext
@@ -124,9 +136,7 @@ _LIGHTING_CONDITION_TYPES = (
 )
 
 
-def _actor_meets_own_state_conditions(
-    idef: InteractionDef, actor_state: Mapping[str, Any]
-) -> bool:
+def _actor_meets_own_state_conditions(idef: InteractionDef, actor_state: Mapping[str, Any]) -> bool:
     """行動者自身の state 条件をすべて満たすか。
 
     ``PLAYER_STATE_IS`` **だけ**を見る。この条件が参照するのは行動者自身の
@@ -150,9 +160,7 @@ def _actor_meets_own_state_conditions(
     return True
 
 
-def _known_ally_meets_target_role_conditions(
-    idef: InteractionDef, actor_state: Mapping[str, Any] | None
-) -> bool:
+def _known_ally_meets_target_role_conditions(idef: InteractionDef, actor_state: Mapping[str, Any] | None) -> bool:
     """既知の相方が、対象 role 条件を満たすはずかを公開済み情報だけで判定する。
 
     「同じ側」と知っているなら、対象の role は行動者自身と同じであることも
@@ -163,10 +171,7 @@ def _known_ally_meets_target_role_conditions(
     if actor_state is None or "role" not in actor_state:
         return True
     for cond in idef.preconditions:
-        if (
-            cond.condition_type
-            is not InteractionConditionTypeEnum.TARGET_PLAYER_STATE_IS
-        ):
+        if cond.condition_type is not InteractionConditionTypeEnum.TARGET_PLAYER_STATE_IS:
             continue
         required = cond.required_state or {}
         if "role" in required and required["role"] != actor_state["role"]:
@@ -185,8 +190,7 @@ def _target_requirement(idef: InteractionDef) -> TargetRequirement:
     return (
         TargetRequirement.INCAPACITATED
         if any(
-            cond.condition_type
-            is InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED
+            cond.condition_type is InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED
             for cond in idef.preconditions
         )
         else TargetRequirement.ACTIVE
@@ -252,7 +256,8 @@ class PlayerInteractionApplicationService:
         # と書く。**tick は出さない** (#892)。
         minutes_per_tick: int | None = None,
         player_perception_policy: PlayerPerceptionPolicy | None = None,
-        interaction_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
+        interaction_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
+        | None = None,
         overflow_sink: Any = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
@@ -264,9 +269,7 @@ class PlayerInteractionApplicationService:
         self._fallen_body_registry = fallen_body_registry
         self._world_flag_state = world_flag_state
         self._effect_service = effect_service or WorldGraphEffectService()
-        self._interaction = interaction_service or SpotInteractionService(
-            self._effect_service
-        )
+        self._interaction = interaction_service or SpotInteractionService(self._effect_service)
         self._cooldown_store = cooldown_store
         self._current_tick_provider = current_tick_provider
         self._minutes_per_tick = minutes_per_tick
@@ -275,10 +278,23 @@ class PlayerInteractionApplicationService:
         self._weather_type_provider = weather_type_provider
         self._player_perception_policy = player_perception_policy
         self._interaction_command_scope_factory = interaction_command_scope_factory
-        self._by_action_name: dict[str, InteractionDef] = {
-            idef.action_name: idef for idef in player_interactions
-        }
+        self._by_action_name: dict[str, InteractionDef] = {idef.action_name: idef for idef in player_interactions}
         self._overflow_sink = overflow_sink
+        self._item_name_rescue: ItemNameRescuer | None = None
+        self._trace_recorder: Any | None = None
+        self._trace_tick_provider: Any | None = None
+
+    def set_item_name_rescue(self, rescue: ItemNameRescuer | None) -> None:
+        """品名を意味で読み替える判断を後付けで注入する。未注入なら名前の重なりだけで当てる。"""
+        self._item_name_rescue = rescue
+
+    @property
+    def item_name_rescue(self) -> ItemNameRescuer | None:
+        return self._item_name_rescue
+
+    def set_trace_recorder(self, recorder: Any, current_tick_provider: Any) -> None:
+        self._trace_recorder = recorder
+        self._trace_tick_provider = current_tick_provider
 
     def set_effective_lighting_resolver(self, resolver: Any | None) -> None:
         """実効照明 resolver を後付けで注入する (二段構築用)。"""
@@ -407,12 +423,8 @@ class PlayerInteractionApplicationService:
             return ()
         return tuple(
             action_name
-            for action_name in visible_action_names_for_state(
-                tuple(self._by_action_name.values()), actor_state
-            )
-            if self._interaction_allows_actor(
-                actor_player_id, self._by_action_name[action_name]
-            )
+            for action_name in visible_action_names_for_state(tuple(self._by_action_name.values()), actor_state)
+            if self._interaction_allows_actor(actor_player_id, self._by_action_name[action_name])
         )
 
     def available_action_labels_for(
@@ -465,9 +477,7 @@ class PlayerInteractionApplicationService:
         take が出る」は残るが、〔手ぶら〕が同じ行に出ているので読み取れる。
         """
         return tuple(
-            self._format_entry_as_legacy_label(
-                self._action_display_entry(action_name, idef, actor_player_id)
-            )
+            self._format_entry_as_legacy_label(self._action_display_entry(action_name, idef, actor_player_id))
             for action_name, idef in self._by_action_name.items()
             if self._interaction_allows_actor(actor_player_id, idef)
             and self._is_offerable(
@@ -559,17 +569,11 @@ class PlayerInteractionApplicationService:
         """
         if target_is_eliminated:
             return False
-        if actor_state is not None and not _actor_meets_own_state_conditions(
-            idef, actor_state
-        ):
+        if actor_state is not None and not _actor_meets_own_state_conditions(idef, actor_state):
             return False
-        if target_is_known_ally and not _known_ally_meets_target_role_conditions(
-            idef, actor_state
-        ):
+        if target_is_known_ally and not _known_ally_meets_target_role_conditions(idef, actor_state):
             return False
-        return (
-            _target_requirement(idef) is TargetRequirement.INCAPACITATED
-        ) == target_is_incapacitated
+        return (_target_requirement(idef) is TargetRequirement.INCAPACITATED) == target_is_incapacitated
 
     def _action_display_entry(
         self,
@@ -602,11 +606,7 @@ class PlayerInteractionApplicationService:
             # blocked 側の既存 formatter は blocking_hints だけを読む。
             # 宣言条件も併記し、「何の条件が、いまどう不成立か」を一続きで
             # 読めるようにする。対象の秘匿条件は condition_hints に入らない。
-            blocking_hints=(
-                (*condition_hints, *current_blockers)
-                if current_blockers
-                else ()
-            ),
+            blocking_hints=((*condition_hints, *current_blockers) if current_blockers else ()),
         )
 
     @staticmethod
@@ -618,9 +618,7 @@ class PlayerInteractionApplicationService:
             display_label=entry.display_label,
         )
 
-    def _currently_blocking_hint(
-        self, actor_player_id: PlayerId | None, idef: InteractionDef
-    ) -> str:
+    def _currently_blocking_hint(self, actor_player_id: PlayerId | None, idef: InteractionDef) -> str:
         """いま明るさの条件を満たしていなければ、その旨を返す。
 
         実 run 011 で、インポスターが明るい集会室から 3 回続けて襲おうと
@@ -663,8 +661,7 @@ class PlayerInteractionApplicationService:
         return tuple(
             cond
             for cond in idef.preconditions
-            if cond.condition_type in _LIGHTING_CONDITION_TYPES
-            and cond.required_lighting is not None
+            if cond.condition_type in _LIGHTING_CONDITION_TYPES and cond.required_lighting is not None
         )
 
     @staticmethod
@@ -676,9 +673,7 @@ class PlayerInteractionApplicationService:
         """
         for cond in conditions:
             matches = current == cond.required_lighting
-            is_positive = (
-                cond.condition_type is InteractionConditionTypeEnum.SPOT_LIGHTING_IS
-            )
+            is_positive = cond.condition_type is InteractionConditionTypeEnum.SPOT_LIGHTING_IS
             if matches is not is_positive:
                 return False
         return True
@@ -717,9 +712,7 @@ class PlayerInteractionApplicationService:
             current = self._current_tick_provider()
         except Exception:
             return 0
-        return self._remaining_cooldown_ticks(
-            actor_player_id, action_name, idef, current
-        )
+        return self._remaining_cooldown_ticks(actor_player_id, action_name, idef, current)
 
     def available_action_labels(self) -> tuple[str, ...]:
         """同席者行に出す**表示用**の action 文字列を宣言順で返す。
@@ -788,9 +781,7 @@ class PlayerInteractionApplicationService:
         """
         idef = self._by_action_name.get(action_name)
         if idef is None:
-            raise InteractionNotFoundException(
-                f"対人 action が定義されていません: {action_name}"
-            )
+            raise InteractionNotFoundException(f"対人 action が定義されていません: {action_name}")
         scope_factory = self._interaction_command_scope_factory
         if scope_factory is None:
             raise RuntimeError("対人interaction用CommandScopeFactoryが未配線です。")
@@ -842,12 +833,8 @@ class PlayerInteractionApplicationService:
     ) -> PlayerInteractionResultDto:
         """解決済み定義をcommand専用repositoryだけで適用する。"""
         if not self._interaction_allows_actor(actor_player_id, idef):
-            plane = actor_plane_for(
-                actor_player_id, self._player_perception_policy
-            )
-            raise InteractionActorPlaneNotAllowedException(
-                actor_plane_refusal_message(plane)
-            )
+            plane = actor_plane_for(actor_player_id, self._player_perception_policy)
+            raise InteractionActorPlaneNotAllowedException(actor_plane_refusal_message(plane))
         if int(actor_player_id) == int(target_player_id):
             # 自分を対象にした対人行為は、成立しても意味が無いうえに
             # 「対象から奪って自分に渡す」が no-op になって成功として返る。
@@ -858,9 +845,7 @@ class PlayerInteractionApplicationService:
 
         graph = spot_graph_repository.find_graph()
         actor_spot = graph.get_entity_spot(EntityId.create(int(actor_player_id)))
-        target_was_down = self._player_life_query.has_reportable_body(
-            target_player_id
-        )
+        target_was_down = self._player_life_query.has_reportable_body(target_player_id)
         actor_status = None
         target_status = None
         if player_status_repository is not None:
@@ -875,9 +860,7 @@ class PlayerInteractionApplicationService:
                 )
             target_spot = body.spot_id
         else:
-            target_spot = graph.get_entity_spot(
-                EntityId.create(int(target_player_id))
-            )
+            target_spot = graph.get_entity_spot(EntityId.create(int(target_player_id)))
         if actor_spot != target_spot:
             raise ApplicationException(
                 "相手が同じ場所にいません。",
@@ -906,50 +889,37 @@ class PlayerInteractionApplicationService:
             )
             raise InteractionNotAllowedException(message)
 
-        actor_inv = self._require_inventory(
-            actor_player_id, player_inventory_repository
-        )
-        target_inv = self._require_inventory(
-            target_player_id, player_inventory_repository
-        )
+        actor_inv = self._require_inventory(actor_player_id, player_inventory_repository)
+        target_inv = self._require_inventory(target_player_id, player_inventory_repository)
 
         # 効果を当てる前に対象の状態を控える。適用後に問い合わせると、
         # 昏倒させた一撃そのものが「倒れている間にされたこと」に化ける。
-        owned = collect_owned_item_spec_ids_from_inventory(
-            actor_inv, item_repository
-        )
-        owned_counts = count_owned_item_instances_by_spec(
-            actor_inv, item_repository
-        )
-        target_owned = collect_owned_item_spec_ids_from_inventory(
-            target_inv, item_repository
-        )
+        owned = collect_owned_item_spec_ids_from_inventory(actor_inv, item_repository)
+        owned_counts = count_owned_item_instances_by_spec(actor_inv, item_repository)
+        target_owned = collect_owned_item_spec_ids_from_inventory(target_inv, item_repository)
         spot_presence_count = len(graph.presence_at(actor_spot).present_entity_ids)
-
-        # LLM は「太い流木を奪う」のように**名前**で品目を指す (倒れた相手の
-        # 持ち物は prompt に出ている: PR #824)。domain 側は spec id しか扱わ
-        # ないので、名前 → spec id の解決はここで済ませて
-        # ``interaction_parameters`` に入れておく。見つからないときは入れない
-        # ままにして、``TARGET_HAS_ITEM`` に「相手はそれを持っていない」と
-        # 言わせる (ここで例外にすると LLM が学習できない失敗になる)。
-        resolved_parameters = self._with_resolved_item_spec_id(
-            interaction_parameters,
-            target_inv,
-            item_repository,
-            item_spec_repository,
-        )
 
         # 再使用間隔。**前提条件より先に見る。**
         #
         # あとに置くと「暗くないので襲えない」が先に返り、待たされている
         # ことが分からない。行為者自身の状態なので、伝えても何も漏れない。
-        remaining = self._remaining_cooldown_ticks(
-            actor_player_id, action_name, idef, current_tick
-        )
+        remaining = self._remaining_cooldown_ticks(actor_player_id, action_name, idef, current_tick)
         if remaining > 0:
-            raise InteractionNotAllowedException(
-                f"まだ間を置く必要がある。あと{self._span_text(remaining)}。"
-            )
+            raise InteractionNotAllowedException(f"まだ間を置く必要がある。あと{self._span_text(remaining)}。")
+
+        # LLM は「太い流木を奪う」のように**名前**で品目を指す (倒れた相手の
+        # 持ち物は prompt に出ている: PR #824)。domain 側は spec id しか扱わ
+        # ないので、名前 → spec id の解決はここで済ませて
+        # ``interaction_parameters`` に入れておく。当てられないときは理由だけを
+        # 置き、``TARGET_HAS_ITEM`` に自分の番で断らせる (D1641)。
+        resolved_parameters, name_resolution = self._with_resolved_item_spec_id(
+            interaction_parameters,
+            target_inv,
+            item_repository,
+            item_spec_repository,
+            action_name=action_name,
+        )
+        self._record_item_name_resolution(name_resolution, actor_player_id, target_player_id, action_name)
 
         ok, reason = self._interaction.can_interact(
             idef,
@@ -963,12 +933,8 @@ class PlayerInteractionApplicationService:
             target_player_status=target_status,
             target_owned_item_spec_ids=target_owned,
             current_tick=current_tick,
-            current_time_of_day_phase=self._current_value_from(
-                self._time_of_day_phase_provider
-            ),
-            current_weather_type=self._current_value_from(
-                self._weather_type_provider
-            ),
+            current_time_of_day_phase=self._current_value_from(self._time_of_day_phase_provider),
+            current_weather_type=self._current_value_from(self._weather_type_provider),
             current_effective_lighting=(
                 self._effective_lighting_resolver.resolve(actor_spot)
                 if self._effective_lighting_resolver is not None
@@ -1104,9 +1070,7 @@ class PlayerInteractionApplicationService:
             for target_damage_spec in result.target_damage_specs:
                 if target_damage_spec.damage <= 0:
                     continue
-                target_status.apply_damage(
-                    target_damage_spec.damage, killer_player_id=actor_player_id
-                )
+                target_status.apply_damage(target_damage_spec.damage, killer_player_id=actor_player_id)
             if event_publisher is not None:
                 status_events_from_damage.extend(target_status.get_events())
                 target_status.clear_events()
@@ -1121,10 +1085,7 @@ class PlayerInteractionApplicationService:
             )
             or ""
         )
-        if (
-            declared_witness_message.strip()
-            and idef.witness_policy is WitnessPolicy.SAME_SPOT
-        ):
+        if declared_witness_message.strip() and idef.witness_policy is WitnessPolicy.SAME_SPOT:
             status_events_from_damage = [
                 replace(
                     event,
@@ -1149,49 +1110,49 @@ class PlayerInteractionApplicationService:
                 action_name,
             )
         else:
-            event_publisher.publish_all([
-                *status_events_from_damage,
-                PlayerInteractedWithPlayerEvent.create(
-                    aggregate_id=graph.graph_id,
-                    aggregate_type="SpotGraphAggregate",
-                    entity_id=EntityId.create(int(actor_player_id)),
-                    target_entity_id=EntityId.create(int(target_player_id)),
-                    spot_id=actor_spot,
-                    action_name=action_name,
-                    result_message="; ".join(result.messages),
-                    action_display_label=idef.effective_display_label,
-                    witness_observation_message=declared_witness_message,
-                    witness_policy=idef.witness_policy,
-                    target_was_down=target_was_down,
-                    notify_target=idef.notify_target,
-                    target_observation_message=(
-                        idef.target_observation_message or ""
+            event_publisher.publish_all(
+                [
+                    *status_events_from_damage,
+                    PlayerInteractedWithPlayerEvent.create(
+                        aggregate_id=graph.graph_id,
+                        aggregate_type="SpotGraphAggregate",
+                        entity_id=EntityId.create(int(actor_player_id)),
+                        target_entity_id=EntityId.create(int(target_player_id)),
+                        spot_id=actor_spot,
+                        action_name=action_name,
+                        result_message="; ".join(result.messages),
+                        action_display_label=idef.effective_display_label,
+                        witness_observation_message=declared_witness_message,
+                        witness_policy=idef.witness_policy,
+                        target_was_down=target_was_down,
+                        notify_target=idef.notify_target,
+                        target_observation_message=(idef.target_observation_message or ""),
                     ),
-                )
-            ])
+                ]
+            )
 
         # 成功が確定してから起点を更新する。**空振りでは更新しない。**
         # 前提条件を確かめる行動そのものが罰になると、条件を試せなくなる。
         self._record_cooldown_start(actor_player_id, action_name, idef, current_tick)
 
+        messages = tuple(result.messages)
+        if name_resolution is not None and name_resolution.renamed:
+            # 黙って読み替えると、崩れた名前で通ると学んで書き続ける。奪えた
+            # 後なので、品の名前を伝えても相手の持ち物は漏れない。
+            messages = (
+                f"「{name_resolution.written}」は「{name_resolution.resolved_name}」と解釈した。",
+                *messages,
+            )
         return PlayerInteractionResultDto(
             action_name=action_name,
             actor_player_id=int(actor_player_id),
             target_player_id=int(target_player_id),
-            messages=tuple(result.messages),
+            messages=messages,
             action_display_label=idef.effective_display_label,
-            actor_granted_spec_ids=tuple(
-                s.value for s in result.item_spec_ids_to_grant
-            ),
-            actor_removed_spec_ids=tuple(
-                s.value for s in result.item_spec_ids_to_remove
-            ),
-            target_granted_spec_ids=tuple(
-                s.value for s in result.target_item_spec_ids_to_grant
-            ),
-            target_removed_spec_ids=tuple(
-                s.value for s in result.target_item_spec_ids_to_remove
-            ),
+            actor_granted_spec_ids=tuple(s.value for s in result.item_spec_ids_to_grant),
+            actor_removed_spec_ids=tuple(s.value for s in result.item_spec_ids_to_remove),
+            target_granted_spec_ids=tuple(s.value for s in result.target_item_spec_ids_to_grant),
+            target_removed_spec_ids=tuple(s.value for s in result.target_item_spec_ids_to_remove),
         )
 
     #: LLM が奪う品目を名指しするときに使う ``interaction_parameters`` のキー。
@@ -1206,67 +1167,87 @@ class PlayerInteractionApplicationService:
         target_inventory: PlayerInventoryAggregate,
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
-    ) -> dict[str, Any] | None:
+        *,
+        action_name: str,
+    ) -> tuple[dict[str, Any] | None, TargetItemNameResolution | None]:
         """``parameters["item"]`` (品目名) を対象の所持から spec id へ解決する。
 
-        見つからなければ何も足さない。「相手はその名前のものを持っていない」
-        は普通に起きる状況なので、ここで例外にすると LLM が学習できない失敗に
-        なる。条件 (``TARGET_HAS_ITEM``) 側が不成立として言葉で返す。
+        当てられなければ spec id を足さず、理由 (曖昧 / 見分けられない) だけを
+        足す。持っていないと分かったときは何も足さない。ここで例外にすると、
+        前提条件より先に断りが出て、相手の持ち物の手がかりが漏れる。
 
         既に ``item_spec_id`` が入っている呼び出し (テストや将来の別経路) は
         そのまま尊重して上書きしない。
         """
         if not interaction_parameters:
-            return interaction_parameters
+            return interaction_parameters, None
         if self.ITEM_SPEC_ID_KEY in interaction_parameters:
-            return interaction_parameters
+            return interaction_parameters, None
         raw_name = interaction_parameters.get(self.ITEM_NAME_KEY)
         if not isinstance(raw_name, str) or not raw_name.strip():
-            return interaction_parameters
-        spec_id = self._find_spec_id_by_name(
-            target_inventory,
+            return interaction_parameters, None
+        resolution = resolve_target_item_name(
             raw_name.strip(),
-            item_repository,
-            item_spec_repository,
+            self._held_items(target_inventory, item_repository, item_spec_repository),
+            rescue=self._item_name_rescue,
+            action_name=action_name,
+            world_item_names=frozenset(spec.name for spec in item_spec_repository.find_all()),
         )
-        if spec_id is None:
-            return interaction_parameters
-        return {**interaction_parameters, self.ITEM_SPEC_ID_KEY: spec_id.value}
+        if resolution.spec_id is not None:
+            return (
+                {**interaction_parameters, self.ITEM_SPEC_ID_KEY: resolution.spec_id.value},
+                resolution,
+            )
+        reason = {
+            ItemNameOutcome.AMBIGUOUS: UnresolvedItemNameReason.AMBIGUOUS,
+            ItemNameOutcome.UNRECOGNIZED: UnresolvedItemNameReason.UNRECOGNIZED,
+        }.get(resolution.outcome)
+        if reason is None:
+            return interaction_parameters, resolution
+        return (
+            {**interaction_parameters, UNRESOLVED_ITEM_NAME_KEY: reason.value},
+            resolution,
+        )
 
-    def _find_spec_id_by_name(
+    def _held_items(
         self,
         inventory: PlayerInventoryAggregate,
-        name: str,
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
-    ) -> ItemSpecId | None:
-        """対象の所持品から表示名が一致する item spec id を引く。
+    ) -> tuple[HeldItem, ...]:
+        held: list[HeldItem] = []
+        for spec_id in sorted(
+            collect_owned_item_spec_ids_from_inventory(inventory, item_repository),
+            key=lambda s: s.value,
+        ):
+            spec = item_spec_repository.find_by_id(spec_id)
+            name = getattr(spec, "name", None) if spec is not None else None
+            if name:
+                held.append(HeldItem(spec_id, name, getattr(spec, "description", "") or ""))
+        return tuple(held)
 
-        同名の別 spec が複数あるときは、どれか 1 つを選ばずに例外で止める。
-        ``collect_owned_item_spec_ids_from_inventory`` が返すのは frozenset で
-        反復順が保証されないため、素朴に最初の一致を返すと **実行ごとに違う
-        物を奪う**。対象名の解決 (``resolve_target``) で種別横断の同名衝突を
-        拒否したのと同じ理由で、ここでも黙って選ばない。
-        """
-        matches = [
-            spec_id
-            for spec_id in collect_owned_item_spec_ids_from_inventory(
-                inventory, item_repository
+    def _record_item_name_resolution(
+        self,
+        resolution: TargetItemNameResolution | None,
+        actor_player_id: PlayerId,
+        target_player_id: PlayerId,
+        action_name: str,
+    ) -> None:
+        payload = resolution.trace_payload() if resolution is not None else None
+        if payload is None or self._trace_recorder is None:
+            return
+        tick = self._trace_tick_provider() if self._trace_tick_provider else None
+        try:
+            self._trace_recorder.record(
+                TraceEventKind.ITEM_NAME_RESOLUTION,
+                tick=tick,
+                player_id=int(actor_player_id),
+                action_name=action_name,
+                target_player_id=int(target_player_id),
+                **payload,
             )
-            if self._spec_name(spec_id, item_spec_repository) == name
-        ]
-        if len(matches) > 1:
-            raise InteractionNotAllowedException(
-                f"「{name}」に当てはまるものが相手の持ち物に複数ある。"
-                "どれを指すのか決められないので、別の物を指定すること。"
-            )
-        return matches[0] if matches else None
-
-    def _spec_name(
-        self, spec_id: ItemSpecId, item_spec_repository: ItemSpecRepository
-    ) -> str | None:
-        spec = item_spec_repository.find_by_id(spec_id)
-        return getattr(spec, "name", None) if spec is not None else None
+        except Exception:  # pragma: no cover - 記録の失敗で行動を落とさない
+            _logger.warning("failed to record item name resolution trace", exc_info=True)
 
     def _require_free_slots(
         self,
@@ -1287,15 +1268,10 @@ class PlayerInteractionApplicationService:
         from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
         inv = self._require_inventory(player_id, player_inventory_repository)
-        free = sum(
-            1
-            for i in range(inv.max_slots)
-            if inv.get_item_instance_id_by_slot(SlotId(i)) is None
-        )
+        free = sum(1 for i in range(inv.max_slots) if inv.get_item_instance_id_by_slot(SlotId(i)) is None)
         if free < needed:
             raise InteractionNotAllowedException(
-                f"{who}の手が塞がっている (空き {free} / 必要 {needed})。"
-                "先に何かを置くか使うかしてから試すこと。"
+                f"{who}の手が塞がっている (空き {free} / 必要 {needed})。先に何かを置くか使うかしてから試すこと。"
             )
 
     def _require_inventory(
@@ -1348,12 +1324,9 @@ class PlayerInteractionApplicationService:
         if not spec_ids:
             return
         inv = self._require_inventory(player_id, player_inventory_repository)
-        if not remove_items_of_specs_from_inventory(
-            inv, tuple(spec_ids), item_repository
-        ):
+        if not remove_items_of_specs_from_inventory(inv, tuple(spec_ids), item_repository):
             raise ApplicationException(
-                f"{who}の所持品から必要数を取り除けませんでした; "
-                "前提条件との不一致",
+                f"{who}の所持品から必要数を取り除けませんでした; 前提条件との不一致",
                 player_id=int(player_id),
             )
         player_inventory_repository.save(inv)
@@ -1367,9 +1340,5 @@ class PlayerInteractionApplicationService:
         item_repository: ItemRepository,
     ) -> None:
         """両者の所持品を動かす前に、未予約品から削除全量を確保できるか検証する。"""
-        if plan_item_removals_from_inventory(
-            inventory, tuple(spec_ids), item_repository
-        ) is None:
-            raise InteractionNotAllowedException(
-                f"{who}の品は別の取引や依頼に確保されているか、必要数に足りない。"
-            )
+        if plan_item_removals_from_inventory(inventory, tuple(spec_ids), item_repository) is None:
+            raise InteractionNotAllowedException(f"{who}の品は別の取引や依頼に確保されているか、必要数に足りない。")

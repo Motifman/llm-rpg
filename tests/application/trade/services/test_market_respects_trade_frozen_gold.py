@@ -37,11 +37,16 @@ def town(tmp_path: Path) -> Any:
 
     raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
-    raw["players"].append({
-        "id": "tom", "name": "トム", "spawn_spot": spawn,
-        "initial_items": [], "initial_gold": 20,
-        "persona_prompt": "あなたはトム。",
-    })
+    raw["players"].append(
+        {
+            "id": "tom",
+            "name": "トム",
+            "spawn_spot": spawn,
+            "initial_items": [],
+            "initial_gold": 20,
+            "persona_prompt": "あなたはトム。",
+        }
+    )
     raw["players"][0]["initial_gold"] = 20
     raw["market"] = {"board_spot": "market_square"}
     raw["player_trade"] = {"enabled": True, "offer_expires_in_ticks": 24}
@@ -77,7 +82,10 @@ class TestTheBoardSeesFrozenGold:
 
         with pytest.raises(MarketGoldNotEnoughError) as exc:
             town._market_service.place_buy_order(
-                _LENA, item_label=_HERB, quantity=1, unit_price=6,
+                _LENA,
+                item_label=_HERB,
+                quantity=1,
+                unit_price=6,
                 current_tick=town.current_tick(),
             )
 
@@ -97,19 +105,27 @@ class TestTheBoardSeesFrozenGold:
 
         spec = town._item_spec_repo.find_by_name(_HERB).item_spec_id
         grant_item_specs_to_inventory(
-            _TOM, (ItemSpecId.create(spec.value),),
-            town._item_repo, town._item_spec_repo,
-            town._player_inventory_repo, overflow_sink=IGNORE_OVERFLOW,
+            _TOM,
+            (ItemSpecId.create(spec.value),),
+            town._item_repo,
+            town._item_spec_repo,
+            town._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
         town._market_service.place_sell_order(
-            _TOM, item_label=_HERB, quantity=1, unit_price=6,
+            _TOM,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=6,
             current_tick=town.current_tick(),
         )
         _freeze_gold_by_offering(town, _LENA, 15)
 
         with pytest.raises(MarketGoldNotEnoughError):
             town._market_service.buy_best(
-                _LENA, item_label=_HERB, quantity=1,
+                _LENA,
+                item_label=_HERB,
+                quantity=1,
                 current_tick=town.current_tick(),
             )
 
@@ -119,7 +135,10 @@ class TestTheBoardSeesFrozenGold:
         これが無いと、上の 2 件は「板が壊れて誰も買えない」でも緑になる。
         """
         order = town._market_service.place_buy_order(
-            _LENA, item_label=_HERB, quantity=1, unit_price=6,
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=6,
             current_tick=town.current_tick(),
         )
 
@@ -144,21 +163,29 @@ class TestTheBoardSeesFrozenGold:
 
         spec = town._item_spec_repo.find_by_name(_HERB).item_spec_id
         grant_item_specs_to_inventory(
-            _LENA, (ItemSpecId.create(spec.value),),
-            town._item_repo, town._item_spec_repo,
-            town._player_inventory_repo, overflow_sink=IGNORE_OVERFLOW,
+            _LENA,
+            (ItemSpecId.create(spec.value),),
+            town._item_repo,
+            town._item_spec_repo,
+            town._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
         town._player_trade_service.offer(
-            _LENA, target=_TOM,
+            _LENA,
+            target=_TOM,
             gives_items=({"item_spec_id": spec.value, "quantity": 1},),
             gives_gold=0,
-            asks_item_labels=(), asks_gold=5,
+            asks_item_labels=(),
+            asks_gold=5,
             current_tick=town.current_tick(),
         )
 
         with pytest.raises(MarketItemNotOwnedError):
             town._market_service.place_sell_order(
-                _LENA, item_label=_HERB, quantity=1, unit_price=6,
+                _LENA,
+                item_label=_HERB,
+                quantity=1,
+                unit_price=6,
                 current_tick=town.current_tick(),
             )
 
@@ -172,7 +199,10 @@ class TestTheBoardSeesFrozenGold:
         town._player_trade_service.decline(_TOM, offerer=_LENA)
 
         order = town._market_service.place_buy_order(
-            _LENA, item_label=_HERB, quantity=1, unit_price=6,
+            _LENA,
+            item_label=_HERB,
+            quantity=1,
+            unit_price=6,
             current_tick=town.current_tick(),
         )
 

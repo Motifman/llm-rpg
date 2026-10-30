@@ -25,7 +25,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_FORBIDDEN_LIBRARY = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 
 _FIRST = PlayerId(1)
 _SECOND = PlayerId(2)
@@ -33,11 +33,11 @@ _SECOND = PlayerId(2)
 
 def _runtime_with_initial_state(tmp_path: Path, states: dict):
     """players[].initial_state を差し込んだシナリオで runtime を作る。"""
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
     for spawn in scenario["players"]:
         if spawn["id"] in states:
             spawn["initial_state"] = states[spawn["id"]]
-    path = tmp_path / "relay_with_state.json"
+    path = tmp_path / "library_with_state.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
     return create_world_runtime(path)
 
@@ -51,9 +51,7 @@ class TestInitialStateReachesTheAggregate:
 
     def test_declared_key_is_present(self, tmp_path) -> None:
         """players[].initial_state のキーが起動直後から読める。"""
-        runtime = _runtime_with_initial_state(
-            tmp_path, {"player_a": {"role": "hunter"}}
-        )
+        runtime = _runtime_with_initial_state(tmp_path, {"player_a": {"role": "hunter"}})
 
         assert _state_of(runtime, _FIRST) == {"role": "hunter"}
 
@@ -72,20 +70,18 @@ class TestInitialStateReachesTheAggregate:
 
     def test_players_without_a_declaration_stay_empty(self, tmp_path) -> None:
         """宣言していない player の state は空のまま (既存シナリオは不変)。"""
-        runtime = _runtime_with_initial_state(
-            tmp_path, {"player_a": {"role": "hunter"}}
-        )
+        runtime = _runtime_with_initial_state(tmp_path, {"player_a": {"role": "hunter"}})
 
         assert _state_of(runtime, _SECOND) == {}
 
     def test_multiple_keys_are_all_applied(self, tmp_path) -> None:
         """複数キーの宣言が全て載る (1 つ目だけ適用される等がない)。"""
-        runtime = _runtime_with_initial_state(
-            tmp_path, {"player_a": {"role": "hunter", "marked": False, "trust": 3}}
-        )
+        runtime = _runtime_with_initial_state(tmp_path, {"player_a": {"role": "hunter", "marked": False, "trust": 3}})
 
         assert _state_of(runtime, _FIRST) == {
-            "role": "hunter", "marked": False, "trust": 3,
+            "role": "hunter",
+            "marked": False,
+            "trust": 3,
         }
 
 
@@ -96,28 +92,32 @@ class TestDeclaredStateIsUsableAsAPrecondition:
     「役割で行為を絞る」が書けたことになる。
     """
 
-    def test_player_state_is_condition_passes_for_the_declared_role(
-        self, tmp_path
-    ) -> None:
+    def test_player_state_is_condition_passes_for_the_declared_role(self, tmp_path) -> None:
         """PLAYER_STATE_IS が、宣言した役割で成立する。"""
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
         for spawn in scenario["players"]:
             spawn["initial_state"] = {"role": "hunter" if spawn["id"] == "player_a" else "crew"}
-        scenario["player_interactions"] = [{
-            "action_name": "mark",
-            "display_label": "印を刻む",
-            "preconditions": [{
-                "condition_type": "PLAYER_STATE_IS",
-                "required_state": {"role": "hunter"},
-                "failure_message": "あなたにそんな真似はできない。",
-            }],
-            "effects": [{
-                "effect_type": "APPLY_DAMAGE",
-                "target": "TARGET_PLAYER",
-                "parameters": {"damage": 1},
-            }],
-        }]
-        path = tmp_path / "relay_role_gate.json"
+        scenario["player_interactions"] = [
+            {
+                "action_name": "mark",
+                "display_label": "印を刻む",
+                "preconditions": [
+                    {
+                        "condition_type": "PLAYER_STATE_IS",
+                        "required_state": {"role": "hunter"},
+                        "failure_message": "あなたにそんな真似はできない。",
+                    }
+                ],
+                "effects": [
+                    {
+                        "effect_type": "APPLY_DAMAGE",
+                        "target": "TARGET_PLAYER",
+                        "parameters": {"damage": 1},
+                    }
+                ],
+            }
+        ]
+        path = tmp_path / "library_role_gate.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
         runtime = create_world_runtime(path)
 
@@ -145,9 +145,7 @@ class TestResumeDoesNotOverwriteMutatedState:
 
     def test_restored_state_survives(self, tmp_path) -> None:
         """snapshot から復元した state が initial_state に潰されない。"""
-        runtime = _runtime_with_initial_state(
-            tmp_path, {"player_a": {"role": "hunter"}}
-        )
+        runtime = _runtime_with_initial_state(tmp_path, {"player_a": {"role": "hunter"}})
         status = runtime._player_status_repo.find_by_id(_FIRST)
         status.merge_state({"role": "crew", "marked": True})
         runtime._player_status_repo.save(status)

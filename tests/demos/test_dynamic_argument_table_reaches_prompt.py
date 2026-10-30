@@ -22,9 +22,7 @@ class _CapturingClient(StubLlmClient):
         return super().invoke(messages, tools, tool_choice, **kwargs)
 
 
-def test_runtime_places_copyable_candidates_before_the_final_instruction(
-    monkeypatch, tmp_path
-) -> None:
+def test_runtime_places_copyable_candidates_before_the_final_instruction(monkeypatch, tmp_path) -> None:
     """現在地の説明とは別に、実引数名と候補値を行動指示の直前へ集約する。"""
     client = _CapturingClient()
     state = create_world_runtime_session(monkeypatch, tmp_path, stub=client)

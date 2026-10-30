@@ -1,5 +1,6 @@
 """ObservationAppender のテスト（正常・境界・例外）"""
 
+from dataclasses import replace
 from datetime import datetime
 from unittest.mock import MagicMock
 
@@ -9,6 +10,8 @@ from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
+    SubjectUnknownView,
+    WithheldFromStrangers,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationContextBuffer
 from ai_rpg_world.application.observation.services.observation_appender import (
@@ -31,9 +34,7 @@ class TestObservationAppenderNormal:
     def appender(self, buffer):
         return ObservationAppender(buffer=buffer)
 
-    def test_append_adds_entry_buffer_with_all_fields(
-        self, appender, buffer
-    ):
+    def test_append_adds_entry_buffer_with_all_fields(self, appender, buffer):
         """全フィールド指定時に観測がバッファに追加される"""
         player_id = PlayerId(1)
         output = ObservationOutput(
@@ -56,7 +57,7 @@ class TestObservationAppenderNormal:
         assert entries[0].output == output
         assert entries[0].game_time_label == game_time_label
 
-    def test_append_with_game_time_label_None(self, appender, buffer):
+    def test_append_with_game_time_label_none(self, appender, buffer):
         """game_time_label が None でも正常に追加される"""
         player_id = PlayerId(2)
         output = ObservationOutput(
@@ -115,9 +116,7 @@ class TestObservationAppenderNormal:
                 return []
 
         cap = CaptureBuffer()
-        appender = ObservationAppender(
-            buffer=cap, runtime_context_provider=provider
-        )
+        appender = ObservationAppender(buffer=cap, runtime_context_provider=provider)
         out = ObservationOutput(prose="x", structured={"type": "t"})
         appender.append(PlayerId(1), out, datetime.now(), None)
         assert len(calls) == 1
@@ -270,3 +269,204 @@ class TestObservationAppenderTraceRecording:
         # buffer には残っている
         assert len(buffer.get_observations(PlayerId(1))) == 1
 
+
+class TestRecipientView:
+    """受け手ごとに記録する版を選ぶ口が、バッファ・trace・observer のすべてに同じ版を渡すことを保証する。"""
+
+    def _heard(self) -> ObservationOutput:
+        return ObservationOutput(
+            prose="ノアが言った: 「水門」",
+            structured={"type": "player_spoke", "speaker": "ノア"},
+            observation_category="social",
+            subject_name="ノア",
+            if_subject_unknown=SubjectUnknownView(prose="誰かが言った: 「水門」", structured={"type": "player_spoke"}),
+        )
+
+    def _hide(self, _player_id: PlayerId, output: ObservationOutput) -> ObservationOutput:
+        assert output.if_subject_unknown is not None
+        return replace(
+            output,
+            prose=output.if_subject_unknown.prose,
+            structured=output.if_subject_unknown.structured,
+            subject_name=None,
+            if_subject_unknown=None,
+        )
+
+    def test_buffer_trace_and_observers_get_the_chosen_view(self) -> None:
+        """伏せた版を選ぶと、バッファの記録・trace の本文・observer の受け取る観測のどれにも名前が残らず、trace に伏せた印が付く。"""
+        from ai_rpg_world.application.trace import NullTraceRecorder
+
+        buffer = DefaultObservationContextBuffer()
+        recorder = NullTraceRecorder()
+        recorded = []
+        original_record = recorder.record
+        recorder.record = lambda kind, **kw: recorded.append(original_record(kind, **kw))  # type: ignore[method-assign]
+        observed: list[ObservationOutput] = []
+        appender = ObservationAppender(
+            buffer=buffer,
+            trace_recorder=recorder,
+            observers=[lambda _pid, out: observed.append(out)],
+            recipient_view=self._hide,
+        )
+
+        appender.append(PlayerId(7), self._heard(), datetime.now())
+
+        assert buffer.get_observations(PlayerId(7))[0].output.prose == "誰かが言った: 「水門」"
+        assert recorded[0].payload["prose"] == "誰かが言った: 「水門」"
+        assert recorded[0].payload["subject_hidden"] is True
+        assert recorded[0].payload["hidden_subject_name"] == "ノア"
+        assert [o.prose for o in observed] == ["誰かが言った: 「水門」"]
+
+    def test_unchanged_view_is_not_marked_hidden(self) -> None:
+        """版を差し替えなければ、trace に伏せた印は付かない。"""
+        from ai_rpg_world.application.trace import NullTraceRecorder
+
+        recorder = NullTraceRecorder()
+        recorded = []
+        original_record = recorder.record
+        recorder.record = lambda kind, **kw: recorded.append(original_record(kind, **kw))  # type: ignore[method-assign]
+        appender = ObservationAppender(
+            buffer=DefaultObservationContextBuffer(),
+            trace_recorder=recorder,
+            recipient_view=lambda _pid, out: out,
+        )
+
+        appender.append(PlayerId(7), self._heard(), datetime.now())
+
+        assert "subject_hidden" not in recorded[0].payload
+
+    def test_hiding_is_marked_even_if_the_speaker_is_named_someone(self) -> None:
+        """話し手の表示名がたまたま「誰か」で本文が変わらなくても、伏せた版を記録したら trace に伏せた印が付く。"""
+        from ai_rpg_world.application.trace import NullTraceRecorder
+
+        recorder = NullTraceRecorder()
+        recorded = []
+        original_record = recorder.record
+        recorder.record = lambda kind, **kw: recorded.append(original_record(kind, **kw))  # type: ignore[method-assign]
+        named_someone = ObservationOutput(
+            prose="誰かが言った: 「水門」",
+            structured={"type": "player_spoke", "speaker": "誰か"},
+            observation_category="social",
+            subject_name="誰か",
+            if_subject_unknown=SubjectUnknownView(prose="誰かが言った: 「水門」", structured={"type": "player_spoke"}),
+        )
+        appender = ObservationAppender(
+            buffer=DefaultObservationContextBuffer(),
+            trace_recorder=recorder,
+            recipient_view=self._hide,
+        )
+
+        appender.append(PlayerId(7), named_someone, datetime.now())
+
+        assert recorded[0].payload["subject_hidden"] is True
+
+    def test_appender_without_recipient_view_hides_the_subject(self) -> None:
+        """選ぶ口を渡していない入口でも、伏せた版を持つ観測は伏せた版で記録する。配線を忘れても名前が全員に届かない。"""
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer=buffer)
+
+        appender.append(PlayerId(7), self._heard(), datetime.now())
+
+        assert buffer.get_observations(PlayerId(7))[0].output.prose == "誰かが言った: 「水門」"
+
+    def test_failing_recipient_view_still_records_hidden_view(self) -> None:
+        """選ぶ口が例外を出しても観測は落とさず、伏せた版で記録する。"""
+
+        def broken(_pid: PlayerId, _out: ObservationOutput) -> ObservationOutput:
+            raise RuntimeError("view failed")
+
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer=buffer, recipient_view=broken)
+
+        appender.append(PlayerId(7), self._heard(), datetime.now())
+
+        assert buffer.get_observations(PlayerId(7))[0].output.prose == "誰かが言った: 「水門」"
+
+
+class TestWithheldView:
+    """主体を知らない受け手に届けない観測を、バッファにも observer にも渡さず、trace にだけ残すことを保証する。"""
+
+    def _remote_revive(self) -> ObservationOutput:
+        return ObservationOutput(
+            prose="遠くで誰かが動けるようになった気配がした。",
+            structured={"type": "player_revived", "actor": "ノア"},
+            observation_category="social",
+            schedules_turn=True,
+            subject_name="ノア",
+            if_subject_unknown=WithheldFromStrangers(),
+        )
+
+    def _recording(self):
+        from ai_rpg_world.application.trace import NullTraceRecorder
+
+        recorder = NullTraceRecorder()
+        recorded = []
+        original_record = recorder.record
+        recorder.record = lambda kind, **kw: recorded.append(original_record(kind, **kw))  # type: ignore[method-assign]
+        return recorder, recorded
+
+    def test_withheld_view_reaches_only_the_trace(self) -> None:
+        """選ぶ口が None を返すと、バッファにも observer にも渡さず False を返し、trace に届けなかった印と相手の名前を残す。"""
+        buffer = DefaultObservationContextBuffer()
+        recorder, recorded = self._recording()
+        observed: list[ObservationOutput] = []
+        appender = ObservationAppender(
+            buffer=buffer,
+            trace_recorder=recorder,
+            observers=[lambda _pid, out: observed.append(out)],
+            recipient_view=lambda _pid, out: out.as_subject_unknown(),
+        )
+
+        delivered = appender.append(PlayerId(7), self._remote_revive(), datetime.now())
+
+        assert delivered is False
+        assert buffer.get_observations(PlayerId(7)) == []
+        assert observed == []
+        assert recorded[0].payload["subject_withheld"] is True
+        assert recorded[0].payload["hidden_subject_name"] == "ノア"
+
+    def test_recorded_observation_returns_true(self) -> None:
+        """記録した観測では True を返し、trace に届けなかった印は付かない。"""
+        recorder, recorded = self._recording()
+        appender = ObservationAppender(
+            buffer=DefaultObservationContextBuffer(),
+            trace_recorder=recorder,
+            recipient_view=lambda _pid, out: out.as_subject_known(),
+        )
+
+        assert appender.append(PlayerId(7), self._remote_revive(), datetime.now()) is True
+        assert "subject_withheld" not in recorded[0].payload
+
+    def test_appender_without_recipient_view_withholds(self) -> None:
+        """選ぶ口を渡していない入口では、届けない印を持つ観測を記録しない。"""
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer=buffer)
+
+        assert appender.append(PlayerId(7), self._remote_revive(), datetime.now()) is False
+        assert buffer.get_observations(PlayerId(7)) == []
+
+    def test_appender_without_recipient_view_warns_once(self, caplog) -> None:
+        """選ぶ口を渡していない入口で主体のある観測を伏せたら、配線漏れを 1 回だけ警告する。"""
+        import logging
+
+        appender = ObservationAppender(buffer=DefaultObservationContextBuffer())
+
+        with caplog.at_level(logging.WARNING):
+            appender.append(PlayerId(7), self._remote_revive(), datetime.now())
+            appender.append(PlayerId(8), self._remote_revive(), datetime.now())
+
+        assert [r.message for r in caplog.records].count(
+            "recipient_view is not wired; recording the subject-unknown view of player_revived for every recipient"
+        ) == 1
+
+    def test_failing_recipient_view_withholds(self) -> None:
+        """選ぶ口が例外を出したら、届けない印を持つ観測は記録しない。"""
+
+        def broken(_pid: PlayerId, _out: ObservationOutput) -> ObservationOutput:
+            raise RuntimeError("view failed")
+
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer=buffer, recipient_view=broken)
+
+        assert appender.append(PlayerId(7), self._remote_revive(), datetime.now()) is False
+        assert buffer.get_observations(PlayerId(7)) == []

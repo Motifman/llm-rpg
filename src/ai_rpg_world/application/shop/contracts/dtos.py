@@ -1,4 +1,5 @@
 """ショップコマンド・クエリ結果DTO"""
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 @dataclass(frozen=True)
 class ShopCommandResultDto:
     """ショップコマンド実行結果DTO"""
+
     success: bool
     message: str
     data: dict[str, Any] | None = None
@@ -18,6 +20,7 @@ class ShopCommandResultDto:
 @dataclass(frozen=True)
 class ShopSummaryDto:
     """ショップサマリDTO（一覧・ロケーション別）"""
+
     shop_id: int
     spot_id: int
     location_area_id: int
@@ -31,6 +34,7 @@ class ShopSummaryDto:
 @dataclass(frozen=True)
 class ShopListingDto:
     """ショップ出品リストDTO"""
+
     shop_id: int
     listing_id: int
     item_instance_id: int
@@ -45,5 +49,6 @@ class ShopListingDto:
 @dataclass(frozen=True)
 class ShopDetailDto:
     """ショップ詳細DTO（サマリ＋出品一覧）"""
+
     summary: ShopSummaryDto
     listings: list[ShopListingDto]

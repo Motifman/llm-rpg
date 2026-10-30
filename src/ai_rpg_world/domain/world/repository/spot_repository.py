@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 class SpotRepository(Repository["Spot", SpotId], ABC):
-    """スポットのリポジトリインターフェース。接続グラフは IConnectedSpotsProvider でゲートウェイから導出する。"""
+    """スポットのリポジトリインターフェース。接続はスポットグラフが保持する。"""
 
     @abstractmethod
     def find_by_id(self, spot_id: SpotId) -> Optional["Spot"]:

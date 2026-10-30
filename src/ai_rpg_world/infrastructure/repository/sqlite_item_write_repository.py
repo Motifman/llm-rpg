@@ -1,4 +1,5 @@
 """アイテム集約の SQLite 実装（ゲーム書き込み DB）。"""
+
 from __future__ import annotations
 
 import copy
@@ -88,11 +89,7 @@ class SqliteItemWriteRepository(ItemRepository):
             durability = Durability(current=int(row["durability_current"]), max_value=int(spec.durability_max))
         # Phase 4-A: state_json (NULL or JSON 文字列) を dict に復元する。
         # 旧 schema 由来の row には state_json が存在しないので keys() で防御。
-        state_json = (
-            row["state_json"]
-            if "state_json" in row.keys() and row["state_json"] is not None
-            else None
-        )
+        state_json = row["state_json"] if "state_json" in row.keys() and row["state_json"] is not None else None
         state_dict = json.loads(state_json) if state_json else {}
         return ItemAggregate.create_from_instance(
             ItemInstance(
@@ -137,9 +134,7 @@ class SqliteItemWriteRepository(ItemRepository):
             SqliteItemSpecWriter.for_shared_unit_of_work(self._conn).replace_spec(aggregate.item_spec)
             # Phase 4-A: state は空 dict なら NULL に戻して storage を節約。
             state_json_value = (
-                json.dumps(dict(aggregate.state), ensure_ascii=False, sort_keys=True)
-                if aggregate.state
-                else None
+                json.dumps(dict(aggregate.state), ensure_ascii=False, sort_keys=True) if aggregate.state else None
             )
             self._conn.execute(
                 """
@@ -177,7 +172,9 @@ class SqliteItemWriteRepository(ItemRepository):
         return cur.rowcount > 0
 
     def find_by_spec_id(self, item_spec_id: ItemSpecId) -> list[ItemAggregate]:
-        cur = self._conn.execute("SELECT * FROM game_items WHERE item_spec_id = ? ORDER BY item_instance_id ASC", (int(item_spec_id),))
+        cur = self._conn.execute(
+            "SELECT * FROM game_items WHERE item_spec_id = ? ORDER BY item_instance_id ASC", (int(item_spec_id),)
+        )
         return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
     def find_by_type(self, item_type: ItemType) -> list[ItemAggregate]:

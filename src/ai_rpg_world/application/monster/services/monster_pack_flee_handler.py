@@ -108,18 +108,19 @@ class MonsterPackFleeHandler:
             return False
 
         if pack_members is None:
-            pack_members = self._monster_repository.find_by_pack_id(
-                monster.pack_id
-            )
+            pack_members = self._monster_repository.find_by_pack_id(monster.pack_id)
         leader = self._find_fleeing_pack_leader_from(
-            monster, pack_members, current_tick,
+            monster,
+            pack_members,
+            current_tick,
         )
         if leader is None:
             return False
 
         # FLEE 状態に遷移 + 観測 event 発火
         monster.enter_flee_state(
-            current_tick, template.pack_flee_follower_duration,
+            current_tick,
+            template.pack_flee_follower_duration,
         )
         self._monster_repository.save(monster)
 

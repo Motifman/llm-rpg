@@ -19,9 +19,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     ScenarioLoadError,
 )
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI, _SENA, _KUZE = (PlayerId(i) for i in (1, 2, 3))
 _REFUSAL_REASON = "異常が続いている間は緊急招集できない。"
 _REFUSAL_ALTERNATIVE = "倒れている者を見つけたなら、その場で報告できる。"
@@ -34,9 +32,7 @@ def runtime():
 
 
 def _terminal(runtime) -> ItemSpecId:
-    return ItemSpecId.create(
-        runtime.id_mapper.get_int("item_spec", "control_terminal")
-    )
+    return ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "control_terminal"))
 
 
 def _sabotage(runtime, action_name: str) -> None:
@@ -67,9 +63,7 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
 def _bulkhead_passages_are_open(runtime) -> bool:
     graph = runtime._spot_graph_repo.find_graph()
     return all(
-        graph.get_connection(
-            ConnectionId.create(runtime.id_mapper.get_int("connection", name))
-        ).passage.traversable
+        graph.get_connection(ConnectionId.create(runtime.id_mapper.get_int("connection", name))).passage.traversable
         for name in _BULKHEAD_CONNECTIONS
     )
 
@@ -146,10 +140,7 @@ def test_bulkhead_flag_clears_when_both_passages_reopen(runtime) -> None:
 def test_every_condition_explicitly_declares_whether_it_blocks_the_button() -> None:
     """異常追加時の記入漏れを既定値へ縮退させず、三条件の意図を宣言で読める。"""
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-    declarations = {
-        entry["flag"]: entry["blocks_emergency_button"]
-        for entry in raw["ongoing_conditions"]
-    }
+    declarations = {entry["flag"]: entry["blocks_emergency_button"] for entry in raw["ongoing_conditions"]}
 
     assert declarations == {
         "power_out": True,

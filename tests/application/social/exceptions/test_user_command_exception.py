@@ -1,6 +1,7 @@
 """
 SNSユーザーコマンド関連例外のテスト
 """
+
 import pytest
 
 from ai_rpg_world.application.social.exceptions.command.user_command_exception import (
@@ -24,11 +25,7 @@ class TestUserCommandException:
 
     def test_create_command_exception_with_context(self):
         """コンテキスト付きのコマンド例外作成テスト"""
-        exception = UserCommandException(
-            "コマンドエラー",
-            user_id=1,
-            target_user_id=2
-        )
+        exception = UserCommandException("コマンドエラー", user_id=1, target_user_id=2)
 
         assert str(exception) == "コマンドエラー"
         assert exception.error_code == "USERCOMMANDEXCEPTION"

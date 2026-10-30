@@ -40,9 +40,7 @@ class PostQueryService:
         self._user_repository = user_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(
-        self, operation: Callable[[], _Result], context: dict[str, Any]
-    ) -> _Result:
+    def _execute_with_error_handling(self, operation: Callable[[], _Result], context: dict[str, Any]) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -52,15 +50,13 @@ class PostQueryService:
         except SnsDomainException as e:
             raise ApplicationExceptionFactory.create_from_domain_exception(
                 e,
-                user_id=context.get('user_id'),
-                target_user_id=context.get('viewer_user_id'),
-                post_id=context.get('post_id')
+                user_id=context.get("user_id"),
+                target_user_id=context.get("viewer_user_id"),
+                post_id=context.get("post_id"),
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
-                             extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
-                                     original_exception=e)
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}", extra=context)
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}", original_exception=e)
 
     def _get_user_profile_info(self, user_id: UserId) -> dict[str, Any]:
         """ユーザーのプロフィール情報を取得"""
@@ -69,7 +65,9 @@ class PostQueryService:
             raise UserNotFoundException(user_id.value, f"ユーザーが見つかりません: {user_id.value}")
         return user_aggregate.get_user_profile_info()
 
-    def _convert_post_to_dto(self, post: "PostAggregate", viewer_user_id: UserId, author_profile_info: dict[str, Any]) -> PostDto:
+    def _convert_post_to_dto(
+        self, post: "PostAggregate", viewer_user_id: UserId, author_profile_info: dict[str, Any]
+    ) -> PostDto:
         """PostAggregateをPostDtoに変換"""
         display_info = post.get_display_info(viewer_user_id)
         return PostDto(
@@ -86,7 +84,7 @@ class PostQueryService:
             is_liked_by_viewer=display_info["is_liked_by_viewer"],
             is_replied_by_viewer=display_info["is_replied_by_viewer"],
             mentioned_users=display_info["mentioned_users"],
-            is_deleted=display_info["is_deleted"]
+            is_deleted=display_info["is_deleted"],
         )
 
     def _filter_and_convert_posts(
@@ -94,7 +92,7 @@ class PostQueryService:
         posts: list["PostAggregate"],
         viewer_user: "UserAggregate",
         viewer_id: UserId,
-        author_user_map: dict[UserId, "UserAggregate"] | None = None
+        author_user_map: dict[UserId, "UserAggregate"] | None = None,
     ) -> list[PostDto]:
         """ポストの権限チェックとDTO変換を行う共通メソッド"""
         result = []
@@ -131,14 +129,12 @@ class PostQueryService:
         """ユーザーのポスト一覧を取得（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_user_timeline_impl(user_id, viewer_user_id, limit, offset),
-            context={
-                "action": "get_user_timeline",
-                "user_id": user_id,
-                "viewer_user_id": viewer_user_id
-            }
+            context={"action": "get_user_timeline", "user_id": user_id, "viewer_user_id": viewer_user_id},
         )
 
-    def _get_user_timeline_impl(self, user_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[PostDto]:
+    def _get_user_timeline_impl(
+        self, user_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0
+    ) -> list[PostDto]:
         """ユーザーのポスト一覧を取得の実装"""
         # UserIdオブジェクトを作成（ドメイン層でバリデーション）
         target_user_id = UserId(user_id)
@@ -164,10 +160,7 @@ class PostQueryService:
         """フォロー中のユーザーのポスト一覧を取得（ブロック・可視性フィルタ適用）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_home_timeline_impl(viewer_user_id, limit, offset),
-            context={
-                "action": "get_home_timeline",
-                "viewer_user_id": viewer_user_id
-            }
+            context={"action": "get_home_timeline", "viewer_user_id": viewer_user_id},
         )
 
     def _get_home_timeline_impl(self, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[PostDto]:
@@ -204,17 +197,18 @@ class PostQueryService:
 
         return result
 
-    def search_posts_by_keyword(self, keyword: str, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[PostDto]:
+    def search_posts_by_keyword(
+        self, keyword: str, viewer_user_id: int, limit: int = 20, offset: int = 0
+    ) -> list[PostDto]:
         """キーワードでポストを検索（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._search_posts_by_keyword_impl(keyword, viewer_user_id, limit, offset),
-            context={
-                "action": "search_posts_by_keyword",
-                "viewer_user_id": viewer_user_id
-            }
+            context={"action": "search_posts_by_keyword", "viewer_user_id": viewer_user_id},
         )
 
-    def _search_posts_by_keyword_impl(self, keyword: str, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[PostDto]:
+    def _search_posts_by_keyword_impl(
+        self, keyword: str, viewer_user_id: int, limit: int = 20, offset: int = 0
+    ) -> list[PostDto]:
         """キーワードでポストを検索の実装"""
         # UserIdオブジェクトを作成（ドメイン層でバリデーション）
         viewer_id = UserId(viewer_user_id)
@@ -238,17 +232,18 @@ class PostQueryService:
 
         return result
 
-    def get_popular_posts(self, viewer_user_id: int, timeframe_hours: int = 24, limit: int = 10, offset: int = 0) -> list[PostDto]:
+    def get_popular_posts(
+        self, viewer_user_id: int, timeframe_hours: int = 24, limit: int = 10, offset: int = 0
+    ) -> list[PostDto]:
         """人気ポストランキングを取得（いいね数順、権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_popular_posts_impl(viewer_user_id, timeframe_hours, limit, offset),
-            context={
-                "action": "get_popular_posts",
-                "viewer_user_id": viewer_user_id
-            }
+            context={"action": "get_popular_posts", "viewer_user_id": viewer_user_id},
         )
 
-    def _get_popular_posts_impl(self, viewer_user_id: int, timeframe_hours: int = 24, limit: int = 10, offset: int = 0) -> list[PostDto]:
+    def _get_popular_posts_impl(
+        self, viewer_user_id: int, timeframe_hours: int = 24, limit: int = 10, offset: int = 0
+    ) -> list[PostDto]:
         """人気ポストランキングを取得の実装"""
         # UserIdオブジェクトを作成（ドメイン層でバリデーション）
         viewer_id = UserId(viewer_user_id)
@@ -276,11 +271,7 @@ class PostQueryService:
         """個別のポストを取得（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_post_impl(post_id, viewer_user_id),
-            context={
-                "action": "get_post",
-                "post_id": post_id,
-                "viewer_user_id": viewer_user_id
-            }
+            context={"action": "get_post", "post_id": post_id, "viewer_user_id": viewer_user_id},
         )
 
     def _get_post_impl(self, post_id: int, viewer_user_id: int) -> PostDto | None:
@@ -318,10 +309,7 @@ class PostQueryService:
         """自分のプライベートポストのみを取得（メモ機能）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_private_posts_impl(user_id, limit, offset),
-            context={
-                "action": "get_private_posts",
-                "user_id": user_id
-            }
+            context={"action": "get_private_posts", "user_id": user_id},
         )
 
     def _get_private_posts_impl(self, user_id: int, limit: int = 20, offset: int = 0) -> list[PostDto]:
@@ -351,14 +339,12 @@ class PostQueryService:
         """ユーザーがいいねしたポスト一覧を取得（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_liked_posts_impl(user_id, viewer_user_id, limit, offset),
-            context={
-                "action": "get_liked_posts",
-                "user_id": user_id,
-                "viewer_user_id": viewer_user_id
-            }
+            context={"action": "get_liked_posts", "user_id": user_id, "viewer_user_id": viewer_user_id},
         )
 
-    def _get_liked_posts_impl(self, user_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[PostDto]:
+    def _get_liked_posts_impl(
+        self, user_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0
+    ) -> list[PostDto]:
         """ユーザーがいいねしたポスト一覧を取得の実装"""
         # UserIdオブジェクトを作成（ドメイン層でバリデーション）
         target_user_id = UserId(user_id)
@@ -387,17 +373,18 @@ class PostQueryService:
 
         return result
 
-    def search_posts_by_hashtag(self, hashtag: str, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[PostDto]:
+    def search_posts_by_hashtag(
+        self, hashtag: str, viewer_user_id: int, limit: int = 20, offset: int = 0
+    ) -> list[PostDto]:
         """ハッシュタグでポストを検索（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._search_posts_by_hashtag_impl(hashtag, viewer_user_id, limit, offset),
-            context={
-                "action": "search_posts_by_hashtag",
-                "viewer_user_id": viewer_user_id
-            }
+            context={"action": "search_posts_by_hashtag", "viewer_user_id": viewer_user_id},
         )
 
-    def _search_posts_by_hashtag_impl(self, hashtag: str, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[PostDto]:
+    def _search_posts_by_hashtag_impl(
+        self, hashtag: str, viewer_user_id: int, limit: int = 20, offset: int = 0
+    ) -> list[PostDto]:
         """ハッシュタグでポストを検索の実装"""
         # UserIdオブジェクトを作成（ドメイン層でバリデーション）
         viewer_id = UserId(viewer_user_id)
@@ -421,16 +408,18 @@ class PostQueryService:
 
         return result
 
-    def get_trending_hashtags(self, limit: int = 10, decay_lambda: float = 0.1, recent_window_hours: float = 1.0) -> list[str]:
+    def get_trending_hashtags(
+        self, limit: int = 10, decay_lambda: float = 0.1, recent_window_hours: float = 1.0
+    ) -> list[str]:
         """トレンドハッシュタグを取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_trending_hashtags_impl(limit, decay_lambda, recent_window_hours),
-            context={
-                "action": "get_trending_hashtags"
-            }
+            context={"action": "get_trending_hashtags"},
         )
 
-    def _get_trending_hashtags_impl(self, limit: int = 10, decay_lambda: float = 0.1, recent_window_hours: float = 1.0) -> list[str]:
+    def _get_trending_hashtags_impl(
+        self, limit: int = 10, decay_lambda: float = 0.1, recent_window_hours: float = 1.0
+    ) -> list[str]:
         """トレンドハッシュタグを取得の実装"""
         # 過去24時間のポストを取得（全ポストを使用）
         recent_posts = self._post_repository.find_posts_in_timeframe(timeframe_hours=24)
@@ -442,7 +431,7 @@ class PostQueryService:
             now=now,
             decay_lambda=decay_lambda,
             recent_window_hours=recent_window_hours,
-            max_results=limit
+            max_results=limit,
         )
 
         # ハッシュタグのみを返す（#付き）

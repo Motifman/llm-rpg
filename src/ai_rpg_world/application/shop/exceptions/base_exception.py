@@ -1,4 +1,5 @@
 """ショップアプリケーション層の基底例外"""
+
 from typing import Any
 
 

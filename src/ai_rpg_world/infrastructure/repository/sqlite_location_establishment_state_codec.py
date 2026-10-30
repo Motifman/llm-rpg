@@ -22,9 +22,7 @@ def build_location_establishment(
         id=LocationSlotId(spot_id=SpotId(spot_id), location_area_id=LocationAreaId(location_area_id)),
         spot_id=SpotId(spot_id),
         location_area_id=LocationAreaId(location_area_id),
-        establishment_type=(
-            None if establishment_type is None else EstablishmentType(establishment_type)
-        ),
+        establishment_type=(None if establishment_type is None else EstablishmentType(establishment_type)),
         establishment_id=establishment_id,
     )
 

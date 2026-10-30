@@ -9,6 +9,7 @@ class Gold:
 
     ゴールドは0以上の値を持ちます。
     """
+
     value: int
 
     def __post_init__(self) -> None:

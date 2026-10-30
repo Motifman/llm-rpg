@@ -33,9 +33,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_TOWN = (
-    pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
-)
+_TOWN = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _LENA = PlayerId(1)
 _TOM = PlayerId(2)
 #: 板の前に立っているだけの人。**誰の相手でもない。**
@@ -50,22 +48,27 @@ class _Town:
         raw = json.loads(_TOWN.read_text(encoding="utf-8"))
         spawn = raw["players"][0]["spawn_spot"]
         for pid, name in (("tom", "トム"), ("mina", "ミナ")):
-            raw["players"].append({
-                "id": pid, "name": name, "spawn_spot": spawn,
-                "initial_items": [], "initial_gold": 300,
-                "persona_prompt": f"あなたは{name}。",
-            })
+            raw["players"].append(
+                {
+                    "id": pid,
+                    "name": name,
+                    "spawn_spot": spawn,
+                    "initial_items": [],
+                    "initial_gold": 300,
+                    "persona_prompt": f"あなたは{name}。",
+                }
+            )
         raw["market"] = {"board_spot": "market_square"}
         (directory / "market_town_v1.json").write_text(
-            json.dumps(raw, ensure_ascii=False), encoding="utf-8",
+            json.dumps(raw, ensure_ascii=False),
+            encoding="utf-8",
         )
         manager = GameRuntimeManager(
-            scenarios_dir=directory, characters_path=directory / "characters.json",
+            scenarios_dir=directory,
+            characters_path=directory / "characters.json",
         )
         character = manager.create_character(CharacterCreateRequest(name="レナ"))
-        summary = manager.create_session(
-            SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id])
-        )
+        summary = manager.create_session(SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id]))
         self._state = manager._sessions[summary.session_id]
 
     @property
@@ -111,10 +114,16 @@ class _Town:
 
     def list_item(self, player_id: PlayerId, price: int, quantity: int = 1) -> None:
         self.give(player_id, _BREAD, quantity)
-        result = self.call("market_list_item", {
-            "item_label": _BREAD, "quantity": quantity, "unit_price": price,
-            "inner_thought": "出す",
-        }, player_id=player_id)
+        result = self.call(
+            "market_list_item",
+            {
+                "item_label": _BREAD,
+                "quantity": quantity,
+                "unit_price": price,
+                "inner_thought": "出す",
+            },
+            player_id=player_id,
+        )
         assert result.success is True, result.message
 
 
@@ -130,9 +139,7 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
 
     graph = runtime._spot_graph_repo.find_graph()
     here = graph.get_entity_spot(EntityId.create(int(player_id)))
-    elsewhere = next(
-        spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here
-    )
+    elsewhere = next(spot for spot in graph.neighbor_spot_ids_for_routing(here) if spot != here)
     graph.unplace_entity(EntityId.create(int(player_id)))
     graph.place_entity(EntityId.create(int(player_id)), elsewhere)
     runtime._spot_graph_repo.save(graph)
@@ -166,14 +173,22 @@ class TestWhichOrderGetsTakenFirst:
         town.list_item(_TOM, 22)
         town.list_item(_MINA, 18)
 
-        result = town.call("market_buy", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "買う",
-        })
+        result = town.call(
+            "market_buy",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "買う",
+            },
+        )
 
         assert result.success is True, result.message
-        assert self._sell_side(town).board().last_trade_price_of(
-            town.runtime._item_spec_repo.find_by_name(_BREAD).item_spec_id.value
-        ) == 18
+        assert (
+            self._sell_side(town)
+            .board()
+            .last_trade_price_of(town.runtime._item_spec_repo.find_by_name(_BREAD).item_spec_id.value)
+            == 18
+        )
 
     def test_the_older_listing_wins_at_the_same_price(self, town: _Town) -> None:
         """同じ値の出品が 2 件並ぶと、先に出した方から約定する。
@@ -185,9 +200,14 @@ class TestWhichOrderGetsTakenFirst:
         town.list_item(_MINA, 18)
         first = town.runtime._market_service.board().orders[0]
 
-        town.call("market_buy", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "買う",
-        })
+        town.call(
+            "market_buy",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "買う",
+            },
+        )
 
         remaining = town.runtime._market_service.board().orders
         assert all(o.order_id != first.order_id for o in remaining)
@@ -197,16 +217,27 @@ class TestWhichOrderGetsTakenFirst:
         town.give_gold(_TOM, 300)
         town.give_gold(_MINA, 300)
         for who, price in ((_TOM, 8), (_MINA, 12)):
-            town.call("market_bid", {
-                "item_label": _BREAD, "quantity": 1, "unit_price": price,
-                "inner_thought": "買いたい",
-            }, player_id=who)
+            town.call(
+                "market_bid",
+                {
+                    "item_label": _BREAD,
+                    "quantity": 1,
+                    "unit_price": price,
+                    "inner_thought": "買いたい",
+                },
+                player_id=who,
+            )
         town.give(_LENA, _BREAD, 1)
         before = town.runtime._player_status_repo.find_by_id(_LENA).gold.value
 
-        town.call("market_sell", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "売る",
-        })
+        town.call(
+            "market_sell",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "売る",
+            },
+        )
 
         after = town.runtime._player_status_repo.find_by_id(_LENA).gold.value
         assert after - before == 12
@@ -216,23 +247,32 @@ class TestWhichOrderGetsTakenFirst:
         town.give_gold(_TOM, 300)
         town.give_gold(_MINA, 300)
         for who in (_TOM, _MINA):
-            town.call("market_bid", {
-                "item_label": _BREAD, "quantity": 1, "unit_price": 12,
-                "inner_thought": "買いたい",
-            }, player_id=who)
+            town.call(
+                "market_bid",
+                {
+                    "item_label": _BREAD,
+                    "quantity": 1,
+                    "unit_price": 12,
+                    "inner_thought": "買いたい",
+                },
+                player_id=who,
+            )
         first = town.runtime._market_service.board().orders[0]
         town.give(_LENA, _BREAD, 1)
 
-        town.call("market_sell", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "売る",
-        })
+        town.call(
+            "market_sell",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "売る",
+            },
+        )
 
         remaining = town.runtime._market_service.board().orders
         assert all(o.order_id != first.order_id for o in remaining)
 
-    def test_changing_your_price_does_not_send_you_to_the_back(
-        self, town: _Town
-    ) -> None:
+    def test_changing_your_price_does_not_send_you_to_the_back(self, town: _Town) -> None:
         """値を変えても順番は変わらない。
 
         **値を動かす人を後ろへ回さない。** この世界で見たいのは値が動くこと
@@ -245,28 +285,42 @@ class TestWhichOrderGetsTakenFirst:
         town.list_item(_TOM, 22)
         town.list_item(_MINA, 20)
         older = town.runtime._market_service.board().orders[0]
-        town.call("market_reprice", {
-            "item_label": _BREAD, "side": "sell", "new_unit_price": 20,
-            "inner_thought": "揃える",
-        }, player_id=_TOM)
+        town.call(
+            "market_reprice",
+            {
+                "item_label": _BREAD,
+                "side": "sell",
+                "new_unit_price": 20,
+                "inner_thought": "揃える",
+            },
+            player_id=_TOM,
+        )
 
-        town.call("market_buy", {
-            "item_label": _BREAD, "quantity": 1, "inner_thought": "買う",
-        })
+        town.call(
+            "market_buy",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "inner_thought": "買う",
+            },
+        )
 
         remaining = town.runtime._market_service.board().orders
         assert all(o.order_id != older.order_id for o in remaining)
 
-    def test_a_purchase_across_two_listings_follows_the_same_order(
-        self, town: _Town
-    ) -> None:
+    def test_a_purchase_across_two_listings_follows_the_same_order(self, town: _Town) -> None:
         """複数の注文にまたがって買うときも、安い方から順に取る。"""
         town.list_item(_TOM, 22)
         town.list_item(_MINA, 18)
 
-        result = town.call("market_buy", {
-            "item_label": _BREAD, "quantity": 2, "inner_thought": "まとめて買う",
-        })
+        result = town.call(
+            "market_buy",
+            {
+                "item_label": _BREAD,
+                "quantity": 2,
+                "inner_thought": "まとめて買う",
+            },
+        )
 
         assert result.success is True, result.message
         assert "18" in result.message and "22" in result.message
@@ -286,10 +340,16 @@ class TestTimePriorityRidesOnTheOrderIds:
         town.list_item(_TOM, 18)
         town.list_item(_MINA, 20)
         town.give_gold(_TOM, 300)
-        town.call("market_bid", {
-            "item_label": _BREAD, "quantity": 1, "unit_price": 8,
-            "inner_thought": "買いたい",
-        }, player_id=_TOM)
+        town.call(
+            "market_bid",
+            {
+                "item_label": _BREAD,
+                "quantity": 1,
+                "unit_price": 8,
+                "inner_thought": "買いたい",
+            },
+            player_id=_TOM,
+        )
 
         ids = [o.order_id.value for o in town.runtime._market_service.board().orders]
 

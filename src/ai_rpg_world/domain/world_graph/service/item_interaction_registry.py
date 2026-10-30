@@ -19,16 +19,10 @@ class ItemInteractionRegistry:
     loader がこの登録簿へ射影する。
     """
 
-    _entries: Mapping[ItemSpecId, tuple[InteractionDef, ...]] = field(
-        default_factory=dict
-    )
+    _entries: Mapping[ItemSpecId, tuple[InteractionDef, ...]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        normalized = {
-            spec_id: tuple(interactions)
-            for spec_id, interactions in self._entries.items()
-            if interactions
-        }
+        normalized = {spec_id: tuple(interactions) for spec_id, interactions in self._entries.items() if interactions}
         object.__setattr__(self, "_entries", MappingProxyType(normalized))
 
     def interactions_for(self, item_spec_id: ItemSpecId) -> tuple[InteractionDef, ...]:
