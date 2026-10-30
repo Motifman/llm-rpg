@@ -37,8 +37,8 @@ from ai_rpg_world.being.domain.memo_book import (
 )
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
+    AwaitedBackstory,
     Backstory,
-    BackstoryRequest,
     Lapse,
     MemoryOperationOutcome,
     ObservedOutcome,
@@ -382,9 +382,9 @@ def being_short_term_memory_to_dict(memory: ShortTermMemory) -> dict[str, Any]:
         "experiences": [experience.show_to(to_dict) for experience in memory.experiences],
         "recent_from": memory.recent_from,
         "awaiting": None if memory.awaiting is None else _move_and_turn_to_dict(memory.awaiting),
-        "request": None
-        if memory.request is None
-        else {"until_turn": memory.request.until_turn, "requested_turn": memory.request.requested_turn},
+        "awaited_backstory": None
+        if memory.awaited_backstory is None
+        else {"until_turn": memory.awaited_backstory.until_turn, "since_turn": memory.awaited_backstory.since_turn},
         "backstories": [
             {"flow": b.flow, "mood": b.mood, "written_turn": b.written_turn, "until_turn": b.until_turn}
             for b in memory.backstories
@@ -396,6 +396,17 @@ def _move_and_turn_to_dict(attempt: Attempt) -> dict[str, Any]:
     return {"turn": attempt.turn, "move": _move_to_dict(attempt.move)}
 
 
+def _dict_to_awaited_backstory(data: dict[str, Any]) -> AwaitedBackstory | None:
+    """前の名前の ``request`` (``requested_turn``) だけを持つ payload も読む (design_decisions D1824-17)。"""
+    if "awaited_backstory" in data:
+        awaited = data["awaited_backstory"]
+        return None if awaited is None else AwaitedBackstory(**awaited)
+    request = data.get("request")
+    if request is None:
+        return None
+    return AwaitedBackstory(until_turn=request["until_turn"], since_turn=request["requested_turn"])
+
+
 def dict_to_being_short_term_memory(data: dict[str, Any], *, being_id: BeingId) -> ShortTermMemory:
     try:
         experiences = (
@@ -404,7 +415,7 @@ def dict_to_being_short_term_memory(data: dict[str, Any], *, being_id: BeingId) 
             else tuple(_dict_to_experience(experience) for experience in data["experiences"])
         )
         awaiting = data.get("awaiting")
-        request = data.get("request")
+        awaited = _dict_to_awaited_backstory(data)
         return ShortTermMemory(
             being_id,
             experiences=experiences,
@@ -420,9 +431,7 @@ def dict_to_being_short_term_memory(data: dict[str, Any], *, being_id: BeingId) 
             ),
             recent_from=data.get("recent_from", 1),
             awaiting=None if awaiting is None else Attempt(turn=awaiting["turn"], move=_dict_to_move(awaiting["move"])),
-            request=None
-            if request is None
-            else BackstoryRequest(until_turn=request["until_turn"], requested_turn=request["requested_turn"]),
+            awaited_backstory=awaited,
         )
     except DomainException as exc:
         raise ValueError(f"invalid being short-term memory payload: {exc}") from exc

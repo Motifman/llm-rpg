@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
-from ai_rpg_world.being.domain.short_term_memory import Backstory, BackstoryRequest, ShortTermMemory
+from ai_rpg_world.being.domain.short_term_memory import AwaitedBackstory, Backstory, ShortTermMemory
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
@@ -17,6 +17,7 @@ BEN = BeingId("being-ben")
 def _memory(being_id: BeingId = ADA, flow: str = "坑道の奥で鍵を探していた") -> ShortTermMemory:
     memory = ShortTermMemory.empty(being_id)
     memory.add_backstory(Backstory(flow=flow, mood="", written_turn=20, until_turn=0))
+    memory.clear_events()
     return memory
 
 
@@ -93,7 +94,7 @@ class TestInMemoryShortTermMemoryRepository:
 
 
 class TestCopies:
-    """保存先が出し入れのたびに写しを渡し、呼び手の書き換えが save するまで保存先に届かないことを保証する。"""
+    """保存先が出し入れのたびに写しを渡し、呼び出し側の書き換えが save するまで保存先に届かないことを保証する。"""
 
     def test_changes_to_a_fetched_memory_are_not_stored_until_saved(self) -> None:
         """取り出した集約に観測を足しても、save するまで保存先の中身は変わらない。"""
@@ -115,20 +116,20 @@ class TestCopies:
 
         assert repository.get(ADA).experiences == ()
 
-    def test_request_is_kept_through_save_and_get(self) -> None:
-        """届くのを待っているいきさつの頼みごとは、保存して取り出しても残る。"""
+    def test_awaited_backstory_is_kept_through_save_and_get(self) -> None:
+        """届くのを待っているいきさつは、保存して取り出しても残る。"""
         repository = InMemoryShortTermMemoryRepository(handoff=discard_events)
-        request = BackstoryRequest(until_turn=10, requested_turn=20)
-        repository.save(ShortTermMemory(ADA, request=request))
+        awaited = AwaitedBackstory(until_turn=10, since_turn=20)
+        repository.save(ShortTermMemory(ADA, awaited_backstory=awaited))
 
-        assert repository.get(ADA).request == request
+        assert repository.get(ADA).awaited_backstory == awaited
 
     def test_pending_events_are_not_stored(self) -> None:
         """ためたイベントは保存しない。取り出した集約はイベントを持たないので、同じイベントを 2 度渡さない。"""
         repository = InMemoryShortTermMemoryRepository(handoff=discard_events)
         memory = ShortTermMemory.empty(ADA)
         memory.perceive(_observation(), current_turn=0)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
 
         repository.save(memory)
 
@@ -136,15 +137,15 @@ class TestCopies:
 
 
 class TestHandoff:
-    """保存するときに、ためたイベントを取り出して配り手に渡すことを保証する (design_decisions D1837 の 6)。"""
+    """保存するときに、ためたイベントを取り出して配送器に渡すことを保証する (design_decisions D1837 の 6)。"""
 
     def test_saved_events_are_handed_off_and_cleared(self) -> None:
-        """保存すると、ためたイベントが配り手に渡り、呼び手の集約のイベントは空になる。"""
+        """保存すると、ためたイベントが配送器に渡り、呼び出し側の集約のイベントは空になる。"""
         handed: list[object] = []
         repository = InMemoryShortTermMemoryRepository(handoff=handed.extend)
         memory = ShortTermMemory.empty(ADA)
         memory.perceive(_observation(), current_turn=0)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
         events = memory.get_events()
 
         repository.save(memory)
@@ -152,18 +153,18 @@ class TestHandoff:
         assert (handed, memory.get_events()) == (events, [])
 
     def test_pending_events_without_handoff_stop_before_saving(self) -> None:
-        """配り手の無い保存先に、イベントのたまった集約を保存しようとすると、保存する前に RuntimeError で止まる。"""
+        """配送器の無い保存先に、イベントのたまった集約を保存しようとすると、保存する前に RuntimeError で止まる。"""
         repository = InMemoryShortTermMemoryRepository()
         memory = ShortTermMemory.empty(ADA)
         memory.perceive(_observation(), current_turn=0)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
 
         with pytest.raises(RuntimeError):
             repository.save(memory)
         assert repository.get(ADA).is_empty()
 
     def test_memory_without_events_is_saved_without_handoff(self) -> None:
-        """イベントが無ければ、配り手の無い保存先にも保存できる。"""
+        """イベントが無ければ、配送器の無い保存先にも保存できる。"""
         repository = InMemoryShortTermMemoryRepository()
 
         repository.save(_memory())

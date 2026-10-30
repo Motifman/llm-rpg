@@ -18,25 +18,26 @@ from ai_rpg_world.being.contract import (
 )
 from ai_rpg_world.being.domain.short_term_memory import (
     BACKSTORY_GENERATIONS,
-    BACKSTORY_RETRY_TURNS,
+    BACKSTORY_OVERDUE_TURNS,
     FOLD_TURNS,
     FORCED_FOLD_TURNS,
     RECENT_TURNS,
     Attempt,
+    AwaitedBackstory,
     Backstory,
-    BackstoryRequest,
-    BackstoryRequestedAgain,
-    FoldForced,
-    FoldRequested,
     Lapse,
     MemoryOperationOutcome,
     ObservedOutcome,
     Perception,
     ShortTermMemory,
-    StaleBackstoryDiscarded,
+    ShortTermMemoryBackstoryAddedEvent,
+    ShortTermMemoryBackstoryOverdueEvent,
+    ShortTermMemoryOldestTurnsDroppedEvent,
+    ShortTermMemoryRangeFilledEvent,
     UnknownOutcome,
 )
 from ai_rpg_world.domain.being.exception.being_exceptions import (
+    ShortTermMemoryStaleBackstoryException,
     ShortTermMemoryUnpairedResultException,
     ShortTermMemoryValidationException,
 )
@@ -126,7 +127,7 @@ def _state(memory: ShortTermMemory) -> tuple[object, ...]:
         memory.backstories,
         memory.recent_from,
         memory.awaiting,
-        memory.request,
+        memory.awaited_backstory,
         memory.get_events(),
     )
 
@@ -374,8 +375,8 @@ def _backstory(until_turn: int, *, written_turn: int | None = None, flow: str = 
     )
 
 
-class TestFold:
-    """ShortTermMemory.fold が、直近の範囲が満ちたらいきさつを頼み、届かなければ頼み直し、上限に届いたら待たずに外すことを保証する (design_decisions D1824-11)。"""
+class TestEndTurn:
+    """ShortTermMemory.end_turn が、直近の範囲が埋まったこと、いきさつが遅れていること、上限で古いターンを外したことを、起きた事実のドメインイベントとしてためることを保証する (design_decisions D1824-11、D1824-17)。"""
 
     @staticmethod
     def _one_result_per_turn(last_turn: int) -> ShortTermMemory:
@@ -385,61 +386,62 @@ class TestFold:
         return memory
 
     def test_nothing_happens_before_the_range_is_full(self) -> None:
-        """直近の範囲が 19 ターン (ターン 1 から 19) のとき、fold は何も頼まず、イベントもためない。"""
+        """直近の範囲が 19 ターン (ターン 1 から 19) のとき、end_turn は何も変えず、イベントもためない。"""
         memory = self._one_result_per_turn(19)
         before = _state(memory)
 
-        memory.fold(current_turn=19)
+        memory.end_turn(turn=19)
 
         assert _state(memory) == before
-        assert memory.request is None
+        assert memory.awaited_backstory is None
 
-    def test_full_range_requests_a_backstory_without_dropping_experiences(self) -> None:
-        """直近の範囲が 20 ターンに届くと、ターン 10 までのいきさつを頼む FoldRequested を 1 件ためる。出来事は外さず、範囲の始まりも動かない。"""
+    def test_full_range_is_reported_without_dropping_experiences(self) -> None:
+        """直近の範囲が 20 ターンに届くと、ターン 10 までの出来事と今のいきさつを持つ ShortTermMemoryRangeFilledEvent を 1 件ため、ターン 10 までのいきさつを待ち始める。出来事は外さず、範囲の始まりも動かない。"""
         memory = self._one_result_per_turn(20)
         backstory = _backstory(0)
         memory.add_backstory(backstory)
+        memory.clear_events()
         experiences = memory.experiences
 
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
 
         (event,) = memory.get_events()
-        assert isinstance(event, FoldRequested)
+        assert isinstance(event, ShortTermMemoryRangeFilledEvent)
         assert (event.being_id, event.turn, event.until_turn, event.backstories) == (ADA, 20, 10, (backstory,))
         assert event.experiences == experiences[:10]
         assert isinstance(event.event_id, int) and event.occurred_at.tzinfo is timezone.utc
         assert (memory.experiences, memory.recent_from) == (experiences, 1)
-        assert memory.request == BackstoryRequest(until_turn=10, requested_turn=20)
+        assert memory.awaited_backstory == AwaitedBackstory(until_turn=10, since_turn=20)
 
-    def test_request_is_not_repeated_while_waiting(self) -> None:
-        """頼んだあと、頼み直すまでのターン (BACKSTORY_RETRY_TURNS) のあいだは、もう一度 fold を呼んでも何もためない。"""
+    def test_range_filled_is_not_repeated_while_waiting(self) -> None:
+        """いきさつを待ち始めてから BACKSTORY_OVERDUE_TURNS 経つまでのあいだは、もう一度 end_turn を呼んでも何もためない。"""
         memory = self._one_result_per_turn(20)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
         memory.clear_events()
 
-        memory.fold(current_turn=20 + BACKSTORY_RETRY_TURNS - 1)
+        memory.end_turn(turn=20 + BACKSTORY_OVERDUE_TURNS - 1)
 
         assert memory.get_events() == []
 
     def test_turns_without_experiences_count_toward_the_range(self) -> None:
-        """出来事の無いターンも 1 ターンと数える。ターン 1 と 20 にだけ出来事があっても、ターン 20 で範囲が満ち、ターン 1 の出来事をまとめるよう頼む。"""
+        """出来事の無いターンも 1 ターンと数える。ターン 1 と 20 にだけ出来事があっても、ターン 20 で範囲が埋まり、ターン 1 の出来事を材料に持つ。"""
         memory = _empty()
         _act_and_answer(memory, "call-1", 1)
         _act_and_answer(memory, "call-20", 20)
 
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
 
         (event,) = memory.get_events()
         assert [e.turn for e in event.experiences] == [1]
 
-    def test_unanswered_move_in_the_range_is_part_of_the_request(self) -> None:
-        """ターン 5 に選んだまま結果の来ない 1 手は、結果の分からない試みとして、頼む出来事に入る。"""
+    def test_unanswered_move_in_the_range_is_part_of_the_material(self) -> None:
+        """ターン 5 に選んだまま結果の来ない 1 手は、結果の分からない試みとして、範囲が埋まったイベントの出来事に入る。"""
         memory = _empty()
         _act_and_answer(memory, "call-1", 1)
         memory.act(_move("call-5"), current_turn=5)
         memory.perceive(_observation(), current_turn=19)
 
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
 
         (event,) = memory.get_events()
         assert event.experiences == (
@@ -447,60 +449,62 @@ class TestFold:
             Attempt(turn=5, move=_move("call-5")),
         )
 
-    def test_requested_experiences_follow_the_recent_order(self) -> None:
-        """頼む出来事は recent() と同じ順。同じ環境で先に起きた他人の行動 (ターン 6) は、自分の 1 手の結果 (ターン 5) より前に並ぶ。"""
+    def test_material_follows_the_recent_order(self) -> None:
+        """範囲が埋まったイベントの出来事は recent() と同じ順。同じ環境で先に起きた他人の行動 (ターン 6) は、自分の 1 手の結果 (ターン 5) より前に並ぶ。"""
         memory = _empty()
         memory.act(_move(), current_turn=5)
         memory.receive_result(_result(body="奪えなかった", order=_at(20.0)), current_turn=5)
         memory.perceive(_observation(body="ゲンが周囲を探索している", order=_at(10.0)), current_turn=5)
 
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
 
         (event,) = memory.get_events()
         assert [e.turn for e in event.experiences] == [6, 5]
 
-    def test_request_tells_the_latest_backstory(self) -> None:
-        """頼みごとのイベントは、頼んだときに持っていたいきさつのうち、いちばん新しいもの (範囲の終わりが最も後) を教える。持っていなければ None。"""
+    def test_event_tells_the_latest_backstory(self) -> None:
+        """範囲が埋まったイベントは、そのとき持っていたいきさつのうち、いちばん新しいもの (範囲の終わりが最も後) を教える。持っていなければ None。"""
         memory = self._one_result_per_turn(20)
         memory.add_backstory(_backstory(0, flow="古い"))
-        memory.fold(current_turn=20)
+        memory.clear_events()
+        memory.end_turn(turn=20)
         (with_backstory,) = memory.get_events()
         assert with_backstory.latest_backstory is not None and with_backstory.latest_backstory.flow == "古い"
 
         fresh = _empty()
-        fresh.fold(current_turn=20)
+        fresh.end_turn(turn=20)
         (no_backstory,) = fresh.get_events()
         assert no_backstory.latest_backstory is None
 
     def test_latest_backstory_is_the_newest_of_several(self) -> None:
-        """いきさつを 2 つ持って頼むと、新しい方 (範囲の終わりが後) を教える。"""
+        """いきさつを 2 つ持って範囲が埋まると、新しい方 (範囲の終わりが後) を教える。"""
         memory = _empty()
         memory.add_backstory(_backstory(0, flow="古い"))
         memory.add_backstory(_backstory(5, flow="新しい"))
         for turn in range(6, 26):
             _act_and_answer(memory, f"call-{turn}", turn)
+        memory.clear_events()
 
-        memory.fold(current_turn=25)
+        memory.end_turn(turn=25)
 
         (event,) = memory.get_events()
         assert event.latest_backstory is not None and event.latest_backstory.flow == "新しい"
 
     def test_backstory_drops_the_turns_it_covers(self) -> None:
-        """ターン 10 までのいきさつが届くと、ターン 10 までの出来事が外れ、範囲の始まりがターン 11 になり、頼みごとは済む。"""
+        """ターン 10 までのいきさつが届くと、ターン 10 までの出来事が外れ、範囲の始まりがターン 11 になり、いきさつを待つのをやめる。"""
         memory = self._one_result_per_turn(20)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
 
         memory.add_backstory(_backstory(10, written_turn=21))
 
         assert [e.turn for e in memory.recent()] == list(range(11, 21))
-        assert (memory.recent_from, memory.request) == (11, None)
+        assert (memory.recent_from, memory.awaited_backstory) == (11, None)
 
     def test_backstory_also_drops_an_unanswered_move_in_its_range(self) -> None:
         """いきさつが届いたとき、まとめた範囲に選んだまま結果の来ない 1 手があれば一緒に外れ、待っている 1 手は無くなる。そのあと次の 1 手を選べる。"""
         memory = _empty()
         memory.act(_move("call-5"), current_turn=5)
         memory.perceive(_observation(), current_turn=19)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
 
         memory.add_backstory(_backstory(10, written_turn=21))
 
@@ -508,86 +512,99 @@ class TestFold:
         memory.act(_move("call-21"), current_turn=21)
         assert memory.awaiting == Attempt(turn=21, move=_move("call-21"))
 
-    def test_missing_backstory_is_requested_again_for_the_same_range(self) -> None:
-        """頼んでから BACKSTORY_RETRY_TURNS (10) 過ぎても届かなければ、同じターン 10 までのいきさつを頼み直す BackstoryRequestedAgain をためる。"""
+    def test_missing_backstory_is_reported_as_overdue_for_the_same_range(self) -> None:
+        """待ち始めてから BACKSTORY_OVERDUE_TURNS (10) 経っても届かなければ、同じターン 10 までの出来事を持つ ShortTermMemoryBackstoryOverdueEvent をため、待ち始めたターンを今のターンに進める。"""
         memory = self._one_result_per_turn(20)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
         memory.clear_events()
 
-        memory.fold(current_turn=30)
+        memory.end_turn(turn=30)
 
         (event,) = memory.get_events()
-        assert isinstance(event, BackstoryRequestedAgain)
+        assert isinstance(event, ShortTermMemoryBackstoryOverdueEvent)
         assert (event.turn, event.until_turn, [e.turn for e in event.experiences]) == (30, 10, list(range(1, 11)))
-        assert memory.request == BackstoryRequest(until_turn=10, requested_turn=30)
+        assert memory.awaited_backstory == AwaitedBackstory(until_turn=10, since_turn=30)
 
-    def test_second_backstory_for_the_same_range_is_discarded(self) -> None:
-        """同じ範囲のいきさつが 2 つ届くと、2 つ目は入れず、StaleBackstoryDiscarded をためる。"""
+    def test_overdue_is_reported_even_when_end_turn_skips_turns(self) -> None:
+        """end_turn を呼ばないターンがあっても、待ち始めてから BACKSTORY_OVERDUE_TURNS 以上経って次に呼ばれたときに、遅れを知らせる。"""
         memory = self._one_result_per_turn(20)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
+        memory.clear_events()
+
+        memory.end_turn(turn=33)
+
+        (event,) = memory.get_events()
+        assert isinstance(event, ShortTermMemoryBackstoryOverdueEvent)
+        assert memory.awaited_backstory == AwaitedBackstory(until_turn=10, since_turn=33)
+
+    def test_second_backstory_for_the_same_range_is_refused(self) -> None:
+        """同じ範囲のいきさつが 2 つ届くと、2 つ目は ShortTermMemoryStaleBackstoryException で断り、中身もためたイベントも変えない。"""
+        memory = self._one_result_per_turn(20)
+        memory.end_turn(turn=20)
         memory.add_backstory(_backstory(10, written_turn=21, flow="先に届いた"))
         memory.clear_events()
+        before = _state(memory)
 
-        memory.add_backstory(_backstory(10, written_turn=22, flow="遅れて届いた"))
+        with pytest.raises(ShortTermMemoryStaleBackstoryException):
+            memory.add_backstory(_backstory(10, written_turn=22, flow="遅れて届いた"))
 
-        assert [b.flow for b in memory.backstories] == ["先に届いた"]
-        (event,) = memory.get_events()
-        assert isinstance(event, StaleBackstoryDiscarded)
-        assert (event.backstory.flow, event.latest_until_turn) == ("遅れて届いた", 10)
+        assert _state(memory) == before
 
     def test_range_at_the_limit_drops_old_turns_without_waiting(self) -> None:
-        """直近の範囲が FORCED_FOLD_TURNS (40) に届くと、いきさつを待たずにターン 10 までを外して FoldForced をため、続けてターン 20 までのいきさつを頼む。"""
+        """直近の範囲が FORCED_FOLD_TURNS (40) に届くと、いきさつを待たずにターン 10 までを外して ShortTermMemoryOldestTurnsDroppedEvent をため、続けてターン 20 までの範囲が埋まったことをためる。"""
         memory = self._one_result_per_turn(40)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
         memory.clear_events()
 
-        memory.fold(current_turn=40)
+        memory.end_turn(turn=40)
 
-        forced, requested = memory.get_events()
-        assert isinstance(forced, FoldForced) and isinstance(requested, FoldRequested)
-        assert (forced.until_turn, [e.turn for e in forced.dropped]) == (10, list(range(1, 11)))
+        dropped, filled = memory.get_events()
+        assert isinstance(dropped, ShortTermMemoryOldestTurnsDroppedEvent) and isinstance(
+            filled, ShortTermMemoryRangeFilledEvent
+        )
+        assert (dropped.turn, dropped.until_turn, [e.turn for e in dropped.dropped]) == (40, 10, list(range(1, 11)))
         assert memory.recent_from == 11
-        assert (requested.until_turn, memory.request) == (20, BackstoryRequest(until_turn=20, requested_turn=40))
+        assert (filled.until_turn, memory.awaited_backstory) == (20, AwaitedBackstory(until_turn=20, since_turn=40))
 
     def test_range_just_below_the_limit_keeps_waiting(self) -> None:
-        """頼んだまま範囲が 39 ターンのときは、いきさつを待ち続け、出来事は外さない。"""
+        """いきさつを待ったまま範囲が 39 ターンのときは、待ち続け、出来事は外さない。"""
         memory = self._one_result_per_turn(39)
-        memory.fold(current_turn=20)
-        memory.fold(current_turn=30)
+        memory.end_turn(turn=20)
+        memory.end_turn(turn=30)
         memory.clear_events()
 
-        memory.fold(current_turn=39)
+        memory.end_turn(turn=39)
 
         assert (memory.get_events(), memory.recent_from) == ([], 1)
 
-    def test_range_reaching_the_limit_without_a_request_drops_then_requests(self) -> None:
-        """一度も頼まないまま範囲が 40 ターンに届くと、まずターン 10 までを外し (FoldForced)、続けてターン 20 までを頼む (FoldRequested)。"""
+    def test_range_reaching_the_limit_without_waiting_drops_then_fills(self) -> None:
+        """一度も範囲が埋まったことを知らせないまま 40 ターンに届くと、まずターン 10 までを外し (ShortTermMemoryOldestTurnsDroppedEvent)、続けてターン 20 までの範囲が埋まったことをためる (ShortTermMemoryRangeFilledEvent)。"""
         memory = self._one_result_per_turn(40)
 
-        memory.fold(current_turn=40)
+        memory.end_turn(turn=40)
 
-        forced, requested = memory.get_events()
-        assert (type(forced), forced.until_turn, type(requested), requested.until_turn) == (
-            FoldForced,
+        dropped, filled = memory.get_events()
+        assert (type(dropped), dropped.until_turn, type(filled), filled.until_turn) == (
+            ShortTermMemoryOldestTurnsDroppedEvent,
             10,
-            FoldRequested,
+            ShortTermMemoryRangeFilledEvent,
             20,
         )
 
-    def test_backstory_short_of_the_request_keeps_the_request(self) -> None:
-        """頼んだ範囲 (ターン 10 まで) より手前 (ターン 5 まで) のいきさつが届くと、ターン 5 までは外れるが、頼みごとは済まない。"""
+    def test_backstory_short_of_the_awaited_range_keeps_waiting(self) -> None:
+        """待っている範囲 (ターン 10 まで) より手前 (ターン 5 まで) のいきさつが届くと、ターン 5 までは外れるが、待つのはやめない。"""
         memory = self._one_result_per_turn(20)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
 
         memory.add_backstory(_backstory(5, written_turn=21))
 
         assert memory.recent_from == 6
-        assert memory.request == BackstoryRequest(until_turn=10, requested_turn=20)
+        assert memory.awaited_backstory == AwaitedBackstory(until_turn=10, since_turn=20)
 
     def test_late_backstory_after_the_limit_is_added(self) -> None:
         """上限で外したあとに、その範囲 (ターン 10 まで) のいきさつが遅れて届くと入る。出来事はもう外れているので変わらない。"""
         memory = self._one_result_per_turn(40)
-        memory.fold(current_turn=40)
+        memory.end_turn(turn=40)
         experiences = memory.experiences
 
         memory.add_backstory(_backstory(10, written_turn=41))
@@ -598,8 +615,8 @@ class TestFold:
     def test_late_backstory_does_not_move_the_range_back(self) -> None:
         """上限で 2 回外した (範囲の始まりがターン 21) あとに、ターン 10 までのいきさつが遅れて届いても、範囲の始まりは戻らない。"""
         memory = self._one_result_per_turn(50)
-        memory.fold(current_turn=40)
-        memory.fold(current_turn=50)
+        memory.end_turn(turn=40)
+        memory.end_turn(turn=50)
         experiences = memory.experiences
 
         memory.add_backstory(_backstory(10, written_turn=51))
@@ -607,13 +624,47 @@ class TestFold:
         assert (memory.recent_from, memory.experiences) == (21, experiences)
 
     def test_memory_waiting_for_a_backstory_is_not_empty(self) -> None:
-        """出来事もいきさつも無くても、届くのを待っている頼みごとがあれば、空の短期記憶ではない (snapshot に残す)。"""
-        assert ShortTermMemory(ADA, request=BackstoryRequest(until_turn=10, requested_turn=20)).is_empty() is False
+        """出来事もいきさつも無くても、届くのを待っているいきさつがあれば、空の短期記憶ではない (snapshot に残す)。"""
+        assert (
+            ShortTermMemory(ADA, awaited_backstory=AwaitedBackstory(until_turn=10, since_turn=20)).is_empty() is False
+        )
 
     def test_turn_counts_follow_the_rules(self) -> None:
-        """外す数は直近の範囲より小さく、上限は外す数の 2 回分を待った長さ。頼み直すまでのターンは外す数と同じ。"""
-        assert (RECENT_TURNS, FOLD_TURNS, FORCED_FOLD_TURNS, BACKSTORY_RETRY_TURNS) == (20, 10, 40, 10)
+        """外す数は直近の範囲より小さく、上限は外す数の 2 回分を待った長さ。遅れを知らせるまでのターンは外す数と同じ。"""
+        assert (RECENT_TURNS, FOLD_TURNS, FORCED_FOLD_TURNS, BACKSTORY_OVERDUE_TURNS) == (20, 10, 40, 10)
         assert 0 < FOLD_TURNS < RECENT_TURNS < FORCED_FOLD_TURNS
+
+
+class TestBackstoryAdded:
+    """ShortTermMemory.add_backstory が、いきさつを入れて出来事を外したことを ShortTermMemoryBackstoryAddedEvent としてためることを保証する (design_decisions D1824-17)。"""
+
+    def test_added_backstory_and_dropped_experiences_are_reported(self) -> None:
+        """ターン 10 までのいきさつを入れると、入れたいきさつと、外したターン 10 までの出来事を持つイベントを 1 件ためる。"""
+        memory = TestEndTurn._one_result_per_turn(20)
+        memory.end_turn(turn=20)
+        memory.clear_events()
+        backstory = _backstory(10, written_turn=21)
+
+        memory.add_backstory(backstory)
+
+        (event,) = memory.get_events()
+        assert isinstance(event, ShortTermMemoryBackstoryAddedEvent)
+        assert (event.being_id, event.backstory, [e.turn for e in event.dropped]) == (
+            ADA,
+            backstory,
+            list(range(1, 11)),
+        )
+
+    def test_backstory_for_turns_already_dropped_reports_nothing_dropped(self) -> None:
+        """上限で外したあとに遅れて届いたいきさつを入れると、外した出来事の無いイベントをためる。"""
+        memory = TestEndTurn._one_result_per_turn(40)
+        memory.end_turn(turn=40)
+        memory.clear_events()
+
+        memory.add_backstory(_backstory(10, written_turn=41))
+
+        (event,) = memory.get_events()
+        assert isinstance(event, ShortTermMemoryBackstoryAddedEvent) and event.dropped == ()
 
 
 class TestEvents:
@@ -621,17 +672,17 @@ class TestEvents:
 
     def test_memory_and_event_are_on_the_eventing_base(self) -> None:
         """短期記憶はイベント基盤の AggregateRoot を継ぎ、ためたイベントは共通の DomainEvent を継ぐ (design_decisions D1837 の 2・3)。"""
-        memory = TestFold._one_result_per_turn(20)
+        memory = TestEndTurn._one_result_per_turn(20)
 
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
 
         (event,) = memory.get_events()
         assert isinstance(memory, AggregateRoot) and isinstance(event, DomainEvent)
 
     def test_clear_events_empties_the_pending_events(self) -> None:
         """clear_events() のあとは get_events() が空になり、中身は変わらない。"""
-        memory = TestFold._one_result_per_turn(20)
-        memory.fold(current_turn=20)
+        memory = TestEndTurn._one_result_per_turn(20)
+        memory.end_turn(turn=20)
         experiences = memory.experiences
 
         memory.clear_events()
@@ -641,8 +692,8 @@ class TestEvents:
 
     def test_get_events_returns_a_copy(self) -> None:
         """get_events() で受け取った並びを変えても、集約がためたイベントは変わらない。"""
-        memory = TestFold._one_result_per_turn(20)
-        memory.fold(current_turn=20)
+        memory = TestEndTurn._one_result_per_turn(20)
+        memory.end_turn(turn=20)
 
         memory.get_events().clear()
 
@@ -696,16 +747,16 @@ class TestBackstories:
         assert BACKSTORY_GENERATIONS == 3
         assert [b.until_turn for b in memory.backstories] == [20, 30, 40]
 
-    def test_backstory_for_an_earlier_range_is_discarded(self) -> None:
-        """いま持っているいきさつより前の範囲までのいきさつは入れず、StaleBackstoryDiscarded をためる。いきさつは変わらない。"""
+    def test_backstory_for_an_earlier_range_is_refused(self) -> None:
+        """いま持っているいきさつより前の範囲までのいきさつは ShortTermMemoryStaleBackstoryException で断り、いきさつもためたイベントも変わらない。"""
         memory = _empty()
         memory.add_backstory(_backstory(20))
+        memory.clear_events()
 
-        memory.add_backstory(_backstory(10, written_turn=30))
+        with pytest.raises(ShortTermMemoryStaleBackstoryException):
+            memory.add_backstory(_backstory(10, written_turn=30))
 
-        assert [b.until_turn for b in memory.backstories] == [20]
-        (event,) = memory.get_events()
-        assert isinstance(event, StaleBackstoryDiscarded)
+        assert ([b.until_turn for b in memory.backstories], memory.get_events()) == ([20], [])
 
     def test_non_backstory_is_rejected(self) -> None:
         """いきさつでない値を足そうとすると ShortTermMemoryValidationException を投げる。"""
@@ -748,7 +799,7 @@ class TestExperienceRules:
             {"backstories": tuple(_backstory(t) for t in (10, 20, 30, 40))},
             {"backstories": (_backstory(20), _backstory(10))},
             {"backstories": (_backstory(20), _backstory(20))},
-            {"recent_from": 4, "request": BackstoryRequest(until_turn=2, requested_turn=20)},
+            {"recent_from": 4, "awaited_backstory": AwaitedBackstory(until_turn=2, since_turn=20)},
             {"experiences": [Perception(turn=3, observation=_observation())]},
         ],
         ids=[
@@ -760,7 +811,7 @@ class TestExperienceRules:
             "too-many-backstories",
             "backstories-out-of-order",
             "backstories-same-range",
-            "request-before-the-range",
+            "awaited-backstory-before-the-range",
             "experiences-not-tuple",
         ],
     )
@@ -773,3 +824,34 @@ class TestExperienceRules:
         """持ち主の BeingId でないものを渡すと拒む。"""
         with pytest.raises(ShortTermMemoryValidationException):
             ShortTermMemory("being_p1")  # type: ignore[arg-type]
+
+
+class TestDroppedOrder:
+    """外した出来事を持つイベントが、出来事を recent() と同じ順で持つことを保証する。"""
+
+    @staticmethod
+    def _other_before_own_result() -> ShortTermMemory:
+        memory = _empty()
+        memory.act(_move(), current_turn=5)
+        memory.receive_result(_result(body="奪えなかった", order=_at(20.0)), current_turn=5)
+        memory.perceive(_observation(body="ゲンが周囲を探索している", order=_at(10.0)), current_turn=5)
+        return memory
+
+    def test_oldest_turns_dropped_follow_the_recent_order(self) -> None:
+        """上限で外した出来事は、同じ環境で先に起きた他人の行動 (ターン 6) が、自分の 1 手の結果 (ターン 5) より前に並ぶ。"""
+        memory = self._other_before_own_result()
+
+        memory.end_turn(turn=40)
+
+        dropped = memory.get_events()[0]
+        assert isinstance(dropped, ShortTermMemoryOldestTurnsDroppedEvent)
+        assert [e.turn for e in dropped.dropped] == [6, 5]
+
+    def test_backstory_added_dropped_follow_the_recent_order(self) -> None:
+        """いきさつが入って外した出来事も、recent() と同じ順に並ぶ。"""
+        memory = self._other_before_own_result()
+
+        memory.add_backstory(_backstory(10, written_turn=20))
+
+        (added,) = memory.get_events()
+        assert [e.turn for e in added.dropped] == [6, 5]

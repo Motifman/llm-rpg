@@ -999,7 +999,7 @@ class WorldRuntime:
 
     @property
     def async_event_executor(self) -> AsyncEventExecutor:
-        """受け手を登録する側が共有する、本人ごとの実行基盤を返す。"""
+        """非同期のハンドラを登録する側が共有する、本人ごとの実行基盤を返す。"""
         if self._async_event_executor is None:
             raise RuntimeError("非同期の配送が組み立てられていません")
         return self._async_event_executor
@@ -1126,7 +1126,7 @@ class WorldRuntime:
         channel: SpeechChannel,
         target_player_id: PlayerId | None = None,
     ) -> None:
-        """speech_speak ツールの実行口。channel に応じて WHISPER/SAY/SHOUT で発話する。
+        """speech_speak ツールを実行する。channel に応じて WHISPER/SAY/SHOUT で発話する。
 
         PlayerSpokeEvent を fire し、ObservationPipeline 経由で配信する。距離 gating
         (SoundPropagationService) は recipient strategy 側で行われる。
@@ -3915,7 +3915,7 @@ def _wire_backstory_writing(
     being_id_of: Callable[[PlayerId], BeingId | None],
     persona_of_player: Callable[[int], tuple[str, str]],
 ) -> None:
-    """短期記憶が頼んだいきさつを、非同期の配送で作り、その Being のターンの始めに入れる (design_decisions D1824-12)。"""
+    """短期記憶の範囲が埋まったか、いきさつが遅れているとき、非同期の配送でいきさつを作り、その Being のターンの始めに入れる (design_decisions D1824-12、D1824-17)。"""
     from ai_rpg_world.application.being.being_backstory_writing import BeingBackstoryWriting
     from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
         IShortTermMemorySummaryCompletionPort,
@@ -3926,7 +3926,10 @@ def _wire_backstory_writing(
     from ai_rpg_world.application.llm.wiring._llm_client_factory import (
         create_llm_client_from_config,
     )
-    from ai_rpg_world.being.domain.short_term_memory import BackstoryAsked
+    from ai_rpg_world.being.domain.short_term_memory import (
+        ShortTermMemoryBackstoryOverdueEvent,
+        ShortTermMemoryRangeFilledEvent,
+    )
     from ai_rpg_world.being.infrastructure.llm_backstory_writer import LlmBackstoryWriter
     from ai_rpg_world.eventing import AsyncDelivery
     from ai_rpg_world.eventing.delivery import DeliveryChannel, DeliveryGuarantee
@@ -3953,23 +3956,24 @@ def _wire_backstory_writing(
         trace_recorder_provider=lambda: runtime._trace_recorder,
         current_tick_provider=lambda: runtime.current_tick(),
     )
-    dispatcher.register_after_commit(
-        BackstoryAsked,
-        writing.note_person,
-        channel=DeliveryChannel.AUXILIARY,
-        guarantee=DeliveryGuarantee.BEST_EFFORT,
-    )
-    dispatcher.register_after_commit(
-        BackstoryAsked,
-        writing.write,
-        channel=DeliveryChannel.AUXILIARY,
-        guarantee=DeliveryGuarantee.BEST_EFFORT,
-        asynchronous=AsyncDelivery(
-            executor=runtime.async_event_executor,
-            recipient_key=lambda event: event.being_id.value,
-            apply_result=writing.apply,
-        ),
-    )
+    for event_type in (ShortTermMemoryRangeFilledEvent, ShortTermMemoryBackstoryOverdueEvent):
+        dispatcher.register_after_commit(
+            event_type,
+            writing.note_person,
+            channel=DeliveryChannel.AUXILIARY,
+            guarantee=DeliveryGuarantee.BEST_EFFORT,
+        )
+        dispatcher.register_after_commit(
+            event_type,
+            writing.write,
+            channel=DeliveryChannel.AUXILIARY,
+            guarantee=DeliveryGuarantee.BEST_EFFORT,
+            asynchronous=AsyncDelivery(
+                executor=runtime.async_event_executor,
+                recipient_key=lambda event: event.being_id.value,
+                apply_result=writing.apply,
+            ),
+        )
 
 
 def _build_persona_resolver(
@@ -4633,7 +4637,7 @@ def create_world_runtime(
         overflow_sink=ground_overflow_sink,
     )
     # spot-graph 世界専用の drop/pickup サービス。
-    # タイルマップで品を落とす旧受け手は
+    # タイルマップで品を落とす旧ハンドラは
     # physical_map 依存で world_runtime では発火しないため、本サービスが
     # SpotInterior.ground_items に直接書き込んで spot-graph 経路で
     # 拾えるようにする。LLM tool 配線とイベント/観測統合はフォロー
@@ -5442,7 +5446,7 @@ def create_world_runtime(
     )
 
     # PR #2: 状態異常 tick 進行 stage。active_effects の継続効果適用 + 期限
-    # 切れ掃除を担う。repositoryとevent収集口はCommandScopeから取得する。
+    # 切れ掃除を担う。repositoryとeventを集める先はCommandScopeから取得する。
     from ai_rpg_world.application.world_graph.status_effects_tick_stage_service import (
         StatusEffectsTickStageService,
     )
@@ -5700,11 +5704,11 @@ def create_world_runtime(
         current_tick_provider=lambda: runtime.current_tick(),
     )
 
-    # Being の保存先は、保存するときにためたイベントをこの配り手に渡す (design_decisions D1837 の 6)。
+    # Being の保存先は、保存するときにためたイベントをこの配送器に渡す (design_decisions D1837 の 6)。
     from ai_rpg_world.application.being.short_term_memory_event_traces import (
         ShortTermMemoryEventTraces,
     )
-    from ai_rpg_world.being.domain.short_term_memory import FoldForced, StaleBackstoryDiscarded
+    from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryOldestTurnsDroppedEvent
     from ai_rpg_world.eventing.delivery import DeliveryChannel, DeliveryGuarantee
 
     being_dispatcher: EventDispatcher[None] = EventDispatcher(failure_observer=_record_after_commit_failure)
@@ -5713,14 +5717,8 @@ def create_world_runtime(
         current_tick_provider=lambda: runtime.current_tick(),
     )
     being_dispatcher.register_after_commit(
-        FoldForced,
-        short_term_memory_event_traces.fold_forced,
-        channel=DeliveryChannel.OBSERVATION,
-        guarantee=DeliveryGuarantee.BEST_EFFORT,
-    )
-    being_dispatcher.register_after_commit(
-        StaleBackstoryDiscarded,
-        short_term_memory_event_traces.backstory_discarded,
+        ShortTermMemoryOldestTurnsDroppedEvent,
+        short_term_memory_event_traces.oldest_turns_dropped,
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
@@ -6028,7 +6026,7 @@ def create_world_runtime(
     )
 
     # 成功eventはinteractionのCommandContextからcommit後に配送する。
-    # このpublisherは前提条件拒否をrollback後の確定状態から観測する専用口。
+    # このpublisherは、前提条件で拒否したことを、rollback後の確定状態から観測するためだけに使う。
     interaction_service.set_event_publisher(pipeline_event_publisher)
     # 通常interactionと会議開始は、それぞれ独立したCommandScopeで確定する。
     # CALL_MEETINGを通常interactionの内側へ入れず、専用scopeを順に開始することで

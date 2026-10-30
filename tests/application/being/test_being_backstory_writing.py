@@ -13,12 +13,13 @@ from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter
 from ai_rpg_world.being.domain.short_term_memory import (
     Backstory,
     Experience,
-    FoldRequested,
-    StaleBackstoryDiscarded,
+    ShortTermMemoryBackstoryAddedEvent,
+    ShortTermMemoryRangeFilledEvent,
 )
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
+from ai_rpg_world.domain.being.exception.being_exceptions import ShortTermMemoryStaleBackstoryException
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ADA = BeingId("being_p1")
@@ -81,20 +82,20 @@ class _World:
             current_tick_provider=lambda: 7,
         )
 
-    def _noted(self, event: FoldRequested) -> FoldRequested:
+    def _noted(self, event: ShortTermMemoryRangeFilledEvent) -> ShortTermMemoryRangeFilledEvent:
         self.writing.note_person(event)
         return event
 
-    def request(self, *, previous: Backstory | None = None) -> FoldRequested:
-        """ターン 1 から 20 に 1 つずつ観測を置き、ターン 20 でいきさつを頼んで保存する。頼みごとのイベントを返す。"""
+    def fill_range(self, *, previous: Backstory | None = None) -> ShortTermMemoryRangeFilledEvent:
+        """ターン 1 から 20 に 1 つずつ観測を置き、ターン 20 で範囲が埋まった短期記憶を保存する。範囲が埋まったイベントを返す。"""
         memory = self.store.get(ADA)
         if previous is not None:
             memory.add_backstory(previous)
         for turn in range(0, 20):
             memory.perceive(_seen(f"ターン {turn + 1} の出来事"), current_turn=turn)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
         self.store.save(memory)
-        (event,) = [e for e in self.handed if isinstance(e, FoldRequested)]
+        (event,) = [e for e in self.handed if isinstance(e, ShortTermMemoryRangeFilledEvent)]
         self.handed.clear()
         return event
 
@@ -107,7 +108,7 @@ class TestNotePerson:
         world = _World()
         looked_up: list[BeingId] = []
         world.writing._persona_of = lambda being_id: (looked_up.append(being_id), ("エイダ", "慎重"))[1]  # type: ignore[method-assign]
-        event = world.request()
+        event = world.fill_range()
         world.writing.note_person(event)
         world.writing.note_person(event)
 
@@ -118,13 +119,13 @@ class TestNotePerson:
 
 
 class TestWrite:
-    """BeingBackstoryWriting.write が、頼まれた範囲と前のいきさつと本人の人物像で、いきさつを作ることを保証する。"""
+    """BeingBackstoryWriting.write が、埋まった範囲の出来事と前のいきさつと本人の人物像で、いきさつを作ることを保証する。"""
 
-    def test_writes_from_the_requested_experiences_and_the_latest_backstory(self) -> None:
-        """頼まれた範囲の出来事 (ターン 1 から 10 の 10 件)、いちばん新しいいきさつ、本人の名前と性格を書き手に渡し、その Being のいきさつとして返す。短期記憶はまだ変えない。"""
+    def test_writes_from_the_range_experiences_and_the_latest_backstory(self) -> None:
+        """埋まった範囲のうち、まとめる出来事 (ターン 1 から 10 の 10 件)、いちばん新しいいきさつ、本人の名前と性格を書き手に渡し、その Being のいきさつとして返す。短期記憶はまだ変えない。"""
         world = _World()
         previous = Backstory(flow="前の流れ", mood="", written_turn=0, until_turn=0)
-        event = world.request(previous=previous)
+        event = world.fill_range(previous=previous)
 
         written = world.writing.write(world._noted(event))
 
@@ -138,12 +139,12 @@ class TestWrite:
         assert written == WrittenBackstory(
             being_id=ADA, backstory=Backstory(flow="10 件の流れ", mood="", written_turn=20, until_turn=10)
         )
-        assert world.store.get(ADA).request is not None
+        assert world.store.get(ADA).awaited_backstory is not None
 
     def test_writer_failure_propagates(self) -> None:
-        """書き手が失敗すると、例外をそのまま投げる。非同期の配送が失敗として trace に残し、頼みごとは残る。"""
+        """書き手が失敗すると、例外をそのまま投げる。非同期の配送が失敗として trace に残し、短期記憶は待ち続ける。"""
         world = _World()
-        event = world.request()
+        event = world.fill_range()
 
         def broken(**kwargs: Any) -> Backstory:
             raise ValueError("LLM が答えなかった")
@@ -158,14 +159,19 @@ class TestApply:
     """BeingBackstoryWriting.apply が、作ったいきさつを短期記憶に入れて保存し、trace に残すことを保証する。"""
 
     def test_backstory_is_added_and_covered_experiences_are_dropped(self) -> None:
-        """いきさつを入れると、ターン 10 までの出来事が外れ、頼みごとが済み、being_backstory_written が残る。"""
+        """いきさつを入れると、ターン 10 までの出来事が外れ、待つのをやめ、保存するときに ShortTermMemoryBackstoryAddedEvent が配送器に渡り、being_backstory_written が残る。"""
         world = _World()
-        written = world.writing.write(world._noted(world.request()))
+        written = world.writing.write(world._noted(world.fill_range()))
 
         world.writing.apply(written)
 
         memory = world.store.get(ADA)
-        assert ([b.until_turn for b in memory.backstories], memory.recent_from, memory.request) == ([10], 11, None)
+        assert ([b.until_turn for b in memory.backstories], memory.recent_from, memory.awaited_backstory) == (
+            [10],
+            11,
+            None,
+        )
+        assert [type(e) for e in world.handed] == [ShortTermMemoryBackstoryAddedEvent]
         ((kind, payload),) = world.recorder.events  # type: ignore[union-attr]
         assert kind == TraceEventKind.BEING_BACKSTORY_WRITTEN
         assert (payload["being_id"], payload["until_turn"], payload["written_turn"], payload["flow"]) == (
@@ -175,22 +181,25 @@ class TestApply:
             "10 件の流れ",
         )
 
-    def test_late_backstory_for_the_same_range_is_discarded_through_the_store(self) -> None:
-        """同じ範囲のいきさつが 2 度届くと、2 度目は入らず、保存するときに StaleBackstoryDiscarded が配り手に渡る。"""
+    def test_late_backstory_for_the_same_range_is_refused(self) -> None:
+        """同じ範囲のいきさつが 2 度届くと、2 度目は短期記憶が ShortTermMemoryStaleBackstoryException で断り、保存も trace の記録もしない。非同期の配送が反映の失敗として残す。"""
         world = _World()
-        written = world.writing.write(world._noted(world.request()))
+        written = world.writing.write(world._noted(world.fill_range()))
         world.writing.apply(written)
+        world.handed.clear()
+        recorded = len(world.recorder.events)  # type: ignore[union-attr]
 
-        world.writing.apply(written)
+        with pytest.raises(ShortTermMemoryStaleBackstoryException):
+            world.writing.apply(written)
 
-        assert [type(e) for e in world.handed] == [StaleBackstoryDiscarded]
-        assert len(world.store.get(ADA).backstories) == 1
+        assert (world.handed, len(world.store.get(ADA).backstories)) == ([], 1)
+        assert len(world.recorder.events) == recorded  # type: ignore[union-attr]
 
     def test_apply_without_recorder_still_adds_the_backstory(self) -> None:
         """trace recorder の無い run でも、いきさつは入る。"""
         world = _World()
         world.recorder = None
-        written = world.writing.write(world._noted(world.request()))
+        written = world.writing.write(world._noted(world.fill_range()))
 
         world.writing.apply(written)
 

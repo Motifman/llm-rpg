@@ -19,6 +19,7 @@ from ai_rpg_world.being.contract import (
     OwnActionResult,
 )
 from ai_rpg_world.domain.being.exception.being_exceptions import (
+    ShortTermMemoryStaleBackstoryException,
     ShortTermMemoryUnpairedResultException,
     ShortTermMemoryValidationException,
 )
@@ -28,8 +29,9 @@ from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 RECENT_TURNS: Final = 20
 FOLD_TURNS: Final = 10
 BACKSTORY_GENERATIONS: Final = 3
-# 頼んだいきさつがこのターン数のあいだ届かなければ、いきさつだけを頼み直す。
-BACKSTORY_RETRY_TURNS: Final = 10
+# いきさつを待ち始めてからこのターン数経っても届かなければ、遅れていることを知らせる。
+# 上限 (FORCED_FOLD_TURNS) まで待つ間に 1 回知らせられる長さ (design_decisions D1824-11)。
+BACKSTORY_OVERDUE_TURNS: Final = 10
 # 直近の範囲がここまで伸びたら、いきさつを待たずに古いターンを外す (外す数の 2 回分を待つ)。
 FORCED_FOLD_TURNS: Final = RECENT_TURNS + 2 * FOLD_TURNS
 
@@ -259,15 +261,18 @@ class Backstory:
 
 
 @dataclass(frozen=True, kw_only=True)
-class BackstoryRequest:
-    """いきさつの頼みごと。``until_turn`` までの出来事をまとめてほしい、と ``requested_turn`` に頼んだ。"""
+class AwaitedBackstory:
+    """届くのを待っている、``until_turn`` までの出来事をまとめたいきさつ。
+
+    ``since_turn`` は今の待ちを始めたターン (範囲が埋まったとき、または遅れを知らせたとき)。
+    """
 
     until_turn: int
-    requested_turn: int
+    since_turn: int
 
     def __post_init__(self) -> None:
         _require_turn(self.until_turn, "until_turn")
-        _require_turn(self.requested_turn, "requested_turn")
+        _require_turn(self.since_turn, "since_turn")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -278,10 +283,10 @@ class ShortTermMemoryEvent(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class BackstoryAsked(ShortTermMemoryEvent):
-    """``until_turn`` までの出来事をまとめたいきさつを頼んだ。届いたら ``add_backstory`` に渡す。
+class _RangeToSummarize(ShortTermMemoryEvent):
+    """``until_turn`` までの出来事を、いきさつにまとめたい範囲として持つイベントの共通の欄。
 
-    ``experiences`` は ``recent()`` と同じ順。``backstories`` は頼んだときに持っていたいきさつ。
+    ``experiences`` は ``recent()`` と同じ順。``backstories`` はそのとき持っていたいきさつ。
     """
 
     turn: int
@@ -296,21 +301,18 @@ class BackstoryAsked(ShortTermMemoryEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class FoldRequested(BackstoryAsked):
-    """直近の範囲が満ちたので、``until_turn`` までの出来事を外したい。
-
-    受け手は、いきさつを作り、エピソードを書き起こす。出来事は、いきさつが届くまで外さない。
-    """
+class ShortTermMemoryRangeFilledEvent(_RangeToSummarize):
+    """直近の範囲が ``RECENT_TURNS`` に届いた。古い ``until_turn`` までの出来事は、いきさつが届くまで外さない。"""
 
 
 @dataclass(frozen=True, kw_only=True)
-class BackstoryRequestedAgain(BackstoryAsked):
-    """頼んだいきさつが届かないので、同じ範囲のいきさつだけをもう一度頼む。エピソードは書き起こし直さない。"""
+class ShortTermMemoryBackstoryOverdueEvent(_RangeToSummarize):
+    """待っているいきさつが、待ち始めてから ``BACKSTORY_OVERDUE_TURNS`` 経っても届かない。範囲は変わらない。"""
 
 
 @dataclass(frozen=True, kw_only=True)
-class FoldForced(ShortTermMemoryEvent):
-    """直近の範囲が上限に届いたので、いきさつを待たずに ``until_turn`` までの出来事を外した。"""
+class ShortTermMemoryOldestTurnsDroppedEvent(ShortTermMemoryEvent):
+    """直近の範囲が ``FORCED_FOLD_TURNS`` に届いたので、いきさつを待たずに ``until_turn`` までの出来事を外した。``dropped`` は ``recent()`` と同じ順。"""
 
     turn: int
     until_turn: int
@@ -318,11 +320,11 @@ class FoldForced(ShortTermMemoryEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StaleBackstoryDiscarded(ShortTermMemoryEvent):
-    """届いたいきさつが、いま持っているいきさつと同じか前の範囲までのものだったので入れなかった。"""
+class ShortTermMemoryBackstoryAddedEvent(ShortTermMemoryEvent):
+    """いきさつが入り、まとめた範囲までの出来事を外した。``dropped`` は ``recent()`` と同じ順で、上限で先に外していれば空。"""
 
     backstory: Backstory
-    latest_until_turn: int
+    dropped: tuple[Experience, ...]
 
 
 class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
@@ -330,7 +332,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
 
     操作は中身を書き換え、値を返さない。決まりに反する操作は例外を投げ、中身もためたイベントも変えない。
     ``recent_from`` は直近の範囲の始まりのターン。``awaiting`` は結果を待っている 1 手。
-    ``request`` は、届くのを待っているいきさつの頼みごと。
+    ``awaited_backstory`` は、届くのを待っているいきさつ。
     """
 
     def __init__(
@@ -341,13 +343,13 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         backstories: tuple[Backstory, ...] = (),
         recent_from: int = 1,
         awaiting: Attempt | None = None,
-        request: BackstoryRequest | None = None,
+        awaited_backstory: AwaitedBackstory | None = None,
     ) -> None:
         if not isinstance(being_id, BeingId):
             raise ShortTermMemoryValidationException("being_id must be BeingId")
         super().__init__()
         self._being_id = being_id
-        self._become(experiences, backstories, recent_from, awaiting, request)
+        self._become(experiences, backstories, recent_from, awaiting, awaited_backstory)
 
     @classmethod
     def empty(cls, being_id: BeingId) -> ShortTermMemory:
@@ -375,8 +377,8 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         return self._awaiting
 
     @property
-    def request(self) -> BackstoryRequest | None:
-        return self._request
+    def awaited_backstory(self) -> AwaitedBackstory | None:
+        return self._awaited
 
     def is_empty(self) -> bool:
         return (
@@ -384,26 +386,26 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
             and not self._backstories
             and self._recent_from == 1
             and self._awaiting is None
-            and self._request is None
+            and self._awaited is None
         )
 
     def perceive(self, observation: Observation, *, current_turn: int) -> None:
         """観測は 1 手を選ぶ前に届き、次の 1 手がそれを見る。"""
         turn = _require_turn(current_turn, "current_turn") + 1
         experiences = self._with(Perception(turn=turn, observation=observation))
-        self._become(experiences, self._backstories, self._recent_from, self._awaiting, self._request)
+        self._become(experiences, self._backstories, self._recent_from, self._awaiting, self._awaited)
 
     def act(self, move: AgentMove, *, current_turn: int) -> None:
         """前の 1 手の結果がまだ来ていなければ、前の 1 手を結果の分からない試みとして残す。"""
         attempt = Attempt(turn=_require_turn(current_turn, "current_turn"), move=move)
         experiences = self._experiences if self._awaiting is None else self._with(self._awaiting)
-        self._become(experiences, self._backstories, self._recent_from, attempt, self._request)
+        self._become(experiences, self._backstories, self._recent_from, attempt, self._awaited)
 
     def receive_result(self, result: Outcome, *, current_turn: int) -> None:
         if self._awaiting is None:
             raise ShortTermMemoryUnpairedResultException(f"no move is awaiting {result!r}")
         attempt = self._awaiting.answered_by(result, turn=_require_turn(current_turn, "current_turn"))
-        self._become(self._with(attempt), self._backstories, self._recent_from, None, self._request)
+        self._become(self._with(attempt), self._backstories, self._recent_from, None, self._awaited)
 
     def lapse(
         self,
@@ -414,55 +416,65 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         order: OccurrenceOrder | None = None,
     ) -> None:
         lapse = Lapse(turn=_require_turn(current_turn, "current_turn"), body=body, time=time, order=order)
-        self._become(self._with(lapse), self._backstories, self._recent_from, self._awaiting, self._request)
+        self._become(self._with(lapse), self._backstories, self._recent_from, self._awaiting, self._awaited)
 
     def recent(self) -> tuple[Experience, ...]:
         """ターンの順に、同じ環境が続く間は起きた順に並べる。起きた順を持たない出来事は動かさない。"""
         return _in_recent_order(self._experiences)
 
-    def fold(self, *, current_turn: int) -> None:
-        """直近の範囲が満ちていれば、古い ``FOLD_TURNS`` ターン分のいきさつを頼む (design_decisions D1824-11)。
+    def end_turn(self, *, turn: int) -> None:
+        """ターンの終わりに、直近の範囲の大きさを見る (design_decisions D1824-11、D1824-17)。
 
         範囲は ``recent_from`` から今のターンまでで、出来事の無いターンも 1 つと数える。
 
-        - ``RECENT_TURNS`` に届き、まだ頼んでいなければ ``FoldRequested`` をためる。出来事はまだ外さない
-        - 頼んでから ``BACKSTORY_RETRY_TURNS`` 過ぎても届かなければ ``BackstoryRequestedAgain`` をためる
-        - ``FORCED_FOLD_TURNS`` に届いたら、いきさつを待たずに古い ``FOLD_TURNS`` ターン分を外し、``FoldForced`` をためる
+        - ``FORCED_FOLD_TURNS`` に届いたら、いきさつを待たずに古い ``FOLD_TURNS`` ターン分を外し、
+          ``ShortTermMemoryOldestTurnsDroppedEvent`` をためる
+        - いきさつを待っておらず ``RECENT_TURNS`` に届いたら、古い ``FOLD_TURNS`` ターン分のいきさつを待ち始め、
+          ``ShortTermMemoryRangeFilledEvent`` をためる。出来事はまだ外さない
+        - 待ち始めてから ``BACKSTORY_OVERDUE_TURNS`` 経っても届かなければ、待ち始めたターンを今のターンに進め、
+          ``ShortTermMemoryBackstoryOverdueEvent`` をためる
         """
-        size = _require_turn(current_turn, "current_turn") - self._recent_from + 1
+        size = _require_turn(turn, "turn") - self._recent_from + 1
         if size >= FORCED_FOLD_TURNS:
             until_turn = self._recent_from + FOLD_TURNS - 1
             dropped = self._forget_until(until_turn)
-            self._add(FoldForced, turn=current_turn, until_turn=until_turn, dropped=dropped)
-        if self._request is None:
+            self._add(ShortTermMemoryOldestTurnsDroppedEvent, turn=turn, until_turn=until_turn, dropped=dropped)
+        if self._awaited is None:
             if size >= RECENT_TURNS:
                 until_turn = self._recent_from + FOLD_TURNS - 1
-                self._ask(until_turn, current_turn)
-                self._add(FoldRequested, turn=current_turn, until_turn=until_turn, **self._material(until_turn))
+                self._await(until_turn, since_turn=turn)
+                self._add(
+                    ShortTermMemoryRangeFilledEvent, turn=turn, until_turn=until_turn, **self._material(until_turn)
+                )
             return
-        if current_turn - self._request.requested_turn >= BACKSTORY_RETRY_TURNS:
-            until_turn = self._request.until_turn
-            self._ask(until_turn, current_turn)
-            self._add(BackstoryRequestedAgain, turn=current_turn, until_turn=until_turn, **self._material(until_turn))
+        if turn - self._awaited.since_turn >= BACKSTORY_OVERDUE_TURNS:
+            until_turn = self._awaited.until_turn
+            self._await(until_turn, since_turn=turn)
+            self._add(
+                ShortTermMemoryBackstoryOverdueEvent, turn=turn, until_turn=until_turn, **self._material(until_turn)
+            )
 
     def add_backstory(self, backstory: Backstory) -> None:
-        """届いたいきさつを入れ、まとめた範囲までの出来事を外す。前の範囲までのいきさつは入れない。"""
+        """届いたいきさつを入れ、まとめた範囲までの出来事を外す。同じか前の範囲までのいきさつは例外で断る。"""
         if not isinstance(backstory, Backstory):
             raise ShortTermMemoryValidationException("backstory must be Backstory")
         latest = self._backstories[-1].until_turn if self._backstories else None
         if latest is not None and backstory.until_turn <= latest:
-            self._add(StaleBackstoryDiscarded, backstory=backstory, latest_until_turn=latest)
-            return
+            raise ShortTermMemoryStaleBackstoryException(
+                f"backstory until turn {backstory.until_turn} is not later than the latest one until turn {latest}"
+            )
         backstories = (*self._backstories, backstory)[-BACKSTORY_GENERATIONS:]
-        request = self._request
-        if request is not None and backstory.until_turn >= request.until_turn:
-            request = None
+        awaited = self._awaited
+        if awaited is not None and backstory.until_turn >= awaited.until_turn:
+            awaited = None
+        dropped = _in_recent_order(self._up_to(backstory.until_turn))
         experiences, recent_from, awaiting = self._after_forgetting(backstory.until_turn)
-        self._become(experiences, backstories, recent_from, awaiting, request)
+        self._become(experiences, backstories, recent_from, awaiting, awaited)
+        self._add(ShortTermMemoryBackstoryAddedEvent, backstory=backstory, dropped=dropped)
 
-    def _ask(self, until_turn: int, current_turn: int) -> None:
-        request = BackstoryRequest(until_turn=until_turn, requested_turn=current_turn)
-        self._become(self._experiences, self._backstories, self._recent_from, self._awaiting, request)
+    def _await(self, until_turn: int, *, since_turn: int) -> None:
+        awaited = AwaitedBackstory(until_turn=until_turn, since_turn=since_turn)
+        self._become(self._experiences, self._backstories, self._recent_from, self._awaiting, awaited)
 
     def _material(self, until_turn: int) -> dict[str, Any]:
         """いきさつとエピソードの材料。外す範囲の出来事と、今のいきさつ。"""
@@ -475,13 +487,13 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         return tuple(e for e in experiences if e.turn <= until_turn)
 
     def _forget_until(self, until_turn: int) -> tuple[Experience, ...]:
-        """``until_turn`` までの出来事を外す。届くのを待っていた頼みごとは、その範囲がもう無いので取り下げる。"""
-        dropped = self._up_to(until_turn)
+        """``until_turn`` までの出来事を外す。その範囲までのいきさつを待っていたなら、範囲がもう無いので待つのをやめる。"""
+        dropped = _in_recent_order(self._up_to(until_turn))
         experiences, recent_from, awaiting = self._after_forgetting(until_turn)
-        request = self._request
-        if request is not None and request.until_turn <= until_turn:
-            request = None
-        self._become(experiences, self._backstories, recent_from, awaiting, request)
+        awaited = self._awaited
+        if awaited is not None and awaited.until_turn <= until_turn:
+            awaited = None
+        self._become(experiences, self._backstories, recent_from, awaiting, awaited)
         return dropped
 
     def _after_forgetting(self, until_turn: int) -> tuple[tuple[Experience, ...], int, Attempt | None]:
@@ -513,7 +525,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         backstories: tuple[Backstory, ...],
         recent_from: int,
         awaiting: Attempt | None,
-        request: BackstoryRequest | None,
+        awaited: AwaitedBackstory | None,
     ) -> None:
         """決まりを確かめてから書き換える。決まりに反すれば何も変えずに例外を投げる。"""
         if not isinstance(experiences, tuple) or not all(isinstance(e, Experience) for e in experiences):
@@ -538,13 +550,13 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         until = [b.until_turn for b in backstories]
         if until != sorted(set(until)):
             raise ShortTermMemoryValidationException("backstories must cover later turns in order")
-        if request is not None and (not isinstance(request, BackstoryRequest) or request.until_turn < recent_from):
-            raise ShortTermMemoryValidationException("a request must ask for turns within the recent range")
+        if awaited is not None and (not isinstance(awaited, AwaitedBackstory) or awaited.until_turn < recent_from):
+            raise ShortTermMemoryValidationException("the awaited backstory must cover turns within the recent range")
         self._experiences = experiences
         self._backstories = backstories
         self._recent_from = recent_from
         self._awaiting = awaiting
-        self._request = request
+        self._awaited = awaited
 
 
 def _in_recent_order(experiences: tuple[Experience, ...]) -> tuple[Experience, ...]:
@@ -576,7 +588,7 @@ class ShortTermMemoryRepository(ABC):
 
     @abstractmethod
     def save(self, memory: ShortTermMemory) -> None:
-        """保存したあとで渡した集約を書き換えても、保存先は変わらない。ためたイベントは取り出して配り手に渡す。"""
+        """保存したあとで渡した集約を書き換えても、保存先は変わらない。ためたイベントは取り出して配送器に渡す。"""
 
     @abstractmethod
     def replace_all_by_being(self, memory: ShortTermMemory) -> None:
@@ -585,27 +597,26 @@ class ShortTermMemoryRepository(ABC):
 
 __all__ = [
     "BACKSTORY_GENERATIONS",
-    "BACKSTORY_RETRY_TURNS",
+    "BACKSTORY_OVERDUE_TURNS",
     "FOLD_TURNS",
     "FORCED_FOLD_TURNS",
     "RECENT_TURNS",
     "Attempt",
+    "AwaitedBackstory",
     "Backstory",
-    "BackstoryAsked",
-    "BackstoryRequest",
-    "BackstoryRequestedAgain",
     "Experience",
     "ExperienceReader",
-    "FoldForced",
-    "FoldRequested",
     "Lapse",
     "MemoryOperationOutcome",
     "ObservedOutcome",
     "Outcome",
     "Perception",
     "ShortTermMemory",
+    "ShortTermMemoryBackstoryAddedEvent",
+    "ShortTermMemoryBackstoryOverdueEvent",
     "ShortTermMemoryEvent",
+    "ShortTermMemoryOldestTurnsDroppedEvent",
+    "ShortTermMemoryRangeFilledEvent",
     "ShortTermMemoryRepository",
-    "StaleBackstoryDiscarded",
     "UnknownOutcome",
 ]

@@ -53,7 +53,7 @@ def _write(
 
 
 class TestLlmBackstoryWriter:
-    """LlmBackstoryWriter が、外す出来事と前のいきさつから LLM に頼む文を組み、応答をいきさつにすることを保証する (design_decisions D1824-12)。"""
+    """LlmBackstoryWriter が、外す出来事と前のいきさつから LLM に渡す文を組み、応答をいきさつにすることを保証する (design_decisions D1824-12)。"""
 
     def test_response_becomes_a_backstory_for_the_range(self) -> None:
         """応答の流れと気分が、まとめた範囲の終わり (10) と書いたターン (20) を持ついきさつになる。"""
@@ -100,7 +100,7 @@ class TestLlmBackstoryWriter:
         ids=["no-flow", "blank-flow", "not-object"],
     )
     def test_broken_response_is_rejected(self, response: Any) -> None:
-        """流れが無い、空白だけ、JSON object でない応答は ValueError。頼みごとは残り、短期記憶が頼み直す。"""
+        """流れが無い、空白だけ、JSON object でない応答は ValueError。短期記憶はいきさつを待ち続け、遅れたら知らせるので、書き直される。"""
         with pytest.raises(ValueError):
             _write(LlmBackstoryWriter(_Completion(response)))
 
