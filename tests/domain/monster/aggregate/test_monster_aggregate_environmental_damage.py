@@ -25,9 +25,6 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterAlreadyDeadException,
 )
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import (
-    MonsterLifecycleState,
-)
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import (
     MonsterTemplateId,
@@ -40,7 +37,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
     SkillLoadoutAggregate,
 )
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _aggregate(*, max_hp: int = 20) -> MonsterAggregate:
@@ -48,8 +44,13 @@ def _aggregate(*, max_hp: int = 20) -> MonsterAggregate:
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=max_hp, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=max_hp,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(100, True),
@@ -60,10 +61,11 @@ def _aggregate(*, max_hp: int = 20) -> MonsterAggregate:
     return MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=template,
-        world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -74,15 +76,17 @@ class TestNonLethal:
     """致命でないダメージで HP 減少 + Damaged event 発火。"""
 
     def test_hp_event_trigger(self) -> None:
-        """HP 減 event 発火。"""
+        """HP20へ環境ダメージ3を与えるとHP17で生存し、攻撃者なしの被害を通知する。"""
         agg = _aggregate(max_hp=20)
         agg.clear_events()
         agg.take_environmental_damage(damage=3, current_tick=WorldTick(10))
 
         assert agg.hp.value == 17
+        assert agg.status == MonsterStatusEnum.ALIVE
         events = [e for e in agg.get_events() if isinstance(e, MonsterDamagedEvent)]
         assert len(events) == 1
         assert events[0].damage == 3
+        assert events[0].current_hp == 17
         assert events[0].attacker_id is None  # 環境ダメージ
         # まだ生存
         died_events = [e for e in agg.get_events() if isinstance(e, MonsterDiedEvent)]
@@ -93,15 +97,20 @@ class TestLethal:
     """致命ダメージで cause=ENVIRONMENT の MonsterDiedEvent。"""
 
     def test_hp_cause_environment_dead(self) -> None:
-        """HP 削り切ると cause ENVIRONMENT で死亡。"""
+        """HP5へ環境ダメージ10を与えるとHP0になり、tick20の環境死として記録する。"""
         agg = _aggregate(max_hp=5)
         agg.clear_events()
         agg.take_environmental_damage(damage=10, current_tick=WorldTick(20))
 
-        assert agg.status != MonsterStatusEnum.ALIVE
-        died_events = [
-            e for e in agg.get_events() if isinstance(e, MonsterDiedEvent)
-        ]
+        assert agg.hp.value == 0
+        assert agg.status == MonsterStatusEnum.DEAD
+        assert agg.last_death_tick == WorldTick(20)
+        damaged_events = [e for e in agg.get_events() if isinstance(e, MonsterDamagedEvent)]
+        assert len(damaged_events) == 1
+        assert damaged_events[0].damage == 10
+        assert damaged_events[0].current_hp == 0
+        assert damaged_events[0].attacker_id is None
+        died_events = [e for e in agg.get_events() if isinstance(e, MonsterDiedEvent)]
         assert len(died_events) == 1
         assert died_events[0].cause == DeathCauseEnum.ENVIRONMENT
         # killer 情報は無し
@@ -113,17 +122,17 @@ class TestAlreadyDead:
     """DEAD 状態で呼ぶと例外。"""
 
     def test_dead_take_environmental_damage_raises_exception(self) -> None:
-        """DEAD 状態で takeenvironmentaldamage は例外。"""
+        """HPが残る飢餓死後の環境被害は拒否され、HP・死亡時刻・既存イベントを保つ。"""
         agg = _aggregate()
-        # DEAD 状態に強制遷移
-        agg._lifecycle_state = MonsterLifecycleState(
-            hp=agg._lifecycle_state.hp,
-            mp=agg._lifecycle_state.mp,
-            status=MonsterStatusEnum.DEAD,
-            last_death_tick=WorldTick(1),
-            spawned_at_tick=WorldTick(0),
-            hunger=0.0,
-            starvation_timer=0,
-        )
+        agg.starve(WorldTick(1))
+        assert agg.hp.value == 20
+        assert agg.status == MonsterStatusEnum.DEAD
+        events_before = agg.get_events()
+        assert events_before
+
         with pytest.raises(MonsterAlreadyDeadException):
             agg.take_environmental_damage(damage=5, current_tick=WorldTick(10))
+
+        assert agg.hp.value == 20
+        assert agg.last_death_tick == WorldTick(1)
+        assert agg.get_events() == events_before

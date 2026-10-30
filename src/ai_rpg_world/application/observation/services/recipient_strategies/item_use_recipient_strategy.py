@@ -55,10 +55,7 @@ class ItemUseRecipientStrategy(IRecipientResolutionStrategy):
             return []
 
         entity_spot = graph.entity_spot_mapping()
-        known_player_ids: set[int] = {
-            s.player_id.value
-            for s in self._player_status_repository.find_all()
-        }
+        known_player_ids: set[int] = {s.player_id.value for s in self._player_status_repository.find_all()}
 
         result: list[PlayerId] = []
         for eid, sid in entity_spot.items():

@@ -55,13 +55,17 @@ SPOT_B = SpotId.create(2)
 
 
 def _node(
-    spot_id: SpotId, *,
+    spot_id: SpotId,
+    *,
     intensity: SoundIntensityEnum = SoundIntensityEnum.SILENT,
     ambient: str | None = None,
 ) -> SpotNode:
     return SpotNode(
-        spot_id=spot_id, name=f"spot{spot_id.value}", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=spot_id,
+        name=f"spot{spot_id.value}",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
             lighting=LightingEnum.BRIGHT,
             sound_ambient=ambient,
@@ -72,21 +76,27 @@ def _node(
     )
 
 
-def _build_AB(
+def _build_ab(
     *,
-    intensity_B: SoundIntensityEnum,
+    intensity_b: SoundIntensityEnum,
     passage: Passage,
 ) -> tuple[SpotGraphAggregate, EntityId]:
-    """A (SILENT) ←→ B (intensity_B) で接続だけ差し替えるヘルパー。"""
+    """A (SILENT) ←→ B (intensity_b) で接続だけ差し替えるヘルパー。"""
     g = SpotGraphAggregate.empty(GRAPH_ID)
     g.add_spot(_node(SPOT_A))
-    g.add_spot(_node(SPOT_B, intensity=intensity_B, ambient="B音"))
-    g.add_connection(SpotConnection(
-        connection_id=ConnectionId.create(10),
-        from_spot_id=SPOT_A, to_spot_id=SPOT_B,
-        name="c", description="", travel_ticks=1,
-        is_bidirectional=False, passage=passage,
-    ))
+    g.add_spot(_node(SPOT_B, intensity=intensity_b, ambient="B音"))
+    g.add_connection(
+        SpotConnection(
+            connection_id=ConnectionId.create(10),
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            name="c",
+            description="",
+            travel_ticks=1,
+            is_bidirectional=False,
+            passage=passage,
+        )
+    )
     eid = EntityId.create(7)
     g.place_entity(eid, SPOT_A)
     g.clear_events()
@@ -109,6 +119,7 @@ class TestAdjacentMovingOccupants:
         [
             (1.0, 0, 0),
             (1.0, 1, 1),
+            (1.0, 3, 3),
             (0.5, 0, 0),
             (0.5, 1, None),
             (0.5, 3, None),
@@ -117,11 +128,14 @@ class TestAdjacentMovingOccupants:
         ],
     )
     def test_presence_detail_follows_permeability(
-        self, permeability: float, moving_count: int, expected: int | None,
+        self,
+        permeability: float,
+        moving_count: int,
+        expected: int | None,
     ) -> None:
         """通りやすい接続は人数、中程度は在否、壁は在否も伏せる。"""
-        graph, listener = _build_AB(
-            intensity_B=SoundIntensityEnum.SILENT,
+        graph, listener = _build_ab(
+            intensity_b=SoundIntensityEnum.SILENT,
             passage=Passage.open(sound_permeability=permeability),
         )
         moving = frozenset(EntityId.create(20 + i) for i in range(moving_count))
@@ -136,15 +150,34 @@ class TestAdjacentMovingOccupants:
         assert events[0].source_spot_id == SPOT_B
         assert events[0].moving_occupants == expected
 
-    def test_listener_and_current_spot_are_not_reported(self) -> None:
-        """聞き手自身と現在地は人数にも観測行にも含めない。"""
-        graph, listener = _build_AB(
-            intensity_B=SoundIntensityEnum.SILENT,
+    @pytest.mark.parametrize("with_self_connection", [False, True])
+    def test_listener_and_current_spot_are_not_reported(
+        self,
+        with_self_connection: bool,
+    ) -> None:
+        """自己接続があっても、聞き手の現在地を隣接の気配として報告しない。"""
+        graph, listener = _build_ab(
+            intensity_b=SoundIntensityEnum.SILENT,
             passage=Passage.open(sound_permeability=1.0),
         )
 
+        if with_self_connection:
+            graph.add_connection(
+                SpotConnection(
+                    connection_id=ConnectionId.create(11),
+                    from_spot_id=SPOT_A,
+                    to_spot_id=SPOT_A,
+                    name="self",
+                    description="",
+                    travel_ticks=1,
+                    is_bidirectional=False,
+                    passage=Passage.open(),
+                )
+            )
+
         graph.emit_listen_carefully(
-            listener, moving_entity_ids=frozenset({listener}),
+            listener,
+            moving_entity_ids=frozenset({listener}),
         )
 
         events = _presence_events(graph)
@@ -154,8 +187,8 @@ class TestAdjacentMovingOccupants:
 
     def test_non_adjacent_spot_is_not_reported(self) -> None:
         """接続のない地点に居る人の気配は観測しない。"""
-        graph, listener = _build_AB(
-            intensity_B=SoundIntensityEnum.SILENT,
+        graph, listener = _build_ab(
+            intensity_b=SoundIntensityEnum.SILENT,
             passage=Passage.open(sound_permeability=1.0),
         )
         spot_c = SpotId.create(3)
@@ -165,29 +198,39 @@ class TestAdjacentMovingOccupants:
         graph.clear_events()
 
         graph.emit_listen_carefully(
-            listener, moving_entity_ids=frozenset({remote}),
+            listener,
+            moving_entity_ids=frozenset({remote}),
         )
 
-        assert all(event.source_spot_id != spot_c for event in _presence_events(graph))
+        events = _presence_events(graph)
+        assert len(events) == 1
+        assert events[0].source_spot_id == SPOT_B
+        assert events[0].moving_occupants == 0
+        assert all(event.source_spot_id != spot_c for event in events)
 
 
 class TestSoundPermeabilityToHops:
     """量子化関数の境界値挙動。"""
 
-    @pytest.mark.parametrize("permeability,expected_hops", [
-        (1.0, 1),
-        (0.7, 1),  # 境界
-        (0.69, 2),
-        (0.6, 2),  # DOOR.CLOSED
-        (0.5, 2),  # DOOR.LOCKED
-        (0.4, 2),  # 境界 / WALL.CRACKED
-        (0.39, 3),
-        (0.1, 3),  # 境界 / WALL.INTACT
-        (0.09, 4),
-        (0.0, 4),
-    ])
+    @pytest.mark.parametrize(
+        "permeability,expected_hops",
+        [
+            (1.0, 1),
+            (0.7, 1),  # 境界
+            (0.69, 2),
+            (0.6, 2),  # DOOR.CLOSED
+            (0.5, 2),  # DOOR.LOCKED
+            (0.4, 2),  # 境界 / WALL.CRACKED
+            (0.39, 3),
+            (0.1, 3),  # 境界 / WALL.INTACT
+            (0.09, 4),
+            (0.0, 4),
+        ],
+    )
     def test_returns_boundary_value_hops(
-        self, permeability: float, expected_hops: int,
+        self,
+        permeability: float,
+        expected_hops: int,
     ) -> None:
         """境界値で期待 hops を返す。"""
         assert sound_permeability_to_hops(permeability) == expected_hops
@@ -196,21 +239,10 @@ class TestSoundPermeabilityToHops:
 class TestOpenPassage1Hop:
     """開口部 / 開いた扉 / 壊れた壁 (permeability 1.0) は 1 hop 減衰。"""
 
-    def test_open_loud_moderate(self) -> None:
-        """OPENLOUD は MODERATE に減衰。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.LOUD,
-            passage=Passage.open(),
-        )
-        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
-        events = _events(g)
-        assert len(events) == 1
-        assert events[0].intensity == "MODERATE"
-
     def test_wall_broken_loud_moderate(self) -> None:
         """WALLBROKENLOUD も MODERATE に減衰。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.LOUD,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.BROKEN),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
@@ -220,8 +252,8 @@ class TestOpenPassage1Hop:
 
     def test_door_open_moderate_faint(self) -> None:
         """DOOROPENMODERATE は FAINT に減衰。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.MODERATE,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.MODERATE,
             passage=Passage.door(DoorStateEnum.OPEN),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
@@ -235,8 +267,8 @@ class TestClosedDoorAndCrackedWall2Hops:
 
     def test_door_closed_loud_faint(self) -> None:
         """DOORCLOSEDLOUD は FAINT に減衰。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.LOUD,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.LOUD,
             passage=Passage.door(DoorStateEnum.CLOSED),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
@@ -246,8 +278,8 @@ class TestClosedDoorAndCrackedWall2Hops:
 
     def test_door_closed_moderate_silent_does_not_trigger(self) -> None:
         """DOORCLOSEDMODERATE は SILENT で発火しない。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.MODERATE,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.MODERATE,
             passage=Passage.door(DoorStateEnum.CLOSED),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
@@ -255,8 +287,8 @@ class TestClosedDoorAndCrackedWall2Hops:
 
     def test_wall_cracked_loud_faint(self) -> None:
         """WALLCRACKEDLOUD は FAINT に減衰。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.LOUD,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.CRACKED),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
@@ -270,8 +302,8 @@ class TestIntactWall3Hops:
 
     def test_wall_intact_loud_silent_does_not_trigger(self) -> None:
         """WALLINTACTLOUD は SILENT で発火しない。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.LOUD,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.INTACT),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
@@ -282,29 +314,38 @@ class TestIntactWall3Hops:
 class TestMultiConnectionPicksBestPath:
     """同一隣接 spot に複数 connection があるとき、最も透過率が高いものを採用。"""
 
+    @pytest.mark.parametrize("reverse_registration", [False, True])
     def test_one_hop(
         self,
+        reverse_registration: bool,
     ) -> None:
-        """壁 INTACT (3 hops) と DOOR OPEN (1 hop) の両方が B を指している
-        場合、音は扉を通って届くべき (= 1 hop で減衰)。
-        """
+        """壁と開扉の登録順によらず、音と気配は減衰の少ない開扉を通る。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))
         g.add_spot(_node(SPOT_B, intensity=SoundIntensityEnum.MODERATE, ambient="泉"))
-        g.add_connection(SpotConnection(
+        wall = SpotConnection(
             connection_id=ConnectionId.create(10),
-            from_spot_id=SPOT_A, to_spot_id=SPOT_B,
-            name="wall", description="", travel_ticks=1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            name="wall",
+            description="",
+            travel_ticks=1,
             is_bidirectional=False,
             passage=Passage.wall(WallStateEnum.INTACT),  # 3 hops
-        ))
-        g.add_connection(SpotConnection(
+        )
+        door = SpotConnection(
             connection_id=ConnectionId.create(11),
-            from_spot_id=SPOT_A, to_spot_id=SPOT_B,
-            name="door", description="", travel_ticks=1,
+            from_spot_id=SPOT_A,
+            to_spot_id=SPOT_B,
+            name="door",
+            description="",
+            travel_ticks=1,
             is_bidirectional=False,
             passage=Passage.door(DoorStateEnum.OPEN),  # 1 hop
-        ))
+        )
+        connections = (door, wall) if reverse_registration else (wall, door)
+        for connection in connections:
+            g.add_connection(connection)
         eid = EntityId.create(7)
         g.place_entity(eid, SPOT_A)
         g.clear_events()
@@ -329,13 +370,18 @@ class TestSelfSpotIgnoresPermeability:
         g.add_spot(_node(SPOT_A, intensity=SoundIntensityEnum.FAINT, ambient="心音"))
         g.add_spot(_node(SPOT_B))
         # 隣接が壁でも自 spot の sound には影響しない
-        g.add_connection(SpotConnection(
-            connection_id=ConnectionId.create(10),
-            from_spot_id=SPOT_A, to_spot_id=SPOT_B,
-            name="wall", description="", travel_ticks=1,
-            is_bidirectional=False,
-            passage=Passage.wall(WallStateEnum.INTACT),
-        ))
+        g.add_connection(
+            SpotConnection(
+                connection_id=ConnectionId.create(10),
+                from_spot_id=SPOT_A,
+                to_spot_id=SPOT_B,
+                name="wall",
+                description="",
+                travel_ticks=1,
+                is_bidirectional=False,
+                passage=Passage.wall(WallStateEnum.INTACT),
+            )
+        )
         eid = EntityId.create(7)
         g.place_entity(eid, SPOT_A)
         g.clear_events()

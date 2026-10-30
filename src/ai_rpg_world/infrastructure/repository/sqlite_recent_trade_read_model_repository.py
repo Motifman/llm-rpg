@@ -27,9 +27,7 @@ def _str_to_dt(value: str) -> datetime:
 
 
 class SqliteRecentTradeReadModelRepository(RecentTradeReadModelRepository):
-    def __init__(
-        self, connection: sqlite3.Connection, *, _commits_after_write: bool
-    ) -> None:
+    def __init__(self, connection: sqlite3.Connection, *, _commits_after_write: bool) -> None:
         self._conn = connection
         self._commits_after_write = _commits_after_write
         if connection.row_factory is not sqlite3.Row:
@@ -37,15 +35,11 @@ class SqliteRecentTradeReadModelRepository(RecentTradeReadModelRepository):
         init_recent_trade_read_model_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteRecentTradeReadModelRepository:
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteRecentTradeReadModelRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteRecentTradeReadModelRepository:
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteRecentTradeReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
     def _entry_rows(self, item_spec_id: ItemSpecId) -> list[sqlite3.Row]:
@@ -88,11 +82,7 @@ class SqliteRecentTradeReadModelRepository(RecentTradeReadModelRepository):
         return None if row is None else self._build_model(row)
 
     def find_by_ids(self, entity_ids: list[ItemSpecId]) -> list[RecentTradeReadModel]:
-        return [
-            model
-            for entity_id in entity_ids
-            if (model := self.find_by_id(entity_id)) is not None
-        ]
+        return [model for entity_id in entity_ids if (model := self.find_by_id(entity_id)) is not None]
 
     def save(self, entity: RecentTradeReadModel) -> RecentTradeReadModel:
         self._conn.execute(

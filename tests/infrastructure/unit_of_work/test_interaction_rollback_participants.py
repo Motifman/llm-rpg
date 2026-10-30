@@ -161,15 +161,16 @@ class TestInteractionRollbackParticipants:
 
         assert world_flags.as_frozen_set() == frozenset({"initial"})
         assert cooldowns.last_success_tick(PLAYER_ID, "inspect") == 3
-        assert cooldowns.last_success_tick(
-            PLAYER_ID,
-            "shared_inspect",
-            scope=InteractionCooldownScope.WORLD,
-        ) == 4
+        assert (
+            cooldowns.last_success_tick(
+                PLAYER_ID,
+                "shared_inspect",
+                scope=InteractionCooldownScope.WORLD,
+            )
+            == 4
+        )
         assert departed.find(PLAYER_ID) == FIRST_SPOT
-        assert graph.find_graph().get_entity_spot(
-            EntityId.create(int(PLAYER_ID))
-        ) == FIRST_SPOT
+        assert graph.find_graph().get_entity_spot(EntityId.create(int(PLAYER_ID))) == FIRST_SPOT
         assert graph.find_graph().get_events() == []
 
     def test_commit_keeps_all_resource_changes(self) -> None:
@@ -210,23 +211,22 @@ class TestInteractionRollbackParticipants:
 
         assert world_flags.as_frozen_set() == frozenset({"initial", "changed"})
         assert cooldowns.last_success_tick(PLAYER_ID, "inspect") == 9
-        assert cooldowns.last_success_tick(
-            PLAYER_ID,
-            "shared_inspect",
-            scope=InteractionCooldownScope.WORLD,
-        ) == 10
+        assert (
+            cooldowns.last_success_tick(
+                PLAYER_ID,
+                "shared_inspect",
+                scope=InteractionCooldownScope.WORLD,
+            )
+            == 10
+        )
         assert departed.find(PLAYER_ID) == SECOND_SPOT
-        assert graph.find_graph().get_entity_spot(
-            EntityId.create(int(PLAYER_ID))
-        ) == SECOND_SPOT
+        assert graph.find_graph().get_entity_spot(EntityId.create(int(PLAYER_ID))) == SECOND_SPOT
 
     def test_world_flag_callback_is_delivered_only_after_commit(self) -> None:
         """flag変更通知はtransaction内では保留され、commit後だけ元の順序で届く。"""
         timeline: list[str] = []
         world_flags, _, _, _, participants = _resources()
-        world_flags.set_change_callback(
-            lambda change: timeline.append(f"flag.{change.flag_name}")
-        )
+        world_flags.set_change_callback(lambda change: timeline.append(f"flag.{change.flag_name}"))
         adapter = RollbackParticipantTransactionAdapter(
             _Transaction(timeline),
             participants=participants,
@@ -250,9 +250,7 @@ class TestInteractionRollbackParticipants:
         """rollbackしたflag変更は状態だけでなく外部通知にも残さない。"""
         timeline: list[str] = []
         world_flags, _, _, _, participants = _resources()
-        world_flags.set_change_callback(
-            lambda change: timeline.append(f"flag.{change.flag_name}")
-        )
+        world_flags.set_change_callback(lambda change: timeline.append(f"flag.{change.flag_name}"))
         adapter = RollbackParticipantTransactionAdapter(
             _Transaction(timeline),
             participants=participants,

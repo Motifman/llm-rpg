@@ -84,11 +84,15 @@ class TestToolNamesRecorded:
             player_id=PlayerId(2),
             tool_names=["x"],
         )
-        sink.record(_make_metrics(
-            wall_latency_ms=1500, prompt_tokens=200,
-            completion_tokens=25, cached_tokens=120,
-            cost_usd=0.005,
-        ))
+        sink.record(
+            _make_metrics(
+                wall_latency_ms=1500,
+                prompt_tokens=200,
+                completion_tokens=25,
+                cached_tokens=120,
+                cost_usd=0.005,
+            )
+        )
 
         kwargs = recorder.record.call_args.kwargs
         assert kwargs["tick"] == 7

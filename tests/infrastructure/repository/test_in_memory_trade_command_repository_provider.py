@@ -72,18 +72,14 @@ class _Participant:
 
 def _scope(data_store: InMemoryDataStore) -> CommandScope:
     transaction = RollbackParticipantTransactionAdapter(
-        InMemoryUnitOfWorkTransactionAdapter(
-            InMemoryUnitOfWork(data_store=data_store)
-        ),
+        InMemoryUnitOfWorkTransactionAdapter(InMemoryUnitOfWork(data_store=data_store)),
         participants=(_Participant(),),
     )
     return CommandScope(
         transaction,
         sync_dispatcher=_NoOpSyncDispatcher(),  # type: ignore[arg-type]
         after_commit_handoff=_NoOpHandoff(),  # type: ignore[arg-type]
-        repository_provider_factory=(
-            InMemoryTradeCommandRepositoryProviderFactory()
-        ),
+        repository_provider_factory=(InMemoryTradeCommandRepositoryProviderFactory()),
     )
 
 
@@ -119,9 +115,7 @@ def test_saved_aggregate_events_move_only_to_command_context() -> None:
         transaction,
         sync_dispatcher=dispatcher,  # type: ignore[arg-type]
         after_commit_handoff=handoff,  # type: ignore[arg-type]
-        repository_provider_factory=(
-            InMemoryTradeCommandRepositoryProviderFactory()
-        ),
+        repository_provider_factory=(InMemoryTradeCommandRepositoryProviderFactory()),
     )
     profile = PlayerProfileAggregate.create(PlayerId(1), PlayerName("Alice"))
     profile.change_name(PlayerName("Alicia"))
@@ -147,9 +141,7 @@ def test_provider_uses_shared_command_context_event_sink() -> None:
 
     tree = ast.parse(inspect.getsource(module.CommandContextUnitOfWorkFacade))
     method_names = {
-        node.name
-        for node in tree.body[0].body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        node.name for node in tree.body[0].body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
 
     assert "__getattr__" not in method_names

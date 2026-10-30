@@ -67,7 +67,9 @@ def test_sqlite_user_repository_specific_updates_profile_and_relationships() -> 
     conn = sqlite3.connect(":memory:")
     user_repo, _, _ = _seed_social(conn)
 
-    updated_user = user_repo.update_profile(user_id=user_repo.find_by_user_name("hero_user").user_id, bio="更新済み", display_name="新勇者")
+    updated_user = user_repo.update_profile(
+        user_id=user_repo.find_by_user_name("hero_user").user_id, bio="更新済み", display_name="新勇者"
+    )
     assert updated_user.get_user_profile_info()["bio"] == "更新済み"
     assert updated_user.get_user_profile_info()["display_name"] == "新勇者"
 

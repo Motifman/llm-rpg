@@ -1,4 +1,5 @@
 """ショップコマンド・DTO"""
+
 from ai_rpg_world.application.shop.contracts.commands import (
     CloseShopCommand,
     CreateShopCommand,

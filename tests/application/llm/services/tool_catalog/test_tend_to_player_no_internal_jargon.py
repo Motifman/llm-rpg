@@ -29,17 +29,13 @@ class TestTendToPlayerDescriptionNoInternalJargon:
         """内部フィールド名を LLM に見せない。ダウン状態は日本語表記で十分。"""
         desc = TEND_TO_PLAYER_DEFINITION.description
         assert "status_effect" not in desc, (
-            "内部技術用語 'status_effect' が LLM 露出テキストに残っている。"
-            "「ダウン状態」等の日本語表記に置換すべき"
+            "内部技術用語 'status_effect' が LLM 露出テキストに残っている。「ダウン状態」等の日本語表記に置換すべき"
         )
 
     def test_downed_target_state(self) -> None:
         """状態タグとして日本語の『ダウン』が使われている。"""
         desc = TEND_TO_PLAYER_DEFINITION.description
-        assert "ダウン" in desc, (
-            "『ダウン』という状態表現が description に無いと、"
-            "LLM は対象状態を正しく識別できない"
-        )
+        assert "ダウン" in desc, "『ダウン』という状態表現が description に無いと、LLM は対象状態を正しく識別できない"
 
     def test_hp_zero_preserved(self) -> None:
         """HP 数値表現は LLM に分かりやすいので保持する (UI と一致)。"""
@@ -49,9 +45,7 @@ class TestTendToPlayerDescriptionNoInternalJargon:
     def test_empty_target_remains(self) -> None:
         """PR #636 で入れた「疲労・空腹では tend できない」文言が残っている。"""
         desc = TEND_TO_PLAYER_DEFINITION.description
-        assert "疲労" in desc and "空腹" in desc, (
-            "PR #636 で入れた疲労・空腹除外の記述が消えていないこと"
-        )
+        assert "疲労" in desc and "空腹" in desc, "PR #636 で入れた疲労・空腹除外の記述が消えていないこと"
 
     def test_description_is_static_string_without_placeholders(self) -> None:
         """description は str 型で placeholder なし。"""

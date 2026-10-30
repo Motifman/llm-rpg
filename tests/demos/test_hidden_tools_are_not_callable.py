@@ -46,9 +46,7 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
     _WorldLlmWiring,
 )
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI = PlayerId(1)
 
@@ -73,9 +71,7 @@ def _call(runtime, name: str, arguments: dict):
         name,
         arguments,
         None,
-        offered_tools_at_prompt=offered_tools_from_payload(
-            wiring._build_tools_payload(_MORI)
-        ),
+        offered_tools_at_prompt=offered_tools_from_payload(wiring._build_tools_payload(_MORI)),
     )
 
 
@@ -173,9 +169,7 @@ class TestTheRefusalIsDistinctFromNotExisting:
 
     def test_the_refusal_says_it_may_come_back(self, in_a_meeting) -> None:
         """断り文句が「いまは」であることを伝える。"""
-        result = _call(
-            in_a_meeting, "interact", {"target_label": "x", "action_name": "y"}
-        )
+        result = _call(in_a_meeting, "interact", {"target_label": "x", "action_name": "y"})
 
         assert "いま" in result.message
 
@@ -184,9 +178,7 @@ class TestTheRefusalIsDistinctFromNotExisting:
 
         起きないと、断られたことを読めないまま黙って止まる。
         """
-        result = _call(
-            in_a_meeting, "interact", {"target_label": "x", "action_name": "y"}
-        )
+        result = _call(in_a_meeting, "interact", {"target_label": "x", "action_name": "y"})
 
         assert result.should_reschedule is True
 
@@ -194,14 +186,10 @@ class TestTheRefusalIsDistinctFromNotExisting:
 class TestTheRefusalMatchesWhatThePlayerWasShown:
     """一覧作成後の位相変更と、一覧外の選択を別の事実として伝える。"""
 
-    def test_a_tool_shown_before_a_meeting_reports_the_changed_situation(
-        self, free_roam
-    ) -> None:
+    def test_a_tool_shown_before_a_meeting_reports_the_changed_situation(self, free_roam) -> None:
         """自由時間に提示した interact が会議開始後に弾かれたら、選択を責めない。"""
         phase_a = _phase_a_with_current_tools(free_roam, "interact")
-        assert "interact" in {
-            tool["function"]["name"] for tool in phase_a.tools_payload
-        }
+        assert "interact" in {tool["function"]["name"] for tool in phase_a.tools_payload}
         free_roam.call_emergency_meeting(_MORI)
 
         result = _wiring(free_roam).run_phase_b(phase_a)
@@ -211,14 +199,10 @@ class TestTheRefusalMatchesWhatThePlayerWasShown:
         assert "一覧に出ているものから選ぶ" not in result.message
         assert result.should_reschedule is True
 
-    def test_a_tool_absent_from_the_sent_list_keeps_the_existing_guidance(
-        self, in_a_meeting
-    ) -> None:
+    def test_a_tool_absent_from_the_sent_list_keeps_the_existing_guidance(self, in_a_meeting) -> None:
         """最初から一覧に無い interact には、一覧内から選ぶ従来の案内を返す。"""
         phase_a = _phase_a_with_current_tools(in_a_meeting, "interact")
-        assert "interact" not in {
-            tool["function"]["name"] for tool in phase_a.tools_payload
-        }
+        assert "interact" not in {tool["function"]["name"] for tool in phase_a.tools_payload}
 
         result = _wiring(in_a_meeting).run_phase_b(phase_a)
 

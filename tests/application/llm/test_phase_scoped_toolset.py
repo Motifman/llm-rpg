@@ -27,9 +27,7 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
 _KUZE = PlayerId(3)
 
@@ -42,9 +40,16 @@ _MEETING_ALLOWED = {"speak", "listen", "wait", "tend_to_player"}
 
 #: 会議中は出さない tool (物理的な行為)。
 _FREE_ROAM_ONLY = {
-    "travel_to", "set_sub_location", "explore", "interact",
-    "use_item", "drop_item", "pickup_item", "give_item",
-    "attack", "report_body",
+    "travel_to",
+    "set_sub_location",
+    "explore",
+    "interact",
+    "use_item",
+    "drop_item",
+    "pickup_item",
+    "give_item",
+    "attack",
+    "report_body",
 }
 
 #: 会議中は出さないが、**シナリオが宣言したときだけ**出る tool。
@@ -123,9 +128,7 @@ class TestMeetingNarrowsTheToolset:
 class TestCommonToolsComeFirst:
     """共通 tool を先に置き、フェーズで落ちるぶんを後ろに寄せる。"""
 
-    def test_meeting_toolset_is_a_prefix_of_free_roam_up_to_the_dropped_block(
-        self, runtime
-    ) -> None:
+    def test_meeting_toolset_is_a_prefix_of_free_roam_up_to_the_dropped_block(self, runtime) -> None:
         """会議で落ちる tool より前の並びが、両フェーズで一致する。
 
         ここが崩れると、フェーズが変わるたびに **tool 定義の先頭から**
@@ -136,29 +139,22 @@ class TestCommonToolsComeFirst:
         runtime.begin_meeting(initiator_player_id=_KUZE, trigger="emergency_button")
         meeting = _tool_names(runtime)
 
-        first_dropped = next(
-            i for i, name in enumerate(free_roam) if name in _FREE_ROAM_ONLY
-        )
+        first_dropped = next(i for i, name in enumerate(free_roam) if name in _FREE_ROAM_ONLY)
 
         assert free_roam[:first_dropped] == meeting[:first_dropped], (
-            "会議で落ちる tool より前の並びが一致していない。"
-            f"\n free_roam={free_roam}\n meeting={meeting}"
+            f"会議で落ちる tool より前の並びが一致していない。\n free_roam={free_roam}\n meeting={meeting}"
         )
 
     def test_the_shared_prefix_is_not_trivially_short(self, runtime) -> None:
-        """共通の先頭が 1 個や 2 個ではない。
+        """会議で落ちる tool より前の共通の先頭は wait / speak / listen の 3 個で、1 個や 2 個に縮んでいない。
 
         並べ替えが崩れて共通部分がほぼ無くなっても、上のテストは
-        「先頭 0 個が一致」で通ってしまう。実際に意味のある長さを要求する。
+        「先頭 0 個が一致」で通ってしまう。実際の並びを要求する。
         """
         free_roam = _tool_names(runtime)
-        first_dropped = next(
-            i for i, name in enumerate(free_roam) if name in _FREE_ROAM_ONLY
-        )
+        first_dropped = next(i for i, name in enumerate(free_roam) if name in _FREE_ROAM_ONLY)
 
-        assert first_dropped >= len(_MEETING_ALLOWED), (
-            f"共通の先頭が短すぎる: {free_roam[:first_dropped]}"
-        )
+        assert free_roam[:first_dropped] == ["wait", "speak", "listen"]
 
 
 class TestPrefixIsStableWithinAPhase:
@@ -289,12 +285,7 @@ class TestEveryToolIsExplicitlyClassified:
         )
 
         exposed = {defn.name for defn, _ in get_spot_graph_specs()}
-        classified = (
-            _MEETING_ALLOWED
-            | _FREE_ROAM_ONLY
-            | _FREE_ROAM_ONLY_WHEN_DECLARED
-            | {"vote"}
-        )
+        classified = _MEETING_ALLOWED | _FREE_ROAM_ONLY | _FREE_ROAM_ONLY_WHEN_DECLARED | {"vote"}
 
         assert not (exposed - classified)
 
@@ -308,11 +299,6 @@ class TestEveryToolIsExplicitlyClassified:
         )
 
         exposed = {defn.name for defn, _ in get_spot_graph_specs()}
-        classified = (
-            _MEETING_ALLOWED
-            | _FREE_ROAM_ONLY
-            | _FREE_ROAM_ONLY_WHEN_DECLARED
-            | {"vote"}
-        )
+        classified = _MEETING_ALLOWED | _FREE_ROAM_ONLY | _FREE_ROAM_ONLY_WHEN_DECLARED | {"vote"}
 
         assert not (classified - exposed)

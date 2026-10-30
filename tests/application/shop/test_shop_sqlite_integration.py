@@ -31,12 +31,8 @@ from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import (
 
 def test_shop_query_service_reads_sqlite_read_models(tmp_path) -> None:
     db_path = tmp_path / "shop-query.sqlite3"
-    summary_repo = SqliteShopSummaryReadModelRepository.for_standalone_connection(
-        sqlite3.connect(db_path)
-    )
-    listing_repo = SqliteShopListingReadModelRepository.for_standalone_connection(
-        sqlite3.connect(db_path)
-    )
+    summary_repo = SqliteShopSummaryReadModelRepository.for_standalone_connection(sqlite3.connect(db_path))
+    listing_repo = SqliteShopListingReadModelRepository.for_standalone_connection(sqlite3.connect(db_path))
     summary_repo.save(
         ShopSummaryReadModel.create(
             shop_id=ShopId(1),

@@ -11,7 +11,7 @@
   fingerprint は既存の ``build_argument_fingerprint`` を流用。
   → ``travel_to(\"A\") → travel_to(\"B\")`` のように引数が変われば発火しない。
 - 閾値は tool 系統ごとに設定 (wait は 3、travel_to は 2、interact は 4、
-  その他は 5)。連打しても害が薄い tool (memo_list 等) も default に含まれる。
+  その他は 5)。
 - 注入は ObservationContextBuffer に直接 append。prompt_builder.drain で
   自然に次ターンに流れる。ObservationPipeline 経由の domain event 化は
   オーバーキル。
@@ -26,7 +26,6 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -42,7 +41,6 @@ from ai_rpg_world.application.llm.services.loop_guard_detectors import (
     DEFAULT_WINDOW_SIZE,
     ConsecutiveSameActionDetector,
     CrossTickFailureDetector,
-    CrossTickFailureRepeat,
     RecordedAction,
     RepeatDetector,
     RepeatSignal,
@@ -68,28 +66,12 @@ __all__ = [
     "DEFAULT_LOOP_THRESHOLDS",
     "DEFAULT_OTHER_THRESHOLD",
     "DEFAULT_WINDOW_SIZE",
-    "CrossTickFailureTrigger",
     "LoopGuardGateSignal",
     "ToolCallLoopGuardService",
 ]
 
 
 _RECENT_ACTION_LIMIT = 5
-
-
-@dataclass(frozen=True)
-class CrossTickFailureTrigger:
-    """``record_and_check`` が cross_tick_failure 閾値到達を検知したときに
-    呼び出し側へ返す通知 (U6: STRUCTURED_FAILURE + salience)。
-
-    loop_guard 自身は being_id や episode 文脈を持たないため、
-    ``BeliefEvidence`` への転記は being 解決ができる呼び出し側に委ねる。
-    """
-
-    tool_name: str
-    error_code: str
-    count: int
-    window: int
 
 
 def _said(arguments: dict[str, Any] | None) -> str | None:
@@ -143,9 +125,7 @@ class ToolCallLoopGuardService:
             完全一致の検出の後に回し、発火したかを渡す。
         """
         if not isinstance(observation_buffer, IObservationContextBuffer):
-            raise TypeError(
-                "observation_buffer must be IObservationContextBuffer"
-            )
+            raise TypeError("observation_buffer must be IObservationContextBuffer")
         if not callable(time_label_provider):
             raise TypeError("time_label_provider must be callable")
         if clock is not None and not callable(clock):
@@ -157,24 +137,16 @@ class ToolCallLoopGuardService:
         )
         if trace_recorder is not None and not isinstance(trace_recorder, ITraceRecorder):
             raise TypeError("trace_recorder must be ITraceRecorder or None")
-        if trace_recorder_provider is not None and not callable(
-            trace_recorder_provider
-        ):
-            raise TypeError(
-                "trace_recorder_provider must be callable or None"
-            )
+        if trace_recorder_provider is not None and not callable(trace_recorder_provider):
+            raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
         if loop_diagnosis is not None and not isinstance(loop_diagnosis, LoopDiagnosis):
             raise TypeError("loop_diagnosis must be LoopDiagnosis or None")
         if location_provider is not None and not callable(location_provider):
             raise TypeError("location_provider must be callable or None")
-        if semantic_repeat_detector is not None and not isinstance(
-            semantic_repeat_detector, SemanticRepeatDetector
-        ):
-            raise TypeError(
-                "semantic_repeat_detector must be SemanticRepeatDetector or None"
-            )
+        if semantic_repeat_detector is not None and not isinstance(semantic_repeat_detector, SemanticRepeatDetector):
+            raise TypeError("semantic_repeat_detector must be SemanticRepeatDetector or None")
         cross_tick_detector = CrossTickFailureDetector(
             window=cross_tick_failure_window,
             threshold=cross_tick_failure_threshold,
@@ -223,15 +195,11 @@ class ToolCallLoopGuardService:
         success: bool | None = None,
         error_code: str | None = None,
         result_summary: str | None = None,
-    ) -> CrossTickFailureTrigger | None:
+    ) -> None:
         """tool 呼出を記録し、繰り返しを見つけたら警告観測を注入する。
 
         呼出側は成功・失敗どちらでも record する。連打は失敗を繰り返す形でも
         問題視したいケースがあるため。
-
-        cross_tick_failure が今回の呼び出しで発火したときだけ
-        ``CrossTickFailureTrigger`` を返す。呼び出し側が being_id を解決して
-        ``BeliefEvidence`` へ転記するかどうかを決める。
 
         Args:
             success: 成否。None は成否不明として cross_tick 側には記録しない。
@@ -242,7 +210,7 @@ class ToolCallLoopGuardService:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(tool_name, str) or not tool_name:
-            return None
+            return
         action = RecordedAction(
             player_key=player_id.value,
             tool_name=tool_name,
@@ -252,9 +220,7 @@ class ToolCallLoopGuardService:
             tick=self._get_current_tick_or_none(),
             result_summary=result_summary,
         )
-        recent = self._recent_actions.setdefault(
-            player_id.value, deque(maxlen=_RECENT_ACTION_LIMIT)
-        )
+        recent = self._recent_actions.setdefault(player_id.value, deque(maxlen=_RECENT_ACTION_LIMIT))
         recent.append(
             RecentAction(
                 action=build_action_summary(tool_name, action.fingerprint),
@@ -269,21 +235,10 @@ class ToolCallLoopGuardService:
             if signal is not None:
                 signals.append(signal)
         if self.semantic_repeat_detector is not None:
-            semantic = self.semantic_repeat_detector.observe(
-                action, exact_match_fired=bool(signals)
-            )
+            semantic = self.semantic_repeat_detector.observe(action, exact_match_fired=bool(signals))
             if semantic is not None:
                 signals.append(semantic)
-        cross_tick_trigger: CrossTickFailureTrigger | None = None
-        for signal in self._emitter.emit_all(player_id, signals, tuple(recent)):
-            if isinstance(signal, CrossTickFailureRepeat):
-                cross_tick_trigger = CrossTickFailureTrigger(
-                    tool_name=signal.tool_name,
-                    error_code=signal.error_code,
-                    count=signal.count,
-                    window=signal.window,
-                )
-        return cross_tick_trigger
+        self._emitter.emit_all(player_id, signals, tuple(recent))
 
     def consume_gate_signal(self, player_id: PlayerId) -> LoopGuardGateSignal | None:
         """直近の loop_guard 警告 signal を 1 回だけ取り出す。

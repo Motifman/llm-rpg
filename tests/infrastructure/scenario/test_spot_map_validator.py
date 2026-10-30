@@ -82,9 +82,7 @@ class TestSpotMapValidatorGraphStructure:
         assert result.ok is True
         assert result.metrics["cycle_rank"] == 0
         assert result.metrics["articulation_spots"] == ["b"]
-        assert {"TREE_GRAPH", "ARTICULATION_SPOT"} <= {
-            issue.code for issue in result.warnings
-        }
+        assert {"TREE_GRAPH", "ARTICULATION_SPOT"} <= {issue.code for issue in result.warnings}
 
     def test_unreachable_spot_is_warning_by_default_and_error_in_strict_mode(self) -> None:
         """到達不能 spot は既定では warning、strict では error になる。"""
@@ -131,15 +129,11 @@ class TestSpotMapValidatorKeySpots:
 
         result = validate_spot_map(
             raw,
-            MapValidationConfig(
-                key_spots=(KeySpotRequirement("signal", severity="warning"),)
-            ),
+            MapValidationConfig(key_spots=(KeySpotRequirement("signal", severity="warning"),)),
         )
 
         assert result.ok is True
-        assert "KEY_SPOT_SINGLE_EDGE_ROUTE" in {
-            issue.code for issue in result.warnings
-        }
+        assert "KEY_SPOT_SINGLE_EDGE_ROUTE" in {issue.code for issue in result.warnings}
 
     def test_key_spot_can_escalate_node_cut_failure_to_error(self) -> None:
         """key_spot ごとの設定で、中間 spot 喪失時の単一路を error に昇格できる。"""
@@ -162,9 +156,7 @@ class TestSpotMapValidatorKeySpots:
 
         result = validate_spot_map(
             raw,
-            MapValidationConfig(
-                key_spots=(KeySpotRequirement("signal", severity="error"),)
-            ),
+            MapValidationConfig(key_spots=(KeySpotRequirement("signal", severity="error"),)),
         )
 
         assert result.ok is False
@@ -183,9 +175,7 @@ class TestSpotMapValidatorKeySpots:
 
         result = validate_spot_map(
             raw,
-            MapValidationConfig(
-                key_spots=(KeySpotRequirement("signal", severity="error"),)
-            ),
+            MapValidationConfig(key_spots=(KeySpotRequirement("signal", severity="error"),)),
         )
 
         assert result.ok is False
@@ -206,9 +196,7 @@ class TestSpotMapValidatorPositions:
         result = validate_spot_map(raw, MapValidationConfig(distance_to_tick_ratio=1.0))
 
         assert result.ok is True
-        assert "TRAVEL_TICKS_DISTANCE_MISMATCH" in {
-            issue.code for issue in result.warnings
-        }
+        assert "TRAVEL_TICKS_DISTANCE_MISMATCH" in {issue.code for issue in result.warnings}
 
     def test_partial_positions_skip_distance_checks_without_error(self) -> None:
         """一部 spot だけ position を持つ場合、距離依存検査の skip 理由が結果に残る。"""
@@ -221,9 +209,7 @@ class TestSpotMapValidatorPositions:
 
         assert result.ok is True
         assert result.metrics["positioned_spot_count"] == 1
-        assert "TRAVEL_TICKS_DISTANCE_MISMATCH" not in {
-            issue.code for issue in result.warnings
-        }
+        assert "TRAVEL_TICKS_DISTANCE_MISMATCH" not in {issue.code for issue in result.warnings}
         assert result.skipped_checks == [
             {
                 "code": "TRAVEL_TICKS_DISTANCE_CHECK_SKIPPED",
@@ -287,9 +273,7 @@ class TestSpotMapValidatorAreas:
         result = validate_spot_map(raw)
 
         assert result.ok is False
-        assert {"AREA_VISIBLE_NAME_EMPTY", "AREA_PROMINENCE_OUT_OF_RANGE"} <= {
-            issue.code for issue in result.errors
-        }
+        assert {"AREA_VISIBLE_NAME_EMPTY", "AREA_PROMINENCE_OUT_OF_RANGE"} <= {issue.code for issue in result.errors}
 
     def test_spot_unknown_area_id_is_error_and_missing_area_id_is_warning(self) -> None:
         """spot.area_id が未知なら error、area 導入後の未設定 spot は warning として見える化する。"""
@@ -374,9 +358,7 @@ class TestSpotMapValidatorDistantCues:
                 {
                     **_spot("summit", x=0, y=0),
                     "area_id": "mountain",
-                    "interior": {
-                        "objects": [{"id": "signal_fire_pit", "name": "狼煙台"}]
-                    },
+                    "interior": {"objects": [{"id": "signal_fire_pit", "name": "狼煙台"}]},
                 }
             ],
             connections=[],
@@ -412,9 +394,7 @@ class TestSpotMapValidatorDistantCues:
 
         assert result.ok is True
         assert result.metrics["distant_cue_count"] == 1
-        assert not {
-            issue.code for issue in result.errors if issue.code.startswith("DISTANT_CUE")
-        }
+        assert not {issue.code for issue in result.errors if issue.code.startswith("DISTANT_CUE")}
 
     def test_cue_appear_event_message_and_schedules_turn_are_validated(self) -> None:
         """appear_event の message と schedules_turn は観測配達の意味を決めるので error で検査する。"""
@@ -423,9 +403,7 @@ class TestSpotMapValidatorDistantCues:
                 {
                     **_spot("summit", x=0, y=0),
                     "area_id": "mountain",
-                    "interior": {
-                        "objects": [{"id": "signal_fire_pit", "name": "狼煙台"}]
-                    },
+                    "interior": {"objects": [{"id": "signal_fire_pit", "name": "狼煙台"}]},
                 }
             ],
             connections=[],
@@ -492,9 +470,7 @@ class TestSpotMapValidatorDistantCues:
         result = validate_spot_map(raw)
 
         assert result.ok is False
-        assert {"DISTANT_CUE_UNKNOWN_OBJECT", "DISTANT_CUE_UNKNOWN_AREA"} <= {
-            issue.code for issue in result.errors
-        }
+        assert {"DISTANT_CUE_UNKNOWN_OBJECT", "DISTANT_CUE_UNKNOWN_AREA"} <= {issue.code for issue in result.errors}
 
     def test_cue_unsupported_source_kind_is_error(self) -> None:
         """段階2aでは object_state 以外の source.kind を error として明示する。"""
@@ -521,9 +497,7 @@ class TestSpotMapValidatorDistantCues:
         result = validate_spot_map(raw)
 
         assert result.ok is False
-        assert "DISTANT_CUE_UNSUPPORTED_SOURCE_KIND" in {
-            issue.code for issue in result.errors
-        }
+        assert "DISTANT_CUE_UNSUPPORTED_SOURCE_KIND" in {issue.code for issue in result.errors}
 
     def test_cue_visible_name_and_prominence_are_validated(self) -> None:
         """visible_name 空や prominence 範囲外は prompt 文生成を壊すので error にする。"""

@@ -24,9 +24,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """player state規則は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
@@ -112,13 +112,18 @@ def _build_app(
     """
     altar = SpotObject(
         object_id=SpotObjectId.create(ALTAR_OBJECT_ID),
-        name="altar", description="d",
+        name="altar",
+        description="d",
         object_type=SpotObjectTypeEnum.OTHER,
-        state={}, interactions=tuple(interactions),
+        state={},
+        interactions=tuple(interactions),
     )
     spot = SpotNode(
-        spot_id=SpotId.create(SPOT_ID), name="shrine", description="d",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=SpotId.create(SPOT_ID),
+        name="shrine",
+        description="d",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
     )
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
     graph.add_spot(spot)
@@ -248,7 +253,9 @@ class TestPlayerStateAppIntegration:
         from unittest.mock import patch
 
         with patch.object(
-            status_repo, "save", wraps=status_repo.save,
+            status_repo,
+            "save",
+            wraps=status_repo.save,
         ) as save_spy:
             # precondition 拒否
             with pytest.raises(InteractionNotAllowedException):

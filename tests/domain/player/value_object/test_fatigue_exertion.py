@@ -56,12 +56,7 @@ class TestFatigueExertionExhaustedBlock:
 
     def test_wait_not_blocked_when_exhausted(self) -> None:
         """WAIT は限界時でも block しない。"""
-        assert (
-            DEFAULT_FATIGUE_EXERTION_POLICY.is_blocked_when_exhausted(
-                ExertionKind.WAIT
-            )
-            is False
-        )
+        assert DEFAULT_FATIGUE_EXERTION_POLICY.is_blocked_when_exhausted(ExertionKind.WAIT) is False
 
 
 class TestFatigueExertionRecoveryWaitRegression:

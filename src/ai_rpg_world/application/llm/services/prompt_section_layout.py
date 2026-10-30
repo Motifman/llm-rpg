@@ -163,6 +163,4 @@ def sections_for(phase: GamePhase) -> tuple[PromptSection, ...]:
     try:
         return SECTIONS_BY_PHASE[phase]
     except KeyError as exc:
-        raise KeyError(
-            f"{phase} の並びが prompt_section_layout に登録されていません"
-        ) from exc
+        raise KeyError(f"{phase} の並びが prompt_section_layout に登録されていません") from exc

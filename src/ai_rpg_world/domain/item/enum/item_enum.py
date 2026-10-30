@@ -3,6 +3,7 @@ from enum import Enum
 
 class ItemType(Enum):
     """アイテム種別（将来のDBスキーマに準拠）"""
+
     EQUIPMENT = "equipment"
     CONSUMABLE = "consumable"
     MATERIAL = "material"
@@ -15,6 +16,7 @@ class ItemType(Enum):
 
 class EquipmentType(Enum):
     """装備種別（装備品のサブタイプ）"""
+
     WEAPON = "weapon"
     HELMET = "helmet"
     ARMOR = "armor"
@@ -25,11 +27,10 @@ class EquipmentType(Enum):
 
 class Rarity(Enum):
     """レアリティ（将来のDBスキーマに準拠）"""
+
     COMMON = "common"
     UNCOMMON = "uncommon"
     RARE = "rare"
     EPIC = "epic"
     LEGENDARY = "legendary"
     MYTHIC = "mythic"
-
-

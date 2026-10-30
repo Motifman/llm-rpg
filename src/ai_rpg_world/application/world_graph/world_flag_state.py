@@ -51,9 +51,7 @@ class MutableWorldFlagState:
     def as_frozen_set(self) -> frozenset[str]:
         return self._registry.as_frozen_set()
 
-    def set_change_callback(
-        self, callback: Callable[[WorldFlagChange], None] | None
-    ) -> None:
+    def set_change_callback(self, callback: Callable[[WorldFlagChange], None] | None) -> None:
         """状態遷移の通知先を後付けする。未設定なら状態変更だけを行う。"""
         self._change_callback = callback
 

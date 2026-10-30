@@ -27,9 +27,7 @@ async def get_session_state(session_id: str) -> SessionStateResponse:
     manager = get_runtime_manager()
     state = manager.get_session_state(session_id)
     if state is None:
-        raise HTTPException(
-            status_code=404, detail=f"Session not found: {session_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
     return state
 
 
@@ -37,9 +35,7 @@ async def get_session_state(session_id: str) -> SessionStateResponse:
 async def pause_session(session_id: str) -> Response:
     manager = get_runtime_manager()
     if not manager.pause_session(session_id):
-        raise HTTPException(
-            status_code=404, detail=f"Session not found: {session_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
     return Response(status_code=204)
 
 
@@ -47,9 +43,7 @@ async def pause_session(session_id: str) -> Response:
 async def resume_session(session_id: str) -> Response:
     manager = get_runtime_manager()
     if not manager.resume_session(session_id):
-        raise HTTPException(
-            status_code=404, detail=f"Session not found: {session_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
     return Response(status_code=204)
 
 
@@ -57,9 +51,7 @@ async def resume_session(session_id: str) -> Response:
 async def stop_session(session_id: str) -> Response:
     manager = get_runtime_manager()
     if not manager.stop_session(session_id):
-        raise HTTPException(
-            status_code=404, detail=f"Session not found: {session_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
     return Response(status_code=204)
 
 
@@ -67,9 +59,7 @@ async def stop_session(session_id: str) -> Response:
 async def change_speed(session_id: str, request: SpeedChangeRequest) -> Response:
     manager = get_runtime_manager()
     if not manager.set_session_speed(session_id, request.speed_multiplier):
-        raise HTTPException(
-            status_code=404, detail=f"Session not found: {session_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
     return Response(status_code=204)
 
 
@@ -77,7 +67,5 @@ async def change_speed(session_id: str, request: SpeedChangeRequest) -> Response
 async def run_scheduled_llm_turns(session_id: str) -> Response:
     manager = get_runtime_manager()
     if not manager.run_scheduled_llm_turns(session_id):
-        raise HTTPException(
-            status_code=404, detail=f"Session or LLM wiring not found: {session_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Session or LLM wiring not found: {session_id}")
     return Response(status_code=204)

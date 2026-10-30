@@ -41,7 +41,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -74,8 +73,13 @@ def _template(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
@@ -92,10 +96,11 @@ def _monster(template: MonsterTemplate) -> MonsterAggregate:
     return MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=template,
-        world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -106,11 +111,16 @@ def _graph() -> SpotGraphAggregate:
     g = SpotGraphAggregate.empty(GRAPH_ID)
     g.add_spot(
         SpotNode(
-            spot_id=SPOT_A, name="Forest", description="",
-            category=SpotCategoryEnum.OTHER, parent_id=None,
+            spot_id=SPOT_A,
+            name="Forest",
+            description="",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
             atmosphere=SpotAtmosphere(
-                lighting=LightingEnum.BRIGHT, sound_ambient=None,
-                temperature=TemperatureEnum.NORMAL, smell=None,
+                lighting=LightingEnum.BRIGHT,
+                sound_ambient=None,
+                temperature=TemperatureEnum.NORMAL,
+                smell=None,
             ),
         )
     )
@@ -233,7 +243,8 @@ class TestChaseTargetMissingClearsState:
         monster = _monster(_template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE))
         original_ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=original_ref,
+            current_tick=WorldTick(9),
+            attacker_ref=original_ref,
         )
         graph = _graph()
         graph.place_monster(monster.monster_id, SPOT_A)
@@ -267,7 +278,8 @@ class TestChaseContinuationTick:
         monster = _monster(_template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE))
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         # 直接 CHASE 状態に遷移させる (前 tick で入った想定)
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
@@ -292,7 +304,8 @@ class TestChaseContinuationTick:
         monster = _monster(_template(reaction=ReactionPolicyEnum.ALWAYS_RETALIATE))
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
         graph = _graph()
@@ -309,12 +322,14 @@ class TestChaseContinuationTick:
         handler, monster_repo, _ = _make_handler()
         monster = _monster(
             _template(
-                reaction=ReactionPolicyEnum.ALWAYS_RETALIATE, flee_grace_ticks=3,
+                reaction=ReactionPolicyEnum.ALWAYS_RETALIATE,
+                flee_grace_ticks=3,
             ),
         )
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(2), attacker_ref=ref,
+            current_tick=WorldTick(2),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(attacker_ref=ref, last_observed_target_spot_id=SPOT_A, current_tick=WorldTick(0))
         graph = _graph()
@@ -337,6 +352,7 @@ class TestChaseContinuationTick:
         from ai_rpg_world.domain.monster.value_object.monster_behavior_state import (
             MonsterBehaviorState,
         )
+
         monster._behavior_state = MonsterBehaviorState(
             state=BehaviorStateEnum.CHASE,
             target_id=None,

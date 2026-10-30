@@ -12,11 +12,7 @@ from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_EXP
 def test_source_does_not_use_section_heading_style_for_inner_thought() -> None:
     """行動内の心の声は section 見出し風の「【心の声】」ではなく表示層の「心の声:」へ集約する。"""
     source_root = Path("src")
-    offenders = [
-        str(path)
-        for path in source_root.rglob("*.py")
-        if "【心の声】" in path.read_text(encoding="utf-8")
-    ]
+    offenders = [str(path) for path in source_root.rglob("*.py") if "【心の声】" in path.read_text(encoding="utf-8")]
     assert offenders == []
 
 

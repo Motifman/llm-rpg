@@ -68,9 +68,7 @@ _LEAVES = SpotObjectId.create(7)
 _ROCK = SpotObjectId.create(8)
 
 
-def _object_state_condition(
-    object_id: SpotObjectId, key: str, value: Any
-) -> InteractionCondition:
+def _object_state_condition(object_id: SpotObjectId, key: str, value: Any) -> InteractionCondition:
     return InteractionCondition(
         condition_type=InteractionConditionTypeEnum.OBJECT_STATE,
         target_object_id=object_id,
@@ -79,9 +77,7 @@ def _object_state_condition(
     )
 
 
-def _time_binding(
-    object_id: SpotObjectId, key: str, value: Any, *, offset: int = 24
-) -> ReactiveObjectStateBinding:
+def _time_binding(object_id: SpotObjectId, key: str, value: Any, *, offset: int = 24) -> ReactiveObjectStateBinding:
     """時間経過でその state を戻す binding。"""
     return ReactiveObjectStateBinding(
         target_object_id=object_id,
@@ -96,15 +92,11 @@ def _time_binding(
     )
 
 
-def _flag_binding(
-    object_id: SpotObjectId, key: str, value: Any
-) -> ReactiveObjectStateBinding:
+def _flag_binding(object_id: SpotObjectId, key: str, value: Any) -> ReactiveObjectStateBinding:
     """フラグ (時間ではない) でその state を戻す binding。"""
     return ReactiveObjectStateBinding(
         target_object_id=object_id,
-        predicate=ScenarioEventCondition(
-            condition_type="FLAG_SET", flag_name="switch_on"
-        ),
+        predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="switch_on"),
         on_true_state_updates=((key, value),),
         on_false_state_updates=(),
     )
@@ -202,9 +194,7 @@ class TestTimeRecoveringFailuresAreRecognised:
             on_false_state_updates=(),
         )
 
-        kind = classify_precondition_failure(
-            _object_state_condition(_LEAVES, "available", True), bindings=(binding,)
-        )
+        kind = classify_precondition_failure(_object_state_condition(_LEAVES, "available", True), bindings=(binding,))
 
         assert kind is PreconditionFailureKind.TIME_RECOVERING
 
@@ -214,9 +204,7 @@ class TestNonTimeRecoveringFailures:
 
     def test_no_binding_at_all_is_permanent(self) -> None:
         """戻す binding が無ければ PERMANENT。別の対象へ向かうべき場合。"""
-        kind = classify_precondition_failure(
-            _object_state_condition(_LEAVES, "available", True), bindings=()
-        )
+        kind = classify_precondition_failure(_object_state_condition(_LEAVES, "available", True), bindings=())
 
         assert kind is PreconditionFailureKind.PERMANENT
 
@@ -224,7 +212,7 @@ class TestNonTimeRecoveringFailures:
         """時間ではない述語が戻すなら CONDITION_RECOVERING。
 
         「待て」ではなく「条件を変えろ」が正しい助言になる。実 run では 2 件と
-        少ないが、`relay_puzzle` の操作盤のように**他人の行動で戻る**形がある。
+        少ないが、`relay_puzzle` (#1631 で退役) の操作盤のように**他人の行動で戻る**形がある。
         """
         kind = classify_precondition_failure(
             _object_state_condition(_LEAVES, "available", True),
@@ -249,9 +237,7 @@ class TestNonTimeRecoveringFailures:
         実 run で 216 件。持ち物 / 体力 / 天候などは「揃えてから再試行」が
         正しい助言で、`reactive_bindings` とは関係がない。
         """
-        kind = classify_precondition_failure(
-            InteractionCondition(condition_type=condition_type), bindings=()
-        )
+        kind = classify_precondition_failure(InteractionCondition(condition_type=condition_type), bindings=())
 
         assert kind is PreconditionFailureKind.MISSING_PREREQUISITE
 
@@ -323,10 +309,6 @@ class TestEveryKindHasWording:
             REMEDIATION_BY_KIND,
         )
 
-        leaked = {
-            kind.name: text
-            for kind, text in REMEDIATION_BY_KIND.items()
-            if re.search(r"[A-Za-z_]{4,}", text)
-        }
+        leaked = {kind.name: text for kind, text in REMEDIATION_BY_KIND.items() if re.search(r"[A-Za-z_]{4,}", text)}
 
         assert leaked == {}, leaked

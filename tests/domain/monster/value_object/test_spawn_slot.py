@@ -40,9 +40,7 @@ class TestSpawnSlot:
         assert slot.condition is None
         assert slot.max_concurrent == 1
 
-    def test_create_success_full(
-        self, spot_id: SpotId, coordinate: Coordinate, template_id: MonsterTemplateId
-    ):
+    def test_create_success_full(self, spot_id: SpotId, coordinate: Coordinate, template_id: MonsterTemplateId):
         """全パラメータで作成できること"""
         condition = SpawnCondition(time_band=TimeOfDay.NIGHT)
         slot = SpawnSlot(
@@ -57,9 +55,7 @@ class TestSpawnSlot:
         assert slot.condition == condition
         assert slot.max_concurrent == 3
 
-    def test_create_fail_weight_negative(
-        self, spot_id: SpotId, coordinate: Coordinate, template_id: MonsterTemplateId
-    ):
+    def test_create_fail_weight_negative(self, spot_id: SpotId, coordinate: Coordinate, template_id: MonsterTemplateId):
         """weight が負のときはエラー"""
         with pytest.raises(MonsterRespawnValidationException, match="weight"):
             SpawnSlot(

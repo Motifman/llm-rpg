@@ -31,7 +31,5 @@ def test_check_internal_hostnames_shell_scenarios_passed() -> None:
         env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
     )
     assert result.returncode == 0, (
-        f"shell scenarios failed (exit {result.returncode})\n"
-        f"stdout:\n{result.stdout}\n"
-        f"stderr:\n{result.stderr}"
+        f"shell scenarios failed (exit {result.returncode})\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )

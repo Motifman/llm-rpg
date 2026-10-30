@@ -26,13 +26,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository i
     InMemoryPlayerStatusRepository,
 )
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[3]
-    / "tests"
-    / "fixtures"
-    / "scenarios"
-    / "darkened_station.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 _DRILL = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
@@ -45,9 +39,7 @@ def _runtime():
 
 
 def _spot_of(runtime, player_id: PlayerId) -> SpotId:
-    return runtime._spot_graph_repo.find_graph().get_entity_spot(
-        EntityId.create(int(player_id))
-    )
+    return runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
 
 
 def _scatter(runtime) -> None:
@@ -112,8 +104,7 @@ def test_success_event_observes_committed_phase_and_gathering() -> None:
         lambda _: observations.append(
             (
                 runtime._game_phase_store.current.phase,
-                len({_spot_of(runtime, pid) for pid in (_MORI, _SENA, _KUZE, _AOI)})
-                == 1,
+                len({_spot_of(runtime, pid) for pid in (_MORI, _SENA, _KUZE, _AOI)}) == 1,
             )
         ),
         channel=DeliveryChannel.OBSERVATION,
@@ -132,13 +123,8 @@ def test_sync_failure_rolls_back_button_phase_gathering_and_navigation() -> None
     _scatter(runtime)
     runtime.do_move(_SENA, "generator_room")
     runtime.advance_tick()
-    before_spots = {
-        player_id: _spot_of(runtime, player_id)
-        for player_id in (_MORI, _SENA, _KUZE, _AOI)
-    }
-    before_navigation = runtime._player_status_repo.find_by_id(
-        _SENA
-    ).spot_navigation_state
+    before_spots = {player_id: _spot_of(runtime, player_id) for player_id in (_MORI, _SENA, _KUZE, _AOI)}
+    before_navigation = runtime._player_status_repo.find_by_id(_SENA).spot_navigation_state
     runtime._game_phase_store.cast_vote(_MORI, _SENA)
     delivered = _fail_before_commit(runtime, "meeting sync failed")
 
@@ -148,14 +134,8 @@ def test_sync_failure_rolls_back_button_phase_gathering_and_navigation() -> None
     assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM
     assert runtime._game_phase_store.has_emergency_button(_KUZE) is True
     assert runtime._game_phase_store.ballots == {int(_MORI): int(_SENA)}
-    assert {
-        player_id: _spot_of(runtime, player_id)
-        for player_id in (_MORI, _SENA, _KUZE, _AOI)
-    } == before_spots
-    assert (
-        runtime._player_status_repo.find_by_id(_SENA).spot_navigation_state
-        == before_navigation
-    )
+    assert {player_id: _spot_of(runtime, player_id) for player_id in (_MORI, _SENA, _KUZE, _AOI)} == before_spots
+    assert runtime._player_status_repo.find_by_id(_SENA).spot_navigation_state == before_navigation
     assert delivered == []
 
 
@@ -179,9 +159,7 @@ def test_body_report_failure_does_not_mark_the_body_as_reported() -> None:
 def test_sync_failure_rolls_back_meeting_condition_resolution() -> None:
     """会議開始の必須処理が失敗すると異常flagの解決も開始前へ戻す。"""
     runtime = create_world_runtime(_DRILL)
-    terminal_spec = ItemSpecId.create(
-        runtime.id_mapper.get_int("item_spec", "control_terminal")
-    )
+    terminal_spec = ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "control_terminal"))
     runtime.do_interact_with_item(_KUZE, terminal_spec, "freeze_fuel")
     runtime.do_interact_with_player(_KUZE, _MORI, "strike_down")
     _fail_before_commit(runtime, "meeting resolution sync failed")
@@ -201,10 +179,7 @@ def test_status_save_failure_rolls_back_every_gathered_player(
     """一人の移動状態保存に失敗してもgraphだけを集合済みにせず全体を戻す。"""
     runtime = _runtime()
     _scatter(runtime)
-    before_spots = {
-        player_id: _spot_of(runtime, player_id)
-        for player_id in (_MORI, _SENA, _KUZE, _AOI)
-    }
+    before_spots = {player_id: _spot_of(runtime, player_id) for player_id in (_MORI, _SENA, _KUZE, _AOI)}
     original_save = InMemoryPlayerStatusRepository.save
 
     def save_then_fail(self, status) -> None:
@@ -219,10 +194,7 @@ def test_status_save_failure_rolls_back_every_gathered_player(
 
     assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM
     assert runtime._game_phase_store.has_emergency_button(_KUZE) is True
-    assert {
-        player_id: _spot_of(runtime, player_id)
-        for player_id in (_MORI, _SENA, _KUZE, _AOI)
-    } == before_spots
+    assert {player_id: _spot_of(runtime, player_id) for player_id in (_MORI, _SENA, _KUZE, _AOI)} == before_spots
 
 
 def test_button_interaction_finishes_with_the_meeting_command(
@@ -259,9 +231,7 @@ def test_button_uses_only_the_dedicated_meeting_scope(
 ) -> None:
     """CALL_MEETINGは配線確認後も通常interaction scopeを開始せず専用scopeだけを使う。"""
     runtime = _runtime()
-    interaction_factory = (
-        runtime._interaction_service._interaction_command_scope_factory
-    )
+    interaction_factory = runtime._interaction_service._interaction_command_scope_factory
 
     def reject_outer_scope():
         raise AssertionError("normal interaction scope must not start")
@@ -283,8 +253,8 @@ def test_trace_observer_failure_does_not_turn_commit_into_command_failure(
 ) -> None:
     """確定後traceが失敗しても会議開始の成功結果と確定状態を維持する。"""
     runtime = _runtime()
-    runtime._meeting_command_service._meeting_committed_observer = (
-        lambda _: (_ for _ in ()).throw(RuntimeError("trace observer failed"))
+    runtime._meeting_command_service._meeting_committed_observer = lambda _: (_ for _ in ()).throw(
+        RuntimeError("trace observer failed")
     )
 
     result = runtime.call_emergency_meeting(_KUZE)
@@ -303,9 +273,7 @@ def test_vote_event_failure_rolls_back_the_new_ballot() -> None:
     dispatcher = _dispatcher(runtime)
     dispatcher.register_required_before_commit(
         MeetingVoteCastEvent,
-        lambda event, context: (_ for _ in ()).throw(
-            RuntimeError("vote progress sync failed")
-        ),
+        lambda event, context: (_ for _ in ()).throw(RuntimeError("vote progress sync failed")),
     )
     dispatcher.register_after_commit(
         MeetingVoteCastEvent,
@@ -326,8 +294,8 @@ def test_player_name_failure_rolls_back_the_new_ballot() -> None:
     """投票者名を解決できないと壊れた観測を確定せず一票も戻す。"""
     runtime = _runtime()
     assert runtime.call_emergency_meeting(_KUZE).success is True
-    runtime._meeting_command_service._player_name_provider = (
-        lambda _: (_ for _ in ()).throw(RuntimeError("player name unavailable"))
+    runtime._meeting_command_service._player_name_provider = lambda _: (_ for _ in ()).throw(
+        RuntimeError("player name unavailable")
     )
 
     with pytest.raises(RuntimeError, match="player name unavailable"):
@@ -383,9 +351,7 @@ def test_last_vote_failure_rolls_back_ejection_graph_phase_and_body_clear() -> N
     delivered: list[MeetingVoteResolvedEvent] = []
     dispatcher.register_required_before_commit(
         MeetingVoteResolvedEvent,
-        lambda event, context: (_ for _ in ()).throw(
-            RuntimeError("vote result sync failed")
-        ),
+        lambda event, context: (_ for _ in ()).throw(RuntimeError("vote result sync failed")),
     )
     dispatcher.register_after_commit(
         MeetingVoteResolvedEvent,

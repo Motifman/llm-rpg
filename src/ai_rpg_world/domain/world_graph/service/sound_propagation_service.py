@@ -75,14 +75,10 @@ class SoundPropagationService:
 
         # (spot, accum, last_hop_connection_name, last_hop_from_spot_id)
         # last_hop_* は speaker_spot 自身では None。
-        frontier: deque[
-            tuple[SpotId, float, str | None, SpotId | None]
-        ] = deque([(speaker_spot, 1.0, None, None)])
+        frontier: deque[tuple[SpotId, float, str | None, SpotId | None]] = deque([(speaker_spot, 1.0, None, None)])
 
         for h in range(max_hops + 1):
-            next_frontier: deque[
-                tuple[SpotId, float, str | None, SpotId | None]
-            ] = deque()
+            next_frontier: deque[tuple[SpotId, float, str | None, SpotId | None]] = deque()
             while frontier:
                 spot, accum_to_spot, last_hop_name, last_hop_from = frontier.popleft()
                 clarity = self.clarity_for_hops_and_accum(h, accum_to_spot)
@@ -125,14 +121,10 @@ class SoundPropagationService:
     ) -> SoundSpotOutcome | None:
         """別位置 store の主体にも使える、spot 間の音の到達結果を返す。"""
         max_hops = volume.max_hops()
-        frontier: deque[
-            tuple[SpotId, float, str | None, SpotId | None]
-        ] = deque([(speaker_spot_id, 1.0, None, None)])
+        frontier: deque[tuple[SpotId, float, str | None, SpotId | None]] = deque([(speaker_spot_id, 1.0, None, None)])
         best: SoundSpotOutcome | None = None
         for hops in range(max_hops + 1):
-            next_frontier: deque[
-                tuple[SpotId, float, str | None, SpotId | None]
-            ] = deque()
+            next_frontier: deque[tuple[SpotId, float, str | None, SpotId | None]] = deque()
             while frontier:
                 spot_id, accumulated, connection_name, from_spot_id = frontier.popleft()
                 if spot_id == listener_spot_id:
@@ -141,16 +133,12 @@ class SoundPropagationService:
                         source_connection_name=connection_name,
                         source_adjacent_spot_id=from_spot_id,
                     )
-                    if best is None or _clarity_rank(candidate.clarity) > _clarity_rank(
-                        best.clarity
-                    ):
+                    if best is None or _clarity_rank(candidate.clarity) > _clarity_rank(best.clarity):
                         best = candidate
                 if hops >= max_hops:
                     continue
                 for connection in graph.iter_outgoing_connections_from(spot_id):
-                    next_accumulated = (
-                        accumulated * connection.passage.sound_permeability
-                    )
+                    next_accumulated = accumulated * connection.passage.sound_permeability
                     if next_accumulated < _MIN_AUDIBLE_ACCUM:
                         continue
                     next_frontier.append(
@@ -172,9 +160,7 @@ class SoundPropagationService:
         graph: SpotGraphAggregate,
     ) -> SoundClarityEnum | None:
         """指定エンティティの聞き取り明瞭さ。届かなければ None。"""
-        outcome = self.outcome_for_listener(
-            speaker_entity_id, listener_entity_id, volume, graph
-        )
+        outcome = self.outcome_for_listener(speaker_entity_id, listener_entity_id, volume, graph)
         return outcome.clarity if outcome is not None else None
 
     def outcome_for_listener(

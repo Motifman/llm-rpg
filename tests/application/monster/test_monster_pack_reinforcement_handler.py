@@ -43,7 +43,6 @@ from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadout
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -70,11 +69,16 @@ WOLF_PACK = PackId.create("wolf_pack_1")
 
 def _node(spot_id: SpotId) -> SpotNode:
     return SpotNode(
-        spot_id=spot_id, name=f"spot{spot_id.value}", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        spot_id=spot_id,
+        name=f"spot{spot_id.value}",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
-            lighting=LightingEnum.BRIGHT, sound_ambient=None,
-            temperature=TemperatureEnum.NORMAL, smell=None,
+            lighting=LightingEnum.BRIGHT,
+            sound_ambient=None,
+            temperature=TemperatureEnum.NORMAL,
+            smell=None,
         ),
     )
 
@@ -82,9 +86,13 @@ def _node(spot_id: SpotId) -> SpotNode:
 def _conn(connection_id: int, from_id: SpotId, to_id: SpotId) -> SpotConnection:
     return SpotConnection(
         connection_id=ConnectionId.create(connection_id),
-        from_spot_id=from_id, to_spot_id=to_id,
-        name="edge", description="", travel_ticks=1,
-        is_bidirectional=False, passage=Passage.open(),
+        from_spot_id=from_id,
+        to_spot_id=to_id,
+        name="edge",
+        description="",
+        travel_ticks=1,
+        is_bidirectional=False,
+        passage=Passage.open(),
     )
 
 
@@ -110,8 +118,13 @@ def _template(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(100, True),
@@ -126,16 +139,19 @@ def _template(
 
 
 def _make_monster(
-    monster_id: int, *, pack_id: PackId | None = WOLF_PACK,
+    monster_id: int,
+    *,
+    pack_id: PackId | None = WOLF_PACK,
     template: MonsterTemplate | None = None,
 ) -> MonsterAggregate:
     return MonsterAggregate(
         monster_id=MonsterId.create(monster_id),
         template=template or _template(),
-        world_object_id=WorldObjectId.create(9000 + monster_id),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(monster_id), owner_id=monster_id,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(monster_id),
+            owner_id=monster_id,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -147,9 +163,7 @@ def _make_repo(*monsters: MonsterAggregate):
     repo = MagicMock()
     by_id = {m.monster_id: m for m in monsters}
     repo.find_by_id.side_effect = lambda mid: by_id.get(mid)
-    repo.find_by_pack_id.side_effect = lambda pid: [
-        m for m in monsters if m.pack_id == pid
-    ]
+    repo.find_by_pack_id.side_effect = lambda pid: [m for m in monsters if m.pack_id == pid]
     return repo
 
 
@@ -188,7 +202,10 @@ class TestPackReinforcementSuccess:
         graph.clear_events()
 
         result = handler.try_respond_to_pack_help(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
 
         assert result is True
@@ -225,7 +242,10 @@ class TestPackReinforcementSuccess:
         graph.clear_events()
 
         result = handler.try_respond_to_pack_help(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
 
         assert result is True
@@ -255,7 +275,10 @@ class TestNoResponse:
         graph.clear_events()
 
         result = handler.try_respond_to_pack_help(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
         assert responder.is_chasing() is False
@@ -268,7 +291,8 @@ class TestNoResponse:
             attacker_ref=AttackerRef.of_player(PlayerId(7)),
         )
         responder = _make_monster(
-            102, template=_template(pack_help_radius=0),
+            102,
+            template=_template(pack_help_radius=0),
         )
         repo = _make_repo(victim, responder)
         handler = _make_handler(repo)
@@ -278,7 +302,10 @@ class TestNoResponse:
         graph.place_monster(responder.monster_id, SPOT_B)
 
         result = handler.try_respond_to_pack_help(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -290,7 +317,8 @@ class TestNoResponse:
             attacker_ref=AttackerRef.of_player(PlayerId(7)),
         )
         responder = _make_monster(
-            102, template=_template(pack_help_radius=1),
+            102,
+            template=_template(pack_help_radius=1),
         )
         repo = _make_repo(victim, responder)
         handler = _make_handler(repo)
@@ -300,7 +328,10 @@ class TestNoResponse:
         graph.place_monster(responder.monster_id, SPOT_C)
 
         result = handler.try_respond_to_pack_help(
-            responder, graph, SPOT_C, WorldTick(10),
+            responder,
+            graph,
+            SPOT_C,
+            WorldTick(10),
         )
         assert result is False
 
@@ -325,7 +356,10 @@ class TestNoResponse:
         graph.place_monster(responder.monster_id, SPOT_B)
 
         result = handler.try_respond_to_pack_help(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
         # 既存の CHASE 対象は変わらない
@@ -348,7 +382,10 @@ class TestNoResponse:
 
         # tick=10、被弾=2、grace=3 → 経過 8 > 3 で援護なし
         result = handler.try_respond_to_pack_help(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -360,8 +397,10 @@ class TestNoResponse:
             attacker_ref=AttackerRef.of_player(PlayerId(7)),
         )
         responder = _make_monster(
-            102, template=_template(
-                pack_help_radius=3, max_pack_responders=0,
+            102,
+            template=_template(
+                pack_help_radius=3,
+                max_pack_responders=0,
             ),
         )
         repo = _make_repo(victim, responder)
@@ -372,7 +411,10 @@ class TestNoResponse:
         graph.place_monster(responder.monster_id, SPOT_B)
 
         result = handler.try_respond_to_pack_help(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -406,7 +448,10 @@ class TestNoResponse:
         graph.place_monster(responder.monster_id, SPOT_B)
 
         result = handler.try_respond_to_pack_help(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -427,7 +472,10 @@ class TestNoResponse:
         graph.place_monster(responder.monster_id, SPOT_B)
 
         result = handler.try_respond_to_pack_help(
-            responder, graph, SPOT_B, WorldTick(10),
+            responder,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
 
@@ -440,10 +488,12 @@ class TestMaxResponders:
         target_ref = AttackerRef.of_player(PlayerId(7))
         # max_pack_responders=2 の victim
         victim = _make_monster(
-            101, template=_template(max_pack_responders=2),
+            101,
+            template=_template(max_pack_responders=2),
         )
         victim.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=target_ref,
+            current_tick=WorldTick(9),
+            attacker_ref=target_ref,
         )
         # 既に CHASE 中の応答者 2 匹 (同 target)
         existing_responder_a = _make_monster(102)
@@ -461,7 +511,10 @@ class TestMaxResponders:
         # 新しく応答しようとする 3 匹目
         responder_c = _make_monster(104)
         repo = _make_repo(
-            victim, existing_responder_a, existing_responder_b, responder_c,
+            victim,
+            existing_responder_a,
+            existing_responder_b,
+            responder_c,
         )
         handler = _make_handler(repo)
 
@@ -472,7 +525,10 @@ class TestMaxResponders:
         graph.place_monster(responder_c.monster_id, SPOT_B)
 
         result = handler.try_respond_to_pack_help(
-            responder_c, graph, SPOT_B, WorldTick(10),
+            responder_c,
+            graph,
+            SPOT_B,
+            WorldTick(10),
         )
         assert result is False
         assert responder_c.is_chasing() is False

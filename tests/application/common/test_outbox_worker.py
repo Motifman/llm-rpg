@@ -50,9 +50,7 @@ class _Store:
             raise RuntimeError("ack failed")
         self.delivered.append(event_id)
 
-    def record_retryable_failure(
-        self, event_id: str, error: Exception
-    ) -> OutboxFailureDisposition:
+    def record_retryable_failure(self, event_id: str, error: Exception) -> OutboxFailureDisposition:
         if self.fail_retryable:
             raise RuntimeError("failure record failed")
         self.retryable.append(event_id)
@@ -159,9 +157,7 @@ def test_retryable_failure_keeps_current_message_and_stops_later_delivery() -> N
     assert store.delivered == ["1"]
     assert store.retryable == ["2"]
     assert caught.value.attempt_count == 1
-    assert caught.value.next_attempt_at == datetime(
-        2026, 8, 14, 0, 0, 1, tzinfo=timezone.utc
-    )
+    assert caught.value.next_attempt_at == datetime(2026, 8, 14, 0, 0, 1, tzinfo=timezone.utc)
 
 
 def test_retry_limit_isolates_message_and_continues_later_delivery() -> None:

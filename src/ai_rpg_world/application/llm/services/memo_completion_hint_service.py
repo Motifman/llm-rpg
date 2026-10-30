@@ -1,8 +1,8 @@
 """Memo 完了 hint サービス (Issue #188 Phase 1c、#1322 で意味判定を追加)。
 
-LLM が memo_done を呼ばずに memo を放置した場合の救済策。直近の action_summary /
-result_summary と未完了 memo を比べ、達成した可能性があれば「もしかして memo を
-完了しましたか？」という hint を result_summary に append する。
+メモ帳のやること (#1628) を済ませたのに消し忘れた場合の救済策。直近の
+action_summary / result_summary と残っているやることを比べ、済んだ可能性があれば
+hint を result_summary に append する。
 
 ## 文字の重なりでは 2 方向に外れる
 
@@ -22,20 +22,17 @@ Noul なら意味で判定できる (#1322)。判断を持たない run は従�
 
 ## 変えない判断
 
-- **自動完了しない**: 抽象的な memo 内容はコード状態にマップできない。memo_done
-  を呼ぶかどうかは当人に委ねる (hint を見て判断する)
-- **hint 文の形を変えない**: `[hint] memo「...」(id: ...)` と「memo_done で記録
-  してください」は既存 run と同じ。hint 件数と hint 後の memo_done 率を同じ形で
-  比較できるようにする
+- **自動で消さない**: 抽象的な memo 内容はコード状態にマップできない。消すか
+  どうかは当人に委ねる (hint を見て判断する)
 
-ただし**数の呼び名は変える**。重なりの割合と較正済みの確率は別物なので、判断
+**数の呼び名は分ける**。重なりの割合と較正済みの確率は別物なので、判断
 由来の数を「類似度」と呼ばない。比較に使うのは hint の件数と `MEMO_HINT` の
 記録で、この語ではない。
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
@@ -46,8 +43,6 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     TypedJudgmentUnavailableException,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 
 DEFAULT_SIMILARITY_THRESHOLD = 0.6
 """重なり判定で hint を出す閾値 (0.0-1.0)。
@@ -95,6 +90,15 @@ def _memo_coverage_ratio(memo_content: str, haystack: str) -> float:
 
 
 @dataclass(frozen=True)
+class PendingTodo:
+    """メモ帳のやること 1 件 (#1628)。判定は ``id`` と ``content`` を見る。"""
+
+    id: str
+    content: str
+    handle: str
+
+
+@dataclass(frozen=True)
 class MemoCompletionHint:
     """検出された hint。result_summary への append 用テキストも保持。
 
@@ -104,23 +108,20 @@ class MemoCompletionHint:
         source: ``overlap`` なら文字の重なりの割合、``judgment`` なら確率
     """
 
-    memo: MemoEntry
+    memo: PendingTodo
     similarity: float
     source: str = SOURCE_OVERLAP
 
     def to_hint_text(self) -> str:
         """LLM に見せる hint 文を返す。"""
-        from ai_rpg_world.application.llm.services.memo_id_display import (
-            short_memo_id,
-        )
-
         # 重なりの割合と確率を同じ語で呼ばない。当人に見せる文なので、数の
         # 意味が違うことは言葉で分かる必要がある。
         measure = "確度" if self.source == SOURCE_JUDGMENT else "類似度"
+        # 自動では消さない。済んだかを決めるのは本人。
         return (
-            f"\n\n[hint] memo「{self.memo.content}」(id: {short_memo_id(self.memo.id)}) "
-            f"を達成した可能性があります ({measure} {self.similarity:.2f})。"
-            "完了したなら memo_done で記録してください。"
+            f"\n\n[hint] やること「{self.memo.content}」({self.memo.handle}) "
+            f"は済んだかもしれません ({measure} {self.similarity:.2f})。"
+            "済んだなら memo の remove で消してください。"
         )
 
 
@@ -161,7 +162,7 @@ class MemoCompletionHintService:
     """action_result への完了示唆 hint を生成する。
 
     使い方:
-        service = MemoCompletionHintService(memo_store)
+        service = MemoCompletionHintService(pending_todos=list_pending_todos)
         detection = service.detect(being_id, action_summary, result_summary)
 
     detect は副作用なし: memo は完了させない。
@@ -169,14 +170,14 @@ class MemoCompletionHintService:
 
     def __init__(
         self,
-        memo_store: MemoRepository,
         *,
+        pending_todos: Callable[[BeingId], Sequence[PendingTodo]],
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         judgment_port: ITypedJudgmentPort | None = None,
         min_probability: float = DEFAULT_MIN_PROBABILITY,
     ) -> None:
-        if not isinstance(memo_store, MemoRepository):
-            raise TypeError("memo_store must be MemoRepository")
+        if not callable(pending_todos):
+            raise TypeError("pending_todos must be callable")
         if not isinstance(similarity_threshold, (int, float)):
             raise TypeError("similarity_threshold must be a number")
         if not (0.0 <= float(similarity_threshold) <= 1.0):
@@ -185,7 +186,7 @@ class MemoCompletionHintService:
             raise TypeError("min_probability must be a number")
         if not 0.0 < float(min_probability) <= 1.0:
             raise ValueError("min_probability must be in (0, 1]")
-        self._memo_store = memo_store
+        self._pending_todos = pending_todos
         self._threshold = float(similarity_threshold)
         #: 公開するのは、配線が組まれたかを外から確かめられるようにするため。
         self.judgment_port = judgment_port
@@ -196,12 +197,17 @@ class MemoCompletionHintService:
         being_id: BeingId,
         action_summary: str,
         result_summary: str,
+        *,
+        excluded_ids: Collection[str] = (),
     ) -> MemoHintDetection:
-        """未完了 memo のうち、達成した可能性が最も高い 1 件の hint を返す。"""
+        """未完了 memo のうち、達成した可能性が最も高い 1 件の hint を返す。
+
+        ``excluded_ids`` の memo は問わない。
+        """
         memos = [
             memo
-            for memo in self._memo_store.list_uncompleted_by_being(being_id)
-            if (memo.content or "").strip()
+            for memo in self._pending_todos(being_id)
+            if (memo.content or "").strip() and memo.id not in excluded_ids
         ]
         haystack = f"{action_summary}\n{result_summary}".strip()
         if not memos or not haystack:
@@ -222,46 +228,35 @@ class MemoCompletionHintService:
                 unavailable_reason=getattr(exc, "error_code", "UNAVAILABLE"),
             )
 
-    def _by_overlap(
-        self, memos: list[MemoEntry], haystack: str
-    ) -> MemoCompletionHint | None:
+    def _by_overlap(self, memos: list[PendingTodo], haystack: str) -> MemoCompletionHint | None:
         best: MemoCompletionHint | None = None
         for memo in memos:
             ratio = _memo_coverage_ratio((memo.content or "").strip(), haystack)
             if ratio < self._threshold:
                 continue
             if best is None or ratio > best.similarity:
-                best = MemoCompletionHint(
-                    memo=memo, similarity=ratio, source=SOURCE_OVERLAP
-                )
+                best = MemoCompletionHint(memo=memo, similarity=ratio, source=SOURCE_OVERLAP)
         return best
 
     def _by_judgment(
         self,
-        memos: list[MemoEntry],
+        memos: list[PendingTodo],
         action_summary: str,
         result_summary: str,
     ) -> MemoHintDetection:
         assert self.judgment_port is not None
         # 質問のキーは連番にする。memo の内部 ID をキーにすると、答えを引く
         # ためだけに ID が state 側の語彙へ混ざりやすい (設計原則 1)。
-        by_key: dict[str, MemoEntry] = {
-            f"{QUESTION_NAME}_{index}": memo for index, memo in enumerate(memos)
-        }
+        by_key: dict[str, PendingTodo] = {f"{QUESTION_NAME}_{index}": memo for index, memo in enumerate(memos)}
         questions = {
             key: NoulQuestion(
-                instructions=(
-                    f"この行動と結果で、memo「{(memo.content or '').strip()}」の"
-                    "意図は果たされたか。"
-                ),
+                instructions=(f"この行動と結果で、memo「{(memo.content or '').strip()}」の意図は果たされたか。"),
                 true_means="果たされた",
                 false_means="まだ果たされていない",
             )
             for key, memo in by_key.items()
         }
-        answers = self.judgment_port.judge(
-            _state(action_summary, result_summary), questions
-        )
+        answers = self.judgment_port.judge(_state(action_summary, result_summary), questions)
 
         judgments: list[MemoCompletionJudgment] = []
         best: MemoCompletionHint | None = None
@@ -287,9 +282,7 @@ class MemoCompletionHintService:
                 )
             )
             if accepted and (best is None or probability > best.similarity):
-                best = MemoCompletionHint(
-                    memo=memo, similarity=probability, source=SOURCE_JUDGMENT
-                )
+                best = MemoCompletionHint(memo=memo, similarity=probability, source=SOURCE_JUDGMENT)
         return MemoHintDetection(hint=best, judgments=tuple(judgments))
 
     def augment_result_summary(
@@ -321,6 +314,7 @@ __all__ = [
     "MemoCompletionHintService",
     "MemoCompletionJudgment",
     "MemoHintDetection",
+    "PendingTodo",
     "QUESTION_NAME",
     "SOURCE_JUDGMENT",
     "SOURCE_OVERLAP",

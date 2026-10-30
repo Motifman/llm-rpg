@@ -34,11 +34,7 @@ class PlayerPerceptionPolicy:
         return self._departed_agents_enabled
 
     def plane_of(self, player_id: PlayerId) -> PlayerPerceptionPlane:
-        if (
-            self._departed_agents_enabled
-            and self._outcome_registry.get_outcome(player_id)
-            is PlayerOutcomeEnum.DEAD
-        ):
+        if self._departed_agents_enabled and self._outcome_registry.get_outcome(player_id) is PlayerOutcomeEnum.DEAD:
             return PlayerPerceptionPlane.DEPARTED
         return PlayerPerceptionPlane.LIVING
 
@@ -52,10 +48,7 @@ class PlayerPerceptionPolicy:
     ) -> bool:
         observer = self.plane_of(observer_player_id)
         subject = self.plane_of(subject_player_id)
-        return not (
-            observer is PlayerPerceptionPlane.LIVING
-            and subject is PlayerPerceptionPlane.DEPARTED
-        )
+        return not (observer is PlayerPerceptionPlane.LIVING and subject is PlayerPerceptionPlane.DEPARTED)
 
     def actor_player_id_from_event(self, event: Any) -> PlayerId | None:
         """actor を持つ既存 event から player_id を取り出し、世界 event は None にする。"""

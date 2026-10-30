@@ -11,6 +11,7 @@ from ai_rpg_world.domain.sns.exception import (
     OwnershipException,
 )
 from ai_rpg_world.domain.sns.value_object import Like, Mention, PostContent, PostId, ReplyId, UserId
+from ai_rpg_world.domain.sns.value_object.sns_identity_token import SnsIdentityToken
 
 ContentId = TypeVar("ContentId", PostId, ReplyId)
 
@@ -29,6 +30,9 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
         parent_post_id: PostId | None = None,
         parent_reply_id: ReplyId | None = None,
         created_at: datetime | None = None,
+        identity_token: str | None = None,
+        author_identity_token: str | None = None,
+        parent_identity_token: str | None = None,
     ):
         super().__init__()
         self._content_id: ContentId = content_id
@@ -40,6 +44,28 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
         self._parent_post_id = parent_post_id
         self._parent_reply_id = parent_reply_id
         self._created_at = created_at if created_at is not None else datetime.now()
+        self._identity_token = SnsIdentityToken() if identity_token is None else SnsIdentityToken(identity_token)
+        self._author_identity_token = (
+            None if author_identity_token is None else SnsIdentityToken(author_identity_token).value
+        )
+        self._parent_identity_token = (
+            None if parent_identity_token is None else SnsIdentityToken(parent_identity_token).value
+        )
+
+    @property
+    def identity_token(self) -> str:
+        """整数の採番や表示順序と独立した、作成時から変わらない識別子。"""
+        return self._identity_token.value
+
+    @property
+    def author_identity_token(self) -> str | None:
+        """作成時の作者の識別子。欠損時に現在の同じ整数の利用者へ結び直さない。"""
+        return self._author_identity_token
+
+    @property
+    def parent_identity_token(self) -> str | None:
+        """作成時の親の識別子。返信以外、または旧形式の欠損時は None。"""
+        return self._parent_identity_token
 
     @property
     def content_id(self) -> ContentId:
@@ -86,7 +112,15 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
         """作成日時"""
         return self._created_at
 
-    def like(self, user_id: UserId, content_type: str, *, liker_display_name: str = "") -> None:
+    def like(
+        self,
+        user_id: UserId,
+        content_type: str,
+        *,
+        liker_display_name: str = "",
+        liker_identity_token: str | None = None,
+        execution_provenance: dict[str, object] | None = None,
+    ) -> None:
         """いいね機能（共通実装）"""
         # コンテンツタイプのバリデーション
         if content_type not in ["post", "reply"]:
@@ -110,6 +144,11 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
             content_author_id=self._author_user_id,
             content_text=self._content.content,
             liker_display_name=liker_display_name,
+            actor_identity_token=liker_identity_token,
+            recipient_identity_token=self._author_identity_token,
+            target_identity_token=self.identity_token,
+            is_liked=like in self._likes,
+            execution_provenance=execution_provenance,
         )
         self.add_event(event)
 
@@ -135,7 +174,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
             aggregate_type=aggregate_type,
             target_id=self._content_id,
             author_user_id=user_id,
-            content_type=content_type
+            content_type=content_type,
         )
         self.add_event(event)
 
@@ -175,7 +214,8 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
     def _create_mentions_from_content(self, content: PostContent) -> set[Mention]:
         """コンテンツからメンションを抽出"""
         import re
-        mention_pattern = r'@(\S+)'
+
+        mention_pattern = r"@(\S+)"
         matches = re.findall(mention_pattern, content.content)
         return set(Mention(mentioned_user_name=match, post_id=self._content_id) for match in matches)
 
@@ -194,7 +234,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
                 aggregate_type=aggregate_type,
                 target_id=self._content_id,
                 mentioned_by_user_id=self._author_user_id,
-            mentioned_user_names=mentioned_users,
-            content_type=content_type
+                mentioned_user_names=mentioned_users,
+                content_type=content_type,
             )
             self.add_event(event)

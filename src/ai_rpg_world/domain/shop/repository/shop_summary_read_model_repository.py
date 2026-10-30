@@ -1,4 +1,5 @@
 """ショップサマリReadModelリポジトリインターフェース"""
+
 from abc import abstractmethod
 
 from ai_rpg_world.domain.common.repository import Repository

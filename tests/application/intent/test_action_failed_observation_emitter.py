@@ -122,9 +122,7 @@ class TestActionFailedObservationEmitter:
 
     def test_time_label_provider_is_required(self) -> None:
         """行動失敗の記録境界は世界時刻 provider の明示を必須にする。"""
-        parameter = inspect.signature(ActionFailedObservationEmitter).parameters[
-            "time_label_provider"
-        ]
+        parameter = inspect.signature(ActionFailedObservationEmitter).parameters["time_label_provider"]
         assert parameter.default is inspect.Parameter.empty
         buffer = DefaultObservationContextBuffer()
         with pytest.raises(TypeError, match="time_label_provider"):
@@ -208,9 +206,7 @@ class TestActionFailedObservationEmitter:
         emitter, buffer, _ = _build_emitter()
         emitter.on_resolution_failure(
             _make_intent(intent_id=777),
-            LlmCommandResultDto(
-                success=False, message="x", error_code="LOST_RACE"
-            ),
+            LlmCommandResultDto(success=False, message="x", error_code="LOST_RACE"),
         )
         out = buffer.get_observations(PlayerId(42))[0].output
         assert out.structured["intent_id"] == 777

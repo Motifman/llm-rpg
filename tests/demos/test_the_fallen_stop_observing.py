@@ -12,7 +12,7 @@ buffer を clear する仕様 (復活直前の他者発話を引きずらない)
 ## 判定が 1 つの strategy の中にしか無かった
 
 除外は `SpotGraphRecipientStrategy` の末尾だけにあり、発話は別経路
-(`SpeechRecipientStrategy` 系) を通るので効いていなかった。当時のコメント
+(`SpotGraphSpeechRecipientStrategy`) を通るので効いていなかった。当時のコメント
 自身が「別経路で同等の制御を入れる」と書いていて、**書かれないまま実 run で
 出た**。
 
@@ -38,9 +38,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI, _SENA, _KUZE, _AOI, _HAGI = (PlayerId(i) for i in range(1, 6))
 
@@ -56,10 +54,7 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
 
 
 def _prose_since(runtime, player_id: PlayerId, since: int) -> list[str]:
-    return [
-        e.output.prose
-        for e in runtime._obs_buffer.get_observations(player_id)[since:]
-    ]
+    return [e.output.prose for e in runtime._obs_buffer.get_observations(player_id)[since:]]
 
 
 @pytest.fixture()
@@ -126,9 +121,7 @@ class TestTheFallenDoNotHearTheLiving:
         _move(runtime, _HAGI, "corridor")
         runtime.advance_tick()
 
-        assert _prose_since(runtime, _SENA, before) == [
-            "ハギが連絡通路にやってきた。"
-        ]
+        assert _prose_since(runtime, _SENA, before) == ["ハギが連絡通路にやってきた。"]
 
 
 class TestTheirOwnFateStillReachesThem:
@@ -142,10 +135,7 @@ class TestTheirOwnFateStillReachesThem:
         """
         runtime = after_sena_falls
 
-        assert any(
-            "死亡した後も移動できる" in e.output.prose
-            for e in runtime._obs_buffer.get_observations(_SENA)
-        )
+        assert any("死亡した後も移動できる" in e.output.prose for e in runtime._obs_buffer.get_observations(_SENA))
 
 
 class TestTheRuleIsAboutWhoTheEventIsAbout:
@@ -166,9 +156,7 @@ class TestTheRuleIsAboutWhoTheEventIsAbout:
 
         repository = MagicMock()
         repository.find_by_id.return_value = MagicMock(is_down=down)
-        return ObservationRecipientResolver(
-            strategies=[], player_status_repository=repository
-        )
+        return ObservationRecipientResolver(strategies=[], player_status_repository=repository)
 
     def _event_about(self, player_id: PlayerId):
         """その player の身に起きたことを表す event。
@@ -224,7 +212,6 @@ class TestTheRuleIsAboutWhoTheEventIsAbout:
 
         assert resolver._without_the_fallen(weather, [_SENA]) == []
 
-
     def test_a_graph_event_does_not_make_a_player_the_subject(self) -> None:
         """spot graph の event で、番号の一致した player が主体に化けない。
 
@@ -266,9 +253,7 @@ class TestTheGuardSitsAtTheOnlyExit:
             / "recipient_strategies"
         )
         offenders = [
-            path.name
-            for path in strategies.glob("*.py")
-            if "_is_player_down" in path.read_text(encoding="utf-8")
+            path.name for path in strategies.glob("*.py") if "_is_player_down" in path.read_text(encoding="utf-8")
         ]
 
         assert offenders == []

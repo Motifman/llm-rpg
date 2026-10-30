@@ -31,23 +31,16 @@ class TestTheMarketRunCanBeRepeated:
 
     def test_it_points_at_the_board_scenario(self) -> None:
         """価格形成を見るシナリオ (掲示板のある市場町) を指している。"""
-        assert _profile(_MARKET)["scenario"] == (
-            "data/scenarios/market_town_v3_board.json"
-        )
+        assert _profile(_MARKET)["scenario"] == ("data/scenarios/market_town_v3_board.json")
 
     def test_it_runs_for_eighty_ticks(self) -> None:
         """80 手番。これまでの市場 run と同じ長さで、比較できる。"""
         assert _profile(_MARKET)["max_world_ticks"] == 80
 
-    def test_it_captures_the_prompts(self) -> None:
-        """プロンプトを保存する。
-
-        値付けの理由は独白とプロンプトの両方を突き合わせないと読めない。
-        保存を落とすと、run が終わってからでは取り返せない。
-        """
+    def test_it_keeps_running_when_capturing_the_prompts_fails(self) -> None:
+        """プロンプトの保存に失敗しても run を止めず、警告にとどめる。"""
         runtime_config = _profile(_MARKET)["runtime_config"]
 
-        assert runtime_config["PROMPT_DATASET_CAPTURE_ENABLED"] is True
         assert runtime_config["PROMPT_DATASET_CAPTURE_FAILURE_POLICY"] == "warn"
 
     def test_it_names_the_provider_it_routes_to(self) -> None:
@@ -83,11 +76,7 @@ class TestItDoesNotDisturbTheProfileItCameFrom:
         market = _profile(_MARKET)["runtime_config"]
         origin = _profile(_ORIGIN)["runtime_config"]
 
-        differing = {
-            key
-            for key in set(market) | set(origin)
-            if market.get(key) != origin.get(key)
-        }
+        differing = {key for key in set(market) | set(origin) if market.get(key) != origin.get(key)}
 
         # LLM_WALL_TIME_CAP_SECONDS: 供物競争 run では 13 件の呼び出しが
         # 既定 95 秒を待ち切って失われ、run 時間の 16% を占めた

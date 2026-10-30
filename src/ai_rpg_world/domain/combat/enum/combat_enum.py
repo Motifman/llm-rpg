@@ -3,6 +3,7 @@ from enum import Enum
 
 class StatusEffectType(Enum):
     """ステータス異常・強化の種類"""
+
     ATTACK_UP = "attack_up"
     ATTACK_DOWN = "attack_down"
     DEFENSE_UP = "defense_up"

@@ -86,9 +86,7 @@ class TestTradeReadModelWiring:
         create_trade_read_model_repositories_bundle_for_app(environ={"GAME_DB_PATH": str(db)})
         conn = sqlite3.connect(str(db))
         try:
-            cur = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-            )
+            cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
             names = {row[0] for row in cur.fetchall()}
         finally:
             conn.close()
@@ -97,9 +95,7 @@ class TestTradeReadModelWiring:
         assert "trade_detail_read_models" in names
         assert "global_market_listing_read_models" in names
 
-    def test_resolve_trade_read_model_persisted_path_exported_matches_bundle_path(
-        self, tmp_path: Path
-    ) -> None:
+    def test_resolve_trade_read_model_persisted_path_exported_matches_bundle_path(self, tmp_path: Path) -> None:
         from ai_rpg_world.application.trade.trade_read_model_wiring import (
             resolve_trade_read_model_persisted_path,
         )

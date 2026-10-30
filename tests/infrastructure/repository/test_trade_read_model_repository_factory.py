@@ -131,9 +131,7 @@ class TestTradeReadModelRepositoryFactory:
         )
         assert isinstance(repo, SqliteTradeReadModelRepository)
 
-    def test_trade_event_handler_offered_persists_via_factory_sqlite(
-        self, tmp_path: Path
-    ) -> None:
+    def test_trade_event_handler_offered_persists_via_factory_sqlite(self, tmp_path: Path) -> None:
         db = tmp_path / "handler.db"
         read_model_repo = create_trade_read_model_repository_from_path(db)
         assert isinstance(read_model_repo, SqliteTradeReadModelRepository)

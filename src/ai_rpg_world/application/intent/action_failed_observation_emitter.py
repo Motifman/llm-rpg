@@ -43,18 +43,20 @@ logger = logging.getLogger(__name__)
 # - 配線・内部エラー (UNKNOWN_TOOL / INTENT_HANDLER_RAISED 等): LLM 側で
 #   リカバー不能。LLM に伝えると「未知のツールが失敗した」を「行動の失敗」と
 #   誤認して同じツールを再試行するループの素になる
-_NON_ACTION_FAILURE_CODES = frozenset({
-    # LLM API レベル
-    "NO_TOOL_CALL",
-    "LLM_API_CALL_FAILED",
-    "LLM_RATE_LIMIT",
-    "LLM_AUTHENTICATION_ERROR",
-    # 配線・内部エラー
-    "UNKNOWN_TOOL",
-    "INTENT_HANDLER_RAISED",
-    "INTENT_SUBMISSION_REJECTED",
-    "INTENT_RESOLVE_INTERNAL",
-})
+_NON_ACTION_FAILURE_CODES = frozenset(
+    {
+        # LLM API レベル
+        "NO_TOOL_CALL",
+        "LLM_API_CALL_FAILED",
+        "LLM_RATE_LIMIT",
+        "LLM_AUTHENTICATION_ERROR",
+        # 配線・内部エラー
+        "UNKNOWN_TOOL",
+        "INTENT_HANDLER_RAISED",
+        "INTENT_SUBMISSION_REJECTED",
+        "INTENT_RESOLVE_INTERNAL",
+    }
+)
 
 
 def _is_action_failure(dto: LlmCommandResultDto) -> bool:
@@ -84,9 +86,7 @@ class ActionFailedObservationEmitter:
         self._now_provider = now_provider
         self._time_label_provider = time_label_provider
 
-    def on_resolution_failure(
-        self, intent: Intent, dto: LlmCommandResultDto
-    ) -> None:
+    def on_resolution_failure(self, intent: Intent, dto: LlmCommandResultDto) -> None:
         """resolve 結果が失敗のとき呼ばれるコールバック。
 
         `success=True` や LLM API 起源の失敗は除外する。
@@ -116,9 +116,7 @@ class ActionFailedObservationEmitter:
                 intent.player_id.value,
             )
 
-    def _build_observation(
-        self, intent: Intent, dto: LlmCommandResultDto
-    ) -> ObservationOutput:
+    def _build_observation(self, intent: Intent, dto: LlmCommandResultDto) -> ObservationOutput:
         prose = (
             f"{intent.tool_name} を試みたが失敗した: {dto.message}"
             if dto.message

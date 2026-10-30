@@ -56,7 +56,7 @@ def test_required_failure_rolls_back_and_skips_after_commit_handlers() -> None:
     """commit前必須handlerが失敗するとtransactionを戻し、commit後処理を呼ばない。"""
     transaction = _Transaction()
     calls: list[str] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_required_before_commit(
         BaseDomainEvent,
         lambda event, context: (_ for _ in ()).throw(RuntimeError("required failed")),
@@ -85,32 +85,24 @@ def test_required_and_after_commit_handlers_run_on_their_side_in_order() -> None
     """必須処理はcommit前、配送処理はcommit後に、それぞれ登録順で実行する。"""
     transaction = _Transaction()
     calls: list[tuple[str, bool, bool]] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_required_before_commit(
         BaseDomainEvent,
-        lambda event, context: calls.append(
-            ("required-1", transaction.is_active, transaction.committed)
-        ),
+        lambda event, context: calls.append(("required-1", transaction.is_active, transaction.committed)),
     )
     dispatcher.register_required_before_commit(
         BaseDomainEvent,
-        lambda event, context: calls.append(
-            ("required-2", transaction.is_active, transaction.committed)
-        ),
+        lambda event, context: calls.append(("required-2", transaction.is_active, transaction.committed)),
     )
     dispatcher.register_after_commit(
         BaseDomainEvent,
-        lambda event: calls.append(
-            ("observation", transaction.is_active, transaction.committed)
-        ),
+        lambda event: calls.append(("observation", transaction.is_active, transaction.committed)),
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
     dispatcher.register_after_commit(
         BaseDomainEvent,
-        lambda event: calls.append(
-            ("read-model", transaction.is_active, transaction.committed)
-        ),
+        lambda event: calls.append(("read-model", transaction.is_active, transaction.committed)),
         channel=DeliveryChannel.READ_MODEL,
         guarantee=DeliveryGuarantee.DURABLE_RETRY,
     )
@@ -136,8 +128,8 @@ def test_best_effort_failure_is_observed_and_later_delivery_continues() -> None:
     calls: list[str] = []
     failures: list[tuple[str, str, str]] = []
     dispatcher = CommandEventDispatcher(
-        failure_observer=lambda channel, guarantee, event, handler, error: (
-            failures.append((channel.value, guarantee.value, str(error)))
+        failure_observer=lambda channel, guarantee, event, handler, error: failures.append(
+            (channel.value, guarantee.value, str(error))
         )
     )
     dispatcher.register_after_commit(
@@ -170,7 +162,7 @@ def test_best_effort_failure_is_observed_and_later_delivery_continues() -> None:
 def test_durable_retry_failure_keeps_commit_and_uses_dedicated_exception() -> None:
     """再送対象の配送失敗は確定状態を戻さず、確定後専用例外として通知する。"""
     transaction = _Transaction()
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         BaseDomainEvent,
         lambda event: (_ for _ in ()).throw(RuntimeError("delivery failed")),
@@ -204,7 +196,7 @@ def test_after_commit_registration_rejects_untyped_policy(
     message: str,
 ) -> None:
     """配送先・保証へ生文字列を渡すと登録時に拒否する。"""
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     with pytest.raises(TypeError, match=message):
         dispatcher.register_after_commit(
@@ -217,7 +209,7 @@ def test_after_commit_registration_rejects_untyped_policy(
 
 def test_unregistered_event_is_a_no_op() -> None:
     """handler未登録のイベントはcommit前・commit後のどちらでも何も実行しない。"""
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     context = CommandContext(DomainEventCollector())
 
     dispatcher.dispatch(_event(), context)
@@ -228,7 +220,7 @@ def test_unregistered_event_is_a_no_op() -> None:
 
 def test_durable_retry_selection_follows_registered_delivery_policy() -> None:
     """outbox対象判定はイベント型の固定表でなく登録済み配送保証から導出する。"""
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     event = _event()
     dispatcher.register_after_commit(
         BaseDomainEvent,
@@ -250,7 +242,7 @@ def test_durable_retry_selection_follows_registered_delivery_policy() -> None:
 
 def test_outbox_handoff_invokes_only_durable_retry_handlers() -> None:
     """outbox再配送ではBEST_EFFORT handlerを重複実行せず、再送必須handlerだけ呼ぶ。"""
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     event = _event()
     calls: list[str] = []
     dispatcher.register_after_commit(
@@ -274,12 +266,12 @@ def test_outbox_handoff_invokes_only_durable_retry_handlers() -> None:
 
 def test_outbox_handoff_reports_zero_when_no_handler_is_registered() -> None:
     """handler未登録のイベントは0件と報告し、workerが静かな欠落を検出できる。"""
-    assert CommandEventDispatcher().handoff_durable((_event(),)) == 0
+    assert CommandEventDispatcher(failure_observer=lambda *args: None).handoff_durable((_event(),)) == 0
 
 
 def test_outbox_handoff_reports_zero_when_only_other_event_type_is_registered() -> None:
     """別イベント型のhandlerだけでは対象イベントを処理した件数に含めない。"""
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         _UnrelatedEvent,
         lambda event: None,
@@ -288,3 +280,30 @@ def test_outbox_handoff_reports_zero_when_only_other_event_type_is_registered() 
     )
 
     assert dispatcher.handoff_durable((_event(),)) == 0
+
+
+def test_durable_failure_does_not_skip_later_handler() -> None:
+    """再送必須の受け手が失敗しても、同じイベントの後続の受け手を呼ぶ。"""
+    calls: list[str] = []
+    dispatcher = CommandEventDispatcher(
+        failure_observer=lambda *args: None,
+    )
+    dispatcher.register_after_commit(
+        BaseDomainEvent,
+        lambda event: (_ for _ in ()).throw(RuntimeError("delivery failed")),
+        channel=DeliveryChannel.READ_MODEL,
+        guarantee=DeliveryGuarantee.DURABLE_RETRY,
+    )
+    dispatcher.register_after_commit(
+        BaseDomainEvent,
+        lambda event: calls.append("later"),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+
+    try:
+        dispatcher.handoff((_event(),))
+    except Exception:
+        pass
+
+    assert calls == ["later"]

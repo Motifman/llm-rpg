@@ -1,6 +1,7 @@
 """
 InMemoryTradeDetailReadModelRepository - TradeDetailReadModelを使用するインメモリ実装
 """
+
 from datetime import datetime, timedelta
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
@@ -44,7 +45,7 @@ class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
             requested_gold=500,
             seller_name="勇者",
             buyer_name=None,
-            status=TradeStatus.ACTIVE
+            status=TradeStatus.ACTIVE,
         )
         self._details[TradeId(1)] = sword_detail
 
@@ -64,7 +65,7 @@ class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
             requested_gold=1200,
             seller_name="賢者",
             buyer_name=None,
-            status=TradeStatus.ACTIVE
+            status=TradeStatus.ACTIVE,
         )
         self._details[TradeId(2)] = staff_detail
 
@@ -84,7 +85,7 @@ class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
             requested_gold=150,
             seller_name="薬草師",
             buyer_name=None,
-            status=TradeStatus.ACTIVE
+            status=TradeStatus.ACTIVE,
         )
         self._details[TradeId(3)] = potion_detail
 
@@ -104,7 +105,7 @@ class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
             requested_gold=5000,
             seller_name="ドラゴンスレイヤー",
             buyer_name="騎士団長",
-            status=TradeStatus.COMPLETED
+            status=TradeStatus.COMPLETED,
         )
         self._details[TradeId(4)] = armor_detail
 
@@ -124,7 +125,7 @@ class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
             requested_gold=300,
             seller_name="ガーディアン",
             buyer_name=None,
-            status=TradeStatus.CANCELLED
+            status=TradeStatus.CANCELLED,
         )
         self._details[TradeId(5)] = shield_detail
 
@@ -144,16 +145,28 @@ class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
             requested_gold=2500,
             seller_name="トレジャーハンター",
             buyer_name="魔法使い",
-            status=TradeStatus.COMPLETED
+            status=TradeStatus.COMPLETED,
         )
         self._details[TradeId(6)] = gem_detail
 
-    def _create_sample_detail(self, trade_id: int, item_spec_id: int, item_instance_id: int,
-                             item_name: str, item_quantity: int, item_type: ItemType,
-                             item_rarity: Rarity, item_equipment_type: EquipmentType | None,
-                             item_description: str, durability_current: int | None,
-                             durability_max: int | None, requested_gold: int,
-                             seller_name: str, buyer_name: str | None, status: TradeStatus) -> TradeDetailReadModel:
+    def _create_sample_detail(
+        self,
+        trade_id: int,
+        item_spec_id: int,
+        item_instance_id: int,
+        item_name: str,
+        item_quantity: int,
+        item_type: ItemType,
+        item_rarity: Rarity,
+        item_equipment_type: EquipmentType | None,
+        item_description: str,
+        durability_current: int | None,
+        durability_max: int | None,
+        requested_gold: int,
+        seller_name: str,
+        buyer_name: str | None,
+        status: TradeStatus,
+    ) -> TradeDetailReadModel:
         """サンプル取引詳細を作成するヘルパーメソッド"""
         return TradeDetailReadModel.create_from_trade_data(
             trade_id=TradeId(trade_id),
@@ -170,7 +183,7 @@ class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
             requested_gold=requested_gold,
             seller_name=seller_name,
             buyer_name=buyer_name,
-            status=status.value  # Enumを文字列に変換
+            status=status.value,  # Enumを文字列に変換
         )
 
     # Repository基本メソッドの実装

@@ -60,7 +60,7 @@ class PersonalTradeListingReadModel:
         durability_max: int | None,
         requested_gold: int,
         seller_name: str,
-        created_at: datetime
+        created_at: datetime,
     ) -> "PersonalTradeListingReadModel":
         """取引情報からReadModelを作成"""
         return cls(
@@ -77,7 +77,7 @@ class PersonalTradeListingReadModel:
             durability_max=durability_max,
             requested_gold=requested_gold,
             seller_name=seller_name,
-            created_at=created_at
+            created_at=created_at,
         )
 
     @property

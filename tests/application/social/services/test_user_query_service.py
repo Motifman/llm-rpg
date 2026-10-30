@@ -1,6 +1,7 @@
 """
 UserQueryServiceのテスト
 """
+
 from unittest.mock import Mock, patch
 
 import pytest
@@ -83,10 +84,10 @@ class TestUserQueryService:
         assert result.display_name == "魔法使い"
         assert result.followee_count == 2  # 勇者と戦士
         assert result.follower_count == 2  # 勇者と僧侶
-        assert result.is_following is True   # 勇者は魔法使いをフォローしている
+        assert result.is_following is True  # 勇者は魔法使いをフォローしている
         assert result.is_followed_by is True  # 魔法使いは勇者をフォローしている（相互フォロー）
-        assert result.is_blocked is False    # 勇者は魔法使いをブロックしていない
-        assert result.is_blocked_by is False # 魔法使いは勇者をブロックしていない
+        assert result.is_blocked is False  # 勇者は魔法使いをブロックしていない
+        assert result.is_blocked_by is False  # 魔法使いは勇者をブロックしていない
         assert result.is_subscribed is True  # 勇者は魔法使いを購読している
 
     def test_show_other_user_profile_self_reference(self):
@@ -130,7 +131,7 @@ class TestUserQueryService:
 
         # 魔法使いのプロフィール確認
         mage_profile = next(result for result in results if result.user_id == 2)
-        assert mage_profile.is_following is True   # 勇者は魔法使いをフォローしている
+        assert mage_profile.is_following is True  # 勇者は魔法使いをフォローしている
         assert mage_profile.is_followed_by is True  # 相互フォロー
         assert mage_profile.is_subscribed is True  # 勇者は魔法使いを購読している
 

@@ -22,18 +22,14 @@ class SpotPresence:
 
     def add(self, entity_id: EntityId) -> SpotPresence:
         if entity_id in self.present_entity_ids:
-            raise SpotPresenceInvariantException(
-                f"Entity {entity_id} is already present at spot {self.spot_id}"
-            )
+            raise SpotPresenceInvariantException(f"Entity {entity_id} is already present at spot {self.spot_id}")
         new_ids = set(self.present_entity_ids)
         new_ids.add(entity_id)
         return SpotPresence(self.spot_id, frozenset(new_ids))
 
     def remove(self, entity_id: EntityId) -> SpotPresence:
         if entity_id not in self.present_entity_ids:
-            raise SpotPresenceInvariantException(
-                f"Entity {entity_id} is not present at spot {self.spot_id}"
-            )
+            raise SpotPresenceInvariantException(f"Entity {entity_id} is not present at spot {self.spot_id}")
         new_ids = set(self.present_entity_ids)
         new_ids.remove(entity_id)
         return SpotPresence(self.spot_id, frozenset(new_ids))

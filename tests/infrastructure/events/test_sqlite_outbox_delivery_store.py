@@ -124,12 +124,8 @@ def test_retryable_failure_remains_pending_and_records_error(tmp_path) -> None:
     assert row["attempt_count"] == 2
     assert row["last_attempted_at"] is not None
     assert row["last_error"] == "RuntimeError: temporary again"
-    assert first.next_attempt_at == datetime(
-        2026, 8, 14, 0, 0, 2, tzinfo=timezone.utc
-    )
-    assert second.next_attempt_at == datetime(
-        2026, 8, 14, 0, 0, 6, tzinfo=timezone.utc
-    )
+    assert first.next_attempt_at == datetime(2026, 8, 14, 0, 0, 2, tzinfo=timezone.utc)
+    assert second.next_attempt_at == datetime(2026, 8, 14, 0, 0, 6, tzinfo=timezone.utc)
     assert row["next_attempt_at"] == second.next_attempt_at.isoformat()
 
 

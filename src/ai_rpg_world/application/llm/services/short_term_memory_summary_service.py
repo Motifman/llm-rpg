@@ -1,10 +1,12 @@
-"""L4 mid summary (Phase 2) を LLM で生成するサービス。
+"""L4 mid summary (【ここまでのいきさつ】) を LLM で生成するサービス。
 
-古いターン群の統一出来事 + 直前 L4 (引き継ぎ context) → 1 つの主観要約。
+古いターン群の統一出来事 + 直前 L4 (引き継ぎ context) → 1 つのいきさつ。
 
 設計:
-- **narrative continuity に絞る**: 学び / 関係性 / 世界ルールは semantic 経路に
-  任せる (docs §4)
+- **流れと気分に絞る**: 出来事そのものはエピソードに、やること・関係性 / 世界ルールは
+  メモに任せる (Issue #1626, #1824)
+- **言われた予定と実際にしたことを分ける**: 言っただけの予定を済んだことに書き換えない
+  (#1584)
 - **永続名のみ**: P1 / OBJ2 等のターン局所ラベルを禁止
 - **失敗時 template fallback**: 呼出側 (``SummarizingShortTermMemory``) で
   raw 連結に縮退して L4 を埋める
@@ -38,25 +40,26 @@ _logger = logging.getLogger(__name__)
 # 出力 cap (LLM が守らないケースの保険)
 COMPRESSED_ACTIVITY_MAX_CHARS = 300
 EMOTIONAL_SUMMARY_MAX_CHARS = 120
-UNRESOLVED_MAX_ITEMS = 3
-UNRESOLVED_ITEM_MAX_CHARS = 120
 # template fallback で古いターン群の出来事を連結するときの最大行数。
 # ターン内の出来事数は可変なので、プロンプト肥大を防ぐ表示上限として独立に持つ。
 FALLBACK_RAW_LINES_LIMIT = 15
 
 
 _SYSTEM_PROMPT = """\
-あなたはあるキャラクター本人として、直近の体験を振り返り、
-「最近何があったか」「いまの気分」「未解決のこと」を一人称で要約します。
+あなたはあるキャラクター本人として、少し前の体験を振り返り、
+「ここまでのいきさつ」と「いまの気分」を一人称で書きます。
+出来事そのものは別の記録に残るので、ここでは出来事どうしをつなぐ流れを書きます。
 
 【絶対のルール】
 - プレイヤー・スポット・オブジェクトは必ず固有名詞で書く
 - P1, P2, OBJ3 のような短縮ラベルは絶対に使わない (ターンごとに変わるため)
+- 「誰が何をすると言ったか」と「誰が何をしたか」を分けて書く。言われただけの予定や
+  頼みごとを、決まったことや済んだことに書き換えない
+  (例: 「ノアは見張りを代わると言った」と「ノアは見張りを代わった」は別のこと)
 
 【絶対に落としてはいけない】
-- 約束・誓い・取引 (誰と・何を・いつまで)
+- 約束・誓い・取引 (誰と・何を・いつまで。言っただけか、果たされたかを分けて)
 - 死亡・重傷・大損失 (自他問わず)
-- 未解決の脅威・目標
 - アイデンティティ更新 (例: 「自分は泳げない」)
 
 【圧縮していい】
@@ -69,15 +72,16 @@ _SYSTEM_PROMPT = """\
 - 失敗 tool の引数違い
 
 【書かないこと】
-- 「タカシは信頼できる」のような関係性の判断 (それは別の長期記憶に任せる)
+- 片付いていないことだけを並べた一覧 (それはメモに任せる)。言われた約束や予定は、
+  一覧にせず「誰が何をすると言った」として流れの中に書く
+- 「タカシは信頼できる」のような関係性の判断 (それはメモに任せる)
 - 「毒キノコは赤い斑点」のような世界ルールの一般化 (同上)
-ここでは「最近の流れ + いまの気分 + 未解決」だけ書く
+ここでは「ここまでのいきさつ + いまの気分」だけ書く
 
 【出力形式】JSON object (この schema を厳守):
 {
-  "compressed_activity": "行動の流れ (2-3 文、固有名詞使用)",
-  "emotional_summary": "今の感情の中核 (1 文)",
-  "unresolved": ["未解決の脅威/目標 0-3 件、各短文"]
+  "compressed_activity": "ここまでのいきさつ (2-3 文、固有名詞使用)",
+  "emotional_summary": "今の感情の中核 (1 文)"
 }
 """
 
@@ -140,15 +144,8 @@ class ShortTermMemorySummaryService:
             user_lines.append("【参考: 直前の中期記憶 (引き継ぎ)】")
             user_lines.append(f"流れ: {previous_l4.compressed_activity}")
             user_lines.append(f"気分: {previous_l4.emotional_summary}")
-            if previous_l4.unresolved:
-                user_lines.append("未解決:")
-                for u in previous_l4.unresolved:
-                    user_lines.append(f"- {u}")
             user_lines.append("")
-        user_lines.append(
-            f"【直近 {compacted_turn_count} ターン / {len(events)} 件の出来事 "
-            "(古い → 新しい)】"
-        )
+        user_lines.append(f"【直近 {compacted_turn_count} ターン / {len(events)} 件の出来事 (古い → 新しい)】")
         user_lines.append(_format_events_for_l4(events))
         user_lines.append("")
         user_lines.append("上記から JSON 形式で要約を 1 つ生成してください。")
@@ -164,7 +161,6 @@ class _ParsedSummary:
 
     compressed_activity: str
     emotional_summary: str
-    unresolved: tuple[str, ...]
 
 
 def _parse_raw(raw: dict[str, Any]) -> _ParsedSummary:
@@ -178,24 +174,9 @@ def _parse_raw(raw: dict[str, Any]) -> _ParsedSummary:
         emotion_raw = ""
     emotion = emotion_raw.strip()[:EMOTIONAL_SUMMARY_MAX_CHARS]
 
-    unresolved_raw = raw.get("unresolved", [])
-    if not isinstance(unresolved_raw, list):
-        unresolved_raw = []
-    unresolved: list[str] = []
-    for item in unresolved_raw:
-        if not isinstance(item, str):
-            continue
-        stripped = item.strip()
-        if not stripped:
-            continue
-        unresolved.append(stripped[:UNRESOLVED_ITEM_MAX_CHARS])
-        if len(unresolved) >= UNRESOLVED_MAX_ITEMS:
-            break
-
     return _ParsedSummary(
         compressed_activity=activity,
         emotional_summary=emotion,
-        unresolved=tuple(unresolved),
     )
 
 
@@ -214,7 +195,6 @@ def build_template_fallback_summary(
     return _ParsedSummary(
         compressed_activity=f"(要約失敗。直近出来事の生ログ:)\n{body}",
         emotional_summary="",
-        unresolved=(),
     )
 
 
@@ -232,8 +212,6 @@ __all__ = [
     "build_template_fallback_summary",
     "COMPRESSED_ACTIVITY_MAX_CHARS",
     "EMOTIONAL_SUMMARY_MAX_CHARS",
-    "UNRESOLVED_MAX_ITEMS",
-    "UNRESOLVED_ITEM_MAX_CHARS",
 ]
 # Note: ``_ParsedSummary`` は module-private な中間表現で、
 # ``summarizing_short_term_memory`` モジュールが「友達」として直接 import

@@ -8,6 +8,7 @@ from .exp_table import ExpTable
 @dataclass(frozen=True)
 class Growth:
     """レベルと経験値を管理するバリューオブジェクト"""
+
     level: int
     total_exp: int
     exp_table: ExpTable
@@ -16,14 +17,18 @@ class Growth:
         if self.level <= 0:
             raise GrowthValidationException(f"level must be greater than 0. level: {self.level}")
         if self.total_exp < 0:
-            raise GrowthValidationException(f"total_exp must be greater than or equal to 0. total_exp: {self.total_exp}")
+            raise GrowthValidationException(
+                f"total_exp must be greater than or equal to 0. total_exp: {self.total_exp}"
+            )
 
         # 現在のレベルと経験値の整合性をチェック
         required_exp = self.exp_table.get_required_exp_for_level(self.level)
         if self.total_exp < required_exp:
-            raise GrowthValidationException(f"total_exp {self.total_exp} is insufficient for level {self.level}. required: {required_exp}")
+            raise GrowthValidationException(
+                f"total_exp {self.total_exp} is insufficient for level {self.level}. required: {required_exp}"
+            )
 
-    def gain_exp(self, exp_amount: int) -> tuple['Growth', bool]:
+    def gain_exp(self, exp_amount: int) -> tuple["Growth", bool]:
         """経験値を獲得し、レベルアップ判定を行う
 
         Args:
@@ -48,10 +53,6 @@ class Growth:
             else:
                 break
 
-        new_growth = Growth(
-            level=new_level,
-            total_exp=new_total_exp,
-            exp_table=self.exp_table
-        )
+        new_growth = Growth(level=new_level, total_exp=new_total_exp, exp_table=self.exp_table)
 
         return new_growth, leveled_up

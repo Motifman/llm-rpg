@@ -138,9 +138,7 @@ class SnsPageQueryService:
         lim = st.limit + 1
         trending: list[str] = []
         if st.home_tab == SnsHomeTab.FOLLOWING:
-            raw = self._post_query.get_home_timeline(
-                viewer_user_id, limit=lim, offset=st.offset
-            )
+            raw = self._post_query.get_home_timeline(viewer_user_id, limit=lim, offset=st.offset)
             posts, has_more = _slice_page(raw, st.limit)
         elif st.home_tab == SnsHomeTab.POPULAR:
             raw = self._post_query.get_popular_posts(
@@ -150,9 +148,7 @@ class SnsPageQueryService:
                 offset=st.offset,
             )
             posts, has_more = _slice_page(raw, st.limit)
-            trending = self._post_query.get_trending_hashtags(
-                limit=_TRENDING_HASHTAGS_LIMIT
-            )
+            trending = self._post_query.get_trending_hashtags(limit=_TRENDING_HASHTAGS_LIMIT)
         else:
             posts, has_more = [], False
 
@@ -228,13 +224,9 @@ class SnsPageQueryService:
         if not q:
             raw = []
         elif mode == SnsSearchMode.HASHTAG:
-            raw = self._post_query.search_posts_by_hashtag(
-                q, viewer_user_id, limit=lim, offset=st.offset
-            )
+            raw = self._post_query.search_posts_by_hashtag(q, viewer_user_id, limit=lim, offset=st.offset)
         else:
-            raw = self._post_query.search_posts_by_keyword(
-                q, viewer_user_id, limit=lim, offset=st.offset
-            )
+            raw = self._post_query.search_posts_by_keyword(q, viewer_user_id, limit=lim, offset=st.offset)
 
         posts, has_more = _slice_page(raw, st.limit)
         lines = [self._post_line(player_id, p) for p in posts]
@@ -296,9 +288,7 @@ class SnsPageQueryService:
         header = self._profile_header_from_dto(player_id, prof, viewer_user_id=viewer_user_id)
 
         lim = st.limit + 1
-        raw = self._post_query.get_user_timeline(
-            target_uid, viewer_user_id, limit=lim, offset=st.offset
-        )
+        raw = self._post_query.get_user_timeline(target_uid, viewer_user_id, limit=lim, offset=st.offset)
         posts, has_more = _slice_page(raw, st.limit)
         lines = [self._post_line(player_id, p) for p in posts]
 
@@ -345,9 +335,7 @@ class SnsPageQueryService:
         gen: int,
     ) -> SnsVirtualPageSnapshotDto:
         lim = st.limit + 1
-        raw = self._notification_query.get_user_notifications(
-            viewer_user_id, limit=lim, offset=st.offset
-        )
+        raw = self._notification_query.get_user_notifications(viewer_user_id, limit=lim, offset=st.offset)
         rows, has_more = _slice_page(list(raw), st.limit)
         # 未読はリポジトリ集約の live query（別 projection 層は不要。Phase 6 確定）
         unread = self._notification_query.get_unread_count(viewer_user_id)

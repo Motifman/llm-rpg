@@ -17,6 +17,21 @@ from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import Mon
 from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
 
 
+def _state_values(state: MonsterLifecycleState) -> tuple[object, ...]:
+    """期待値を計算せず、変更前後で比較する公開値だけを取り出す。"""
+    return (
+        state.hp.value,
+        state.hp.max_hp,
+        state.mp.value,
+        state.mp.max_mp,
+        state.status,
+        state.last_death_tick,
+        state.spawned_at_tick,
+        state.hunger,
+        state.starvation_timer,
+    )
+
+
 class TestMonsterLifecycleStateCreateForUnspawned:
     """create_for_unspawned のテスト"""
 
@@ -282,10 +297,25 @@ class TestMonsterLifecycleStateWithSpawnReset:
             max_mp=50,
             spawned_at_tick=WorldTick(10),
         )
+        state = state.apply_mp_use(20)
+        state, should_starve = state.tick_hunger(0.8, 0.7, 5)
+        assert should_starve is False
         return state.apply_damage(100).with_death(WorldTick(50))
 
     def test_with_spawn_reset_full_recovery(self, dead_state: MonsterLifecycleState):
-        """リスポーンで HP/MP 満タン、飢餓リセット"""
+        """死亡前の飢餓時間を消し、満タンで再出現しても旧状態は変えない。"""
+        expected_old = (
+            0,
+            100,
+            30,
+            50,
+            MonsterStatusEnum.DEAD,
+            WorldTick(50),
+            WorldTick(10),
+            0.8,
+            1,
+        )
+        assert _state_values(dead_state) == expected_old
         tick = WorldTick(150)
         new_state = dead_state.with_spawn_reset(
             max_hp=120,
@@ -300,6 +330,10 @@ class TestMonsterLifecycleStateWithSpawnReset:
         assert new_state.hunger == 0.2
         assert new_state.starvation_timer == 0
         assert new_state.last_death_tick is None
+        assert new_state.hp.max_hp == 120
+        assert new_state.mp.max_mp == 60
+        assert new_state is not dead_state
+        assert _state_values(dead_state) == expected_old
 
 
 class TestMonsterLifecycleStateTickHunger:
@@ -474,11 +508,35 @@ class TestMonsterLifecycleStateDecreaseHunger:
             initial_hunger=0.8,
         )
 
-    def test_decreases_hunger(self, hungry_state: MonsterLifecycleState):
-        """飢餓が減少"""
+    def test_decreases_hunger(self):
+        """採食は飢餓0.8を0.5へ減らし、正の飢餓時間を消す。旧状態は変えない。"""
+        state = MonsterLifecycleState.create_for_spawned(
+            max_hp=100,
+            max_mp=50,
+            spawned_at_tick=WorldTick(0),
+            initial_hunger=0.6,
+        )
+        hungry_state, should_starve = state.tick_hunger(0.2, 0.7, 5)
+        expected_old = (
+            100,
+            100,
+            50,
+            50,
+            MonsterStatusEnum.ALIVE,
+            None,
+            WorldTick(0),
+            pytest.approx(0.8),
+            1,
+        )
+        assert _state_values(hungry_state) == expected_old
+        assert should_starve is False
+
         new_state = hungry_state.decrease_hunger(0.3)
-        assert new_state.hunger == 0.5
+
+        assert new_state.hunger == pytest.approx(0.5)
         assert new_state.starvation_timer == 0
+        assert new_state is not hungry_state
+        assert _state_values(hungry_state) == expected_old
 
     def test_decrease_clamped_to_zero(self, hungry_state: MonsterLifecycleState):
         """飢餓は 0 でクランプ"""
@@ -494,18 +552,50 @@ class TestMonsterLifecycleStateDecreaseHunger:
 class TestMonsterLifecycleStateImmutability:
     """不変性のテスト"""
 
-    def test_all_mutations_return_new_instance(self):
-        """すべての変更メソッドが新しいインスタンスを返す"""
+    @pytest.mark.parametrize(
+        ("method", "args", "expected"),
+        [
+            ("apply_damage", (1,), (99, 100, 50, 50, MonsterStatusEnum.ALIVE, None, WorldTick(0), 0.0, 0)),
+            ("apply_heal", (0,), (100, 100, 50, 50, MonsterStatusEnum.ALIVE, None, WorldTick(0), 0.0, 0)),
+            ("apply_mp_recovery", (0,), (100, 100, 50, 50, MonsterStatusEnum.ALIVE, None, WorldTick(0), 0.0, 0)),
+            ("apply_mp_use", (0,), (100, 100, 50, 50, MonsterStatusEnum.ALIVE, None, WorldTick(0), 0.0, 0)),
+            (
+                "with_death",
+                (WorldTick(1),),
+                (100, 100, 50, 50, MonsterStatusEnum.DEAD, WorldTick(1), WorldTick(0), 0.0, 0),
+            ),
+            ("decrease_hunger", (0.1,), (100, 100, 50, 50, MonsterStatusEnum.ALIVE, None, WorldTick(0), 0.0, 0)),
+            ("tick_hunger", (0.1, 1.0, 5), (100, 100, 50, 50, MonsterStatusEnum.ALIVE, None, WorldTick(0), 0.1, 0)),
+        ],
+        ids=["damage", "heal-zero", "mp-recovery-zero", "mp-use-zero", "death", "hunger-decrease", "hunger-tick"],
+    )
+    def test_all_mutations_return_new_instance(self, method, args, expected):
+        """この初期状態に対する7操作は旧値を保ち、別実体に操作後の全公開値を返す。"""
         state = MonsterLifecycleState.create_for_spawned(
             max_hp=100,
             max_mp=50,
             spawned_at_tick=WorldTick(0),
         )
-        assert state.apply_damage(1) is not state
-        assert state.apply_heal(0) is not state
-        assert state.apply_mp_recovery(0) is not state
-        assert state.apply_mp_use(0) is not state
-        assert state.with_death(WorldTick(1)) is not state
-        assert state.decrease_hunger(0.1) is not state
-        new_state, _ = state.tick_hunger(0.1, 1.0, 5)
+        expected_old = (
+            100,
+            100,
+            50,
+            50,
+            MonsterStatusEnum.ALIVE,
+            None,
+            WorldTick(0),
+            0.0,
+            0,
+        )
+        assert _state_values(state) == expected_old
+
+        result = getattr(state, method)(*args)
+        if method == "tick_hunger":
+            new_state, should_starve = result
+            assert should_starve is False
+        else:
+            new_state = result
+
         assert new_state is not state
+        assert _state_values(new_state) == expected
+        assert _state_values(state) == expected_old

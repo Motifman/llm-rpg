@@ -1,5 +1,8 @@
 # WorldQuery の現状と LLM 向けコンテキスト設計
 
+> 退役した計画（2026-10-25、Issue #1862）。旧タイル向けの問い合わせ・表示を前提にした計画は退役した。
+> 以下の本文は当時の記録として保存する。現行構成は[世界の現在の構成](game/world_architecture.md)を参照。
+
 ## 1. ブランチマージ
 
 - `feature/refactoring-handlers-and-domain` を `main` にマージ済み。

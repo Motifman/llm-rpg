@@ -101,11 +101,8 @@ def _create_scope(
             participants=(_Participant(),),
         ),
         sync_dispatcher=sync_dispatcher or _NoOpSyncDispatcher(),  # type: ignore[arg-type]
-        after_commit_handoff=after_commit_handoff
-        or _NoOpAfterCommitHandoff(),  # type: ignore[arg-type]
-        repository_provider_factory=(
-            SqliteTradeCommandRepositoryProviderFactory()
-        ),
+        after_commit_handoff=after_commit_handoff or _NoOpAfterCommitHandoff(),  # type: ignore[arg-type]
+        repository_provider_factory=(SqliteTradeCommandRepositoryProviderFactory()),
     )
     return scope, unit_of_work
 
@@ -206,12 +203,8 @@ class TestSqliteTradeCommandRepositoryProvider:
 
         with pytest.raises(RuntimeError, match="command failed"):
             with scope as context:
-                context.repositories.player_profiles.save(
-                    PlayerProfileAggregate.create(player_id, PlayerName("Alice"))
-                )
-                context.repositories.player_inventories.save(
-                    PlayerInventoryAggregate.create_new_inventory(player_id)
-                )
+                context.repositories.player_profiles.save(PlayerProfileAggregate.create(player_id, PlayerName("Alice")))
+                context.repositories.player_inventories.save(PlayerInventoryAggregate.create_new_inventory(player_id))
                 raise RuntimeError("command failed")
 
         assert _table_count(database, "game_player_profiles") == 0

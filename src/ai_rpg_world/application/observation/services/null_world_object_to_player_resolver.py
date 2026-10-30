@@ -1,13 +1,12 @@
 """WorldObjectId → PlayerId 解決を常に None で返す NoOp 実装。
 
-PhysicalMapRepository (tile-map) に依存しない spot_graph 専用経路で使う。
+スポットのグラフ専用の経路で使う。
 spot_graph 世界では world_object と player の紐付けが PhysicalMap 経由ではなく
 SpotAggregate 経由で行われるため、resolver 自体が「常に解決できない」状態で
 問題ない。PhysicalMap 由来の WorldObjectId が観測対象になる経路は spot_graph
 runtime には存在しないので、observation pipeline 側で missing 扱いされて
 配信から除外される。
 """
-
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IWorldObjectToPlayerResolver,

@@ -1,4 +1,3 @@
-
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.world.event.weather_events import WeatherChangedEvent
 from ai_rpg_world.domain.world.exception.weather_exception import (
@@ -14,6 +13,7 @@ from ai_rpg_world.domain.world.value_object.weather_zone_name import WeatherZone
 
 class InvalidWeatherTransitionException(WeatherDomainException):
     """許可されていない天候遷移の例外"""
+
     error_code = "WEATHER.INVALID_TRANSITION"
 
 
@@ -22,13 +22,9 @@ class WeatherZone(AggregateRoot):
     天候ゾーンの集約。
     特定のスポットの集まりに対して共通の天候を管理する。
     """
-    
+
     def __init__(
-        self,
-        zone_id: WeatherZoneId,
-        name: WeatherZoneName,
-        spot_ids: set[SpotId],
-        current_state: WeatherState
+        self, zone_id: WeatherZoneId, name: WeatherZoneName, spot_ids: set[SpotId], current_state: WeatherState
     ):
         super().__init__()
         self._zone_id = zone_id
@@ -38,11 +34,7 @@ class WeatherZone(AggregateRoot):
 
     @classmethod
     def create(
-        cls,
-        zone_id: WeatherZoneId,
-        name: WeatherZoneName,
-        spot_ids: set[SpotId],
-        current_state: WeatherState
+        cls, zone_id: WeatherZoneId, name: WeatherZoneName, spot_ids: set[SpotId], current_state: WeatherState
     ) -> "WeatherZone":
         return cls(zone_id, name, spot_ids, current_state)
 
@@ -69,8 +61,7 @@ class WeatherZone(AggregateRoot):
 
         # 遷移の制約チェック
         if not force and not WeatherSimulationService.is_transition_allowed(
-            self._current_state.weather_type, 
-            new_state.weather_type
+            self._current_state.weather_type, new_state.weather_type
         ):
             raise InvalidWeatherTransitionException(
                 f"Transition from {self._current_state.weather_type} to {new_state.weather_type} is not allowed"
@@ -79,14 +70,16 @@ class WeatherZone(AggregateRoot):
         old_weather = self._current_state.weather_type
         self._current_state = new_state
 
-        self.add_event(WeatherChangedEvent.create(
-            aggregate_id=self._zone_id,
-            aggregate_type="WeatherZone",
-            zone_id=self._zone_id,
-            old_weather=old_weather,
-            new_weather=new_state.weather_type,
-            intensity=new_state.intensity
-        ))
+        self.add_event(
+            WeatherChangedEvent.create(
+                aggregate_id=self._zone_id,
+                aggregate_type="WeatherZone",
+                zone_id=self._zone_id,
+                old_weather=old_weather,
+                new_weather=new_state.weather_type,
+                intensity=new_state.intensity,
+            )
+        )
 
     def contains_spot(self, spot_id: SpotId) -> bool:
         """指定されたスポットがこの天候ゾーンに含まれるか判定する"""

@@ -61,9 +61,7 @@ def test_every_shipped_scenario_wires_all_present_command_scope_owners(
     runtime = create_world_runtime(scenario_path)
 
     for label, owner in _runtime_scope_owners(runtime).items():
-        fields = tuple(
-            name for name in vars(owner) if "command_scope_factory" in name
-        )
+        fields = tuple(name for name in vars(owner) if "command_scope_factory" in name)
         assert fields, f"{scenario_path.name}: {label} has no scope factory field"
         assert all(getattr(owner, field) is not None for field in fields), (
             f"{scenario_path.name}: {label} has an unwired scope factory"
@@ -74,6 +72,4 @@ def test_every_shipped_scenario_wires_all_present_command_scope_owners(
         "_tend_to_player_command_scope_factory",
         "_prepare_action_command_scope_factory",
     ):
-        assert getattr(runtime, field) is not None, (
-            f"{scenario_path.name}: runtime.{field} is unwired"
-        )
+        assert getattr(runtime, field) is not None, f"{scenario_path.name}: runtime.{field} is unwired"

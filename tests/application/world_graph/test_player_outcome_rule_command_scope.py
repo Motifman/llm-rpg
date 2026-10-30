@@ -64,9 +64,7 @@ def test_progress_failure_rolls_back_all_outcomes_and_probability_rng(
     evaluator = _stage(runtime)._condition_evaluator
     before_rng = evaluator.rollback_snapshot()
     observed: list[int] = []
-    runtime._player_outcome_registry.register_callback(
-        lambda player_id, _old, _new: observed.append(int(player_id))
-    )
+    runtime._player_outcome_registry.register_callback(lambda player_id, _old, _new: observed.append(int(player_id)))
     original_mark_fired = progress.mark_fired
 
     def mark_then_fail(progress_id: str) -> None:
@@ -105,14 +103,9 @@ def test_success_observes_all_outcomes_and_progress_after_commit(
 
     _stage(runtime).run(WorldTick(1))
 
-    assert [entry[0] for entry in observations] == [
-        int(player_id) for player_id in runtime.get_player_ids()
-    ]
+    assert [entry[0] for entry in observations] == [int(player_id) for player_id in runtime.get_player_ids()]
     assert all(entry[1] is True for entry in observations)
-    assert all(
-        entry[2] == frozenset({PlayerOutcomeEnum.RESCUED})
-        for entry in observations
-    )
+    assert all(entry[2] == frozenset({PlayerOutcomeEnum.RESCUED}) for entry in observations)
 
 
 def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
@@ -122,9 +115,7 @@ def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
     """commit済みcleanup失敗では確定outcomeを通知して専用例外を維持する。"""
     runtime = _runtime(tmp_path)
     observed: list[int] = []
-    runtime._player_outcome_registry.register_callback(
-        lambda player_id, _old, _new: observed.append(int(player_id))
-    )
+    runtime._player_outcome_registry.register_callback(lambda player_id, _old, _new: observed.append(int(player_id)))
     data_store = runtime._item_repo._data_store
     original_release = data_store.release_uow_transaction
 
@@ -138,9 +129,7 @@ def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
         _stage(runtime).run(WorldTick(1))
 
     assert set(_outcomes(runtime).values()) == {PlayerOutcomeEnum.RESCUED}
-    assert runtime._scenario_event_progress.is_fired(
-        "player_outcome_rule:rescue_everyone"
-    )
+    assert runtime._scenario_event_progress.is_fired("player_outcome_rule:rescue_everyone")
     assert observed == [int(player_id) for player_id in runtime.get_player_ids()]
 
 
@@ -192,10 +181,7 @@ def test_runtime_wires_outcome_progress_and_rng_as_participants(
     stage = _stage(runtime)
     factory = stage._command_scope_factory
     transaction_factory = factory._transaction_factory
-    resources = {
-        participant.rollback_resource
-        for participant in transaction_factory._participants
-    }
+    resources = {participant.rollback_resource for participant in transaction_factory._participants}
 
     assert runtime._player_outcome_registry in resources
     assert runtime._scenario_event_progress in resources

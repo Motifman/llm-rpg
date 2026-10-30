@@ -10,6 +10,7 @@ from ai_rpg_world.domain.sns.value_object.user_id import UserId
 @dataclass(frozen=True)
 class FollowRelationShip:
     """フォロー関係性を表現する値オブジェクト"""
+
     follower_user_id: UserId
     followee_user_id: UserId
     created_at: datetime = field(default_factory=datetime.now)
@@ -18,8 +19,7 @@ class FollowRelationShip:
         """等価性比較（作成時間に関係なく、フォロワーとフォロー対象のみで判定）"""
         if not isinstance(other, FollowRelationShip):
             return NotImplemented
-        return (self.follower_user_id == other.follower_user_id and
-                self.followee_user_id == other.followee_user_id)
+        return self.follower_user_id == other.follower_user_id and self.followee_user_id == other.followee_user_id
 
     def __hash__(self) -> int:
         """ハッシュ値（作成時間に関係なく、フォロワーとフォロー対象のみで計算）"""

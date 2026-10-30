@@ -9,17 +9,6 @@
 
 from typing import Any
 
-from ai_rpg_world.domain.combat.event.combat_events import (
-    HitBoxCreatedEvent,
-    HitBoxDeactivatedEvent,
-    HitBoxHitRecordedEvent,
-    HitBoxMovedEvent,
-    HitBoxObstacleCollidedEvent,
-)
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
-    ConversationStartedEvent,
-)
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildBankDepositedEvent,
     GuildBankWithdrawnEvent,
@@ -31,16 +20,10 @@ from ai_rpg_world.domain.guild.event.guild_event import (
 )
 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.monster.event.monster_events import (
-    ActorStateChangedEvent,
     BehaviorStuckEvent,
     MonsterCreatedEvent,
     MonsterDamagedEvent,
-    MonsterDecidedToInteractEvent,
-    MonsterDecidedToMoveEvent,
-    MonsterDecidedToUseSkillEvent,
     MonsterDiedEvent,
-    MonsterEvadedEvent,
-    MonsterFedEvent,
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
@@ -54,6 +37,7 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
+    ItemRemovedFromInventoryEvent,
     ItemUnequippedEvent,
 )
 from ai_rpg_world.domain.player.event.status_events import (
@@ -61,14 +45,7 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
     PlayerLevelUpEvent,
-    PlayerLocationChangedEvent,
     PlayerRevivedEvent,
-)
-from ai_rpg_world.domain.pursuit.event.pursuit_events import (
-    PursuitCancelledEvent,
-    PursuitFailedEvent,
-    PursuitStartedEvent,
-    PursuitUpdatedEvent,
 )
 from ai_rpg_world.domain.quest.event.quest_event import (
     QuestAcceptedEvent,
@@ -111,20 +88,6 @@ from ai_rpg_world.domain.trade.event.trade_event import (
     TradeCancelledEvent,
     TradeDeclinedEvent,
     TradeOfferedEvent,
-)
-from ai_rpg_world.domain.world.event.harvest_events import (
-    HarvestCancelledEvent,
-    HarvestCompletedEvent,
-    HarvestStartedEvent,
-)
-from ai_rpg_world.domain.world.event.map_events import (
-    ItemStoredInChestEvent,
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-    LocationExitedEvent,
-    ResourceHarvestedEvent,
-    SpotWeatherChangedEvent,
-    WorldObjectInteractedEvent,
 )
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionCreatedEvent,
@@ -174,10 +137,6 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
     """観測対象イベント型と担当戦略のマッピングを構築する。"""
     mapping: dict[type[Any], str] = {}
     ev: type[Any]
-
-    # conversation (順序: Resolver の先頭)
-    for ev in (ConversationStartedEvent, ConversationEndedEvent):
-        mapping[ev] = "conversation"
 
     # quest
     for ev in (
@@ -231,19 +190,6 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
     ):
         mapping[ev] = "guild"
 
-    # harvest
-    for ev in (HarvestStartedEvent, HarvestCancelledEvent, HarvestCompletedEvent):
-        mapping[ev] = "harvest"
-
-    # pursuit
-    for ev in (
-        PursuitStartedEvent,
-        PursuitUpdatedEvent,
-        PursuitFailedEvent,
-        PursuitCancelledEvent,
-    ):
-        mapping[ev] = "pursuit"
-
     # monster
     for ev in (
         MonsterCreatedEvent,
@@ -251,29 +197,13 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
         MonsterDamagedEvent,
         MonsterDiedEvent,
         MonsterRespawnedEvent,
-        MonsterEvadedEvent,
         MonsterHealedEvent,
         MonsterMpRecoveredEvent,
-        MonsterDecidedToMoveEvent,
-        MonsterDecidedToUseSkillEvent,
-        MonsterDecidedToInteractEvent,
-        MonsterFedEvent,
-        ActorStateChangedEvent,
         TargetSpottedEvent,
         TargetLostEvent,
         BehaviorStuckEvent,
     ):
         mapping[ev] = "monster"
-
-    # combat
-    for ev in (
-        HitBoxCreatedEvent,
-        HitBoxMovedEvent,
-        HitBoxHitRecordedEvent,
-        HitBoxDeactivatedEvent,
-        HitBoxObstacleCollidedEvent,
-    ):
-        mapping[ev] = "combat"
 
     # skill
     for ev in (
@@ -295,23 +225,16 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
     # speech
     mapping[PlayerSpokeEvent] = "speech"
 
-    # default (Gateway / マップ / プレイヤー状態 / インベントリ系)
+    # default (プレイヤー状態・所持品)
     for ev in (
-        LocationEnteredEvent,
-        LocationExitedEvent,
-        PlayerLocationChangedEvent,
         PlayerDownedEvent,
         PlayerRevivedEvent,
         PlayerLevelUpEvent,
         PlayerGoldEarnedEvent,
         PlayerGoldPaidEvent,
-        ItemTakenFromChestEvent,
-        ItemStoredInChestEvent,
-        ResourceHarvestedEvent,
-        SpotWeatherChangedEvent,
-        WorldObjectInteractedEvent,
         ItemAddedToInventoryEvent,
         ItemDroppedFromInventoryEvent,
+        ItemRemovedFromInventoryEvent,
         ItemEquippedEvent,
         ItemUnequippedEvent,
         InventorySlotOverflowEvent,
@@ -358,7 +281,7 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
         MarketDeliveryLeftAtBoardEvent,
         PlayerOverflowedItemEvent,
         PlayerTradeOfferEvent,
-    PlayerTradedWithMerchantEvent,
+        PlayerTradedWithMerchantEvent,
         TimeOfDayChangedEvent,
         GamePhaseChangedEvent,
         MeetingVoteCastEvent,
@@ -388,9 +311,7 @@ class ObservedEventRegistry:
         Args:
             event_to_strategy: カスタムマッピング。None の場合はデフォルトを使用。
         """
-        self._event_to_strategy = (
-            event_to_strategy if event_to_strategy is not None else dict(_EVENT_TO_STRATEGY)
-        )
+        self._event_to_strategy = event_to_strategy if event_to_strategy is not None else dict(_EVENT_TO_STRATEGY)
 
     def is_observed(self, event: Any) -> bool:
         """イベントが観測対象の場合 True を返す。"""
@@ -412,9 +333,7 @@ class ObservedEventRegistry:
         指定 strategy が担当するイベント型のタプルを返す。
         テスト・デバッグ用。
         """
-        return tuple(
-            ev_type for ev_type, key in self._event_to_strategy.items() if key == strategy_key
-        )
+        return tuple(ev_type for ev_type, key in self._event_to_strategy.items() if key == strategy_key)
 
     def get_all_event_types(self) -> tuple[type[Any], ...]:
         """観測対象の全イベント型を返す。起動時検査・テスト・デバッグ用。"""

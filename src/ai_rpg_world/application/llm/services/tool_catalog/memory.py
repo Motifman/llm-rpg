@@ -1,360 +1,107 @@
-"""Memo 系およびエピソード記憶メタツールの定義。
-
-Issue #188 Phase 1a で TODO → memo にリネーム。LLM が context に固定したい
-任意のテキスト (タスク / 目標 / 戦略メモ / 注意事項 / 観察など) を memo
-として扱えるように tool description も刷新。
-
-ツール名:
-- 新: memo_add / memo_list / memo_done
-- 旧: todo_add / todo_list / todo_complete は alias として残す (後方互換)
-"""
-
+"""エピソード記憶メタツールの定義。"""
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.application.llm.services.availability_resolvers import (
-    MemoryExploreRelatedAvailabilityResolver,
-    MemoryRecallByHandleAvailabilityResolver,
-    MemoryRecallEpisodesAvailabilityResolver,
-    MemorySearchSemanticAvailabilityResolver,
-    TodoAddAvailabilityResolver,
-    TodoCompleteAvailabilityResolver,
-    TodoListAvailabilityResolver,
+    EpisodeRecallAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_MEMO_ADD,
-    TOOL_NAME_MEMO_DONE,
-    TOOL_NAME_MEMO_LIST,
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
-    TOOL_NAME_MEMORY_RECALL_EPISODES,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+    TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
 )
+from ai_rpg_world.being.domain.episode import INDEX_TEXT_MAX_LENGTH
 
-MEMO_ADD_DESCRIPTION = (
-    "ターンを跨いで覚えておきたい情報 (目標 / 戦略 / 観察 / 約束など) を memo として記録します。"
-    "書いた memo は memo_done で閉じるまで毎ターン表示されます。"
-)
 
-MEMO_ADD_PARAMETERS = {
-    "type": "object",
-    "properties": {
-        "content": {
-            "type": "string",
-            "description": "memo の内容。自由なテキスト (目標 / 戦略 / 注意 / 観察 / 約束など)。",
+def episode_recall_definition(max_handles: int) -> ToolDefinitionDto:
+    """上限 M は profile の値なので、定義もそこから作る (#1623)。"""
+    return ToolDefinitionDto(
+        name=TOOL_NAME_EPISODE_RECALL,
+        description=(
+            "【思い出せる出来事】に並ぶ自分の昔の出来事を、呼び名を指定して詳しく思い出す。"
+            "目次の「思い出すとき」に今の場面が当てはまるとき、昔のことを人に話す前、"
+            "似た場面で前にどうしたかを確かめたいときに使う。"
+            f"1 回に {max_handles} 件まで、まとめて思い出せる。"
+            "目次に無い呼び名は思い出せない。思い出すだけで、世界の出来事は起こさない。"
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "handles": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "maxItems": max_handles,
+                    "description": (
+                        "【思い出せる出来事】の行の先頭にある ep_ で始まる呼び名。"
+                        '1 件でも配列で渡す (例: ["ep_3f2a7b"])。'
+                    ),
+                },
+            },
+            "required": ["handles"],
         },
-    },
-    "required": ["content"],
-}
-MEMO_ADD_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_MEMO_ADD,
-    description=MEMO_ADD_DESCRIPTION,
-    parameters=MEMO_ADD_PARAMETERS,
-    category=ToolCategory.AUXILIARY,
-)
+        category=ToolCategory.META_COGNITIVE,
+    )
 
 
-MEMO_LIST_DESCRIPTION = (
-    "アクティブな (未完了の) memo 一覧を返します。"
-    "memo は常時プロンプトの「進行中のメモ」セクションにも表示されますが、"
-    "明示的に確認したい時に使えます。"
-)
-MEMO_LIST_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_MEMO_LIST,
-    description=MEMO_LIST_DESCRIPTION,
-    parameters={"type": "object", "properties": {}, "required": []},
-    category=ToolCategory.AUXILIARY,
-)
-
-
-MEMO_DONE_DESCRIPTION = (
-    "指定 ID 群の memo を完了として記録します。達成・撤回・無効化どれでも、もう参照"
-    "不要になった memo は閉じてください。同じ目的を構成する複数 memo を一括で閉じる"
-    "と context が軽くなります。"
-    "\n\n"
-    "**memo_done はメモを片付ける操作であり、目標達成にも世界の変化にも繋がりません**。"
-    "目標達成には物理ツール (travel_to / interact / pickup_item / speech / "
-    "use_item 等) を呼んでください。想起しただけで反射的に閉じないこと。"
-    "\n\n"
-    "memo_id は表示handle (例: 'memo_a3b9f1…')、裸の短縮形、full UUIDのいずれも可。"
-    "短縮形が複数の memo に"
-    "一致すると曖昧エラーになるので、その時だけより長い prefix を指定してください。"
-    "1 件でも memo_ids=['<id>'] のように配列で渡す。存在しない ID は個別に not_found"
-    "として報告され、残りは正常完了 (部分成功)。"
-)
-MEMO_DONE_PARAMETERS = {
-    "type": "object",
-    "properties": {
-        "memo_ids": {
-            "type": "array",
-            "items": {"type": "string"},
-            "minItems": 1,
-            "maxItems": 10,
-            "description": (
-                "完了する memo の ID 配列。1 件でも配列で渡す (例: ['abc'])。"
-                "同じ目的を構成する複数の memo を一括完了する場合は複数 ID を含める。"
-            ),
-        },
-    },
-    "required": ["memo_ids"],
-}
-MEMO_DONE_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_MEMO_DONE,
-    description=MEMO_DONE_DESCRIPTION,
-    parameters=MEMO_DONE_PARAMETERS,
-    category=ToolCategory.AUXILIARY,
-)
-
-
-# 後方互換: 旧 TODO 名の DEFINITION エイリアス
-TODO_ADD_DEFINITION = MEMO_ADD_DEFINITION
-TODO_LIST_DEFINITION = MEMO_LIST_DEFINITION
-TODO_COMPLETE_DEFINITION = MEMO_DONE_DEFINITION
-
-
-MEMORY_EXPLORE_RELATED_PARAMETERS = {
-    "type": "object",
-    "properties": {
-        "handle": {
-            "type": "string",
-            "description": (
-                "prompt 上の「【さっき思い出した記憶の見出し】」に並んでいる "
-                "``ep_`` で始まる handle 文字列をそのまま渡す (例: ``ep_3f2a7b``)。"
-            ),
-        },
-        "top_k": {
-            "type": "integer",
-            "description": "返す隣接エピソードの最大件数（既定 5、最大 64）",
-        },
-    },
-    "required": ["handle"],
-}
-
-MEMORY_EXPLORE_RELATED_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_MEMORY_EXPLORE_RELATED,
+EPISODE_REVISE_INDEX_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_EPISODE_REVISE_INDEX,
     description=(
-        "prompt の「【さっき思い出した記憶の見出し】」section に並んでいる "
-        "handle (例: ``ep_3f2a7b``) を起点に、リンクされた関連エピソード記憶を"
-        "列挙します。結果はプロンプト文脈向けの JSON であり、世界状態は変えません。"
+        "【思い出せる出来事】の目次の一行 (どんな記憶か・どんな時に思い出すか) を書き直す。"
+        "呼び出した本文が目次の書き方と合っていなかったとき、"
+        "思い出すべき場面が目次に書いた場面と違ったときに使う。"
+        "本文は変わらず、前の目次も消えずに残る。直すのに手番を 1 回使う。"
+        f"about と recall_when はそれぞれ {INDEX_TEXT_MAX_LENGTH} 字まで。"
+        "世界の出来事は起こさない。"
     ),
-    parameters=MEMORY_EXPLORE_RELATED_PARAMETERS,
-    category=ToolCategory.META_COGNITIVE,
-)
-
-
-MEMORY_SEARCH_SEMANTIC_PARAMETERS = {
-    "type": "object",
-    "properties": {
-        "query": {
-            "type": "string",
-            "description": (
-                "検索したい単語・名前・キーワード (例: 「タカシ」「毒キノコ」「北の洞窟」)。"
-                "1 語または短いフレーズを推奨。tags と本文の双方を見る。"
-            ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "handle": {
+                "type": "string",
+                "description": "直したい記憶の、【思い出せる出来事】の行の先頭にある ep_ で始まる呼び名。",
+            },
+            "about": {
+                "type": "string",
+                "description": "どんな記憶か。",
+            },
+            "recall_when": {
+                "type": "string",
+                "description": "どんな時に思い出すとよいか。「金庫や鍵の話が出たとき」のように場面で書く。",
+            },
         },
-        "top_k": {
-            "type": "integer",
-            "description": "返す学び (semantic 記憶) の最大件数 (既定 5、最大 32)。",
-        },
+        "required": ["handle", "about", "recall_when"],
     },
-    "required": ["query"],
-}
-
-MEMORY_SEARCH_SEMANTIC_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
-    description=(
-        "あなた自身の「学び (semantic 記憶)」を能動的に検索します。"
-        "passive な想起では出てこない遠い記憶を、固有名詞や概念キーワードで"
-        "引き寄せたい時に使ってください。結果は次ターンの観測として現れる"
-        "JSON で、世界状態は変えません。"
-    ),
-    parameters=MEMORY_SEARCH_SEMANTIC_PARAMETERS,
     category=ToolCategory.META_COGNITIVE,
 )
-
-
-# Issue #526 後続: episodic memory の能動 recall (= "思い出そう" と意志する)
-MEMORY_RECALL_EPISODES_DESCRIPTION = (
-    "過去の自分の経験を能動的に取り出すツール。"
-    "受動想起 (= prompt の「関連する記憶」 section) は状況に連想で結びついた"
-    "ものだけが自動で並ぶため、それ以外の過去を確認したいときに使う。"
-    "\n\n"
-    "# 使えるタイミング (例)\n"
-    "- 自分の過去の経験を語る前に、想像で埋めず実際の記憶を取り出したいとき\n"
-    "- 過去の似た状況を参照したいとき\n"
-    "- 過去にした約束や判断を確認したいとき\n"
-    "- 「昨日どうだった」「あの場所で何があった」のように時間や場所の問いに答えるとき\n"
-    "\n"
-    "# 引数\n"
-    "- about: 思い出したい内容の自由文 (具体的な人物名・場所名・物の名前が"
-    "含まれているとマッチしやすい)。\n"
-    "- time_range: 時間範囲の絞り込み (任意)。\"recent\" / \"today\" / "
-    "\"yesterday\" / \"this_week\" / \"any\" (既定)。\n"
-    "\n"
-    "# 結果\n"
-    "過去の出来事 (複数件のことあり)。何も思い出せなかったときは"
-    "「思い出そうとしたが何も浮かばなかった」と返る。\n"
-    "\n"
-    "# 注意\n"
-    "うろ覚え・誤想起はあり得る。世界状態は変えない。"
-)
-
-MEMORY_RECALL_EPISODES_PARAMETERS = {
-    "type": "object",
-    "properties": {
-        "about": {
-            "type": "string",
-            "description": (
-                "思い出したい内容の自由文。具体的な人物名・場所名・物の名前が"
-                "含まれているとマッチしやすい (例: 「カイトと閲覧室で話した内容」)。"
-                "固有名詞が無いときは time_range と組み合わせる。"
-            ),
-        },
-        "time_range": {
-            "type": "string",
-            "enum": ["recent", "today", "yesterday", "this_week", "any"],
-            "description": (
-                "時間範囲の絞り込み。"
-                "recent=直近数時間 / today=今日 / yesterday=昨日 / "
-                "this_week=今週 / any=絞らない (既定)。"
-            ),
-        },
-    },
-    "required": ["about"],
-}
-
-MEMORY_RECALL_EPISODES_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_MEMORY_RECALL_EPISODES,
-    description=MEMORY_RECALL_EPISODES_DESCRIPTION,
-    parameters=MEMORY_RECALL_EPISODES_PARAMETERS,
-    category=ToolCategory.META_COGNITIVE,
-)
-
-
-# Issue #526 後続 PR-D: afterglow index (= prompt の「さっき思い出した記憶の
-# 見出し」section) から、handle (``ep_<6 文字>``) を指定して本文を引き戻すツール。
-# memory_recall_episodes が自由文検索なのに対し、これは prompt 上の handle を
-# 直接受け取って「今ぼんやり覚えてる中のこれを詳しく」と取り出す経路。
-# 取り出した episode は slot に再注入されるため、しばらく鮮明に浮かぶ状態が続く。
-MEMORY_RECALL_BY_HANDLE_DESCRIPTION = (
-    "prompt の「【さっき思い出した記憶の見出し】」section に並んでいる handle "
-    "(例: ``ep_3f2a7b``) を指定して、その出来事の本文 (recall_text) を引き戻すツール。"
-    "\n\n"
-    "# 使えるタイミング (例)\n"
-    "- 「さっき思い出した記憶の見出し」に気になる項目があり、詳しく思い出したいとき\n"
-    "- 過去の出来事を語る前に、見出しからその本文を引き出して確認したいとき\n"
-    "\n"
-    "# 引数\n"
-    "- handle: prompt 上に表示された ``ep_`` で始まる handle 文字列。\n"
-    "\n"
-    "# 結果\n"
-    "該当する episode の本文 (recall_text) を 1 件返す。引き戻した episode は "
-    "しばらく「鮮明な記憶」として手元に残る (= slot に再注入される)。\n"
-    "該当する見出しが既に消えていた場合は「もう忘れました」と返る。\n"
-    "\n"
-    "# 注意\n"
-    "- 自由文での検索は ``memory_recall_episodes`` を使う。本ツールは prompt 上に "
-    "見えている handle 専用。\n"
-    "- 世界状態は変えない (= 思い出すだけ)。"
-)
-
-MEMORY_RECALL_BY_HANDLE_PARAMETERS = {
-    "type": "object",
-    "properties": {
-        "handle": {
-            "type": "string",
-            "description": (
-                "prompt 上の「【さっき思い出した記憶の見出し】」に並んでいる "
-                "``ep_`` で始まる handle 文字列をそのまま渡す (例: ``ep_3f2a7b``)。"
-            ),
-        },
-    },
-    "required": ["handle"],
-}
-
-MEMORY_RECALL_BY_HANDLE_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
-    description=MEMORY_RECALL_BY_HANDLE_DESCRIPTION,
-    parameters=MEMORY_RECALL_BY_HANDLE_PARAMETERS,
-    category=ToolCategory.META_COGNITIVE,
-)
-
-
-def get_memo_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
-    """memo 系ツールの (definition, resolver) 一覧を返す。"""
-    return [
-        (MEMO_ADD_DEFINITION, TodoAddAvailabilityResolver()),
-        (MEMO_LIST_DEFINITION, TodoListAvailabilityResolver()),
-        (MEMO_DONE_DEFINITION, TodoCompleteAvailabilityResolver()),
-    ]
-
-
-# 後方互換: 旧名 ``get_todo_specs`` は ``get_memo_specs`` のエイリアス。
-get_todo_specs = get_memo_specs
 
 
 def get_memory_specs(
     *,
-    todo_enabled: bool = False,
-    episodic_explore_related_enabled: bool = False,
-    semantic_search_enabled: bool = False,
-    memo_enabled: bool | None = None,
-    episodic_recall_enabled: bool = False,
-    recall_by_handle_enabled: bool = False,
+    episode_recall_max_handles: int | None = None,
+    episode_index_revision_enabled: bool = False,
 ) -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
-    """memo および任意で memory_explore_related / memory_search_semantic /
-    memory_recall_episodes を返す。
+    """目次つきのエピソードの道具を返す。
 
-    ``todo_enabled`` は後方互換のための旧名引数。``memo_enabled`` を渡せば
-    そちらが優先される。両方未指定は False (= memo を expose しない)。
-
-    ``semantic_search_enabled`` は Phase 1d。LLM が semantic memory を能動検索
-    したい時に使う ``memory_search_semantic`` を expose する。default False。
-
-    ``episodic_recall_enabled`` は Issue #526 後続。LLM が過去 episode を
-    「思い出そう」と能動的に呼び戻す ``memory_recall_episodes`` を expose
-    する。default False (= 検証フェーズで明示的に ON にする)。
+    ``episode_recall_max_handles`` を渡すと、目次つきのエピソードの呼び出し
+    ``episode_recall`` をその上限で出す (#1623)。None なら出さない。
+    ``episode_index_revision_enabled`` は、その目次を直す ``episode_revise_index``。
     """
-    if memo_enabled is None:
-        memo_enabled = todo_enabled
     specs: list[tuple[ToolDefinitionDto, IAvailabilityResolver]] = []
-    if memo_enabled:
-        specs.extend(get_memo_specs())
-    if episodic_explore_related_enabled:
-        specs.append(
-            (MEMORY_EXPLORE_RELATED_DEFINITION, MemoryExploreRelatedAvailabilityResolver())
-        )
-    if semantic_search_enabled:
-        specs.append(
-            (MEMORY_SEARCH_SEMANTIC_DEFINITION, MemorySearchSemanticAvailabilityResolver())
-        )
-    if episodic_recall_enabled:
-        specs.append(
-            (MEMORY_RECALL_EPISODES_DEFINITION, MemoryRecallEpisodesAvailabilityResolver())
-        )
-    if recall_by_handle_enabled:
+    if episode_recall_max_handles is not None:
         specs.append(
             (
-                MEMORY_RECALL_BY_HANDLE_DEFINITION,
-                MemoryRecallByHandleAvailabilityResolver(),
+                episode_recall_definition(episode_recall_max_handles),
+                EpisodeRecallAvailabilityResolver(),
             )
         )
+    if episode_index_revision_enabled:
+        specs.append((EPISODE_REVISE_INDEX_DEFINITION, EpisodeRecallAvailabilityResolver()))
     return specs
 
 
 __all__ = [
-    "MEMORY_SEARCH_SEMANTIC_DEFINITION",
-    "MEMORY_RECALL_EPISODES_DEFINITION",
-    "MEMO_ADD_DEFINITION",
-    "MEMO_LIST_DEFINITION",
-    "MEMO_DONE_DEFINITION",
-    "MEMORY_EXPLORE_RELATED_DEFINITION",
-    # backward-compat
-    "TODO_ADD_DEFINITION",
-    "TODO_LIST_DEFINITION",
-    "TODO_COMPLETE_DEFINITION",
-    "get_memo_specs",
+    "EPISODE_REVISE_INDEX_DEFINITION",
+    "episode_recall_definition",
     "get_memory_specs",
-    "get_todo_specs",
 ]

@@ -22,7 +22,9 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
     """UserAggregateを使用するインメモリリポジトリ"""
 
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
+    def __init__(
+        self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None
+    ):
         super().__init__(data_store, unit_of_work)
 
     @property
@@ -146,6 +148,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
 
     def update_profile(self, user_id: UserId, bio: str, display_name: str) -> UserAggregate:
         """ユーザープロフィールを更新"""
+
         def operation() -> Any:
             user = self._users.get(user_id)
             if not user:
@@ -162,9 +165,11 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
         query_lower = query.lower()
         for user in self._users.values():
             profile_info = user.get_user_profile_info()
-            if (query_lower in profile_info["user_name"].lower() or
-                query_lower in profile_info["display_name"].lower() or
-                query_lower in profile_info["bio"].lower()):
+            if (
+                query_lower in profile_info["user_name"].lower()
+                or query_lower in profile_info["display_name"].lower()
+                or query_lower in profile_info["bio"].lower()
+            ):
                 result.append(user)
                 if len(result) >= limit:
                     break
@@ -172,6 +177,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
 
     def bulk_update_relationships(self, relationships: list[tuple[UserId, UserId, str]]) -> int:
         """複数の関係性を一括更新（フォロー/ブロック/サブスクライブ）"""
+
         def operation() -> Any:
             updated_count = 0
             for from_user_id, to_user_id, relationship_type in relationships:
@@ -190,7 +196,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
                     from_user.subscribe(to_user_id)
                     updated_count += 1
             return updated_count
-            
+
         result_value: int = self._execute_operation(operation)
         return result_value
 
@@ -211,12 +217,13 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
     def save(self, user: UserAggregate) -> UserAggregate:
         """ユーザーを保存"""
         cloned_user = self._clone(user)
+
         def operation() -> Any:
             self._users[cloned_user.user_id] = cloned_user
             profile_info = cloned_user.get_user_profile_info()
             self._username_to_user_id[profile_info["user_name"]] = cloned_user.user_id
             return cloned_user
-            
+
         self._register_aggregate(user)
         self._register_pending_if_uow(user.user_id, user)
         result_value: UserAggregate = self._execute_operation(operation)
@@ -224,6 +231,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
 
     def delete(self, user_id: UserId) -> bool:
         """ユーザーを削除"""
+
         def operation() -> bool:
             if user_id in self._users:
                 user = self._users[user_id]
@@ -233,7 +241,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
                     del self._username_to_user_id[profile_info["user_name"]]
                 return True
             return False
-            
+
         return self._execute_operation(operation)
 
     def find_by_display_name(self, display_name: str) -> UserAggregate | None:
@@ -249,18 +257,30 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
         if not user:
             return {}
 
-        follower_count = len([f for f in self._users.values() if any(follow.followee_user_id == user_id for follow in f.follow_relationships)])
+        follower_count = len(
+            [
+                f
+                for f in self._users.values()
+                if any(follow.followee_user_id == user_id for follow in f.follow_relationships)
+            ]
+        )
         followee_count = len(user.follow_relationships)
         blocked_count = len(user.block_relationships)
         subscription_count = len(user.subscribe_relationships)
-        subscriber_count = len([s for s in self._users.values() if any(sub.subscribed_user_id == user_id for sub in s.subscribe_relationships)])
+        subscriber_count = len(
+            [
+                s
+                for s in self._users.values()
+                if any(sub.subscribed_user_id == user_id for sub in s.subscribe_relationships)
+            ]
+        )
 
         return {
             "follower_count": follower_count,
             "followee_count": followee_count,
             "blocked_count": blocked_count,
             "subscription_count": subscription_count,
-            "subscriber_count": subscriber_count
+            "subscriber_count": subscriber_count,
         }
 
     def exists_by_id(self, user_id: UserId) -> bool:

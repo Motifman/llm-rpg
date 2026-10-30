@@ -43,9 +43,7 @@ class CommandScopeFactory(Generic[RepositoryProviderT]):
         *,
         sync_dispatcher: SyncDomainEventDispatcherPort,
         after_commit_handoff: AfterCommitHandoffPort,
-        repository_provider_factory: RepositoryProviderFactoryPort[
-            RepositoryProviderT
-        ] | None = None,
+        repository_provider_factory: RepositoryProviderFactoryPort[RepositoryProviderT] | None = None,
         transactional_outbox: TransactionalOutboxPort | None = None,
         max_sync_events: int = 1000,
     ) -> None:

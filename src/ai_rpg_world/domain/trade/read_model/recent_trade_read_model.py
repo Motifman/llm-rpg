@@ -7,6 +7,7 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 @dataclass
 class RecentTradeData:
     """最近の取引データ"""
+
     trade_id: int
     price: int
     traded_at: datetime
@@ -33,18 +34,11 @@ class RecentTradeReadModel:
 
     @classmethod
     def create_from_item_and_trades(
-        cls,
-        item_spec_id: ItemSpecId,
-        item_name: str,
-        recent_trades: list[RecentTradeData],
-        last_updated: datetime
+        cls, item_spec_id: ItemSpecId, item_name: str, recent_trades: list[RecentTradeData], last_updated: datetime
     ) -> "RecentTradeReadModel":
         """アイテム情報と取引データからReadModelを作成"""
         return cls(
-            item_spec_id=item_spec_id,
-            item_name=item_name,
-            recent_trades=recent_trades,
-            last_updated=last_updated
+            item_spec_id=item_spec_id, item_name=item_name, recent_trades=recent_trades, last_updated=last_updated
         )
 
     @property

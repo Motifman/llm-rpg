@@ -35,22 +35,16 @@ def _scenario_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "data" / "scenarios"
 
 
-def _create_session_with_stub(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, stub: StubLlmClient
-):
+def _create_session_with_stub(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, stub: StubLlmClient):
     """tick loop を無効化し、StubLlmClient を使うセッションを作る。"""
     monkeypatch.setenv("SPOT_GRAPH_TICK_LOOP_ENABLED", "false")
     mgr = GameRuntimeManager(
         scenarios_dir=_scenario_dir(),
         characters_path=tmp_path / "characters.json",
     )
-    char = mgr.create_character(
-        CharacterCreateRequest(name="listen 配線テスト用キャラクター")
-    )
+    char = mgr.create_character(CharacterCreateRequest(name="listen 配線テスト用キャラクター"))
     summary = mgr.create_session(
-        SessionCreateRequest(
-            world_id="relay_puzzle_demo", character_ids=[char.id]
-        ),
+        SessionCreateRequest(world_id="forbidden_library_demo", character_ids=[char.id]),
     )
     state = mgr._sessions[summary.session_id]
     state.llm_wiring.llm_client = stub
@@ -83,8 +77,7 @@ class TestSessionListenWiring:
 
         # UNSUPPORTED_TOOL でないことを assert (主目的)
         assert result.error_code != "UNSUPPORTED_TOOL", (
-            f"spot_graph_listen が UNSUPPORTED_TOOL に化けている (配線漏れ): "
-            f"{result.message}"
+            f"spot_graph_listen が UNSUPPORTED_TOOL に化けている (配線漏れ): {result.message}"
         )
         # 成功 DTO で返る
         assert result.success is True
@@ -179,9 +172,5 @@ class TestSessionListenWiring:
 
         # observation buffer に action_failed 観測が無いこと
         entries = list(runtime._obs_buffer.get_observations(target_pid))
-        action_failed = [
-            e
-            for e in entries
-            if (e.output.structured or {}).get("type") == "action_failed"
-        ]
+        action_failed = [e for e in entries if (e.output.structured or {}).get("type") == "action_failed"]
         assert action_failed == []

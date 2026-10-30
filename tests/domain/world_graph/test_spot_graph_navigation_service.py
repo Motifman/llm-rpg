@@ -71,8 +71,35 @@ class TestSpotGraphNavigationServiceRoute:
         r = nav.calculate_route(g, SpotId.create(1), SpotId.create(1))
         assert r == [SpotId.create(1)]
 
-    def test_shortest_path(self):
+    @pytest.mark.parametrize("with_detour", [False, True])
+    def test_shortest_path(self, with_detour: bool) -> None:
+        """一本道でも長い迂回路があっても、始終点を含む最短の場所列を返す。"""
         g = _three_spot_line_graph()
+        if with_detour:
+            for i in (4, 5):
+                g.add_spot(
+                    SpotNode(
+                        spot_id=SpotId.create(i),
+                        name=f"S{i}",
+                        description="",
+                        category=SpotCategoryEnum.OTHER,
+                        parent_id=None,
+                    )
+                )
+            for connection_id, from_id, to_id in ((10, 1, 4), (20, 4, 5), (30, 5, 3)):
+                g.add_connection(
+                    SpotConnection(
+                        connection_id=ConnectionId.create(connection_id),
+                        from_spot_id=SpotId.create(from_id),
+                        to_spot_id=SpotId.create(to_id),
+                        name="detour",
+                        description="",
+                        travel_ticks=1,
+                        is_bidirectional=False,
+                        passage_conditions=[],
+                        passage=Passage.open(sound_permeability=1.0),
+                    )
+                )
         nav = SpotGraphNavigationService()
         r = nav.calculate_route(g, SpotId.create(1), SpotId.create(3))
         assert r == [SpotId.create(1), SpotId.create(2), SpotId.create(3)]
@@ -127,7 +154,7 @@ class TestSpotGraphNavigationServiceRoute:
                 travel_ticks=0,
                 is_bidirectional=False,
                 passage_conditions=[],
-            passage=Passage.door(DoorStateEnum.LOCKED, sound_permeability=1.0),
+                passage=Passage.door(DoorStateEnum.LOCKED, sound_permeability=1.0),
             )
         )
         nav = SpotGraphNavigationService()
@@ -160,9 +187,7 @@ class TestSpotGraphNavigationServiceCanPass:
             description="",
             travel_ticks=0,
             is_bidirectional=False,
-            passage_conditions=[
-                PassageCondition(condition_type=PassageConditionTypeEnum.ALWAYS)
-            ],
+            passage_conditions=[PassageCondition(condition_type=PassageConditionTypeEnum.ALWAYS)],
         )
         nav = SpotGraphNavigationService()
         ok, msg = nav.can_pass(c, frozenset(), frozenset())
@@ -254,9 +279,9 @@ class TestSpotGraphNavigationServiceCanPass:
             ],
         )
 
-        ok, message = SpotGraphNavigationService(
-            predicate_evaluator=common
-        ).can_pass(connection, frozenset(), frozenset())
+        ok, message = SpotGraphNavigationService(predicate_evaluator=common).can_pass(
+            connection, frozenset(), frozenset()
+        )
 
         assert ok is True
         assert message is None
@@ -277,14 +302,18 @@ class TestSpotGraphNavigationServiceCanPass:
             description="",
             travel_ticks=0,
             is_bidirectional=False,
-            passage_conditions=[PassageCondition(
-                condition_type=PassageConditionTypeEnum.ITEM_REQUIRED,
-                item_spec_id=required,
-            )],
+            passage_conditions=[
+                PassageCondition(
+                    condition_type=PassageConditionTypeEnum.ITEM_REQUIRED,
+                    item_spec_id=required,
+                )
+            ],
         )
 
         ok, message = SpotGraphNavigationService(common).can_pass(
-            connection, frozenset({required}), frozenset(),
+            connection,
+            frozenset({required}),
+            frozenset(),
         )
 
         assert (ok, message) == (True, None)
@@ -314,15 +343,19 @@ class TestSpotGraphNavigationServiceCanPass:
             description="",
             travel_ticks=0,
             is_bidirectional=False,
-            passage_conditions=[PassageCondition(
-                condition_type=PassageConditionTypeEnum.ITEM_REQUIRED,
-                item_spec_id=ItemSpecId.create(7),
-            )],
+            passage_conditions=[
+                PassageCondition(
+                    condition_type=PassageConditionTypeEnum.ITEM_REQUIRED,
+                    item_spec_id=ItemSpecId.create(7),
+                )
+            ],
         )
 
         with pytest.raises(ScenarioPredicateEvaluationException):
             SpotGraphNavigationService(common).can_pass(
-                connection, frozenset(), frozenset(),
+                connection,
+                frozenset(),
+                frozenset(),
             )
 
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
@@ -350,13 +383,17 @@ class TestSpotGraphNavigationServiceCanPass:
             description="",
             travel_ticks=0,
             is_bidirectional=False,
-            passage_conditions=[PassageCondition(
-                condition_type=PassageConditionTypeEnum.FLAG_SET,
-                flag_name="door_open",
-            )],
+            passage_conditions=[
+                PassageCondition(
+                    condition_type=PassageConditionTypeEnum.FLAG_SET,
+                    flag_name="door_open",
+                )
+            ],
         )
 
         with pytest.raises(ScenarioPredicateEvaluationException):
             SpotGraphNavigationService(predicate_evaluator=common).can_pass(
-                connection, frozenset(), frozenset(),
+                connection,
+                frozenset(),
+                frozenset(),
             )

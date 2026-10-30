@@ -33,9 +33,11 @@ from ai_rpg_world.domain.world_graph.value_object.player_outcome_rule import Pla
 from ai_rpg_world.domain.world_graph.value_object.reactive_object_state_binding import ReactiveObjectStateBinding
 from ai_rpg_world.domain.world_graph.value_object.reactive_passage_binding import ReactivePassageBinding
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
+from ai_rpg_world.domain.world_graph.value_object.scenario_team import ScenarioTeam
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import SynchronizedActionGroup
+from ai_rpg_world.infrastructure.scenario.parse_round_assignment import RoundSlotAssignment
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 
 
@@ -61,6 +63,12 @@ class ScenarioMetadata:
     #: 「集会室から物資庫は 2 tick かかる」を全員が知っていて初めて、時刻の
     #: 食い違いを突ける。世界によって要否が反転するので宣言にする。
     show_world_map: bool = False
+    #: 行動の総量に限りがある世界か。False なら system prompt の「行動の制限」の行を出さない。
+    #:
+    #: **既定は出す (True)。** 島のように、締め切りを TICK_LIMIT ではなく出来事で書く
+    #: 世界があり、勝敗条件から自動で決めると、それらのプロンプトまで変わってしまう。
+    #: 締め切りを置かない世界 (廃坑の山村) が明示的に外す。
+    limits_actions: bool = True
     #: 役割キー → プロンプトに出す呼び名。
     #:
     #: ``crew`` / ``keeper`` は engine 側の識別子で、そのまま出すと #892 に
@@ -75,14 +83,13 @@ class ScenarioMetadata:
     #: objective が混入する silent failure になる)。
     llm_objective_text: str = ""
     #: 終局結果ごとの観測文型。世界固有の場所や語彙は runtime でなくここに置く。
-    player_outcome_messages: Mapping[PlayerOutcomeEnum, str] = field(
-        default_factory=dict
-    )
+    player_outcome_messages: Mapping[PlayerOutcomeEnum, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class ItemSpecDefinition:
     """シナリオ JSON で定義されたアイテム仕様。"""
+
     string_id: str
     spec_id: ItemSpecId
     name: str
@@ -101,6 +108,8 @@ class ItemSpecDefinition:
     # Issue #794 D: item の一般用途。具体的な spot / object 名ではなく、
     # 「どういう用途で、どういう種類の場所が要るか」を作者が書く。
     usage_hint: str = ""
+    # シナリオの出来事で持ち物から外れたとき、持ち主に届ける文。空なら既定の文。
+    event_removal_message: str = ""
 
 
 @dataclass(frozen=True)
@@ -127,6 +136,7 @@ class PlayerSpawnConfig:
     シナリオ JSON で `players[].initial_state` を省略すれば空 dict になり、
     PR 1 までの挙動と同じ。
     """
+
     string_id: str
     player_id: int
     name: str
@@ -139,19 +149,20 @@ class PlayerSpawnConfig:
     # text block にまとめて入れる想定。秘密はそのプレイヤーの prompt にしか
     # 入らないので natural な info asymmetry になる。
     persona_prompt: str | None = None
-    # 目的層 G6: このプレイヤー個別の初期目的文。goal store の seed に使われる。
+    # 目的層 G6: このプレイヤー個別の初期目的文。【現在の目的】に載る。
     # None なら `metadata.llm_objective_text` (シナリオ共通) へフォールバックする
     # ので、既存シナリオの挙動は変わらない。persona_prompt と同じく、秘密の動機を
     # 含む目的をそのプレイヤーの prompt にだけ入れられる (= 情報の非対称性)。
     objective: str | None = None
-    # 目的層 G6: このプレイヤーの初期目的を改訂不可にするか。None なら従来どおり
-    # シナリオ全体の性質 (`_scenario_has_goal`) から導出する。明示すればそれが
-    # 優先され、「勝敗条件つきシナリオでもこの 1 人だけは立て直せる」が書ける。
-    goal_locked: bool | None = None
     # 経済統合 Phase 0: 所持金の初期値。省略すれば 0 で、宣言しないシナリオの
     # 挙動は変わらない。PlayerStatusAggregate への配線は売買ツールを入れる PR
     # の管轄なので、ここでは宣言の保持までを行う。
     initial_gold: int = 0
+    # #1520: 入るときに紹介する相手の player id。None なら自分以外の全員を紹介する。
+    # 紹介しなかった相手は、会うまでその Being にとって居ないのと同じになる。
+    knows_at_start: tuple[str, ...] | None = None
+    # #1581: 名前を知らない相手に見せる呼び方。最初から全員に知られている人は無くてよい。
+    appearance: str | None = None
 
 
 @dataclass(frozen=True)
@@ -255,6 +266,7 @@ class ScenarioLootTableDefinition:
     table_id: LootTableId として割り振った内部 id (mapper 経由)
     entries: (item_spec_id, weight, min_quantity, max_quantity) のタプル
     """
+
     string_id: str
     table_id: int
     name: str
@@ -264,6 +276,7 @@ class ScenarioLootTableDefinition:
 @dataclass(frozen=True)
 class ScenarioLootEntry:
     """LootTable の 1 エントリ。"""
+
     item_spec_id: int
     weight: int
     min_quantity: int = 1
@@ -370,8 +383,7 @@ class ScenarioNeedsConfig:
             or self.starvation_damage_per_tick < 0
         ):
             raise ValueError(
-                "starvation_damage_per_tick must be a non-negative integer, "
-                f"got {self.starvation_damage_per_tick!r}"
+                f"starvation_damage_per_tick must be a non-negative integer, got {self.starvation_damage_per_tick!r}"
             )
         # 空腹だけ 0 を弾く。**0 を通すと「空腹の無い世界」が黙って出来上がる。**
         # 空腹が要らない世界は needs 節ごと書かなければよい (既定は据え置き) ので、
@@ -387,9 +399,7 @@ def _require_int(value: object, *, name: str, minimum: int) -> None:
     「空腹が True ずつ進む世界」を作らせない。
     """
     if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-        raise ValueError(
-            f"{name} must be an integer >= {minimum}, got {value!r}"
-        )
+        raise ValueError(f"{name} must be an integer >= {minimum}, got {value!r}")
 
 
 @dataclass(frozen=True)
@@ -457,12 +467,6 @@ class ScenarioMonsterPlacement:
 
     template_string_id: str
     spot_string_id: str
-    # 同じ spot に複数体置きたい時用に座標を分けられるよう保持。シナリオが省略
-    # していれば (0, 0, 0)。spot-graph では座標は behavior の参照点として
-    # 使われる程度。
-    coordinate_x: int = 0
-    coordinate_y: int = 0
-    coordinate_z: int = 0
     # spawn_condition が None / is_always なら static 配置。それ以外は動的。
     spawn_condition: ScenarioMonsterSpawnCondition | None = None
 
@@ -495,9 +499,7 @@ class ScenarioLoadResult:
     player_outcome_rules: tuple[PlayerOutcomeRule, ...] = ()
     needs_config: ScenarioNeedsConfig = field(default_factory=ScenarioNeedsConfig)
     #: 人が持つ属性の宣言。**書かないシナリオは空** = 従来どおりの扱い。
-    player_attribute_specs: PlayerAttributeSpecs = field(
-        default_factory=PlayerAttributeSpecs.empty
-    )
+    player_attribute_specs: PlayerAttributeSpecs = field(default_factory=PlayerAttributeSpecs.empty)
     weather_config: ScenarioWeatherConfig | None = None
     day_night_config: ScenarioDayNightConfig | None = None
     reactive_passage_bindings: tuple[ReactivePassageBinding, ...] = ()
@@ -562,6 +564,8 @@ class ScenarioLoadResult:
     # 商人 (merchants) とは別の宣言にする。商人の居る町でも「人同士の取引は
     # しない」世界はありえるし、逆もある。meeting_enabled と同じく、宣言の
     # 無い世界では取引ツールを出さず、既存 run の tool 一覧を動かさない。
+    public_sns_enabled: bool = False
+    public_sns_push_budget_chars: int = 6000
     player_trade_enabled: bool = False
     #: 提案が流れるまでの手番数。None なら engine の既定。
     #:
@@ -579,3 +583,8 @@ class ScenarioLoadResult:
     merchants: tuple[ScenarioMerchantDefinition, ...] = ()
     # 経済統合 Phase 3: 掲示板型の市場。宣言の無い世界には板が無い。
     market: ScenarioMarketConfig | None = None
+    # #1514: round_assignment で player に割り当てた枠。宣言の無い世界では空。
+    round_assignments: tuple[RoundSlotAssignment, ...] = ()
+    # #1516: チームの所属と勝利条件。宣言の無い世界では空で、勝敗は
+    # win_conditions / lose_conditions が決める。
+    teams: tuple[ScenarioTeam, ...] = ()

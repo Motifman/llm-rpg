@@ -23,20 +23,18 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_CONTROL_PANEL_TOGGLE = _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "control_panel_toggle.json"
 
 _ACTOR = PlayerId(1)
 _WITNESS = PlayerId(2)
 
 
-def _scenario_with_control_panel_witness_policy(
-    tmp_path: Path, witness_policy: str | None
-) -> Path:
-    """relay_puzzle の control_panel/power_on に witness_policy を差し込んで書き出す。
+def _scenario_with_control_panel_witness_policy(tmp_path: Path, witness_policy: str | None) -> Path:
+    """control_panel_toggle の control_panel/power_on に witness_policy を差し込んで書き出す。
 
     ``None`` なら witness_policy を書かない (= 既定の SAME_SPOT)。
     """
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
     patched = False
     for spot in scenario["spots"]:
         interior = spot.get("interior") or {}
@@ -52,7 +50,7 @@ def _scenario_with_control_panel_witness_policy(
                     interaction["witness_policy"] = witness_policy
                 patched = True
     assert patched, "control_panel/power_on が見つからない (シナリオ構造が変わった)"
-    path = tmp_path / f"relay_{witness_policy or 'default'}.json"
+    path = tmp_path / f"panel_{witness_policy or 'default'}.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
     return path
 
@@ -79,9 +77,7 @@ def _interacted_observations(runtime, player_id: PlayerId) -> list:
 class TestInteractWitnessPolicy:
     """do_interact が InteractionDef の witness_policy を第三者への配信に反映する。"""
 
-    def test_actor_only_interaction_is_not_observed_by_same_spot_player(
-        self, tmp_path: Path
-    ) -> None:
+    def test_actor_only_interaction_is_not_observed_by_same_spot_player(self, tmp_path: Path) -> None:
         """witness_policy=ACTOR_ONLY の操作は、同じスポットの第三者に一切届かない。"""
         scenario = _scenario_with_control_panel_witness_policy(tmp_path, "ACTOR_ONLY")
         runtime = _runtime_with_both_players_at_actor_spot(scenario)
@@ -90,14 +86,9 @@ class TestInteractWitnessPolicy:
         assert result.messages
 
         leaked = _interacted_observations(runtime, _WITNESS)
-        assert leaked == [], (
-            "ACTOR_ONLY を宣言した interaction が同スポットの第三者に漏れている。"
-            f"leaked={leaked}"
-        )
+        assert leaked == [], f"ACTOR_ONLY を宣言した interaction が同スポットの第三者に漏れている。leaked={leaked}"
 
-    def test_same_spot_interaction_is_observed_exactly_once(
-        self, tmp_path: Path
-    ) -> None:
+    def test_same_spot_interaction_is_observed_exactly_once(self, tmp_path: Path) -> None:
         """witness_policy 既定 (SAME_SPOT) の操作は、同スポットの第三者にちょうど 1 件だけ届く。"""
         scenario = _scenario_with_control_panel_witness_policy(tmp_path, None)
         runtime = _runtime_with_both_players_at_actor_spot(scenario)
@@ -107,6 +98,5 @@ class TestInteractWitnessPolicy:
 
         observed = _interacted_observations(runtime, _WITNESS)
         assert len(observed) == 1, (
-            "同じ interaction の観測が重複して届いている (event の二重発火)。"
-            f"count={len(observed)} entries={observed}"
+            f"同じ interaction の観測が重複して届いている (event の二重発火)。count={len(observed)} entries={observed}"
         )

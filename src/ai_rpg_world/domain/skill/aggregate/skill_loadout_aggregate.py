@@ -33,9 +33,7 @@ class AwakenState:
 
     def __post_init__(self) -> None:
         if self.active_until_tick < 0:
-            raise SkillAwakenStateException(
-                f"active_until_tick cannot be negative: {self.active_until_tick}"
-            )
+            raise SkillAwakenStateException(f"active_until_tick cannot be negative: {self.active_until_tick}")
         if self.cooldown_reduction_rate < 0 or self.cooldown_reduction_rate >= 1:
             raise SkillAwakenStateException(
                 f"cooldown_reduction_rate must be in [0, 1): {self.cooldown_reduction_rate}"
@@ -146,9 +144,7 @@ class SkillLoadoutAggregate(AggregateRoot):
 
     def equip_skill(self, deck_tier: DeckTier, slot_index: int, skill: SkillSpec, actor_id: int | None = None) -> None:
         if actor_id is not None and actor_id != self._owner_id:
-            raise SkillOwnerMismatchException(
-                f"actor_id mismatch: expected={self._owner_id}, actual={actor_id}"
-            )
+            raise SkillOwnerMismatchException(f"actor_id mismatch: expected={self._owner_id}, actual={actor_id}")
         self._validate_skill_prerequisites(deck_tier=deck_tier, slot_index=slot_index, skill=skill)
         if deck_tier == DeckTier.NORMAL:
             self._normal_deck = self._normal_deck.equip(slot_index, skill)
@@ -166,15 +162,11 @@ class SkillLoadoutAggregate(AggregateRoot):
 
     def unequip_skill(self, deck_tier: DeckTier, slot_index: int, actor_id: int | None = None) -> None:
         if actor_id is not None and actor_id != self._owner_id:
-            raise SkillOwnerMismatchException(
-                f"actor_id mismatch: expected={self._owner_id}, actual={actor_id}"
-            )
+            raise SkillOwnerMismatchException(f"actor_id mismatch: expected={self._owner_id}, actual={actor_id}")
         target_deck = self._normal_deck if deck_tier == DeckTier.NORMAL else self._awakened_deck
         old_skill = target_deck.get_skill(slot_index)
         if old_skill is None:
-            raise SkillNotFoundInSlotException(
-                f"slot has no skill: tier={deck_tier.value}, slot={slot_index}"
-            )
+            raise SkillNotFoundInSlotException(f"slot has no skill: tier={deck_tier.value}, slot={slot_index}")
         next_deck = target_deck.unequip(slot_index)
         if deck_tier == DeckTier.NORMAL:
             self._normal_deck = next_deck
@@ -198,9 +190,7 @@ class SkillLoadoutAggregate(AggregateRoot):
         actor_id: int | None = None,
     ) -> None:
         if actor_id is not None and actor_id != self._owner_id:
-            raise SkillOwnerMismatchException(
-                f"actor_id mismatch: expected={self._owner_id}, actual={actor_id}"
-            )
+            raise SkillOwnerMismatchException(f"actor_id mismatch: expected={self._owner_id}, actual={actor_id}")
         if duration_ticks <= 0:
             raise SkillAwakenStateException("duration_ticks must be greater than 0")
         if self._awaken_state.is_active and current_tick < self._awaken_state.active_until_tick:
@@ -230,21 +220,15 @@ class SkillLoadoutAggregate(AggregateRoot):
 
     def use_skill(self, slot_index: int, current_tick: int, actor_id: int | None = None) -> SkillSpec:
         if actor_id is not None and actor_id != self._owner_id:
-            raise SkillOwnerMismatchException(
-                f"actor_id mismatch: expected={self._owner_id}, actual={actor_id}"
-            )
-        
+            raise SkillOwnerMismatchException(f"actor_id mismatch: expected={self._owner_id}, actual={actor_id}")
+
         if current_tick < self._cast_lock_until_tick:
-            raise SkillCastLockActiveException(
-                f"actor is in cast lock until tick {self._cast_lock_until_tick}"
-            )
+            raise SkillCastLockActiveException(f"actor is in cast lock until tick {self._cast_lock_until_tick}")
 
         deck_tier = self.current_deck_tier(current_tick)
         skill = self.get_current_deck(current_tick).get_skill(slot_index)
         if skill is None:
-            raise SkillNotFoundInSlotException(
-                f"slot has no skill: tier={deck_tier.value}, slot={slot_index}"
-            )
+            raise SkillNotFoundInSlotException(f"slot has no skill: tier={deck_tier.value}, slot={slot_index}")
 
         cooldown_until = self._skill_cooldowns_until.get(skill.skill_id.value, 0)
         if cooldown_until > current_tick:
@@ -300,4 +284,3 @@ class SkillLoadoutAggregate(AggregateRoot):
             raise SkillPrerequisiteNotMetException(
                 f"missing required skills: {[required.value for required in missing]}"
             )
-

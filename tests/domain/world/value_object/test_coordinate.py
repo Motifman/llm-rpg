@@ -13,7 +13,7 @@ class TestCoordinate:
         assert coord.x == 10
         assert coord.y == 20
         assert coord.z == 1
-        
+
     def test_create_default_z(self):
         """zのデフォルト値が0であること"""
         coord = Coordinate(10, 20)
@@ -32,7 +32,7 @@ class TestCoordinate:
             Coordinate(-1, 0, 0)
         with pytest.raises(CoordinateValidationException):
             Coordinate(0, -1, 0)
-        
+
         # zは負の値（地下）を許容する
         coord = Coordinate(0, 0, -1)
         assert coord.z == -1
@@ -46,7 +46,7 @@ class TestCoordinate:
         """マンハッタン距離が正しく計算されること（zの差も含む）"""
         c1 = Coordinate(0, 0, 0)
         c2 = Coordinate(3, 4, 2)
-        assert c1.distance_to(c2) == 9 # 3 + 4 + 2
+        assert c1.distance_to(c2) == 9  # 3 + 4 + 2
         assert c2.distance_to(c1) == 9
 
     def test_distance_to_z_axis(self):
@@ -54,10 +54,10 @@ class TestCoordinate:
         c1 = Coordinate(0, 0, 0)
         c2 = Coordinate(0, 0, 5)
         assert c1.distance_to(c2) == 5
-        
+
         c3 = Coordinate(1, 1, 1)
         c4 = Coordinate(2, 2, 2)
-        assert c3.distance_to(c4) == 3 # |2-1| + |2-1| + |2-1| = 3
+        assert c3.distance_to(c4) == 3  # |2-1| + |2-1| + |2-1| = 3
 
     def test_equality(self):
         """等価性比較が正しく動作すること"""
@@ -89,7 +89,7 @@ class TestCoordinate:
         c1 = Coordinate(0, 0, 0)
         c2 = Coordinate(3, 4, 0)
         assert c1.euclidean_distance_to(c2) == 5.0
-        
+
         c3 = Coordinate(1, 1, 1)
         c4 = Coordinate(2, 2, 2)
         # sqrt(1^2 + 1^2 + 1^2) = sqrt(3)
@@ -98,8 +98,9 @@ class TestCoordinate:
     def test_neighbor(self):
         """隣接座標の取得が正しく動作すること"""
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+
         coord = Coordinate(1, 1, 1)
-        
+
         assert coord.neighbor(DirectionEnum.NORTH) == Coordinate(1, 0, 1)
         assert coord.neighbor(DirectionEnum.SOUTH) == Coordinate(1, 2, 1)
         assert coord.neighbor(DirectionEnum.EAST) == Coordinate(2, 1, 1)
@@ -111,15 +112,15 @@ class TestCoordinate:
         """別の座標への方向取得が正しく動作すること"""
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
         from ai_rpg_world.domain.world.exception.map_exception import SameCoordinateDirectionException
-        
+
         c = Coordinate(1, 1, 1)
-        
+
         assert c.direction_to(Coordinate(1, 0, 1)) == DirectionEnum.NORTH
         assert c.direction_to(Coordinate(1, 2, 1)) == DirectionEnum.SOUTH
         assert c.direction_to(Coordinate(2, 1, 1)) == DirectionEnum.EAST
         assert c.direction_to(Coordinate(0, 1, 1)) == DirectionEnum.WEST
         assert c.direction_to(Coordinate(1, 1, 2)) == DirectionEnum.UP
         assert c.direction_to(Coordinate(1, 1, 0)) == DirectionEnum.DOWN
-        
+
         with pytest.raises(SameCoordinateDirectionException):
             c.direction_to(c)

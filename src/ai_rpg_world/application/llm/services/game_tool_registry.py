@@ -1,6 +1,5 @@
 """ツールレジストリのデフォルト実装"""
 
-
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IAvailabilityResolver,

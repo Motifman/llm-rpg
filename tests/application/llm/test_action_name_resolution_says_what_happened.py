@@ -106,9 +106,7 @@ class TestInteractStillSendsTheSameActionName:
     """interact の引数解決が、解決結果を型で受けても従来と同じ値を送ることを保証する。"""
 
     def _resolve(self, action_name: str) -> dict:
-        context = ToolRuntimeContextDto(
-            targets={"OBJ1": _field("reap_wheat", "water_field")}
-        )
+        context = ToolRuntimeContextDto(targets={"OBJ1": _field("reap_wheat", "water_field")})
         result = SpotGraphArgumentResolver().resolve_args(
             TOOL_NAME_SPOT_GRAPH_INTERACT,
             {"target_label": "麦畑", "action_name": action_name, "inner_thought": ""},

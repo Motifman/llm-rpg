@@ -15,6 +15,12 @@ import pytest
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.say_inline_delivery import (
+    wrap_with_say_inline,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
+    adapt_executor_handler,
+)
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
 )
@@ -27,9 +33,7 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_DRILL = (
-    Path(__file__).resolve().parents[5] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[5] / "data" / "scenarios" / "station_drill.json"
 _MORI, _SENA, _KUZE = (PlayerId(i) for i in (1, 2, 3))
 _RESTORED = "レバーが噛み合い、配管に熱が戻る音がした。"
 
@@ -73,26 +77,24 @@ def _executor(runtime) -> SpotGraphToolExecutor:
         sync_action_groups=runtime.scenario.synchronized_action_groups,
         time_provider=runtime._time_provider,
         spot_graph_repository=runtime._spot_graph_repo,
-        sync_action_registry=(
-            runtime._simulation_service._sync_action_resolver_stage._registry
-        ),
-        prepare_action_command_scope_factory=(
-            runtime._prepare_action_command_scope_factory
-        ),
+        sync_action_registry=(runtime._simulation_service._sync_action_resolver_stage._registry),
+        prepare_action_command_scope_factory=(runtime._prepare_action_command_scope_factory),
         speech_service=runtime._speech_service,
         runtime=runtime,
     )
 
 
 def _interact(runtime, executor, player_id: PlayerId, object_str_id: str, action: str, **extra):
-    return executor._interact(
-        player_id.value,
+    handler = wrap_with_say_inline(adapt_executor_handler(executor._interact), executor.speak_say_inline)
+    return handler(
+        player_id,
         {
             "object_id": runtime.id_mapper.get_int("object", object_str_id),
             "action_name": action,
             "inner_thought": "弁を受け持つ",
             **extra,
         },
+        None,
     )
 
 
@@ -136,15 +138,18 @@ class TestInteractRegistersTheListenerSide:
         """同じ人が両方の弁を interact しても、2 つ目は拒否され 1 人では完成しない。"""
         executor = _executor(runtime)
         _move(runtime, _MORI, "fuel_bay")
-        _interact(runtime, executor, _MORI, "fuel_thaw_valve", "open_thaw_valve")
+        first = _interact(runtime, executor, _MORI, "fuel_thaw_valve", "open_thaw_valve")
         _move(runtime, _MORI, "machine_room")
 
         second = _interact(runtime, executor, _MORI, "oil_feed_valve", "open_oil_feed_valve")
 
+        assert first.success is True
         assert second.success is False
         assert second.error_code == "INTERACTION_PRECONDITION_FAILED"
+        assert "別の参加者" in second.message
         runtime.advance_tick()
         assert "fuel_frozen" in _flags(runtime)
+        assert "fuel_restored" not in _flags(runtime)
 
     def test_say_inline_still_reaches_the_room_when_a_valve_is_taken(self, runtime) -> None:
         """弁を受け持ちながらの一言 (say_inline) は、通常の interact と同じく同室者へ届く。"""
@@ -152,7 +157,11 @@ class TestInteractRegistersTheListenerSide:
         executor = _executor(runtime)
 
         _interact(
-            runtime, executor, _MORI, "fuel_thaw_valve", "open_thaw_valve",
+            runtime,
+            executor,
+            _MORI,
+            "fuel_thaw_valve",
+            "open_thaw_valve",
             say_inline="解氷弁は俺が持つ。",
         )
 

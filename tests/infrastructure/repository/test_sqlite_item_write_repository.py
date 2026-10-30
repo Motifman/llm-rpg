@@ -82,13 +82,9 @@ def sqlite_conn() -> sqlite3.Connection:
 
 
 class TestSqliteItemWriteRepository:
-    def test_find_by_owner_id_returns_inventory_equipment_reserved_union(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_find_by_owner_id_returns_inventory_equipment_reserved_union(self, sqlite_conn: sqlite3.Connection) -> None:
         item_repo = SqliteItemWriteRepository.for_standalone_connection(sqlite_conn)
-        inventory_repo = SqlitePlayerInventoryWriteRepository.for_standalone_connection(
-            sqlite_conn
-        )
+        inventory_repo = SqlitePlayerInventoryWriteRepository.for_standalone_connection(sqlite_conn)
 
         item_a = _equipment_item(1001, 11)
         item_b = _equipment_item(1002, 12)
@@ -115,15 +111,11 @@ class TestSqliteItemWriteRepository:
         owned = item_repo.find_by_owner_id(1)
         assert [int(item.item_instance_id) for item in owned] == [1001, 1002, 1003]
 
-    def test_find_by_owner_id_returns_empty_when_owner_not_found(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_find_by_owner_id_returns_empty_when_owner_not_found(self, sqlite_conn: sqlite3.Connection) -> None:
         item_repo = SqliteItemWriteRepository.for_standalone_connection(sqlite_conn)
         assert item_repo.find_by_owner_id(9999) == []
 
-    def test_save_and_reload_preserves_instance_state(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_save_and_reload_preserves_instance_state(self, sqlite_conn: sqlite3.Connection) -> None:
         """Phase 4-A: per-instance state を保存→再読込で復元できる (state_json column)。"""
         item_repo = SqliteItemWriteRepository.for_standalone_connection(sqlite_conn)
         agg = _equipment_item(2001, 5001)
@@ -135,9 +127,7 @@ class TestSqliteItemWriteRepository:
         assert loaded is not None
         assert loaded.state == {"lit": True, "charges": 5, "tag": "hero_lantern"}
 
-    def test_save_and_reload_with_empty_state_returns_empty_dict(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_save_and_reload_with_empty_state_returns_empty_dict(self, sqlite_conn: sqlite3.Connection) -> None:
         """state が空のときは NULL に保存され、復元時は空 dict として返る (旧 instance も同様)。"""
         item_repo = SqliteItemWriteRepository.for_standalone_connection(sqlite_conn)
         agg = _equipment_item(2002, 5002)  # state は default の空 dict
@@ -148,9 +138,7 @@ class TestSqliteItemWriteRepository:
         assert loaded is not None
         assert loaded.state == {}
 
-    def test_state_overwrite_is_persisted(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_state_overwrite_is_persisted(self, sqlite_conn: sqlite3.Connection) -> None:
         """save 後に state を変えて再 save すると上書きされる。"""
         item_repo = SqliteItemWriteRepository.for_standalone_connection(sqlite_conn)
         agg = _equipment_item(2003, 5003)
@@ -168,12 +156,8 @@ class TestSqliteItemWriteRepository:
         assert agg3 is not None
         assert agg3.state == {"lit": False, "extinguished_at_tick": 42}
 
-    def test_inventory_save_rolls_back_when_multi_table_write_fails(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
-        inventory_repo = SqlitePlayerInventoryWriteRepository.for_standalone_connection(
-            sqlite_conn
-        )
+    def test_inventory_save_rolls_back_when_multi_table_write_fails(self, sqlite_conn: sqlite3.Connection) -> None:
+        inventory_repo = SqlitePlayerInventoryWriteRepository.for_standalone_connection(sqlite_conn)
         inventory = PlayerInventoryAggregate.create_new_inventory(PlayerId(10), max_slots=2)
         sqlite_conn.execute("DROP TABLE game_player_reserved_items")
 
@@ -186,9 +170,7 @@ class TestSqliteItemWriteRepository:
         )
         assert int(cur.fetchone()[0]) == 0
 
-    def test_status_save_rolls_back_when_multi_table_write_fails(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_status_save_rolls_back_when_multi_table_write_fails(self, sqlite_conn: sqlite3.Connection) -> None:
         status_repo = SqlitePlayerStatusWriteRepository.for_standalone_connection(sqlite_conn)
         sqlite_conn.execute("DROP TABLE game_player_active_effects")
 

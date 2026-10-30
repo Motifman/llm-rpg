@@ -1,10 +1,12 @@
 """
 ReplyCommandServiceのテスト
 """
+
 import logging
 from unittest.mock import Mock, patch
 
 import pytest
+from tests.support.command_scope_stack import CommandScopeTestStack
 
 from ai_rpg_world.application.social.contracts.commands import (
     CreatePostCommand,
@@ -38,12 +40,10 @@ from ai_rpg_world.domain.sns.exception import (
     VisibilityValidationException,
 )
 from ai_rpg_world.domain.sns.value_object import PostId, ReplyId, UserId
-from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
 from ai_rpg_world.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class TestReplyCommandService:
@@ -52,16 +52,8 @@ class TestReplyCommandService:
     @pytest.fixture
     def setup_service(self):
         """テスト用のサービスとリポジトリをセットアップ"""
-        # Unit of Workファクトリ関数を定義（別トランザクション用）
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-
-        # ファクトリーメソッドでUnit of Workとイベントパブリッシャーを作成
-        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
-            unit_of_work_factory=create_uow
-        )
-
         data_store = InMemoryDataStore()
+        unit_of_work = event_publisher = CommandScopeTestStack(data_store)
         post_repository = InMemoryPostRepository(data_store, unit_of_work)
         user_repository = InMemorySnsUserRepository(data_store, unit_of_work)
         reply_repository = InMemoryReplyRepository(data_store, unit_of_work)
@@ -76,21 +68,15 @@ class TestReplyCommandService:
 
         # まずポストを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
         # リプライを作成
         command = CreateReplyCommand(
-            user_id=1,
-            parent_post_id=post_id,
-            content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, parent_post_id=post_id, content="テストリプライ", visibility=PostVisibility.PUBLIC
         )
 
         result = service.create_reply(command)
@@ -121,31 +107,22 @@ class TestReplyCommandService:
 
         # まずポストを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
         # まず親リプライを作成
         parent_reply_command = CreateReplyCommand(
-            user_id=1,
-            parent_post_id=post_id,
-            content="親リプライ",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, parent_post_id=post_id, content="親リプライ", visibility=PostVisibility.PUBLIC
         )
         parent_reply_result = service.create_reply(parent_reply_command)
         parent_reply_id = parent_reply_result.data["reply_id"]
 
         # 子リプライを作成
         command = CreateReplyCommand(
-            user_id=1,
-            parent_reply_id=parent_reply_id,
-            content="子リプライ",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, parent_reply_id=parent_reply_id, content="子リプライ", visibility=PostVisibility.PUBLIC
         )
 
         result = service.create_reply(command)
@@ -176,12 +153,9 @@ class TestReplyCommandService:
 
         # まずポストを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
@@ -189,7 +163,7 @@ class TestReplyCommandService:
             user_id=999,  # 存在しないユーザー
             parent_post_id=post_id,
             content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            visibility=PostVisibility.PUBLIC,
         )
 
         with pytest.raises(UserQueryException):  # ApplicationExceptionFactoryによって変換される
@@ -203,7 +177,7 @@ class TestReplyCommandService:
             user_id=1,
             parent_post_id=999,  # 存在しないポスト
             content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            visibility=PostVisibility.PUBLIC,
         )
 
         with pytest.raises(ReplyCreationException) as exc_info:
@@ -219,7 +193,7 @@ class TestReplyCommandService:
             user_id=1,
             parent_reply_id=999,  # 存在しないリプライ
             content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            visibility=PostVisibility.PUBLIC,
         )
 
         with pytest.raises(ReplyCreationException) as exc_info:
@@ -231,11 +205,7 @@ class TestReplyCommandService:
         """親ポストも親リプライも指定されていない場合のテスト"""
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
-        command = CreateReplyCommand(
-            user_id=1,
-            content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
-        )
+        command = CreateReplyCommand(user_id=1, content="テストリプライ", visibility=PostVisibility.PUBLIC)
 
         with pytest.raises(ReplyCreationException) as exc_info:
             service.create_reply(command)
@@ -248,29 +218,20 @@ class TestReplyCommandService:
 
         # まずポストとリプライを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
         create_reply_command = CreateReplyCommand(
-            user_id=1,
-            parent_post_id=post_id,
-            content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, parent_post_id=post_id, content="テストリプライ", visibility=PostVisibility.PUBLIC
         )
         reply_result = service.create_reply(create_reply_command)
         reply_id = reply_result.data["reply_id"]
 
         # いいねコマンドを実行
-        like_command = LikeReplyCommand(
-            user_id=1,
-            reply_id=reply_id
-        )
+        like_command = LikeReplyCommand(user_id=1, reply_id=reply_id)
 
         result = service.like_reply(like_command)
 
@@ -291,7 +252,7 @@ class TestReplyCommandService:
 
         like_command = LikeReplyCommand(
             user_id=1,
-            reply_id=999  # 存在しないリプライ
+            reply_id=999,  # 存在しないリプライ
         )
 
         with pytest.raises(ReplyNotFoundForCommandException):
@@ -303,29 +264,20 @@ class TestReplyCommandService:
 
         # まずポストとリプライを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
         create_reply_command = CreateReplyCommand(
-            user_id=1,
-            parent_post_id=post_id,
-            content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, parent_post_id=post_id, content="テストリプライ", visibility=PostVisibility.PUBLIC
         )
         reply_result = service.create_reply(create_reply_command)
         reply_id = reply_result.data["reply_id"]
 
         # 削除コマンドを実行
-        delete_command = DeleteReplyCommand(
-            user_id=1,
-            reply_id=reply_id
-        )
+        delete_command = DeleteReplyCommand(user_id=1, reply_id=reply_id)
 
         result = service.delete_reply(delete_command)
 
@@ -350,7 +302,7 @@ class TestReplyCommandService:
 
         delete_command = DeleteReplyCommand(
             user_id=1,
-            reply_id=999  # 存在しないリプライ
+            reply_id=999,  # 存在しないリプライ
         )
 
         with pytest.raises(ReplyNotFoundForCommandException):
@@ -362,20 +314,14 @@ class TestReplyCommandService:
 
         # まずポストとリプライを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
         create_reply_command = CreateReplyCommand(
-            user_id=1,
-            parent_post_id=post_id,
-            content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, parent_post_id=post_id, content="テストリプライ", visibility=PostVisibility.PUBLIC
         )
         reply_result = service.create_reply(create_reply_command)
         reply_id = reply_result.data["reply_id"]
@@ -383,7 +329,7 @@ class TestReplyCommandService:
         # 別のユーザー（ユーザー2）で削除を試みる
         delete_command = DeleteReplyCommand(
             user_id=2,  # 別のユーザー
-            reply_id=reply_id
+            reply_id=reply_id,
         )
 
         with pytest.raises(ReplyOwnershipException):
@@ -395,25 +341,20 @@ class TestReplyCommandService:
 
         # まずポストを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
         # 281文字のコンテンツ（上限を超える）
         long_content = "a" * 281
         command = CreateReplyCommand(
-            user_id=1,
-            parent_post_id=post_id,
-            content=long_content,
-            visibility=PostVisibility.PUBLIC
+            user_id=1, parent_post_id=post_id, content=long_content, visibility=PostVisibility.PUBLIC
         )
 
         from ai_rpg_world.application.social.exceptions.command.post_command_exception import PostCommandException
+
         with pytest.raises(PostCommandException):  # ContentLengthValidationExceptionが変換される
             service.create_reply(command)
 
@@ -423,12 +364,9 @@ class TestReplyCommandService:
 
         # まずポストを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
@@ -436,10 +374,11 @@ class TestReplyCommandService:
             user_id=1,
             parent_post_id=post_id,
             content="テストリプライ",
-            visibility="invalid_visibility"  # 無効な可視性
+            visibility="invalid_visibility",  # 無効な可視性
         )
 
         from ai_rpg_world.application.social.exceptions.command.post_command_exception import PostCommandException
+
         with pytest.raises(PostCommandException):  # VisibilityValidationExceptionが変換される
             service.create_reply(command)
 
@@ -449,12 +388,9 @@ class TestReplyCommandService:
 
         # まずポストを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
@@ -463,10 +399,7 @@ class TestReplyCommandService:
 
         # リプライを作成
         command = CreateReplyCommand(
-            user_id=1,
-            parent_post_id=post_id,
-            content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, parent_post_id=post_id, content="テストリプライ", visibility=PostVisibility.PUBLIC
         )
 
         result = service.create_reply(command)
@@ -489,29 +422,20 @@ class TestReplyCommandService:
 
         # まずポストとリプライを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
         create_reply_command = CreateReplyCommand(
-            user_id=1,
-            parent_post_id=post_id,
-            content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, parent_post_id=post_id, content="テストリプライ", visibility=PostVisibility.PUBLIC
         )
         reply_result = service.create_reply(create_reply_command)
         reply_id = reply_result.data["reply_id"]
 
         # いいねを実行
-        like_command = LikeReplyCommand(
-            user_id=1,
-            reply_id=reply_id
-        )
+        like_command = LikeReplyCommand(user_id=1, reply_id=reply_id)
 
         # イベント発行をリセット（作成時のイベントをクリア）
         event_publisher.clear_events()
@@ -537,20 +461,14 @@ class TestReplyCommandService:
 
         # まずポストとリプライを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
         create_reply_command = CreateReplyCommand(
-            user_id=1,
-            parent_post_id=post_id,
-            content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, parent_post_id=post_id, content="テストリプライ", visibility=PostVisibility.PUBLIC
         )
         reply_result = service.create_reply(create_reply_command)
         reply_id = reply_result.data["reply_id"]
@@ -559,10 +477,7 @@ class TestReplyCommandService:
         event_publisher.clear_events()
 
         # 削除を実行
-        delete_command = DeleteReplyCommand(
-            user_id=1,
-            reply_id=reply_id
-        )
+        delete_command = DeleteReplyCommand(user_id=1, reply_id=reply_id)
 
         result = service.delete_reply(delete_command)
 
@@ -585,17 +500,15 @@ class TestReplyCommandService:
 
         # まずポストを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
         # リポジトリのsaveメソッドをモックして例外を投げる
         original_save = reply_repository.save
+
         def mock_save_that_raises(reply):
             raise Exception("Database connection failed")
 
@@ -603,10 +516,7 @@ class TestReplyCommandService:
 
         try:
             command = CreateReplyCommand(
-                user_id=1,
-                parent_post_id=post_id,
-                content="テストリプライ",
-                visibility=PostVisibility.PUBLIC
+                user_id=1, parent_post_id=post_id, content="テストリプライ", visibility=PostVisibility.PUBLIC
             )
 
             with pytest.raises(SystemErrorException) as exc_info:
@@ -623,36 +533,28 @@ class TestReplyCommandService:
 
         # まずポストとリプライを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
         create_reply_command = CreateReplyCommand(
-            user_id=1,
-            parent_post_id=post_id,
-            content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            user_id=1, parent_post_id=post_id, content="テストリプライ", visibility=PostVisibility.PUBLIC
         )
         reply_result = service.create_reply(create_reply_command)
         reply_id = reply_result.data["reply_id"]
 
         # リポジトリのsaveメソッドをモックして例外を投げる
         original_save = reply_repository.save
+
         def mock_save_that_raises(reply):
             raise Exception("Database connection failed")
 
         reply_repository.save = mock_save_that_raises
 
         try:
-            like_command = LikeReplyCommand(
-                user_id=1,
-                reply_id=reply_id
-            )
+            like_command = LikeReplyCommand(user_id=1, reply_id=reply_id)
 
             with pytest.raises(SystemErrorException) as exc_info:
                 service.like_reply(like_command)
@@ -668,12 +570,9 @@ class TestReplyCommandService:
 
         # まずポストを作成
         from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
-        create_post_command = CreatePostCommand(
-            user_id=1,
-            content="テストポスト",
-            visibility=PostVisibility.PUBLIC
-        )
+        create_post_command = CreatePostCommand(user_id=1, content="テストポスト", visibility=PostVisibility.PUBLIC)
         post_result = post_service.create_post(create_post_command)
         post_id = post_result.data["post_id"]
 
@@ -685,11 +584,12 @@ class TestReplyCommandService:
             user_id=999,  # 存在しないユーザー
             parent_post_id=post_id,
             content="テストリプライ",
-            visibility=PostVisibility.PUBLIC
+            visibility=PostVisibility.PUBLIC,
         )
 
         # 例外が発生することを確認
         from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
+
         with pytest.raises(UserQueryException):
             service.create_reply(command)
 

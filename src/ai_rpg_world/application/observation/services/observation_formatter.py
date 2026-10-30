@@ -1,6 +1,6 @@
 """観測テキスト（プローズ＋構造化）を生成するフォーマッタ実装"""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
@@ -8,17 +8,8 @@ from ai_rpg_world.application.observation.contracts.interfaces import IObservati
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
-from ai_rpg_world.application.observation.services.formatters.combat_formatter import (
-    CombatObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.conversation_formatter import (
-    ConversationObservationFormatter,
-)
 from ai_rpg_world.application.observation.services.formatters.guild_formatter import (
     GuildObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.harvest_formatter import (
-    HarvestObservationFormatter,
 )
 from ai_rpg_world.application.observation.services.formatters.item_use_formatter import (
     ItemUseObservationFormatter,
@@ -31,9 +22,6 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
 )
 from ai_rpg_world.application.observation.services.formatters.player_formatter import (
     PlayerObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.pursuit_formatter import (
-    PursuitObservationFormatter,
 )
 from ai_rpg_world.application.observation.services.formatters.quest_formatter import (
     QuestObservationFormatter,
@@ -52,9 +40,6 @@ from ai_rpg_world.application.observation.services.formatters.spot_graph_formatt
 )
 from ai_rpg_world.application.observation.services.formatters.trade_formatter import (
     TradeObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.world_formatter import (
-    WorldObservationFormatter,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -77,9 +62,7 @@ if TYPE_CHECKING:
 class _EventFormatter(Protocol):
     """下位 formatter の共通形。attention_level は受け取らない。"""
 
-    def format(
-        self, event: Any, recipient_player_id: PlayerId
-    ) -> ObservationOutput | None: ...
+    def format(self, event: Any, recipient_player_id: PlayerId) -> ObservationOutput | None: ...
 
 
 class ObservationFormatter(IObservationFormatter):
@@ -108,6 +91,7 @@ class ObservationFormatter(IObservationFormatter):
         departed_player_checker: Callable[[PlayerId], bool] | None = None,
         downed_self_becomes_departed: bool = False,
         effective_lighting_resolver: Any | None = None,
+        event_removal_messages: Mapping[int, str] | None = None,
     ) -> None:
         self._name_resolver = ObservationNameResolver(
             spot_repository=spot_repository,
@@ -138,23 +122,19 @@ class ObservationFormatter(IObservationFormatter):
             departed_player_checker=departed_player_checker,
             downed_self_becomes_departed=downed_self_becomes_departed,
             effective_lighting_resolver=effective_lighting_resolver,
+            event_removal_messages=dict(event_removal_messages or {}),
         )
         self._formatters: list[_EventFormatter] = [
-            ConversationObservationFormatter(self._context),
             QuestObservationFormatter(self._context),
             ShopObservationFormatter(self._context),
             TradeObservationFormatter(self._context),
             SnsObservationFormatter(self._context),
             GuildObservationFormatter(self._context),
-            HarvestObservationFormatter(self._context),
             MonsterObservationFormatter(self._context),
-            CombatObservationFormatter(self._context),
             SkillObservationFormatter(self._context),
             SpotGraphObservationFormatter(self._context),
             ItemUseObservationFormatter(self._context),
-            WorldObservationFormatter(self._context),
             PlayerObservationFormatter(self._context),
-            PursuitObservationFormatter(self._context),
         ]
 
     def format(

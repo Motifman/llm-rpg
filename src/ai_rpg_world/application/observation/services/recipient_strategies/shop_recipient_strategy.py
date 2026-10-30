@@ -48,4 +48,3 @@ class ShopRecipientStrategy(IRecipientResolutionStrategy):
             return self._player_audience_query.players_at_spot(event.spot_id)
 
         return []
-

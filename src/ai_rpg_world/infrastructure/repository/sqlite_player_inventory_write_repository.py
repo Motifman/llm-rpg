@@ -1,4 +1,5 @@
 """プレイヤーインベントリ集約の SQLite 実装（ゲーム書き込み DB）。"""
+
 from __future__ import annotations
 
 import copy
@@ -67,7 +68,9 @@ class SqlitePlayerInventoryWriteRepository(PlayerInventoryRepository):
         sink.add_events_from_aggregate(aggregate)
 
     def find_by_id(self, player_id: PlayerId) -> PlayerInventoryAggregate | None:
-        row = self._conn.execute("SELECT * FROM game_player_inventories WHERE player_id = ?", (int(player_id),)).fetchone()
+        row = self._conn.execute(
+            "SELECT * FROM game_player_inventories WHERE player_id = ?", (int(player_id),)
+        ).fetchone()
         if row is None:
             return None
         return copy.deepcopy(self._build_inventory_from_row(row))
@@ -134,7 +137,11 @@ class SqlitePlayerInventoryWriteRepository(PlayerInventoryRepository):
             began_local_transaction = True
         player_id_value = int(player_id)
         try:
-            for table_name in ("game_player_inventory_slots", "game_player_equipment_slots", "game_player_reserved_items"):
+            for table_name in (
+                "game_player_inventory_slots",
+                "game_player_equipment_slots",
+                "game_player_reserved_items",
+            ):
                 self._conn.execute(f"DELETE FROM {table_name} WHERE player_id = ?", (player_id_value,))
             cur = self._conn.execute("DELETE FROM game_player_inventories WHERE player_id = ?", (player_id_value,))
             if began_local_transaction:

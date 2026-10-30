@@ -118,17 +118,19 @@ class TestTheDeclarationReachesTheOffer:
     失敗になる。**宣言と、宣言が効いていない世界の両方**を見る。
     """
 
-    def test_a_declared_expiry_changes_when_the_offer_runs_out(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_declared_expiry_changes_when_the_offer_runs_out(self, tmp_path: Path) -> None:
         """宣言した手番数のあとに提案が流れる。"""
         raw = _raw()
-        raw["players"].append({
-            "id": "tom", "name": "トム",
-            "spawn_spot": raw["players"][0]["spawn_spot"],
-            "initial_items": [], "initial_gold": 50,
-            "persona_prompt": "あなたはトム。",
-        })
+        raw["players"].append(
+            {
+                "id": "tom",
+                "name": "トム",
+                "spawn_spot": raw["players"][0]["spawn_spot"],
+                "initial_items": [],
+                "initial_gold": 50,
+                "persona_prompt": "あなたはトム。",
+            }
+        )
         raw["player_trade"] = {"enabled": True, "offer_expires_in_ticks": 24}
         path = tmp_path / "market_town_v1.json"
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -138,21 +140,23 @@ class TestTheDeclarationReachesTheOffer:
 
         assert offer.expires_at_tick == runtime.current_tick() + 24
 
-    def test_the_engine_default_applies_without_a_declaration(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_engine_default_applies_without_a_declaration(self, tmp_path: Path) -> None:
         """宣言しなければ engine の既定 (10 手番) のままになる。
 
         正の対照。宣言を読む経路を壊したときに、上のテストだけだと「既定へ
         倒れた」ことに気付けない。
         """
         raw = _raw()
-        raw["players"].append({
-            "id": "tom", "name": "トム",
-            "spawn_spot": raw["players"][0]["spawn_spot"],
-            "initial_items": [], "initial_gold": 50,
-            "persona_prompt": "あなたはトム。",
-        })
+        raw["players"].append(
+            {
+                "id": "tom",
+                "name": "トム",
+                "spawn_spot": raw["players"][0]["spawn_spot"],
+                "initial_items": [],
+                "initial_gold": 50,
+                "persona_prompt": "あなたはトム。",
+            }
+        )
         raw["player_trade"] = {"enabled": True}
         path = tmp_path / "market_town_v1.json"
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")

@@ -1,2 +1,1 @@
-from .skill_enum import DeckTier, SkillHitPatternType, SkillProposalType
-
+from .skill_enum import DeckTier, SkillProposalType

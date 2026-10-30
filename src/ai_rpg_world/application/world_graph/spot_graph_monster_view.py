@@ -58,8 +58,7 @@ class IMonsterAggregateLookup(Protocol):
     依存を狭めるためテストでは MagicMock の duck typing で十分。
     """
 
-    def find_by_id(self, monster_id: MonsterId) -> MonsterAggregate | None:
-        ...
+    def find_by_id(self, monster_id: MonsterId) -> MonsterAggregate | None: ...
 
 
 _BEHAVIOR_LABEL_JP = {

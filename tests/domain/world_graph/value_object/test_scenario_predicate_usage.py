@@ -35,9 +35,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate_usage impor
 
 def _evaluated_predicate_type_names() -> set[str]:
     """評価器の `isinstance(predicate, Type)` 分岐から型名を抽出する。"""
-    tree = ast.parse(textwrap.dedent(
-        inspect.getsource(ScenarioPredicateEvaluator.evaluate)
-    ))
+    tree = ast.parse(textwrap.dedent(inspect.getsource(ScenarioPredicateEvaluator.evaluate)))
     names: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -47,11 +45,7 @@ def _evaluated_predicate_type_names() -> set[str]:
         if len(node.args) != 2:
             continue
         subject, expected_type = node.args
-        if (
-            isinstance(subject, ast.Name)
-            and subject.id == "predicate"
-            and isinstance(expected_type, ast.Name)
-        ):
+        if isinstance(subject, ast.Name) and subject.id == "predicate" and isinstance(expected_type, ast.Name):
             names.add(expected_type.id)
     return names
 
@@ -87,24 +81,45 @@ class TestScenarioPredicateStructuralCoverage:
         """名前が似るだけの用途へ共通述語を誤って許可しない。"""
         s = ScenarioPredicateUsage
         assert PREDICATE_ALLOWED_USAGES == {
-            FlagSetPredicate: frozenset({
-                s.SCENARIO_CONDITION, s.GAME_END, s.INTERACTION,
-                s.PASSAGE, s.DISCOVERY, s.MONSTER_SPAWN,
-            }),
+            FlagSetPredicate: frozenset(
+                {
+                    s.SCENARIO_CONDITION,
+                    s.GAME_END,
+                    s.INTERACTION,
+                    s.PASSAGE,
+                    s.DISCOVERY,
+                    s.MONSTER_SPAWN,
+                }
+            ),
             TickAtLeastPredicate: frozenset({s.SCENARIO_CONDITION, s.GAME_END}),
             EntityAtSpotPredicate: frozenset({s.SCENARIO_CONDITION, s.GAME_END}),
             EntityCountAtSpotAtLeastPredicate: frozenset({s.SCENARIO_CONDITION}),
-            ItemSpecOwnedPredicate: frozenset({
-                s.SCENARIO_CONDITION, s.INTERACTION, s.PASSAGE, s.DISCOVERY,
-            }),
+            ItemSpecOwnedPredicate: frozenset(
+                {
+                    s.SCENARIO_CONDITION,
+                    s.INTERACTION,
+                    s.PASSAGE,
+                    s.DISCOVERY,
+                }
+            ),
             ItemSpecCountAtLeastPredicate: frozenset({s.INTERACTION}),
-            StateValuesMatchPredicate: frozenset({
-                s.SCENARIO_CONDITION, s.INTERACTION,
-            }),
-            StateIntAtLeastPredicate: frozenset({
-                s.SCENARIO_CONDITION, s.INTERACTION,
-            }),
-            WeatherTypeIsPredicate: frozenset({
-                s.SCENARIO_CONDITION, s.INTERACTION, s.MONSTER_SPAWN,
-            }),
+            StateValuesMatchPredicate: frozenset(
+                {
+                    s.SCENARIO_CONDITION,
+                    s.INTERACTION,
+                }
+            ),
+            StateIntAtLeastPredicate: frozenset(
+                {
+                    s.SCENARIO_CONDITION,
+                    s.INTERACTION,
+                }
+            ),
+            WeatherTypeIsPredicate: frozenset(
+                {
+                    s.SCENARIO_CONDITION,
+                    s.INTERACTION,
+                    s.MONSTER_SPAWN,
+                }
+            ),
         }

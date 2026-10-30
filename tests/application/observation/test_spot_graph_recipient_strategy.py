@@ -81,8 +81,7 @@ def _make_strategy(
 
     graph = MagicMock()
     graph.entity_spot_mapping.return_value = {
-        EntityId.create(eid): SpotId(sid)
-        for eid, sid in entity_spot_mapping.items()
+        EntityId.create(eid): SpotId(sid) for eid, sid in entity_spot_mapping.items()
     }
 
     repo = MagicMock()
@@ -178,6 +177,7 @@ class TestSpotObjectInteracted:
     def test_actor_only_observation(self):
         """Phase G #1: witness_policy=ACTOR_ONLY なら同室他者にも届かない。"""
         from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+
         strategy = _make_strategy({1: 1, 2: 1})
         event = SpotObjectInteractedEvent.create(
             aggregate_id=GRAPH_ID,
@@ -319,8 +319,7 @@ class TestConnectionStateChangedAdjacentDelivery:
 
         graph = MagicMock()
         graph.entity_spot_mapping.return_value = {
-            EntityId.create(eid): SpotId(sid)
-            for eid, sid in entity_spot_mapping.items()
+            EntityId.create(eid): SpotId(sid) for eid, sid in entity_spot_mapping.items()
         }
 
         def _iter_outgoing(spot_id):
@@ -355,14 +354,14 @@ class TestConnectionStateChangedAdjacentDelivery:
         )
 
     def test_includes_player_in_audible_neighbor_spot(self):
-        """SPOT_A → SPOT_C が permeability=0.5 (可聴) なら C にいる人にも届く。"""
-        SPOT_C = 3
+        """A → C が permeability=0.5 (可聴) なら C にいる人にも届く。"""
+        spot_c = 3
         strategy = self._make_strategy_with_adjacency(
-            entity_spot_mapping={1: 1, 2: 2, 3: SPOT_C},  # P3 が SPOT_C
+            entity_spot_mapping={1: 1, 2: 2, 3: spot_c},  # P3 は C にいる
             adjacency={
-                1: [(SPOT_C, 0.5)],  # SPOT_A → SPOT_C は半透過
+                1: [(spot_c, 0.5)],  # A → C は半透過
                 2: [],
-                SPOT_C: [],
+                spot_c: [],
             },
         )
         event = ConnectionStateChangedEvent.create(
@@ -380,12 +379,12 @@ class TestConnectionStateChangedAdjacentDelivery:
 
     def test_excludes_neighbor_when_passage_is_soundproof(self):
         """permeability < 0.1 は完全遮音 → 隣接 spot の人には届かない。"""
-        SPOT_C = 3
+        spot_c = 3
         strategy = self._make_strategy_with_adjacency(
-            entity_spot_mapping={1: 1, 3: SPOT_C},
+            entity_spot_mapping={1: 1, 3: spot_c},
             adjacency={
-                1: [(SPOT_C, 0.05)],  # ほぼ完全遮音
-                SPOT_C: [],
+                1: [(spot_c, 0.05)],  # ほぼ完全遮音
+                spot_c: [],
             },
         )
         event = ConnectionStateChangedEvent.create(
@@ -403,13 +402,13 @@ class TestConnectionStateChangedAdjacentDelivery:
 
     def test_neighbor_via_spot_is_also_audible(self):
         """to_spot から出る隣接 connection も配信対象になる。"""
-        SPOT_D = 4
+        spot_d = 4
         strategy = self._make_strategy_with_adjacency(
-            entity_spot_mapping={2: 2, 4: SPOT_D},
+            entity_spot_mapping={2: 2, 4: spot_d},
             adjacency={
                 1: [],
-                2: [(SPOT_D, 0.7)],  # SPOT_B → SPOT_D は高透過
-                SPOT_D: [],
+                2: [(spot_d, 0.7)],  # B → D は高透過
+                spot_d: [],
             },
         )
         event = ConnectionStateChangedEvent.create(
@@ -518,8 +517,7 @@ class TestSpotSoundHeardRecipientResolution:
 
         graph = MagicMock()
         graph.entity_spot_mapping.return_value = {
-            EntityId.create(eid): SpotId(sid)
-            for eid, sid in entity_spot_mapping.items()
+            EntityId.create(eid): SpotId(sid) for eid, sid in entity_spot_mapping.items()
         }
         repo = MagicMock()
         repo.find_graph.return_value = graph
@@ -533,9 +531,7 @@ class TestSpotSoundHeardRecipientResolution:
             statuses.append(status)
             by_id[pid] = status
         player_status_repo.find_all.return_value = statuses
-        player_status_repo.find_by_id.side_effect = (
-            lambda pid: by_id.get(pid.value)
-        )
+        player_status_repo.find_by_id.side_effect = lambda pid: by_id.get(pid.value)
 
         return SpotGraphRecipientStrategy(
             observed_event_registry=registry,
@@ -643,12 +639,8 @@ class TestDownPlayerExcluded:
         )
 
         repository = MagicMock()
-        repository.find_by_id.side_effect = lambda pid: MagicMock(
-            is_down=int(pid) in down_player_ids
-        )
-        resolver = ObservationRecipientResolver(
-            strategies=[strategy], player_status_repository=repository
-        )
+        repository.find_by_id.side_effect = lambda pid: MagicMock(is_down=int(pid) in down_player_ids)
+        resolver = ObservationRecipientResolver(strategies=[strategy], player_status_repository=repository)
         return {r.value for r in resolver.resolve(event)}
 
     def test_spot_down_player_actor_event(self):

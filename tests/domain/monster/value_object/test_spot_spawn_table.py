@@ -38,9 +38,7 @@ class TestSpotSpawnTable:
         assert table.spot_id == spot_id
         assert table.slots == []
 
-    def test_create_success_with_slots(
-        self, spot_id: SpotId, slot_a: SpawnSlot, slot_b: SpawnSlot
-    ):
+    def test_create_success_with_slots(self, spot_id: SpotId, slot_a: SpawnSlot, slot_b: SpawnSlot):
         """スロットリストで作成できること"""
         table = SpotSpawnTable(spot_id=spot_id, slots=[slot_a, slot_b])
         assert table.spot_id == spot_id

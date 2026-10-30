@@ -15,6 +15,7 @@ from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 @dataclass(frozen=True)
 class LootEntry:
     """ドロップテーブルの各エントリー"""
+
     item_spec_id: ItemSpecId
     weight: int
     min_quantity: int = 1
@@ -34,6 +35,7 @@ class LootEntry:
 @dataclass(frozen=True)
 class LootResult:
     """抽選結果"""
+
     item_spec_id: ItemSpecId
     quantity: int
 
@@ -43,12 +45,8 @@ class LootTableAggregate(AggregateRoot):
     ドロップテーブルの集約。
     確率に基づいたアイテム抽選ロジックを持つ。
     """
-    def __init__(
-        self,
-        loot_table_id: LootTableId | int,
-        entries: list[LootEntry],
-        name: str = ""
-    ):
+
+    def __init__(self, loot_table_id: LootTableId | int, entries: list[LootEntry], name: str = ""):
         super().__init__()
         lid = LootTableId.create(loot_table_id) if not isinstance(loot_table_id, LootTableId) else loot_table_id
         self._validate_entries(entries)
@@ -59,10 +57,7 @@ class LootTableAggregate(AggregateRoot):
 
     @classmethod
     def create(
-        cls,
-        loot_table_id: LootTableId | int | str,
-        entries: list[LootEntry],
-        name: str = ""
+        cls, loot_table_id: LootTableId | int | str, entries: list[LootEntry], name: str = ""
     ) -> "LootTableAggregate":
         lid = LootTableId.create(loot_table_id) if not isinstance(loot_table_id, LootTableId) else loot_table_id
         return cls(lid, entries, name)
@@ -70,7 +65,7 @@ class LootTableAggregate(AggregateRoot):
     def _validate_entries(self, entries: list[LootEntry]) -> None:
         if not entries:
             raise LootTableValidationException("Loot table entries cannot be empty")
-        
+
         total_weight = sum(entry.weight for entry in entries)
         if entries and total_weight <= 0:
             raise LootWeightValidationException("Total weight must be positive if entries exist")
@@ -87,18 +82,23 @@ class LootTableAggregate(AggregateRoot):
     def name(self) -> str:
         return self._name
 
-    def roll(self) -> LootResult | None:
-        """アイテムを抽選する。何も出ない場合はNoneを返す。"""
+    def roll(self, random_source: random.Random | None = None) -> LootResult | None:
+        """アイテムを抽選する。何も出ない場合はNoneを返す。
+
+        ``random_source`` を渡すと、その乱数で引く。シードから作った乱数を
+        渡せば、抽選の結果を run の間でそろえられる (#1514)。
+        """
         if not self._entries or self._total_weight <= 0:
             return None
 
-        r = random.randint(1, self._total_weight)
+        rng = random_source if random_source is not None else random
+        r = rng.randint(1, self._total_weight)
         current_weight = 0
-        
+
         for entry in self._entries:
             current_weight += entry.weight
             if r <= current_weight:
-                quantity = random.randint(entry.min_quantity, entry.max_quantity)
+                quantity = rng.randint(entry.min_quantity, entry.max_quantity)
                 return LootResult(entry.item_spec_id, quantity)
-        
+
         return None

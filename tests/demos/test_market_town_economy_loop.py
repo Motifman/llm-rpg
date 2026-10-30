@@ -22,9 +22,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-_SCENARIO = (
-    pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
-)
+_SCENARIO = pathlib.Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _BREAD = "焼きたてのパン"
 _HERB = "薬草"
 
@@ -35,12 +33,11 @@ class _Town:
     def __init__(self, directory: pathlib.Path) -> None:
         shutil.copy(_SCENARIO, directory / _SCENARIO.name)
         manager = GameRuntimeManager(
-            scenarios_dir=directory, characters_path=directory / "characters.json",
+            scenarios_dir=directory,
+            characters_path=directory / "characters.json",
         )
         character = manager.create_character(CharacterCreateRequest(name="レナ"))
-        summary = manager.create_session(
-            SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id])
-        )
+        summary = manager.create_session(SessionCreateRequest(world_id="market_town_v1", character_ids=[character.id]))
         self._state = manager._sessions[summary.session_id]
         self.player_id = PlayerId(int(self.runtime.scenario.player_spawns[0].player_id))
 
@@ -167,10 +164,7 @@ class TestTheWorldOffersOnlyWhatItHas:
 
     def test_the_economy_tools_are_offered(self, town: _Town) -> None:
         """商人が居るので、買いと売りの両方が使える。"""
-        names = [
-            definition.name
-            for definition in town.runtime.get_tool_definitions(for_every_player=True)
-        ]
+        names = [definition.name for definition in town.runtime.get_tool_definitions(for_every_player=True)]
 
         assert "buy_item" in names
         assert "sell_item" in names
@@ -182,9 +176,6 @@ class TestTheWorldOffersOnlyWhatItHas:
         モンスターの居ない世界の attack と同じ判断。1 人の世界では give_item の
         相手も、tend_to_player の対象も、この先ずっと現れない。
         """
-        names = [
-            definition.name
-            for definition in town.runtime.get_tool_definitions(for_every_player=True)
-        ]
+        names = [definition.name for definition in town.runtime.get_tool_definitions(for_every_player=True)]
 
         assert absent not in names

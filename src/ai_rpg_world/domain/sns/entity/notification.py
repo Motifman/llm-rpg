@@ -1,9 +1,12 @@
+from copy import deepcopy
 from datetime import datetime
+from typing import Any
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.sns.value_object.notification_content import NotificationContent
 from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
 from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
+from ai_rpg_world.domain.sns.value_object.sns_identity_token import SnsIdentityToken
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
 
@@ -18,7 +21,13 @@ class Notification(AggregateRoot):
         content: NotificationContent,
         created_at: datetime,
         is_read: bool = False,
-        expires_at: datetime | None = None
+        expires_at: datetime | None = None,
+        *,
+        identity_token: str | None = None,
+        source_event_id: str | None = None,
+        recipient_identity_token: str | None = None,
+        execution_provenance: dict[str, Any] | None = None,
+        observation_delivered: bool = False,
     ):
         super().__init__()
         self._notification_id = notification_id
@@ -28,6 +37,36 @@ class Notification(AggregateRoot):
         self._created_at = created_at
         self._is_read = is_read
         self._expires_at = expires_at
+        self._identity_token = (
+            SnsIdentityToken(identity_token).value if identity_token is not None else SnsIdentityToken().value
+        )
+        self._source_event_id = source_event_id
+        self._recipient_identity_token = recipient_identity_token
+        self._execution_provenance = deepcopy(execution_provenance)
+        self._observation_delivered = observation_delivered
+
+    @property
+    def identity_token(self) -> str:
+        return self._identity_token
+
+    @property
+    def source_event_id(self) -> str | None:
+        return self._source_event_id
+
+    @property
+    def recipient_identity_token(self) -> str | None:
+        return self._recipient_identity_token
+
+    @property
+    def execution_provenance(self) -> dict[str, Any] | None:
+        return deepcopy(self._execution_provenance)
+
+    @property
+    def observation_delivered(self) -> bool:
+        return self._observation_delivered
+
+    def mark_observation_delivered(self) -> None:
+        self._observation_delivered = True
 
     @property
     def notification_id(self) -> NotificationId:
@@ -88,7 +127,7 @@ class Notification(AggregateRoot):
         notification_type: NotificationType,
         content: NotificationContent,
         expires_at: datetime,
-        created_at: datetime | None = None
+        created_at: datetime | None = None,
     ) -> "Notification":
         """プッシュ通知を作成（一時的）"""
         if created_at is None:
@@ -100,7 +139,7 @@ class Notification(AggregateRoot):
             content=content,
             created_at=created_at,
             is_read=False,
-            expires_at=expires_at
+            expires_at=expires_at,
         )
 
     @classmethod
@@ -110,7 +149,7 @@ class Notification(AggregateRoot):
         user_id: UserId,
         notification_type: NotificationType,
         content: NotificationContent,
-        created_at: datetime | None = None
+        created_at: datetime | None = None,
     ) -> "Notification":
         """中期通知を作成（永続的）"""
         if created_at is None:
@@ -122,5 +161,5 @@ class Notification(AggregateRoot):
             content=content,
             created_at=created_at,
             is_read=False,
-            expires_at=None  # 中期通知は自動削除されない
+            expires_at=None,  # 中期通知は自動削除されない
         )

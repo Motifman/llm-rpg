@@ -41,9 +41,7 @@ def _executor(runtime) -> SpotGraphToolExecutor:
         event_publisher=runtime._speech_event_publisher,
         player_status_repository=runtime._player_status_repo,
         speech_service=runtime._speech_service,
-        tend_to_player_command_scope_factory=(
-            runtime._tend_to_player_command_scope_factory
-        ),
+        tend_to_player_command_scope_factory=(runtime._tend_to_player_command_scope_factory),
         runtime=runtime,
     )
 
@@ -57,9 +55,7 @@ def _down(runtime, player_id: PlayerId) -> None:
     status.clear_events()
     runtime._player_status_repo.save(status)
     runtime._speech_event_publisher.publish_all(events)
-    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
-        EntityId.create(int(player_id))
-    )
+    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
     current_tick = int(runtime.current_tick())
     runtime._fallen_body_registry.record(
         player_id,
@@ -101,9 +97,7 @@ def test_status_save_failure_rolls_back_revive_without_observation(
     original_publish_all = runtime._speech_event_publisher.publish_all
 
     def observe(events) -> None:
-        delivered.extend(
-            event for event in events if isinstance(event, PlayerRevivedEvent)
-        )
+        delivered.extend(event for event in events if isinstance(event, PlayerRevivedEvent))
         original_publish_all(events)
 
     monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
@@ -145,9 +139,7 @@ def test_grace_cancellation_failure_rolls_back_revive_without_observation(
     original_publish_all = runtime._speech_event_publisher.publish_all
 
     def observe(events) -> None:
-        delivered.extend(
-            event for event in events if isinstance(event, PlayerRevivedEvent)
-        )
+        delivered.extend(event for event in events if isinstance(event, PlayerRevivedEvent))
         original_publish_all(events)
 
     monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
@@ -182,9 +174,7 @@ def test_body_removal_failure_rolls_back_revive_without_observation(
     original_publish_all = runtime._speech_event_publisher.publish_all
 
     def observe(events) -> None:
-        delivered.extend(
-            event for event in events if isinstance(event, PlayerRevivedEvent)
-        )
+        delivered.extend(event for event in events if isinstance(event, PlayerRevivedEvent))
         original_publish_all(events)
 
     monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)

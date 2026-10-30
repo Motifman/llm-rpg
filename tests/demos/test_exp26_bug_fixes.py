@@ -18,10 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data" / "scenarios" / "survival_island_v2.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 class TestUseItemInventoryIter:
@@ -64,6 +61,7 @@ class TestUseItemInventoryIter:
         """executor のソースコードから旧 `inv.slots` 参照が消えていることを
         確認する (regression text-level check)。"""
         from pathlib import Path
+
         executor_src = (
             Path(__file__).resolve().parents[2]
             / "src/ai_rpg_world/application/llm/services/executors/spot_graph_tool_executor.py"
@@ -71,9 +69,7 @@ class TestUseItemInventoryIter:
         text = executor_src.read_text(encoding="utf-8")
         # 旧コード: `for slot in inv.slots:` (code 上の参照のみを検出。
         # コメント中の文字列言及は許可)。
-        non_comment_lines = [
-            ln for ln in text.splitlines() if not ln.lstrip().startswith("#")
-        ]
+        non_comment_lines = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
         joined = "\n".join(non_comment_lines)
         assert "inv.slots" not in joined, (
             "spot_graph_tool_executor.py に code 上の 'inv.slots' 参照が "
@@ -98,21 +94,21 @@ class TestObjectNameResolverFallback:
         from ai_rpg_world.application.observation.services.formatters._spot_graph_object_handler import (
             SpotGraphObjectHandler,
         )
+
         sg_formatter = next(
-            f for f in formatter._formatters
+            f
+            for f in formatter._formatters
             if any(isinstance(h, SpotGraphObjectHandler) for h in getattr(f, "_handlers", []))
         )
-        handler = next(
-            h for h in sg_formatter._handlers if isinstance(h, SpotGraphObjectHandler)
-        )
+        handler = next(h for h in sg_formatter._handlers if isinstance(h, SpotGraphObjectHandler))
         spot_id_int = runtime.id_mapper.get_int("spot", "shipwreck_beach")
         wreck_hold_id = runtime.id_mapper.get_int("object", "wreck_hold")
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+
         name = handler._resolve_object_name(SpotId.create(spot_id_int), SpotObjectId.create(wreck_hold_id))
         assert name != "何か", (
-            f"object_name が fallback '何か' のまま。"
-            f"spot_interior_repository 注入が効いていない可能性"
+            f"object_name が fallback '何か' のまま。spot_interior_repository 注入が効いていない可能性"
         )
         # 実際の name は scenario JSON 由来 (例: "船倉")
         assert "船倉" in name or len(name) >= 2
@@ -123,7 +119,9 @@ class TestInteractionNotFoundRemediation:
     generic LLM_TOOL_EXECUTION_FAILED に化ける問題を防ぐ。"""
 
     def test_returns_action_name_action(
-        self, monkeypatch, tmp_path,
+        self,
+        monkeypatch,
+        tmp_path,
     ) -> None:
         """存在しない action name では 利用可能 action 一覧が 返る。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
@@ -136,14 +134,16 @@ class TestInteractionNotFoundRemediation:
         state = create_world_runtime_session(monkeypatch, tmp_path)
         wiring = state.llm_wiring
         # 存在しない action_name "search" を投げる
-        stub = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_INTERACT,
-            "arguments": {
-                "target_label": "OBJ1",
-                "action_name": "search_made_up",
-                "inner_thought": "t",
-            },
-        })
+        stub = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_SPOT_GRAPH_INTERACT,
+                "arguments": {
+                    "target_label": "OBJ1",
+                    "action_name": "search_made_up",
+                    "inner_thought": "t",
+                },
+            }
+        )
         wiring.llm_client = stub
         target_pid = state.runtime.get_player_ids()[0]
         result = wiring.run_turn(target_pid)

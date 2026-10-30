@@ -33,10 +33,7 @@ class WorldFlagsSubsystemCodec(WorldSubsystemCodec):
     def capture(self, runtime: Any) -> dict[str, Any]:
         flag_state = getattr(runtime, "_world_flag_state", None)
         if flag_state is None:
-            raise RuntimeError(
-                "runtime._world_flag_state not found; "
-                "WorldFlagsSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._world_flag_state not found; WorldFlagsSubsystemCodec requires it")
         # frozen set → ソート済 list で出力 (= 決定的)。
         flags = sorted(str(f) for f in flag_state.as_frozen_set())
         return {
@@ -47,16 +44,10 @@ class WorldFlagsSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         flag_state = getattr(runtime, "_world_flag_state", None)
         if flag_state is None:
-            raise RuntimeError(
-                "runtime._world_flag_state not found; "
-                "WorldFlagsSubsystemCodec requires it"
-            )
+            raise RuntimeError("runtime._world_flag_state not found; WorldFlagsSubsystemCodec requires it")
         flags = frozenset(str(f) for f in data.get("flags", []))
         # ``replace_from_interaction`` は名前は interaction 由来だが、本質的
         # に「flag set を完全置換」する API なので restore でも使える。

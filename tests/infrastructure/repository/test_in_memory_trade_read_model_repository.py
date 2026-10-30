@@ -1,6 +1,7 @@
 """
 InMemoryTradeReadModelRepositoryのテスト
 """
+
 from datetime import datetime, timedelta
 
 import pytest
@@ -76,7 +77,7 @@ class TestInMemoryTradeReadModelRepository:
             durability_max=100,
             requested_gold=TradeRequestedGold(1000),
             status=TradeStatus.ACTIVE,
-            created_at=datetime.now()
+            created_at=datetime.now(),
         )
 
         # 保存
@@ -107,7 +108,6 @@ class TestInMemoryTradeReadModelRepository:
         """存在しない取引を削除しようとするとFalseが返る"""
         result = self.repository.delete(TradeId(999))
         assert result is False
-
 
     def test_find_recent_trades_returns_recent_first(self):
         """find_recent_tradesで最新の取引が先頭に返る"""
@@ -245,9 +245,7 @@ class TestInMemoryTradeReadModelRepository:
 
     def test_find_active_trades_as_seller_returns_only_active_listings(self):
         """find_active_trades_as_seller は出品者の ACTIVE のみ返す"""
-        trades, cursor = self.repository.find_active_trades_as_seller(
-            PlayerId(1), limit=20
-        )
+        trades, cursor = self.repository.find_active_trades_as_seller(PlayerId(1), limit=20)
         ids = {t.trade_id for t in trades}
         assert 1 in ids
         assert 11 in ids
@@ -313,17 +311,13 @@ class TestInMemoryTradeReadModelRepository:
 
     def test_find_active_trades_as_seller_empty_when_no_listings(self):
         """出品が無いプレイヤーは空"""
-        trades, cursor = self.repository.find_active_trades_as_seller(
-            PlayerId(999), limit=10
-        )
+        trades, cursor = self.repository.find_active_trades_as_seller(PlayerId(999), limit=10)
         assert trades == []
         assert cursor is None
 
     def test_find_active_trades_as_seller_pagination_no_overlap(self):
         """find_active_trades_as_seller でページを跨いでも重複しない"""
-        first_page, next_cursor = self.repository.find_active_trades_as_seller(
-            PlayerId(1), limit=1
-        )
+        first_page, next_cursor = self.repository.find_active_trades_as_seller(PlayerId(1), limit=1)
         assert len(first_page) == 1
         assert next_cursor is not None
         second_page, final_cursor = self.repository.find_active_trades_as_seller(
@@ -385,11 +379,7 @@ class TestInMemoryTradeReadModelRepository:
     def test_search_trades_combined_filters(self):
         """複数のフィルタ条件を組み合わせた検索ができる"""
         # EQUIPMENTタイプで、価格が1000以上、アクティブな取引を検索
-        filter = TradeSearchFilter(
-            item_types=[ItemType.EQUIPMENT],
-            min_price=1000,
-            statuses=[TradeStatus.ACTIVE]
-        )
+        filter = TradeSearchFilter(item_types=[ItemType.EQUIPMENT], min_price=1000, statuses=[TradeStatus.ACTIVE])
         trades, cursor = self.repository.search_trades(filter, limit=20)
 
         # 全ての取引が条件を満たしていることを確認

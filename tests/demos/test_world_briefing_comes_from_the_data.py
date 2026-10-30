@@ -61,10 +61,7 @@ _WITH_LOCKED_DOORS = _SCENARIOS / "survival_island_v4_coop.json"
 
 def _system_prompt(path: Path) -> str:
     runtime = create_world_runtime(path)
-    return (
-        runtime._world_llm_system_prompts_by_player_id.get(1)
-        or runtime._world_llm_system_prompt
-    )
+    return runtime._world_llm_system_prompts_by_player_id.get(1) or runtime._world_llm_system_prompt
 
 
 class TestTheFactsMatchTheData:
@@ -102,9 +99,7 @@ class TestTheFactsMatchTheData:
     def test_all_tasks_are_listed_and_unassigned_work_is_marked_common(self) -> None:
         """16件すべてを知らせ、担当の無い4件は誰でも引き取れると明示する。"""
         prompt = _system_prompt(_DRILL)
-        roster = prompt.split("【点検の割り当て】", 1)[1].split(
-            "【話し合いと投票の決まり】", 1
-        )[0]
+        roster = prompt.split("【点検の割り当て】", 1)[1].split("【話し合いと投票の決まり】", 1)[0]
 
         assert roster.count("  担当: ") == 12
         assert roster.count("  共通 — ") == 4
@@ -134,9 +129,7 @@ class TestTheFactsMatchTheData:
         """目的文のタスク総数と必要数は、実際の終了条件と一致する。"""
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
         task_end = next(
-            condition
-            for condition in raw["game_end_conditions"]["win"]
-            if condition["type"] == "FLAGS_SET_AT_LEAST"
+            condition for condition in raw["game_end_conditions"]["win"] if condition["type"] == "FLAGS_SET_AT_LEAST"
         )
         total = len(task_end["required_flags"])
         required = task_end["min_set_count"]
@@ -153,9 +146,7 @@ class TestTheFactsMatchTheData:
         """
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
         crew_objectives = [
-            player["objective"]
-            for player in raw["players"]
-            if player["initial_state"].get("role") == "crew"
+            player["objective"] for player in raw["players"] if player["initial_state"].get("role") == "crew"
         ]
         board = next(
             effect["parameters"]["message"]
@@ -168,9 +159,7 @@ class TestTheFactsMatchTheData:
             if effect["effect_type"] == "SHOW_MESSAGE"
         )
         task_end = next(
-            condition
-            for condition in raw["game_end_conditions"]["win"]
-            if condition["type"] == "FLAGS_SET_AT_LEAST"
+            condition for condition in raw["game_end_conditions"]["win"] if condition["type"] == "FLAGS_SET_AT_LEAST"
         )
 
         assert len(crew_objectives) == 6
@@ -185,10 +174,7 @@ class TestTheFactsMatchTheData:
     def test_every_room_starts_bright_without_stale_blackout_copy(self) -> None:
         """9区画は明るく始まり、既に壊れている照明を本文が捏造しない。"""
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-        lighting_by_room = {
-            spot["name"]: (spot.get("atmosphere") or {}).get("lighting")
-            for spot in raw["spots"]
-        }
+        lighting_by_room = {spot["name"]: (spot.get("atmosphere") or {}).get("lighting") for spot in raw["spots"]}
         assert lighting_by_room == {
             "観測室": "BRIGHT",
             "医務室": "BRIGHT",
@@ -253,10 +239,7 @@ class TestTheMapIsThereForSpatialReasoning:
         runtime = create_world_runtime(_DRILL)
 
         def _clock() -> str:
-            return next(
-                l for l in runtime.build_observation(PlayerId(1)).splitlines()
-                if "現在時刻" in l
-            )
+            return next(l for l in runtime.build_observation(PlayerId(1)).splitlines() if "現在時刻" in l)
 
         before = _clock()
         runtime.advance_tick()
@@ -418,18 +401,14 @@ class TestDutyStateDisplayFallbacks:
             ("", "気象記録簿", '気象を記録する ("log_weather")'),
         ),
     )
-    def test_missing_names_reduce_detail_without_hiding_the_duty(
-        self, spot_name, object_name, expected
-    ) -> None:
+    def test_missing_names_reduce_detail_without_hiding_the_duty(self, spot_name, object_name, expected) -> None:
         """物体名が無ければ場所へ、場所も無ければ入口名だけへ縮退する。"""
         interaction = self._interaction("log_weather")
         obj = SimpleNamespace(name=object_name, interactions=(interaction,))
         spot = SimpleNamespace(spot_id="internal_hall", name=spot_name)
         interior = SimpleNamespace(objects=(obj,))
 
-        names = build_own_state_display_names(
-            [spot], {spot.spot_id: interior}, role_labels={}
-        )
+        names = build_own_state_display_names([spot], {spot.spot_id: interior}, role_labels={})
 
         assert names["duty=weather"] == ("担当", expected)
 
@@ -458,28 +437,18 @@ class TestDutyStateDisplayFallbacks:
             preconditions=(duty_condition,),
             effects=(flag_effect,),
         )
-        obj = SimpleNamespace(
-            name="気象記録簿", interactions=(unrelated, entry, completion)
-        )
+        obj = SimpleNamespace(name="気象記録簿", interactions=(unrelated, entry, completion))
         spot = SimpleNamespace(spot_id="hall", name="集会室")
         interior = SimpleNamespace(objects=(obj,))
-        player = SimpleNamespace(
-            name="モリ", initial_state={"duty": "weather"}
-        )
+        player = SimpleNamespace(name="モリ", initial_state={"duty": "weather"})
 
-        roster = build_duty_roster_text(
-            [player], [spot], {spot.spot_id: interior}
-        )
+        roster = build_duty_roster_text([player], [spot], {spot.spot_id: interior})
 
         assert "担当: モリ — 気象を記録する (集会室)" in roster
         assert "古いメモを読む" not in roster
 
-    @pytest.mark.parametrize(
-        "later_action", ("log_weather_2", "log_weather_3", "log_weather_pretend")
-    )
-    def test_later_steps_are_ignored_even_when_declared_before_the_entry(
-        self, later_action
-    ) -> None:
+    @pytest.mark.parametrize("later_action", ("log_weather_2", "log_weather_3", "log_weather_pretend"))
+    def test_later_steps_are_ignored_even_when_declared_before_the_entry(self, later_action) -> None:
         """宣言順にかかわらず、途中段・仕上げ・偽装でなく入口名を表示する。"""
         later = self._interaction(later_action, "後続の表示")
         entry = self._interaction("log_weather")
@@ -490,9 +459,7 @@ class TestDutyStateDisplayFallbacks:
         spot = SimpleNamespace(spot_id="hall", name="集会室")
         interior = SimpleNamespace(objects=(obj,))
 
-        names = build_own_state_display_names(
-            [spot], {spot.spot_id: interior}, role_labels={}
-        )
+        names = build_own_state_display_names([spot], {spot.spot_id: interior}, role_labels={})
 
         assert names["duty=weather"] == (
             "担当",

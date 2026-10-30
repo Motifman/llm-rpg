@@ -22,9 +22,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
@@ -62,9 +60,7 @@ def _executor(runtime) -> SpotGraphToolExecutor:
 class TestDifferentTargetsInOneTick:
     """同じ手番でも対象が競合しなければ、二人の行為は独立して成立する。"""
 
-    def test_both_attacks_succeed_and_start_their_own_waits(
-        self, two_attackers
-    ) -> None:
+    def test_both_attacks_succeed_and_start_their_own_waits(self, two_attackers) -> None:
         """別々の相手なら両方成功し、各行為者の待ち時間が同じ手番から始まる。"""
         runtime = two_attackers
 
@@ -86,14 +82,10 @@ class TestTheSecondAttackRechecksTheTarget:
         runtime = two_attackers
         runtime.do_interact_with_player(_KUZE, _MORI, "strike_down")
 
-        with pytest.raises(
-            InteractionNotAllowedException, match="その相手はもう倒れている"
-        ):
+        with pytest.raises(InteractionNotAllowedException, match="その相手はもう倒れている"):
             runtime.do_interact_with_player(_SENA, _MORI, "strike_down")
 
-    def test_a_refused_later_attack_does_not_start_the_wait(
-        self, two_attackers
-    ) -> None:
+    def test_a_refused_later_attack_does_not_start_the_wait(self, two_attackers) -> None:
         """競合で成立しなかった後着は待ち時間を消費せず、別の相手を襲える。"""
         runtime = two_attackers
         runtime.do_interact_with_player(_KUZE, _MORI, "strike_down")
@@ -106,9 +98,7 @@ class TestTheSecondAttackRechecksTheTarget:
         runtime.do_interact_with_player(_SENA, _AOI, "strike_down")
         assert store.last_success_tick(_SENA, "strike_down") == 0
 
-    def test_the_actor_receives_a_reason_for_the_refusal(
-        self, two_attackers
-    ) -> None:
+    def test_the_actor_receives_a_reason_for_the_refusal(self, two_attackers) -> None:
         """実ツール境界は、後着の行為者へ世界内の理由を失敗として返す。"""
         runtime = two_attackers
         runtime.do_interact_with_player(_KUZE, _MORI, "strike_down")

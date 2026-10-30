@@ -4,6 +4,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class CreateGuildCommand:
     """ギルド作成コマンド"""
+
     spot_id: int
     location_area_id: int
     name: str
@@ -14,6 +15,7 @@ class CreateGuildCommand:
 @dataclass(frozen=True)
 class AddGuildMemberCommand:
     """ギルドメンバー追加コマンド（招待。招待者はオフィサー以上）"""
+
     guild_id: int
     inviter_player_id: int
     new_member_player_id: int
@@ -22,6 +24,7 @@ class AddGuildMemberCommand:
 @dataclass(frozen=True)
 class LeaveGuildCommand:
     """ギルド脱退コマンド"""
+
     guild_id: int
     player_id: int
 
@@ -29,6 +32,7 @@ class LeaveGuildCommand:
 @dataclass(frozen=True)
 class ChangeGuildRoleCommand:
     """ギルド役職変更コマンド（変更者はオフィサー以上）"""
+
     guild_id: int
     changer_player_id: int
     target_player_id: int
@@ -38,6 +42,7 @@ class ChangeGuildRoleCommand:
 @dataclass(frozen=True)
 class DepositToGuildBankCommand:
     """ギルド金庫入金コマンド（メンバー全員可能）"""
+
     guild_id: int
     player_id: int
     amount: int
@@ -46,6 +51,7 @@ class DepositToGuildBankCommand:
 @dataclass(frozen=True)
 class WithdrawFromGuildBankCommand:
     """ギルド金庫出金コマンド（オフィサー以上のみ）"""
+
     guild_id: int
     player_id: int
     amount: int
@@ -54,5 +60,6 @@ class WithdrawFromGuildBankCommand:
 @dataclass(frozen=True)
 class DisbandGuildCommand:
     """ギルド解散コマンド（リーダーのみ）"""
+
     guild_id: int
     player_id: int

@@ -1,0 +1,644 @@
+{
+ "labeled_by": "claude",
+ "labels": {
+  "being_w1_p3:t1:0": {
+   "A": {
+    "船倉に使える道具や物はないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "難破船の船倉は漁り尽くされており、もう使える物はない": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    },
+    "流木の山は時間がたつと再び流木が拾える": {
+     "reason_or_next": true,
+     "unrelated": true,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "難破船の船倉はもう漁り尽くされ、使える物は残っていない": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p2:t2:0": {
+   "A": {
+    "流木はいつでも入手できるとは限らない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "浜辺の流木は拾い尽くすと、波が運んでくるまで時間がたたないと入手できない": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "流木は拾い尽くしても時間がたてば波がまた運んでくる": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p3:t2:0": {
+   "A": {
+    "流木の入手は確実ではない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "浜辺の流木は拾い尽くすとしばらく取れないが、時間が経つと再び流れ着く": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "難破船の浜の流木は時間がたつと波が運んでくる": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p4:t2:0": {
+   "A": {
+    "流木を手に入れるのは簡単ではないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "流木は取り尽くすと時間がたてば再び流れ着く": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "難破船の浜の流木は拾い尽くしても時間がたつと再び流れ着く": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p1:t4:0": {
+   "A": {
+    "浜辺に隠れた資源や手がかりは見つからないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "難破船の浜にはもう探索で見つかる資源や手がかりは残っていないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "難破船の浜は探索し尽くされており、資源や手がかりは残っていない": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": true
+    }
+   }
+  },
+  "being_w1_p2:t4:0": {
+   "A": {},
+   "B1": {},
+   "C": {
+    "難破船の浜は一通り探索済みで、新たな手がかりや資源は見つからない": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": true
+    }
+   }
+  },
+  "being_w1_p3:t3:0": {
+   "A": {},
+   "B1": {
+    "浜辺の流木は採り尽くしても時間が経つと再び流れ着く": {
+     "reason_or_next": true,
+     "unrelated": true,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {}
+  },
+  "being_w1_p3:t4:0": {
+   "A": {
+    "森の入口では枯れ葉や流木などの狼煙用素材は見つからないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "森の入口では狼煙用の枯れ葉や流木は見つからず、椰子の実が手に入ることがある": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": true
+    }
+   },
+   "C": {}
+  },
+  "being_w1_p2:t3:1": {
+   "A": {},
+   "B1": {
+    "難破船の浜では火打ち石や枯れ葉はすぐには見つからないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "難破船の浜には火打ち石や枯れ葉は落ちていないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p2:t5:0": {
+   "A": {
+    "干潟には狼煙や食料に使える素材は見つからないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "干潟では狼煙に使える枯れ葉は見つからないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "干潟では枯れ葉は見つからないが、貝は採れる": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": true
+    }
+   }
+  },
+  "being_w1_p1:t3:0": {
+   "A": {
+    "仲間は各自の所持品や発見を自分からは報告しないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "仲間は発見や所持品を自発的には報告しないことがある": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "仲間は所持品や発見を報告しないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p1:t5:1": {
+   "A": {
+    "リオは先に拠点にいるとは限らない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "リオは拠点で待たずに自ら探索に向かうかもしれない": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "リオは拠点に戻らず自分から動くことがある": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p3:t8:0": {
+   "A": {
+    "大樫の樹に狼煙や救助に役立つ手がかりはないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "大樫の樹には狼煙や救助に役立つ手がかりは無い": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": true
+    }
+   },
+   "C": {}
+  },
+  "being_w1_p3:t9:0": {
+   "A": {
+    "樹上からは島の地形や山頂への道筋が見えないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "大樫の樹は登る対象ではなく、移動先の場所である": {
+     "reason_or_next": true,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {}
+  },
+  "being_w1_p2:t5:1": {
+   "A": {
+    "カイは干潟にいるとは限らない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "干潟には大型カニが現れ、人を襲うことがある": {
+     "reason_or_next": false,
+     "unrelated": true,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "大型カニは人を襲うかもしれない": {
+     "reason_or_next": false,
+     "unrelated": true,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p2:t10:0": {
+   "A": {
+    "カイは自分の状態を報告してこないことがある": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "カイは自分の状態を積極的には報告しないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "カイは自分の状態を報告しないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p2:t11:1": {
+   "A": {},
+   "B1": {
+    "山は川沿いが本道。沼を東に抜け鉄の鳥の脇を登ると高地の泉に出る": {
+     "reason_or_next": false,
+     "unrelated": true,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {}
+  },
+  "being_w1_p1:t5:0": {
+   "A": {
+    "拠点に着いても新しい資源や情報が必ずあるとは限らない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "拠点の周辺を探索しても新たな資源や情報は見つからないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "拠点の周辺には目立った資源や情報はないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p1:t7:0": {
+   "A": {},
+   "B1": {},
+   "C": {
+    "拠点周辺を探索しても資源や手がかりは見つからないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p1:t7:1": {
+   "A": {},
+   "B1": {},
+   "C": {}
+  },
+  "being_w1_p1:t9:1": {
+   "A": {
+    "河口付近には枯れ葉や食料の素材はないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "河口を探索しても枯れ葉や食料の素材は見つからないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "河口には枯れ葉や食料の素材がないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p1:t10:0": {
+   "A": {},
+   "B1": {
+    "河口の周辺には目立った資源や手がかりは無いかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {}
+  },
+  "being_w1_p2:t17:0": {
+   "A": {
+    "写真から島や観測所の手がかりは読み取れないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "壁の写真からは島や観測所の手がかりは得られない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": true
+    }
+   },
+   "C": {
+    "壁の古い写真に島や観測所の手がかりは無いかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p4:t15:0": {
+   "A": {},
+   "B1": {
+    "ノアは隠し入江にいないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "ノアは隠し入江にいないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p4:t16:1": {
+   "A": {
+    "ノアが物資を探しているとは限らない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {},
+   "C": {}
+  },
+  "being_w1_p1:t11:0": {
+   "A": {
+    "河口では枯れ葉や食料は見つからないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "河口では探索しても目立った発見はないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "河口の探索では目立った発見はないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p3:t16:0": {
+   "A": {},
+   "B1": {
+    "川の上流は山頂への道や流木の手がかりに乏しいかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "川の上流に山頂への道や流木の手がかりは無いかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p3:t15:0": {
+   "A": {
+    "上流や深い森方面に山頂への手がかりはないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "川の上流や深い森に山頂への道の手がかりはないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "川の上流方面に山頂への道の手がかりは無いかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  },
+  "being_w1_p4:t18:1": {
+   "A": {
+    "廃屋には狼煙に使える素材や道具は無いかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "観測拠点跡（廃屋）の箱は空で、時間がたっても中身は戻らない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": true
+    }
+   },
+   "C": {
+    "廃屋には狼煙に使える素材はもうない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": true
+    }
+   }
+  },
+  "being_w1_p1:t12:1": {
+   "A": {
+    "上流では枯れ葉や食料は手に入らないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "B1": {
+    "川の上流では枯れ葉や食料は手に入らないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   },
+   "C": {
+    "川の上流では枯れ葉や食料は手に入らないかもしれない": {
+     "reason_or_next": false,
+     "unrelated": false,
+     "game_term": false,
+     "overclaim": false
+    }
+   }
+  }
+ }
+}

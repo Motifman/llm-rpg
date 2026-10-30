@@ -14,8 +14,6 @@ drift between the code and the team's shared mental model.
 from __future__ import annotations
 
 import importlib
-import inspect
-from dataclasses import fields
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -36,33 +34,6 @@ def test_experiment_and_server_entrypoints_use_world_runtime() -> None:
     assert "GameRuntimeManager" in app
     assert "create_world_runtime" in manager
     assert "create_spot_graph_wiring" not in experiment
-
-
-def test_world_runtime_memory_stack_has_flag_gated_semantic_extension() -> None:
-    """world_runtime's episodic builder now exposes semantic/link handles behind flags."""
-    from ai_rpg_world.application.llm.wiring.episodic_stack import (
-        EpisodicStack,
-        build_episodic_stack,
-    )
-
-    stack_fields = {field.name for field in fields(EpisodicStack)}
-    build_params = inspect.signature(build_episodic_stack).parameters
-
-    assert {
-        "chunk_coordinator",
-        "passive_recall",
-        "noun_matcher",
-        "episode_store",
-        "semantic_passive_recall",
-        "semantic_passive_top_k",
-        "episodic_semantic_promotion",
-        "semantic_memory_store",
-        "memory_link_store",
-    } <= stack_fields
-    assert build_params["semantic_enabled"].default is False
-    assert build_params["semantic_passive_top_k"].default == 0
-    assert "semantic_gist_service" in build_params
-    assert "semantic_persona_resolver" in build_params
 
 
 def test_full_wiring_is_retired() -> None:
@@ -89,20 +60,3 @@ def test_full_wiring_is_retired() -> None:
         "ai_rpg_world/application/llm/services/llm_turn_trigger.py",
     ):
         assert not (_SRC / rel).exists(), rel
-
-
-def test_memory_recall_episodes_is_world_runtime_specific() -> None:
-    """Active episode recall is wired in world_runtime and WorldLlmWiring."""
-    world_runtime = _read(
-        _SRC / "ai_rpg_world/application/world_runtime/world_runtime.py"
-    )
-    world_llm_wiring = _read(
-        _SRC
-        / "ai_rpg_world/application/llm/services/world_llm_turn/wiring.py"
-    )
-
-    assert "memory_recall_episodes" in world_runtime
-    assert "TOOL_NAME_MEMORY_RECALL_EPISODES" in world_llm_wiring, (
-        "WorldLlmWiring が TOOL_NAME_MEMORY_RECALL_EPISODES を dispatch していない。"
-        "episode recall の tool handler 配線が抜けた可能性。"
-    )

@@ -32,9 +32,7 @@ def mapper() -> ScenarioIdMapper:
 class TestDepositItemToObjectLoading:
     """投入数や対象 state を暗黙に補わず、必要な宣言を読み込み時に固定する。"""
 
-    def test_loads_all_quantity_and_resolves_string_ids(
-        self, mapper: ScenarioIdMapper
-    ) -> None:
+    def test_loads_all_quantity_and_resolves_string_ids(self, mapper: ScenarioIdMapper) -> None:
         """item_spec・target_object を数値 ID に解決し、quantity=all を保持する。"""
         effect = parse_interaction_effect(
             {
@@ -58,9 +56,7 @@ class TestDepositItemToObjectLoading:
         }
 
     @pytest.mark.parametrize("missing", ["item_spec", "state_key", "quantity"])
-    def test_required_parameter_omission_fails_fast(
-        self, mapper: ScenarioIdMapper, missing: str
-    ) -> None:
+    def test_required_parameter_omission_fails_fast(self, mapper: ScenarioIdMapper, missing: str) -> None:
         """item_spec・state_key・quantity の省略は既定値へ縮退せず読み込み時に拒否する。"""
         parameters = {
             "item_spec": "driftwood",
@@ -80,9 +76,7 @@ class TestDepositItemToObjectLoading:
             )
 
     @pytest.mark.parametrize("quantity", [0, -1, "some"])
-    def test_invalid_quantity_fails_fast(
-        self, mapper: ScenarioIdMapper, quantity: object
-    ) -> None:
+    def test_invalid_quantity_fails_fast(self, mapper: ScenarioIdMapper, quantity: object) -> None:
         """quantity は正の整数か all だけを許し、曖昧な値を実行時へ持ち越さない。"""
         with pytest.raises(ScenarioLoadError, match="quantity"):
             parse_interaction_effect(
@@ -119,9 +113,7 @@ class TestDepositItemToObjectLoading:
 class TestObjectStateIntAtLeastLoading:
     """整数 state 条件は state_key と required_quantity を別々に保持する。"""
 
-    def test_loads_state_key_and_required_quantity(
-        self, mapper: ScenarioIdMapper
-    ) -> None:
+    def test_loads_state_key_and_required_quantity(self, mapper: ScenarioIdMapper) -> None:
         """閾値には required_quantity を使い、reactive の ticks_offset を流用しない。"""
         condition = parse_interaction_condition(
             {
@@ -131,7 +123,7 @@ class TestObjectStateIntAtLeastLoading:
                 "required_quantity": 3,
             },
             mapper,
-                player_attribute_specs=_NO_ATTRIBUTES,
+            player_attribute_specs=_NO_ATTRIBUTES,
         )
 
         assert condition.state_key == "driftwood_stacked"

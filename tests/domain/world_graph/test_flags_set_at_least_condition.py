@@ -78,10 +78,17 @@ def _graph() -> SpotGraphAggregate:
 
 
 def _evaluate(condition: GameEndCondition, flags: set[str]) -> bool:
-    return GameEndConditionEvaluator().evaluate(
-        _graph(), condition, frozenset(flags), [PlayerId(1)],
-        result_on_match=_SIDE,
-    ).is_ended
+    return (
+        GameEndConditionEvaluator()
+        .evaluate(
+            _graph(),
+            condition,
+            frozenset(flags),
+            [PlayerId(1)],
+            result_on_match=_SIDE,
+        )
+        .is_ended
+    )
 
 
 class TestCounting:
@@ -130,7 +137,10 @@ class TestValidation:
 
         空を許すと「0 個中 0 個」で **開始した瞬間に勝つ**。
         """
-        with pytest.raises(GameEndConditionValidationException):
+        with pytest.raises(
+            GameEndConditionValidationException,
+            match="required_flags が必要です",
+        ):
             _condition(flags=())
 
     def test_threshold_above_the_list_is_rejected(self) -> None:
@@ -182,10 +192,7 @@ class TestItCanBeWrittenInAScenario:
         import shutil
         from pathlib import Path
 
-        src = (
-            Path(__file__).resolve().parents[3]
-            / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-        )
+        src = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
         raw = json.loads(src.read_text(encoding="utf-8"))
         raw["game_end_conditions"] = {"win": [condition], "lose": []}
         dst = tmp_path / "tasks.json"
@@ -196,15 +203,19 @@ class TestItCanBeWrittenInAScenario:
         """宣言どおりの条件が組み上がる。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-        path = self._scenario(tmp_path, {
-            "type": "FLAGS_SET_AT_LEAST",
-            "required_flags": list(_TASKS),
-            "min_set_count": 3,
-        })
+        path = self._scenario(
+            tmp_path,
+            {
+                "type": "FLAGS_SET_AT_LEAST",
+                "required_flags": list(_TASKS),
+                "min_set_count": 3,
+            },
+        )
 
         result = ScenarioLoader().load_from_file(path)
 
         (cond,) = result.win_conditions
+        assert cond.condition_type is GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST
         assert cond.required_flags == _TASKS
         assert cond.min_set_count == 3
 
@@ -215,23 +226,34 @@ class TestItCanBeWrittenInAScenario:
         """
         from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-        path = self._scenario(tmp_path, {
-            "type": "FLAGS_SET_AT_LEAST",
-            "required_flags": ["task_radio"],
-            "min_set_count": 5,
-        })
+        path = self._scenario(
+            tmp_path,
+            {
+                "type": "FLAGS_SET_AT_LEAST",
+                "required_flags": ["task_radio"],
+                "min_set_count": 5,
+            },
+        )
 
-        with pytest.raises(Exception):
+        with pytest.raises(
+            GameEndConditionValidationException,
+            match="min_set_count が required_flags の数を超えています",
+        ):
             ScenarioLoader().load_from_file(path)
 
     def test_a_missing_threshold_is_rejected_at_load(self, tmp_path) -> None:
         """閾値の書き忘れも読み込み時に落とす。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-        path = self._scenario(tmp_path, {
-            "type": "FLAGS_SET_AT_LEAST",
-            "required_flags": list(_TASKS),
-        })
+        path = self._scenario(
+            tmp_path,
+            {
+                "type": "FLAGS_SET_AT_LEAST",
+                "required_flags": list(_TASKS),
+            },
+        )
 
-        with pytest.raises(Exception):
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
+
+        with pytest.raises(ScenarioLoadError, match="整数の min_set_count"):
             ScenarioLoader().load_from_file(path)

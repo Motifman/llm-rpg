@@ -86,7 +86,7 @@ class TestResolveTargetAcceptsBothKinds:
         assert target.player_id == 2
 
     def test_concatenated_prompt_line_resolves(self) -> None:
-        """"P1 (リン)" のようなプロンプト行の貼り付けも吸収して解決する。"""
+        """ "P1 (リン)" のようなプロンプト行の貼り付けも吸収して解決する。"""
         target = resolve_target(
             "P1 (リン)",
             _context(),

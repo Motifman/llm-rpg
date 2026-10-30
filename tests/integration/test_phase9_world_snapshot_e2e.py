@@ -55,9 +55,7 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 
-_SCENARIOS_DIR = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
-)
+_SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
 _SCENARIO_FILE = "decay_demo.json"
 _SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
     source=WorldFlagMutationSource.SCENARIO_EVENT,
@@ -86,21 +84,17 @@ def _build_runtime_session(out_dir: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SPOT_GRAPH_TICK_LOOP_ENABLED", "false")
 
     chars_path = out_dir / "characters.json"
-    mgr = GameRuntimeManager(
-        scenarios_dir=_SCENARIOS_DIR, characters_path=chars_path
-    )
+    mgr = GameRuntimeManager(scenarios_dir=_SCENARIOS_DIR, characters_path=chars_path)
     char = mgr.create_character(CharacterCreateRequest(name="e2e-test"))
     world_id = Path(_SCENARIO_FILE).stem
-    summary = mgr.create_session(
-        SessionCreateRequest(world_id=world_id, character_ids=[char.id])
-    )
+    summary = mgr.create_session(SessionCreateRequest(world_id=world_id, character_ids=[char.id]))
     state = mgr._sessions[summary.session_id]
     runtime = state.runtime
 
     # snapshot session を組むためには aux Being stack の初期化が必要
     # (= scripts/run_scenario_experiment.py の経路と同じ)。
-    if hasattr(runtime, "_wire_auxiliary_tool_stack"):
-        runtime._wire_auxiliary_tool_stack()
+    if hasattr(runtime, "_wire_being_stack"):
+        runtime._wire_being_stack()
     for pid in runtime.get_player_ids():
         provisioning = getattr(runtime, "_aux_being_provisioning", None)
         if provisioning is not None:
@@ -129,9 +123,7 @@ def _normalize_world_json(path: Path) -> dict:
 class TestE2ECaptureRestoreRoundTrip:
     """Phase 9 完成のテスト: 24 subsystem が round-trip で bit-identical。"""
 
-    def test_capture_restore_round_trip_bit_identical(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_capture_restore_round_trip_bit_identical(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """src で capture → dst で restore → recapture が bit-identical。
 
         これにより全 24 subsystem (Phase 9-2〜9-4c + Encounter Memory PR3
@@ -146,9 +138,7 @@ class TestE2ECaptureRestoreRoundTrip:
             source_scenario=Path(_SCENARIO_FILE).stem,
             world_tick=int(src_runtime.current_tick()),
         )
-        src_world_data = _normalize_world_json(
-            src_dir / "snapshots" / "world.json"
-        )
+        src_world_data = _normalize_world_json(src_dir / "snapshots" / "world.json")
 
         # --- dst 環境 (= fresh runtime)
         dst_dir = tmp_path / "dst"
@@ -171,19 +161,14 @@ class TestE2ECaptureRestoreRoundTrip:
             source_scenario=Path(_SCENARIO_FILE).stem,
             world_tick=int(dst_runtime.current_tick()),
         )
-        dst_world_data = _normalize_world_json(
-            dst_dir / "snapshots" / "world.json"
-        )
+        dst_world_data = _normalize_world_json(dst_dir / "snapshots" / "world.json")
 
         # bit-identical (captured_at 除く) ことを assert
         assert src_world_data == dst_world_data, (
-            "snapshot round-trip が bit-identical でない。"
-            "subsystem codec のいずれかで非対称な変換が起きている可能性。"
+            "snapshot round-trip が bit-identical でない。subsystem codec のいずれかで非対称な変換が起きている可能性。"
         )
 
-    def test_captured_subsystems_match_the_expected_set(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_captured_subsystems_match_the_expected_set(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """world.json に載る subsystem が EXPECTED_WORLD_SUBSYSTEM_KEYS と一致する。
 
         期待集合をここに写経していたが、subsystem を 1 つ足すたびに
@@ -205,15 +190,11 @@ class TestE2ECaptureRestoreRoundTrip:
             source_scenario=Path(_SCENARIO_FILE).stem,
             world_tick=int(runtime.current_tick()),
         )
-        data = json.loads(
-            (tmp_path / "snapshots" / "world.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((tmp_path / "snapshots" / "world.json").read_text(encoding="utf-8"))
 
         assert set(data["subsystems"].keys()) == set(EXPECTED_WORLD_SUBSYSTEM_KEYS)
 
-    def test_round_trip_with_mutated_non_initial_state(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_round_trip_with_mutated_non_initial_state(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """**non-trivial** な live state で round-trip が bit-identical。
 
         code-review HIGH 1 対応: 初期状態だけの round-trip だと codec が
@@ -240,9 +221,7 @@ class TestE2ECaptureRestoreRoundTrip:
         )
 
         src_dir = tmp_path / "src"
-        src_runtime, src_session, _mgr = _build_runtime_session(
-            src_dir, monkeypatch
-        )
+        src_runtime, src_session, _mgr = _build_runtime_session(src_dir, monkeypatch)
 
         # === mutate phase ===
         # 1. world_tick: advance を 4 回 (= 0 でない値にする)
@@ -301,24 +280,14 @@ class TestE2ECaptureRestoreRoundTrip:
             source_scenario=Path(_SCENARIO_FILE).stem,
             world_tick=int(src_runtime.current_tick()),
         )
-        src_world_data = _normalize_world_json(
-            src_dir / "snapshots" / "world.json"
-        )
+        src_world_data = _normalize_world_json(src_dir / "snapshots" / "world.json")
 
         # sanity: mutate した内容が実際に snapshot に乗っているか確認
         subsystems = src_world_data["subsystems"]
         assert src_world_data["world_tick"] > 0  # tick が進んだ
-        vitals_entry = next(
-            e
-            for e in subsystems["player_vitals"]["entries"]
-            if e["player_id"] == int(first_pid.value)
-        )
+        vitals_entry = next(e for e in subsystems["player_vitals"]["entries"] if e["player_id"] == int(first_pid.value))
         assert vitals_entry["hp_value"] == 73
-        sd_entry = next(
-            e
-            for e in subsystems["player_state_dict"]["entries"]
-            if e["player_id"] == int(first_pid.value)
-        )
+        sd_entry = next(e for e in subsystems["player_state_dict"]["entries"] if e["player_id"] == int(first_pid.value))
         assert sd_entry["state"].get("e2e_marker") == "set_in_src"
         assert "e2e_e_world_flag" in subsystems["world_flags"]["flags"]
         recent_entries = subsystems["recent_event_store"]["entries"]
@@ -328,21 +297,17 @@ class TestE2ECaptureRestoreRoundTrip:
         )
         assert recent_player_entry is not None
         assert any(
-            entry["kind"] == "observation"
-            and "e2e mutate marker" in entry["payload"]["output"]["prose"]
+            entry["kind"] == "observation" and "e2e mutate marker" in entry["payload"]["output"]["prose"]
             for entry in recent_player_entry["entries"]
         )
         assert any(
-            entry["kind"] == "action_result"
-            and entry["payload"]["action_summary"] == "walked_to_armory"
+            entry["kind"] == "action_result" and entry["payload"]["action_summary"] == "walked_to_armory"
             for entry in recent_player_entry["entries"]
         )
 
         # === restore + recapture (= bit-identical 確認) ===
         dst_dir = tmp_path / "dst"
-        dst_runtime, dst_session, _dst_mgr = _build_runtime_session(
-            dst_dir, monkeypatch
-        )
+        dst_runtime, dst_session, _dst_mgr = _build_runtime_session(dst_dir, monkeypatch)
         (dst_dir / "snapshots").mkdir(parents=True, exist_ok=True)
         (dst_dir / "snapshots" / "world.json").write_text(
             (src_dir / "snapshots" / "world.json").read_text(encoding="utf-8"),
@@ -358,9 +323,7 @@ class TestE2ECaptureRestoreRoundTrip:
             source_scenario=Path(_SCENARIO_FILE).stem,
             world_tick=int(dst_runtime.current_tick()),
         )
-        dst_world_data = _normalize_world_json(
-            dst_dir / "snapshots" / "world.json"
-        )
+        dst_world_data = _normalize_world_json(dst_dir / "snapshots" / "world.json")
         assert src_world_data == dst_world_data, (
             "non-trivial state での round-trip が bit-identical でない。"
             "live state を扱う codec が非対称な変換をしている可能性。"
@@ -377,9 +340,7 @@ class TestE2EPostRestoreRuntime:
         不能」になる。本 test は **「resume が機能する」最後の守り**。
         """
         # src で snapshot を取り、dst で restore
-        src_runtime, src_session, _src_mgr = _build_runtime_session(
-            tmp_path / "src"
-        , monkeypatch)
+        src_runtime, src_session, _src_mgr = _build_runtime_session(tmp_path / "src", monkeypatch)
         src_session.capture_world(
             src_runtime,
             source_scenario=Path(_SCENARIO_FILE).stem,
@@ -390,9 +351,7 @@ class TestE2EPostRestoreRuntime:
         dst_runtime, dst_session, _dst_mgr = _build_runtime_session(dst_dir, monkeypatch)
         (dst_dir / "snapshots").mkdir(parents=True, exist_ok=True)
         (dst_dir / "snapshots" / "world.json").write_text(
-            (tmp_path / "src" / "snapshots" / "world.json").read_text(
-                encoding="utf-8"
-            ),
+            (tmp_path / "src" / "snapshots" / "world.json").read_text(encoding="utf-8"),
             encoding="utf-8",
         )
         dst_session.restore_world_from_dir(
@@ -407,18 +366,14 @@ class TestE2EPostRestoreRuntime:
             dst_runtime.advance_tick()
         assert int(dst_runtime.current_tick()) == initial_tick + 3
 
-    def test_world_tick_continues_from_restored_value(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_world_tick_continues_from_restored_value(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """snapshot に world_tick=N が保存されたら、restore 後 current_tick == N。
 
         Phase 9-2 で導入した ``set_current_tick`` が機能していることを担保。
         scenario の「30 tick の続きから」を成立させる土台。
         """
         # src で tick を進める
-        src_runtime, src_session, _src_mgr = _build_runtime_session(
-            tmp_path / "src"
-        , monkeypatch)
+        src_runtime, src_session, _src_mgr = _build_runtime_session(tmp_path / "src", monkeypatch)
         for _ in range(5):
             src_runtime.advance_tick()
         src_tick = int(src_runtime.current_tick())
@@ -436,9 +391,7 @@ class TestE2EPostRestoreRuntime:
         assert int(dst_runtime.current_tick()) == 0  # 初期状態
         (dst_dir / "snapshots").mkdir(parents=True, exist_ok=True)
         (dst_dir / "snapshots" / "world.json").write_text(
-            (tmp_path / "src" / "snapshots" / "world.json").read_text(
-                encoding="utf-8"
-            ),
+            (tmp_path / "src" / "snapshots" / "world.json").read_text(encoding="utf-8"),
             encoding="utf-8",
         )
         dst_session.restore_world_from_dir(
@@ -469,15 +422,11 @@ class TestE2EFailFast:
             world_tick=int(runtime.current_tick()),
         )
         # 別 scenario (= regrowth_demo) で load 試行
-        dst_runtime, dst_session, _dst_mgr = _build_runtime_session(
-            tmp_path / "dst", monkeypatch
-        )
+        dst_runtime, dst_session, _dst_mgr = _build_runtime_session(tmp_path / "dst", monkeypatch)
         dst_dir = tmp_path / "dst" / "snapshots"
         dst_dir.mkdir(parents=True, exist_ok=True)
         (dst_dir / "world.json").write_text(
-            (tmp_path / "src" / "snapshots" / "world.json").read_text(
-                encoding="utf-8"
-            ),
+            (tmp_path / "src" / "snapshots" / "world.json").read_text(encoding="utf-8"),
             encoding="utf-8",
         )
         with pytest.raises(WorldStateScenarioMismatchError, match="decay_demo"):
@@ -487,15 +436,11 @@ class TestE2EFailFast:
                 current_scenario="regrowth_demo",
             )
 
-    def test_legacy_snapshot_dir_world_json_skips_world(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_legacy_snapshot_dir_world_json_skips_world(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """world.json なし (= Phase 6 までの旧 snapshot) でも restore は no-op で動く。"""
         runtime, session, _mgr = _build_runtime_session(tmp_path, monkeypatch)
         legacy_dir = tmp_path / "legacy_no_world"
         legacy_dir.mkdir()
         # world.json なしの dir に対する restore → ``None`` で no-op
-        result = session.restore_world_from_dir(
-            runtime, legacy_dir, current_scenario=Path(_SCENARIO_FILE).stem
-        )
+        result = session.restore_world_from_dir(runtime, legacy_dir, current_scenario=Path(_SCENARIO_FILE).stem)
         assert result is None

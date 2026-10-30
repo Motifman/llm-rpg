@@ -82,9 +82,7 @@ OBJECT_ID = SpotObjectId.create(7)
 def test_object_binding_requires_scope_before_condition_evaluation() -> None:
     """bindingがある公開runは条件評価へ触れる前にscope未配線を拒否する。"""
     evaluator = Mock()
-    evaluator.evaluate_diagnostic.side_effect = AssertionError(
-        "scope確認前に条件評価へ触れてはいけない"
-    )
+    evaluator.evaluate_diagnostic.side_effect = AssertionError("scope確認前に条件評価へ触れてはいけない")
     stage = ReactiveObjectStateBindingStageService(
         bindings=(_probability_binding(key="power"),),
         condition_evaluator=evaluator,
@@ -194,7 +192,7 @@ def _build_world(*, object_state: dict | None = None):
         random_source=random.Random(17),
     )
     observed: list[tuple[str, dict, tuple[str, str]]] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def observe(event: BaseDomainEvent) -> None:
         interior = interiors.find_by_spot_id(SPOT_ID)
@@ -204,12 +202,8 @@ def _build_world(*, object_state: dict | None = None):
                 type(event).__name__,
                 dict(interior.objects[0].state),
                 (
-                    graph.find_graph()
-                    .get_connection(ConnectionId.create(10))
-                    .passage.state,
-                    graph.find_graph()
-                    .get_connection(ConnectionId.create(11))
-                    .passage.state,
+                    graph.find_graph().get_connection(ConnectionId.create(10)).passage.state,
+                    graph.find_graph().get_connection(ConnectionId.create(11)).passage.state,
                 ),
             )
         )
@@ -230,9 +224,7 @@ def _build_world(*, object_state: dict | None = None):
         ),
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
-        repository_provider_factory=InMemoryReactiveCommandRepositoryProviderFactory(
-            spot_graph=graph
-        ),
+        repository_provider_factory=InMemoryReactiveCommandRepositoryProviderFactory(spot_graph=graph),
     )
     return store, interiors, graph, evaluator, observed, factory
 

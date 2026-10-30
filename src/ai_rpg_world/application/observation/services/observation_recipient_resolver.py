@@ -9,7 +9,9 @@ if TYPE_CHECKING:
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationRecipientResolver,
     IRecipientResolutionStrategy,
-    IWorldObjectToPlayerResolver,
+)
+from ai_rpg_world.application.observation.services.null_world_object_to_player_resolver import (
+    NullWorldObjectToPlayerResolver,
 )
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
@@ -18,18 +20,13 @@ from ai_rpg_world.application.observation.services.player_audience_query_service
     PlayerAudienceQueryService,
 )
 from ai_rpg_world.application.observation.services.recipient_strategies import (
-    CombatRecipientStrategy,
-    ConversationRecipientStrategy,
     DefaultRecipientStrategy,
     GuildRecipientStrategy,
-    HarvestRecipientStrategy,
     MonsterRecipientStrategy,
-    PursuitRecipientStrategy,
     QuestRecipientStrategy,
     ShopRecipientStrategy,
     SkillRecipientStrategy,
     SnsRecipientStrategy,
-    SpeechRecipientStrategy,
     TradeRecipientStrategy,
 )
 from ai_rpg_world.application.observation.services.recipient_strategies.item_use_recipient_strategy import (
@@ -41,9 +38,6 @@ from ai_rpg_world.application.observation.services.recipient_strategies.spot_gra
 from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_speech_recipient_strategy import (
     SpotGraphSpeechRecipientStrategy,
 )
-from ai_rpg_world.application.observation.services.world_object_to_player_resolver import (
-    WorldObjectToPlayerResolver,
-)
 from ai_rpg_world.application.player.services.departed_position_store import (
     DepartedPositionStore,
 )
@@ -51,7 +45,6 @@ from ai_rpg_world.application.player.services.player_life_query import PlayerLif
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
-from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.player.repository.player_status_repository import (
@@ -65,9 +58,6 @@ from ai_rpg_world.domain.skill.repository.skill_repository import (
     SkillLoadoutRepository,
 )
 from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
-from ai_rpg_world.domain.world.repository.physical_map_repository import (
-    PhysicalMapRepository,
-)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
@@ -189,13 +179,11 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
 def create_observation_recipient_resolver(
     player_status_repository: PlayerStatusRepository,
     player_life_query: PlayerLifeQuery | None = None,
-    physical_map_repository: PhysicalMapRepository | None = None,
     quest_repository: QuestRepository | None = None,
     guild_repository: GuildRepository | None = None,
     shop_repository: ShopRepository | None = None,  # 後方互換のみ（未使用）
     trade_repository: TradeRepository | None = None,
     monster_repository: MonsterRepository | None = None,
-    hit_box_repository: HitBoxRepository | None = None,
     skill_loadout_repository: SkillLoadoutRepository | None = None,
     skill_deck_progress_repository: SkillDeckProgressRepository | None = None,
     sns_user_repository: Optional["UserRepository"] = None,
@@ -204,32 +192,18 @@ def create_observation_recipient_resolver(
     departed_position_store: DepartedPositionStore | None = None,
 ) -> IObservationRecipientResolver:
     """
-    既存と同様の振る舞いになる Resolver を組み立てる。
-    デフォルト戦略と WorldObjectToPlayerResolver を用いる。
+    スポットの配信規則と、物体からプレイヤーを解決しない契約で組み立てる。
+    グラフを渡さない構築も許すが、その場合は発言を配信しない。
     """
     _ = shop_repository
     _ = sns_user_repository
     observed_event_registry = ObservedEventRegistry()
-    # tile-map なし (spot_graph 専用) ランタイムでは physical_map_repository=None
-    # で呼ばれる。その場合は NullWorldObjectToPlayerResolver を使い、
-    # WorldObjectId→PlayerId の解決は常に None (= 該当なし) として処理する。
-    if physical_map_repository is not None:
-        world_object_resolver: IWorldObjectToPlayerResolver = (
-            WorldObjectToPlayerResolver(physical_map_repository)
-        )
-    else:
-        from ai_rpg_world.application.observation.services.null_world_object_to_player_resolver import (
-            NullWorldObjectToPlayerResolver,
-        )
-        world_object_resolver = NullWorldObjectToPlayerResolver()
+    world_object_resolver = NullWorldObjectToPlayerResolver()
     player_audience_query = PlayerAudienceQueryService(
         player_status_repository=player_status_repository,
         spot_graph_repository=spot_graph_repository,
     )
     strategies: list[IRecipientResolutionStrategy] = [
-        ConversationRecipientStrategy(
-            observed_event_registry=observed_event_registry,
-        ),
         QuestRecipientStrategy(
             observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
@@ -252,25 +226,11 @@ def create_observation_recipient_resolver(
             player_audience_query=player_audience_query,
             guild_repository=guild_repository,
         ),
-        HarvestRecipientStrategy(
-            observed_event_registry=observed_event_registry,
-            world_object_to_player_resolver=world_object_resolver,
-        ),
-        PursuitRecipientStrategy(
-            observed_event_registry=observed_event_registry,
-            world_object_to_player_resolver=world_object_resolver,
-        ),
         MonsterRecipientStrategy(
             observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
-            physical_map_repository=physical_map_repository,
             world_object_to_player_resolver=world_object_resolver,
             monster_repository=monster_repository,
-        ),
-        CombatRecipientStrategy(
-            observed_event_registry=observed_event_registry,
-            world_object_to_player_resolver=world_object_resolver,
-            hit_box_repository=hit_box_repository,
         ),
         SkillRecipientStrategy(
             observed_event_registry=observed_event_registry,
@@ -301,15 +261,9 @@ def create_observation_recipient_resolver(
             if spot_graph_repository is not None
             else ()
         ),
-        SpeechRecipientStrategy(
-            observed_event_registry=observed_event_registry,
-            player_status_repository=player_status_repository,
-        ),
         DefaultRecipientStrategy(
             observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
-            world_object_to_player_resolver=world_object_resolver,
-            spot_graph_repository=spot_graph_repository,
         ),
     ]
     return ObservationRecipientResolver(

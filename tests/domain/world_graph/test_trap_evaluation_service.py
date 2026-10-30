@@ -67,28 +67,14 @@ class TestEntryTrapEvaluation:
     """進入トラップの発動判定テスト"""
 
     def test_basic_entry_trap_triggers(self) -> None:
-        """基本的な進入トラップが発動し、効果を返すこと"""
+        """一度きりの進入罠は損傷効果と、その罠の発動済み旗を返す。"""
         svc = TrapEvaluationService()
         traps = (_entry_trap(),)
         triggered, effects, new_flags = svc.evaluate_entry_traps(traps, frozenset(), frozenset())
         assert len(triggered) == 1
         assert len(effects) == 1
         assert effects[0].effect_type == InteractionEffectTypeEnum.APPLY_DAMAGE
-
-    def test_one_shot_trap_sets_triggered_flag(self) -> None:
-        """一度きりトラップ発動時に trap_triggered フラグが返されること"""
-        svc = TrapEvaluationService()
-        traps = (_entry_trap(trap_id="spike", is_repeating=False),)
-        triggered, effects, new_flags = svc.evaluate_entry_traps(traps, frozenset(), frozenset())
-        assert len(triggered) == 1
-        assert "trap_triggered:spike" in new_flags
-
-    def test_repeating_trap_does_not_set_triggered_flag(self) -> None:
-        """繰返しトラップ発動時には trap_triggered フラグが返されないこと"""
-        svc = TrapEvaluationService()
-        traps = (_entry_trap(trap_id="fire", is_repeating=True),)
-        _, _, new_flags = svc.evaluate_entry_traps(traps, frozenset(), frozenset())
-        assert "trap_triggered:fire" not in new_flags
+        assert new_flags == frozenset({"trap_triggered:spike_trap"})
 
     def test_one_shot_trap_does_not_retrigger(self) -> None:
         """一度きりのトラップは、発動フラグがあると再発動しないこと"""
@@ -99,16 +85,22 @@ class TestEntryTrapEvaluation:
         assert len(triggered) == 0
         assert len(effects) == 0
 
-    def test_repeating_trap_retriggers(self) -> None:
-        """繰返しトラップは、発動フラグがあっても再発動すること"""
+    @pytest.mark.parametrize(
+        "flags",
+        [frozenset(), frozenset({"trap_triggered:fire"})],
+        ids=["first-trigger", "already-triggered"],
+    )
+    def test_repeating_trap_retriggers(self, flags: frozenset[str]) -> None:
+        """反復罠は初回も発動済みでも効果を返し、一度きり用の旗を追加しない。"""
         svc = TrapEvaluationService()
-        traps = (_entry_trap(trap_id="fire", is_repeating=True),)
-        flags = frozenset({"trap_triggered:fire"})
-        triggered, effects, _ = svc.evaluate_entry_traps(traps, flags, frozenset())
-        assert len(triggered) == 1
+        trap = _entry_trap(trap_id="fire", is_repeating=True)
+        triggered, effects, new_flags = svc.evaluate_entry_traps((trap,), flags, frozenset())
+        assert triggered == (trap,)
+        assert effects == (_damage_effect(),)
+        assert new_flags == frozenset()
 
     def test_disarmed_trap_does_not_trigger(self) -> None:
-        """解除条件（フラグ）を満たしたトラップは発動しないこと"""
+        """別の旗では発動し、指定の解除旗があれば罠・効果・新規旗を返さない。"""
         svc = TrapEvaluationService()
         disarm = (
             InteractionCondition(
@@ -117,9 +109,17 @@ class TestEntryTrapEvaluation:
             ),
         )
         traps = (_entry_trap(disarm_conditions=disarm),)
+        unrelated_flags = frozenset({"another_trap_disarmed"})
+        triggered, effects, new_flags = svc.evaluate_entry_traps(traps, unrelated_flags, frozenset())
+        assert triggered == traps
+        assert effects == (_damage_effect(),)
+        assert new_flags == frozenset({"trap_triggered:spike_trap"})
+
         flags = frozenset({"trap_disarmed"})
-        triggered, effects, _ = svc.evaluate_entry_traps(traps, flags, frozenset())
-        assert len(triggered) == 0
+        triggered, effects, new_flags = svc.evaluate_entry_traps(traps, flags, frozenset())
+        assert triggered == ()
+        assert effects == ()
+        assert new_flags == frozenset()
 
     def test_disarm_by_item(self) -> None:
         """解除条件（アイテム所持）を満たしたトラップは発動しないこと"""
@@ -152,11 +152,13 @@ class TestEntryTrapEvaluation:
         assert triggered[0].trap_id == "b"
 
     def test_multiple_effects_per_trap(self) -> None:
-        """1つのトラップに複数効果がある場合、全て返すこと"""
+        """一つの罠の異なる効果を、指定した値と順序のまま全て返す。"""
         svc = TrapEvaluationService()
-        traps = (_entry_trap(effects=(_damage_effect(), _teleport_effect())),)
+        damage = _damage_effect(damage=13)
+        teleport = _teleport_effect(spot_id=7)
+        traps = (_entry_trap(effects=(damage, teleport)),)
         triggered, effects, _ = svc.evaluate_entry_traps(traps, frozenset(), frozenset())
-        assert len(effects) == 2
+        assert effects == (damage, teleport)
 
     def test_on_interact_trap_ignored_by_entry_evaluation(self) -> None:
         """ON_INTERACTトラップは進入評価では無視されること"""
@@ -170,12 +172,13 @@ class TestInteractTrapEvaluation:
     """操作トラップの発動判定テスト"""
 
     def test_interact_trap_triggers(self) -> None:
-        """操作トラップが発動し、効果を返すこと"""
+        """一度きりの操作罠は状態異常効果と、その罠の発動済み旗を返す。"""
         svc = TrapEvaluationService()
         trap = _interact_trap()
         effects, new_flags = svc.evaluate_interact_trap(trap, frozenset(), frozenset())
         assert len(effects) == 1
         assert effects[0].effect_type == InteractionEffectTypeEnum.APPLY_STATUS_EFFECT
+        assert new_flags == frozenset({"trap_triggered:chest_trap"})
 
     def test_entry_trap_ignored_by_interact_evaluation(self) -> None:
         """ON_ENTRYトラップは操作評価では空を返すこと"""
@@ -191,14 +194,6 @@ class TestInteractTrapEvaluation:
         flags = frozenset({"trap_triggered:poison_chest"})
         effects, _ = svc.evaluate_interact_trap(trap, flags, frozenset())
         assert len(effects) == 0
-
-    def test_one_shot_interact_trap_sets_flag(self) -> None:
-        """一度きり操作トラップ発動時にフラグが返されること"""
-        svc = TrapEvaluationService()
-        trap = _interact_trap(trap_id="poison_chest")
-        effects, new_flags = svc.evaluate_interact_trap(trap, frozenset(), frozenset())
-        assert len(effects) == 1
-        assert "trap_triggered:poison_chest" in new_flags
 
 
 class TestTrapDefValidation:

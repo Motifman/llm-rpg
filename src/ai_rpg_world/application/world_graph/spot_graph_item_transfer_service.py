@@ -1,10 +1,7 @@
 """スポットグラフ世界における drop / pickup の最小サービス。
 
-タイルマップ時代の ItemDroppedFromInventoryDropHandler は ``physical_map``
-依存で world_runtime / spot-graph 世界では発火しない (world_runtime
-で ``physical_map_repository=None`` を渡している)。spot-graph 世界では
 SpotInterior.ground_items にアイテムを置き、SpotInterior 経路で
-プレイヤーが拾い直せる必要がある。
+プレイヤーが拾い直せるようにする。
 
 本サービスはそのための機械的動作 (インベントリ↔地面の状態遷移) と、
 witness 最小版 (drop / pickup の事実を同スポットの他プレイヤーに観測として
@@ -56,6 +53,7 @@ if TYPE_CHECKING:
         ItemTransferCommandRepositoryProviderPort,
         SpotGraphReadRepositoryPort,
     )
+
 
 class ItemTransferException(Exception):
     """drop/pickup/give の境界条件違反 (プレイヤー未配置・地面に存在しない 等)。
@@ -111,7 +109,7 @@ class TargetNotInSameSpotError(ItemTransferException):
     ) -> None:
         msg = (
             f"{target_name} は同じ場所にいません (あなたの現在地: {sender_spot_name})。"
-            f"travel_to で移動してから再度渡してください。"
+            f"相手のいる場所へ移ってから、もう一度渡してください。"
         )
         super().__init__(msg)
         self.target_name = target_name
@@ -123,7 +121,7 @@ class SlotIsEmptyError(ItemTransferException):
 
     agent 向け経路では item_label から実行時に slot を引き直すため、LLM が
     slot 番号を指定することはない。message でも存在しない引数を案内せず、
-    所持品欄の名前を再確認するよう促す。
+    所持アイテムの欄の名前を再確認するよう促す。
 
     ``slot_id`` は内部診断用に保持するが、LLM 向け message には出さない。
     """
@@ -133,8 +131,8 @@ class SlotIsEmptyError(ItemTransferException):
     def __init__(self, *, slot_id: int) -> None:
         msg = (
             "その名前のアイテムをもう持っていません。"
-            "inspect_target で自分の所持品を確認してから、"
-            "所持品欄に表示されているアイテム名を指定してください。"
+            "【現在地と周囲】の「所持アイテム:」に出ている名前を確認して、"
+            "その名前で指定してください。"
         )
         super().__init__(msg)
         self.slot_id = slot_id
@@ -256,7 +254,8 @@ class SpotGraphItemTransferService:
         spot_graph_repository: SpotGraphReadRepositoryPort,
         spot_interior_repository: ISpotInteriorRepository,
         player_outcome_registry: PlayerOutcomeRegistry | None = None,
-        item_transfer_command_scope_factory: CommandScopeFactoryPort[ItemTransferCommandRepositoryProviderPort] | None = None,
+        item_transfer_command_scope_factory: CommandScopeFactoryPort[ItemTransferCommandRepositoryProviderPort]
+        | None = None,
     ) -> None:
         # spot-graph 世界では「プレイヤーがどこに居るか」は
         # PlayerStatusAggregate ではなく SpotGraphAggregate.get_entity_spot で
@@ -267,9 +266,7 @@ class SpotGraphItemTransferService:
         self._player_outcome_registry = player_outcome_registry
         self._item_transfer_command_scope_factory = item_transfer_command_scope_factory
 
-    def set_player_outcome_registry(
-        self, player_outcome_registry: PlayerOutcomeRegistry | None
-    ) -> None:
+    def set_player_outcome_registry(self, player_outcome_registry: PlayerOutcomeRegistry | None) -> None:
         """target の DEAD outcome を確認する registry を後付けで注入する。"""
         self._player_outcome_registry = player_outcome_registry
 
@@ -326,9 +323,7 @@ class SpotGraphItemTransferService:
         """一つのrepository集合だけでdropの状態遷移と観測eventを作る。"""
         inventory = player_inventory_repository.find_by_id(player_id)
         if inventory is None:
-            raise ItemTransferException(
-                f"inventory not found for player {player_id.value}"
-            )
+            raise ItemTransferException(f"inventory not found for player {player_id.value}")
 
         item_instance_id = inventory.get_item_instance_id_by_slot(slot_id)
         if item_instance_id is None:
@@ -338,20 +333,14 @@ class SpotGraphItemTransferService:
             # を持つ SlotIsEmptyError に差し替える。
             raise SlotIsEmptyError(slot_id=slot_id.value)
 
-        spot_id = self._resolve_current_spot(
-            player_id, spot_graph_repository=spot_graph_repository
-        )
+        spot_id = self._resolve_current_spot(player_id, spot_graph_repository=spot_graph_repository)
         interior = spot_interior_repository.find_by_spot_id(spot_id)
         if interior is None:
-            raise ItemTransferException(
-                f"spot interior not found for spot {spot_id.value}"
-            )
+            raise ItemTransferException(f"spot interior not found for spot {spot_id.value}")
 
         item_aggregate = item_repository.find_by_id(item_instance_id)
         if item_aggregate is None:
-            raise ItemTransferException(
-                f"item aggregate not found for instance {item_instance_id.value}"
-            )
+            raise ItemTransferException(f"item aggregate not found for instance {item_instance_id.value}")
         item_spec_id = item_aggregate.item_spec.item_spec_id
 
         # event を発火させない remove_item_for_storage を使う。
@@ -369,9 +358,7 @@ class SpotGraphItemTransferService:
 
         # 表示名は inventory remove 前に確定させる必要があるが、ItemAggregate は
         # まだ item_repository に残っているのでここで OK。
-        item_name = self._item_name_or_id(
-            item_instance_id, item_repository=item_repository
-        )
+        item_name = self._item_name_or_id(item_instance_id, item_repository=item_repository)
 
         # witness 最小版: 同室の他プレイヤーに観測として届ける。
         # 行為者本人には messages を ItemTransferResult で返し、観測ストリームには
@@ -436,20 +423,14 @@ class SpotGraphItemTransferService:
         spot_graph_repository: SpotGraphReadRepositoryPort,
     ) -> tuple[ItemTransferResult, PlayerPickedUpItemEvent]:
         """一つのrepository集合だけでpickupの状態遷移と観測eventを作る。"""
-        spot_id = self._resolve_current_spot(
-            player_id, spot_graph_repository=spot_graph_repository
-        )
+        spot_id = self._resolve_current_spot(player_id, spot_graph_repository=spot_graph_repository)
         interior = spot_interior_repository.find_by_spot_id(spot_id)
         if interior is None:
-            raise ItemTransferException(
-                f"spot interior not found for spot {spot_id.value}"
-            )
+            raise ItemTransferException(f"spot interior not found for spot {spot_id.value}")
 
         ground_item = interior.find_ground_item(item_instance_id)
         # 満杯チェック / 失敗 message で使うため、item_name を 1 度だけ引く。
-        item_name = self._item_name_or_id(
-            item_instance_id, item_repository=item_repository
-        )
+        item_name = self._item_name_or_id(item_instance_id, item_repository=item_repository)
         if ground_item is None:
             # PR-ε: 「他プレイヤーが同 tick で先に拾った」「observation が
             # 古くて既に消えている」の典型ケース。LLM 向けに「先取り可能性」
@@ -458,9 +439,7 @@ class SpotGraphItemTransferService:
 
         inventory = player_inventory_repository.find_by_id(player_id)
         if inventory is None:
-            raise ItemTransferException(
-                f"inventory not found for player {player_id.value}"
-            )
+            raise ItemTransferException(f"inventory not found for player {player_id.value}")
 
         # PR-ε: 事前ガードで pickup 時のインベントリ満杯を surface する。
         # ``acquire_item`` は満杯だと overflow event を出すだけで silent に
@@ -573,14 +552,10 @@ class SpotGraphItemTransferService:
 
         from_inv = player_inventory_repository.find_by_id(from_player_id)
         if from_inv is None:
-            raise ItemTransferException(
-                f"inventory not found for sender {from_player_id.value}"
-            )
+            raise ItemTransferException(f"inventory not found for sender {from_player_id.value}")
         to_inv = player_inventory_repository.find_by_id(to_player_id)
         if to_inv is None:
-            raise ItemTransferException(
-                f"inventory not found for recipient {to_player_id.value}"
-            )
+            raise ItemTransferException(f"inventory not found for recipient {to_player_id.value}")
         if self._is_target_dead(to_player_id):
             raise TargetIsDeadError()
         if self._is_target_down(to_player_id, player_status_repository):
@@ -595,12 +570,8 @@ class SpotGraphItemTransferService:
         # 両者が同スポットに居ることを確認する。spot_graph_repository は spot
         # の本人位置を解決する単一の真実源 (status.current_spot_id は tile-map
         # 由来で更新されない)。
-        from_spot = self._resolve_current_spot(
-            from_player_id, spot_graph_repository=spot_graph_repository
-        )
-        to_spot = self._resolve_current_spot(
-            to_player_id, spot_graph_repository=spot_graph_repository
-        )
+        from_spot = self._resolve_current_spot(from_player_id, spot_graph_repository=spot_graph_repository)
+        to_spot = self._resolve_current_spot(to_player_id, spot_graph_repository=spot_graph_repository)
         if from_spot != to_spot:
             # PR-α: 相手が別 spot にいる → LLM 向けに travel_to を示唆する
             # message を持つ domain exception。target_name / sender_spot_name
@@ -612,13 +583,9 @@ class SpotGraphItemTransferService:
 
         item_aggregate = item_repository.find_by_id(item_instance_id)
         if item_aggregate is None:
-            raise ItemTransferException(
-                f"item aggregate not found for instance {item_instance_id.value}"
-            )
+            raise ItemTransferException(f"item aggregate not found for instance {item_instance_id.value}")
         item_spec_id = item_aggregate.item_spec.item_spec_id
-        item_name = self._item_name_or_id(
-            item_instance_id, item_repository=item_repository
-        )
+        item_name = self._item_name_or_id(item_instance_id, item_repository=item_repository)
 
         # 事前に受け手の空きを確認する。受け手が満杯の状態で送り手から先に
         # 抜くと、acquire_item は overflow event を発行するだけで instance を
@@ -663,9 +630,7 @@ class SpotGraphItemTransferService:
             event,
         )
 
-    def list_ground_items_at_player_spot(
-        self, player_id: PlayerId
-    ) -> tuple[GroundItem, ...]:
+    def list_ground_items_at_player_spot(self, player_id: PlayerId) -> tuple[GroundItem, ...]:
         """プレイヤーが今いるスポットの地面アイテム一覧。
 
         UI / ランナー / 将来の LLM tool が「拾える物」を列挙するために使う。
@@ -689,9 +654,7 @@ class SpotGraphItemTransferService:
         try:
             return graph.get_entity_spot(EntityId.create(int(player_id)))
         except Exception as e:
-            raise ItemTransferException(
-                f"player {player_id.value} is not placed at any spot: {e}"
-            ) from e
+            raise ItemTransferException(f"player {player_id.value} is not placed at any spot: {e}") from e
 
     def _item_name_or_id(
         self,

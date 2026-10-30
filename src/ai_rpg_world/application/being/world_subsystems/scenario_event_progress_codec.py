@@ -32,14 +32,12 @@ class ScenarioEventProgressSubsystemCodec(WorldSubsystemCodec):
         store = getattr(runtime, "_scenario_event_progress", None)
         if store is None:
             raise RuntimeError(
-                "runtime._scenario_event_progress not found; "
-                "ScenarioEventProgressSubsystemCodec requires it"
+                "runtime._scenario_event_progress not found; ScenarioEventProgressSubsystemCodec requires it"
             )
         # fired は set, scheduled は dict。ソートで決定的に。
         fired = sorted(str(eid) for eid in store._fired_event_ids)
         scheduled_entries: list[dict[str, Any]] = list(
-            {"event_id": str(eid), "fire_at_tick": int(tick)}
-            for eid, tick in store._scheduled.items()
+            {"event_id": str(eid), "fire_at_tick": int(tick)} for eid, tick in store._scheduled.items()
         )
         scheduled = sorted(scheduled_entries, key=lambda d: d["event_id"])
         return {
@@ -51,15 +49,11 @@ class ScenarioEventProgressSubsystemCodec(WorldSubsystemCodec):
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
         store = getattr(runtime, "_scenario_event_progress", None)
         if store is None:
             raise RuntimeError(
-                "runtime._scenario_event_progress not found; "
-                "ScenarioEventProgressSubsystemCodec requires it"
+                "runtime._scenario_event_progress not found; ScenarioEventProgressSubsystemCodec requires it"
             )
         # 内部 dict / set を直接書き換え (= clear + repopulate)。
         # public 経路 ``mark_fired`` / ``schedule`` でも復元可能だが、

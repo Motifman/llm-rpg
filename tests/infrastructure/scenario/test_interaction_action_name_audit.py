@@ -66,10 +66,7 @@ def _iter_interactions(raw: Mapping[str, Any], *, scenario: str) -> Iterable[Int
                     continue
                 yield InteractionAuditEntry(
                     scenario=scenario,
-                    location=(
-                        f"spots[{spot_id!r}].objects[{object_id!r}]"
-                        f".interactions[{interaction_index}]"
-                    ),
+                    location=(f"spots[{spot_id!r}].objects[{object_id!r}].interactions[{interaction_index}]"),
                     action_name=interaction.get("action_name"),
                     display_label=interaction.get("display_label"),
                 )
@@ -78,17 +75,12 @@ def _iter_interactions(raw: Mapping[str, Any], *, scenario: str) -> Iterable[Int
         if not isinstance(item, Mapping):
             continue
         item_id = item.get("id", f"#{item_index}")
-        for interaction_index, interaction in enumerate(
-            item.get("interactions", []) or []
-        ):
+        for interaction_index, interaction in enumerate(item.get("interactions", []) or []):
             if not isinstance(interaction, Mapping):
                 continue
             yield InteractionAuditEntry(
                 scenario=scenario,
-                location=(
-                    f"item_specs[{item_id!r}]"
-                    f".interactions[{interaction_index}]"
-                ),
+                location=(f"item_specs[{item_id!r}].interactions[{interaction_index}]"),
                 action_name=interaction.get("action_name"),
                 display_label=interaction.get("display_label"),
             )
@@ -128,11 +120,7 @@ def find_missing_or_empty_display_labels(
     entries: Iterable[InteractionAuditEntry],
 ) -> list[InteractionAuditEntry]:
     """display_label が欠落・空白・文字列以外の interaction を返す。"""
-    return [
-        entry
-        for entry in entries
-        if not isinstance(entry.display_label, str) or not entry.display_label.strip()
-    ]
+    return [entry for entry in entries if not isinstance(entry.display_label, str) or not entry.display_label.strip()]
 
 
 def find_untranslated_display_labels(
@@ -155,8 +143,7 @@ def find_ambiguous_bare_action_names(
     return [
         entry
         for entry in entries
-        if isinstance(entry.action_name, str)
-        and entry.action_name.strip() in AMBIGUOUS_BARE_ACTION_NAMES
+        if isinstance(entry.action_name, str) and entry.action_name.strip() in AMBIGUOUS_BARE_ACTION_NAMES
     ]
 
 
@@ -258,8 +245,20 @@ class TestInteractionDisplayLabelAuditMutationFixtures:
     def test_ambiguous_denylist_keeps_seed_words_with_reasons(self) -> None:
         """denylist を空にする退行を、理由つき語彙の存在で検出する。"""
         expected = {
-            "take", "light", "search", "claim", "clean", "record", "collect",
-            "use", "set", "run", "check", "get", "make", "hold",
+            "take",
+            "light",
+            "search",
+            "claim",
+            "clean",
+            "record",
+            "collect",
+            "use",
+            "set",
+            "run",
+            "check",
+            "get",
+            "make",
+            "hold",
         }
         assert set(AMBIGUOUS_BARE_ACTION_NAME_REASONS) == expected
         assert all(reason.strip() for reason in AMBIGUOUS_BARE_ACTION_NAME_REASONS.values())

@@ -55,9 +55,7 @@ def _graph() -> SpotGraphAggregate:
 
 def _condition() -> GameEndCondition:
     return GameEndCondition(
-        condition_type=(
-            GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
-        ),
+        condition_type=(GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE),
         required_state={"role": "crew"},
         comparison_state={"role": "keeper"},
     )
@@ -96,7 +94,7 @@ class TestSurvivingPlayerGroupComparison:
         assert _evaluate(_outcomes()).is_ended is False
 
     def test_two_crew_against_two_keepers_ends(self) -> None:
-        """crew 2 人、keeper 2 人なら同数になったため成立する。"""
+        """crew 1 人が DEAD になれば残り 2 対 2 で成立する。幽霊として活動しても DEAD を生存人数へ戻さない。"""
         result = _evaluate(_outcomes(dead=(_CREW[0],)))
 
         assert result.is_ended is True
@@ -105,25 +103,9 @@ class TestSurvivingPlayerGroupComparison:
     def test_two_crew_against_one_keeper_does_not_end(self) -> None:
         """keeper が 1 人退場済みなら crew 2 人で敗北にはならない。
 
-        固定閾値を 2 にする方式との違いが現れる境界である。
+        EJECTED は比較母数から除く。固定閾値を 2 にする方式との違いが現れる境界である。
         """
-        result = _evaluate(
-            _outcomes(dead=(_CREW[0],), ejected=(_KEEPERS[0],))
-        )
-
-        assert result.is_ended is False
-
-    def test_dead_players_who_continue_as_ghosts_are_not_survivors(self) -> None:
-        """DEAD の幽霊は作業を続けられても生存人数には含めない。"""
-        result = _evaluate(_outcomes(dead=(_CREW[0],)))
-
-        assert result.is_ended is True
-
-    def test_ejected_players_are_not_survivors(self) -> None:
-        """追放された keeper は比較する生存人数に含めない。"""
-        result = _evaluate(
-            _outcomes(dead=(_CREW[0],), ejected=(_KEEPERS[0],))
-        )
+        result = _evaluate(_outcomes(dead=(_CREW[0],), ejected=(_KEEPERS[0],)))
 
         assert result.is_ended is False
 
@@ -135,9 +117,7 @@ class TestSurvivingPlayerGroupComparisonValidation:
         """比較先が無い宣言は、右辺の人数が決まらないため拒否する。"""
         with pytest.raises(GameEndConditionValidationException):
             GameEndCondition(
-                condition_type=(
-                    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
-                ),
+                condition_type=(GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE),
                 required_state={"role": "crew"},
             )
 
@@ -145,9 +125,7 @@ class TestSurvivingPlayerGroupComparisonValidation:
         """同じ集合との比較は常に成立するため、開始即終了を構築時に拒否する。"""
         with pytest.raises(GameEndConditionValidationException, match="同じ"):
             GameEndCondition(
-                condition_type=(
-                    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
-                ),
+                condition_type=(GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE),
                 required_state={"role": "crew"},
                 comparison_state={"role": "crew"},
             )

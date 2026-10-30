@@ -11,7 +11,6 @@ PR α (#214) で trace に ``position_change`` event が乗るようになった
     - tick scrub bar
     - tick 別 event log
     - category filter 付き Event timeline
-    - 折りたたみ式 memo state パネル
 
 使い方::
 
@@ -161,10 +160,13 @@ def collect_players(
 # Event timeline で表示しないノイズ系 kind (実験 #26 user フィードバック)。
 # prompt_section_breakdown と llm_call は性能計測用で人間視点では本筋を埋もれ
 # させるため、UI のイベントログからは除外する (trace.jsonl 自体には残る)。
-_EVENT_TIMELINE_HIDDEN_KINDS = frozenset({
-    "prompt_section_breakdown",
-    "llm_call",
-})
+_EVENT_TIMELINE_HIDDEN_KINDS = frozenset(
+    {
+        "prompt_section_breakdown",
+        "llm_call",
+        "aux_llm_call",
+    }
+)
 
 _EVENT_FILTER_CATEGORIES: tuple[tuple[str, str, bool], ...] = (
     ("speech", "発言", True),
@@ -246,10 +248,7 @@ def group_events_by_tick(
             continue
         obs_key = _player_spoke_observation_key(e)
         inline_observation_key = _player_spoke_speaker_content_key(e)
-        if (
-            inline_observation_key is not None
-            and inline_observation_key in inline_speech_keys
-        ):
+        if inline_observation_key is not None and inline_observation_key in inline_speech_keys:
             e = replace(
                 e,
                 payload={
@@ -284,20 +283,14 @@ def group_events_by_tick(
                     existing = by_tick[tick_key][row_idx]
                     existing_payload = dict(existing.payload)
                     recipients = list(existing_payload.get("_viewer_recipients") or [])
-                    if recipient_info is not None and not _speech_recipient_info_exists(
-                        recipients, recipient_info
-                    ):
+                    if recipient_info is not None and not _speech_recipient_info_exists(recipients, recipient_info):
                         recipients.append(recipient_info)
                     existing_payload["_viewer_recipients"] = recipients
-                    by_tick[tick_key][row_idx] = replace(
-                        existing, payload=existing_payload
-                    )
+                    by_tick[tick_key][row_idx] = replace(existing, payload=existing_payload)
                     continue
                 if speech_key is not None:
                     new_payload = dict(payload)
-                    new_payload["_viewer_recipients"] = (
-                        [recipient_info] if recipient_info is not None else []
-                    )
+                    new_payload["_viewer_recipients"] = [recipient_info] if recipient_info is not None else []
                     e = replace(e, payload=new_payload)
                     by_tick.setdefault(e.tick, []).append(e)
                     speech_obs_index[speech_key] = (e.tick, len(by_tick[e.tick]) - 1)
@@ -346,43 +339,6 @@ def build_position_timeline(
     return timeline
 
 
-def build_memo_state_timeline(
-    events: list[TraceEvent],
-) -> dict[int, list[dict[str, Any]]]:
-    """tick → 各 memo の状態 list (PR γ memo panel 用)。
-
-    Returns:
-        ``{tick: [{memo_id, content, player_id, added_tick, status, done_tick?}]}``
-        status は ``"active"`` / ``"done"``。
-    """
-    timeline: dict[int, list[dict[str, Any]]] = {}
-    memos: dict[str, dict[str, Any]] = {}
-    sorted_events = sorted(events, key=lambda e: e.seq)
-    for e in sorted_events:
-        if not isinstance(e.payload, dict):
-            continue
-        tick = e.tick if e.tick is not None else 0
-        if e.kind == TraceEventKind.MEMO_ADD:
-            memo_id = str(e.payload.get("memo_id") or "")
-            if memo_id:
-                memos[memo_id] = {
-                    "memo_id": memo_id,
-                    "content": str(e.payload.get("content") or ""),
-                    "player_id": e.player_id,
-                    "added_tick": tick,
-                    "status": "active",
-                }
-        elif e.kind == TraceEventKind.MEMO_DONE:
-            memo_id = str(e.payload.get("memo_id") or "")
-            if memo_id in memos:
-                memos[memo_id] = dict(memos[memo_id])
-                memos[memo_id]["status"] = "done"
-                memos[memo_id]["done_tick"] = tick
-        # snapshot at this tick
-        timeline[tick] = [dict(m) for m in memos.values()]
-    return timeline
-
-
 def compute_event_heatmap(
     events: list[TraceEvent],
 ) -> dict[str, list[int]]:
@@ -390,7 +346,7 @@ def compute_event_heatmap(
 
     Returns:
         ``{"ticks": [0, 1, ...], "action": [n0, n1, ...], "observation": [...], "memo": [...]}``
-        memo は memo_add/done/hint をまとめてカウント。
+        memo は memo_hint を数える。
     """
     max_tick = max((e.tick for e in events if e.tick is not None), default=0)
     ticks = list(range(0, max_tick + 1))
@@ -408,11 +364,7 @@ def compute_event_heatmap(
             series["action"][e.tick] += 1
         elif e.kind == TraceEventKind.OBSERVATION:
             series["observation"][e.tick] += 1
-        elif e.kind in (
-            TraceEventKind.MEMO_ADD,
-            TraceEventKind.MEMO_DONE,
-            TraceEventKind.MEMO_HINT,
-        ):
+        elif e.kind == TraceEventKind.MEMO_HINT:
             series["memo"][e.tick] += 1
         elif e.kind == TraceEventKind.POSITION_CHANGE:
             series["position_change"][e.tick] += 1
@@ -466,17 +418,9 @@ def build_speech_timeline(
             arguments = {}
 
         # speech 系ツール (公開発言)
-        is_speech = (
-            tool in ("say", "whisper")
-            or tool.startswith("speech_")
-        )
+        is_speech = tool in ("say", "whisper") or tool.startswith("speech_")
         if is_speech:
-            message = (
-                arguments.get("message")
-                or arguments.get("content")
-                or arguments.get("text")
-                or ""
-            )
+            message = arguments.get("message") or arguments.get("content") or arguments.get("text") or ""
             if message:
                 raw_bubbles.append(
                     {
@@ -513,9 +457,7 @@ def build_speech_timeline(
         for i, b in enumerate(bubbles):
             start = b["source_tick"]
             natural_end = start + bubble_persistence - 1
-            next_start = (
-                bubbles[i + 1]["source_tick"] - 1 if i + 1 < len(bubbles) else natural_end
-            )
+            next_start = bubbles[i + 1]["source_tick"] - 1 if i + 1 < len(bubbles) else natural_end
             end_tick = min(natural_end, next_start)
             for t in range(start, end_tick + 1):
                 timeline.setdefault(t, []).append(b)
@@ -535,8 +477,6 @@ def compute_trace_moments(
     kind 区分 (CSS で枠色が異なる):
         - ``start``: trace 開始 (常に t=0 で 1 件)
         - ``end``: WIN/LOSE 確定 (RUN_END で 1 件)
-        - ``memo``: memo_add (戦略の決定)
-        - ``memo_done``: memo_done (達成 / 撤回)
         - ``hint``: memo_hint (fuzzy match 発火)
         - ``failed``: action_result.success=false (失敗、要分析)
         - ``move``: position_change (spot 跨ぎ。初期配置は除外)
@@ -572,28 +512,6 @@ def compute_trace_moments(
                     "detail": "trace finished",
                     "score": 100,
                     "player_id": None,
-                }
-            )
-        elif e.kind == TraceEventKind.MEMO_ADD:
-            moments.append(
-                {
-                    "tick": int(e.tick or 0),
-                    "kind": "memo",
-                    "label": "memo added",
-                    "detail": str(payload.get("content") or ""),
-                    "score": 65,
-                    "player_id": e.player_id,
-                }
-            )
-        elif e.kind == TraceEventKind.MEMO_DONE:
-            moments.append(
-                {
-                    "tick": int(e.tick or 0),
-                    "kind": "memo_done",
-                    "label": "memo done",
-                    "detail": str(payload.get("memo_id") or ""),
-                    "score": 78,
-                    "player_id": e.player_id,
                 }
             )
         elif e.kind == TraceEventKind.MEMO_HINT:
@@ -674,7 +592,6 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     <span>events <strong>{total_events}</strong></span>
     <span>players <strong>{player_summary}</strong></span>
     <span class="viewer-links">
-      <a href="episodic.html" data-sibling="episodic.html" title="episodic memory viewer" class="vlink">📖 episodic</a>
       <a href="timeline.html" data-sibling="timeline.html" title="player × tick timeline" class="vlink">📊 timeline</a>
     </span>
   </div>
@@ -707,16 +624,6 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       <h2>Event timeline</h2>
       {event_filter_html}
       <div id="event-log">{event_log_html}</div>
-    </div>
-    <div id="memo-panel-section">
-      <h2>Objectives / Active memo
-        <label class="toggle-label" title="memo パネルの表示・非表示を切り替え"
-               style="font-size: 0.65rem; font-weight: normal; margin-left: 0.5rem;">
-          <input type="checkbox" id="toggle-memo-panel">
-          show
-        </label>
-      </h2>
-      <div id="memo-panel" style="display:none"><div class="placeholder">(no memo)</div></div>
     </div>
   </section>
 
@@ -966,7 +873,7 @@ section h2, #timeline-section > div > h2 {
   border: 0;
   box-shadow: none;
   display: grid;
-  grid-template-rows: minmax(180px, 1fr) auto;
+  grid-template-rows: minmax(180px, 1fr);
   gap: 0.85rem;
   overflow: visible;
 }
@@ -982,35 +889,6 @@ section h2, #timeline-section > div > h2 {
     #071318;
   background-size: auto, 34px 34px, 34px 34px, auto;
 }
-#memo-panel-section { min-height: 0; }
-#memo-panel { padding: 0.55rem 0.75rem; overflow-y: auto; line-height: 1.5; }
-#memo-panel .memo-item {
-  font-size: 0.82rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--line-soft);
-  border-left: 4px solid var(--blue);
-  border-radius: 5px;
-  background: rgba(11, 25, 32, 0.85);
-  display: grid;
-  grid-template-columns: minmax(56px, auto) 1fr auto;
-  gap: 0.65rem;
-  align-items: center;
-  line-height: 1.45;
-  margin-bottom: 0.45rem;
-}
-#memo-panel .memo-item:last-child { margin-bottom: 0; }
-#memo-panel .memo-owner {
-  font-size: 0.8rem;
-  color: var(--cyan);
-  min-width: 0;
-  font-weight: 600;
-}
-#memo-panel .memo-content { flex: 1; word-break: break-word; line-height: 1.45; }
-#memo-panel .memo-content.done { color: #80908e; text-decoration: line-through; }
-#memo-panel .memo-meta { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
-#memo-panel .memo-meta.stale { color: #ffba67; font-weight: bold; }
-#memo-panel .placeholder { color: var(--muted); font-size: 0.85rem; padding: 0.5rem 0; }
-
 #event-filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1085,8 +963,6 @@ section h2, #timeline-section > div > h2 {
   padding: 0 0.24rem;
 }
 .event-row.kind-action_result.failed .event-body { color: #ff8f7b; }
-.event-row.kind-memo_add .event-body { color: #9bea91; }
-.event-row.kind-memo_done .event-body { color: #9bea91; }
 .event-row.kind-memo_hint .event-body { color: #ffd07a; }
 .event-row.kind-position_change .event-body { color: #65dce8; }
 /* Issue #276: 観測 prose は LLM が読んでいる「世界からの情報」なので、
@@ -1120,7 +996,7 @@ body.show-inner-thoughts .event-inner-thought { display: inline; }
 
 _VIEWER_JS_TEMPLATE = """
 (function() {{
-  // 兄弟ファイル (episodic.html / timeline.html) への遷移リンク補正。
+  // 兄弟ファイル (timeline.html) への遷移リンク補正。
   // 相対 href のままだと htmlpreview.github.io 経由で開いたとき raw gist URL
   // (text/plain) に解決され、HTML がソースコードとして表示されてしまう。
   // viewer 自身が htmlpreview 経由で配信されている場合は、兄弟リンクも
@@ -1141,10 +1017,8 @@ _VIEWER_JS_TEMPLATE = """
   const scenarioData = {scenario_data_json};
   const players = {players_json};
   const positionTimeline = {position_timeline_json};  // {{tick: {{player_id: spot_id}}}}
-  const memoTimeline = {memo_timeline_json};          // {{tick: [memo records]}}
   const speechTimeline = {speech_timeline_json};      // {{tick: [{{player_id, kind, text, source_tick}}]}}
   const maxTick = {max_tick};
-  const STALE_AGE = 20;
 
   const playerColors = ['#2e7dd7', '#e07a26', '#5fa14a', '#a155bf'];
   const playerNameById = {{}};
@@ -1402,48 +1276,6 @@ _VIEWER_JS_TEMPLATE = """
     }});
   }}
 
-  // ---------- memo panel toggle (実験 #26 user feedback) ----------
-  const memoPanelSection = document.getElementById('memo-panel-section');
-  const memoToggle = document.getElementById('toggle-memo-panel');
-  if (memoToggle && memoPanelSection) {{
-    memoToggle.addEventListener('change', () => {{
-      const panel = document.getElementById('memo-panel');
-      if (panel) {{
-        panel.style.display = memoToggle.checked ? '' : 'none';
-      }}
-    }});
-  }}
-
-  // ---------- memo panel ----------
-  const memoPanel = document.getElementById('memo-panel');
-  function renderMemoPanel(tick) {{
-    // 最も近い t <= tick のスナップショット
-    let snap = null;
-    for (let t = tick; t >= 0; t--) {{
-      if (memoTimeline[t]) {{ snap = memoTimeline[t]; break; }}
-    }}
-    if (!snap || snap.length === 0) {{
-      memoPanel.innerHTML = '<div class="placeholder">(no memo at tick ' + tick + ')</div>';
-      return;
-    }}
-    const parts = [];
-    for (const m of snap) {{
-      const owner = playerNameById[m.player_id] || ('#' + m.player_id);
-      const age = tick - m.added_tick;
-      const isStale = m.status === 'active' && age >= STALE_AGE;
-      const ageLabel = m.status === 'done'
-        ? ('completed t=' + m.done_tick)
-        : (age + ' tick' + (isStale ? ' [STALE]' : ''));
-      parts.push(
-        '<div class="memo-item">' +
-          '<span class="memo-owner">' + escapeHtml(owner) + '</span>' +
-          '<span class="memo-content ' + (m.status === 'done' ? 'done' : '') + '">' + escapeHtml(m.content) + '</span>' +
-          '<span class="memo-meta ' + (isStale ? 'stale' : '') + '">' + ageLabel + '</span>' +
-        '</div>'
-      );
-    }}
-    memoPanel.innerHTML = parts.join('');
-  }}
   function escapeHtml(s) {{
     return String(s).replace(/[&<>"']/g, ch => ({{
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -1491,7 +1323,6 @@ _VIEWER_JS_TEMPLATE = """
     document.getElementById('scrubber').value = String(tick);
     document.getElementById('tick-display').textContent = 'tick ' + tick + ' / ' + maxTick;
     animatePlayersToTick(tick, animate !== false);
-    renderMemoPanel(tick);
     updateEventLogHighlight(tick);
     // bubble は player marker のアニメーション後に位置を取りたいので
     // 短い delay で配置 (animate duration ~ 240ms に追従)
@@ -1594,7 +1425,6 @@ def render_viewer_html(
     player_summary = ", ".join(f"{p['name']} (#{p['id']})" for p in players) or "(none)"
 
     position_timeline = build_position_timeline(events, spot_name_to_id=spot_name_to_id)
-    memo_timeline = build_memo_state_timeline(events)
     speech_timeline = build_speech_timeline(events)
 
     return _HTML_TEMPLATE.format(
@@ -1611,7 +1441,6 @@ def render_viewer_html(
             scenario_data_json=json.dumps(scenario_topology, ensure_ascii=False),
             players_json=json.dumps(players, ensure_ascii=False),
             position_timeline_json=json.dumps(position_timeline, ensure_ascii=False),
-            memo_timeline_json=json.dumps(memo_timeline, ensure_ascii=False),
             speech_timeline_json=json.dumps(speech_timeline, ensure_ascii=False),
             max_tick=max_tick,
         ),
@@ -1638,10 +1467,7 @@ def _build_event_log_html(
                 visible_row_count += 1
             pname = _event_player_label(e, name_by_pid)
             body = _format_event_body(e)
-            classes = (
-                f"event-row kind-{html.escape(kind)} "
-                f"category-{html.escape(category)}"
-            )
+            classes = f"event-row kind-{html.escape(kind)} category-{html.escape(category)}"
             if not default_visible:
                 classes += " filtered-hidden"
             if (
@@ -1658,9 +1484,7 @@ def _build_event_log_html(
                 f"</div>"
             )
         tick_attr = "" if tick is None else f' data-tick="{int(tick)}"'
-        tick_classes = "tick-block" + (
-            " all-filtered" if rows and visible_row_count == 0 else ""
-        )
+        tick_classes = "tick-block" + (" all-filtered" if rows and visible_row_count == 0 else "")
         parts.append(
             f'<div class="{tick_classes}"{tick_attr}>'
             f'<div class="tick-header">{html.escape(tick_label)}</div>'
@@ -1708,12 +1532,16 @@ def _event_timeline_category(e: TraceEvent) -> str:
         return "action_result"
     if kind == TraceEventKind.OBSERVATION:
         return "observation"
-    if kind in {TraceEventKind.MEMO_ADD, TraceEventKind.MEMO_DONE, TraceEventKind.MEMO_HINT}:
+    if kind == TraceEventKind.MEMO_HINT:
         return "memo"
     if kind in {
-        TraceEventKind.EPISODIC_CHUNK_WRITTEN,
-        TraceEventKind.EPISODIC_RECALL,
+        # 古いエピソードの区切りの書き込みと、受動想起【関連する記憶】【関連する学び】は
+        # #1631 で消した。過去の run の trace を読むために残す。
+        "episodic_chunk_written",
+        "episodic_recall",
         "semantic_passive_recall",
+        # 状況の項目から引く想起 (#1414) は #1631 で消した。過去の run の trace を読むために残す。
+        "situation_belief_recall",
     }:
         return "recall"
     if kind.startswith("belief_"):
@@ -1725,6 +1553,10 @@ def _event_timeline_category(e: TraceEvent) -> str:
         "side_handler_failed",
         "SIDE_HANDLER_FAILED",
         "llm_call",
+        TraceEventKind.AUX_LLM_CALL,
+        TraceEventKind.AUX_LLM_CALL_RECORD_FAILED,
+        TraceEventKind.LLM_FAILURE_RETRY,
+        TraceEventKind.OWN_ACTION_FOLLOW_UP,
         "snapshot_save",
         "snapshot_load",
         "world_snapshot_save",
@@ -1862,9 +1694,7 @@ def _player_spoke_recipient_info(e: TraceEvent) -> dict[str, Any] | None:
     }
 
 
-def _speech_recipient_info_exists(
-    recipients: list[dict[str, Any]], recipient_info: dict[str, Any]
-) -> bool:
+def _speech_recipient_info_exists(recipients: list[dict[str, Any]], recipient_info: dict[str, Any]) -> bool:
     """同じ受信者・聞こえ方・経路の recipient が既にあるかを返す。"""
     return any(
         isinstance(r, dict)
@@ -1888,7 +1718,7 @@ def _successful_speak_action_result_key(e: TraceEvent) -> tuple[Any, ...] | None
     prefix = "発言した:"
     if not summary.startswith(prefix):
         return None
-    content = summary[len(prefix):].strip()
+    content = summary[len(prefix) :].strip()
     # 「（あなたの声は...）」以降は delivery summary なので、action content との
     # 突き合わせから除外する。
     content = content.split("（あなたの声は", 1)[0].strip()
@@ -1919,10 +1749,7 @@ def _format_event_body(e: TraceEvent) -> str:
                 or "?"
             )
             channel = (
-                payload.get("_viewer_speech_source")
-                or structured.get("channel")
-                or payload.get("channel")
-                or "speak"
+                payload.get("_viewer_speech_source") or structured.get("channel") or payload.get("channel") or "speak"
             )
             content = structured.get("content") or payload.get("content") or payload.get("prose") or ""
             recipients = payload.get("_viewer_recipients")
@@ -1931,9 +1758,7 @@ def _format_event_body(e: TraceEvent) -> str:
                 labels = ", ".join(_format_speech_recipient(r) for r in recipients[:6])
                 if len(recipients) > 6:
                     labels += f", …(+{len(recipients) - 6})"
-                recipient_part = (
-                    f" <span class='speech-recipients'>届いた相手: {labels}</span>"
-                )
+                recipient_part = f" <span class='speech-recipients'>届いた相手: {labels}</span>"
             return (
                 f"発言 <span class='speech-channel'>[{esc(channel)}]</span> "
                 f"{esc(speaker)}: {esc(content)}{recipient_part}"
@@ -1953,88 +1778,72 @@ def _format_event_body(e: TraceEvent) -> str:
                 labels = ", ".join(_format_speech_recipient(r) for r in recipients[:6])
                 if len(recipients) > 6:
                     labels += f", …(+{len(recipients) - 6})"
-                recipient_part = (
-                    f" <span class='speech-recipients'>届いた相手: {labels}</span>"
-                )
-            inner_part = (
-                f" <span class='event-inner-thought'>内心: {esc(short(inner, 120))}</span>"
-                if inner
-                else ""
-            )
+                recipient_part = f" <span class='speech-recipients'>届いた相手: {labels}</span>"
+            inner_part = f" <span class='event-inner-thought'>内心: {esc(short(inner, 120))}</span>" if inner else ""
             return (
-                f"発言 <span class='speech-channel'>[{esc(channel)}]</span>: "
-                f"{esc(content)}{recipient_part}{inner_part}"
+                f"発言 <span class='speech-channel'>[{esc(channel)}]</span>: {esc(content)}{recipient_part}{inner_part}"
             )
         args_str = _compact_payload_summary(args) if isinstance(args, (dict, list)) else ""
         inner = args.get("inner_thought") if isinstance(args, dict) else None
-        inner_part = (
-            f" <span class='event-inner-thought'>内心: {esc(short(inner, 120))}</span>"
-            if inner
-            else ""
-        )
-        return (
-            f"<code>{esc(tool)}</code>"
-            + (f" {esc(args_str)}" if args_str else "")
-            + inner_part
-        )
+        inner_part = f" <span class='event-inner-thought'>内心: {esc(short(inner, 120))}</span>" if inner else ""
+        return f"<code>{esc(tool)}</code>" + (f" {esc(args_str)}" if args_str else "") + inner_part
     if e.kind == TraceEventKind.ACTION_RESULT:
         success = payload.get("success")
         mark = "OK" if success else "NG"
         summary = payload.get("result_summary") or ""
         return f"[{esc(mark)}] {esc(summary)}"
-    if e.kind == TraceEventKind.MEMO_ADD:
-        return f"+ {esc(payload.get('content', ''))} (id={esc(payload.get('memo_id', ''))})"
-    if e.kind == TraceEventKind.MEMO_DONE:
-        return f"✓ done (id={esc(payload.get('memo_id', ''))})"
     if e.kind == TraceEventKind.MEMO_HINT:
         sim = payload.get("similarity")
-        return f"hint memo {esc(payload.get('memo_id', ''))} sim={esc(round(float(sim), 2)) if sim is not None else '?'}"
+        return (
+            f"hint memo {esc(payload.get('memo_id', ''))} sim={esc(round(float(sim), 2)) if sim is not None else '?'}"
+        )
     if e.kind == TraceEventKind.POSITION_CHANGE:
         from_id = payload.get("from_spot_id")
         to_name = payload.get("spot_name") or payload.get("to_spot_id") or ""
         if from_id is None:
             return f"spawn at {esc(to_name)}"
         return f"{esc(from_id)} → {esc(to_name)}"
-    if e.kind == TraceEventKind.EPISODIC_CHUNK_WRITTEN:
-        # write 経路: どの境界理由で何が保存されたかの 1 行サマリ
+    if e.kind == "episodic_chunk_written":
+        # 古いエピソードの区切りの書き込み (#1631 で消した) の 1 行サマリ。過去の run の trace を読むために残す。
         ep_short = (payload.get("episode_id") or "")[:6]
         reason = payload.get("boundary_reason") or "?"
         snippet = (payload.get("recall_text_snippet") or "")[:60]
         snippet_part = (
-            f" <span class='dim'>{esc(snippet)}</span>"
-            if snippet and "{" not in snippet and "}" not in snippet
-            else ""
+            f" <span class='dim'>{esc(snippet)}</span>" if snippet and "{" not in snippet and "}" not in snippet else ""
         )
-        return (
-            f"✎ chunk written id={esc(ep_short)}… "
-            f"reason={esc(reason)}{snippet_part}"
-        )
-    if e.kind == TraceEventKind.EPISODIC_RECALL:
-        # read 経路: 想起 candidate と発火 cue の 1 行サマリ
+        return f"✎ chunk written id={esc(ep_short)}… reason={esc(reason)}{snippet_part}"
+    if e.kind == "episodic_recall":
+        # 受動想起 (#1631 で消した) の 1 行サマリ。過去の run の trace を読むために残す。
         cand_count = int(payload.get("candidate_count") or 0)
         candidates = payload.get("candidates") or []
         first_ep = ""
         if candidates:
             first_ep_id = (candidates[0].get("episode_id") or "")[:6]
             first_snippet = (candidates[0].get("recall_text_snippet") or "")[:60]
-            first_ep = (
-                f" first={esc(first_ep_id)}…: "
-                f"<span class='dim'>{esc(first_snippet)}</span>"
-            )
+            first_ep = f" first={esc(first_ep_id)}…: <span class='dim'>{esc(first_snippet)}</span>"
         return f"⟲ recall {cand_count} candidates{first_ep}"
     kind = str(e.kind)
     if kind == "semantic_passive_recall":
         cand_count = int(payload.get("candidate_count") or len(payload.get("candidates") or []))
         top_k = payload.get("top_k")
         first = _first_text_from_candidates(payload.get("candidates"))
-        first_part = (
-            f" first: <span class='dim'>{esc(short(first, 90))}</span>"
-            if first
-            else ""
+        first_part = f" first: <span class='dim'>{esc(short(first, 90))}</span>" if first else ""
+        return (
+            f"semantic recall: {cand_count} candidates"
+            + (f" / top_k={esc(top_k)}" if top_k is not None else "")
+            + first_part
         )
-        return f"semantic recall: {cand_count} candidates" + (
-            f" / top_k={esc(top_k)}" if top_k is not None else ""
-        ) + first_part
+    if kind == "situation_belief_recall":
+        if payload.get("failed"):
+            return f"situation recall failed: {esc(short(str(payload['failed']), 90))}"
+        if payload.get("query") == "":
+            return f"situation recall: empty situation, not searched / {esc(payload.get('candidate_count'))} candidates"
+        chosen = len(payload.get("chosen") or [])
+        hits = payload.get("hits") or []
+        first = hits[0].get("text") if hits and isinstance(hits[0], dict) else None
+        return f"situation recall: {chosen} chosen / {esc(payload.get('candidate_count'))} candidates" + (
+            f" first: <span class='dim'>{esc(short(str(first), 90))}</span>" if first else ""
+        )
     if kind == "prediction_outcome":
         outcome = (
             payload.get("outcome")
@@ -2073,10 +1882,7 @@ def _format_event_body(e: TraceEvent) -> str:
         player_id = payload.get("player_id")
         err = payload.get("error_type") or "?"
         player_part = f" player=#{esc(player_id)}" if player_id is not None else ""
-        return (
-            f"side handler failed: {esc(handler)} / {esc(event_type)}"
-            f"{player_part} ({esc(err)})"
-        )
+        return f"side handler failed: {esc(handler)} / {esc(event_type)}{player_part} ({esc(err)})"
     return esc(_compact_payload_summary(payload))
 
 
@@ -2148,9 +1954,7 @@ def _compact_payload_summary(value: Any) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Build a self-contained trace viewer HTML (Phase 1d β)"
-    )
+    parser = argparse.ArgumentParser(description="Build a self-contained trace viewer HTML (Phase 1d β)")
     parser.add_argument(
         "run_dir",
         type=Path,
@@ -2190,7 +1994,7 @@ def main(argv: list[str] | None = None) -> int:
     topology = load_scenario_topology(scenario_path)
 
     asset = fetch_cytoscape(offline=args.offline)
-    print(f"[vendor] cytoscape@{asset.version} ({len(asset.content)//1024} KB)", flush=True)
+    print(f"[vendor] cytoscape@{asset.version} ({len(asset.content) // 1024} KB)", flush=True)
 
     out_path = args.output or (run_dir / "viewer.html")
     title = args.title or run_dir.name
@@ -2201,7 +2005,7 @@ def main(argv: list[str] | None = None) -> int:
         cytoscape_js_src=asset.content,
     )
     out_path.write_text(html_str, encoding="utf-8")
-    print(f"[viewer] {out_path} ({len(html_str)//1024} KB, {len(events)} events)")
+    print(f"[viewer] {out_path} ({len(html_str) // 1024} KB, {len(events)} events)")
     return 0
 
 

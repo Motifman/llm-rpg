@@ -12,9 +12,7 @@ import pytest
 
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
 
 
 @pytest.fixture(scope="module")
@@ -66,10 +64,7 @@ class TestPlayers:
 
     def test_initial_items(self, loaded) -> None:
         """設計 §4 の対応: 各人の秘密と物的証拠を関連付ける。"""
-        spawn_items = {
-            p.string_id: tuple(s.spec_id.value for s in p.initial_items)
-            for p in loaded.player_spawns
-        }
+        spawn_items = {p.string_id: tuple(s.spec_id.value for s in p.initial_items) for p in loaded.player_spawns}
         # 各人が少なくとも 1 つ initial item を持つ
         for sid, items in spawn_items.items():
             assert items, f"{sid} の initial_items が空"
@@ -120,31 +115,22 @@ class TestPlayerOutcomeRules:
         """rescueticks は設計通り。"""
         # 1 day = 48 tick: 救助船 day 4 / day 6 / day 7 (= tick 192 / 288 / 336)
         # チャンスを 3 回に増やして難易度を下げた (実験 #29 後続調整)。
-        assert tuple(
-            rule.trigger.tick
-            for rule in loaded.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        ) == (192, 288, 336)
+        assert tuple(rule.trigger.tick for rule in loaded.player_outcome_rules if rule.outcome.value == "RESCUED") == (
+            192,
+            288,
+            336,
+        )
 
     def test_stranded_eight_tick_384(self, loaded) -> None:
         """stranded は 8日 tick 384。"""
         # 8 日 × 48 tick = 384
-        stranded = next(
-            rule for rule in loaded.player_outcome_rules
-            if rule.outcome.value == "STRANDED"
-        )
+        stranded = next(rule for rule in loaded.player_outcome_rules if rule.outcome.value == "STRANDED")
         assert stranded.trigger.tick == 384
 
     def test_signal_flag_signal_fire_lit(self, loaded) -> None:
         """signal flag は signal fire lit。"""
-        rescue = next(
-            rule for rule in loaded.player_outcome_rules
-            if rule.outcome.value == "RESCUED"
-        )
-        assert any(
-            condition.flag_name == "signal_fire_lit"
-            for condition in rescue.player_conditions
-        )
+        rescue = next(rule for rule in loaded.player_outcome_rules if rule.outcome.value == "RESCUED")
+        assert any(condition.flag_name == "signal_fire_lit" for condition in rescue.player_conditions)
 
 
 class TestNoLegacyPlayerIds:

@@ -9,5 +9,5 @@ __all__ = [
     "TradeCommandException",
     "TradeCreationException",
     "TradeNotFoundForCommandException",
-    "TradeAccessDeniedException"
+    "TradeAccessDeniedException",
 ]

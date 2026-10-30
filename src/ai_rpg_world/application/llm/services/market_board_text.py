@@ -39,9 +39,7 @@ _UNKNOWN_ITEM = "(名前不明のもの)"
 
 def market_entries_from_view(
     view: Any, item_display_name: Callable[[int], str]
-) -> tuple[
-    tuple[SpotGraphMarketRowEntry, ...], tuple[SpotGraphMarketOwnOrderEntry, ...]
-]:
+) -> tuple[tuple[SpotGraphMarketRowEntry, ...], tuple[SpotGraphMarketOwnOrderEntry, ...]]:
     """板の読み出し結果を、品名を引いた表示用の行へ変換する。
 
     打てる手が 1 つも無い品目の行は落とす。ただし**直近に成立した値がある品目は
@@ -50,22 +48,20 @@ def market_entries_from_view(
     """
     rows = []
     for row in view.rows:
-        if (
-            row.buy_price_gold is None
-            and row.sell_price_gold is None
-            and row.last_trade_price_gold is None
-        ):
+        if row.buy_price_gold is None and row.sell_price_gold is None and row.last_trade_price_gold is None:
             continue
-        rows.append(SpotGraphMarketRowEntry(
-            item_name=item_display_name(row.item_spec_id),
-            buy_price_gold=row.buy_price_gold,
-            listing_count=row.listing_count,
-            buyable_quantity=row.buyable_quantity,
-            sell_price_gold=row.sell_price_gold,
-            bid_count=row.bid_count,
-            sellable_quantity=row.sellable_quantity,
-            last_trade_price_gold=row.last_trade_price_gold,
-        ))
+        rows.append(
+            SpotGraphMarketRowEntry(
+                item_name=item_display_name(row.item_spec_id),
+                buy_price_gold=row.buy_price_gold,
+                listing_count=row.listing_count,
+                buyable_quantity=row.buyable_quantity,
+                sell_price_gold=row.sell_price_gold,
+                bid_count=row.bid_count,
+                sellable_quantity=row.sellable_quantity,
+                last_trade_price_gold=row.last_trade_price_gold,
+            )
+        )
     own = tuple(
         SpotGraphMarketOwnOrderEntry(
             item_name=item_display_name(order.item_spec_id),
@@ -92,9 +88,7 @@ def market_board_text(view: Any, item_display_name: Callable[[int], str]) -> str
     return "\n".join(lines)
 
 
-def board_rows_lines(
-    rows: Sequence[SpotGraphMarketRowEntry], *, has_own_orders: bool = False
-) -> tuple[str, ...]:
+def board_rows_lines(rows: Sequence[SpotGraphMarketRowEntry], *, has_own_orders: bool = False) -> tuple[str, ...]:
     """板の需給を 1 品目 1 行で整える。
 
     空のときも 1 行出す。黙って何も返さないと「引けなかった」と区別がつかない。
@@ -103,7 +97,7 @@ def board_rows_lines(
     """
     if not rows:
         return (_NOTHING_BUT_YOURS if has_own_orders else _NOTHING_AT_ALL,)
-    return tuple(f"  \"{row.item_name}\" {_row_text(row)}" for row in rows)
+    return tuple(f'  "{row.item_name}" {_row_text(row)}' for row in rows)
 
 
 def own_order_lines(
@@ -118,33 +112,22 @@ def own_order_lines(
     for order in own_orders:
         if order.side == "buy":
             label = "あなたの買い注文"
-            state = (
-                "引き取り待ち"
-                if order.is_awaiting_collection
-                else "まだ受けられていない"
-            )
+            state = "引き取り待ち" if order.is_awaiting_collection else "まだ受けられていない"
         else:
             label = "あなたの出品"
-            state = (
-                "引き取り待ち" if order.is_awaiting_collection else "まだ売れていない"
-            )
-        lines.append(
-            f"  {label}: \"{order.item_name}\" ×{order.quantity} "
-            f"@{order.unit_price_gold}G ({state})"
-        )
+            state = "引き取り待ち" if order.is_awaiting_collection else "まだ売れていない"
+        lines.append(f'  {label}: "{order.item_name}" ×{order.quantity} @{order.unit_price_gold}G ({state})')
     return tuple(lines)
 
 
 def _row_text(row: SpotGraphMarketRowEntry) -> str:
     buy_side = (
-        f"{row.buy_price_gold}G で買える "
-        f"(出品 {row.listing_count}件 / 計 {row.buyable_quantity}つ)"
+        f"{row.buy_price_gold}G で買える (出品 {row.listing_count}件 / 計 {row.buyable_quantity}つ)"
         if row.buy_price_gold is not None
         else _NO_LISTINGS
     )
     sell_side = (
-        f"{row.sell_price_gold}G で売れる "
-        f"(買い注文 {row.bid_count}件 / 計 {row.sellable_quantity}つ)"
+        f"{row.sell_price_gold}G で売れる (買い注文 {row.bid_count}件 / 計 {row.sellable_quantity}つ)"
         if row.sell_price_gold is not None
         else _NO_BIDS
     )

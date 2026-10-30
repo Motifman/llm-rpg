@@ -35,12 +35,8 @@ def attach_shop_sqlite_repositories(
     """Attach shop SQLite repositories to a shared connection."""
     return ShopSqliteRepositories(
         shops=SqliteShopRepository.for_shared_unit_of_work(connection),
-        shop_summaries=SqliteShopSummaryReadModelRepository.for_shared_unit_of_work(
-            connection
-        ),
-        shop_listings=SqliteShopListingReadModelRepository.for_shared_unit_of_work(
-            connection
-        ),
+        shop_summaries=SqliteShopSummaryReadModelRepository.for_shared_unit_of_work(connection),
+        shop_listings=SqliteShopListingReadModelRepository.for_shared_unit_of_work(connection),
     )
 
 

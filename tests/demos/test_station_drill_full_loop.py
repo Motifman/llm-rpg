@@ -38,26 +38,33 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
-_KUZE = PlayerId(3)   # keeper
+_KUZE = PlayerId(3)  # keeper
 _AOI = PlayerId(4)
-_HAGI = PlayerId(5)   # crew (機関担当)
-_YURA = PlayerId(6)   # crew (担当なし)
-_JIN = PlayerId(7)    # keeper
-_SAKI = PlayerId(8)   # crew (記録担当)
+_HAGI = PlayerId(5)  # crew (機関担当)
+_YURA = PlayerId(6)  # crew (担当なし)
+_JIN = PlayerId(7)  # keeper
+_SAKI = PlayerId(8)  # crew (記録担当)
 _TASK_FLAGS = (
-    "task_wind_instruments", "task_air_intake_flow",
-    "task_observation_records", "task_inventory_ledger",
-    "task_hygiene_supplies", "task_cold_storage",
-    "task_cultivation_stock", "task_heating_fuel",
-    "task_fuel_pump", "task_generator", "task_mainland_radio",
-    "task_grow_light_wiring", "task_first_aid", "task_weather",
-    "task_cable_labels", "task_exhaust_filter",
+    "task_wind_instruments",
+    "task_air_intake_flow",
+    "task_observation_records",
+    "task_inventory_ledger",
+    "task_hygiene_supplies",
+    "task_cold_storage",
+    "task_cultivation_stock",
+    "task_heating_fuel",
+    "task_fuel_pump",
+    "task_generator",
+    "task_mainland_radio",
+    "task_grow_light_wiring",
+    "task_first_aid",
+    "task_weather",
+    "task_cable_labels",
+    "task_exhaust_filter",
 )
 _SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
     source=WorldFlagMutationSource.SCENARIO_EVENT,
@@ -220,10 +227,7 @@ class TestTheWholeLoopRuns:
         for voter in (_MORI, _AOI, _HAGI, _YURA, _SAKI, _JIN, _KUZE):
             runtime.cast_vote(voter, _KUZE)
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(_KUZE)
-            is PlayerOutcomeEnum.EJECTED
-        )
+        assert runtime._player_outcome_registry.get_outcome(_KUZE) is PlayerOutcomeEnum.EJECTED
         assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM
 
         # 5. 自由時間に戻って作業を続けられる。

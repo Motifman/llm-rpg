@@ -10,6 +10,7 @@ from ai_rpg_world.domain.sns.value_object.user_id import UserId
 @dataclass(frozen=True)
 class SubscribeRelationShip:
     """購読関係性を表現する値オブジェクト"""
+
     subscriber_user_id: UserId
     subscribed_user_id: UserId
     created_at: datetime = field(default_factory=datetime.now)
@@ -18,8 +19,9 @@ class SubscribeRelationShip:
         """等価性比較（作成時間に関係なく、購読者と購読対象のみで判定）"""
         if not isinstance(other, SubscribeRelationShip):
             return NotImplemented
-        return (self.subscriber_user_id == other.subscriber_user_id and
-                self.subscribed_user_id == other.subscribed_user_id)
+        return (
+            self.subscriber_user_id == other.subscriber_user_id and self.subscribed_user_id == other.subscribed_user_id
+        )
 
     def __hash__(self) -> int:
         """ハッシュ値（作成時間に関係なく、購読者と購読対象のみで計算）"""
@@ -28,7 +30,9 @@ class SubscribeRelationShip:
     def __post_init__(self) -> None:
         """購読関係性のバリデーション"""
         if self.subscriber_user_id == self.subscribed_user_id:
-            raise SelfReferenceValidationException(int(self.subscriber_user_id), "subscriber_user_id", "subscribed_user_id")
+            raise SelfReferenceValidationException(
+                int(self.subscriber_user_id), "subscriber_user_id", "subscribed_user_id"
+            )
 
     def is_subscribed(self, user_id: UserId) -> bool:
         """指定したユーザーを購読しているか"""

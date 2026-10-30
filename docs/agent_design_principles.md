@@ -49,6 +49,7 @@
 具体ルール:
 
 - 「次の turn」という抽象は使わない。「次に observation が `schedules_turn=True` で起きるとき」と表現する
+- 自分の行動の結果も、本人に届いた観測として扱う。成功した行動のあとは次の tick に起きる。休むのは本人が `wait` を選んだときと、移動の途中だけ ([design_decisions D1597](./design_decisions.md))。休眠は何も起きていないときの無駄を避けるためにあり、自分が行動した直後は何も起きていない状態ではない
 - gate 設計で「1 turn 1 回」と言いたくなったら、「1 起動 1 ツール呼び出し」が既に唯一の自然 unit なので、追加 gate は基本不要 (`tool_call_loop_guard` が同一引数連打を検知済)
 - 時間表現は wall-clock の `datetime` (= observation の `occurred_at`) と game tick の 2 系統が並走する。主観時間ラベル ([docs/quality_checks/yesterday_v1_baseline.md](./quality_checks/yesterday_v1_baseline.md) 経由) は前者を使う
 
@@ -203,3 +204,5 @@
   目標到達を消す」ことが観測されたため、協調と分散を対で扱う方針を残す。
 - **2026-07-29**: 原則 1 の具体ルールに、prompt 文面からエンジンの実装事情を
   除く方針と禁止語テストを追加。
+- **2026-10-12**: 原則 2 の具体ルールに、自分の行動の結果も本人への観測として
+  扱うことを追加 (Issue #1597)。

@@ -1,4 +1,3 @@
-import math
 from datetime import datetime, timedelta
 
 import pytest
@@ -12,29 +11,29 @@ from ai_rpg_world.domain.sns.value_object import PostContent, PostId, UserId
 class TestTrendingDomainService:
     """TrendingDomainServiceのテスト"""
 
-    def create_test_post(self, post_id: int, user_id: int, content: str, created_at: datetime) -> PostAggregate:
+    def create_test_post(
+        self,
+        post_id: int,
+        user_id: int,
+        content: str,
+        created_at: datetime,
+        hashtags: tuple[str, ...] | None = None,
+    ) -> PostAggregate:
         """テスト用のポストを作成"""
         # contentからハッシュタグを抽出（#で始まる単語）
         import re
-        hashtags_in_content = re.findall(r'#(\w+)', content)
-        hashtags = tuple(hashtags_in_content) if hashtags_in_content else ("test", "hashtag")
 
-        post_content = PostContent(
-            content=content,
-            hashtags=hashtags,
-            visibility=PostVisibility.PUBLIC
-        )
-        post = PostAggregate.create(
-            post_id=PostId(post_id),
-            author_user_id=UserId(user_id),
-            post_content=post_content
-        )
+        if hashtags is None:
+            hashtags = tuple(re.findall(r"#(\w+)", content))
+
+        post_content = PostContent(content=content, hashtags=hashtags, visibility=PostVisibility.PUBLIC)
+        post = PostAggregate.create(post_id=PostId(post_id), author_user_id=UserId(user_id), post_content=post_content)
         # 作成時刻を設定
         post._created_at = created_at
         return post
 
     def test_calculate_trending_hashtags_basic(self):
-        """基本的なトレンド計算テスト"""
+        """3投稿の4タグを頻度・直近の増加・時間減衰に応じた得点の降順で返す。"""
         now = datetime.now()
 
         # テストデータ作成
@@ -45,11 +44,7 @@ class TestTrendingDomainService:
         ]
 
         result = TrendingDomainService.calculate_trending_hashtags(
-            posts=posts,
-            now=now,
-            decay_lambda=0.1,
-            recent_window_hours=1.0,
-            max_results=10
+            posts=posts, now=now, decay_lambda=0.1, recent_window_hours=1.0, max_results=10
         )
 
         # 結果の検証
@@ -66,8 +61,19 @@ class TestTrendingDomainService:
         scores = [score for _, score in result]
         assert scores == sorted(scores, reverse=True)
 
+        # 1h / 0.5h / 0h の各投稿が寄与する既知の得点。
+        # 対象の計算関数を期待値の生成に使わない。
+        assert dict(result) == pytest.approx(
+            {
+                "人気": 4.078195683600,
+                "トレンド": 0.627185505177,
+                "話題": 0.659341993658,
+                "おすすめ": 0.693147180560,
+            }
+        )
+
     def test_calculate_trending_hashtags_hybrid_score(self):
-        """ハイブリッドスコア計算の詳細テスト"""
+        """直近の出現数と時間減衰に従い、異なる得点を持つ4タグを欠落なく返す。"""
         now = datetime.now()
 
         # テストデータ: 全て直近1時間以内
@@ -78,23 +84,17 @@ class TestTrendingDomainService:
         ]
 
         result = TrendingDomainService.calculate_trending_hashtags(
-            posts=posts,
-            now=now,
-            decay_lambda=0.1,
-            recent_window_hours=1.0,
-            max_results=10
+            posts=posts, now=now, decay_lambda=0.1, recent_window_hours=1.0, max_results=10
         )
 
         # 期待される順位を確認
         hashtags = [hashtag for hashtag, _ in result]
         expected_order = ["人気", "トレンド", "おすすめ", "話題"]  # ハッシュタグのみ
 
-        for i, expected_hashtag in enumerate(expected_order):
-            if i < len(hashtags):
-                assert hashtags[i] == expected_hashtag, f"順位{i+1}が{expected_hashtag}であるべき: {hashtags}"
+        assert hashtags == expected_order
 
     def test_calculate_trending_hashtags_growth_rate(self):
-        """成長率の効果をテスト"""
+        """古い2投稿のタグも得点0で残し、直近1投稿のタグを上位に返す。"""
         now = datetime.now()
 
         # テストデータ: 一部が直近1時間を超える
@@ -111,7 +111,7 @@ class TestTrendingDomainService:
             now=now,
             decay_lambda=0.1,
             recent_window_hours=1.0,  # 1時間を直近とする
-            max_results=10
+            max_results=10,
         )
 
         # #古いトレンド: 総数=2, 直近=0, 成長率=0/(2-0+1)=0
@@ -120,41 +120,42 @@ class TestTrendingDomainService:
         # 新しいトレンドの方がスコアが高くなるはず
         hashtags = [hashtag for hashtag, _ in result]
         assert hashtags[0] == "新しいトレンド", f"成長率の高いハッシュタグが先頭に来るべき: {hashtags}"
+        assert set(hashtags) == {"新しいトレンド", "古いトレンド"}
+        scores = dict(result)
+        assert scores["古いトレンド"] == 0.0
+        assert scores["新しいトレンド"] == pytest.approx(0.659341993658)
 
     def test_calculate_trending_hashtags_empty_posts(self):
         """空のポストリストのテスト"""
         now = datetime.now()
 
         result = TrendingDomainService.calculate_trending_hashtags(
-            posts=[],
-            now=now,
-            decay_lambda=0.1,
-            recent_window_hours=1.0,
-            max_results=10
+            posts=[], now=now, decay_lambda=0.1, recent_window_hours=1.0, max_results=10
         )
 
         assert result == []
 
-    def test_calculate_trending_hashtags_no_hashtags(self):
-        """ハッシュタグのないポストのテスト"""
+    @pytest.mark.parametrize(
+        ("hashtags", "expected_hashtags"),
+        [
+            pytest.param(("test", "hashtag"), ["hashtag", "test"], id="explicit-tags"),
+            pytest.param((), [], id="no-tags"),
+        ],
+    )
+    def test_calculate_trending_hashtags_uses_explicit_tags(self, hashtags, expected_hashtags):
+        """本文に#がなくても指定タグを集計し、タグが空の投稿からは何も返さない。"""
         now = datetime.now()
 
         posts = [
-            self.create_test_post(1, 1, "ハッシュタグのないポスト", now),
+            self.create_test_post(1, 1, "ハッシュタグのないポスト", now, hashtags=hashtags),
         ]
 
         result = TrendingDomainService.calculate_trending_hashtags(
-            posts=posts,
-            now=now,
-            decay_lambda=0.1,
-            recent_window_hours=1.0,
-            max_results=10
+            posts=posts, now=now, decay_lambda=0.1, recent_window_hours=1.0, max_results=10
         )
 
-        # デフォルトのハッシュタグが使用される
-        hashtags = [hashtag for hashtag, _ in result]
-        assert "test" in hashtags
-        assert "hashtag" in hashtags
+        # 同点のタグ同士に順位の約束を追加しない。
+        assert sorted(hashtag for hashtag, _ in result) == expected_hashtags
 
     def test_calculate_trending_hashtags_max_results(self):
         """max_resultsパラメータのテスト"""
@@ -167,11 +168,7 @@ class TestTrendingDomainService:
         posts.append(self.create_test_post(1, 1, content, now))
 
         result = TrendingDomainService.calculate_trending_hashtags(
-            posts=posts,
-            now=now,
-            decay_lambda=0.1,
-            recent_window_hours=1.0,
-            max_results=3
+            posts=posts, now=now, decay_lambda=0.1, recent_window_hours=1.0, max_results=3
         )
 
         assert len(result) == 3

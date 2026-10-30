@@ -100,11 +100,9 @@ class TestRun:
 
     def test_multiple_player_independently(self) -> None:
         """複数 player を独立に判定。"""
-        reg = PlayerOutcomeRegistry.new_for_players(
-            [PlayerId(1), PlayerId(2), PlayerId(3)]
-        )
+        reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1), PlayerId(2), PlayerId(3)])
         timer = PlayerDeathGraceTimer()
-        timer.register(PlayerId(1), downed_at_tick=0)   # tick 30 で overdue
+        timer.register(PlayerId(1), downed_at_tick=0)  # tick 30 で overdue
         timer.register(PlayerId(2), downed_at_tick=10)  # tick 40 で overdue
         timer.register(PlayerId(3), downed_at_tick=20)  # tick 50 で overdue
         stage = _stage(reg, timer)

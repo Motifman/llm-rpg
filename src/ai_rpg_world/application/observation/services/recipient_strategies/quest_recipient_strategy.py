@@ -108,4 +108,3 @@ class QuestRecipientStrategy(IRecipientResolutionStrategy):
         if guild is None:
             return []
         return list(guild.members.keys())
-

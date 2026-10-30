@@ -2,7 +2,6 @@
 ItemInfoQueryService専用のアプリケーション例外
 """
 
-
 from typing import Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
@@ -34,10 +33,7 @@ class ItemInfoQueryApplicationException(ApplicationException):
         Returns:
             ItemInfoQueryApplicationException: アプリケーション例外
         """
-        return cls(
-            f"Item spec not found: {item_spec_id}",
-            item_spec_id=item_spec_id
-        )
+        return cls(f"Item spec not found: {item_spec_id}", item_spec_id=item_spec_id)
 
     @classmethod
     def invalid_request(cls, message: str, **context: Any) -> "ItemInfoQueryApplicationException":

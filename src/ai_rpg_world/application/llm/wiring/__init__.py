@@ -20,10 +20,5 @@ R2c-2 で ``create_llm_agent_wiring`` / ``LlmAgentOrchestrator`` /
 共有コードはそれらを **直接** import する (本 ``__init__`` は何も re-export しない):
 
 - ``resolved_runtime_config`` — env から解決した LLM runtime 設定の単一窓口
-- ``feature_flags`` — short-term memory / semantic 等の env flag resolver
 - ``_llm_client_factory`` — LLM クライアント生成
-- ``episodic_stack`` — escape も使うエピソード記憶 stack builder
-- ``optional_llm_services`` — LiteLLM 有無で optional な LLM サービス/ポート解決 (R2c-1)
-- ``_shared_builders`` — エピソード/リンク/セマンティック構築の共有 builder
-- ``episodic_memory_link_bundle`` / ``_default_episodic_episode_store`` 等
 """

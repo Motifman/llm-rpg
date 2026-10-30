@@ -41,26 +41,22 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
 
 
 def _scenario_dir() -> Path:
-    return Path(__file__).resolve().parents[3] / "data" / "scenarios"
+    return Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
 
 
-def _create_relay_session(
+def _create_panel_session(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     stub: StubLlmClient,
 ):
-    """relay_puzzle_demo (制御室に操作盤 OBJ1 がある) でセッション開始。"""
+    """control_panel_toggle (制御室に操作盤 OBJ1 がある) でセッション開始。"""
     monkeypatch.setenv("SPOT_GRAPH_TICK_LOOP_ENABLED", "false")
     mgr = GameRuntimeManager(
         scenarios_dir=_scenario_dir(),
         characters_path=tmp_path / "characters.json",
     )
     char = mgr.create_character(CharacterCreateRequest(name="failure msg テスト"))
-    summary = mgr.create_session(
-        SessionCreateRequest(
-            world_id="relay_puzzle_demo", character_ids=[char.id]
-        )
-    )
+    summary = mgr.create_session(SessionCreateRequest(world_id="control_panel_toggle", character_ids=[char.id]))
     state = mgr._sessions[summary.session_id]
     state.llm_wiring.llm_client = stub
     return state
@@ -133,7 +129,7 @@ class TestInvalidTargetLabelMessage:
     ) -> None:
         """LLM が存在しない object 名を渡したとき、有効候補名がメッセージに含まれる。
 
-        PR #441 で display_name fallback が入ったため、relay シナリオで実在する
+        PR #441 で display_name fallback が入ったため、試験用の世界で実在する
         ``"操作盤"`` は label と一致して解決されるようになった。本テストは
         「明らかに存在しない名前」を投げて INVALID_TARGET_LABEL ハッピーパスを
         引き続き保証する。
@@ -144,7 +140,7 @@ class TestInvalidTargetLabelMessage:
                 "arguments": {"target_label": "存在しない架空のオブジェクト_X", "action_name": "電源を入れる"},
             }
         )
-        state = _create_relay_session(monkeypatch, tmp_path, stub)
+        state = _create_panel_session(monkeypatch, tmp_path, stub)
         target_pid = state.runtime.get_player_ids()[0]
         result = state.llm_wiring.run_turn(target_pid)
 
@@ -179,7 +175,7 @@ class TestInvalidTargetLabelMessage:
                 "arguments": {"object_label": "操作盤", "action_name": "examine"},
             }
         )
-        state = _create_relay_session(monkeypatch, tmp_path, stub)
+        state = _create_panel_session(monkeypatch, tmp_path, stub)
         target_pid = state.runtime.get_player_ids()[0]
         result = state.llm_wiring.run_turn(target_pid)
 
@@ -201,7 +197,7 @@ class TestInvalidTargetLabelMessage:
                 "arguments": {"target_label": "操作盤", "action_name": ""},
             }
         )
-        state = _create_relay_session(monkeypatch, tmp_path, stub)
+        state = _create_panel_session(monkeypatch, tmp_path, stub)
         target_pid = state.runtime.get_player_ids()[0]
         result = state.llm_wiring.run_turn(target_pid)
 
@@ -235,7 +231,7 @@ class TestInvalidDestinationLabelMessage:
                 "arguments": {"destination_label": "中央廊下"},
             }
         )
-        state = _create_relay_session(monkeypatch, tmp_path, stub)
+        state = _create_panel_session(monkeypatch, tmp_path, stub)
         target_pid = state.runtime.get_player_ids()[0]
         result = state.llm_wiring.run_turn(target_pid)
 
@@ -255,7 +251,7 @@ class TestInvalidDestinationLabelMessage:
                 "arguments": {"destination_label": "未定義の謎のスポット"},
             }
         )
-        state = _create_relay_session(monkeypatch, tmp_path, stub)
+        state = _create_panel_session(monkeypatch, tmp_path, stub)
         target_pid = state.runtime.get_player_ids()[0]
         result = state.llm_wiring.run_turn(target_pid)
 
@@ -290,7 +286,7 @@ class TestInvalidWhisperMessage:
                 },
             }
         )
-        state = _create_relay_session(monkeypatch, tmp_path, stub_empty)
+        state = _create_panel_session(monkeypatch, tmp_path, stub_empty)
         target_pid = state.runtime.get_player_ids()[0]
         result_empty = state.llm_wiring.run_turn(target_pid)
         assert result_empty.success is False
@@ -313,7 +309,7 @@ class TestInvalidWhisperMessage:
                 },
             }
         )
-        state = _create_relay_session(monkeypatch, tmp_path, stub)
+        state = _create_panel_session(monkeypatch, tmp_path, stub)
         target_pid = state.runtime.get_player_ids()[0]
         result = state.llm_wiring.run_turn(target_pid)
         assert result.success is False
@@ -334,14 +330,14 @@ class TestExploreEmptyMessageAugmented:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """relay_puzzle_demo の制御室 (操作盤あり) で explore → "操作盤" を併記。"""
+        """control_panel_toggle の制御室 (操作盤あり) で explore → "操作盤" を併記。"""
         stub = StubLlmClient(
             tool_call_to_return={
                 "name": "explore",
                 "arguments": {"inner_thought": "周囲を探す"},
             }
         )
-        state = _create_relay_session(monkeypatch, tmp_path, stub)
+        state = _create_panel_session(monkeypatch, tmp_path, stub)
         # A は spawn=control_room で OBJ1 (操作盤) が見える
         target_pid = state.runtime.get_player_ids()[0]
         result = state.llm_wiring.run_turn(target_pid)
@@ -350,8 +346,9 @@ class TestExploreEmptyMessageAugmented:
         # F2: 単純な「新しい発見はなかった」だけではなく、可視オブジェクトを列挙
         assert '"操作盤"' in result.message
         assert "OBJ1" not in result.message
-        # 「target_label に指定」のヒントも含まれる
+        # 「target_label に指定」のヒントも含まれ、interact の名前は出ない
         assert "target_label" in result.message
+        assert "interact" not in result.message
 
     def test_empty_discoveries_says_current_spot_is_exhausted_when_no_discoverable_remains(
         self,

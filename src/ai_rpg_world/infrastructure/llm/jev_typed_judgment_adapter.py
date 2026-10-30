@@ -37,6 +37,11 @@ from typing import Any, Union
 
 import httpx
 
+from ai_rpg_world.application.llm.contracts.aux_llm_call import (
+    AuxLlmCall,
+    AuxLlmCallSink,
+    AuxLlmComponent,
+)
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ChoiceQuestion,
     ITypedJudgmentPort,
@@ -75,6 +80,7 @@ class JevTypedJudgmentAdapter(ITypedJudgmentPort):
         rate_limit_retry_base_sleep: float = 0.5,
         sleep: Callable[[float], Any] = time.sleep,
         client: httpx.Client | None = None,
+        aux_call_sink: AuxLlmCallSink | None = None,
     ) -> None:
         if not isinstance(api_key, str) or not api_key.strip():
             raise ValueError("api_key must be a non-empty string")
@@ -94,6 +100,7 @@ class JevTypedJudgmentAdapter(ITypedJudgmentPort):
         self._retry_base_sleep = float(rate_limit_retry_base_sleep)
         self._sleep = sleep
         self._client = client or httpx.Client()
+        self._aux_call_sink = aux_call_sink
 
     def judge(
         self,
@@ -107,15 +114,50 @@ class JevTypedJudgmentAdapter(ITypedJudgmentPort):
         body = {
             "model": self._model,
             "state": state,
-            "questions": {
-                name: _as_wire_question(question)
-                for name, question in questions.items()
-            },
+            "questions": {name: _as_wire_question(question) for name, question in questions.items()},
         }
         started = time.perf_counter()
-        payload = self._post_with_retry(body)
-        latency_ms = (time.perf_counter() - started) * 1000
-        return _as_results(payload, questions, latency_ms)
+        payload: dict[str, Any] | None = None
+        try:
+            payload = self._post_with_retry(body)
+            latency_ms = (time.perf_counter() - started) * 1000
+            results = _as_results(payload, questions, latency_ms)
+        except TypedJudgmentUnavailableException as exc:
+            self._record_call(questions, payload, started, error_code=exc.error_code)
+            raise
+        self._record_call(questions, payload, started, error_code=None)
+        return results
+
+    def _record_call(
+        self,
+        questions: Mapping[str, Question],
+        payload: Mapping[str, Any] | None,
+        started: float,
+        *,
+        error_code: str | None,
+    ) -> None:
+        if self._aux_call_sink is None:
+            return
+        try:
+            # #1429 の時点で Decisions endpoint は usage を返さない。返すように
+            # なったら拾い、返さない間は None のまま「取れない」と残す。
+            usage = (payload or {}).get("usage")
+            usage = usage if isinstance(usage, dict) else {}
+            self._aux_call_sink.record(
+                AuxLlmCall(
+                    component=AuxLlmComponent.TYPED_JUDGMENT,
+                    model=self._model,
+                    wall_latency_ms=int((time.perf_counter() - started) * 1000),
+                    success=error_code is None,
+                    prompt_tokens=_optional_int(usage.get("prompt_tokens")),
+                    completion_tokens=_optional_int(usage.get("completion_tokens")),
+                    cost_usd=_optional_float(usage.get("cost")),
+                    error_code=error_code,
+                    question_names=tuple(questions),
+                )
+            )
+        except Exception:
+            logger.exception("aux_call_sink.record failed for typed judgment")
 
     def _post_with_retry(self, body: dict[str, Any]) -> dict[str, Any]:
         attempt = 0
@@ -171,6 +213,14 @@ class JevTypedJudgmentAdapter(ITypedJudgmentPort):
                     error_code="TYPED_JUDGMENT_SCHEMA_MISMATCH",
                 )
             return payload
+
+
+def _optional_int(value: Any) -> int | None:
+    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _optional_float(value: Any) -> float | None:
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
 def _as_wire_question(question: Question) -> dict[str, Any]:
@@ -229,17 +279,14 @@ def _as_results(
         expected = _EXPECTED_ANSWER_TYPE[type(question)]
         if answer.get("type") != expected:
             raise TypedJudgmentUnavailableException(
-                f"typed judgment answer for {name!r} was {answer.get('type')!r}, "
-                f"expected {expected!r}",
+                f"typed judgment answer for {name!r} was {answer.get('type')!r}, expected {expected!r}",
                 error_code="TYPED_JUDGMENT_SCHEMA_MISMATCH",
             )
         out[name] = _as_result(name, expected, answer, latency_ms)
     return out
 
 
-def _as_result(
-    name: str, expected: str, answer: Mapping[str, Any], latency_ms: float
-) -> JudgmentResult:
+def _as_result(name: str, expected: str, answer: Mapping[str, Any], latency_ms: float) -> JudgmentResult:
     probabilities = answer.get("probabilities") or {}
     if not isinstance(probabilities, dict):
         raise TypedJudgmentUnavailableException(

@@ -5,9 +5,8 @@ chore で module-level に昇格させたもの (元は ``create_world_runtime``
 関数の内部ローカルクラス)。
 
 設計:
-- 旧 ``InMemoryEventPublisher`` の per-event-type ``register_handler`` を
-  使うアプローチを廃止し、publish / publish_all / publish_async_events
-  のいずれでも ``_dispatch`` に集約する単純な publisher。
+- 受け手の登録と呼び出しは共通の配送器へ委ねる。
+  publish / publish_all / publish_async_events はいずれも ``_dispatch`` に集約する。
 - ``_dispatch`` は ObservationPipeline.run → ObservationAppender.append
   → ObservationTurnScheduler.maybe_schedule の流れで配信する。
 - speech (``PlayerSpokeEvent``) と interaction (``ConnectionStateChangedEvent``
@@ -19,10 +18,11 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
+from ai_rpg_world.eventing import DeliveryChannel, DeliveryGuarantee, EventDispatcher
 
 if TYPE_CHECKING:  # pragma: no cover
     from ai_rpg_world.application.world_runtime.world_runtime import WorldRuntime
@@ -31,12 +31,22 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 
+class _SideHandler:
+    """共通の呼び出しの口へ合わせ、失敗の記録に使う元の受け手を保持する。"""
+
+    def __init__(self, receiver: Any) -> None:
+        self.receiver = receiver
+
+    def __call__(self, event: DomainEvent) -> None:
+        self.receiver.handle(event)
+
+
 class PipelineEventPublisher(EventPublisher[DomainEvent]):
     """全 DomainEvent を ObservationPipeline 経由で配信する EventPublisher。
 
-    register_handler は no-op (per-event-type 登録は使わない)。publish /
-    publish_all / publish_async_events はいずれも ``_dispatch`` に集約し、
-    pipeline.run → appender.append → scheduler.maybe_schedule を実行する。
+    受け手は共通基盤の確定後へ登録し、観測より先に同期実行する。
+    publish / publish_all / publish_async_events はいずれも ``_dispatch`` に
+    集約し、pipeline.run → appender.append → scheduler.maybe_schedule を実行する。
 
     Args:
         runtime_ref: ``WorldRuntime`` への参照。``_obs_pipeline`` /
@@ -46,28 +56,42 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
 
     def __init__(self, runtime_ref: WorldRuntime) -> None:
         self._runtime = runtime_ref
-        # Phase E-3: side handler list。observation pipeline とは別軸で、
-        # event ごとに副作用ハンドラを走らせるための登録経路。
-        # (event_type, handler) のタプルで、event は handler.handle(event) で
-        # 渡される。同期実行のみサポート (PlayerOutcomeRegistry 等の即時反映用)。
-        self._side_handlers: list[tuple[type, Any]] = []
+        self._dispatcher: EventDispatcher[None] = EventDispatcher(
+            failure_observer=self._observe_side_handler_failure,
+        )
 
     def register_handler(
         self,
         event_type: Any,
         handler: Any,
-        is_synchronous: bool = False,
     ) -> None:
-        """Phase E-3: side handler を登録する。
-
-        従来は no-op だったが、PlayerOutcomeRegistry の更新ハンドラを
-        event-driven に組み込むため、type-filtered な dispatch list を持つよう
-        拡張した。`is_synchronous` は無視 (常に同期実行)。
-        """
-        del is_synchronous
+        """既存の登録の口を、共通基盤の確定後の同期配送へつなぐ。"""
         if event_type is None or handler is None:
             return
-        self._side_handlers.append((event_type, handler))
+        self._dispatcher.register_after_commit(
+            event_type,
+            _SideHandler(handler),
+            channel=DeliveryChannel.OBSERVATION,
+            guarantee=DeliveryGuarantee.BEST_EFFORT,
+        )
+
+    def _observe_side_handler_failure(
+        self,
+        channel: DeliveryChannel,
+        guarantee: DeliveryGuarantee,
+        event: DomainEvent,
+        handler: object,
+        error: Exception,
+    ) -> None:
+        # 静的メソッドや属性の関数でも、trace は登録した受け手の型名を残す。
+        receiver = cast(_SideHandler, handler).receiver
+        logger.error(
+            "side handler %s failed on event %s — continuing pipeline",
+            type(receiver).__name__,
+            type(event).__name__,
+            exc_info=error,
+        )
+        self._record_side_handler_failure(receiver, event, error)
 
     def publish(self, event: DomainEvent) -> None:
         self._dispatch(event)
@@ -107,9 +131,7 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
                 aggregate_id = str(aggregate_id)
             # aggregate が player のときだけ best-effort で player_id に昇格する。
             player_id = (
-                aggregate_id
-                if aggregate_type == "PlayerStatusAggregate" and isinstance(aggregate_id, int)
-                else None
+                aggregate_id if aggregate_type == "PlayerStatusAggregate" and isinstance(aggregate_id, int) else None
             )
             recorder.record(
                 TraceEventKind.SIDE_HANDLER_FAILED,
@@ -126,34 +148,22 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
         except Exception:
             logger.warning(
                 "failed to record SIDE_HANDLER_FAILED trace for handler=%s event=%s",
-                type(handler).__name__, type(event).__name__,
+                type(handler).__name__,
+                type(event).__name__,
                 exc_info=True,
             )
 
     def _dispatch(self, event: DomainEvent) -> None:
-        # Phase E-3: side handler を先に走らせる。observation pipeline より先に
-        # registry mutation を済ませることで「player downed → DEAD outcome が
-        # 立った状態で観測が emit される」順序になる。
-        # silent failure fix: 個別 handler の例外で observation pipeline 全体を
-        # 道連れに止めないよう、handler の例外は log に残してから継続する。
-        # こうしないと「最初に登録された side handler が壊れた瞬間、以降の全
-        # observation が止まる」というカスケード障害になる (1 つの outcome
-        # mutation bug が tick 全体の prompt 配信を止める)。
-        # logger.exception で stack trace を残すので silent failure にもならない。
-        for event_type, handler in self._side_handlers:
-            if not isinstance(event, event_type):
-                continue
-            try:
-                handler.handle(event)
-            except Exception as exc:
-                logger.exception(
-                    "side handler %s failed on event %s — continuing pipeline",
-                    type(handler).__name__, type(event).__name__,
-                )
-                # Stage 3X 前段 (観測): 握った失敗を trace にも残す。log だけだと
-                # 実 run の集計に乗らず、load-bearing な同期副作用の失敗頻度が
-                # 見えない。記録自体の失敗で pipeline を止めない (best-effort)。
-                self._record_side_handler_failure(handler, event, exc)
+        # 公開SNSの受信は専用の確定境界で記録する。旧formatterへ同じ通知を
+        # 二重に流すと全文・起床が重複するため、ここで一本化する。
+        from ai_rpg_world.domain.sns.event import SnsContentLikedEvent, SnsUserFollowedEvent
+
+        public_sns = getattr(self._runtime, "_public_sns_command_service", None)
+        if public_sns is not None and isinstance(event, (SnsContentLikedEvent, SnsUserFollowedEvent)):
+            public_sns.record_event(event)
+            return
+        # 観測を作る前に、確定後の受け手の反映を済ませる。直接発行も同じ口を通す。
+        self._dispatcher.handoff([event])
         items = self._runtime._obs_pipeline.run(event)
         if not items:
             return
@@ -163,8 +173,7 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
         appender = self._runtime._observation_appender
         if appender is None:
             logger.debug(
-                "PipelineEventPublisher: observation_appender is not yet set, "
-                "skipping event=%s",
+                "PipelineEventPublisher: observation_appender is not yet set, skipping event=%s",
                 type(event).__name__,
             )
             return
@@ -172,7 +181,8 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
         now = datetime.now(timezone.utc)
         time_label = self._runtime._time_label()
         for pid, output in items:
-            appender.append(pid, output, now, time_label)
+            if not appender.append(pid, output, now, time_label):
+                continue
             scheduler = self._runtime._observation_turn_scheduler
             if scheduler is not None:
                 scheduler.maybe_schedule(pid, output)

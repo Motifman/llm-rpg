@@ -32,9 +32,7 @@ _WEATHER_FEATURE = "weather"
 
 # 新しい interaction 条件を足したとき、その条件が環境機能を要求するかを必ず
 # 判断させる。判定側もこの表を読むため、検査と実装の対象集合が分岐しない。
-_INTERACTION_CONDITION_FEATURE_REQUIREMENTS: Mapping[
-    InteractionConditionTypeEnum, str | None
-] = {
+_INTERACTION_CONDITION_FEATURE_REQUIREMENTS: Mapping[InteractionConditionTypeEnum, str | None] = {
     InteractionConditionTypeEnum.ALWAYS: None,
     InteractionConditionTypeEnum.HAS_ITEM: None,
     InteractionConditionTypeEnum.OBJECT_STATE: None,
@@ -78,25 +76,31 @@ _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS: Mapping[str, str | None] = {
 
 # 終了条件は、置かれた配列が成立時の勝敗ラベルを決める。条件型を追加した人が
 # 「勝敗あり / 中立」のどちらかを判断するまで loader が受理しないよう全件を列挙する。
-_GAME_END_CONDITION_ALLOWED_SECTIONS: Mapping[
-    GameEndConditionTypeEnum, frozenset[str]
-] = {
-    GameEndConditionTypeEnum.ALL_AT_SPOT: frozenset({"win", "lose"}),
-    GameEndConditionTypeEnum.ANY_AT_SPOT: frozenset({"win", "lose"}),
-    GameEndConditionTypeEnum.FLAG_SET: frozenset({"win", "lose"}),
-    GameEndConditionTypeEnum.TICK_LIMIT: frozenset({"win", "lose"}),
-    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST: frozenset(
-        {"win", "lose"}
-    ),
-    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE: (
-        frozenset({"win", "lose"})
-    ),
-    GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST: frozenset({"win", "lose"}),
-    GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED: frozenset({"end"}),
+#
+# teams のあるシナリオ (#1516) では、勝敗はチームの ``win`` が決める。全体の
+# ``end`` は「どのチームも勝たずに終わる」中立の終わりなので ``team_end`` として
+# 読み、世界の出来事を見る条件をすべて置ける。
+#
+# 「全員が / 誰かが その場所にいる」は、チームの win に書くと「チームの全員が」と
+# 読み違える。世界全体を見るので相手チームの人まで数え、ANY_AT_SPOT なら相手が
+# 着いただけで勝つ。チームの win には置かせない。
+_WORLD_END_SECTIONS = frozenset({"win", "lose", "team_win", "team_end"})
+_PLACE_END_SECTIONS = frozenset({"win", "lose", "team_end"})
+_GAME_END_CONDITION_ALLOWED_SECTIONS: Mapping[GameEndConditionTypeEnum, frozenset[str]] = {
+    GameEndConditionTypeEnum.ALL_AT_SPOT: _PLACE_END_SECTIONS,
+    GameEndConditionTypeEnum.ANY_AT_SPOT: _PLACE_END_SECTIONS,
+    GameEndConditionTypeEnum.FLAG_SET: _WORLD_END_SECTIONS,
+    GameEndConditionTypeEnum.TICK_LIMIT: _WORLD_END_SECTIONS,
+    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST: (_WORLD_END_SECTIONS),
+    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE: (_WORLD_END_SECTIONS),
+    GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST: _WORLD_END_SECTIONS,
+    GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED: frozenset({"end", "team_end"}),
+    GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME: frozenset({"team_win"}),
 }
 
 _SCENARIO_EVENT_TRIGGERS = frozenset({"ON_TICK", "ON_CHAIN"})
 _SCENARIO_EVENT_RECIPIENTS = frozenset({"all_players", "players_at_spot"})
+
 
 def validate_feature_consistency(
     scenario: ScenarioLoadResult,
@@ -115,25 +119,14 @@ def validate_feature_consistency(
         scenario,
         meeting_declared=scenario.meeting_enabled,
     )
-    if (
-        scenario.death_semantics.grace_ticks == 0
-        and exposure.is_exposed("tend_to_player")
-    ):
-        raise ScenarioLoadError(
-            "death.grace_ticks が 0 の世界では tend_to_player を "
-            "disabled_tools に指定してください"
-        )
+    if scenario.death_semantics.grace_ticks == 0 and exposure.is_exposed("tend_to_player"):
+        raise ScenarioLoadError("death.grace_ticks が 0 の世界では tend_to_player を disabled_tools に指定してください")
 
     nodes = tuple(iter_mappings(raw))
     _reject_effects_on_synchronized_interactions(scenario, nodes)
-    if any(
-        node.get("effect_type") == InteractionEffectTypeEnum.CALL_MEETING.value
-        for node in nodes
-    ):
+    if any(node.get("effect_type") == InteractionEffectTypeEnum.CALL_MEETING.value for node in nodes):
         if not scenario.meeting_enabled:
-            raise ScenarioLoadError(
-                "CALL_MEETING を使うシナリオには有効な meeting 宣言が必要です"
-            )
+            raise ScenarioLoadError("CALL_MEETING を使うシナリオには有効な meeting 宣言が必要です")
 
     day_night_condition_names = {
         condition.value
@@ -150,9 +143,7 @@ def validate_feature_consistency(
         for node in nodes
     )
     if uses_day_night and scenario.day_night_config is None:
-        raise ScenarioLoadError(
-            "時間帯条件を使うシナリオには有効な environment.day_night が必要です"
-        )
+        raise ScenarioLoadError("時間帯条件を使うシナリオには有効な environment.day_night が必要です")
 
     # 条件が指すフェーズ名が、そのシナリオが宣言したフェーズに実在すること。
     #
@@ -165,19 +156,11 @@ def validate_feature_consistency(
     # 照合相手は enum ではなくそのシナリオの宣言になる。
     declared_phases = {
         phase.name
-        for phase in (
-            scenario.day_night_config.cycle.phases
-            if scenario.day_night_config is not None
-            else ()
-        )
+        for phase in (scenario.day_night_config.cycle.phases if scenario.day_night_config is not None else ())
     }
     if declared_phases:
         unknown = sorted(
-            {
-                str(node["required_time_of_day_phase"])
-                for node in nodes
-                if node.get("required_time_of_day_phase")
-            }
+            {str(node["required_time_of_day_phase"]) for node in nodes if node.get("required_time_of_day_phase")}
             - declared_phases
         )
         if unknown:
@@ -202,12 +185,8 @@ def validate_feature_consistency(
         )
         for node in nodes
     )
-    if uses_weather and (
-        scenario.weather_config is None or not scenario.weather_config.enabled
-    ):
-        raise ScenarioLoadError(
-            "天候条件を使うシナリオには有効な environment.weather が必要です"
-        )
+    if uses_weather and (scenario.weather_config is None or not scenario.weather_config.enabled):
+        raise ScenarioLoadError("天候条件を使うシナリオには有効な environment.weather が必要です")
 
 
 def _reject_effects_on_synchronized_interactions(

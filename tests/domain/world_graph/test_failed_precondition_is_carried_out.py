@@ -127,8 +127,7 @@ class TestEvaluatePreconditionsResult:
     """interaction 前提条件が共通 PredicateResult 契約を正本として返す。"""
 
     def test_second_failure_keeps_condition_message_and_path(self) -> None:
-        """2番目で落ちると、条件の実体・文・子番号1を同じ結果へ保持する。
-        """
+        """2番目で落ちると、条件の実体・文・子番号1を同じ結果へ保持する。"""
         first = _state_condition()
         second = _item_condition()
 
@@ -163,30 +162,16 @@ class TestEvaluatePreconditionsResult:
 class TestCanInteractStaysCompatible:
     """`can_interact` の戻り値は 2 要素のまま。"""
 
-    def test_it_still_returns_two_values(self) -> None:
-        """`can_interact` は (成否, 理由) を返す。
-
-        #380 で richer な `evaluate_preconditions` を新設したが、`can_interact` は
-        テストを含め 64 箇所から呼ばれている。**戻り値を増やすと呼び出し側が全部
-        壊れる**ので、こちらは委譲のまま維持する。
-        """
-        result = SpotInteractionService().can_interact(
-            _interaction(_state_condition()),
-            _bush(available=False),
-            owned_item_spec_ids=frozenset(),
-            world_flags=frozenset(),
-        )
-
-        assert len(result) == 2
-        assert result[0] is False
-
     def test_it_agrees_with_the_richer_method(self) -> None:
         """委譲先と成否・理由が一致する。"""
         service = SpotInteractionService()
         args = (_interaction(_state_condition()), _bush(available=False))
         kwargs = {"owned_item_spec_ids": frozenset(), "world_flags": frozenset()}
 
-        ok, reason = service.can_interact(*args, **kwargs)
+        result = service.can_interact(*args, **kwargs)
+        assert len(result) == 2
+        assert result[0] is False
+        ok, reason = result
         rich_ok, rich_reason, _failed = service.evaluate_preconditions(*args, **kwargs)
 
         assert (ok, reason) == (rich_ok, rich_reason)

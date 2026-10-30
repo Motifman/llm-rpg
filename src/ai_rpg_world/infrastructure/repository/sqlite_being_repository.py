@@ -98,9 +98,7 @@ def _payload_dict_to_snapshot(data: dict[str, Any]) -> BeingSnapshot:
     """
     raw_kinds = data.get("declared_memory_kinds", [])
     if not isinstance(raw_kinds, list):
-        raise ValueError(
-            f"declared_memory_kinds must be JSON array, got {type(raw_kinds).__name__}"
-        )
+        raise ValueError(f"declared_memory_kinds must be JSON array, got {type(raw_kinds).__name__}")
     return BeingSnapshot(
         being_id_value=data["being_id_value"],
         identity_name=data["identity_name"],
@@ -170,12 +168,8 @@ class SqliteBeingRepository(BeingRepository):
 
     def save_snapshot(self, snapshot: BeingSnapshot) -> None:
         if not isinstance(snapshot, BeingSnapshot):
-            raise TypeError(
-                f"snapshot must be BeingSnapshot, got {type(snapshot).__name__}"
-            )
-        payload = json.dumps(
-            _snapshot_to_payload_dict(snapshot), ensure_ascii=False
-        )
+            raise TypeError(f"snapshot must be BeingSnapshot, got {type(snapshot).__name__}")
+        payload = json.dumps(_snapshot_to_payload_dict(snapshot), ensure_ascii=False)
         updated_at = datetime.now(timezone.utc).isoformat()
 
         cur = self._conn.cursor()
@@ -205,9 +199,7 @@ class SqliteBeingRepository(BeingRepository):
 
     def find_snapshot_by_id(self, being_id: BeingId) -> BeingSnapshot | None:
         if not isinstance(being_id, BeingId):
-            raise TypeError(
-                f"being_id must be BeingId, got {type(being_id).__name__}"
-            )
+            raise TypeError(f"being_id must be BeingId, got {type(being_id).__name__}")
 
         cur = self._conn.cursor()
         cur.execute(
@@ -223,9 +215,7 @@ class SqliteBeingRepository(BeingRepository):
 
     def exists(self, being_id: BeingId) -> bool:
         if not isinstance(being_id, BeingId):
-            raise TypeError(
-                f"being_id must be BeingId, got {type(being_id).__name__}"
-            )
+            raise TypeError(f"being_id must be BeingId, got {type(being_id).__name__}")
         cur = self._conn.cursor()
         cur.execute(
             "SELECT 1 FROM beings WHERE being_id_value = ? LIMIT 1",
@@ -235,9 +225,7 @@ class SqliteBeingRepository(BeingRepository):
 
     def delete(self, being_id: BeingId) -> bool:
         if not isinstance(being_id, BeingId):
-            raise TypeError(
-                f"being_id must be BeingId, got {type(being_id).__name__}"
-            )
+            raise TypeError(f"being_id must be BeingId, got {type(being_id).__name__}")
         cur = self._conn.cursor()
         cur.execute(
             "DELETE FROM beings WHERE being_id_value = ?",
@@ -247,9 +235,7 @@ class SqliteBeingRepository(BeingRepository):
         self._conn.commit()
         return deleted
 
-    def find_all_attached_to(
-        self, world_id: WorldId, player_id: PlayerId
-    ) -> list[Being]:
+    def find_all_attached_to(self, world_id: WorldId, player_id: PlayerId) -> list[Being]:
         """JSON カラム経由で attach 検索する。
 
         SQLite JSON1 拡張の ``json_extract`` で attachment フィールドを直接
@@ -259,13 +245,9 @@ class SqliteBeingRepository(BeingRepository):
         migration で追加して indexed query に差し替える出口を残す。
         """
         if not isinstance(world_id, WorldId):
-            raise TypeError(
-                f"world_id must be WorldId, got {type(world_id).__name__}"
-            )
+            raise TypeError(f"world_id must be WorldId, got {type(world_id).__name__}")
         if not isinstance(player_id, PlayerId):
-            raise TypeError(
-                f"player_id must be PlayerId, got {type(player_id).__name__}"
-            )
+            raise TypeError(f"player_id must be PlayerId, got {type(player_id).__name__}")
 
         cur = self._conn.cursor()
         cur.execute(

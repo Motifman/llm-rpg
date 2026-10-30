@@ -56,18 +56,13 @@ _STANCE: dict[str, str] = {
     "application/world_graph/spot_exploration_application_service.py": _DROP,
     "application/world_graph/spot_graph_scenario_event_stage_service.py": _DROP,
     "application/world_graph/player_interaction_application_service.py": _DROP,
-    "application/world/handlers/item_taken_from_chest_handler.py": _NOT_REACHABLE,
-    "application/world/handlers/monster_death_reward_handler.py": _NOT_REACHABLE,
-    "application/world/services/place_object_service.py": _NOT_REACHABLE,
     "application/quest/services/quest_progress_reaction_service.py": _NOT_REACHABLE,
-    "domain/world/service/harvest_domain_service.py": _NOT_REACHABLE,
     # 起動時の初期所持品は、枠を超えたら**読み込みの時点で落とす**。作者の
     # 誤りであって世界の出来事ではないので、地面に落とす形にはしない。
     "application/world_runtime/world_runtime.py": _REFUSE,
     # ── 現行経路から到達しない (旧実装) ──────────────────────────
     "application/shop/services/shop_command_service.py": _NOT_REACHABLE,
     "application/trade/services/trade_command_service.py": _NOT_REACHABLE,
-    "application/conversation/services/conversation_command_service.py": _NOT_REACHABLE,
     # ── 付与の実装そのもの ────────────────────────────────────────
     "application/world_graph/spot_inventory_helpers.py": _INFRASTRUCTURE,
 }
@@ -88,11 +83,7 @@ def _modules_that_grant_items() -> set[str]:
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
-            name = (
-                func.attr if isinstance(func, ast.Attribute)
-                else func.id if isinstance(func, ast.Name)
-                else None
-            )
+            name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
             if name in _GRANT_CALLS:
                 found.add(str(path.relative_to(_SRC)))
                 break
@@ -125,9 +116,7 @@ class TestEveryGrantPathDeclaresWhatItDoesWhenFull:
         """
         stale = sorted(set(_STANCE) - _modules_that_grant_items())
 
-        assert not stale, (
-            f"付与しなくなったモジュールが表に残っています。消してください: {stale}"
-        )
+        assert not stale, f"付与しなくなったモジュールが表に残っています。消してください: {stale}"
 
     def test_every_stance_is_one_of_the_known_ones(self) -> None:
         """宣言された構えが、決めてある選択肢のどれかになっている。"""
@@ -169,6 +158,4 @@ class TestTheToolFacingPathsStillDeclareThatTheyRefuse:
         """ツールが受け取る 4 経路の宣言が、どれも事前拒否のままになっている。"""
         downgraded = [m for m in self._TOOL_FACING if _STANCE.get(m) != _REFUSE]
 
-        assert not downgraded, (
-            f"ツールが受け取る経路の構えが事前拒否から変わっています: {downgraded}"
-        )
+        assert not downgraded, f"ツールが受け取る経路の構えが事前拒否から変わっています: {downgraded}"

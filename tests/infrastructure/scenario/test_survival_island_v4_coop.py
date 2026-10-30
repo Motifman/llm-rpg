@@ -20,7 +20,6 @@ from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_object import VISIBLE_STATE_TAGS_KEY
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
@@ -79,10 +78,7 @@ class TestSurvivalIslandV4Load:
 
         assert cue.cue_id == "summit_signal_smoke"
         assert cue.source.kind == "object_state"
-        assert (
-            cue.source.object_id.value
-            == loaded_v4.id_mapper.get_int("object", "signal_fire_pit")
-        )
+        assert cue.source.object_id.value == loaded_v4.id_mapper.get_int("object", "signal_fire_pit")
         assert cue.source.state_key == "lit"
         assert cue.source.equals is True
         assert cue.origin_area_id == "mountain"
@@ -138,14 +134,10 @@ class TestSurvivalIslandV4MapValidation:
             "observation_outpost_ruins",
             "shipwreck_beach",
         ]
-        assert "TRAVEL_TICKS_DISTANCE_MISMATCH" not in {
-            issue.code for issue in result.warnings
-        }
+        assert "TRAVEL_TICKS_DISTANCE_MISMATCH" not in {issue.code for issue in result.warnings}
         assert "SPOT_AREA_ID_MISSING" not in {issue.code for issue in result.warnings}
         assert "AREA_CENTROID_UNAVAILABLE" not in {issue.code for issue in result.errors}
-        assert not {
-            issue.code for issue in result.errors if issue.code.startswith("DISTANT_CUE")
-        }
+        assert not {issue.code for issue in result.errors if issue.code.startswith("DISTANT_CUE")}
 
     def test_v3_and_v4_hidden_cove_are_not_indoor_by_default(self, raw_v4) -> None:
         """memo A/B 既定の v3 と本命 v4 の隠し入江は、どちらも屋内扱いで山影を隠さない。"""
@@ -168,17 +160,11 @@ class TestSurvivalIslandV4CoveCarving:
         interaction = _find_interaction(raw_v4, "hidden_cove", "cove_carving", "read_carving")
 
         assert interaction["display_label"] == "刻み跡を読む"
-        assert (
-            interaction["witness_observation_message"]
-            == "{actor}が入江の岩肌の刻み跡を読んでいる。"
-        )
+        assert interaction["witness_observation_message"] == "{actor}が入江の岩肌の刻み跡を読んでいる。"
         effect_types = [effect["effect_type"] for effect in interaction["effects"]]
         assert effect_types == ["CHANGE_OBJECT_STATE", "SET_FLAG", "SHOW_MESSAGE"]
         flag_effect = interaction["effects"][1]
-        assert flag_effect["parameters"] == {
-            "flag_name": "east_route_revealed",
-            "value": True,
-        }
+        assert flag_effect["parameters"] == {"flag_name": "east_route_revealed"}
         assert _flag_reference_count(raw_v4, "east_route_revealed") == 1
 
     def test_cove_carving_is_loaded_with_witness_message(self, loaded_v4) -> None:
@@ -219,9 +205,7 @@ class TestSurvivalIslandV4SignalHints:
             }
         ]
 
-    def test_foothills_carving_read_message_hints_three_driftwood_requirement(
-        self, raw_v4
-    ) -> None:
+    def test_foothills_carving_read_message_hints_three_driftwood_requirement(self, raw_v4) -> None:
         """山麓の石積みを読むと、狼煙には流木が三本必要だと物語内文面で分かる。"""
         interaction = _find_interaction(raw_v4, "foothills", "trail_cairn", "read_carving")
 
@@ -237,15 +221,11 @@ class TestSurvivalIslandV4SignalHints:
             }
         ]
 
-    def test_light_signal_driftwood_failure_does_not_suggest_nonexistent_thick_wood(
-        self, raw_v4
-    ) -> None:
+    def test_light_signal_driftwood_failure_does_not_suggest_nonexistent_thick_wood(self, raw_v4) -> None:
         """light_signal の流木不足文面は、存在しない太い流木という別素材を示唆しない。"""
         interaction = _find_interaction(raw_v4, "summit", "signal_fire_pit", "light_signal")
         driftwood_condition = next(
-            condition
-            for condition in interaction["preconditions"]
-            if condition.get("state_key") == "driftwood_stacked"
+            condition for condition in interaction["preconditions"] if condition.get("state_key") == "driftwood_stacked"
         )
 
         assert driftwood_condition["failure_message"] == "流木が足りない。3 本は要る。"
@@ -255,24 +235,14 @@ class TestSurvivalIslandV4SignalHints:
 class TestSurvivalIslandV4SignalDeposits:
     """狼煙台が持ち寄り式の材料蓄積を宣言し、旧個人所持経路を残さない。"""
 
-    def test_signal_pit_declares_deposit_actions_and_object_state_gate(
-        self, raw_v4
-    ) -> None:
+    def test_signal_pit_declares_deposit_actions_and_object_state_gate(self, raw_v4) -> None:
         """流木・枯れ葉は all 投入 action を持ち、点火は object.state の累積数を見る。"""
-        driftwood = _find_interaction(
-            raw_v4, "summit", "signal_fire_pit", "add_driftwood"
-        )
-        leaves = _find_interaction(
-            raw_v4, "summit", "signal_fire_pit", "add_dry_leaves"
-        )
-        light = _find_interaction(
-            raw_v4, "summit", "signal_fire_pit", "light_signal"
-        )
+        driftwood = _find_interaction(raw_v4, "summit", "signal_fire_pit", "add_driftwood")
+        leaves = _find_interaction(raw_v4, "summit", "signal_fire_pit", "add_dry_leaves")
+        light = _find_interaction(raw_v4, "summit", "signal_fire_pit", "light_signal")
 
         assert driftwood["display_label"] == "流木を狼煙台に積む"
-        assert driftwood["witness_observation_message"] == (
-            "{actor}が狼煙台に流木を積み上げた。"
-        )
+        assert driftwood["witness_observation_message"] == ("{actor}が狼煙台に流木を積み上げた。")
         assert driftwood["effects"][0] == {
             "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
             "parameters": {
@@ -283,9 +253,7 @@ class TestSurvivalIslandV4SignalDeposits:
             },
         }
         assert leaves["display_label"] == "枯れ葉を狼煙台に敷く"
-        assert leaves["witness_observation_message"] == (
-            "{actor}が狼煙台に枯れ葉を敷いた。"
-        )
+        assert leaves["witness_observation_message"] == ("{actor}が狼煙台に枯れ葉を敷いた。")
         assert [condition["condition_type"] for condition in light["preconditions"]] == [
             "OBJECT_STATE",
             "OBJECT_STATE_INT_AT_LEAST",
@@ -299,9 +267,7 @@ class TestSurvivalIslandV4SignalDeposits:
             if effect["effect_type"] == "REMOVE_ITEM"
         } & {"driftwood", "dry_leaves"}
 
-    def test_signal_pit_has_no_action_that_removes_deposited_materials(
-        self, raw_v4
-    ) -> None:
+    def test_signal_pit_has_no_action_that_removes_deposited_materials(self, raw_v4) -> None:
         """投入は一方通行というユーザ判断を固定し、積んだ材料を降ろす action を置かない。"""
         pit = next(
             obj
@@ -317,9 +283,7 @@ class TestSurvivalIslandV4SignalDeposits:
             "light_signal",
         ]
 
-    def test_public_intro_and_objective_do_not_explain_the_solution(
-        self, raw_v4
-    ) -> None:
+    def test_public_intro_and_objective_do_not_explain_the_solution(self, raw_v4) -> None:
         """持ち寄り方は世界の object 表示から発見させ、公開導入と目的文へ答えを書かない。"""
         for text in (
             raw_v4["metadata"]["llm_public_intro"],
@@ -334,11 +298,7 @@ class TestSurvivalIslandV4WaterSources:
 
     def test_water_sources_define_author_unavailable_hint(self, loaded_v4) -> None:
         """水源2つは available=false 表示に、水専用の作者指定ヒントを使う。"""
-        objects_by_name = {
-            obj.name: obj
-            for interior in loaded_v4.interiors.values()
-            for obj in interior.objects
-        }
+        objects_by_name = {obj.name: obj for interior in loaded_v4.interiors.values() for obj in interior.objects}
 
         assert objects_by_name["河口の水辺"].unavailable_hint == "今は汲めない・時間を置けば戻る"
         assert objects_by_name["湧水の口"].unavailable_hint == "今は汲めない・時間を置けば戻る"
@@ -373,18 +333,10 @@ class TestSurvivalIslandV4ObjectStateDisplay:
 
     def test_fire_and_openable_objects_render_state_display_tags(self, loaded_v4) -> None:
         """焚き火・箱・狼煙台の見た目 state は state_display の日本語 tag として表示される。"""
-        objects_by_name = {
-            obj.name: obj
-            for interior in loaded_v4.interiors.values()
-            for obj in interior.objects
-        }
+        objects_by_name = {obj.name: obj for interior in loaded_v4.interiors.values() for obj in interior.objects}
 
-        assert objects_by_name["焚き火跡"].visible_state() == {
-            VISIBLE_STATE_TAGS_KEY: ("焚き火は消えている",)
-        }
-        assert objects_by_name["砂に埋もれた箱"].visible_state() == {
-            VISIBLE_STATE_TAGS_KEY: ("箱はまだ開いていない",)
-        }
+        assert objects_by_name["焚き火跡"].visible_state() == {VISIBLE_STATE_TAGS_KEY: ("焚き火は消えている",)}
+        assert objects_by_name["砂に埋もれた箱"].visible_state() == {VISIBLE_STATE_TAGS_KEY: ("箱はまだ開いていない",)}
         assert objects_by_name["狼煙台"].visible_state() == {
             VISIBLE_STATE_TAGS_KEY: (
                 "狼煙台に火はついていない",
@@ -398,11 +350,7 @@ class TestSurvivalIslandV4ObjectStateDisplay:
         loaded_v4,
     ) -> None:
         """read/examined など個人の行為履歴 state は、第三者 prompt では表示しない。"""
-        objects_by_name = {
-            obj.name: obj
-            for interior in loaded_v4.interiors.values()
-            for obj in interior.objects
-        }
+        objects_by_name = {obj.name: obj for interior in loaded_v4.interiors.values() for obj in interior.objects}
 
         assert objects_by_name["岩肌の刻み跡"].visible_state() == {}
         assert objects_by_name["錆びた標識"].visible_state() == {}
@@ -414,10 +362,7 @@ class TestSurvivalIslandV4FoodEconomy:
 
     def test_food_spoilage_ticks_are_softened_for_long_run_observation(self, loaded_v4) -> None:
         """主な食料は 200 tick 観察中に即腐敗しすぎないよう、腐敗までの tick が緩和されている。"""
-        spoilage_by_id = {
-            item.string_id: item.spoils_after_ticks
-            for item in loaded_v4.item_spec_definitions
-        }
+        spoilage_by_id = {item.string_id: item.spoils_after_ticks for item in loaded_v4.item_spec_definitions}
 
         assert spoilage_by_id["shellfish"] == 144
         assert spoilage_by_id["raw_fish"] == 144
@@ -467,9 +412,7 @@ class TestSurvivalIslandV4ExplorePayoff:
             for spot in raw_v4["spots"]
             for item in (spot.get("interior") or {}).get("discoverable_items", [])
         }
-        assert all_discoverable_specs.isdisjoint(
-            {"first_aid", "fishing_rod", "treasure_compass"}
-        )
+        assert all_discoverable_specs.isdisjoint({"first_aid", "fishing_rod", "treasure_compass"})
 
     def test_loader_resolves_v4_discoverable_items(self, loaded_v4) -> None:
         """ScenarioLoader 後も discoverable_items が SpotInterior に残り、探索で使える状態になる。"""
@@ -499,8 +442,7 @@ class TestSurvivalIslandV4ExplorePayoff:
             item.item_spec_id.value == id_mapper.get_int("item_spec", "vine_rope")
             and item.discovery_condition.condition_type.value == "HAS_ITEM"
             and item.discovery_condition.required_item_spec_id is not None
-            and item.discovery_condition.required_item_spec_id.value
-            == id_mapper.get_int("item_spec", "bone_knife")
+            and item.discovery_condition.required_item_spec_id.value == id_mapper.get_int("item_spec", "bone_knife")
             for item in swamp_items
         )
 
@@ -521,16 +463,11 @@ class TestSurvivalIslandV4ActionConditionHints:
             _make_player_state(snapshot),
         )
 
-        assert (
-            '[沖で釣りをする → "fish_deep"（夜不可・嵐不可）]'
-            in result.current_state_text
-        )
+        assert '[沖で釣りをする → "fish_deep"（夜不可・嵐不可）]' in result.current_state_text
         assert "night" not in result.current_state_text
         assert "STORM" not in result.current_state_text
         assert result.tool_runtime_context.targets["OBJ1"].display_name == "沖の釣り場"
-        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == (
-            "fish_deep",
-        )
+        assert result.tool_runtime_context.targets["OBJ1"].available_interactions == ("fish_deep",)
 
     def test_signal_pit_prompt_shows_state_requirements_and_blocked_action(
         self,
@@ -541,11 +478,7 @@ class TestSurvivalIslandV4ActionConditionHints:
         interior = loaded_v4.interiors[summit_id]
         snapshot = _build_snapshot_for_spot(loaded_v4, summit_id, interior)
         pit = next(obj for obj in snapshot.objects if obj.name == "狼煙台")
-        light = next(
-            interaction
-            for interaction in pit.interactions
-            if interaction.action_name == "light_signal"
-        )
+        light = next(interaction for interaction in pit.interactions if interaction.action_name == "light_signal")
         result = SpotGraphUiContextBuilder().build(
             "survival_island_v4_coop",
             _make_player_state(snapshot),
@@ -562,13 +495,10 @@ class TestSurvivalIslandV4ActionConditionHints:
         assert (
             "いまできない: 狼煙を上げる → "
             '"light_signal"（流木が足りない。3 本は要る。・'
-            "枯れ葉が足りない。乾いたものを 2 掴みは要る。）"
-            in result.current_state_text
+            "枯れ葉が足りない。乾いたものを 2 掴みは要る。）" in result.current_state_text
         )
         signal_target = next(
-            target
-            for target in result.tool_runtime_context.targets.values()
-            if target.display_name == "狼煙台"
+            target for target in result.tool_runtime_context.targets.values() if target.display_name == "狼煙台"
         )
         assert signal_target.available_interactions == (
             "add_driftwood",
@@ -621,14 +551,10 @@ class TestSurvivalIslandV4SurvivalEconomy:
             "path_to_summit",
         ]
         rescue_ticks = [
-            rule["trigger"]["tick"]
-            for rule in raw_v4["player_outcome_rules"]
-            if rule["outcome"] == "RESCUED"
+            rule["trigger"]["tick"] for rule in raw_v4["player_outcome_rules"] if rule["outcome"] == "RESCUED"
         ]
         stranded_tick = next(
-            rule["trigger"]["tick"]
-            for rule in raw_v4["player_outcome_rules"]
-            if rule["outcome"] == "STRANDED"
+            rule["trigger"]["tick"] for rule in raw_v4["player_outcome_rules"] if rule["outcome"] == "STRANDED"
         )
         assert travel_ticks < rescue_ticks[0]
         assert stranded_tick == 240
@@ -676,8 +602,7 @@ def _find_discoverable_item(
 def _flag_reference_count(raw: Any, flag_name: str) -> int:
     if isinstance(raw, dict):
         return sum(
-            (1 if key == "flag_name" and value == flag_name else 0)
-            + _flag_reference_count(value, flag_name)
+            (1 if key == "flag_name" and value == flag_name else 0) + _flag_reference_count(value, flag_name)
             for key, value in raw.items()
         )
     if isinstance(raw, list):
@@ -703,10 +628,7 @@ def _build_snapshot_for_spot(loaded_v4, spot_id: SpotId, interior):
     # 時刻帯の呼び名は**シナリオが宣言したもの**を渡す。コード側に既定の表を
     # 持たないので、渡さないと時刻帯ヒントは出ない (#853 後続 / 系統3)。
     # v4_coop は predawn(未明) を宣言しており、コードの表には無かった。
-    phase_labels = {
-        phase.name: phase.display_text
-        for phase in loaded_v4.day_night_config.cycle.phases
-    }
+    phase_labels = {phase.name: phase.display_text for phase in loaded_v4.day_night_config.cycle.phases}
     snapshot = SpotGraphCurrentStateBuilder(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -723,23 +645,6 @@ def _make_player_state(snapshot) -> PlayerCurrentStateDto:
         player_id=1,
         player_name="P",
         current_spot_id=snapshot.current_spot_id,
-        current_spot_name=snapshot.current_spot_name,
-        current_spot_description=snapshot.current_spot_description,
-        x=None,
-        y=None,
-        z=None,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="晴れ",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=0,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=snapshot,
     )
 

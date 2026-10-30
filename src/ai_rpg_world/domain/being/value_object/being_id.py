@@ -27,9 +27,7 @@ class BeingId:
 
     def __post_init__(self) -> None:
         if not isinstance(self.value, str):
-            raise BeingIdValidationException(
-                f"BeingId.value must be str, got {type(self.value).__name__}"
-            )
+            raise BeingIdValidationException(f"BeingId.value must be str, got {type(self.value).__name__}")
         stripped = self.value.strip()
         if not stripped:
             raise BeingIdValidationException("BeingId.value must be non-empty")

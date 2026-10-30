@@ -1,4 +1,5 @@
 """プレイヤープロフィール集約の SQLite 実装（ゲーム書き込み DB）。"""
+
 from __future__ import annotations
 
 import copy

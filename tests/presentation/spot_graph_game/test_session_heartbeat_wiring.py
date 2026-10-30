@@ -21,9 +21,7 @@ def _scenario_dir() -> Path:
 def _heartbeat_observation_count(obs_buffer: object, player_id: PlayerId) -> int:
     get_observations = getattr(obs_buffer, "get_observations")
     entries = list(get_observations(player_id))
-    return sum(
-        1 for e in entries if (getattr(getattr(e, "output"), "structured") or {}).get("type") == "heartbeat"
-    )
+    return sum(1 for e in entries if (getattr(getattr(e, "output"), "structured") or {}).get("type") == "heartbeat")
 
 
 class TestSessionHeartbeatWiring:
@@ -42,7 +40,7 @@ class TestSessionHeartbeatWiring:
         )
         char = mgr.create_character(CharacterCreateRequest(name="ヒートビート確認用キャラクター"))
         summary = mgr.create_session(
-            SessionCreateRequest(world_id="relay_puzzle_demo", character_ids=[char.id]),
+            SessionCreateRequest(world_id="forbidden_library_demo", character_ids=[char.id]),
         )
         state = mgr._sessions[summary.session_id]
         runtime = state.runtime
@@ -66,9 +64,7 @@ class TestSessionHeartbeatWiring:
         assert all(_heartbeat_observation_count(buf, pid) >= 1 for pid in player_ids)
         for pid in player_ids:
             heartbeats = [
-                entry
-                for entry in buf.get_observations(pid)
-                if entry.output.structured.get("type") == "heartbeat"
+                entry for entry in buf.get_observations(pid) if entry.output.structured.get("type") == "heartbeat"
             ]
             assert heartbeats
             assert all(entry.game_time_label == runtime._time_label() for entry in heartbeats)

@@ -173,8 +173,10 @@ class TestReviveProsePRKappa:
         )
         handler.handle(
             _make_event(
-                aggregate_id=2, caregiver_player_id=PlayerId(1),
-                hp_recovered=60, total_hp=60,
+                aggregate_id=2,
+                caregiver_player_id=PlayerId(1),
+                hp_recovered=60,
+                total_hp=60,
             )
         )
         output = appender.append.call_args.kwargs.get("output") or appender.append.call_args.args[1]

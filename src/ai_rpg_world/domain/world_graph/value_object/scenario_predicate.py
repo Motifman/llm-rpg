@@ -25,9 +25,7 @@ class FlagSetPredicate:
 
     def __post_init__(self) -> None:
         if not isinstance(self.flag_name, str) or not self.flag_name.strip():
-            raise ScenarioPredicateValidationException(
-                "FlagSetPredicate.flag_name must be a non-empty str"
-            )
+            raise ScenarioPredicateValidationException("FlagSetPredicate.flag_name must be a non-empty str")
 
 
 @dataclass(frozen=True)
@@ -38,9 +36,7 @@ class TickAtLeastPredicate:
 
     def __post_init__(self) -> None:
         if isinstance(self.threshold, bool) or not isinstance(self.threshold, int):
-            raise ScenarioPredicateValidationException(
-                "TickAtLeastPredicate.threshold must be an int"
-            )
+            raise ScenarioPredicateValidationException("TickAtLeastPredicate.threshold must be an int")
 
 
 @dataclass(frozen=True)
@@ -51,12 +47,8 @@ class EntityAtSpotPredicate:
     spot_id: SpotId
 
     def __post_init__(self) -> None:
-        if not isinstance(self.entity_id, EntityId) or not isinstance(
-            self.spot_id, SpotId
-        ):
-            raise ScenarioPredicateValidationException(
-                "EntityAtSpotPredicate requires EntityId and SpotId"
-            )
+        if not isinstance(self.entity_id, EntityId) or not isinstance(self.spot_id, SpotId):
+            raise ScenarioPredicateValidationException("EntityAtSpotPredicate requires EntityId and SpotId")
 
 
 @dataclass(frozen=True)
@@ -68,9 +60,7 @@ class EntityCountAtSpotAtLeastPredicate:
 
     def __post_init__(self) -> None:
         if not isinstance(self.spot_id, SpotId):
-            raise ScenarioPredicateValidationException(
-                "EntityCountAtSpotAtLeastPredicate.spot_id must be a SpotId"
-            )
+            raise ScenarioPredicateValidationException("EntityCountAtSpotAtLeastPredicate.spot_id must be a SpotId")
         if (
             isinstance(self.required_count, bool)
             or not isinstance(self.required_count, int)
@@ -89,9 +79,7 @@ class ItemSpecOwnedPredicate:
 
     def __post_init__(self) -> None:
         if not isinstance(self.item_spec_id, ItemSpecId):
-            raise ScenarioPredicateValidationException(
-                "ItemSpecOwnedPredicate.item_spec_id must be an ItemSpecId"
-            )
+            raise ScenarioPredicateValidationException("ItemSpecOwnedPredicate.item_spec_id must be an ItemSpecId")
 
 
 @dataclass(frozen=True)
@@ -111,9 +99,7 @@ class ItemSpecCountAtLeastPredicate:
             or not isinstance(self.required_count, int)
             or self.required_count <= 0
         ):
-            raise ScenarioPredicateValidationException(
-                "ItemSpecCountAtLeastPredicate.required_count must be positive"
-            )
+            raise ScenarioPredicateValidationException("ItemSpecCountAtLeastPredicate.required_count must be positive")
 
 
 @dataclass(frozen=True)
@@ -126,9 +112,7 @@ class StateValuesMatchPredicate:
         if not isinstance(self.required_values, Mapping) or any(
             not isinstance(key, str) for key in self.required_values
         ):
-            raise ScenarioPredicateValidationException(
-                "StateValuesMatchPredicate.required_values must map str keys"
-            )
+            raise ScenarioPredicateValidationException("StateValuesMatchPredicate.required_values must map str keys")
         object.__setattr__(
             self,
             "required_values",
@@ -145,13 +129,9 @@ class StateIntAtLeastPredicate:
 
     def __post_init__(self) -> None:
         if not isinstance(self.state_key, str) or not self.state_key:
-            raise ScenarioPredicateValidationException(
-                "StateIntAtLeastPredicate.state_key must be a non-empty str"
-            )
+            raise ScenarioPredicateValidationException("StateIntAtLeastPredicate.state_key must be a non-empty str")
         if isinstance(self.threshold, bool) or not isinstance(self.threshold, int):
-            raise ScenarioPredicateValidationException(
-                "StateIntAtLeastPredicate.threshold must be an int"
-            )
+            raise ScenarioPredicateValidationException("StateIntAtLeastPredicate.threshold must be an int")
 
 
 @dataclass(frozen=True)
@@ -163,8 +143,7 @@ class WeatherTypeIsPredicate:
     def __post_init__(self) -> None:
         if not isinstance(self.required_weather_type, WeatherTypeEnum):
             raise ScenarioPredicateValidationException(
-                "WeatherTypeIsPredicate.required_weather_type must be a "
-                "WeatherTypeEnum"
+                "WeatherTypeIsPredicate.required_weather_type must be a WeatherTypeEnum"
             )
 
 

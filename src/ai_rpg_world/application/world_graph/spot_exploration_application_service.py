@@ -96,9 +96,7 @@ class SpotExplorationApplicationService:
     def explore_once(self, player_id: PlayerId) -> SpotExplorationResultDto:
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            raise RuntimeError(
-                "探索用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("探索用CommandScopeFactoryが未配線です。")
 
         with scope_factory.create() as context:
             repositories = context.repositories

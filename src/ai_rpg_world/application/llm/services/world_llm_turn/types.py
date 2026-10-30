@@ -12,6 +12,7 @@ WORLD_ACTION_MOMENTARY_BLANK = "一瞬の空白"
 WORLD_RESULT_MOMENTARY_BLANK = "意識が途切れ、この間の自分の行動を思い出せない。"
 WORLD_ACTION_HESITATION = "迷い"
 WORLD_RESULT_HESITATION = "何をするか決めきれず、時間が過ぎた。"
+LLM_CALL_FAILED_ERROR_CODE = "LLM_API_FAILED"
 
 ACTION_RESULT_TRACE_RESERVED_KEYS = frozenset(
     {
@@ -21,6 +22,7 @@ ACTION_RESULT_TRACE_RESERVED_KEYS = frozenset(
         "success",
         "error_code",
         "result_summary",
+        "execution_provenance",
     }
 )
 
@@ -41,8 +43,7 @@ def action_result_extra_trace_payload(
     safe = {
         key: value
         for key, value in raw.items()
-        if key not in ACTION_RESULT_TRACE_RESERVED_KEYS
-        and key != "tool_trace_payload"
+        if key not in ACTION_RESULT_TRACE_RESERVED_KEYS and key != "tool_trace_payload"
     }
     safe["tool_trace_payload"] = raw
     return safe
@@ -55,6 +56,7 @@ class LlmPhaseAResult:
     Phase B (tool 実行) の入力として保持する。LLM 呼び出し例外を捕まえた場合は
     ``exception`` に詰め、Phase B 側で LlmCommandResultDto を組み立てる。
     """
+
     player_id: PlayerId
     prompt: dict[str, Any]
     tools_payload: list[Any]

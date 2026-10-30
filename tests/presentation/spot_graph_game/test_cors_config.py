@@ -15,11 +15,7 @@ def test_create_game_app_does_not_allow_cors_by_default(tmp_path: Path) -> None:
     """cors_origins を省略すると、ローカルのブラウザ開発元も既定許可しない。"""
     app = create_game_app(scenarios_dir=tmp_path)
 
-    cors_middleware = next(
-        middleware
-        for middleware in app.user_middleware
-        if middleware.cls is CORSMiddleware
-    )
+    cors_middleware = next(middleware for middleware in app.user_middleware if middleware.cls is CORSMiddleware)
 
     assert cors_middleware.kwargs["allow_origins"] == []
 

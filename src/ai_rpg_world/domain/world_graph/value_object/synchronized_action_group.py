@@ -69,9 +69,7 @@ class SynchronizedActionGroup:
 
     def __post_init__(self) -> None:
         if not self.group_id:
-            raise SynchronizedActionGroupValidationException(
-                "group_id must not be empty"
-            )
+            raise SynchronizedActionGroupValidationException("group_id must not be empty")
         if len(self.required_action_names) < 2:
             raise SynchronizedActionGroupValidationException(
                 f"required_action_names must have at least 2 entries "
@@ -85,10 +83,6 @@ class SynchronizedActionGroup:
                 f"required_action_names must be unique: {self.required_action_names}"
             )
         if self.window_ticks <= 0:
-            raise SynchronizedActionGroupValidationException(
-                f"window_ticks must be positive: {self.window_ticks}"
-            )
+            raise SynchronizedActionGroupValidationException(f"window_ticks must be positive: {self.window_ticks}")
         if not self.on_complete:
-            raise SynchronizedActionGroupValidationException(
-                "on_complete must contain at least one effect"
-            )
+            raise SynchronizedActionGroupValidationException("on_complete must contain at least one effect")

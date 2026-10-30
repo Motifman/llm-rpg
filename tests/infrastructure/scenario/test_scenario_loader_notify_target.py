@@ -22,11 +22,13 @@ def _player_interaction(**overrides) -> dict:
         "display_label": "毒を盛る",
         "witness_policy": "ACTOR_ONLY",
         "preconditions": [{"condition_type": "ALWAYS"}],
-        "effects": [{
-            "effect_type": "APPLY_DAMAGE",
-            "target": "TARGET_PLAYER",
-            "parameters": {"damage": 1},
-        }],
+        "effects": [
+            {
+                "effect_type": "APPLY_DAMAGE",
+                "target": "TARGET_PLAYER",
+                "parameters": {"damage": 1},
+            }
+        ],
     }
     base.update(overrides)
     return base
@@ -89,9 +91,7 @@ class TestMessageWithoutFlagIsRejected:
         出ない」を実 run で探すことになる。
         """
         with pytest.raises(ScenarioLoadError) as exc_info:
-            _load_player_interaction(
-                target_observation_message="喉の奥が焼けるように熱い。"
-            )
+            _load_player_interaction(target_observation_message="喉の奥が焼けるように熱い。")
         assert "notify_target" in str(exc_info.value)
 
 

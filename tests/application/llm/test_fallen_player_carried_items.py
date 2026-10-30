@@ -42,9 +42,7 @@ def _render_players(*entries: SpotGraphNearbyEntityEntry) -> str:
         nearby_entities=tuple(entries),
     )
     lines: list[str] = []
-    builder._build_entity_section(
-        snap, LabelAllocator(), RuntimeTargetCollector(), lines
-    )
+    builder._build_entity_section(snap, LabelAllocator(), RuntimeTargetCollector(), lines)
     return "\n".join(lines)
 
 
@@ -53,17 +51,13 @@ class TestFallenPlayerCarriedItems:
 
     def test_downed_player_shows_carried_items(self) -> None:
         """倒れている相手の行に、持っているものが並ぶ。"""
-        text = _render_players(
-            _entry(is_down=True, carried_item_names=("太い流木", "火打ち石"))
-        )
+        text = _render_players(_entry(is_down=True, carried_item_names=("太い流木", "火打ち石")))
         assert "太い流木" in text
         assert "火打ち石" in text
 
     def test_dead_player_shows_carried_items(self) -> None:
         """死んでいる相手の行にも、持っているものが並ぶ。"""
-        text = _render_players(
-            _entry(is_dead=True, carried_item_names=("太い流木",))
-        )
+        text = _render_players(_entry(is_dead=True, carried_item_names=("太い流木",)))
         assert "太い流木" in text
 
     def test_standing_player_does_not_show_carried_items(self) -> None:
@@ -85,16 +79,12 @@ class TestFallenPlayerCarriedItems:
 
     def test_downed_marker_is_preserved(self) -> None:
         """所持品を足しても「倒れて動かない」の表示は消えない。"""
-        text = _render_players(
-            _entry(is_down=True, carried_item_names=("太い流木",))
-        )
+        text = _render_players(_entry(is_down=True, carried_item_names=("太い流木",)))
         assert "倒れて動かない" in text
 
     def test_dead_marker_is_preserved(self) -> None:
         """所持品を足しても「死亡している」の表示は消えない。"""
-        text = _render_players(
-            _entry(is_dead=True, carried_item_names=("太い流木",))
-        )
+        text = _render_players(_entry(is_dead=True, carried_item_names=("太い流木",)))
         assert "死亡している" in text
 
 
@@ -131,9 +121,7 @@ class TestPlayerActionAffordance:
             ),
         )
         lines: list[str] = []
-        builder._build_entity_section(
-            snap, LabelAllocator(), RuntimeTargetCollector(), lines
-        )
+        builder._build_entity_section(snap, LabelAllocator(), RuntimeTargetCollector(), lines)
         return "\n".join(lines)
 
     def test_declared_actions_are_listed_on_the_player_row(self) -> None:
@@ -183,9 +171,7 @@ class TestPlayerActionAffordance:
             ),
         )
         lines: list[str] = []
-        builder._build_entity_section(
-            snap, LabelAllocator(), RuntimeTargetCollector(), lines
-        )
+        builder._build_entity_section(snap, LabelAllocator(), RuntimeTargetCollector(), lines)
         text = "\n".join(lines)
 
         downed_line = next(line for line in lines if "倒れた人" in line)

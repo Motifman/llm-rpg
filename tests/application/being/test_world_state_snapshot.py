@@ -22,7 +22,6 @@ from ai_rpg_world.application.being.being_snapshot_file_gateway import (
     WorldStateSnapshotFileGateway,
 )
 from ai_rpg_world.application.being.world_state_snapshot import (
-    SUPPORTED_WORLD_SNAPSHOT_VERSIONS,
     WorldStateScenarioMismatchError,
     WorldStateSnapshot,
     WorldStateSnapshotCoverageError,
@@ -59,15 +58,14 @@ class TestWorldStateSnapshotVO:
         """``True`` は int 派生だが意図的に弾く (= 既存 BeingSnapshot 同方針)。"""
         with pytest.raises(ValueError, match="world_tick"):
             WorldStateSnapshot(
-                source_scenario="demo", world_tick=True  # type: ignore[arg-type]
+                source_scenario="demo",
+                world_tick=True,  # type: ignore[arg-type]
             )
 
     def test_zero_schema_version_raises_exception(self) -> None:
         """0 以下の schemaversion は例外。"""
         with pytest.raises(ValueError, match="schema_version"):
-            WorldStateSnapshot(
-                source_scenario="demo", world_tick=0, schema_version=0
-            )
+            WorldStateSnapshot(source_scenario="demo", world_tick=0, schema_version=0)
 
     def test_dict_round_trip(self) -> None:
         """to dict と from dict の round trip。"""
@@ -84,9 +82,7 @@ class TestWorldStateSnapshotVO:
 class _RecordingCodec(WorldSubsystemCodec):
     """test 用 codec — capture / restore の呼出を記録する。"""
 
-    def __init__(
-        self, key: str, capture_payload: dict[str, Any] | None = None
-    ) -> None:
+    def __init__(self, key: str, capture_payload: dict[str, Any] | None = None) -> None:
         self._key = key
         self.capture_count = 0
         self.restore_calls: list[dict[str, Any]] = []
@@ -166,9 +162,7 @@ class TestWorldStateSnapshotServiceRestore:
     def test_unsupported_schema_version_raises_exception(self) -> None:
         """未サポート schemaversion は例外。"""
         service = WorldStateSnapshotService()
-        snap = WorldStateSnapshot(
-            source_scenario="demo", world_tick=0, schema_version=99
-        )
+        snap = WorldStateSnapshot(source_scenario="demo", world_tick=0, schema_version=99)
         with pytest.raises(WorldStateSnapshotVersionError):
             service.restore(SimpleNamespace(), snap, current_scenario="demo")
 
@@ -259,9 +253,7 @@ class TestWorldStateSnapshotServiceRestore:
         with pytest.raises(WorldStateScenarioMismatchError, match="forest"):
             service.restore(SimpleNamespace(), snap, current_scenario="desert")
 
-    def test_unknown_subsystem_skip(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_unknown_subsystem_skip(self, caplog: pytest.LogCaptureFixture) -> None:
         """新 version で増えた subsystem を旧 code で読む場合の後方互換。"""
         codec = _RecordingCodec("player_status")
         service = WorldStateSnapshotService(subsystem_codecs=[codec])
@@ -278,9 +270,7 @@ class TestWorldStateSnapshotServiceRestore:
         # 登録済 codec は呼ばれる
         assert codec.restore_calls == [{"x": 1}]
         # 未知 subsystem は info ログ
-        assert any(
-            "future_subsystem" in r.message for r in caplog.records
-        )
+        assert any("future_subsystem" in r.message for r in caplog.records)
 
     def test_strict_unknown_subsystem_raises_exception(self) -> None:
         """strict restore では未登録 subsystem を読み飛ばさず例外にする。"""
@@ -294,9 +284,7 @@ class TestWorldStateSnapshotServiceRestore:
                 "future_subsystem": {"y": 2},
             },
         )
-        with pytest.raises(
-            WorldStateSnapshotCoverageError, match="future_subsystem"
-        ):
+        with pytest.raises(WorldStateSnapshotCoverageError, match="future_subsystem"):
             service.restore(
                 SimpleNamespace(),
                 snap,
@@ -354,14 +342,10 @@ class TestWorldStateSnapshotFileGateway:
         """existsin の前後。"""
         gateway = WorldStateSnapshotFileGateway()
         assert gateway.exists_in(tmp_path) is False
-        gateway.write(
-            WorldStateSnapshot(source_scenario="d", world_tick=0), tmp_path
-        )
+        gateway.write(WorldStateSnapshot(source_scenario="d", world_tick=0), tmp_path)
         assert gateway.exists_in(tmp_path) is True
 
-    def test_read_raises_file_not_found_error(
-        self, tmp_path: Path
-    ) -> None:
+    def test_read_raises_file_not_found_error(self, tmp_path: Path) -> None:
         """read はファイルなしで FileNotFoundError。"""
         gateway = WorldStateSnapshotFileGateway()
         with pytest.raises(FileNotFoundError):
@@ -379,3 +363,44 @@ class TestWorldStateSnapshotFileGateway:
         assert "森の世界" in raw
         data = json.loads(raw)
         assert data["world_tick"] == 42
+
+
+def test_removed_pursuit_subsystem_is_skipped_in_strict_restore():
+    """旧追跡2件を読み捨てても現役の状態は復元でき、入力snapshotは書き換えない。"""
+    codec = _RecordingCodec("player_spot_navigation_state")
+    snapshot = WorldStateSnapshot(
+        source_scenario="demo",
+        world_tick=8,
+        subsystems={
+            "player_spot_navigation_state": {"schema_version": 1, "entries": []},
+            "player_pursuit_state": {
+                "schema_version": 1,
+                "entries": [
+                    {"player_id": 1, "pursuit": None},
+                    {"player_id": 2, "pursuit": {"target_id": 99}},
+                ],
+            },
+        },
+    )
+    service = WorldStateSnapshotService(subsystem_codecs=[codec])
+    service.restore(object(), snapshot, current_scenario="demo", strict_subsystems=True)
+    assert codec.restore_calls == [{"schema_version": 1, "entries": []}]
+    assert snapshot.removed_subsystem_counts == {"player_pursuit_state": 2}
+    assert "player_pursuit_state" in snapshot.subsystems
+
+
+@pytest.mark.parametrize(
+    "subsystems",
+    [
+        {"player_pursuit_state": {"entries": []}, "player_spot_navigation_state": {}, "unknown": {}},
+        {"player_pursuit_state": {"entries": []}},
+    ],
+)
+def test_removed_key_does_not_relax_strict_coverage(subsystems):
+    """削除済み追跡キーがあっても、未知キーや現役キー欠落は復元前に拒否する。"""
+    codec = _RecordingCodec("player_spot_navigation_state")
+    service = WorldStateSnapshotService(subsystem_codecs=[codec])
+    snapshot = WorldStateSnapshot(source_scenario="demo", world_tick=8, subsystems=subsystems)
+    with pytest.raises(WorldStateSnapshotCoverageError):
+        service.restore(object(), snapshot, current_scenario="demo", strict_subsystems=True)
+    assert codec.restore_calls == []

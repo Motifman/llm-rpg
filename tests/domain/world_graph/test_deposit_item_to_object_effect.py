@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -55,9 +57,7 @@ def _fire_pit(*, stacked: object = 0) -> SpotObject:
         display_label="狼煙を上げる",
         preconditions=(
             InteractionCondition(
-                condition_type=(
-                    InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST
-                ),
+                condition_type=(InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST),
                 target_object_id=FIRE_PIT_ID,
                 state_key="driftwood_stacked",
                 required_quantity=3,
@@ -113,10 +113,7 @@ class TestDistributedDeposit:
 
         assert len(first.item_spec_ids_to_remove) == 2
         assert len(second.item_spec_ids_to_remove) == 1
-        assert (
-            second.new_interior.get_object(FIRE_PIT_ID).state["driftwood_stacked"]
-            == 3
-        )
+        assert second.new_interior.get_object(FIRE_PIT_ID).state["driftwood_stacked"] == 3
         assert lit.new_interior.get_object(FIRE_PIT_ID) is not None
 
     def test_holding_three_without_deposit_does_not_satisfy_light_condition(self) -> None:
@@ -158,13 +155,11 @@ class TestDepositQuantityConsistency:
         )
 
         assert result.item_spec_ids_to_remove == (DRIFTWOOD_ID, DRIFTWOOD_ID)
-        assert (
-            result.new_interior.get_object(FIRE_PIT_ID).state["driftwood_stacked"]
-            == 2
-        )
+        assert result.new_interior.get_object(FIRE_PIT_ID).state["driftwood_stacked"] == 2
 
-    def test_all_moves_every_owned_item_and_leaves_no_remainder(self) -> None:
-        """quantity=all は所持 4 個すべてを減算予約し、state にも 4 加える。"""
+    @pytest.mark.parametrize("explicit_target", [False, True])
+    def test_all_moves_every_owned_item_and_leaves_no_remainder(self, explicit_target: bool) -> None:
+        """all は所持4個を消費予約し、暗黙または明示した対象だけの蓄積1へ4を加える。"""
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT,
             parameters={
@@ -174,9 +169,13 @@ class TestDepositQuantityConsistency:
             },
         )
         pit = _fire_pit(stacked=1)
+        target = replace(pit, object_id=SpotObjectId.create(11)) if explicit_target else pit
+        if explicit_target:
+            effect = replace(effect, parameters={**effect.parameters, "object_id": target.object_id.value})
+        interior = SpotInterior((), (pit, target) if explicit_target else (pit,), (), ())
 
         result = WorldGraphEffectService().apply_effects(
-            interior=_interior(pit),
+            interior=interior,
             acting_object=pit,
             effects=(effect,),
             world_flags=frozenset(),
@@ -184,10 +183,11 @@ class TestDepositQuantityConsistency:
         )
 
         assert result.item_spec_ids_to_remove == (DRIFTWOOD_ID,) * 4
-        assert (
-            result.new_interior.get_object(FIRE_PIT_ID).state["driftwood_stacked"]
-            == 5
-        )
+        assert result.new_interior.get_object(target.object_id).state["driftwood_stacked"] == 5
+
+        if explicit_target:
+            assert result.new_interior.get_object(FIRE_PIT_ID).state == {"driftwood_stacked": 1}
+        assert all(obj.state == {"driftwood_stacked": 1} for obj in interior.objects)
 
     def test_missing_state_key_starts_from_zero(self) -> None:
         """対象 state にキーが無い場合は 0 起点で、投入数と同じ値を新設する。"""
@@ -235,9 +235,7 @@ class TestDepositQuantityConsistency:
         )
 
         assert result.item_spec_ids_to_remove == ()
-        assert result.new_interior.get_object(FIRE_PIT_ID).state == {
-            "driftwood_stacked": 2
-        }
+        assert result.new_interior.get_object(FIRE_PIT_ID).state == {"driftwood_stacked": 2}
 
 
 class TestObjectStateIntAtLeast:
@@ -266,7 +264,7 @@ class TestObjectStateIntAtLeast:
         expected: bool,
         expected_message: str | None,
     ) -> None:
-        """閾値ちょうどは成立し、1不足・キー不在・非整数は現在値0として不成立になる。"""
+        """閾値ちょうどは成立し、1不足は不成立、キー不在・非整数は現在値0として不成立になる。"""
         condition = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST,
             target_object_id=FIRE_PIT_ID,

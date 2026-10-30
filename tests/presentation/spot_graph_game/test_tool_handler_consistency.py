@@ -22,7 +22,7 @@ class TestValidateToolHandlerConsistency:
         ToolHandlerConsistencyError を投げる。"""
         with pytest.raises(ToolHandlerConsistencyError):
             validate_tool_handler_consistency(
-                exposed_tool_names=["travel_to", "memory_recall_by_handle"],
+                exposed_tool_names=["travel_to", "episode_recall"],
                 handler_keys=["travel_to"],
             )
 
@@ -31,20 +31,20 @@ class TestValidateToolHandlerConsistency:
         足せばいいかが一目で分かる。"""
         with pytest.raises(ToolHandlerConsistencyError) as exc_info:
             validate_tool_handler_consistency(
-                exposed_tool_names=["memory_recall_by_handle", "fictional_tool"],
+                exposed_tool_names=["episode_recall", "fictional_tool"],
                 handler_keys=["travel_to"],
             )
         message = str(exc_info.value)
-        assert "memory_recall_by_handle" in message
+        assert "episode_recall" in message
         assert "fictional_tool" in message
 
     def test_passes_when_all_exposed_tools_have_handlers(self):
         """spec が handler の部分集合になっていれば例外を投げず返る。"""
         validate_tool_handler_consistency(
-            exposed_tool_names=["travel_to", "memory_recall_by_handle"],
+            exposed_tool_names=["travel_to", "episode_recall"],
             handler_keys=[
                 "travel_to",
-                "memory_recall_by_handle",
+                "episode_recall",
                 "interact",
             ],
         )
@@ -54,7 +54,7 @@ class TestValidateToolHandlerConsistency:
         feature flag OFF や aux executor 常駐パターンを潰さないため。"""
         validate_tool_handler_consistency(
             exposed_tool_names=["travel_to"],
-            handler_keys=["travel_to", "memory_recall_by_handle"],
+            handler_keys=["travel_to", "episode_recall"],
         )
 
     def test_empty_inputs_are_safe(self):
@@ -90,9 +90,8 @@ class _StubWiring:
     from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
         _WorldLlmWiring,
     )
-    _validate_tool_handler_consistency = (
-        _WorldLlmWiring._validate_tool_handler_consistency
-    )
+
+    _validate_tool_handler_consistency = _WorldLlmWiring._validate_tool_handler_consistency
     # 検査は「どのフェーズでも露出しうる tool」を集めてから突き合わせる。
     # 集める側も本物を借りないと、フェーズ限定 tool を見落とす検査を
     # 「通った」と誤認する (vote がまさにその形で素通りしていた)。
@@ -109,7 +108,7 @@ class TestWorldLlmWiringConsistencyHook:
         wiring = _StubWiring(
             definitions=[
                 _StubToolDefinition("travel_to"),
-                _StubToolDefinition("memory_recall_by_handle"),
+                _StubToolDefinition("episode_recall"),
             ],
             handlers=["travel_to"],
         )
@@ -121,7 +120,7 @@ class TestWorldLlmWiringConsistencyHook:
         投げない。"""
         wiring = _StubWiring(
             definitions=[_StubToolDefinition("travel_to")],
-            handlers=["travel_to", "memory_recall_by_handle"],
+            handlers=["travel_to", "episode_recall"],
         )
         wiring._validate_tool_handler_consistency()
 

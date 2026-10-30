@@ -57,23 +57,16 @@ def parse_mutually_known_roles(
     roles: list[str] = []
     for value in raw:
         if not isinstance(value, str) or not value.strip():
-            raise ScenarioLoadError(
-                "mutually_known_roles は空でない role 名の配列にしてください"
-            )
+            raise ScenarioLoadError("mutually_known_roles は空でない role 名の配列にしてください")
         role = value.strip()
         if role in roles:
-            raise ScenarioLoadError(
-                f"mutually_known_roles に重複があります: {role}"
-            )
-        count = sum(
-            1 for player in players if player.initial_state.get("role") == role
-        )
+            raise ScenarioLoadError(f"mutually_known_roles に重複があります: {role}")
+        count = sum(1 for player in players if player.initial_state.get("role") == role)
         if count < 2:
-            raise ScenarioLoadError(
-                f"mutually_known_roles の {role} には二人以上必要です: {count}人"
-            )
+            raise ScenarioLoadError(f"mutually_known_roles の {role} には二人以上必要です: {count}人")
         roles.append(role)
     return tuple(roles)
+
 
 def parse_role_personas(
     raw: Any,
@@ -86,9 +79,7 @@ def parse_role_personas(
         raise ScenarioLoadError("role_personas は role 名から文章への object で書いてください")
 
     declared_roles = {
-        role
-        for player in players
-        if isinstance((role := player.initial_state.get("role")), str) and role
+        role for player in players if isinstance((role := player.initial_state.get("role")), str) and role
     }
     parsed: dict[str, str] = {}
     for role, persona in raw.items():
@@ -96,21 +87,18 @@ def parse_role_personas(
             raise ScenarioLoadError("role_personas のキーは空でない role 名にしてください")
         normalized_role = role.strip()
         if normalized_role in parsed:
-            raise ScenarioLoadError(
-                f"role_personas に正規化後の重複があります: {normalized_role}"
-            )
+            raise ScenarioLoadError(f"role_personas に正規化後の重複があります: {normalized_role}")
         if normalized_role not in declared_roles:
-            raise ScenarioLoadError(
-                f"role_personas に player が一人も持たない role があります: {normalized_role}"
-            )
+            raise ScenarioLoadError(f"role_personas に player が一人も持たない role があります: {normalized_role}")
         if not isinstance(persona, str) or not persona.strip():
-            raise ScenarioLoadError(
-                f"role_personas.{normalized_role} は空でない文字列にしてください"
-            )
+            raise ScenarioLoadError(f"role_personas.{normalized_role} は空でない文字列にしてください")
         parsed[normalized_role] = persona.strip()
     return parsed
 
-def parse_monsters_block( raw: dict[str, Any] | None, mapper: ScenarioIdMapper,
+
+def parse_monsters_block(
+    raw: dict[str, Any] | None,
+    mapper: ScenarioIdMapper,
 ) -> tuple[tuple[ScenarioMonsterTemplate, ...], tuple[ScenarioMonsterPlacement, ...]]:
     """`monsters.templates` と `monsters.initial_placements` を読み込む (Phase B-2a)。
 
@@ -135,7 +123,7 @@ def parse_monsters_block( raw: dict[str, Any] | None, mapper: ScenarioIdMapper,
         }
       ],
       "initial_placements": [
-        {"template": "wild_dog", "spot": "deep_forest", "coordinate": {"x": 0, "y": 0}}
+        {"template": "wild_dog", "spot": "deep_forest"}
       ]
     }
     ```
@@ -152,36 +140,28 @@ def parse_monsters_block( raw: dict[str, Any] | None, mapper: ScenarioIdMapper,
     if not isinstance(placements_raw, list):
         raise ScenarioLoadError("monsters.initial_placements must be a list")
 
-    templates = tuple(
-        parse_monster_template(t, mapper, i)
-        for i, t in enumerate(templates_raw)
-    )
-    placements = tuple(
-        parse_monster_placement(p, i)
-        for i, p in enumerate(placements_raw)
-    )
+    templates = tuple(parse_monster_template(t, mapper, i) for i, t in enumerate(templates_raw))
+    placements = tuple(parse_monster_placement(p, i) for i, p in enumerate(placements_raw))
     return templates, placements
 
-def parse_monster_template( raw: Any, mapper: ScenarioIdMapper, index: int,
+
+def parse_monster_template(
+    raw: Any,
+    mapper: ScenarioIdMapper,
+    index: int,
 ) -> ScenarioMonsterTemplate:
     """1 monster template を MonsterTemplate に変換する。"""
     if not isinstance(raw, dict):
-        raise ScenarioLoadError(
-            f"monsters.templates[{index}] must be an object, got {type(raw).__name__}"
-        )
+        raise ScenarioLoadError(f"monsters.templates[{index}] must be an object, got {type(raw).__name__}")
     string_id = raw.get("id")
     if not isinstance(string_id, str) or not string_id:
-        raise ScenarioLoadError(
-            f"monsters.templates[{index}].id must be a non-empty string"
-        )
+        raise ScenarioLoadError(f"monsters.templates[{index}].id must be a non-empty string")
     # 文字列 ID → 連番 int を id_mapper に登録 (将来 cross-reference する場面用)
     template_int_id = mapper.register("monster_template", string_id)
 
     base = raw.get("base_stats", {})
     if not isinstance(base, dict):
-        raise ScenarioLoadError(
-            f"monsters.templates[{index}].base_stats must be an object"
-        )
+        raise ScenarioLoadError(f"monsters.templates[{index}].base_stats must be an object")
     try:
         base_stats = BaseStats(
             max_hp=int(base.get("max_hp", 30)),
@@ -193,9 +173,7 @@ def parse_monster_template( raw: Any, mapper: ScenarioIdMapper, index: int,
             evasion_rate=float(base.get("evasion_rate", 0.05)),
         )
     except (TypeError, ValueError) as e:
-        raise ScenarioLoadError(
-            f"monsters.templates[{index}].base_stats parse error: {e}"
-        ) from e
+        raise ScenarioLoadError(f"monsters.templates[{index}].base_stats parse error: {e}") from e
 
     reward_raw = raw.get("reward", {})
     reward = RewardInfo(
@@ -216,9 +194,7 @@ def parse_monster_template( raw: Any, mapper: ScenarioIdMapper, index: int,
         race = Race[race_name]
     except KeyError as e:
         valid = [r.name for r in Race]
-        raise ScenarioLoadError(
-            f"monsters.templates[{index}].race must be one of {valid}, got {race_name}"
-        ) from e
+        raise ScenarioLoadError(f"monsters.templates[{index}].race must be one of {valid}, got {race_name}") from e
     faction_name = str(raw.get("faction", "ENEMY"))
     try:
         faction = MonsterFactionEnum[faction_name]
@@ -241,12 +217,16 @@ def parse_monster_template( raw: Any, mapper: ScenarioIdMapper, index: int,
         vision_range=int(raw.get("vision_range", 5)),
         flee_threshold=float(raw.get("flee_threshold", 0.2)),
         attack_status_effects=parse_monster_attack_status_effects(
-            raw.get("attack_status_effects", []), index,
+            raw.get("attack_status_effects", []),
+            index,
         ),
     )
     return ScenarioMonsterTemplate(string_id=string_id, template=template)
 
-def parse_monster_attack_status_effects( raw: Any, template_index: int,
+
+def parse_monster_attack_status_effects(
+    raw: Any,
+    template_index: int,
 ) -> tuple[AttackStatusEffectChance, ...]:
     """攻撃時状態異常のJSON宣言を、検証済みドメイン値へ変換する。"""
     path = f"monsters.templates[{template_index}].attack_status_effects"
@@ -262,52 +242,48 @@ def parse_monster_attack_status_effects( raw: Any, template_index: int,
             effect_type = StatusEffectType(effect_type_raw)
         except (TypeError, ValueError) as exc:
             raise ScenarioLoadError(
-                f"{item_path}.effect_type must be a StatusEffectType value, "
-                f"got {effect_type_raw!r}"
+                f"{item_path}.effect_type must be a StatusEffectType value, got {effect_type_raw!r}"
             ) from exc
         try:
-            parsed.append(AttackStatusEffectChance(
-                effect_type=effect_type,
-                chance=float(item.get("chance", 0.0)),
-                duration_ticks=int(item.get("duration_ticks", 0)),
-                value=item.get("value", 1.0),
-            ))
+            parsed.append(
+                AttackStatusEffectChance(
+                    effect_type=effect_type,
+                    chance=float(item.get("chance", 0.0)),
+                    duration_ticks=int(item.get("duration_ticks", 0)),
+                    value=item.get("value", 1.0),
+                )
+            )
         except MonsterTemplateValidationException as exc:
             raise ScenarioLoadError(f"{item_path}: {exc}") from exc
     return tuple(parsed)
 
-def parse_monster_placement( raw: Any, index: int,
+
+def parse_monster_placement(
+    raw: Any,
+    index: int,
 ) -> ScenarioMonsterPlacement:
     if not isinstance(raw, dict):
-        raise ScenarioLoadError(
-            f"monsters.initial_placements[{index}] must be an object"
-        )
+        raise ScenarioLoadError(f"monsters.initial_placements[{index}] must be an object")
     template_id = raw.get("template")
     spot_id = raw.get("spot")
     if not isinstance(template_id, str) or not template_id:
-        raise ScenarioLoadError(
-            f"monsters.initial_placements[{index}].template must be a non-empty string"
-        )
+        raise ScenarioLoadError(f"monsters.initial_placements[{index}].template must be a non-empty string")
     if not isinstance(spot_id, str) or not spot_id:
-        raise ScenarioLoadError(
-            f"monsters.initial_placements[{index}].spot must be a non-empty string"
-        )
-    coord = raw.get("coordinate", {})
-    if not isinstance(coord, dict):
-        coord = {}
+        raise ScenarioLoadError(f"monsters.initial_placements[{index}].spot must be a non-empty string")
     spawn_condition = parse_monster_spawn_condition(
-        raw.get("spawn_condition"), index,
+        raw.get("spawn_condition"),
+        index,
     )
     return ScenarioMonsterPlacement(
         template_string_id=template_id,
         spot_string_id=spot_id,
-        coordinate_x=int(coord.get("x", 0)),
-        coordinate_y=int(coord.get("y", 0)),
-        coordinate_z=int(coord.get("z", 0)),
         spawn_condition=spawn_condition,
     )
 
-def parse_monster_spawn_condition( raw: Any, placement_index: int,
+
+def parse_monster_spawn_condition(
+    raw: Any,
+    placement_index: int,
 ) -> ScenarioMonsterSpawnCondition | None:
     """placement の spawn_condition ブロックを ScenarioMonsterSpawnCondition に変換。
 
@@ -333,9 +309,7 @@ def parse_monster_spawn_condition( raw: Any, placement_index: int,
             f"monsters.initial_placements[{placement_index}].spawn_condition "
             f"must be an object, got {type(raw).__name__}"
         )
-    unknown_keys = set(raw) - set(
-        _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS
-    )
+    unknown_keys = set(raw) - set(_MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS)
     if unknown_keys:
         raise ScenarioLoadError(
             f"monsters.initial_placements[{placement_index}].spawn_condition "
@@ -347,15 +321,11 @@ def parse_monster_spawn_condition( raw: Any, placement_index: int,
             return ()
         if not isinstance(value, list):
             raise ScenarioLoadError(
-                f"monsters.initial_placements[{placement_index}]."
-                f"spawn_condition.{key} must be a list of strings"
+                f"monsters.initial_placements[{placement_index}].spawn_condition.{key} must be a list of strings"
             )
         return tuple(str(v) for v in value)
 
-    values = {
-        key: _as_str_tuple(raw.get(key), key)
-        for key in _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS
-    }
+    values = {key: _as_str_tuple(raw.get(key), key) for key in _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS}
     phases = values["day_night_phases"]
     required_flags = values["required_flags"]
     forbidden_flags = values["forbidden_flags"]
@@ -380,6 +350,7 @@ def parse_monster_spawn_condition( raw: Any, placement_index: int,
         weather_type_names=weathers,
     )
 
+
 def parse_players(
     players_raw: list[dict[str, Any]],
     mapper: ScenarioIdMapper,
@@ -387,57 +358,157 @@ def parse_players(
     player_attribute_specs: PlayerAttributeSpecs,
 ) -> list[PlayerSpawnConfig]:
     spawns: list[PlayerSpawnConfig] = []
+    player_ids = [raw["id"] for raw in players_raw]
     for p in players_raw:
         pid = mapper.register("player", p["id"])
         spot_sid = p["spawn_spot"]
         spot_id = SpotId.create(mapper.get_int("spot", spot_sid))
-        items = tuple(
-            parse_initial_item(raw, mapper, owner_id=p["id"])
-            for raw in p.get("initial_items", [])
-        )
+        items = tuple(parse_initial_item(raw, mapper, owner_id=p["id"]) for raw in p.get("initial_items", []))
         _require_initial_items_fit(items, owner_id=p["id"])
         initial_state = parse_player_initial_state(
-            p.get("initial_state", {}), owner_id=p["id"],
+            p.get("initial_state", {}),
+            owner_id=p["id"],
         )
         # 初期値そのものは変更ではないので `mutable` は見ない。見るのは
         # 「世界がその値を持っているか」だけ。
         with declaring(f"players[{p['id']}].initial_state:"):
             reject_values_the_world_does_not_have(
-                initial_state, player_attribute_specs, what="initial_state",
+                initial_state,
+                player_attribute_specs,
+                what="initial_state",
             )
         persona_raw = p.get("persona_prompt")
         persona_prompt: str | None = None
         if persona_raw is not None:
             if not isinstance(persona_raw, str):
                 raise ValueError(
-                    f"player '{p['id']}': persona_prompt must be a string, "
-                    f"got {type(persona_raw).__name__}"
+                    f"player '{p['id']}': persona_prompt must be a string, got {type(persona_raw).__name__}"
                 )
             # 前後 whitespace を削るが内側の改行は保持する (多行プロンプトを許容)
             stripped = persona_raw.strip()
             persona_prompt = stripped if stripped else None
         objective = parse_player_objective(
-            p.get("objective"), owner_id=p["id"],
+            p.get("objective"),
+            owner_id=p["id"],
         )
-        goal_locked = parse_player_goal_locked(
-            p.get("goal_locked"), owner_id=p["id"],
-        )
+        reject_removed_player_goal_locked(p, owner_id=p["id"])
         initial_gold = parse_player_initial_gold(
-            p.get("initial_gold"), owner_id=p["id"],
+            p.get("initial_gold"),
+            owner_id=p["id"],
         )
-        spawns.append(PlayerSpawnConfig(
-            string_id=p["id"],
-            player_id=pid,
-            name=p["name"],
-            spawn_spot_id=spot_id,
-            initial_items=items,
-            initial_state=initial_state,
-            persona_prompt=persona_prompt,
-            objective=objective,
-            goal_locked=goal_locked,
-            initial_gold=initial_gold,
-        ))
+        knows_at_start = parse_player_knows_at_start(
+            p,
+            owner_id=p["id"],
+            player_ids=player_ids,
+        )
+        appearance = parse_player_appearance(p, owner_id=p["id"])
+        spawns.append(
+            PlayerSpawnConfig(
+                string_id=p["id"],
+                player_id=pid,
+                name=p["name"],
+                spawn_spot_id=spot_id,
+                initial_items=items,
+                initial_state=initial_state,
+                persona_prompt=persona_prompt,
+                objective=objective,
+                initial_gold=initial_gold,
+                knows_at_start=knows_at_start,
+                appearance=appearance,
+            )
+        )
+    reject_names_strangers_could_learn_without_meeting(spawns)
     return spawns
+
+
+def parse_player_appearance(player: dict[str, Any], *, owner_id: str) -> str | None:
+    """``players[].appearance`` を検証する (#1581)。書かなければ None。"""
+    if "appearance" not in player:
+        return None
+    raw = player["appearance"]
+    if not isinstance(raw, str) or not raw.strip():
+        raise ScenarioLoadError(f"players[{owner_id}].appearance は空でない文字列で書いてください (got {raw!r})")
+    return raw.strip()
+
+
+def _knows_at_start(spawn: PlayerSpawnConfig, other: PlayerSpawnConfig) -> bool:
+    return spawn.knows_at_start is None or other.string_id in spawn.knows_at_start
+
+
+def reject_names_strangers_could_learn_without_meeting(
+    spawns: Sequence[PlayerSpawnConfig],
+) -> None:
+    """名前を知らない相手を見た目で出せないシナリオと、見た目や文から名前が分かるシナリオを止める (#1581)。
+
+    名前は、記録に入る文で参加者の名前を見た目に置き換えて伏せる。名前が別の人の名前や
+    見た目の一部だと、置き換えが別の人まで巻き込む。
+    """
+    for spawn in spawns:
+        for other in spawns:
+            if other is spawn:
+                continue
+            if spawn.name in other.name:
+                raise ScenarioLoadError(
+                    f"players[{spawn.string_id}].name {spawn.name!r} が "
+                    f"players[{other.string_id}].name {other.name!r} の一部になっています"
+                )
+    appearances: dict[str, str] = {}
+    for spawn in spawns:
+        if spawn.appearance is None:
+            continue
+        if spawn.appearance in appearances:
+            raise ScenarioLoadError(
+                f"players[{spawn.string_id}].appearance {spawn.appearance!r} が "
+                f"players[{appearances[spawn.appearance]}] と同じです"
+            )
+        appearances[spawn.appearance] = spawn.string_id
+        for other in spawns:
+            if other.name in spawn.appearance:
+                raise ScenarioLoadError(f"players[{spawn.string_id}].appearance に名前 {other.name!r} が入っています")
+    for spawn in spawns:
+        for other in spawns:
+            if other is spawn or _knows_at_start(spawn, other):
+                continue
+            if other.appearance is None:
+                raise ScenarioLoadError(
+                    f"players[{other.string_id}].appearance がありません。"
+                    f"players[{spawn.string_id}] は最初から名前を知らないので、見た目で出します"
+                )
+            for field, text in (
+                ("persona_prompt", spawn.persona_prompt),
+                ("objective", spawn.objective),
+            ):
+                if text and other.name in text:
+                    raise ScenarioLoadError(
+                        f"players[{spawn.string_id}].{field} に、最初から知らない {other.name!r} の名前があります"
+                    )
+
+
+def parse_player_knows_at_start(
+    player: dict[str, Any], *, owner_id: str, player_ids: Sequence[str]
+) -> tuple[str, ...] | None:
+    """``players[].knows_at_start`` を検証する (#1520)。
+
+    書かなければ None で、自分以外の全員を紹介する。空の配列は「誰も紹介しない」で、
+    None と区別する。
+    """
+    if "knows_at_start" not in player:
+        return None
+    raw = player["knows_at_start"]
+    where = f"players[{owner_id}].knows_at_start"
+    if not isinstance(raw, list):
+        raise ScenarioLoadError(f"{where} は player id の配列で書いてください (got {raw!r})")
+    known: list[str] = []
+    for value in raw:
+        if not isinstance(value, str) or value not in player_ids:
+            raise ScenarioLoadError(f"{where} に居ない player id があります: {value!r}")
+        if value == owner_id:
+            raise ScenarioLoadError(f"{where} に自分自身は書けません: {value!r}")
+        if value in known:
+            raise ScenarioLoadError(f"{where} に重複があります: {value!r}")
+        known.append(value)
+    return tuple(known)
+
 
 def parse_player_initial_gold(raw: Any, *, owner_id: str) -> int:
     """``players[].initial_gold`` を検証する (経済統合 Phase 0)。
@@ -449,36 +520,27 @@ def parse_player_initial_gold(raw: Any, *, owner_id: str) -> int:
     if raw is None:
         return 0
     if isinstance(raw, bool) or not isinstance(raw, int):
-        raise ScenarioLoadError(
-            f"players[{owner_id}].initial_gold は整数で宣言してください "
-            f"(got {raw!r})"
-        )
+        raise ScenarioLoadError(f"players[{owner_id}].initial_gold は整数で宣言してください (got {raw!r})")
     if raw < 0:
-        raise ScenarioLoadError(
-            f"players[{owner_id}].initial_gold は 0 以上で宣言してください "
-            f"(got {raw})"
-        )
+        raise ScenarioLoadError(f"players[{owner_id}].initial_gold は 0 以上で宣言してください (got {raw})")
     return raw
+
 
 def parse_player_objective(raw: Any, *, owner_id: str) -> str | None:
     """``players[].objective`` を検証して正規化する (目的層 G6)。
 
     persona_prompt と同じ規約: 前後の whitespace は削るが内側の改行は
     保持する (箇条書きの目的文を許容するため)。空文字・空白のみは None に
-    畳んで「未指定」と同じ扱いにする — 空文字で seed すると GoalEntry の
-    VO 不変条件に弾かれて静かに目的が消えるため、入口で潰す。
+    畳んで「未指定」と同じ扱いにする。
     """
     if raw is None:
         return None
     if not isinstance(raw, str):
-        raise ValueError(
-            f"player '{owner_id}': objective must be a string, "
-            f"got {type(raw).__name__}"
-        )
+        raise ValueError(f"player '{owner_id}': objective must be a string, got {type(raw).__name__}")
     stripped = raw.strip()
     if not stripped:
         # 空白のみを黙って None に畳むと「個別目的を書いたつもりが共通目的で
-        # seed される」静かな失敗になる。共通目的文が非空の通常シナリオでは
+        # 使われる」静かな失敗になる。共通目的文が非空の通常シナリオでは
         # fail-fast にも掛からないので、ここで痕跡を残すしかない。
         logging.getLogger(__name__).warning(
             "player '%s': objective is whitespace-only; treating it as unset "
@@ -488,24 +550,29 @@ def parse_player_objective(raw: Any, *, owner_id: str) -> str | None:
         return None
     return stripped
 
-def parse_player_goal_locked(raw: Any, *, owner_id: str) -> bool | None:
-    """``players[].goal_locked`` を検証する (目的層 G6)。
 
-    None (未指定) はシナリオ全体の性質から導出する意味なので、False とは
-    区別して保持する。bool 以外は誤記として弾く — 0 / 1 / "true" を暗黙に
-    受けると「locked のつもりが unlocked」の取り違えが静かに通るため。
+def reject_removed_player_goal_locked(
+    raw_player: dict[str, Any],
+    *,
+    owner_id: str,
+) -> None:
+    """``players[].goal_locked`` を書いたシナリオを止める。
+
+    目的の保存先と一緒に消した項目 (#1631)。``players[]`` は未知のキーを
+    弾かないので、ここで止めないと書いた意図が黙って捨てられる。
     """
-    if raw is None:
-        return None
-    if not isinstance(raw, bool):
+    if "goal_locked" in raw_player:
         raise ValueError(
-            f"player '{owner_id}': goal_locked must be a boolean, "
-            f"got {type(raw).__name__}"
+            f"player '{owner_id}': goal_locked は目的の保存先と一緒に消した "
+            "(#1631)。この項目は読まれないので削除してください。目的は "
+            "objective に書く"
         )
-    return raw
+
 
 def parse_player_initial_state(
-    raw: Any, *, owner_id: str,
+    raw: Any,
+    *,
+    owner_id: str,
 ) -> dict[str, Any]:
     """`players[].initial_state` を JSON プリミティブの flat dict に正規化。
 
@@ -517,16 +584,12 @@ def parse_player_initial_state(
     if raw is None:
         return {}
     if not isinstance(raw, dict):
-        raise ScenarioLoadError(
-            f"players[{owner_id}].initial_state must be an object "
-            f"(got {type(raw).__name__})"
-        )
+        raise ScenarioLoadError(f"players[{owner_id}].initial_state must be an object (got {type(raw).__name__})")
     allowed = (str, int, float, bool, type(None))
     for key, value in raw.items():
         if not isinstance(key, str):
             raise ScenarioLoadError(
-                f"players[{owner_id}].initial_state key must be string "
-                f"(got {type(key).__name__}: {key!r})"
+                f"players[{owner_id}].initial_state key must be string (got {type(key).__name__}: {key!r})"
             )
         if not isinstance(value, allowed):
             raise ScenarioLoadError(
@@ -534,7 +597,6 @@ def parse_player_initial_state(
                 f"(str / int / float / bool / null), got {type(value).__name__}"
             )
     return dict(raw)
-
 
 
 def _require_initial_items_fit(items: tuple[Any, ...], *, owner_id: str) -> None:
@@ -552,12 +614,12 @@ def _require_initial_items_fit(items: tuple[Any, ...], *, owner_id: str) -> None
         PlayerInventoryAggregate,
     )
 
-    DEFAULT_MAX_SLOTS = PlayerInventoryAggregate.DEFAULT_MAX_SLOTS
+    max_slots = PlayerInventoryAggregate.DEFAULT_MAX_SLOTS
 
-    if len(items) <= DEFAULT_MAX_SLOTS:
+    if len(items) <= max_slots:
         return
     raise ScenarioLoadError(
         f"players[{owner_id!r}].initial_items が所持枠に収まりません "
-        f"({len(items)} 個を宣言していますが、枠は {DEFAULT_MAX_SLOTS} 個です)。"
+        f"({len(items)} 個を宣言していますが、枠は {max_slots} 個です)。"
         "枠を超えたぶんは持たせられないので、宣言を減らしてください。"
     )

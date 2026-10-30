@@ -4,8 +4,8 @@ from hashlib import sha256
 from types import SimpleNamespace
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.player.services.player_life_query import (
     PlayerLifeQuery,
@@ -29,24 +29,23 @@ class _GamePhaseStoreStub:
 class _RuntimeStub:
     """実行方式の設定だけを持つ runtime 代役。"""
 
-    _episodic_stack = None
-
     def __init__(
         self,
         workers: int,
         *,
         meeting: bool = False,
-        meeting_serial_turns: bool = False,
     ) -> None:
         self._runtime_config = SimpleNamespace(
             llm_turn_parallel_workers=workers,
-            llm_meeting_serial_turns=meeting_serial_turns,
         )
         self._game_phase_store = _GamePhaseStoreStub(meeting)
         self._player_life_query = PlayerLifeQuery(
             player_status_repository=None,
             player_outcome_registry=None,
         )
+
+    def current_tick(self) -> int:
+        return 0
 
 
 class _WiringStub:
@@ -57,14 +56,12 @@ class _WiringStub:
         workers: int,
         *,
         meeting: bool = False,
-        meeting_serial_turns: bool = False,
     ) -> None:
         self.runtime = _RuntimeStub(
             workers,
             meeting=meeting,
-            meeting_serial_turns=meeting_serial_turns,
         )
-        self.short_term_memory = DefaultSlidingWindowMemory(
+        self.short_term_memory = SummarizingShortTermMemory(
             turn_cap=10,
             compact_turn_count=5,
         )
@@ -96,9 +93,7 @@ class _WiringStub:
     def run_phase_a(self, player_id: PlayerId) -> tuple[PlayerId, str]:
         return player_id, self._build_prompt(player_id)
 
-    def run_phase_b(
-        self, phase_a: tuple[PlayerId, str]
-    ) -> LlmCommandResultDto:
+    def run_phase_b(self, phase_a: tuple[PlayerId, str]) -> LlmCommandResultDto:
         player_id, _prompt = phase_a
         self.spoken.append(f"player-{player_id.value} の同 tick 発言")
         return LlmCommandResultDto(success=True, message="完了した。")
@@ -108,12 +103,10 @@ def _run_two_players(
     *,
     workers: int,
     meeting: bool = False,
-    meeting_serial_turns: bool = False,
 ) -> _WiringStub:
     wiring = _WiringStub(
         workers,
         meeting=meeting,
-        meeting_serial_turns=meeting_serial_turns,
     )
     trigger = _WorldLlmTurnTrigger(wiring=wiring)
     trigger.schedule_turn(PlayerId(1))
@@ -142,35 +135,21 @@ def test_parallel_execution_closes_one_turn_per_player() -> None:
     assert store.completed_turn_count(PlayerId(2)) == 1
 
 
-def test_enabled_meeting_serialization_exposes_same_tick_speech_to_later_turns() -> None:
-    """逐次化を有効にした会議では、後続者が同 tick の先行発言を読んでから話す。"""
+def test_meeting_keeps_wave_parallel() -> None:
+    """会議でも wave 並列を保ち、同 tick 発言を互いに見せない。"""
     wiring = _run_two_players(
         workers=4,
         meeting=True,
-        meeting_serial_turns=True,
-    )
-
-    first, second = list(wiring.prompt_snapshots)
-    assert f"player-{first} の同 tick 発言" in wiring.prompt_snapshots[second]
-
-
-def test_disabled_meeting_serialization_keeps_meeting_wave_parallel() -> None:
-    """逐次化が無効なら会議でも wave 並列を保ち、同 tick 発言を互いに見せない。"""
-    wiring = _run_two_players(
-        workers=4,
-        meeting=True,
-        meeting_serial_turns=False,
     )
 
     assert all(prompt == "" for prompt in wiring.prompt_snapshots.values())
 
 
 def test_free_roam_keeps_wave_parallel_prompts_isolated_within_the_tick() -> None:
-    """逐次化を有効にしても自由時間は並列を保ち、同 tick の他者行動を混ぜない。"""
+    """自由時間は並列を保ち、同 tick の他者行動を混ぜない。"""
     wiring = _run_two_players(
         workers=4,
         meeting=False,
-        meeting_serial_turns=True,
     )
 
     assert all(prompt == "" for prompt in wiring.prompt_snapshots.values())
@@ -183,20 +162,10 @@ def test_worker_count_does_not_change_prefixes_within_the_same_phase() -> None:
     serial_free_roam = _run_two_players(workers=1, meeting=False)
     parallel_free_roam = _run_two_players(workers=4, meeting=False)
 
-    assert set(serial_meeting.system_hashes.values()) == set(
-        configured_parallel_meeting.system_hashes.values()
-    )
-    assert set(serial_meeting.toolset_hashes.values()) == set(
-        configured_parallel_meeting.toolset_hashes.values()
-    )
-    assert set(serial_free_roam.system_hashes.values()) == set(
-        parallel_free_roam.system_hashes.values()
-    )
-    assert set(serial_free_roam.toolset_hashes.values()) == set(
-        parallel_free_roam.toolset_hashes.values()
-    )
+    assert set(serial_meeting.system_hashes.values()) == set(configured_parallel_meeting.system_hashes.values())
+    assert set(serial_meeting.toolset_hashes.values()) == set(configured_parallel_meeting.toolset_hashes.values())
+    assert set(serial_free_roam.system_hashes.values()) == set(parallel_free_roam.system_hashes.values())
+    assert set(serial_free_roam.toolset_hashes.values()) == set(parallel_free_roam.toolset_hashes.values())
     # フェーズ境界では実物どおり toolset が変わる。この変更は #8 の
     # worker 切替とは別で、キャッシュ不変を主張しない。
-    assert set(serial_meeting.toolset_hashes.values()) != set(
-        serial_free_roam.toolset_hashes.values()
-    )
+    assert set(serial_meeting.toolset_hashes.values()) != set(serial_free_roam.toolset_hashes.values())

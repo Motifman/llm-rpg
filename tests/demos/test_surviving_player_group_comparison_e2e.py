@@ -9,9 +9,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 
-_STATION_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_STATION_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _CREW = tuple(PlayerId(value) for value in (1, 2, 4, 5, 6, 8))
 
 

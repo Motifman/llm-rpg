@@ -37,9 +37,7 @@ class TradeObservationFormatter:
             return self._format_trade_declined(event, recipient_player_id)
         return None
 
-    def _format_trade_offered(
-        self, event: TradeOfferedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_trade_offered(self, event: TradeOfferedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.offered_item_id)
         trade_id = event.aggregate_id.value
         is_seller = event.seller_id.value == recipient_id.value
@@ -52,9 +50,7 @@ class TradeObservationFormatter:
                 "item_name": item_name,
                 "requested_gold": event.requested_gold.value,
             }
-            spec_val = resolve_item_spec_id_value_for_instance(
-                self._context.item_repository, event.offered_item_id
-            )
+            spec_val = resolve_item_spec_id_value_for_instance(self._context.item_repository, event.offered_item_id)
             if spec_val is not None:
                 structured["item_spec_id_value"] = spec_val
             return ObservationOutput(
@@ -73,9 +69,7 @@ class TradeObservationFormatter:
             "item_name": item_name,
             "requested_gold": event.requested_gold.value,
         }
-        spec_val = resolve_item_spec_id_value_for_instance(
-            self._context.item_repository, event.offered_item_id
-        )
+        spec_val = resolve_item_spec_id_value_for_instance(self._context.item_repository, event.offered_item_id)
         if spec_val is not None:
             structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
@@ -85,9 +79,7 @@ class TradeObservationFormatter:
             schedules_turn=True,
         )
 
-    def _format_trade_accepted(
-        self, event: TradeAcceptedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_trade_accepted(self, event: TradeAcceptedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         trade_id = event.aggregate_id.value
         is_buyer = event.buyer_id.value == recipient_id.value
         if is_buyer:
@@ -112,9 +104,7 @@ class TradeObservationFormatter:
             schedules_turn=True,
         )
 
-    def _format_trade_cancelled(
-        self, event: TradeCancelledEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_trade_cancelled(self, event: TradeCancelledEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         trade_id = event.aggregate_id.value
         prose = "取引がキャンセルされました。"
         structured: dict[str, Any] = {"type": "trade_cancelled", "trade_id_value": trade_id}
@@ -125,9 +115,7 @@ class TradeObservationFormatter:
             schedules_turn=True,
         )
 
-    def _format_trade_declined(
-        self, event: TradeDeclinedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_trade_declined(self, event: TradeDeclinedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         trade_id = event.aggregate_id.value
         is_decliner = event.decliner_id.value == recipient_id.value
         if is_decliner:
@@ -145,6 +133,7 @@ class TradeObservationFormatter:
                 "role": "seller",
                 "trade_id_value": trade_id,
                 "decliner_player_id": event.decliner_id.value,
+                "decliner_name": decliner_name,
             }
         return ObservationOutput(
             prose=prose,

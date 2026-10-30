@@ -1,4 +1,5 @@
 """ShopEventHandlerのテスト"""
+
 from datetime import datetime
 from unittest.mock import Mock
 
@@ -34,8 +35,9 @@ class TestShopEventHandler:
     @pytest.fixture
     def setup_handler(self):
         """ハンドラとリポジトリをセットアップ"""
+
         def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
+            return InMemoryUnitOfWork()
 
         summary_repo = InMemoryShopSummaryReadModelRepository()
         listing_repo = InMemoryShopListingReadModelRepository()
@@ -118,9 +120,7 @@ class TestShopEventHandler:
         )
         summary_repo.save(summary_rm)
 
-        projection = ShopListingProjection(
-            item_name="Test Sword", item_spec_id=5, quantity=3
-        )
+        projection = ShopListingProjection(item_name="Test Sword", item_spec_id=5, quantity=3)
         event = ShopItemListedEvent.create(
             aggregate_id=ShopId(1),
             aggregate_type="ShopAggregate",

@@ -73,7 +73,9 @@ def build_monster_template(
         reward_info=RewardInfo(
             exp=int(row["reward_exp"]),
             gold=int(row["reward_gold"]),
-            loot_table_id=None if row["reward_loot_table_id"] is None else LootTableId(int(row["reward_loot_table_id"])),
+            loot_table_id=None
+            if row["reward_loot_table_id"] is None
+            else LootTableId(int(row["reward_loot_table_id"])),
         ),
         respawn_info=RespawnInfo(
             respawn_interval_ticks=int(row["respawn_interval_ticks"]),
@@ -99,9 +101,7 @@ def build_monster_template(
                 after_ticks=int(stage_row["after_ticks"]),
                 stats_multiplier=float(stage_row["stats_multiplier"]),
                 flee_bias_multiplier=(
-                    None
-                    if stage_row["flee_bias_multiplier"] is None
-                    else float(stage_row["flee_bias_multiplier"])
+                    None if stage_row["flee_bias_multiplier"] is None else float(stage_row["flee_bias_multiplier"])
                 ),
                 allow_chase=bool(stage_row["allow_chase"]),
             )
@@ -120,13 +120,19 @@ def build_monster_template(
         # Phase 4-O B: 温度 comfort 範囲 (migration v25)。古い row はカラム
         # default で埋まる (FREEZING / HOT / 0 = 効果無効)。
         min_comfortable_temperature=_optional_temperature(
-            row, "min_comfortable_temperature", default=TemperatureEnum.FREEZING,
+            row,
+            "min_comfortable_temperature",
+            default=TemperatureEnum.FREEZING,
         ),
         max_comfortable_temperature=_optional_temperature(
-            row, "max_comfortable_temperature", default=TemperatureEnum.HOT,
+            row,
+            "max_comfortable_temperature",
+            default=TemperatureEnum.HOT,
         ),
         temperature_discomfort_damage_per_tick=_optional_int(
-            row, "temperature_discomfort_damage_per_tick", default=0,
+            row,
+            "temperature_discomfort_damage_per_tick",
+            default=0,
         ),
         # Phase 4-O C: pack 援護フィールド (migration v26)
         # default は両方 0 = 援護機能無効。migration v26 の SQL DEFAULT と
@@ -137,18 +143,26 @@ def build_monster_template(
         # 同時に 0 超に設定する想定)。
         pack_help_radius=_optional_int(row, "pack_help_radius", default=0),
         max_pack_responders=_optional_int(
-            row, "max_pack_responders", default=0,
+            row,
+            "max_pack_responders",
+            default=0,
         ),
         # Phase 4-O C #2: pack 群れ逃走 (migration v27)
         pack_flee_follower=_optional_bool(
-            row, "pack_flee_follower", default=False,
+            row,
+            "pack_flee_follower",
+            default=False,
         ),
         pack_flee_follower_duration=_optional_int(
-            row, "pack_flee_follower_duration", default=0,
+            row,
+            "pack_flee_follower_duration",
+            default=0,
         ),
         # Phase 4-O C #3: pack 警戒共有 (migration v28)
         pack_awareness_radius=_optional_int(
-            row, "pack_awareness_radius", default=0,
+            row,
+            "pack_awareness_radius",
+            default=0,
         ),
         attack_status_effects=tuple(
             AttackStatusEffectChance(
@@ -174,7 +188,10 @@ def _optional_bool(row: sqlite3.Row, key: str, *, default: bool) -> bool:
 
 
 def _optional_temperature(
-    row: sqlite3.Row, key: str, *, default: TemperatureEnum,
+    row: sqlite3.Row,
+    key: str,
+    *,
+    default: TemperatureEnum,
 ) -> TemperatureEnum:
     """row[key] が無い (旧スキーマ) なら default、あれば TemperatureEnum 化。"""
     try:

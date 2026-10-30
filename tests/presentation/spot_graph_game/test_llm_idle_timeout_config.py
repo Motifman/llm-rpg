@@ -23,35 +23,25 @@ class TestResolveLlmIdleTimeoutTicks:
 
     def test_config_24(self) -> None:
         """1 日 (24 tick) 沈黙許容を試したい場合の長め設定。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(
-            values={"LLM_IDLE_TIMEOUT_TICKS": "24"}
-        )
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_IDLE_TIMEOUT_TICKS": "24"})
         assert cfg.llm_idle_timeout_ticks == 24
 
     def test_config_can_lower_idle_timeout_to_one(self) -> None:
         """旧 heartbeat 並の頻発を再現したい場合の最小値。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(
-            values={"LLM_IDLE_TIMEOUT_TICKS": "1"}
-        )
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_IDLE_TIMEOUT_TICKS": "1"})
         assert cfg.llm_idle_timeout_ticks == 1
 
     def test_case_raises_value_error(self) -> None:
         """parse 失敗は既定値縮退ではなく profile ミスとして止める。"""
         with pytest.raises(ValueError, match="LLM_IDLE_TIMEOUT_TICKS"):
-            ResolvedLlmRuntimeConfig.from_mapping(
-                values={"LLM_IDLE_TIMEOUT_TICKS": "abc"}
-            )
+            ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_IDLE_TIMEOUT_TICKS": "abc"})
 
     def test_zero_raises_value_error(self) -> None:
         """0 / 負値は heartbeat emitter に渡す前に fail-fast する。"""
         with pytest.raises(ValueError, match="LLM_IDLE_TIMEOUT_TICKS"):
-            ResolvedLlmRuntimeConfig.from_mapping(
-                values={"LLM_IDLE_TIMEOUT_TICKS": "0"}
-            )
+            ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_IDLE_TIMEOUT_TICKS": "0"})
         with pytest.raises(ValueError, match="LLM_IDLE_TIMEOUT_TICKS"):
-            ResolvedLlmRuntimeConfig.from_mapping(
-                values={"LLM_IDLE_TIMEOUT_TICKS": "-5"}
-            )
+            ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_IDLE_TIMEOUT_TICKS": "-5"})
 
 
 class TestResolveLlmToolChoice:
@@ -69,7 +59,6 @@ class TestResolveLlmToolChoice:
         cfg = ResolvedLlmRuntimeConfig.from_mapping(
             values={
                 "LLM_TOOL_CHOICE": "auto",
-                "REASON_FIRST_TWO_STEP_ENABLED": "true",
             }
         )
 
@@ -96,9 +85,7 @@ class TestResolveLlmSessionIdEnabled:
 
     def test_false_disables_session_id(self) -> None:
         """false は空文字への変換ではなく、会話 ID の送信自体を無効にする。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(
-            values={"LLM_SESSION_ID_ENABLED": "false"}
-        )
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_SESSION_ID_ENABLED": "false"})
 
         assert cfg.llm_session_id_enabled is False
 
@@ -106,6 +93,4 @@ class TestResolveLlmSessionIdEnabled:
     def test_unknown_values_fail_fast(self, value: str) -> None:
         """未知値は true への縮退を許さず、run の開始前に拒否する。"""
         with pytest.raises(ValueError, match="LLM_SESSION_ID_ENABLED"):
-            ResolvedLlmRuntimeConfig.from_mapping(
-                values={"LLM_SESSION_ID_ENABLED": value}
-            )
+            ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_SESSION_ID_ENABLED": value})

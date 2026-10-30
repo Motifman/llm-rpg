@@ -19,8 +19,8 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts._viewer_vendor import VendorAsset  # noqa: E402
 from scripts.build_trace_viewer import (  # noqa: E402
+    _event_timeline_category,
     _format_event_body,
-    build_memo_state_timeline,
     build_position_timeline,
     build_speech_timeline,
     collect_players,
@@ -242,8 +242,14 @@ class TestGroupEventsByTick:
         """同 tick / 同 prose / 同 structured.type の observation は 1 件に。
         (4 player broadcast で同じ prose が 4 連続並ぶのを抑制)"""
         events = [
-            TraceEvent(seq=i, timestamp="t", kind="observation", tick=0, player_id=i,
-                       payload={"prose": "雨が降ってきた", "structured": {"type": "weather_changed"}})
+            TraceEvent(
+                seq=i,
+                timestamp="t",
+                kind="observation",
+                tick=0,
+                player_id=i,
+                payload={"prose": "雨が降ってきた", "structured": {"type": "weather_changed"}},
+            )
             for i in range(1, 5)
         ]
         grouped = group_events_by_tick(events)
@@ -253,10 +259,22 @@ class TestGroupEventsByTick:
     def test_different_prose_observation_remains(self) -> None:
         """prose が違えば別 event として両方残す。"""
         events = [
-            TraceEvent(seq=1, timestamp="t", kind="observation", tick=0, player_id=1,
-                       payload={"prose": "A が起きた", "structured": {"type": "x"}}),
-            TraceEvent(seq=2, timestamp="t", kind="observation", tick=0, player_id=2,
-                       payload={"prose": "B が起きた", "structured": {"type": "x"}}),
+            TraceEvent(
+                seq=1,
+                timestamp="t",
+                kind="observation",
+                tick=0,
+                player_id=1,
+                payload={"prose": "A が起きた", "structured": {"type": "x"}},
+            ),
+            TraceEvent(
+                seq=2,
+                timestamp="t",
+                kind="observation",
+                tick=0,
+                player_id=2,
+                payload={"prose": "B が起きた", "structured": {"type": "x"}},
+            ),
         ]
         grouped = group_events_by_tick(events)
         obs = [e for e in grouped[0] if e.kind == "observation"]
@@ -626,6 +644,87 @@ class TestFormatEventBody:
 
         assert "[say_inline]" in _format_event_body(speech)
 
+    def test_situation_belief_recall_shows_counts_and_the_first_hit(self) -> None:
+        """situation_belief_recall は、載せた件数、候補の数、いちばん近い信念の本文を 1 行で表示し、想起に分類される。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind="situation_belief_recall",
+            tick=1,
+            player_id=1,
+            payload={
+                "failed": None,
+                "candidate_count": 4,
+                "hits": [{"entry_id": "b-1", "score": 1.2, "text": "干潟は潮が満ちると渡れない"}],
+                "chosen": ["b-1", "b-2"],
+            },
+        )
+        out = _format_event_body(e)
+        assert "2 chosen / 4 candidates" in out
+        assert "干潟は潮が満ちると渡れない" in out
+        assert _event_timeline_category(e) == "recall"
+
+    def test_llm_failure_retry_is_system_and_shows_whether_it_was_rescheduled(self) -> None:
+        """llm_failure_retry は LLM 呼び出しの記録と同じシステムに分類され、連続の回数と次の tick に回したかを表示する (#1595)。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind=TraceEventKind.LLM_FAILURE_RETRY,
+            tick=32,
+            player_id=2,
+            payload={
+                "consecutive_failures": 3,
+                "max_consecutive_failures": 3,
+                "rescheduled": False,
+                "error_code": "LLM_API_FAILED",
+            },
+        )
+        out = _format_event_body(e)
+        assert "consecutive_failures=3" in out
+        assert "rescheduled=False" in out
+        assert _event_timeline_category(e) == "system"
+
+    def test_own_action_follow_up_is_system_and_shows_why(self) -> None:
+        """own_action_follow_up は失敗の回し直しと同じシステムに分類され、次の tick に回したかとその理由を表示する (#1597)。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind=TraceEventKind.OWN_ACTION_FOLLOW_UP,
+            tick=31,
+            player_id=1,
+            payload={"rescheduled": False, "reason": "rest_chosen"},
+        )
+        out = _format_event_body(e)
+        assert "rescheduled=False" in out
+        assert "reason=rest_chosen" in out
+        assert _event_timeline_category(e) == "system"
+
+    def test_situation_belief_recall_with_empty_query_says_it_was_not_searched(self) -> None:
+        """問い合わせ文が空の situation_belief_recall は、一致 0 件ではなく、検索しなかったことを表示する。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind="situation_belief_recall",
+            tick=1,
+            player_id=1,
+            payload={"failed": None, "query": "", "candidate_count": 4, "hits": [], "chosen": []},
+        )
+        out = _format_event_body(e)
+        assert "not searched" in out
+        assert "0 chosen" not in out
+
+    def test_failed_situation_belief_recall_shows_the_failure(self) -> None:
+        """失敗した situation_belief_recall は、失敗の内容を表示する。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind="situation_belief_recall",
+            tick=1,
+            player_id=1,
+            payload={"failed": "ValueError: top_k must be >= 1"},
+        )
+        assert "situation recall failed: ValueError" in _format_event_body(e)
+
     def test_semantic_passive_recall_uses_compact_summary(self) -> None:
         """semantic_passive_recall は cue 配列ではなく件数と候補本文を表示する。"""
         e = TraceEvent(
@@ -676,7 +775,7 @@ class TestFormatEventBody:
             TraceEvent(
                 seq=3,
                 timestamp="t",
-                kind="goal_reflect",
+                kind="custom_summary_event",
                 tick=1,
                 player_id=1,
                 payload={"goal_id": "g1", "summary": "水を探す"},
@@ -810,7 +909,7 @@ class TestRenderViewerHtml:
                 tick=1,
                 player_id=1,
                 payload={"tool": "examine", "arguments": {"target": "浜"}},
-            )
+            ),
         ]
         out = render_viewer_html(
             title="x",
@@ -841,8 +940,8 @@ class TestRenderViewerHtml:
         )
         assert '<div class="tick-block all-filtered" data-tick="1">' in out
 
-    def test_trace_navigator_removed_and_memo_collapsed_by_default(self) -> None:
-        """下部 trace navigator は出力せず、memo は既定で畳む。"""
+    def test_trace_navigator_and_old_memo_panel_are_not_rendered(self) -> None:
+        """下部 trace navigator も、古いメモのパネルも出力しない。"""
         out = render_viewer_html(
             title="x",
             events=_sample_events(),
@@ -852,8 +951,7 @@ class TestRenderViewerHtml:
         assert 'id="trace-nav-section"' not in out
         assert 'id="moment-rail"' not in out
         assert 'id="heatmap"' not in out
-        assert 'id="toggle-memo-panel"' in out
-        assert 'id="toggle-memo-panel" checked' not in out
+        assert "memo-panel" not in out
 
 
 class TestMainCli:
@@ -888,9 +986,7 @@ class TestMainCli:
             encoding="utf-8",
         )
 
-        with patch.object(
-            build_trace_viewer, "fetch_cytoscape", return_value=_fake_asset()
-        ):
+        with patch.object(build_trace_viewer, "fetch_cytoscape", return_value=_fake_asset()):
             rc = build_trace_viewer.main([str(tmp_path)])
 
         assert rc == 0
@@ -918,9 +1014,7 @@ class TestPositionTimeline:
     def test_returns_tick(self) -> None:
         """各 position_change tick のスナップショットが順に積まれる。"""
         events = _sample_events()
-        timeline = build_position_timeline(
-            events, spot_name_to_id={"制御室": "s1", "廊下": "s2", "金庫室": "s3"}
-        )
+        timeline = build_position_timeline(events, spot_name_to_id={"制御室": "s1", "廊下": "s2", "金庫室": "s3"})
         # tick 0: カイト=s1, リン=s2 (初期配置)
         assert timeline[0] == {1: "s1", 2: "s2"}
         # tick 2: リンが移動 → カイトはまだ s1, リン=s3
@@ -932,57 +1026,6 @@ class TestPositionTimeline:
         timeline = build_position_timeline(events)
         # tick 1 は position_change なし (action のみ)
         assert 1 not in timeline
-
-
-class TestMemoStateTimeline:
-    """build_memo_state_timeline の挙動 (PR γ memo panel 用)。"""
-
-    def test_memo_add_active_memo_recorded(self) -> None:
-        """memo_add 発生 tick のスナップショットに該当 memo が active で含まれる。"""
-        events = [
-            TraceEvent(
-                seq=1,
-                timestamp="t",
-                kind=TraceEventKind.MEMO_ADD,
-                tick=3,
-                player_id=1,
-                payload={"memo_id": "m1", "content": "扉を固定"},
-            ),
-        ]
-        timeline = build_memo_state_timeline(events)
-        snap = timeline[3]
-        assert len(snap) == 1
-        assert snap[0]["memo_id"] == "m1"
-        assert snap[0]["status"] == "active"
-        assert snap[0]["added_tick"] == 3
-
-    def test_memo_done_status_done(self) -> None:
-        """memo_done 後のスナップショットで該当 memo の status=done。"""
-        events = [
-            TraceEvent(
-                seq=1,
-                timestamp="t",
-                kind=TraceEventKind.MEMO_ADD,
-                tick=3,
-                player_id=1,
-                payload={"memo_id": "m1", "content": "x"},
-            ),
-            TraceEvent(
-                seq=2,
-                timestamp="t",
-                kind=TraceEventKind.MEMO_DONE,
-                tick=10,
-                player_id=1,
-                payload={"memo_id": "m1"},
-            ),
-        ]
-        timeline = build_memo_state_timeline(events)
-        # tick 3 の時点では active
-        assert timeline[3][0]["status"] == "active"
-        # tick 10 で done
-        done = timeline[10][0]
-        assert done["status"] == "done"
-        assert done["done_tick"] == 10
 
 
 class TestEventHeatmap:
@@ -1013,23 +1056,22 @@ class TestComputeTraceMoments:
         end_m = next(m for m in moments if m["kind"] == "end")
         assert end_m["label"] == "WIN"
 
-    def test_memo_add_has_medium_score_from_memo_kind(self) -> None:
-        """memo_add は kind="memo", score≈65, content が detail に入る。"""
+    def test_memo_hint_is_a_hint_moment(self) -> None:
+        """memo_hint は kind="hint", score=58 の moment になる。"""
         events = [
             TraceEvent(
                 seq=1,
                 timestamp="t",
-                kind=TraceEventKind.MEMO_ADD,
+                kind=TraceEventKind.MEMO_HINT,
                 tick=3,
                 player_id=1,
-                payload={"memo_id": "m1", "content": "power_on を維持"},
+                payload={"memo_id": "m1", "similarity": 0.8},
             ),
         ]
         moments = compute_trace_moments(events)
         assert len(moments) == 1
-        assert moments[0]["kind"] == "memo"
-        assert moments[0]["detail"] == "power_on を維持"
-        assert moments[0]["score"] == 65
+        assert moments[0]["kind"] == "hint"
+        assert moments[0]["score"] == 58
 
     def test_failed_action_result_has_high_score_from_failed_kind(self) -> None:
         """action_result.success=False は kind="failed" (score=85)。"""
@@ -1115,7 +1157,6 @@ class TestTacticalThemeMarkers:
         assert "--gold:" in out
         # 新ラベル
         assert "Tactical map" in out
-        assert "Objectives / Active memo" in out
         # badge outcome chip
         assert "badge outcome" in out
         assert "Trace navigator" not in out
@@ -1144,9 +1185,7 @@ class TestSpeechTimeline:
 
     def test_finds_inner_thought_kind_thought(self) -> None:
         """arguments.inner_thought は kind="thought" として別ものとして拾う。"""
-        events = [
-            self._evt(1, 5, 1, "examine", {"target": "x", "inner_thought": "考えごと"})
-        ]
+        events = [self._evt(1, 5, 1, "examine", {"target": "x", "inner_thought": "考えごと"})]
         tl = build_speech_timeline(events)
         # speech は無く thought のみ
         kinds = [b["kind"] for b in tl[5]]
@@ -1155,9 +1194,7 @@ class TestSpeechTimeline:
 
     def test_finds_say_inner_thought_action(self) -> None:
         """同一 action に message と inner_thought 両方あれば bubble 2 件。"""
-        events = [
-            self._evt(1, 3, 1, "speech_say", {"message": "公開", "inner_thought": "心声"})
-        ]
+        events = [self._evt(1, 3, 1, "speech_say", {"message": "公開", "inner_thought": "心声"})]
         tl = build_speech_timeline(events)
         kinds = sorted([b["kind"] for b in tl[3]])
         assert kinds == ["speech", "thought"]
@@ -1225,9 +1262,9 @@ class TestRenderViewerHtmlSpeech:
 
 
 class TestRenderViewerHtmlSiblingLinks:
-    """episodic / timeline への遷移リンクが htmlpreview 経由でも壊れない仕掛けを確認する。"""
+    """timeline への遷移リンクが htmlpreview 経由でも壊れない仕掛けを確認する。"""
 
-    def test_episodic_timeline_data_sibling_attribute_file(self) -> None:
+    def test_timeline_link_has_data_sibling_attribute(self) -> None:
         """相対 href だけだと htmlpreview 経由で raw gist (text/plain) に解決され
         ソース表示になるため、JS 書き換えの起点として data-sibling を持たせる。"""
         out = render_viewer_html(
@@ -1236,7 +1273,7 @@ class TestRenderViewerHtmlSiblingLinks:
             scenario_topology={"spots": [], "connections": []},
             cytoscape_js_src="/* fake */",
         )
-        assert 'data-sibling="episodic.html"' in out
+        assert 'data-sibling="episodic.html"' not in out
         assert 'data-sibling="timeline.html"' in out
 
     def test_htmlpreview_via_htmlpreview_url_js(self) -> None:

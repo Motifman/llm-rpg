@@ -55,13 +55,9 @@ class SqliteOutboxDeliveryStore:
                 raw_next_attempt = row["next_attempt_at"]
                 if raw_next_attempt is not None:
                     next_attempt_at = datetime.fromisoformat(str(raw_next_attempt))
-                    if (
-                        next_attempt_at.tzinfo is None
-                        or next_attempt_at.utcoffset() is None
-                    ):
+                    if next_attempt_at.tzinfo is None or next_attempt_at.utcoffset() is None:
                         raise RuntimeError(
-                            "outboxのnext_attempt_atにタイムゾーンがありません: "
-                            f"event_id={row['event_id']}"
+                            f"outboxのnext_attempt_atにタイムゾーンがありません: event_id={row['event_id']}"
                         )
                     if next_attempt_at > now:
                         break
@@ -82,9 +78,7 @@ class SqliteOutboxDeliveryStore:
         """handler成功後に1行だけ配達済みへ変更する。"""
         self._record_attempt(event_id, status="delivered", error=None)
 
-    def record_retryable_failure(
-        self, event_id: str, error: Exception
-    ) -> OutboxFailureDisposition:
+    def record_retryable_failure(self, event_id: str, error: Exception) -> OutboxFailureDisposition:
         """一時失敗の次回時刻、または試行上限による隔離を確定する。"""
         now = self._now()
         connection = sqlite3.connect(self._database)
@@ -100,17 +94,10 @@ class SqliteOutboxDeliveryStore:
                 (event_id,),
             ).fetchone()
             if row is None:
-                raise RuntimeError(
-                    "更新対象のpending outbox行が一意に存在しません: "
-                    f"event_id={event_id}"
-                )
+                raise RuntimeError(f"更新対象のpending outbox行が一意に存在しません: event_id={event_id}")
             attempt_count = int(row["attempt_count"]) + 1
             dead_lettered = attempt_count >= self._retry_policy.max_attempts
-            next_attempt_at = (
-                None
-                if dead_lettered
-                else now + self._retry_policy.delay_after(attempt_count)
-            )
+            next_attempt_at = None if dead_lettered else now + self._retry_policy.delay_after(attempt_count)
             status = "dead_letter" if dead_lettered else "pending"
             cursor = connection.execute(
                 """
@@ -134,10 +121,7 @@ class SqliteOutboxDeliveryStore:
                 ),
             )
             if cursor.rowcount != 1:
-                raise RuntimeError(
-                    "更新対象のpending outbox行が一意に存在しません: "
-                    f"event_id={event_id}"
-                )
+                raise RuntimeError(f"更新対象のpending outbox行が一意に存在しません: event_id={event_id}")
             connection.commit()
             return OutboxFailureDisposition(
                 attempt_count=attempt_count,
@@ -189,10 +173,7 @@ class SqliteOutboxDeliveryStore:
                 ),
             )
             if cursor.rowcount != 1:
-                raise RuntimeError(
-                    "更新対象のpending outbox行が一意に存在しません: "
-                    f"event_id={event_id}"
-                )
+                raise RuntimeError(f"更新対象のpending outbox行が一意に存在しません: event_id={event_id}")
             connection.commit()
         except BaseException:
             connection.rollback()
@@ -206,11 +187,7 @@ class SqliteOutboxDeliveryStore:
 
     def _now(self) -> datetime:
         now = self._now_provider()
-        if (
-            not isinstance(now, datetime)
-            or now.tzinfo is None
-            or now.utcoffset() is None
-        ):
+        if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("now_providerはタイムゾーン付き日時を返す必要があります")
         return now
 

@@ -45,9 +45,7 @@ class Facing:
             return (0, 0, -step)
         vec = self.to_2d_vector()
         if vec is None:
-            raise DirectionDeltaUndefinedException(
-                f"{self.direction.value} の移動量が定義されていません"
-            )
+            raise DirectionDeltaUndefinedException(f"{self.direction.value} の移動量が定義されていません")
         return (vec[0] * step, vec[1] * step, 0)
 
     def to_display_label(self) -> str:
@@ -109,7 +107,5 @@ class Facing:
         }
         direction = mapping.get((step_x, step_y))
         if direction is None:
-            raise SameCoordinateDirectionException(
-                f"変位がゼロのため向きを決められません: dx={dx}, dy={dy}, dz={dz}"
-            )
+            raise SameCoordinateDirectionException(f"変位がゼロのため向きを決められません: dx={dx}, dy={dy}, dz={dz}")
         return cls(direction)

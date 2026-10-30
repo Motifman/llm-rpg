@@ -3,8 +3,8 @@
 PR4 で追加された機能:
 
 - 「現在地: 〇〇」line に ``(初めて訪れた)`` を追加
-- 「同じ場所にいるプレイヤー」の名前に ``(初めて会った)`` を追加
-- encounter_memory が未注入の場合は完全に既存挙動 (= 注記なし)
+- 「同じ場所にいるプレイヤー」の名前に ``(初めて会った)`` を追加 (Being の知り合いの記録から)
+- encounter_memory / acquaintances が未注入の場合は注記なし
 
 dto 構築は重いので unit test は internal helper を直接呼んで挙動を担保する。
 end-to-end の経路 (= 実 PlayerCurrentStateDto → ui_context_builder → 注記) は
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
 )
@@ -26,12 +27,29 @@ from ai_rpg_world.application.llm.services.action_result_store import (  # noqa:
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     SpotGraphUiContextBuilder,
 )
+from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
+    InMemoryAcquaintanceRepository,
+)
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+    InMemoryMemoryTurnClock,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _SPOT_NAMES = {100: "forest_clearing", 200: "summit"}
+
+
+def _acquaintances() -> PlayerAcquaintances:
+    return PlayerAcquaintances(
+        store=InMemoryAcquaintanceRepository(),
+        being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
+        turn_reader=InMemoryMemoryTurnClock(),
+        environment_name="森",
+        names_by_player_id={1: "エイダ", 2: "カイ", 3: "ノア"},
+    )
 
 
 def _make_builder(memory: InMemoryEncounterMemory, tick: int = 0):
@@ -79,50 +97,141 @@ class TestSpotFamiliarityAnnotation:
         assert builder._spot_familiarity_annotation(PlayerId(1), 100) is None
 
 
+class TestFirstVisitNoteOnlyOnTheFirstTurn:
+    """実行済みの手番の数を渡すと、「(初めて訪れた)」が着いた最初のターンだけに付くことを保証する (#1596)。"""
+
+    def _builder(self, memory: InMemoryEncounterMemory, turns: dict[int, int]):
+        return SpotGraphUiContextBuilder(
+            encounter_memory=memory,
+            current_tick_provider=lambda: 0,
+            spot_str_id_resolver=lambda i: _SPOT_NAMES[i],
+            executed_turn_provider=lambda pid: turns.get(pid.value, 0),
+        )
+
+    def test_the_note_is_shown_again_until_the_first_turn_runs(self) -> None:
+        """着いたあと手番を実行する前なら、注記を 2 度組んでも 2 度とも「(初めて訪れた)」になる。"""
+        memory = InMemoryEncounterMemory()
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 3)
+        builder = self._builder(memory, {1: 4})
+
+        notes = [builder._spot_familiarity_annotation(PlayerId(1), 100) for _ in range(2)]
+
+        assert notes == ["(初めて訪れた)", "(初めて訪れた)"]
+
+    def test_the_note_is_gone_after_one_turn_at_the_spot(self) -> None:
+        """注記を出したあと手番を 1 回実行すると、同じ場所に留まっていても注記は付かない。"""
+        memory = InMemoryEncounterMemory()
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 3)
+        turns = {1: 4}
+        builder = self._builder(memory, turns)
+        builder._spot_familiarity_annotation(PlayerId(1), 100)
+
+        turns[1] = 5
+
+        assert builder._spot_familiarity_annotation(PlayerId(1), 100) is None
+
+    def test_returning_to_a_spot_gets_no_note(self) -> None:
+        """一度離れて戻ってきた場所 (訪れた回数 2) には、戻った最初のターンでも注記は付かない。"""
+        memory = InMemoryEncounterMemory()
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 9)
+        builder = self._builder(memory, {1: 7})
+
+        assert builder._spot_familiarity_annotation(PlayerId(1), 100) is None
+
+    def test_without_a_turn_provider_the_note_stays_while_the_count_is_one(self) -> None:
+        """executed_turn_provider を渡さない構成では、訪れた回数が 1 の間ずっと「(初めて訪れた)」が付く。"""
+        memory = InMemoryEncounterMemory()
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
+        builder = _make_builder(memory)
+
+        notes = [builder._spot_familiarity_annotation(PlayerId(1), 100) for _ in range(2)]
+
+        assert notes == ["(初めて訪れた)", "(初めて訪れた)"]
+
+    def test_each_player_keeps_their_own_first_turn(self) -> None:
+        """実行済みの手番の数が違う 2 人が同じ場所に初めて着くと、どちらにも「(初めて訪れた)」が付く。"""
+        memory = InMemoryEncounterMemory()
+        for pid in (PlayerId(1), PlayerId(2)):
+            memory.observe(pid, EncounterKey.spot("forest_clearing"), 3)
+        builder = self._builder(memory, {1: 4, 2: 1})
+
+        notes = [builder._spot_familiarity_annotation(pid, 100) for pid in (PlayerId(1), PlayerId(2))]
+
+        assert notes == ["(初めて訪れた)", "(初めて訪れた)"]
+
+    def test_a_failing_turn_provider_gives_no_note(self) -> None:
+        """実行済みの手番の数が引けないときは、初めてと言い切らず注記を付けない。"""
+        memory = InMemoryEncounterMemory()
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
+        builder = SpotGraphUiContextBuilder(
+            encounter_memory=memory,
+            current_tick_provider=lambda: 0,
+            spot_str_id_resolver=lambda i: _SPOT_NAMES[i],
+            executed_turn_provider=lambda pid: (_ for _ in ()).throw(RuntimeError("no turns")),
+        )
+
+        assert builder._spot_familiarity_annotation(PlayerId(1), 100) is None
+
+
 class TestPlayerFamiliarityAnnotation:
-    """``_player_familiarity_annotation`` の挙動。"""
+    """``_player_familiarity_annotation`` が、見ている側の Being の知り合いの記録から「初めて会った」を決めることを保証する。"""
 
-    def test_player(self) -> None:
-        """初対面 player は初めて会った注記。"""
-        memory = InMemoryEncounterMemory()
-        memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
-        builder = _make_builder(memory)
-        assert (
-            builder._player_familiarity_annotation(PlayerId(1), "ノア")
-            == "(初めて会った)"
+    def test_person_met_once_gets_first_meeting_note(self) -> None:
+        """一度だけ会った相手には (初めて会った) を付ける。"""
+        acquaintances = _acquaintances()
+        acquaintances.record_meeting(PlayerId(1), "ノア")
+        builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) == "(初めて会った)"
+
+    def test_person_met_twice_gets_no_note(self) -> None:
+        """二度以上会った相手には注記を付けない。"""
+        acquaintances = _acquaintances()
+        acquaintances.record_meeting(PlayerId(1), "ノア")
+        acquaintances.record_meeting(PlayerId(1), "ノア")
+        builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) is None
+
+    def test_person_never_met_gets_no_note(self) -> None:
+        """会った記録の無い相手には注記を付けない。"""
+        builder = SpotGraphUiContextBuilder(acquaintances=_acquaintances())
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) is None
+
+    def test_meeting_of_another_viewer_does_not_count(self) -> None:
+        """別のプレイヤーが会った記録は、見ている側の注記に使わない。"""
+        acquaintances = _acquaintances()
+        acquaintances.record_meeting(PlayerId(2), "ノア")
+        builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) is None
+
+    def test_unknown_player_or_missing_viewer_gets_no_note(self) -> None:
+        """参加者でない番号の相手と、見ている側が分からないときは注記を付けない。"""
+        acquaintances = _acquaintances()
+        acquaintances.record_meeting(PlayerId(1), "ノア")
+        builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
+        assert builder._player_familiarity_annotation(PlayerId(1), 99) is None
+        assert builder._player_familiarity_annotation(None, 3) is None
+
+    def test_first_meeting_note_survives_being_shown_by_appearance(self) -> None:
+        """名前を知らずに会った相手は、一覧で見た目で書かれても、番号で引くので (初めて会った) が付く (#1581)。"""
+        acquaintances = PlayerAcquaintances(
+            store=InMemoryAcquaintanceRepository(),
+            being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
+            turn_reader=InMemoryMemoryTurnClock(),
+            environment_name="森",
+            names_by_player_id={1: "エイダ", 2: "カイ", 3: "ノア"},
+            appearances_by_player_id={3: "背の高い男"},
         )
+        acquaintances.record_meeting(PlayerId(1), "ノア")
+        builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) == "(初めて会った)"
 
-    def test_player_pr4_none(self) -> None:
-        """再会 player は PR4 範囲では None。"""
-        memory = InMemoryEncounterMemory()
-        memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
-        memory.observe(PlayerId(1), EncounterKey.player("ノア"), 5)
-        builder = _make_builder(memory)
-        assert (
-            builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
-        )
-
-    def test_observe_player_none(self) -> None:
-        """未 observe な player は None。"""
-        memory = InMemoryEncounterMemory()
-        builder = _make_builder(memory)
-        assert (
-            builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
-        )
-
-    def test_display_name_empty_string_none(self) -> None:
-        """displayname が空文字なら None。"""
+    def test_environment_encounter_alone_gives_no_note(self) -> None:
+        """環境の encounter に人の記録が残っていても、知り合いの記録を渡さなければ人に注記を付けない。"""
         memory = InMemoryEncounterMemory()
         memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
         builder = _make_builder(memory)
-        assert builder._player_familiarity_annotation(PlayerId(1), "") is None
-
-    def test_viewer_id_none(self) -> None:
-        """viewer id が None なら None。"""
-        memory = InMemoryEncounterMemory()
-        memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
-        builder = _make_builder(memory)
-        assert builder._player_familiarity_annotation(None, "ノア") is None
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) is None
 
 
 class TestEncounterEnabledGuard:
@@ -144,16 +253,6 @@ class TestEncounterEnabledGuard:
         """完全未注入で disabled。"""
         builder = SpotGraphUiContextBuilder()
         assert builder._encounter_enabled() is False
-
-    def test_disabled_player_not_rendered(self) -> None:
-        """disabled 時 player 注記は 出ない。"""
-        memory = InMemoryEncounterMemory()
-        memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
-        builder = SpotGraphUiContextBuilder(encounter_memory=memory)
-        # tick / resolver が無いので encounter_enabled=False
-        assert (
-            builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
-        )
 
 
 class TestConstructorTypeChecks:
@@ -194,52 +293,36 @@ class TestAnnotateCurrentSpotText:
         memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
         return _make_builder(memory)
 
-    def test_spot_line_2(
-        self, builder: SpotGraphUiContextBuilder
-    ) -> None:
+    def test_spot_line_2(self, builder: SpotGraphUiContextBuilder) -> None:
         """初訪問の spot 行を 書き換える。"""
         # snap stub: SimpleNamespace で必要 field だけ
         from types import SimpleNamespace
 
-        snap = SimpleNamespace(
-            current_spot_id=100, current_spot_name="森の広場"
-        )
+        snap = SimpleNamespace(current_spot_id=100, current_spot_name="森の広場")
         original = "現在地: 森の広場\n  description"
-        out = builder._annotate_current_spot_familiarity(
-            original, snap, PlayerId(1)
-        )
+        out = builder._annotate_current_spot_familiarity(original, snap, PlayerId(1))
         assert "現在地: 森の広場 (初めて訪れた)\n  description" == out
 
-    def test_spot_line(
-        self, builder: SpotGraphUiContextBuilder
-    ) -> None:
+    def test_spot_line(self, builder: SpotGraphUiContextBuilder) -> None:
         """注記なしの spot 行は 書き換えない。"""
         from types import SimpleNamespace
 
         snap = SimpleNamespace(current_spot_id=200, current_spot_name="山頂")
         original = "現在地: 山頂\n  description"
         # spot 200 (summit) は未 observe なので注記なし
-        out = builder._annotate_current_spot_familiarity(
-            original, snap, PlayerId(1)
-        )
+        out = builder._annotate_current_spot_familiarity(original, snap, PlayerId(1))
         assert out == original
 
-    def test_spot_id_none(
-        self, builder: SpotGraphUiContextBuilder
-    ) -> None:
+    def test_spot_id_none(self, builder: SpotGraphUiContextBuilder) -> None:
         """spot id が None なら 書き換えない。"""
         from types import SimpleNamespace
 
         snap = SimpleNamespace(current_spot_id=None, current_spot_name="不明")
         original = "現在地: 不明"
-        out = builder._annotate_current_spot_familiarity(
-            original, snap, PlayerId(1)
-        )
+        out = builder._annotate_current_spot_familiarity(original, snap, PlayerId(1))
         assert out == original
 
-    def test_viewer_none(
-        self, builder: SpotGraphUiContextBuilder
-    ) -> None:
+    def test_viewer_none(self, builder: SpotGraphUiContextBuilder) -> None:
         """viewer None なら 書き換えない。"""
         from types import SimpleNamespace
 
@@ -248,22 +331,15 @@ class TestAnnotateCurrentSpotText:
         out = builder._annotate_current_spot_familiarity(original, snap, None)
         assert out == original
 
-    def test_spot_description_string(
-        self, builder: SpotGraphUiContextBuilder
-    ) -> None:
+    def test_spot_description_string(self, builder: SpotGraphUiContextBuilder) -> None:
         """``str.replace`` で部分一致させると description に紛れた名前まで
         書き換えてしまう。完全一致の行のみ置換する仕様を担保する。"""
         from types import SimpleNamespace
 
         snap = SimpleNamespace(current_spot_id=100, current_spot_name="森の広場")
         # description にも「森の広場」が部分一致で混入する形を想定
-        original = (
-            "現在地: 森の広場\n"
-            "  ここは「森の広場」と呼ばれる場所だ。"
-        )
-        out = builder._annotate_current_spot_familiarity(
-            original, snap, PlayerId(1)
-        )
+        original = "現在地: 森の広場\n  ここは「森の広場」と呼ばれる場所だ。"
+        out = builder._annotate_current_spot_familiarity(original, snap, PlayerId(1))
         # 1 行目だけが書き換わる、2 行目の「森の広場」は触られない
         assert out.splitlines()[0] == "現在地: 森の広場 (初めて訪れた)"
         assert out.splitlines()[1] == "  ここは「森の広場」と呼ばれる場所だ。"

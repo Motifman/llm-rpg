@@ -55,9 +55,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     ScenarioLoadError,
 )
 
-_DRILL = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
 _MORI, _SENA, _KUZE = PlayerId(1), PlayerId(2), PlayerId(3)
 
@@ -202,9 +200,7 @@ class TestTheRowSaysHowLong:
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
 
         row = next(
-            line
-            for line in runtime.build_observation(_KUZE).splitlines()
-            if "いまできない:" in line and "襲う" in line
+            line for line in runtime.build_observation(_KUZE).splitlines() if "いまできない:" in line and "襲う" in line
         )
 
         assert "あと 20 分" in row
@@ -220,11 +216,7 @@ class TestTheRowSaysHowLong:
         for _ in range(2):
             runtime.advance_tick()
 
-        row = next(
-            line
-            for line in runtime.build_observation(_KUZE).splitlines()
-            if "セナ" in line and "襲う" in line
-        )
+        row = next(line for line in runtime.build_observation(_KUZE).splitlines() if "セナ" in line and "襲う" in line)
 
         assert "tick" not in row
 
@@ -275,10 +267,7 @@ class TestTheDeclarationIsChecked:
         緑になる**。
         """
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-        declared = {
-            i["action_name"]: i.get("cooldown_ticks", 0)
-            for i in raw["player_interactions"]
-        }
+        declared = {i["action_name"]: i.get("cooldown_ticks", 0) for i in raw["player_interactions"]}
 
         assert declared["strike_down"] == _DECLARED_COOLDOWN
 
@@ -291,20 +280,16 @@ class TestTheDeclarationIsChecked:
             pytest.param("object:1:strike", id="reserved_prefix"),
         ],
     )
-    def test_a_malformed_cooldown_group_is_rejected(
-        self, tmp_path, value
-    ) -> None:
+    def test_a_malformed_cooldown_group_is_rejected(self, tmp_path, value) -> None:
         """空値・非文字列・物体用の予約接頭辞は読み込み時に拒否する。
 
         待ち時間のキーは snapshot に残る。曖昧な値や対人・物体で衝突する値を
         受け入れると、再開後だけ別の行為が待たされる静かな失敗になる。
         """
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-        next(
-            interaction
-            for interaction in raw["player_interactions"]
-            if interaction["action_name"] == "strike_down"
-        )["cooldown_group"] = value
+        next(interaction for interaction in raw["player_interactions"] if interaction["action_name"] == "strike_down")[
+            "cooldown_group"
+        ] = value
         path = tmp_path / "bad_group.json"
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
 
@@ -314,19 +299,15 @@ class TestTheDeclarationIsChecked:
     def test_an_ordinary_cooldown_group_is_loaded(self, tmp_path) -> None:
         """通常の文字列は、InteractionDef の共有待ち時間キーとして残る。"""
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-        next(
-            interaction
-            for interaction in raw["player_interactions"]
-            if interaction["action_name"] == "strike_down"
-        )["cooldown_group"] = "attack"
+        next(interaction for interaction in raw["player_interactions"] if interaction["action_name"] == "strike_down")[
+            "cooldown_group"
+        ] = "attack"
         path = tmp_path / "shared_group.json"
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
 
         scenario = ScenarioLoader().load_from_file(path)
         strike = next(
-            interaction
-            for interaction in scenario.player_interactions
-            if interaction.action_name == "strike_down"
+            interaction for interaction in scenario.player_interactions if interaction.action_name == "strike_down"
         )
 
         assert strike.cooldown_group == "attack"

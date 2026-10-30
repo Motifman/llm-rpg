@@ -18,9 +18,7 @@ class PackId:
 
     def __post_init__(self) -> None:
         if not self.value or not self.value.strip():
-            raise PackIdValidationException(
-                f"PackId value cannot be empty or whitespace: {self.value!r}"
-            )
+            raise PackIdValidationException(f"PackId value cannot be empty or whitespace: {self.value!r}")
 
     @classmethod
     def create(cls, value: str | int) -> "PackId":
@@ -29,9 +27,7 @@ class PackId:
             raise PackIdValidationException("PackId value cannot be None")
         s = str(value).strip()
         if not s:
-            raise PackIdValidationException(
-                f"PackId value cannot be empty after strip: {value!r}"
-            )
+            raise PackIdValidationException(f"PackId value cannot be empty after strip: {value!r}")
         return cls(s)
 
     def __str__(self) -> str:

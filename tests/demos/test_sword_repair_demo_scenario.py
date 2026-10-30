@@ -38,9 +38,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """デモ規則は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_initial_items_to_inventory,
 )
@@ -82,13 +82,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "tests"
-    / "fixtures"
-    / "scenarios"
-    / "sword_repair_demo.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "sword_repair_demo.json"
 
 
 @pytest.fixture
@@ -128,8 +122,11 @@ def smithy():
         inventory_repo.save(PlayerInventoryAggregate(player_id=pid))
         if spawn.initial_items:
             grant_initial_items_to_inventory(
-                pid, spawn.initial_items,
-                item_repo, item_spec_repo, inventory_repo,
+                pid,
+                spawn.initial_items,
+                item_repo,
+                item_spec_repo,
+                inventory_repo,
                 overflow_sink=IGNORE_OVERFLOW,
             )
 
@@ -203,7 +200,9 @@ class TestSwordRepairDemo:
         # initial state はシナリオ JSON 側で仕込み済み
 
         app.execute_interaction(
-            _player_id(loaded), _bench_id(loaded), "repair_with_kit",
+            _player_id(loaded),
+            _bench_id(loaded),
+            "repair_with_kit",
             current_tick=WorldTick(5),
             acting_item_instance_id=kit,
             target_item_instance_id=sword,
@@ -226,7 +225,9 @@ class TestSwordRepairDemo:
 
         # 1 回目は成功
         app.execute_interaction(
-            _player_id(loaded), _bench_id(loaded), "repair_with_kit",
+            _player_id(loaded),
+            _bench_id(loaded),
+            "repair_with_kit",
             current_tick=WorldTick(1),
             acting_item_instance_id=kit,
             target_item_instance_id=sword,
@@ -236,7 +237,9 @@ class TestSwordRepairDemo:
         # 実装順依存だが、いずれにしても InteractionNotAllowed)
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _bench_id(loaded), "repair_with_kit",
+                _player_id(loaded),
+                _bench_id(loaded),
+                "repair_with_kit",
                 current_tick=WorldTick(2),
                 acting_item_instance_id=kit,
                 target_item_instance_id=sword,
@@ -252,7 +255,9 @@ class TestSwordRepairDemo:
 
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _bench_id(loaded), "repair_with_kit",
+                _player_id(loaded),
+                _bench_id(loaded),
+                "repair_with_kit",
                 current_tick=WorldTick(1),
                 acting_item_instance_id=kit,
                 target_item_instance_id=sword,
@@ -268,7 +273,9 @@ class TestSwordRepairDemo:
 
         with pytest.raises(ApplicationException, match="同じ item_instance_id"):
             app.execute_interaction(
-                _player_id(loaded), _bench_id(loaded), "repair_with_kit",
+                _player_id(loaded),
+                _bench_id(loaded),
+                "repair_with_kit",
                 current_tick=WorldTick(1),
                 acting_item_instance_id=kit,
                 target_item_instance_id=kit,
@@ -291,7 +298,9 @@ class TestSwordRepairDemo:
 
         with pytest.raises(ApplicationException, match="target item instance"):
             app.execute_interaction(
-                _player_id(loaded), _bench_id(loaded), "repair_with_kit",
+                _player_id(loaded),
+                _bench_id(loaded),
+                "repair_with_kit",
                 current_tick=WorldTick(1),
                 acting_item_instance_id=kit,
                 target_item_instance_id=ghost_id,
@@ -308,7 +317,9 @@ class TestSwordRepairDemo:
 
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _bench_id(loaded), "repair_with_kit",
+                _player_id(loaded),
+                _bench_id(loaded),
+                "repair_with_kit",
                 current_tick=WorldTick(1),
                 acting_item_instance_id=kit,
                 # target_item_instance_id を渡さない
@@ -336,7 +347,9 @@ class TestSwordRepairDemo:
 
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _bench_id(loaded), "repair_with_kit",
+                _player_id(loaded),
+                _bench_id(loaded),
+                "repair_with_kit",
                 current_tick=WorldTick(1),
                 acting_item_instance_id=kit,
                 target_item_instance_id=sword,

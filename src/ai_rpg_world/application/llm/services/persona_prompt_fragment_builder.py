@@ -5,6 +5,8 @@ from __future__ import annotations
 from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
 from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import PersonaPromptPolicy
 
+PERSONA_HEADING = "【ペルソナ】"
+
 
 class PersonaPromptFragmentBuilder:
     """Converts structured persona data into a compact prompt section."""
@@ -17,7 +19,7 @@ class PersonaPromptFragmentBuilder:
             raise TypeError("persona must be AgentPersonaDto")
 
         lines = [
-            "【ペルソナ】",
+            PERSONA_HEADING,
             f"- あなたは「{persona.display_name}」本人である。「{persona.display_name}」=あなた自身であり、他者ではない。",
             f"- 名前: {persona.display_name}",
             f"- 一人称: {persona.first_person}",

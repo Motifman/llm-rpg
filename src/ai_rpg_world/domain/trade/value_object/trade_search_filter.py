@@ -28,28 +28,26 @@ class TradeSearchFilter:
             raise TradeSearchFilterValidationException("Minimum price cannot be negative")
         if self.max_price is not None and self.max_price < 0:
             raise TradeSearchFilterValidationException("Maximum price cannot be negative")
-        if (self.min_price is not None and self.max_price is not None and
-            self.min_price > self.max_price):
+        if self.min_price is not None and self.max_price is not None and self.min_price > self.max_price:
             raise TradeSearchFilterValidationException("Minimum price cannot be greater than maximum price")
 
     @classmethod
-    def active_only(cls) -> 'TradeSearchFilter':
+    def active_only(cls) -> "TradeSearchFilter":
         """アクティブ取引のみのフィルタを作成"""
         return cls(statuses=[TradeStatus.ACTIVE])
 
     @classmethod
-    def by_item_name(cls, name: str) -> 'TradeSearchFilter':
+    def by_item_name(cls, name: str) -> "TradeSearchFilter":
         """アイテム名検索フィルタを作成"""
         return cls(item_name=name)
 
     @classmethod
-    def by_price_range(cls, min_price: int | None = None,
-                      max_price: int | None = None) -> 'TradeSearchFilter':
+    def by_price_range(cls, min_price: int | None = None, max_price: int | None = None) -> "TradeSearchFilter":
         """価格範囲フィルタを作成"""
         return cls(min_price=min_price, max_price=max_price)
 
     @classmethod
-    def by_item_types(cls, item_types: list[ItemType]) -> 'TradeSearchFilter':
+    def by_item_types(cls, item_types: list[ItemType]) -> "TradeSearchFilter":
         """アイテムタイプフィルタを作成"""
         return cls(item_types=item_types)
 
@@ -62,8 +60,8 @@ class TradeSearchFilter:
         equipment_types: list[str] | None = None,
         min_price: int | None = None,
         max_price: int | None = None,
-        statuses: list[str] | None = None
-    ) -> 'TradeSearchFilter':
+        statuses: list[str] | None = None,
+    ) -> "TradeSearchFilter":
         """プリミティブ型からValue Objectを作成（ファクトリーメソッド）"""
         # enum変換
         converted_item_types = None
@@ -89,5 +87,5 @@ class TradeSearchFilter:
             equipment_types=converted_equipment_types,
             min_price=min_price,
             max_price=max_price,
-            statuses=converted_statuses
+            statuses=converted_statuses,
         )

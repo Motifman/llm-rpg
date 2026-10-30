@@ -62,23 +62,16 @@ def killed():
     runtime = create_world_runtime(_DRILL)
     _move(runtime, _KUZE, "storage")
     runtime.do_interact(_KUZE, "supply_shelf", "find_cutter")
-    for pid, spot in ((_SENA, "corridor"), (_KUZE, "corridor"),
-                      (_MORI, "hall"), (_AOI, "hall")):
+    for pid, spot in ((_SENA, "corridor"), (_KUZE, "corridor"), (_MORI, "hall"), (_AOI, "hall")):
         _move(runtime, pid, spot)
     darken_spot(runtime)
-    before = {
-        int(p): len(runtime._obs_buffer.get_observations(p))
-        for p in (_MORI, _SENA, _AOI)
-    }
+    before = {int(p): len(runtime._obs_buffer.get_observations(p)) for p in (_MORI, _SENA, _AOI)}
     runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
     return runtime, before
 
 
 def _new_prose(runtime, before, player_id) -> list[str]:
-    return [
-        e.output.prose
-        for e in runtime._obs_buffer.get_observations(player_id)[int(before[int(player_id)]):]
-    ]
+    return [e.output.prose for e in runtime._obs_buffer.get_observations(player_id)[int(before[int(player_id)]) :]]
 
 
 class TestTheKillIsHidden:
@@ -114,10 +107,7 @@ class TestTheKillIsHidden:
         """
         runtime, before = killed
 
-        assert any(
-            "死亡した後も移動できる" in p
-            for p in _new_prose(runtime, before, _SENA)
-        )
+        assert any("死亡した後も移動できる" in p for p in _new_prose(runtime, before, _SENA))
 
 
 class TestDeathIsImmediate:
@@ -132,9 +122,7 @@ class TestDeathIsImmediate:
 
         runtime.advance_tick()
 
-        assert runtime._player_outcome_registry.get_outcome(_SENA) is (
-            PlayerOutcomeEnum.DEAD
-        )
+        assert runtime._player_outcome_registry.get_outcome(_SENA) is (PlayerOutcomeEnum.DEAD)
 
     def test_the_body_can_no_longer_be_revived(self, killed) -> None:
         """確定したあとは手当てできない。
@@ -147,8 +135,7 @@ class TestDeathIsImmediate:
         _move(runtime, _MORI, "corridor")
 
         row = next(
-            (l for l in runtime.build_observation(_MORI).splitlines()
-             if "セナ" in l and '"' in l),
+            (l for l in runtime.build_observation(_MORI).splitlines() if "セナ" in l and '"' in l),
             "",
         )
         assert row
@@ -195,9 +182,7 @@ class TestValidation:
         """
         from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-        result = ScenarioLoader().load_from_file(
-            self._scenario(tmp_path, {"grace_ticks": 0})
-        )
+        result = ScenarioLoader().load_from_file(self._scenario(tmp_path, {"grace_ticks": 0}))
 
         assert result.death_semantics.grace_ticks == 0
 
@@ -209,9 +194,7 @@ class TestValidation:
         )
 
         with pytest.raises(ScenarioLoadError):
-            ScenarioLoader().load_from_file(
-                self._scenario(tmp_path, {"announce_globally": "no"})
-            )
+            ScenarioLoader().load_from_file(self._scenario(tmp_path, {"announce_globally": "no"}))
 
 
 class TestTheConfirmedDeathIsAlsoHidden:
@@ -247,9 +230,7 @@ class TestTheConfirmedDeathIsAlsoHidden:
         runtime, before = killed
         runtime.eject_player(_KUZE)
 
-        assert any(
-            "追放" in prose for prose in _new_prose(runtime, before, _MORI)
-        )
+        assert any("追放" in prose for prose in _new_prose(runtime, before, _MORI))
 
 
 class TestTheDeclarationReachesTheStructuredSideToo:
@@ -270,9 +251,7 @@ class TestTheDeclarationReachesTheStructuredSideToo:
 
         downed = [
             e.output.structured
-            for e in runtime._obs_buffer.get_observations(_SENA)[
-                int(before[int(_SENA)]) :
-            ]
+            for e in runtime._obs_buffer.get_observations(_SENA)[int(before[int(_SENA)]) :]
             if e.output.structured.get("type") == "player_downed"
         ]
 

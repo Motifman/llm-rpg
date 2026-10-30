@@ -26,9 +26,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
@@ -129,10 +127,7 @@ class TestTimeoutStillResolvesTheVote:
             runtime.cast_vote(voter, _KUZE)
         _pass_ticks(runtime, GamePhaseStore.DEFAULT_MEETING_SILENCE_LIMIT_TICKS)
 
-        assert (
-            runtime._player_outcome_registry.get_outcome(_KUZE)
-            is PlayerOutcomeEnum.EJECTED
-        )
+        assert runtime._player_outcome_registry.get_outcome(_KUZE) is PlayerOutcomeEnum.EJECTED
 
     def test_the_result_is_delivered_on_timeout(self, runtime) -> None:
         """時間切れでも結果が全員に届く。

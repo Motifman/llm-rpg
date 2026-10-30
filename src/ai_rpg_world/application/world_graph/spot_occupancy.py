@@ -44,9 +44,7 @@ def collect_spot_occupancy(
         if not player_life_query.can_vote(player_id):
             continue
         try:
-            spot_id = str(
-                graph.get_entity_spot(EntityId.create(int(player_id))).value
-            )
+            spot_id = str(graph.get_entity_spot(EntityId.create(int(player_id))).value)
         except Exception:
             continue
         if spot_id in counts:

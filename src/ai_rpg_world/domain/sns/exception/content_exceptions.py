@@ -11,6 +11,7 @@ from ai_rpg_world.domain.sns.exception.base_exceptions import (
 
 class InvalidContentTypeException(ContentValidationException):
     """コンテンツタイプが無効な場合の例外"""
+
     error_code = "INVALID_CONTENT_TYPE"
 
     def __init__(self, content_type: str, message: str | None = None):
@@ -22,6 +23,7 @@ class InvalidContentTypeException(ContentValidationException):
 
 class InvalidParentReferenceException(ContentValidationException):
     """親参照が無効な場合の例外"""
+
     error_code = "INVALID_PARENT_REFERENCE"
 
     def __init__(self, message: str | None = None):
@@ -32,6 +34,7 @@ class InvalidParentReferenceException(ContentValidationException):
 
 class PostIdValidationException(ContentValidationException):
     """ポストIDバリデーション例外"""
+
     error_code = "POST_ID_VALIDATION_ERROR"
 
     def __init__(self, post_id: int | str, message: str | None = None):
@@ -43,6 +46,7 @@ class PostIdValidationException(ContentValidationException):
 
 class ReplyIdValidationException(ContentValidationException):
     """リプライIDバリデーション例外"""
+
     error_code = "REPLY_ID_VALIDATION_ERROR"
 
     def __init__(self, reply_id: int | str, message: str | None = None):
@@ -54,6 +58,7 @@ class ReplyIdValidationException(ContentValidationException):
 
 class ContentLengthValidationException(ContentValidationException):
     """コンテンツ文字数バリデーション例外"""
+
     error_code = "CONTENT_LENGTH_VALIDATION_ERROR"
 
     def __init__(self, content: str, max_length: int, message: str | None = None):
@@ -66,6 +71,7 @@ class ContentLengthValidationException(ContentValidationException):
 
 class HashtagCountValidationException(ContentValidationException):
     """ハッシュタグ数バリデーション例外"""
+
     error_code = "HASHTAG_COUNT_VALIDATION_ERROR"
 
     def __init__(self, hashtag_count: int, max_count: int, message: str | None = None):
@@ -78,6 +84,7 @@ class HashtagCountValidationException(ContentValidationException):
 
 class VisibilityValidationException(ContentValidationException):
     """可視性バリデーション例外"""
+
     error_code = "VISIBILITY_VALIDATION_ERROR"
 
     def __init__(self, visibility: str, message: str | None = None):
@@ -89,6 +96,7 @@ class VisibilityValidationException(ContentValidationException):
 
 class MentionValidationException(ContentValidationException):
     """メンションバリデーション例外"""
+
     error_code = "MENTION_VALIDATION_ERROR"
 
     def __init__(self, user_name: str, message: str | None = None):
@@ -100,6 +108,7 @@ class MentionValidationException(ContentValidationException):
 
 class ContentOwnershipException(SnsDomainException):
     """コンテンツ所有権関連の例外"""
+
     error_code = "CONTENT_OWNERSHIP_ERROR"
 
     def __init__(self, user_id: int, content_id: int, content_type: str, message: str | None = None):
@@ -107,7 +116,9 @@ class ContentOwnershipException(SnsDomainException):
         self.content_id = content_id
         self.content_type = content_type
         if message is None:
-            message = f"ユーザーはこの{content_type}を削除する権限がありません。user_id: {user_id}, content_id: {content_id}"
+            message = (
+                f"ユーザーはこの{content_type}を削除する権限がありません。user_id: {user_id}, content_id: {content_id}"
+            )
         super().__init__(message)
 
 
@@ -117,6 +128,7 @@ OwnershipException = ContentOwnershipException
 
 class ContentTypeMismatchException(ContentTypeException):
     """コンテンツタイプ関連の例外"""
+
     error_code = "CONTENT_TYPE_MISMATCH_ERROR"
 
     def __init__(self, content_id: int, expected_type: str, actual_type: str, message: str | None = None):
@@ -130,6 +142,7 @@ class ContentTypeMismatchException(ContentTypeException):
 
 class ContentAlreadyDeletedException(ContentValidationException):
     """すでに削除済みのコンテンツを削除しようとした場合の例外"""
+
     error_code = "CONTENT_ALREADY_DELETED"
 
     def __init__(self, content_id: int, content_type: str, message: str | None = None):
@@ -142,6 +155,7 @@ class ContentAlreadyDeletedException(ContentValidationException):
 
 class NotificationIdValidationException(ContentValidationException):
     """通知IDバリデーション例外"""
+
     error_code = "NOTIFICATION_ID_VALIDATION_ERROR"
 
     def __init__(self, notification_id: int | str, message: str | None = None) -> None:
@@ -153,6 +167,7 @@ class NotificationIdValidationException(ContentValidationException):
 
 class NotificationContentValidationException(ContentValidationException):
     """通知コンテンツバリデーション例外"""
+
     error_code = "NOTIFICATION_CONTENT_VALIDATION_ERROR"
 
     def __init__(self, message: str):

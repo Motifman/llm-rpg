@@ -45,9 +45,9 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 @pytest.fixture(autouse=True)
 def _bind_command_scope(monkeypatch) -> None:
     """デモ規則は公開入口を正規の確定区間へ通して検証する。"""
-    install_passthrough_spot_interaction_constructor(
-        monkeypatch, SpotInteractionApplicationService
-    )
+    install_passthrough_spot_interaction_constructor(monkeypatch, SpotInteractionApplicationService)
+
+
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
     grant_initial_items_to_inventory,
@@ -90,11 +90,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "tests"
-    / "fixtures"
-    / "scenarios"
-    / "herbal_tea_greenhouse_demo.json"
+    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "herbal_tea_greenhouse_demo.json"
 )
 
 
@@ -135,8 +131,11 @@ def greenhouse():
         inventory_repo.save(PlayerInventoryAggregate(player_id=pid))
         if spawn.initial_items:
             grant_initial_items_to_inventory(
-                pid, spawn.initial_items,
-                item_repo, item_spec_repo, inventory_repo,
+                pid,
+                spawn.initial_items,
+                item_repo,
+                item_spec_repo,
+                inventory_repo,
                 overflow_sink=IGNORE_OVERFLOW,
             )
 
@@ -197,10 +196,7 @@ def _spec_counts(inventory_repo, item_repo, loaded) -> dict[str, int]:
     """{string_id -> 所持個数} を返す。"""
     inv = inventory_repo.find_by_id(_player_id(loaded))
     counts = count_owned_item_instances_by_spec(inv, item_repo)
-    spec_int_to_str = {
-        loaded.id_mapper.get_int("item_spec", s): s
-        for s in ("herb_leaf", "coal", "tea_cup")
-    }
+    spec_int_to_str = {loaded.id_mapper.get_int("item_spec", s): s for s in ("herb_leaf", "coal", "tea_cup")}
     return {spec_int_to_str[k.value]: v for k, v in counts.items()}
 
 
@@ -227,7 +223,9 @@ class TestHerbalTeaGreenhouseDemo:
         """harvest で薬草が 3 枚一括入手される (Phase 2-A #104 GIVE_ITEM quantity=3)。"""
         loaded, interior_repo, inv_repo, item_repo, app, _ = greenhouse
         app.execute_interaction(
-            _player_id(loaded), _planter_id(loaded), "harvest",
+            _player_id(loaded),
+            _planter_id(loaded),
+            "harvest",
             current_tick=WorldTick(2),
         )
         counts = _spec_counts(inv_repo, item_repo, loaded)
@@ -246,19 +244,21 @@ class TestHerbalTeaGreenhouseDemo:
         """
         loaded, interior_repo, _, _, app, binding_stage = greenhouse
         app.execute_interaction(
-            _player_id(loaded), _planter_id(loaded), "harvest",
+            _player_id(loaded),
+            _planter_id(loaded),
+            "harvest",
             current_tick=WorldTick(2),
         )
         # tick 3-7: 経過 1-5 < 6、predicate False、binding は asymmetric なので触らない
         for t in range(3, 8):
             binding_stage.run(WorldTick(t))
-            assert _planter_state(interior_repo, loaded)["available"] is False, (
-                f"tick={t} で早期再生"
-            )
+            assert _planter_state(interior_repo, loaded)["available"] is False, f"tick={t} で早期再生"
             # 早期再採取は弾かれる
             with pytest.raises(InteractionNotAllowedException):
                 app.execute_interaction(
-                    _player_id(loaded), _planter_id(loaded), "harvest",
+                    _player_id(loaded),
+                    _planter_id(loaded),
+                    "harvest",
                     current_tick=WorldTick(t),
                 )
         # tick 8: 2+6=8、predicate True → available=true (on_true)
@@ -266,7 +266,9 @@ class TestHerbalTeaGreenhouseDemo:
         assert _planter_state(interior_repo, loaded)["available"] is True
         # 再採取成功
         app.execute_interaction(
-            _player_id(loaded), _planter_id(loaded), "harvest",
+            _player_id(loaded),
+            _planter_id(loaded),
+            "harvest",
             current_tick=WorldTick(9),
         )
 
@@ -275,12 +277,16 @@ class TestHerbalTeaGreenhouseDemo:
         loaded, _, inv_repo, item_repo, app, _ = greenhouse
         # 薬草 3 枚を確保
         app.execute_interaction(
-            _player_id(loaded), _planter_id(loaded), "harvest",
+            _player_id(loaded),
+            _planter_id(loaded),
+            "harvest",
             current_tick=WorldTick(1),
         )
         # 投入成功
         app.execute_interaction(
-            _player_id(loaded), _brewer_id(loaded), "infuse",
+            _player_id(loaded),
+            _brewer_id(loaded),
+            "infuse",
             current_tick=WorldTick(2),
         )
         # 投入後: 薬草 0、炭 1 (2-1)、茶 0
@@ -295,7 +301,9 @@ class TestHerbalTeaGreenhouseDemo:
         # 採取せず (薬草 0) で投入を試みる
         with pytest.raises(InteractionNotAllowedException):
             app.execute_interaction(
-                _player_id(loaded), _brewer_id(loaded), "infuse",
+                _player_id(loaded),
+                _brewer_id(loaded),
+                "infuse",
                 current_tick=WorldTick(1),
             )
         # 失敗時は炭も消費されない
@@ -311,11 +319,15 @@ class TestHerbalTeaGreenhouseDemo:
         """
         loaded, interior_repo, _, _, app, binding_stage = greenhouse
         app.execute_interaction(
-            _player_id(loaded), _planter_id(loaded), "harvest",
+            _player_id(loaded),
+            _planter_id(loaded),
+            "harvest",
             current_tick=WorldTick(1),
         )
         app.execute_interaction(
-            _player_id(loaded), _brewer_id(loaded), "infuse",
+            _player_id(loaded),
+            _brewer_id(loaded),
+            "infuse",
             current_tick=WorldTick(2),
         )
         # phase=brewing、started_at_tick=2
@@ -337,17 +349,25 @@ class TestHerbalTeaGreenhouseDemo:
         """
         loaded, interior_repo, inv_repo, item_repo, app, binding_stage = greenhouse
         app.execute_interaction(
-            _player_id(loaded), _planter_id(loaded), "harvest", current_tick=WorldTick(1),
+            _player_id(loaded),
+            _planter_id(loaded),
+            "harvest",
+            current_tick=WorldTick(1),
         )
         app.execute_interaction(
-            _player_id(loaded), _brewer_id(loaded), "infuse", current_tick=WorldTick(2),
+            _player_id(loaded),
+            _brewer_id(loaded),
+            "infuse",
+            current_tick=WorldTick(2),
         )
         for t in range(3, 7):
             binding_stage.run(WorldTick(t))
         assert _brewer_state(interior_repo, loaded)["phase"] == "ready"
 
         app.execute_interaction(
-            _player_id(loaded), _brewer_id(loaded), "collect_tea",
+            _player_id(loaded),
+            _brewer_id(loaded),
+            "collect_tea",
             current_tick=WorldTick(7),
         )
         # 茶 1、薬草 0、炭 1
@@ -372,15 +392,24 @@ class TestHerbalTeaGreenhouseDemo:
 
         # ---- 1 周目 ----
         app.execute_interaction(
-            _player_id(loaded), _planter_id(loaded), "harvest", current_tick=WorldTick(1),
+            _player_id(loaded),
+            _planter_id(loaded),
+            "harvest",
+            current_tick=WorldTick(1),
         )
         app.execute_interaction(
-            _player_id(loaded), _brewer_id(loaded), "infuse", current_tick=WorldTick(2),
+            _player_id(loaded),
+            _brewer_id(loaded),
+            "infuse",
+            current_tick=WorldTick(2),
         )
         for t in range(3, 7):
             binding_stage.run(WorldTick(t))
         app.execute_interaction(
-            _player_id(loaded), _brewer_id(loaded), "collect_tea", current_tick=WorldTick(7),
+            _player_id(loaded),
+            _brewer_id(loaded),
+            "collect_tea",
+            current_tick=WorldTick(7),
         )
         assert _spec_counts(inv_repo, item_repo, loaded)["tea_cup"] == 1
 
@@ -391,15 +420,24 @@ class TestHerbalTeaGreenhouseDemo:
 
         # ---- 2 周目 ----
         app.execute_interaction(
-            _player_id(loaded), _planter_id(loaded), "harvest", current_tick=WorldTick(8),
+            _player_id(loaded),
+            _planter_id(loaded),
+            "harvest",
+            current_tick=WorldTick(8),
         )
         app.execute_interaction(
-            _player_id(loaded), _brewer_id(loaded), "infuse", current_tick=WorldTick(9),
+            _player_id(loaded),
+            _brewer_id(loaded),
+            "infuse",
+            current_tick=WorldTick(9),
         )
         for t in range(10, 14):
             binding_stage.run(WorldTick(t))
         app.execute_interaction(
-            _player_id(loaded), _brewer_id(loaded), "collect_tea", current_tick=WorldTick(14),
+            _player_id(loaded),
+            _brewer_id(loaded),
+            "collect_tea",
+            current_tick=WorldTick(14),
         )
         # 茶 2 杯、炭 0、薬草 0
         counts = _spec_counts(inv_repo, item_repo, loaded)

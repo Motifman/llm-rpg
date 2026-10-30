@@ -4,35 +4,20 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
-    ChunkEncodingInput,
-    build_chunk_encoding_input,
-    chunk_encoding_episode_generation_allowed,
     format_action_result_line_for_recent_events,
     format_unified_timeline_as_recent_events_bullets,
     merge_observations_and_action_results_to_unified_timeline,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.services.observation_short_term_memory_sync import (
-    drain_observation_buffer_into_short_term_memory,
-)
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
-)
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
 )
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
 )
-from ai_rpg_world.application.observation.services.observation_context_buffer import (
-    DefaultObservationContextBuffer,
-)
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class TestMergeObservationsAndActionResultsToUnifiedTimeline:
@@ -64,9 +49,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         )
         observations = [obs_newest, obs_oldest]
         action_results = [action_middle]
-        timeline = merge_observations_and_action_results_to_unified_timeline(
-            observations, action_results
-        )
+        timeline = merge_observations_and_action_results_to_unified_timeline(observations, action_results)
         formatter = DefaultRecentEventsFormatter()
         text_from_formatter = formatter.format(observations, action_results)
         text_from_timeline = format_unified_timeline_as_recent_events_bullets(timeline)
@@ -105,9 +88,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         )
         timeline = merge_observations_and_action_results_to_unified_timeline([], [failed])
         fmt = DefaultRecentEventsFormatter()
-        assert fmt.format([], [failed]) == format_unified_timeline_as_recent_events_bullets(
-            timeline
-        )
+        assert fmt.format([], [failed]) == format_unified_timeline_as_recent_events_bullets(timeline)
         assert "[失敗]" in timeline[0].text
         assert "error_code=BAD_ARG" in timeline[0].text
 
@@ -179,7 +160,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
 
         entry = ActionResultEntry(
             occurred_at=datetime.now(),
-            action_summary='speech_say を実行しました。',
+            action_summary="speech_say を実行しました。",
             result_summary="失敗。content は必須",
             success=False,
             error_code="INVALID_ARGUMENT",
@@ -202,10 +183,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
 
         text = format_action_result_line_for_recent_events(entry)
 
-        assert text == (
-            "[行動] 一瞬の空白 → [失敗] | "
-            "意識が途切れ、この間の自分の行動を思い出せない。"
-        )
+        assert text == ("[行動] 一瞬の空白 → [失敗] | 意識が途切れ、この間の自分の行動を思い出せない。")
         assert "error_code=" not in text
         assert "tool=" not in text
 
@@ -226,59 +204,6 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         )
         text = format_action_result_line_for_recent_events(entry)
         assert text.startswith("[0:30] [行動] ")
-        assert "→ [結果]" not in text
-
-    def test_prediction_label_appears_between_action_and_result(self) -> None:
-        """#552 PR-A: expected_result があれば [予測: ...] が行動と結果の間に出る。"""
-        entry = ActionResultEntry(
-            occurred_at=datetime.now(),
-            action_summary="「古い祭壇」に対して調べるを行った",
-            result_summary="石は冷たく、何も起きなかった。",
-            success=True,
-            expected_result="祭壇から封印の手がかりが得られる",
-        )
-        text = format_action_result_line_for_recent_events(entry)
-        assert "[予測: 祭壇から封印の手がかりが得られる]" in text
-        # 「行動 → 予測 → 結果」の順
-        assert text.index("[行動]") < text.index("[予測:") < text.index("[結果]")
-
-    def test_no_prediction_label_when_expected_result_absent(self) -> None:
-        """#552 PR-A: expected_result が None なら [予測: ...] は出ない (露出 OFF の現状)。"""
-        entry = ActionResultEntry(
-            occurred_at=datetime.now(),
-            action_summary="x を実行しました。",
-            result_summary="成功。",
-            success=True,
-            expected_result=None,
-        )
-        assert "[予測:" not in format_action_result_line_for_recent_events(entry)
-
-    def test_prediction_label_on_failure_line(self) -> None:
-        """#552 PR-A: 失敗行にも [予測: ...] が付く (予測と実際のズレを読めるように)。"""
-        entry = ActionResultEntry(
-            occurred_at=datetime.now(),
-            action_summary="扉を開けようとした",
-            result_summary="鍵がかかっていた",
-            success=False,
-            error_code="BLOCKED",
-            expected_result="扉が開くはず",
-        )
-        text = format_action_result_line_for_recent_events(entry)
-        assert "[予測: 扉が開くはず]" in text
-        assert "[失敗]" in text
-
-    def test_prediction_label_on_omit_result_line(self) -> None:
-        """#552 PR-A: omit_result (成功・結果省略) 行にも [予測: ...] は付く。"""
-        entry = ActionResultEntry(
-            occurred_at=datetime.now(),
-            action_summary="speech_say を実行しました。",
-            result_summary="発言しました。",
-            success=True,
-            omit_result_in_prompt=True,
-            expected_result="相手が振り向く",
-        )
-        text = format_action_result_line_for_recent_events(entry)
-        assert "[予測: 相手が振り向く]" in text
         assert "→ [結果]" not in text
 
     def test_inner_thought_is_rendered_once_as_own_line(self) -> None:
@@ -333,10 +258,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
 
         text = format_action_result_line_for_recent_events(entry)
 
-        assert (
-            '呼び出し: interact(target_label="当番表", '
-            'action_name="write_note", parameters=本文)'
-        ) in text
+        assert ('呼び出し: interact(target_label="当番表", action_name="write_note", parameters=本文)') in text
         assert '"本文"' not in text
 
     def test_call_line_preserves_quotes_inside_identifier_arrays(self) -> None:
@@ -355,10 +277,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
 
         text = format_action_result_line_for_recent_events(entry)
 
-        assert (
-            '呼び出し: give_item(gives=["火打ち石","流木"], '
-            'target_player_label="セナ")'
-        ) in text
+        assert ('呼び出し: give_item(gives=["火打ち石","流木"], target_player_label="セナ")') in text
 
     def test_call_line_is_present_even_when_the_action_has_no_arguments(self) -> None:
         """成功した行動なら、引数が無くても呼び出し行を必ず出す。"""
@@ -465,119 +384,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
                 observation_category="environment",
             ),
         )
-        timeline = merge_observations_and_action_results_to_unified_timeline(
-            [obs_utc, obs_naive], ()
-        )
+        timeline = merge_observations_and_action_results_to_unified_timeline([obs_utc, obs_naive], ())
         assert len(timeline) == 2
         stamps = tuple(line.occurred_at.timestamp() for line in timeline)
         assert stamps == tuple(sorted(stamps))
-
-
-class TestChunkEncodingInput:
-    """ChunkEncodingInput の検証とエピソード起動ゲート"""
-
-    def test_build_chunk_encoding_input_mismatch_timeline_raises(self) -> None:
-        """unified_timeline がマージ結果と一致しない ChunkEncodingInput は拒否される"""
-        obs = ObservationEntry(
-            occurred_at=datetime(2025, 1, 1, 0, 0, 0),
-            output=ObservationOutput(
-                prose="a", structured={}, observation_category="self_only"
-            ),
-        )
-        with pytest.raises(ValueError, match="unified_timeline"):
-            ChunkEncodingInput(
-                player_id=PlayerId(1),
-                observations=(obs,),
-                action_results=(),
-                unified_timeline=(),
-            )
-
-    def test_episode_generation_requires_action(self) -> None:
-        """行動結果が 0 件ならエピソード生成不可"""
-        inp = build_chunk_encoding_input(
-            PlayerId(1),
-            (),
-            (),
-        )
-        assert chunk_encoding_episode_generation_allowed(inp) is False
-
-    def test_episode_generation_allowed_with_action(self) -> None:
-        """行動結果が 1 件以上なら起動可"""
-        act = ActionResultEntry(
-            occurred_at=datetime(2025, 1, 1, 0, 0, 0),
-            action_summary="m",
-            result_summary="r",
-        )
-        inp = build_chunk_encoding_input(PlayerId(1), (), (act,))
-        assert chunk_encoding_episode_generation_allowed(inp) is True
-
-
-class TestDrainObservationBufferIntoSlidingWindow:
-    """観測 drain → append_all が PromptBuilder と同順序であること"""
-
-    def test_empty_buffer_returns_empty_overflow(self) -> None:
-        """drain が空なら append せず空リスト"""
-        buf = DefaultObservationContextBuffer()
-        win: DefaultSlidingWindowMemory = DefaultSlidingWindowMemory(max_entries_per_player=10)
-        pid = PlayerId(1)
-        overflow = drain_observation_buffer_into_short_term_memory(buf, win, pid)
-        assert overflow == []
-        assert win.get_recent(pid, 10) == []
-
-    def test_drain_appends_and_returns_overflow(self) -> None:
-        """複数件 drain しウィンドウ上限を超えた分が overflow になる"""
-        buf = DefaultObservationContextBuffer()
-        win = DefaultSlidingWindowMemory(max_entries_per_player=2)
-        pid = PlayerId(1)
-        t0 = datetime(2025, 1, 1, 0, 0, 0)
-        entries = [
-            ObservationEntry(
-                occurred_at=t0,
-                output=ObservationOutput(
-                    prose=f"e{i}", structured={}, observation_category="self_only"
-                ),
-            )
-            for i in range(3)
-        ]
-        for e in entries:
-            buf.append(pid, e)
-        overflow = drain_observation_buffer_into_short_term_memory(buf, win, pid)
-        assert len(overflow) == 1
-        assert overflow[0].output.prose == "e0"
-        recent = win.get_recent(pid, 10)
-        assert len(recent) == 2
-        texts = {r.output.prose for r in recent}
-        assert texts == {"e1", "e2"}
-
-    def test_matches_prompt_builder_sequence(self) -> None:
-        """DefaultPromptBuilder の drain→append_all 節と同一の観測列・溢れになる"""
-        buf = DefaultObservationContextBuffer()
-        win = DefaultSlidingWindowMemory(max_entries_per_player=3)
-        pid = PlayerId(1)
-        for i in range(5):
-            buf.append(
-                pid,
-                ObservationEntry(
-                    occurred_at=datetime(2025, 1, 1, 0, 0, i),
-                    output=ObservationOutput(
-                        prose=f"p{i}", structured={}, observation_category="self_only"
-                    ),
-                ),
-            )
-        overflow_helper = drain_observation_buffer_into_short_term_memory(buf, win, pid)
-        buf2 = DefaultObservationContextBuffer()
-        win2 = DefaultSlidingWindowMemory(max_entries_per_player=3)
-        for i in range(5):
-            buf2.append(
-                pid,
-                ObservationEntry(
-                    occurred_at=datetime(2025, 1, 1, 0, 0, i),
-                    output=ObservationOutput(
-                        prose=f"p{i}", structured={}, observation_category="self_only"
-                    ),
-                ),
-            )
-        drained = buf2.drain(pid)
-        overflow_pb = win2.append_all(pid, drained) if drained else []
-        assert overflow_helper == overflow_pb
-        assert win.get_recent(pid, 10) == win2.get_recent(pid, 10)

@@ -4,11 +4,11 @@ from .loot_table_repository import LootTableRepository, LootTableWriter
 from .recipe_repository import RecipeRepository, RecipeWriter
 
 __all__ = [
-    'ItemSpecRepository',
-    'ItemSpecWriter',
-    'ItemRepository',
-    'RecipeRepository',
-    'RecipeWriter',
-    'LootTableRepository',
-    'LootTableWriter',
+    "ItemSpecRepository",
+    "ItemSpecWriter",
+    "ItemRepository",
+    "RecipeRepository",
+    "RecipeWriter",
+    "LootTableRepository",
+    "LootTableWriter",
 ]

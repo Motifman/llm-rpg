@@ -30,10 +30,7 @@ from pathlib import Path
 
 import pytest
 
-_PROMPT_ROOT = (
-    Path(__file__).resolve().parents[2]
-    / "src" / "ai_rpg_world" / "application" / "llm"
-)
+_PROMPT_ROOT = Path(__file__).resolve().parents[2] / "src" / "ai_rpg_world" / "application" / "llm"
 
 #: 過去にテンプレートへ混入した / しやすい、特定の世界に属する語。
 #: **網羅ではない** (上の docstring 参照)。
@@ -81,10 +78,6 @@ class TestNoTemplateNamesAParticularWorld:
         テンプレートは全シナリオで共有される。**そこに書かれた世界は、
         別の世界の run でも読まされる。**
         """
-        offenders = [
-            f"{path.name}:{name}"
-            for path, name, text in _prompt_constants()
-            if word in text
-        ]
+        offenders = [f"{path.name}:{name}" for path, name, text in _prompt_constants() if word in text]
 
         assert offenders == []

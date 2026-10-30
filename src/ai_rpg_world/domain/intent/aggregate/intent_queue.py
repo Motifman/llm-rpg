@@ -60,10 +60,7 @@ class IntentQueue:
             raise IntentValidationException("intent must be Intent")
         # VO の __eq__ で比較する (PlayerId が将来フィールド追加された時も追従)
         for existing in self._items:
-            if (
-                existing.player_id == intent.player_id
-                and existing.submitted_at_tick == intent.submitted_at_tick
-            ):
+            if existing.player_id == intent.player_id and existing.submitted_at_tick == intent.submitted_at_tick:
                 raise DuplicateIntentForPlayerException(
                     "player already submitted an intent in this tick",
                     player_id=intent.player_id.value,
@@ -79,16 +76,8 @@ class IntentQueue:
         """
         if not isinstance(current_tick, WorldTick):
             raise IntentValidationException("current_tick must be WorldTick")
-        ready = [
-            i
-            for i in self._items
-            if i.complete_at_tick.value <= current_tick.value
-        ]
-        self._items = [
-            i
-            for i in self._items
-            if i.complete_at_tick.value > current_tick.value
-        ]
+        ready = [i for i in self._items if i.complete_at_tick.value <= current_tick.value]
+        self._items = [i for i in self._items if i.complete_at_tick.value > current_tick.value]
         ready.sort(key=_sort_key)
         return ready
 
@@ -106,9 +95,7 @@ class IntentQueue:
             if item.intent_id.value == intent_id.value:
                 del self._items[idx]
                 return item
-        raise UnknownIntentException(
-            "intent not found in queue", intent_id=intent_id.value
-        )
+        raise UnknownIntentException("intent not found in queue", intent_id=intent_id.value)
 
     def size(self) -> int:
         return len(self._items)

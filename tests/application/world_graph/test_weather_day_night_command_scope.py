@@ -69,9 +69,7 @@ class _Transaction:
             raise RuntimeError("environment commit failed")
         self._active = False
         if self._fail_after_commit:
-            raise TransactionCommittedCleanupException(
-                cleanup_error=RuntimeError("environment cleanup failed")
-            )
+            raise TransactionCommittedCleanupException(cleanup_error=RuntimeError("environment cleanup failed"))
 
     def rollback(self) -> None:
         self._active = False
@@ -101,7 +99,7 @@ def _scope_factory(
     fail_commit: bool = False,
     fail_after_commit: bool = False,
 ):
-    dispatcher = dispatcher or CommandEventDispatcher()
+    dispatcher = dispatcher or CommandEventDispatcher(failure_observer=lambda *args: None)
     return CommandScopeFactory[object](
         RollbackParticipantTransactionFactory(
             _TransactionFactory(
@@ -144,7 +142,7 @@ def test_weather_event_observes_committed_state() -> None:
         "state": WeatherState(WeatherTypeEnum.CLEAR, 0.5),
     }
     observed: list[tuple[WeatherState, WeatherState]] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphWeatherChangedEvent,
         lambda event: observed.append((event.weather_state, holder["state"])),
@@ -174,7 +172,7 @@ def test_weather_commit_failure_restores_state_rng_and_skips_event() -> None:
     original = WeatherState(WeatherTypeEnum.CLEAR, 0.5)
     holder = {"state": original}
     observed: list[WeatherState] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphWeatherChangedEvent,
         lambda event: observed.append(event.weather_state),
@@ -208,12 +206,10 @@ def test_weather_event_handler_failure_keeps_committed_transition() -> None:
     """確定後の天候event処理失敗は遷移成功を失敗へ変えない。"""
     original = WeatherState(WeatherTypeEnum.CLEAR, 0.5)
     holder = {"state": original}
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphWeatherChangedEvent,
-        lambda _event: (_ for _ in ()).throw(
-            RuntimeError("weather observation failed")
-        ),
+        lambda _event: (_ for _ in ()).throw(RuntimeError("weather observation failed")),
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
@@ -241,7 +237,7 @@ def test_weather_post_commit_failure_still_notifies_committed_transition() -> No
         "state": WeatherState(WeatherTypeEnum.CLEAR, 0.5),
     }
     observed: list[WeatherState] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphWeatherChangedEvent,
         lambda event: observed.append(event.weather_state),
@@ -271,13 +267,11 @@ def test_weather_post_commit_failure_still_notifies_committed_transition() -> No
 def test_day_night_event_observes_committed_phase() -> None:
     """昼夜eventは新しいフェーズが確定した後にだけ配送される。"""
     observed: list[tuple[str, str]] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     stage = SpotGraphDayNightStageService(_day_night_cycle())
     dispatcher.register_after_commit(
         SpotGraphDayNightPhaseChangedEvent,
-        lambda event: observed.append(
-            (event.new_time.phase_name, stage.current_time_of_day().phase_name)
-        ),
+        lambda event: observed.append((event.new_time.phase_name, stage.current_time_of_day().phase_name)),
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
@@ -296,7 +290,7 @@ def test_day_night_event_observes_committed_phase() -> None:
 def test_day_night_commit_failure_restores_phase_and_skips_event() -> None:
     """昼夜commit失敗は開始前フェーズへ戻り、成功eventを配送しない。"""
     observed: list[str] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphDayNightPhaseChangedEvent,
         lambda event: observed.append(event.new_time.phase_name),
@@ -321,12 +315,10 @@ def test_day_night_commit_failure_restores_phase_and_skips_event() -> None:
 
 def test_day_night_event_handler_failure_keeps_committed_phase() -> None:
     """確定後の昼夜event処理失敗はフェーズ遷移成功を失敗へ変えない。"""
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphDayNightPhaseChangedEvent,
-        lambda _event: (_ for _ in ()).throw(
-            RuntimeError("day/night observation failed")
-        ),
+        lambda _event: (_ for _ in ()).throw(RuntimeError("day/night observation failed")),
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
@@ -346,7 +338,7 @@ def test_day_night_event_handler_failure_keeps_committed_phase() -> None:
 def test_day_night_post_commit_failure_still_notifies_committed_phase() -> None:
     """commit済み後処理失敗でも昼夜変更を通知し、確定後例外を維持する。"""
     observed: list[str] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphDayNightPhaseChangedEvent,
         lambda event: observed.append(event.new_time.phase_name),
@@ -372,12 +364,8 @@ def test_day_night_post_commit_failure_still_notifies_committed_phase() -> None:
 def test_weather_due_tick_requires_scope_before_reading_state() -> None:
     """更新対象tickでは天候stateへ触れる前に未配線を拒否する。"""
     stage = SpotGraphEnvironmentStageService(
-        weather_state_provider=lambda: (_ for _ in ()).throw(
-            AssertionError("weather state must not be read")
-        ),
-        weather_state_setter=lambda _state: (_ for _ in ()).throw(
-            AssertionError("weather state must not be written")
-        ),
+        weather_state_provider=lambda: (_ for _ in ()).throw(AssertionError("weather state must not be read")),
+        weather_state_setter=lambda _state: (_ for _ in ()).throw(AssertionError("weather state must not be written")),
         update_interval_ticks=2,
     )
 
@@ -388,12 +376,8 @@ def test_weather_due_tick_requires_scope_before_reading_state() -> None:
 def test_weather_non_due_tick_is_noop_without_scope() -> None:
     """更新対象外tickはscope未配線でもstateへ触れず何もしない。"""
     stage = SpotGraphEnvironmentStageService(
-        weather_state_provider=lambda: (_ for _ in ()).throw(
-            AssertionError("weather state must not be read")
-        ),
-        weather_state_setter=lambda _state: (_ for _ in ()).throw(
-            AssertionError("weather state must not be written")
-        ),
+        weather_state_provider=lambda: (_ for _ in ()).throw(AssertionError("weather state must not be read")),
+        weather_state_setter=lambda _state: (_ for _ in ()).throw(AssertionError("weather state must not be written")),
         update_interval_ticks=2,
     )
 

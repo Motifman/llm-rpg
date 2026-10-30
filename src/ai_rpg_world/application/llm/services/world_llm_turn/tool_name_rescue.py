@@ -53,7 +53,7 @@ NO_MATCH_OPTION = "__no_match__"
 QUESTION_NAME = "tool_name_rescue"
 
 #: state では引数から外し、別の欄に置く。意図を示す材料として名前を付けて渡す。
-_INTENT_FIELDS: tuple[str, ...] = ("inner_thought", "expected_result")
+_INTENT_FIELDS: tuple[str, ...] = ("inner_thought",)
 
 _SUFFIX_RATIO_CUTOFF: float = 0.5
 _SHORTENED_NAME_SCORE: float = 0.95
@@ -67,9 +67,7 @@ _SHORTENED_NAME_SCORE: float = 0.95
 _LEGACY_TOOL_PREFIXES: tuple[str, ...] = ("spot_graph_",)
 
 
-def suggest_closest_tool_name(
-    requested: str, valid_tools: Iterable[str]
-) -> str | None:
+def suggest_closest_tool_name(requested: str, valid_tools: Iterable[str]) -> str | None:
     """typo っぽい tool 名から、最も近い valid tool 名 1 件を返す。
 
     共通 prefix segment が 1 つも無い候補は除外し、残った候補のうち suffix の
@@ -97,7 +95,7 @@ def suggest_closest_tool_name(
     candidates_to_try: list[str] = [requested]
     for legacy in _LEGACY_TOOL_PREFIXES:
         if requested.startswith(legacy) and len(requested) > len(legacy):
-            candidates_to_try.append(requested[len(legacy):])
+            candidates_to_try.append(requested[len(legacy) :])
             break
 
     best: str | None = None
@@ -116,9 +114,7 @@ def suggest_closest_tool_name(
     return None
 
 
-def _fuzzy_score_variant(
-    requested: str, valid_list: list[str], SequenceMatcher: Any
-) -> tuple[str | None, float]:
+def _fuzzy_score_variant(requested: str, valid_list: list[str], sequence_matcher: Any) -> tuple[str | None, float]:
     """1 つの ``requested`` variant について、valid 側から最高スコアを持つ
     候補を返す。``suggest_closest_tool_name`` の内部ヘルパー。"""
     req_parts = requested.split("_")
@@ -148,16 +144,14 @@ def _fuzzy_score_variant(
             # いるはずなので来ない、念のため)
             score = 1.0
         else:
-            score = SequenceMatcher(None, req_suffix, cand_suffix).ratio()
+            score = sequence_matcher(None, req_suffix, cand_suffix).ratio()
         if score > best_score:
             best_score = score
             best = cand
     return best, best_score
 
 
-def build_unsupported_tool_message(
-    *, requested: str, valid_tools: Iterable[str]
-) -> str:
+def build_unsupported_tool_message(*, requested: str, valid_tools: Iterable[str]) -> str:
     """UNSUPPORTED_TOOL 用のエラーメッセージを、文字の類似度による提案つきで組み立てる。"""
     valid_sorted = sorted(v for v in valid_tools if isinstance(v, str) and v)
     return format_unsupported_tool_message(
@@ -167,9 +161,7 @@ def build_unsupported_tool_message(
     )
 
 
-def format_unsupported_tool_message(
-    *, requested: str, valid_tools: Iterable[str], suggestion: str | None
-) -> str:
+def format_unsupported_tool_message(*, requested: str, valid_tools: Iterable[str], suggestion: str | None) -> str:
     """UNSUPPORTED_TOOL 用のエラーメッセージを組み立てる。
 
     含む情報:
@@ -282,10 +274,7 @@ class ToolNameRescue:
         try:
             result = self._resolver.resolve(
                 value=requested,
-                candidates=[
-                    Candidate(name, (offered[name] or "").strip() or name)
-                    for name in options
-                ],
+                candidates=[Candidate(name, (offered[name] or "").strip() or name) for name in options],
                 context=_state(requested, arguments, offered),
             )
         except BackendError as exc:
@@ -416,8 +405,7 @@ def _state(
         "arguments": {
             key: value
             for key, value in arguments.items()
-            if key not in _INTENT_FIELDS
-            and not (isinstance(value, int) and not isinstance(value, bool))
+            if key not in _INTENT_FIELDS and not (isinstance(value, int) and not isinstance(value, bool))
         },
         "available_tools": {name: offered[name] or name for name in sorted(offered)},
     }

@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from ai_rpg_world.domain.item.entity.item_instance import ItemInstance
@@ -30,17 +32,14 @@ class TestItemInstance:
             rarity=Rarity.COMMON,
             description="A test sword for testing",
             max_stack_size=max_stack,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
 
     @pytest.fixture
     def sample_item_instance(self, sample_item_spec):
         """テスト用のItemInstanceを作成"""
         item_id = ItemInstanceId(1)
-        return ItemInstance(
-            item_instance_id=item_id,
-            item_spec=sample_item_spec
-        )
+        return ItemInstance(item_instance_id=item_id, item_spec=sample_item_spec)
 
     @pytest.fixture
     def item_instance_with_durability(self):
@@ -56,14 +55,10 @@ class TestItemInstance:
             description="A durable sword for testing",
             max_stack_size=max_stack,
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         durability = Durability(max_value=100, current=50)
-        return ItemInstance(
-            item_instance_id=item_id,
-            item_spec=item_spec,
-            durability=durability
-        )
+        return ItemInstance(item_instance_id=item_id, item_spec=item_spec, durability=durability)
 
     def test_create_basic_item_instance(self, sample_item_instance):
         """基本的なItemInstance作成のテスト"""
@@ -80,7 +75,6 @@ class TestItemInstance:
         assert item_instance_with_durability.durability is not None
         assert item_instance_with_durability.durability.max_value == 100
         assert item_instance_with_durability.durability.current == 50
-
 
     def test_use_basic_item(self, sample_item_instance):
         """基本アイテムの使用テスト（数量1の消費で0になる）"""
@@ -118,72 +112,61 @@ class TestItemInstance:
             description="A broken sword",
             max_stack_size=max_stack,
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         durability = Durability(max_value=100, current=0)  # 破損済み
-        item = ItemInstance(
-            item_instance_id=item_id,
-            item_spec=spec,
-            durability=durability
-        )
+        item = ItemInstance(item_instance_id=item_id, item_spec=spec, durability=durability)
         success = item.use()
         assert success is False
         assert item.durability.current == 0
 
-    def test_can_stack_with_same_item(self, sample_item_spec):
-        """同じスペックのアイテムとのスタックテスト"""
+    @pytest.mark.parametrize("quantities", [(1, 1), (5, 3)])
+    def test_can_stack_with_same_item(self, sample_item_spec, quantities):
+        """同じ仕様で両方に空きがあれば、数量が違っても両方向にスタックできる。"""
         item1 = ItemInstance(
             item_instance_id=ItemInstanceId(10),
-            item_spec=sample_item_spec
+            item_spec=sample_item_spec,
+            quantity=quantities[0],
         )
         item2 = ItemInstance(
             item_instance_id=ItemInstanceId(11),
-            item_spec=sample_item_spec
+            item_spec=sample_item_spec,
+            quantity=quantities[1],
         )
         assert item1.can_stack_with(item2)
+        assert item2.can_stack_with(item1)
 
-    def test_cannot_stack_different_name(self, sample_item_spec):
-        """異なるスペックのアイテムとのスタックテスト"""
+    @pytest.mark.parametrize(
+        "spec_changes",
+        [
+            pytest.param(
+                {"item_spec_id": ItemSpecId(999), "name": "Different Sword", "description": "A different sword"},
+                id="different-name",
+            ),
+            pytest.param(
+                {
+                    "item_spec_id": ItemSpecId(888),
+                    "item_type": ItemType.CONSUMABLE,
+                    "description": "A test sword as consumable",
+                    "equipment_type": None,
+                },
+                id="different-type",
+            ),
+            pytest.param({"item_spec_id": ItemSpecId(999)}, id="only-spec-id"),
+        ],
+    )
+    def test_cannot_stack_different_spec_ids(self, sample_item_spec, spec_changes):
+        """仕様IDが異なれば、名前や種別が同じでも違っていてもスタックできない。"""
         item1 = ItemInstance(
             item_instance_id=ItemInstanceId(10),
-            item_spec=sample_item_spec
-        )
-        # 異なるスペックを作成
-        different_spec = ItemSpec(
-            item_spec_id=ItemSpecId(999),
-            name="Different Sword",
-            item_type=ItemType.EQUIPMENT,
-            rarity=Rarity.COMMON,
-            description="A different sword",
-            max_stack_size=MaxStackSize(64),
-            equipment_type=EquipmentType.WEAPON
+            item_spec=sample_item_spec,
         )
         item2 = ItemInstance(
             item_instance_id=ItemInstanceId(11),
-            item_spec=different_spec
+            item_spec=replace(sample_item_spec, **spec_changes),
         )
         assert not item1.can_stack_with(item2)
-
-    def test_cannot_stack_different_type(self, sample_item_spec):
-        """異なるタイプのスペックのアイテムとのスタックテスト"""
-        item1 = ItemInstance(
-            item_instance_id=ItemInstanceId(10),
-            item_spec=sample_item_spec
-        )
-        # 異なるタイプのスペックを作成
-        different_type_spec = ItemSpec(
-            item_spec_id=ItemSpecId(888),
-            name="Test Sword",
-            item_type=ItemType.CONSUMABLE,
-            rarity=Rarity.COMMON,
-            description="A test sword as consumable",
-            max_stack_size=MaxStackSize(64)
-        )
-        item2 = ItemInstance(
-            item_instance_id=ItemInstanceId(12),
-            item_spec=different_type_spec
-        )
-        assert not item1.can_stack_with(item2)
+        assert not item2.can_stack_with(item1)
 
     def test_cannot_stack_at_max_quantity(self):
         """最大数量時のスタックテスト"""
@@ -193,22 +176,24 @@ class TestItemInstance:
             item_type=ItemType.CONSUMABLE,
             rarity=Rarity.COMMON,
             description="An item with limited stack size",
-            max_stack_size=MaxStackSize(2)
+            max_stack_size=MaxStackSize(2),
         )
-        item = ItemInstance(
-            item_instance_id=ItemInstanceId(13),
-            item_spec=limited_spec
-        )
+        item = ItemInstance(item_instance_id=ItemInstanceId(13), item_spec=limited_spec)
         item.add_quantity(1)  # 最大まで追加
 
-        other = ItemInstance(
-            item_instance_id=ItemInstanceId(14),
-            item_spec=limited_spec
-        )
+        other = ItemInstance(item_instance_id=ItemInstanceId(14), item_spec=limited_spec)
         assert not item.can_stack_with(other)
 
-    def test_cannot_stack_durable_items(self):
-        """耐久度付きアイテムはスタックできないテスト"""
+    @pytest.mark.parametrize(
+        ("quantity", "has_durability"),
+        [
+            pytest.param(1, True, id="full-with-durability"),
+            pytest.param(0, True, id="empty-with-durability"),
+            pytest.param(0, False, id="empty-durable-spec"),
+        ],
+    )
+    def test_cannot_stack_durable_items(self, quantity, has_durability):
+        """耐久仕様の品は、数量に空きがあり耐久度実体がなくてもスタックできない。"""
         durable_spec = ItemSpec(
             item_spec_id=ItemSpecId(888),
             name="Durable Sword",
@@ -217,22 +202,24 @@ class TestItemInstance:
             description="A sword with durability",
             max_stack_size=MaxStackSize(1),  # 耐久度付きアイテムはmax_stack_size=1でなければならない
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
 
         item1 = ItemInstance(
             item_instance_id=ItemInstanceId(15),
             item_spec=durable_spec,
-            durability=Durability(max_value=100, current=100)
+            durability=Durability(max_value=100, current=100) if has_durability else None,
+            quantity=quantity,
         )
 
         item2 = ItemInstance(
             item_instance_id=ItemInstanceId(16),
             item_spec=durable_spec,
-            durability=Durability(max_value=100, current=80)
+            durability=Durability(max_value=100, current=80) if has_durability else None,
+            quantity=quantity,
         )
 
-        # 同じスペックでも耐久度があるためスタックできない
+        # 数量0なら満杯の条件では拒否できず、耐久仕様の禁止条件を検査できる。
         assert not item1.can_stack_with(item2)
         assert not item2.can_stack_with(item1)
 
@@ -252,15 +239,11 @@ class TestItemInstance:
             rarity=Rarity.COMMON,
             description="A test item",
             max_stack_size=max_stack,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         item_id = ItemInstanceId(100)
         with pytest.raises(QuantityValidationException):
-            ItemInstance(
-                item_instance_id=item_id,
-                item_spec=spec,
-                quantity=-1
-            )
+            ItemInstance(item_instance_id=item_id, item_spec=spec, quantity=-1)
 
     def test_invalid_durability_without_spec_max(self):
         """スペックに耐久度最大値がないのに耐久度を設定した場合のテスト"""
@@ -273,17 +256,13 @@ class TestItemInstance:
             rarity=Rarity.COMMON,
             description="An item without durability",
             max_stack_size=max_stack,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
             # durability_maxは設定しない
         )
         item_id = ItemInstanceId(101)
         durability = Durability(max_value=100, current=100)
         with pytest.raises(DurabilityValidationException):
-            ItemInstance(
-                item_instance_id=item_id,
-                item_spec=spec,
-                durability=durability
-            )
+            ItemInstance(item_instance_id=item_id, item_spec=spec, durability=durability)
 
     def test_invalid_durability_max_mismatch(self):
         """耐久度の最大値がスペックのdurability_maxと一致しない場合のテスト"""
@@ -297,31 +276,30 @@ class TestItemInstance:
             description="An item with durability",
             max_stack_size=max_stack,
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
         item_id = ItemInstanceId(102)
         durability = Durability(max_value=200, current=200)  # スペックと一致しない
         with pytest.raises(DurabilityValidationException):
-            ItemInstance(
-                item_instance_id=item_id,
-                item_spec=spec,
-                durability=durability
-            )
+            ItemInstance(item_instance_id=item_id, item_spec=spec, durability=durability)
 
     def test_add_quantity_zero(self, sample_item_instance):
-        """0数量追加のテスト"""
+        """加算0は数量例外で拒否し、現在数量1を保持する。"""
         with pytest.raises(QuantityValidationException):
             sample_item_instance.add_quantity(0)
+        assert sample_item_instance.quantity == 1
 
     def test_add_quantity_negative(self, sample_item_instance):
-        """負の数量追加のテスト"""
+        """加算-1は数量例外で拒否し、現在数量1を保持する。"""
         with pytest.raises(QuantityValidationException):
             sample_item_instance.add_quantity(-1)
+        assert sample_item_instance.quantity == 1
 
     def test_add_quantity_over_max(self, sample_item_instance):
-        """最大数量超過のテスト"""
+        """数量1への加算64は上限超過で拒否し、現在数量1を保持する。"""
         with pytest.raises(StackSizeExceededException):
             sample_item_instance.add_quantity(64)  # 既に1あるので65になる
+        assert sample_item_instance.quantity == 1
 
     def test_remove_quantity_success(self, sample_item_instance):
         """数量削除成功のテスト"""
@@ -330,40 +308,55 @@ class TestItemInstance:
         assert sample_item_instance.quantity == 3
 
     def test_remove_quantity_zero(self, sample_item_instance):
-        """0数量削除のテスト"""
+        """減算0は数量例外で拒否し、現在数量1を保持する。"""
         with pytest.raises(QuantityValidationException):
             sample_item_instance.remove_quantity(0)
+        assert sample_item_instance.quantity == 1
 
     def test_remove_quantity_insufficient(self, sample_item_instance):
-        """数量不足のテスト"""
+        """数量1から2の減算は不足例外で拒否し、現在数量1を保持する。"""
         with pytest.raises(InsufficientQuantityException):
             sample_item_instance.remove_quantity(2)
+        assert sample_item_instance.quantity == 1
 
     def test_equality(self, sample_item_instance, sample_item_spec):
-        """等価性テスト"""
+        """同じ実体IDなら仕様や数量が違っても等しく、異なる実体IDは等しくない。"""
         same_id = ItemInstance(
             item_instance_id=ItemInstanceId(1),
-            item_spec=sample_item_spec  # 同じスペックでもIDが同じなら等価
+            item_spec=sample_item_spec,  # 同じスペックでもIDが同じなら等価
         )
         different_id = ItemInstance(
             item_instance_id=ItemInstanceId(2),
-            item_spec=sample_item_spec  # IDが異なるので非等価
+            item_spec=sample_item_spec,  # IDが異なるので非等価
         )
 
         assert sample_item_instance == same_id
         assert sample_item_instance != different_id
 
-    def test_hash(self, sample_item_instance, sample_item_spec):
-        """ハッシュテスト"""
-        same_id = ItemInstance(
+        different_attributes = ItemInstance(
             item_instance_id=ItemInstanceId(1),
-            item_spec=sample_item_spec
+            item_spec=replace(sample_item_spec, item_spec_id=ItemSpecId(3)),
+            quantity=2,
         )
+        assert sample_item_instance == different_attributes
+
+    def test_hash(self, sample_item_instance, sample_item_spec):
+        """同じ実体IDは数量が異なっても同じハッシュとなり、集合では1件にまとまる。"""
+        same_id = ItemInstance(item_instance_id=ItemInstanceId(1), item_spec=sample_item_spec)
 
         assert hash(sample_item_instance) == hash(same_id)
 
         # setで重複を除去できる
         items = {sample_item_instance, same_id}
+        assert len(items) == 1
+
+        different_quantity = ItemInstance(
+            item_instance_id=ItemInstanceId(1),
+            item_spec=sample_item_spec,
+            quantity=2,
+        )
+        assert hash(sample_item_instance) == hash(different_quantity)
+        items.add(different_quantity)
         assert len(items) == 1
 
     def test_repr(self, sample_item_instance):
@@ -384,7 +377,7 @@ class TestItemInstance:
             item_type=ItemType.CONSUMABLE,
             rarity=Rarity.COMMON,
             description="An item with limited stack size",
-            max_stack_size=max_stack
+            max_stack_size=max_stack,
         )
         item_id = ItemInstanceId(103)
 
@@ -392,7 +385,7 @@ class TestItemInstance:
             ItemInstance(
                 item_instance_id=item_id,
                 item_spec=spec,
-                quantity=15  # max_stack_size(10)を超える
+                quantity=15,  # max_stack_size(10)を超える
             )
 
         # エラーメッセージに適切な情報が含まれていることを確認
@@ -409,14 +402,14 @@ class TestItemInstance:
             description="An item with durability and correct stack size",
             max_stack_size=MaxStackSize(1),  # 正しい
             durability_max=100,
-            equipment_type=EquipmentType.WEAPON
+            equipment_type=EquipmentType.WEAPON,
         )
 
         # このspecでは正常に作成できるはず
         instance = ItemInstance(
             item_instance_id=ItemInstanceId(104),
             item_spec=valid_spec,
-            durability=Durability(max_value=100, current=100)
+            durability=Durability(max_value=100, current=100),
         )
         assert instance.durability is not None
         assert instance.max_stack_size.value == 1

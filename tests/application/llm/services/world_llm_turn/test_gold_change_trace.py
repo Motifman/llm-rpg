@@ -34,11 +34,13 @@ class _Purse:
 
 
 def _handler(trace_payload: dict[str, Any] | None = None, *, success: bool = True):
-    def _run(player_id: PlayerId, arguments: dict[str, Any],
-             runtime_context: Any) -> LlmCommandResultDto:
+    def _run(player_id: PlayerId, arguments: dict[str, Any], runtime_context: Any) -> LlmCommandResultDto:
         return LlmCommandResultDto(
-            success=success, message="やった", trace_payload=trace_payload,
+            success=success,
+            message="やった",
+            trace_payload=trace_payload,
         )
+
     return _run
 
 
@@ -52,7 +54,9 @@ class TestGoldThatMovedIsAlwaysRecorded:
     def test_the_three_fields_appear_when_gold_moved(self) -> None:
         """所持金が 12G から 19G へ増えたら、増分・残高・出どころが残る。"""
         wrapped = wrap_with_gold_change(
-            _handler(), _Purse(12, 19), tool_name="market_sell",
+            _handler(),
+            _Purse(12, 19),
+            tool_name="market_sell",
         )
 
         payload = _call(wrapped)
@@ -64,7 +68,9 @@ class TestGoldThatMovedIsAlwaysRecorded:
     def test_spending_is_recorded_as_a_negative_delta(self) -> None:
         """払った場合は増分が負になる (向きを符号で表す)。"""
         wrapped = wrap_with_gold_change(
-            _handler(), _Purse(19, 4), tool_name="market_buy",
+            _handler(),
+            _Purse(19, 4),
+            tool_name="market_buy",
         )
 
         assert _call(wrapped)["gold_delta"] == -15
@@ -76,7 +82,9 @@ class TestGoldThatMovedIsAlwaysRecorded:
         永久に漏れる。**
         """
         wrapped = wrap_with_gold_change(
-            _handler(None), _Purse(10, 3), tool_name="market_bid",
+            _handler(None),
+            _Purse(10, 3),
+            tool_name="market_bid",
         )
 
         assert _call(wrapped)["gold_delta"] == -7
@@ -92,7 +100,8 @@ class TestNothingIsAddedWhenNothingMoved:
         毎回 0 を除く仕事をすることになる。
         """
         wrapped = wrap_with_gold_change(
-            _handler({"tool_event": "listed"}), _Purse(12, 12),
+            _handler({"tool_event": "listed"}),
+            _Purse(12, 12),
             tool_name="market_list_item",
         )
 
@@ -104,7 +113,9 @@ class TestNothingIsAddedWhenNothingMoved:
         """元の payload を書き換えず、新しい dict を返す。"""
         original = {"tool_event": "sold"}
         wrapped = wrap_with_gold_change(
-            _handler(original), _Purse(12, 19), tool_name="market_sell",
+            _handler(original),
+            _Purse(12, 19),
+            tool_name="market_sell",
         )
 
         _call(wrapped)
@@ -121,7 +132,8 @@ class TestTheHandlersOwnLabelSurvivesButItsNumbersDoNot:
         `merchant_buy` のような意味のある名前を、ツール名で潰さない。
         """
         wrapped = wrap_with_gold_change(
-            _handler({"gold_change_source": "merchant_buy"}), _Purse(19, 4),
+            _handler({"gold_change_source": "merchant_buy"}),
+            _Purse(19, 4),
             tool_name="buy_item",
         )
 
@@ -134,7 +146,8 @@ class TestTheHandlersOwnLabelSurvivesButItsNumbersDoNot:
         後者でなければならない。
         """
         wrapped = wrap_with_gold_change(
-            _handler({"gold_delta": -99, "gold_after": 0}), _Purse(19, 4),
+            _handler({"gold_delta": -99, "gold_after": 0}),
+            _Purse(19, 4),
             tool_name="buy_item",
         )
 
@@ -153,7 +166,9 @@ class TestAnUnreadablePurseIsNotGuessed:
         読めないことを 0 と書くと、**動かなかったのと区別がつかなくなる**。
         """
         wrapped = wrap_with_gold_change(
-            _handler({"tool_event": "sold"}), purse, tool_name="market_sell",
+            _handler({"tool_event": "sold"}),
+            purse,
+            tool_name="market_sell",
         )
 
         assert _call(wrapped) == {"tool_event": "sold"}
@@ -163,11 +178,14 @@ class TestAnUnreadablePurseIsNotGuessed:
 
         trace は分析用で、世界の進行には要らない。
         """
+
         def _broken(player_id):
             raise RuntimeError("読めない")
 
         wrapped = wrap_with_gold_change(
-            _handler({"tool_event": "sold"}), _broken, tool_name="market_sell",
+            _handler({"tool_event": "sold"}),
+            _broken,
+            tool_name="market_sell",
         )
 
         result = wrapped(PlayerId(1), {}, None)
@@ -206,14 +224,15 @@ class _Ledger:
 def _moving_handler(ledger: _Ledger, moves: dict[int, int], *, declared=()):
     """実行時に複数人の所持金を動かす handler。"""
 
-    def _run(player_id: PlayerId, arguments: dict[str, Any],
-             runtime_context: Any) -> LlmCommandResultDto:
+    def _run(player_id: PlayerId, arguments: dict[str, Any], runtime_context: Any) -> LlmCommandResultDto:
         for pid, delta in moves.items():
             ledger.amounts[pid] += delta
         return LlmCommandResultDto(
-            success=True, message="やった",
+            success=True,
+            message="やった",
             gold_affected_player_ids=tuple(declared),
         )
+
     return _run
 
 
@@ -230,7 +249,9 @@ class TestBothSidesOfATradeAreRecorded:
         ledger = _Ledger(p1=12, p2=12)
         wrapped = wrap_with_gold_change(
             _moving_handler(ledger, {1: -10, 2: +10}, declared=(2,)),
-            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+            ledger.read,
+            tool_name="trade_accept",
+            roster_reader=ledger.roster,
         )
 
         payload = _call(wrapped)
@@ -248,7 +269,9 @@ class TestBothSidesOfATradeAreRecorded:
         ledger = _Ledger(p1=12, p2=12)
         wrapped = wrap_with_gold_change(
             _moving_handler(ledger, {1: -10, 2: +10}, declared=(2,)),
-            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+            ledger.read,
+            tool_name="trade_accept",
+            roster_reader=ledger.roster,
         )
 
         payload = _call(wrapped)
@@ -263,7 +286,9 @@ class TestBothSidesOfATradeAreRecorded:
         ledger = _Ledger(p1=12, p2=12, p3=12)
         wrapped = wrap_with_gold_change(
             _moving_handler(ledger, {1: -10, 2: +10}, declared=(2,)),
-            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+            ledger.read,
+            tool_name="trade_accept",
+            roster_reader=ledger.roster,
         )
 
         moved = {row["player_id"] for row in _call(wrapped)["gold_changes"]}
@@ -283,7 +308,9 @@ class TestTheDeclarationIsCheckedAgainstReality:
         ledger = _Ledger(p1=12, p2=12)
         wrapped = wrap_with_gold_change(
             _moving_handler(ledger, {1: -10, 2: +10}),
-            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+            ledger.read,
+            tool_name="trade_accept",
+            roster_reader=ledger.roster,
         )
 
         with caplog.at_level("WARNING"):
@@ -296,7 +323,9 @@ class TestTheDeclarationIsCheckedAgainstReality:
         ledger = _Ledger(p1=12, p2=12)
         wrapped = wrap_with_gold_change(
             _moving_handler(ledger, {1: -10}, declared=(2,)),
-            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+            ledger.read,
+            tool_name="trade_accept",
+            roster_reader=ledger.roster,
         )
 
         with caplog.at_level("WARNING"):
@@ -312,7 +341,9 @@ class TestTheDeclarationIsCheckedAgainstReality:
         ledger = _Ledger(p1=12, p2=12)
         wrapped = wrap_with_gold_change(
             _moving_handler(ledger, {1: -10, 2: +10}, declared=(2,)),
-            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+            ledger.read,
+            tool_name="trade_accept",
+            roster_reader=ledger.roster,
         )
 
         with caplog.at_level("WARNING"):

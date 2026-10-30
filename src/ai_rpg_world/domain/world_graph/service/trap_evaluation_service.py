@@ -99,7 +99,5 @@ class TrapEvaluationService:
                 if not cond.flag_name or cond.flag_name not in world_flags:
                     return False
             else:
-                raise NotImplementedError(
-                    f"Unsupported disarm condition type: {t.value}"
-                )
+                raise NotImplementedError(f"Unsupported disarm condition type: {t.value}")
         return True

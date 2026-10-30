@@ -234,11 +234,7 @@ class TestRestoreConsistencyCheck:
                 graph_id=SpotGraphId.create(1),
                 spots={SpotId.create(1): spot1},
                 monster_spot={},
-                monster_presences={
-                    SpotId.create(1): MonsterSpotPresence(
-                        SpotId.create(1), frozenset({m1})
-                    )
-                },
+                monster_presences={SpotId.create(1): MonsterSpotPresence(SpotId.create(1), frozenset({m1}))},
             )
 
     def test_mapping_presence_raises_exception(self) -> None:
@@ -259,11 +255,7 @@ class TestRestoreConsistencyCheck:
                     SpotId.create(2): _node(2),
                 },
                 monster_spot={m1: SpotId.create(1)},
-                monster_presences={
-                    SpotId.create(2): MonsterSpotPresence(
-                        SpotId.create(2), frozenset({m1})
-                    )
-                },
+                monster_presences={SpotId.create(2): MonsterSpotPresence(SpotId.create(2), frozenset({m1}))},
             )
 
     def test_state_restore(self) -> None:
@@ -280,10 +272,6 @@ class TestRestoreConsistencyCheck:
             graph_id=SpotGraphId.create(1),
             spots={SpotId.create(1): _node(1)},
             monster_spot={m1: SpotId.create(1)},
-            monster_presences={
-                SpotId.create(1): MonsterSpotPresence(
-                    SpotId.create(1), frozenset({m1})
-                )
-            },
+            monster_presences={SpotId.create(1): MonsterSpotPresence(SpotId.create(1), frozenset({m1}))},
         )
         assert g.get_monster_spot(m1) == SpotId.create(1)

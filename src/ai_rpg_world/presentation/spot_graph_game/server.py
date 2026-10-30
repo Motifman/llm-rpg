@@ -13,9 +13,7 @@ from ai_rpg_world.presentation.spot_graph_game.app import create_game_app
 
 def create_app_from_env() -> FastAPI:
     """Factory used by ``uvicorn --factory``."""
-    scenarios_dir = Path(
-        os.getenv("GAME_SCENARIOS_DIR", "data/scenarios")
-    )
+    scenarios_dir = Path(os.getenv("GAME_SCENARIOS_DIR", "data/scenarios"))
     cors_raw = os.getenv(
         "GAME_CORS_ORIGINS",
         "",

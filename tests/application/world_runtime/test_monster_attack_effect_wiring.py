@@ -20,12 +20,7 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SOURCE = (
-    Path(__file__).resolve().parents[3]
-    / "data"
-    / "scenarios"
-    / "survival_island_v2.json"
-)
+_SOURCE = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v2.json"
 _ATTACK_TICK = WorldTick(7)
 _TARGET_PLAYER_ID = PlayerId(1)
 
@@ -43,23 +38,21 @@ def scenario_path(tmp_path: Path) -> Path:
     neutral_template["name"] = "状態異常能力を持たない獣"
     neutral_template.pop("attack_status_effects", None)
     monsters["templates"].append(neutral_template)
-    monsters["initial_placements"].append(
-        {"template": "effectless_beast", "spot": "deep_forest"}
-    )
+    monsters["initial_placements"].append({"template": "effectless_beast", "spot": "deep_forest"})
 
     declared_template = deepcopy(neutral_template)
     declared_template["id"] = "scenario_only_jellyfish"
     declared_template["name"] = "宣言だけで毒を持つクラゲ"
-    declared_template["attack_status_effects"] = [{
-        "effect_type": "poison",
-        "chance": 1.0,
-        "duration_ticks": 6,
-        "value": 2.5,
-    }]
+    declared_template["attack_status_effects"] = [
+        {
+            "effect_type": "poison",
+            "chance": 1.0,
+            "duration_ticks": 6,
+            "value": 2.5,
+        }
+    ]
     monsters["templates"].append(declared_template)
-    monsters["initial_placements"].append(
-        {"template": "scenario_only_jellyfish", "spot": "deep_forest"}
-    )
+    monsters["initial_placements"].append({"template": "scenario_only_jellyfish", "spot": "deep_forest"})
 
     path = tmp_path / "monster_attack_effects.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")

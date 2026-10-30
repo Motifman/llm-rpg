@@ -16,6 +16,9 @@ from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter impor
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.service.player_outcome_registry import (
@@ -54,7 +57,9 @@ class PlayerOutcomeRuleStageService:
         player_ids: Sequence[PlayerId],
         predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
         command_scope_factory: CommandScopeFactoryPort[object] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._rules = tuple(rules)
         self._outcome_registry = outcome_registry
         self._condition_evaluator = condition_evaluator
@@ -64,9 +69,7 @@ class PlayerOutcomeRuleStageService:
         self._predicate_trace_emitter = predicate_trace_emitter
         self._command_scope_factory = command_scope_factory
         self._condition_evaluator.validate_dependencies(
-            condition
-            for rule in self._rules
-            for condition in (rule.trigger, *rule.player_conditions)
+            condition for rule in self._rules for condition in (rule.trigger, *rule.player_conditions)
         )
 
     def set_command_scope_factory(
@@ -77,25 +80,37 @@ class PlayerOutcomeRuleStageService:
         self._command_scope_factory = factory
 
     def run(self, current_tick: WorldTick) -> None:
-        """発火条件を満たした規則を評価し、一度限りなら機会を消費する。"""
+        """世界の段の中で、発火条件を満たした規則を評価し、一度限りなら機会を消費する。"""
+        self._run(current_tick, evaluation_point="world_stage")
+
+    def run_after_turns(self, current_tick: WorldTick) -> None:
+        """全員の手番のあとに、手番の中で満たされた規則を同じ tick のうちに評価する。"""
+        self._run(current_tick, evaluation_point="after_turns")
+
+    def _run(self, current_tick: WorldTick, *, evaluation_point: str) -> None:
         if not self._rules:
             return
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            raise RuntimeError(
-                "player outcome rule用CommandScopeFactoryが未配線です。"
-            )
+            raise RuntimeError("player outcome rule用CommandScopeFactoryが未配線です。")
         for rule in self._rules:
             progress_id = f"{_PROGRESS_PREFIX}{rule.rule_id}"
             if rule.once and self._progress_store.is_fired(progress_id):
                 continue
-            self._run_rule_command(rule, current_tick, scope_factory)
+            with self._failure_isolator.unit(
+                stage="player_outcome_rule",
+                tick=current_tick,
+                target_kind="player_outcome_rule",
+                target_id=rule.rule_id,
+            ):
+                self._run_rule_command(rule, current_tick, scope_factory, evaluation_point)
 
     def _run_rule_command(
         self,
         rule: PlayerOutcomeRule,
         current_tick: WorldTick,
         scope_factory: CommandScopeFactoryPort[object],
+        evaluation_point: str,
     ) -> None:
         """ruleの全対象outcomeと一度限り進捗を一緒に確定する。"""
         committed: tuple[_CommittedOutcome, ...] = ()
@@ -106,6 +121,7 @@ class PlayerOutcomeRuleStageService:
                     rule,
                     current_tick,
                     notify_callbacks=False,
+                    evaluation_point=evaluation_point,
                 )
         except CommandPostCommitException:
             self._notify_committed_outcomes(committed)
@@ -122,13 +138,12 @@ class PlayerOutcomeRuleStageService:
         current_tick: WorldTick,
         *,
         notify_callbacks: bool,
+        evaluation_point: str,
     ) -> tuple[tuple[_CommittedOutcome, ...], bool]:
         # 外側の確認は不要なscope生成を避ける高速経路にすぎない。
         # 待機中に別commandが同じonce規則を確定し得るため、資源所有権を
         # 取得した後にも進捗を再確認してから条件評価へ進む。
-        if rule.once and self._progress_store.is_fired(
-            f"{_PROGRESS_PREFIX}{rule.rule_id}"
-        ):
+        if rule.once and self._progress_store.is_fired(f"{_PROGRESS_PREFIX}{rule.rule_id}"):
             return (), False
 
         graph = self._graph_provider()
@@ -145,6 +160,7 @@ class PlayerOutcomeRuleStageService:
                 current_tick=current_tick,
                 purpose="player_outcome_trigger",
                 owner_id=rule.rule_id,
+                evaluation_point=evaluation_point,
             )
         if not trigger_result.is_satisfied:
             return (), False
@@ -154,13 +170,11 @@ class PlayerOutcomeRuleStageService:
             old_outcome = self._outcome_registry.get_outcome(player_id)
             if old_outcome.is_resolved:
                 continue
-            eligibility_evaluation = (
-                self._condition_evaluator.evaluate_all_diagnostic_for_player(
-                    rule.player_conditions,
-                    current_tick,
-                    graph,
-                    target_player_id=player_id,
-                )
+            eligibility_evaluation = self._condition_evaluator.evaluate_all_diagnostic_for_player(
+                rule.player_conditions,
+                current_tick,
+                graph,
+                target_player_id=player_id,
             )
             eligibility_result = eligibility_evaluation.result
             if self._predicate_trace_emitter is not None:
@@ -171,6 +185,7 @@ class PlayerOutcomeRuleStageService:
                     purpose="player_outcome_eligibility",
                     owner_id=rule.rule_id,
                     player_id=player_id.value,
+                    evaluation_point=evaluation_point,
                 )
             if not eligibility_result.is_satisfied:
                 continue

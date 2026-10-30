@@ -24,9 +24,7 @@ def seed_spot_graph_to_sqlite(
     provided_interiors = dict(interiors or {})
     for spot_id in provided_interiors:
         if not graph.contains_spot(spot_id):
-            raise SpotNotInGraphException(
-                f"Cannot seed interior for unknown spot: {spot_id}"
-            )
+            raise SpotNotInGraphException(f"Cannot seed interior for unknown spot: {spot_id}")
 
     started_without_transaction = not connection.in_transaction
     savepoint_name = "spot_graph_seed"

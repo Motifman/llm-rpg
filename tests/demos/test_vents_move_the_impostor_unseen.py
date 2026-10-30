@@ -30,9 +30,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
 _KUZE = PlayerId(3)  # keeper (インポスター)
@@ -177,9 +175,7 @@ class TestOnlyTheImpostorCanVent:
             ("storage", "enter_vent_to_observatory"),
         ),
     )
-    def test_the_impostor_still_sees_the_destination_action(
-        self, runtime, spot_name: str, action_name: str
-    ) -> None:
+    def test_the_impostor_still_sees_the_destination_action(self, runtime, spot_name: str, action_name: str) -> None:
         """使える keeper には、説明でなく操作名を通じて接続先を伝える。"""
         _place(runtime, _KUZE, spot_name)
 
@@ -211,12 +207,8 @@ class TestOnlyTheImpostorCanVent:
 class TestTheVentRestrictionIsSharedKnowledge:
     """クルーは通気口を試さず、通った人物を疑うための前提だけを知る。"""
 
-    @pytest.mark.parametrize(
-        "player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA, _SAKI)
-    )
-    def test_each_crew_member_knows_the_vent_is_not_for_them(
-        self, runtime, player_id: PlayerId
-    ) -> None:
+    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA, _SAKI))
+    def test_each_crew_member_knows_the_vent_is_not_for_them(self, runtime, player_id: PlayerId) -> None:
         """クルー6人の実プロンプトに、非公開の使い手を推理する前提が届く。"""
         messages = runtime.build_full_prompt(player_id)["messages"]
         prompt = "\n".join(message["content"] for message in messages)
@@ -224,9 +216,7 @@ class TestTheVentRestrictionIsSharedKnowledge:
         assert _VENT_KNOWLEDGE in prompt
         assert "各室の壁の下部には通気口の格子がある" not in prompt
 
-    def test_no_crew_prompt_names_the_role_that_can_use_the_vent(
-        self, runtime
-    ) -> None:
+    def test_no_crew_prompt_names_the_role_that_can_use_the_vent(self, runtime) -> None:
         """クルーの実プロンプトは、使い手を一段で特定できる役割名を漏らさない。"""
         for player_id in (_MORI, _SENA, _AOI, _HAGI, _YURA, _SAKI):
             messages = runtime.build_full_prompt(player_id)["messages"]
@@ -235,12 +225,8 @@ class TestTheVentRestrictionIsSharedKnowledge:
             assert "管理人" not in prompt, runtime.get_player_name(player_id)
             assert "keeper" not in prompt, runtime.get_player_name(player_id)
 
-    @pytest.mark.parametrize(
-        "knowledge", (_VENT_KNOWLEDGE, _BOARD_VENT_KNOWLEDGE)
-    )
-    def test_the_added_knowledge_does_not_name_the_role(
-        self, knowledge: str
-    ) -> None:
+    @pytest.mark.parametrize("knowledge", (_VENT_KNOWLEDGE, _BOARD_VENT_KNOWLEDGE))
+    def test_the_added_knowledge_does_not_name_the_role(self, knowledge: str) -> None:
         """persona と当番表へ足す知識文自体にも、使い手の役割名を書かない。"""
         assert "管理人" not in knowledge
         assert "keeper" not in knowledge
@@ -257,18 +243,14 @@ class TestTheImpostorsKnowWhatTheVentsEnable:
     """インポスター二人が、実配置と一致する秘密移動を事前に知る。"""
 
     @pytest.mark.parametrize("player_id", (_KUZE, _JIN))
-    def test_each_impostor_system_prompt_explains_the_vent_ability(
-        self, runtime, player_id: PlayerId
-    ) -> None:
+    def test_each_impostor_system_prompt_explains_the_vent_ability(self, runtime, player_id: PlayerId) -> None:
         """二人の system prompt は、二室間を秘密に移動できると伝える。"""
         system = runtime.build_full_prompt(player_id)["messages"][0]["content"]
 
         assert _IMPOSTOR_VENT_KNOWLEDGE in system
 
     @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA))
-    def test_crew_system_prompts_do_not_receive_the_impostor_ability(
-        self, runtime, player_id: PlayerId
-    ) -> None:
+    def test_crew_system_prompts_do_not_receive_the_impostor_ability(self, runtime, player_id: PlayerId) -> None:
         """クルーの既存知識には、クゼだけが知る秘密移動の説明を混ぜない。"""
         system = runtime.build_full_prompt(player_id)["messages"][0]["content"]
 
@@ -294,9 +276,7 @@ class TestTheImpostorsKnowWhatTheVentsEnable:
                     if effect.get("effect_type") == "TELEPORT_ENTITY"
                 ]
                 assert len(teleport_effects) == 1, obj["id"]
-                declared_connections[spot["id"]] = teleport_effects[0][
-                    "parameters"
-                ]["target_spot"]
+                declared_connections[spot["id"]] = teleport_effects[0]["parameters"]["target_spot"]
 
         assert declared_connections == {
             "observatory": "storage",
@@ -313,10 +293,7 @@ class TestWhatTheWitnessesSee:
         **entry の repr を丸ごと文字列にしてはいけない。** structured に残った
         名前まで拾ってしまい、prose で伏せたことを確かめられない (一度やった)。
         """
-        return [
-            (entry.output.prose, entry.output.structured or {})
-            for entry in runtime._obs_buffer.drain(player_id)
-        ]
+        return [(entry.output.prose, entry.output.structured or {}) for entry in runtime._obs_buffer.drain(player_id)]
 
     def test_a_dark_room_only_hears_the_vent(self, runtime) -> None:
         """灯りの無い観測室では、入ったのが誰かは分からず音だけが残る。"""
@@ -379,9 +356,7 @@ class TestRecentVentTrace:
         assert len(lines) == 1
         assert "格子の縁の埃が乱れている" in lines[0]
 
-    def test_recent_use_does_not_reveal_a_visual_trace_in_the_dark(
-        self, runtime
-    ) -> None:
+    def test_recent_use_does_not_reveal_a_visual_trace_in_the_dark(self, runtime) -> None:
         """通気口自体が暗所で見えても、灯りが無ければ埃の乱れは読めない。"""
         darken_spot(runtime, "observatory")
         _place(runtime, _KUZE, "observatory")
@@ -451,9 +426,7 @@ class TestDarknessStillAnnouncesItself:
         end = rest.find("\n同じ場所")
         return rest if end < 0 else rest[:end]
 
-    def test_a_dark_room_with_a_visible_object_still_asks_for_a_light(
-        self, runtime
-    ) -> None:
+    def test_a_dark_room_with_a_visible_object_still_asks_for_a_light(self, runtime) -> None:
         """通気口だけ見える観測室でも、灯りが要ることは伝わる。"""
         darken_spot(runtime, "observatory")
         _place(runtime, _SENA, "observatory")

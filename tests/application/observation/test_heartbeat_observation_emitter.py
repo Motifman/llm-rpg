@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import pytest
+from tests.support.trace_recorders import CollectingTraceRecorder
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
     ILLMPlayerResolver,
@@ -29,6 +30,11 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
 )
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
+)
+from ai_rpg_world.application.trace.events import TraceEventKind
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+    WorldTickFailurePolicy,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -52,6 +58,14 @@ class _RecordingTurnTrigger(ILlmTurnTrigger):
 
     def run_scheduled_turns(self) -> None:
         return None
+
+
+def _isolating(recorder: CollectingTraceRecorder) -> WorldTickFailureIsolator:
+    return WorldTickFailureIsolator(policy=WorldTickFailurePolicy.ISOLATE, trace_recorder_provider=lambda: recorder)
+
+
+def _failed_stages(recorder: CollectingTraceRecorder) -> list[str]:
+    return [e.payload["stage"] for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)]
 
 
 def _build_emitter(
@@ -115,9 +129,7 @@ class TestHeartbeatObservationEmitter:
 
     def test_time_label_provider_is_required(self) -> None:
         """heartbeat の記録境界は世界時刻 provider の明示を必須にする。"""
-        parameter = inspect.signature(HeartbeatObservationEmitter).parameters[
-            "time_label_provider"
-        ]
+        parameter = inspect.signature(HeartbeatObservationEmitter).parameters["time_label_provider"]
         assert parameter.default is inspect.Parameter.empty
         buffer = DefaultObservationContextBuffer()
         with pytest.raises(TypeError, match="time_label_provider"):
@@ -135,10 +147,7 @@ class TestHeartbeatObservationEmitter:
             emitter.run(WorldTick(tick))
 
         # tick=1: anchor, 3,5,7 で発行 → 3 回
-        ticks = [
-            o.output.structured["tick"]
-            for o in buffer.get_observations(PlayerId(1))
-        ]
+        ticks = [o.output.structured["tick"] for o in buffer.get_observations(PlayerId(1))]
         assert ticks == [3, 5, 7]
         assert trigger.scheduled == [1, 1, 1]
 
@@ -157,7 +166,7 @@ class TestHeartbeatObservationEmitter:
         assert sorted(trigger.scheduled) == [1, 2]
 
     def test_provider_exception_does_propagate(self) -> None:
-        """provider が例外を投げても tick 全体を倒さず安全に return する。"""
+        """isolate で provider が例外を投げても tick 全体を倒さず安全に return し、その失敗を trace に残す。"""
         buffer = DefaultObservationContextBuffer()
         appender = ObservationAppender(buffer)
         trigger = _RecordingTurnTrigger()
@@ -169,17 +178,20 @@ class TestHeartbeatObservationEmitter:
         def boom() -> list[PlayerId]:
             raise RuntimeError("provider failed")
 
+        recorder = CollectingTraceRecorder()
         emitter = HeartbeatObservationEmitter(
             observation_appender=appender,
             turn_scheduler=scheduler,
             llm_player_ids_provider=boom,
             time_label_provider=lambda _tick: None,
             interval_ticks=1,
+            failure_isolator=_isolating(recorder),
         )
 
         # 例外を投げず、観測も投入されないこと
         emitter.run(WorldTick(5))
         assert trigger.scheduled == []
+        assert _failed_stages(recorder) == ["heartbeat.player_ids"]
 
     def test_non_player_id_entries_are_skipped(self) -> None:
         """provider が PlayerId 以外を返した要素は警告ログを残して skip。"""
@@ -220,7 +232,7 @@ class TestHeartbeatObservationEmitter:
             )
 
     def test_schedule_failure_does_cause_duplicate_observation(self) -> None:
-        """maybe_schedule が失敗しても次 tick で同じ観測が再投入されない。
+        """isolate で maybe_schedule が失敗しても次 tick で同じ観測が再投入されず、失敗は毎回 trace に残る。
 
         HIGH 指摘: append 成功後 schedule 失敗のケースで _last_emitted_tick を
         進めないと、次の interval 経過時に append が再発火し buffer に
@@ -233,6 +245,7 @@ class TestHeartbeatObservationEmitter:
             def maybe_schedule(self, player_id, output):
                 raise RuntimeError("schedule blew up")
 
+        recorder = CollectingTraceRecorder()
         emitter = HeartbeatObservationEmitter(
             observation_appender=appender,
             turn_scheduler=_FailingScheduler(),  # type: ignore[arg-type]
@@ -240,6 +253,7 @@ class TestHeartbeatObservationEmitter:
             time_label_provider=lambda _tick: None,
             interval_ticks=1,
             now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
+            failure_isolator=_isolating(recorder),
         )
 
         emitter.run(WorldTick(0))  # anchor
@@ -251,6 +265,7 @@ class TestHeartbeatObservationEmitter:
         observations = buffer.get_observations(PlayerId(1))
         ticks = [o.output.structured["tick"] for o in observations]
         assert ticks == [1, 2, 3]
+        assert _failed_stages(recorder) == ["heartbeat.schedule_turn"] * 3
 
     def test_emitter_payload_includes_tick_and_interval(self) -> None:
         """発行される観測の structured に tick と interval_ticks が入る。"""
@@ -313,7 +328,7 @@ class TestHeartbeatSkipsTravelingPlayers:
         assert trigger.scheduled == [2]
 
     def test_provider_fail_safe_raises_exception(self) -> None:
-        """provider 失敗は heartbeat を止めない。silent failure 防止のため fail-open。"""
+        """isolate で provider が失敗しても heartbeat を止めず、移動中ではない側に倒して投入し、失敗を trace に残す。"""
         buffer = DefaultObservationContextBuffer()
         appender = ObservationAppender(buffer)
         turn_trigger = _RecordingTurnTrigger()
@@ -325,6 +340,7 @@ class TestHeartbeatSkipsTravelingPlayers:
         def raising_provider(pid: PlayerId) -> bool:
             raise RuntimeError("provider boom")
 
+        recorder = CollectingTraceRecorder()
         emitter = HeartbeatObservationEmitter(
             observation_appender=appender,
             turn_scheduler=turn_scheduler,
@@ -333,11 +349,13 @@ class TestHeartbeatSkipsTravelingPlayers:
             interval_ticks=2,
             now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
             is_traveling_provider=raising_provider,
+            failure_isolator=_isolating(recorder),
         )
         emitter.run(WorldTick(10))  # anchor
         emitter.run(WorldTick(12))  # emit
         assert len(buffer.get_observations(PlayerId(1))) == 1
         assert turn_trigger.scheduled == [1]
+        assert _failed_stages(recorder) == ["heartbeat.is_traveling"]
 
     def test_provider_unspecified_all_players_line(self) -> None:
         """is_traveling_provider 省略時 (後方互換) は全員に発行される。"""

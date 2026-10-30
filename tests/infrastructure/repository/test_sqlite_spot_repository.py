@@ -23,9 +23,7 @@ def sqlite_conn() -> sqlite3.Connection:
 
 
 class TestSqliteSpotRepository:
-    def test_shared_repository_requires_active_transaction_for_save(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_repository_requires_active_transaction_for_save(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteSpotRepository.for_shared_unit_of_work(sqlite_conn)
         with pytest.raises(RuntimeError, match="for_shared_unit_of_work"):
             repo.save(Spot(SpotId(1), "Town", "desc", SpotCategoryEnum.TOWN))
@@ -49,9 +47,7 @@ class TestSqliteSpotRepository:
         assert found is not None
         assert found.spot_id == SpotId(1)
 
-    def test_find_by_name_returns_none_for_blank_or_missing(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_find_by_name_returns_none_for_blank_or_missing(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteSpotRepository.for_standalone_connection(sqlite_conn)
         repo.save(Spot(SpotId(1), "Town", "", SpotCategoryEnum.TOWN))
 
@@ -69,9 +65,7 @@ class TestSqliteSpotRepository:
         assert repo.delete(SpotId(1)) is True
         assert repo.find_by_id(SpotId(1)) is None
 
-    def test_shared_uow_write_is_visible_inside_transaction(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_uow_write_is_visible_inside_transaction(self, sqlite_conn: sqlite3.Connection) -> None:
         uow = SqliteUnitOfWork(connection=sqlite_conn)
         with uow:
             repo = SqliteSpotRepository.for_shared_unit_of_work(uow.connection)

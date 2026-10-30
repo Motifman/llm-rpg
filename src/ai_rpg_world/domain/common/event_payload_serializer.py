@@ -1,8 +1,8 @@
 """EventPayloadSerializer - イベント永続化・配送のシリアライズ port (Phase 6)
 
 outbox 実装で使用する。in-process では不使用（オブジェクト参照をそのまま渡す）。
-SEAM.md の Serialization Seam に従い、将来的な差し替え境界を定義する。
 """
+
 from typing import Protocol
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent

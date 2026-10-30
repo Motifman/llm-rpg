@@ -34,21 +34,11 @@ class PredicateResult(Generic[PredicateT]):
 
     def __post_init__(self) -> None:
         if not isinstance(self.is_satisfied, bool):
-            raise PredicateResultValidationException(
-                "is_satisfied must be bool"
-            )
-        if self.reason_code is not None and not isinstance(
-            self.reason_code, PredicateReasonCode
-        ):
-            raise PredicateResultValidationException(
-                "reason_code must be PredicateReasonCode or None"
-            )
-        if self.failure_message is not None and (
-            not isinstance(self.failure_message, str) or not self.failure_message
-        ):
-            raise PredicateResultValidationException(
-                "failure_message must be non-empty str or None"
-            )
+            raise PredicateResultValidationException("is_satisfied must be bool")
+        if self.reason_code is not None and not isinstance(self.reason_code, PredicateReasonCode):
+            raise PredicateResultValidationException("reason_code must be PredicateReasonCode or None")
+        if self.failure_message is not None and (not isinstance(self.failure_message, str) or not self.failure_message):
+            raise PredicateResultValidationException("failure_message must be non-empty str or None")
         self._validate_path()
         self._validate_context_names()
 
@@ -60,50 +50,32 @@ class PredicateResult(Generic[PredicateT]):
                 or self.failed_path is not None
                 or self.missing_context
             ):
-                raise PredicateResultValidationException(
-                    "satisfied result must not contain failure details"
-                )
+                raise PredicateResultValidationException("satisfied result must not contain failure details")
             return
 
         if self.reason_code is None:
-            raise PredicateResultValidationException(
-                "failed result requires reason_code"
-            )
+            raise PredicateResultValidationException("failed result requires reason_code")
         if self.failed_predicate is None or self.failed_path is None:
-            raise PredicateResultValidationException(
-                "failed result requires failed_predicate and failed_path"
-            )
+            raise PredicateResultValidationException("failed result requires failed_predicate and failed_path")
         if self.reason_code is PredicateReasonCode.MISSING_CONTEXT:
             if not self.missing_context:
-                raise PredicateResultValidationException(
-                    "missing-context result requires context names"
-                )
+                raise PredicateResultValidationException("missing-context result requires context names")
         elif self.missing_context:
-            raise PredicateResultValidationException(
-                "only missing-context result may contain context names"
-            )
+            raise PredicateResultValidationException("only missing-context result may contain context names")
 
     def _validate_path(self) -> None:
         if self.failed_path is None:
             return
         if not isinstance(self.failed_path, tuple) or any(
-            isinstance(index, bool)
-            or not isinstance(index, int)
-            or index < 0
-            for index in self.failed_path
+            isinstance(index, bool) or not isinstance(index, int) or index < 0 for index in self.failed_path
         ):
-            raise PredicateResultValidationException(
-                "failed_path must be a tuple of non-negative int"
-            )
+            raise PredicateResultValidationException("failed_path must be a tuple of non-negative int")
 
     def _validate_context_names(self) -> None:
         if not isinstance(self.missing_context, frozenset) or any(
-            not isinstance(name, str) or not name
-            for name in self.missing_context
+            not isinstance(name, str) or not name for name in self.missing_context
         ):
-            raise PredicateResultValidationException(
-                "missing_context must be a frozenset of non-empty str"
-            )
+            raise PredicateResultValidationException("missing_context must be a frozenset of non-empty str")
 
     @classmethod
     def satisfied(cls) -> PredicateResult[PredicateT]:
@@ -138,9 +110,7 @@ class PredicateResult(Generic[PredicateT]):
     ) -> PredicateResult[PredicateT]:
         """評価に必要な入力が渡っていない結果を返す。"""
         if not isinstance(required_context, (set, frozenset)):
-            raise PredicateResultValidationException(
-                "required_context must be a set or frozenset of context names"
-            )
+            raise PredicateResultValidationException("required_context must be a set or frozenset of context names")
         return cls(
             is_satisfied=False,
             reason_code=PredicateReasonCode.MISSING_CONTEXT,

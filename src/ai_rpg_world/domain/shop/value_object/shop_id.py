@@ -10,6 +10,7 @@ class ShopId:
 
     IDは正の整数である必要があります。
     """
+
     value: int
 
     def __post_init__(self) -> None:

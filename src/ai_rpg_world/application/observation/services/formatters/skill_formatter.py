@@ -63,25 +63,23 @@ class SkillObservationFormatter:
     def _skill_name(self, skill_id: Any) -> str:
         return self._context.name_resolver.skill_name(skill_id)
 
-    def _format_skill_equipped(
-        self, event: SkillEquippedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_skill_equipped(self, event: SkillEquippedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         name = self._skill_name(event.skill_id)
         prose = f"{name}を装備しました。"
         structured: dict[str, Any] = {"type": "skill_equipped", "skill_name": name, "deck_tier": event.deck_tier.value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
-    def _format_skill_unequipped(
-        self, event: SkillUnequippedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_skill_unequipped(self, event: SkillUnequippedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         name = self._skill_name(event.removed_skill_id)
         prose = f"{name}を外しました。"
-        structured: dict[str, Any] = {"type": "skill_unequipped", "skill_name": name, "deck_tier": event.deck_tier.value}
+        structured: dict[str, Any] = {
+            "type": "skill_unequipped",
+            "skill_name": name,
+            "deck_tier": event.deck_tier.value,
+        }
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
-    def _format_skill_used(
-        self, event: SkillUsedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
+    def _format_skill_used(self, event: SkillUsedEvent, recipient_id: PlayerId) -> ObservationOutput | None:
         name = self._skill_name(event.skill_id)
         prose = f"{name}を使用しました。"
         structured: dict[str, Any] = {"type": "skill_used", "skill_name": name, "deck_tier": event.deck_tier.value}
@@ -120,21 +118,33 @@ class SkillObservationFormatter:
         self, event: SkillLoadoutCapacityChangedEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = f"スキルデッキの容量が更新されました（通常:{event.normal_capacity}、覚醒:{event.awakened_capacity}）。"
-        structured: dict[str, Any] = {"type": "skill_loadout_capacity_changed", "normal": event.normal_capacity, "awakened": event.awakened_capacity}
+        structured: dict[str, Any] = {
+            "type": "skill_loadout_capacity_changed",
+            "normal": event.normal_capacity,
+            "awakened": event.awakened_capacity,
+        }
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_skill_deck_exp_gained(
         self, event: SkillDeckExpGainedEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = f"スキルデッキに経験値を獲得しました（+{event.gained_exp}）。"
-        structured: dict[str, Any] = {"type": "skill_deck_exp_gained", "gained_exp": event.gained_exp, "total_exp": event.total_exp}
+        structured: dict[str, Any] = {
+            "type": "skill_deck_exp_gained",
+            "gained_exp": event.gained_exp,
+            "total_exp": event.total_exp,
+        }
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_skill_deck_leveled_up(
         self, event: SkillDeckLeveledUpEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = f"スキルデッキがレベルアップしました（{event.old_level}→{event.new_level}）。"
-        structured: dict[str, Any] = {"type": "skill_deck_leveled_up", "old_level": event.old_level, "new_level": event.new_level}
+        structured: dict[str, Any] = {
+            "type": "skill_deck_leveled_up",
+            "old_level": event.old_level,
+            "new_level": event.new_level,
+        }
         return ObservationOutput(
             prose=prose,
             structured=structured,

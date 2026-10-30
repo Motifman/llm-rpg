@@ -89,9 +89,7 @@ class SpeechAudienceResolver:
         ):
             return self._departed_position_store.find(player_id)
         try:
-            return self._spot_graph_repository.find_graph().get_entity_spot(
-                EntityId.create(int(player_id))
-            )
+            return self._spot_graph_repository.find_graph().get_entity_spot(EntityId.create(int(player_id)))
         except EntityNotInGraphException:
             return None
 
@@ -138,9 +136,7 @@ class SpeechAudienceResolver:
         if speaker_spot is None:
             return []
 
-        player_id_values: set[int] = {
-            s.player_id.value for s in self._player_status_repository.find_all()
-        }
+        player_id_values: set[int] = {s.player_id.value for s in self._player_status_repository.find_all()}
 
         if channel == SpeechChannel.WHISPER:
             if target_player_id is None or target_player_id == speaker_player_id:
@@ -169,25 +165,24 @@ class SpeechAudienceResolver:
         volume = speech_channel_to_sound_volume(channel)
         result: list[SpeechAudienceMember] = []
         seen: set[int] = set()
-        physical_recipients = {
-            recipient.entity_id.value: recipient
-            for recipient in self._sound_propagation.resolve_recipients(
-                EntityId.create(speaker_player_id), volume, graph
-            )
-        } if self._departed_position_store is None or self._departed_position_store.find(
-            speaker_player
-        ) is None else {}
+        physical_recipients = (
+            {
+                recipient.entity_id.value: recipient
+                for recipient in self._sound_propagation.resolve_recipients(
+                    EntityId.create(speaker_player_id), volume, graph
+                )
+            }
+            if self._departed_position_store is None or self._departed_position_store.find(speaker_player) is None
+            else {}
+        )
         for status in self._player_status_repository.find_all():
             recipient_player_id = status.player_id
             if recipient_player_id == speaker_player:
                 continue  # speaker 自身は除外
             if int(recipient_player_id) in seen:
                 continue
-            if (
-                self._player_perception_policy is not None
-                and not self._player_perception_policy.can_perceive_player(
-                    recipient_player_id, speaker_player
-                )
+            if self._player_perception_policy is not None and not self._player_perception_policy.can_perceive_player(
+                recipient_player_id, speaker_player
             ):
                 continue
             recipient_is_departed = bool(
@@ -204,9 +199,7 @@ class SpeechAudienceResolver:
             else:
                 listener_spot = self._player_spot(recipient_player_id)
                 outcome = (
-                    self._sound_propagation.outcome_between_spots(
-                        speaker_spot, listener_spot, volume, graph
-                    )
+                    self._sound_propagation.outcome_between_spots(speaker_spot, listener_spot, volume, graph)
                     if listener_spot is not None
                     else None
                 )

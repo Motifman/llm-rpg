@@ -14,12 +14,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-SCENARIO_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "data"
-    / "scenarios"
-    / "survival_island_v4_coop.json"
-)
+SCENARIO_PATH = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "survival_island_v4_coop.json"
 
 
 def _load_v4():
@@ -34,12 +29,8 @@ class TestSurvivalIslandV4ItemUsageHint:
         scenario = _load_v4()
         by_id = {item.string_id: item for item in scenario.item_spec_definitions}
 
-        assert by_id["flint"].usage_hint == (
-            "火を起こす道具。焚き火跡や狼煙台のような火を扱う場所で interact して使う"
-        )
-        assert by_id["driftwood"].usage_hint == (
-            "火を起こす材料。焚き火跡や狼煙台のような場所で interact の材料になる"
-        )
+        assert by_id["flint"].usage_hint == ("火を起こす道具。焚き火跡や狼煙台のような火を扱う場所で interact して使う")
+        assert by_id["driftwood"].usage_hint == ("火を起こす材料。焚き火跡や狼煙台のような場所で interact の材料になる")
         assert by_id["dry_leaves"].usage_hint == (
             "火を起こす材料。焚き火跡や狼煙台のような場所で interact の材料になる"
         )
@@ -120,11 +111,7 @@ class TestSurvivalIslandV4ItemUsageHint:
         runtime = create_world_runtime(SCENARIO_PATH)
         scenario = _load_v4()
         noah_id = PlayerId(scenario.id_mapper.get_int("player", "noah"))
-        emblem = next(
-            item
-            for item in scenario.item_spec_definitions
-            if item.string_id == "military_emblem"
-        )
+        emblem = next(item for item in scenario.item_spec_definitions if item.string_id == "military_emblem")
         grant_item_specs_to_inventory(
             noah_id,
             (emblem.spec_id,),

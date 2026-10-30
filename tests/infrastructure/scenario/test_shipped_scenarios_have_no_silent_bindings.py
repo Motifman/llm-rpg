@@ -12,7 +12,7 @@ warning するようになった。しかし **warning は構造ではない。*
 - つまり `docs/trace_observability_review.md` の手順で run 後に確認しても検出でき
   ない。見落とせば、状態だけ静かに変わるシナリオがそのまま実験に乗る
 
-#383 の作業では `relay_puzzle_demo.json` を直して `data/scenarios` の警告を 0 件に
+#383 の作業では `relay_puzzle_demo.json` (#1631 で退役) を直して `data/scenarios` の警告を 0 件に
 した。**しかしその状態を守る仕組みが無かった** (レビュー指摘)。次に誰かが無音の
 binding を持つシナリオを足しても、標準出力に 1 行流れるだけで CI は緑になる。
 
@@ -77,15 +77,12 @@ def _silent_bindings_by_reading_the_json(path: Path) -> list[_SilentBinding]:
         return []
     if not isinstance(raw, dict):
         return []
-    objects = ((raw.get("reactive_bindings") or {}).get("objects") or [])
+    objects = (raw.get("reactive_bindings") or {}).get("objects") or []
     out: list[_SilentBinding] = []
     for i, binding in enumerate(objects):
         if not isinstance(binding, dict):
             continue
-        if (
-            binding.get("narrative_on_true") is None
-            and binding.get("narrative_on_false") is None
-        ):
+        if binding.get("narrative_on_true") is None and binding.get("narrative_on_false") is None:
             out.append(_SilentBinding(path.name, i, binding.get("target")))
     return out
 
@@ -116,8 +113,7 @@ class TestTheAuditActuallyReadsSomething:
         監査が意味を持つ前提をここで固定する。
         """
         total = sum(
-            len(((json.loads(p.read_text(encoding="utf-8")) or {}).get(
-                "reactive_bindings") or {}).get("objects") or [])
+            len(((json.loads(p.read_text(encoding="utf-8")) or {}).get("reactive_bindings") or {}).get("objects") or [])
             for p in _scenario_files()
             if p.read_text(encoding="utf-8").strip().startswith("{")
         )
@@ -138,13 +134,11 @@ class TestShippedScenariosHaveNoSilentObjectBindings:
 
         assert not silent, (
             "状態を変えるのに観測を一切出さない reactive object binding があります。"
-            " 意図的な無音なら narrative_on_true=\"\" を明示し、書き忘れなら観測文を"
+            ' 意図的な無音なら narrative_on_true="" を明示し、書き忘れなら観測文を'
             f" 書いてください:\n" + "\n".join(f"  - {b}" for b in silent)
         )
 
-    def test_loading_every_scenario_emits_no_silent_binding_warning(
-        self, caplog
-    ) -> None:
+    def test_loading_every_scenario_emits_no_silent_binding_warning(self, caplog) -> None:
         """実際に loader を通しても、この警告が 1 件も出ない。
 
         上の試験は JSON を直接読む。判定条件が loader 側とずれていないことを、
@@ -159,12 +153,6 @@ class TestShippedScenariosHaveNoSilentObjectBindings:
                 except Exception:
                     # 別の理由で読めないシナリオはこの監査の対象外。
                     continue
-            offenders += [
-                f"{path.name}: {r.getMessage()}"
-                for r in caplog.records
-                if _SILENT_BINDING in r.getMessage()
-            ]
+            offenders += [f"{path.name}: {r.getMessage()}" for r in caplog.records if _SILENT_BINDING in r.getMessage()]
 
-        assert not offenders, "loader が無音 binding を警告しました:\n" + "\n".join(
-            f"  - {o}" for o in offenders
-        )
+        assert not offenders, "loader が無音 binding を警告しました:\n" + "\n".join(f"  - {o}" for o in offenders)

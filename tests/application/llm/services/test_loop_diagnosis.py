@@ -74,9 +74,7 @@ class TestTheQuestionOffersEveryReasonWithItsMeaning:
 
         question = port.calls[0][1][QUESTION_NAME]
         assert isinstance(question, ChoiceQuestion)
-        assert set(question.options) == {r.value for r in RepeatReason} | {
-            NONE_APPLICABLE_OPTION
-        }
+        assert set(question.options) == {r.value for r in RepeatReason} | {NONE_APPLICABLE_OPTION}
         assert all(meaning for meaning in question.options.values())
 
     def test_the_state_is_passed_unchanged(self) -> None:

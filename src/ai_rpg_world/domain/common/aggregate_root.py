@@ -3,27 +3,13 @@ from collections import Counter
 from typing import Any
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+from ai_rpg_world.eventing import AggregateRoot as EventAggregateRoot
 
 logger = logging.getLogger(__name__)
 
 
-class AggregateRoot:
-    """集約ルートの基底クラス"""
-
-    def __init__(self) -> None:
-        self._events: list[BaseDomainEvent[Any, Any]] = []
-
-    def add_event(self, event: BaseDomainEvent[Any, Any]) -> None:
-        """ドメインイベントを追加"""
-        self._events.append(event)
-
-    def get_events(self) -> list[BaseDomainEvent[Any, Any]]:
-        """未発行のイベントを取得"""
-        return self._events.copy()
-
-    def clear_events(self) -> None:
-        """イベントをクリア"""
-        self._events.clear()
+class AggregateRoot(EventAggregateRoot[BaseDomainEvent[Any, Any]]):
+    """ゲームの集約に、未発行イベントの診断を加える。"""
 
     def warn_if_pending_events(self, *, context: str) -> None:
         """PR-L (B1): ``add_event`` した events が publish されずに残っている
@@ -53,7 +39,8 @@ class AggregateRoot:
         counts = Counter(type(e).__name__ for e in pending)
         breakdown = ", ".join(f"{name}={n}" for name, n in counts.most_common())
         logger.warning(
-            "Aggregate has %d pending domain events at %s; publish_all() may "
-            "have been forgotten. event_types: %s",
-            len(pending), context, breakdown,
+            "Aggregate has %d pending domain events at %s; publish_all() may have been forgotten. event_types: %s",
+            len(pending),
+            context,
+            breakdown,
         )

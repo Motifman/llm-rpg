@@ -32,6 +32,9 @@ from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolv
     TARGET_LABEL_JUDGMENTS_KEY,
     SpotGraphArgumentResolver,
 )
+from ai_rpg_world.application.llm.services._argument_resolvers.target_item_name_rescue import (
+    TargetItemNameRescue,
+)
 from ai_rpg_world.application.llm.services._argument_resolvers.target_label_rescue import (
     QUESTION_NAME as TARGET_LABEL_RESCUE_QUESTION,
 )
@@ -42,6 +45,7 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
+    ACTION_DISPLAY_PHRASE_KEY,
     ACTION_HISTORY_PROJECTION_KEY,
     CANONICAL_IDENTIFIERS_KEY,
     project_action_arguments_for_history,
@@ -53,6 +57,9 @@ from ai_rpg_world.application.llm.services.failure_helpers import (
     list_destination_labels,
     list_object_labels,
 )
+from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+    get_spot_graph_specs,
+)
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
     filter_definitions_for_escape_llm,
     validate_tool_handler_consistency,
@@ -61,6 +68,10 @@ from ai_rpg_world.application.llm.services.world_llm_turn.gold_change_trace impo
     build_gold_reader,
     build_roster_reader,
     wrap_with_gold_change,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.say_inline_delivery import (
+    with_unspoken_say_inline,
+    wrap_with_say_inline,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
     QUESTION_NAME as TOOL_NAME_RESCUE_QUESTION,
@@ -97,9 +108,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_WAIT,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
 )
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
@@ -115,15 +123,15 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 
 logger = logging.getLogger(__name__)
 
-BUSY_FREE_TOOLS: frozenset[str] = frozenset({
-    TOOL_NAME_SPEECH,
-    TOOL_NAME_SPOT_GRAPH_LISTEN,
-    TOOL_NAME_SPOT_GRAPH_WAIT,
-    TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_LIST,
-    TOOL_NAME_TODO_COMPLETE,
-})
+BUSY_FREE_TOOLS: frozenset[str] = frozenset(
+    {
+        TOOL_NAME_SPEECH,
+        TOOL_NAME_SPOT_GRAPH_LISTEN,
+        TOOL_NAME_SPOT_GRAPH_WAIT,
+        TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    }
+)
+
 
 def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
     """#344: spot_graph_use_item / attack / give_item / pickup_item /
@@ -171,7 +179,6 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
                 attr,
             )
             return
-
 
     services = SpotGraphWorldServices(
         interaction=runtime._interaction_service,
@@ -239,7 +246,7 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
         # _travel_to 内部で runtime.do_move を呼んで単一の副作用実装を
         # 共有する。runtime.do_move は既に start_travel_to_spot +
         # _process_graph_events + 同一 spot 短絡 + _record_action_result
-        # (scene_boundary + subjective) を面倒見ている。
+        # (主観入力の記録) を面倒見ている。
         runtime=runtime,
     )
     wiring._spot_graph_executor = executor
@@ -314,49 +321,51 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
     # ``SpotGraphArgumentResolver`` の呼び出しが experiment 用 wiring
     # に無く、164 件すべて INVALID_ARGUMENT で落ちていた。
     # 解決後 args を executor に渡すように adapter で resolver を噛ませる。
-    resolver_targets = frozenset({
-        TOOL_NAME_SPOT_GRAPH_USE_ITEM,
-        TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-        TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-        TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-        # attack も resolver 経由で `target_label='大型カニ'` を
-        # `monster_id` に解決する必要がある。Issue #618 で発覚した
-        # silent failure: resolver に hook されていなかったため、
-        # agent が attack を呼ぶと毎回 `INVALID_TARGET_LABEL: monster_id
-        # が解決されていません` で reject されていた (= scenario で
-        # モンスターと戦えない致命的 bug)。
-        TOOL_NAME_SPOT_GRAPH_ATTACK,
-        # Issue #621 Phase 3b: 新 tool `tend_to_player`。
-        # `target_player_label='エイダ'` を `target_player_id` に解決して
-        # executor に渡す必要があるため resolver hook が必須。
-        TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
-        # PR-θ1 (経路統合): travel_to も resolver 経由で
-        # `destination_label='森の広場'` を `destination_spot_id` に解決
-        # する。旧 handler は handler 内で resolve していたが、新経路は
-        # resolver stage で SpotGraphArgumentResolver._resolve_travel_to
-        # (`resolve_destination_target` 同一関数を再利用) が変換する。
-        TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-        # PR-θ3 (経路統合): interact も resolver 経由で
-        # `target_label='OBJ1'` を `object_id` に解決する。旧 handler と
-        # 同じく resolver 例外時の「有効な target_label 一覧」 message は
-        # invalid_label_failure_builder で構築する。
-        TOOL_NAME_SPOT_GRAPH_INTERACT,
-        # vote / report_body はどちらも `target_player_label='アオイ'`
-        # を `target_player_id` に解決してから executor に渡す。
-        # resolver を挟まないと executor が None を読んで必ず失敗する
-        # (#618 の attack と同じ形)。
-        TOOL_NAME_SPOT_GRAPH_VOTE,
-        TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
-        # 売買も resolver 経由で `item_label='パン'` を「どの商人の
-        # どの品か」へ解決する。挟まないと executor が merchant_id を
-        # 読めず必ず失敗する。
-        TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
-        TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
-        # 取引も resolver 経由で相手と差し出す品を解決する。
-        TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
-        TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
-        TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
-    })
+    resolver_targets = frozenset(
+        {
+            TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+            TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+            # attack も resolver 経由で `target_label='大型カニ'` を
+            # `monster_id` に解決する必要がある。Issue #618 で発覚した
+            # silent failure: resolver に hook されていなかったため、
+            # agent が attack を呼ぶと毎回 `INVALID_TARGET_LABEL: monster_id
+            # が解決されていません` で reject されていた (= scenario で
+            # モンスターと戦えない致命的 bug)。
+            TOOL_NAME_SPOT_GRAPH_ATTACK,
+            # Issue #621 Phase 3b: 新 tool `tend_to_player`。
+            # `target_player_label='エイダ'` を `target_player_id` に解決して
+            # executor に渡す必要があるため resolver hook が必須。
+            TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+            # PR-θ1 (経路統合): travel_to も resolver 経由で
+            # `destination_label='森の広場'` を `destination_spot_id` に解決
+            # する。旧 handler は handler 内で resolve していたが、新経路は
+            # resolver stage で SpotGraphArgumentResolver._resolve_travel_to
+            # (`resolve_destination_target` 同一関数を再利用) が変換する。
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            # PR-θ3 (経路統合): interact も resolver 経由で
+            # `target_label='OBJ1'` を `object_id` に解決する。旧 handler と
+            # 同じく resolver 例外時の「有効な target_label 一覧」 message は
+            # invalid_label_failure_builder で構築する。
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            # vote / report_body はどちらも `target_player_label='アオイ'`
+            # を `target_player_id` に解決してから executor に渡す。
+            # resolver を挟まないと executor が None を読んで必ず失敗する
+            # (#618 の attack と同じ形)。
+            TOOL_NAME_SPOT_GRAPH_VOTE,
+            TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
+            # 売買も resolver 経由で `item_label='パン'` を「どの商人の
+            # どの品か」へ解決する。挟まないと executor が merchant_id を
+            # 読めず必ず失敗する。
+            TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+            TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+            # 取引も resolver 経由で相手と差し出す品を解決する。
+            TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
+            TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+            TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+        }
+    )
     # #1321: 一覧に当たらなかった行動名を意味で選び直す口。profile が型付き
     # 判断を求めていなければ None のままで、従来どおり失敗させる。
     #
@@ -390,6 +399,18 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
                 )
             ),
         )
+    # 人を対象にした操作の品名も同じ判断で選び直す (#1641)。候補は相手の所持品で
+    # resolver には見えないので、runtime の対人操作に渡す。
+    set_item_name_rescue = getattr(wiring.runtime, "set_target_item_name_rescue", None)
+    if callable(set_item_name_rescue):
+        set_item_name_rescue(
+            TargetItemNameRescue(
+                port=typed_judgment_port,
+                min_confidence=target_label_rescue.min_confidence,
+            )
+            if typed_judgment_port is not None and target_label_rescue is not None
+            else None
+        )
     argument_resolver = SpotGraphArgumentResolver(
         action_name_rescue=action_name_rescue,
         target_label_rescue=target_label_rescue,
@@ -398,6 +419,12 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
     # 組んだ resolver を配線に残す。何が注入されたかを外から確かめられる形に
     # しておかないと、注入漏れを検査するテストが書けない。
     wiring.argument_resolver = argument_resolver
+    # 名前の解決で断られた行動の発言も届けるため、resolver の外側で包む (D1601)。
+    tools_offering_say_inline = frozenset(
+        definition.name
+        for definition, _ in get_spot_graph_specs()
+        if "say_inline" in definition.parameters.get("properties", {})
+    )
     for tool_name in targets:
         raw = raw_handlers.get(tool_name)
         if raw is None:
@@ -415,41 +442,44 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
                 else None
             )
             adapted = adapt_executor_handler_with_resolver(
-                raw, tool_name, argument_resolver,
+                raw,
+                tool_name,
+                argument_resolver,
                 invalid_label_failure_builder=tool_specific_builder,
                 # recorder は session 作成後に差し込まれる経路があるので、
                 # 使用時に look-up する (loop guard と同じ流儀)。
-                trace_recorder_provider=lambda: getattr(
-                    wiring.runtime, "trace_recorder", None
-                ),
+                trace_recorder_provider=lambda: getattr(wiring.runtime, "trace_recorder", None),
                 current_tick_provider=lambda: _current_tick_or_none(wiring),
             )
         else:
             adapted = adapt_executor_handler(raw)
+        if tool_name in tools_offering_say_inline:
+            adapted = wrap_with_say_inline(adapted, executor.speak_say_inline)
         wiring._tool_handlers[tool_name] = adapted
     _wrap_every_handler_with_gold_change(wiring, runtime)
     # Step 1 並列化 review HIGH 1: build_full_prompt が内部で lazy-init する
-    # _todo_tool_executor / _cached_default_prompt_builder は check-then-act
+    # Being の保存先 / _cached_default_prompt_builder は check-then-act
     # で 2 スレッドが同時に初回呼び出しすると double-init になる。並列実行
     # の前に単一スレッドで pre-warm して race を構造的に消す。
     try:
-        if hasattr(runtime, "_wire_auxiliary_tool_stack"):
-            runtime._wire_auxiliary_tool_stack()
+        if hasattr(runtime, "_wire_being_stack"):
+            runtime._wire_being_stack()
         if hasattr(runtime, "_get_or_build_default_prompt_builder"):
             runtime._get_or_build_default_prompt_builder()
     except Exception:
         # pre-warm に失敗しても通常パスはあくまで lazy で動く。安全側 fallback。
         logger.exception(
-            "Pre-warming auxiliary tool stack / default prompt builder failed; "
+            "Pre-warming being stack / default prompt builder failed; "
             "lazy initialization will fall back, but Phase A 並列化時に race の "
             "可能性が残る"
         )
     # PR-E: tool spec (= LLM に見せる) と _tool_handlers (= dispatch SSOT) の
-    # 不整合は起動時に止める。pre-warm が aux executor を完成させた直後に
+    # 不整合は起動時に止める。pre-warm の直後に
     # 一度だけ実行するため、ここに置く。get_tool_definitions に失敗しても
     # それ自体は通常運用で起きるべきでないが、検証ロジックの破綻で実験を
     # 止めるのは過剰なので例外なら警告だけ残す。
     wiring._validate_tool_handler_consistency()
+
 
 def _tool_is_exposed_in(wiring: WorldLlmWiring) -> Callable[[str], bool] | None:
     """この世界に在るツールかを答える関数。露出判断を持たない runtime では None。
@@ -489,6 +519,7 @@ def definitions_across_phases(wiring: Any) -> list[Any]:
             seen.setdefault(definition.name, definition)
     return list(seen.values())
 
+
 def validate_tool_handler_consistency_for_wiring(wiring: WorldLlmWiring) -> None:
     """runtime が expose する tool 定義集合と _tool_handlers のキー集合が
     矛盾していないか確認する。expose されているのに handler 未登録の tool
@@ -504,8 +535,7 @@ def validate_tool_handler_consistency_for_wiring(wiring: WorldLlmWiring) -> None
         if exc.__class__.__name__ == "ToolExposureConfigurationError":
             raise
         logger.warning(
-            "_validate_tool_handler_consistency: get_tool_definitions が "
-            "失敗したため整合性検証をスキップする",
+            "_validate_tool_handler_consistency: get_tool_definitions が 失敗したため整合性検証をスキップする",
             exc_info=True,
         )
         return
@@ -518,6 +548,7 @@ def validate_tool_handler_consistency_for_wiring(wiring: WorldLlmWiring) -> None
         exposed_tool_names=exposed_names,
         handler_keys=wiring._tool_handlers.keys(),
     )
+
 
 def build_interact_invalid_label_failure(
     runtime_context: Any,
@@ -561,22 +592,14 @@ def build_interact_invalid_label_failure(
             remediation=resolver_failure_remediation(TOOL_NAME_SPOT_GRAPH_INTERACT, error_code),
             should_reschedule=is_reschedulable_error_code(error_code),
         )
-    normalized_label = label.strip().strip('"\'「」')
-    dark_hidden_names = tuple(
-        getattr(runtime_context, "dark_hidden_object_names", ()) or ()
-    )
+    normalized_label = label.strip().strip("\"'「」")
+    dark_hidden_names = tuple(getattr(runtime_context, "dark_hidden_object_names", ()) or ())
     if normalized_label and normalized_label in dark_hidden_names:
         return LlmCommandResultDto(
             success=False,
-            message=(
-                f"暗くて見えないため、{normalized_label}を対象にできない。"
-                "灯りを確保してから確かめる必要がある。"
-            ),
+            message=(f"暗くて見えないため、{normalized_label}を対象にできない。灯りを確保してから確かめる必要がある。"),
             error_code=error_code,
-            remediation=(
-                "灯りを持つか、灯りを持つ人物と同席してから"
-                "同じ対象を確認してください。"
-            ),
+            remediation=("灯りを持つか、灯りを持つ人物と同席してから同じ対象を確認してください。"),
             should_reschedule=is_reschedulable_error_code(error_code),
         )
     # 旧引数名 ``object_label`` で呼ばれたときに「見つかりません: (空文字)」
@@ -592,10 +615,7 @@ def build_interact_invalid_label_failure(
                 f"{valid_objects or '(この場所に interactable なオブジェクトなし)'}"
             ),
             error_code=error_code,
-            remediation=(
-                "object_label に書いた値をそのまま target_label に移して"
-                "呼び直してください。"
-            ),
+            remediation=("object_label に書いた値をそのまま target_label に移して呼び直してください。"),
             should_reschedule=is_reschedulable_error_code(error_code),
         )
     return LlmCommandResultDto(
@@ -607,12 +627,13 @@ def build_interact_invalid_label_failure(
         ),
         error_code=error_code,
         remediation=(
-            "target_label には「現在の状況」のオブジェクト欄で "
-            "\"\" に囲まれているオブジェクト名を指定してください。"
+            "target_label には【現在地と周囲】のオブジェクト欄で "
+            '"" に囲まれているオブジェクト名を指定してください。'
             "action_name は同じ行の [] 内に表示された操作名から選んでください。"
         ),
         should_reschedule=is_reschedulable_error_code(error_code),
     )
+
 
 def build_travel_to_invalid_label_failure(
     runtime_context: Any,
@@ -654,12 +675,13 @@ def build_travel_to_invalid_label_failure(
         ),
         error_code=error_code,
         remediation=(
-            "destination_label には「現在の状況」の接続先で "
-            "\"\" に囲まれている行き先スポット名を指定してください。"
+            "destination_label には【現在地と周囲】の接続先で "
+            '"" に囲まれている行き先スポット名を指定してください。'
             "矢印の左側の道や扉の名前は指定しないでください。"
         ),
         should_reschedule=is_reschedulable_error_code(error_code),
     )
+
 
 def resolver_failure_remediation(tool_name: str, error_code: str) -> str:
     """resolver 失敗時に、現在プロンプトと同じ名前指定規約で復帰ヒントを返す。"""
@@ -668,50 +690,45 @@ def resolver_failure_remediation(tool_name: str, error_code: str) -> str:
             return (
                 "gives には {item_label: アイテム名, target_player_label: 相手の名前} "
                 "の object を 1 件以上入れてください。item_label は所持アイテム欄の "
-                "\"\" 内、target_player_label は同じ場所にいるプレイヤー名を使います。"
+                '"" 内、target_player_label は同じ場所にいるプレイヤー名を使います。'
             )
         return "ツール説明にある必須引数と型を確認し、足りない引数を指定してください。"
     if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
         return (
-            "item_label には「現在の状況」の所持アイテム欄で \"\" に囲まれている"
+            'item_label には【現在地と周囲】の所持アイテム欄で "" に囲まれている'
             "アイテム名を指定してください。食べ物以外を使うと別の失敗になります。"
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_DROP_ITEM:
         return (
-            "item_label には「現在の状況」の所持アイテム欄で \"\" に囲まれている"
+            'item_label には【現在地と周囲】の所持アイテム欄で "" に囲まれている'
             "アイテム名を指定してください。地面に落ちているものの名前は drop_item には使えません。"
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM:
         return (
-            "ground_item_label には「現在の状況」の地面に落ちているもの欄で "
-            "\"\" に囲まれているアイテム名を指定してください。所持アイテム名は pickup_item には使えません。"
+            "ground_item_label には【現在地と周囲】の地面に落ちているもの欄で "
+            '"" に囲まれているアイテム名を指定してください。所持アイテム名は pickup_item には使えません。'
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
         return (
-            "gives の item_label には所持アイテム欄の \"\" 内のアイテム名を、"
+            'gives の item_label には所持アイテム欄の "" 内のアイテム名を、'
             "target_player_label には同じ場所にいる相手の名前を指定してください。"
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_ATTACK:
         return (
-            "target_label には「現在の状況」に表示されているモンスター名を指定してください。"
+            "target_label には【現在地と周囲】に表示されているモンスター名を指定してください。"
             "アイテム名・プレイヤー名・オブジェクト名は attack の対象には使えません。"
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER:
         return (
             "target_player_label には同じ場所で倒れているプレイヤーの名前を指定してください。"
-            "相手が別の場所にいるなら travel_to で移動し、倒れていない相手には speech_speak などを使ってください。"
+            "相手が別の場所にいるなら移動し、倒れていない相手には話しかけてください。"
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION:
-        return (
-            "sub_location_label には「現在の状況」に表示されているサブロケーション名を指定してください。"
-        )
-    return (
-        "ツール説明と「現在の状況」を確認し、そのツールが要求する種類の名前を指定してください。"
-    )
+        return "sub_location_label には【現在地と周囲】に表示されているサブロケーション名を指定してください。"
+    return "ツール説明と【現在地と周囲】を確認し、そのツールが要求する種類の名前を指定してください。"
 
-def _wrap_every_handler_with_gold_change(
-    wiring: WorldLlmWiring, runtime: Any
-) -> None:
+
+def _wrap_every_handler_with_gold_change(wiring: WorldLlmWiring, runtime: Any) -> None:
     """登録済みの**全ツール**を、所持金の変化を測る包みで囲む。
 
     所持金が動いたのに記録が出ないツールがあると、分析側は「どのツールが
@@ -731,7 +748,9 @@ def _wrap_every_handler_with_gold_change(
         if getattr(handler, "records_gold_change", False):
             continue  # 二重に包まない (再配線されても 1 枚)
         wiring._tool_handlers[tool_name] = wrap_with_gold_change(
-            handler, gold_reader, tool_name=tool_name,
+            handler,
+            gold_reader,
+            tool_name=tool_name,
             roster_reader=roster_reader,
         )
 
@@ -749,13 +768,16 @@ def adapt_executor_handler(
     で受ければ、runtime_context を使わない handler は従来と同じシグネチャ
     で動く。
     """
+
     def _handler(
         player_id: PlayerId,
         arguments: dict[str, Any],
         runtime_context: Any,
     ) -> LlmCommandResultDto:
         return raw_handler(int(player_id.value), arguments, runtime_context)
+
     return _handler
+
 
 def adapt_executor_handler_with_resolver(
     # adapt_executor_handler と同じく runtime_context を第3引数で渡すため、
@@ -795,7 +817,9 @@ def adapt_executor_handler_with_resolver(
     ) -> LlmCommandResultDto:
         try:
             resolved = argument_resolver.resolve_args(
-                tool_name, arguments, runtime_context,
+                tool_name,
+                arguments,
+                runtime_context,
             )
         except ToolArgumentResolutionException as e:
             # 対象名を問うたが採らなかった判断も trace に残す。残さないと
@@ -811,7 +835,9 @@ def adapt_executor_handler_with_resolver(
                 )
             if invalid_label_failure_builder is not None:
                 return invalid_label_failure_builder(
-                    runtime_context, arguments, e,
+                    runtime_context,
+                    arguments,
+                    e,
                 )
             return LlmCommandResultDto(
                 success=False,
@@ -834,14 +860,10 @@ def adapt_executor_handler_with_resolver(
             )
             return LlmCommandResultDto(
                 success=False,
-                message=(
-                    f"ツール '{tool_name}' の引数解決が実装されていません "
-                    "(設計バグ)。"
-                ),
+                message=(f"ツール '{tool_name}' の引数解決が実装されていません (設計バグ)。"),
                 error_code="RESOLVER_DISPATCH_MISSING",
                 remediation=(
-                    "別のツールを試してください。同じツールを連打しても "
-                    "解決しません (フレームワーク側の修正が必要)。"
+                    "別のツールを試してください。同じツールを連打しても 解決しません (フレームワーク側の修正が必要)。"
                 ),
             )
         # resolver は公開 label を内部 ID に置き換える。履歴には LLM が
@@ -852,23 +874,22 @@ def adapt_executor_handler_with_resolver(
         canonical = resolved.pop(CANONICAL_IDENTIFIERS_KEY, None)
         projection = project_action_arguments_for_history(
             arguments,
-            canonical_identifiers=(
-                canonical if isinstance(canonical, dict) else None
-            ),
+            canonical_identifiers=(canonical if isinstance(canonical, dict) else None),
         )
         # #1321: 行動名を意味で選び直したときは、その判断を trace に残し、
         # 解釈を結果文で当人に見せる。**黙って置き換えない。** 黙って通すと
         # 発明した名前が通ると学び、同じ名前を書き続ける。
         judgment = resolved.pop(ACTION_NAME_JUDGMENT_KEY, None)
-        target_judgments = [
-            j for j in (resolved.pop(TARGET_LABEL_JUDGMENTS_KEY, None) or ()) if isinstance(j, dict)
-        ]
+        target_judgments = [j for j in (resolved.pop(TARGET_LABEL_JUDGMENTS_KEY, None) or ()) if isinstance(j, dict)]
         resolved[ACTION_HISTORY_PROJECTION_KEY] = projection
         # **generic 経路 (do_* を通らない tool) にも同じ射影を届ける。**
         # 投影を読むのは executor 側の 5 経路だけで、それ以外は phase_b が
         # raw から作り直していた。届けないと、正規値を報告する resolver を
         # 増やしても何も起きない静かな no-op になる。
         arguments[ACTION_HISTORY_PROJECTION_KEY] = projection
+        display_phrase = resolved.pop(ACTION_DISPLAY_PHRASE_KEY, None)
+        if isinstance(display_phrase, str):
+            arguments[ACTION_DISPLAY_PHRASE_KEY] = display_phrase
         if isinstance(judgment, dict):
             _record_action_name_judgment(
                 judgment,
@@ -894,6 +915,7 @@ def adapt_executor_handler_with_resolver(
         return result
 
     return _handler
+
 
 def _current_tick_or_none(wiring: WorldLlmWiring) -> int | None:
     """trace に載せる現在 tick。取れなければ None (記録自体は落とさない)。"""
@@ -952,9 +974,7 @@ def _record_judgment(
         logger.warning("failed to record typed judgment trace", exc_info=True)
 
 
-def _with_interpretation_note(
-    result: LlmCommandResultDto, judgment: dict[str, Any]
-) -> LlmCommandResultDto:
+def _with_interpretation_note(result: LlmCommandResultDto, judgment: dict[str, Any]) -> LlmCommandResultDto:
     """「書いた名前をどう解釈したか」を結果文の先頭に足す。
 
     executor が返した文面は消さない。何が起きたかは executor の側が知っている。
@@ -1000,9 +1020,7 @@ def maybe_interrupt_busy(
             return False, None
     else:
         nav_snapshot = nav
-        status.set_spot_navigation_state(
-            PlayerSpotNavigationState.at_rest(nav.current_spot_id)
-        )
+        status.set_spot_navigation_state(PlayerSpotNavigationState.at_rest(nav.current_spot_id))
         repo.save(status)
     logger.info(
         "Travel interrupted for player_id=%s by tool=%s (was at leg %d of %d)",
@@ -1012,6 +1030,7 @@ def maybe_interrupt_busy(
         len(nav.leg_connection_ids),
     )
     return True, nav_snapshot
+
 
 def restore_nav_state(
     wiring: WorldLlmWiring,
@@ -1039,6 +1058,7 @@ def restore_nav_state(
         int(player_id.value),
     )
 
+
 def coerce_arguments(raw_arguments: Any) -> dict[str, Any]:
     if isinstance(raw_arguments, dict):
         return raw_arguments
@@ -1049,6 +1069,7 @@ def coerce_arguments(raw_arguments: Any) -> dict[str, Any]:
             return {}
         return parsed if isinstance(parsed, dict) else {}
     return {}
+
 
 def reason_tool_is_not_offered(
     wiring: WorldLlmWiring,
@@ -1075,10 +1096,7 @@ def reason_tool_is_not_offered(
     誰も何もできなくなり、原因が見えなくなる。**
     """
     try:
-        offered = {
-            d.name
-            for d in wiring.runtime.get_tool_definitions(player_id=player_id)
-        }
+        offered = {d.name for d in wiring.runtime.get_tool_definitions(player_id=player_id)}
     except Exception:
         logger.warning(
             "get_tool_definitions に失敗したため %s の露出判定を省略する",
@@ -1091,24 +1109,17 @@ def reason_tool_is_not_offered(
     if name in offered_tools_at_prompt:
         return LlmCommandResultDto(
             success=False,
-            message=(
-                f"状況が変わったため、選んだ時点では可能だった {name} を"
-                "いまは実行できない。"
-            ),
+            message=(f"状況が変わったため、選んだ時点では可能だった {name} をいまは実行できない。"),
             error_code="TOOL_BECAME_UNAVAILABLE",
-            should_reschedule=is_reschedulable_error_code(
-                "TOOL_BECAME_UNAVAILABLE"
-            ),
+            should_reschedule=is_reschedulable_error_code("TOOL_BECAME_UNAVAILABLE"),
         )
     return LlmCommandResultDto(
         success=False,
-        message=(
-            f"いまは {name} を選べない。"
-            "「利用可能な tool」に出ているものから選ぶこと。"
-        ),
+        message=(f"いまは {name} を選べない。「利用可能な tool」に出ているものから選ぶこと。"),
         error_code="TOOL_NOT_OFFERED_NOW",
         should_reschedule=True,
     )
+
 
 def _unsupported_tool_message(
     wiring: WorldLlmWiring,
@@ -1131,9 +1142,7 @@ def _unsupported_tool_message(
             trace_recorder_provider=lambda: getattr(wiring.runtime, "trace_recorder", None),
             current_tick_provider=lambda: _current_tick_or_none(wiring),
         )
-    return format_unsupported_tool_message(
-        requested=name, valid_tools=offered.keys(), suggestion=suggestion.tool
-    )
+    return format_unsupported_tool_message(requested=name, valid_tools=offered.keys(), suggestion=suggestion.tool)
 
 
 def execute_tool(
@@ -1175,12 +1184,14 @@ def execute_tool(
     # 使えない」は別の失敗で、返す文言も変える必要がある。
     if handler is not None:
         not_offered = reason_tool_is_not_offered(
-            wiring, name,
+            wiring,
+            name,
             player_id,
             offered_tools_at_prompt=offered_tools_at_prompt,
         )
         if not_offered is not None:
-            return not_offered
+            # 出していない行動は世界で起きていないので、添えた発言も出さない (D1601)。
+            return with_unspoken_say_inline(not_offered, arguments)
 
     if handler is None:
         # PR-J: LLM の tool 名 typo を救済する 3 層:
@@ -1191,35 +1202,34 @@ def execute_tool(
         # ないので、3 が最重要。
         # 提案も一覧も、そのターンに送った tool から作る。handler 表から作ると、
         # 会議中に隠した tool やこの世界で出していない tool まで勧める (#1413)。
-        message = _unsupported_tool_message(
-            wiring, player_id, name, arguments, offered_tools_at_prompt
-        )
+        message = _unsupported_tool_message(wiring, player_id, name, arguments, offered_tools_at_prompt)
         # PR-J: should_reschedule は _RESCHEDULE_ERROR_CODES SSOT 経由で
         # 決定する。ハードコードすると将来 policy を変えた時に乖離する。
-        return LlmCommandResultDto(
-            success=False,
-            message=message,
-            error_code="UNSUPPORTED_TOOL",
-            should_reschedule=is_reschedulable_error_code("UNSUPPORTED_TOOL"),
+        return with_unspoken_say_inline(
+            LlmCommandResultDto(
+                success=False,
+                message=message,
+                error_code="UNSUPPORTED_TOOL",
+                should_reschedule=is_reschedulable_error_code("UNSUPPORTED_TOOL"),
+            ),
+            arguments,
         )
     result = handler(player_id, arguments, runtime_context)
     # 個別 handler が should_reschedule を立て忘れても、error_code の
     # 共通方針を実行結果へ反映する。ActionFailedObservationEmitter はこの
     # field を schedules_turn に写すため、ここが既存の本人向け失敗観測と
     # wiring-reschedule streak をつなぐ共通出口になる。
-    if (
-        not result.should_reschedule
-        and should_reschedule_for_next_tick(result)
-    ):
+    if not result.should_reschedule and should_reschedule_for_next_tick(result):
         return dataclass_replace(result, should_reschedule=True)
     return result
+
 
 # ── per-tool handlers (PR 7) ──
 
 # PR-θ1/θ2 (経路統合): _handle_travel_to / _handle_explore は削除。
 # SpotGraphToolExecutor._travel_to / _explore に統合され、それぞれ
 # runtime.do_move / runtime.do_explore を呼ぶ薄い wrapper として単一の
-# 実装になった。旧 handler の副作用 (scene_boundary / subjective /
+# 実装になった。旧 handler の副作用 (subjective /
 # _process_graph_events / display_name / 発見なし時の可視 object 併記 /
 # inner_thought 空警告) は全部保持している。
 #
@@ -1258,7 +1268,6 @@ def execute_tool(
 # inner_thought 空警告) は保持し、新経路の付加価値 (疲労回復) も引き継ぐ。
 
 
-
 # PR-θ6 (経路統合): _handle_set_sub_location は削除。脱出ランタイムでは
 # set_sub_location は意図的に未対応 (ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS
 # で LLM 露出も除外されている)。SpotGraphToolExecutor._set_sub_location
@@ -1267,15 +1276,11 @@ def execute_tool(
 # `_execute_tool` の default 経路が UNSUPPORTED_TOOL を返す。旧 handler は
 # 防御 UNSUPPORTED_TOOL を返すだけの dead code だったので削除する。
 
+
 def make_auxiliary_tool_handler(
     wiring: WorldLlmWiring, tool_name: str
 ) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
-    """TODO/memo ツール用のハンドラを tool_name 固定で返す。
-
-    NOTE: pure_spot_graph mode (B-4 / Issue #155) では TODO/memo ツールは
-    LLM の tools リストに含まれないため、通常到達しない。安全側のフォール
-    バックとして残し、デフォルト構成で memo を使う際の経路を維持する。
-    """
+    """記憶のツール (episode_recall / episode_revise_index) 用のハンドラを tool_name 固定で返す。"""
 
     def handler(
         player_id: PlayerId,
@@ -1283,9 +1288,7 @@ def make_auxiliary_tool_handler(
         runtime_context: Any,
     ) -> LlmCommandResultDto:
         del runtime_context
-        aux_result: LlmCommandResultDto = wiring.runtime.run_llm_auxiliary_tool(
-            player_id, tool_name, arguments
-        )
+        aux_result: LlmCommandResultDto = wiring.runtime.run_llm_auxiliary_tool(player_id, tool_name, arguments)
         return aux_result
 
     return handler

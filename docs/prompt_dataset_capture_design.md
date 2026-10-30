@@ -17,7 +17,7 @@ system prompt / toolset の参照を戻せば、確率的要素を除いて同�
   - `system_content` は `system_prompt_builder.build(player_info)` で生成される。
   - `user_content` は現在状態、記憶、直近の出来事、指示などを結合して生成される。
   - 返り値には `messages`、`tools`、`tool_choice`、`current_state_snapshot`、
-    `current_beliefs_snapshot`、`persona_snapshot` が入る。
+    `persona_snapshot` が入る (`current_beliefs_snapshot` は #1631 で受動想起と一緒に消した)。
   - 参照: `src/ai_rpg_world/application/llm/services/prompt_builder.py:1155`
     から `:1179`。
 - 現在 trace に残るのは prompt 全文ではなく、section ごとの文字数だけである。
@@ -31,6 +31,10 @@ system prompt / toolset の参照を戻せば、確率的要素を除いて同�
   - reasoning 有効時は `append_force_tool_call_instruction(prompt["messages"])`
     で user message 末尾を変え、`tool_choice="auto"` にする。
   - 通常時は `prompt["messages"]` と `tool_choice="required"` を使う。
+  - 追記: #1053 で、熟考ターンを `auto` に落として末尾に指示を足す扱いをやめた。
+    それ以来 `append_force_tool_call_instruction` はどこからも呼ばれていない。
+    #1677 で部品ごと消した (#1631 の撤去の一環)。いまの `tool_choice` は、
+    解決済み設定の `llm_tool_choice` から渡る (既定は `required`)。
   - 参照: `src/ai_rpg_world/presentation/spot_graph_game/runtime_manager.py:1588`
     から `:1636`。
 - LLM 呼び出しメトリクスは `LlmCallMetricsSink` 経由で trace に流れている。
@@ -118,11 +122,13 @@ prompt dataset sink は LLM 呼び出しの本文・ツール定義・出力を�
 
 | キー | 既定 | 意味 |
 |---|---:|---|
-| `PROMPT_DATASET_CAPTURE_ENABLED` | `false` | プロンプト保存を有効化する |
+| `PROMPT_DATASET_CAPTURE_ENABLED` | (#1795 で消した) | プロンプト保存を有効化する。今はいつも保存する |
 | `PROMPT_DATASET_CAPTURE_FORMAT` | `jsonl` | 実験中の追記形式。初期実装は `jsonl` のみ |
 | `PROMPT_DATASET_CAPTURE_FAILURE_POLICY` | `fail` | 保存失敗時に run を止めるか。`fail` / `warn` |
 | `PROMPT_DATASET_INCLUDE_TOOLS` | `true` | tool 定義を `toolsets.jsonl` に保存する |
 | `PROMPT_DATASET_INCLUDE_SYSTEM_PROMPTS` | `true` | system prompt を `system_prompts.jsonl` に保存する |
+
+**その後**: `PROMPT_DATASET_CAPTURE_ENABLED` は、記憶ではない設定の片付け (#1631) の #1795 で消した。`make experiment` の run は、いつもプロンプトを保存する。保存の失敗時の方針 `PROMPT_DATASET_CAPTURE_FAILURE_POLICY` は残る。
 
 `PROMPT_DATASET_CAPTURE_FORMAT=parquet` は実験中の直接出力ではなく、後段の
 export コマンドで扱う。実験中は append と壊れた行の調査がしやすい JSONL を使う。
@@ -195,7 +201,7 @@ v1 の最優先は **実際に LLM サーバへ送った最終 messages 全文�
 
 `being_id` / `persona_id` はこの文脈で正規取得する。Phase 1 実装前に
 `runtime_manager.py` の turn context から取得できるかを確認し、取得点を 1 箇所に
-固定する。取れない場合は `PROMPT_DATASET_CAPTURE_ENABLED=true` の run を
+固定する。取れない場合は `PROMPT_DATASET_CAPTURE_ENABLED=true` (今はすべて) の run を
 fail-fast させる。`None` のまま静かに保存しない。
 
 ### 3. `LiteLLMClient.invoke()` の `litellm.completion(**kwargs)` 境界
@@ -593,8 +599,8 @@ system prompt は hash で重複排除する。将来、他キャラクターの
 }
 ```
 
-tool 定義も system prompt と同じく hash で重複排除する。`LLM_TOOL_MODE` や
-機能フラグで tool list が変わる場合も、別 toolset 行として保存される。
+tool 定義も system prompt と同じく hash で重複排除する。機能フラグで tool list が
+変わる場合も、別 toolset 行として保存される。
 
 ### `run.json`
 
@@ -862,7 +868,7 @@ run id を split に割り当てる。
 
 ## 失敗時の扱い
 
-`PROMPT_DATASET_CAPTURE_ENABLED=false` のときは何もしない。
+`PROMPT_DATASET_CAPTURE_ENABLED=false` のときは何もしない (#1795 でキーを消し、今はいつも保存する)。
 
 `true` のとき:
 

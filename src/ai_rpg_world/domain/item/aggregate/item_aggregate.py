@@ -29,10 +29,7 @@ class ItemAggregate(AggregateRoot):
     アイテムの使用・破損などのライフサイクルを管理する。
     """
 
-    def __init__(
-        self,
-        item_instance: ItemInstance
-    ):
+    def __init__(self, item_instance: ItemInstance):
         super().__init__()
         self._item_instance = item_instance
 
@@ -49,6 +46,7 @@ class ItemAggregate(AggregateRoot):
         # ビジネスルール: durability_maxがない場合にdurabilityを指定することはできない
         if durability is not None and item_spec.durability_max is None:
             from ai_rpg_world.domain.item.exception import DurabilityValidationException
+
             raise DurabilityValidationException(
                 f"Cannot specify durability for item spec without durability_max (current: {durability.current}, max: {durability.max_value})"
             )
@@ -64,10 +62,7 @@ class ItemAggregate(AggregateRoot):
 
     @classmethod
     def create_by_crafting(
-        cls,
-        item_instance_id: ItemInstanceId,
-        item_spec: ItemSpec,
-        quantity: int = 1
+        cls, item_instance_id: ItemInstanceId, item_spec: ItemSpec, quantity: int = 1
     ) -> "ItemAggregate":
         """合成によって作成されたアイテム集約を作成"""
         # 耐久度を持つアイテムの場合のみ耐久度を作成
@@ -76,17 +71,14 @@ class ItemAggregate(AggregateRoot):
             durability = Durability(current=item_spec.durability_max, max_value=item_spec.durability_max)
 
         item_instance = ItemInstance(
-            item_instance_id=item_instance_id,
-            item_spec=item_spec,
-            durability=durability,
-            quantity=quantity
+            item_instance_id=item_instance_id, item_spec=item_spec, durability=durability, quantity=quantity
         )
         event = ItemCraftedEvent.create(
             aggregate_id=item_instance_id,
             aggregate_type="ItemAggregate",
             item_instance_id=item_instance_id,
             item_spec_id=item_spec.item_spec_id,
-            quantity=quantity
+            quantity=quantity,
         )
         item_aggregate = cls(item_instance)
         item_aggregate.add_event(event)
@@ -201,7 +193,7 @@ class ItemAggregate(AggregateRoot):
                 item_instance_id=self.item_instance_id,
                 item_spec_id=self.item_spec.item_spec_id,
                 remaining_quantity=self.quantity,
-                remaining_durability=self.durability
+                remaining_durability=self.durability,
             )
             self.add_event(event)
 
@@ -211,7 +203,7 @@ class ItemAggregate(AggregateRoot):
                     aggregate_id=self.item_instance_id,
                     aggregate_type="ItemAggregate",
                     item_instance_id=self.item_instance_id,
-                    item_spec_id=self.item_spec.item_spec_id
+                    item_spec_id=self.item_spec.item_spec_id,
                 )
                 self.add_event(broken_event)
 
@@ -247,7 +239,7 @@ class ItemAggregate(AggregateRoot):
                 aggregate_type="ItemAggregate",
                 item_instance_id=self.item_instance_id,
                 item_spec_id=self.item_spec.item_spec_id,
-                new_durability=self.durability
+                new_durability=self.durability,
             )
             self.add_event(event)
 

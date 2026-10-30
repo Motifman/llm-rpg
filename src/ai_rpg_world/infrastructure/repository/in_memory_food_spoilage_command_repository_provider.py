@@ -69,10 +69,7 @@ class InMemoryFoodSpoilageCommandRepositoryProviderFactory:
     ) -> InMemoryFoodSpoilageCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
-            raise TypeError(
-                "インメモリfood spoilage providerには"
-                "InMemoryUnitOfWorkTransactionAdapterが必要です"
-            )
+            raise TypeError("インメモリfood spoilage providerにはInMemoryUnitOfWorkTransactionAdapterが必要です")
         return InMemoryFoodSpoilageCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,

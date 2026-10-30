@@ -23,9 +23,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI, _KUZE = PlayerId(1), PlayerId(3)
 
 
@@ -39,9 +37,7 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
     graph = runtime._spot_graph_repo.find_graph()
     entity_id = EntityId.create(int(player_id))
     graph.unplace_entity(entity_id)
-    graph.place_entity(
-        entity_id, SpotId.create(runtime.id_mapper.get_int("spot", spot))
-    )
+    graph.place_entity(entity_id, SpotId.create(runtime.id_mapper.get_int("spot", spot)))
     runtime._spot_graph_repo.save(graph)
 
 
@@ -79,7 +75,6 @@ def test_llm_handler_keeps_the_labels_sent_before_resolver_conversion(
                 "target_label": "当番表",
                 "action_name": "read_board",
                 "inner_thought": "当番を確かめる。",
-                "expected_result": "担当が分かる。",
             },
         }
     )
@@ -128,7 +123,6 @@ def test_failed_interaction_does_not_expose_rejected_call_as_a_prompt_example(
                 "target_label": "配膳用の裏口",
                 "action_name": "進む",
                 "inner_thought": "ここから物資庫へ進む。",
-                "expected_result": "物資庫へ着く。",
             },
         }
     )
@@ -180,3 +174,47 @@ def test_tools_without_identifier_arguments_leave_the_mapping_empty() -> None:
 
     entry = _latest_action(runtime, _MORI)
     assert entry.identifier_arguments == {}
+
+
+def test_failed_interaction_line_names_the_action_by_its_display_label(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """前提条件で断られた操作の行は、成功の行と同じく「「対象」で表示名」と書き、action_name を出さない。
+
+    廃坑の山村の 3 本目の実 run で「「昇降機」に start_lift した → [失敗]」と出ていた。
+    action_name は呼び出しの値で、世界の言葉ではない。断られた行は呼び出しの手本も
+    残さないので、ここに出すと内部の名前だけが経験として残る。
+    """
+    stub = StubLlmClient(
+        tool_call_to_return={
+            "name": "interact",
+            "arguments": {
+                "target_label": "非常用ランタンケース",
+                "action_name": "take_lantern",
+                "inner_thought": "ランタンを取る。",
+            },
+        }
+    )
+    state = create_world_runtime_session(
+        monkeypatch,
+        tmp_path,
+        stub,
+        world_id="station_drill",
+    )
+    player_id = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
+    _move(state.runtime, player_id, "storage")
+    while True:
+        try:
+            state.runtime.do_interact(player_id, "emergency_lantern_case", "take_lantern")
+        except Exception:
+            break
+
+    result = state.llm_wiring.run_turn(player_id)
+    user = state.runtime.build_full_prompt(player_id)["messages"][1]["content"]
+
+    assert result.success is False
+    failed = [line for line in user.splitlines() if "[失敗]" in line]
+    assert len(failed) == 1
+    assert "「非常用ランタンケース」でランタンを取り出す → [失敗]" in failed[0]
+    assert "take_lantern" not in failed[0]

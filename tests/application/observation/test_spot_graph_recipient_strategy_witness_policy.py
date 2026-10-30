@@ -41,8 +41,7 @@ def _make_strategy(entity_spot_mapping: dict) -> SpotGraphRecipientStrategy:
 
     graph = MagicMock()
     graph.entity_spot_mapping.return_value = {
-        EntityId.create(eid): SpotId(sid)
-        for eid, sid in entity_spot_mapping.items()
+        EntityId.create(eid): SpotId(sid) for eid, sid in entity_spot_mapping.items()
     }
     repo = MagicMock()
     repo.find_graph.return_value = graph

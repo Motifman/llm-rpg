@@ -12,9 +12,7 @@ from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 
 def test_world_runtime_injects_shared_player_status_tick_scope() -> None:
     """needs decayと状態異常は同じprovider構成のscope factoryを共有する。"""
-    runtime = create_world_runtime(
-        Path("data/scenarios/survival_island_v2_short.json")
-    )
+    runtime = create_world_runtime(Path("data/scenarios/survival_island_v2_short.json"))
 
     needs_stage = runtime._simulation_service._needs_decay_stage
     status_effects_stage = runtime._simulation_service._status_effects_stage
@@ -30,9 +28,7 @@ def test_lethal_needs_tick_rolls_back_player_lifecycle_when_grace_registration_f
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """猶予登録の途中失敗ではHP・身体・猶予・観測を開始前へ戻す。"""
-    runtime = create_world_runtime(
-        Path("data/scenarios/survival_island_v2_short.json")
-    )
+    runtime = create_world_runtime(Path("data/scenarios/survival_island_v2_short.json"))
     player_id = runtime.get_player_ids()[0]
     status = runtime._player_status_repo.find_by_id(player_id)
     assert status is not None
@@ -44,9 +40,7 @@ def test_lethal_needs_tick_rolls_back_player_lifecycle_when_grace_registration_f
     original_publish_all = runtime._speech_event_publisher.publish_all
 
     def observe(events) -> None:
-        delivered.extend(
-            event for event in events if isinstance(event, PlayerDownedEvent)
-        )
+        delivered.extend(event for event in events if isinstance(event, PlayerDownedEvent))
         original_publish_all(events)
 
     monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)

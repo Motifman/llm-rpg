@@ -29,6 +29,7 @@ from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnu
 @dataclass(frozen=True)
 class MonsterTemplate:
     """モンスターの種族・定義情報"""
+
     template_id: MonsterTemplateId
     name: str
     base_stats: BaseStats
@@ -159,26 +160,22 @@ class MonsterTemplate:
         object.__setattr__(self, "growth_stages", self.growth_stages or [])
         object.__setattr__(self, "preferred_feed_item_spec_ids", self.preferred_feed_item_spec_ids or frozenset())
         if not isinstance(self.skill_ids, list):
-            raise MonsterTemplateValidationException(
-                f"skill_ids must be a list, got {type(self.skill_ids).__name__}"
-            )
+            raise MonsterTemplateValidationException(f"skill_ids must be a list, got {type(self.skill_ids).__name__}")
         for i, e in enumerate(self.skill_ids):
             if not isinstance(e, SkillId):
-                raise MonsterTemplateValidationException(
-                    f"skill_ids[{i}] must be SkillId, got {type(e).__name__}"
-                )
+                raise MonsterTemplateValidationException(f"skill_ids[{i}] must be SkillId, got {type(e).__name__}")
         if not self.name or not self.name.strip():
             raise MonsterTemplateValidationException("Monster name cannot be empty")
-        
+
         if not self.description or not self.description.strip():
             raise MonsterTemplateValidationException("Monster description cannot be empty")
-        
+
         if len(self.description) > 1000:
             raise MonsterTemplateValidationException("Monster description is too long (max 1000 characters)")
-        
+
         if not isinstance(self.race, Race):
             raise MonsterTemplateValidationException(f"Invalid race: {self.race}")
-            
+
         if not isinstance(self.faction, MonsterFactionEnum):
             raise MonsterTemplateValidationException(f"Invalid faction: {self.faction}")
 
@@ -186,81 +183,45 @@ class MonsterTemplate:
             raise MonsterTemplateValidationException(
                 f"has_dark_vision must be bool, got {type(self.has_dark_vision).__name__}"
             )
-        if not isinstance(self.attack_cooldown_ticks, int) or isinstance(
-            self.attack_cooldown_ticks, bool
-        ):
-            raise MonsterTemplateValidationException(
-                "attack_cooldown_ticks must be int"
-            )
+        if not isinstance(self.attack_cooldown_ticks, int) or isinstance(self.attack_cooldown_ticks, bool):
+            raise MonsterTemplateValidationException("attack_cooldown_ticks must be int")
         if self.attack_cooldown_ticks < 1:
             raise MonsterTemplateValidationException(
                 f"attack_cooldown_ticks must be >= 1, got {self.attack_cooldown_ticks}"
             )
         if not isinstance(self.attack_status_effects, tuple):
-            raise MonsterTemplateValidationException(
-                "attack_status_effects must be a tuple"
-            )
+            raise MonsterTemplateValidationException("attack_status_effects must be a tuple")
         for index, effect in enumerate(self.attack_status_effects):
             if not isinstance(effect, AttackStatusEffectChance):
                 raise MonsterTemplateValidationException(
                     f"attack_status_effects[{index}] must be AttackStatusEffectChance"
                 )
-        if not isinstance(self.idle_wander_chance, (int, float)) or isinstance(
-            self.idle_wander_chance, bool
-        ):
-            raise MonsterTemplateValidationException(
-                "idle_wander_chance must be float"
-            )
+        if not isinstance(self.idle_wander_chance, (int, float)) or isinstance(self.idle_wander_chance, bool):
+            raise MonsterTemplateValidationException("idle_wander_chance must be float")
         if not (0.0 <= self.idle_wander_chance <= 1.0):
             raise MonsterTemplateValidationException(
-                f"idle_wander_chance must be between 0.0 and 1.0, "
-                f"got {self.idle_wander_chance}"
+                f"idle_wander_chance must be between 0.0 and 1.0, got {self.idle_wander_chance}"
             )
         if not isinstance(self.reaction_to_attack, ReactionPolicyEnum):
             raise MonsterTemplateValidationException(
-                f"reaction_to_attack must be ReactionPolicyEnum, "
-                f"got {type(self.reaction_to_attack).__name__}"
+                f"reaction_to_attack must be ReactionPolicyEnum, got {type(self.reaction_to_attack).__name__}"
             )
-        if not isinstance(self.flee_grace_ticks, int) or isinstance(
-            self.flee_grace_ticks, bool
-        ):
-            raise MonsterTemplateValidationException(
-                "flee_grace_ticks must be int"
-            )
+        if not isinstance(self.flee_grace_ticks, int) or isinstance(self.flee_grace_ticks, bool):
+            raise MonsterTemplateValidationException("flee_grace_ticks must be int")
         if self.flee_grace_ticks < 0:
-            raise MonsterTemplateValidationException(
-                f"flee_grace_ticks must be >= 0, got {self.flee_grace_ticks}"
-            )
-        if not isinstance(self.chase_search_ticks, int) or isinstance(
-            self.chase_search_ticks, bool
-        ):
-            raise MonsterTemplateValidationException(
-                "chase_search_ticks must be int"
-            )
+            raise MonsterTemplateValidationException(f"flee_grace_ticks must be >= 0, got {self.flee_grace_ticks}")
+        if not isinstance(self.chase_search_ticks, int) or isinstance(self.chase_search_ticks, bool):
+            raise MonsterTemplateValidationException("chase_search_ticks must be int")
         if self.chase_search_ticks < 0:
-            raise MonsterTemplateValidationException(
-                f"chase_search_ticks must be >= 0, got {self.chase_search_ticks}"
-            )
-        if not isinstance(self.chase_max_distance, int) or isinstance(
-            self.chase_max_distance, bool
-        ):
-            raise MonsterTemplateValidationException(
-                "chase_max_distance must be int"
-            )
+            raise MonsterTemplateValidationException(f"chase_search_ticks must be >= 0, got {self.chase_search_ticks}")
+        if not isinstance(self.chase_max_distance, int) or isinstance(self.chase_max_distance, bool):
+            raise MonsterTemplateValidationException("chase_max_distance must be int")
         if self.chase_max_distance < 0:
-            raise MonsterTemplateValidationException(
-                f"chase_max_distance must be >= 0, got {self.chase_max_distance}"
-            )
-        if not isinstance(self.chase_max_ticks, int) or isinstance(
-            self.chase_max_ticks, bool
-        ):
-            raise MonsterTemplateValidationException(
-                "chase_max_ticks must be int"
-            )
+            raise MonsterTemplateValidationException(f"chase_max_distance must be >= 0, got {self.chase_max_distance}")
+        if not isinstance(self.chase_max_ticks, int) or isinstance(self.chase_max_ticks, bool):
+            raise MonsterTemplateValidationException("chase_max_ticks must be int")
         if self.chase_max_ticks < 0:
-            raise MonsterTemplateValidationException(
-                f"chase_max_ticks must be >= 0, got {self.chase_max_ticks}"
-            )
+            raise MonsterTemplateValidationException(f"chase_max_ticks must be >= 0, got {self.chase_max_ticks}")
         if not isinstance(self.min_comfortable_temperature, TemperatureEnum):
             raise MonsterTemplateValidationException(
                 "min_comfortable_temperature must be TemperatureEnum, "
@@ -271,59 +232,47 @@ class MonsterTemplate:
                 "max_comfortable_temperature must be TemperatureEnum, "
                 f"got {type(self.max_comfortable_temperature).__name__}"
             )
-        if (
-            self.min_comfortable_temperature.severity
-            > self.max_comfortable_temperature.severity
-        ):
+        if self.min_comfortable_temperature.severity > self.max_comfortable_temperature.severity:
             raise MonsterTemplateValidationException(
                 f"min_comfortable_temperature ({self.min_comfortable_temperature}) "
                 f"must be <= max ({self.max_comfortable_temperature})"
             )
         if not isinstance(
-            self.temperature_discomfort_damage_per_tick, int,
+            self.temperature_discomfort_damage_per_tick,
+            int,
         ) or isinstance(self.temperature_discomfort_damage_per_tick, bool):
-            raise MonsterTemplateValidationException(
-                "temperature_discomfort_damage_per_tick must be int"
-            )
+            raise MonsterTemplateValidationException("temperature_discomfort_damage_per_tick must be int")
         if self.temperature_discomfort_damage_per_tick < 0:
             raise MonsterTemplateValidationException(
                 "temperature_discomfort_damage_per_tick must be >= 0, "
                 f"got {self.temperature_discomfort_damage_per_tick}"
             )
         if not isinstance(self.pack_help_radius, int) or isinstance(
-            self.pack_help_radius, bool,
+            self.pack_help_radius,
+            bool,
         ):
-            raise MonsterTemplateValidationException(
-                "pack_help_radius must be int"
-            )
+            raise MonsterTemplateValidationException("pack_help_radius must be int")
         if self.pack_help_radius < 0:
-            raise MonsterTemplateValidationException(
-                f"pack_help_radius must be >= 0, got {self.pack_help_radius}"
-            )
+            raise MonsterTemplateValidationException(f"pack_help_radius must be >= 0, got {self.pack_help_radius}")
         if not isinstance(self.max_pack_responders, int) or isinstance(
-            self.max_pack_responders, bool,
+            self.max_pack_responders,
+            bool,
         ):
-            raise MonsterTemplateValidationException(
-                "max_pack_responders must be int"
-            )
+            raise MonsterTemplateValidationException("max_pack_responders must be int")
         if self.max_pack_responders < 0:
             raise MonsterTemplateValidationException(
                 f"max_pack_responders must be >= 0, got {self.max_pack_responders}"
             )
         if not isinstance(self.pack_flee_follower, bool):
-            raise MonsterTemplateValidationException(
-                "pack_flee_follower must be bool"
-            )
+            raise MonsterTemplateValidationException("pack_flee_follower must be bool")
         if not isinstance(self.pack_flee_follower_duration, int) or isinstance(
-            self.pack_flee_follower_duration, bool,
+            self.pack_flee_follower_duration,
+            bool,
         ):
-            raise MonsterTemplateValidationException(
-                "pack_flee_follower_duration must be int"
-            )
+            raise MonsterTemplateValidationException("pack_flee_follower_duration must be int")
         if self.pack_flee_follower_duration < 0:
             raise MonsterTemplateValidationException(
-                "pack_flee_follower_duration must be >= 0, "
-                f"got {self.pack_flee_follower_duration}"
+                f"pack_flee_follower_duration must be >= 0, got {self.pack_flee_follower_duration}"
             )
         # 矛盾組み合わせチェック: follower=True で duration=0 は「機能を有効化
         # したのに効果ゼロ」で意図不明。シナリオ作成者の誤設定を弾く。
@@ -334,37 +283,30 @@ class MonsterTemplate:
                 f"指定する) but got duration={self.pack_flee_follower_duration}"
             )
         if not isinstance(self.pack_awareness_radius, int) or isinstance(
-            self.pack_awareness_radius, bool,
+            self.pack_awareness_radius,
+            bool,
         ):
-            raise MonsterTemplateValidationException(
-                "pack_awareness_radius must be int"
-            )
+            raise MonsterTemplateValidationException("pack_awareness_radius must be int")
         if self.pack_awareness_radius < 0:
             raise MonsterTemplateValidationException(
                 f"pack_awareness_radius must be >= 0, got {self.pack_awareness_radius}"
             )
 
         if self.vision_range < 0:
-            raise MonsterTemplateValidationException(
-                f"vision_range cannot be negative: {self.vision_range}"
-            )
+            raise MonsterTemplateValidationException(f"vision_range cannot be negative: {self.vision_range}")
         if not (0.0 <= self.flee_threshold <= 1.0):
             raise MonsterTemplateValidationException(
                 f"flee_threshold must be between 0.0 and 1.0: {self.flee_threshold}"
             )
         for i, t in enumerate(self.phase_thresholds):
             if not (0.0 <= t <= 1.0):
-                raise MonsterTemplateValidationException(
-                    f"phase_thresholds[{i}] must be between 0.0 and 1.0: {t}"
-                )
+                raise MonsterTemplateValidationException(f"phase_thresholds[{i}] must be between 0.0 and 1.0: {t}")
         if self.ambush_chase_range is not None and self.ambush_chase_range < 0:
             raise MonsterTemplateValidationException(
                 f"ambush_chase_range cannot be negative: {self.ambush_chase_range}"
             )
         if self.territory_radius is not None and self.territory_radius < 0:
-            raise MonsterTemplateValidationException(
-                f"territory_radius cannot be negative: {self.territory_radius}"
-            )
+            raise MonsterTemplateValidationException(f"territory_radius cannot be negative: {self.territory_radius}")
         if not isinstance(self.ecology_type, EcologyTypeEnum):
             raise MonsterTemplateValidationException(
                 f"ecology_type must be EcologyTypeEnum, got {type(self.ecology_type).__name__}"
@@ -408,13 +350,9 @@ class MonsterTemplate:
             if self.growth_stages:
                 sorted_ticks = [g.after_ticks for g in sorted(self.growth_stages, key=lambda x: x.after_ticks)]
                 if sorted_ticks != [g.after_ticks for g in self.growth_stages]:
-                    raise MonsterTemplateValidationException(
-                        "growth_stages must be ordered by after_ticks ascending"
-                    )
+                    raise MonsterTemplateValidationException("growth_stages must be ordered by after_ticks ascending")
                 if self.growth_stages[0].after_ticks != 0:
-                    raise MonsterTemplateValidationException(
-                        "first growth_stage must have after_ticks=0"
-                    )
+                    raise MonsterTemplateValidationException("first growth_stage must have after_ticks=0")
         if self.hunger_increase_per_tick < 0.0:
             raise MonsterTemplateValidationException(
                 f"hunger_increase_per_tick cannot be negative: {self.hunger_increase_per_tick}"
@@ -428,13 +366,9 @@ class MonsterTemplate:
                 f"hunger_starvation_threshold must be between 0.0 and 1.0: {self.hunger_starvation_threshold}"
             )
         if self.starvation_ticks < 0:
-            raise MonsterTemplateValidationException(
-                f"starvation_ticks cannot be negative: {self.starvation_ticks}"
-            )
+            raise MonsterTemplateValidationException(f"starvation_ticks cannot be negative: {self.starvation_ticks}")
         if self.max_age_ticks is not None and self.max_age_ticks < 0:
-            raise MonsterTemplateValidationException(
-                f"max_age_ticks cannot be negative: {self.max_age_ticks}"
-            )
+            raise MonsterTemplateValidationException(f"max_age_ticks cannot be negative: {self.max_age_ticks}")
         if not (0.0 <= self.forage_threshold <= 1.0):
             raise MonsterTemplateValidationException(
                 f"forage_threshold must be between 0.0 and 1.0: {self.forage_threshold}"
@@ -445,7 +379,8 @@ class MonsterTemplate:
             )
 
     def temperature_discomfort(
-        self, temperature: TemperatureEnum,
+        self,
+        temperature: TemperatureEnum,
     ) -> TemperatureDiscomfortKind | None:
         """指定温度が monster の comfort 範囲外なら不快タイプを返す。
 

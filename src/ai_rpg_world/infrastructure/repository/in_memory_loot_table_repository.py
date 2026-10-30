@@ -1,4 +1,3 @@
-
 from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootTableAggregate
 from ai_rpg_world.domain.item.repository.loot_table_repository import (
     LootTableRepository,

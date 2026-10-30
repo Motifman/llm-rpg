@@ -152,8 +152,7 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
         with self._inflight_lock:
             if self._is_shutdown:
                 _logger.warning(
-                    "ThreadPoolShortTermMemoryScheduler.submit called after "
-                    "shutdown; dropping task for player_id=%s",
+                    "ThreadPoolShortTermMemoryScheduler.submit called after shutdown; dropping task for player_id=%s",
                     player_id,
                 )
                 self._emit_drop(player_id, reason="shutdown", queue_size=0)
@@ -161,23 +160,19 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
             current = len(self._inflight)
             if current >= self._max_queue_size:
                 _logger.warning(
-                    "ThreadPoolShortTermMemoryScheduler: キュー満杯 (%d/%d)、"
-                    "新規 task を drop: player_id=%s",
+                    "ThreadPoolShortTermMemoryScheduler: キュー満杯 (%d/%d)、新規 task を drop: player_id=%s",
                     current,
                     self._max_queue_size,
                     player_id,
                 )
-                self._emit_drop(
-                    player_id, reason="queue_full", queue_size=current
-                )
+                self._emit_drop(player_id, reason="queue_full", queue_size=current)
                 return False
         # ロック外で executor.submit (デッドロック回避)
         try:
             future = self._executor.submit(self._worker, player_id, task)
         except RuntimeError:
             _logger.warning(
-                "ThreadPoolShortTermMemoryScheduler: executor already shutdown; "
-                "dropping task for player_id=%s",
+                "ThreadPoolShortTermMemoryScheduler: executor already shutdown; dropping task for player_id=%s",
                 player_id,
                 exc_info=True,
             )
@@ -217,8 +212,7 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
         except Exception as exc:
             latency_ms = int((time.monotonic() - start) * 1000)
             _logger.exception(
-                "ThreadPoolShortTermMemoryScheduler worker task failed for "
-                "player_id=%s (latency_ms=%d)",
+                "ThreadPoolShortTermMemoryScheduler worker task failed for player_id=%s (latency_ms=%d)",
                 player_id,
                 latency_ms,
             )

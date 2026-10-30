@@ -33,10 +33,6 @@ class TimeOfDay:
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.ratio < 1.0:
-            raise TimeOfDayValidationException(
-                f"TimeOfDay.ratio must be in [0.0, 1.0): {self.ratio}"
-            )
+            raise TimeOfDayValidationException(f"TimeOfDay.ratio must be in [0.0, 1.0): {self.ratio}")
         if not 0.0 <= self.ambient_light <= 1.0:
-            raise TimeOfDayValidationException(
-                f"TimeOfDay.ambient_light must be in [0.0, 1.0]: {self.ambient_light}"
-            )
+            raise TimeOfDayValidationException(f"TimeOfDay.ambient_light must be in [0.0, 1.0]: {self.ambient_light}")

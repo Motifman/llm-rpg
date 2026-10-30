@@ -25,19 +25,14 @@ class TestResolveItemSpecHelpers:
     """観測 structured 用の item_spec_id 解決ヘルパー。"""
 
     def test_resolve_returns_none_when_repository_none(self) -> None:
-        assert (
-            resolve_item_spec_id_value_for_instance(None, ItemInstanceId.create(1))
-            is None
-        )
+        assert resolve_item_spec_id_value_for_instance(None, ItemInstanceId.create(1)) is None
 
     def test_resolve_returns_spec_from_aggregate(self) -> None:
         repo = MagicMock()
         agg = MagicMock()
         agg.item_spec.item_spec_id.value = 42
         repo.find_by_id.return_value = agg
-        assert (
-            resolve_item_spec_id_value_for_instance(repo, ItemInstanceId.create(7)) == 42
-        )
+        assert resolve_item_spec_id_value_for_instance(repo, ItemInstanceId.create(7)) == 42
 
     def test_first_from_obtained_items(self) -> None:
         assert first_item_spec_id_value_from_obtained_items([]) is None
@@ -46,16 +41,8 @@ class TestResolveItemSpecHelpers:
 
     def test_bool_item_spec_id_skipped_then_next_used(self) -> None:
         """bool は int とみなさない（episodic cue と整合）。"""
-        assert (
-            first_item_spec_id_value_from_obtained_items([{"item_spec_id": True}])
-            is None
-        )
-        assert (
-            first_item_spec_id_value_from_obtained_items(
-                [{"item_spec_id": True}, {"item_spec_id": 12}]
-            )
-            == 12
-        )
+        assert first_item_spec_id_value_from_obtained_items([{"item_spec_id": True}]) is None
+        assert first_item_spec_id_value_from_obtained_items([{"item_spec_id": True}, {"item_spec_id": 12}]) == 12
 
 
 class TestObservationFormatterContextCreation:

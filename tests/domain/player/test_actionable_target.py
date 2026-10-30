@@ -66,10 +66,6 @@ def _check(**kwargs):
 class TestUniversalRules:
     """どの行為にも共通で効く決まり。"""
 
-    def test_a_valid_target_passes(self) -> None:
-        """条件を満たす相手は通る。"""
-        assert _check() is None
-
     def test_you_cannot_target_yourself(self) -> None:
         """自分自身は対象にできない。"""
         rejection = _check(target_player_id=1)
@@ -88,9 +84,7 @@ class TestUniversalRules:
         """倒れている本人は、他人に対して何もできない。"""
         assert _check(actor_status=_DOWNED).code == "ACTOR_IS_DOWN"
 
-    @pytest.mark.parametrize(
-        "outcome", [PlayerOutcomeEnum.DEAD, PlayerOutcomeEnum.EJECTED]
-    )
+    @pytest.mark.parametrize("outcome", [PlayerOutcomeEnum.DEAD, PlayerOutcomeEnum.EJECTED])
     def test_an_eliminated_target_is_rejected(self, outcome) -> None:
         """退場した相手は対象にできない。
 
@@ -101,45 +95,8 @@ class TestUniversalRules:
         assert _check(target_outcome=outcome).code == "TARGET_IS_ELIMINATED"
 
 
-class TestRequirementActive:
-    """立っている相手を要求する行為 (物を渡す・囁く)。"""
-
-    def test_a_downed_target_is_rejected(self) -> None:
-        """倒れている相手には渡せない。
-
-        give_item は転送サービス側に同じ判定を独自に持っている。ここに
-        集約して、行動が増えても書き直さなくてよい形にする。
-        """
-        rejection = _check(target_status=_DOWNED)
-
-        assert rejection is not None
-        assert rejection.code == "TARGET_IS_DOWN"
-
-    def test_a_standing_target_passes(self) -> None:
-        """立っている相手には渡せる。"""
-        assert _check(target_status=_STANDING) is None
-
-
 class TestRequirementIncapacitated:
     """倒れている相手を要求する行為 (手当て・漁る・通報)。"""
-
-    def test_a_standing_target_is_rejected(self) -> None:
-        """立っている相手は対象にならない。"""
-        rejection = _check(
-            requirement=TargetRequirement.INCAPACITATED, target_status=_STANDING
-        )
-
-        assert rejection is not None
-        assert rejection.code == "TARGET_IS_NOT_DOWN"
-
-    def test_a_downed_target_passes(self) -> None:
-        """倒れている相手には効く。"""
-        assert (
-            _check(
-                requirement=TargetRequirement.INCAPACITATED, target_status=_DOWNED
-            )
-            is None
-        )
 
     def test_an_eliminated_target_is_still_rejected(self) -> None:
         """倒れていても、退場が確定した相手には効かない。
@@ -160,17 +117,27 @@ class TestRequirementIncapacitated:
 class TestEveryRequirementIsHandled:
     """要求の種類を増やしたら、判定にも足すことを強制する。"""
 
-    def test_no_requirement_falls_through_silently(self) -> None:
-        """すべての要求が判定を通る。
+    @pytest.mark.parametrize("requirement", list(TargetRequirement))
+    @pytest.mark.parametrize("status", [_STANDING, _DOWNED], ids=["standing", "downed"])
+    def test_each_requirement_checks_both_target_states(self, requirement, status) -> None:
+        """各要求は、立位・昏倒それぞれを許可するか決まった理由で拒否する。"""
+        expected = {
+            (TargetRequirement.ACTIVE, False): None,
+            (TargetRequirement.ACTIVE, True): "TARGET_IS_DOWN",
+            (TargetRequirement.INCAPACITATED, False): "TARGET_IS_NOT_DOWN",
+            (TargetRequirement.INCAPACITATED, True): None,
+            (TargetRequirement.PRESENT, False): None,
+            (TargetRequirement.PRESENT, True): None,
+        }
 
-        分岐を書き忘れた要求が「常に通る」に落ちると、その行為だけ判定が
-        効かなくなる。**足りない側に倒れる**ので気付きにくい。
-        """
-        for requirement in TargetRequirement:
-            # 立っている相手・倒れている相手の双方で、例外なく結論が出る。
-            for status in (_STANDING, _DOWNED):
-                result = _check(requirement=requirement, target_status=status)
-                assert result is None or result.code, requirement
+        result = _check(requirement=requirement, target_status=status)
+
+        expected_code = expected[requirement, status.is_down]
+        if expected_code is None:
+            assert result is None
+        else:
+            assert result is not None
+            assert result.code == expected_code
 
     def test_a_rejection_always_carries_a_message(self) -> None:
         """拒否には必ず理由の文が付く。
@@ -187,69 +154,3 @@ class TestEveryRequirementIsHandled:
         ):
             rejection = _check(**kwargs)
             assert rejection is not None and rejection.message, kwargs
-
-
-class TestTendNoLongerRevivesTheConfirmedDead:
-    """死亡が確定した相手は蘇生できない。
-
-    **括り出しで実際に塞がった穴。** 旧 tend_to_player は `is_down` しか
-    見ていなかった。猶予が切れて DEAD が確定しても `is_down` は True のまま
-    なので、**死体を起こせた**。この関数の docstring 自身が「将来 PR」と
-    して触れていた。
-
-    普遍則に載せ替えたことで、行動側に何も書かずに塞がった。行動を 1 つ
-    足すたびに「死んだ相手をどう扱うか」を書き直さなくてよい、という
-    括り出しの目的がそのまま出た形。
-    """
-
-    def _executor_with(self, *, outcome):
-        from unittest.mock import MagicMock
-
-        from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (  # noqa: E501
-            SpotGraphToolExecutor,
-        )
-
-        actor = MagicMock(is_down=False, current_spot_id=1)
-        target = MagicMock(is_down=True, current_spot_id=1)
-        status_repo = MagicMock()
-        status_repo.find_by_id.side_effect = lambda pid: (
-            actor if int(pid) == 1 else target
-        )
-        runtime = MagicMock()
-        runtime._player_outcome_registry.get_outcome.return_value = outcome
-
-        services = MagicMock()
-        services.movement = MagicMock()
-        return SpotGraphToolExecutor(
-            spot_graph_world_services=services,
-            player_inventory_repository=MagicMock(),
-            item_repository=MagicMock(),
-            event_publisher=MagicMock(),
-            spot_graph_repository=MagicMock(),
-            player_status_repository=status_repo,
-            runtime=runtime,
-        )
-
-    def test_a_confirmed_dead_target_cannot_be_revived(self) -> None:
-        """DEAD が確定した相手は起こせない。"""
-        executor = self._executor_with(outcome=PlayerOutcomeEnum.DEAD)
-
-        result = executor._execute_tend_to_player_in_scope(
-            1, {"target_player_id": 2, "target_display_name": "セナ"}
-        )
-
-        assert result.success is False
-        assert "戻らない" in result.message
-
-    def test_a_merely_downed_target_can_still_be_revived(self) -> None:
-        """まだ猶予のある相手は今までどおり起こせる。
-
-        塞ぎすぎると蘇生そのものができなくなる。
-        """
-        executor = self._executor_with(outcome=PlayerOutcomeEnum.UNRESOLVED)
-
-        result = executor._execute_tend_to_player_in_scope(
-            1, {"target_player_id": 2, "target_display_name": "セナ"}
-        )
-
-        assert result.success is not False or "戻らない" not in result.message

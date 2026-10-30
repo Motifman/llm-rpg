@@ -4,6 +4,9 @@
 変換して並べる。Issue #526 段階 3 の検証で、PR #580 (slot 基盤) と
 PR #583 (PR-A: 希少資源化) の合算効果を実 LLM run で確認するために使う。
 
+想起の枠と受動想起 (`episodic_recall`) は #1631 で消したので、それより後の trace
+では指標はどれも 0 になる。消す前の run を比べるためのスクリプトである。
+
 # 指標
 
 | 指標 | 何を見るか |
@@ -76,11 +79,7 @@ def _summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
         p = d.get("payload", {})
         candidate_counts.append(int(p.get("candidate_count", 0)))
         chars_totals.append(int(p.get("recall_text_chars_total", 0)))
-        ids = frozenset(
-            c.get("episode_id")
-            for c in p.get("candidates", [])
-            if c.get("episode_id")
-        )
+        ids = frozenset(c.get("episode_id") for c in p.get("candidates", []) if c.get("episode_id"))
         candidate_id_sets.append(ids)
         slot = p.get("recall_slot")
         if isinstance(slot, dict):
@@ -123,27 +122,17 @@ def _summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "ticks_with_recall": len(events),
         "candidate_count_distribution": dict(Counter(candidate_counts)),
-        "candidate_count_mean": round(statistics.fmean(candidate_counts), 2)
-        if candidate_counts
-        else 0,
-        "recall_chars_mean": round(statistics.fmean(chars_totals), 1)
-        if chars_totals
-        else 0,
+        "candidate_count_mean": round(statistics.fmean(candidate_counts), 2) if candidate_counts else 0,
+        "recall_chars_mean": round(statistics.fmean(chars_totals), 1) if chars_totals else 0,
         "recall_chars_max": max(chars_totals) if chars_totals else 0,
         "max_consecutive_same_recall_set": max_consec,
-        "jaccard_avg_adjacent_ticks": round(statistics.fmean(jaccards), 3)
-        if jaccards
-        else None,
+        "jaccard_avg_adjacent_ticks": round(statistics.fmean(jaccards), 3) if jaccards else None,
         "slot_decisions_seen": slot_decisions_seen,
         "slot_retained_total": retained_total,
         "slot_inserted_total": inserted_total,
         "slot_evicted_total": evicted_total,
         "afterglow_decisions_seen": afterglow_decisions_seen,
-        "afterglow_size_mean": (
-            round(statistics.fmean(afterglow_sizes), 2)
-            if afterglow_sizes
-            else 0
-        ),
+        "afterglow_size_mean": (round(statistics.fmean(afterglow_sizes), 2) if afterglow_sizes else 0),
         "afterglow_size_max": max(afterglow_sizes) if afterglow_sizes else 0,
         "afterglow_slot_evicted_entries_total": afterglow_slot_evicted,
         "afterglow_weak_recall_entries_total": afterglow_weak_recall,
@@ -174,15 +163,9 @@ def _format_side_by_side(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="想起スロット ablation 比較 (任意個の run dir を並べる)"
-    )
-    parser.add_argument(
-        "--off", type=Path, help="slot OFF (baseline) の run dir"
-    )
-    parser.add_argument(
-        "--on", type=Path, help="slot ON (afterglow なし) の run dir"
-    )
+    parser = argparse.ArgumentParser(description="想起スロット ablation 比較 (任意個の run dir を並べる)")
+    parser.add_argument("--off", type=Path, help="slot OFF (baseline) の run dir")
+    parser.add_argument("--on", type=Path, help="slot ON (afterglow なし) の run dir")
     parser.add_argument(
         "--afterglow",
         type=Path,

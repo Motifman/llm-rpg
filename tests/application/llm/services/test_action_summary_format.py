@@ -4,6 +4,7 @@ from ai_rpg_world.application.llm.llm_argument_fingerprint import (
     build_argument_fingerprint,
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
+    ACTION_DISPLAY_PHRASE_KEY,
     ACTION_SUMMARY_FORMATTERS,
     ACTION_SUMMARY_HIDDEN_FIELDS,
     INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS,
@@ -14,8 +15,6 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     get_spot_graph_specs,
 )
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_MEMO_ADD,
-    TOOL_NAME_MEMO_DONE,
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -28,9 +27,6 @@ _FULL_ARGS = {
     "target_label": "OBJ1",
     "action_name": "inspect",
     "inner_thought": "何か手がかりがあるはずだ",
-    "intention": "祭壇の封印の手がかりを探す",
-    "expected_result": "祭壇から封印の手がかりが得られる",
-    "emotion_hint": "curiosity",
 }
 
 
@@ -39,11 +35,8 @@ def _all_declared_tool_names() -> set[str]:
     memory = {
         definition.name
         for definition, _ in get_memory_specs(
-            memo_enabled=True,
-            episodic_recall_enabled=True,
-            recall_by_handle_enabled=True,
-            episodic_explore_related_enabled=True,
-            semantic_search_enabled=True,
+            episode_recall_max_handles=3,
+            episode_index_revision_enabled=True,
         )
     }
     return spot | memory
@@ -64,7 +57,7 @@ class TestFormatActionSummaryForDisplay:
         assert natural & fallback == set()
 
     def test_natural_text_examples_for_high_volume_tools(self) -> None:
-        """speak / memo / spot action は JSON ではなく短い自然文になる。"""
+        """speak / spot action は JSON ではなく短い自然文になる。"""
         assert (
             format_action_summary_for_display(
                 TOOL_NAME_SPEECH,
@@ -73,22 +66,11 @@ class TestFormatActionSummaryForDisplay:
             == "あなたは言った: 「北へ行く」"
         )
         assert (
-            format_action_summary_for_display(TOOL_NAME_MEMO_ADD, {"content": "長い本文"})
-            == "メモを書いた"
-        )
-        assert (
-            format_action_summary_for_display(
-                TOOL_NAME_MEMO_DONE,
-                {"memo_ids": ["bb0aaa", "88cd0a", "bda741"]},
-            )
-            == "メモ 3 件を完了にした (bb0aaa, 88cd0a, bda741)"
-        )
-        assert (
             format_action_summary_for_display(
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
                 {"target_label": "流木の山", "action_name": "gather"},
             )
-            == "「流木の山」に gather した"
+            == "「流木の山」に働きかけた"
         )
         assert (
             format_action_summary_for_display(
@@ -104,25 +86,17 @@ class TestFormatActionSummaryForDisplay:
             )
             == "「貝」を使った"
         )
-        assert (
-            format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_LISTEN, {})
-            == "耳を澄ました"
-        )
-        assert (
-            format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_EXPLORE, {})
-            == "この場所を探索した"
-        )
+        assert format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_LISTEN, {}) == "耳を澄ました"
+        assert format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_EXPLORE, {}) == "この場所を探索した"
 
     def test_hidden_fields_include_inner_thought_and_duplicate_content(self) -> None:
-        """JSON フォールバックから心の声・発話本文・メモ本文・予測などの重複入力を落とす。"""
+        """JSON フォールバックから心の声・発話本文・メモ帳への書き込みなどの重複入力を落とす。"""
         assert ACTION_SUMMARY_HIDDEN_FIELDS == frozenset(
             {
                 "content",
                 "reason",
                 "inner_thought",
-                "intention",
-                "expected_result",
-                "emotion_hint",
+                "memo",
             }
         )
 
@@ -133,14 +107,12 @@ class TestFormatActionSummaryForDisplay:
             {
                 "content": "本文",
                 "inner_thought": "考え",
-                "expected_result": "予測",
                 "target_label": "周囲",
             },
         )
         assert out == 'look_around({"target_label": "周囲"}) を実行しました。'
         assert "content" not in out
         assert "inner_thought" not in out
-        assert "expected_result" not in out
 
     def test_no_args_returns_bare_summary(self) -> None:
         """args が空なら自然文 formatter は空入力向けの短文を返す。"""
@@ -155,7 +127,31 @@ class TestFormatActionSummaryForDisplay:
     def test_fingerprint_is_independent_of_display(self) -> None:
         """loop_guard 用 fingerprint は raw args から計算され、表示整形に影響されない。"""
         fp_full = build_argument_fingerprint(_FULL_ARGS)
-        fp_outcome_only = build_argument_fingerprint(
-            {"target_label": "OBJ1", "action_name": "inspect"}
-        )
+        fp_outcome_only = build_argument_fingerprint({"target_label": "OBJ1", "action_name": "inspect"})
         assert fp_full == fp_outcome_only
+
+
+class TestInteractSummaryUsesTheDisplayLabel:
+    """interact の行動の行が、resolver の運んだ表示名を action_name より優先することを保証する。"""
+
+    def test_display_phrase_replaces_the_action_name(self) -> None:
+        """resolver が対象名の後ろに続く句 (ACTION_DISPLAY_PHRASE_KEY) を運んでいれば「「対象」〈句〉」と書き、action_name を出さない。成功の行と同じ書き方にそろえる。"""
+        summary = format_action_summary_for_display(
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            {
+                "target_label": "昇降機",
+                "action_name": "start_lift",
+                ACTION_DISPLAY_PHRASE_KEY: "で鍵を差して昇降機を動かす",
+            },
+        )
+
+        assert summary == "「昇降機」で鍵を差して昇降機を動かす"
+
+    def test_without_display_phrase_the_action_name_is_not_written(self) -> None:
+        """表示名が届かない行 (候補に無い操作名で断られたときなど) も、操作名を書かず「「対象」に働きかけた」と書く (#1564)。操作名は呼び出しの値で、世界の言葉ではない。"""
+        summary = format_action_summary_for_display(
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            {"target_label": "カンテラ", "action_name": "light_lamp"},
+        )
+
+        assert summary == "「カンテラ」に働きかけた"

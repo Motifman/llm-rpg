@@ -41,7 +41,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -63,11 +62,15 @@ GRAPH_ID = SpotGraphId.create(1)
 def _node(spot_id_int: int) -> SpotNode:
     return SpotNode(
         spot_id=SpotId.create(spot_id_int),
-        name=f"spot{spot_id_int}", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
+        name=f"spot{spot_id_int}",
+        description="",
+        category=SpotCategoryEnum.OTHER,
+        parent_id=None,
         atmosphere=SpotAtmosphere(
-            lighting=LightingEnum.BRIGHT, sound_ambient=None,
-            temperature=TemperatureEnum.NORMAL, smell=None,
+            lighting=LightingEnum.BRIGHT,
+            sound_ambient=None,
+            temperature=TemperatureEnum.NORMAL,
+            smell=None,
         ),
     )
 
@@ -75,9 +78,13 @@ def _node(spot_id_int: int) -> SpotNode:
 def _conn(connection_id: int, from_id: int, to_id: int) -> SpotConnection:
     return SpotConnection(
         connection_id=ConnectionId.create(connection_id),
-        from_spot_id=SpotId.create(from_id), to_spot_id=SpotId.create(to_id),
-        name="edge", description="", travel_ticks=1,
-        is_bidirectional=False, passage=Passage.open(),
+        from_spot_id=SpotId.create(from_id),
+        to_spot_id=SpotId.create(to_id),
+        name="edge",
+        description="",
+        travel_ticks=1,
+        is_bidirectional=False,
+        passage=Passage.open(),
     )
 
 
@@ -102,8 +109,13 @@ def _template(
         template_id=MonsterTemplateId.create(1),
         name="Wolf",
         base_stats=BaseStats(
-            max_hp=20, max_mp=0, attack=4,
-            defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+            max_hp=20,
+            max_mp=0,
+            attack=4,
+            defense=0,
+            speed=1,
+            critical_rate=0.0,
+            evasion_rate=0.0,
         ),
         reward_info=RewardInfo(exp=1, gold=1),
         respawn_info=RespawnInfo(100, True),
@@ -122,10 +134,11 @@ def _monster(template: MonsterTemplate) -> MonsterAggregate:
     return MonsterAggregate(
         monster_id=MonsterId.create(101),
         template=template,
-        world_object_id=WorldObjectId.create(9001),
         skill_loadout=SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=101,
-            normal_capacity=4, awakened_capacity=2,
+            SkillLoadoutId(1),
+            owner_id=101,
+            normal_capacity=4,
+            awakened_capacity=2,
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
@@ -171,7 +184,8 @@ class TestChaseMaxDistance:
         monster = _monster(_template(chase_max_distance=1))
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,
@@ -184,7 +198,10 @@ class TestChaseMaxDistance:
         graph.place_entity(EntityId.create(player.player_id.value), SpotId.create(3))
 
         result = handler.try_react(
-            monster, graph, SpotId.create(1), WorldTick(10),
+            monster,
+            graph,
+            SpotId.create(1),
+            WorldTick(10),
         )
 
         assert result is None
@@ -199,7 +216,8 @@ class TestChaseMaxDistance:
         monster = _monster(_template(chase_max_distance=2))
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,
@@ -212,7 +230,10 @@ class TestChaseMaxDistance:
         graph.place_entity(EntityId.create(player.player_id.value), SpotId.create(3))
 
         result = handler.try_react(
-            monster, graph, SpotId.create(1), WorldTick(10),
+            monster,
+            graph,
+            SpotId.create(1),
+            WorldTick(10),
         )
 
         assert result is not None
@@ -227,7 +248,8 @@ class TestChaseMaxDistance:
         monster = _monster(_template(chase_max_distance=0))
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(9), attacker_ref=ref,
+            current_tick=WorldTick(9),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,
@@ -241,7 +263,10 @@ class TestChaseMaxDistance:
         graph.place_entity(EntityId.create(player.player_id.value), SpotId.create(6))
 
         result = handler.try_react(
-            monster, graph, SpotId.create(1), WorldTick(10),
+            monster,
+            graph,
+            SpotId.create(1),
+            WorldTick(10),
         )
 
         assert result is not None
@@ -262,7 +287,8 @@ class TestChaseMaxTicks:
         # last_attacked_tick は更新せず flee_grace_ticks には引っかからないよう。
         # その代わり grace_ticks=999 なので grace は事実上発動しない。
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(10), attacker_ref=ref,
+            current_tick=WorldTick(10),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,
@@ -276,7 +302,10 @@ class TestChaseMaxTicks:
 
         # chase_max_ticks=5、開始 tick=10、現 tick=16 → 経過 6 > 5
         result = handler.try_react(
-            monster, graph, SpotId.create(1), WorldTick(16),
+            monster,
+            graph,
+            SpotId.create(1),
+            WorldTick(16),
         )
 
         assert result is None
@@ -289,7 +318,8 @@ class TestChaseMaxTicks:
         monster = _monster(_template(chase_max_ticks=5))
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(10), attacker_ref=ref,
+            current_tick=WorldTick(10),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,
@@ -302,7 +332,10 @@ class TestChaseMaxTicks:
         graph.place_entity(EntityId.create(player.player_id.value), SpotId.create(2))
 
         result = handler.try_react(
-            monster, graph, SpotId.create(1), WorldTick(11),
+            monster,
+            graph,
+            SpotId.create(1),
+            WorldTick(11),
         )
 
         # 1 hop 追跡継続
@@ -318,7 +351,8 @@ class TestChaseMaxTicks:
         monster = _monster(_template(chase_max_ticks=5))
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(10), attacker_ref=ref,
+            current_tick=WorldTick(10),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,
@@ -331,7 +365,10 @@ class TestChaseMaxTicks:
         graph.place_entity(EntityId.create(player.player_id.value), SpotId.create(2))
 
         result = handler.try_react(
-            monster, graph, SpotId.create(1), WorldTick(15),
+            monster,
+            graph,
+            SpotId.create(1),
+            WorldTick(15),
         )
 
         assert result is not None
@@ -347,8 +384,13 @@ class TestChaseMaxTicks:
             template_id=MonsterTemplateId.create(1),
             name="Wolf",
             base_stats=BaseStats(
-                max_hp=20, max_mp=0, attack=4,
-                defense=0, speed=1, critical_rate=0.0, evasion_rate=0.0,
+                max_hp=20,
+                max_mp=0,
+                attack=4,
+                defense=0,
+                speed=1,
+                critical_rate=0.0,
+                evasion_rate=0.0,
             ),
             reward_info=RewardInfo(exp=1, gold=1),
             respawn_info=RespawnInfo(100, True),
@@ -364,7 +406,8 @@ class TestChaseMaxTicks:
         monster = _monster(template)
         ref = AttackerRef.of_player(PlayerId(7))
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(10), attacker_ref=ref,
+            current_tick=WorldTick(10),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,
@@ -380,7 +423,10 @@ class TestChaseMaxTicks:
 
         # max_ticks=4、開始 tick=10、現 tick=15 → 経過 5 > 4 で IDLE
         result = handler.try_react(
-            monster, graph, SpotId.create(1), WorldTick(15),
+            monster,
+            graph,
+            SpotId.create(1),
+            WorldTick(15),
         )
 
         assert result is None
@@ -393,7 +439,8 @@ class TestChaseMaxTicks:
         monster = _monster(_template(chase_max_ticks=0))
         ref = AttackerRef.of_player(player.player_id)
         monster.record_attacked_by_in_spot(
-            current_tick=WorldTick(10), attacker_ref=ref,
+            current_tick=WorldTick(10),
+            attacker_ref=ref,
         )
         monster.enter_chase_state(
             attacker_ref=ref,
@@ -407,7 +454,10 @@ class TestChaseMaxTicks:
 
         # 100 tick 経過しても追跡継続
         result = handler.try_react(
-            monster, graph, SpotId.create(1), WorldTick(110),
+            monster,
+            graph,
+            SpotId.create(1),
+            WorldTick(110),
         )
 
         assert result is not None

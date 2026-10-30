@@ -15,12 +15,14 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class ConsumableUsedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
     """消費可能アイテム使用イベント（効果適用用）。アプリ層で発行。aggregate_id が player_id。"""
+
     item_spec_id: ItemSpecId
 
 
 @dataclass(frozen=True)
 class ItemUsedEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
     """アイテム使用イベント"""
+
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
     remaining_quantity: int
@@ -30,6 +32,7 @@ class ItemUsedEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
 @dataclass(frozen=True)
 class ItemBrokenEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
     """アイテム破損イベント"""
+
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
 
@@ -37,6 +40,7 @@ class ItemBrokenEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
 @dataclass(frozen=True)
 class ItemRepairedEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
     """アイテム修理イベント"""
+
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
     new_durability: Durability | None
@@ -54,6 +58,7 @@ class ItemSpoiledEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
 @dataclass(frozen=True)
 class ItemCraftedEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
     """アイテム合成イベント"""
+
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
     quantity: int

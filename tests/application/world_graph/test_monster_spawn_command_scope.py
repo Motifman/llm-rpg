@@ -28,7 +28,6 @@ from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
@@ -82,7 +81,6 @@ def _slot(key: str, *, template_id: int = 1) -> MonsterSpawnSlot:
         slot_key=key,
         template=_template(template_id),
         spot_id=SPOT_ID,
-        coordinate=Coordinate(0, 0, 0),
         day_night_phase_names=(),
         required_flags=(),
         forbidden_flags=(),
@@ -127,7 +125,7 @@ def _build(slots: tuple[MonsterSpawnSlot, ...]) -> _Harness:
         spot_graph_repository=graph,
     )
     observed: list[tuple[str, int, int, tuple[str, ...]]] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def observe(event: BaseDomainEvent) -> None:
         observed.append(
@@ -155,9 +153,7 @@ def _build(slots: tuple[MonsterSpawnSlot, ...]) -> _Harness:
         ),
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
-        repository_provider_factory=(
-            InMemoryMonsterSpawnCommandRepositoryProviderFactory(spot_graph=graph)
-        ),
+        repository_provider_factory=(InMemoryMonsterSpawnCommandRepositoryProviderFactory(spot_graph=graph)),
     )
     stage.set_command_scope_factory(scope_factory)
     return _Harness(stage, store, monsters, loadouts, graph, observed)
@@ -173,13 +169,9 @@ def test_spawn_commits_all_resources_before_observation() -> None:
     loadouts = harness.loadouts.find_all()
     assert [monster.monster_id.value for monster in monsters] == [10_001]
     assert [loadout.loadout_id.value for loadout in loadouts] == [20_001]
-    assert tuple(harness.graph.find_graph().monster_spot_mapping()) == (
-        monsters[0].monster_id,
-    )
+    assert tuple(harness.graph.find_graph().monster_spot_mapping()) == (monsters[0].monster_id,)
     assert harness.stage.active_slot_keys() == ["wolf#0"]
-    assert harness.observed == [
-        ("MonsterAppearedAtSpotEvent", 1, 1, ("wolf#0",))
-    ]
+    assert harness.observed == [("MonsterAppearedAtSpotEvent", 1, 1, ("wolf#0",))]
 
 
 def test_spawn_failure_rolls_back_resources_events_and_identifiers() -> None:
@@ -208,12 +200,8 @@ def test_spawn_failure_rolls_back_resources_events_and_identifiers() -> None:
 
     harness.graph.save = original_save  # type: ignore[method-assign]
     harness.stage.run(WorldTick(2))
-    assert [monster.monster_id.value for monster in harness.monsters.find_all()] == [
-        10_001
-    ]
-    assert [loadout.loadout_id.value for loadout in harness.loadouts.find_all()] == [
-        20_001
-    ]
+    assert [monster.monster_id.value for monster in harness.monsters.find_all()] == [10_001]
+    assert [loadout.loadout_id.value for loadout in harness.loadouts.find_all()] == [20_001]
 
 
 def test_each_slot_commits_independently() -> None:
@@ -234,16 +222,10 @@ def test_each_slot_commits_independently() -> None:
     with pytest.raises(RuntimeError, match="second slot failed"):
         harness.stage.run(WorldTick(1))
 
-    assert [monster.monster_id.value for monster in harness.monsters.find_all()] == [
-        10_001
-    ]
-    assert [loadout.loadout_id.value for loadout in harness.loadouts.find_all()] == [
-        20_001
-    ]
+    assert [monster.monster_id.value for monster in harness.monsters.find_all()] == [10_001]
+    assert [loadout.loadout_id.value for loadout in harness.loadouts.find_all()] == [20_001]
     assert harness.stage.active_slot_keys() == ["wolf#0"]
-    assert [entry[0] for entry in harness.observed] == [
-        "MonsterAppearedAtSpotEvent"
-    ]
+    assert [entry[0] for entry in harness.observed] == ["MonsterAppearedAtSpotEvent"]
 
 
 def test_spawn_collects_only_events_created_by_its_slot() -> None:
@@ -256,9 +238,7 @@ def test_spawn_collects_only_events_created_by_its_slot() -> None:
 
     harness.stage.run(WorldTick(1))
 
-    assert [entry[0] for entry in harness.observed] == [
-        "MonsterAppearedAtSpotEvent"
-    ]
+    assert [entry[0] for entry in harness.observed] == ["MonsterAppearedAtSpotEvent"]
     assert tuple(harness.graph.find_graph().get_events()) == preexisting_events
 
 
@@ -270,16 +250,13 @@ def test_despawn_failure_restores_graph_slot_and_observation() -> None:
         slot_key=slot.slot_key,
         template=slot.template,
         spot_id=slot.spot_id,
-        coordinate=slot.coordinate,
         day_night_phase_names=(),
         required_flags=("enabled",),
         forbidden_flags=(),
         weather_type_names=(),
     )
     harness = _build((slot,))
-    harness.stage._flags_provider = lambda: (
-        frozenset({"enabled"}) if cell["enabled"] else frozenset()
-    )
+    harness.stage._flags_provider = lambda: frozenset({"enabled"}) if cell["enabled"] else frozenset()
     harness.stage.run(WorldTick(1))
     harness.observed.clear()
     original_save = harness.graph.save

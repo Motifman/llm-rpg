@@ -27,14 +27,9 @@ class WorldFlagPredicateContext:
     def __post_init__(self) -> None:
         if self.world_flags is not None and (
             not isinstance(self.world_flags, frozenset)
-            or any(
-                not isinstance(flag_name, str) or not flag_name
-                for flag_name in self.world_flags
-            )
+            or any(not isinstance(flag_name, str) or not flag_name for flag_name in self.world_flags)
         ):
-            raise PredicateContextValidationException(
-                "world_flags must be a frozenset of non-empty str or None"
-            )
+            raise PredicateContextValidationException("world_flags must be a frozenset of non-empty str or None")
 
 
 @dataclass(frozen=True)
@@ -44,12 +39,8 @@ class TickPredicateContext:
     current_tick: WorldTick | None
 
     def __post_init__(self) -> None:
-        if self.current_tick is not None and not isinstance(
-            self.current_tick, WorldTick
-        ):
-            raise PredicateContextValidationException(
-                "current_tick must be a WorldTick or None"
-            )
+        if self.current_tick is not None and not isinstance(self.current_tick, WorldTick):
+            raise PredicateContextValidationException("current_tick must be a WorldTick or None")
 
 
 @dataclass(frozen=True)
@@ -66,9 +57,7 @@ class EntityPlacementPredicateContext:
             not isinstance(entity_id, EntityId) or not isinstance(spot_id, SpotId)
             for entity_id, spot_id in locations.items()
         ):
-            raise PredicateContextValidationException(
-                "entity_locations must map EntityId to SpotId or be None"
-            )
+            raise PredicateContextValidationException("entity_locations must map EntityId to SpotId or be None")
         object.__setattr__(self, "entity_locations", MappingProxyType(dict(locations)))
 
 
@@ -84,9 +73,7 @@ class OwnedItemSpecsPredicateContext:
             not isinstance(item_spec_ids, frozenset)
             or any(not isinstance(item_spec_id, ItemSpecId) for item_spec_id in item_spec_ids)
         ):
-            raise PredicateContextValidationException(
-                "owned_item_spec_ids must be a frozenset of ItemSpecId or None"
-            )
+            raise PredicateContextValidationException("owned_item_spec_ids must be a frozenset of ItemSpecId or None")
 
 
 @dataclass(frozen=True)
@@ -122,12 +109,8 @@ class StateValuesPredicateContext:
         values = self.state_values
         if values is None:
             return
-        if not isinstance(values, Mapping) or any(
-            not isinstance(key, str) for key in values
-        ):
-            raise PredicateContextValidationException(
-                "state_values must map str keys or be None"
-            )
+        if not isinstance(values, Mapping) or any(not isinstance(key, str) for key in values):
+            raise PredicateContextValidationException("state_values must map str keys or be None")
         object.__setattr__(
             self,
             "state_values",
@@ -142,12 +125,8 @@ class WeatherTypePredicateContext:
     current_weather_type: WeatherTypeEnum | None
 
     def __post_init__(self) -> None:
-        if self.current_weather_type is not None and not isinstance(
-            self.current_weather_type, WeatherTypeEnum
-        ):
-            raise PredicateContextValidationException(
-                "current_weather_type must be a WeatherTypeEnum or None"
-            )
+        if self.current_weather_type is not None and not isinstance(self.current_weather_type, WeatherTypeEnum):
+            raise PredicateContextValidationException("current_weather_type must be a WeatherTypeEnum or None")
 
 
 PredicateContext = (

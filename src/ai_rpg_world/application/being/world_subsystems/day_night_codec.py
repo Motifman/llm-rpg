@@ -35,35 +35,24 @@ class DayNightSubsystemCodec(WorldSubsystemCodec):
         return SUBSYSTEM_KEY
 
     def capture(self, runtime: Any) -> dict[str, Any]:
-        stage = getattr(runtime, "_day_night_stage", None)
+        stage = runtime._day_night_stage
         if stage is None:
             return {"schema_version": SCHEMA_VERSION, "phase_name": None}
-        current = getattr(stage, "_current", None)
         return {
             "schema_version": SCHEMA_VERSION,
-            "phase_name": current.phase_name if current is not None else None,
+            "phase_name": stage._current.phase_name,
         }
 
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise ValueError(
-                f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported "
-                f"(expected {SCHEMA_VERSION})"
-            )
-        stage = getattr(runtime, "_day_night_stage", None)
+            raise ValueError(f"{SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected {SCHEMA_VERSION})")
+        stage = runtime._day_night_stage
         if stage is None:
             return
-        time_provider = getattr(runtime, "_time_provider", None)
-        if time_provider is None:
-            # tick provider なしでは再計算できない (= 異常構成)
-            return
         # tick から再導出 (= WorldTickSubsystemCodec が先に走っている前提)
-        current_tick = time_provider.get_current_tick()
-        cycle = getattr(stage, "_cycle", None)
-        if cycle is None:
-            return
-        stage._current = cycle.time_of_day_at(current_tick)
+        current_tick = runtime._time_provider.get_current_tick()
+        stage._current = stage._cycle.time_of_day_at(current_tick)
 
 
 __all__ = ["DayNightSubsystemCodec", "SUBSYSTEM_KEY", "SCHEMA_VERSION"]

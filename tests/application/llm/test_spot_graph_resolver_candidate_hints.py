@@ -197,10 +197,12 @@ def test_give_item_unknown_recipient_lists_valid_player_names_in_partial_failure
     result = resolver.resolve_args(
         TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
         {
-            "gives": [{
-                "item_label": "流木",
-                "target_player_label": "カイ",
-            }],
+            "gives": [
+                {
+                    "item_label": "流木",
+                    "target_player_label": "カイ",
+                }
+            ],
             "inner_thought": "",
         },
         context,

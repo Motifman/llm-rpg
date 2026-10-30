@@ -11,5 +11,5 @@ __all__ = [
     "PersonalTradeListingReadModelRepository",
     "TradeDetailReadModelRepository",
     "ItemTradeStatisticsReadModelRepository",
-    "TradeRepository"
+    "TradeRepository",
 ]

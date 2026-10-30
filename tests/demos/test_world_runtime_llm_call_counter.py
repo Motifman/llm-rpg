@@ -28,7 +28,6 @@ _SCENARIO_PATH = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.jso
 
 @pytest.fixture
 def runtime(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
     monkeypatch.setenv("SPOT_GRAPH_TICK_LOOP_ENABLED", "false")
     return create_world_runtime(_SCENARIO_PATH)
 
@@ -51,17 +50,16 @@ class TestLlmCallCounter:
     def test_column_bump_value_does_not_crash(self, runtime) -> None:
         """ThreadPoolExecutor で 4 worker × 250 bump = 1000 件。Lock 不在で
         ++int が race するパスを検知する。"""
-        N = 1000
-        WORKERS = 4
-        per_worker = N // WORKERS
-        with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+        call_count = 1000
+        workers = 4
+        per_worker = call_count // workers
+        with ThreadPoolExecutor(max_workers=workers) as ex:
             futures = [
-                ex.submit(lambda: [runtime.bump_llm_call_count() for _ in range(per_worker)])
-                for _ in range(WORKERS)
+                ex.submit(lambda: [runtime.bump_llm_call_count() for _ in range(per_worker)]) for _ in range(workers)
             ]
             for f in futures:
                 f.result()
-        assert runtime.pop_llm_call_count() == per_worker * WORKERS
+        assert runtime.pop_llm_call_count() == per_worker * workers
 
 
 class TestCountTravelingPlayers:

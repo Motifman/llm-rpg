@@ -30,9 +30,7 @@ class TestTheSummarySaysWhetherAToolCameBack:
 
     def test_reports_a_returned_tool_call(self, ping) -> None:
         """ツール呼び出しが返った応答は tool_called が真で、打ち切り理由も載る。"""
-        summary = ping._summarize(
-            _response(tool_calls=[object()], finish_reason="tool_calls"), 10
-        )
+        summary = ping._summarize(_response(tool_calls=[object()], finish_reason="tool_calls"), 10)
 
         assert summary["tool_called"] is True
         assert summary["finish_reason"] == "tool_calls"
@@ -49,10 +47,9 @@ class TestRepeatIsBounded:
     """直列の繰り返し回数に上限がある。"""
 
     @pytest.mark.parametrize("repeat", [0, 31])
-    def test_out_of_range_repeat_is_refused_before_any_call(
-        self, ping, monkeypatch, repeat: int
-    ) -> None:
+    def test_out_of_range_repeat_is_refused_before_any_call(self, ping, monkeypatch, repeat: int) -> None:
         """--repeat が 1〜30 の外なら、クライアントを作る前に終了コード 2 で止まる。"""
+
         def fail(*_args, **_kwargs):
             raise AssertionError("呼び出してはいけない")
 

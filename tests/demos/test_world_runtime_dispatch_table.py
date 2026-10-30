@@ -20,6 +20,8 @@ from tests.demos._world_runtime_helpers import (
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
@@ -32,9 +34,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
 )
 
 
@@ -53,8 +52,7 @@ class TestWorldRuntimeDispatchTable:
         state = _create_session(monkeypatch, tmp_path)
 
         assert (
-            state.llm_wiring._spot_graph_executor
-            ._tend_to_player_command_scope_factory
+            state.llm_wiring._spot_graph_executor._tend_to_player_command_scope_factory
             is state.runtime._tend_to_player_command_scope_factory
         )
 
@@ -65,14 +63,11 @@ class TestWorldRuntimeDispatchTable:
         state = _create_session(monkeypatch, tmp_path)
 
         assert (
-            state.llm_wiring._spot_graph_executor
-            ._prepare_action_command_scope_factory
+            state.llm_wiring._spot_graph_executor._prepare_action_command_scope_factory
             is state.runtime._prepare_action_command_scope_factory
         )
 
-    def test_dispatch_table_registers_all_required_tools(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_dispatch_table_registers_all_required_tools(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """必須 tool が dispatch table に揃っているか確認。
 
         PR 7 の refactor で誤って handler が落ちると、その tool は
@@ -92,14 +87,11 @@ class TestWorldRuntimeDispatchTable:
             TOOL_NAME_SPOT_GRAPH_LISTEN,
             TOOL_NAME_SPOT_GRAPH_WAIT,
             TOOL_NAME_SPEECH,
-            TOOL_NAME_TODO_ADD,
-            TOOL_NAME_TODO_LIST,
-            TOOL_NAME_TODO_COMPLETE,
+            TOOL_NAME_EPISODE_RECALL,
+            TOOL_NAME_EPISODE_REVISE_INDEX,
         }
         missing = required - set(handlers.keys())
-        assert not missing, (
-            f"dispatch table から必須 tool が欠落: {missing}"
-        )
+        assert not missing, f"dispatch table から必須 tool が欠落: {missing}"
 
     def test_consumable_effect_handler_runs_before_use_item_commit(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -115,25 +107,16 @@ class TestWorldRuntimeDispatchTable:
         state = _create_session(monkeypatch, tmp_path)
         publisher = state.runtime._speech_event_publisher
         assert publisher is not None, "pipeline_event_publisher が runtime に保存されていない"
-        # PipelineEventPublisher は InMemoryEventPublisher を委譲経由で保持しており、
-        # register_handler で登録された handler を _handlers に持つ。
-        # 直接 attribute は internal だが、テスト目的でアクセス。
-        from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
-        assert isinstance(publisher, PipelineEventPublisher)
         assert not any(
-            event_type is ConsumableUsedEvent
-            for event_type, _handler in publisher._side_handlers
+            registration.event_type is ConsumableUsedEvent for registration in publisher._dispatcher._after_commit
         )
         factory = state.runtime._use_item_command_scope_factory
         dispatcher = factory._sync_dispatcher
-        assert any(
-            registration.event_type is ConsumableUsedEvent
-            for registration in dispatcher._before_commit
-        ), "ConsumableUsedEventのcommit前必須handlerが登録されていない"
+        assert any(registration.event_type is ConsumableUsedEvent for registration in dispatcher._before_commit), (
+            "ConsumableUsedEventのcommit前必須handlerが登録されていない"
+        )
 
-    def test_dispatch_table_registers_344_wired_tools(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_dispatch_table_registers_344_wired_tools(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """#344 で配線した spot_graph_use_item / attack / give / pickup / drop
         が dispatch table に登録されていることを直接検証する。
 
@@ -155,9 +138,7 @@ class TestWorldRuntimeDispatchTable:
             f"_WorldLlmWiring._wire_missing_spot_graph_tools が動いていない可能性。"
         )
 
-    def test_unknown_tool_returns_unsupported(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_unknown_tool_returns_unsupported(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """未登録の tool 名は UNSUPPORTED_TOOL を返す。"""
         stub = StubLlmClient(
             tool_call_to_return={
@@ -173,9 +154,7 @@ class TestWorldRuntimeDispatchTable:
         assert result.error_code == "UNSUPPORTED_TOOL"
         assert "totally_made_up_tool" in result.message
 
-    def test_each_handler_returns_command_dto(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_each_handler_returns_command_dto(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """テーブルに登録された各 handler は callable で、LlmCommandResultDto を返す
         signature と整合することを smoke-check する (PR 7 refactor の構造保証)。"""
         state = _create_session(monkeypatch, tmp_path)
@@ -195,9 +174,7 @@ class TestWorldRuntimeScheduleTurnDoesNotTouchSelfRescheduleStreak:
     streak で打ち切られる。
     """
 
-    def test_schedule_turn_preserves_existing_streak(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_schedule_turn_preserves_existing_streak(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """既に streak が積まれているプレイヤーへの schedule_turn は
         streak に触らない (既存値を維持する)。"""
         state = _create_session(monkeypatch, tmp_path)
@@ -231,88 +208,3 @@ class TestWorldRuntimeScheduleTurnDoesNotTouchSelfRescheduleStreak:
         # PR-I: streak には登録しない。pending には乗る。
         assert pid.value not in trigger._self_reschedule_streak
         assert pid.value in trigger.pending_player_ids
-
-
-class TestReinterpretationAfterTurnTrigger:
-    """U3: ターン完了で reinterpretation coordinator.after_turn_completed を呼ぶ。"""
-
-    def test_calls_coordinator_after_turn_completed(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """_episodic_stack.reinterpretation_coordinator があれば player_id / being_id 付きで通知する。"""
-        from ai_rpg_world.application.being.acting_being import ActingBeing
-        from ai_rpg_world.domain.being.value_object.being_id import BeingId
-        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-        state = _create_session(monkeypatch, tmp_path)
-        trigger = state.llm_wiring.llm_turn_trigger
-        expected_being_id = BeingId("being_w1_p1")
-
-        class _CoordSpy:
-            def __init__(self):
-                self.calls: list[tuple[PlayerId, object]] = []
-
-            def after_turn_completed(self, player_id, being_id):
-                self.calls.append((player_id, being_id))
-
-        spy = _CoordSpy()
-        from types import SimpleNamespace
-
-        stack = getattr(trigger.wiring.runtime, "_episodic_stack", None)
-        if stack is None:
-            stack = SimpleNamespace()
-            trigger.wiring.runtime._episodic_stack = stack
-        stack.reinterpretation_coordinator = spy
-        trigger.wiring.runtime._acting_being_for = lambda player_id: ActingBeing(
-            player_id=player_id,
-            being_id=expected_being_id,
-        )
-
-        trigger._note_turn_for_reinterpretation(1)
-        assert len(spy.calls) == 1
-        called_player_id, called_being_id = spy.calls[0]
-        assert called_player_id == PlayerId(1)
-        assert called_being_id == expected_being_id
-
-    def test_skips_when_acting_being_unresolved(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """_acting_being_for が None なら coordinator を呼ばない。"""
-        state = _create_session(monkeypatch, tmp_path)
-        trigger = state.llm_wiring.llm_turn_trigger
-
-        class _CoordSpy:
-            def __init__(self):
-                self.calls = []
-
-            def after_turn_completed(self, player_id, being_id):
-                self.calls.append((player_id, being_id))
-
-        spy = _CoordSpy()
-        from types import SimpleNamespace
-
-        stack = getattr(trigger.wiring.runtime, "_episodic_stack", None)
-        if stack is None:
-            stack = SimpleNamespace()
-            trigger.wiring.runtime._episodic_stack = stack
-        stack.reinterpretation_coordinator = spy
-        trigger.wiring.runtime._acting_being_for = lambda player_id: None
-
-        trigger._note_turn_for_reinterpretation(1)
-        assert spy.calls == []
-
-    def test_coordinator_unwired_op(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """reinterpretation OFF (stack=None / coordinator=None) では何もしない・例外も出さない。"""
-        state = _create_session(monkeypatch, tmp_path)
-        trigger = state.llm_wiring.llm_turn_trigger
-        from types import SimpleNamespace
-
-        trigger.wiring.runtime._episodic_stack = None
-        trigger._note_turn_for_reinterpretation(1)  # 例外なく no-op
-
-        trigger.wiring.runtime._episodic_stack = SimpleNamespace(
-            reinterpretation_coordinator=None
-        )
-        trigger._note_turn_for_reinterpretation(1)  # 例外なく no-op

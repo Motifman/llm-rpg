@@ -98,9 +98,7 @@ class TestWhatFitsGoesInAndTheRestGoesToTheSink:
 
         assert _held(world, herb) == 3
 
-    def test_the_sink_is_left_alone_when_everything_fits(
-        self, world: Any, herb: int
-    ) -> None:
+    def test_the_sink_is_left_alone_when_everything_fits(self, world: Any, herb: int) -> None:
         """全部入るときは、行き先が呼ばれない (**正の対照**)。
 
         毎回呼んでいると、地面に落ちる観測が入らなかったときにも出てしまう。
@@ -169,8 +167,6 @@ class TestTheSinkCannotBeForgotten:
         経路を足した人が、書いた瞬間に「溢れをどうするか」を決めることに
         なる形を、署名そのもので守る。
         """
-        parameter = inspect.signature(grant_item_specs_to_inventory).parameters[
-            "overflow_sink"
-        ]
+        parameter = inspect.signature(grant_item_specs_to_inventory).parameters["overflow_sink"]
 
         assert parameter.default is inspect.Parameter.empty

@@ -30,9 +30,7 @@ from ai_rpg_world.application.llm.services.failure_helpers import (
 
 
 def _make_target(label: str, kind: str, display_name: str) -> ToolRuntimeTargetDto:
-    return ToolRuntimeTargetDto(
-        label=label, kind=kind, display_name=display_name
-    )
+    return ToolRuntimeTargetDto(label=label, kind=kind, display_name=display_name)
 
 
 class TestListTargetsOfKind:
@@ -156,9 +154,7 @@ class TestBuildSanitizedExceptionFailure:
         class _SensitiveError(Exception):
             pass
 
-        exc = _SensitiveError(
-            "/home/user/secret_path: API_KEY=sk-xxxxxxxx"
-        )
+        exc = _SensitiveError("/home/user/secret_path: API_KEY=sk-xxxxxxxx")
         with caplog.at_level(
             logging.ERROR,
             logger="ai_rpg_world.application.llm.services.failure_helpers",
@@ -177,9 +173,7 @@ class TestBuildSanitizedExceptionFailure:
         assert "API_KEY" not in dto.message
         assert "sk-xxxxxxxx" not in dto.message
         # サーバログには文脈が残る
-        assert any(
-            "tool=foo player=42" in r.message for r in caplog.records
-        )
+        assert any("tool=foo player=42" in r.message for r in caplog.records)
 
     def test_remediation_loaded_from_mapping(self) -> None:
         """error_code に応じた remediation が引かれる (SYSTEM_ERROR 既定)。"""

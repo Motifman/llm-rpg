@@ -21,9 +21,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class TestGameEndShortCircuit:
     """ゲーム終了状態なら LLM ターンを一切回さない。"""
 
-    def test_game_ended_run_scheduled_turns_return(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_game_ended_run_scheduled_turns_return(self, monkeypatch, tmp_path: Path) -> None:
         """check_game_end().is_ended=True なら pending を全消して即 return。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
@@ -52,9 +50,7 @@ class TestGameEndShortCircuit:
 
         trigger.run_scheduled_turns()
 
-        assert call_count["n"] == 0, (
-            "ゲーム終了後に LLM が呼ばれた (Fix 1a が動いていない)"
-        )
+        assert call_count["n"] == 0, "ゲーム終了後に LLM が呼ばれた (Fix 1a が動いていない)"
         # pending / turn_counts もクリアされている
         assert trigger.pending_player_ids == set()
 
@@ -62,9 +58,7 @@ class TestGameEndShortCircuit:
 class TestSkipDeadPlayerTurn:
     """死亡 / outcome 確定したプレイヤーの個別 LLM ターンを skip。"""
 
-    def test_outcome_resolved_player_llm(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_outcome_resolved_player_llm(self, monkeypatch, tmp_path: Path) -> None:
         """outcome resolved player の LLM ターンは 回らない。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
@@ -111,13 +105,10 @@ class TestSkipDeadPlayerTurn:
 
         # DEAD は skip されるので、呼び出しは other 1 人分
         assert len(called_pids) == len(all_players) - 1, (
-            f"DEAD player の turn が回ってしまった: {len(called_pids)} calls "
-            f"for {len(all_players)} players"
+            f"DEAD player の turn が回ってしまった: {len(called_pids)} calls for {len(all_players)} players"
         )
 
-    def test_can_player_act_helper_boundary(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_can_player_act_helper_boundary(self, monkeypatch, tmp_path: Path) -> None:
         """_can_player_act が outcome / is_down を正しく見る。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 

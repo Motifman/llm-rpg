@@ -20,9 +20,7 @@ def unique_attached_being(matches: Sequence[Being]) -> Being | None:
     if not matches:
         return None
     if len(matches) > 1:
-        raise BeingMultipleAttachmentException(
-            f"multiple Beings attached: {[b.being_id.value for b in matches]}"
-        )
+        raise BeingMultipleAttachmentException(f"multiple Beings attached: {[b.being_id.value for b in matches]}")
     return matches[0]
 
 

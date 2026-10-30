@@ -23,9 +23,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
-)
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _MORI = PlayerId(1)
 
 
@@ -96,17 +94,10 @@ def test_runtime_violation_is_traced_without_aborting_the_run(monkeypatch) -> No
     result = runtime.build_llm_context(_MORI)
 
     assert result.current_state_text
-    events = [
-        event
-        for event in recorder.events
-        if event[0] == TraceEventKind.PROMPT_ARGUMENT_CONTRACT_VIOLATION
-    ]
+    events = [event for event in recorder.events if event[0] == TraceEventKind.PROMPT_ARGUMENT_CONTRACT_VIOLATION]
     assert len(events) == 1
     assert events[0][2] == _MORI.value
-    assert any(
-        violation["value"] == "read_board"
-        for violation in events[0][3]["violations"]
-    )
+    assert any(violation["value"] == "read_board" for violation in events[0][3]["violations"])
 
 
 def test_a_dark_hidden_object_is_not_registered_as_a_target() -> None:
@@ -119,18 +110,14 @@ def test_a_dark_hidden_object_is_not_registered_as_a_target() -> None:
 
     assert context.dark_hidden_object_names
     hidden = set(context.dark_hidden_object_names)
-    assert hidden.isdisjoint(
-        target.display_name for target in context.targets.values()
-    )
+    assert hidden.isdisjoint(target.display_name for target in context.targets.values())
 
 
 def test_a_world_starting_in_darkness_passes_startup_validation(tmp_path: Path) -> None:
     """初期地点の暗所物体は候補に入らず、除外リストなしでも起動できる。"""
     scenario = json.loads(_SCENARIO.read_text(encoding="utf-8"))
     scenario["players"][0]["spawn_spot"] = "corridor"
-    next(spot for spot in scenario["spots"] if spot["id"] == "corridor")[
-        "atmosphere"
-    ]["lighting"] = "DARK"
+    next(spot for spot in scenario["spots"] if spot["id"] == "corridor")["atmosphere"]["lighting"] = "DARK"
     path = tmp_path / "station_drill_dark_start.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 

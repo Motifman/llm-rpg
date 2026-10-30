@@ -6,6 +6,7 @@ from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 @dataclass(frozen=True)
 class GlobalMarketFilterDto:
     """グローバル取引所フィルタDTO（ステータスフィルタなし）"""
+
     item_name: str | None = None
     item_types: list[str] | None = None
     rarities: list[str] | None = None
@@ -17,6 +18,7 @@ class GlobalMarketFilterDto:
 @dataclass(frozen=True)
 class GlobalMarketListingDto:
     """グローバル取引所出品DTO"""
+
     trade_id: int
     item_spec_id: int
     item_instance_id: int
@@ -35,5 +37,6 @@ class GlobalMarketListingDto:
 @dataclass(frozen=True)
 class GlobalMarketListDto:
     """グローバル取引所出品一覧DTO"""
+
     listings: list[GlobalMarketListingDto]
     next_cursor: str | None

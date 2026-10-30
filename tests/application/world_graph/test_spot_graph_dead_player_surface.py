@@ -73,9 +73,7 @@ def _build_builder_and_graph(
     node.is_outdoor = False
     graph.get_spot.return_value = node
     presence = MagicMock()
-    presence.present_entity_ids = frozenset(
-        {EntityId.create(ACTING_ID), EntityId.create(OTHER_ID)}
-    )
+    presence.present_entity_ids = frozenset({EntityId.create(ACTING_ID), EntityId.create(OTHER_ID)})
     graph.presence_at.return_value = presence
     mp = MagicMock()
     mp.present_monster_ids = frozenset()
@@ -151,11 +149,7 @@ class TestBuildSnapshotFallenBodyLocation:
 
         graph.get_entity_spot.return_value = SPOT_B
         at_entity_spot = builder.build_snapshot(ACTING_ID)
-        assert [
-            entry
-            for entry in at_entity_spot.nearby_entities
-            if entry.entity_id == OTHER_ID
-        ] == []
+        assert [entry for entry in at_entity_spot.nearby_entities if entry.entity_id == OTHER_ID] == []
 
     def test_body_record_marks_a_healthy_entity_as_down(self) -> None:
         """status が健康でも、身体記録があれば同席者行は is_down=True になる。"""
@@ -182,9 +176,7 @@ class TestBuildSnapshotPerceptionPlane:
             PlayerOutcomeRegistry,
         )
 
-        outcomes = PlayerOutcomeRegistry.new_for_players(
-            [PlayerId(ACTING_ID), PlayerId(OTHER_ID)]
-        )
+        outcomes = PlayerOutcomeRegistry.new_for_players([PlayerId(ACTING_ID), PlayerId(OTHER_ID)])
         outcomes.set_outcome(PlayerId(OTHER_ID), PlayerOutcomeEnum.DEAD)
         policy = PlayerPerceptionPolicy(
             outcome_registry=outcomes,
@@ -194,8 +186,4 @@ class TestBuildSnapshotPerceptionPlane:
 
         snap = builder.build_snapshot(ACTING_ID)
 
-        assert [
-            entry
-            for entry in snap.nearby_entities
-            if entry.entity_id == OTHER_ID
-        ] == []
+        assert [entry for entry in snap.nearby_entities if entry.entity_id == OTHER_ID] == []

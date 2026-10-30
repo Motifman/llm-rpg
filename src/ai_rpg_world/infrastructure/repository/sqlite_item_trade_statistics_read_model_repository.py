@@ -38,12 +38,8 @@ def _row_to_model(row: sqlite3.Row) -> ItemTradeStatisticsReadModel:
     )
 
 
-class SqliteItemTradeStatisticsReadModelRepository(
-    ItemTradeStatisticsReadModelRepository
-):
-    def __init__(
-        self, connection: sqlite3.Connection, *, _commits_after_write: bool
-    ) -> None:
+class SqliteItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadModelRepository):
+    def __init__(self, connection: sqlite3.Connection, *, _commits_after_write: bool) -> None:
         self._conn = connection
         self._commits_after_write = _commits_after_write
         if connection.row_factory is not sqlite3.Row:
@@ -51,38 +47,24 @@ class SqliteItemTradeStatisticsReadModelRepository(
         init_item_trade_statistics_read_model_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteItemTradeStatisticsReadModelRepository:
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteItemTradeStatisticsReadModelRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(
-        cls, connection: sqlite3.Connection
-    ) -> SqliteItemTradeStatisticsReadModelRepository:
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteItemTradeStatisticsReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
-    def find_by_id(
-        self, entity_id: ItemSpecId
-    ) -> ItemTradeStatisticsReadModel | None:
+    def find_by_id(self, entity_id: ItemSpecId) -> ItemTradeStatisticsReadModel | None:
         row = self._conn.execute(
             "SELECT * FROM item_trade_statistics_read_models WHERE item_spec_id = ?",
             (int(entity_id),),
         ).fetchone()
         return None if row is None else _row_to_model(row)
 
-    def find_by_ids(
-        self, entity_ids: list[ItemSpecId]
-    ) -> list[ItemTradeStatisticsReadModel]:
-        return [
-            model
-            for entity_id in entity_ids
-            if (model := self.find_by_id(entity_id)) is not None
-        ]
+    def find_by_ids(self, entity_ids: list[ItemSpecId]) -> list[ItemTradeStatisticsReadModel]:
+        return [model for entity_id in entity_ids if (model := self.find_by_id(entity_id)) is not None]
 
-    def save(
-        self, entity: ItemTradeStatisticsReadModel
-    ) -> ItemTradeStatisticsReadModel:
+    def save(self, entity: ItemTradeStatisticsReadModel) -> ItemTradeStatisticsReadModel:
         self._conn.execute(
             """
             INSERT INTO item_trade_statistics_read_models (
@@ -131,7 +113,5 @@ class SqliteItemTradeStatisticsReadModelRepository(
         ).fetchall()
         return [_row_to_model(row) for row in rows]
 
-    def find_statistics(
-        self, item_spec_id: ItemSpecId
-    ) -> ItemTradeStatisticsReadModel | None:
+    def find_statistics(self, item_spec_id: ItemSpecId) -> ItemTradeStatisticsReadModel | None:
         return self.find_by_id(item_spec_id)

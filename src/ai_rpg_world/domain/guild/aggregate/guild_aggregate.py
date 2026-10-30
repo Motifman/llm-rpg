@@ -49,6 +49,10 @@ class GuildAggregate(AggregateRoot):
     def spot_id(self) -> SpotId:
         return self._spot_id
 
+    def is_at_spot(self, spot_id: SpotId | None) -> bool:
+        """指定スポットがギルドの所在地かを判定する。未配置は所在地ではない。"""
+        return self._spot_id == spot_id
+
     @property
     def location_area_id(self) -> LocationAreaId:
         return self._location_area_id
@@ -111,14 +115,10 @@ class GuildAggregate(AggregateRoot):
     ) -> None:
         """メンバーを追加する（招待）。招待者はオフィサー以上である必要がある。"""
         if self.is_member(new_player_id):
-            raise AlreadyGuildMemberException(
-                f"Player {new_player_id} is already a member of guild {self.guild_id}"
-            )
+            raise AlreadyGuildMemberException(f"Player {new_player_id} is already a member of guild {self.guild_id}")
         inviter = self._members.get(inviter_player_id)
         if inviter is None:
-            raise NotGuildMemberException(
-                f"Inviter {inviter_player_id} is not a member of guild {self.guild_id}"
-            )
+            raise NotGuildMemberException(f"Inviter {inviter_player_id} is not a member of guild {self.guild_id}")
         if not inviter.can_invite_member():
             raise InsufficientGuildPermissionException(
                 f"Player {inviter_player_id} cannot invite members (role={inviter.role})"
@@ -140,11 +140,7 @@ class GuildAggregate(AggregateRoot):
 
     def _assign_successor_leader(self, leaving_player_id: PlayerId) -> None:
         """リーダー脱退時に後継リーダーを任命する。貢献度は未実装のため joined_at が最も古いオフィサー、いなければ最も古いメンバーを昇格させる。"""
-        candidates = [
-            (pid, m)
-            for pid, m in self._members.items()
-            if pid != leaving_player_id
-        ]
+        candidates = [(pid, m) for pid, m in self._members.items() if pid != leaving_player_id]
         if not candidates:
             return
         # オフィサーを joined_at 昇順、次にメンバーを joined_at 昇順で並べ、先頭をリーダーに
@@ -177,9 +173,7 @@ class GuildAggregate(AggregateRoot):
         """ギルドから脱退する。リーダー脱退時は joined_at が最も古いオフィサー（いなければメンバー）を後継リーダーに任命する。"""
         membership = self._members.get(player_id)
         if membership is None:
-            raise CannotLeaveGuildException(
-                f"Player {player_id} is not a member of guild {self.guild_id}"
-            )
+            raise CannotLeaveGuildException(f"Player {player_id} is not a member of guild {self.guild_id}")
         if membership.role == GuildRole.LEADER and len(self._members) > 1:
             self._assign_successor_leader(player_id)
         del self._members[player_id]
@@ -195,13 +189,9 @@ class GuildAggregate(AggregateRoot):
         """ギルドを解散する。リーダーのみ実行可能。権限チェックはアプリ層でも行う。"""
         membership = self._members.get(disbanded_by)
         if membership is None:
-            raise NotGuildMemberException(
-                f"Player {disbanded_by} is not a member of guild {self.guild_id}"
-            )
+            raise NotGuildMemberException(f"Player {disbanded_by} is not a member of guild {self.guild_id}")
         if membership.role != GuildRole.LEADER:
-            raise CannotDisbandGuildException(
-                "Only the guild leader can disband the guild"
-            )
+            raise CannotDisbandGuildException("Only the guild leader can disband the guild")
         self.add_event(
             GuildDisbandedEvent.create(
                 aggregate_id=self.guild_id,
@@ -219,25 +209,19 @@ class GuildAggregate(AggregateRoot):
         """役職を変更する。変更者はオフィサー以上である必要がある。"""
         changer = self._members.get(changer_player_id)
         if changer is None:
-            raise NotGuildMemberException(
-                f"Changer {changer_player_id} is not a member of guild {self.guild_id}"
-            )
+            raise NotGuildMemberException(f"Changer {changer_player_id} is not a member of guild {self.guild_id}")
         if not changer.can_change_role():
             raise InsufficientGuildPermissionException(
                 f"Player {changer_player_id} cannot change roles (role={changer.role})"
             )
         target = self._members.get(target_player_id)
         if target is None:
-            raise NotGuildMemberException(
-                f"Target {target_player_id} is not a member of guild {self.guild_id}"
-            )
+            raise NotGuildMemberException(f"Target {target_player_id} is not a member of guild {self.guild_id}")
         if target.role == new_role:
             return
         # リーダーは自分を降格できない（別のリーダーを任命してから脱退する）
         if target_player_id == changer_player_id and target.role == GuildRole.LEADER:
-            raise CannotChangeRoleException(
-                "Leader cannot demote themselves. Appoint another leader first."
-            )
+            raise CannotChangeRoleException("Leader cannot demote themselves. Appoint another leader first.")
         old_role = target.role
         new_membership = GuildMembership(
             player_id=target_player_id,

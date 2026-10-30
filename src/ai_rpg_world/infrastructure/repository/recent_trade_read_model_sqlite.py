@@ -42,9 +42,7 @@ def _migration_v1(conn: sqlite3.Connection) -> None:
     )
 
 
-_RECENT_TRADE_MIGRATIONS = (
-    SqliteMigration(version=1, apply=_migration_v1),
-)
+_RECENT_TRADE_MIGRATIONS = (SqliteMigration(version=1, apply=_migration_v1),)
 
 
 def init_recent_trade_read_model_schema(conn: sqlite3.Connection) -> None:

@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any
 
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
@@ -13,7 +13,6 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldPaidEvent,
     PlayerHpHealedEvent,
     PlayerLevelUpEvent,
-    PlayerLocationChangedEvent,
     PlayerMpConsumedEvent,
     PlayerMpHealedEvent,
     PlayerRevivedEvent,
@@ -21,21 +20,16 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerStaminaHealedEvent,
 )
 from ai_rpg_world.domain.player.exception import (
-    CannotSwitchPursuitTargetException,
     InsufficientGoldException,
     InsufficientHpException,
     InsufficientMpException,
     InsufficientStaminaException,
-    NoActivePursuitException,
     PlayerDownedException,
     PlayerNotDownedException,
-    PursuitLastKnownMismatchException,
-    PursuitStateRequiredException,
-    PursuitTargetMismatchException,
     SpeechValidationException,
     SpotNavigationStateInvalidException,
 )
-from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
+from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
@@ -48,35 +42,12 @@ from ai_rpg_world.domain.player.value_object.needs_decay_tick import (
     NeedsDecayTickResult,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
-)
-from ai_rpg_world.domain.player.value_object.player_pursuit_state import (
-    PlayerPursuitState,
-)
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
     PlayerSpotNavigationState,
 )
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
-from ai_rpg_world.domain.pursuit.event.pursuit_events import (
-    PursuitCancelledEvent,
-    PursuitFailedEvent,
-    PursuitStartedEvent,
-    PursuitUpdatedEvent,
-)
-from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
-    PursuitLastKnownState,
-)
-from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
-from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
-    PursuitTargetSnapshot,
-)
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 
 # Phase 4-D-2: player.state に格納可能な値型は JSON プリミティブのみ。
@@ -93,9 +64,7 @@ def _validate_player_state_dict(state: Mapping[str, Any]) -> None:
 
     for key, value in state.items():
         if not isinstance(key, str):
-            raise PlayerStateValidationException(
-                f"player state key must be str, got {type(key).__name__}: {key!r}"
-            )
+            raise PlayerStateValidationException(f"player state key must be str, got {type(key).__name__}: {key!r}")
         if not isinstance(value, _ALLOWED_PLAYER_STATE_VALUE_TYPES):
             raise PlayerStateValidationException(
                 f"player state[{key!r}] value type {type(value).__name__} is not "
@@ -117,11 +86,10 @@ class PlayerStatusAggregate(AggregateRoot):
         hp: Hp,
         mp: Mp,
         stamina: Stamina,
-        navigation_state: PlayerNavigationState | None = None,
+        current_spot_id: SpotId | None = None,
         is_down: bool = False,
         active_effects: list[StatusEffect] | None = None,
         attention_level: AttentionLevel | None = None,
-        pursuit_state: PlayerPursuitState | None = None,
         spot_navigation_state: PlayerSpotNavigationState | None = None,
         needs: AgentNeeds | None = None,
         state: Mapping[str, Any] | None = None,
@@ -136,15 +104,10 @@ class PlayerStatusAggregate(AggregateRoot):
         self._hp = hp
         self._mp = mp
         self._stamina = stamina
-        self._navigation_state = (
-            navigation_state if navigation_state is not None else PlayerNavigationState.empty()
-        )
+        self._current_spot_id = current_spot_id
         self._is_down = is_down
         self._active_effects = active_effects or []
         self._attention_level = attention_level if attention_level is not None else AttentionLevel.FULL
-        self._pursuit_state = (
-            pursuit_state if pursuit_state is not None else PlayerPursuitState.empty()
-        )
         self._spot_navigation_state = spot_navigation_state
         self._needs = needs if needs is not None else AgentNeeds.default()
         # PR-T: 「前回 turn の need 値」を保持する snapshot。初期は空 dict で、
@@ -268,10 +231,7 @@ class PlayerStatusAggregate(AggregateRoot):
                 changed = True
         if tick.fatigue_critical_damage_per_tick > 0:
             fatigue = self.needs.get(NeedType.FATIGUE)
-            if (
-                fatigue is not None
-                and fatigue.value >= tick.fatigue_critical_threshold
-            ):
+            if fatigue is not None and fatigue.value >= tick.fatigue_critical_threshold:
                 self.apply_damage(tick.fatigue_critical_damage_per_tick)
                 changed = True
         return NeedsDecayTickResult(changed=changed)
@@ -354,85 +314,12 @@ class PlayerStatusAggregate(AggregateRoot):
     @property
     def current_spot_id(self) -> SpotId | None:
         """現在のスポットID"""
-        return self._navigation_state.current_spot_id
-
-    @property
-    def current_coordinate(self) -> Coordinate | None:
-        """現在の座標"""
-        return self._navigation_state.current_coordinate
-
-    @property
-    def current_destination(self) -> Coordinate | None:
-        """現在の目的地座標（同じスポット内）"""
-        return self._navigation_state.current_destination
-
-    @property
-    def planned_path(self) -> list[Coordinate]:
-        """計画された経路"""
-        return self._navigation_state.planned_path_as_list()
-
-    @property
-    def goal_destination_type(self) -> Literal["spot", "location", "object"] | None:
-        """目的地の種別（spot=スポット到着で完了、location=ロケーション内到着で完了、object=オブジェクト隣接で完了）"""
-        return self._navigation_state.goal_destination_type
-
-    @property
-    def goal_spot_id(self) -> SpotId | None:
-        """目標スポットID"""
-        return self._navigation_state.goal_spot_id
-
-    @property
-    def goal_location_area_id(self) -> LocationAreaId | None:
-        """目標ロケーションエリアID（destination_type が location のときのみ）"""
-        return self._navigation_state.goal_location_area_id
-
-    @property
-    def goal_world_object_id(self) -> WorldObjectId | None:
-        """目標ワールドオブジェクトID（destination_type が object のときのみ）"""
-        return self._navigation_state.goal_world_object_id
-
-    @property
-    def pursuit_state(self) -> PursuitState | None:
-        """静的移動と独立した追跡状態。"""
-        return self._pursuit_state.pursuit
+        return self._current_spot_id
 
     @property
     def spot_navigation_state(self) -> PlayerSpotNavigationState | None:
         """スポットグラフ上の移動状態（未使用のワールドでは None）。"""
         return self._spot_navigation_state
-
-    @property
-    def has_active_pursuit(self) -> bool:
-        """追跡中かどうか。"""
-        return self._pursuit_state.has_active_pursuit
-
-    @property
-    def actor_world_object_id(self) -> WorldObjectId:
-        """追跡イベントで使うプレイヤーのアクターID。"""
-        return WorldObjectId.create(int(self._player_id))
-
-    def set_destination(
-        self,
-        destination: Coordinate,
-        path: list[Coordinate],
-        goal_destination_type: Literal["spot", "location", "object"] | None = None,
-        goal_spot_id: SpotId | None = None,
-        goal_location_area_id: LocationAreaId | None = None,
-        goal_world_object_id: WorldObjectId | None = None,
-    ) -> None:
-        """目的地と経路、および到着判定用の目標情報を設定する"""
-        self._navigation_state = self._navigation_state.with_destination_set(
-            destination=destination,
-            path=path,
-            goal_destination_type=goal_destination_type,
-            goal_spot_id=goal_spot_id,
-            goal_location_area_id=goal_location_area_id,
-            goal_world_object_id=goal_world_object_id,
-        )
-
-    def clear_path(self) -> None:
-        """経路と目標情報をクリアする"""
-        self._navigation_state = self._navigation_state.cleared()
 
     def set_spot_navigation_state(self, state: PlayerSpotNavigationState | None) -> None:
         """スポットグラフ用の移動状態を設定する（None で未使用に戻す）。"""
@@ -448,204 +335,6 @@ class PlayerStatusAggregate(AggregateRoot):
         if self._spot_navigation_state is None:
             raise SpotNavigationStateInvalidException("スポットグラフ上の位置が未初期化です")
         self._spot_navigation_state = self._spot_navigation_state.with_sub_location(sub_location_id)
-
-    def start_pursuit(
-        self,
-        target_snapshot: PursuitTargetSnapshot,
-        last_known: PursuitLastKnownState | None = None,
-    ) -> PursuitState:
-        """追跡を開始し、開始イベントを発行する。"""
-        target_id = target_snapshot.target_id
-        if self._pursuit_state.has_active_pursuit and self._pursuit_state.target_id != target_id:
-            raise CannotSwitchPursuitTargetException(
-                "追跡対象を切り替えるには、先に現在の追跡を終了してください。",
-            )
-
-        resolved_last_known = self._coerce_last_known(target_id, target_snapshot, last_known)
-        self._pursuit_state = self._pursuit_state.with_started(
-            actor_id=self.actor_world_object_id,
-            target_id=target_id,
-            target_snapshot=target_snapshot,
-            last_known=resolved_last_known,
-        )
-        self.add_event(
-            PursuitStartedEvent.create(
-                aggregate_id=self.actor_world_object_id,
-                aggregate_type="PlayerStatusAggregate",
-                actor_id=self.actor_world_object_id,
-                target_id=target_id,
-                target_snapshot=target_snapshot,
-                last_known=resolved_last_known,
-            )
-        )
-        started = self._pursuit_state.pursuit
-        if started is None:
-            raise NoActivePursuitException("追跡の開始に失敗しました。")
-        return started
-
-    def update_pursuit(
-        self,
-        target_snapshot: PursuitTargetSnapshot | None = None,
-        last_known: PursuitLastKnownState | None = None,
-    ) -> bool:
-        """意味のある変化があるときだけ追跡状態を更新する。"""
-        if not self._pursuit_state.has_active_pursuit:
-            raise NoActivePursuitException(
-                "追跡中でない状態では追跡の更新はできません。",
-            )
-
-        current_state = self._pursuit_state
-        target_id = current_state.target_id
-        if target_id is None:
-            raise NoActivePursuitException("追跡中でない状態では追跡の更新はできません。")
-        if target_snapshot is not None and target_snapshot.target_id != target_id:
-            raise PursuitTargetMismatchException(
-                "追跡更新時の target_snapshot の target_id が現行の追跡対象と一致しません。",
-            )
-
-        next_last_known = self._coerce_last_known(
-            target_id,
-            target_snapshot if target_snapshot is not None else current_state.target_snapshot,
-            last_known or current_state.last_known,
-        )
-        next_state = self._pursuit_state.with_updated(
-            target_snapshot=target_snapshot,
-            last_known=next_last_known,
-        )
-        if next_state == current_state:
-            return False
-
-        self._pursuit_state = next_state
-        self.add_event(
-            PursuitUpdatedEvent.create(
-                aggregate_id=self.actor_world_object_id,
-                aggregate_type="PlayerStatusAggregate",
-                actor_id=self.actor_world_object_id,
-                target_id=target_id,
-                target_snapshot=next_state.target_snapshot,
-                last_known=next_last_known,
-            )
-        )
-        return True
-
-    def fail_pursuit(
-        self,
-        reason: PursuitFailureReason,
-        last_known: PursuitLastKnownState | None = None,
-        target_snapshot: PursuitTargetSnapshot | None = None,
-    ) -> None:
-        """追跡を失敗で終了し、失敗イベントを発行する。"""
-        if not self._pursuit_state.has_active_pursuit:
-            raise NoActivePursuitException(
-                "追跡中でない状態では追跡の失敗処理はできません。",
-            )
-
-        current_state = self._pursuit_state
-        current_target_id = current_state.target_id
-        if current_target_id is None:
-            raise NoActivePursuitException("追跡中でない状態では追跡の失敗処理はできません。")
-        next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
-        next_last_known = self._coerce_last_known(
-            current_target_id, next_snapshot, last_known or current_state.last_known
-        )
-        self.add_event(
-            PursuitFailedEvent.create(
-                aggregate_id=self.actor_world_object_id,
-                aggregate_type="PlayerStatusAggregate",
-                actor_id=self.actor_world_object_id,
-                target_id=current_state.target_id,
-                failure_reason=reason,
-                last_known=next_last_known,
-                target_snapshot=next_snapshot,
-            )
-        )
-        self._pursuit_state = self._pursuit_state.cleared()
-
-    def cancel_pursuit(
-        self,
-        last_known: PursuitLastKnownState | None = None,
-        target_snapshot: PursuitTargetSnapshot | None = None,
-    ) -> None:
-        """追跡を明示的に中断し、中断イベントを発行する。"""
-        if not self._pursuit_state.has_active_pursuit:
-            raise NoActivePursuitException(
-                "追跡中でない状態では追跡の中断はできません。",
-            )
-
-        current_state = self._pursuit_state
-        current_target_id = current_state.target_id
-        if current_target_id is None:
-            raise NoActivePursuitException("追跡中でない状態では追跡の失敗処理はできません。")
-        next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
-        next_last_known = self._coerce_last_known(
-            current_target_id, next_snapshot, last_known or current_state.last_known
-        )
-        self.add_event(
-            PursuitCancelledEvent.create(
-                aggregate_id=self.actor_world_object_id,
-                aggregate_type="PlayerStatusAggregate",
-                actor_id=self.actor_world_object_id,
-                target_id=current_state.target_id,
-                last_known=next_last_known,
-                target_snapshot=next_snapshot,
-            )
-        )
-        self._pursuit_state = self._pursuit_state.cleared()
-
-    def _coerce_last_known(
-        self,
-        target_id: WorldObjectId,
-        target_snapshot: PursuitTargetSnapshot | None,
-        last_known: PursuitLastKnownState | None,
-    ) -> PursuitLastKnownState:
-        if last_known is not None:
-            if last_known.target_id != target_id:
-                raise PursuitLastKnownMismatchException(
-                    "last_known の target_id は追跡対象と一致している必要があります。",
-                )
-            return last_known
-        if target_snapshot is None:
-            raise PursuitStateRequiredException(
-                "追跡には target_snapshot または last_known のいずれかを指定してください。",
-            )
-        return PursuitLastKnownState(
-            target_id=target_snapshot.target_id,
-            spot_id=target_snapshot.spot_id,
-            coordinate=target_snapshot.coordinate,
-        )
-
-    def advance_path(self) -> Coordinate | None:
-        """経路を1ステップ進める。次に進むべき座標を返し、経路から削除する。"""
-        next_coord, new_state = self._navigation_state.advance_step()
-        self._navigation_state = new_state
-        return next_coord
-
-    def update_location(
-        self,
-        spot_id: SpotId,
-        coordinate: Coordinate,
-        current_tick: WorldTick | None = None,
-    ) -> None:
-        """現在地を更新する"""
-        if self._navigation_state.current_spot_id == spot_id and self._navigation_state.current_coordinate == coordinate:
-            return
-
-        old_spot_id = self._navigation_state.current_spot_id
-        old_coordinate = self._navigation_state.current_coordinate
-        self._navigation_state = self._navigation_state.with_location_updated(
-            spot_id=spot_id,
-            coordinate=coordinate,
-        )
-
-        self.add_event(PlayerLocationChangedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            old_spot_id=old_spot_id,
-            old_coordinate=old_coordinate,
-            new_spot_id=spot_id,
-            new_coordinate=coordinate,
-            occurred_tick=current_tick,
-        ))
 
     def can_act(self) -> bool:
         """戦闘行動が可能かどうか
@@ -739,9 +428,7 @@ class PlayerStatusAggregate(AggregateRoot):
         """
         return not self._is_down
 
-    def apply_damage(
-        self, damage: int, killer_player_id: PlayerId | None = None
-    ) -> None:
+    def apply_damage(self, damage: int, killer_player_id: PlayerId | None = None) -> None:
         """計算済みのダメージを適用する
 
         Args:
@@ -753,22 +440,26 @@ class PlayerStatusAggregate(AggregateRoot):
         # HPが0になった場合は戦闘不能状態にする
         if not self._hp.is_alive():
             self._is_down = True
-            self.add_event(PlayerDownedEvent.create(
-                aggregate_id=self._player_id,
-                aggregate_type="PlayerStatusAggregate",
-                killer_player_id=killer_player_id,
-            ))
+            self.add_event(
+                PlayerDownedEvent.create(
+                    aggregate_id=self._player_id,
+                    aggregate_type="PlayerStatusAggregate",
+                    killer_player_id=killer_player_id,
+                )
+            )
 
     def record_evasion(self) -> None:
         """回避を記録する（行動可能状態のみ）"""
         if self._is_down:
             raise PlayerDownedException("ダウン状態のプレイヤーは回避を記録できません")
 
-        self.add_event(PlayerEvadedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            current_hp=self._hp.value,
-        ))
+        self.add_event(
+            PlayerEvadedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                current_hp=self._hp.value,
+            )
+        )
 
     def gain_exp(self, exp_amount: int) -> None:
         """経験値を獲得する
@@ -799,13 +490,15 @@ class PlayerStatusAggregate(AggregateRoot):
             if self._base_stats.max_mp != old_base_stats.max_mp:
                 self._mp = Mp.create(self._mp.value, self._base_stats.max_mp)
 
-            self.add_event(PlayerLevelUpEvent.create(
-                aggregate_id=self._player_id,
-                aggregate_type="PlayerStatusAggregate",
-                old_level=old_level,
-                new_level=self._growth.level,
-                stat_growth=stat_growth,
-            ))
+            self.add_event(
+                PlayerLevelUpEvent.create(
+                    aggregate_id=self._player_id,
+                    aggregate_type="PlayerStatusAggregate",
+                    old_level=old_level,
+                    new_level=self._growth.level,
+                    stat_growth=stat_growth,
+                )
+            )
 
     def heal_hp(self, amount: int) -> None:
         """HPを回復する
@@ -819,12 +512,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_hp = self._hp.value
         self._hp = self._hp.heal(amount)
 
-        self.add_event(PlayerHpHealedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            healed_amount=self._hp.value - old_hp,
-            total_hp=self._hp.value,
-        ))
+        self.add_event(
+            PlayerHpHealedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                healed_amount=self._hp.value - old_hp,
+                total_hp=self._hp.value,
+            )
+        )
 
     def use_mp(self, amount: int) -> None:
         """MPを消費する
@@ -845,12 +540,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_mp = self._mp.value
         self._mp = self._mp.consume(amount)
 
-        self.add_event(PlayerMpConsumedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            consumed_amount=amount,
-            remaining_mp=self._mp.value,
-        ))
+        self.add_event(
+            PlayerMpConsumedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                consumed_amount=amount,
+                remaining_mp=self._mp.value,
+            )
+        )
 
     def heal_mp(self, amount: int) -> None:
         """MPを回復する
@@ -861,12 +558,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_mp = self._mp.value
         self._mp = self._mp.heal(amount)
 
-        self.add_event(PlayerMpHealedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            healed_amount=self._mp.value - old_mp,
-            total_mp=self._mp.value,
-        ))
+        self.add_event(
+            PlayerMpHealedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                healed_amount=self._mp.value - old_mp,
+                total_mp=self._mp.value,
+            )
+        )
 
     def earn_gold(self, amount: int) -> None:
         """ゴールドを獲得する
@@ -877,12 +576,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_gold = self._gold.value
         self._gold = self._gold.add(amount)
 
-        self.add_event(PlayerGoldEarnedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            earned_amount=amount,
-            total_gold=self._gold.value,
-        ))
+        self.add_event(
+            PlayerGoldEarnedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                earned_amount=amount,
+                total_gold=self._gold.value,
+            )
+        )
 
     def pay_gold(self, amount: int) -> None:
         """ゴールドを支払う
@@ -909,12 +610,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_gold = self._gold.value
         self._gold = self._gold.subtract(amount)
 
-        self.add_event(PlayerGoldPaidEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            paid_amount=amount,
-            total_gold=self._gold.value,
-        ))
+        self.add_event(
+            PlayerGoldPaidEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                paid_amount=amount,
+                total_gold=self._gold.value,
+            )
+        )
 
     def consume_stamina(self, amount: int) -> None:
         """スタミナを消費する
@@ -935,19 +638,16 @@ class PlayerStatusAggregate(AggregateRoot):
         old_stamina = self._stamina.value
         self._stamina = self._stamina.consume(amount)
 
-        self.add_event(PlayerStaminaConsumedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            consumed_amount=amount,
-            remaining_stamina=self._stamina.value,
-        ))
+        self.add_event(
+            PlayerStaminaConsumedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                consumed_amount=amount,
+                remaining_stamina=self._stamina.value,
+            )
+        )
 
-    def validate_resource_consumption(
-        self,
-        mp_cost: int = 0,
-        stamina_cost: int = 0,
-        hp_cost: int = 0
-    ) -> None:
+    def validate_resource_consumption(self, mp_cost: int = 0, stamina_cost: int = 0, hp_cost: int = 0) -> None:
         """リソース消費が可能かバリデーションを行う
 
         Args:
@@ -968,17 +668,14 @@ class PlayerStatusAggregate(AggregateRoot):
             raise InsufficientMpException(f"MPが不足しています。必要: {mp_cost}, 現在: {self._mp.value}")
 
         if stamina_cost > 0 and not self._stamina.can_consume(stamina_cost):
-            raise InsufficientStaminaException(f"スタミナが不足しています。必要: {stamina_cost}, 現在: {self._stamina.value}")
+            raise InsufficientStaminaException(
+                f"スタミナが不足しています。必要: {stamina_cost}, 現在: {self._stamina.value}"
+            )
 
         if hp_cost > 0 and hp_cost >= self._hp.value:
             raise InsufficientHpException(f"HPが不足しています。必要: {hp_cost}, 現在: {self._hp.value}")
 
-    def consume_resources(
-        self,
-        mp_cost: int = 0,
-        stamina_cost: int = 0,
-        hp_cost: int = 0
-    ) -> None:
+    def consume_resources(self, mp_cost: int = 0, stamina_cost: int = 0, hp_cost: int = 0) -> None:
         """リソースを一括で消費する
 
         Args:
@@ -1012,12 +709,14 @@ class PlayerStatusAggregate(AggregateRoot):
         old_stamina = self._stamina.value
         self._stamina = self._stamina.recover(amount)
 
-        self.add_event(PlayerStaminaHealedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            healed_amount=self._stamina.value - old_stamina,
-            total_stamina=self._stamina.value,
-        ))
+        self.add_event(
+            PlayerStaminaHealedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                healed_amount=self._stamina.value - old_stamina,
+                total_stamina=self._stamina.value,
+            )
+        )
 
     def revive(
         self,
@@ -1049,20 +748,21 @@ class PlayerStatusAggregate(AggregateRoot):
         # ダウン状態を解除
         self._is_down = False
 
-        self.add_event(PlayerRevivedEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            hp_recovered=self._hp.value - old_hp,
-            total_hp=self._hp.value,
-            caregiver_player_id=caregiver_player_id,
-        ))
+        self.add_event(
+            PlayerRevivedEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                hp_recovered=self._hp.value - old_hp,
+                total_hp=self._hp.value,
+                caregiver_player_id=caregiver_player_id,
+            )
+        )
 
     def speak(
         self,
         content: str,
         channel: SpeechChannel,
         spot_id: SpotId,
-        speaker_coordinate: Coordinate,
         target_player_id: PlayerId | None = None,
     ) -> None:
         """発言する（囁き・発言・シャウト）。イベントを発火するのみで状態は変更しない。
@@ -1071,7 +771,6 @@ class PlayerStatusAggregate(AggregateRoot):
             content: 発言内容（空でないこと）
             channel: 発言種別（WHISPER / SAY / SHOUT）
             spot_id: 発言時のスポットID（配信先解決用）
-            speaker_coordinate: 発言時の座標（範囲計算用）
             target_player_id: 囁き時のみ必須。宛先プレイヤーID。
 
         Raises:
@@ -1085,15 +784,16 @@ class PlayerStatusAggregate(AggregateRoot):
         if channel == SpeechChannel.WHISPER and target_player_id is None:
             raise SpeechValidationException("囁きの場合は宛先プレイヤーを指定してください")
 
-        self.add_event(PlayerSpokeEvent.create(
-            aggregate_id=self._player_id,
-            aggregate_type="PlayerStatusAggregate",
-            content=content.strip(),
-            channel=channel,
-            spot_id=spot_id,
-            speaker_coordinate=speaker_coordinate,
-            target_player_id=target_player_id,
-        ))
+        self.add_event(
+            PlayerSpokeEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerStatusAggregate",
+                content=content.strip(),
+                channel=channel,
+                spot_id=spot_id,
+                target_player_id=target_player_id,
+            )
+        )
 
     def add_status_effect(self, effect: StatusEffect) -> None:
         """ステータス効果を追加する。

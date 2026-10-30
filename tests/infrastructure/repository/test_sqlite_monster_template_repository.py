@@ -50,7 +50,8 @@ def sqlite_conn() -> sqlite3.Connection:
 
 class TestSqliteMonsterTemplateRepository:
     def test_attack_status_effects_round_trip_and_replace_removes_stale_rows(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """状態異常宣言は順序と値を保存し、置換時に古い子行を残さない。"""
         writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
@@ -76,14 +77,13 @@ class TestSqliteMonsterTemplateRepository:
         assert replaced is not None
         assert replaced.attack_status_effects == ()
 
-    def test_find_by_id_returns_none_when_empty(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_find_by_id_returns_none_when_empty(self, sqlite_conn: sqlite3.Connection) -> None:
         repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
         assert repo.find_by_id(MonsterTemplateId(1)) is None
 
     def test_temperature_comfort_fields_round_trip(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """Phase 4-O B: 温度 comfort 範囲 + discomfort_damage が SQLite で
         round-trip する (migration v25)。"""
@@ -116,7 +116,8 @@ class TestSqliteMonsterTemplateRepository:
         assert loaded.temperature_discomfort_damage_per_tick == 2
 
     def test_default_template_round_trips_with_default_temperature_fields(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """default 値 (FREEZING / HOT / 0) が round-trip する。"""
         from ai_rpg_world.domain.world_graph.enum.temperature_enum import (
@@ -134,7 +135,8 @@ class TestSqliteMonsterTemplateRepository:
         assert loaded.temperature_discomfort_damage_per_tick == 0
 
     def test_pack_awareness_radius_round_trip(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """Phase 4-O C #3: pack_awareness_radius が SQLite で round-trip
         する (migration v28)。"""
@@ -158,7 +160,8 @@ class TestSqliteMonsterTemplateRepository:
         assert loaded.pack_awareness_radius == 4
 
     def test_default_pack_awareness_radius_is_disabled(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """default 値 (0) で機能無効状態が維持される。"""
         writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
@@ -170,7 +173,8 @@ class TestSqliteMonsterTemplateRepository:
         assert loaded.pack_awareness_radius == 0
 
     def test_pack_flee_follower_fields_round_trip(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """Phase 4-O C #2: pack_flee_follower / pack_flee_follower_duration
         が SQLite で round-trip する (migration v27)。"""
@@ -197,7 +201,8 @@ class TestSqliteMonsterTemplateRepository:
         assert loaded.pack_flee_follower_duration == 5
 
     def test_default_pack_flee_fields_are_disabled(
-        self, sqlite_conn: sqlite3.Connection,
+        self,
+        sqlite_conn: sqlite3.Connection,
     ) -> None:
         """default 値 (False / 0) が round-trip し、機能無効状態を維持する。"""
         writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
@@ -209,9 +214,7 @@ class TestSqliteMonsterTemplateRepository:
         assert loaded.pack_flee_follower is False
         assert loaded.pack_flee_follower_duration == 0
 
-    def test_writer_replace_and_find_roundtrip(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_writer_replace_and_find_roundtrip(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
         repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
         writer.replace_template(_template(1, "Slime"))
@@ -221,9 +224,7 @@ class TestSqliteMonsterTemplateRepository:
         assert result.template_id == MonsterTemplateId(1)
         assert result.name == "Slime"
 
-    def test_find_by_name_supports_trimmed_lookup(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_find_by_name_supports_trimmed_lookup(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
         repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
         writer.replace_template(_template(1, "Goblin"))
@@ -232,9 +233,7 @@ class TestSqliteMonsterTemplateRepository:
         assert result is not None
         assert result.template_id == MonsterTemplateId(1)
 
-    def test_writer_replace_updates_existing_name_index(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_writer_replace_updates_existing_name_index(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
         repo = SqliteMonsterTemplateRepository.for_connection(sqlite_conn)
         writer.replace_template(_template(1, "Old"))
@@ -245,16 +244,12 @@ class TestSqliteMonsterTemplateRepository:
         assert result is not None
         assert result.name == "New"
 
-    def test_shared_writer_requires_active_transaction(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_writer_requires_active_transaction(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteMonsterTemplateWriter.for_shared_unit_of_work(sqlite_conn)
         with pytest.raises(RuntimeError, match="writer"):
             writer.replace_template(_template(1, "Slime"))
 
-    def test_shared_writer_delete_and_read_inside_transaction(
-        self, sqlite_conn: sqlite3.Connection
-    ) -> None:
+    def test_shared_writer_delete_and_read_inside_transaction(self, sqlite_conn: sqlite3.Connection) -> None:
         writer = SqliteMonsterTemplateWriter.for_standalone_connection(sqlite_conn)
         writer.replace_template(_template(1, "Slime"))
 
