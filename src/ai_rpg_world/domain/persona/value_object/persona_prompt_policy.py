@@ -19,8 +19,6 @@ class PersonaPromptPolicy:
     include_fears: bool = True
     include_taboos: bool = True
     include_fragmented_memories: bool = True
-    include_behavioral_rules: bool = True
-    include_relationship_hints: bool = True
     max_items_per_section: int = 6
 
     def __post_init__(self) -> None:
@@ -31,8 +29,6 @@ class PersonaPromptPolicy:
             "include_fears",
             "include_taboos",
             "include_fragmented_memories",
-            "include_behavioral_rules",
-            "include_relationship_hints",
         ):
             if not isinstance(getattr(self, name), bool):
                 raise TypeError(f"{name} must be bool")

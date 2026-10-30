@@ -56,18 +56,6 @@ class PersonaPromptFragmentBuilder:
             persona.fragmented_memories,
             self._policy.include_fragmented_memories,
         )
-        self._append_list_section(
-            lines,
-            "行動ルール",
-            persona.behavioral_rules,
-            self._policy.include_behavioral_rules,
-        )
-        self._append_list_section(
-            lines,
-            "関係性の手がかり",
-            persona.relationship_hints,
-            self._policy.include_relationship_hints,
-        )
         return "\n".join(lines).strip()
 
     def _append_text_section(

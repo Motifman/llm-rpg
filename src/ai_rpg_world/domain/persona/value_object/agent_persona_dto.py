@@ -29,8 +29,6 @@ class AgentPersonaDto:
     taboos: tuple[str, ...] = ()
     background_summary: str = ""
     fragmented_memories: tuple[str, ...] = ()
-    behavioral_rules: tuple[str, ...] = ()
-    relationship_hints: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("character_id", "display_name", "first_person", "speech_style"):
@@ -43,8 +41,6 @@ class AgentPersonaDto:
         ensure_str_tuple("fears", self.fears)
         ensure_str_tuple("taboos", self.taboos)
         ensure_str_tuple("fragmented_memories", self.fragmented_memories)
-        ensure_str_tuple("behavioral_rules", self.behavioral_rules)
-        ensure_str_tuple("relationship_hints", self.relationship_hints)
 
 
 __all__ = ["AgentPersonaDto"]
