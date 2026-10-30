@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass
 from typing import Any, Generic, TypeVar, cast, overload
 
-from ai_rpg_world.eventing.async_delivery import AsyncDelivery
+from ai_rpg_world.eventing.async_delivery import AsyncDelivery, AsyncEventExecutor
+from ai_rpg_world.eventing.async_event_handler import AsyncEventHandler
 from ai_rpg_world.eventing.delivery import (
     AfterCommitFailureObserver,
     AfterCommitHandler,
@@ -19,6 +20,7 @@ from ai_rpg_world.eventing.domain_event import DomainEvent
 _Event = TypeVar("_Event", bound=DomainEvent)
 _Context = TypeVar("_Context")
 _Result = TypeVar("_Result")
+_Command = TypeVar("_Command")
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,18 @@ class _AfterCommitRegistration:
     handler: AfterCommitHandler
     channel: DeliveryChannel
     guarantee: DeliveryGuarantee
+
+
+@dataclass(frozen=True)
+class _SubmitToAsyncHandler(Generic[_Event, _Command, _Result]):
+    """イベントを、非同期のハンドラの仕事として受付に渡す。"""
+
+    handler: AsyncEventHandler[_Event, _Command, _Result]
+    executor: AsyncEventExecutor
+    recipient_key: Callable[[_Event], Hashable]
+
+    def __call__(self, event: _Event) -> None:
+        self.executor.submit_handler(key=self.recipient_key(event), event=event, handler=self.handler)
 
 
 class EventDispatcher(Generic[_Context]):
@@ -105,6 +119,28 @@ class EventDispatcher(Generic[_Context]):
             handler = asynchronous.bind(handler)
         self._after_commit.append(
             _AfterCommitRegistration(event_type, cast("AfterCommitHandler", handler), channel, guarantee)
+        )
+
+    def register_async_after_commit(
+        self,
+        event_type: type[_Event],
+        handler: AsyncEventHandler[_Event, _Command, _Result],
+        *,
+        channel: DeliveryChannel,
+        guarantee: DeliveryGuarantee,
+        executor: AsyncEventExecutor,
+        recipient_key: Callable[[_Event], Hashable],
+    ) -> None:
+        """確定後の非同期のハンドラを登録する。どの段の失敗も ``executor`` の失敗の知らせ先に届く。"""
+        if not isinstance(handler, AsyncEventHandler):
+            raise TypeError("handlerはAsyncEventHandlerである必要があります")
+        if guarantee is DeliveryGuarantee.DURABLE_RETRY:
+            raise ValueError("非同期のハンドラにはDURABLE_RETRYを指定できません")
+        self.register_after_commit(
+            event_type,
+            _SubmitToAsyncHandler(handler, executor, recipient_key),
+            channel=channel,
+            guarantee=guarantee,
         )
 
     def dispatch(self, event: DomainEvent, context: _Context) -> None:
