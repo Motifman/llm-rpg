@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from ai_rpg_world.application.social.sns_virtual_pages.kinds import (
     SnsHomeTab,
     SnsSearchMode,
@@ -18,6 +20,9 @@ class SnsPageSessionService:
 
     def __init__(self) -> None:
         self._state_by_player: dict[int, SnsPageSessionState] = {}
+        # 履歴に残った ref が、再入室・別プレイヤー・実行再開後の対象を指さないようにする。
+        self._ref_namespace = uuid4().hex
+        self._ref_seq = 0
 
     def get_state(self, player_id: int) -> SnsPageSessionState:
         """状態が無い場合は home 既定で作成する（読み取り専用用途向け）。"""
@@ -74,31 +79,31 @@ class SnsPageSessionService:
         st.clear_ref_maps()
         return st.snapshot_generation
 
-    def _next_ref(self, st: SnsPageSessionState, prefix: str) -> str:
-        st.ref_seq += 1
-        return f"{prefix}_{st.ref_seq:02d}"
+    def _next_ref(self, prefix: str) -> str:
+        self._ref_seq += 1
+        return f"{prefix}_{self._ref_namespace}_{self._ref_seq:02d}"
 
     def issue_post_ref(self, player_id: int, post_id: int) -> str:
         st = self.get_state(player_id)
-        ref = self._next_ref(st, "r_post")
+        ref = self._next_ref("r_post")
         st.ref_to_post_id[ref] = post_id
         return ref
 
     def issue_user_ref(self, player_id: int, user_id: int) -> str:
         st = self.get_state(player_id)
-        ref = self._next_ref(st, "r_user")
+        ref = self._next_ref("r_user")
         st.ref_to_user_id[ref] = user_id
         return ref
 
     def issue_reply_ref(self, player_id: int, reply_id: int) -> str:
         st = self.get_state(player_id)
-        ref = self._next_ref(st, "r_reply")
+        ref = self._next_ref("r_reply")
         st.ref_to_reply_id[ref] = reply_id
         return ref
 
     def issue_notification_ref(self, player_id: int, notification_id: int) -> str:
         st = self.get_state(player_id)
-        ref = self._next_ref(st, "r_notif")
+        ref = self._next_ref("r_notif")
         st.ref_to_notification_id[ref] = notification_id
         return ref
 

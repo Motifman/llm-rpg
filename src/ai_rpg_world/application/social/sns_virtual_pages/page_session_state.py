@@ -34,7 +34,6 @@ class SnsPageSessionState:
     profile_target_user_id: int | None = None
     post_detail_root_post_id: int | None = None
     snapshot_generation: int = 0
-    ref_seq: int = 0
     ref_to_post_id: dict[str, int] = field(default_factory=dict)
     ref_to_user_id: dict[str, int] = field(default_factory=dict)
     ref_to_reply_id: dict[str, int] = field(default_factory=dict)
