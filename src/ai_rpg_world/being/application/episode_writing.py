@@ -61,6 +61,7 @@ class AddEpisodesToMemory:
                 index=content.index,
                 body=content.body,
                 taken_handles=taken,
+                truncated=content.truncated,
             )
             taken.add(episode.handle)
             written.append(WrittenEpisode(episode=episode, truncated=content.truncated))

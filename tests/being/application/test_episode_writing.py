@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory, AddEpisodesToMemoryCommand
-from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
+from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex, EpisodeWrittenEvent
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
@@ -103,6 +103,16 @@ class TestAddEpisodesToMemory:
 
         assert existing.handle == "ep_3f2a7b"
         assert [w.episode.handle for w in result.written] == ["ep_3f2a7b9", "ep_3f2a7b9c"]
+
+    def test_truncation_is_carried_to_the_episode_written_event(self) -> None:
+        """中身の切り詰めた項目と元の長さを、記憶に加えたときの EpisodeWrittenEvent に載せる。"""
+        handed: list[object] = []
+        add_episodes, _ = _add_episodes(InMemoryEpisodeRepository(handoff=handed.extend))
+
+        _add(add_episodes, _content(truncated={"body": 405}))
+
+        (event,) = handed
+        assert isinstance(event, EpisodeWrittenEvent) and event.truncated == {"body": 405}
 
     def test_truncation_and_dropped_count_are_carried_to_the_result(self) -> None:
         """中身の切り詰めた項目と、捨てた中身の数を結果に残す。"""

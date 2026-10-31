@@ -86,6 +86,22 @@ class TestWritingAnEpisode:
             event.body,
         ) == (ADA, EPISODE_ID, "ep_3f2a7b", "地下の金庫室", 5, INDEX, episode.body)
 
+    def test_written_episode_event_carries_the_truncation(self) -> None:
+        """書くときに渡した切り詰めた項目と元の長さを、EpisodeWrittenEvent が持つ。渡さなければ空。エピソード自体は持たない。"""
+        truncated = Episode.write(
+            being_id=ADA,
+            episode_id=EPISODE_ID,
+            environment_name="地下の金庫室",
+            written_turn=5,
+            index=INDEX,
+            body="紙。",
+            truncated={"about": 52},
+        )
+
+        (event,) = truncated.get_events()
+        (plain,) = _write().get_events()
+        assert (event.truncated, plain.truncated) == ({"about": 52}, {})
+
     def test_written_episode_has_handle_from_id_and_no_recall_yet(self) -> None:
         """作ったエピソードは、呼び名が ep_ と ID の先頭 6 文字で、呼び出された回数 0、最後に呼び出した時なし、目次の履歴が空になる。"""
         episode = _write()
