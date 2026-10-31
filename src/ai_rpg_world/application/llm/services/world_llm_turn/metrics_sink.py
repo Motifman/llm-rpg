@@ -79,6 +79,8 @@ class LlmMetricsTraceSink:
                 phase=getattr(metrics, "phase", "one_step"),
                 llm_call_id=getattr(metrics, "llm_call_id", None),
                 discarded_tool_calls=getattr(metrics, "discarded_tool_calls", 0),
+                # "length" は出力の上限で打ち切られた呼び出し (#1924)。
+                finish_reason=getattr(metrics, "finish_reason", None),
                 **(
                     {"tool_call_combination": list(metrics.tool_call_combination)}
                     if getattr(metrics, "tool_call_combination", None) is not None

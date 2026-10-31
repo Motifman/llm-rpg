@@ -98,7 +98,12 @@ class TraceEventKind:
     # cached_tokens / tps / success / error_code / cost_usd
     # ``cost_usd`` は OpenRouter 経由時のみ provider 宣告値が乗る (直結 / vLLM では 0.0)。
     # τ_sim の設定根拠データ + scenario ごとの cost 評価に使う。
+    # ``finish_reason`` ("length" は出力の上限で打ち切られた呼び出し) は 2026-10-31 より前の trace には無い (#1924)。
     LLM_CALL = "llm_call"
+    # #1924: 考えが出力の上限で切れて行動を返せなかった呼び出しを、考えを止めて 1 回だけ呼び直した。
+    # payload: phase / truncated_llm_call_id / retry_llm_call_id / reasoning_effort (打ち切られた呼び出しの段階) /
+    # outcome (tool_call / no_tool_call / invoke_exception) / returned_tool / retry_finish_reason / error_type
+    LLM_OUTPUT_TRUNCATED_RETRY = "llm_output_truncated_retry"
     # 行動を決める呼び出し以外の LLM 呼び出し 1 回ぶん (#1617)。記憶の部品と Jev。
     # llm_call と分けるのは、行動の費用と混ぜず、連続失敗の監視にも数えないため。
     # payload: component (AuxLlmComponent の値) / model / wall_latency_ms /

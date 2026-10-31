@@ -63,6 +63,9 @@ class LlmCallMetrics:
             tool_call の件数。通常は 0。
         tool_call_combination: 複数 tool_call が返った場合だけ、全 tool 名を返却順で
             保持する。引数は実行済みと誤読されるため記録しない。
+        finish_reason: 応答の ``choices[0].finish_reason`` (``"stop"`` / ``"tool_calls"`` /
+            ``"length"`` など)。取れなければ None。``"length"`` は出力の上限で打ち切られた
+            呼び出しで、考えが上限を使い切ったかを見分け、呼び直すかを決めるのに使う (#1924)。
     """
 
     model: str
@@ -82,6 +85,7 @@ class LlmCallMetrics:
     llm_call_id: str | None = None
     discarded_tool_calls: int = 0
     tool_call_combination: tuple[str, ...] | None = None
+    finish_reason: str | None = None
 
     @staticmethod
     def compute_tps(completion_tokens: int, wall_latency_ms: int) -> float:

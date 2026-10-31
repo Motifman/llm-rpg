@@ -44,6 +44,10 @@ from ai_rpg_world.application.llm.services.world_llm_turn.reason_first_trace imp
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
     coerce_arguments,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.truncated_output_retry import (
+    TruncatedOutputRetryAllowance,
+    invoke_retrying_truncated_output,
+)
 
 
 def resolve_reason_first_gate(wiring: WorldLlmWiring, player_id: PlayerId) -> ReasonFirstGateDecision:
@@ -183,14 +187,19 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
     # 形式の "type":"function" 構造から function.name を読む)。
     metrics_sink = build_llm_metrics_sink(wiring, player_id, tool_names=tool_names)
     last_llm_call_id: str | None = None
+    # prompt dataset の attempt_index は、このターンの呼び出しの数で振る。呼び出しが例外で落ちても番号が重ならないため。
+    calls_made = 0
 
     def _invoke(
         *,
         attempt_index: int,
         parent_attempt_id: str | None = None,
         messages_override: list[dict[str, Any]] | None = None,
+        reasoning_effort: str | None = None,
+        call_metrics_sink: Any | None = None,
     ) -> dict[str, Any] | None:
-        nonlocal last_llm_call_id
+        nonlocal last_llm_call_id, calls_made
+        calls_made += 1
         # tool_choice は解決済み実験設定をそのまま渡す。required が両立しない
         # provider を使う run だけ、profile で明示した auto と末尾指示を使う。
         # 呼び出し中の静かな降格は行わない。
@@ -200,7 +209,7 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
             player_id=player_id,
             prompt=prompt,
             tool_choice=tool_choice,
-            reasoning_effort=None,
+            reasoning_effort=reasoning_effort,
             attempt_index=attempt_index,
             parent_attempt_id=parent_attempt_id,
             phase="one_step",
@@ -209,8 +218,8 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
         if prompt_capture_context is not None:
             last_llm_call_id = prompt_capture_context.context.llm_call_id
         invoke_kwargs = {
-            "metrics_sink": metrics_sink,
-            "reasoning_effort": None,
+            "metrics_sink": metrics_sink if call_metrics_sink is None else call_metrics_sink,
+            "reasoning_effort": reasoning_effort,
             **llm_session_kwargs(wiring, player_id),
         }
         if prompt_capture_context is not None:
@@ -234,7 +243,22 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
         )
 
     try:
-        tool_call = _invoke(attempt_index=0)
+        tool_call = invoke_retrying_truncated_output(
+            lambda attempt, parent, effort, watch: _invoke(
+                attempt_index=attempt,
+                parent_attempt_id=parent,
+                reasoning_effort=effort,
+                call_metrics_sink=watch,
+            ),
+            wiring=wiring,
+            player_id=player_id,
+            phase="one_step",
+            metrics_sink=metrics_sink,
+            attempt_index=0,
+            parent_attempt_id=None,
+            last_llm_call_id=lambda: last_llm_call_id,
+            allowance=TruncatedOutputRetryAllowance(),
+        )
     except Exception as exc:  # KeyboardInterrupt / SystemExit / GeneratorExit は伝播
         logger.exception("Phase A llm invoke failed for player_id=%s", player_id.value)
         return _result(None, exc)
@@ -251,7 +275,7 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
         try:
             parent = last_llm_call_id
             tool_call = _invoke(
-                attempt_index=1,
+                attempt_index=calls_made,
                 parent_attempt_id=parent,
                 messages_override=retry_messages,
             )
@@ -294,6 +318,8 @@ def run_reason_first_phase_a(
     action_metrics_sink = build_llm_metrics_sink(wiring, player_id, tool_names=action_tool_names)
     reason_first_turn_id = f"reason-first-{uuid.uuid4().hex}"
     last_llm_call_id: str | None = None
+    # 評価の段の prompt dataset の attempt_index は、評価の段の呼び出しの数で振る。呼び出しが例外で落ちても番号が重ならないため。
+    assess_calls_made = 0
     assess_choice = {
         "type": "function",
         "function": {"name": TOOL_NAME_ASSESS_SITUATION},
@@ -337,14 +363,17 @@ def run_reason_first_phase_a(
         attempt_index: int,
         parent_attempt_id: str | None,
         phase: str,
+        reasoning_effort: str | None = None,
     ) -> dict[str, Any] | None:
-        nonlocal last_llm_call_id
+        nonlocal last_llm_call_id, assess_calls_made
+        if phase == "assess_phase":
+            assess_calls_made += 1
         prompt_capture_context = build_prompt_capture_context(
             wiring,
             player_id=player_id,
             prompt=prompt,
             tool_choice=tool_choice,
-            reasoning_effort=None,
+            reasoning_effort=reasoning_effort,
             attempt_index=attempt_index,
             parent_attempt_id=parent_attempt_id,
             phase=phase,
@@ -358,7 +387,7 @@ def run_reason_first_phase_a(
             last_llm_call_id = prompt_capture_context.context.llm_call_id
         invoke_kwargs = {
             "metrics_sink": metrics_sink,
-            "reasoning_effort": None,
+            "reasoning_effort": reasoning_effort,
             "call_phase": phase,
             **llm_session_kwargs(wiring, player_id),
         }
@@ -374,16 +403,29 @@ def run_reason_first_phase_a(
 
     assessment: dict[str, str] | None = None
     parent_attempt_id: str | None = None
+    # 打ち切られたときの呼び直しは、評価の段で 1 回まで。評価の再試行の 2 周目に持ち越す。
+    assess_allowance = TruncatedOutputRetryAllowance()
     for attempt_index in (0, 1):
         try:
-            tool_call = _invoke(
-                prompt["messages"],
-                assess_tools_payload,
-                assess_choice,
-                metrics_sink=assess_metrics_sink,
-                attempt_index=attempt_index,
-                parent_attempt_id=parent_attempt_id,
+            tool_call = invoke_retrying_truncated_output(
+                lambda attempt, parent, effort, watch: _invoke(
+                    prompt["messages"],
+                    assess_tools_payload,
+                    assess_choice,
+                    metrics_sink=watch,
+                    attempt_index=attempt,
+                    parent_attempt_id=parent,
+                    phase="assess_phase",
+                    reasoning_effort=effort,
+                ),
+                wiring=wiring,
+                player_id=player_id,
                 phase="assess_phase",
+                metrics_sink=assess_metrics_sink,
+                attempt_index=assess_calls_made,
+                parent_attempt_id=parent_attempt_id,
+                last_llm_call_id=lambda: last_llm_call_id,
+                allowance=assess_allowance,
             )
         except Exception as exc:  # noqa: BLE001 — retry 後の fail-fast に変換する
             logger.warning(
@@ -458,14 +500,25 @@ def run_reason_first_phase_a(
     prompt = inject_dynamic_argument_candidate_table(prompt, set(action_tool_names))
     action_messages = prompt["messages"]
     try:
-        action_tool_call = _invoke(
-            action_messages,
-            action_tools_payload,
-            "required",
+        action_tool_call = invoke_retrying_truncated_output(
+            lambda attempt, parent, effort, watch: _invoke(
+                action_messages,
+                action_tools_payload,
+                "required",
+                metrics_sink=watch,
+                attempt_index=attempt,
+                parent_attempt_id=parent,
+                phase="action_phase",
+                reasoning_effort=effort,
+            ),
+            wiring=wiring,
+            player_id=player_id,
+            phase="action_phase",
             metrics_sink=action_metrics_sink,
             attempt_index=0,
             parent_attempt_id=None,
-            phase="action_phase",
+            last_llm_call_id=lambda: last_llm_call_id,
+            allowance=TruncatedOutputRetryAllowance(),
         )
     except Exception as exc:  # noqa: BLE001 — 既存 LLM_API_FAILED 経路へ渡す
         logger.exception(

@@ -707,6 +707,7 @@ class LiteLLMClient(
         reasoning_tokens = self._extract_reasoning_tokens(response)
         cost_usd = self._extract_cost_usd(response)
         tool_call_combination = self._extract_tool_call_combination(response)
+        finish_reason = self._extract_finish_reason(response)
         discarded_tool_calls = len(tool_call_combination) - 1 if tool_call_combination is not None else 0
         if discarded_tool_calls:
             self._logger.warning(
@@ -730,6 +731,7 @@ class LiteLLMClient(
             llm_call_id=_extract_llm_call_id(prompt_capture_context),
             discarded_tool_calls=discarded_tool_calls,
             tool_call_combination=tool_call_combination,
+            finish_reason=finish_reason,
         )
         self._record_prompt_capture(
             prompt_capture_context,
@@ -750,10 +752,23 @@ class LiteLLMClient(
                 "tool_choice": tool_choice,
                 "phase": call_phase,
                 "discarded_tool_calls": discarded_tool_calls,
+                "finish_reason": finish_reason,
                 **({"tool_call_combination": list(tool_call_combination)} if tool_call_combination is not None else {}),
             },
         )
         return tool_call
+
+    @staticmethod
+    def _extract_finish_reason(response: Any) -> str | None:
+        """``choices[0].finish_reason`` を取り出す。取れなければ None。"""
+        try:
+            choices = getattr(response, "choices", None) or []
+            if not choices:
+                return None
+            value = getattr(choices[0], "finish_reason", None)
+            return value if isinstance(value, str) and value else None
+        except (TypeError, AttributeError):
+            return None
 
     @staticmethod
     def _extract_tool_call_combination(response: Any) -> tuple[str, ...] | None:
@@ -872,6 +887,7 @@ class LiteLLMClient(
         llm_call_id: str | None = None,
         discarded_tool_calls: int = 0,
         tool_call_combination: tuple[str, ...] | None = None,
+        finish_reason: str | None = None,
     ) -> None:
         if sink is None:
             return
@@ -894,6 +910,7 @@ class LiteLLMClient(
                 llm_call_id=llm_call_id,
                 discarded_tool_calls=discarded_tool_calls,
                 tool_call_combination=tool_call_combination,
+                finish_reason=finish_reason,
             )
             sink.record(metrics)
         except Exception:

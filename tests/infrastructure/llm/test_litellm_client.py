@@ -1642,6 +1642,36 @@ class TestLiteLLMClientReasoningEffortOverride:
         response.usage = MagicMock(spec=[])  # no completion_tokens_details
         assert LiteLLMClient._extract_reasoning_tokens(response) == 0
 
+    @pytest.mark.parametrize(
+        "finish_reason, expected", [("length", "length"), ("tool_calls", "tool_calls"), (None, None)]
+    )
+    def test_invoke_emits_finish_reason_in_metrics(self, client, finish_reason, expected):
+        """応答の choices[0].finish_reason が、LlmCallMetrics と prompt dataset の metrics に載る。無ければ None。"""
+        captured = []
+        recorded = []
+
+        class _Sink:
+            def record(self, m):
+                captured.append(m)
+
+        class _CaptureSink:
+            def record_call(self, **kwargs):
+                recorded.append(kwargs["metrics"])
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            resp = _make_tool_call_response("world_no_op", {})
+            resp.choices[0].finish_reason = finish_reason
+            m_litellm.completion.return_value = resp
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+                metrics_sink=_Sink(),
+                prompt_capture_context=SimpleNamespace(sink=_CaptureSink(), context=SimpleNamespace(llm_call_id="c1")),
+            )
+        assert captured[0].finish_reason == expected
+        assert recorded[0]["finish_reason"] == expected
+
     def test_invoke_emits_reasoning_tokens_in_metrics(self, client):
         """reasoning_tokens が metrics_sink 経由の LlmCallMetrics に載る。"""
         captured = []

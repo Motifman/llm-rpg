@@ -1,7 +1,7 @@
 """run_phase_a で LLM 呼び出しの metrics が trace_recorder に流れることを検証。
 
 invoke が metrics_sink を受け取り、LLM_CALL event が record される。
-trace_recorder 未注入の経路では sink=None なので no-op (litellm 側はクラッシュしない)。
+trace_recorder 未注入の経路でも、打ち切りを覚える受け口だけを渡し、trace には何も流さない (#1924)。
 """
 
 from __future__ import annotations
@@ -52,6 +52,7 @@ class _FakeLlmClient:
                     phase="assess_phase",
                     discarded_tool_calls=2,
                     tool_call_combination=("travel_to", "memo_add", "speak"),
+                    finish_reason="tool_calls",
                 )
             )
         return {"name": "wait", "arguments": {"reason": "test"}}
@@ -95,6 +96,8 @@ class TestPhaseAMetricsSink:
         assert payload["phase"] == "assess_phase"
         assert payload["discarded_tool_calls"] == 2
         assert payload["tool_call_combination"] == ["travel_to", "memo_add", "speak"]
+        # 出力の上限で打ち切られた呼び出し ("length") を trace だけで見分けられるように (#1924)。
+        assert payload["finish_reason"] == "tool_calls"
 
     def test_tick_is_captured_when_sink_records_metric(self, monkeypatch, tmp_path: Path) -> None:
         """Review HIGH 2 対応: sink 構築時の固定 tick ではなく record 時の tick を使う。
@@ -151,8 +154,8 @@ class TestPhaseAMetricsSink:
         )
         assert "tool_call_combination" not in payload
 
-    def test_trace_recorder_none_sink_none(self, monkeypatch, tmp_path: Path) -> None:
-        """trace recorder が None なら sink は None。"""
+    def test_without_trace_recorder_sink_only_watches_the_call(self, monkeypatch, tmp_path: Path) -> None:
+        """trace recorder が None でも、打ち切りを覚える受け口 (CallOutcomeWatch) だけは渡し、trace には何も流さない (#1924)。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
@@ -163,4 +166,20 @@ class TestPhaseAMetricsSink:
         pid = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
         state.llm_wiring.run_phase_a(pid)
 
-        assert client.last_sink is None, "sink が None でないと litellm が record を呼んでしまう"
+        from ai_rpg_world.application.llm.contracts.llm_call_metrics import LlmCallMetrics
+        from ai_rpg_world.application.llm.services.world_llm_turn.truncated_output_retry import CallOutcomeWatch
+
+        assert isinstance(client.last_sink, CallOutcomeWatch)
+        client.last_sink.record(
+            LlmCallMetrics(
+                model="m",
+                wall_latency_ms=1,
+                prompt_tokens=1,
+                completion_tokens=1,
+                tps=0.0,
+                success=True,
+                finish_reason="stop",
+            )
+        )
+        assert client.last_sink.finish_reason == "stop"
+        assert state.runtime.trace_recorder is None
