@@ -1,6 +1,6 @@
 """Being 本人が書いたエピソードの中身に、ID と呼び名を付け、エピソードとして記憶に加える。
 
-中身を書くのは口 (``EpisodeWriter``)。どこで区切って書かせるかは呼ぶ側が決める。
+中身を書くのは、ドメインに置く抽象クラス ``EpisodeWriter``。どこで区切って書かせるかは呼ぶ側が決める。
 """
 
 from __future__ import annotations
@@ -23,6 +23,14 @@ class WrittenEpisode:
 
 
 @dataclass(frozen=True)
+class AddEpisodesToMemoryCommand:
+    being_id: BeingId
+    contents: EpisodeContents
+    environment_name: str
+    written_turn: int
+
+
+@dataclass(frozen=True)
 class EpisodeWritingResult:
     written: tuple[WrittenEpisode, ...]
     dropped_count: int = 0
@@ -40,22 +48,16 @@ class AddEpisodesToMemory:
         self._repository = repository
         self._new_episode_id = new_episode_id
 
-    def add(
-        self,
-        contents: EpisodeContents,
-        *,
-        being_id: BeingId,
-        environment_name: str,
-        written_turn: int,
-    ) -> EpisodeWritingResult:
+    def add(self, command: AddEpisodesToMemoryCommand) -> EpisodeWritingResult:
+        being_id, contents = command.being_id, command.contents
         taken = {e.handle for e in self._repository.list_by_being(being_id)}
         written: list[WrittenEpisode] = []
         for content in contents.contents:
             episode = Episode.write(
                 being_id=being_id,
                 episode_id=self._new_episode_id(),
-                environment_name=environment_name,
-                written_turn=written_turn,
+                environment_name=command.environment_name,
+                written_turn=command.written_turn,
                 index=content.index,
                 body=content.body,
                 taken_handles=taken,
@@ -67,4 +69,4 @@ class AddEpisodesToMemory:
         return EpisodeWritingResult(written=tuple(written), dropped_count=contents.dropped_count)
 
 
-__all__ = ["AddEpisodesToMemory", "EpisodeWritingResult", "WrittenEpisode"]
+__all__ = ["AddEpisodesToMemory", "AddEpisodesToMemoryCommand", "EpisodeWritingResult", "WrittenEpisode"]

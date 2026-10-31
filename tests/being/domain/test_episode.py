@@ -7,6 +7,7 @@ from ai_rpg_world.being.domain.episode import (
     EpisodeIndex,
     EpisodeIndexRevised,
     EpisodeRecalled,
+    EpisodeWrittenEvent,
     IndexRevision,
 )
 from ai_rpg_world.domain.being.exception.being_exceptions import (
@@ -69,9 +70,21 @@ class TestEpisodeIndex:
 class TestWritingAnEpisode:
     """Episode.write が、目次と本文を受け取り、ID から呼び名を作り、まだ呼び出されていないエピソードを返すことを保証する。"""
 
-    def test_written_episode_has_no_events(self) -> None:
-        """書いたばかりのエピソードは、ためたイベントを持たない。"""
-        assert _write().get_events() == []
+    def test_written_episode_records_episode_written(self) -> None:
+        """書いたエピソードは、Being・ID・呼び名・環境・書いたターン・目次・本文を持つ EpisodeWrittenEvent を 1 件ためる。"""
+        episode = _write()
+
+        (event,) = episode.get_events()
+        assert isinstance(event, EpisodeWrittenEvent)
+        assert (
+            event.being_id,
+            event.episode_id,
+            event.handle,
+            event.environment_name,
+            event.written_turn,
+            event.index,
+            event.body,
+        ) == (ADA, EPISODE_ID, "ep_3f2a7b", "地下の金庫室", 5, INDEX, episode.body)
 
     def test_written_episode_has_handle_from_id_and_no_recall_yet(self) -> None:
         """作ったエピソードは、呼び名が ep_ と ID の先頭 6 文字で、呼び出された回数 0、最後に呼び出した時なし、目次の履歴が空になる。"""
@@ -256,6 +269,7 @@ class TestRecallingAnEpisode:
     def test_recall_records_episode_recalled(self) -> None:
         """呼び出すと、ID・呼び名・ターン・呼び出したあとの回数を持つ EpisodeRecalled が 1 件たまる。"""
         episode = _write()
+        episode.clear_events()
 
         episode.recall(turn=9)
 
@@ -329,6 +343,7 @@ class TestRevisingTheIndex:
     def test_revision_records_episode_index_revised(self) -> None:
         """目次を直すと、前の版と新しい版とターンを持つ EpisodeIndexRevised が 1 件たまる。"""
         episode = _write()
+        episode.clear_events()
 
         episode.revise_index(self.NEW_INDEX, turn=10)
 

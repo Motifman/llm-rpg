@@ -180,6 +180,12 @@ class TraceEventKind:
     # recall_when, body_length, truncated: {鍵: 切り詰める前の長さ}}] /
     # 失敗なら error_type と error、飛ばしたなら skip_reason。
     EPISODE_WRITING = "episode_writing"
+    # Being がエピソードを書き起こして記憶に加えた (エピソードの EpisodeWrittenEvent。#1824、design_decisions D1824-19)。
+    # エピソードごとに 1 件。今の短期記憶を畳むときと環境を離れるときの書き起こし (episode_writing) でも、短期記憶の
+    # 範囲が埋まったときの書き起こしでも残る。0 件だったことと、切り詰めた項目は、ここには残らない (今の書き起こしの
+    # 経路では episode_writing に残る。範囲が埋まったときの経路では、どこにも残らない)。
+    # payload: being_id / handle / environment_name / written_turn / summary / recall_when / body_length。
+    BEING_EPISODE_WRITTEN = "being_episode_written"
     # 今の短期記憶に入った出来事を、Being 側の短期記憶へ写さなかった (#1824、design_decisions D1824-7)。
     # 写さなかった 1 件ごとに 1 件。payload: being_id / source (observation / action_result /
     # move) / reason (being_inner_record / empty_body / missing_time_label / unpaired_result /

@@ -51,11 +51,17 @@ def recent_events_text(memory: ShortTermMemory) -> str:
 
 def experiences_text(experiences: Sequence[Experience]) -> str:
     """並べた順のまま、出来事を【直近の出来事】と同じ行にする。いきさつやエピソードの材料にも使う。"""
+    text = experience_lines(experiences)
+    return NO_RECENT_EVENTS if text is None else text
+
+
+def experience_lines(experiences: Sequence[Experience]) -> str | None:
+    """``experiences_text`` と同じ行。行になる出来事が 1 つも無ければ None。"""
     reader = _Line()
     lines = [line for experience in experiences if (line := experience.show_to(reader)) is not None]
     if not lines:
-        return NO_RECENT_EVENTS
+        return None
     return "\n".join(f"- {line}" for line in lines)
 
 
-__all__ = ["NO_RECENT_EVENTS", "experiences_text", "recent_events_text"]
+__all__ = ["NO_RECENT_EVENTS", "experience_lines", "experiences_text", "recent_events_text"]

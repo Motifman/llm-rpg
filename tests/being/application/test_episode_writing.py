@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
+from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory, AddEpisodesToMemoryCommand
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from tests.event_handoff_helpers import discard_events
 
 ADA = BeingId("being_ada")
 
@@ -31,7 +32,7 @@ def _content(about: str = "金庫を開けた", *, truncated: dict[str, int] | N
 def _add_episodes(
     repository: InMemoryEpisodeRepository | None = None,
 ) -> tuple[AddEpisodesToMemory, InMemoryEpisodeRepository]:
-    repository = repository if repository is not None else InMemoryEpisodeRepository()
+    repository = repository if repository is not None else InMemoryEpisodeRepository(handoff=discard_events)
     ids = _ids()
     return AddEpisodesToMemory(repository, new_episode_id=lambda: next(ids)), repository
 
@@ -44,10 +45,12 @@ def _add(
     written_turn: int = 12,
 ):
     return add_episodes.add(
-        EpisodeContents(contents=contents, dropped_count=dropped_count),
-        being_id=ADA,
-        environment_name=environment_name,
-        written_turn=written_turn,
+        AddEpisodesToMemoryCommand(
+            being_id=ADA,
+            contents=EpisodeContents(contents=contents, dropped_count=dropped_count),
+            environment_name=environment_name,
+            written_turn=written_turn,
+        )
     )
 
 
@@ -84,7 +87,7 @@ class TestAddEpisodesToMemory:
 
     def test_handles_already_used_by_the_being_are_avoided(self) -> None:
         """その Being がもう使っている呼び名と重なる ID なら、新しい側の呼び名を伸ばす。"""
-        repository = InMemoryEpisodeRepository()
+        repository = InMemoryEpisodeRepository(handoff=discard_events)
         existing = Episode.write(
             being_id=ADA,
             episode_id="3f2a7b9c-0000-4f00-8a00-000000000099",

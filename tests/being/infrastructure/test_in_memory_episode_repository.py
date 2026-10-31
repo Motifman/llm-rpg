@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.application.being._memory_payload_codecs import being_episode_to_dict
-from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex, EpisodeRecalled
+from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex, EpisodeRecalled, EpisodeWrittenEvent
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
 )
@@ -20,7 +20,8 @@ INDEX = EpisodeIndex(summary="金庫の番号を探した", recall_when="金庫�
 
 
 def _episode(episode_id: str, *, taken_handles: set[str] | None = None, being_id: BeingId = ADA) -> Episode:
-    return Episode.write(
+    """中身を作るための下ごしらえ。書いたときのイベントは空にしてから返す。"""
+    episode = Episode.write(
         being_id=being_id,
         episode_id=episode_id,
         environment_name="地下の金庫室",
@@ -29,6 +30,8 @@ def _episode(episode_id: str, *, taken_handles: set[str] | None = None, being_id
         body="棚の裏に紙が貼ってあった。",
         taken_handles=taken_handles or set(),
     )
+    episode.clear_events()
+    return episode
 
 
 FIRST_ID = "3f2a7b9c-1d2e-4f00-8a00-000000000001"
@@ -392,10 +395,22 @@ class TestTheRepositoryFilesEpisodesByTheirOwner:
 
 
 class TestHandoff:
-    """エピソードを保存するときに、ためたイベント (EpisodeRecalled など) を取り出して配り手に渡すことを保証する (design_decisions D1837 の 6)。"""
+    """エピソードを保存するときに、ためたイベント (EpisodeRecalled など) を取り出して配送器に渡すことを保証する (design_decisions D1837 の 6)。"""
+
+    def test_written_episode_is_handed_off_when_added(self) -> None:
+        """書いたばかりのエピソードを加えると、EpisodeWrittenEvent が配送器に渡り、呼び出し側のエピソードのイベントは空になる。"""
+        handed: list[object] = []
+        repo = InMemoryEpisodeRepository(handoff=handed.extend)
+        episode = Episode.write(
+            being_id=ADA, episode_id=FIRST_ID, environment_name="地下の金庫室", written_turn=3, index=INDEX, body="紙。"
+        )
+
+        repo.add(episode)
+
+        assert ([type(e) for e in handed], episode.get_events()) == ([EpisodeWrittenEvent], [])
 
     def test_saved_events_are_handed_off_and_cleared(self) -> None:
-        """思い出したエピソードを保存すると、EpisodeRecalled が配り手に渡り、呼び手のエピソードのイベントは空になる。"""
+        """思い出したエピソードを保存すると、EpisodeRecalled が配送器に渡り、呼び出し側のエピソードのイベントは空になる。"""
         handed: list[object] = []
         repo = InMemoryEpisodeRepository(handoff=handed.extend)
         repo.add(_first())
@@ -408,7 +423,7 @@ class TestHandoff:
         assert episode.get_events() == []
 
     def test_pending_events_without_handoff_stop_before_saving(self) -> None:
-        """配り手の無い保存先に、イベントのたまったエピソードを保存しようとすると、保存する前に RuntimeError で止まる。"""
+        """配送器の無い保存先に、イベントのたまったエピソードを保存しようとすると、保存する前に RuntimeError で止まる。"""
         repo = InMemoryEpisodeRepository()
         repo.add(_first())
         episode = repo.list_by_being(ADA)[0]
@@ -419,7 +434,7 @@ class TestHandoff:
         assert repo.list_by_being(ADA)[0].recall_count == 0
 
     def test_restored_episodes_with_events_are_handed_off(self) -> None:
-        """持ち越しから戻すときに、イベントのたまったエピソードがあれば、保存と同じく配り手に渡す。"""
+        """持ち越しから戻すときに、イベントのたまったエピソードがあれば、保存と同じく配送器に渡す。"""
         handed: list[object] = []
         repo = InMemoryEpisodeRepository(handoff=handed.extend)
         episode = _first()
@@ -431,7 +446,7 @@ class TestHandoff:
         assert repo.list_by_being(ADA)[0].recall_count == 1
 
     def test_restored_episodes_with_events_without_handoff_stop_before_storing(self) -> None:
-        """配り手の無い保存先に、イベントのたまったエピソードを戻そうとすると、入れる前に RuntimeError で止まる。"""
+        """配送器の無い保存先に、イベントのたまったエピソードを戻そうとすると、入れる前に RuntimeError で止まる。"""
         repo = InMemoryEpisodeRepository()
         episode = _first()
         episode.recall(turn=5)

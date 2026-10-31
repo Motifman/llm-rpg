@@ -12,7 +12,7 @@ from ai_rpg_world.application.llm.services.recent_events_formatter import (
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
-from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
+from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory, AddEpisodesToMemoryCommand
 from ai_rpg_world.being.domain.episode_writer import EpisodeWriter
 from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
@@ -77,10 +77,12 @@ class PlayerEpisodeWriting:
             self_name, persona = self._persona_of(int(player_id.value))
             contents = self._writer.write(self_name=self_name, persona=persona, events_text=_render(entries))
             result = self._add_episodes.add(
-                contents,
-                being_id=being_id,
-                environment_name=environment_name,
-                written_turn=written_turn,
+                AddEpisodesToMemoryCommand(
+                    being_id=being_id,
+                    contents=contents,
+                    environment_name=environment_name,
+                    written_turn=written_turn,
+                )
             )
         except Exception as exc:
             _logger.warning(

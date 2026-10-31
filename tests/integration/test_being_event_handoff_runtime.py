@@ -196,17 +196,81 @@ class TestBackstoryWritingInTheRuntime:
         assert recorder.payloads(TraceEventKind.BEING_BACKSTORY_WRITTEN) == []
 
     def test_being_without_a_player_is_reported_as_prepare_failed(self) -> None:
-        """どのプレイヤーにも結びつかない Being の範囲が埋まると、名前と人格の文を引けず、prepare_failed として async_event_delivery_failed に残る。裏の仕事は受け付けない。"""
+        """どのプレイヤーにも結びつかない Being の範囲が埋まると、いきさつとエピソードを書く 2 つのハンドラが名前と人格の文を引けず、それぞれ prepare_failed として async_event_delivery_failed に残る。裏の仕事は受け付けない。"""
         runtime, recorder, _ = _runtime()
         stranger = BeingId("being_nobody")
 
         self._fill_range(runtime, stranger)
 
-        (failure,) = recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)
-        assert (failure["reason"], failure["handler"], failure["error_type"]) == (
-            "prepare_failed",
-            "WriteBackstoryHandler",
-            "LookupError",
-        )
+        failures = recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)
+        assert sorted((f["reason"], f["handler"], f["error_type"]) for f in failures) == [
+            ("prepare_failed", "WriteBackstoryHandler", "LookupError"),
+            ("prepare_failed", "WriteEpisodesHandler", "LookupError"),
+        ]
         runtime.shutdown_async_events()
         assert runtime._being_short_term_memory_store.get(stranger).backstories == ()
+
+
+class TestEpisodeWritingInTheRuntime:
+    """本番の runtime で、短期記憶の範囲が埋まると、その範囲のエピソードが裏で書かれ、その Being のターンの始めに記憶に加わることを保証する (design_decisions D1824-19)。"""
+
+    @staticmethod
+    def _end_turns(runtime, being_id, *, turns: range, end_at: int) -> None:
+        store = runtime._being_short_term_memory_store
+        memory = store.get(being_id)
+        for turn in turns:
+            memory.perceive(_seen(), current_turn=turn)
+        memory.end_turn(turn=end_at)
+        store.save(memory)
+
+    def test_episodes_for_the_filled_range_are_added_at_the_turn_entry(self) -> None:
+        """範囲が埋まった短期記憶を保存すると、書いたエピソード (スタブ) が、その Being の結果を反映したときに記憶に加わり、being_episode_written が残る。反映するまでは加わらない。"""
+        runtime, recorder, being_id = _runtime()
+        player = runtime.get_player_ids()[0]
+        self._end_turns(runtime, being_id, turns=range(0, 20), end_at=20)
+        runtime.async_event_executor.shutdown(timeout=5)
+        assert runtime._being_episode_store.list_by_being(being_id) == ()
+
+        runtime.apply_async_results(player)
+
+        (episode,) = runtime._being_episode_store.list_by_being(being_id)
+        assert (episode.body.startswith("(スタブ) "), episode.written_turn) == (True, 20)
+        (payload,) = recorder.payloads(TraceEventKind.BEING_EPISODE_WRITTEN)
+        assert (payload["being_id"], payload["handle"], payload["written_turn"]) == (being_id.value, episode.handle, 20)
+
+    def test_overdue_backstory_does_not_write_episodes_again(self) -> None:
+        """いきさつが遅れて同じ範囲を書き直しても (書き直したいきさつは古い範囲として断られる)、エピソードは書き直さない。エピソードを書くハンドラの失敗も残らない。"""
+        runtime, recorder, being_id = _runtime()
+        player = runtime.get_player_ids()[0]
+        self._end_turns(runtime, being_id, turns=range(0, 20), end_at=20)
+        self._end_turns(runtime, being_id, turns=range(20, 30), end_at=30)
+        runtime.async_event_executor.shutdown(timeout=5)
+
+        runtime.apply_async_results(player)
+
+        assert len(runtime._being_episode_store.list_by_being(being_id)) == 1
+        failures = recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)
+        assert [(f["event_type"], f["handler"], f["error_type"]) for f in failures] == [
+            ("ShortTermMemoryBackstoryOverdueEvent", "WriteBackstoryHandler", "ShortTermMemoryStaleBackstoryException")
+        ]
+
+    def test_failed_episode_writing_reaches_the_trace(self, monkeypatch) -> None:
+        """LLM の応答が崩れてエピソードを書けなければ、handler_failed として WriteEpisodesHandler の名前で async_event_delivery_failed に残り、記憶には何も加わらない。"""
+        monkeypatch.setattr(
+            "ai_rpg_world.application.llm.services.stub_episode_writing_completion.StubEpisodeWritingCompletion.complete_episode_writing_json",
+            lambda self, messages: "JSON ではない応答",
+        )
+        runtime, recorder, being_id = _runtime()
+        player = runtime.get_player_ids()[0]
+        self._end_turns(runtime, being_id, turns=range(0, 20), end_at=20)
+        runtime.async_event_executor.shutdown(timeout=5)
+
+        runtime.apply_async_results(player)
+
+        assert runtime._being_episode_store.list_by_being(being_id) == ()
+        (failure,) = recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)
+        assert (failure["reason"], failure["handler"], failure["event_type"]) == (
+            "handler_failed",
+            "WriteEpisodesHandler",
+            "ShortTermMemoryRangeFilledEvent",
+        )

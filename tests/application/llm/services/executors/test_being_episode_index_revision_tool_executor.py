@@ -62,6 +62,9 @@ def _unchanged(stored: Episode | None, episode: Episode) -> bool:
 
 
 class _RefusingRepository(InMemoryEpisodeRepository):
+    def __init__(self) -> None:
+        super().__init__(handoff=discard_events)
+
     def save(self, episode: Episode) -> None:
         raise EpisodeConflictException("refused")
 

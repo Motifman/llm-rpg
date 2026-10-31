@@ -103,7 +103,20 @@ class EpisodeIndexRevised(DomainEvent):
     turn: int
 
 
-EpisodeEvent = EpisodeRecalled | EpisodeIndexRevised
+@dataclass(frozen=True, kw_only=True)
+class EpisodeWrittenEvent(DomainEvent):
+    """本人がエピソードを書き起こし、記憶に加えた。"""
+
+    being_id: BeingId
+    episode_id: str
+    handle: str
+    environment_name: str
+    written_turn: int
+    index: EpisodeIndex
+    body: str
+
+
+EpisodeEvent = EpisodeRecalled | EpisodeIndexRevised | EpisodeWrittenEvent
 
 
 def _require_recalls(recall_count: object, last_recalled_turn: object, written_turn: int) -> None:
@@ -198,8 +211,8 @@ class Episode(AggregateRoot[EpisodeEvent]):
         body: str,
         taken_handles: Collection[str] = (),
     ) -> Episode:
-        """``taken_handles`` は同じ Being がもう使っている呼び名。"""
-        return cls(
+        """``taken_handles`` は同じ Being がもう使っている呼び名。書いたことを ``EpisodeWrittenEvent`` としてためる。"""
+        episode = cls(
             being_id=being_id,
             episode_id=episode_id,
             handle=_handle_for(episode_id, taken_handles),
@@ -208,6 +221,20 @@ class Episode(AggregateRoot[EpisodeEvent]):
             index=index,
             body=body,
         )
+        episode.add_event(
+            EpisodeWrittenEvent(
+                event_id=uuid.uuid4().int,
+                occurred_at=datetime.now(timezone.utc),
+                being_id=being_id,
+                episode_id=episode_id,
+                handle=episode.handle,
+                environment_name=environment_name,
+                written_turn=written_turn,
+                index=index,
+                body=body,
+            )
+        )
+        return episode
 
     @property
     def being_id(self) -> BeingId:
@@ -330,7 +357,7 @@ class EpisodeRepository(ABC):
         """エピソードが持つ Being の、同じ ID の記録を置き換える。並びの位置は変えない。
 
         記録に無ければ ``EpisodeNotFoundException``、記録からの後の版でなければ
-        (``Episode.follows``) ``EpisodeConflictException`` を投げる。ためたイベントは取り出して配り手に渡す。
+        (``Episode.follows``) ``EpisodeConflictException`` を投げる。ためたイベントは取り出して配送器に渡す。
         """
 
     @abstractmethod
@@ -350,5 +377,6 @@ __all__ = [
     "EpisodeIndexRevised",
     "EpisodeRecalled",
     "EpisodeRepository",
+    "EpisodeWrittenEvent",
     "IndexRevision",
 ]
