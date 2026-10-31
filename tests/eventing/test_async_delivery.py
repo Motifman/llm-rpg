@@ -1,4 +1,4 @@
-"""非同期の受け手が本人ごとの順序と、結果を反映するスレッドを守る。"""
+"""非同期のハンドラが本人ごとの順序と、結果を反映するスレッドを守る。"""
 
 from datetime import datetime, timezone
 from threading import Event, get_ident
@@ -11,7 +11,7 @@ from ai_rpg_world.eventing.async_delivery import AsyncEventExecutor
 
 @pytest.mark.parametrize("_repeat", range(3))
 def test_slow_handler_does_not_block_submission(_repeat: int) -> None:
-    """受け手が停止中でも受付は戻り、結果の反映は受け取る側のスレッドで行う。"""
+    """ハンドラが停止中でも受付は戻り、結果の反映は受け取る側のスレッドで行う。"""
     entered, release = Event(), Event()
     applied: list[tuple[int, int]] = []
     caller = get_ident()
@@ -95,47 +95,6 @@ def test_handler_failure_is_reported_and_next_job_runs() -> None:
     assert str(failures[0].error) == "failed"
 
 
-def test_dispatcher_can_register_async_receiver() -> None:
-    """確定後の非同期登録は、完了した結果を反映の呼び出しまで保留する。"""
-    from ai_rpg_world.eventing import DeliveryChannel, DeliveryGuarantee, EventDispatcher
-    from ai_rpg_world.eventing.async_delivery import AsyncDelivery
-
-    executor = AsyncEventExecutor(failure_observer=lambda failure: None)
-    dispatcher = EventDispatcher[object](failure_observer=lambda *args: None)
-    values: list[int] = []
-    dispatcher.register_after_commit(
-        DomainEvent,
-        lambda event: event.event_id,
-        channel=DeliveryChannel.AUXILIARY,
-        guarantee=DeliveryGuarantee.BEST_EFFORT,
-        asynchronous=AsyncDelivery(executor, lambda event: "a", values.append),
-    )
-    dispatcher.handoff([DomainEvent(7, datetime.now(timezone.utc))])
-    executor.shutdown(timeout=2)
-    assert values == []
-    executor.apply_results("a")
-    assert values == [7]
-
-
-def test_async_registration_rejects_durable_retry() -> None:
-    """非同期の受付成功を配送完了と誤認しないよう、再送必須との組み合わせを登録時に拒否する。"""
-    from ai_rpg_world.eventing import DeliveryChannel, DeliveryGuarantee, EventDispatcher
-    from ai_rpg_world.eventing.async_delivery import AsyncDelivery
-
-    executor = AsyncEventExecutor(failure_observer=lambda failure: None)
-    try:
-        with pytest.raises(ValueError, match="DURABLE_RETRY"):
-            EventDispatcher[object](failure_observer=lambda *args: None).register_after_commit(
-                DomainEvent,
-                lambda event: None,
-                channel=DeliveryChannel.AUXILIARY,
-                guarantee=DeliveryGuarantee.DURABLE_RETRY,
-                asynchronous=AsyncDelivery(executor, lambda event: "a", lambda result: None),
-            )
-    finally:
-        executor.shutdown(timeout=2)
-
-
 def test_capacity_counts_finished_results_until_they_are_applied() -> None:
     """先の結果が反映待ちで次の仕事が実行中なら、両方を未反映の上限に数えて次の受付を断る。"""
     entered, release = Event(), Event()
@@ -203,7 +162,7 @@ def test_shutdown_discards_unfinished_jobs_and_rejects_new_jobs(_repeat: int) ->
         ]
     finally:
         release.set()
-        # 終了後の受け手を確実に片付け、遅い結果が保留一覧に戻らないことを見る。
+        # 終了後のハンドラを確実に片付け、遅い結果が保留一覧に戻らないことを見る。
         from concurrent.futures import wait
 
         wait(tuple(executor._futures), timeout=2)

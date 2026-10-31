@@ -3915,8 +3915,7 @@ def _wire_backstory_writing(
     being_id_of: Callable[[PlayerId], BeingId | None],
     persona_of_player: Callable[[int], tuple[str, str]],
 ) -> None:
-    """短期記憶の範囲が埋まったか、いきさつが遅れているとき、非同期の配送でいきさつを作り、その Being のターンの始めに入れる (design_decisions D1824-12、D1824-17)。"""
-    from ai_rpg_world.application.being.being_backstory_writing import BeingBackstoryWriting
+    """短期記憶の範囲が埋まったか、いきさつが遅れているとき、非同期のハンドラでいきさつを書き、その Being のターンの始めに入れる (design_decisions D1824-18)。"""
     from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
         IShortTermMemorySummaryCompletionPort,
     )
@@ -3926,12 +3925,12 @@ def _wire_backstory_writing(
     from ai_rpg_world.application.llm.wiring._llm_client_factory import (
         create_llm_client_from_config,
     )
+    from ai_rpg_world.being.application.handlers.write_backstory_handler import WriteBackstoryHandler
     from ai_rpg_world.being.domain.short_term_memory import (
         ShortTermMemoryBackstoryOverdueEvent,
         ShortTermMemoryRangeFilledEvent,
     )
     from ai_rpg_world.being.infrastructure.llm_backstory_writer import LlmBackstoryWriter
-    from ai_rpg_world.eventing import AsyncDelivery
     from ai_rpg_world.eventing.delivery import DeliveryChannel, DeliveryGuarantee
 
     complete_json: Callable[[list[dict[str, str]]], Any]
@@ -3949,30 +3948,19 @@ def _wire_backstory_writing(
                 return persona_of_player(int(player_id.value))
         raise LookupError(f"no player acts as {being_id.value}")
 
-    writing = BeingBackstoryWriting(
+    handler = WriteBackstoryHandler(
         writer=LlmBackstoryWriter(complete_json),
         store=runtime._being_short_term_memory_store,
         persona_of=_persona_of_being,
-        trace_recorder_provider=lambda: runtime._trace_recorder,
-        current_tick_provider=lambda: runtime.current_tick(),
     )
     for event_type in (ShortTermMemoryRangeFilledEvent, ShortTermMemoryBackstoryOverdueEvent):
-        dispatcher.register_after_commit(
+        dispatcher.register_async_after_commit(
             event_type,
-            writing.note_person,
+            handler,
             channel=DeliveryChannel.AUXILIARY,
             guarantee=DeliveryGuarantee.BEST_EFFORT,
-        )
-        dispatcher.register_after_commit(
-            event_type,
-            writing.write,
-            channel=DeliveryChannel.AUXILIARY,
-            guarantee=DeliveryGuarantee.BEST_EFFORT,
-            asynchronous=AsyncDelivery(
-                executor=runtime.async_event_executor,
-                recipient_key=lambda event: event.being_id.value,
-                apply_result=writing.apply,
-            ),
+            executor=runtime.async_event_executor,
+            recipient_key=lambda event: event.being_id.value,
         )
 
 
@@ -5705,20 +5693,29 @@ def create_world_runtime(
     )
 
     # Being の保存先は、保存するときにためたイベントをこの配送器に渡す (design_decisions D1837 の 6)。
-    from ai_rpg_world.application.being.short_term_memory_event_traces import (
-        ShortTermMemoryEventTraces,
+    from ai_rpg_world.application.being.handlers.record_short_term_memory_trace_handler import (
+        RecordShortTermMemoryTraceHandler,
     )
-    from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryOldestTurnsDroppedEvent
+    from ai_rpg_world.being.domain.short_term_memory import (
+        ShortTermMemoryBackstoryAddedEvent,
+        ShortTermMemoryOldestTurnsDroppedEvent,
+    )
     from ai_rpg_world.eventing.delivery import DeliveryChannel, DeliveryGuarantee
 
     being_dispatcher: EventDispatcher[None] = EventDispatcher(failure_observer=_record_after_commit_failure)
-    short_term_memory_event_traces = ShortTermMemoryEventTraces(
+    record_short_term_memory_trace = RecordShortTermMemoryTraceHandler(
         trace_recorder_provider=lambda: runtime._trace_recorder,
         current_tick_provider=lambda: runtime.current_tick(),
     )
     being_dispatcher.register_after_commit(
         ShortTermMemoryOldestTurnsDroppedEvent,
-        short_term_memory_event_traces.oldest_turns_dropped,
+        record_short_term_memory_trace.handle,
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    being_dispatcher.register_after_commit(
+        ShortTermMemoryBackstoryAddedEvent,
+        record_short_term_memory_trace.handle,
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
