@@ -38,7 +38,6 @@ def _prompt_of(runtime, player_id: PlayerId) -> str:
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
     wiring.run_phase_a(player_id)
@@ -142,7 +141,6 @@ def _tool_names_of(runtime, player_id: PlayerId) -> list:
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
     wiring.run_phase_a(player_id)

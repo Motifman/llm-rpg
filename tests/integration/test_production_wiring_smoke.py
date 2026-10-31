@@ -15,10 +15,9 @@ PR #443 の実機 run で連続発覚した silent failure 系 bug (PR #439 / #4
 
 本 test 群はそのギャップを埋める「**配線契約テスト**」:
 
-- 短期記憶の実体が ``SummarizingShortTermMemory`` であること (PR #439 silent failure 再発防止)
-- 上記 + ``LLM_CLIENT=litellm`` を組み合わせると、短期記憶の
-  ``_service`` (= 短期記憶要約 LLM 経路) が **None ではなく** 注入されていること
-  (PR #444 silent failure 再発防止)
+- ゲームの出来事が Being の短期記憶に写され、``LLM_CLIENT=litellm`` なら いきさつを書く LLM の経路が
+  スタブではなく LiteLLMClient につながっていること (PR #439 / #444 silent failure 再発防止。
+  今の短期記憶を消すまでは、その実体と要約の LLM の経路を見ていた)
 - ``LiteLLMClient`` の ``_timeout_seconds`` が **必ず有限値** で、litellm
   default 6000 秒のハングが起きない構造になっていること (PR #444 再発防止)
 - env と実体の **型** が trace に書かれた値と一致すること (config-init split
@@ -86,81 +85,31 @@ def _build_runtime(config: Any = None) -> Any:
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestShortTermMemoryConfigVsRuntime:
-    """設定から組んだ短期記憶の実体が、畳んで要約する短期記憶になるか。
+class TestBeingShortTermMemoryWiring:
+    """本番の配線で、ゲームの出来事が Being の短期記憶に入り、いきさつを書く LLM の経路が設定どおりにつながることを保証する (design_decisions D1824-24)。
 
-    PR #439 で silent failure (env=rolling_summary でも DefaultSlidingWindowMemory
-    が使われていた) が発覚し fix された。本 test 群は再発防止。
+    今の短期記憶 (``SummarizingShortTermMemory``) を消す前は、ここでその実体と要約の LLM の経路を見ていた
+    (PR #439 / #444 の静かな失敗の再発防止)。同じ形の失敗を、Being の短期記憶の配線で見張る。
     """
 
-    def test_config_unspecified_default_short_term_memory(self) -> None:
-        """設定未指定 → default の SummarizingShortTermMemory が使われる (#1631)。"""
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
-
+    def test_game_events_are_copied_into_the_being_short_term_memory(self) -> None:
+        """ストアに足した出来事を、写す処理 (PlayerShortTermMemoryCopy) が聞いている。"""
         runtime = _build_runtime()
-        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
-    def test_turn_window_follows_the_domain_constants(self) -> None:
-        """短期記憶のターン数は設定ではなく、Being のドメインの定数 (RECENT_TURNS / FOLD_TURNS / BACKSTORY_GENERATIONS) に従う (design_decisions D1824-9)。"""
-        from ai_rpg_world.being.domain.short_term_memory import (
-            BACKSTORY_GENERATIONS,
-            FOLD_TURNS,
-            RECENT_TURNS,
-        )
+        assert runtime._being_short_term_memory_copy is not None
+        assert runtime._being_short_term_memory_copy.on_appended in runtime._recent_event_store._append_listeners
 
-        memory = _build_runtime()._short_term_memory
+    def test_stub_client_writes_backstories_with_the_stub_completion(self) -> None:
+        """LLM_CLIENT=stub なら、いきさつはスタブの完了で書く。"""
+        from ai_rpg_world.application.llm.services.stub_backstory_completion import stub_backstory_completion
 
-        assert (memory._turn_cap, memory._compact_turn_count, memory._keep_gen) == (
-            RECENT_TURNS,
-            FOLD_TURNS,
-            BACKSTORY_GENERATIONS,
-        )
+        runtime = _build_runtime(ResolvedLlmRuntimeConfig.for_tests(llm_client_kind="stub"))
 
+        assert _backstory_completion(runtime) is stub_backstory_completion
 
-# ──────────────────────────────────────────────────────────────────
-# Short-term memory: LLM 経路の実注入
-# ──────────────────────────────────────────────────────────────────
-
-
-class TestShortTermMemoryLlmServicesWired:
-    """rolling_summary + LLM_CLIENT=litellm のとき、summary_service が実体注入される。
-
-    PR #444 で silent failure (setter は存在するが呼び出し側 wiring が未実装で
-    L4 / L5 が全件 template fallback だった) が fix された。本 test 群は再発防止。
-    """
-
-    def test_rolling_summary_stub_client_summary_service_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """LLM_CLIENT=stub なら LiteLLMClient ではないので summary_service は注入されない
-        (= template fallback mode で動く / これは正しい挙動)。"""
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
-
-        runtime = _build_runtime(
-            ResolvedLlmRuntimeConfig.for_tests(
-                llm_client_kind="stub",
-            )
-        )
-        sw = runtime._short_term_memory
-        assert isinstance(sw, SummarizingShortTermMemory)
-        # stub なので LLM 経路は注入されない
-        assert sw._service is None
-
-    def test_rolling_summary_litellm_client_summary_service(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """PR #444 fix の核心 assert: rolling + litellm なら setter 注入が走り、
-        ``_service`` が None でなくなる。
-
-        PR #444 前は呼び出し側 wiring が未実装で、ここが None のまま動いていた
-        (= L4 が全件 template fallback)。
-        """
-        from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
-            ShortTermMemorySummaryService,
-        )
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
+    def test_litellm_client_writes_backstories_through_the_client(self) -> None:
+        """LLM_CLIENT=litellm なら、いきさつは LiteLLMClient の complete_short_term_summary_json で書く。スタブに落ちていない。"""
+        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
         runtime = _build_runtime(
             ResolvedLlmRuntimeConfig.for_tests(
@@ -169,16 +118,23 @@ class TestShortTermMemoryLlmServicesWired:
                 llm_api_key="sk-test-dummy",
             )
         )
-        sw = runtime._short_term_memory
-        assert isinstance(sw, SummarizingShortTermMemory)
-        # PR #444: LLM 経路が確実に注入される
-        assert sw._service is not None, (
-            "PR #444 silent failure 再発: rolling_summary + LLM_CLIENT=litellm "
-            "なのに sliding_window._service=None。L4 が template fallback で動く危険"
-        )
-        assert isinstance(sw._service, ShortTermMemorySummaryService)
-        # persona_resolver も注入される (= L4 が player ごとの persona を読める)
-        assert sw._persona_resolver is not None
+
+        completion = _backstory_completion(runtime)
+        assert isinstance(getattr(completion, "__self__", None), LiteLLMClient)
+        assert completion.__name__ == "complete_short_term_summary_json"
+
+
+def _backstory_completion(runtime: Any) -> Any:
+    from ai_rpg_world.being.application.handlers.write_backstory_handler import WriteBackstoryHandler
+
+    dispatcher = runtime._being_short_term_memory_store._handoff.__self__
+    handlers = [
+        r.handler.handler
+        for r in dispatcher._after_commit
+        if isinstance(getattr(r.handler, "handler", None), WriteBackstoryHandler)
+    ]
+    assert handlers, "いきさつを書くハンドラが登録されていない"
+    return handlers[0]._write._writer._complete_json
 
 
 # ──────────────────────────────────────────────────────────────────

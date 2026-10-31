@@ -148,7 +148,7 @@ def _format_stable_to_volatile(
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
 
-    順序: objective → mid_summary (L4) → recent_events →
+    順序: objective → mid_summary (いきさつ) → recent_events →
     memos → current_state。
 
     section 寿命 / 変動率の根拠 (Y_after_pr612 実測, tick 1-107):
@@ -156,7 +156,7 @@ def _format_stable_to_volatile(
     | section              | 変動率 (per tick) | 種類 |
     |----------------------|------------------|------|
     | objective            | 0% (静的)         | 純 stable |
-    | L4 mid_summary       | 15 tick に 1 世代  | stable |
+    | mid_summary (いきさつ) | いきさつが届いたときだけ (#1824) | stable |
     | recent_events (head) | ~0% (末尾 append) | **head 安定** |
     | memos                | 23-43%            | high-volatile (agent 操作依存) |
     | current_state        | ~100% (毎 tick)   | 最 volatile |
@@ -181,7 +181,7 @@ def _format_stable_to_volatile(
     _emit_objective(sections, objective_text)
     _emit_known_people(sections, known_people_text)
 
-    # 3. ここまでのいきさつ (L4 mid summary、空なら省略)
+    # 3. ここまでのいきさつ (Being の短期記憶のいきさつ、空なら省略)
     if mid_summary_text.strip():
         sections.extend(
             [

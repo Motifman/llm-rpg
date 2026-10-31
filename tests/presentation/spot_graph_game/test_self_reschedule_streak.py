@@ -19,9 +19,6 @@ from dataclasses import dataclass
 
 import pytest
 
-from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-    SummarizingShortTermMemory,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
     _WorldLlmTurnTrigger,
@@ -52,7 +49,6 @@ def _make_trigger(max_streak: int = 5) -> _WorldLlmTurnTrigger:
 
     class _DummyWiring:
         runtime = _DummyRuntime()
-        short_term_memory = SummarizingShortTermMemory()
 
     return _WorldLlmTurnTrigger(
         wiring=_DummyWiring(),
@@ -80,26 +76,6 @@ class TestSelfRescheduleStreakIncrement:
         for expected in (1, 2, 3, 4):
             t._account_result(1, _ResultStub(should_reschedule=True))
             assert t._self_reschedule_streak.get(1) == expected
-
-    def test_executed_wave_is_recorded_as_one_short_term_turn(self):
-        """実行済みの 1 wave は短期記憶の 1 ターンになる。"""
-        t = _make_trigger()
-
-        t._account_result(1, _ResultStub())
-
-        store = t.wiring.short_term_memory._event_store
-        assert store.completed_turn_count(_pid(1)) == 1
-
-    def test_each_self_reschedule_wave_closes_a_separate_turn(self):
-        """再スケジュールで別 wave に進むたび、別のターン境界を記録する。"""
-        t = _make_trigger()
-
-        t._account_result(1, _ResultStub(should_reschedule=True))
-        t.pending_player_ids.clear()
-        t._account_result(1, _ResultStub(should_reschedule=False))
-
-        store = t.wiring.short_term_memory._event_store
-        assert store.completed_turn_count(_pid(1)) == 2
 
 
 class TestSelfRescheduleStreakLimit:

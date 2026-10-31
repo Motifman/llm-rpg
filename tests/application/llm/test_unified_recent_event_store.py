@@ -1,18 +1,12 @@
-"""観測と行動を統一しても、従来の種類別 view と描画を保つことを保証する。"""
+"""UnifiedRecentEventStore が、未処理の観測と直近の行動の結果だけを持ち、足した出来事を聞き手に知らせることを保証する (design_decisions D1824-24)。"""
 
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
-from ai_rpg_world.application.llm.services.recent_events_formatter import (
-    DefaultRecentEventsFormatter,
-)
-from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-    SummarizingShortTermMemory,
-)
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    RECENT_ACTION_RESULTS_KEPT,
     UnifiedRecentEventStore,
 )
 from ai_rpg_world.application.observation.contracts.dtos import (
@@ -42,164 +36,93 @@ def _action(minutes: int, summary: str) -> ActionResultEntry:
     )
 
 
-def test_unified_store_returns_both_kinds_in_occurred_at_order() -> None:
-    """記録順が前後しても統一時系列は occurred_at の古い順になる。"""
-    store = UnifiedRecentEventStore()
-    store.append_action_result(_PLAYER, _action(3, "三番目の行動"))
-    store.append_observation(_PLAYER, _observation(1, "最初の観測"))
-    store.append_action_result(_PLAYER, _action(2, "二番目の行動"))
+class TestRecentActionResults:
+    """直近の行動の結果を、新しい順に、決まった件数まで持つことを保証する。"""
 
-    timeline = store.get_timeline(_PLAYER)
+    def test_recent_action_results_are_newest_first(self) -> None:
+        """行動の結果は、起きた時刻の新しい順に limit 件まで返す。"""
+        store = UnifiedRecentEventStore()
+        for minute, summary in ((1, "扉を開けた"), (3, "階段を降りた"), (2, "棚を調べた")):
+            store.append_action_result(_PLAYER, _action(minute, summary))
 
-    assert [entry.kind for entry in timeline] == [
-        "observation",
-        "action_result",
-        "action_result",
-    ]
-    assert [entry.occurred_at for entry in timeline] == sorted(entry.occurred_at for entry in timeline)
+        assert [e.action_summary for e in store.get_recent_action_results(_PLAYER, 2)] == ["階段を降りた", "棚を調べた"]
 
+    def test_same_time_results_put_the_earlier_one_first(self) -> None:
+        """同じ時刻の行動の結果は、先に足したものを先に返す。並びを持っていたころと同じ順。"""
+        store = UnifiedRecentEventStore()
+        store.append_action_result(_PLAYER, _action(1, "先"))
+        store.append_action_result(_PLAYER, _action(1, "後"))
 
-def test_kind_views_return_only_the_requested_existing_dto_type() -> None:
-    """種類別 view は他方を混ぜず、従来 DTO を新しい順で返す。"""
-    store = UnifiedRecentEventStore()
-    observations = [_observation(1, "観測1"), _observation(3, "観測2")]
-    actions = [_action(2, "行動1"), _action(4, "行動2")]
-    for entry in observations:
-        store.append_observation(_PLAYER, entry)
-    for entry in actions:
-        store.append_action_result(_PLAYER, entry)
+        assert [e.action_summary for e in store.get_recent_action_results(_PLAYER, 2)] == ["先", "後"]
 
-    assert store.get_recent_observations(_PLAYER, 20) == list(reversed(observations))
-    assert store.get_recent_action_results(_PLAYER, 20) == list(reversed(actions))
+    def test_only_the_last_kept_count_of_results_are_kept(self) -> None:
+        """RECENT_ACTION_RESULTS_KEPT 件を超えて足すと、古く足したものから捨てる。"""
+        store = UnifiedRecentEventStore()
+        for minute in range(RECENT_ACTION_RESULTS_KEPT + 3):
+            store.append_action_result(_PLAYER, _action(minute, f"行動 {minute}"))
 
+        kept = store.action_results_in_storage_order(_PLAYER)
+        assert [e.action_summary for e in kept] == [
+            f"行動 {minute}" for minute in range(3, RECENT_ACTION_RESULTS_KEPT + 3)
+        ]
 
-def test_recent_events_rendering_is_byte_identical_to_the_legacy_two_list_path() -> None:
-    """旧2リスト経路と統一ストアの種類別 view は同じ本文を1バイトも変えない。"""
-    observations = [_observation(1, "物音を聞いた。"), _observation(4, "扉が閉じた。")]
-    actions = [_action(2, "周囲を見渡した"), _action(3, "声をかけた")]
-    formatter = DefaultRecentEventsFormatter()
-    legacy_text = formatter.format(list(reversed(observations)), list(reversed(actions)))
+    def test_negative_limit_is_rejected(self) -> None:
+        """limit に負の数を渡すと ValueError を投げる。"""
+        with pytest.raises(ValueError):
+            UnifiedRecentEventStore().get_recent_action_results(_PLAYER, -1)
 
-    store = UnifiedRecentEventStore()
-    for entry in observations:
-        store.append_observation(_PLAYER, entry)
-    for entry in actions:
-        store.append_action_result(_PLAYER, entry)
-    unified_text = formatter.format_unified_entries(
-        store.get_recent_timeline(
-            _PLAYER,
-            observation_limit=20,
-            action_result_limit=20,
-            newest_equal_observation_first=False,
+    def test_replaced_results_are_kept_up_to_the_count(self) -> None:
+        """snapshot から戻すときも、RECENT_ACTION_RESULTS_KEPT 件を超えた古いものは捨てる。"""
+        store = UnifiedRecentEventStore()
+
+        store.replace_action_results(
+            _PLAYER, [_action(minute, f"行動 {minute}") for minute in range(RECENT_ACTION_RESULTS_KEPT + 1)]
         )
-    )
 
-    assert unified_text == legacy_text
-
-
-def test_turn_buckets_keep_the_existing_head_until_compaction() -> None:
-    """cap 手前ではターンを追加しても、既存の出来事本文は先頭から変わらない。"""
-    store = UnifiedRecentEventStore()
-    memory = SummarizingShortTermMemory(
-        event_store=store,
-        turn_cap=4,
-        compact_turn_count=2,
-    )
-    formatter = DefaultRecentEventsFormatter()
-    rendered: list[str] = []
-
-    for turn in range(3):
-        store.append_action_result(_PLAYER, _action(turn, f"行動{turn}"))
-        memory.complete_turn(_PLAYER)
-        rendered.append(formatter.format_unified_entries(store.get_active_timeline(_PLAYER)))
-
-    assert rendered[1].startswith(rendered[0])
-    assert rendered[2].startswith(rendered[1])
-    assert store.completed_turn_sizes(_PLAYER) == (1, 1, 1)
+        assert len(store.action_results_in_storage_order(_PLAYER)) == RECENT_ACTION_RESULTS_KEPT
 
 
-def test_reaching_cap_compacts_oldest_turns_and_keeps_the_rest() -> None:
-    """cap 到達時は古い K ターンだけを外し、残る N-K ターンを空にしない。"""
-    store = UnifiedRecentEventStore()
-    memory = SummarizingShortTermMemory(
-        event_store=store,
-        turn_cap=4,
-        compact_turn_count=2,
-    )
+class TestObservationsAreNotKept:
+    """観測は持たず、聞き手に知らせるだけであることを保証する。"""
 
-    for turn in range(4):
-        store.append_action_result(_PLAYER, _action(turn, f"行動{turn}"))
-        memory.complete_turn(_PLAYER)
+    def test_appended_observation_is_not_kept(self) -> None:
+        """観測を足しても、預かりにも行動の結果にも残らない。"""
+        store = UnifiedRecentEventStore()
 
-    actions = store.action_results_in_storage_order(_PLAYER)
-    assert [entry.action_summary for entry in actions] == ["行動2", "行動3"]
-    assert store.completed_turn_sizes(_PLAYER) == (1, 1)
-    assert store.get_active_timeline(_PLAYER)
+        store.append_observation(_PLAYER, _observation(1, "扉が開いた"))
+
+        assert store.get_pending_observations(_PLAYER) == []
+        assert store.action_results_in_storage_order(_PLAYER) == []
 
 
-def test_many_observations_do_not_evict_actions_from_recent_turns() -> None:
-    """観測が大量に流入しても、畳む前のターン窓にある自分の行動も観測も押し出されない。"""
-    store = UnifiedRecentEventStore()
-    memory = SummarizingShortTermMemory(
-        event_store=store,
-        turn_cap=5,
-        compact_turn_count=2,
-    )
+class TestPendingObservations:
+    """手番の前に届いた観測を、取り出すまで預かることを保証する。"""
 
-    for turn in range(4):
-        for index in range(40):
-            memory.append(
-                _PLAYER,
-                _observation(turn * 100 + index, f"観測{turn}-{index}"),
-            )
-        store.append_action_result(_PLAYER, _action(turn, f"行動{turn}"))
-        memory.complete_turn(_PLAYER)
+    def test_drain_returns_pending_observations_in_order_and_empties_them(self) -> None:
+        """預かった観測は、取り出すと届いた順に返り、預かりは空になる。"""
+        store = UnifiedRecentEventStore()
+        store.append_pending_observation(_PLAYER, _observation(1, "扉が開いた"))
+        store.append_pending_observation(_PLAYER, _observation(2, "鐘が鳴った"))
 
-    assert [entry.action_summary for entry in store.action_results_in_storage_order(_PLAYER)] == [
-        "行動0",
-        "行動1",
-        "行動2",
-        "行動3",
-    ]
-    assert len(store.observations_in_storage_order(_PLAYER)) == 160
+        drained = store.drain_pending_observations(_PLAYER)
 
+        assert [e.output.prose for e in drained] == ["扉が開いた", "鐘が鳴った"]
+        assert store.get_pending_observations(_PLAYER) == []
 
-def test_short_term_memory_implementation_must_accept_turn_completion() -> None:
-    """complete_turn を実装しない短期記憶は構築できず、配線漏れを許さない。"""
+    def test_player_ids_include_players_with_pending_or_results(self) -> None:
+        """預かりか行動の結果のあるプレイヤーを返す。"""
+        store = UnifiedRecentEventStore()
+        store.append_pending_observation(PlayerId(1), _observation(1, "扉が開いた"))
+        store.append_action_result(PlayerId(2), _action(1, "扉を通った"))
 
-    class _IncompleteShortTermMemory(IShortTermMemory):
-        def append(self, player_id, entry):  # type: ignore[no-untyped-def]
-            pass
-
-        def append_all(self, player_id, entries):  # type: ignore[no-untyped-def]
-            pass
-
-        def get_recent(self, player_id, limit):  # type: ignore[no-untyped-def]
-            return []
-
-    with pytest.raises(TypeError, match="abstract class"):
-        _IncompleteShortTermMemory()
-
-
-def test_open_turn_entries_return_only_what_arrived_after_the_last_closed_turn() -> None:
-    """前のターンを閉じたあとに届いた観測と行動だけを、届いた順に返し、閉じたターンの分は含めない。"""
-    store = UnifiedRecentEventStore()
-    store.append_observation(_PLAYER, _observation(1, "閉じたターンの観測"))
-    store.close_turn(_PLAYER)
-    store.append_action_result(_PLAYER, _action(3, "いまのターンの行動"))
-    store.append_observation(_PLAYER, _observation(2, "いまのターンの観測"))
-
-    entries = store.open_turn_entries(_PLAYER)
-
-    assert [entry.kind for entry in entries] == ["action_result", "observation"]
-    assert store.open_turn_entries(PlayerId(8)) == []
+        assert store.player_ids() == {1, 2}
 
 
 class TestAppendListeners:
-    """追記を知らせる口 (add_append_listener) が、時系列に入った出来事を入れた順に、2 つ目の書き手 (design_decisions D1824-7) へ渡すことを保証する。"""
+    """足した出来事を知らせる処理 (add_append_listener) が、足した順に聞き手へ渡すことを保証する。写す処理 (PlayerShortTermMemoryCopy) がこれで Being の短期記憶に書く (design_decisions D1824-7)。"""
 
     def test_listener_receives_observations_and_action_results_in_order(self) -> None:
-        """観測と行動の結果を足すと、知らせる口に、追記した時系列の 1 件ずつがその順で届く。"""
+        """観測と行動の結果を足すと、聞き手に 1 件ずつがその順で届く。"""
         store = UnifiedRecentEventStore()
         received: list[tuple[PlayerId, str]] = []
         store.add_append_listener(lambda pid, entry: received.append((pid, entry.kind)))
@@ -208,21 +131,20 @@ class TestAppendListeners:
         store.append_action_result(_PLAYER, _action(2, "扉を通った"))
 
         assert received == [(_PLAYER, "observation"), (_PLAYER, "action_result")]
-        assert [e.kind for e in store.get_timeline(_PLAYER)] == ["observation", "action_result"]
 
     def test_pending_and_replaced_entries_are_not_announced(self) -> None:
-        """未処理の観測の預かりと、snapshot から戻す置き換えは、時系列への追記ではないので知らせない。"""
+        """未処理の観測の預かりと、snapshot から戻す置き換えは、足した出来事ではないので知らせない。"""
         store = UnifiedRecentEventStore()
         received: list[object] = []
         store.add_append_listener(lambda pid, entry: received.append(entry))
 
         store.append_pending_observation(_PLAYER, _observation(1, "扉が開いた"))
-        store.replace_observations(_PLAYER, [_observation(2, "鐘が鳴った")])
+        store.replace_action_results(_PLAYER, [_action(2, "扉を通った")])
 
         assert received == []
 
     def test_removed_listener_is_no_longer_called(self) -> None:
-        """外した口には、そのあとの追記を知らせない。"""
+        """外した聞き手には、そのあとに足した出来事を知らせない。"""
         store = UnifiedRecentEventStore()
         received: list[object] = []
         listener = lambda pid, entry: received.append(entry)  # noqa: E731
@@ -234,6 +156,6 @@ class TestAppendListeners:
         assert received == []
 
     def test_non_callable_listener_is_rejected(self) -> None:
-        """呼べない値を知らせる口に渡すと TypeError を投げる。"""
+        """呼べない値を聞き手に渡すと TypeError を投げる。"""
         with pytest.raises(TypeError):
             UnifiedRecentEventStore().add_append_listener("not callable")  # type: ignore[arg-type]

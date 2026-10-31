@@ -407,7 +407,6 @@ class GameRuntimeManager:
         llm_wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
             llm_client=create_llm_client_from_config(runtime_config, aux_call_sink=runtime._aux_llm_call_sink),
             # 使えるキーが無い設定はここで落ちる。1 件目の判断まで進ませない。
             typed_judgment_port=create_typed_judgment_port_from_config(

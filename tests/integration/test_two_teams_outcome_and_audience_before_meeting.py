@@ -149,7 +149,6 @@ def _speak(runtime, player_id: PlayerId, content: str) -> str:
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=_NoCallClient(),
     )
     prompt = runtime.build_full_prompt(player_id)

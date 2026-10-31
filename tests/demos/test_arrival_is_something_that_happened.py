@@ -99,7 +99,6 @@ class TestGoingWhereYouAlreadyAreIsNotAFailure:
         wiring = _WorldLlmWiring(
             runtime=race,
             observation_buffer=race._obs_buffer,
-            short_term_memory=race._short_term_memory,
             llm_client=_Client(),
         )
         context = race.build_full_prompt(_GAREN)["tool_runtime_context"]

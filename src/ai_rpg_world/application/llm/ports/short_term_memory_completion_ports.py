@@ -1,15 +1,7 @@
-"""短期記憶 (Phase 2) の LLM 完了 Port。
+"""Being の短期記憶のいきさつを書く LLM の呼び出しのインタフェース (#1824)。
 
-DDD 再編 (Issue #470 Phase 1):
-- 旧: 本ファイルに L4MidSummary (Value Object) と
-  Port (LLM 完了 interface) が同居していた
-- 新: Value Object は ``domain/memory/short_term/value_object/`` に昇格、
-  Port は application 層の責務 (= 外部 LLM API との境界) として本ファイルに残る
-
-L4MidSummary を使うコードは
-``ai_rpg_world.domain.memory.short_term.value_object`` から import すること。
-
-詳細: docs/memory_system/short_term_memory_design.md §3, §4。
+名前は、今の短期記憶の要約を書いていたころのまま。費用の記録 (``aux_llm_call``) の component も
+``short_term_summary`` のままにして、前の run と比べられるようにしている。
 """
 
 from __future__ import annotations
@@ -19,7 +11,7 @@ from typing import Any
 
 
 class IShortTermMemorySummaryCompletionPort(ABC):
-    """L4 mid summary 生成用の無ツール JSON 完了 port。"""
+    """いきさつを書くための、道具を使わない JSON の完了。"""
 
     @abstractmethod
     def complete_short_term_summary_json(
@@ -30,8 +22,7 @@ class IShortTermMemorySummaryCompletionPort(ABC):
 
         Raises:
             LlmApiCallException: API 失敗 / 空応答 / JSON パース不能時。
-                呼び出し元 (``ShortTermMemorySummaryService``) は template
-                fallback に縮退する。
+                呼び出し元 (``LlmBackstoryWriter``) はそのまま投げ、いきさつを書く非同期の処理の失敗になる。
         """
         raise NotImplementedError
 

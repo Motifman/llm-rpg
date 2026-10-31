@@ -1008,7 +1008,8 @@ _AUX_COMPONENT_LABELS: dict[str, str] = {
     # report を読むために残す。
     "episode_subjective": "主観の書き込み",
     "short_term_long_summary": "短期記憶の長い要約",
-    AuxLlmComponent.SHORT_TERM_SUMMARY.value: "短期記憶の要約",
+    # 2026-10-31 より前の run では今の短期記憶の要約、それ以後は Being の短期記憶のいきさつ (design_decisions D1824-24)。
+    AuxLlmComponent.SHORT_TERM_SUMMARY.value: "短期記憶のいきさつ",
     AuxLlmComponent.EPISODE_WRITING.value: "エピソードの書き起こし",
     AuxLlmComponent.TYPED_JUDGMENT.value: "Jev の型付き判断",
 }

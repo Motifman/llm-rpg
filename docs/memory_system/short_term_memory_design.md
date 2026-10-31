@@ -1,5 +1,7 @@
 # 短期記憶 (Short-Term Memory) 設計
 
+> **2026-10-31 に、この文書の短期記憶 (`SummarizingShortTermMemory`) とその要約、要約の scheduler を消した** (design_decisions D1824-24)。プロンプトの【直近の出来事】と【ここまでのいきさつ】は Being の短期記憶 (`being/domain/short_term_memory.py`) から作る (design_decisions D1824-22)。以下は消す前の設計の記録。
+
 > このドキュメントは、現在の `DefaultSlidingWindowMemory` (固定容量 20 件の
 > sliding window) を補完する **rolling summary 型** の短期記憶モジュールの
 > 設計を確定した版。実験 #25 (Issue #356) の trace 分析を出発点に、

@@ -109,7 +109,6 @@ def _first_turn_prompt(scenario: str, mapping: dict[str, str]) -> str:
     _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
         typed_judgment_port=ScriptedJudgmentPort(),
     ).run_phase_a(PlayerId(1))

@@ -15,6 +15,7 @@ from typing import Protocol
 class AuxLlmComponent(str, Enum):
     """呼び出した部品。report.md はこの単位で費用を分ける。"""
 
+    # Being の短期記憶のいきさつ。値は、今の短期記憶の要約を書いていたころのまま (design_decisions D1824-24)。
     SHORT_TERM_SUMMARY = "short_term_summary"
     EPISODE_WRITING = "episode_writing"
     TYPED_JUDGMENT = "typed_judgment"

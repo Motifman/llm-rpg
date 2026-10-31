@@ -146,7 +146,6 @@ def captured(request) -> dict[str, Any]:
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
     wiring.run_phase_a(PlayerId(1))

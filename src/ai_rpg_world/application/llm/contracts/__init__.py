@@ -24,7 +24,6 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ILlmTurnTrigger,
     IPromptBuilder,
     IRecentEventsFormatter,
-    IShortTermMemory,
     ISystemPromptBuilder,
 )
 
@@ -58,6 +57,5 @@ __all__ = [
     "ILlmTurnTrigger",
     "IPromptBuilder",
     "IRecentEventsFormatter",
-    "IShortTermMemory",
     "ISystemPromptBuilder",
 ]

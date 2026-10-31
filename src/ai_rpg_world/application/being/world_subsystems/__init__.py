@@ -35,10 +35,8 @@ Phase 9-4b: world-side time/weather
 - ``DayNightSubsystemCodec`` — day_night cycle の現 phase (= tick から再計算)
 - travel stage は state を持たない (= PlayerSpotNavigationState で代替済)
 
-Phase 9-4c: 短期記憶 (= LLM agent の prompt context)
-- ``ShortTermMemorySubsystemCodec`` — 直近観測を保持する短期記憶
-- ``ObservationBufferSubsystemCodec`` — 未 drain の pending 観測
-- ``ActionResultStoreSubsystemCodec`` — 直近の tool 実行結果
+Phase 9-4c: 直近の出来事のストア
+- ``UnifiedRecentEventStoreSubsystemCodec`` — 未処理の観測と直近の行動の結果 (design_decisions D1824-24)
 
 Encounter Memory PR2: familiarity 信号
 - ``EncounterMemorySubsystemCodec`` — player ごとの (entity / spot / event-type)
@@ -119,9 +117,6 @@ from ai_rpg_world.application.being.world_subsystems.scenario_predicate_rng_code
     ScenarioPredicateRngSubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems.short_term_memory_codec import (
-    ActionResultStoreSubsystemCodec,
-    ObservationBufferSubsystemCodec,
-    ShortTermMemorySubsystemCodec,
     UnifiedRecentEventStoreSubsystemCodec,
     migrate_legacy_recent_event_subsystems,
 )
@@ -167,9 +162,6 @@ __all__ = [
     "WeatherSubsystemCodec",
     "DayNightSubsystemCodec",
     # Phase 9-4c
-    "ShortTermMemorySubsystemCodec",
-    "ObservationBufferSubsystemCodec",
-    "ActionResultStoreSubsystemCodec",
     "UnifiedRecentEventStoreSubsystemCodec",
     "migrate_legacy_recent_event_subsystems",
     # Encounter Memory (PR2)

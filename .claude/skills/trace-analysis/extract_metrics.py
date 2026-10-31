@@ -143,7 +143,9 @@ def _extract_summary(events: list[dict]) -> dict[str, Any]:
         "episodic_chunk_written": counts_by_kind.get("episodic_chunk_written", 0),
         "episodic_subjective_filled": counts_by_kind.get("episodic_subjective_filled", 0),
         "episode_writing": counts_by_kind.get("episode_writing", 0),
+        # 2026-10-31 より前の trace の今の短期記憶の要約。それより後は being_backstory_written。
         "short_term_summary": counts_by_kind.get("short_term_summary_generated", 0),
+        "being_backstory_written": counts_by_kind.get("being_backstory_written", 0),
         "short_term_long_summary": counts_by_kind.get("short_term_long_summary_generated", 0),
         "loop_guard_warning": counts_by_kind.get("loop_guard_warning", 0),
         "typed_judgment": counts_by_kind.get("typed_judgment", 0),
@@ -1004,6 +1006,7 @@ def _make_comparison(current: dict, baseline: dict) -> list[dict]:
         ("失敗率", "action_fail_rate", "pct"),
         ("episode_writing", "episode_writing", "int"),
         ("short_term_summary", "short_term_summary", "int"),
+        ("being_backstory_written", "being_backstory_written", "int"),
         ("short_term_long_summary", "short_term_long_summary", "int"),
         ("loop_guard_warning", "loop_guard_warning", "int"),
         ("typed_judgment", "typed_judgment", "int"),

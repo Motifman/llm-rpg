@@ -318,8 +318,10 @@ class TestDistantCueAppearanceRuntime:
         user_message = prompt["messages"][1]["content"]
 
         assert "北東の山の方から白い煙が上がった。" in user_message
-        recent = runtime._short_term_memory.get_recent(player_id, 20)
-        assert any(entry.output.structured.get("type") == "distant_cue_appeared" for entry in recent)
+        recent = runtime._being_short_term_memory_store.get(runtime._acting_being_for(player_id).being_id).recent()
+        assert any(
+            "北東の山の方から白い煙が上がった。" in getattr(getattr(e, "observation", None), "body", "") for e in recent
+        )
 
     def test_restored_active_true_state_does_not_fire_again(self) -> None:
         """snapshot restore 後に active=true と復元された cue は同じ出現を再発火しない。"""

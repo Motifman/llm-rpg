@@ -128,28 +128,10 @@ class TraceEventKind:
     # 落とすが、run 中の状態変化で発見した場合は実験データを守るため
     # trace に残して続行する。payload: violation_count / violations[]。
     PROMPT_ARGUMENT_CONTRACT_VIOLATION = "prompt_argument_contract_violation"
-    # Phase 2.1: 短期記憶 L4 生成タスクが scheduler でキュー満杯 / shutdown 後に
-    # drop された瞬間。payload: reason / queue_size / max_queue_size。
-    # silent failure 防止のため、drop は trace + warning で必ず可観測化する。
-    SHORT_TERM_SUMMARY_DROPPED = "short_term_summary_dropped"
-    # Phase 2.2: 短期記憶 L4 生成タスク (scheduler worker 内) が例外で死んだ瞬間。
-    # 通常パスでは ``_run_generation`` が全例外を握って template fallback を
-    # install するため、ここに到達するのは "fallback すら失敗した" バグ性の
-    # 事象。log だけでなく trace でも見えるようにする (silent failure 防止)。
-    # payload: error_type / error_message_snippet / latency_ms (worker 開始からの)
-    SHORT_TERM_SUMMARY_GENERATION_FAILED = "short_term_summary_generation_failed"
-    # PR #435: L4 mid summary が install された瞬間 (LLM 成功 / template fallback
-    # の両方を含む)。失敗時の trace は既に SHORT_TERM_SUMMARY_DROPPED /
-    # _GENERATION_FAILED にあるが、**成功時の生成内容** を捕捉する経路が無く、
-    # 「rolling が何を圧縮して覚えていたか」が事後追えなかった (実験 #30 前準備で
-    # ギャップとして発覚)。
-    # payload: summary_id / raw_count / compressed_activity / emotional_summary /
-    # is_fallback
-    SHORT_TERM_SUMMARY_GENERATED = "short_term_summary_generated"
-    # 短期記憶のターン窓が古いターン群を畳んだ瞬間。summary 生成の成否とは
-    # 別に、圧縮自体の発火を測る。payload: completed_turn_count_before / after /
-    # entry_count_before / after / compacted_turn_count。
-    SHORT_TERM_MEMORY_COMPACTED = "short_term_memory_compacted"
+    # 2026-10-31 より前の trace には、今の短期記憶とその要約の trace も残る (design_decisions D1824-24)。
+    # short_term_summary_dropped / short_term_summary_generation_failed / short_term_summary_generated
+    # (要約を作れなかった、作った) と short_term_memory_compacted (古いターンを畳んだ)。今は Being の短期記憶の
+    # being_short_term_memory_range_filled / being_backstory_written / being_short_term_memory_fold_forced が受け持つ。
     # Phase 7 (Issue #470): Being snapshot save / load。run が前回 snapshot
     # からの続きか・どの player の memory が今 run の trace に乗っているかを
     # post-hoc 分析できるようにする。silent failure 防止用に **必ず** trace に

@@ -261,7 +261,7 @@ class TestE2ECaptureRestoreRoundTrip:
             ),
             game_time_label="Day 1 morning",
         )
-        src_runtime._short_term_memory.append(first_pid, obs)
+        src_runtime._obs_buffer.append(first_pid, obs)
 
         # 6. action_result_store: action result 1 件
         ar = ActionResultEntry(
@@ -290,20 +290,11 @@ class TestE2ECaptureRestoreRoundTrip:
         sd_entry = next(e for e in subsystems["player_state_dict"]["entries"] if e["player_id"] == int(first_pid.value))
         assert sd_entry["state"].get("e2e_marker") == "set_in_src"
         assert "e2e_e_world_flag" in subsystems["world_flags"]["flags"]
-        recent_entries = subsystems["recent_event_store"]["entries"]
-        recent_player_entry = next(
-            (e for e in recent_entries if e["player_id"] == int(first_pid.value)),
-            None,
-        )
-        assert recent_player_entry is not None
-        assert any(
-            entry["kind"] == "observation" and "e2e mutate marker" in entry["payload"]["output"]["prose"]
-            for entry in recent_player_entry["entries"]
-        )
-        assert any(
-            entry["kind"] == "action_result" and entry["payload"]["action_summary"] == "walked_to_armory"
-            for entry in recent_player_entry["entries"]
-        )
+        recent = subsystems["recent_event_store"]
+        pending = next(g for g in recent["pending_observations"] if g["player_id"] == int(first_pid.value))
+        assert any("e2e mutate marker" in entry["output"]["prose"] for entry in pending["entries"])
+        results = next(g for g in recent["action_results"] if g["player_id"] == int(first_pid.value))
+        assert any(entry["action_summary"] == "walked_to_armory" for entry in results["entries"])
 
         # === restore + recapture (= bit-identical 確認) ===
         dst_dir = tmp_path / "dst"

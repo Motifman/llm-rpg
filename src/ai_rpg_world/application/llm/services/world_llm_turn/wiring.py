@@ -19,7 +19,6 @@ from ai_rpg_world.application.intent.action_failed_observation_emitter import (
 )
 from ai_rpg_world.application.intent.intent_id_generator import IntentIdGenerator
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ITypedJudgmentPort,
 )
@@ -119,7 +118,6 @@ class WorldLlmWiring:
 
     runtime: Any
     observation_buffer: Any
-    short_term_memory: IShortTermMemory
     #: 既定値を置かない。スタブを既定にすると、本番の配線で渡し忘れても黙って
     #: スタブで動く。スタブで回す試験と smoke_stub は、明示して渡す。
     llm_client: Any

@@ -6,9 +6,6 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
-from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-    SummarizingShortTermMemory,
-)
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
 )
@@ -30,7 +27,6 @@ class _FakeRuntime:
     def __init__(self) -> None:
         event_store = UnifiedRecentEventStore()
         self._obs_buffer = DefaultObservationContextBuffer(event_store=event_store)
-        self._short_term_memory = SummarizingShortTermMemory(event_store=event_store)
         self.explore_calls: list[int] = []
         self.action_results: list[tuple[int, str, str]] = []
         # PR-θ2 (経路統合): _wire_missing_spot_graph_tools が `needed`
@@ -147,7 +143,6 @@ def test_world_runtime_llm_turn_handles_missing_tool_call_as_no_op() -> None:
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
 

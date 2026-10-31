@@ -50,7 +50,6 @@ def _wiring(runtime) -> _WorldLlmWiring:
     return _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=_StubClient(),
     )
 
@@ -146,7 +145,6 @@ def _phase_b_calling(name: str, *, port: ITypedJudgmentPort | None):
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=_StubClient(),
         typed_judgment_port=port,
     )

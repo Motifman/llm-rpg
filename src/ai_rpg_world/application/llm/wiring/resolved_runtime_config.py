@@ -7,7 +7,7 @@ PR #443 で連続発覚した silent failure (PR #439 / #441 / #444 / #446) の�
 (architect レビュー PR #444 後)。
 
 - ``run_scenario_experiment.py`` が env を読んで run_start trace に書く
-- ``wiring/_build_short_term_memory`` が env を読んで kind を解決する
+- ``wiring/_build_short_term_memory`` が env を読んで kind を解決する (この関数は #1824 で今の短期記憶とともに消した)
 - ``demos/world_runtime/world_runtime.py`` が **別経路で** env を読んで
   ``DefaultSlidingWindowMemory`` (Issue #1631 で削除) を直接作る
   (PR #439 で fix した silent failure の原因)

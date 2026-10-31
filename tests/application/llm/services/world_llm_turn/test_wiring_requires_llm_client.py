@@ -24,5 +24,4 @@ def test_wiring_without_llm_client_cannot_be_built() -> None:
         _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
         )

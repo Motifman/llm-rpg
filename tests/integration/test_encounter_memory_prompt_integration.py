@@ -71,7 +71,6 @@ def _take_a_turn(runtime, player_id) -> None:
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
     wiring.run_phase_b(

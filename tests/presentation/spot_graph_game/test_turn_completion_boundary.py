@@ -1,12 +1,11 @@
-"""LLM 実行方式に関わらず、自分の 1 wave を短期記憶の 1 ターンにする。"""
+"""LLM の実行方式 (逐次・並列) と会議かどうかで、同じ tick の他者の行動がプロンプトに混ざらず、プレフィックスも変わらないことを保証する。"""
 
 from hashlib import sha256
 from types import SimpleNamespace
 
+import pytest
+
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-    SummarizingShortTermMemory,
-)
 from ai_rpg_world.application.player.services.player_life_query import (
     PlayerLifeQuery,
 )
@@ -61,11 +60,8 @@ class _WiringStub:
             workers,
             meeting=meeting,
         )
-        self.short_term_memory = SummarizingShortTermMemory(
-            turn_cap=10,
-            compact_turn_count=5,
-        )
         self.spoken: list[str] = []
+        self.finished_turns: list[int] = []
         self.prompt_snapshots: dict[int, str] = {}
         self.system_hashes: dict[int, str] = {}
         self.toolset_hashes: dict[int, str] = {}
@@ -88,6 +84,7 @@ class _WiringStub:
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         self._build_prompt(player_id)
         self.spoken.append(f"player-{player_id.value} の同 tick 発言")
+        self.finished_turns.append(player_id.value)
         return LlmCommandResultDto(success=True, message="完了した。")
 
     def run_phase_a(self, player_id: PlayerId) -> tuple[PlayerId, str]:
@@ -96,6 +93,7 @@ class _WiringStub:
     def run_phase_b(self, phase_a: tuple[PlayerId, str]) -> LlmCommandResultDto:
         player_id, _prompt = phase_a
         self.spoken.append(f"player-{player_id.value} の同 tick 発言")
+        self.finished_turns.append(player_id.value)
         return LlmCommandResultDto(success=True, message="完了した。")
 
 
@@ -117,22 +115,12 @@ def _run_two_players(
     return wiring
 
 
-def test_serial_execution_closes_one_turn_per_player() -> None:
-    """直列経路は実行した各 player のターンを 1 回ずつ閉じる。"""
-    wiring = _run_two_players(workers=0)
+@pytest.mark.parametrize("workers", [0, 2])
+def test_each_scheduled_player_finishes_exactly_one_turn(workers: int) -> None:
+    """直列でも並列でも、予定した各 player の 1 手を 1 回だけ最後まで処理する。Being の短期記憶のターンは、その 1 手の処理 (run_phase_b) の終わりで閉じる (design_decisions D1824-21)。"""
+    wiring = _run_two_players(workers=workers)
 
-    store = wiring.short_term_memory._event_store
-    assert store.completed_turn_count(PlayerId(1)) == 1
-    assert store.completed_turn_count(PlayerId(2)) == 1
-
-
-def test_parallel_execution_closes_one_turn_per_player() -> None:
-    """並列 Phase A / 直列 Phase B 経路も各 player のターンを 1 回ずつ閉じる。"""
-    wiring = _run_two_players(workers=2)
-
-    store = wiring.short_term_memory._event_store
-    assert store.completed_turn_count(PlayerId(1)) == 1
-    assert store.completed_turn_count(PlayerId(2)) == 1
+    assert sorted(wiring.finished_turns) == [1, 2]
 
 
 def test_meeting_keeps_wave_parallel() -> None:
