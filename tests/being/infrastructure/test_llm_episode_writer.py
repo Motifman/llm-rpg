@@ -28,8 +28,24 @@ class _Completion(EpisodeWritingCompletion):
         return self.response
 
 
-class _Failing(EpisodeWritingCompletion):
+class _Sequence(EpisodeWritingCompletion):
+    """呼ばれるたびに、渡した応答を順に返す。"""
+
+    def __init__(self, *responses: Any) -> None:
+        self.responses = list(responses)
+        self.messages: list[list[dict[str, str]]] = []
+
     def complete_episode_writing_json(self, messages: list[dict[str, str]]) -> Any:
+        self.messages.append(messages)
+        return self.responses.pop(0)
+
+
+class _Failing(EpisodeWritingCompletion):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete_episode_writing_json(self, messages: list[dict[str, str]]) -> Any:
+        self.calls += 1
         raise RuntimeError("api down")
 
 
@@ -187,6 +203,51 @@ class TestLlmEpisodeWriterFailures:
         ],
     )
     def test_malformed_response_returns_no_content(self, response: Any) -> None:
-        """応答の形が崩れていれば、正しい項目があっても 1 件も返さず EpisodeWritingResponseException を投げる。"""
+        """応答の形が 2 回とも崩れていれば、正しい項目があっても 1 件も返さず EpisodeWritingResponseException を投げる。"""
+        completion = _Completion(response)
+
         with pytest.raises(EpisodeWritingResponseException):
-            _write(_Completion(response))
+            _write(completion)
+
+        assert len(completion.messages) == 2
+
+
+class TestLlmEpisodeWriterRewrite:
+    """LlmEpisodeWriter が、崩れた応答のときに同じ材料で 1 回だけ書き直させることを保証する (design_decisions D1626)。"""
+
+    def test_broken_response_is_written_again_with_the_same_messages(self) -> None:
+        """1 回目の応答が崩れていて 2 回目が整っていれば、2 回目の中身を返し、書き直した印を付ける。2 回とも同じ文を渡し、1 回目の正しい項目は拾わない。"""
+        completion = _Sequence(
+            {"episodes": [_item(about="拾わない"), _item(about=" ")]}, {"episodes": [_item(about="2 回目")]}
+        )
+
+        contents = _write(completion)
+
+        assert ([c.index.summary for c in contents.contents], contents.rewritten) == (["2 回目"], True)
+        assert len(completion.messages) == 2 and completion.messages[0] == completion.messages[1]
+
+    def test_good_first_response_is_not_rewritten(self) -> None:
+        """1 回目の応答が整っていれば、書き直さず、書き直した印も付けない。"""
+        completion = _Sequence({"episodes": [_item()]})
+
+        contents = _write(completion)
+
+        assert (len(completion.messages), contents.rewritten) == (1, False)
+
+    def test_second_broken_response_fails_with_both_reasons(self) -> None:
+        """2 回目も崩れていれば、それ以上書き直さず、1 回目と 2 回目の理由を添えた EpisodeWritingResponseException を投げる。"""
+        completion = _Sequence({"episodes": [_item(about=" ")]}, {"episodes": "金庫"})
+
+        with pytest.raises(EpisodeWritingResponseException, match="about.*episodes list|episodes list.*about"):
+            _write(completion)
+
+        assert len(completion.messages) == 2
+
+    def test_call_failure_is_not_rewritten(self) -> None:
+        """LLM の呼び出しそのものが失敗したら、書き直さずに (呼び出しは 1 回だけで) そのまま伝える。"""
+        completion = _Failing()
+
+        with pytest.raises(RuntimeError):
+            _write(completion)
+
+        assert completion.calls == 1

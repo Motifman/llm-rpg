@@ -25,6 +25,7 @@ _EVENT = EpisodeWrittenEvent(
     index=EpisodeIndex(summary="鐘の記憶", recall_when="鐘の話が出たとき"),
     body="鐘が鳴った。",
     truncated={"body": 405},
+    rewritten=True,
 )
 
 
@@ -46,7 +47,7 @@ class TestRecordEpisodeWrittenTraceHandler:
     """RecordEpisodeWrittenTraceHandler が、書き起こしたエピソードを 1 件ずつ trace に残すことを保証する (design_decisions D1824-19)。"""
 
     def test_episode_written_is_recorded(self) -> None:
-        """書き起こしたエピソードは、being_episode_written に、Being・呼び名・環境・書いたターン・目次・本文の長さ・切り詰めた項目と元の長さで残る。"""
+        """書き起こしたエピソードは、being_episode_written に、Being・呼び名・環境・書いたターン・目次・本文の長さ・切り詰めた項目と元の長さ・書き直させたかで残る。"""
         recorder = _Recorder()
 
         _handler(recorder).handle(_EVENT)
@@ -64,6 +65,7 @@ class TestRecordEpisodeWrittenTraceHandler:
                     "recall_when": "鐘の話が出たとき",
                     "body_length": 6,
                     "truncated": {"body": 405},
+                    "rewritten": True,
                 },
             )
         ]

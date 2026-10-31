@@ -43,11 +43,12 @@ def _add(
     dropped_count: int = 0,
     environment_name: str = "地下の金庫室",
     written_turn: int = 12,
+    rewritten: bool = False,
 ):
     return add_episodes.add(
         AddEpisodesToMemoryCommand(
             being_id=ADA,
-            contents=EpisodeContents(contents=contents, dropped_count=dropped_count),
+            contents=EpisodeContents(contents=contents, dropped_count=dropped_count, rewritten=rewritten),
             environment_name=environment_name,
             written_turn=written_turn,
         )
@@ -113,6 +114,16 @@ class TestAddEpisodesToMemory:
 
         (event,) = handed
         assert isinstance(event, EpisodeWrittenEvent) and event.truncated == {"body": 405}
+
+    def test_rewritten_mark_is_carried_to_the_result_and_the_event(self) -> None:
+        """書き直させた中身なら、結果と、記憶に加えたときの EpisodeWrittenEvent の両方に、書き直した印が付く。"""
+        handed: list[object] = []
+        add_episodes, _ = _add_episodes(InMemoryEpisodeRepository(handoff=handed.extend))
+
+        result = _add(add_episodes, _content(), rewritten=True)
+
+        (event,) = handed
+        assert (result.rewritten, isinstance(event, EpisodeWrittenEvent) and event.rewritten) == (True, True)
 
     def test_truncation_and_dropped_count_are_carried_to_the_result(self) -> None:
         """中身の切り詰めた項目と、捨てた中身の数を結果に残す。"""

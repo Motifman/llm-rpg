@@ -177,6 +177,8 @@ class TraceEventKind:
     # 2026-10-31 より前の trace には、今の短期記憶を畳んだときの trigger: compaction も残る (design_decisions D1824-21)。
     # payload: being_id / trigger (leaving。前の trace では compaction も) / event_count /
     # outcome (written / failed / skipped) / episode_count / dropped_count /
+    # rewritten (outcome が written のときだけ。応答が崩れていて、同じ材料で書き直させて書けたか。
+    # design_decisions D1626 の「その後」) /
     # written_turn / environment_name / episodes: list[{handle, summary,
     # recall_when, body_length, truncated: {鍵: 切り詰める前の長さ}}] /
     # 失敗なら error_type と error、飛ばしたなら skip_reason。
@@ -188,7 +190,8 @@ class TraceEventKind:
     # ほかの書き起こし (episode_writing。環境を離れるとき) のエピソードと、同じ Being・
     # 同じターンで重なることがある。重なったら episode_writing の件数を引いて見る。
     # payload: being_id / handle / environment_name / written_turn / summary / recall_when / body_length /
-    # truncated ({鍵: 切り詰める前の長さ}。切り詰めなければ空。design_decisions D1824-20)。
+    # truncated ({鍵: 切り詰める前の長さ}。切り詰めなければ空。design_decisions D1824-20) /
+    # rewritten (応答が崩れていて、同じ材料で書き直させて書いたエピソードか。design_decisions D1626 の「その後」)。
     BEING_EPISODE_WRITTEN = "being_episode_written"
     # Being の短期記憶の直近の範囲が埋まった (ShortTermMemoryRangeFilledEvent。#1824、design_decisions D1824-20)。
     # このあと、いきさつとエピソードが裏で書かれる。payload: being_id / turn (埋まったターン。その範囲で書いた
