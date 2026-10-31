@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from tests.event_handoff_helpers import discard_events
+
 from ai_rpg_world.application.being.player_episode_writing import (
     TRIGGER_COMPACTION,
     TRIGGER_LEAVING,
@@ -89,7 +91,7 @@ def _item(**overrides: str) -> dict[str, str]:
 
 
 def _make(completion: _Completion, *, being: BeingId | None = ADA_BEING):
-    repository = InMemoryEpisodeRepository()
+    repository = InMemoryEpisodeRepository(handoff=discard_events)
     turns = InMemoryMemoryTurnClock()
     recorder = _Recorder()
     writing = PlayerEpisodeWriting(
