@@ -168,10 +168,8 @@ class IContextFormatStrategy(ABC):
         ``inventory_text`` は所持物証の整形済テキスト。callable provider が
         生成して渡す。空なら section を出さない。
 
-        ``mid_summary_text`` は短期記憶 (L4 mid summary) を一覧化した
-        「【ここまでのいきさつ】」section の本体 (Phase 2)。``SummarizingShortTermMemory``
-        が直近 N 件 raw 観測から圧縮した 3 世代分を箇条書きにする。
-        空なら section ごと省略。
+        ``mid_summary_text`` は「【ここまでのいきさつ】」section の本体。Being の
+        短期記憶のいきさつを、新しい順に 3 世代まで並べる (#1824)。空なら section ごと省略。
         """
         pass
 

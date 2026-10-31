@@ -15,7 +15,6 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IContextFormatStrategy,
     ICurrentStateFormatter,
     ILlmUiContextBuilder,
-    IRecentEventsFormatter,
     IShortTermMemory,
     ISystemPromptBuilder,
 )
@@ -27,9 +26,6 @@ from ai_rpg_world.application.llm.services.prompt_builder_config import (
 )
 from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
     ToolCallLoopGuardService,
-)
-from ai_rpg_world.application.llm.services.unified_recent_event_store import (
-    UnifiedRecentEventStore,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -61,14 +57,14 @@ def _make_core() -> PromptBuilderCoreServices:
     return PromptBuilderCoreServices(
         observation_buffer=MagicMock(spec=IObservationContextBuffer),
         short_term_memory=MagicMock(spec=IShortTermMemory),
-        recent_event_store=UnifiedRecentEventStore(),
         world_query_service=_CurrentStateSource(),
         player_profile_repository=MagicMock(spec=PlayerProfileRepository),
         current_state_formatter=MagicMock(spec=ICurrentStateFormatter),
-        recent_events_formatter=MagicMock(spec=IRecentEventsFormatter),
         context_format_strategy=MagicMock(spec=IContextFormatStrategy),
         system_prompt_builder=MagicMock(spec=ISystemPromptBuilder),
         available_tools_provider=MagicMock(spec=IAvailableToolsProvider),
+        recent_events_text_provider=lambda being_id: "",
+        backstory_text_provider=lambda being_id: "",
     )
 
 

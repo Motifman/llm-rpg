@@ -26,7 +26,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.being.player_short_term_memory_copy import (
         PlayerShortTermMemoryCopy,
     )
-    from ai_rpg_world.application.being.recent_events_shadow import RecentEventsShadow
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
         ResolvedLlmRuntimeConfig,
@@ -73,6 +72,10 @@ def _new_interaction_cooldown_store() -> Any:
 
 class ToolExposureConfigurationError(RuntimeError):
     """runtime config が要求する LLM ツールを配線できないときの起動時エラー。"""
+
+
+class PublicSnsNotSupportedError(RuntimeError):
+    """公開 SNS を有効にしたシナリオを、今は動かせないときの起動時エラー (#1920)。"""
 
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
@@ -620,15 +623,13 @@ class WorldRuntime:
     _being_episode_index_revision_tool_executor: Any | None = field(default=None, repr=False)
     # #1628: エピソードと同じく、世界の snapshot には入らない。
     _being_memo_store: MemoBookRepository = field(default_factory=InMemoryMemoBookRepository, repr=False)
-    # #1824: Being 側の短期記憶。世界の snapshot には入らない。今の短期記憶と並べて
-    # ``_being_short_term_memory_copy`` が書く。
+    # #1824: Being 側の短期記憶。世界の snapshot には入らない。``_being_short_term_memory_copy`` が書き、
+    # プロンプトの【直近の出来事】と【ここまでのいきさつ】はここから作る。
     _being_short_term_memory_store: ShortTermMemoryRepository = field(
         default_factory=InMemoryShortTermMemoryRepository, repr=False
     )
     # create_world_runtime が組む。phase_b が 1 手を書き留める。
     _being_short_term_memory_copy: PlayerShortTermMemoryCopy | None = field(default=None, repr=False)
-    # create_world_runtime が組む。プロンプトを組むたびに【直近の出来事】を比べる。
-    _recent_events_shadow: RecentEventsShadow | None = field(default=None, repr=False)
     # reason-first 2段階 turn の有効化。True でも常時 2 段階ではなく、
     # presentation runtime_manager の Phase A 入口で既存 shared state を読んで
     # gated 発火する。下流 execution / episode / prediction 経路は mode 非分岐。
@@ -1932,20 +1933,17 @@ class WorldRuntime:
             EndBeingTurnCommand(being_id=acting.being_id, turn=turn)
         )
 
-    def note_being_memories_restored(self, being_ids: Sequence[BeingId]) -> None:
-        """Being の記憶を snapshot から戻した。【直近の出来事】の影に知らせる。"""
-        if self._recent_events_shadow is not None:
-            for being_id in being_ids:
-                self._recent_events_shadow.note_restored(being_id)
+    def being_recent_events_text(self, being_id: BeingId) -> str:
+        """プロンプトの【直近の出来事】の本文。Being の短期記憶から作る (#1824)。"""
+        from ai_rpg_world.being.application.recent_events_text import recent_events_text
 
-    def _on_short_term_compacted(self, player_id: PlayerId, entries: Sequence[Any]) -> None:
-        """今の短期記憶が古いターンを畳んだ。【直近の出来事】の影に知らせる。
+        return recent_events_text(self._being_short_term_memory_store.get(being_id))
 
-        畳んだ出来事のエピソードは書かない。Being の短期記憶の範囲が埋まったときに書く (design_decisions D1824-21)。
-        """
-        del entries
-        if self._recent_events_shadow is not None:
-            self._recent_events_shadow.note_compacted(player_id)
+    def being_backstory_text(self, being_id: BeingId) -> str:
+        """プロンプトの【ここまでのいきさつ】の本文。Being の短期記憶のいきさつから作る (#1824)。"""
+        from ai_rpg_world.being.application.backstory_text import backstory_text
+
+        return backstory_text(self._being_short_term_memory_store.get(being_id))
 
     def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
         """環境を離れるとき (run の終わり) に、まだ畳まれていない出来事からエピソードを書く (#1626)。
@@ -2143,18 +2141,14 @@ class WorldRuntime:
         core = PromptBuilderCoreServices(
             observation_buffer=self._obs_buffer,
             short_term_memory=self._short_term_memory,
-            recent_event_store=self._recent_event_store,
             world_query_service=WorldRuntimeQueryAdapter(self),
             player_profile_repository=WorldProfileRepositoryAdapter(self),
             current_state_formatter=self._formatter,
-            recent_events_formatter=self._recent_events_formatter,
             context_format_strategy=self._context_strategy,
             system_prompt_builder=WorldSystemPromptBuilder(self),
             available_tools_provider=WorldAvailableToolsProvider(),
-            recent_events_projection=(self._public_sns_projection.project if self._public_sns_projection else None),
-            recent_events_shadow=(
-                self._recent_events_shadow.compare if self._recent_events_shadow is not None else None
-            ),
+            recent_events_text_provider=self.being_recent_events_text,
+            backstory_text_provider=self.being_backstory_text,
         )
         # objective_text は scenario.metadata.llm_objective_text を 1 度だけ解決する。
         # 空のとき ValueError が立つので、prompt builder 構築時点で fail-fast。
@@ -4180,6 +4174,13 @@ def create_world_runtime(
         random_seed=config.scenario_random_seed,
         round_number=round_number,
     )
+    if scenario.public_sns_enabled:
+        # 通知を【直近の出来事】に収める処理 (PublicSnsPromptProjection) は今の短期記憶の出来事の上で動き、
+        # Being の短期記憶から作る【直近の出来事】には当てられない。収め直すまで、公開 SNS の世界は動かさない。
+        raise PublicSnsNotSupportedError(
+            "公開 SNS を有効にしたシナリオ (public_sns_enabled: true) は、今は動かせません。"
+            "通知を【直近の出来事】に収め直すまで止めています (#1920)"
+        )
 
     fallback_name = scenario.player_spawns[0].name if scenario.player_spawns else "探索者"
     persona_block = build_persona_block_from_character(
@@ -5309,8 +5310,6 @@ def create_world_runtime(
         persona_block=persona_block,
         event_store=recent_event_store,
         aux_llm_call_sink=aux_llm_call_sink,
-        # runtime はこのあとで組むが、畳むのは tick が始まってからなので間に合う。
-        on_compacted=lambda pid, entries: runtime._on_short_term_compacted(pid, entries),
     )
     action_result_store = DefaultActionResultStore(event_store=recent_event_store)
     # encounter_memory は上 (spawn loop 直前) で生成済 (PR4)。
@@ -6853,15 +6852,6 @@ def create_world_runtime(
         trace_recorder_provider=lambda: runtime._trace_recorder,
     )
     recent_event_store.add_append_listener(runtime._being_short_term_memory_copy.on_appended)
-    from ai_rpg_world.application.being.recent_events_shadow import RecentEventsShadow
-
-    runtime._recent_events_shadow = RecentEventsShadow(
-        store=runtime._being_short_term_memory_store,
-        being_id_of=_being_id_of,
-        projection_active=lambda: runtime._public_sns_projection is not None,
-        current_tick_provider=lambda: runtime.current_tick(),
-        trace_recorder_provider=lambda: runtime._trace_recorder,
-    )
     persona_of_player = _build_persona_resolver(
         scenario=scenario,
         world_character=world_character,

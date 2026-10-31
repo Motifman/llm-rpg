@@ -32,10 +32,10 @@
 2. `DefaultPromptBuilder.build` が部分を集める
    - 観測バッファから取り出して短期記憶に積む (613 行)
    - 現在地と周囲: `WorldRuntimeQueryAdapter` → `_build_minimal_player_state_dto` → `SpotGraphCurrentStateFormatter.format` (`llm/services/spot_graph_current_state_formatter.py:21`) で現在地の塊を作り、`SpotGraphUiContextBuilder.build` (`llm/services/spot_graph_ui_context_builder.py:513`) が `prompt_section_layout.sections_for` の順に接続先・オブジェクト・その場の人などの節を足す
-   - 直近の出来事: `UnifiedRecentEventStore.get_active_timeline` を `RecentEventsFormatter.format_unified_entries` (`llm/services/recent_events_formatter.py:47`) で行にする
+   - 直近の出来事: Being の短期記憶 (`BeingId` 鍵) を `recent_events_text` (`being/application/recent_events_text.py`) で行にする (#1824 で `UnifiedRecentEventStore` の並びから切り替えた。design_decisions D1824-22)
    - 保留中の予測と、前回の予測と実際は #1631 で消した
    - 関連する記憶、見出し、関連する学びは #1631 で消した。過去の出来事は目次つきのエピソードの【思い出せる出来事】が出す
-   - 進行中のメモ (`_build_active_memos_text`、705 行)、現在の目的 (`objective_text_provider`、713 行)、ここまでのいきさつ (短期記憶の `get_mid_summary_text`。自己像と世界観は #1824 で消した)
+   - 進行中のメモ (`_build_active_memos_text`、705 行)、現在の目的 (`objective_text_provider`、713 行)、ここまでのいきさつ (Being の短期記憶のいきさつを `backstory_text` (`being/application/backstory_text.py`) で並べる。自己像と世界観は #1824 で消した)
 3. `SectionBasedContextFormatStrategy.format` (`llm/services/context_format_strategy.py`) が見出しを付けて並べる (747 行)。run の設定は `stable_to_volatile` で、`_format_stable_to_volatile` (300 行) の順になる
 4. 繰り返しの警告 (`_build_loop_warning_prefix`、780 行) を指示の前に付け、本文の後ろに置く (783 行)
 5. `run_phase_a` に戻り、`inject_dynamic_argument_candidate_table` (`llm/services/dynamic_argument_candidates.py:363`) が【現在選べる対象引数】を指示の直前に差し込む (`phase_a.py:231`)
@@ -100,7 +100,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 |---|---|---|---|---|---|
 | U1 【現在の目的】 | 「- 最終目標は『救助されること』。…」「- 4 人は初対面だ。…」 | `objective_text_provider` → `_resolve_player_objective_text` (`world_runtime/world_runtime.py`) | シナリオの `players[].objective` か `metadata.llm_objective_text` を、そのまま描く | 環境の材料 (goal journal を #1631 で消すまでは混ざっていた) | 無 |
 | U2 【自己像と世界観】 | (#1824 で消した。長い期間の流れはエピソードの目次が受け持つ) | - | - | - | - |
-| U3 【ここまでのいきさつ】 (#1824 で【最近の流れ】から改名) | 「[最新] 難破船の浜で遺体確認と漂着物の回収を続け、…」「  気分: …」 (片付いていないことは #1824 で外した) | `get_mid_summary_text` (`llm/services/summarizing_short_term_memory.py`)、行の形は `format_mid_summary_block` | 短期記憶の L4 要約 | Being の持ち物 | 無 (整数の player 鍵) |
+| U3 【ここまでのいきさつ】 (#1824 で【最近の流れ】から改名) | 「[最新] 難破船の浜で遺体確認と漂着物の回収を続け、…」「  気分: …」 (片付いていないことは #1824 で外した) | `backstory_text` (`being/application/backstory_text.py`)。行の形は今の短期記憶の要約を出していたころと同じ | Being の短期記憶のいきさつ (#1824 で今の短期記憶の L4 要約から切り替えた) | Being の持ち物 | 有 (`BeingId` 鍵) |
 | U4 観測の行 | 「- [Day 1 深夜 5:30] カイが言った: 「…」」「- [Day 1 6:00] 朝になった。」「- [Day 1 6:00] 〈森の小道〉の向こうから、カイの遠くの声が聞こえる: 「…」」 | `format_observation_line_for_recent_events` (`llm/contracts/chunk_encoding.py:80`)。遠くの声の文は `player_formatter.py:474` (`observation/services/formatters/`) | 環境のイベントを観測パイプラインが本文にしたもの。`UnifiedRecentEventStore` に積まれる | 混ざっている (環境の観測と、遠くの声で話者の名前を出すかという誰を知っているかの判断) | 無 (`PlayerId` 鍵) |
 | U5 自分の行動の行 | 「- [Day 1 8:30] [行動] 「釣り場」に fish_stream した → [失敗] \| error_code=INTERACTION_PRECONDITION_FAILED \| tool=interact \| 行動が拒否された: 釣竿が必要だ。」「  心の声: …」「（3 名に届いた。ぼんやり=1）」、失敗の観測「interact を試みたが失敗した: … 修正のヒント: …」 | `format_action_result_line_for_recent_events` (`chunk_encoding.py:96`)、失敗の観測は `intent/action_failed_observation_emitter.py:128`、届いた人数は `speech/services/audience_feedback.py:119` | action_result_store (tool 名・引数・`inner_thought`・結果・`error_code`) と、環境が返す結果の文・届いた人数・修正のヒント | 混ざっている (環境の結果の文と、Being の行動と内心の記録) | 無 (`PlayerId` 鍵) |
 | U6 内省の観測行 | (#1631 で消した) | - | - | - | - |
@@ -195,7 +195,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 |---|---|---|
 | **誰を知っているか** (【同じ局面にいる者】、遠くの声、「初めて会った」) | encounter (`InMemoryEncounterMemory`、`PlayerId` 鍵、世界の snapshot)。初期配置の同席者は記録されない | `AcquaintanceRecord` を Being の store に置く。鍵は (環境の名前, 名前の文)。欄は初めて会ったターン、最後に見たターン、回数、どう知ったか (紹介された / 会った / 声を聞いた)、注記。時計は Being のターン数。#1465 の会った人の記録と同じ作業 |
 | 行った場所 (「初めて訪れた」) | encounter (シナリオの spot の文字列 ID が鍵) | 同じ store に場所の種類で持つ。鍵は場所の名前の文 |
-| 短期記憶 (直近の出来事、要約) | `UnifiedRecentEventStore`、`SummarizingShortTermMemory`、action_result_store、観測バッファ。いずれも `PlayerId` 鍵 | #1465 のとおり Being の snapshot へ |
+| 短期記憶 (直近の出来事、要約) | `UnifiedRecentEventStore`、`SummarizingShortTermMemory`、action_result_store、観測バッファ。いずれも `PlayerId` 鍵。プロンプトの本文は #1824 から Being の短期記憶 (`BeingId` 鍵) から作る | #1465 のとおり Being の snapshot へ |
 | 繰り返しの見張り | `ToolCallLoopGuardService` (整数の player 鍵) | Being の store へ。snapshot に入っていなければ再開で消えている (推測) |
 | 人格 | シナリオの `persona_prompt` に、環境での立場と一体で書かれている | Being の人格と、環境が渡す `assigned_role` に分ける。分けるかは #1469 で決める。最初は `persona_prompt` を丸ごと `assigned_role` として受け取れば再現できる |
 | 自分の名前 | `EnvironmentEntry.self_name` (型はあるが run に配線されていない) | 入るときに受け取り、短期記憶や記憶の文の中の自分を見分けるのに使う |

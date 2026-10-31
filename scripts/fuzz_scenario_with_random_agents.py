@@ -68,8 +68,6 @@ ASYNC_EVENT_DELIVERY_HOLE_REASONS = frozenset({"prepare_failed", "handler_failed
 #: 記憶の道具や 1 手の無い結果のような、決めたとおりに写さないものは数えない。
 BEING_SHORT_TERM_MEMORY_NOT_COPIED = "being_short_term_memory_not_copied"
 BROKEN_COPY_REASONS = frozenset({"memory_rule", "contract_violation", "unpaired_result", "unexpected_error"})
-#: 今の【直近の出来事】と Being の側の文の食い違い (design_decisions D1824-10)。切り替える前に 0 を確かめる。
-RECENT_EVENTS_SHADOW_MISMATCH = "recent_events_shadow_mismatch"
 
 #: ターンの文を見て、穴を見つけたら説明の文を返す検査。シナリオごとに足す。
 TurnCheck = Callable[["TurnView"], Iterable[str]]
@@ -475,14 +473,6 @@ def _drive(
                     result.findings.append(
                         FuzzFinding("exception", int(tick or 0), f"非同期のハンドラが失敗した: {_compact(payload)}")
                     )
-            elif kind == RECENT_EVENTS_SHADOW_MISMATCH and payload.get("mismatch_kind") == "different":
-                result.findings.append(
-                    FuzzFinding(
-                        "shadow_mismatch",
-                        int(tick or 0),
-                        f"【直近の出来事】が Being の側の文と違う: {_compact(payload)}",
-                    )
-                )
             elif kind == BEING_SHORT_TERM_MEMORY_NOT_COPIED and payload.get("reason") in BROKEN_COPY_REASONS:
                 result.findings.append(
                     FuzzFinding("exception", int(tick or 0), f"Being 側の短期記憶へ写せなかった: {_compact(payload)}")

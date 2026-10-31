@@ -635,7 +635,6 @@ def _drive_scenario(
                     current_scenario=scenario_path.stem,
                 )
                 logger.info("restored %d being snapshot(s)", len(restore_report.restored))
-                runtime.note_being_memories_restored(restore_report.restored)
                 # Phase 9-1: world snapshot も load (= 旧 snapshot dir に
                 # world.json が無ければ no-op = 後方互換)。world snapshot は
                 # scenario fail-fast 方針なので例外は素通し。

@@ -14,21 +14,38 @@ from ai_rpg_world.application.being.world_subsystems.public_sns_codec import Pub
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.world_llm_turn.wiring import WorldLlmWiring
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import ResolvedLlmRuntimeConfig
-from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.application.world_runtime.world_runtime import PublicSnsNotSupportedError, create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+_SUSPENDED = "公開 SNS の世界は、通知を【直近の出来事】に収め直すまで起動時に止めている (#1920)"
+
+
+def _scenario_path(tmp_path: Path, *, enabled: bool, disabled=(), budget=6000) -> Path:
+    raw = json.loads(Path("data/scenarios/station_drill.json").read_text())
+    raw.update(
+        public_sns_enabled=enabled,
+        disabled_tools=list(dict.fromkeys([*raw.get("disabled_tools", []), *disabled])),
+        public_sns_push_budget_chars=budget,
+    )
+    path = tmp_path / f"world-{len(list(tmp_path.iterdir()))}.json"
+    path.write_text(json.dumps(raw, ensure_ascii=False))
+    return path
+
+
+def test_public_sns_world_stops_at_startup_with_the_issue_number(tmp_path):
+    """公開 SNS を有効にしたシナリオは、起動時に PublicSnsNotSupportedError で止まり、文に直す Issue の番号 (#1920) が出る。"""
+    path = _scenario_path(tmp_path, enabled=True)
+
+    with pytest.raises(PublicSnsNotSupportedError, match="#1920"):
+        create_world_runtime(path, config=ResolvedLlmRuntimeConfig.for_tests())
 
 
 @pytest.fixture
 def make_runtime(tmp_path):
     def create(*, enabled=True, disabled=(), budget=6000):
-        raw = json.loads(Path("data/scenarios/station_drill.json").read_text())
-        raw.update(
-            public_sns_enabled=enabled,
-            disabled_tools=list(dict.fromkeys([*raw.get("disabled_tools", []), *disabled])),
-            public_sns_push_budget_chars=budget,
-        )
-        path = tmp_path / f"world-{len(list(tmp_path.iterdir()))}.json"
-        path.write_text(json.dumps(raw, ensure_ascii=False))
+        if enabled:
+            pytest.skip(_SUSPENDED)
+        path = _scenario_path(tmp_path, enabled=enabled, disabled=disabled, budget=budget)
         return create_world_runtime(path, config=ResolvedLlmRuntimeConfig.for_tests())
 
     return create
