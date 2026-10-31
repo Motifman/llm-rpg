@@ -8,7 +8,6 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     LlmCommandResultDto,
-    SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
 )
 
@@ -17,14 +16,12 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailabilityResolver,
     IAvailableToolsProvider,
-    IContextFormatStrategy,
     ICurrentStateFormatter,
     IGameToolRegistry,
     ILLMPlayerResolver,
     ILlmTurnTrigger,
     IPromptBuilder,
     IRecentEventsFormatter,
-    ISystemPromptBuilder,
 )
 
 # -- end memo re-exports --
@@ -43,19 +40,16 @@ __all__ = [
     "merge_observations_and_action_results_to_unified_timeline",
     "ActionResultEntry",
     "LlmCommandResultDto",
-    "SystemPromptPlayerInfoDto",
     "ToolDefinitionDto",
     "AgentPersonaDto",
     "PersonaPromptPolicy",
     "IActionResultStore",
     "IAvailabilityResolver",
     "IAvailableToolsProvider",
-    "IContextFormatStrategy",
     "ICurrentStateFormatter",
     "IGameToolRegistry",
     "ILLMPlayerResolver",
     "ILlmTurnTrigger",
     "IPromptBuilder",
     "IRecentEventsFormatter",
-    "ISystemPromptBuilder",
 ]

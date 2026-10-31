@@ -9,9 +9,6 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
 from ai_rpg_world.application.llm.services.available_tools_provider import (
     DefaultAvailableToolsProvider,
 )
-from ai_rpg_world.application.llm.services.context_format_strategy import (
-    SectionBasedContextFormatStrategy,
-)
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
@@ -44,7 +41,6 @@ __all__ = [
     "ProfileBasedLlmPlayerResolver",
     "SetBasedLlmPlayerResolver",
     "NoOpAvailabilityResolver",
-    "SectionBasedContextFormatStrategy",
     "StubLlmClient",
     "ToolCommandMapper",
     "register_default_tools",

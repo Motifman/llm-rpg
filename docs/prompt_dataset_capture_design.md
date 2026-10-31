@@ -1,5 +1,8 @@
 # LLM プロンプト保存と Hugging Face データセット化の設計
 
+> 2026-11-01: 下に出てくるシステムプロンプトの組み立て (`system_prompt_builder`) と `context_format_strategy.py` は消え、毎ターンのプロンプトは Being の作業記憶から組むようになった (design_decisions D1630-3)。
+
+
 ## 目的
 
 実験 run の各 LLM 呼び出しについて、実際に LLM に送ったプロンプト、ツール定義、

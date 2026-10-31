@@ -1,5 +1,7 @@
 # プロンプトの棚卸し: 環境の材料と Being の持ち物
 
+> 2026-11-01: 毎ターンのプロンプトは、Being の作業記憶 (`being/domain/working_memory.py`) から組むようになった。下に出てくる `SectionBasedContextFormatStrategy` (`context_format_strategy.py`) は消えた (design_decisions D1630-3)。この文書は当時の棚卸しとして残す。
+
 #1520 (プロンプトを Being が組み立て、環境は材料を渡す形にする) の材料。いまのプロンプトを部分ごとに、環境の材料か、Being の持ち物か、混ざっているか、組み立ての決まりか、に分けた。
 
 確かめたもの: 保存済みの run `var/runs/memory_jev_e2e_v4_002` の `prompt_dataset` (206 呼び出し、system prompt 4 種) と、HEAD 23c6daa2 のコード。推測で書いた箇所は「推測」と付けた。この一覧はその時点の記録で、移した部分は書き換えていない。S7【同じ局面にいる者】は #1520 段 1 で毎ターンのメッセージの【知っている人】に移った (design_decisions D1520)。

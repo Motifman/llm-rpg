@@ -2,7 +2,7 @@
 
 Issue #227 経路統一プロジェクトの後続レビュー (HIGH-3):
     world_runtime runtime は独自経路で prompt を組み立てているが、shareable な
-    部品 (SectionBasedContextFormatStrategy, DefaultRecentEventsFormatter,
+    部品 (作業記憶、DefaultRecentEventsFormatter、
     tile-map field の None 固定) はすべて本家と共有して
     いる。完全な経路統一は別 PR で行うが、現在の収束状態が後退しないことを
     本ファイルが構造的に固定する。
@@ -25,14 +25,12 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_both_paths_use_section_based_context_format_strategy() -> None:
-    """両経路が同一の SectionBasedContextFormatStrategy を使う。"""
+def test_prompt_builder_composes_from_the_working_memory() -> None:
+    """DefaultPromptBuilder は区画を自分で並べず、Being の作業記憶から文を組む (#1630)。"""
     prompt_builder = _read(_REPO_ROOT / "src/ai_rpg_world/application/llm/services/prompt_builder.py")
-    world_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/world_runtime/world_runtime.py")
-    # DefaultPromptBuilder は wiring 経由で受け取る (strategy 名は context_format_strategy.py
-    # に集中)。world_runtime も同じ strategy class をクラス定数で持つ。
-    assert "SectionBasedContextFormatStrategy" in world_runtime
-    # prompt_builder は IContextFormatStrategy 経由で受け取るので strategy 名は出ない
+    assert "CurrentWorkingMemory" in prompt_builder
+    assert "message_text(memory)" in prompt_builder
+    assert not (_REPO_ROOT / "src/ai_rpg_world/application/llm/services/context_format_strategy.py").exists()
 
 
 def test_both_paths_use_default_recent_events_formatter() -> None:
@@ -42,11 +40,10 @@ def test_both_paths_use_default_recent_events_formatter() -> None:
 
 
 def test_world_runtime_holds_formatter_instances_as_class_vars() -> None:
-    """world_runtime runtime が formatter を class-level に、context_strategy を instance field として保持している。"""
+    """world_runtime runtime が formatter を class-level に保持している。"""
     world_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/world_runtime/world_runtime.py")
     # formatter は引き続き ClassVar (stateless / env 依存無し)
     assert "_recent_events_formatter: ClassVar" in world_runtime
-    assert "_context_strategy: SectionBasedContextFormatStrategy = field" in world_runtime
 
 
 def test_world_runtime_build_full_prompt_uses_default_prompt_builder() -> None:
@@ -62,9 +59,10 @@ def test_world_runtime_build_full_prompt_uses_default_prompt_builder() -> None:
 
 
 def test_world_runtime_default_prompt_builder_adapters_module_exists() -> None:
-    """world_runtime adapter モジュールが存在し、4 つの adapter を提供する (HIGH-3 Part 2)。"""
+    """world_runtime adapter モジュールが存在し、現在状態とツールの一覧の 2 つの adapter を提供する (HIGH-3 Part 2)。
+
+    システムプロンプトとプロフィールの adapter は、作業記憶から組むようにして消した (#1630)。
+    """
     adapters = _read(_REPO_ROOT / "src/ai_rpg_world/application/world_runtime/default_prompt_builder_adapters.py")
     assert "class WorldRuntimeQueryAdapter" in adapters
-    assert "class WorldProfileRepositoryAdapter" in adapters
-    assert "class WorldSystemPromptBuilder" in adapters
     assert "class WorldAvailableToolsProvider" in adapters

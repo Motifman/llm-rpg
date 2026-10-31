@@ -13,7 +13,7 @@ from ai_rpg_world.being.contract import Orientation, Scene
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_id import BeingId
-from ai_rpg_world.being.domain.episode import EpisodeRepository
+from ai_rpg_world.being.domain.episode import Episode, EpisodeRepository
 from ai_rpg_world.being.domain.episode_index_selection import RecalledRisesToTop
 from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
@@ -62,9 +62,7 @@ class CurrentWorkingMemory:
     ) -> WorkingMemory:
         environment_name = self._environment_name(being_id)
         short_term = self._short_term_memories.get(being_id)
-        shown_episodes = RecalledRisesToTop().select(
-            self._episodes.list_by_being(being_id), limit=self._episode_index_limit
-        )
+        shown_episodes = self.episodes_in_index(being_id)
         memory = MemoryTexts(
             known_people=render_known_people(
                 self._acquaintances.list_by_being(being_id), environment_name=environment_name
@@ -82,6 +80,10 @@ class CurrentWorkingMemory:
             scene=scene,
             closing=closing,
         )
+
+    def episodes_in_index(self, being_id: BeingId) -> tuple[Episode, ...]:
+        """【思い出せる出来事】に並べるエピソード。目次の文と、目次に出したものの記録が同じ選び方を使う。"""
+        return RecalledRisesToTop().select(self._episodes.list_by_being(being_id), limit=self._episode_index_limit)
 
     def _environment_name(self, being_id: BeingId) -> str:
         being = self._beings.find_by_id(being_id)

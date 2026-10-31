@@ -7,10 +7,6 @@
 
 from pathlib import Path
 
-from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
-from ai_rpg_world.application.world_runtime.default_prompt_builder_adapters import (
-    WorldSystemPromptBuilder,
-)
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -39,30 +35,15 @@ class TestWorldRuntimePerPlayerSystemPrompt:
             self_name = runtime.get_player_name(pid)
             assert self_name in prompt, f"player {pid} の prompt に自分の名前 {self_name} が含まれていない"
 
-    def test_system_prompt_builder_adapter_returns_per_player_prompt(self) -> None:
-        """WorldSystemPromptBuilder.build() が player_info.player_name から
-        正しい per-player prompt を引く。"""
+    def test_turn_prompt_carries_each_players_own_system_prompt(self) -> None:
+        """1 ターンのプロンプトのシステムプロンプトは、そのプレイヤーの per-player prompt と同じで、相手のものとは違う。"""
         runtime = create_world_runtime(_FORBIDDEN_LIBRARY)
-        builder = WorldSystemPromptBuilder(runtime)
         player_ids = runtime.get_player_ids()
 
-        # 各 player の prompt を取得し、別 player の prompt と異なることを確認
-        prompts: dict[str, str] = {}
-        for pid in player_ids:
-            name = runtime.get_player_name(pid)
-            info = SystemPromptPlayerInfoDto(
-                player_name=name,
-                role="adventurer",
-                race="human",
-                element="fire",
-                game_description="",
-            )
-            prompts[name] = builder.build(info)
+        systems = [runtime.build_full_prompt(pid)["messages"][0]["content"] for pid in player_ids]
 
-        names = list(prompts.keys())
-        assert len(names) == 2
-        # 2 つの prompt が異なる (per-player persona が効いている)
-        assert prompts[names[0]] != prompts[names[1]], (
+        assert systems == [runtime.build_system_prompt(pid) for pid in player_ids]
+        assert systems[0] != systems[1], (
             "per-player system prompt が differentiate されていない (自呼び regression の可能性)"
         )
 

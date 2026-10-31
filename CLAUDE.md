@@ -134,7 +134,7 @@ Bounded Context として境界を守れているのは Being だけです。経
 
 ゲームの側は、`domain/` の下をフォルダ (`world_graph`、`player`、`monster` など) に分けていますが、Bounded Context としての境界はまだ守れていません。境界の引き直しは、シナリオエンジンのモデリング (#1339) で行います。
 
-エージェントの 1 ターンの流れ: 担当エージェント選定 → 現在状態と直近イベントの収集 → `prompt_builder.py` でシステム / ユーザプロンプト構築 → LLM がツール呼び出しを返す → 実行 → ドメインイベントが観測に変換され短期記憶へ入る (短期記憶を畳むときと環境を離れるときに、本人がエピソードを書き起こす) → WebSocket で観戦者に配信。詳細は `application/llm/services/world_llm_turn/` (Phase A / B とツールの実行) と `application/llm/services/prompt_builder.py`。
+エージェントの 1 ターンの流れ: 担当エージェント選定 → 現在状態と直近イベントの収集 → `prompt_builder.py` が環境の材料 (案内・場面・目的・締め) を集め、Being の作業記憶 (`being/domain/working_memory.py`、D1630-3) からシステム / ユーザプロンプトを組む → LLM がツール呼び出しを返す → 実行 → ドメインイベントが観測に変換され短期記憶へ入る (短期記憶を畳むときと環境を離れるときに、本人がエピソードを書き起こす) → WebSocket で観戦者に配信。詳細は `application/llm/services/world_llm_turn/` (Phase A / B とツールの実行) と `application/llm/services/prompt_builder.py`。
 
 ## コーディング規約
 

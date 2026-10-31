@@ -113,3 +113,32 @@ class TestCompose:
 
         recent = next(s for s in memory.message if s.heading == "直近の出来事")
         assert recent.lines[-1] == "（なし）"
+
+
+class TestWithScene:
+    """場面だけを差し替えた作業記憶を作ることを保証する (design_decisions D1630-3)。"""
+
+    def test_scene_sections_and_notices_are_replaced(self) -> None:
+        """場面の区画と知らせは新しい場面のものになり、ほかの区画と締めはそのまま残る。"""
+        memory = _compose()
+        scene = Scene(
+            [
+                Description(heading="現在地と周囲", text="北の竪坑口"),
+                Description(heading="現在選べる対象引数", text="- wait"),
+            ],
+            notices=[Description(heading="進行中の異常", text="- 停電")],
+        )
+
+        replaced = memory.with_scene(scene)
+
+        assert [s.heading for s in replaced.message][-2:] == ["現在地と周囲", "現在選べる対象引数"]
+        assert replaced.message[:-2] == memory.message[:-1]
+        assert [s.heading for s in replaced.notices] == ["進行中の異常"]
+        assert (replaced.system, replaced.closing) == (memory.system, memory.closing)
+
+    def test_section_is_looked_up_by_heading(self) -> None:
+        """メッセージの区画は見出しで引け、無い見出しは None。"""
+        memory = _compose()
+
+        assert memory.section("メモ") is not None
+        assert memory.section("無い見出し") is None

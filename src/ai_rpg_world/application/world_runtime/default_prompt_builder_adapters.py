@@ -7,19 +7,15 @@ Issue #227 後続レビュー HIGH-3 Part 2:
 
 各アダプタは「本家の Protocol/ABC を満たす最小限の wrapper」で、world_runtime
 固有のロジック (build_llm_context / _build_minimal_player_state_dto /
-build_world_system_prompt / get_tool_definitions) に委譲する。
+get_tool_definitions) に委譲する。
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ai_rpg_world.application.llm.contracts.dtos import (
-    SystemPromptPlayerInfoDto,
-)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IAvailableToolsProvider,
-    ISystemPromptBuilder,
 )
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world.contracts.queries import (
@@ -56,56 +52,6 @@ class WorldRuntimeQueryAdapter:
         if snap is None:
             return None
         return self._runtime._build_minimal_player_state_dto(pid, snap)
-
-
-class WorldProfileRepositoryAdapter:
-    """find_by_id 1 メソッドだけを満たす player_profile_repository adapter。
-
-    DefaultPromptBuilder は profile から name/role/race/element を取り出して
-    SystemPromptPlayerInfoDto に渡すため、最低限のフィールドを持つ
-    PlayerProfileAggregate を返す。world_runtime ではシナリオ player 名のみ
-    重要で、role/race/element は default で十分。
-    """
-
-    def __init__(self, runtime: WorldRuntime) -> None:
-        self._runtime = runtime
-
-    def find_by_id(self, player_id: PlayerId) -> PlayerProfileAggregate | None:
-        name_str = self._runtime.get_player_name(player_id)
-        if not name_str:
-            return None
-        return PlayerProfileAggregate.create(
-            player_id=player_id,
-            name=PlayerName(name_str),
-            role=Role.CITIZEN,
-            race=Race.HUMAN,
-            element=Element.NEUTRAL,
-        )
-
-
-class WorldSystemPromptBuilder(ISystemPromptBuilder):
-    """world_runtime の per-player system prompt 文字列を返す。
-
-    Issue #264 第16回実験 (player 2 が自呼びする) で発見された persona 混入バグの
-    fix: runtime.build_system_prompt(player_id) 経由で player ごとの persona が
-    埋まった system prompt を取得する。player_id は player_info.player_name から
-    runtime.get_player_ids() / get_player_name() で逆引きする。
-
-    一致する player_id が無ければ runtime._world_llm_system_prompt にフォールバック
-    (旧挙動: 単体プレイ用 shared prompt)。
-    """
-
-    def __init__(self, runtime: WorldRuntime) -> None:
-        self._runtime = runtime
-
-    def build(self, player_info: SystemPromptPlayerInfoDto) -> str:
-        # player_info.player_name から player_id を逆引き。world_runtime では
-        # player 名は scenario.player_spawns に対して unique。
-        for pid in self._runtime.get_player_ids():
-            if self._runtime.get_player_name(pid) == player_info.player_name:
-                return self._runtime.build_system_prompt(pid)
-        # 一致なし: shared prompt にフォールバック
-        return self._runtime._world_llm_system_prompt
 
 
 class WorldAvailableToolsProvider(IAvailableToolsProvider):

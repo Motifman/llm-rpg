@@ -112,7 +112,29 @@ class TestGathering:
 
 
 class TestAcrossTurns:
-    """ターンをまたいで、前のターンの文が次のターンの文の先頭にそのまま残ることを保証する (不変条件 2)。"""
+    """ターンをまたいで、前のターンの文が次のターンの文の先頭にそのまま残ることを保証する (不変条件 2)。
+
+    いきさつが届くターンは見張りの対象外。いきさつは新しい順に並び、届いたときに直近の出来事の
+    古い分も外れるので、途中が変わるのが正しい。
+    """
+
+    def test_new_acquaintance_keeps_everything_up_to_the_known_people(self, stores: dict[str, object]) -> None:
+        """知っている人が 1 人増えても、システムプロンプトは同じで、メッセージは前のターンの【知っている人】までの文で始まる。"""
+        before = _of(stores)
+        stores["acquaintances"].record_introduction(  # type: ignore[attr-defined]
+            HAL, environment_name="廃坑の山村", name="ハギ", turn=1, relation_note=None
+        )
+
+        after = _of(stores)
+
+        up_to_known = []
+        for section in before.message:
+            up_to_known.append(section_text(section))
+            if section.heading == "知っている人":
+                break
+        assert system_prompt_text(after) == system_prompt_text(before)
+        assert message_text(after).startswith("\n\n".join(up_to_known))
+        assert "- ハギ" in message_text(after)
 
     def test_new_event_keeps_everything_up_to_recent_events(self, stores: dict[str, object]) -> None:
         """出来事が 1 つ増えても、システムプロンプトは同じで、メッセージは直近の出来事までの前のターンの文で始まる。"""
