@@ -2,7 +2,7 @@
 
 資料 (``tests/fixtures/prompts/*.json``) は、組み立てを作業記憶へ切り替える前の main で
 このモジュールを走らせて書いた。``first_turn`` と ``after_repeated_waits`` は ``21a33e4c9``、
-``with_memory`` と ``every_scenario_sha256.json`` は ``24ec78dab`` (どちらも切り替える前)。
+``with_memory``、``after_power_cut``、``every_scenario_sha256.json`` は ``24ec78dab`` (どちらも切り替える前)。
 """
 
 from __future__ import annotations
@@ -43,13 +43,17 @@ def build_baseline(scenario_name: str) -> dict[str, Any]:
     """最初のターンの全員、1 人目が同じ待機を繰り返した直後、1 人目の記憶に中身があるターンを組む。
 
     記憶に中身があるターンは、いきさつ・目次・メモ・知っている人がそろう。station_drill では
-    停電を起こし、同じ待機も繰り返すので、知らせ・直近の出来事・繰り返しの警告も出る。
+    停電を起こし、同じ待機も繰り返すので、知らせと繰り返しの警告も出る。いきさつを入れたので、
+    直近の出来事は空のまま。直近の出来事に中身があるターンは、station_drill で停電を起こした直後に組む。
     """
-    return {
+    baseline: dict[str, Any] = {
         "first_turn": _first_turn(scenario_name),
         "after_repeated_waits": _after_repeated_waits(scenario_name),
         "with_memory": _with_memory(scenario_name),
     }
+    if scenario_name == "station_drill":
+        baseline["after_power_cut"] = _after_power_cut()
+    return baseline
 
 
 def build_every_scenario() -> dict[str, dict[str, dict[str, str]]]:
@@ -81,10 +85,20 @@ def _with_memory(scenario_name: str) -> dict[str, str]:
     player_id = runtime.get_player_ids()[0]
     _fill_memory(runtime, player_id)
     if scenario_name == "station_drill":
-        control_terminal = ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "control_terminal"))
-        runtime.do_interact_with_item(PlayerId(3), control_terminal, "cut_power")
+        _cut_power(runtime)
         _repeat_waits(runtime, player_id)
     return _prompt(runtime, player_id)
+
+
+def _after_power_cut() -> dict[str, str]:
+    runtime = _runtime("station_drill")
+    _cut_power(runtime)
+    return _prompt(runtime, runtime.get_player_ids()[0])
+
+
+def _cut_power(runtime: WorldRuntime) -> None:
+    control_terminal = ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "control_terminal"))
+    runtime.do_interact_with_item(PlayerId(3), control_terminal, "cut_power")
 
 
 def _repeat_waits(runtime: WorldRuntime, player_id: PlayerId) -> None:
