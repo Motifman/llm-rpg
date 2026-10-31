@@ -1,4 +1,4 @@
-"""本番の runtime で、Being の保存先が保存するときにイベントを配り手に渡し、受け手が trace に残すことを保証する (design_decisions D1837 の 6、D1824-11)。"""
+"""本番の runtime で、Being の保存先が保存するときにイベントを配送器に渡し、ハンドラが trace に残すことを保証する (design_decisions D1837 の 6、D1824-11)。"""
 
 from __future__ import annotations
 
@@ -38,15 +38,15 @@ def _seen() -> Observation:
 
 
 class TestBeingEventHandoffInTheRuntime:
-    """create_world_runtime が組んだ Being の保存先と配り手が、保存のたびにイベントを受け手まで届けることを保証する。"""
+    """create_world_runtime が組んだ Being の保存先と配送器が、保存のたびにイベントをハンドラまで届けることを保証する。"""
 
-    def test_fold_forced_reaches_the_trace(self) -> None:
-        """短期記憶の範囲が上限に届いて待たずに外したことは、保存すると being_short_term_memory_fold_forced として trace に残る。"""
+    def test_oldest_turns_dropped_reaches_the_trace(self) -> None:
+        """短期記憶の範囲が上限に届いて待たずに古いターンを外したことは、保存すると being_short_term_memory_fold_forced として trace に残る。"""
         runtime, recorder, being_id = _runtime()
         store = runtime._being_short_term_memory_store
         memory = store.get(being_id)
         memory.perceive(_seen(), current_turn=0)
-        memory.fold(current_turn=40)
+        memory.end_turn(turn=40)
 
         store.save(memory)
 
@@ -58,21 +58,8 @@ class TestBeingEventHandoffInTheRuntime:
             1,
         )
 
-    def test_discarded_backstory_reaches_the_trace(self) -> None:
-        """持っているいきさつと同じ範囲のいきさつは入らず、保存すると being_backstory_discarded として trace に残る。"""
-        runtime, recorder, being_id = _runtime()
-        store = runtime._being_short_term_memory_store
-        memory = store.get(being_id)
-        memory.add_backstory(Backstory(flow="浜で流木を拾った", mood="", written_turn=10, until_turn=10))
-        memory.add_backstory(Backstory(flow="遅れて届いた", mood="", written_turn=11, until_turn=10))
-
-        store.save(memory)
-
-        (payload,) = recorder.payloads(TraceEventKind.BEING_BACKSTORY_DISCARDED)
-        assert (payload["until_turn"], payload["latest_until_turn"]) == (10, 10)
-
     def test_memo_book_with_events_is_saved_through_the_dispatcher(self) -> None:
-        """受け手の無いメモ帳のイベントも配り手を通り、保存したメモ帳は取り出せる。"""
+        """ハンドラの無いメモ帳のイベントも配送器を通り、保存したメモ帳は取り出せる。"""
         runtime, _, being_id = _runtime()
         store = runtime._being_memo_store
         book = store.get(being_id)
@@ -90,7 +77,7 @@ class TestBeingEventHandoffInTheRuntime:
         assert ([m.text for m in store.get(being_id).memos], book.get_events()) == (["火を起こす"], [])
 
     def test_episode_with_events_is_saved_through_the_dispatcher(self) -> None:
-        """思い出したエピソードのイベントも配り手を通り、保存したエピソードは思い出した回数を持って取り出せる。"""
+        """思い出したエピソードのイベントも配送器を通り、保存したエピソードは思い出した回数を持って取り出せる。"""
         runtime, _, being_id = _runtime()
         store = runtime._being_episode_store
         store.add(
@@ -113,36 +100,62 @@ class TestBeingEventHandoffInTheRuntime:
 
 
 class TestBackstoryWritingInTheRuntime:
-    """本番の runtime で、短期記憶が頼んだいきさつが裏で作られ、その Being のターンの始めに入ることを保証する (design_decisions D1824-12)。"""
+    """本番の runtime で、短期記憶の範囲が埋まるといきさつが裏で作られ、その Being のターンの始めに入ることを保証する (design_decisions D1824-12)。"""
 
     @staticmethod
-    def _request(runtime, being_id) -> None:
+    def _fill_range(runtime, being_id) -> None:
         store = runtime._being_short_term_memory_store
         memory = store.get(being_id)
         for turn in range(0, 20):
             memory.perceive(_seen(), current_turn=turn)
-        memory.fold(current_turn=20)
+        memory.end_turn(turn=20)
         store.save(memory)
 
-    def test_requested_backstory_is_added_at_the_turn_entry(self) -> None:
-        """いきさつを頼んで保存すると、裏で作ったいきさつ (スタブ) が、その Being の結果を反映したときに入り、ターン 10 までの出来事が外れ、being_backstory_written が残る。"""
+    def test_backstory_for_the_filled_range_is_added_at_the_turn_entry(self) -> None:
+        """範囲が埋まった短期記憶を保存すると、裏で作ったいきさつ (スタブ) が、その Being の結果を反映したときに入り、ターン 10 までの出来事が外れ、being_backstory_written が残る。"""
         runtime, recorder, being_id = _runtime()
         player = runtime.get_player_ids()[0]
-        self._request(runtime, being_id)
+        self._fill_range(runtime, being_id)
         runtime.async_event_executor.shutdown(timeout=5)
 
         runtime.apply_async_results(player)
 
         memory = runtime._being_short_term_memory_store.get(being_id)
-        assert ([b.until_turn for b in memory.backstories], memory.recent_from, memory.request) == ([10], 11, None)
+        assert ([b.until_turn for b in memory.backstories], memory.recent_from, memory.awaited_backstory) == (
+            [10],
+            11,
+            None,
+        )
         assert memory.backstories[0].flow.startswith("(スタブ) ")
         (payload,) = recorder.payloads(TraceEventKind.BEING_BACKSTORY_WRITTEN)
         assert (payload["being_id"], payload["until_turn"]) == (being_id.value, 10)
 
+    def test_stale_backstory_is_refused_without_stopping_the_turn_entry(self) -> None:
+        """範囲が埋まって書いたいきさつと、遅れを知らせて書き直した同じ範囲のいきさつが両方届くと、1 つ目が入り、2 つ目は短期記憶が断る。断ったことは async_event_delivery_failed (application_failed) に残り、結果を反映しても例外は投げない (design_decisions D1824-15、D1824-17)。"""
+        runtime, recorder, being_id = _runtime()
+        player = runtime.get_player_ids()[0]
+        self._fill_range(runtime, being_id)
+        store = runtime._being_short_term_memory_store
+        memory = store.get(being_id)
+        memory.end_turn(turn=30)
+        store.save(memory)
+        runtime.async_event_executor.shutdown(timeout=5)
+
+        runtime.apply_async_results(player)
+
+        assert [b.until_turn for b in store.get(being_id).backstories] == [10]
+        (failure,) = recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)
+        assert (failure["reason"], failure["event_type"], failure["error_type"]) == (
+            "application_failed",
+            "ShortTermMemoryBackstoryOverdueEvent",
+            "ShortTermMemoryStaleBackstoryException",
+        )
+        assert len(recorder.payloads(TraceEventKind.BEING_BACKSTORY_WRITTEN)) == 1
+
     def test_backstory_is_not_added_before_the_turn_entry(self) -> None:
         """裏でいきさつができても、その Being の結果を反映するまでは短期記憶は変わらない (書くのはターンを進めるスレッドだけ)。"""
         runtime, _, being_id = _runtime()
-        self._request(runtime, being_id)
+        self._fill_range(runtime, being_id)
         runtime.async_event_executor.shutdown(timeout=5)
 
         memory = runtime._being_short_term_memory_store.get(being_id)
@@ -153,28 +166,28 @@ class TestBackstoryWritingInTheRuntime:
     def test_pending_backstory_is_added_when_async_events_shut_down(self) -> None:
         """ターンの始めを待たずに run を終えても、終える処理 (shutdown_async_events) が、できていたいきさつを入れる。"""
         runtime, recorder, being_id = _runtime()
-        self._request(runtime, being_id)
+        self._fill_range(runtime, being_id)
 
         runtime.shutdown_async_events()
 
         memory = runtime._being_short_term_memory_store.get(being_id)
-        assert ([b.until_turn for b in memory.backstories], memory.request) == ([10], None)
+        assert ([b.until_turn for b in memory.backstories], memory.awaited_backstory) == ([10], None)
         assert len(recorder.payloads(TraceEventKind.BEING_BACKSTORY_WRITTEN)) == 1
 
-    def test_failed_writing_reaches_the_trace_and_keeps_the_request(self, monkeypatch) -> None:
-        """LLM の応答が崩れていきさつを書けなければ async_event_delivery_failed が残り、いきさつは入らず、頼みごとが残る (短期記憶が頼み直す)。"""
+    def test_failed_writing_reaches_the_trace_and_keeps_waiting(self, monkeypatch) -> None:
+        """LLM の応答が崩れていきさつを書けなければ async_event_delivery_failed が残り、いきさつは入らず、短期記憶は待ち続ける (遅れたら知らせ、書き直される)。"""
         monkeypatch.setattr(
             "ai_rpg_world.application.llm.services.stub_backstory_completion.stub_backstory_completion",
             lambda messages: "JSON ではない応答",
         )
         runtime, recorder, being_id = _runtime()
         player = runtime.get_player_ids()[0]
-        self._request(runtime, being_id)
+        self._fill_range(runtime, being_id)
         runtime.async_event_executor.shutdown(timeout=5)
 
         runtime.apply_async_results(player)
 
         memory = runtime._being_short_term_memory_store.get(being_id)
-        assert (memory.backstories, memory.request is not None) == ((), True)
+        assert (memory.backstories, memory.awaited_backstory is not None) == ((), True)
         assert len(recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)) == 1
         assert recorder.payloads(TraceEventKind.BEING_BACKSTORY_WRITTEN) == []

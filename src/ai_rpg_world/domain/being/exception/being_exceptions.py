@@ -151,6 +151,12 @@ class ShortTermMemoryUnpairedResultException(BeingDomainException, BusinessRuleE
     error_code = "BEING.SHORT_TERM_MEMORY_UNPAIRED_RESULT"
 
 
+class ShortTermMemoryStaleBackstoryException(BeingDomainException, BusinessRuleException):
+    """届いたいきさつが、いま持っているいきさつと同じか前の範囲までのものだった。入れずに断る。"""
+
+    error_code = "BEING.SHORT_TERM_MEMORY_STALE_BACKSTORY"
+
+
 __all__ = [
     "BeingAlreadyAttachedException",
     "BeingAttachmentValidationException",
@@ -168,6 +174,7 @@ __all__ = [
     "MemoLimitReachedException",
     "MemoNotFoundException",
     "MemoValidationException",
+    "ShortTermMemoryStaleBackstoryException",
     "ShortTermMemoryUnpairedResultException",
     "ShortTermMemoryValidationException",
 ]

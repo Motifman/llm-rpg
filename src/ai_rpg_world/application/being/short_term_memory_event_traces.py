@@ -1,4 +1,4 @@
-"""Being の短期記憶がためたイベントのうち、受け手が trace だけのものを残す (#1824、design_decisions D1824-11)。"""
+"""Being の短期記憶がためたイベントのうち、trace に残すだけのものを残す (#1824、design_decisions D1824-11)。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
-from ai_rpg_world.being.domain.short_term_memory import FoldForced, StaleBackstoryDiscarded
+from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryOldestTurnsDroppedEvent
 
 
 class ShortTermMemoryEventTraces:
@@ -19,7 +19,7 @@ class ShortTermMemoryEventTraces:
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
 
-    def fold_forced(self, event: FoldForced) -> None:
+    def oldest_turns_dropped(self, event: ShortTermMemoryOldestTurnsDroppedEvent) -> None:
         recorder = self._trace_recorder_provider()
         if recorder is None:
             return
@@ -30,18 +30,6 @@ class ShortTermMemoryEventTraces:
             turn=event.turn,
             until_turn=event.until_turn,
             dropped_count=len(event.dropped),
-        )
-
-    def backstory_discarded(self, event: StaleBackstoryDiscarded) -> None:
-        recorder = self._trace_recorder_provider()
-        if recorder is None:
-            return
-        recorder.record(
-            TraceEventKind.BEING_BACKSTORY_DISCARDED,
-            tick=self._current_tick_provider(),
-            being_id=event.being_id.value,
-            until_turn=event.backstory.until_turn,
-            latest_until_turn=event.latest_until_turn,
         )
 
 

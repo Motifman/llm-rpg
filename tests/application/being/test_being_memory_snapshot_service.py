@@ -35,8 +35,8 @@ from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.memo_book import MemoBook, MemoCertainty, MemoKind, MemoProvenance, MemoSource
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
+    AwaitedBackstory,
     Backstory,
-    BackstoryRequest,
     Lapse,
     MemoryOperationOutcome,
     ObservedOutcome,
@@ -776,9 +776,14 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
         Backstory(flow="鍵を見つけて村へ戻った", mood="", written_turn=10, until_turn=10),
     )
     awaiting = Attempt(turn=16, move=AgentMove(call_id="call-6", tool_name="wait", arguments={}))
-    request = BackstoryRequest(until_turn=20, requested_turn=30)
+    awaited = AwaitedBackstory(until_turn=20, since_turn=30)
     return ShortTermMemory(
-        being, experiences=experiences, backstories=backstories, recent_from=11, awaiting=awaiting, request=request
+        being,
+        experiences=experiences,
+        backstories=backstories,
+        recent_from=11,
+        awaiting=awaiting,
+        awaited_backstory=awaited,
     )
 
 
@@ -789,7 +794,7 @@ def _state(memory: ShortTermMemory) -> tuple[object, ...]:
         memory.backstories,
         memory.recent_from,
         memory.awaiting,
-        memory.request,
+        memory.awaited_backstory,
     )
 
 
@@ -950,22 +955,58 @@ class TestShortTermMemoryPayload:
         assert [type(e) for e in memory.experiences] == [Perception, Attempt]
         assert (memory.recent_from, memory.awaiting) == (1, None)
 
-    def test_memory_saved_before_the_backstory_request_restores_without_it(self) -> None:
-        """いきさつの頼みごととまとめた範囲の終わりを足す前の payload は、頼みごと無し、いきさつは書いたターンまでをまとめたものとして戻る (design_decisions D1824-11)。"""
+    def test_memory_saved_before_the_awaited_backstory_restores_without_it(self) -> None:
+        """待っているいきさつとまとめた範囲の終わりを足す前の payload は、待っているいきさつ無し、いきさつは書いたターンまでをまとめたものとして戻る (design_decisions D1824-11)。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId("ada")
         src_stores["short_term"].save(_every_field_short_term_memory())
         payload = json.loads(src_svc.capture(being))
         memory_payload = payload["being_short_term_memory"][0]
-        memory_payload.pop("request")
+        memory_payload.pop("awaited_backstory")
         memory_payload["backstories"] = [{"flow": "鍵を探していた", "mood": "", "written_turn": 10}]
         (svc, stores) = _make_service()
 
         svc.restore(being, json.dumps(payload))
 
         memory = stores["short_term"].get(being)
-        assert memory.request is None
+        assert memory.awaited_backstory is None
         assert [(b.written_turn, b.until_turn) for b in memory.backstories] == [(10, 10)]
+
+    def test_awaited_backstory_is_saved_under_the_new_name_only(self) -> None:
+        """待っているいきさつは awaited_backstory の欄に until_turn と since_turn で保存し、前の名前の request の欄は書かない (design_decisions D1824-17)。"""
+        (svc, stores) = _make_service()
+        being = BeingId("ada")
+        stores["short_term"].save(_every_field_short_term_memory())
+
+        memory_payload = json.loads(svc.capture(being))["being_short_term_memory"][0]
+
+        assert memory_payload["awaited_backstory"] == {"until_turn": 20, "since_turn": 30}
+        assert "request" not in memory_payload
+
+    @pytest.mark.parametrize(
+        ("old_request", "expected"),
+        [
+            (None, None),
+            ({"until_turn": 20, "requested_turn": 30}, AwaitedBackstory(until_turn=20, since_turn=30)),
+        ],
+        ids=["null", "with-values"],
+    )
+    def test_payload_with_the_old_request_name_is_read_as_the_awaited_backstory(
+        self, old_request: dict[str, int] | None, expected: AwaitedBackstory | None
+    ) -> None:
+        """前の名前の request の欄だけを持つ payload は、それを待っているいきさつとして読む。requested_turn は since_turn になり、null なら待っているいきさつ無しになる (design_decisions D1824-17)。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId("ada")
+        src_stores["short_term"].save(_every_field_short_term_memory())
+        payload = json.loads(src_svc.capture(being))
+        memory_payload = payload["being_short_term_memory"][0]
+        memory_payload.pop("awaited_backstory")
+        memory_payload["request"] = old_request
+        (svc, stores) = _make_service()
+
+        svc.restore(being, json.dumps(payload))
+
+        assert stores["short_term"].get(being).awaited_backstory == expected
 
 
 class TestCapturedSnapshotIsACopy:
