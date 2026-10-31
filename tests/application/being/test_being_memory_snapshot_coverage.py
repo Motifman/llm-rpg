@@ -147,6 +147,8 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
         from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
         from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
+        from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
 
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
@@ -154,11 +156,13 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
             BeingMemorySnapshotService, "EXPECTED_PAYLOAD_KEYS", original | frozenset({"fictional_new_store"})
         )
         repo = InMemoryBeingRepository()
-        resolver = BeingAttachmentResolver(repo)
-        provisioning = BeingProvisioningService(repo)
+        player_beings = PlayerBeings(DEFAULT_SINGLE_WORLD_ID)
+        resolver = BeingAttachmentResolver(repo, player_beings)
+        provisioning = BeingProvisioningService(repo, player_beings)
         wiring = SimpleNamespace(
             being_repository=repo,
             being_attachment_resolver=resolver,
+            player_beings=player_beings,
             acquaintance_store=InMemoryAcquaintanceRepository(),
             being_episode_store=InMemoryEpisodeRepository(),
             being_memo_store=InMemoryMemoBookRepository(),

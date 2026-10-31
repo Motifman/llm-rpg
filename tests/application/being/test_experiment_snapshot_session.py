@@ -28,6 +28,7 @@ from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InM
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import InMemoryShortTermMemoryRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
 
@@ -39,11 +40,13 @@ def _make_wiring_stub() -> tuple[SimpleNamespace, BeingProvisioningService]:
     BeingProvisioningService 経由で行う。
     """
     repo = InMemoryBeingRepository()
-    resolver = BeingAttachmentResolver(repo)
-    provisioning = BeingProvisioningService(repo)
+    player_beings = PlayerBeings(DEFAULT_SINGLE_WORLD_ID)
+    resolver = BeingAttachmentResolver(repo, player_beings)
+    provisioning = BeingProvisioningService(repo, player_beings)
     wiring = SimpleNamespace(
         being_repository=repo,
         being_attachment_resolver=resolver,
+        player_beings=player_beings,
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
@@ -381,3 +384,143 @@ class TestMemoryTurns:
             {"being_id": "being-rio", "memory_turn": 1},
             {"being_id": "being-noa", "memory_turn": 0},
         ]
+
+
+class TestPlayerBeingsOnResume:
+    """再開したとき、誰がどのプレイヤーを動かしているかを世界の snapshot か Being の snapshot から読むことを保証する (design_decisions D1928)。
+
+    実際の run と同じく、再開する側でも先にシナリオのプレイヤーへ Being を用意してから読む。
+    """
+
+    @staticmethod
+    def _being_snapshots(tmp_path: Path, *player_values: int) -> Path:
+        """``player_values`` のプレイヤーを動かす Being を用意し、その Being の snapshot を書き出したディレクトリ。"""
+        (wiring, provisioning) = _make_wiring_stub()
+        for value in player_values:
+            provisioning.ensure_attached(PlayerId(value))
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
+        session.capture_all([PlayerId(value) for value in player_values])
+        return tmp_path / "snap"
+
+    @staticmethod
+    def _resume(snap_dir: Path, *player_values: int) -> tuple[SimpleNamespace, ExperimentSnapshotSession]:
+        """``player_values`` のプレイヤーに起動時の Being を用意してから、``snap_dir`` の Being の snapshot を読む。"""
+        from ai_rpg_world.application.being.world_state_snapshot_service import WorldStateSnapshotService
+        from ai_rpg_world.application.being.world_subsystems.player_beings_codec import PlayerBeingsSubsystemCodec
+
+        (wiring, provisioning) = _make_wiring_stub()
+        for value in player_values:
+            provisioning.ensure_attached(PlayerId(value))
+        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=snap_dir)
+        session._world_snapshot_service = WorldStateSnapshotService(
+            subsystem_codecs=[PlayerBeingsSubsystemCodec()], expected_subsystem_keys=("player_beings",)
+        )
+        session.restore_all_from_dir(snap_dir)
+        return wiring, session
+
+    @staticmethod
+    def _write_world(snap_dir: Path, pairs: list[tuple[int, str]] | None) -> None:
+        from ai_rpg_world.application.being.being_snapshot_file_gateway import WorldStateSnapshotFileGateway
+        from ai_rpg_world.application.being.world_state_snapshot import WorldStateSnapshot
+
+        subsystems = (
+            {}
+            if pairs is None
+            else {
+                "player_beings": {
+                    "schema_version": 1,
+                    "pairs": [{"player_id": player, "being_id": being} for player, being in pairs],
+                }
+            }
+        )
+        WorldStateSnapshotFileGateway().write(
+            WorldStateSnapshot(source_scenario="demo", world_tick=3, subsystems=subsystems), snap_dir
+        )
+
+    @staticmethod
+    def _restore_world(wiring: SimpleNamespace, session: ExperimentSnapshotSession, snap_dir: Path) -> None:
+        session.restore_world_from_dir(
+            SimpleNamespace(_player_beings=wiring.player_beings), snap_dir, current_scenario="demo"
+        )
+
+    def test_table_in_the_world_snapshot_is_used(self, tmp_path: Path) -> None:
+        """世界の snapshot に対応表があれば、それで続け、読んだ先を world_snapshot と残す。"""
+        snap_dir = self._being_snapshots(tmp_path, 1, 2)
+        self._write_world(snap_dir, [(1, "being_w1_p1"), (2, "being_w1_p2")])
+        wiring, session = self._resume(snap_dir, 1, 2)
+
+        self._restore_world(wiring, session, snap_dir)
+
+        assert wiring.player_beings.pairs() == (
+            (PlayerId(1), BeingId("being_w1_p1")),
+            (PlayerId(2), BeingId("being_w1_p2")),
+        )
+        assert session.player_beings_source == "world_snapshot"
+
+    def test_old_world_snapshot_without_the_table_uses_being_numbers(self, tmp_path: Path) -> None:
+        """対応表の欄が無い古い世界の snapshot は、Being の snapshot に残る番号の対応表で続ける。"""
+        snap_dir = self._being_snapshots(tmp_path, 1, 2)
+        self._write_world(snap_dir, None)
+        wiring, session = self._resume(snap_dir, 1, 2)
+
+        self._restore_world(wiring, session, snap_dir)
+
+        assert wiring.player_beings.being_of(PlayerId(2)) == BeingId("being_w1_p2")
+        assert session.player_beings_source == "being_snapshots"
+
+    def test_no_world_snapshot_uses_being_numbers(self, tmp_path: Path) -> None:
+        """世界の snapshot が無い古い snapshot も、Being の snapshot に残る番号で続ける。"""
+        snap_dir = self._being_snapshots(tmp_path, 1)
+        wiring, session = self._resume(snap_dir, 1)
+
+        assert session.restore_world_from_dir(None, snap_dir, current_scenario="demo") is None
+
+        assert wiring.player_beings.being_of(PlayerId(1)) == BeingId("being_w1_p1")
+        assert session.player_beings_source == "being_snapshots"
+
+    def test_player_not_in_this_run_is_skipped(self, tmp_path: Path) -> None:
+        """Being の snapshot が、今の run にいないプレイヤーを指していれば、対応表に載せずに続ける。"""
+        snap_dir = self._being_snapshots(tmp_path, 1, 2)
+        wiring, session = self._resume(snap_dir, 1)
+
+        session.restore_world_from_dir(None, snap_dir, current_scenario="demo")
+
+        assert wiring.player_beings.pairs() == ((PlayerId(1), BeingId("being_w1_p1")),)
+
+    def test_two_beings_driving_one_player_stop_before_starting(self, tmp_path: Path) -> None:
+        """2 つの Being の snapshot が同じプレイヤーを指していれば、読み込みの時点で止める。"""
+        import json
+
+        from ai_rpg_world.domain.world.exception.player_beings_exception import PlayerAlreadyDrivenException
+
+        snap_dir = self._being_snapshots(tmp_path, 1, 2)
+        second = snap_dir / "being_w1_p2.json"
+        data = json.loads(second.read_text(encoding="utf-8"))
+        data["attachment_player_id"] = 1
+        second.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+        with pytest.raises(PlayerAlreadyDrivenException):
+            self._resume(snap_dir, 1, 2)
+
+    def test_world_table_disagreeing_with_being_numbers_stops(self, tmp_path: Path) -> None:
+        """世界の snapshot の対応表が、Being の snapshot の番号と食い違えば、起動前に止める。"""
+        from ai_rpg_world.application.being.world_state_snapshot import WorldStateSnapshotCoverageError
+
+        snap_dir = self._being_snapshots(tmp_path, 1, 2)
+        self._write_world(snap_dir, [(1, "being_w1_p2"), (2, "being_w1_p1")])
+        wiring, session = self._resume(snap_dir, 1, 2)
+
+        with pytest.raises(WorldStateSnapshotCoverageError, match="食い違います"):
+            self._restore_world(wiring, session, snap_dir)
+
+    def test_world_table_naming_a_being_without_snapshot_stops(self, tmp_path: Path) -> None:
+        """世界の snapshot の対応表に、snapshot の無い Being が載っていれば止める。起動時の記憶の無い Being で黙って始めないため。"""
+        from ai_rpg_world.application.being.world_state_snapshot import WorldStateSnapshotCoverageError
+
+        snap_dir = self._being_snapshots(tmp_path, 1, 2)
+        (snap_dir / "being_w1_p2.json").unlink()
+        self._write_world(snap_dir, [(1, "being_w1_p1"), (2, "being_w1_p2")])
+        wiring, session = self._resume(snap_dir, 1, 2)
+
+        with pytest.raises(WorldStateSnapshotCoverageError, match="being_w1_p2"):
+            self._restore_world(wiring, session, snap_dir)

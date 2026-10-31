@@ -55,6 +55,10 @@ class RestoreBeingSnapshotResult:
     removed_declared_memory_kind_counts: dict[str, int] = field(default_factory=dict)
     #: ``persona`` の無い古い snapshot から読み捨てた名前と一人称 (``name`` と ``first_person``)。読み捨てなければ None。
     removed_legacy_identity: dict[str, str | None] | None = None
+    #: snapshot に残る、Being が動かしていた世界とプレイヤーの番号。対応表の欄が無い古い世界の snapshot から
+    #: 対応表を作り直すのに使う (design_decisions D1928)。
+    attachment_world_id: int | None = None
+    attachment_player_id: int | None = None
 
 
 class RestoreBeingSnapshotFromFileUseCase:
@@ -143,6 +147,8 @@ class RestoreBeingSnapshotFromFileUseCase:
             removed_memory_key_counts=removed_memory_key_counts,
             removed_declared_memory_kind_counts=removed_declared_memory_kind_counts,
             removed_legacy_identity=removed_legacy_identity,
+            attachment_world_id=snapshot.attachment_world_id,
+            attachment_player_id=snapshot.attachment_player_id,
         )
 
     def _with_current_persona(self, snapshot: BeingSnapshot) -> BeingSnapshot:

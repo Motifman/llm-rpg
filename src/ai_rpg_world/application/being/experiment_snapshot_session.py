@@ -102,6 +102,8 @@ logger = logging.getLogger(__name__)
 
 EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     "public_sns",
+    # 誰がどのプレイヤーを動かしているか (design_decisions D1928)。無い古い snapshot は Being の snapshot から作り直す。
+    "player_beings",
     # Phase 9-2
     "world_tick",
     "player_position",
@@ -204,10 +206,12 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
     restore したいが、本 PR の vitals codec は ``hp_max`` を直接保存して
     いるので順序非依存。
     """
+    from ai_rpg_world.application.being.world_subsystems.player_beings_codec import PlayerBeingsSubsystemCodec
     from ai_rpg_world.application.being.world_subsystems.public_sns_codec import PublicSnsSubsystemCodec
 
     return [
         PublicSnsSubsystemCodec(),
+        PlayerBeingsSubsystemCodec(),
         # Phase 9-2
         WorldTickSubsystemCodec(),
         PlayerPositionSubsystemCodec(),
@@ -278,6 +282,8 @@ class ExperimentSnapshotSession:
         required_fields = (
             "being_repository",
             "being_attachment_resolver",
+            # 誰がどのプレイヤーを動かしているか (design_decisions D1928)。Being を読んだら、ここにも書く。
+            "player_beings",
             "acquaintance_store",
             "being_episode_store",
             "being_memo_store",
@@ -308,6 +314,14 @@ class ExperimentSnapshotSession:
             file_gateway=self._gateway,
         )
         self._resolver = wiring_result.being_attachment_resolver
+        self._being_repository = wiring_result.being_repository
+        self._player_beings = wiring_result.player_beings
+        # snapshot から読んだ Being と、その snapshot の番号で対応表に書いたプレイヤー (書かなければ None)。
+        # 対応表をどこから得たかを残すのと、世界の snapshot の対応表と食い違わないかを確かめるのに使う (design_decisions D1928)。
+        self._restored_players: dict[BeingId, PlayerId | None] = {}
+        #: 再開したときに対応表をどこから読んだか。"world_snapshot" (世界の snapshot の欄)、"being_snapshots" (Being の
+        #: snapshot の番号)、"startup" (どちらにも無く、起動時に用意したまま)。再開していなければ None。
+        self.player_beings_source: str | None = None
         self._snapshot_dir = snapshot_dir
         self._world_id = world_id or DEFAULT_SINGLE_WORLD_ID
         # Phase 9-2: 既定で 4 つの subsystem codec を登録する
@@ -383,9 +397,11 @@ class ExperimentSnapshotSession:
                 "no world.json in %s; skipping world state restore (legacy snapshot directory)",
                 input_dir,
             )
+            self._player_beings_rebuilt_from_being_snapshots()
+            self._verify_player_beings()
             return None
         snapshot = self._world_gateway.read(input_dir)
-        migrated_subsystems = migrate_legacy_recent_event_subsystems(snapshot.subsystems)
+        migrated_subsystems = self._with_player_beings(migrate_legacy_recent_event_subsystems(snapshot.subsystems))
         if migrated_subsystems is not snapshot.subsystems:
             snapshot = WorldStateSnapshot(
                 source_scenario=snapshot.source_scenario,
@@ -400,7 +416,66 @@ class ExperimentSnapshotSession:
             current_scenario=current_scenario,
             strict_subsystems=True,
         )
+        self._verify_player_beings()
         return cast("WorldStateSnapshot | None", snapshot)
+
+    def _player_beings_rebuilt_from_being_snapshots(self) -> dict[str, Any]:
+        """対応表の欄が無い古い snapshot では、Being の snapshot を読むときに書いた対応表をそのまま使う。
+
+        Being の snapshot に番号があれば、それで書いてある (restore_all_from_dir)。無ければ起動時に用意した対応表のまま。
+        """
+        from ai_rpg_world.application.being.world_subsystems.player_beings_codec import SCHEMA_VERSION
+
+        self.player_beings_source = (
+            "being_snapshots" if any(player is not None for player in self._restored_players.values()) else "startup"
+        )
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "pairs": [
+                {"player_id": player_id.value, "being_id": being_id.value}
+                for player_id, being_id in self._player_beings.pairs()
+            ],
+        }
+
+    def _with_player_beings(self, subsystems: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """対応表の欄が無い古い世界の snapshot には、Being の snapshot から作り直した欄を足す。"""
+        from ai_rpg_world.application.being.world_subsystems.player_beings_codec import SUBSYSTEM_KEY
+
+        if SUBSYSTEM_KEY in subsystems:
+            self.player_beings_source = "world_snapshot"
+            return subsystems
+        return {**subsystems, SUBSYSTEM_KEY: self._player_beings_rebuilt_from_being_snapshots()}
+
+    def _verify_player_beings(self) -> None:
+        """対応表を確かめ、読めない形なら、間違った Being がプレイヤーを動かしたまま始めないよう止める。
+
+        - 対応表に載る Being が保存先にある
+        - Being の snapshot を読んだときは、世界の snapshot の対応表に載る Being は snapshot から読んだ Being である。
+          起動時に用意した記憶の無い Being が、snapshot の欠けたプレイヤーを黙って動かさないため。世界の snapshot だけを
+          読んだときは確かめない
+        - snapshot から読んだ Being の番号と、対応表が食い違わない
+        """
+        from ai_rpg_world.application.being.world_state_snapshot import WorldStateSnapshotCoverageError
+
+        pairs = self._player_beings.pairs()
+        missing = [being_id.value for _, being_id in pairs if self._being_repository.find_by_id(being_id) is None]
+        if missing:
+            raise WorldStateSnapshotCoverageError(f"対応表の Being が保存先にありません: {missing!r}")
+        if self.player_beings_source == "world_snapshot" and self._restored_players:
+            unrestored = [being_id.value for _, being_id in pairs if being_id not in self._restored_players]
+            if unrestored:
+                raise WorldStateSnapshotCoverageError(
+                    f"世界の snapshot の対応表に載る Being の snapshot がありません: {unrestored!r}"
+                )
+        mismatched = [
+            being_id.value
+            for being_id, player_id in self._restored_players.items()
+            if self._player_beings.player_of(being_id) != player_id
+        ]
+        if mismatched:
+            raise WorldStateSnapshotCoverageError(
+                f"Being の snapshot の番号と、世界の snapshot の対応表が食い違います: {mismatched!r}"
+            )
 
     @property
     def world_snapshot_service(self) -> WorldStateSnapshotService:
@@ -497,6 +572,25 @@ class ExperimentSnapshotSession:
                 failed.append((m.being_id, repr(exc)))
         return CaptureAllReport(succeeded=succeeded, failed=failed)
 
+    def _drive_by_snapshot_number(self, result: Any) -> PlayerId | None:
+        """Being の snapshot に残る番号で、対応表にも書く。書いたプレイヤーを返す。
+
+        世界の snapshot に対応表があれば、あとでそれに置き換わる。無い古い snapshot はこの番号のまま続ける。
+        起動時に用意していないプレイヤー (今のシナリオにいないプレイヤー) は、対応表に載せずに飛ばす。
+        """
+        if result.attachment_world_id != self._world_id.value or result.attachment_player_id is None:
+            return None
+        player_id = PlayerId(result.attachment_player_id)
+        if self._player_beings.being_of(player_id) is None:
+            logger.warning(
+                "snapshot of %s drove player %s, who is not in this run; not driving",
+                result.being_id.value,
+                player_id.value,
+            )
+            return None
+        self._player_beings.drive(player_id, result.being_id)
+        return player_id
+
     def restore_all_from_dir(
         self,
         input_dir: Path,
@@ -545,6 +639,7 @@ class ExperimentSnapshotSession:
 
             result = self._restore_use_case.execute(path)
             restored.append(result.being_id)
+            self._restored_players[result.being_id] = self._drive_by_snapshot_number(result)
             if result.removed_memory_key_counts:
                 removed_memory_key_counts[result.being_id] = result.removed_memory_key_counts
             if result.removed_declared_memory_kind_counts:

@@ -88,14 +88,18 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
             InMemoryShortTermMemoryRepository,
         )
+        from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
+        from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
             InMemoryBeingRepository,
         )
 
         repo = InMemoryBeingRepository()
+        player_beings = PlayerBeings(DEFAULT_SINGLE_WORLD_ID)
         return SimpleNamespace(
             _aux_being_repository=repo,
-            aux_being_resolver=BeingAttachmentResolver(repo),
+            _player_beings=player_beings,
+            aux_being_resolver=BeingAttachmentResolver(repo, player_beings),
             _memory_turn_clock=InMemoryMemoryTurnClock(),
             _acquaintance_store=InMemoryAcquaintanceRepository(),
             _being_episode_store=InMemoryEpisodeRepository(),

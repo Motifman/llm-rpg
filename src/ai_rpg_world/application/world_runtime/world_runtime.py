@@ -1877,6 +1877,7 @@ class WorldRuntime:
         from ai_rpg_world.application.being.being_provisioning_service import (
             BeingProvisioningService,
         )
+        from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
         from ai_rpg_world.domain.world.value_object.world_id import (
             DEFAULT_SINGLE_WORLD_ID,
         )
@@ -1885,8 +1886,10 @@ class WorldRuntime:
         )
 
         self._aux_being_repository = InMemoryBeingRepository()
-        self._aux_being_provisioning = BeingProvisioningService(self._aux_being_repository)
-        self._aux_being_resolver = BeingAttachmentResolver(self._aux_being_repository)
+        # 誰がどのプレイヤーを動かしているか。ゲームの側が持ち、世界の snapshot に入る (design_decisions D1928)。
+        self._player_beings = PlayerBeings(DEFAULT_SINGLE_WORLD_ID)
+        self._aux_being_provisioning = BeingProvisioningService(self._aux_being_repository, self._player_beings)
+        self._aux_being_resolver = BeingAttachmentResolver(self._aux_being_repository, self._player_beings)
         self._aux_being_default_world_id = DEFAULT_SINGLE_WORLD_ID
 
     @property

@@ -152,6 +152,9 @@ class TraceEventKind:
     #     部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない)
     #   - removed_declared_memory_kinds: list[{being_id, counts: {種類: 件数}}] (= 古い
     #     snapshot から読み捨てた記憶の種類の宣言。D1469-1)
+    #   - player_beings_source: "world_snapshot" / "being_snapshots" / "startup" (= 誰がどのプレイヤーを動かして
+    #     いるかを読んだ先。対応表の欄が無い古い snapshot は Being の snapshot の番号から作り直し、番号も無ければ
+    #     起動時の対応表のまま。D1928)
     #   - removed_legacy_identities: list[{being_id, name, first_person}] (= persona の無い
     #     古い snapshot から読み捨てた仮の名前と一人称。人柄は起動時にシナリオから入れたものを使う。D1469-2)
     # SNAPSHOT_SAVE payload:
