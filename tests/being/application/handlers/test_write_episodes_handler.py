@@ -11,6 +11,7 @@ from ai_rpg_world.being.application.write_episodes import WriteEpisodesCommand
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
 from ai_rpg_world.being.domain.episode import EpisodeIndex
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents, EpisodeWriter
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemory, ShortTermMemoryRangeFilledEvent
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -49,7 +50,7 @@ class _Writer(EpisodeWriter):
     def __init__(self) -> None:
         self.calls = 0
 
-    def write(self, *, self_name: str, persona: str, events_text: str) -> EpisodeContents:
+    def write(self, *, persona: Persona, persona_text: str, events_text: str) -> EpisodeContents:
         self.calls += 1
         return CONTENTS
 
@@ -69,13 +70,18 @@ class _World:
         self.episodes = InMemoryEpisodeRepository(handoff=discard_events)
         self.writer = _Writer()
         self.looked_up: list[BeingId] = []
+        self.persona_looked_up: list[BeingId] = []
         ids = _ids()
         self.handler = WriteEpisodesHandler(
             writer=self.writer,
             add_episodes=AddEpisodesToMemory(self.episodes, new_episode_id=lambda: next(ids)),
+            persona_of=lambda being_id: (
+                self.persona_looked_up.append(being_id),
+                Persona(name="エイダ", first_person="わたし"),
+            )[1],
             circumstances_of=lambda being_id: (
                 self.looked_up.append(being_id),
-                EpisodeWritingCircumstances(self_name="エイダ", persona="慎重", environment_name="廃坑の山村"),
+                EpisodeWritingCircumstances(persona_text="慎重", environment_name="廃坑の山村"),
             )[1],
         )
 
@@ -84,7 +90,7 @@ class TestWriteEpisodesHandler:
     """WriteEpisodesHandler が、範囲が埋まったイベントからエピソードを書き、その Being の記憶に加えることを保証する。"""
 
     def test_prepare_builds_a_write_command_with_the_circumstances(self) -> None:
-        """prepare は、ゲームの側の関数で引いた名前・人格の文・いる環境と、まとめる出来事・埋まったターンを持つ WriteEpisodesCommand を作る。"""
+        """prepare は、Being の保存先から引いた人柄、ゲームの側の関数で引いた人格の文といる環境、まとめる出来事、埋まったターンを持つ WriteEpisodesCommand を作る。"""
         world = _World()
         event = _range_filled()
 
@@ -92,13 +98,13 @@ class TestWriteEpisodesHandler:
 
         assert command == WriteEpisodesCommand(
             being_id=ADA,
-            self_name="エイダ",
-            persona="慎重",
+            persona=Persona(name="エイダ", first_person="わたし"),
+            persona_text="慎重",
             experiences=event.experiences,
             environment_name="廃坑の山村",
             written_turn=20,
         )
-        assert world.looked_up == [ADA]
+        assert (world.persona_looked_up, world.looked_up) == ([ADA], [ADA])
 
     def test_handle_writes_and_returns_a_command_to_add_the_episodes(self) -> None:
         """handle はエピソードの中身を書き、環境と書いたターンとともに記憶に加える AddEpisodesToMemoryCommand を返す。記憶はまだ変えない。"""

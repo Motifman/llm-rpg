@@ -10,6 +10,7 @@ from ai_rpg_world.being.application.add_backstory_to_short_term_memory import (
 )
 from ai_rpg_world.being.application.write_backstory import WriteBackstory, WriteBackstoryCommand
 from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import (
     ShortTermMemoryBackstoryOverdueEvent,
     ShortTermMemoryRangeFilledEvent,
@@ -24,10 +25,10 @@ RangeToSummarize = ShortTermMemoryRangeFilledEvent | ShortTermMemoryBackstoryOve
 class WriteBackstoryHandler(
     AsyncEventHandler[RangeToSummarize, WriteBackstoryCommand, AddBackstoryToShortTermMemoryCommand]
 ):
-    """``persona_of`` は、本人の名前と人格の文を返す。
+    """``persona_of`` は Being の保存先から人柄を引き、``persona_text_of`` は人格の文を返す。
 
-    Being の ``Persona`` に移すまでは、ゲームの側がプレイヤーを走査して引く関数を渡す (#1469)。保存先を走査するので、
-    ターンを進めるスレッドで動く ``prepare`` で呼ぶ。
+    人格の文は、``persona_prompt`` を分けるまで (#1339 / #1548)、ゲームの側がプレイヤーを走査して引く関数を渡す
+    (design_decisions D1469-2)。どちらも保存先を引くので、ターンを進めるスレッドで動く ``prepare`` で呼ぶ。
     """
 
     def __init__(
@@ -35,18 +36,19 @@ class WriteBackstoryHandler(
         *,
         writer: BackstoryWriter,
         store: ShortTermMemoryRepository,
-        persona_of: Callable[[BeingId], tuple[str, str]],
+        persona_of: Callable[[BeingId], Persona],
+        persona_text_of: Callable[[BeingId], str],
     ) -> None:
         self._write = WriteBackstory(writer)
         self._add = AddBackstoryToShortTermMemory(store)
         self._persona_of = persona_of
+        self._persona_text_of = persona_text_of
 
     def prepare(self, event: RangeToSummarize) -> WriteBackstoryCommand:
-        self_name, persona = self._persona_of(event.being_id)
         return WriteBackstoryCommand(
             being_id=event.being_id,
-            self_name=self_name,
-            persona=persona,
+            persona=self._persona_of(event.being_id),
+            persona_text=self._persona_text_of(event.being_id),
             experiences=event.experiences,
             previous=event.latest_backstory,
             until_turn=event.until_turn,

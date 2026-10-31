@@ -202,11 +202,9 @@ class TestSchemaStrictness:
             json.dumps(
                 {
                     "being_id_value": "being_w1_p1",
-                    "identity_name": "agent",
-                    "identity_first_person": "わたし",
+                    "persona": {"name": "エイダ"},
                     "attachment_world_id": 1,
                     "attachment_player_id": 1,
-                    "declared_memory_kinds": [],
                     "snapshot_version": 2,
                     "memory_payload_json": bad_payload,
                 }

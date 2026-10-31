@@ -141,6 +141,10 @@ class BeingSnapshotCodec:
                 player_id=PlayerId(snapshot.attachment_player_id),
             )
 
+        if snapshot.persona is None:
+            raise BeingSnapshotIncompleteException(
+                "snapshot has no persona (old snapshot); fill it with the persona from the scenario before decoding"
+            )
         return Being(being_id=being_id, persona=snapshot.persona, attachment=attachment)
 
 

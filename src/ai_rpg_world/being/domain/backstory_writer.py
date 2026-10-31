@@ -8,6 +8,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import Backstory, Experience
 
 
@@ -24,14 +25,17 @@ class BackstoryWriter(ABC):
     def write(
         self,
         *,
-        self_name: str,
-        persona: str,
+        persona: Persona,
+        persona_text: str,
         experiences: tuple[Experience, ...],
         previous: Backstory | None,
         until_turn: int,
         written_turn: int,
     ) -> WrittenBackstory:
         """``experiences`` (``until_turn`` までの出来事、``recent()`` と同じ順) を、``previous`` に続くいきさつにまとめる。
+
+        ``persona`` から名前と一人称を書き手に伝える。``persona_text`` は人格の文で、まだゲームの側の ``persona_prompt``
+        から来る (#1339 / #1548 で ``Persona`` に移す)。
 
         書けなければ例外を投げる。短期記憶はいきさつを待ち続け、遅れたら知らせるので、書き直される。
         """

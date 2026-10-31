@@ -32,6 +32,7 @@ from ai_rpg_world.application.being.removed_memory_payload_keys import (
     drop_removed_memory_payload_keys,
 )
 from ai_rpg_world.domain.being.exception.being_exceptions import (
+    BeingSnapshotIncompleteException,
     BeingSnapshotVersionException,
 )
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
@@ -39,6 +40,7 @@ from ai_rpg_world.domain.being.service.being_snapshot_codec import (
     BeingSnapshotCodec,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,8 @@ class RestoreBeingSnapshotResult:
     memory_restored: bool
     removed_memory_key_counts: dict[str, int] = field(default_factory=dict)
     removed_declared_memory_kind_counts: dict[str, int] = field(default_factory=dict)
+    #: ``persona`` の無い古い snapshot から読み捨てた名前と一人称 (``name`` と ``first_person``)。読み捨てなければ None。
+    removed_legacy_identity: dict[str, str | None] | None = None
 
 
 class RestoreBeingSnapshotFromFileUseCase:
@@ -94,6 +98,13 @@ class RestoreBeingSnapshotFromFileUseCase:
                 f"(supported: {sorted(BeingSnapshotCodec.SUPPORTED_VERSIONS)}). "
                 f"file={input_path}"
             )
+        removed_legacy_identity: dict[str, str | None] | None = None
+        if snapshot.has_legacy_identity:
+            removed_legacy_identity = {
+                "name": snapshot.legacy_identity_name,
+                "first_person": snapshot.legacy_identity_first_person,
+            }
+            snapshot = self._with_current_persona(snapshot)
         being_id = BeingSnapshotCodec.decode(snapshot).being_id
         removed_declared_memory_kind_counts = BeingSnapshotCodec.removed_declared_memory_kind_counts(snapshot)
         snapshot = replace(snapshot, legacy_declared_memory_kinds=())
@@ -131,7 +142,18 @@ class RestoreBeingSnapshotFromFileUseCase:
             memory_restored=memory_restored,
             removed_memory_key_counts=removed_memory_key_counts,
             removed_declared_memory_kind_counts=removed_declared_memory_kind_counts,
+            removed_legacy_identity=removed_legacy_identity,
         )
+
+    def _with_current_persona(self, snapshot: BeingSnapshot) -> BeingSnapshot:
+        """古い snapshot の仮の名前と一人称は使わず、起動時にシナリオから入れた人柄で埋める (design_decisions D1469-2)。"""
+        current = self._repo.find_by_id(BeingId(snapshot.being_id_value))
+        if current is None:
+            raise BeingSnapshotIncompleteException(
+                f"snapshot of {snapshot.being_id_value!r} has no persona and no Being to take it from; "
+                "provision the Being from the scenario before restoring an old snapshot"
+            )
+        return replace(snapshot, persona=current.persona, legacy_identity_name=None, legacy_identity_first_person=None)
 
 
 __all__ = [

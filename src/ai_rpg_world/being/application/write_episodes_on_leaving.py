@@ -12,6 +12,7 @@ from ai_rpg_world.being.application.episode_writing import (
 from ai_rpg_world.being.application.recent_events_text import experience_lines
 from ai_rpg_world.being.application.write_episodes import WriteEpisodes, WriteEpisodesCommand
 from ai_rpg_world.being.domain.episode_writer import EpisodeWriter
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
@@ -19,8 +20,8 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 @dataclass(frozen=True)
 class WriteEpisodesOnLeavingCommand:
     being_id: BeingId
-    self_name: str
-    persona: str
+    persona: Persona
+    persona_text: str
     environment_name: str
     written_turn: int
 
@@ -60,8 +61,8 @@ class WriteEpisodesOnLeaving:
         contents = self._write_episodes.execute(
             WriteEpisodesCommand(
                 being_id=command.being_id,
-                self_name=command.self_name,
                 persona=command.persona,
+                persona_text=command.persona_text,
                 experiences=experiences,
                 environment_name=command.environment_name,
                 written_turn=command.written_turn,

@@ -5,17 +5,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter, WrittenBackstory
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import Backstory, Experience
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 @dataclass(frozen=True)
 class WriteBackstoryCommand:
-    """``experiences`` (``until_turn`` までの出来事、``recent()`` と同じ順) を、``previous`` に続くいきさつにまとめる。"""
+    """``experiences`` (``until_turn`` までの出来事、``recent()`` と同じ順) を、``previous`` に続くいきさつにまとめる。
+
+    ``persona`` は Being の人柄、``persona_text`` はゲームの側から来る人格の文 (design_decisions D1469-2)。
+    """
 
     being_id: BeingId
-    self_name: str
-    persona: str
+    persona: Persona
+    persona_text: str
     experiences: tuple[Experience, ...]
     previous: Backstory | None
     until_turn: int
@@ -30,8 +34,8 @@ class WriteBackstory:
 
     def execute(self, command: WriteBackstoryCommand) -> WrittenBackstory:
         return self._writer.write(
-            self_name=command.self_name,
             persona=command.persona,
+            persona_text=command.persona_text,
             experiences=command.experiences,
             previous=command.previous,
             until_turn=command.until_turn,

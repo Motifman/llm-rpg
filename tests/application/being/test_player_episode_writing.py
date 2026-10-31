@@ -14,6 +14,7 @@ from ai_rpg_world.application.trace.recorder import NullTraceRecorder
 from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
 from ai_rpg_world.being.application.write_episodes_on_leaving import WriteEpisodesOnLeaving
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemory
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
@@ -99,7 +100,8 @@ def _make(
         being_id_of=lambda pid: being,
         turn_reader=turns,
         environment_name_of=lambda pid: "地下の金庫室",
-        persona_of=lambda pid: ("エイダ", "慎重な錠前師"),
+        persona_of=lambda being_id: Persona(name="エイダ", first_person="わたし"),
+        persona_text_of=lambda pid: "慎重な錠前師",
         trace_recorder_provider=lambda: recorder,
         current_tick_provider=lambda: 7,
     )
@@ -118,6 +120,16 @@ class TestPlayerEpisodeWritingInput:
 
         user = completion.messages[0][1]["content"]
         assert "- [深夜 0:01] 棚を調べた。\n- [深夜 0:01] 金庫が開いた。" in user
+
+    def test_name_and_first_person_come_from_the_being_persona(self) -> None:
+        """書き手には、Being の人柄の名前と一人称と、ゲームの側の人格の文を渡す。"""
+        completion = _Completion({"episodes": []})
+        writing, *_ = _make(completion)
+
+        writing.write(ADA, trigger=TRIGGER_LEAVING)
+
+        user = completion.messages[0][1]["content"]
+        assert "あなた = エイダ\nあなたの一人称 = わたし\nあなたの人物像 = 慎重な錠前師" in user
 
     def test_episode_carries_being_turn_and_environment_name(self) -> None:
         """書いたエピソードは、その Being の記憶のターン数と環境の名前を持ち、Being の記録に入る。"""

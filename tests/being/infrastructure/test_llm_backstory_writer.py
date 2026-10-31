@@ -6,6 +6,7 @@ import pytest
 
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
 from ai_rpg_world.being.domain.backstory_writer import WrittenBackstory
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import Backstory, Perception
 from ai_rpg_world.being.infrastructure.llm_backstory_writer import (
     FLOW_MAX_CHARS,
@@ -47,9 +48,15 @@ def _write(
     *,
     experiences: tuple[Perception, ...] = (_seen(1, "鐘が鳴った"), _seen(2, "扉が開いた")),
     previous: Backstory | None = None,
+    persona: Persona = Persona(name="エイダ"),
 ) -> WrittenBackstory:
     return writer.write(
-        self_name="エイダ", persona="慎重", experiences=experiences, previous=previous, until_turn=10, written_turn=20
+        persona=persona,
+        persona_text="慎重",
+        experiences=experiences,
+        previous=previous,
+        until_turn=10,
+        written_turn=20,
     )
 
 
@@ -80,6 +87,22 @@ class TestLlmBackstoryWriter:
         assert "あなた = エイダ" in content and "あなたの性格 = 慎重" in content
         assert "流れ: 坑道で鍵を探した" in content and "気分: 焦り" in content
         assert content.index("- [1日目 朝] 鐘が鳴った") < content.index("- [1日目 朝] 扉が開いた")
+
+    def test_first_person_is_told_after_the_name(self) -> None:
+        """一人称が決まっていれば、名前の次の行で一人称を伝える。"""
+        completion = _Completion({"compressed_activity": "流れ"})
+
+        _write(LlmBackstoryWriter(completion), persona=Persona(name="エイダ", first_person="わたし"))
+
+        assert "あなた = エイダ\nあなたの一人称 = わたし\n" in completion.calls[0][1]["content"]
+
+    def test_undecided_first_person_is_not_mentioned(self) -> None:
+        """一人称が決まっていなければ (None)、一人称について何も書かない。"""
+        completion = _Completion({"compressed_activity": "流れ"})
+
+        _write(LlmBackstoryWriter(completion))
+
+        assert "一人称" not in completion.calls[0][1]["content"]
 
     def test_system_prompt_tells_the_length_limits(self) -> None:
         """指示の文面は、流れ (FLOW_MAX_CHARS 字) と気分 (MOOD_MAX_CHARS 字) の文字数の上限を、定数の数字で伝える。超えると切れることも伝える。"""

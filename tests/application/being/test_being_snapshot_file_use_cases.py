@@ -226,3 +226,55 @@ class TestRestoreRemovedDeclaration:
         """宣言を持たない今のファイルでは、読み捨てた宣言の件数を空で報告する。"""
         path = _capture_old_snapshot(tmp_path, {})
         assert _make_environment()["restore"].execute(path).removed_declared_memory_kind_counts == {}
+
+
+class TestRestoreLegacyIdentity:
+    """persona の無い古いファイルの名前と一人称を読み捨て、起動時に入れた人柄で復元することを保証する (design_decisions D1469-2)。"""
+
+    @staticmethod
+    def _make_legacy(path: Path) -> None:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        del data["persona"]
+        data.update(identity_name="agent_1", identity_first_person="わたし")
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    def test_legacy_identity_is_dropped_and_current_persona_is_kept(self, tmp_path: Path) -> None:
+        """復元先にシナリオから用意した Being があれば、その人柄を残し、読み捨てた名前と一人称を結果で返す。記憶は戻る。"""
+        path = _capture_old_snapshot(tmp_path, {})
+        self._make_legacy(path)
+        dst = _make_environment()
+        scenario_persona = Persona(name="ハル")
+        dst["repo"].save(
+            Being(
+                being_id=BeingId("being_w1_p1"),
+                persona=scenario_persona,
+                attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)),
+            )
+        )
+
+        result = dst["restore"].execute(path)
+
+        assert result.removed_legacy_identity == {"name": "agent_1", "first_person": "わたし"}
+        stored = dst["repo"].find_snapshot_by_id(BeingId("being_w1_p1"))
+        assert stored.persona == scenario_persona
+        assert (stored.legacy_identity_name, stored.legacy_identity_first_person) == (None, None)
+        assert [a.name for a in dst["acquaintances"].list_by_being(BeingId("being_w1_p1"))] == ["カイト"]
+
+    def test_legacy_identity_without_a_being_to_take_from_is_rejected(self, tmp_path: Path) -> None:
+        """復元先に人柄を引ける Being が無ければ、保存先に書く前に BeingSnapshotIncompleteException で断る。"""
+        from ai_rpg_world.domain.being.exception.being_exceptions import BeingSnapshotIncompleteException
+
+        path = _capture_old_snapshot(tmp_path, {})
+        self._make_legacy(path)
+        dst = _make_environment()
+
+        with pytest.raises(BeingSnapshotIncompleteException, match="no persona"):
+            dst["restore"].execute(path)
+
+        assert dst["repo"].find_snapshot_by_id(BeingId("being_w1_p1")) is None
+
+    def test_current_snapshot_drops_no_identity(self, tmp_path: Path) -> None:
+        """persona を持つ今のファイルでは、読み捨てた名前と一人称を返さない。"""
+        path = _capture_old_snapshot(tmp_path, {})
+
+        assert _make_environment()["restore"].execute(path).removed_legacy_identity is None

@@ -6,6 +6,7 @@ import pytest
 
 from ai_rpg_world.being.domain.episode import EpisodeIndex
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.infrastructure.llm_episode_writer import (
     MAX_EPISODES_PER_WRITING,
     SYSTEM_PROMPT,
@@ -57,7 +58,7 @@ def _item(
 
 
 def _write(completion: EpisodeWritingCompletion, **overrides: Any) -> EpisodeContents:
-    fields: dict[str, Any] = {"self_name": "エイダ", "persona": "慎重な錠前師", "events_text": EVENTS}
+    fields: dict[str, Any] = {"persona": Persona(name="エイダ"), "persona_text": "慎重な錠前師", "events_text": EVENTS}
     fields.update(overrides)
     return LlmEpisodeWriter(completion).write(**fields)
 
@@ -87,11 +88,27 @@ class TestLlmEpisodeWriterMessages:
         )
         assert "流れは別に残る" in SYSTEM_PROMPT
 
+    def test_first_person_is_told_after_the_name(self) -> None:
+        """一人称が決まっていれば、名前の次の行で一人称を伝える。"""
+        completion = _Completion({"episodes": []})
+
+        _write(completion, persona=Persona(name="エイダ", first_person="わたし"))
+
+        assert "あなた = エイダ\nあなたの一人称 = わたし\n" in completion.messages[0][1]["content"]
+
+    def test_undecided_first_person_is_not_mentioned(self) -> None:
+        """一人称が決まっていなければ (None)、一人称について何も書かない。"""
+        completion = _Completion({"episodes": []})
+
+        _write(completion, persona=Persona(name="エイダ"))
+
+        assert "一人称" not in completion.messages[0][1]["content"]
+
     def test_blank_persona_is_left_out(self) -> None:
         """人物像が空なら、人物像の行を出さない。"""
         completion = _Completion({"episodes": []})
 
-        _write(completion, persona="  ")
+        _write(completion, persona_text="  ")
 
         assert "人物像" not in completion.messages[0][1]["content"]
 
@@ -101,7 +118,7 @@ class TestLlmEpisodeWriterMessages:
         second = _Completion({"episodes": []})
 
         _write(first)
-        _write(second, self_name="カイ", events_text="- 雨が降った。")
+        _write(second, persona=Persona(name="カイ", first_person="俺"), events_text="- 雨が降った。")
 
         assert first.messages[0][0] == second.messages[0][0]
         assert "エイダ" not in first.messages[0][0]["content"]

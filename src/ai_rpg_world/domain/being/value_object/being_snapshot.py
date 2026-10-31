@@ -18,7 +18,8 @@ store ごとの内訳構造は ``BeingMemorySnapshotService`` (application 層) 
 
 ## 不変条件 (all-or-nothing 構造の核)
 
-1. ``being_id_value`` は非空。人柄は ``Persona`` が自分で検証する
+1. ``being_id_value`` は非空。人柄は ``Persona`` が自分で検証する。人柄が ``None`` なのは、``persona`` の無い古い
+   snapshot から読んだときだけで、そのときは読み捨てる名前と一人称を ``legacy_identity_*`` に持つ
 2. ``attachment_world_id`` と ``attachment_player_id`` は **両方 None または両方
    非 None** でなければならない (= 片方だけ埋まる部分状態を構造的に禁止)
 3. ``snapshot_version`` は正の int
@@ -52,7 +53,9 @@ class BeingSnapshot:
     """
 
     being_id_value: str
-    persona: Persona
+    #: ``persona`` の無い古い snapshot から読んだときだけ None。名前と一人称は読み捨て、起動時にシナリオから入れた
+    #: 人柄で埋めてから decode する (design_decisions D1469-2)。
+    persona: Persona | None
     attachment_world_id: int | None
     attachment_player_id: int | None
     snapshot_version: int = CURRENT_SNAPSHOT_VERSION
@@ -60,17 +63,33 @@ class BeingSnapshot:
     #: 消した「どの種類の記憶を持つかの宣言」。古い snapshot から読んだときだけ埋まる。読み捨てた件数を
     #: ``snapshot_load`` に残すためだけに持ち、書き出さない (design_decisions D1469-1)。
     legacy_declared_memory_kinds: tuple[str, ...] = ()
+    #: 古い snapshot の ``identity_name`` と ``identity_first_person``。読み捨てたことを ``snapshot_load`` に
+    #: 残すためだけに持ち、書き出さない (design_decisions D1469-2)。
+    legacy_identity_name: str | None = None
+    legacy_identity_first_person: str | None = None
 
     def __post_init__(self) -> None:
         self._reject_blank("being_id_value", self.being_id_value)
-        if not isinstance(self.persona, Persona):
-            raise BeingSnapshotIncompleteException(
-                f"BeingSnapshot.persona must be Persona, got {type(self.persona).__name__}"
-            )
+        self._validate_persona()
         self._validate_attachment_pair()
         self._validate_memory_kinds()
         self._validate_version()
         self._validate_memory_payload()
+
+    def _validate_persona(self) -> None:
+        if self.persona is None:
+            if not isinstance(self.legacy_identity_name, str):
+                raise BeingSnapshotIncompleteException("BeingSnapshot without persona must carry legacy_identity_name")
+            return
+        if not isinstance(self.persona, Persona):
+            raise BeingSnapshotIncompleteException(
+                f"BeingSnapshot.persona must be Persona or None, got {type(self.persona).__name__}"
+            )
+
+    @property
+    def has_legacy_identity(self) -> bool:
+        """``persona`` の無い古い snapshot から読んだなら True。"""
+        return self.persona is None
 
     @staticmethod
     def _reject_blank(field: str, value: object) -> None:

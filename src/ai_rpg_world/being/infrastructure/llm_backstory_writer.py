@@ -10,7 +10,9 @@ from typing import Any
 
 from ai_rpg_world.being.application.recent_events_text import experiences_text
 from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter, WrittenBackstory
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import Backstory, Experience
+from ai_rpg_world.being.infrastructure.self_lines import self_lines
 
 FLOW_MAX_CHARS = 300
 MOOD_MAX_CHARS = 120
@@ -71,8 +73,8 @@ class LlmBackstoryWriter(BackstoryWriter):
     def write(
         self,
         *,
-        self_name: str,
-        persona: str,
+        persona: Persona,
+        persona_text: str,
         experiences: tuple[Experience, ...],
         previous: Backstory | None,
         until_turn: int,
@@ -85,7 +87,7 @@ class LlmBackstoryWriter(BackstoryWriter):
                 backstory=Backstory(flow=flow, mood=mood, written_turn=written_turn, until_turn=until_turn)
             )
         response = self._complete_json(
-            _messages(self_name=self_name, persona=persona, experiences=experiences, previous=previous)
+            _messages(persona=persona, persona_text=persona_text, experiences=experiences, previous=previous)
         )
         flow, mood, truncated = _read(response)
         return WrittenBackstory(
@@ -95,11 +97,11 @@ class LlmBackstoryWriter(BackstoryWriter):
 
 
 def _messages(
-    *, self_name: str, persona: str, experiences: tuple[Experience, ...], previous: Backstory | None
+    *, persona: Persona, persona_text: str, experiences: tuple[Experience, ...], previous: Backstory | None
 ) -> list[dict[str, str]]:
-    lines = [f"あなた = {self_name}"]
-    if persona.strip():
-        lines.append(f"あなたの性格 = {persona.strip()}")
+    lines = self_lines(persona)
+    if persona_text.strip():
+        lines.append(f"あなたの性格 = {persona_text.strip()}")
     lines.append("")
     if previous is not None:
         lines += ["【参考: 直前の中期記憶 (引き継ぎ)】", f"流れ: {previous.flow}", f"気分: {previous.mood}", ""]

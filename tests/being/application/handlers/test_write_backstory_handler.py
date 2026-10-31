@@ -7,6 +7,7 @@ from ai_rpg_world.being.application.handlers.write_backstory_handler import Writ
 from ai_rpg_world.being.application.write_backstory import WriteBackstoryCommand
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
 from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter, WrittenBackstory
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import (
     Backstory,
     Experience,
@@ -45,14 +46,14 @@ class _Writer(BackstoryWriter):
     def write(
         self,
         *,
-        self_name: str,
-        persona: str,
+        persona: Persona,
+        persona_text: str,
         experiences: tuple[Experience, ...],
         previous: Backstory | None,
         until_turn: int,
         written_turn: int,
     ) -> WrittenBackstory:
-        self.calls.append({"self_name": self_name, "experiences": experiences})
+        self.calls.append({"persona": persona, "experiences": experiences})
         return WrittenBackstory(
             backstory=Backstory(
                 flow=f"{len(experiences)} 件の流れ", mood="", written_turn=written_turn, until_turn=until_turn
@@ -77,18 +78,23 @@ class _World:
         self.store = InMemoryShortTermMemoryRepository(handoff=discard_events)
         self.writer = _Writer()
         self.looked_up: list[BeingId] = []
+        self.text_looked_up: list[BeingId] = []
         self.handler = WriteBackstoryHandler(
             writer=self.writer,
             store=self.store,
-            persona_of=lambda being_id: (self.looked_up.append(being_id), ("エイダ", "慎重"))[1],
+            persona_of=lambda being_id: (
+                self.looked_up.append(being_id),
+                Persona(name="エイダ", first_person="わたし"),
+            )[1],
+            persona_text_of=lambda being_id: (self.text_looked_up.append(being_id), "慎重")[1],
         )
 
 
 class TestPrepare:
-    """WriteBackstoryHandler.prepare が、イベントから材料を取り出し、名前と人格の文を引いてコマンドを作ることを保証する。"""
+    """WriteBackstoryHandler.prepare が、イベントから材料を取り出し、Being の人柄とゲームの側の人格の文を引いてコマンドを作ることを保証する。"""
 
     def test_range_filled_becomes_a_write_command(self) -> None:
-        """範囲が埋まったイベントから、ゲームの側の関数で引いた名前と人格の文、まとめる出来事、いちばん新しいいきさつ、範囲の終わり、埋まったターンを持つ WriteBackstoryCommand を作る。"""
+        """範囲が埋まったイベントから、Being の保存先から引いた人柄、ゲームの側の関数で引いた人格の文、まとめる出来事、いちばん新しいいきさつ、範囲の終わり、埋まったターンを持つ WriteBackstoryCommand を作る。"""
         world = _World()
         (event,) = _memory_with_filled_range().get_events()
         assert isinstance(event, ShortTermMemoryRangeFilledEvent)
@@ -97,14 +103,14 @@ class TestPrepare:
 
         assert command == WriteBackstoryCommand(
             being_id=ADA,
-            self_name="エイダ",
-            persona="慎重",
+            persona=Persona(name="エイダ", first_person="わたし"),
+            persona_text="慎重",
             experiences=event.experiences,
             previous=PREVIOUS,
             until_turn=10,
             written_turn=20,
         )
-        assert world.looked_up == [ADA]
+        assert (world.looked_up, world.text_looked_up) == ([ADA], [ADA])
 
     def test_overdue_becomes_a_write_command_for_the_same_range(self) -> None:
         """いきさつが遅れているイベントからも、同じ範囲を書き直すコマンドを作る。書いたターンは遅れを知らせたターン。"""
