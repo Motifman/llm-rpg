@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingSnapshotIncompleteException,
 )
@@ -16,11 +17,9 @@ from ai_rpg_world.domain.being.value_object.being_snapshot import (
 def _minimal_snapshot(**overrides: object) -> BeingSnapshot:
     base: dict[str, object] = dict(
         being_id_value="ada",
-        identity_name="アダ",
-        identity_first_person="わたし",
+        persona=Persona(name="アダ", first_person="わたし"),
         attachment_world_id=None,
         attachment_player_id=None,
-        declared_memory_kinds=(),
         snapshot_version=CURRENT_SNAPSHOT_VERSION,
     )
     base.update(overrides)
@@ -35,7 +34,7 @@ class TestBeingSnapshotConstruction:
         snapshot = _minimal_snapshot()
         assert snapshot.being_id_value == "ada"
         assert snapshot.has_attachment is False
-        assert snapshot.declared_memory_kinds == ()
+        assert snapshot.legacy_declared_memory_kinds == ()
 
     def test_attachment(self) -> None:
         """world / player 両方とも値があれば has_attachment は True。"""
@@ -61,20 +60,20 @@ class TestBeingSnapshotPartialStateRejection:
         with pytest.raises(BeingSnapshotIncompleteException, match="being_id_value"):
             _minimal_snapshot(being_id_value="")
 
-    def test_id_entity_name_empty_string_raises_exception(self) -> None:
-        """name の空文字も不許可。"""
-        with pytest.raises(BeingSnapshotIncompleteException, match="identity_name"):
-            _minimal_snapshot(identity_name="")
+    def test_non_persona_raises_exception(self) -> None:
+        """persona が Persona でなければ BeingSnapshotIncompleteException を投げる。"""
+        with pytest.raises(BeingSnapshotIncompleteException, match="persona"):
+            _minimal_snapshot(persona="アダ")
 
-    def test_non_tuple_memory_kinds_raises_exception(self) -> None:
-        """list を渡しても tuple ではないので不許可 (= immutable 強制)。"""
+    def test_non_tuple_legacy_memory_kinds_raises_exception(self) -> None:
+        """古い宣言を list で渡すと tuple ではないので BeingSnapshotIncompleteException を投げる。"""
         with pytest.raises(BeingSnapshotIncompleteException, match="tuple"):
-            _minimal_snapshot(declared_memory_kinds=["episodic"])  # type: ignore[arg-type]
+            _minimal_snapshot(legacy_declared_memory_kinds=["episodic"])  # type: ignore[arg-type]
 
-    def test_non_string_memory_kind_element_raises_exception(self) -> None:
-        """要素は文字列でなければ不許可 (= codec で MemoryKind に変換するため)。"""
+    def test_non_string_legacy_memory_kind_element_raises_exception(self) -> None:
+        """古い宣言の要素が文字列でなければ BeingSnapshotIncompleteException を投げる。"""
         with pytest.raises(BeingSnapshotIncompleteException, match="elements"):
-            _minimal_snapshot(declared_memory_kinds=(1, 2))  # type: ignore[arg-type]
+            _minimal_snapshot(legacy_declared_memory_kinds=(1, 2))  # type: ignore[arg-type]
 
     def test_attachment_world_id_int_raises_exception(self) -> None:
         """attachment_world_id が int でなければ不許可。"""
@@ -121,11 +120,9 @@ class TestBeingSnapshotMemoryPayload:
         """``CURRENT_SNAPSHOT_VERSION`` が dataclass default として使われている。"""
         snapshot = BeingSnapshot(
             being_id_value="ada",
-            identity_name="アダ",
-            identity_first_person="わたし",
+            persona=Persona(name="アダ"),
             attachment_world_id=None,
             attachment_player_id=None,
-            declared_memory_kinds=(),
         )
         assert snapshot.snapshot_version == CURRENT_SNAPSHOT_VERSION
 
@@ -137,6 +134,6 @@ class TestBeingSnapshotEquality:
         """全フィールド同値なら ``==`` が True。"""
         assert _minimal_snapshot() == _minimal_snapshot()
 
-    def test_name_not_equal(self) -> None:
-        """name が違えば等しくない。"""
-        assert _minimal_snapshot(identity_name="アダ") != _minimal_snapshot(identity_name="ベン")
+    def test_persona_not_equal(self) -> None:
+        """人柄が違えば等しくない。"""
+        assert _minimal_snapshot(persona=Persona(name="アダ")) != _minimal_snapshot(persona=Persona(name="ベン"))

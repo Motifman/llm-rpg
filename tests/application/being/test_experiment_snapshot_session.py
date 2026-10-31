@@ -342,6 +342,7 @@ class TestScenarioMetadata:
     def test_metadata_legacy_snapshot_restore_works(self, tmp_path: Path) -> None:
         """``_metadata`` キー無しの旧 snapshot ファイルでも壊れない (後方互換)。"""
         from ai_rpg_world.application.being.being_snapshot_file_gateway import BeingSnapshotFileGateway
+        from ai_rpg_world.being.domain.persona import Persona
         from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
 
         snap_dir = tmp_path / "old"
@@ -349,11 +350,9 @@ class TestScenarioMetadata:
         gateway = BeingSnapshotFileGateway()
         snap = BeingSnapshot(
             being_id_value="being_w1_p1",
-            identity_name="agent",
-            identity_first_person="わたし",
+            persona=Persona(name="agent"),
             attachment_world_id=1,
             attachment_player_id=1,
-            declared_memory_kinds=(),
             snapshot_version=2,
             memory_payload_json=None,
         )

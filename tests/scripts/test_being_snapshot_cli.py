@@ -11,11 +11,10 @@ import importlib.util
 import json
 from pathlib import Path
 
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
-from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
@@ -41,9 +40,8 @@ def _populate_source_dbs(
     repo = SqliteBeingRepository.connect(str(being_db))
     being = Being(
         being_id=BeingId("being_w1_p1"),
-        identity=BeingIdentity(name="アダ", first_person="わたし"),
+        persona=Persona(name="アダ", first_person="わたし"),
         attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)),
-        declared_memory_kinds=[MemoryKind.EPISODIC],
     )
     repo.save(being)
 
@@ -96,7 +94,7 @@ class TestBeingSnapshotCliEndToEnd:
         dst_repo = SqliteBeingRepository.connect(str(dst_being_db))
         loaded = dst_repo.find_by_id(being_id)
         assert loaded is not None
-        assert loaded.identity.name == "アダ"
+        assert loaded.persona.name == "アダ"
 
     def test_save_missing_source_db_exits_one(self, tmp_path: Path) -> None:
         """source DB が無い save は sqlite が自動生成する前に弾かれる。"""

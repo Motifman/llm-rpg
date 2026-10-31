@@ -2,8 +2,7 @@
 
 PR #462 §2.1 R1: 「永続化は store 単位 env ではなく Being 単位の設定 1 箇所」「復元
 の完全性は all-or-nothing で保証 (部分復元を構造的に禁止)」を実現するための中間
-形式。Phase 2 PR4 (旧) では Being 集約 root の状態 (identity + attachment +
-declared_memory_kinds) のみを内包していた。
+形式。Being 集約 root の状態 (人柄と attachment) を持つ。
 
 Phase 4 Step 4-1 (Issue #470): memory payload を載せるための ``snapshot_version=2``
 を導入する。memory payload 自体は **オペーク な JSON 文字列** として保持し、
@@ -19,14 +18,13 @@ store ごとの内訳構造は ``BeingMemorySnapshotService`` (application 層) 
 
 ## 不変条件 (all-or-nothing 構造の核)
 
-1. ``being_id_value`` / ``identity_name`` / ``identity_first_person`` は非空
+1. ``being_id_value`` は非空。人柄は ``Persona`` が自分で検証する
 2. ``attachment_world_id`` と ``attachment_player_id`` は **両方 None または両方
    非 None** でなければならない (= 片方だけ埋まる部分状態を構造的に禁止)
-3. ``declared_memory_kinds`` は str のタプル (中身が認識可能な MemoryKind 値か
-   どうかは codec の decode 時にチェックする = VO 自体は形式のみガード)
-4. ``snapshot_version`` は正の int
-5. ``memory_payload_json`` は ``str | None`` (= 非 None なら JSON valid を
+3. ``snapshot_version`` は正の int
+4. ``memory_payload_json`` は ``str | None`` (= 非 None なら JSON valid を
    codec が責務として保証)。v1 snapshot では常に None
+5. ``legacy_declared_memory_kinds`` は str のタプル。古い snapshot から読んだときだけ埋まり、書き出さない
 
 これらが満たされない場合は ``BeingSnapshotIncompleteException`` を投げる。
 """
@@ -35,6 +33,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingSnapshotIncompleteException,
 )
@@ -53,18 +52,21 @@ class BeingSnapshot:
     """
 
     being_id_value: str
-    identity_name: str
-    identity_first_person: str
+    persona: Persona
     attachment_world_id: int | None
     attachment_player_id: int | None
-    declared_memory_kinds: tuple[str, ...]
     snapshot_version: int = CURRENT_SNAPSHOT_VERSION
     memory_payload_json: str | None = None
+    #: 消した「どの種類の記憶を持つかの宣言」。古い snapshot から読んだときだけ埋まる。読み捨てた件数を
+    #: ``snapshot_load`` に残すためだけに持ち、書き出さない (design_decisions D1469-1)。
+    legacy_declared_memory_kinds: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         self._reject_blank("being_id_value", self.being_id_value)
-        self._reject_blank("identity_name", self.identity_name)
-        self._reject_blank("identity_first_person", self.identity_first_person)
+        if not isinstance(self.persona, Persona):
+            raise BeingSnapshotIncompleteException(
+                f"BeingSnapshot.persona must be Persona, got {type(self.persona).__name__}"
+            )
         self._validate_attachment_pair()
         self._validate_memory_kinds()
         self._validate_version()
@@ -95,14 +97,14 @@ class BeingSnapshot:
             )
 
     def _validate_memory_kinds(self) -> None:
-        if not isinstance(self.declared_memory_kinds, tuple):
+        if not isinstance(self.legacy_declared_memory_kinds, tuple):
             raise BeingSnapshotIncompleteException(
-                f"declared_memory_kinds must be tuple, got {type(self.declared_memory_kinds).__name__}"
+                f"legacy_declared_memory_kinds must be tuple, got {type(self.legacy_declared_memory_kinds).__name__}"
             )
-        for kind in self.declared_memory_kinds:
+        for kind in self.legacy_declared_memory_kinds:
             if not isinstance(kind, str):
                 raise BeingSnapshotIncompleteException(
-                    f"declared_memory_kinds elements must be str, got {type(kind).__name__}"
+                    f"legacy_declared_memory_kinds elements must be str, got {type(kind).__name__}"
                 )
 
     def _validate_version(self) -> None:

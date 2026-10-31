@@ -3,14 +3,6 @@
 import ast
 from pathlib import Path
 
-from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
-
-
-def test_semantic_is_not_a_declared_memory_kind() -> None:
-    """MemoryKindは現役の3種類だけを持ち、SEMANTICという別名も持たない。"""
-    assert set(MemoryKind.__members__) == {"SHORT_TERM", "EPISODIC", "MEMO"}
-    assert {kind.value for kind in MemoryKind} == {"short_term", "episodic", "memo"}
-
 
 def test_production_has_no_semantic_enum_access() -> None:
     """srcとscriptsにSEMANTICメンバーを参照する式を残さず、遅延実行時の属性エラーを防ぐ。"""

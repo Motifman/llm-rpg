@@ -82,7 +82,7 @@ run 後はまず `experiment.config.resolved.json` を見て、意図した prof
 - 保存・読み込みは `TraceEventKind.SNAPSHOT_SAVE` / `SNAPSHOT_LOAD` に必ず 1 件残る
 - 保存失敗は警告のみで実験は成功扱い (実験データを守る)。読み込み失敗は開始前に即終了 (壊れた状態で始めない)
 - 記憶の部品を消して snapshot のキーが無くなったら、`src/ai_rpg_world/application/being/removed_memory_payload_keys.py` の表に足す。古い snapshot に残るそのキーは読み込みで捨て、件数が `snapshot_load` の `removed_memory_keys` に残る (`docs/design_decisions.md` の D1631-5)
-- 世界の保存項目とBeingの記憶本文は別の入口で扱う。廃止した旧追跡の世界キーは世界snapshot側で除き、`snapshot_load.removed_world_subsystems`に件数を残す。廃止した`semantic`の所有宣言はBeingのcodecで除き、`removed_declared_memory_kinds`に記録する。未知キーや現役キー欠落を一律に無視しない（D1893 / D1893-5）。
+- 世界の保存項目とBeingの記憶本文は別の入口で扱う。廃止した旧追跡の世界キーは世界snapshot側で除き、`snapshot_load.removed_world_subsystems`に件数を残す。Beingは記憶の種類の所有宣言を持たないので、古いsnapshotに残る宣言はどの文字列も読み捨て、種類別の件数を`removed_declared_memory_kinds`に記録する (D1469-1)。未知キーや現役キー欠落を一律に無視しない（D1893 / D1893-5）。
 - 詳細は `docs/design_decisions.md` の #15-#18
 
 ### プロンプトの本文にツールの名前を書くとき
@@ -127,7 +127,7 @@ infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM ア�
 
 ### Bounded Context
 
-Bounded Context として境界を守れているのは Being だけです。経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳・短期記憶を持ち、環境 (ゲーム) とやりとりするときは `being/contract` の型だけを使います。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは `domain/being` だけを一時的に許す)。
+Bounded Context として境界を守れているのは Being だけです。経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳・短期記憶を持ち、環境 (ゲーム) とやりとりするときは `being/contract` の型だけを使います。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは、`domain/being` のうちまだ移していない ID・所属・例外のモジュールだけを一時的に許す)。Being 集約と人柄 (`Persona`) は `being/domain` にあります。
 
 `BeingId` をキーに持つ保存先を足すときは、同じ PR で Being の snapshot (`BeingMemorySnapshotService`) まで配線します。配線を忘れると、run を止めて再開したときに記憶が静かに途切れます。キーを足すところまでやって読み書きを忘れた場合は起動時に止まりますが、キーごと忘れた場合はどの検査も気づきません (`docs/design_decisions.md` の #27)。足す前に保存した snapshot も読めるようにするなら、`ADDED_PAYLOAD_KEYS` にも足します (D1824-6)。
 

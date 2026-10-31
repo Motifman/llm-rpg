@@ -7,13 +7,13 @@ import pytest
 from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingMultipleAttachmentException,
 )
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
@@ -21,8 +21,8 @@ from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
 )
 
 
-def _identity() -> BeingIdentity:
-    return BeingIdentity(name="アダ", first_person="わたし")
+def _persona() -> Persona:
+    return Persona(name="アダ", first_person="わたし")
 
 
 def _being(
@@ -35,7 +35,7 @@ def _being(
         if attached is not None
         else None
     )
-    return Being(being_id=BeingId(being_id), identity=_identity(), attachment=attachment)
+    return Being(being_id=BeingId(being_id), persona=_persona(), attachment=attachment)
 
 
 @pytest.fixture

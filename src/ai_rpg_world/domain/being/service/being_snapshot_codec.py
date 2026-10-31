@@ -11,7 +11,6 @@ PR #462 §2.1 R1: 「all-or-nothing で復元の完全性を保証 (部分復元
   保持する。未指定なら v1 互換の snapshot (memory_payload_json=None) になる
 - ``decode(snapshot)``: BeingSnapshot から Being 集約を復元
   - snapshot version が現 codec で読めない値なら ``BeingSnapshotVersionException``
-  - 廃止したsemantic宣言だけを除き、ほかのmemory_kind文字列が認識できなければ ``BeingSnapshotIncompleteException``
   - その他 VO レベルの形式エラーは VO 自身のドメイン例外 (BeingId 等) で検出
 
 Phase 4 Step 4-1: memory payload は本 codec ではオペーク扱い。実際の memory
@@ -21,24 +20,20 @@ store への書き戻しは ``BeingMemorySnapshotService`` (application 層、4-
 
 from __future__ import annotations
 
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingSnapshotIncompleteException,
     BeingSnapshotVersionException,
 )
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
 from ai_rpg_world.domain.being.value_object.being_snapshot import (
     CURRENT_SNAPSHOT_VERSION,
     LEGACY_SNAPSHOT_VERSION_V1,
     BeingSnapshot,
 )
-from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
-
-_REMOVED_MEMORY_KIND = "semantic"
 
 
 class BeingSnapshotCodec:
@@ -85,20 +80,23 @@ class BeingSnapshotCodec:
         # 有効)。v1 はあくまで decode 経路の後方互換用。
         return BeingSnapshot(
             being_id_value=being.being_id.value,
-            identity_name=being.identity.name,
-            identity_first_person=being.identity.first_person,
+            persona=being.persona,
             attachment_world_id=world_id_value,
             attachment_player_id=player_id_value,
-            declared_memory_kinds=tuple(sorted(k.value for k in being.declared_memory_kinds)),
             snapshot_version=CURRENT_SNAPSHOT_VERSION,
             memory_payload_json=memory_payload_json,
         )
 
     @staticmethod
     def removed_declared_memory_kind_counts(snapshot: BeingSnapshot) -> dict[str, int]:
-        """廃止済みの宣言の出現数を返す。記憶本文の件数は扱わない。"""
-        count = snapshot.declared_memory_kinds.count(_REMOVED_MEMORY_KIND)
-        return {_REMOVED_MEMORY_KIND: count} if count else {}
+        """古い snapshot に残っていた記憶の種類の宣言を、種類ごとに数える。宣言はもう持たないので、どれも読み捨てる。
+
+        記憶本文の件数は扱わない (design_decisions D1469-1)。
+        """
+        counts: dict[str, int] = {}
+        for kind in snapshot.legacy_declared_memory_kinds:
+            counts[kind] = counts.get(kind, 0) + 1
+        return counts
 
     @staticmethod
     def decode(snapshot: BeingSnapshot) -> Being:
@@ -128,10 +126,6 @@ class BeingSnapshotCodec:
             )
 
         being_id = BeingId(snapshot.being_id_value)
-        identity = BeingIdentity(
-            name=snapshot.identity_name,
-            first_person=snapshot.identity_first_person,
-        )
 
         attachment: BeingAttachment | None = None
         if snapshot.has_attachment:
@@ -147,24 +141,7 @@ class BeingSnapshotCodec:
                 player_id=PlayerId(snapshot.attachment_player_id),
             )
 
-        kinds: list[MemoryKind] = []
-        valid_values = {k.value for k in MemoryKind}
-        for raw in snapshot.declared_memory_kinds:
-            # 記憶本文とは別の宣言だけを移行する。未知の値は引き続き拒否する。
-            if raw == _REMOVED_MEMORY_KIND:
-                continue
-            if raw not in valid_values:
-                raise BeingSnapshotIncompleteException(
-                    f"unknown memory_kind value in snapshot: {raw!r} (known: {sorted(valid_values)})"
-                )
-            kinds.append(MemoryKind(raw))
-
-        return Being(
-            being_id=being_id,
-            identity=identity,
-            attachment=attachment,
-            declared_memory_kinds=kinds,
-        )
+        return Being(being_id=being_id, persona=snapshot.persona, attachment=attachment)
 
 
 __all__ = ["BeingSnapshotCodec"]

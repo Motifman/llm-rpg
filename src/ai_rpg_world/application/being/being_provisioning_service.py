@@ -17,10 +17,10 @@ LLM ターン開始時に (world, player) に Being が attach されている�
 - Step 6-full で wiring が Being-centric になった時に、本 service を経由せず persona
   config 等から explicit BeingId を渡す経路に置き換える前提
 
-## Identity の placeholder
+## 人柄
 
-``identity_hint`` を渡せばそれを使う。渡されなければ ``BeingIdentity(name=f"agent_{player_id.value}",
-first_person="わたし")`` を default として使う (= 後で persona と結合する想定の仮値)。
+新しく作る Being の人柄は ``persona`` で渡す。起動時はシナリオのプレイヤーの名前から作って渡す
+(design_decisions D1469-1)。渡されなければ名前だけを ``agent_{player_id}`` にし、一人称などは決めない。
 
 ## Thread safety
 
@@ -34,11 +34,11 @@ from __future__ import annotations
 from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
@@ -69,20 +69,21 @@ class BeingProvisioningService:
         player_id: PlayerId,
         *,
         world_id: WorldId | None = None,
-        identity_hint: BeingIdentity | None = None,
+        persona: Persona | None = None,
     ) -> BeingId:
         """指定 (world, player) に Being が attach されていることを保証する。
 
         - 既に attach 済みの Being があれば、その BeingId を返す
         - 無ければ ``f"being_w{world_id}_p{player_id}"`` で Being を作って attach
         - 既存の同 BeingId が別 (world, player) に attach 中なら detach → 再 attach
+        - ``persona`` は新しく作るときだけ使う。既にある Being の人柄は変えない
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError(f"player_id must be PlayerId, got {type(player_id).__name__}")
         if world_id is not None and not isinstance(world_id, WorldId):
             raise TypeError(f"world_id must be WorldId or None, got {type(world_id).__name__}")
-        if identity_hint is not None and not isinstance(identity_hint, BeingIdentity):
-            raise TypeError(f"identity_hint must be BeingIdentity or None, got {type(identity_hint).__name__}")
+        if persona is not None and not isinstance(persona, Persona):
+            raise TypeError(f"persona must be Persona or None, got {type(persona).__name__}")
 
         target_world = world_id or self._default_world_id
 
@@ -108,10 +109,9 @@ class BeingProvisioningService:
             return being_id
 
         # Case 3: 新規作成 + attach
-        identity = identity_hint or self._default_identity(player_id)
         being = Being(
             being_id=being_id,
-            identity=identity,
+            persona=persona or Persona(name=f"agent_{player_id.value}"),
             attachment=BeingAttachment(world_id=target_world, player_id=player_id),
         )
         self._repo.save(being)
@@ -125,14 +125,6 @@ class BeingProvisioningService:
         差し替える想定。
         """
         return BeingId(f"being_w{world_id.value}_p{player_id.value}")
-
-    @staticmethod
-    def _default_identity(player_id: PlayerId) -> BeingIdentity:
-        """``identity_hint`` が渡されない場合の placeholder。後で persona と結合する想定。"""
-        return BeingIdentity(
-            name=f"agent_{player_id.value}",
-            first_person="わたし",
-        )
 
 
 __all__ = ["BeingProvisioningService"]

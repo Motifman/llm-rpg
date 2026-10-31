@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
@@ -28,7 +28,7 @@ def _being(
     )
     return Being(
         being_id=BeingId(value),
-        identity=BeingIdentity(name=name, first_person="わたし"),
+        persona=Persona(name=name, first_person="わたし"),
         attachment=attachment,
     )
 
@@ -47,9 +47,8 @@ class TestInMemoryBeingRepository:
         # ないので属性ごとに比較する。
         assert found is not None
         assert found.being_id == being.being_id
-        assert found.identity == being.identity
+        assert found.persona == being.persona
         assert found.attachment == being.attachment
-        assert found.declared_memory_kinds == being.declared_memory_kinds
 
     def test_id_find_id_none(self) -> None:
         """未保存の ID では None が返る。"""
@@ -63,7 +62,7 @@ class TestInMemoryBeingRepository:
         repo.save(_being("ada", name="アダ2"))
         found = repo.find_by_id(BeingId("ada"))
         assert found is not None
-        assert found.identity.name == "アダ2"
+        assert found.persona.name == "アダ2"
 
     def test_returns_exists_after_true(self) -> None:
         """save 済みなら exists が True。"""

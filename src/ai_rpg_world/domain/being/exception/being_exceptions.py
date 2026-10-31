@@ -34,10 +34,10 @@ class BeingIdValidationException(BeingDomainException, ValidationException):
     error_code = "BEING.ID_VALIDATION"
 
 
-class BeingIdentityValidationException(BeingDomainException, ValidationException):
-    """BeingIdentity バリデーション例外 (name / first_person の不正)。"""
+class PersonaValidationException(BeingDomainException, ValidationException):
+    """Persona の名前や人柄の値が、空白だけか、型が違う。"""
 
-    error_code = "BEING.IDENTITY_VALIDATION"
+    error_code = "BEING.PERSONA_VALIDATION"
 
 
 class BeingNotFoundException(BeingDomainException, NotFoundException):
@@ -162,7 +162,6 @@ __all__ = [
     "BeingAttachmentValidationException",
     "BeingDomainException",
     "BeingIdValidationException",
-    "BeingIdentityValidationException",
     "BeingMultipleAttachmentException",
     "BeingNotFoundException",
     "BeingSnapshotIncompleteException",
@@ -174,6 +173,7 @@ __all__ = [
     "MemoLimitReachedException",
     "MemoNotFoundException",
     "MemoValidationException",
+    "PersonaValidationException",
     "ShortTermMemoryStaleBackstoryException",
     "ShortTermMemoryUnpairedResultException",
     "ShortTermMemoryValidationException",

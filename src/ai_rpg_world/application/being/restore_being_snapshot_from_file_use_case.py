@@ -94,15 +94,9 @@ class RestoreBeingSnapshotFromFileUseCase:
                 f"(supported: {sorted(BeingSnapshotCodec.SUPPORTED_VERSIONS)}). "
                 f"file={input_path}"
             )
-        # 保存前に未知の宣言を拒否し、廃止済みの宣言だけを正規化する。
-        being = BeingSnapshotCodec.decode(snapshot)
-        being_id = being.being_id
+        being_id = BeingSnapshotCodec.decode(snapshot).being_id
         removed_declared_memory_kind_counts = BeingSnapshotCodec.removed_declared_memory_kind_counts(snapshot)
-        if removed_declared_memory_kind_counts:
-            snapshot = replace(
-                snapshot,
-                declared_memory_kinds=BeingSnapshotCodec.encode(being).declared_memory_kinds,
-            )
+        snapshot = replace(snapshot, legacy_declared_memory_kinds=())
 
         payload: str | None = None
         removed_memory_key_counts: dict[str, int] = {}

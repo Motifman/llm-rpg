@@ -8,11 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
-from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
@@ -20,22 +19,16 @@ from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
 )
 
 
-def _identity() -> BeingIdentity:
-    return BeingIdentity(name="アダ", first_person="わたし")
-
-
 def _being(
     being_id: str = "ada",
     name: str = "アダ",
     attached: bool = False,
-    kinds: list[MemoryKind] | None = None,
 ) -> Being:
     attachment = BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2)) if attached else None
     return Being(
         being_id=BeingId(being_id),
-        identity=BeingIdentity(name=name, first_person="わたし"),
+        persona=Persona(name=name, first_person="わたし", traits=("慎重",)),
         attachment=attachment,
-        declared_memory_kinds=kinds or [],
     )
 
 
@@ -50,18 +43,14 @@ class TestSqliteBeingRepositoryCrud:
     """SqliteBeingRepository の CRUD 挙動。"""
 
     def test_save_find_id_being(self, repo: SqliteBeingRepository) -> None:
-        """ラウンドトリップで identity / attachment / kinds が一致。"""
-        original = _being(
-            attached=True,
-            kinds=[MemoryKind.EPISODIC, MemoryKind.MEMO],
-        )
+        """保存して読み直すと、人柄と所属が一致する。"""
+        original = _being(attached=True)
         repo.save(original)
         loaded = repo.find_by_id(BeingId("ada"))
         assert loaded is not None
         assert loaded.being_id == original.being_id
-        assert loaded.identity == original.identity
+        assert loaded.persona == original.persona
         assert loaded.attachment == original.attachment
-        assert loaded.declared_memory_kinds == original.declared_memory_kinds
 
     def test_id_find_id_none(self, repo: SqliteBeingRepository) -> None:
         """未保存の ID では None。"""
@@ -73,7 +62,7 @@ class TestSqliteBeingRepositoryCrud:
         repo.save(_being("ada", name="アダ2"))
         loaded = repo.find_by_id(BeingId("ada"))
         assert loaded is not None
-        assert loaded.identity.name == "アダ2"
+        assert loaded.persona.name == "アダ2"
 
     def test_returns_exists_after_true(self, repo: SqliteBeingRepository) -> None:
         """save 済みなら exists が True、未保存なら False。"""
@@ -120,11 +109,11 @@ class TestSqliteBeingRepositorySchema:
         repo2 = SqliteBeingRepository.connect(str(db_path))
         loaded = repo2.find_by_id(BeingId("ada"))
         assert loaded is not None
-        assert loaded.identity.name == "アダ"
+        assert loaded.persona.name == "アダ"
 
     def test_save_after_snapshot_json(self, repo: SqliteBeingRepository) -> None:
         """SQL を直接叩いて payload が想定形であることを確認。"""
-        repo.save(_being(attached=True, kinds=[MemoryKind.MEMO]))
+        repo.save(_being(attached=True))
         cur = repo.connection.cursor()
         cur.execute(
             "SELECT snapshot_version, snapshot_json FROM beings WHERE being_id_value = ?",
@@ -137,60 +126,31 @@ class TestSqliteBeingRepositorySchema:
         assert row["snapshot_version"] == 2
         data = json.loads(row["snapshot_json"])
         assert data["being_id_value"] == "ada"
-        assert data["identity_name"] == "アダ"
+        assert data["persona"]["name"] == "アダ"
         assert data["attachment_world_id"] == 1
         assert data["attachment_player_id"] == 2
-        assert data["declared_memory_kinds"] == ["memo"]
+        assert "declared_memory_kinds" not in data
 
 
 class TestSqliteBeingRepositoryMemoryPayload:
-    """Phase 4 Step 4-1: memory_payload_json の永続化 round-trip。"""
+    """memory_payload_json の永続化を保証する。"""
 
-    def test_payload_dict_memory_payload_json_included(self) -> None:
-        """_snapshot_to_payload_dict が v2 snapshot の payload を落とさない。"""
-        from ai_rpg_world.domain.being.value_object.being_snapshot import (
-            BeingSnapshot,
-        )
-        from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
-            _payload_dict_to_snapshot,
-            _snapshot_to_payload_dict,
-        )
+    def test_memory_payload_survives_save_and_find(self, repo: SqliteBeingRepository) -> None:
+        """payload を載せた snapshot を保存して読み直すと、payload を含めて同じ snapshot が返る。"""
+        from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
 
         snapshot = BeingSnapshot(
             being_id_value="ada",
-            identity_name="アダ",
-            identity_first_person="わたし",
+            persona=Persona(name="アダ", first_person="わたし"),
             attachment_world_id=1,
             attachment_player_id=2,
-            declared_memory_kinds=("memo",),
             snapshot_version=2,
             memory_payload_json='{"memo": [{"id": "m1"}]}',
         )
-        payload_dict = _snapshot_to_payload_dict(snapshot)
-        assert payload_dict["memory_payload_json"] == '{"memo": [{"id": "m1"}]}'
 
-        # JSON シリアライズ → 復元の round-trip でも payload が保たれる。
-        restored = _payload_dict_to_snapshot(json.loads(json.dumps(payload_dict)))
-        assert restored == snapshot
+        repo.save_snapshot(snapshot)
 
-    def test_v1_line_payload_none(self) -> None:
-        """v1 schema の snapshot_json には memory_payload_json キーがない。"""
-        from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
-            _payload_dict_to_snapshot,
-        )
-
-        v1_data = {
-            "being_id_value": "ada",
-            "identity_name": "アダ",
-            "identity_first_person": "わたし",
-            "attachment_world_id": None,
-            "attachment_player_id": None,
-            "declared_memory_kinds": [],
-            "snapshot_version": 1,
-        }
-        snapshot = _payload_dict_to_snapshot(v1_data)
-        assert snapshot.memory_payload_json is None
-        assert snapshot.snapshot_version == 1
+        assert repo.find_snapshot_by_id(BeingId("ada")) == snapshot
 
 
 class TestSqliteBeingRepositoryFindAllAttachedTo:
@@ -213,14 +173,14 @@ class TestSqliteBeingRepositoryFindAllAttachedTo:
         """異常状態検出は Resolver の責務なので、ここは全件返す。"""
         repo.save(_being("ada", attached=True))
         # ben を同じ (world=1, player=2) に attach 済みで保存
-        from ai_rpg_world.domain.being.aggregate.being import Being
+        from ai_rpg_world.being.domain.being import Being
         from ai_rpg_world.domain.being.value_object.being_attachment import (
             BeingAttachment,
         )
 
         ben = Being(
             being_id=BeingId("ben"),
-            identity=BeingIdentity(name="ベン", first_person="俺"),
+            persona=Persona(name="ベン", first_person="俺"),
             attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2)),
         )
         repo.save(ben)
@@ -248,15 +208,16 @@ class TestSqliteBeingRepositoryTypeGuards:
 
 
 @pytest.mark.parametrize("version", [1, 2])
-def test_old_database_declaration_is_removed_on_read_and_resave(tmp_path: Path, version: int) -> None:
-    """旧DBのsemantic宣言を読み飛ばし、同一性・所属を保って現役の宣言だけを再保存できる。"""
+def test_old_database_row_is_read_and_resaved_with_persona(tmp_path: Path, version: int) -> None:
+    """persona の無い古い行は、名前と一人称を人柄として読み、宣言を読み捨てて、保存し直すと persona の形になる。"""
     database = tmp_path / "old.db"
     repo = SqliteBeingRepository.connect(str(database))
-    original = _being(attached=True, kinds=[MemoryKind.MEMO])
+    original = _being(attached=True)
     repo.save(original)
     row = repo.connection.execute("SELECT snapshot_json FROM beings").fetchone()
     payload = json.loads(row[0])
-    payload["declared_memory_kinds"] = ["semantic", "memo"]
+    del payload["persona"]
+    payload.update(identity_name="agent_2", identity_first_person="わたし", declared_memory_kinds=["semantic", "memo"])
     payload["snapshot_version"] = version
     repo.connection.execute(
         "UPDATE beings SET snapshot_version = ?, snapshot_json = ?",
@@ -268,12 +229,12 @@ def test_old_database_declaration_is_removed_on_read_and_resave(tmp_path: Path, 
     reopened = SqliteBeingRepository.connect(str(database))
     try:
         being = reopened.find_by_id(original.being_id)
-        assert being.identity == original.identity
+        assert being.persona == Persona(name="agent_2", first_person="わたし")
         assert being.attachment == original.attachment
-        assert being.declared_memory_kinds == original.declared_memory_kinds
-        attached = reopened.find_all_attached_to(WorldId(1), PlayerId(2))
-        assert attached[0].declared_memory_kinds == original.declared_memory_kinds
+        assert reopened.find_all_attached_to(WorldId(1), PlayerId(2))[0].persona == being.persona
         reopened.save(being)
-        assert reopened.find_snapshot_by_id(original.being_id).declared_memory_kinds == ("memo",)
+        resaved = json.loads(reopened.connection.execute("SELECT snapshot_json FROM beings").fetchone()[0])
+        assert resaved["persona"]["name"] == "agent_2"
+        assert not {"identity_name", "identity_first_person", "declared_memory_kinds"} & resaved.keys()
     finally:
         reopened.connection.close()
