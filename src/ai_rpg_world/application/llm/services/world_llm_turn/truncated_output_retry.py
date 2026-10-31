@@ -21,9 +21,9 @@ _logger = logging.getLogger(__name__)
 
 
 class CallOutcomeWatch:
-    """1 回の呼び出しの計測を受け、打ち切りの理由と考えの段階を覚えてから、trace の受け口へ渡す。
+    """1 回の呼び出しの計測を受け、打ち切りの理由と考えの段階を覚えてから、trace の記録係へ渡す。
 
-    trace の受け口が無いとき (``inner`` が None) も覚える。呼び直すかの判断を trace の有無に左右させないため。
+    trace の記録係が無いとき (``inner`` が None) も覚える。呼び直すかの判断を trace の有無に左右させないため。
     """
 
     def __init__(self, inner: Any | None) -> None:

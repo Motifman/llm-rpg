@@ -177,7 +177,7 @@ class TestOneStepTurn:
         assert _retries(runtime) == []
 
     def test_retry_happens_even_without_a_trace_recorder(self) -> None:
-        """trace の受け口が無くても、打ち切られた手番は呼び直す。呼び直すかを trace の有無に左右させない。"""
+        """trace の記録係が無くても、打ち切られた手番は呼び直す。呼び直すかを trace の有無に左右させない。"""
         client = _Client([_Cut(), _EXPLORE])
         wiring, _ = _one_step_wiring(client, traced=False)
 

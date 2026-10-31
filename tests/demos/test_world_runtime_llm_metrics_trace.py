@@ -1,7 +1,7 @@
 """run_phase_a で LLM 呼び出しの metrics が trace_recorder に流れることを検証。
 
 invoke が metrics_sink を受け取り、LLM_CALL event が record される。
-trace_recorder 未注入の経路でも、打ち切りを覚える受け口だけを渡し、trace には何も流さない (#1924)。
+trace_recorder 未注入の経路でも、打ち切りを覚える渡し先だけを渡し、trace には何も流さない (#1924)。
 """
 
 from __future__ import annotations
@@ -155,7 +155,7 @@ class TestPhaseAMetricsSink:
         assert "tool_call_combination" not in payload
 
     def test_without_trace_recorder_sink_only_watches_the_call(self, monkeypatch, tmp_path: Path) -> None:
-        """trace recorder が None でも、打ち切りを覚える受け口 (CallOutcomeWatch) だけは渡し、trace には何も流さない (#1924)。"""
+        """trace recorder が None でも、打ち切りを覚える渡し先 (CallOutcomeWatch) だけは渡し、trace には何も流さない (#1924)。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)
