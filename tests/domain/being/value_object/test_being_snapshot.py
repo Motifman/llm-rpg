@@ -18,8 +18,8 @@ def _minimal_snapshot(**overrides: object) -> BeingSnapshot:
     base: dict[str, object] = dict(
         being_id_value="ada",
         persona=Persona(name="アダ", first_person="わたし"),
-        attachment_world_id=None,
-        attachment_player_id=None,
+        attachment_environment_id=None,
+        attachment_environment_name=None,
         snapshot_version=CURRENT_SNAPSHOT_VERSION,
     )
     base.update(overrides)
@@ -37,23 +37,29 @@ class TestBeingSnapshotConstruction:
         assert snapshot.legacy_declared_memory_kinds == ()
 
     def test_attachment(self) -> None:
-        """world / player 両方とも値があれば has_attachment は True。"""
-        snapshot = _minimal_snapshot(attachment_world_id=1, attachment_player_id=2)
+        """環境の識別子と表示の名前の両方があれば has_attachment は True。"""
+        snapshot = _minimal_snapshot(
+            attachment_environment_id="mine_village_v1#1", attachment_environment_name="廃坑の山村"
+        )
         assert snapshot.has_attachment is True
 
 
 class TestBeingSnapshotPartialStateRejection:
     """all-or-nothing: 部分状態を構造的に禁止する挙動。"""
 
-    def test_world_raises_exception(self) -> None:
-        """world_id だけ非 None は部分状態として不許可。"""
-        with pytest.raises(BeingSnapshotIncompleteException, match="attachment"):
-            _minimal_snapshot(attachment_world_id=1, attachment_player_id=None)
+    @pytest.mark.parametrize(
+        ("environment_id", "environment_name"), [("mine_village_v1#1", None), (None, "廃坑の山村")]
+    )
+    def test_half_of_the_attachment_raises(self, environment_id: str | None, environment_name: str | None) -> None:
+        """環境の識別子と表示の名前の片方だけがあると、部分状態として BeingSnapshotIncompleteException を投げる。"""
+        with pytest.raises(BeingSnapshotIncompleteException, match="attachment_environment"):
+            _minimal_snapshot(attachment_environment_id=environment_id, attachment_environment_name=environment_name)
 
-    def test_player_raises_exception(self) -> None:
-        """player_id だけ非 None も部分状態として不許可。"""
-        with pytest.raises(BeingSnapshotIncompleteException, match="attachment"):
-            _minimal_snapshot(attachment_world_id=None, attachment_player_id=2)
+    @pytest.mark.parametrize(("world_id", "player_id"), [(1, None), (None, 2), ("1", 2), (True, 2)])
+    def test_broken_legacy_numbers_raise(self, world_id: object, player_id: object) -> None:
+        """古い snapshot の番号が片方だけか、int でなければ BeingSnapshotIncompleteException を投げる。"""
+        with pytest.raises(BeingSnapshotIncompleteException, match="legacy_attachment"):
+            _minimal_snapshot(legacy_attachment_world_id=world_id, legacy_attachment_player_id=player_id)
 
     def test_being_id_value_empty_string_raises_exception(self) -> None:
         """空文字の being_id は復元不能なので構造的に禁止。"""
@@ -89,10 +95,11 @@ class TestBeingSnapshotPartialStateRejection:
         with pytest.raises(BeingSnapshotIncompleteException, match="elements"):
             _minimal_snapshot(legacy_declared_memory_kinds=(1, 2))  # type: ignore[arg-type]
 
-    def test_attachment_world_id_int_raises_exception(self) -> None:
-        """attachment_world_id が int でなければ不許可。"""
-        with pytest.raises(BeingSnapshotIncompleteException, match="attachment_world_id"):
-            _minimal_snapshot(attachment_world_id="1", attachment_player_id=2)  # type: ignore[arg-type]
+    @pytest.mark.parametrize("value", [1, "   "])
+    def test_non_text_environment_raises(self, value: object) -> None:
+        """環境の識別子が空白だけか文字列でなければ BeingSnapshotIncompleteException を投げる。"""
+        with pytest.raises(BeingSnapshotIncompleteException, match="attachment_environment"):
+            _minimal_snapshot(attachment_environment_id=value, attachment_environment_name="廃坑の山村")
 
     def test_snapshot_version_zero_raises_exception(self) -> None:
         """version は正の int。"""
@@ -135,8 +142,8 @@ class TestBeingSnapshotMemoryPayload:
         snapshot = BeingSnapshot(
             being_id_value="ada",
             persona=Persona(name="アダ"),
-            attachment_world_id=None,
-            attachment_player_id=None,
+            attachment_environment_id=None,
+            attachment_environment_name=None,
         )
         assert snapshot.snapshot_version == CURRENT_SNAPSHOT_VERSION
 

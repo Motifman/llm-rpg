@@ -19,11 +19,28 @@ def _pairs(snapshot_dir: Path) -> list[dict]:
     return json.loads((snapshot_dir / "world.json").read_text())["subsystems"]["player_beings"]["pairs"]
 
 
-@pytest.mark.parametrize(("drop_table", "source"), [(False, "world_snapshot"), (True, "being_snapshots")])
+def _as_old_being_snapshots(snapshot_dir: Path) -> None:
+    """Being の snapshot を、居場所を世界とプレイヤーの番号で持っていた古い形に書き換える。"""
+    for path in snapshot_dir.glob("being_w1_p*.json"):
+        data = json.loads(path.read_text())
+        data.pop("attachment_environment_id")
+        data.pop("attachment_environment_name")
+        data.update(attachment_world_id=1, attachment_player_id=int(path.stem.removeprefix("being_w1_p")))
+        path.write_text(json.dumps(data, ensure_ascii=False))
+
+
+@pytest.mark.parametrize(
+    ("drop_table", "old_beings", "source"),
+    [(False, False, "world_snapshot"), (True, True, "being_snapshots"), (True, False, "startup")],
+)
 def test_resumed_run_keeps_the_same_beings_on_the_same_players(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, drop_table: bool, source: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, drop_table: bool, old_beings: bool, source: str
 ) -> None:
-    """再開した run は、保存した対応表と同じ組で続く。対応表の欄を消した古い形でも、Being の snapshot の番号から同じ組を作り直す。"""
+    """再開した run は、保存した対応表と同じ組で続く。
+
+    対応表の欄を消した古い世界の snapshot でも、古い Being の snapshot の番号から同じ組を作り直す。番号も無ければ、
+    起動時に用意した対応表 (Being の ID はプレイヤーから決まる) で同じ組になる。
+    """
     monkeypatch.setattr(run_scenario_experiment, "_load_dotenv_safe", lambda: None)
     saved, resaved = tmp_path / "saved", tmp_path / "resaved"
     assert (
@@ -35,6 +52,8 @@ def test_resumed_run_keeps_the_same_beings_on_the_same_players(
         world = json.loads((saved / "world.json").read_text())
         del world["subsystems"]["player_beings"]
         (saved / "world.json").write_text(json.dumps(world))
+    if old_beings:
+        _as_old_being_snapshots(saved)
 
     assert (
         run_scenario_experiment.main(

@@ -24,6 +24,9 @@ def repo() -> InMemoryBeingRepository:
     return InMemoryBeingRepository()
 
 
+ENVIRONMENT = BeingAttachment(environment_id="mine_village_v1#1", environment_name="廃坑の山村")
+
+
 @pytest.fixture
 def player_beings() -> PlayerBeings:
     return PlayerBeings(WorldId(1))
@@ -31,7 +34,7 @@ def player_beings() -> PlayerBeings:
 
 @pytest.fixture
 def service(repo: InMemoryBeingRepository, player_beings: PlayerBeings) -> BeingProvisioningService:
-    return BeingProvisioningService(repo, player_beings)
+    return BeingProvisioningService(repo, player_beings, ENVIRONMENT)
 
 
 class TestConstruction:
@@ -39,17 +42,24 @@ class TestConstruction:
 
     def test_world_is_the_world_of_the_table(self, repo: InMemoryBeingRepository) -> None:
         """用意する世界は、対応表の世界になる。"""
-        assert BeingProvisioningService(repo, PlayerBeings(WorldId(7))).default_world_id == WorldId(7)
+        assert BeingProvisioningService(repo, PlayerBeings(WorldId(7)), ENVIRONMENT).default_world_id == WorldId(7)
 
     def test_non_repository_raises_type_error(self, player_beings: PlayerBeings) -> None:
         """保存先でない値を渡すと TypeError を投げる。"""
         with pytest.raises(TypeError, match="being_repository"):
-            BeingProvisioningService("not-a-repo", player_beings)  # type: ignore[arg-type]
+            BeingProvisioningService("not-a-repo", player_beings, ENVIRONMENT)  # type: ignore[arg-type]
+
+    def test_non_environment_raises_type_error(
+        self, repo: InMemoryBeingRepository, player_beings: PlayerBeings
+    ) -> None:
+        """環境でない値を渡すと TypeError を投げる。"""
+        with pytest.raises(TypeError, match="environment"):
+            BeingProvisioningService(repo, player_beings, "mine_village_v1#1")  # type: ignore[arg-type]
 
     def test_non_player_beings_raises_type_error(self, repo: InMemoryBeingRepository) -> None:
         """対応表でない値を渡すと TypeError を投げる。"""
         with pytest.raises(TypeError, match="player_beings"):
-            BeingProvisioningService(repo, "not-a-table")  # type: ignore[arg-type]
+            BeingProvisioningService(repo, "not-a-table", ENVIRONMENT)  # type: ignore[arg-type]
 
 
 class TestEnsureAttachedNewBeing:
@@ -66,7 +76,7 @@ class TestEnsureAttachedNewBeing:
         being = repo.find_by_id(being_id)
         assert being is not None
         assert being.is_attached is True
-        assert being.attachment == BeingAttachment(world_id=1, player_id=2)
+        assert being.attachment == ENVIRONMENT
 
     def test_new_being_is_written_in_the_table(
         self, player_beings: PlayerBeings, service: BeingProvisioningService
@@ -161,7 +171,7 @@ class TestEnsureAttachedReattach:
         being = Being(
             being_id=BeingId("being_w1_p2"),
             persona=Persona(name="既存", first_person="わたし"),
-            attachment=BeingAttachment(world_id=1, player_id=99),
+            attachment=BeingAttachment(environment_id="other_world#1", environment_name="峠の野営地"),
         )
         repo.save(being)
         # ensure_attached(player_id=2) を呼ぶと既存 Being が player=2 に再 attach
@@ -170,10 +180,10 @@ class TestEnsureAttachedReattach:
         reloaded = repo.find_by_id(being_id)
         assert reloaded is not None
         assert reloaded.attachment is not None
-        assert reloaded.attachment.player_id == 2
+        assert reloaded.attachment == ENVIRONMENT
         # identity は既存のものが残る (= 上書きしない)
         assert reloaded.persona.name == "既存"
-        assert moved == [BeingAttachment(world_id=1, player_id=2)]
+        assert moved == [ENVIRONMENT]
 
     def test_moved_being_leaves_the_player_it_drove(
         self, repo: InMemoryBeingRepository, player_beings: PlayerBeings, service: BeingProvisioningService
@@ -183,7 +193,7 @@ class TestEnsureAttachedReattach:
             Being(
                 being_id=BeingId("being_w1_p2"),
                 persona=Persona(name="既存"),
-                attachment=BeingAttachment(world_id=1, player_id=99),
+                attachment=BeingAttachment(environment_id="other_world#1", environment_name="峠の野営地"),
             )
         )
         player_beings.drive(PlayerId(99), BeingId("being_w1_p2"))
@@ -205,7 +215,7 @@ class TestEnsureAttachedReattach:
 
         reloaded = repo.find_by_id(BeingId("being_w1_p2"))
         assert reloaded is not None
-        assert reloaded.attachment == BeingAttachment(world_id=1, player_id=2)
+        assert reloaded.attachment == ENVIRONMENT
 
 
 class TestEnsureAttachedTypeGuards:

@@ -79,20 +79,6 @@ class BeingSnapshotIncompleteException(BeingDomainException, ValidationException
     error_code = "BEING.SNAPSHOT_INCOMPLETE"
 
 
-class BeingMultipleAttachmentException(BeingDomainException, StateException):
-    """同一 (world, player) に 2 つ以上の Being が attach 済みという異常状態。
-
-    PR #462 §2.1 R1 / Phase 2 PR2: attachment は 0..1 が不変条件。Being.attach
-    側で多重 attach は弾いているが、Repository を直接書く経路や永続化された
-    異常データから読み戻した場合に備え、取り出した列を ``unique_attached_being``
-    が判定して本例外を投げる。
-
-    状態遷移の整合性破壊なので StateException 系。
-    """
-
-    error_code = "BEING.MULTIPLE_ATTACHMENT"
-
-
 class BeingSnapshotVersionException(BeingDomainException, ValidationException):
     """BeingSnapshot のバージョンが現バージョン codec で復元不能な場合に投げる例外。
 
@@ -168,7 +154,6 @@ __all__ = [
     "BeingAttachmentValidationException",
     "BeingDomainException",
     "BeingIdValidationException",
-    "BeingMultipleAttachmentException",
     "BeingNotAttachedException",
     "BeingNotFoundException",
     "BeingSnapshotIncompleteException",

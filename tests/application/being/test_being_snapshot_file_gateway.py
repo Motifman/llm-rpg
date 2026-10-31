@@ -34,8 +34,8 @@ def _snapshot(
             fears=("暗闇",),
             background="港町で育った。",
         ),
-        attachment_world_id=1,
-        attachment_player_id=1,
+        attachment_environment_id="w1p1",
+        attachment_environment_name="廃坑の山村",
         snapshot_version=2,
         memory_payload_json=memory_payload_json,
     )
@@ -70,13 +70,31 @@ class TestSnapshotToDict:
         bad = {
             "being_id_value": "",  # 空文字 → 不変条件違反
             "persona": {"name": "n"},
-            "attachment_world_id": None,
-            "attachment_player_id": None,
+            "attachment_environment_id": None,
+            "attachment_environment_name": None,
             "snapshot_version": 2,
             "memory_payload_json": None,
         }
         with pytest.raises(BeingSnapshotIncompleteException):
             dict_to_snapshot(bad)
+
+
+class TestAttachmentInSnapshotDict:
+    """居場所を環境の識別子と表示の名前で書き、番号の欄の古い snapshot は番号を読み捨てる値として持つことを保証する (design_decisions D1928-2)。"""
+
+    def test_dict_has_the_environment_and_no_numbers(self) -> None:
+        """書き出す dict は環境の識別子と表示の名前を持ち、世界とプレイヤーの番号の欄を持たない。"""
+        data = snapshot_to_dict(_snapshot())
+
+        assert (data["attachment_environment_id"], data["attachment_environment_name"]) == ("w1p1", "廃坑の山村")
+        assert not {"attachment_world_id", "attachment_player_id"} & data.keys()
+
+    def test_round_trip_keeps_the_environment(self) -> None:
+        """書き出して読み直すと、環境の識別子と表示の名前が元に戻り、番号は持たない。"""
+        snapshot = dict_to_snapshot(snapshot_to_dict(_snapshot()))
+
+        assert (snapshot.attachment_environment_id, snapshot.attachment_environment_name) == ("w1p1", "廃坑の山村")
+        assert (snapshot.legacy_attachment_world_id, snapshot.legacy_attachment_player_id) == (None, None)
 
 
 class TestPersonaInSnapshotDict:
@@ -115,6 +133,8 @@ class TestPersonaInSnapshotDict:
         assert snapshot.persona is None
         assert (snapshot.legacy_identity_name, snapshot.legacy_identity_first_person) == ("agent_1", "わたし")
         assert snapshot.legacy_declared_memory_kinds == ("episodic", "memo", "semantic")
+        assert (snapshot.legacy_attachment_world_id, snapshot.legacy_attachment_player_id) == (1, 1)
+        assert snapshot.has_attachment is False
 
     def test_snapshot_without_persona_cannot_be_written(self) -> None:
         """人柄で埋める前の古い snapshot を書き出そうとすると BeingSnapshotIncompleteException を投げる。"""

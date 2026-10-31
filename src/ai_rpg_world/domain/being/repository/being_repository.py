@@ -61,19 +61,5 @@ class BeingRepository(ABC):
         snapshot 取得の経路を別に持つ必要がある。
         """
 
-    @abstractmethod
-    def find_all_attached_to(self, world_id: WorldId, player_id: PlayerId) -> list[Being]:
-        """指定 (world, player) に attach 中の Being をすべて返す。
-
-        正常系では 0..1 件しか返らない (= ``Being.attach`` で 0..1 を強制)。
-        2 件以上返るのは attach 制約が破られた異常状態なので、
-        application 層の ``BeingAttachmentResolver`` が取り出した列を
-        ``unique_attached_being`` が判定し、
-        ``BeingMultipleAttachmentException`` を投げる。
-
-        本 interface 自体はリスト返却に留め、不変条件の判定は呼び出し元に委ねる
-        (= Repository は「集約の取り出し器」、判定は domain の純関数)。
-        """
-
 
 __all__ = ["BeingRepository"]

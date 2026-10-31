@@ -284,6 +284,8 @@ class ExperimentSnapshotSession:
             "being_attachment_resolver",
             # 誰がどのプレイヤーを動かしているか (design_decisions D1928)。Being を読んだら、ここにも書く。
             "player_beings",
+            # この run の環境 (design_decisions D1928-2)。再開した Being をここに入れる。
+            "being_environment",
             "acquaintance_store",
             "being_episode_store",
             "being_memo_store",
@@ -316,9 +318,12 @@ class ExperimentSnapshotSession:
         self._resolver = wiring_result.being_attachment_resolver
         self._being_repository = wiring_result.being_repository
         self._player_beings = wiring_result.player_beings
-        # snapshot から読んだ Being と、その snapshot の番号で対応表に書いたプレイヤー (書かなければ None)。
+        self._being_environment = wiring_result.being_environment
+        # snapshot から読んだ Being。世界の snapshot の対応表に、snapshot の無い Being が載っていないかを確かめるのに使う。
+        self._restored_being_ids: set[BeingId] = set()
+        # 番号の欄の古い snapshot から読んだ Being と、その番号でこの run の対応表に書くべきプレイヤー (書かないなら None)。
         # 対応表をどこから得たかを残すのと、世界の snapshot の対応表と食い違わないかを確かめるのに使う (design_decisions D1928)。
-        self._restored_players: dict[BeingId, PlayerId | None] = {}
+        self._legacy_players: dict[BeingId, PlayerId | None] = {}
         #: 再開したときに対応表をどこから読んだか。"world_snapshot" (世界の snapshot の欄)、"being_snapshots" (Being の
         #: snapshot の番号)、"startup" (どちらにも無く、起動時に用意したまま)。再開していなければ None。
         self.player_beings_source: str | None = None
@@ -427,7 +432,7 @@ class ExperimentSnapshotSession:
         from ai_rpg_world.application.being.world_subsystems.player_beings_codec import SCHEMA_VERSION
 
         self.player_beings_source = (
-            "being_snapshots" if any(player is not None for player in self._restored_players.values()) else "startup"
+            "being_snapshots" if any(player is not None for player in self._legacy_players.values()) else "startup"
         )
         return {
             "schema_version": SCHEMA_VERSION,
@@ -461,21 +466,35 @@ class ExperimentSnapshotSession:
         missing = [being_id.value for _, being_id in pairs if self._being_repository.find_by_id(being_id) is None]
         if missing:
             raise WorldStateSnapshotCoverageError(f"対応表の Being が保存先にありません: {missing!r}")
-        if self.player_beings_source == "world_snapshot" and self._restored_players:
-            unrestored = [being_id.value for _, being_id in pairs if being_id not in self._restored_players]
+        if self.player_beings_source == "world_snapshot" and self._restored_being_ids:
+            unrestored = [being_id.value for _, being_id in pairs if being_id not in self._restored_being_ids]
             if unrestored:
                 raise WorldStateSnapshotCoverageError(
                     f"世界の snapshot の対応表に載る Being の snapshot がありません: {unrestored!r}"
                 )
         mismatched = [
             being_id.value
-            for being_id, player_id in self._restored_players.items()
+            for being_id, player_id in self._legacy_players.items()
             if self._player_beings.player_of(being_id) != player_id
         ]
         if mismatched:
             raise WorldStateSnapshotCoverageError(
                 f"Being の snapshot の番号と、世界の snapshot の対応表が食い違います: {mismatched!r}"
             )
+        self._enter_this_environment()
+
+    def _enter_this_environment(self) -> None:
+        """対応表でこの run のプレイヤーを動かす Being を、今の環境に入れる (design_decisions D1928-2)。
+
+        snapshot の居場所は保存した run の環境なので、別のシナリオの snapshot や、居場所の無い古い snapshot から
+        再開しても、動かす Being の居場所をこの run の環境にそろえる。
+        """
+        for _, being_id in self._player_beings.pairs():
+            being = self._being_repository.find_by_id(being_id)
+            if being is None or being.attachment == self._being_environment:
+                continue
+            being.move_to(self._being_environment)
+            self._being_repository.save(being)
 
     @property
     def world_snapshot_service(self) -> WorldStateSnapshotService:
@@ -578,9 +597,9 @@ class ExperimentSnapshotSession:
         世界の snapshot に対応表があれば、あとでそれに置き換わる。無い古い snapshot はこの番号のまま続ける。
         起動時に用意していないプレイヤー (今のシナリオにいないプレイヤー) は、対応表に載せずに飛ばす。
         """
-        if result.attachment_world_id != self._world_id.value or result.attachment_player_id is None:
+        if result.legacy_attachment_world_id != self._world_id.value or result.legacy_attachment_player_id is None:
             return None
-        player_id = PlayerId(result.attachment_player_id)
+        player_id = PlayerId(result.legacy_attachment_player_id)
         if self._player_beings.being_of(player_id) is None:
             logger.warning(
                 "snapshot of %s drove player %s, who is not in this run; not driving",
@@ -639,7 +658,9 @@ class ExperimentSnapshotSession:
 
             result = self._restore_use_case.execute(path)
             restored.append(result.being_id)
-            self._restored_players[result.being_id] = self._drive_by_snapshot_number(result)
+            self._restored_being_ids.add(result.being_id)
+            if result.legacy_attachment_player_id is not None:
+                self._legacy_players[result.being_id] = self._drive_by_snapshot_number(result)
             if result.removed_memory_key_counts:
                 removed_memory_key_counts[result.being_id] = result.removed_memory_key_counts
             if result.removed_declared_memory_kind_counts:

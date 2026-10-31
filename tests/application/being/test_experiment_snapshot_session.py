@@ -21,6 +21,7 @@ from ai_rpg_world.application.being.experiment_snapshot_session import (
     ExperimentSnapshotSession,
     _default_world_subsystem_codecs,
 )
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment as _BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
@@ -32,6 +33,8 @@ from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
 
+_ENVIRONMENT = _BeingAttachment(environment_id="demo#1", environment_name="試験の世界")
+
 
 def _make_wiring_stub() -> tuple[SimpleNamespace, BeingProvisioningService]:
     """wiring 結果風の SimpleNamespace を作る。
@@ -42,11 +45,12 @@ def _make_wiring_stub() -> tuple[SimpleNamespace, BeingProvisioningService]:
     repo = InMemoryBeingRepository()
     player_beings = PlayerBeings(DEFAULT_SINGLE_WORLD_ID)
     resolver = BeingAttachmentResolver(repo, player_beings)
-    provisioning = BeingProvisioningService(repo, player_beings)
+    provisioning = BeingProvisioningService(repo, player_beings, _ENVIRONMENT)
     wiring = SimpleNamespace(
         being_repository=repo,
         being_attachment_resolver=resolver,
         player_beings=player_beings,
+        being_environment=_ENVIRONMENT,
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
@@ -354,8 +358,8 @@ class TestScenarioMetadata:
         snap = BeingSnapshot(
             being_id_value="being_w1_p1",
             persona=Persona(name="agent"),
-            attachment_world_id=1,
-            attachment_player_id=1,
+            attachment_environment_id="w1p1",
+            attachment_environment_name="廃坑の山村",
             snapshot_version=2,
             memory_payload_json=None,
         )
@@ -401,6 +405,19 @@ class TestPlayerBeingsOnResume:
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
         session.capture_all([PlayerId(value) for value in player_values])
         return tmp_path / "snap"
+
+    @staticmethod
+    def _as_old_format(snap_dir: Path) -> None:
+        """Being の snapshot を、居場所を世界とプレイヤーの番号で持っていた古い形に書き換える。"""
+        import json
+
+        for path in snap_dir.glob("being_w1_p*.json"):
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data.pop("attachment_environment_id")
+            data.pop("attachment_environment_name")
+            data["attachment_world_id"] = 1
+            data["attachment_player_id"] = int(path.stem.removeprefix("being_w1_p"))
+            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
     @staticmethod
     def _resume(snap_dir: Path, *player_values: int) -> tuple[SimpleNamespace, ExperimentSnapshotSession]:
@@ -458,8 +475,9 @@ class TestPlayerBeingsOnResume:
         assert session.player_beings_source == "world_snapshot"
 
     def test_old_world_snapshot_without_the_table_uses_being_numbers(self, tmp_path: Path) -> None:
-        """対応表の欄が無い古い世界の snapshot は、Being の snapshot に残る番号の対応表で続ける。"""
+        """対応表の欄が無い古い世界の snapshot は、古い Being の snapshot に残る番号の対応表で続ける。"""
         snap_dir = self._being_snapshots(tmp_path, 1, 2)
+        self._as_old_format(snap_dir)
         self._write_world(snap_dir, None)
         wiring, session = self._resume(snap_dir, 1, 2)
 
@@ -469,8 +487,9 @@ class TestPlayerBeingsOnResume:
         assert session.player_beings_source == "being_snapshots"
 
     def test_no_world_snapshot_uses_being_numbers(self, tmp_path: Path) -> None:
-        """世界の snapshot が無い古い snapshot も、Being の snapshot に残る番号で続ける。"""
+        """世界の snapshot が無い古い snapshot も、古い Being の snapshot に残る番号で続ける。"""
         snap_dir = self._being_snapshots(tmp_path, 1)
+        self._as_old_format(snap_dir)
         wiring, session = self._resume(snap_dir, 1)
 
         assert session.restore_world_from_dir(None, snap_dir, current_scenario="demo") is None
@@ -479,8 +498,9 @@ class TestPlayerBeingsOnResume:
         assert session.player_beings_source == "being_snapshots"
 
     def test_player_not_in_this_run_is_skipped(self, tmp_path: Path) -> None:
-        """Being の snapshot が、今の run にいないプレイヤーを指していれば、対応表に載せずに続ける。"""
+        """古い Being の snapshot が、今の run にいないプレイヤーを指していれば、対応表に載せずに続ける。"""
         snap_dir = self._being_snapshots(tmp_path, 1, 2)
+        self._as_old_format(snap_dir)
         wiring, session = self._resume(snap_dir, 1)
 
         session.restore_world_from_dir(None, snap_dir, current_scenario="demo")
@@ -494,6 +514,7 @@ class TestPlayerBeingsOnResume:
         from ai_rpg_world.domain.world.exception.player_beings_exception import PlayerAlreadyDrivenException
 
         snap_dir = self._being_snapshots(tmp_path, 1, 2)
+        self._as_old_format(snap_dir)
         second = snap_dir / "being_w1_p2.json"
         data = json.loads(second.read_text(encoding="utf-8"))
         data["attachment_player_id"] = 1
@@ -507,6 +528,7 @@ class TestPlayerBeingsOnResume:
         from ai_rpg_world.application.being.world_state_snapshot import WorldStateSnapshotCoverageError
 
         snap_dir = self._being_snapshots(tmp_path, 1, 2)
+        self._as_old_format(snap_dir)
         self._write_world(snap_dir, [(1, "being_w1_p2"), (2, "being_w1_p1")])
         wiring, session = self._resume(snap_dir, 1, 2)
 
@@ -523,4 +545,44 @@ class TestPlayerBeingsOnResume:
         wiring, session = self._resume(snap_dir, 1, 2)
 
         with pytest.raises(WorldStateSnapshotCoverageError, match="being_w1_p2"):
+            self._restore_world(wiring, session, snap_dir)
+
+    def test_resumed_beings_enter_this_environment(self, tmp_path: Path) -> None:
+        """別の環境で保存した Being も、居場所の無い古い Being も、対応表でこの run のプレイヤーを動かすなら、この run の環境に入る。"""
+        import json
+
+        snap_dir = self._being_snapshots(tmp_path, 1, 2)
+        first = snap_dir / "being_w1_p1.json"
+        data = json.loads(first.read_text(encoding="utf-8"))
+        data["attachment_environment_id"] = "other_world#1"
+        first.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        second = snap_dir / "being_w1_p2.json"
+        data = json.loads(second.read_text(encoding="utf-8"))
+        data.pop("attachment_environment_id")
+        data.pop("attachment_environment_name")
+        second.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        self._write_world(snap_dir, [(1, "being_w1_p1"), (2, "being_w1_p2")])
+        wiring, session = self._resume(snap_dir, 1, 2)
+
+        self._restore_world(wiring, session, snap_dir)
+
+        for being_id in ("being_w1_p1", "being_w1_p2"):
+            assert wiring.being_repository.find_by_id(BeingId(being_id)).attachment == _ENVIRONMENT
+
+    def test_old_being_of_another_world_listed_in_the_table_stops(self, tmp_path: Path) -> None:
+        """別の世界の番号を持つ古い Being が、世界の snapshot の対応表でこの run のプレイヤーに載っていれば、食い違いとして止める。"""
+        import json
+
+        from ai_rpg_world.application.being.world_state_snapshot import WorldStateSnapshotCoverageError
+
+        snap_dir = self._being_snapshots(tmp_path, 1)
+        self._as_old_format(snap_dir)
+        path = snap_dir / "being_w1_p1.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["attachment_world_id"] = 2
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        self._write_world(snap_dir, [(1, "being_w1_p1")])
+        wiring, session = self._resume(snap_dir, 1)
+
+        with pytest.raises(WorldStateSnapshotCoverageError, match="食い違います"):
             self._restore_world(wiring, session, snap_dir)

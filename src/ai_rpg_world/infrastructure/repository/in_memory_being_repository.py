@@ -63,16 +63,5 @@ class InMemoryBeingRepository(BeingRepository):
             raise TypeError(f"being_id must be BeingId, got {type(being_id).__name__}")
         return self._snapshots.pop(being_id, None) is not None
 
-    def find_all_attached_to(self, world_id: WorldId, player_id: PlayerId) -> list[Being]:
-        if not isinstance(world_id, WorldId):
-            raise TypeError(f"world_id must be WorldId, got {type(world_id).__name__}")
-        if not isinstance(player_id, PlayerId):
-            raise TypeError(f"player_id must be PlayerId, got {type(player_id).__name__}")
-        out: list[Being] = []
-        for snapshot in self._snapshots.values():
-            if snapshot.attachment_world_id == world_id.value and snapshot.attachment_player_id == player_id.value:
-                out.append(BeingSnapshotCodec.decode(snapshot))
-        return out
-
 
 __all__ = ["InMemoryBeingRepository"]

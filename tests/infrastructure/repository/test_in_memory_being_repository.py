@@ -21,7 +21,11 @@ def _being(
     *,
     attached: tuple[int, int] | None = None,
 ) -> Being:
-    attachment = BeingAttachment(world_id=attached[0], player_id=attached[1]) if attached is not None else None
+    attachment = (
+        BeingAttachment(environment_id=f"w{attached[0]}p{attached[1]}", environment_name="廃坑の山村")
+        if attached is not None
+        else None
+    )
     return Being(
         being_id=BeingId(value),
         persona=Persona(name=name, first_person="わたし"),
@@ -90,43 +94,3 @@ class TestInMemoryBeingRepository:
         repo = InMemoryBeingRepository()
         with pytest.raises(TypeError):
             repo.find_by_id("ada")  # type: ignore[arg-type]
-
-
-class TestInMemoryBeingRepositoryFindAllAttachedTo:
-    """find_all_attached_to の挙動 (= Phase 3 Step 2 で追加)。"""
-
-    def test_one_attached_being_matches_query(self) -> None:
-        """正常系: ある (world, player) に attach 中の Being を 1 件返す。"""
-        repo = InMemoryBeingRepository()
-        repo.save(_being("ada", attached=(1, 2)))
-        result = repo.find_all_attached_to(WorldId(1), PlayerId(2))
-        assert len(result) == 1
-        assert result[0].being_id == BeingId("ada")
-
-    def test_attach_being(self) -> None:
-        """detach 中の Being は (world, player) 検索の対象外。"""
-        repo = InMemoryBeingRepository()
-        repo.save(_being("ada", attached=None))
-        assert repo.find_all_attached_to(WorldId(1), PlayerId(2)) == []
-
-    def test_different_world_being(self) -> None:
-        """world_id が違えばマッチしない。"""
-        repo = InMemoryBeingRepository()
-        repo.save(_being("ada", attached=(2, 2)))
-        assert repo.find_all_attached_to(WorldId(1), PlayerId(2)) == []
-
-    def test_returns_all_world_player_multiple_being(self) -> None:
-        """異常状態の検出は Resolver 側に委ねるため、本 method は単に全件返す。"""
-        repo = InMemoryBeingRepository()
-        repo.save(_being("ada", attached=(1, 2)))
-        repo.save(_being("ben", attached=(1, 2)))
-        result = repo.find_all_attached_to(WorldId(1), PlayerId(2))
-        assert {b.being_id.value for b in result} == {"ada", "ben"}
-
-    def test_vo_raises_type_error(self) -> None:
-        """型違反は TypeError で弾く。"""
-        repo = InMemoryBeingRepository()
-        with pytest.raises(TypeError, match="world_id"):
-            repo.find_all_attached_to(1, PlayerId(2))  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match="player_id"):
-            repo.find_all_attached_to(WorldId(1), 2)  # type: ignore[arg-type]

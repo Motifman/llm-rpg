@@ -1,5 +1,8 @@
 # MemoryKindの使われなくなった宣言を外す検証 (#1893)
 
+> D1928-2 で `find_all_attached_to` は消えた。Being の保存先は `find_by_id` で引く。
+
+
 基準: `f86d9fcde0ba4ada9d1e3124c13452dfa3b3aae2`。担当D、ブランチ `codex/1893-remove-semantic-memory-kind`。
 
 ## テストリスト

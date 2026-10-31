@@ -1877,6 +1877,7 @@ class WorldRuntime:
         from ai_rpg_world.application.being.being_provisioning_service import (
             BeingProvisioningService,
         )
+        from ai_rpg_world.being.domain.being_attachment import BeingAttachment
         from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
         from ai_rpg_world.domain.world.value_object.world_id import (
             DEFAULT_SINGLE_WORLD_ID,
@@ -1888,7 +1889,15 @@ class WorldRuntime:
         self._aux_being_repository = InMemoryBeingRepository()
         # 誰がどのプレイヤーを動かしているか。ゲームの側が持ち、世界の snapshot に入る (design_decisions D1928)。
         self._player_beings = PlayerBeings(DEFAULT_SINGLE_WORLD_ID)
-        self._aux_being_provisioning = BeingProvisioningService(self._aux_being_repository, self._player_beings)
+        # Being が入る環境。識別子はシナリオの識別子と世界の番号から作る。Being にとっては照合にだけ使う札
+        # (design_decisions D1928-2)。表示の名前は、環境に入るときの紹介 (environment_entry_for_player) と同じ。
+        self._being_environment = BeingAttachment(
+            environment_id=f"{self.scenario.metadata.id}#{DEFAULT_SINGLE_WORLD_ID.value}",
+            environment_name=self.scenario.metadata.title,
+        )
+        self._aux_being_provisioning = BeingProvisioningService(
+            self._aux_being_repository, self._player_beings, self._being_environment
+        )
         self._aux_being_resolver = BeingAttachmentResolver(self._aux_being_repository, self._player_beings)
         self._aux_being_default_world_id = DEFAULT_SINGLE_WORLD_ID
 

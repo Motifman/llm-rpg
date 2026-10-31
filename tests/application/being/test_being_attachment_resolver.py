@@ -16,7 +16,11 @@ from ai_rpg_world.infrastructure.repository.in_memory_being_repository import In
 
 
 def _being(being_id: str, *, attached: tuple[int, int] | None = None) -> Being:
-    attachment = BeingAttachment(world_id=attached[0], player_id=attached[1]) if attached is not None else None
+    attachment = (
+        BeingAttachment(environment_id=f"w{attached[0]}p{attached[1]}", environment_name="廃坑の山村")
+        if attached is not None
+        else None
+    )
     return Being(being_id=BeingId(being_id), persona=Persona(name="アダ"), attachment=attachment)
 
 

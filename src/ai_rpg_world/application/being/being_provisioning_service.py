@@ -35,15 +35,23 @@ from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 
 class BeingProvisioningService:
-    """``player_beings`` の世界のプレイヤーに、Being を用意する idempotent な service。"""
+    """``player_beings`` の世界のプレイヤーに、Being を用意する idempotent な service。
 
-    def __init__(self, being_repository: BeingRepository, player_beings: PlayerBeings) -> None:
+    用意した Being は ``environment`` (この世界の環境) に入る (design_decisions D1928-2)。
+    """
+
+    def __init__(
+        self, being_repository: BeingRepository, player_beings: PlayerBeings, environment: BeingAttachment
+    ) -> None:
         if not isinstance(being_repository, BeingRepository):
             raise TypeError(f"being_repository must be BeingRepository, got {type(being_repository).__name__}")
         if not isinstance(player_beings, PlayerBeings):
             raise TypeError(f"player_beings must be PlayerBeings, got {type(player_beings).__name__}")
+        if not isinstance(environment, BeingAttachment):
+            raise TypeError(f"environment must be BeingAttachment, got {type(environment).__name__}")
         self._repo = being_repository
         self._player_beings = player_beings
+        self._environment = environment
 
     @property
     def default_world_id(self) -> WorldId:
@@ -68,7 +76,7 @@ class BeingProvisioningService:
 
         world_id = self._player_beings.world_id
         being_id = self._derive_being_id(world_id, player_id)
-        attachment = BeingAttachment(world_id=world_id.value, player_id=player_id.value)
+        attachment = self._environment
         # find_by_id は毎回新しいインスタンスを返すので、変えたら必ず save する。
         being = self._repo.find_by_id(being_id)
         if being is None:
