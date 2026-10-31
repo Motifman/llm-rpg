@@ -419,8 +419,8 @@ def build_world_briefing(
     meeting_tick_limit: int | None = None,
     meeting_silence_limit_ticks: int | None = None,
     meeting_cooldown_ticks: int | None = None,
-) -> str:
-    """システムプロンプトに載せる、run 中変わらない事実をまとめる。
+) -> tuple[str, ...]:
+    """システムプロンプトに載せる、run 中変わらない事実を段落の並びで返す。
 
     どれも空になりうる。**その世界に無い概念は 1 行も出さない。**
     """
@@ -442,7 +442,7 @@ def build_world_briefing(
             minutes_per_tick=minutes_per_tick,
         ),
     ]
-    return "\n\n".join(s for s in sections if s)
+    return tuple(s for s in sections if s)
 
 
 def build_recorded_player_state_tick_keys(

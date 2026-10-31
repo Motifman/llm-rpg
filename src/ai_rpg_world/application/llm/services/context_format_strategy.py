@@ -1,7 +1,9 @@
 """コンテキストフォーマット戦略 (world_runtime format に統一)。"""
 
 from ai_rpg_world.application.llm.contracts.interfaces import IContextFormatStrategy
+from ai_rpg_world.application.llm.services.description_text import description_text
 from ai_rpg_world.being.application.episode_index_text import EPISODE_INDEX_HEADING
+from ai_rpg_world.being.contract import Description
 
 
 class SectionBasedContextFormatStrategy(IContextFormatStrategy):
@@ -67,6 +69,17 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
 
 _PLACEHOLDER_CURRENT_STATE = "（情報なし）"
 _PLACEHOLDER_RECENT_EVENTS = "（なし）"
+_CURRENT_SURROUNDINGS_HEADING = "現在地と周囲"
+
+
+def current_surroundings_description(current_state_text: str) -> Description:
+    """今見えている場面 (Scene) の先頭に置く説明文。状態が無ければ「（情報なし）」と書く。"""
+    return Description(
+        heading=_CURRENT_SURROUNDINGS_HEADING,
+        text=current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
+    )
+
+
 _RECENT_EVENTS_PREAMBLE = "観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。"
 
 
@@ -222,10 +235,5 @@ def _format_stable_to_volatile(
         )
 
     # 7. 現在地と周囲 (必須、最 volatile なので末尾)
-    sections.extend(
-        [
-            "【現在地と周囲】",
-            current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
-        ]
-    )
+    sections.append(description_text(current_surroundings_description(current_state_text)))
     return "\n".join(sections)

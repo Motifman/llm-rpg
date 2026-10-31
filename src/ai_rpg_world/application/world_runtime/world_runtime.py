@@ -105,7 +105,9 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 )
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
+    current_surroundings_description,
 )
+from ai_rpg_world.application.llm.services.description_text import description_text, descriptions_text
 from ai_rpg_world.application.llm.services.prompt_argument_contract import (
     PromptArgumentContractError,
     PromptArgumentContractViolation,
@@ -144,13 +146,15 @@ from ai_rpg_world.application.llm.services.world_briefing import (
 from ai_rpg_world.application.llm.services.world_llm_prompt import (
     CharacterPromptInput,
     build_persona_block_from_character,
-    build_world_system_prompt,
+    build_world_system_prompt_for,
+    limited_action_and_time_pressure_text,
     safe_world_intro_text,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
     DEFAULT_FAILURE_STREAK_ABORT,
     LlmFailureStreakMonitor,
 )
+from ai_rpg_world.application.llm.services.world_orientation import world_orientation
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
     TOOL_NAME_EPISODE_REVISE_INDEX,
@@ -312,6 +316,7 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
+from ai_rpg_world.being.contract import Description, Orientation, Scene
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.memo_book import MemoBookRepository
@@ -437,6 +442,7 @@ _FALLBACK_MINUTES_PER_TICK = 5
 #: 最後の 1 tick では遅い。移動も相談もできないまま終わる。2 tick あれば
 #: 「誰に入れるか」を一度やり取りできる。
 _MEETING_URGENT_REMAINING_TICKS = 2
+_PUBLIC_SNS_HEADING = "公開SNS"
 
 
 def _minutes_per_tick(scenario: ScenarioLoadResult) -> int | None:
@@ -599,6 +605,8 @@ class WorldRuntime:
     # prompt を持つ。dict が空 / 該当 id 無しなら _world_llm_system_prompt にフォールバック。
     _world_llm_system_prompt: str = field(default="", repr=False)
     _world_llm_system_prompts_by_player_id: dict[int, str] = field(default_factory=dict, repr=False)
+    # Being に渡す、入るときの案内 (#1630)。システムプロンプトはここから組む。
+    _orientations_by_player_id: dict[int, Orientation] = field(default_factory=dict, repr=False)
     # create_world_runtime が構築後に差し込む配線。型は circular import 回避で
     # Any。宣言が無いと、代入側の typo を静かに受け入れてしまう。
     _use_item_command_scope_factory: Any | None = field(default=None, repr=False)
@@ -1171,6 +1179,10 @@ class WorldRuntime:
         """E2E テスト用のツール一覧テキスト。"""
         names = [d.name for d in self.get_tool_definitions(player_id=player_id)]
         return ", ".join(names)
+
+    def orientation_for(self, player_id: PlayerId) -> Orientation | None:
+        """プレイヤーを動かす Being が、この世界に入るときに受け取る案内。シナリオに居なければ None。"""
+        return self._orientations_by_player_id.get(player_id.value)
 
     def build_system_prompt(self, player_id: PlayerId) -> str:
         """LLM に渡すシステムプロンプト。
@@ -2224,18 +2236,18 @@ class WorldRuntime:
                 logger.exception("公開SNSの通知再送が未完了です")
         # observation buffer の drain は DefaultPromptBuilder.build() 内で行われる
 
-        tail_sections = tuple(
-            section
-            for section in (
-                self._public_sns_screen_text(player_id),
-                self._format_ongoing_conditions(),
-                self._format_time_since_last_gathering(),
+        notices = tuple(
+            notice
+            for notice in (
+                self._public_sns_screen_description(player_id),
+                self._ongoing_conditions_description(),
+                self._time_since_last_gathering_description(),
             )
-            if section
+            if notice is not None
         )
-        if tail_sections:
+        if notices:
             tail_instruction = action_instruction or self._ESCAPE_GAME_ACTION_INSTRUCTION
-            action_instruction = "\n\n".join((*tail_sections, tail_instruction))
+            action_instruction = "\n\n".join((descriptions_text(notices), tail_instruction))
 
         builder = self._get_or_build_default_prompt_builder()
         acting = self._acting_being_for(player_id)
@@ -2251,11 +2263,18 @@ class WorldRuntime:
             "tools": [d.name for d in self.get_tool_definitions(player_id=player_id)],
             "tool_runtime_context": ctx.tool_runtime_context,
             "action_instruction": result["action_instruction"],
+            # 今見えている場面。候補表は、出すツールが決まったあとに差し込む。
+            "scene": Scene((current_surroundings_description(result["current_state_snapshot"]), *notices)),
             "sns_shown_notification_ids": result.get("sns_shown_notification_ids", ()),
             "sns_screen_generation": getattr(self._public_sns_screens.get(int(player_id)), "generation", None),
         }
 
     def _public_sns_header_text(self, player_id: PlayerId) -> str:
+        """通知を収める字数の見積もりに使う、知らせの見出しと名乗りの部分。"""
+        body = self._public_sns_header_body(player_id)
+        return description_text(Description(heading=_PUBLIC_SNS_HEADING, text=body)) if body else ""
+
+    def _public_sns_header_body(self, player_id: PlayerId) -> str:
         store = self._public_sns_data_store
         if store is None:
             return ""
@@ -2266,27 +2285,30 @@ class WorldRuntime:
             return ""
         own_id = f"sns:{store.sns_public_namespace}:user:{user.identity_token}"
         pending = self._public_sns_projection.pending_count(int(player_id))
-        return f"【公開SNS】自分: {user.profile.display_name} / 人物: {own_id}\n未表示通知: {pending}件。受信箱で確認できます。"
+        return f"自分: {user.profile.display_name} / 人物: {own_id}\n未表示通知: {pending}件。受信箱で確認できます。"
 
-    def _public_sns_screen_text(self, player_id: PlayerId) -> str:
-        header = self._public_sns_header_text(player_id)
-        if not header:
-            return ""
+    def _public_sns_screen_description(self, player_id: PlayerId) -> Description | None:
+        body = self._public_sns_header_body(player_id)
+        if not body:
+            return None
         screen = self._public_sns_screens.get(int(player_id))
         status = self._public_sns_screens.presentation_status(int(player_id))
-        return header + "\n" + status + ("\n" + screen.text if screen else "")
+        return Description(
+            heading=_PUBLIC_SNS_HEADING,
+            text=body + "\n" + status + ("\n" + screen.text if screen else ""),
+        )
 
-    def _format_ongoing_conditions(self) -> str:
-        """成立中の異常だけを、最終指示の直前へ置ける本文に整形する。"""
+    def _ongoing_conditions_description(self) -> Description | None:
+        """成立中の異常だけを、最終指示の直前へ置ける知らせにする。"""
         active_flags = self._world_flag_state.as_frozen_set()
         messages = [
             condition.message for condition in self.scenario.ongoing_conditions if condition.flag in active_flags
         ]
         if not messages:
-            return ""
-        return "\n".join(["【進行中の異常】", *(f"- {message}" for message in messages)])
+            return None
+        return Description(heading="進行中の異常", text="\n".join(f"- {message}" for message in messages))
 
-    def _format_time_since_last_gathering(self) -> str:
+    def _time_since_last_gathering_description(self) -> Description | None:
         """自由時間なら、直近の集合からの経過を世界の分数で返す。
 
         会議後の ``FREE_ROAM.started_at_tick`` は会議終了 tick なので、その
@@ -2295,7 +2317,7 @@ class WorldRuntime:
         言い分けられる。会議中は、いま全員が集まっているため節ごと省く。
         """
         if not self._meeting_enabled or self._game_phase_store.is_meeting():
-            return ""
+            return None
         phase = self._game_phase_store.current
         elapsed_ticks = max(0, int(self.current_tick()) - phase.started_at_tick)
         minutes = elapsed_ticks * (_minutes_per_tick(self.scenario) or 1)
@@ -2303,7 +2325,7 @@ class WorldRuntime:
             message = f"ここでの行動が始まってから {minutes} 分が過ぎている。"
         else:
             message = f"最後に全員が集まってから {minutes} 分が過ぎている。"
-        return f"【時間の経過】\n- {message}"
+        return Description(heading="時間の経過", text=f"- {message}")
 
     # ── アクション実行 ──
 
@@ -4147,8 +4169,6 @@ def create_world_runtime(
         meeting_silence_limit_ticks=scenario.meeting_silence_limit_ticks,
         meeting_cooldown_ticks=scenario.meeting_cooldown_ticks,
     )
-    if briefing:
-        safe_intro = f"{safe_intro}\n\n{briefing}" if safe_intro else briefing
 
     # 記憶の指示は、組み上がった runtime が実際に出す欄とツールに合わせる (#1616)。
     # そのため組み立ては runtime を作り終えたあと (この関数の末尾) で行う。
@@ -4158,14 +4178,22 @@ def create_world_runtime(
         episode_index_shown: bool,
         episode_recall_offered: bool,
     ) -> str:
-        return build_world_system_prompt(
-            world_title=scenario.metadata.title,
-            persona_block=persona,
-            safe_intro=safe_intro,
+        return build_world_system_prompt_for(
+            _orientation(persona),
             has_goal=_has_goal,
-            limits_actions=scenario.metadata.limits_actions,
             episode_index_shown=episode_index_shown,
             episode_recall_offered=episode_recall_offered,
+        )
+
+    def _orientation(persona: str) -> Orientation:
+        return world_orientation(
+            persona_block=persona,
+            world_title=scenario.metadata.title,
+            intro=safe_intro,
+            briefing_sections=briefing,
+            action_limit_text=(
+                limited_action_and_time_pressure_text(has_goal=_has_goal) if scenario.metadata.limits_actions else None
+            ),
         )
 
     # Issue #264 第16回実験 fix: シナリオに player_spawns がある場合、
@@ -6810,6 +6838,9 @@ def create_world_runtime(
         episode_index_shown=episode_index_shown,
         episode_recall_offered=episode_recall_offered,
     )
+    runtime._orientations_by_player_id = {
+        player_id: _orientation(persona) for player_id, persona in personas_by_player_id.items()
+    }
     runtime._world_llm_system_prompts_by_player_id = {
         player_id: _world_system_prompt(
             persona,
