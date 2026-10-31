@@ -49,6 +49,7 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
             current_state_text="現在地表示",
             memos_text="メモ",
             recent_events_text="出来事" * 20,
+            backstory_text="いきさつ",
             inventory_text="持ち物",
             instruction="指示文",
             tools=tools,
@@ -65,6 +66,7 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
         assert p["memos_chars"] == 2
         assert "prediction_feedback_chars" not in p
         assert p["recent_events_chars"] == 60
+        assert p["backstory_chars"] == 4
         assert "recall_chars" not in p
         assert p["inventory_chars"] == 3
         assert p["instruction_chars"] == 3

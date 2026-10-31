@@ -223,27 +223,6 @@ class TestDetectsExceptions:
         assert result.async_event_delivery_failures == {}
         assert "async_failures" not in result.report()
 
-    @pytest.mark.parametrize(("mismatch_kind", "reported"), [("different", True), ("public_sns_projection", False)])
-    def test_recent_events_shadow_mismatch_is_reported(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mismatch_kind: str, reported: bool
-    ) -> None:
-        """今の【直近の出来事】と Being の側の文が違ったという trace は、穴として出す。比べなかった印 (公開 SNS の投影) は出さない (design_decisions D1824-10)。"""
-        original = WorldRuntime.advance_tick
-
-        def advance_tick_that_mismatches(self, *args, **kwargs):
-            if self.current_tick() == 2:
-                self._trace_recorder.record(
-                    "recent_events_shadow_mismatch", tick=2, being_id="being_w1_p1", mismatch_kind=mismatch_kind
-                )
-            return original(self, *args, **kwargs)
-
-        monkeypatch.setattr(WorldRuntime, "advance_tick", advance_tick_that_mismatches)
-
-        result = run_random_agents(_small_scenario(tmp_path), seed=0, max_world_ticks=4)
-
-        mismatches = [f.tick for f in result.findings if f.kind == "shadow_mismatch"]
-        assert mismatches == ([2] if reported else [])
-
     def test_exception_swallowed_inside_a_tool_is_reported(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

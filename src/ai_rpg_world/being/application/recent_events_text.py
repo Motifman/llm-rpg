@@ -1,6 +1,6 @@
-"""Being の短期記憶を、毎ターンのプロンプトの【直近の出来事】に出す本文にする (#1824、design_decisions D1824-10)。
+"""Being の短期記憶を、毎ターンのプロンプトの【直近の出来事】に出す本文にする (#1824、design_decisions D1824-10、D1824-22)。
 
-行の形は今のプロンプトと同じ。行の順は集約の ``recent()`` に従う。
+行の形は、今の短期記憶から作っていたころのプロンプトと同じ。行の順は集約の ``recent()`` に従う。
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class _Line:
         return _line(result.time, result.body, attempt.move.inner_thought)
 
     def attempted_without_result(self, attempt: Attempt) -> str | None:
-        # 今のプロンプトには結果の無い 1 手の行が無い。出すかは切り替えるときに決める。
+        # 切り替える前のプロンプトに無かった行なので、切り替えでは出さないと決めた (design_decisions D1824-22)。
         return None
 
     def lapsed(self, lapse: Lapse) -> str | None:

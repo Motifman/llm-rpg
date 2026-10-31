@@ -1,4 +1,4 @@
-"""本番の runtime で、今の短期記憶に入った出来事が Being 側の短期記憶にも並べて書かれ、プロンプトは変わらないことを保証する (#1824、design_decisions D1824-7)。"""
+"""本番の runtime で、ゲームの出来事が Being 側の短期記憶に書かれ、プロンプトがそこから作られることを保証する (#1824、design_decisions D1824-7)。"""
 
 from __future__ import annotations
 
@@ -18,9 +18,11 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.being.application.recent_events_text import NO_RECENT_EVENTS, recent_events_text
 from ai_rpg_world.being.domain.short_term_memory import (
     RECENT_TURNS,
     Attempt,
+    Backstory,
     Lapse,
     MemoryOperationOutcome,
     Perception,
@@ -118,15 +120,16 @@ class TestCopyInTheRuntime:
             (2, "Attempt", "[行動] その場で待機した → [結果] しばらく行動を控えて、様子を見た"),
         ]
 
-    def test_copying_does_not_change_the_prompt(self) -> None:
-        """写す側があってもなくても、同じ 2 手のあとに組むプロンプトは同じ文になる。"""
+    def test_without_copying_the_prompt_shows_no_recent_events(self) -> None:
+        """`PlayerShortTermMemoryCopy` を配線しないと、同じ 2 手のあとでも【直近の出来事】は「（直近の出来事はありません）」になる。プロンプトの出来事は、この写す処理を通ってしか入らない。"""
         with_copy, with_copy_wiring, _ = _game(copy=True)
         without_copy, without_copy_wiring, _ = _game(copy=False)
         for wiring in (with_copy_wiring, without_copy_wiring):
             _turn(wiring)
             _turn(wiring)
 
-        assert with_copy.build_full_prompt(_ME)["messages"] == without_copy.build_full_prompt(_ME)["messages"]
+        assert _recent_events_section(_user_content(without_copy)) == NO_RECENT_EVENTS
+        assert "しばらく行動を控えて、様子を見た" in _user_content(with_copy)
 
 
 class TestMemoryOperationsAndLapsesInTheRuntime:
@@ -166,12 +169,12 @@ class TestMemoryOperationsAndLapsesInTheRuntime:
         assert recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_NOT_COPIED) == []
 
 
-class TestRecentEventsShadowInTheRuntime:
-    """本番の手番の流れで、Being の短期記憶から作った【直近の出来事】が今の文と同じになり、違えば trace に残ることを保証する (design_decisions D1824-10)。"""
+class TestPromptReadsTheBeingShortTermMemory:
+    """本番の手番の流れで、プロンプトの【直近の出来事】と【ここまでのいきさつ】が Being の短期記憶から作られることを保証する (#1824)。"""
 
-    def test_texts_match_through_observations_results_memory_operations_and_lapses(self) -> None:
-        """預かった観測、待つ 1 手、記憶の道具の 1 手、道具を選ばない手番を重ねても、プロンプトを組むたびの比較で食い違いは残らない。"""
-        runtime, wiring, recorder = _game()
+    def test_recent_events_section_is_the_being_text_through_observations_memory_operations_and_lapses(self) -> None:
+        """預かった観測、待つ 1 手、記憶の道具の 1 手、道具を選ばない手番を重ねると、【直近の出来事】の本文は Being の短期記憶から作った文と同じになる。"""
+        runtime, wiring, _ = _game()
         runtime._obs_buffer.append(
             _ME,
             ObservationEntry(
@@ -187,31 +190,93 @@ class TestRecentEventsShadowInTheRuntime:
         _turn(wiring)
         wiring.llm_client.set_tool_call_to_return(None)
         _turn(wiring)
+
+        content = _user_content(runtime)
+
+        being_text = recent_events_text(runtime._being_short_term_memory_store.get(_being_id(runtime)))
+        assert "鐘が鳴った" in being_text
+        assert _recent_events_section(content) == being_text
+
+    def test_recent_events_section_follows_the_being_memory_not_the_current_memory(self) -> None:
+        """今の短期記憶に出来事が残っていても、Being の短期記憶を空にすると、【直近の出来事】は「（直近の出来事はありません）」になる。"""
+        runtime, wiring, _ = _game()
+        _turn(wiring)
+        runtime._being_short_term_memory_store.replace_all_by_being(ShortTermMemory.empty(_being_id(runtime)))
+
+        content = _user_content(runtime)
+
+        assert runtime._recent_event_store.get_timeline(_ME) != []
+        assert _recent_events_section(content) == NO_RECENT_EVENTS
+
+    def test_backstory_section_shows_the_being_backstories_newest_first(self) -> None:
+        """Being の短期記憶にいきさつが 2 つあれば、【ここまでのいきさつ】に新しい順で「[最新]」「[2 世代前]」と出る。"""
+        runtime, wiring, _ = _game()
+        _turn(wiring)
+        being_id = _being_id(runtime)
+        runtime._being_short_term_memory_store.replace_all_by_being(
+            ShortTermMemory(
+                being_id,
+                backstories=(
+                    Backstory(flow="改札を抜けた", mood="落ち着かない", written_turn=20, until_turn=10),
+                    Backstory(flow="ホームで駅員と話した", mood="", written_turn=30, until_turn=20),
+                ),
+                recent_from=21,
+            )
+        )
+
+        content = _user_content(runtime)
+
+        assert (
+            "【ここまでのいきさつ】\n[最新] ホームで駅員と話した\n\n[2 世代前] 改札を抜けた\n  気分: 落ち着かない"
+            in content
+        )
+
+    def test_section_breakdown_counts_the_backstory_shown_in_the_prompt(self) -> None:
+        """いきさつを出したプロンプトでは、prompt_section_breakdown の backstory_chars が【ここまでのいきさつ】の本文の文字数になる。"""
+        runtime, wiring, recorder = _game()
+        _turn(wiring)
+        being_id = _being_id(runtime)
+        backstory = Backstory(flow="改札を抜けた", mood="落ち着かない", written_turn=20, until_turn=10)
+        runtime._being_short_term_memory_store.replace_all_by_being(
+            ShortTermMemory(being_id, backstories=(backstory,), recent_from=11)
+        )
+
         runtime.build_full_prompt(_ME)
 
-        assert recorder.payloads(TraceEventKind.RECENT_EVENTS_SHADOW_MISMATCH) == []
+        breakdown = recorder.payloads(TraceEventKind.PROMPT_SECTION_BREAKDOWN)[-1]
+        assert breakdown["backstory_chars"] == len("[最新] 改札を抜けた\n  気分: 落ち着かない")
 
-    def test_texts_still_match_after_the_current_memory_compacts(self) -> None:
-        """今の短期記憶が古いターンを畳むまで (21 手) 待ち続けても、畳んだあとの比較で食い違いは残らない。畳んだことを影に知らせて比べ方を変える。Being の側も同じころに範囲が埋まり、いきさつが届くと古いターンを外す (design_decisions D1824-21)。"""
+    def test_no_backstory_section_until_a_backstory_arrives(self) -> None:
+        """いきさつがまだ無ければ、今の短期記憶の要約があっても【ここまでのいきさつ】は出ない。"""
+        runtime, wiring, _ = _game()
+        _turn(wiring)
+
+        assert "【ここまでのいきさつ】" not in _user_content(runtime)
+
+    def test_prompt_is_built_after_the_range_fills(self) -> None:
+        """Being の短期記憶の範囲が埋まるまで (21 手) 回しても、プロンプトの【直近の出来事】は Being の短期記憶から作った文のまま。"""
         runtime, wiring, recorder = _game()
 
         for _ in range(RECENT_TURNS + 1):
             _turn(wiring)
             # 本番では turn_trigger が手番の終わりに閉じる。
             runtime._short_term_memory.complete_turn(_ME)
-        runtime.build_full_prompt(_ME)
+        content = _user_content(runtime)
 
         assert recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_RANGE_FILLED) != []
-        assert recorder.payloads(TraceEventKind.RECENT_EVENTS_SHADOW_MISMATCH) == []
+        being_text = recent_events_text(runtime._being_short_term_memory_store.get(_being_id(runtime)))
+        assert _recent_events_section(content) == being_text
 
-    def test_different_being_memory_is_traced(self) -> None:
-        """Being の短期記憶が今の文と違えば、プロンプトを組んだときに different の食い違いが 1 件残る。"""
-        runtime, wiring, recorder = _game()
-        _turn(wiring)
-        being_id = runtime._acting_being_for(_ME).being_id
-        runtime._being_short_term_memory_store.replace_all_by_being(ShortTermMemory.empty(being_id))
 
-        runtime.build_full_prompt(_ME)
+def _being_id(runtime: Any) -> Any:
+    return runtime._acting_being_for(_ME).being_id
 
-        (payload,) = recorder.payloads(TraceEventKind.RECENT_EVENTS_SHADOW_MISMATCH)
-        assert payload["mismatch_kind"] == "different"
+
+def _user_content(runtime: Any) -> str:
+    return runtime.build_full_prompt(_ME)["messages"][1]["content"]
+
+
+def _recent_events_section(content: str) -> str:
+    """【直近の出来事】の見出しと前置きの 1 行を除いた本文。次の見出しの前で切る。"""
+    body = content.split("【直近の出来事】\n", 1)[1].split("\n", 1)[1]
+    return body.split("\n\n【", 1)[0]

@@ -23,6 +23,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
 )
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.being.domain.short_term_memory import Backstory, ShortTermMemory
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _PID = PlayerId(7)
@@ -82,7 +83,7 @@ class TestThePromptHasNoSelfImageSection:
     """1 ターンのプロンプトに【自己像と世界観】が出ないことを保証する。"""
 
     def test_prompt_after_overflow_shows_recent_flow_but_not_self_image(self) -> None:
-        """要約が 4 世代分たまったあとのプロンプトに、【ここまでのいきさつ】は出て【自己像と世界観】は出ない。"""
+        """Being の短期記憶にいきさつが 3 世代たまったあとのプロンプトに、【ここまでのいきさつ】は出て【自己像と世界観】は出ない。"""
         import tests.demos.test_disabled_memory_parts_vanish_from_the_prompt as capture
 
         scenario, mapping = capture._profile_mapping("smoke_stub")
@@ -91,7 +92,17 @@ class TestThePromptHasNoSelfImageSection:
             config=capture.ResolvedLlmRuntimeConfig.from_mapping({**mapping, **capture._OFFLINE}),
         )
         player_id = PlayerId(1)
-        _compact_generations(runtime._short_term_memory, player_id, 4)
+        being_id = runtime._acting_being_for(player_id).being_id
+        runtime._being_short_term_memory_store.replace_all_by_being(
+            ShortTermMemory(
+                being_id,
+                backstories=tuple(
+                    Backstory(flow=f"{n} 回目の流れ", mood="", written_turn=n * 10 + 10, until_turn=n * 10)
+                    for n in (1, 2, 3)
+                ),
+                recent_from=31,
+            )
+        )
         client = capture._PromptCaptureClient()
 
         capture._WorldLlmWiring(

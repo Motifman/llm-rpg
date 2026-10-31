@@ -1,7 +1,7 @@
-"""今の短期記憶に入った出来事を、契約の型に写して Being 側の短期記憶にも書く (#1824)。
+"""ゲームの出来事を、契約の型に写して Being 側の短期記憶に書く (#1824)。
 
-今の短期記憶はそのまま動かし続ける。写せなかった出来事は trace に残し、run を止めない
-(design_decisions D1824-7)。
+プロンプトの【直近の出来事】は、ここで書いた短期記憶から作る (design_decisions D1824-22)。写せなかった出来事は
+trace に残し、run を止めない (design_decisions D1824-7)。
 """
 
 from __future__ import annotations

@@ -258,8 +258,8 @@ class TestSnapshotTraceCarriesMemoryTurns:
         assert turns[0] == turns[1]
         assert any(turn > 0 for turn in turns[0].values())
 
-    def test_resumed_run_after_compaction_leaves_no_false_mismatch(self, tmp_path: Path) -> None:
-        """今の短期記憶が古いターンを畳んだあとで保存し、続きから再開しても、影は食い違いを残さない。再開した run では、今の文の行が同じ順で Being の文に含まれるかで比べるため (design_decisions D1824-10)。"""
+    def test_resumed_run_after_the_range_fills_builds_prompts_without_failures(self, tmp_path: Path) -> None:
+        """Being の短期記憶の範囲が埋まったあとで保存し、続きから再開しても、戻した短期記憶からプロンプトを組み、手番は 1 つも失敗しない。"""
         from scripts.run_scenario_experiment import main
 
         common = ["--profile", "smoke_stub", "--no-html", "--no-progress-jsonl", "--no-stderr-progress"]
@@ -297,4 +297,4 @@ class TestSnapshotTraceCarriesMemoryTurns:
 
         assert self._events(tmp_path / "first" / "trace.jsonl", "being_short_term_memory_range_filled") != []
         assert self._events(tmp_path / "second" / "trace.jsonl", "prompt_section_breakdown") != []
-        assert self._events(tmp_path / "second" / "trace.jsonl", "recent_events_shadow_mismatch") == []
+        assert self._events(tmp_path / "second" / "trace.jsonl", "world_tick_unit_failed") == []

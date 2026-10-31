@@ -26,16 +26,13 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
-    IRecentEventsFormatter,
     IShortTermMemory,
     ISystemPromptBuilder,
-)
-from ai_rpg_world.application.llm.services.unified_recent_event_store import (
-    UnifiedRecentEventStore,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
@@ -68,19 +65,17 @@ class PromptBuilderCoreServices:
 
     observation_buffer: IObservationContextBuffer
     short_term_memory: IShortTermMemory
-    recent_event_store: UnifiedRecentEventStore
     # 本体の service ではなく、必要な 1 メソッドだけを要求する。
     # world_runtime は duck-type adapter を渡す (#1371)。
     world_query_service: _PlayerCurrentStateSource
     player_profile_repository: _PlayerProfileSource
     current_state_formatter: ICurrentStateFormatter
-    recent_events_formatter: IRecentEventsFormatter
     context_format_strategy: IContextFormatStrategy
     system_prompt_builder: ISystemPromptBuilder
     available_tools_provider: IAvailableToolsProvider
-    recent_events_projection: Callable[[PlayerId, list[Any]], tuple[list[Any], tuple[str, ...]]] | None = None
-    # 組んだ【直近の出来事】を、Being の短期記憶から作った文と並べて比べる (#1824 の影)。
-    recent_events_shadow: Callable[[PlayerId, str], None] | None = None
+    # 【直近の出来事】と【ここまでのいきさつ】の本文。Being の短期記憶から作る (#1824)。
+    recent_events_text_provider: Callable[[BeingId], str]
+    backstory_text_provider: Callable[[BeingId], str]
 
 
 @dataclass(frozen=True)

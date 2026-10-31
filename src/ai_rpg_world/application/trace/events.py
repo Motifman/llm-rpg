@@ -118,7 +118,7 @@ class TraceEventKind:
     # prompt section の文字数内訳 (実験 #356 後続: prefix cache 分析用)。
     # prompt_builder.build() が messages / tools を組み上げた直後に 1 件記録する。
     # payload: system_chars / objective_chars / known_people_chars / current_state_chars / memos_chars /
-    # recent_events_chars / inventory_chars /
+    # recent_events_chars / backstory_chars (【ここまでのいきさつ】。2026-10-31 より前の trace には無い) / inventory_chars /
     # instruction_chars / tools_chars / messages_total_chars
     # token 数ではなく char 数で出す: 軽量 / モデル非依存 / deterministic。
     # 分析側で同 turn の prompt_tokens 比に換算する (≒ token 内訳)。
@@ -197,21 +197,14 @@ class TraceEventKind:
     # このあと、いきさつとエピソードが裏で書かれる。payload: being_id / turn (埋まったターン。その範囲で書いた
     # エピソードの written_turn と同じ) / until_turn (まとめる範囲の終わり) / experience_count (まとめる出来事の数)。
     BEING_SHORT_TERM_MEMORY_RANGE_FILLED = "being_short_term_memory_range_filled"
-    # 今の短期記憶に入った出来事を、Being 側の短期記憶へ写さなかった (#1824、design_decisions D1824-7)。
+    # ゲームの出来事を、Being 側の短期記憶へ写さなかった (#1824、design_decisions D1824-7)。
     # 写さなかった 1 件ごとに 1 件。payload: being_id / source (observation / action_result /
     # move) / reason (being_inner_record / empty_body / missing_time_label / unpaired_result /
     # memory_rule / contract_violation / unexpected_error) / event_kind (観測の種類か道具の名前。無ければ None)。
     # unexpected_error なら error_type も持つ。
     BEING_SHORT_TERM_MEMORY_NOT_COPIED = "being_short_term_memory_not_copied"
-    # 今の【直近の出来事】と、Being の短期記憶から作った文が違った (#1824、design_decisions D1824-10)。
-    # プロンプトは今の文のまま。プロンプトを組むたびに比べ、違ったときだけ 1 件。
-    # payload: being_id / mismatch_kind (different / public_sns_projection)。
-    # public_sns_projection は比べなかった印で Being ごとに 1 回だけ。different は compared_as
-    # (whole = 全体が同じか / subsequence = 今の短期記憶が畳んだあとで、今の文の行が同じ順で Being の文に
-    # 含まれるか) / line_index (今の文で最初に違った出来事の位置。出来事は「- 」で始まる行と続き行の塊) /
-    # current_line / being_line (whole のときの、同じ位置の Being の側の出来事。無ければ None) /
-    # current_line_count / being_line_count (出来事の数) も持つ。
-    RECENT_EVENTS_SHADOW_MISMATCH = "recent_events_shadow_mismatch"
+    # recent_events_shadow_mismatch (design_decisions D1824-10) は 2026-10-31 より前の trace にだけある。
+    # プロンプトを Being の短期記憶から作るようになって、比べるものが無くなった (design_decisions D1824-22)。
     # Being の短期記憶の直近の範囲が上限に届き、いきさつを待たずに古いターンを外した (#1824、design_decisions D1824-11)。
     # payload: being_id / turn (外したときのターン) / until_turn (外した範囲の終わり) / dropped_count (外した出来事の数)。
     BEING_SHORT_TERM_MEMORY_FOLD_FORCED = "being_short_term_memory_fold_forced"

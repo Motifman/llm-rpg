@@ -16,7 +16,6 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ICurrentStateFormatter,
     ILlmUiContextBuilder,
     IPromptBuilder,
-    IRecentEventsFormatter,
     IShortTermMemory,
     ISystemPromptBuilder,
 )
@@ -25,9 +24,6 @@ from ai_rpg_world.application.llm.services.prompt_builder_config import (
     PromptBuilderCoreServices,
     PromptLimits,
     PromptSectionProviders,
-)
-from ai_rpg_world.application.llm.services.unified_recent_event_store import (
-    UnifiedRecentEventStore,
 )
 
 # build_pre_turn_failure_section: Issue #227 chore β で廃止 (#241 後続)
@@ -45,8 +41,8 @@ MESSAGE_WHEN_PLAYER_NOT_PLACED = "現在地: 未配置。ゲームに参加す�
 
 class DefaultPromptBuilder(IPromptBuilder):
     """
-    観測バッファの drain → スライディングウィンドウへの append と、
-    現在状態・直近の出来事・システムプロンプトの組み立てを行う。
+    観測バッファの drain → 短期記憶への append と、現在状態・直近の出来事・
+    システムプロンプトの組み立てを行う。直近の出来事といきさつは Being の短期記憶から作る。
     """
 
     def __init__(
@@ -93,11 +89,9 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         observation_buffer = core.observation_buffer
         short_term_memory = core.short_term_memory
-        recent_event_store = core.recent_event_store
         world_query_service = core.world_query_service
         player_profile_repository = core.player_profile_repository
         current_state_formatter = core.current_state_formatter
-        recent_events_formatter = core.recent_events_formatter
         context_format_strategy = core.context_format_strategy
         system_prompt_builder = core.system_prompt_builder
         available_tools_provider = core.available_tools_provider
@@ -114,14 +108,14 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
         if not isinstance(short_term_memory, IShortTermMemory):
             raise TypeError("short_term_memory must be IShortTermMemory")
-        if not isinstance(recent_event_store, UnifiedRecentEventStore):
-            raise TypeError("recent_event_store must be UnifiedRecentEventStore")
         # world_query_service / player_profile_repository は __init__ 冒頭で
         # hasattr 構造チェック済み (Issue #227 HIGH-3 Part 2: duck-type 契約)
         if not isinstance(current_state_formatter, ICurrentStateFormatter):
             raise TypeError("current_state_formatter must be ICurrentStateFormatter")
-        if not isinstance(recent_events_formatter, IRecentEventsFormatter):
-            raise TypeError("recent_events_formatter must be IRecentEventsFormatter")
+        if not callable(core.recent_events_text_provider):
+            raise TypeError("recent_events_text_provider must be callable")
+        if not callable(core.backstory_text_provider):
+            raise TypeError("backstory_text_provider must be callable")
         if not isinstance(context_format_strategy, IContextFormatStrategy):
             raise TypeError("context_format_strategy must be IContextFormatStrategy")
         if not isinstance(system_prompt_builder, ISystemPromptBuilder):
@@ -174,13 +168,11 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         self._observation_buffer = observation_buffer
         self._short_term_memory = short_term_memory
-        self._recent_event_store = recent_event_store
         self._world_query_service = world_query_service
         self._profile_repository = player_profile_repository
         self._current_state_formatter = current_state_formatter
-        self._recent_events_projection = core.recent_events_projection
-        self._recent_events_shadow = core.recent_events_shadow
-        self._recent_events_formatter = recent_events_formatter
+        self._recent_events_text_provider = core.recent_events_text_provider
+        self._backstory_text_provider = core.backstory_text_provider
         self._context_format_strategy = context_format_strategy
         self._system_prompt_builder = system_prompt_builder
         self._available_tools_provider = available_tools_provider
@@ -227,6 +219,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         user_content: str,
         known_people_text: str = "",
         episode_index_text: str = "",
+        backstory_text: str = "",
     ) -> None:
         """``PROMPT_SECTION_BREAKDOWN`` を 1 件記録する (失敗は握りつぶす)。
 
@@ -265,6 +258,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 current_state_chars=len(current_state_text),
                 memos_chars=len(memos_text),
                 recent_events_chars=len(recent_events_text),
+                backstory_chars=len(backstory_text),
                 inventory_chars=len(inventory_text),
                 instruction_chars=len(instruction),
                 tools_chars=tools_chars,
@@ -347,15 +341,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         )
         current_state_text = ui_context.current_state_text
 
-        # 4. 直近の出来事（観測＋行動結果をマージ）
-        recent_entries = self._recent_event_store.get_active_timeline(player_id)
-        projected_entries = recent_entries
-        shown_notification_ids: tuple[str, ...] = ()
-        if self._recent_events_projection is not None:
-            projected_entries, shown_notification_ids = self._recent_events_projection(player_id, recent_entries)
-        recent_events_text = self._recent_events_formatter.format_unified_entries(projected_entries)
-        if self._recent_events_shadow is not None:
-            self._recent_events_shadow(player_id, recent_events_text)
+        # 4. 直近の出来事。drain した観測は、上の append で Being の短期記憶にも入っている。
+        recent_events_text = self._recent_events_text_provider(acting.being_id)
 
         # 5. 利用可能ツール取得
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
@@ -378,19 +365,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             self._being_memo_text_provider, player_id, "being_memo_text_provider"
         )
 
-        # Phase 2: 短期記憶の L4 mid summary (rolling 実装のみが値を返す)。
-        # 失敗しても prompt 構築を止めない。
-        try:
-            raw_mid = self._short_term_memory.get_mid_summary_text(player_id)
-            mid_summary_text = raw_mid if isinstance(raw_mid, str) else ""
-        except Exception as e:
-            self._logger.warning(
-                "get_mid_summary_text failed for player_id=%s: %s",
-                player_id.value,
-                e,
-                exc_info=True,
-            )
-            mid_summary_text = ""
+        mid_summary_text = self._backstory_text_provider(acting.being_id)
 
         context = self._context_format_strategy.format(
             current_state_text=current_state_text,
@@ -435,7 +410,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             "tools": tools,
             "tool_choice": "required",
         }
-        result["sns_shown_notification_ids"] = shown_notification_ids
         result["tool_runtime_context"] = ui_context.tool_runtime_context
         # Phase A が、実際に API へ出す tool 集合から動的引数候補表を作り、
         # この指示の直前へ安全に差し込むための境界を明示する。
@@ -454,6 +428,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             current_state_text=current_state_text,
             memos_text=being_memo_text,
             recent_events_text=recent_events_text,
+            backstory_text=mid_summary_text,
             inventory_text=inventory_text,
             instruction=instruction,
             tools=tools,
