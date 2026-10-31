@@ -539,7 +539,7 @@ def test_being_provisioning_failure_stops_runtime_creation(
         BeingProvisioningService,
     )
 
-    def _boom(self, player_id):
+    def _boom(self, player_id, **_kwargs):
         raise RuntimeError("provision boom")
 
     monkeypatch.setattr(BeingProvisioningService, "ensure_attached", _boom)

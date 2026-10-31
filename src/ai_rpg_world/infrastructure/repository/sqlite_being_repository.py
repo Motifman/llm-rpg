@@ -25,8 +25,7 @@ CREATE TABLE beings (
 
 - Being 集約 root の永続化のみ (= memory store 中身は含まない)
 - memory store と Being の接続は Step 3 で 1 store ずつ移行
-- run 間で Being identity (= name / first_person / attachment / declared_kinds)
-  が確実に残ることをここで担保する
+- run 間で Being の人柄と attachment が確実に残ることをここで担保する
 """
 
 from __future__ import annotations
@@ -36,11 +35,12 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.service.being_snapshot_codec import (
     BeingSnapshotCodec,
 )
+from ai_rpg_world.domain.being.service.being_snapshot_dict import dict_to_snapshot, snapshot_to_dict
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -51,11 +51,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_migration import (
 )
 
 _BEING_SCHEMA_NAMESPACE = "beings-v1"
-
-# 旧 DB 行が ``snapshot_version`` 列を持たない場合のフォールバック。
-# 「列が欠落 = 最古世代」の意味論なので CURRENT_SNAPSHOT_VERSION ではなく
-# 1 で固定する (= 将来 CURRENT が 2 以上に上がっても旧データは v1 として扱う)。
-_FALLBACK_SNAPSHOT_VERSION = 1
 
 
 def _init_schema_v1(connection: sqlite3.Connection) -> None:
@@ -68,46 +63,6 @@ def _init_schema_v1(connection: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL
         );
         """
-    )
-
-
-def _snapshot_to_payload_dict(snapshot: BeingSnapshot) -> dict[str, Any]:
-    """BeingSnapshot を JSON 互換 dict に変換する。
-
-    primitive のみで構成されているので素直にダンプできる。
-    """
-    return {
-        "being_id_value": snapshot.being_id_value,
-        "identity_name": snapshot.identity_name,
-        "identity_first_person": snapshot.identity_first_person,
-        "attachment_world_id": snapshot.attachment_world_id,
-        "attachment_player_id": snapshot.attachment_player_id,
-        "declared_memory_kinds": list(snapshot.declared_memory_kinds),
-        "snapshot_version": snapshot.snapshot_version,
-        # Phase 4 Step 4-1: v2 snapshot から導入。v1 行を読むときは
-        # ``data.get(..., None)`` で None になるので後方互換は保たれる。
-        "memory_payload_json": snapshot.memory_payload_json,
-    }
-
-
-def _payload_dict_to_snapshot(data: dict[str, Any]) -> BeingSnapshot:
-    """JSON 由来 dict から BeingSnapshot を再構築する。
-
-    BeingSnapshot.__post_init__ の構造検証はそのまま走る (= all-or-nothing
-    の入口で再度ガードされる)。
-    """
-    raw_kinds = data.get("declared_memory_kinds", [])
-    if not isinstance(raw_kinds, list):
-        raise ValueError(f"declared_memory_kinds must be JSON array, got {type(raw_kinds).__name__}")
-    return BeingSnapshot(
-        being_id_value=data["being_id_value"],
-        identity_name=data["identity_name"],
-        identity_first_person=data["identity_first_person"],
-        attachment_world_id=data.get("attachment_world_id"),
-        attachment_player_id=data.get("attachment_player_id"),
-        declared_memory_kinds=tuple(raw_kinds),
-        snapshot_version=data.get("snapshot_version", _FALLBACK_SNAPSHOT_VERSION),
-        memory_payload_json=data.get("memory_payload_json"),
     )
 
 
@@ -169,7 +124,7 @@ class SqliteBeingRepository(BeingRepository):
     def save_snapshot(self, snapshot: BeingSnapshot) -> None:
         if not isinstance(snapshot, BeingSnapshot):
             raise TypeError(f"snapshot must be BeingSnapshot, got {type(snapshot).__name__}")
-        payload = json.dumps(_snapshot_to_payload_dict(snapshot), ensure_ascii=False)
+        payload = json.dumps(snapshot_to_dict(snapshot), ensure_ascii=False)
         updated_at = datetime.now(timezone.utc).isoformat()
 
         cur = self._conn.cursor()
@@ -211,7 +166,7 @@ class SqliteBeingRepository(BeingRepository):
             return None
 
         data = json.loads(row["snapshot_json"])
-        return _payload_dict_to_snapshot(data)
+        return dict_to_snapshot(data)
 
     def exists(self, being_id: BeingId) -> bool:
         if not isinstance(being_id, BeingId):
@@ -261,7 +216,7 @@ class SqliteBeingRepository(BeingRepository):
         result: list[Being] = []
         for row in cur.fetchall():
             data = json.loads(row["snapshot_json"])
-            snapshot = _payload_dict_to_snapshot(data)
+            snapshot = dict_to_snapshot(data)
             result.append(BeingSnapshotCodec.decode(snapshot))
         return result
 

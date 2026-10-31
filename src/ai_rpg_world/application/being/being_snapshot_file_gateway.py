@@ -7,8 +7,7 @@ Phase 5 (Issue #470): ``CaptureBeingSnapshotToFileUseCase`` /
 なぜ別 module:
 - use case が ``open()`` / ``json.dump`` の生 API に直接依存しないようにする
   (= テストで gateway を mock 化できる / ファイル形式を 1 箇所に集約)
-- ``_snapshot_to_payload_dict`` 同等のシリアライズ責務 (Phase 4-1) を
-  application 層に持つことで、CLI から呼ぶときの infra 依存を最小化
+- dict との変換は ``domain/being/service/being_snapshot_dict.py`` にあり、SQLite のリポジトリと同じ形で書く
 
 ## メタデータ (Phase 7)
 
@@ -29,6 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ai_rpg_world.domain.being.service.being_snapshot_dict import dict_to_snapshot, snapshot_to_dict
 from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
 
 
@@ -53,49 +53,6 @@ class BeingSnapshotFileMetadata:
         )
 
 
-def snapshot_to_dict(snapshot: BeingSnapshot) -> dict[str, Any]:
-    """``BeingSnapshot`` を JSON 互換 dict に変換する。
-
-    sqlite_being_repository の ``_snapshot_to_payload_dict`` と同形式
-    (= 同じ JSON が repo / file 両方で読める)。
-    """
-    if not isinstance(snapshot, BeingSnapshot):
-        raise TypeError(f"snapshot must be BeingSnapshot, got {type(snapshot).__name__}")
-    return {
-        "being_id_value": snapshot.being_id_value,
-        "identity_name": snapshot.identity_name,
-        "identity_first_person": snapshot.identity_first_person,
-        "attachment_world_id": snapshot.attachment_world_id,
-        "attachment_player_id": snapshot.attachment_player_id,
-        "declared_memory_kinds": list(snapshot.declared_memory_kinds),
-        "snapshot_version": snapshot.snapshot_version,
-        "memory_payload_json": snapshot.memory_payload_json,
-    }
-
-
-def dict_to_snapshot(data: dict[str, Any]) -> BeingSnapshot:
-    """JSON 由来 dict から ``BeingSnapshot`` を再構築する。
-
-    ``BeingSnapshot.__post_init__`` の構造検証 (= all-or-nothing) はそのまま
-    走る = 不完全な入力は ``BeingSnapshotIncompleteException`` で弾かれる。
-    """
-    if not isinstance(data, dict):
-        raise TypeError(f"data must be dict, got {type(data).__name__}")
-    raw_kinds = data.get("declared_memory_kinds", [])
-    if not isinstance(raw_kinds, list):
-        raise TypeError(f"declared_memory_kinds must be list, got {type(raw_kinds).__name__}")
-    return BeingSnapshot(
-        being_id_value=str(data["being_id_value"]),
-        identity_name=str(data["identity_name"]),
-        identity_first_person=str(data["identity_first_person"]),
-        attachment_world_id=data.get("attachment_world_id"),
-        attachment_player_id=data.get("attachment_player_id"),
-        declared_memory_kinds=tuple(str(x) for x in raw_kinds),
-        snapshot_version=int(data.get("snapshot_version", 1)),
-        memory_payload_json=data.get("memory_payload_json"),
-    )
-
-
 class BeingSnapshotFileGateway:
     """``BeingSnapshot`` をローカルファイルに読み書きする gateway。
 
@@ -115,7 +72,7 @@ class BeingSnapshotFileGateway:
         """``snapshot`` を ``output_path`` に JSON で書き出す。
 
         親ディレクトリは事前に存在する想定。``ensure_ascii=False`` で日本語
-        identity も読みやすい形で保存する。``metadata`` を渡せば
+        人柄も読みやすい形で保存する。``metadata`` を渡せば
         ``_metadata`` ブロックも書き込まれる。
         """
         if not isinstance(snapshot, BeingSnapshot):

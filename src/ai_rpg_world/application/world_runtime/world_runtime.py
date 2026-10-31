@@ -316,6 +316,7 @@ from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock, MemoryTurnReader
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
@@ -6693,7 +6694,10 @@ def create_world_runtime(
     runtime._wire_being_stack()
     for spawn in scenario.player_spawns:
         try:
-            runtime._aux_being_provisioning.ensure_attached(PlayerId(int(spawn.player_id)))
+            # 一人称や人柄はシナリオに書く場所がまだ無い。persona_prompt を分けるとき (#1339 / #1548) に入れる。
+            runtime._aux_being_provisioning.ensure_attached(
+                PlayerId(int(spawn.player_id)), persona=Persona(name=spawn.name)
+            )
         except Exception as exc:
             raise RuntimeError(f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を渡せない") from exc
     runtime._wire_being_stack()

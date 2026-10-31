@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId

@@ -29,7 +29,7 @@ Repository から複数返ってきたら ``BeingMultipleAttachmentException`` �
 
 from __future__ import annotations
 
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.service.unique_attached_being import unique_attached_being
 from ai_rpg_world.domain.being.value_object.being_id import BeingId

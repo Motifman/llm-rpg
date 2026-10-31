@@ -6,7 +6,8 @@ from dataclasses import replace
 
 import pytest
 
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingSnapshotIncompleteException,
     BeingSnapshotVersionException,
@@ -16,27 +17,43 @@ from ai_rpg_world.domain.being.service.being_snapshot_codec import (
 )
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
 from ai_rpg_world.domain.being.value_object.being_snapshot import (
     CURRENT_SNAPSHOT_VERSION,
     BeingSnapshot,
 )
-from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 
-def _identity() -> BeingIdentity:
-    return BeingIdentity(name="アダ", first_person="わたし")
+def _persona() -> Persona:
+    return Persona(
+        name="アダ",
+        first_person="わたし",
+        speech="丁寧語",
+        traits=("慎重", "観察好き"),
+        values=("約束",),
+        fears=("暗闇",),
+        background="港町で育った。",
+    )
 
 
 def _attached_being() -> Being:
     return Being(
         being_id=BeingId("ada"),
-        identity=_identity(),
+        persona=_persona(),
         attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2)),
-        declared_memory_kinds=[MemoryKind.EPISODIC, MemoryKind.MEMO],
     )
+
+
+def _snapshot(**overrides: object) -> BeingSnapshot:
+    fields: dict[str, object] = dict(
+        being_id_value="ada",
+        persona=_persona(),
+        attachment_world_id=None,
+        attachment_player_id=None,
+    )
+    fields.update(overrides)
+    return BeingSnapshot(**fields)  # type: ignore[arg-type]
 
 
 class TestBeingSnapshotCodecEncode:
@@ -44,13 +61,13 @@ class TestBeingSnapshotCodecEncode:
 
     def test_attach_being_encode(self) -> None:
         """attachment なしの Being は snapshot の attachment 両 None で表現。"""
-        being = Being(being_id=BeingId("ada"), identity=_identity())
+        being = Being(being_id=BeingId("ada"), persona=_persona())
         snapshot = BeingSnapshotCodec.encode(being)
         assert snapshot.being_id_value == "ada"
-        assert snapshot.identity_name == "アダ"
+        assert snapshot.persona == _persona()
         assert snapshot.attachment_world_id is None
         assert snapshot.attachment_player_id is None
-        assert snapshot.declared_memory_kinds == ()
+        assert snapshot.legacy_declared_memory_kinds == ()
         assert snapshot.snapshot_version == CURRENT_SNAPSHOT_VERSION
 
     def test_attach_being_encode_attachment(
@@ -60,11 +77,6 @@ class TestBeingSnapshotCodecEncode:
         snapshot = BeingSnapshotCodec.encode(_attached_being())
         assert snapshot.attachment_world_id == 1
         assert snapshot.attachment_player_id == 2
-
-    def test_declared_memory_kinds_value_string_tuple(self) -> None:
-        """encode 後の memory_kinds は str tuple かつ決定的 (sorted)。"""
-        snapshot = BeingSnapshotCodec.encode(_attached_being())
-        assert snapshot.declared_memory_kinds == ("episodic", "memo")
 
     def test_being_raises_type_error(self) -> None:
         """型違反は TypeError で弾く。"""
@@ -76,56 +88,24 @@ class TestBeingSnapshotCodecDecode:
     """decode (BeingSnapshot → Being) の挙動。"""
 
     def test_encode_decode_being_state(self) -> None:
-        """ラウンドトリップで Being の全状態 (id / identity / attachment / kinds) が一致。"""
+        """encode して decode すると、ID・人柄のすべての項目・所属が元の Being と一致する。"""
         original = _attached_being()
         decoded = BeingSnapshotCodec.decode(BeingSnapshotCodec.encode(original))
         assert decoded.being_id == original.being_id
-        assert decoded.identity == original.identity
+        assert decoded.persona == original.persona
         assert decoded.attachment == original.attachment
-        assert decoded.declared_memory_kinds == original.declared_memory_kinds
 
     def test_attach_snapshot_decode_attachment_none(self) -> None:
         """attachment 両 None の snapshot は未 attach Being として復元される。"""
-        snapshot = BeingSnapshot(
-            being_id_value="ada",
-            identity_name="アダ",
-            identity_first_person="わたし",
-            attachment_world_id=None,
-            attachment_player_id=None,
-            declared_memory_kinds=(),
-        )
-        being = BeingSnapshotCodec.decode(snapshot)
+        being = BeingSnapshotCodec.decode(_snapshot())
         assert being.attachment is None
         assert being.is_attached is False
-
-    def test_raises_unknown_memory_kind_being_snapshot_incomplete_exception(
-        self,
-    ) -> None:
-        """codec が認識できない memory_kind 文字列は all-or-nothing 違反。"""
-        snapshot = BeingSnapshot(
-            being_id_value="ada",
-            identity_name="アダ",
-            identity_first_person="わたし",
-            attachment_world_id=None,
-            attachment_player_id=None,
-            declared_memory_kinds=("unknown_kind",),
-        )
-        with pytest.raises(BeingSnapshotIncompleteException, match="unknown_kind"):
-            BeingSnapshotCodec.decode(snapshot)
 
     def test_raises_unsupported_version_being_snapshot_version_exception(
         self,
     ) -> None:
         """未サポート version は明示的にバージョン例外として弾く。"""
-        snapshot = BeingSnapshot(
-            being_id_value="ada",
-            identity_name="アダ",
-            identity_first_person="わたし",
-            attachment_world_id=None,
-            attachment_player_id=None,
-            declared_memory_kinds=(),
-            snapshot_version=999,
-        )
+        snapshot = _snapshot(snapshot_version=999)
         with pytest.raises(BeingSnapshotVersionException, match="999"):
             BeingSnapshotCodec.decode(snapshot)
 
@@ -162,31 +142,14 @@ class TestBeingSnapshotCodecMemoryPayload:
 
     def test_v1_snapshot_decode(self) -> None:
         """SUPPORTED_VERSIONS が v1 を含むため後方互換で復元可能。"""
-        snapshot = BeingSnapshot(
-            being_id_value="ada",
-            identity_name="アダ",
-            identity_first_person="わたし",
-            attachment_world_id=1,
-            attachment_player_id=2,
-            declared_memory_kinds=("episodic",),
-            snapshot_version=1,
-        )
+        snapshot = _snapshot(attachment_world_id=1, attachment_player_id=2, snapshot_version=1)
         being = BeingSnapshotCodec.decode(snapshot)
         assert being.being_id == BeingId("ada")
         assert being.attachment is not None
 
     def test_v_one_snapshot_memory_payload_raises_exception(self) -> None:
         """v1 と memory_payload_json の組み合わせは整合性エラー。"""
-        snapshot = BeingSnapshot(
-            being_id_value="ada",
-            identity_name="アダ",
-            identity_first_person="わたし",
-            attachment_world_id=None,
-            attachment_player_id=None,
-            declared_memory_kinds=(),
-            snapshot_version=1,
-            memory_payload_json='{"memo": []}',
-        )
+        snapshot = _snapshot(snapshot_version=1, memory_payload_json='{"memo": []}')
         with pytest.raises(BeingSnapshotIncompleteException, match="v1"):
             BeingSnapshotCodec.decode(snapshot)
 
@@ -194,9 +157,8 @@ class TestBeingSnapshotCodecMemoryPayload:
         """memory payload は Phase 4-2 の service 責務なので codec では復元しない。"""
         snapshot = BeingSnapshotCodec.encode(_attached_being(), memory_payload_json='{"any": "thing"}')
         being = BeingSnapshotCodec.decode(snapshot)
-        # codec は Being 集約 root の状態 (identity / attachment / kinds) だけ復元
         assert being.attachment is not None
-        assert MemoryKind.EPISODIC in being.declared_memory_kinds
+        assert being.persona == _persona()
 
     def test_v2_snapshot_round_trip(self) -> None:
         """encode → decode → encode で payload も保持される。"""
@@ -209,27 +171,32 @@ class TestBeingSnapshotCodecMemoryPayload:
 
 
 class TestRemovedMemoryDeclaration:
-    """古いsnapshotの廃止済み宣言だけを除き、ほかの復元契約を保つ。"""
+    """古い snapshot に残る記憶の種類の宣言を、どの値でも数えて読み捨てることを保証する (design_decisions D1469-1)。"""
 
     @pytest.mark.parametrize("version", [1, 2])
-    @pytest.mark.parametrize("kinds", [("semantic",), ("semantic", "memo", "semantic", "short_term", "episodic")])
-    def test_old_declaration_is_omitted_on_decode_and_reencode(self, version: int, kinds: tuple[str, ...]) -> None:
-        """v1/v2のsemantic宣言を除去し、同一性・所属・現役宣言を保ち、再保存で復活させない。"""
-        snapshot = replace(
-            BeingSnapshotCodec.encode(_attached_being()), snapshot_version=version, declared_memory_kinds=kinds
+    def test_old_declarations_are_counted_by_kind(self, version: int) -> None:
+        """古い宣言は、廃止済みの semantic も未知の値も拒まず、種類ごとの件数として数える。"""
+        snapshot = _snapshot(
+            snapshot_version=version,
+            legacy_declared_memory_kinds=("semantic", "memo", "semantic", "unknown_kind"),
         )
-        being = BeingSnapshotCodec.decode(snapshot)
-        encoded = BeingSnapshotCodec.encode(being)
-        assert encoded.being_id_value == snapshot.being_id_value
-        assert encoded.identity_name == snapshot.identity_name
-        assert encoded.identity_first_person == snapshot.identity_first_person
-        assert encoded.attachment_world_id == snapshot.attachment_world_id
-        assert encoded.attachment_player_id == snapshot.attachment_player_id
-        assert encoded.declared_memory_kinds == tuple(sorted(set(kinds) - {"semantic"}))
 
-    @pytest.mark.parametrize("kinds", [("semantic", "unknown_kind"), ("Semantic",), ("SEMANTIC",)])
-    def test_unknown_declarations_are_still_rejected(self, kinds: tuple[str, ...]) -> None:
-        """廃止済み宣言との混在や大文字表記を含め、未知の宣言は従来どおり拒否する。"""
-        snapshot = replace(BeingSnapshotCodec.encode(_attached_being()), declared_memory_kinds=kinds)
-        with pytest.raises(BeingSnapshotIncompleteException, match="unknown memory_kind"):
-            BeingSnapshotCodec.decode(snapshot)
+        assert BeingSnapshotCodec.removed_declared_memory_kind_counts(snapshot) == {
+            "semantic": 2,
+            "memo": 1,
+            "unknown_kind": 1,
+        }
+
+    def test_snapshot_without_old_declarations_counts_nothing(self) -> None:
+        """宣言を持たない snapshot は、読み捨てた件数を空で返す。"""
+        assert BeingSnapshotCodec.removed_declared_memory_kind_counts(_snapshot()) == {}
+
+    def test_old_declarations_do_not_come_back_on_reencode(self) -> None:
+        """古い宣言のある snapshot を decode して encode し直すと、宣言は残らず ID・人柄・所属は保たれる。"""
+        snapshot = _snapshot(
+            attachment_world_id=1, attachment_player_id=2, legacy_declared_memory_kinds=("episodic", "memo")
+        )
+
+        encoded = BeingSnapshotCodec.encode(BeingSnapshotCodec.decode(snapshot))
+
+        assert encoded == replace(snapshot, legacy_declared_memory_kinds=())

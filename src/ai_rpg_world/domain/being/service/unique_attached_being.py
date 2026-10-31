@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingMultipleAttachmentException,
 )

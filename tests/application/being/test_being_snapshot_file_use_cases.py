@@ -15,16 +15,15 @@ from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case impo
     CaptureBeingSnapshotToFileUseCase,
 )
 from ai_rpg_world.application.being.restore_being_snapshot_from_file_use_case import RestoreBeingSnapshotFromFileUseCase
+from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import InMemoryShortTermMemoryRepository
-from ai_rpg_world.domain.being.aggregate.being import Being
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
-from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
@@ -54,9 +53,8 @@ def _make_environment():
 def _make_being() -> Being:
     return Being(
         being_id=BeingId("being_w1_p1"),
-        identity=BeingIdentity(name="アダ", first_person="わたし"),
+        persona=Persona(name="アダ", first_person="わたし"),
         attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)),
-        declared_memory_kinds=[MemoryKind.MEMO, MemoryKind.SHORT_TERM],
     )
 
 
@@ -98,7 +96,7 @@ class TestRestoreUseCase:
         assert [a.name for a in dst["acquaintances"].list_by_being(being.being_id)] == ["カイト"]
         loaded = dst["repo"].find_by_id(being.being_id)
         assert loaded is not None
-        assert loaded.identity.name == "アダ"
+        assert loaded.persona.name == "アダ"
 
     def test_payload_snapshot_restore_memory(self, tmp_path: Path) -> None:
         """v1 snapshot 想定: memory_payload_json=None なら memory_restored=False。"""
@@ -107,11 +105,9 @@ class TestRestoreUseCase:
         env = _make_environment()
         snap = BeingSnapshot(
             being_id_value="being_w1_p1",
-            identity_name="アダ",
-            identity_first_person="わたし",
+            persona=Persona(name="アダ", first_person="わたし"),
             attachment_world_id=1,
             attachment_player_id=1,
-            declared_memory_kinds=("memo",),
             snapshot_version=2,
             memory_payload_json=None,
         )
@@ -202,36 +198,31 @@ class TestRestoreUseCaseDropsRemovedMemoryKeys:
 
 
 class TestRestoreRemovedDeclaration:
-    """ファイル復元で廃止済みの宣言と記憶本文を分けて扱う。"""
+    """古いファイルに残る記憶の種類の宣言を、記憶本文とは分けて数え、読み捨てることを保証する (design_decisions D1469-1)。"""
+
+    @staticmethod
+    def _declare_in_file(path: Path, kinds: list[str]) -> None:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["declared_memory_kinds"] = kinds
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
     def test_removed_declarations_are_counted_without_changing_memory_payload(self, tmp_path: Path) -> None:
-        """semantic宣言2件を除去して報告し、記憶本文をそのまま保存・復元する。"""
+        """宣言をどの種類も数えて報告し、保存した snapshot には残さず、記憶本文はそのまま復元する。"""
         path = _capture_old_snapshot(tmp_path, {})
-        gateway = BeingSnapshotFileGateway()
-        snapshot = dataclasses.replace(gateway.read(path), declared_memory_kinds=("memo", "semantic", "semantic"))
-        gateway.write(snapshot, path)
+        self._declare_in_file(path, ["memo", "semantic", "semantic", "unknown_kind"])
+        payload = BeingSnapshotFileGateway().read(path).memory_payload_json
         dst = _make_environment()
+
         result = dst["restore"].execute(path)
-        assert result.removed_declared_memory_kind_counts == {"semantic": 2}
+
+        assert result.removed_declared_memory_kind_counts == {"memo": 1, "semantic": 2, "unknown_kind": 1}
         assert result.removed_memory_key_counts == {}
         stored = dst["repo"].find_snapshot_by_id(result.being_id)
-        assert stored.declared_memory_kinds == ("memo",)
-        assert stored.memory_payload_json == snapshot.memory_payload_json
+        assert stored.legacy_declared_memory_kinds == ()
+        assert stored.memory_payload_json == payload
         assert [a.name for a in dst["acquaintances"].list_by_being(result.being_id)] == ["カイト"]
 
-    def test_unknown_declaration_is_rejected_before_saving(self, tmp_path: Path) -> None:
-        """semanticと未知の宣言が混在するファイルは、保存先に書き込む前に拒否する。"""
-        from ai_rpg_world.domain.being.exception.being_exceptions import BeingSnapshotIncompleteException
-
-        path = _capture_old_snapshot(tmp_path, {})
-        gateway = BeingSnapshotFileGateway()
-        gateway.write(dataclasses.replace(gateway.read(path), declared_memory_kinds=("semantic", "unknown_kind")), path)
-        dst = _make_environment()
-        with pytest.raises(BeingSnapshotIncompleteException, match="unknown_kind"):
-            dst["restore"].execute(path)
-        assert dst["repo"].find_snapshot_by_id(BeingId("being_w1_p1")) is None
-
     def test_current_snapshot_reports_no_removed_declarations(self, tmp_path: Path) -> None:
-        """現役の宣言だけのファイルでは、除去した宣言の件数を空で報告する。"""
+        """宣言を持たない今のファイルでは、読み捨てた宣言の件数を空で報告する。"""
         path = _capture_old_snapshot(tmp_path, {})
         assert _make_environment()["restore"].execute(path).removed_declared_memory_kind_counts == {}

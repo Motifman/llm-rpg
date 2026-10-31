@@ -7,10 +7,10 @@ import pytest
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
-from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
@@ -68,29 +68,28 @@ class TestEnsureAttachedNewBeing:
         assert being.is_attached is True
         assert being.attachment == BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
 
-    def test_identity_hint(
+    def test_persona_is_used_for_new_being(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
     ) -> None:
-        """identity_hint が新規 Being の identity に使われる。"""
-        hint = BeingIdentity(name="アダ", first_person="わたし")
-        being_id = service.ensure_attached(PlayerId(2), identity_hint=hint)
+        """persona を渡すと、新しく作る Being がその人柄を持つ。"""
+        hint = Persona(name="アダ", first_person="わたし")
+        being_id = service.ensure_attached(PlayerId(2), persona=hint)
         being = repo.find_by_id(being_id)
         assert being is not None
-        assert being.identity == hint
+        assert being.persona == hint
 
-    def test_identity_hint_unspecified_placeholder_used(
+    def test_without_persona_only_placeholder_name_is_set(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
     ) -> None:
-        """identity_hint が None なら ``agent_{player}`` 形式の placeholder。"""
+        """persona を渡さなければ、名前だけを ``agent_{player}`` にし、一人称などは決めない。"""
         being_id = service.ensure_attached(PlayerId(7))
         being = repo.find_by_id(being_id)
         assert being is not None
-        assert being.identity.name == "agent_7"
-        assert being.identity.first_person == "わたし"
+        assert being.persona == Persona(name="agent_7")
 
     def test_world_id_world_attach(
         self,
@@ -119,22 +118,21 @@ class TestEnsureAttachedIdempotent:
         second = service.ensure_attached(PlayerId(2))
         assert first == second
 
-    def test_two_identity_hint_existing_identity(
+    def test_second_persona_does_not_overwrite_existing_persona(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
     ) -> None:
-        """既存 Being の identity は idempotent 呼び出しで上書きされない。"""
-        first_hint = BeingIdentity(name="アダ", first_person="わたし")
-        service.ensure_attached(PlayerId(2), identity_hint=first_hint)
-        # 2 回目に違う hint
+        """既にある Being の人柄は、2 回目に別の persona を渡しても変わらない。"""
+        first_hint = Persona(name="アダ", first_person="わたし")
+        service.ensure_attached(PlayerId(2), persona=first_hint)
         service.ensure_attached(
             PlayerId(2),
-            identity_hint=BeingIdentity(name="別人", first_person="俺"),
+            persona=Persona(name="別人", first_person="俺"),
         )
         being = repo.find_by_id(BeingId("being_w1_p2"))
         assert being is not None
-        assert being.identity == first_hint
+        assert being.persona == first_hint
 
 
 class TestEnsureAttachedReattach:
@@ -176,7 +174,7 @@ class TestEnsureAttachedReattach:
         # 事前に手動で Being を別 player に attach
         being = Being(
             being_id=BeingId("being_w1_p2"),
-            identity=BeingIdentity(name="既存", first_person="わたし"),
+            persona=Persona(name="既存", first_person="わたし"),
             attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(99)),
         )
         repo.save(being)
@@ -188,7 +186,7 @@ class TestEnsureAttachedReattach:
         assert reloaded.attachment is not None
         assert reloaded.attachment.player_id == PlayerId(2)
         # identity は既存のものが残る (= 上書きしない)
-        assert reloaded.identity.name == "既存"
+        assert reloaded.persona.name == "既存"
 
 
 class TestEnsureAttachedTypeGuards:
@@ -204,10 +202,10 @@ class TestEnsureAttachedTypeGuards:
         with pytest.raises(TypeError, match="world_id"):
             service.ensure_attached(PlayerId(2), world_id=1)  # type: ignore[arg-type]
 
-    def test_being_id_entity_hint_raises_type_error(self, service: BeingProvisioningService) -> None:
-        """identity_hint の型違反は TypeError。"""
-        with pytest.raises(TypeError, match="identity_hint"):
+    def test_non_persona_raises_type_error(self, service: BeingProvisioningService) -> None:
+        """persona に Persona でない値を渡すと TypeError を投げる。"""
+        with pytest.raises(TypeError, match="persona"):
             service.ensure_attached(
                 PlayerId(2),
-                identity_hint="アダ",  # type: ignore[arg-type]
+                persona="アダ",  # type: ignore[arg-type]
             )

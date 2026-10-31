@@ -62,7 +62,7 @@
 - `Message` の3つのID拒否試験は実入力0なので、名前も `zero` に合わせる。負数を試したとは主張しない
 - `get_content_length` はASCIIの13文字を検査している。Unicodeの文字数とバイト数を区別する証明とはしない
 - `WorldProfileRepositoryAdapter`、クエストの名前解決、プロフィールの保存と再構築は実際の利用境界
-- `BeingIdentity` は世界を跨いで残る主体の名前・一人称。文字数制限と空白保持の異なる
+- `Persona` (旧 `BeingIdentity`、D1469-1) は世界を跨いで残る主体の名前と人柄。文字数制限と空白保持の異なる
   `PlayerName` の代わりにはならず、両者の試験を重複と扱わない
 - `Message` と一部のプロフィール照会は本番呼出しを検索で確認できなかったが、公開APIの廃止判断はしない。
   `Message` は [値オブジェクト整理](https://github.com/Motifman/llm-rpg/commit/a1c01bcd009bce48197a51b16d19244d55d2f69f)
