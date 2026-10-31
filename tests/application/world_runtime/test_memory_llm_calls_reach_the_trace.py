@@ -75,7 +75,7 @@ class TestNewMemoryComponentsReachTheRuntimeTrace:
     def test_episode_writing_call_is_traced_as_episode_writing(self) -> None:
         """エピソードの書き起こしが LLM を呼ぶと、runtime の recorder に component=episode_writing の aux_llm_call が 1 件届く。"""
         runtime, recorder = _runtime_with_recorder()
-        completion = runtime._player_episode_writing._writer._completion
+        completion = runtime._player_episode_writing._write_episodes._write_episodes._writer._completion
 
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.return_value = _json_response()

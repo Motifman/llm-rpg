@@ -981,12 +981,3 @@ class TestRollingSummaryCompactionListener:
             mem.complete_turn(_PID)
 
         assert len(received) == 1
-
-    def test_uncompacted_entries_include_the_open_turn(self) -> None:
-        """まだ畳んでいない分は、閉じたターンと、まだ閉じていないターンの出来事を古い順に含む。"""
-        mem = SummarizingShortTermMemory(turn_cap=4, compact_turn_count=2)
-        mem.append(_PID, _obs("closed"))
-        mem.complete_turn(_PID)
-        mem.append(_PID, _obs("open"))
-
-        assert [e.payload.output.prose for e in mem.uncompacted_entries(_PID)] == ["closed", "open"]

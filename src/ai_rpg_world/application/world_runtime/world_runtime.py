@@ -1946,7 +1946,7 @@ class WorldRuntime:
         return backstory_text(self._being_short_term_memory_store.get(being_id))
 
     def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
-        """環境を離れるとき (run の終わり) に、まだ畳まれていない出来事からエピソードを書く (#1626)。
+        """環境を離れるとき (run の終わり) に、Being の短期記憶のまだまとめていない出来事からエピソードを書く (#1626、design_decisions D1824-23)。
 
         書き起こしを有効にしていなければ何もしない。``skip_reason`` を渡すと書かずに、
         プレイヤーごとにその理由を trace に残す。
@@ -1954,22 +1954,12 @@ class WorldRuntime:
         if self._player_episode_writing is None:
             return
         from ai_rpg_world.application.being.player_episode_writing import TRIGGER_LEAVING
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
 
-        memory = self._short_term_memory
-        if not isinstance(memory, SummarizingShortTermMemory):
-            raise RuntimeError("episode writing needs SummarizingShortTermMemory")
         for player_id in self.get_player_ids():
             if skip_reason is not None:
                 self._player_episode_writing.skip(player_id, trigger=TRIGGER_LEAVING, reason=skip_reason)
                 continue
-            self._player_episode_writing.write(
-                player_id,
-                memory.uncompacted_entries(player_id),
-                trigger=TRIGGER_LEAVING,
-            )
+            self._player_episode_writing.write(player_id, trigger=TRIGGER_LEAVING)
 
     def _acting_being_for(self, player_id: PlayerId) -> ActingBeing | None:
         self._wire_being_stack()
@@ -4095,6 +4085,7 @@ def _build_player_episode_writing(
         environment_entry_for_player,
     )
     from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
+    from ai_rpg_world.being.application.write_episodes_on_leaving import WriteEpisodesOnLeaving
     from ai_rpg_world.being.infrastructure.llm_episode_writer import LlmEpisodeWriter
 
     completion = _episode_writing_completion(cfg, runtime=runtime)
@@ -4104,8 +4095,11 @@ def _build_player_episode_writing(
         return acting.being_id if acting is not None else None
 
     return PlayerEpisodeWriting(
-        writer=LlmEpisodeWriter(completion),
-        add_episodes=AddEpisodesToMemory(runtime._being_episode_store),
+        write_episodes=WriteEpisodesOnLeaving(
+            runtime._being_short_term_memory_store,
+            LlmEpisodeWriter(completion),
+            AddEpisodesToMemory(runtime._being_episode_store),
+        ),
         being_id_of=_being_id_of,
         turn_reader=turn_reader,
         environment_name_of=lambda pid: environment_entry_for_player(runtime.scenario, pid).environment_name,

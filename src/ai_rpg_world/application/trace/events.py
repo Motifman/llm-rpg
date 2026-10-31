@@ -175,7 +175,13 @@ class TraceEventKind:
     NAME_LEARNED = "name_learned"
     # 目次つきのエピソードを書き起こした (#1626)。1 回の書き起こしごとに 1 件。今は環境を離れるときだけ。
     # 2026-10-31 より前の trace には、今の短期記憶を畳んだときの trigger: compaction も残る (design_decisions D1824-21)。
-    # payload: being_id / trigger (leaving。前の trace では compaction も) / event_count /
+    # payload: being_id / trigger (leaving。前の trace では compaction も) /
+    # event_count (Being の短期記憶のまだまとめていない出来事の数。Being を引けないか失敗したときは None。
+    # 2026-10-31 より前の trace では、今の短期記憶のまだ畳んでいない出来事の数。design_decisions D1824-23) /
+    # awaited_until_turn (まだいきさつを待っている範囲の終わり。待っていなければ None。その範囲のエピソードは
+    # 範囲が埋まったときに書くので、離れるときには書かない。being_episode_written と突き合わせて、終わりまでに
+    # 記憶に入らなかった範囲を見つける。Being を引けたときだけ。2026-10-31 より前の trace には無い) /
+    # skip_reason が no_events なのは、行になる出来事が無かったとき。結果の来ない 1 手だけなら event_count は 0 でない /
     # outcome (written / failed / skipped) / episode_count / dropped_count /
     # rewritten (outcome が written のときだけ。応答が崩れていて、同じ材料で書き直させて書けたか。
     # design_decisions D1626 の「その後」) /
