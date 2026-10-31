@@ -43,6 +43,7 @@ from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InM
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import InMemoryShortTermMemoryRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
 
@@ -52,11 +53,13 @@ _FIXED_TIME = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 def _make_stack():
     """新規 in-memory store stack + wiring stub を返す。"""
     repo = InMemoryBeingRepository()
-    resolver = BeingAttachmentResolver(repo)
-    provisioning = BeingProvisioningService(repo)
+    player_beings = PlayerBeings(DEFAULT_SINGLE_WORLD_ID)
+    resolver = BeingAttachmentResolver(repo, player_beings)
+    provisioning = BeingProvisioningService(repo, player_beings)
     wiring = SimpleNamespace(
         being_repository=repo,
         being_attachment_resolver=resolver,
+        player_beings=player_beings,
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
@@ -102,7 +105,8 @@ class TestSnapshotRoundTripDeterminism:
         src_session = ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / "src")
         src_session.capture_all([PlayerId(1)], source_scenario="test_scenario")
         src_payload = _strip_volatile_metadata(json.loads((tmp_path / "src" / f"{being_id.value}.json").read_text()))
-        (dst_wiring, _) = _make_stack()
+        (dst_wiring, dst_prov) = _make_stack()
+        dst_prov.ensure_attached(PlayerId(1))
         dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / "dst")
         dst_session.restore_all_from_dir(tmp_path / "src", current_scenario="test_scenario")
         dst_session.capture_all([PlayerId(1)], source_scenario="test_scenario")
@@ -123,7 +127,8 @@ class TestRestoreIdempotency:
         assert being_id is not None
         _populate_all_stores(src_wiring, being_id)
         ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / "src").capture_all([PlayerId(1)])
-        (dst1_wiring, _) = _make_stack()
+        (dst1_wiring, dst1_prov) = _make_stack()
+        dst1_prov.ensure_attached(PlayerId(1))
         dst1_session = ExperimentSnapshotSession(wiring_result=dst1_wiring, snapshot_dir=tmp_path / "dst1")
         dst1_session.restore_all_from_dir(tmp_path / "src")
         dst1_session.capture_all([PlayerId(1)])
@@ -147,7 +152,8 @@ class TestRestoreInsensitivityToScenarioName:
         ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / "src").capture_all(
             [PlayerId(1)], source_scenario="forest_world"
         )
-        (dst_wiring, _) = _make_stack()
+        (dst_wiring, dst_prov) = _make_stack()
+        dst_prov.ensure_attached(PlayerId(1))
         dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / "dst")
         dst_session.restore_all_from_dir(tmp_path / "src", current_scenario="desert_world")
         dst_session.capture_all([PlayerId(1)], source_scenario="desert_world")

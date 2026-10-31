@@ -1,4 +1,4 @@
-"""BeingProvisioningService の idempotent な Being 確保挙動 (Phase 3 Step 6-mini)。"""
+"""BeingProvisioningService が、プレイヤーを動かす Being を用意し、ゲームの側の対応表に書くことを保証する (design_decisions D1928)。"""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
     InMemoryBeingRepository,
@@ -24,32 +25,31 @@ def repo() -> InMemoryBeingRepository:
 
 
 @pytest.fixture
-def service(repo: InMemoryBeingRepository) -> BeingProvisioningService:
-    return BeingProvisioningService(repo)
+def player_beings() -> PlayerBeings:
+    return PlayerBeings(WorldId(1))
+
+
+@pytest.fixture
+def service(repo: InMemoryBeingRepository, player_beings: PlayerBeings) -> BeingProvisioningService:
+    return BeingProvisioningService(repo, player_beings)
 
 
 class TestConstruction:
-    """コンストラクタの型ガード + default 値。"""
+    """コンストラクタの型ガードと、用意する世界を保証する。"""
 
-    def test_being_repository_can_build(self, repo: InMemoryBeingRepository) -> None:
-        """正常系: Repository を渡せばインスタンス化される。"""
-        s = BeingProvisioningService(repo)
-        assert s.default_world_id == WorldId(1)
+    def test_world_is_the_world_of_the_table(self, repo: InMemoryBeingRepository) -> None:
+        """用意する世界は、対応表の世界になる。"""
+        assert BeingProvisioningService(repo, PlayerBeings(WorldId(7))).default_world_id == WorldId(7)
 
-    def test_default_world_id_can_override(self, repo: InMemoryBeingRepository) -> None:
-        """default_world_id を渡せばそれを使う。"""
-        s = BeingProvisioningService(repo, default_world_id=WorldId(7))
-        assert s.default_world_id == WorldId(7)
-
-    def test_repository_raises_type_error(self) -> None:
-        """型違反は TypeError。"""
+    def test_non_repository_raises_type_error(self, player_beings: PlayerBeings) -> None:
+        """保存先でない値を渡すと TypeError を投げる。"""
         with pytest.raises(TypeError, match="being_repository"):
-            BeingProvisioningService("not-a-repo")  # type: ignore[arg-type]
+            BeingProvisioningService("not-a-repo", player_beings)  # type: ignore[arg-type]
 
-    def test_world_id_default_raises_type_error(self, repo: InMemoryBeingRepository) -> None:
-        """default_world_id の型違反は TypeError。"""
-        with pytest.raises(TypeError, match="default_world_id"):
-            BeingProvisioningService(repo, default_world_id=1)  # type: ignore[arg-type]
+    def test_non_player_beings_raises_type_error(self, repo: InMemoryBeingRepository) -> None:
+        """対応表でない値を渡すと TypeError を投げる。"""
+        with pytest.raises(TypeError, match="player_beings"):
+            BeingProvisioningService(repo, "not-a-table")  # type: ignore[arg-type]
 
 
 class TestEnsureAttachedNewBeing:
@@ -67,6 +67,14 @@ class TestEnsureAttachedNewBeing:
         assert being is not None
         assert being.is_attached is True
         assert being.attachment == BeingAttachment(world_id=1, player_id=2)
+
+    def test_new_being_is_written_in_the_table(
+        self, player_beings: PlayerBeings, service: BeingProvisioningService
+    ) -> None:
+        """新しく作った Being が、対応表でそのプレイヤーを動かす。"""
+        being_id = service.ensure_attached(PlayerId(2))
+
+        assert player_beings.being_of(PlayerId(2)) == being_id
 
     def test_persona_is_used_for_new_being(
         self,
@@ -91,22 +99,18 @@ class TestEnsureAttachedNewBeing:
         assert being is not None
         assert being.persona == Persona(name="agent_7")
 
-    def test_world_id_world_attach(
-        self,
-        repo: InMemoryBeingRepository,
-        service: BeingProvisioningService,
-    ) -> None:
-        """world_id 指定で default を上書きできる。"""
-        being_id = service.ensure_attached(PlayerId(3), world_id=WorldId(99))
-        assert being_id == BeingId("being_w99_p3")
-        being = repo.find_by_id(being_id)
-        assert being is not None
-        assert being.attachment is not None
-        assert being.attachment.world_id == 99
-
 
 class TestEnsureAttachedIdempotent:
     """idempotent な挙動: 既に attach 中なら何もしない。"""
+
+    def test_player_already_driven_keeps_its_being(
+        self, repo: InMemoryBeingRepository, player_beings: PlayerBeings, service: BeingProvisioningService
+    ) -> None:
+        """対応表でもう別の Being がプレイヤーを動かしていれば、その Being を返し、新しく作らない。"""
+        player_beings.drive(PlayerId(2), BeingId("ada"))
+
+        assert service.ensure_attached(PlayerId(2)) == BeingId("ada")
+        assert repo.find_by_id(BeingId("being_w1_p2")) is None
 
     def test_returns_two_ensure_attached_same_being_id(
         self,
@@ -137,33 +141,6 @@ class TestEnsureAttachedIdempotent:
 
 class TestEnsureAttachedReattach:
     """同じ BeingId の Being が既にあるとき、Being.move_to でこの (world, player) に入れることを保証する。"""
-
-    def test_creates_world_id_provisioning_independent_being(
-        self,
-        repo: InMemoryBeingRepository,
-        service: BeingProvisioningService,
-    ) -> None:
-        """同じ player_id でも world_id が違えば BeingId は別になる (= Case 3 新規作成)。
-
-        決定論命名規約 ``being_w{world}_p{player}`` の確認。世界をまたぐと
-        Being も別存在として扱う。
-        """
-        # 先に world=99 に attach
-        service.ensure_attached(PlayerId(2), world_id=WorldId(99))
-        being_id_99 = BeingId("being_w99_p2")
-        being_99 = repo.find_by_id(being_id_99)
-        assert being_99 is not None
-        assert being_99.attachment is not None
-        assert being_99.attachment.world_id == 99
-
-        # 次に default world (= 1) で呼ぶ → 別 ID の新規 Being が作られる (= Case 3)
-        new_being_id = service.ensure_attached(PlayerId(2))
-        assert new_being_id == BeingId("being_w1_p2")
-        assert new_being_id != being_id_99
-        # 元の world=99 Being はそのまま attach 状態が維持される
-        being_99_after = repo.find_by_id(being_id_99)
-        assert being_99_after is not None
-        assert being_99_after.is_attached is True
 
     def test_existing_being_attached_elsewhere_is_moved(
         self,
@@ -198,6 +175,24 @@ class TestEnsureAttachedReattach:
         assert reloaded.persona.name == "既存"
         assert moved == [BeingAttachment(world_id=1, player_id=2)]
 
+    def test_moved_being_leaves_the_player_it_drove(
+        self, repo: InMemoryBeingRepository, player_beings: PlayerBeings, service: BeingProvisioningService
+    ) -> None:
+        """同じ BeingId の Being が対応表でほかのプレイヤーを動かしていれば、そこを離れてこのプレイヤーを動かす。"""
+        repo.save(
+            Being(
+                being_id=BeingId("being_w1_p2"),
+                persona=Persona(name="既存"),
+                attachment=BeingAttachment(world_id=1, player_id=99),
+            )
+        )
+        player_beings.drive(PlayerId(99), BeingId("being_w1_p2"))
+
+        service.ensure_attached(PlayerId(2))
+
+        assert player_beings.being_of(PlayerId(2)) == BeingId("being_w1_p2")
+        assert player_beings.being_of(PlayerId(99)) is None
+
     def test_existing_detached_being_is_moved_in(
         self,
         repo: InMemoryBeingRepository,
@@ -220,11 +215,6 @@ class TestEnsureAttachedTypeGuards:
         """player_id の型違反は TypeError。"""
         with pytest.raises(TypeError, match="player_id"):
             service.ensure_attached(2)  # type: ignore[arg-type]
-
-    def test_world_id_world_id_raises_type_error(self, service: BeingProvisioningService) -> None:
-        """world_id の型違反は TypeError。"""
-        with pytest.raises(TypeError, match="world_id"):
-            service.ensure_attached(PlayerId(2), world_id=1)  # type: ignore[arg-type]
 
     def test_non_persona_raises_type_error(self, service: BeingProvisioningService) -> None:
         """persona に Persona でない値を渡すと TypeError を投げる。"""

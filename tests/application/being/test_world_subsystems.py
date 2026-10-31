@@ -346,3 +346,41 @@ class TestCodecsKeysAreUnique:
             PlayerNeedsSubsystemCodec().subsystem_key,
         ]
         assert len(set(keys)) == len(keys)
+
+
+class TestPlayerBeingsCodec:
+    """誰がどのプレイヤーを動かしているかの対応表を、世界の snapshot に書いて戻せることを保証する (design_decisions D1928)。"""
+
+    def test_table_round_trips(self) -> None:
+        """書き出した対応表を別の runtime に戻すと、同じ組がそろう。"""
+        from ai_rpg_world.application.being.world_subsystems.player_beings_codec import PlayerBeingsSubsystemCodec
+        from ai_rpg_world.being.domain.being_id import BeingId
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
+        from ai_rpg_world.domain.world.value_object.world_id import WorldId
+
+        source = SimpleNamespace(
+            _player_beings=PlayerBeings(WorldId(1), [(PlayerId(2), BeingId("ben")), (PlayerId(1), BeingId("ada"))])
+        )
+        target = SimpleNamespace(_player_beings=PlayerBeings(WorldId(1), [(PlayerId(9), BeingId("old"))]))
+        codec = PlayerBeingsSubsystemCodec()
+
+        data = codec.capture(source)
+        codec.restore(target, data)
+
+        assert data == {
+            "schema_version": 1,
+            "pairs": [{"player_id": 1, "being_id": "ada"}, {"player_id": 2, "being_id": "ben"}],
+        }
+        assert target._player_beings.pairs() == source._player_beings.pairs()
+
+    def test_unknown_version_is_refused(self) -> None:
+        """知らない schema_version は ValueError で断る。"""
+        from ai_rpg_world.application.being.world_subsystems.player_beings_codec import PlayerBeingsSubsystemCodec
+        from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
+        from ai_rpg_world.domain.world.value_object.world_id import WorldId
+
+        with pytest.raises(ValueError, match="schema_version"):
+            PlayerBeingsSubsystemCodec().restore(
+                SimpleNamespace(_player_beings=PlayerBeings(WorldId(1))), {"schema_version": 99, "pairs": []}
+            )

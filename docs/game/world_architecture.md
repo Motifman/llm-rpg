@@ -55,6 +55,7 @@ Beingの記憶・イベント基盤の設計変更やSQLiteの過去の表の削
 
 - 世界snapshotに残る旧`player_pursuit_state`だけを除き、`snapshot_load.removed_world_subsystems`と`world_snapshot_load.removed_subsystems`に捨てたプレイヤー行数を残す。現役のスポット移動とその途中状態は復元する。未知キーと現役キー欠落の厳格な検査は維持する。
 - Beingは記憶の種類の所有宣言を持たない。古いsnapshotに残る宣言はどの文字列も読み捨て、`snapshot_load.removed_declared_memory_kinds`にBeingごとの種類別の件数を残す。記憶本文とは別で、本文の`removed_memory_keys`へ混ぜない (D1469-1)。`persona`の無い古いsnapshotの仮の名前と一人称は読み捨て、`snapshot_load.removed_legacy_identities`に残す。人柄は起動時にシナリオから入れたものを使う (D1469-2)。
+- 誰がどのプレイヤーを動かしているかの対応表 (`PlayerBeings`) は、世界snapshotの`player_beings`に入る。欄の無い古いsnapshotはBeingのsnapshotの`attachment_world_id`/`attachment_player_id`から作り直し、読んだ先を`snapshot_load.player_beings_source`に残す。同じプレイヤーを2つのBeingが指す形は起動前に止める (D1928)。
 - スキルの旧形・速度・追加効果は型へ復元しない。過去のSQLiteの表・列は残し、旧`pattern_type`必須列はwriterのSQLだけで空文字を入れる。ドメインに仮の命中パターンは作らない。装備・消費・前提条件・クールダウン等は引き続き保存・復元する。
 - モンスター個体の旧ID・座標列はドメインへ復元しない。旧`world_object_id`必須列は保存層で既存行の値を保持し、新規行だけ同じ表の最大値+1で満たす。旧座標列も更新せず、過去の表や列は残す。現役のHP・生死・行動状態等のSQLite保存は維持する。
 

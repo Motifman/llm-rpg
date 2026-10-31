@@ -496,6 +496,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     return SimpleNamespace(
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,
+        player_beings=getattr(runtime, "_player_beings", None),
         acquaintance_store=getattr(runtime, "_acquaintance_store", None),
         being_episode_store=getattr(runtime, "_being_episode_store", None),
         being_memo_store=getattr(runtime, "_being_memo_store", None),
@@ -670,6 +671,8 @@ def _drive_scenario(
                         {"being_id": b.value, "counts": counts}
                         for b, counts in restore_report.removed_memory_key_counts.items()
                     ],
+                    # 誰がどのプレイヤーを動かしているかを読んだ先 (design_decisions D1928)。
+                    player_beings_source=snapshot_session.player_beings_source,
                     removed_legacy_identities=[
                         {"being_id": b.value, **identity}
                         for b, identity in restore_report.removed_legacy_identities.items()

@@ -1,21 +1,15 @@
-"""BeingProvisioningService — LLM 制御 player に Being を確保する application service。
-
-Issue #470 Phase 3 Step 6-mini: 既存 wiring が PlayerId 中心で動いているため、
-Step 3a-2 以降の caller 移行で BeingAttachmentResolver が Being を引けるよう、
-LLM ターン開始時に (world, player) に Being が attach されていることを保証する。
+"""BeingProvisioningService — プレイヤーを動かす Being を用意する application service。
 
 ## 責務
 
-- ある (world, player) ペアに Being が attach 中なら何もしない (= idempotent)
-- attach 中の Being が無ければ、決定論的な BeingId で Being を作って attach する
-- 既に同 BeingId の Being が別 (world, player) に attach 中なら detach → 再 attach
+- プレイヤーを動かしている Being がいれば何もしない (= idempotent)
+- いなければ、決定論的な BeingId の Being を作るか、既にある Being を移して、このプレイヤーを動かさせる
+- 誰がどのプレイヤーを動かしているかは、ゲームの側の対応表 (``PlayerBeings``) に書く (#1928、design_decisions D1928)
 
 ## 決定論的 BeingId 命名
 
 ``f"being_w{world_id.value}_p{player_id.value}"`` を仮の命名規約として使う。
-- run を跨いで同じ player_id が出てきたら同じ BeingId に決まる (= 永続化と再開で identity が連続する)
-- Step 6-full で wiring が Being-centric になった時に、本 service を経由せず persona
-  config 等から explicit BeingId を渡す経路に置き換える前提
+run を跨いで同じ player_id が出てきたら同じ BeingId に決まる (= 永続化と再開で identity が連続する)。
 
 ## 人柄
 
@@ -25,104 +19,73 @@ LLM ターン開始時に (world, player) に Being が attach されている�
 ## Thread safety
 
 本 service は単一スレッドの LLM ターン実行を前提とする。並行 ``ensure_attached``
-は race するので、必要なら呼び出し側で lock を取ること (= 現状 K run は単一スレッド
-LLM 実行なので問題なし)。
+は race するので、必要なら呼び出し側で lock を取ること。
 """
 
 from __future__ import annotations
 
-from ai_rpg_world.application.being.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 
 class BeingProvisioningService:
-    """LLM 制御 player に Being を確保する idempotent な service。"""
+    """``player_beings`` の世界のプレイヤーに、Being を用意する idempotent な service。"""
 
-    def __init__(
-        self,
-        being_repository: BeingRepository,
-        *,
-        default_world_id: WorldId | None = None,
-    ) -> None:
+    def __init__(self, being_repository: BeingRepository, player_beings: PlayerBeings) -> None:
         if not isinstance(being_repository, BeingRepository):
             raise TypeError(f"being_repository must be BeingRepository, got {type(being_repository).__name__}")
-        if default_world_id is not None and not isinstance(default_world_id, WorldId):
-            raise TypeError(f"default_world_id must be WorldId or None, got {type(default_world_id).__name__}")
+        if not isinstance(player_beings, PlayerBeings):
+            raise TypeError(f"player_beings must be PlayerBeings, got {type(player_beings).__name__}")
         self._repo = being_repository
-        self._default_world_id = default_world_id or WorldId(1)
-        self._resolver = BeingAttachmentResolver(being_repository)
+        self._player_beings = player_beings
 
     @property
     def default_world_id(self) -> WorldId:
-        return self._default_world_id
+        return self._player_beings.world_id
 
-    def ensure_attached(
-        self,
-        player_id: PlayerId,
-        *,
-        world_id: WorldId | None = None,
-        persona: Persona | None = None,
-    ) -> BeingId:
-        """指定 (world, player) に Being が attach されていることを保証する。
+    def ensure_attached(self, player_id: PlayerId, *, persona: Persona | None = None) -> BeingId:
+        """プレイヤーを動かす Being がいることを保証し、その ID を返す。
 
-        - 既に attach 済みの Being があれば、その BeingId を返す
-        - 無ければ ``f"being_w{world_id}_p{player_id}"`` で Being を作って attach
-        - 既存の同 BeingId が別 (world, player) に attach 中なら、そこから移す (``Being.move_to``)
+        - 対応表にもう Being がいれば、その ID を返す
+        - いなければ ``being_w{world}_p{player}`` の Being を、無ければ作り、あれば (ほかのプレイヤーを動かしていても)
+          このプレイヤーに移して動かさせる (``Being.move_to``、``PlayerBeings.drive``)
         - ``persona`` は新しく作るときだけ使う。既にある Being の人柄は変えない
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError(f"player_id must be PlayerId, got {type(player_id).__name__}")
-        if world_id is not None and not isinstance(world_id, WorldId):
-            raise TypeError(f"world_id must be WorldId or None, got {type(world_id).__name__}")
         if persona is not None and not isinstance(persona, Persona):
             raise TypeError(f"persona must be Persona or None, got {type(persona).__name__}")
 
-        target_world = world_id or self._default_world_id
+        driving = self._player_beings.being_of(player_id)
+        if driving is not None:
+            return driving
 
-        # Case 1: 既に (world, player) に attach 中の Being があればそのまま返す
-        existing = self._resolver.resolve_attached_being(target_world, player_id)
-        if existing is not None:
-            return existing.being_id
-
-        # Case 2: 決定論 BeingId で Being が既に存在するなら、それを (world, player)
-        # に入れ直す。別の (world, player) に入っていれば、Being が外してから入る (move_to)。
-        #
-        # NOTE: ``find_by_id`` は ``BeingSnapshotCodec.decode`` 経由で **毎回
-        # 新インスタンス** を返す (Phase 4 Step 4-3 以降、InMemory / Sqlite 共)。
-        # 参照共有はないので、ここで mutate しても repo の内部状態は変わらない。
-        # **必ず ``save()`` を呼んで永続化すること**。
-        being_id = self._derive_being_id(target_world, player_id)
-        attachment = BeingAttachment(world_id=target_world.value, player_id=player_id.value)
-        existing_being = self._repo.find_by_id(being_id)
-        if existing_being is not None:
-            existing_being.move_to(attachment)
-            self._repo.save(existing_being)
-            return being_id
-
-        # Case 3: 新規作成 + attach
-        being = Being(
-            being_id=being_id,
-            persona=persona or Persona(name=f"agent_{player_id.value}"),
-            attachment=attachment,
-        )
+        world_id = self._player_beings.world_id
+        being_id = self._derive_being_id(world_id, player_id)
+        attachment = BeingAttachment(world_id=world_id.value, player_id=player_id.value)
+        # find_by_id は毎回新しいインスタンスを返すので、変えたら必ず save する。
+        being = self._repo.find_by_id(being_id)
+        if being is None:
+            being = Being(
+                being_id=being_id,
+                persona=persona or Persona(name=f"agent_{player_id.value}"),
+                attachment=attachment,
+            )
+        else:
+            being.move_to(attachment)
+        self._player_beings.drive(player_id, being_id)
         self._repo.save(being)
         return being_id
 
     @staticmethod
     def _derive_being_id(world_id: WorldId, player_id: PlayerId) -> BeingId:
-        """決定論的 BeingId 命名規約 (= ``being_w<world>_p<player>``)。
-
-        Phase 3 までの仮命名。Step 6-full で persona config 由来の explicit ID に
-        差し替える想定。
-        """
+        """決定論的 BeingId 命名規約 (= ``being_w<world>_p<player>``)。"""
         return BeingId(f"being_w{world_id.value}_p{player_id.value}")
 
 
