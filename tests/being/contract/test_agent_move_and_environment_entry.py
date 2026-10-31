@@ -97,33 +97,30 @@ class TestAgentMove:
 
 
 class TestEnvironmentEntry:
-    """環境に入るときの取り決めが、環境の名前・本人の名前・課す目的を持つことを保証する。"""
+    """環境に入るときの取り決めが、環境の名前と課す目的を持ち、Being の名前を持たないことを保証する。"""
 
-    def test_entry_keeps_names_and_imposed_goal(self) -> None:
-        """環境の名前・本人の名前・課す目的を渡すと、そのまま読める。"""
-        entry = EnvironmentEntry(
-            environment_name="遭難の島",
-            self_name="リオ",
-            imposed_goal="山頂の狼煙台に火を灯す",
-        )
+    def test_entry_keeps_environment_name_and_imposed_goal(self) -> None:
+        """環境の名前と課す目的を渡すと、そのまま読める。"""
+        entry = EnvironmentEntry(environment_name="遭難の島", imposed_goal="山頂の狼煙台に火を灯す")
 
         assert entry.environment_name == "遭難の島"
-        assert entry.self_name == "リオ"
         assert entry.imposed_goal == "山頂の狼煙台に火を灯す"
 
     def test_imposed_goal_is_optional(self) -> None:
         """目的を課さない環境では imposed_goal を省け、None になる。"""
-        entry = EnvironmentEntry(environment_name="返信だけの環境", self_name="リオ")
+        entry = EnvironmentEntry(environment_name="返信だけの環境")
 
         assert entry.imposed_goal is None
 
-    @pytest.mark.parametrize("field", ["environment_name", "self_name"])
-    def test_blank_name_is_rejected(self, field: str) -> None:
-        """環境の名前か本人の名前が空なら拒む。"""
-        values = {"environment_name": "遭難の島", "self_name": "リオ", field: ""}
-
+    def test_blank_environment_name_is_rejected(self) -> None:
+        """環境の名前が空なら拒む。"""
         with pytest.raises(ContractViolation):
-            EnvironmentEntry(**values)
+            EnvironmentEntry(environment_name="")
+
+    def test_environment_does_not_name_the_being(self) -> None:
+        """環境は Being の名前を付けないので、本人の名前を渡すと TypeError になる (design_decisions D1928-3)。"""
+        with pytest.raises(TypeError):
+            EnvironmentEntry(environment_name="遭難の島", self_name="リオ")  # type: ignore[call-arg]
 
 
 class TestIntroductions:
@@ -131,7 +128,7 @@ class TestIntroductions:
 
     def test_entry_without_introductions_introduces_nobody(self) -> None:
         """introductions を省くと、誰も紹介されない空の tuple になる。"""
-        entry = EnvironmentEntry(environment_name="山村", self_name="リオ")
+        entry = EnvironmentEntry(environment_name="山村")
 
         assert entry.introductions == ()
 
@@ -139,7 +136,6 @@ class TestIntroductions:
         """紹介は渡した順に、名前と関係の注記 (無ければ None) を保つ。"""
         entry = EnvironmentEntry(
             environment_name="山村",
-            self_name="リオ",
             introductions=[
                 Introduction(name="ノア", relation_note="あなたと同じ側"),
                 Introduction(name="カイ"),
@@ -158,18 +154,11 @@ class TestIntroductions:
         with pytest.raises(ContractViolation):
             Introduction(name="ノア", relation_note="")
 
-    def test_introducing_oneself_or_the_same_person_twice_is_rejected(self) -> None:
-        """本人を紹介したり、同じ名前を 2 回紹介したりすると拒む。"""
+    def test_introducing_the_same_person_twice_is_rejected(self) -> None:
+        """同じ名前を 2 回紹介すると拒む。"""
         with pytest.raises(ContractViolation):
             EnvironmentEntry(
                 environment_name="山村",
-                self_name="リオ",
-                introductions=[Introduction(name="リオ")],
-            )
-        with pytest.raises(ContractViolation):
-            EnvironmentEntry(
-                environment_name="山村",
-                self_name="リオ",
                 introductions=[Introduction(name="ノア"), Introduction(name="ノア")],
             )
 
@@ -178,6 +167,5 @@ class TestIntroductions:
         with pytest.raises(ContractViolation):
             EnvironmentEntry(
                 environment_name="山村",
-                self_name="リオ",
                 introductions=["ノア"],
             )

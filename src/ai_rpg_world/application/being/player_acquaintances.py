@@ -92,6 +92,9 @@ class PlayerAcquaintances:
             raise ValueError(
                 f"entry is for {entry.environment_name!r}, but acquaintances are kept for {self._environment_name!r}"
             )
+        own_name = self._names_by_player_id.get(player_id.value)
+        if any(i.name == own_name for i in entry.introductions):
+            raise ValueError(f"entry introduces player_id={player_id.value} to itself as {own_name!r}")
         being_id = self._resolve(player_id)
         if being_id is None:
             if entry.introductions:

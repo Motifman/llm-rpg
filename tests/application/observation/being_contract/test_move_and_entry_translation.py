@@ -104,7 +104,6 @@ class TestEnvironmentEntryForPlayer:
 
         assert entry == EnvironmentEntry(
             environment_name="無人島サバイバル",
-            self_name="エイダ",
             imposed_goal="全員を救助させる",
             introductions=(Introduction(name="リオ"),),
         )
@@ -116,7 +115,6 @@ class TestEnvironmentEntryForPlayer:
             PlayerId.create(2),
         )
 
-        assert entry.self_name == "リオ"
         assert entry.imposed_goal == "島から脱出する"
 
     def test_no_objective_means_no_imposed_goal(self) -> None:
