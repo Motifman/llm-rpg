@@ -5693,8 +5693,11 @@ def create_world_runtime(
     )
 
     # Being の保存先は、保存するときにためたイベントをこの配送器に渡す (design_decisions D1837 の 6)。
-    from ai_rpg_world.application.being.handlers.record_short_term_memory_trace_handler import (
-        RecordShortTermMemoryTraceHandler,
+    from ai_rpg_world.application.being.handlers.record_backstory_added_trace_handler import (
+        RecordBackstoryAddedTraceHandler,
+    )
+    from ai_rpg_world.application.being.handlers.record_oldest_turns_dropped_trace_handler import (
+        RecordOldestTurnsDroppedTraceHandler,
     )
     from ai_rpg_world.being.domain.short_term_memory import (
         ShortTermMemoryBackstoryAddedEvent,
@@ -5703,19 +5706,21 @@ def create_world_runtime(
     from ai_rpg_world.eventing.delivery import DeliveryChannel, DeliveryGuarantee
 
     being_dispatcher: EventDispatcher[None] = EventDispatcher(failure_observer=_record_after_commit_failure)
-    record_short_term_memory_trace = RecordShortTermMemoryTraceHandler(
-        trace_recorder_provider=lambda: runtime._trace_recorder,
-        current_tick_provider=lambda: runtime.current_tick(),
-    )
     being_dispatcher.register_after_commit(
         ShortTermMemoryOldestTurnsDroppedEvent,
-        record_short_term_memory_trace.handle,
+        RecordOldestTurnsDroppedTraceHandler(
+            trace_recorder_provider=lambda: runtime._trace_recorder,
+            current_tick_provider=lambda: runtime.current_tick(),
+        ).handle,
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
     being_dispatcher.register_after_commit(
         ShortTermMemoryBackstoryAddedEvent,
-        record_short_term_memory_trace.handle,
+        RecordBackstoryAddedTraceHandler(
+            trace_recorder_provider=lambda: runtime._trace_recorder,
+            current_tick_provider=lambda: runtime.current_tick(),
+        ).handle,
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
