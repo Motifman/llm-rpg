@@ -681,8 +681,9 @@ def _resolve_tool_choice(source: Mapping[str, str]) -> str:
 def _resolve_reasoning_effort(source: Mapping[str, str]) -> str:
     """``LLM_REASONING_EFFORT`` を解決する。
 
-    既定は ``"minimal"``。本命の profile をはじめ、実 LLM の run の多くが
-    minimal で動いており、書き忘れた run だけが熟考なしで走るのを避ける (#1631)。
+    既定は ``"minimal"``。実 LLM の run の多くが minimal で動いており、書き忘れた
+    run だけが熟考なしで走るのを避ける (#1631)。廃坑の山村の本命の profile は、
+    モデルが受け付ける ``"low"`` を明示している (D1924-2)。
     ``"none"`` を使う profile は値を明示している。
     空文字は「reasoning 関連フィールドを一切注入しない」を表す明示値として許す。
     """
