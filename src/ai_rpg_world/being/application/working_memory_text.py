@@ -16,7 +16,12 @@ def system_prompt_text(memory: WorkingMemory) -> str:
 
 def message_text(memory: WorkingMemory) -> str:
     """区画、繰り返しの警告、知らせ、締めの一文の順に、空行で区切って並べる。"""
-    parts = [section_text(s) for s in memory.message]
+    return "\n\n".join(p for p in ("\n\n".join(section_text(s) for s in memory.message), closing_text(memory)) if p)
+
+
+def closing_text(memory: WorkingMemory) -> str:
+    """メッセージのうち区画より後ろ (繰り返しの警告、知らせ、締めの一文) の文。"""
+    parts: list[str] = []
     if memory.closing is not None and memory.closing.warning:
         parts.append(memory.closing.warning)
     parts.extend(section_text(s) for s in memory.notices)
@@ -25,4 +30,4 @@ def message_text(memory: WorkingMemory) -> str:
     return "\n\n".join(parts)
 
 
-__all__ = ["message_text", "section_text", "system_prompt_text"]
+__all__ = ["closing_text", "message_text", "section_text", "system_prompt_text"]

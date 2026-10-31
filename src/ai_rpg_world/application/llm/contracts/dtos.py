@@ -108,32 +108,6 @@ class LlmCommandResultDto:
 
 
 @dataclass(frozen=True)
-class SystemPromptPlayerInfoDto:
-    """システムプロンプト生成用のプレイヤー情報 DTO"""
-
-    player_name: str
-    role: str
-    race: str
-    element: str
-    game_description: str
-    persona_block: str = ""
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.player_name, str):
-            raise TypeError("player_name must be str")
-        if not isinstance(self.role, str):
-            raise TypeError("role must be str")
-        if not isinstance(self.race, str):
-            raise TypeError("race must be str")
-        if not isinstance(self.element, str):
-            raise TypeError("element must be str")
-        if not isinstance(self.game_description, str):
-            raise TypeError("game_description must be str")
-        if not isinstance(self.persona_block, str):
-            raise TypeError("persona_block must be str")
-
-
-@dataclass(frozen=True)
 class ActionResultEntry:
     """行動結果 1 件（直近の出来事のマージ用）。
 

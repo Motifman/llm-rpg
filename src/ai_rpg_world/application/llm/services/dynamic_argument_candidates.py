@@ -21,7 +21,9 @@ from ai_rpg_world.application.llm.services._argument_resolvers.target_lookup imp
     label_forms,
 )
 from ai_rpg_world.application.llm.services.description_text import description_text
+from ai_rpg_world.being.application.working_memory_text import message_text
 from ai_rpg_world.being.contract import Description, Scene
+from ai_rpg_world.being.domain.working_memory import WorkingMemory
 
 # runtime_context のラベルを require_target_type で直接引くツール。値には
 # display_name ではなく、実際に resolver が受理する label を載せる。
@@ -414,14 +416,19 @@ def inject_dynamic_argument_candidate_table(
     content = str(user_message.get("content") or "")
     if not content.endswith(instruction):
         raise ValueError("candidate table injection requires action instruction at prompt tail")
-    body = content[: -len(instruction)].rstrip()
-    user_message["content"] = f"{body}\n\n{table}\n\n{instruction}"
     scene = result.get("scene")
-    if in_scene and isinstance(scene, Scene) and scene.descriptions:
-        # 候補表はユーザー文で【現在地と周囲】の直後に入るので、場面でも同じ位置に置く。
+    memory = result.get("working_memory")
+    if in_scene and isinstance(scene, Scene) and isinstance(memory, WorkingMemory) and scene.descriptions:
+        # 候補表は場面の【現在地と周囲】の直後に置き、作業記憶から文を組み直す (#1630)。
         surroundings, *rest = scene.descriptions
         candidates = dynamic_argument_candidate_description(snapshot["entries"])
         result["scene"] = Scene((surroundings, *([candidates] if candidates else []), *rest), notices=scene.notices)
+        result["working_memory"] = memory.with_scene(result["scene"])
+        user_message["content"] = message_text(result["working_memory"])
+        return result
+    # reason_first の行動の段は、作業記憶の外の足し書きの中で、指示の直前に置く (design_decisions D1630-3)。
+    body = content[: -len(instruction)].rstrip()
+    user_message["content"] = f"{body}\n\n{table}\n\n{instruction}"
     return result
 
 

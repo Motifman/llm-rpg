@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from ai_rpg_world.being.application.working_memory_text import message_text, section_text, system_prompt_text
+from ai_rpg_world.being.application.working_memory_text import (
+    closing_text,
+    message_text,
+    section_text,
+    system_prompt_text,
+)
 from ai_rpg_world.being.domain.working_memory import Closing, Section, Steadiness, WorkingMemory
 
 
@@ -61,3 +66,15 @@ class TestWholeText:
         )
 
         assert message_text(memory) == "【現在地と周囲】\n集会室\n\n行動を選ぶ。"
+
+    def test_closing_text_is_the_part_after_the_sections(self) -> None:
+        """区画より後ろの文 (警告、知らせ、締め) は、メッセージの末尾と同じ文になる。"""
+        memory = WorkingMemory(
+            system=(),
+            message=(_section("現在地と周囲", "集会室"),),
+            notices=(_section("時間の経過", "- 5 分"),),
+            closing=Closing(instruction="行動を選ぶ。", warning="⚠ 同じ手が続いた。"),
+        )
+
+        assert closing_text(memory) == "⚠ 同じ手が続いた。\n\n【時間の経過】\n- 5 分\n\n行動を選ぶ。"
+        assert message_text(memory).endswith("\n\n" + closing_text(memory))

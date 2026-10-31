@@ -1,0 +1,325 @@
+{
+ "abandoned_hospital": {
+  "1": {
+   "assess": "7011a58f788f6248057b7fb2533390c4cd8f051175cdcb62f640526d0e65bfe8",
+   "auto": "91f7c72d3168ae46166af97c1ad30acd0244f47e1f1f0670105229610a6511e5",
+   "required": "d91f8f77c16015e44a0759b0f14c71517af7915190800655ee1e525a62680e7a"
+  }
+ },
+ "forbidden_library_demo": {
+  "1": {
+   "assess": "f00ec202d7ede3e69975a8ccb3814b68462b3c9229421c3930a37ed7215b3c6c",
+   "auto": "ae32418f931af5ba1aabd83c15ad3b492d9d7e1ab21ab42ecdd6ce1de864884f",
+   "required": "16b0a1da839e706ea179195071a9009e25ea429e87ef557b700b86ce5fb96e7e"
+  },
+  "2": {
+   "assess": "74decefe00a0301ff215718e9153271c71af76976bc468214da4b5a2215d055e",
+   "auto": "dcab2368e4447b53afb003ecf2241dca916c01ce306cd3a826e2851809e15504",
+   "required": "51ea6dba5f1ed233f8cd8500881a89b63dfaaf5c27dbb7bda59cc843d9c0651f"
+  }
+ },
+ "market_town_v1": {
+  "1": {
+   "assess": "2c896d5496904fbfbb60815172292271f004d658e82d1045e6ef2380d115242d",
+   "auto": "1ede8f56e500ab6f1bf5e83d67f551b4dab9513ae5b23b12bbff3216a6552705",
+   "required": "ca185f059874fbc26d9bfdd81f553ffdd4d6ed7b954a21ba3c65e3fdf52bcb67"
+  }
+ },
+ "market_town_v2_trade": {
+  "1": {
+   "assess": "590b0fdfc9782e3af784fcc92bd73b83a535c98c0ef9356b09033b3481d7a5bf",
+   "auto": "e66c88071e9d7106f819d4db1687fc32a1d06c98514852018559a4d793b594b8",
+   "required": "4a718419a9ef120cee0ec3e9f2adbb49e78fc1d3dd293f26420d9799150d1a8b"
+  },
+  "2": {
+   "assess": "cffcd896fada186873f555b441290bb749e64d1dec9f9cf17b848e9bc0d56758",
+   "auto": "bbf4c59eee60678ba4fd4341f2b03392772b0582e4eaad1cba5a10da3bdd6285",
+   "required": "aa9e5ac99e3c2189fcd68a2500e76771ed9c092bc09520d4a1b209f15179faa4"
+  },
+  "3": {
+   "assess": "ec98a9f2e5b89e68871dc19935030807aceb86521a556dfeb836af5095062ea2",
+   "auto": "91bc700e8ab191cbc6c5eb8e390ad9d1ac0989f78b95e792e60cbed098a350f5",
+   "required": "174277033001bacab67eef5b48cf125afbcf093235fa47a8b4a4d9197f2cde45"
+  }
+ },
+ "market_town_v3_board": {
+  "1": {
+   "assess": "c050b82c6ce4eb7019f8adcd328c56b53a154a1143370556b37d282836a157af",
+   "auto": "7e29774f7c185f66818abbcf6124e9dc005a2cf9892f49e63ea2eeb493591d0b",
+   "required": "f9356c4fea4aedca6e6142f19ed7522c425bf32b7f13ec51736cc1d6090c8de0"
+  },
+  "2": {
+   "assess": "180219a9d8d71f8ab65c74570de1673841e9a36d71f6c7f52c082bdb95619532",
+   "auto": "f5d7b6599431dfcf8f2911d15d271fc8f7ea5d228ae806d16b3453241e319bf4",
+   "required": "9e99b81771e6b22ad5ab53d86799c013e5ab5dc457781e06720f2878d12857a8"
+  },
+  "3": {
+   "assess": "451610fb5f1bcb8e60ba53571d9fc614dd0fea32c8b2323c5908ac855dbbd596",
+   "auto": "8961e7226487bf5d2037ffc1bfbdeedde62f00520f23821c31258118b8144fc1",
+   "required": "b41355a0a7f20dc672132ff381dcd771751c1e0ce9a49d2417f0fd13e734131c"
+  },
+  "4": {
+   "assess": "a6dd4763cfb188eb91bb096a90ffe90f5342078dc039f00c83ec121f3fde55ee",
+   "auto": "58dba9d5ef77a84caadf0740c10c5bfb064d82233779464e6c08fb74a5e96982",
+   "required": "5fa4714ff2b414327f09ffaf836b611d753439ce31f51a9d3453c0c7b4a9e853"
+  },
+  "5": {
+   "assess": "ee4d2a9348cf33061f362d26c22401c48b19caca82f100a0e1280c4015f1fe2d",
+   "auto": "2264cead047c09b6c1c0952c99a94cba7725931731d0e815a7abda847b790a87",
+   "required": "bbe7a4baaf473edc0724e31edd05a585e5d9d4db31ac42fa35a6a94e04b50dcd"
+  }
+ },
+ "mine_village_v1": {
+  "1": {
+   "assess": "0f11d6b6e06880c4944fc01d042f6a181595690470aaef20456d65e831ae2280",
+   "auto": "2bc95aaebe67f6de47868775651acae1dda16a96e91f839c3b4dc467913279ed",
+   "required": "cab9c80983c46baea5890641aefb3a332698e6f472b244691b673e78de313e77"
+  },
+  "2": {
+   "assess": "fcca49048d0d7b38fe7d0123a434409ac6d97a1308c83c403b959c54d97b4c85",
+   "auto": "f371794baba31685b3dda45af94cdd2e88044a2f98bb14c44daa14fbd318cb10",
+   "required": "2c915c4a1260f845e5da64b1d75a18e4b3d37c9d329f5d3a6085f20840cc954b"
+  },
+  "3": {
+   "assess": "007b82e82bb0aeb69be1e7eb30adb6c6cd2b8d6a9bfc3c6931ab489d7d1585d3",
+   "auto": "c2a5fa6df74c0135f92f6f491cd93955682b1799cdc4f603521929ab8bcae695",
+   "required": "f2af8d04422dd8f0aeeeb27b331d11fec1473910b794fc8833612eafe117b141"
+  },
+  "4": {
+   "assess": "3d27aba3d1829e71c01cb882e2047b3ad4d0460813f0d02d8bd9182f0ee2cba1",
+   "auto": "71ac5392bfd383a739dce02464e4d1950269bd339308540f09b9817269031fdc",
+   "required": "75347eaa52b2d1b7ab8f72909f3d03b99d06c21f3862f63ad8388e3d18ee91b5"
+  }
+ },
+ "offering_race_v1": {
+  "1": {
+   "assess": "e0998b801ab000652f0ec55f0dda9d1ac242336f32b67d2453a7ee0f6f4715ed",
+   "auto": "8b516322c166bba05c82aadc44ec2d4bf74b3d83d39ad8462a170499bcdee867",
+   "required": "48fcfe3df6c3d2e178b292a4b1f44773a6095b748cb9206a37eb03f18cc9f9a2"
+  },
+  "2": {
+   "assess": "768d2f0bf15dc8fbb5646dda87f251f2e559c04525edb6559dfac6d90277be3a",
+   "auto": "ef3535a485b31a879c6ec4c75eaaef6a7495c6573aa2244364afd869daf67783",
+   "required": "b2cd1b7cd822da9d2a93f325aa78d204e94105c1634498b4dcd631983b4a65c7"
+  },
+  "3": {
+   "assess": "692e3a93ce393b7aa32fa8a4588801b3e4080042fb70399e20dec1523ad8284f",
+   "auto": "8d7f86cd78e6af86079fd85e361aae39a8bd993f5da4d8e25ed82875dec566b1",
+   "required": "d7d7f0f4764ffa8cf027f9759b75311d635d927137626b5bb0c86b5c2fa867ad"
+  },
+  "4": {
+   "assess": "a2bcb4bfddcca39425469493668d0073c0f5a0bed5142ad017651907c32958e4",
+   "auto": "86d0d23c505e5061ecd8959a0bdc3c817e88fe106017a014bf7438331ae9a0ef",
+   "required": "03b7531fc4a546b1578edc8681e96947ee7e555fac71ef80476fa1cb8465950e"
+  }
+ },
+ "offering_race_v2": {
+  "1": {
+   "assess": "ade4a364e604e335f143e2cc59a16aeed1c5c2b7722537c63a09eedd169962e5",
+   "auto": "cd9d7b09217e1c604e0d0ea7f493730cc27abbecbb9de5995c1b636c2323053c",
+   "required": "f642f9a5eebb7a0ef0c461f2534e74db3bff5e1ca8b41f67969da318e48f4965"
+  },
+  "2": {
+   "assess": "4989b966ff719fb3041c1659aa556ec1677d83f4e3fe8f7a061a73c68ff5911b",
+   "auto": "39fb6905fa3fdfc374c34a91a197e782846863974da106571fba7c8bc66e050d",
+   "required": "3111629e2384e2e7c7caa3ba146705d31d92bc0e95b5b770d17fca2a6a44a64d"
+  },
+  "3": {
+   "assess": "eef0384a0cfc868aba3d007656d5f923ac682d549db85c0d6c9a3ca0c4a20a6b",
+   "auto": "6f6d8da5a898ead8e21b1eda60d8233ff96c1f8f06b0050efc0d6929c3e52f6d",
+   "required": "46a3d501da9b73479086afa1855f7b49f898121c717a18f244463de454b7a979"
+  },
+  "4": {
+   "assess": "2d1356243bc72e0f307aed9e9e5aac9e810636a2c8f1776322d0309516e970da",
+   "auto": "73b97640d4fed85b8a573cc30e72da604de27d272b639fda97cfec02096affd8",
+   "required": "3e8b41bbdc271f67349f3aec092a1ed2a3d7eaa7701cfcd08489e21ba97255a9"
+  }
+ },
+ "persistent_world_demo": {
+  "1": {
+   "assess": "332253de674b251ddf9453cada8b66c8711c69ff383c66f5dae8b17056fb68ca",
+   "auto": "b16be2ab8cae0bb89e7aa4624bcb808c7882212601d599a251272be62180416c",
+   "required": "625fefc5518fc9a5c11c8d176bb32f60dbab9d07669407f17572808e071a1028"
+  }
+ },
+ "recall_probe_v1": {
+  "1": {
+   "assess": "1c3ba6c756a47f471fd0ba55c8e0c27f390839dd3db26fe439fd508268f5875b",
+   "auto": "aa9c6246ad32a3eeaa15d00c47b8438d68c201bb7889881560fd3f442cda3cff",
+   "required": "ef4096fee0d6f58fe07ad5a6068eaa0a1d772c795ff89012448df5c1a23d4bdc"
+  }
+ },
+ "recall_probe_v2": {
+  "1": {
+   "assess": "e39a415f5715785c6d9fbdd756bcc72873c110099bb3a38f3b1d2d667b01e57f",
+   "auto": "8dbef4a0be128848c75990a91cbaa2b7f9a21ea020e0fa67e2501cec0d5b4f8a",
+   "required": "37ae4587c5e738cd307a50981063101d78d0a0f68af2e09c3f5dbe8dede430f6"
+  }
+ },
+ "recall_probe_v3": {
+  "1": {
+   "assess": "2271ea3961bebf4be9c90128e45a1eb516af20095afba95314afa66293ee814c",
+   "auto": "2bf72a757059fc1d829db05484845a66b2d4f0ec1e10c072221f06c600c73c8c",
+   "required": "0a64ff89b80e6357cb78553dcf400af98967e16022a5db0e307353c8a8defc40"
+  },
+  "2": {
+   "assess": "70f0e3a691df8e6ec183dd4f315d80ce05689eca2abfc80080813e9019adad2c",
+   "auto": "9de512b24a3f15f51d5cb8f5f5768be33c8313b2e34e1638104951afc803f4fa",
+   "required": "5c3dc20e967f550228e17c1d45deac081ae11fae38bc5407b8b72574b3905d11"
+  }
+ },
+ "recall_probe_v3_epistemic": {
+  "1": {
+   "assess": "7e0746db4490803760a217f9baa7e3a5c0ef543701a506cc7b14a6bbdd35993b",
+   "auto": "d2271715f31b2aed86228e73612e8b9e9bf4efa19593bd424bee3cbf64a39401",
+   "required": "937d9781d01fe4de708e1c678a52f1e3787ac69bebe81fd27992ea63e05e5eb6"
+  },
+  "2": {
+   "assess": "6634e776ab9472fdb090a05291abc8024893fc7b34e813b285b73aa1cd404d9c",
+   "auto": "7df7b7abdf7b296824fb5b1b592d9df8e1cc45e57d900fdc3e9d6cc420cb0725",
+   "required": "e36b0657487558e4a9d0d3c64cb126b14db1f62a31821fd96916853c272eb498"
+  }
+ },
+ "single_relic_contention_demo": {
+  "1": {
+   "assess": "90556c1c2cfc46a7a18302201895ff6154585377d2798b40ecc6aab6b5da89d6",
+   "auto": "4d453668d164486ea38602840e7cf111becb9235e9d7ef54341a3bd5d767999f",
+   "required": "bb1914e6060a929db4664622a8f45e278109efc2c540deda71a7c4a1f70e185d"
+  },
+  "2": {
+   "assess": "3001de8c34e1476c39f2d29af06589b7e654cca34e68c3af39f6c822cee2e5f3",
+   "auto": "c23597cc60af8f768f72bf8f6b5ed2e690161cc530b15f5da8539313cdf68006",
+   "required": "bdd3d16a9efced3e35cb3aab878f9345020bb5db00686a6dde9b51cb342ca014"
+  }
+ },
+ "station_drill": {
+  "1": {
+   "assess": "0fc95651c67fbe1f36f14374f4881134ce7aac9dba034a89097061c6e4224b7d",
+   "auto": "c1a26a3d5b01f316200e72486de641afc79976f88220b14fbbdf66d1a9c41f5e",
+   "required": "d7b3b3cb3d5db28dbb1f99faa826bcd574bcd6e959d9d4f9741fb751a2aad7b6"
+  },
+  "2": {
+   "assess": "fb2031f32fb55f599898f14f15de3fc0e7cda1610b0f0e038bfbb076eaf02e06",
+   "auto": "ed134d957316bc9189d40ba3ae3b0a8a3d574d796df7ff64afaca793c7454aae",
+   "required": "e7ae2c6bef291b162c5a2535379aa3a980563d1e9738960de2e53078d471e304"
+  },
+  "3": {
+   "assess": "3f14a7d0a6c19b4ff28acf0dd9028b6a326169ea212a40979db48dd884bab106",
+   "auto": "4d2b7f23be1b76eb56332f91e6c8fafa2c132d7920314a879210ed058437864e",
+   "required": "d86e48e11fb933215a83b34eb312ea332091f7fd48a09fe8af662442378506be"
+  },
+  "4": {
+   "assess": "5b3fb8ae9dab953a9b89a706057d27a23cec9f63f099d6c985addc27aa10968f",
+   "auto": "66f3a73323a078332cab1c86723635e937aa4ba027ece0431f05cdd52d332c29",
+   "required": "64491f2cbd98471b7923f818a95933304b29d0c4cefb330230537969aeee5033"
+  },
+  "5": {
+   "assess": "f01d48a68c349754415fcb12d4b7839ac6ef3c67a3c8fcb8229b24a35963bbea",
+   "auto": "952c5f7d72267661db4559a434ebe81d0fc91a2cee1812ef1a7f855de1e14d5b",
+   "required": "2ab1ba8cedcaec218d934d61f832972f6287db803416c717d4c69ea7f30f4651"
+  },
+  "6": {
+   "assess": "e2c54ff0de83e53eae8c75070d3995493a3f203e8bfeecf637740dce069e5048",
+   "auto": "6d6838b90386650cf60fc8a4e3bc668f17be29b175ed629889b0b9d2539f13f7",
+   "required": "de3de19381880899ef132d5148920003e7b7e1e51c628f19c256e9c0ee8d4984"
+  },
+  "7": {
+   "assess": "a524842eee08eb40c63fbcb209b74a380b70ae474e9450cdf686d32451e5acbe",
+   "auto": "9f9e2064c5f21207bdeff27193dec1dc19fa528e4329b6e6935dfcf138e3d518",
+   "required": "d9848457afd85d0daface430e3e1758831fef48af1ea926079201a82e82e9c52"
+  },
+  "8": {
+   "assess": "00f654a3f996b26439613f90554c7a11fb89966390b26b8c313df06cc9f45774",
+   "auto": "62e30bcd726bc9011cc8c53a7a8935c56ed083934d6c1b95607eab89164bb933",
+   "required": "25a7cf25b6279724bf88dd613c6a33baf632bdc7b3637cf8adf29ca16351aeb3"
+  }
+ },
+ "survival_island_v2": {
+  "1": {
+   "assess": "b2d122e352b91780cb7f22cace6822e07c4a875fea93fe8b3a5695e1b9411faf",
+   "auto": "23c65fbc309033b4547b1a702eb2d3ca5ef87fd915a33217886172467f1947d5",
+   "required": "a4927b2717405e1e8397bbf5cf30fc2627a3ac7a1cc933d3943456e8a9c604e0"
+  },
+  "2": {
+   "assess": "c41715bfb28642b77ec2add0111a8e2187cac4a5e58495d17f56c1b9613e5ea4",
+   "auto": "7f1c972b21433ebf7c955093fc778c4fcb1ccd31fed4921f849e03eeaea4d5c3",
+   "required": "97224ebee63340cbbec2cb796a0bcd6fad44f79608143c83ac2933f39aa0dcdb"
+  },
+  "3": {
+   "assess": "2cbaaab1ba47e0ac2ed368f7b95a44f646d3e80f1f2e310d54ee7a5a09551994",
+   "auto": "aacabf0ce276d060f2c28f389f1337b28845f799f9bc870d6fe16bcda8ef42eb",
+   "required": "03ad12cfdb1ef5157e2a0070e20d5083cbfe54d4c2e2016123a627ad88432c24"
+  },
+  "4": {
+   "assess": "e5cfc44702feba68ee8323986a9f815551965f8cfc0e3a085c2d6443d56aeeef",
+   "auto": "ea27856e26af85503ac28232cdf317283b95a51904bbb1a20f1ad8917cd09a57",
+   "required": "79df6dc539956413d2c09ea53aff997feed2252a0cc7c5d99f912993ab112e0b"
+  }
+ },
+ "survival_island_v2_short": {
+  "1": {
+   "assess": "4841c9a4a4b673d53162a479ccfaeb73f08a5e2f2a3813fb7a07f7aade25f06d",
+   "auto": "1012ff1a8f740c5af8e80a499c19d8fa515bd63579eef64eef28a07a0a97d1ad",
+   "required": "f4584db0fb77c296ea291e66e95b3c3b65091e3c61cf43ec50bc8992d280ec42"
+  },
+  "2": {
+   "assess": "c7f1d2a98509161dd94bc0c9875526cc884f735cecbabc81cd86d43637011922",
+   "auto": "4c21ea5184ab7f40109bf8e3e490f85912c5482ae56d8b8fdc5ae734aed5d1b0",
+   "required": "80f07f1d599070c43365a137b2fa36f95656d38425bdeb7f5debbfa055a894ea"
+  },
+  "3": {
+   "assess": "8b2a3fe63bf808b972dc12fe5950c669474adcf98cc650f185be6da39febd8ca",
+   "auto": "de2c5d6c85ff5885c3a2eea2919895810f4bb230d893242df8720f646c241c82",
+   "required": "8b7aab32e1364b820b1a64b6f50c84f1092ae68ff4dd79733ac3674e8d05e718"
+  },
+  "4": {
+   "assess": "50a3202bb942a650cf8d9faf7c1aabe4bb9e587934f27825da6d621e1f3b23ec",
+   "auto": "c6426df1f66dfc605bd44bbdae6a9e6886d7854bb85431a06a7ce07648d9ca94",
+   "required": "ef1f88f2d5c2c6374d8d8bf62539a84ea58450308e083f8e6a246686e392aa3b"
+  }
+ },
+ "survival_island_v3_coop": {
+  "1": {
+   "assess": "9528645d792bbdf43167411b596855aca5f904a84d674f23b38225e4371cf210",
+   "auto": "13307755f2c449b20f3714dd2b56e87272cc6a390d6e8c95046ca78c009510f8",
+   "required": "20a880601339dfe53622444cb9f5ca96e8339ad14f785954eba6bec1195ed9c8"
+  },
+  "2": {
+   "assess": "15b7846be34864ec4f959f85ddcec60283e7aa227c738a7e9379f5b0c03c135a",
+   "auto": "a8cb27c495bdef9958766a0f2ba893fa54503a3019e6f3b340ae226c442423ec",
+   "required": "ef9afbd98e65426f06d0f7fa3ec0045f242c62a8c7d812a70f10a209f397453f"
+  },
+  "3": {
+   "assess": "bf85d31abdaf6b57c1aaa33a034cca07a1d51f881b996dd2e8090e0de628a59b",
+   "auto": "c3b428c2ea2eb8d8835a4e8536c0f091993e3310dd58e4abc9172ef88225bbbf",
+   "required": "96ccd1ecc8795d42b0f360f2d26cec625c7f775e5b8a5547eea05e352ab9e1f4"
+  },
+  "4": {
+   "assess": "61631e06dec734067c489a4cc74ca7b944cd2f2769c7457e60f45dfaf1d0e8e8",
+   "auto": "667041b49c96f3b84cd17d0d0bf018991e46a20488536636eb2e94930f85dc9f",
+   "required": "3680f816b28b06fb47500f71353c37a2a00bb744b9fd57835b1ec4a481f90541"
+  }
+ },
+ "survival_island_v4_coop": {
+  "1": {
+   "assess": "57f7ba8b37baac7085fcfa06018ba910e7922adb9d8722069f0e3c82761fa0ee",
+   "auto": "be4d4a75b5c967453a64449e2abdcb61a633656449f629c3cf9b57d76bc3d796",
+   "required": "ce784e7101af1db60969af144d8506a9f037dae4ff463da12bd6db127ca168f8"
+  },
+  "2": {
+   "assess": "5e390d02f2f5a7fe7793ea985f54eb3c9d350ff50fbb205c9b4e65455c0b9116",
+   "auto": "948757ca4a9730ec591346a84e68f4b7b77b4b59869917c41d75a31a2ecdff6d",
+   "required": "ea1b921ab118331d8f03ae19286a05ec8c5b77c81d4f1b294e021a0e2240ec98"
+  },
+  "3": {
+   "assess": "f6972f44b3f6ab04ca069adebe80e24f9950ddf05a29a0e49c57fffbba7d3a5c",
+   "auto": "830eedce830cf03f8586c7c0711b4824c912dfeda652920b97746d8136ab43a1",
+   "required": "d715df5b60720a0b59fab366446ecedec929d4299ca9e9fa3eefb28b20f88a26"
+  },
+  "4": {
+   "assess": "4c55316f702b6b7ca9789fb1bf7e747103a0fde8bb2f56151c6e8fcf0c353f0f",
+   "auto": "aff0ba3670d10c9658ff392ae9b22723a4673639d24b7be6b47fe617397a840c",
+   "required": "60ee7671565e83d7814db7efd001b6e9b145ee974545522d560a0ef223744a44"
+  }
+ }
+}

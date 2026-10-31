@@ -17,6 +17,12 @@ from ai_rpg_world.domain.being.exception.being_exceptions import WorkingMemoryOr
 OPENING = "あなたは次のペルソナとして行動するキャラクターである。"
 RECENT_EVENTS_PREAMBLE = "観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。"
 NO_RECENT_EVENTS = "（なし）"
+GOAL_HEADING = "現在の目的"
+KNOWN_PEOPLE_HEADING = "知っている人"
+BACKSTORY_HEADING = "ここまでのいきさつ"
+RECENT_EVENTS_HEADING = "直近の出来事"
+EPISODE_INDEX_HEADING = "思い出せる出来事"
+MEMO_HEADING = "メモ"
 
 
 class Steadiness(IntEnum):
@@ -82,6 +88,15 @@ class WorkingMemory:
         if any(n.steadiness is not Steadiness.EVERY_TURN for n in self.notices):
             raise WorkingMemoryOrderException("notices must be EVERY_TURN sections")
 
+    @staticmethod
+    def system_sections(orientation: Orientation, conduct: str) -> tuple[Section, ...]:
+        """システムプロンプトの区画。案内と作法の文だけで決まり、ターンをまたいで変わらない。"""
+        return (
+            Section(heading=None, lines=(OPENING,), steadiness=Steadiness.FIXED),
+            *_from_descriptions(orientation.descriptions, Steadiness.ON_ENTRY),
+            Section(heading=None, lines=tuple(conduct.split("\n")), steadiness=Steadiness.ON_ENTRY),
+        )
+
     @classmethod
     def compose(
         cls,
@@ -94,22 +109,18 @@ class WorkingMemory:
         closing: Closing,
     ) -> WorkingMemory:
         """``conduct`` は、作法と環境の決まりが混ざった今の固定文。分けるまでは見出しの無い 1 つの区画にする。"""
-        system = (
-            Section(heading=None, lines=(OPENING,), steadiness=Steadiness.FIXED),
-            *_from_descriptions(orientation.descriptions, Steadiness.ON_ENTRY),
-            Section(heading=None, lines=tuple(conduct.split("\n")), steadiness=Steadiness.ON_ENTRY),
-        )
+        system = cls.system_sections(orientation, conduct)
         optional = (
-            ("現在の目的", (imposed_goal or "").strip(), Steadiness.ON_ENTRY),
-            ("知っている人", memory.known_people.strip(), Steadiness.GROWING),
-            ("ここまでのいきさつ", memory.backstory.strip(), Steadiness.GROWING),
+            (GOAL_HEADING, (imposed_goal or "").strip(), Steadiness.ON_ENTRY),
+            (KNOWN_PEOPLE_HEADING, memory.known_people.strip(), Steadiness.GROWING),
+            (BACKSTORY_HEADING, memory.backstory.strip(), Steadiness.GROWING),
         )
         trailing = (
-            ("思い出せる出来事", memory.episode_index.rstrip(), Steadiness.OCCASIONAL),
-            ("メモ", memory.memo.rstrip(), Steadiness.OCCASIONAL),
+            (EPISODE_INDEX_HEADING, memory.episode_index.rstrip(), Steadiness.OCCASIONAL),
+            (MEMO_HEADING, memory.memo.rstrip(), Steadiness.OCCASIONAL),
         )
         recent = Section(
-            heading="直近の出来事",
+            heading=RECENT_EVENTS_HEADING,
             lines=(RECENT_EVENTS_PREAMBLE, *(memory.recent_events.strip() or NO_RECENT_EVENTS).split("\n")),
             steadiness=Steadiness.GROWING,
         )
@@ -125,6 +136,20 @@ class WorkingMemory:
             notices=_from_descriptions(scene.notices, Steadiness.EVERY_TURN),
             closing=closing,
         )
+
+    def with_scene(self, scene: Scene) -> WorkingMemory:
+        """場面だけを差し替えた作業記憶。出すツールが決まって候補表が場面に入ったときに使う。"""
+        steadier = tuple(s for s in self.message if s.steadiness is not Steadiness.EVERY_TURN)
+        return WorkingMemory(
+            system=self.system,
+            message=(*steadier, *_from_descriptions(scene.descriptions, Steadiness.EVERY_TURN)),
+            notices=_from_descriptions(scene.notices, Steadiness.EVERY_TURN),
+            closing=self.closing,
+        )
+
+    def section(self, heading: str) -> Section | None:
+        """メッセージの区画を見出しで引く。無ければ None。"""
+        return next((s for s in self.message if s.heading == heading), None)
 
 
 def _present(candidates: Sequence[tuple[str, str, Steadiness]]) -> tuple[Section, ...]:

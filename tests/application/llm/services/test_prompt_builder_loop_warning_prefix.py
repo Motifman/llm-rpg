@@ -12,10 +12,8 @@ import pytest
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IAvailableToolsProvider,
-    IContextFormatStrategy,
     ICurrentStateFormatter,
     ILlmUiContextBuilder,
-    ISystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.services.prompt_builder import (
     DefaultPromptBuilder,
@@ -40,9 +38,9 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
 )
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
-from ai_rpg_world.domain.player.repository.player_profile_repository import (
-    PlayerProfileRepository,
-)
+from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
+from ai_rpg_world.being.contract import Description, Orientation
+from ai_rpg_world.being.domain.working_memory import MemoryTexts, WorkingMemory
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -60,13 +58,11 @@ def _make_core() -> PromptBuilderCoreServices:
         observation_buffer=MagicMock(spec=IObservationContextBuffer),
         recent_event_store=UnifiedRecentEventStore(),
         world_query_service=_CurrentStateSource(),
-        player_profile_repository=MagicMock(spec=PlayerProfileRepository),
         current_state_formatter=MagicMock(spec=ICurrentStateFormatter),
-        context_format_strategy=MagicMock(spec=IContextFormatStrategy),
-        system_prompt_builder=MagicMock(spec=ISystemPromptBuilder),
         available_tools_provider=MagicMock(spec=IAvailableToolsProvider),
-        recent_events_text_provider=lambda being_id: "",
-        backstory_text_provider=lambda being_id: "",
+        working_memory=MagicMock(spec=CurrentWorkingMemory),
+        orientation_provider=lambda player_id: Orientation([Description(heading="ペルソナ", text="旅人")]),
+        conduct_text_provider=lambda: "【行動ルール】",
     )
 
 
@@ -151,14 +147,10 @@ def test_prompt_builder_uses_only_current_state_source() -> None:
     from ai_rpg_world.being.domain.being_id import BeingId
 
     core = _make_core()
-    profile = core.player_profile_repository.find_by_id.return_value
-    profile.name.value = "旅人"
-    profile.role.value = "citizen"
-    profile.race.value = "human"
-    profile.element.value = "neutral"
     core.observation_buffer.drain.return_value = []
-    core.context_format_strategy.format.side_effect = lambda **kwargs: kwargs["current_state_text"]
-    core.system_prompt_builder.build.return_value = "世界の説明"
+    core.working_memory.of.side_effect = lambda being_id, **kwargs: WorkingMemory.compose(
+        memory=MemoryTexts(), **kwargs
+    )
     builder = DefaultPromptBuilder(core, ui_context_builder=SpotGraphUiContextBuilder())
 
     result = builder.build(ActingBeing(_pid(1), BeingId("test-being")))

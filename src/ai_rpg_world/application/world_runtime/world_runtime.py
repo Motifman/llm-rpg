@@ -103,11 +103,7 @@ from ai_rpg_world.application.llm.services.action_result_store import DefaultAct
 from ai_rpg_world.application.llm.services.action_summary_format import (
     project_action_arguments_for_history,
 )
-from ai_rpg_world.application.llm.services.context_format_strategy import (
-    SectionBasedContextFormatStrategy,
-    current_surroundings_description,
-)
-from ai_rpg_world.application.llm.services.description_text import description_text, descriptions_text
+from ai_rpg_world.application.llm.services.description_text import description_text
 from ai_rpg_world.application.llm.services.prompt_argument_contract import (
     PromptArgumentContractError,
     PromptArgumentContractViolation,
@@ -317,6 +313,8 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
+from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
+from ai_rpg_world.being.application.working_memory_text import system_prompt_text
 from ai_rpg_world.being.contract import Description, Orientation, Scene
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
@@ -324,7 +322,7 @@ from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock, MemoryTurnReader
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
-from ai_rpg_world.being.domain.working_memory import Closing, WorkingMemory
+from ai_rpg_world.being.domain.working_memory import WorkingMemory
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
@@ -1184,37 +1182,6 @@ class WorldRuntime:
         names = [d.name for d in self.get_tool_definitions(player_id=player_id)]
         return ", ".join(names)
 
-    def working_memory_for(self, player_id: PlayerId, prompt: Mapping[str, Any]) -> WorkingMemory:
-        """組んだ 1 ターンのプロンプトの材料から、このターンの作業記憶を組む (#1630)。
-
-        ターンの組み立てはまだ切り替えていない (3 本目)。今は、今のプロンプトと同じ文になるかを
-        確かめるために使う。
-        """
-        from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
-
-        acting = self._acting_being_for(player_id)
-        orientation = self.orientation_for(player_id)
-        if acting is None or orientation is None or not self._conduct_text:
-            raise LookupError(f"player_id={player_id.value} has no Being, orientation or conduct text")
-        cfg = self._runtime_config
-        assert cfg is not None
-        current = CurrentWorkingMemory(
-            beings=self._aux_being_repository,
-            short_term_memories=self._being_short_term_memory_store,
-            acquaintances=self._acquaintance_store,
-            episodes=self._being_episode_store,
-            memo_books=self._being_memo_store,
-            episode_index_limit=cfg.being_episode_index_limit,
-        )
-        return current.of(
-            acting.being_id,
-            orientation=orientation,
-            conduct=self._conduct_text,
-            imposed_goal=prompt["objective_text"],
-            scene=prompt["scene"],
-            closing=Closing(instruction=prompt["closing_instruction"], warning=prompt["loop_warning"]),
-        )
-
     def conduct_text(self) -> str:
         """システムプロンプトのうち、案内の後に置く作法と環境の決まり (#1630)。"""
         return self._conduct_text
@@ -1736,46 +1703,37 @@ class WorldRuntime:
         # create_world_runtime で組んだ runtime には、目次と書き起こしが常に入る (#1631)。
         return self._runtime_config is not None
 
-    def episode_index_text(self, player_id: PlayerId) -> str:
-        """【思い出せる出来事】の本体。出すたびに、出した呼び名を trace に残す (#1623)。
-
-        本人の Being が引けなければ空文字で、欄を出さない。
-        """
-        from ai_rpg_world.application.observation.being_contract import (
-            environment_entry_for_player,
-        )
-        from ai_rpg_world.being.application.episode_index_text import (
-            format_episode_index,
-        )
-        from ai_rpg_world.being.domain.episode_index_selection import (
-            RecalledRisesToTop,
-        )
-
-        acting = self._acting_being_for(player_id)
-        if acting is None:
-            return ""
+    def _current_working_memory(self) -> CurrentWorkingMemory:
+        """Being の持ち物から作業記憶の区画を集める問い合わせ (#1630)。"""
         cfg = self._runtime_config
         assert cfg is not None
-        selection = RecalledRisesToTop()
-        episodes = self._being_episode_store.list_by_being(acting.being_id)
-        shown = selection.select(episodes, limit=cfg.being_episode_index_limit)
+        return CurrentWorkingMemory(
+            beings=self._aux_being_repository,
+            short_term_memories=self._being_short_term_memory_store,
+            acquaintances=self._acquaintance_store,
+            episodes=self._being_episode_store,
+            memo_books=self._being_memo_store,
+            episode_index_limit=cfg.being_episode_index_limit,
+        )
+
+    def _record_episode_index_shown(self, player_id: PlayerId, being_id: BeingId) -> None:
+        """【思い出せる出来事】に出した呼び名を trace に残す (#1623)。目次の文と同じ選び方で引く。"""
+        cfg = self._runtime_config
+        assert cfg is not None
+        shown = self._current_working_memory().episodes_in_index(being_id)
         try:
             self._trace_recorder.record(
                 TraceEventKind.EPISODE_INDEX_SHOWN,
                 tick=self.current_tick(),
                 player_id=int(player_id.value),
-                being_id=acting.being_id.value,
+                being_id=being_id.value,
                 order="recalled_rises_to_top",
                 limit=cfg.being_episode_index_limit,
-                total_count=len(episodes),
+                total_count=len(self._being_episode_store.list_by_being(being_id)),
                 shown_handles=[e.handle for e in shown],
             )
         except Exception:
             logger.exception("trace recorder.record raised for EPISODE_INDEX_SHOWN; skipping")
-        return format_episode_index(
-            shown,
-            current_environment_name=environment_entry_for_player(self.scenario, player_id).environment_name,
-        )
 
     def _being_memo_enabled(self) -> bool:
         # create_world_runtime で組んだ runtime には、メモ帳が常に入る (#1631)。
@@ -1797,18 +1755,6 @@ class WorldRuntime:
         if not self._being_memo_enabled():
             return definition
         return with_memo_schema(definition, episode_source_offered=self.memo_episode_source_offered())
-
-    def being_memo_text(self, player_id: PlayerId) -> str:
-        """【メモ】の本体。本人の Being が引けなければ空文字で、欄を出さない。"""
-        from ai_rpg_world.being.application.memo_book_text import format_memo_book
-
-        acting = self._acting_being_for(player_id)
-        if acting is None:
-            return ""
-        return format_memo_book(
-            self._being_memo_store.get(acting.being_id),
-            current_environment_name=self.environment_name_for(player_id),
-        )
 
     def environment_name_for(self, player_id: PlayerId) -> str:
         from ai_rpg_world.application.observation.being_contract import (
@@ -1988,24 +1934,12 @@ class WorldRuntime:
             EndBeingTurnCommand(being_id=acting.being_id, turn=turn)
         )
 
-    def being_recent_events_text(self, being_id: BeingId) -> str:
-        """プロンプトの【直近の出来事】の本文。Being の短期記憶から作る (#1824)。"""
-        from ai_rpg_world.being.application.recent_events_text import recent_events_text
-
-        return recent_events_text(self._being_short_term_memory_store.get(being_id))
-
     def being_persona(self, being_id: BeingId) -> Persona:
         """Being の保存先から人柄を引く。いきさつとエピソードの書き手に名前と一人称を渡す (design_decisions D1469-2)。"""
         being = self._aux_being_repository.find_by_id(being_id)
         if being is None:
             raise LookupError(f"no Being {being_id.value}")
         return being.persona
-
-    def being_backstory_text(self, being_id: BeingId) -> str:
-        """プロンプトの【ここまでのいきさつ】の本文。Being の短期記憶のいきさつから作る (#1824)。"""
-        from ai_rpg_world.being.application.backstory_text import backstory_text
-
-        return backstory_text(self._being_short_term_memory_store.get(being_id))
 
     def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
         """環境を離れるとき (run の終わり) に、Being の短期記憶のまだまとめていない出来事からエピソードを書く (#1626、design_decisions D1824-23)。
@@ -2158,11 +2092,9 @@ class WorldRuntime:
             field,
         )
 
-    # Issue #227 後続 HIGH-3 改善: stateless formatter / strategy を class-level
-    # に持ち、build_full_prompt の毎回 new を避ける + 本家 DefaultPromptBuilder と
-    # 同じインスタンスタイプを使うことを明示する。
+    # Issue #227 後続 HIGH-3 改善: stateless formatter を class-level に持ち、
+    # build_full_prompt の毎回 new を避ける。
     _recent_events_formatter: ClassVar[DefaultRecentEventsFormatter] = DefaultRecentEventsFormatter()
-    _context_strategy: SectionBasedContextFormatStrategy = field(default_factory=SectionBasedContextFormatStrategy)
 
     def _get_or_build_default_prompt_builder(self) -> DefaultPromptBuilder:
         """本家 DefaultPromptBuilder のインスタンスを lazy 構築してキャッシュする。
@@ -2185,22 +2117,18 @@ class WorldRuntime:
         )
         from ai_rpg_world.application.world_runtime.default_prompt_builder_adapters import (
             WorldAvailableToolsProvider,
-            WorldProfileRepositoryAdapter,
             WorldRuntimeQueryAdapter,
-            WorldSystemPromptBuilder,
         )
 
         core = PromptBuilderCoreServices(
             observation_buffer=self._obs_buffer,
             recent_event_store=self._recent_event_store,
             world_query_service=WorldRuntimeQueryAdapter(self),
-            player_profile_repository=WorldProfileRepositoryAdapter(self),
             current_state_formatter=self._formatter,
-            context_format_strategy=self._context_strategy,
-            system_prompt_builder=WorldSystemPromptBuilder(self),
             available_tools_provider=WorldAvailableToolsProvider(),
-            recent_events_text_provider=self.being_recent_events_text,
-            backstory_text_provider=self.being_backstory_text,
+            working_memory=self._current_working_memory(),
+            orientation_provider=self.orientation_for,
+            conduct_text_provider=self.conduct_text,
         )
         # objective_text は scenario.metadata.llm_objective_text を 1 度だけ解決する。
         # 空のとき ValueError が立つので、prompt builder 構築時点で fail-fast。
@@ -2211,11 +2139,6 @@ class WorldRuntime:
             # 目的層 G6: players[].objective があればその人だけ別の目的文に
             # なり、無ければシナリオ共通文になる。
             objective_text_provider=lambda pid: self._resolve_player_objective_text(pid, resolved_objective_text),
-            being_memo_text_provider=(self.being_memo_text if self._being_memo_enabled() else None),
-            known_people_text_provider=(
-                self._player_acquaintances.known_people_text if self._player_acquaintances is not None else None
-            ),
-            episode_index_text_provider=(self.episode_index_text if self._episode_index_enabled() else None),
         )
         limits = PromptLimits(
             default_action_instruction=self._ESCAPE_GAME_ACTION_INSTRUCTION,
@@ -2244,13 +2167,8 @@ class WorldRuntime:
     ) -> dict[str, Any]:
         """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。
 
-        Issue #227 後続 HIGH-3 Part 2: 本家 DefaultPromptBuilder.build() に統合した。
-        section 組み立て・recent_events・tile-map field 制御は
-        DefaultPromptBuilder 内部で処理される。world_runtime 固有の部分は adapter
-        (default_prompt_builder_adapters.py) 経由で注入する:
-        - WorldQuery 相当: build_llm_context + _build_minimal_player_state_dto
-        - system_prompt: precomputed _world_llm_system_prompt
-        - objective/inventory section: provider 経由
+        DefaultPromptBuilder が、環境の材料 (案内 ``orientation_for``、作法の文 ``conduct_text``、
+        課された目的、場面と知らせ、締めの一文) を集め、Being の作業記憶から文を組む (design_decisions D1630-3)。
 
         return shape:
             {
@@ -2260,12 +2178,11 @@ class WorldRuntime:
                 ],
                 "tools": [<tool name str>, ...],     # world_runtime は名前 list
                 "tool_runtime_context": ToolRuntimeContextDto,
+                "action_instruction": str,           # 区画より後ろの文 (警告、知らせ、締め)。候補表はこの直前に入る
+                "scene": Scene,                      # 今見えている場面
+                "working_memory": WorkingMemory,     # このターンの作業記憶
+                "sns_shown_notification_ids": ..., "sns_screen_generation": ...,
             }
-
-        Issue #227 後続 Step B: 旧 {"system", "user"} flat shape を廃止し
-        DefaultPromptBuilder と同じ messages 配列形式に統一 (経路統一の最終仕上げ)。
-        旧 shape を期待する caller は messages[0]["content"] / messages[1]["content"]
-        への参照に書き換える必要がある。
         """
         self._wire_being_stack()
         if self._public_sns_command_service is not None:
@@ -2284,15 +2201,12 @@ class WorldRuntime:
             )
             if notice is not None
         )
-        closing_instruction = action_instruction or self._ESCAPE_GAME_ACTION_INSTRUCTION
-        if notices:
-            action_instruction = "\n\n".join((descriptions_text(notices), closing_instruction))
-
         builder = self._get_or_build_default_prompt_builder()
         acting = self._acting_being_for(player_id)
         if acting is None:
             raise RuntimeError("Being is not attached to this player.")
-        result = builder.build(acting, action_instruction=action_instruction)
+        result = builder.build(acting, action_instruction=action_instruction, notices=notices)
+        self._record_episode_index_shown(player_id, acting.being_id)
 
         # tool_runtime_context は world_runtime 独自の build_llm_context 経由で取得
         ctx = self.build_llm_context(player_id)
@@ -2302,12 +2216,9 @@ class WorldRuntime:
             "tools": [d.name for d in self.get_tool_definitions(player_id=player_id)],
             "tool_runtime_context": ctx.tool_runtime_context,
             "action_instruction": result["action_instruction"],
-            # 今見えている場面。候補表は、出すツールが決まったあとに差し込む。
-            "scene": Scene((current_surroundings_description(result["current_state_snapshot"]),), notices=notices),
-            # 作業記憶が文を組むときの材料 (#1630)。締めの一文と繰り返しの警告は区画の外に置く。
-            "objective_text": result["objective_text"],
-            "closing_instruction": closing_instruction,
-            "loop_warning": result["loop_warning"],
+            # 今見えている場面と作業記憶 (#1630)。候補表は、出すツールが決まったあとに場面へ差し込む。
+            "scene": result["scene"],
+            "working_memory": result["working_memory"],
             "sns_shown_notification_ids": result.get("sns_shown_notification_ids", ()),
             "sns_screen_generation": getattr(self._public_sns_screens.get(int(player_id)), "generation", None),
         }
@@ -6889,12 +6800,11 @@ def create_world_runtime(
     runtime._orientations_by_player_id = {
         player_id: _orientation(persona) for player_id, persona in personas_by_player_id.items()
     }
+    # 1 ターンのプロンプトと同じ組み方 (作業記憶のシステムプロンプトの区画) で作る (design_decisions D1630-3)。
     runtime._world_llm_system_prompts_by_player_id = {
-        player_id: _world_system_prompt(
-            persona,
-            episode_index_shown=episode_index_shown,
-            episode_recall_offered=episode_recall_offered,
+        player_id: system_prompt_text(
+            WorkingMemory(system=WorkingMemory.system_sections(orientation, runtime._conduct_text), message=())
         )
-        for player_id, persona in personas_by_player_id.items()
+        for player_id, orientation in runtime._orientations_by_player_id.items()
     }
     return runtime

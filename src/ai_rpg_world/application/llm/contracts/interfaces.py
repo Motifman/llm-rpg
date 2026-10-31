@@ -15,7 +15,6 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     LlmUiContextDto,
-    SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
@@ -94,54 +93,6 @@ class IRecentEventsFormatter(ABC):
     @abstractmethod
     def format_unified_entries(self, entries: list[UnifiedRecentEventEntry]) -> str:
         """記録時に統一済みの時系列を文字列化する。"""
-        pass
-
-
-class IContextFormatStrategy(ABC):
-    """現在状態・直近出来事・メモ帳などを user prompt 用コンテキストへ整形する。"""
-
-    @abstractmethod
-    def format(
-        self,
-        current_state_text: str,
-        recent_events_text: str,
-        objective_text: str = "",
-        inventory_text: str = "",
-        mid_summary_text: str = "",
-        known_people_text: str = "",
-        episode_index_text: str = "",
-        being_memo_text: str = "",
-    ) -> str:
-        """user prompt に入れる文脈テキストを返す。
-
-        ``being_memo_text`` は Being のメモ帳を整形した【メモ】の本体 (#1628)。
-        空なら section を出さない。
-
-        ``known_people_text`` は Being が描いた【知っている人】の本体。空なら
-        section を出さない (#1520)。
-
-        ``episode_index_text`` はエピソードの目次【思い出せる出来事】の本体。空なら
-        section を出さない (#1623)。目次を出す設定では、空の目次も「まだ無い」と渡る。
-
-        ``objective_text`` は実行ランタイムが固定の目的文を渡したい場合に使う
-        (例: world_runtime の「【現在の目的】この廃墟から外へ脱出する」)。空なら
-        section を出さない (Issue #227 chore β: 経路統一)。
-
-        ``inventory_text`` は所持物証の整形済テキスト。callable provider が
-        生成して渡す。空なら section を出さない。
-
-        ``mid_summary_text`` は「【ここまでのいきさつ】」section の本体。Being の
-        短期記憶のいきさつを、新しい順に 3 世代まで並べる (#1824)。空なら section ごと省略。
-        """
-        pass
-
-
-class ISystemPromptBuilder(ABC):
-    """system prompt を組み立てる。"""
-
-    @abstractmethod
-    def build(self, player_info: SystemPromptPlayerInfoDto) -> str:
-        """プレイヤー情報から system prompt を返す。"""
         pass
 
 

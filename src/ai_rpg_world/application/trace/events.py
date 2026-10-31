@@ -122,9 +122,12 @@ class TraceEventKind:
     OWN_ACTION_FOLLOW_UP = "own_action_follow_up"
     # prompt section の文字数内訳 (実験 #356 後続: prefix cache 分析用)。
     # prompt_builder.build() が messages / tools を組み上げた直後に 1 件記録する。
-    # payload: system_chars / objective_chars / known_people_chars / current_state_chars / memos_chars /
-    # recent_events_chars / backstory_chars (【ここまでのいきさつ】。2026-10-31 より前の trace には無い) / inventory_chars /
-    # instruction_chars / tools_chars / messages_total_chars
+    # payload: system_chars / objective_chars / known_people_chars / episode_index_chars / current_state_chars /
+    # memos_chars / recent_events_chars / backstory_chars (【ここまでのいきさつ】。2026-10-31 より前の trace には無い) /
+    # instruction_chars / tools_chars / user_content_chars / messages_total_chars / tools_count
+    # 2026-11-01 から、区画ごとの文字数は作業記憶の区画の本文 (見出しの行を除く) から数える (D1630-3)。
+    # recent_events_chars は前置きの一文と改行の分だけ増え、常に 0 だった inventory_chars は無くなった。
+    # 出来事の本文が空白だけのときは「（なし）」、現在地の文が空のときは「（情報なし）」も数える (前は 0)。
     # token 数ではなく char 数で出す: 軽量 / モデル非依存 / deterministic。
     # 分析側で同 turn の prompt_tokens 比に換算する (≒ token 内訳)。
     PROMPT_SECTION_BREAKDOWN = "prompt_section_breakdown"
