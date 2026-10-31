@@ -56,3 +56,27 @@ class TestDescriptions:
         """Description 以外 (文の文字列など) を混ぜると拒む。"""
         with pytest.raises(ContractViolation):
             kind(["雪の山村"])  # type: ignore[list-item]
+
+
+class TestSceneNotices:
+    """場面が、今見えているものと知らせを分けて持つことを保証する (design_decisions D1630-2)。"""
+
+    def test_notices_are_kept_apart_from_descriptions(self) -> None:
+        """知らせは説明文とは別の並びとして、渡した順に読める。省くと空。"""
+        surroundings = Description(heading="現在地と周囲", text="集会室")
+        elapsed = Description(heading="時間の経過", text="- 5 分")
+
+        scene = Scene([surroundings], notices=[elapsed])
+
+        assert (scene.descriptions, scene.notices) == ((surroundings,), (elapsed,))
+        assert Scene([surroundings]).notices == ()
+
+    def test_same_heading_in_descriptions_and_notices_is_rejected(self) -> None:
+        """説明文と知らせに同じ見出しがあると拒む。"""
+        with pytest.raises(ContractViolation, match="時間の経過"):
+            Scene([Description(heading="時間の経過", text="a")], notices=[Description(heading="時間の経過", text="b")])
+
+    def test_non_description_notice_is_rejected(self) -> None:
+        """知らせに Description 以外を混ぜると拒む。"""
+        with pytest.raises(ContractViolation):
+            Scene((), notices=["停電"])  # type: ignore[list-item]

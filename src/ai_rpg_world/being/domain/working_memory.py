@@ -1,0 +1,141 @@
+"""Being がこのターンに頭に置いているものの一覧 (#1630)。
+
+中身はそれぞれの持ち主 (短期記憶、メモ帳、エピソード、知り合い) と環境が持つ。作業記憶は
+毎ターン組み直す値で、区画を書き換わりにくい順に並べることだけを受け持つ。
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from enum import IntEnum
+
+from ai_rpg_world.being.contract import Description, Orientation, Scene
+from ai_rpg_world.domain.being.exception.being_exceptions import WorkingMemoryOrderException
+
+#: システムプロンプトの冒頭の一文。
+OPENING = "あなたは次のペルソナとして行動するキャラクターである。"
+RECENT_EVENTS_PREAMBLE = "観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。"
+NO_RECENT_EVENTS = "（なし）"
+
+
+class Steadiness(IntEnum):
+    """区画の書き換わりにくさ。値の小さいほうが書き換わりにくい。"""
+
+    FIXED = 1
+    """書き換わらない (冒頭の一文)。"""
+    ON_ENTRY = 2
+    """入るときに決まる (案内、作法と環境の決まり、課された目的)。"""
+    GROWING = 3
+    """末尾に足していく (知っている人、いきさつ、直近の出来事)。いきさつは、直近の出来事の古い分が外れるときに一緒に変わる。"""
+    OCCASIONAL = 4
+    """ときどき置き換わる (目次、メモ)。"""
+    EVERY_TURN = 5
+    """毎ターン置き換わる (場面)。"""
+
+
+@dataclass(frozen=True, kw_only=True)
+class Section:
+    """``heading`` が None の区画は見出しの行を持たない。"""
+
+    heading: str | None
+    lines: tuple[str, ...]
+    steadiness: Steadiness
+
+
+@dataclass(frozen=True, kw_only=True)
+class Closing:
+    """区画の外に置く、行動を選ばせる締めの一文。``warning`` は同じ手を続けたときに環境が添える一文。"""
+
+    instruction: str
+    warning: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class MemoryTexts:
+    """Being の記憶の持ち主がそれぞれ作った、区画の本文。空なら区画を出さない (直近の出来事を除く)。"""
+
+    known_people: str = ""
+    backstory: str = ""
+    recent_events: str = ""
+    episode_index: str = ""
+    memo: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
+class WorkingMemory:
+    """システムプロンプトと毎ターンのメッセージを別々の並びとして持ち、それぞれの中で書き換わりにくい順を守る。
+
+    ``notices`` (場面に付く知らせ) と ``closing`` は、メッセージの区画の後ろに付く。
+    """
+
+    system: tuple[Section, ...]
+    message: tuple[Section, ...]
+    notices: tuple[Section, ...] = field(default_factory=tuple)
+    closing: Closing | None = None
+
+    def __post_init__(self) -> None:
+        for part, sections in (("system", self.system), ("message", self.message)):
+            steadiness = [s.steadiness for s in sections]
+            if steadiness != sorted(steadiness):
+                raise WorkingMemoryOrderException(f"{part} sections must go from steadier to less steady: {steadiness}")
+        if any(n.steadiness is not Steadiness.EVERY_TURN for n in self.notices):
+            raise WorkingMemoryOrderException("notices must be EVERY_TURN sections")
+
+    @classmethod
+    def compose(
+        cls,
+        *,
+        orientation: Orientation,
+        conduct: str,
+        imposed_goal: str | None,
+        memory: MemoryTexts,
+        scene: Scene,
+        closing: Closing,
+    ) -> WorkingMemory:
+        """``conduct`` は、作法と環境の決まりが混ざった今の固定文。分けるまでは見出しの無い 1 つの区画にする。"""
+        system = (
+            Section(heading=None, lines=(OPENING,), steadiness=Steadiness.FIXED),
+            *_from_descriptions(orientation.descriptions, Steadiness.ON_ENTRY),
+            Section(heading=None, lines=tuple(conduct.split("\n")), steadiness=Steadiness.ON_ENTRY),
+        )
+        optional = (
+            ("現在の目的", (imposed_goal or "").strip(), Steadiness.ON_ENTRY),
+            ("知っている人", memory.known_people.strip(), Steadiness.GROWING),
+            ("ここまでのいきさつ", memory.backstory.strip(), Steadiness.GROWING),
+        )
+        trailing = (
+            ("思い出せる出来事", memory.episode_index.rstrip(), Steadiness.OCCASIONAL),
+            ("メモ", memory.memo.rstrip(), Steadiness.OCCASIONAL),
+        )
+        recent = Section(
+            heading="直近の出来事",
+            lines=(RECENT_EVENTS_PREAMBLE, *(memory.recent_events.strip() or NO_RECENT_EVENTS).split("\n")),
+            steadiness=Steadiness.GROWING,
+        )
+        message = (
+            *_present(optional),
+            recent,
+            *_present(trailing),
+            *_from_descriptions(scene.descriptions, Steadiness.EVERY_TURN),
+        )
+        return cls(
+            system=system,
+            message=message,
+            notices=_from_descriptions(scene.notices, Steadiness.EVERY_TURN),
+            closing=closing,
+        )
+
+
+def _present(candidates: Sequence[tuple[str, str, Steadiness]]) -> tuple[Section, ...]:
+    return tuple(
+        Section(heading=heading, lines=tuple(text.split("\n")), steadiness=steadiness)
+        for heading, text, steadiness in candidates
+        if text.strip()
+    )
+
+
+def _from_descriptions(descriptions: Sequence[Description], steadiness: Steadiness) -> tuple[Section, ...]:
+    return tuple(
+        Section(heading=d.heading, lines=tuple(d.text.split("\n")), steadiness=steadiness) for d in descriptions
+    )

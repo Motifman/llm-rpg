@@ -48,9 +48,19 @@ class Orientation:
 
 @dataclass(frozen=True)
 class Scene:
-    """毎ターン置き換わる、今見えている場面。現在地と周囲、選べる対象、知らせなど。"""
+    """毎ターン置き換わる、今見えている場面。
+
+    ``descriptions`` は今見えているもの (現在地と周囲、選べる対象)。``notices`` は場面に付く
+    知らせ (進行中の異常、時間の経過など) で、Being は行動を選ぶ直前に読む位置に置く。
+    見出しは 2 つの並びを通して重ならない。
+    """
 
     descriptions: Sequence[Description] = field(default_factory=tuple)
+    notices: Sequence[Description] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "descriptions", _descriptions(self.descriptions))
+        descriptions = _descriptions(self.descriptions)
+        notices = _descriptions(self.notices)
+        _descriptions((*descriptions, *notices))
+        object.__setattr__(self, "descriptions", descriptions)
+        object.__setattr__(self, "notices", notices)

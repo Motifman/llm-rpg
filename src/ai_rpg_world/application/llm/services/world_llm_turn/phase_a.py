@@ -497,7 +497,7 @@ def run_reason_first_phase_a(
     prompt = dict(prompt)
     prompt["messages"] = action_messages
     prompt["action_instruction"] = _REASON_FIRST_ACTION_INSTRUCTION
-    prompt = inject_dynamic_argument_candidate_table(prompt, set(action_tool_names))
+    prompt = inject_dynamic_argument_candidate_table(prompt, set(action_tool_names), in_scene=False)
     action_messages = prompt["messages"]
     try:
         action_tool_call = invoke_retrying_truncated_output(

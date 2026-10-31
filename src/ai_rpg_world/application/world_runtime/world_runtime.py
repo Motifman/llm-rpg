@@ -149,6 +149,7 @@ from ai_rpg_world.application.llm.services.world_llm_prompt import (
     build_world_system_prompt_for,
     limited_action_and_time_pressure_text,
     safe_world_intro_text,
+    world_conduct_text,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
     DEFAULT_FAILURE_STREAK_ABORT,
@@ -323,6 +324,7 @@ from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock, MemoryTurnReader
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
+from ai_rpg_world.being.domain.working_memory import Closing, WorkingMemory
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
@@ -607,6 +609,8 @@ class WorldRuntime:
     _world_llm_system_prompts_by_player_id: dict[int, str] = field(default_factory=dict, repr=False)
     # Being に渡す、入るときの案内 (#1630)。システムプロンプトはここから組む。
     _orientations_by_player_id: dict[int, Orientation] = field(default_factory=dict, repr=False)
+    # システムプロンプトのうち、案内の後に置く作法と環境の決まり。全員に同じ。
+    _conduct_text: str = field(default="", repr=False)
     # create_world_runtime が構築後に差し込む配線。型は circular import 回避で
     # Any。宣言が無いと、代入側の typo を静かに受け入れてしまう。
     _use_item_command_scope_factory: Any | None = field(default=None, repr=False)
@@ -1179,6 +1183,41 @@ class WorldRuntime:
         """E2E テスト用のツール一覧テキスト。"""
         names = [d.name for d in self.get_tool_definitions(player_id=player_id)]
         return ", ".join(names)
+
+    def working_memory_for(self, player_id: PlayerId, prompt: Mapping[str, Any]) -> WorkingMemory:
+        """組んだ 1 ターンのプロンプトの材料から、このターンの作業記憶を組む (#1630)。
+
+        ターンの組み立てはまだ切り替えていない (3 本目)。今は、今のプロンプトと同じ文になるかを
+        確かめるために使う。
+        """
+        from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
+
+        acting = self._acting_being_for(player_id)
+        orientation = self.orientation_for(player_id)
+        if acting is None or orientation is None or not self._conduct_text:
+            raise LookupError(f"player_id={player_id.value} has no Being, orientation or conduct text")
+        cfg = self._runtime_config
+        assert cfg is not None
+        current = CurrentWorkingMemory(
+            beings=self._aux_being_repository,
+            short_term_memories=self._being_short_term_memory_store,
+            acquaintances=self._acquaintance_store,
+            episodes=self._being_episode_store,
+            memo_books=self._being_memo_store,
+            episode_index_limit=cfg.being_episode_index_limit,
+        )
+        return current.of(
+            acting.being_id,
+            orientation=orientation,
+            conduct=self._conduct_text,
+            imposed_goal=prompt["objective_text"],
+            scene=prompt["scene"],
+            closing=Closing(instruction=prompt["closing_instruction"], warning=prompt["loop_warning"]),
+        )
+
+    def conduct_text(self) -> str:
+        """システムプロンプトのうち、案内の後に置く作法と環境の決まり (#1630)。"""
+        return self._conduct_text
 
     def orientation_for(self, player_id: PlayerId) -> Orientation | None:
         """プレイヤーを動かす Being が、この世界に入るときに受け取る案内。シナリオに居なければ None。"""
@@ -2245,9 +2284,9 @@ class WorldRuntime:
             )
             if notice is not None
         )
+        closing_instruction = action_instruction or self._ESCAPE_GAME_ACTION_INSTRUCTION
         if notices:
-            tail_instruction = action_instruction or self._ESCAPE_GAME_ACTION_INSTRUCTION
-            action_instruction = "\n\n".join((descriptions_text(notices), tail_instruction))
+            action_instruction = "\n\n".join((descriptions_text(notices), closing_instruction))
 
         builder = self._get_or_build_default_prompt_builder()
         acting = self._acting_being_for(player_id)
@@ -2264,7 +2303,11 @@ class WorldRuntime:
             "tool_runtime_context": ctx.tool_runtime_context,
             "action_instruction": result["action_instruction"],
             # 今見えている場面。候補表は、出すツールが決まったあとに差し込む。
-            "scene": Scene((current_surroundings_description(result["current_state_snapshot"]), *notices)),
+            "scene": Scene((current_surroundings_description(result["current_state_snapshot"]),), notices=notices),
+            # 作業記憶が文を組むときの材料 (#1630)。締めの一文と繰り返しの警告は区画の外に置く。
+            "objective_text": result["objective_text"],
+            "closing_instruction": closing_instruction,
+            "loop_warning": result["loop_warning"],
             "sns_shown_notification_ids": result.get("sns_shown_notification_ids", ()),
             "sns_screen_generation": getattr(self._public_sns_screens.get(int(player_id)), "generation", None),
         }
@@ -6835,6 +6878,11 @@ def create_world_runtime(
     episode_index_shown, episode_recall_offered = runtime._episode_index_parts_named_in_system_prompt()
     runtime._world_llm_system_prompt = _world_system_prompt(
         persona_block,
+        episode_index_shown=episode_index_shown,
+        episode_recall_offered=episode_recall_offered,
+    )
+    runtime._conduct_text = world_conduct_text(
+        has_goal=_has_goal,
         episode_index_shown=episode_index_shown,
         episode_recall_offered=episode_recall_offered,
     )
