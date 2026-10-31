@@ -233,11 +233,7 @@ class TestIntroductionsAndKnownPeople:
         with pytest.raises(ValueError):
             acquaintances.receive_entry(
                 ADA,
-                EnvironmentEntry(
-                    environment_name="山村",
-                    self_name="エイダ",
-                    introductions=[Introduction(name="ノア")],
-                ),
+                EnvironmentEntry(environment_name="山村", introductions=[Introduction(name="ノア")]),
             )
 
     def test_introductions_without_a_being_are_rejected(self) -> None:
@@ -250,9 +246,18 @@ class TestIntroductionsAndKnownPeople:
 
         assert acquaintances.known_people_text(STRANGER) == ""
 
+    def test_introducing_the_player_to_itself_is_rejected(self) -> None:
+        """プレイヤー本人の名前を紹介に入れると、自分を知り合いとして記録せずに ValueError を投げる (design_decisions D1928-3)。"""
+        acquaintances, store, _ = _make()
+
+        with pytest.raises(ValueError, match="エイダ"):
+            acquaintances.receive_entry(ADA, _entry(Introduction(name="ノア"), Introduction(name="エイダ")))
+
+        assert store.list_by_being(BeingId("being_p1")) == ()
+
 
 def _entry(*introductions: Introduction) -> EnvironmentEntry:
-    return EnvironmentEntry(environment_name="島", self_name="エイダ", introductions=introductions)
+    return EnvironmentEntry(environment_name="島", introductions=introductions)
 
 
 def _heard(speaker: str = "ノア") -> ObservationOutput:

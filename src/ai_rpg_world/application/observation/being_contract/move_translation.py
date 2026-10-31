@@ -32,7 +32,6 @@ def environment_entry_for_player(scenario: ScenarioLoadResult, player_id: Player
     goal = (spawn.objective or scenario.metadata.llm_objective_text or "").strip()
     return EnvironmentEntry(
         environment_name=scenario.metadata.title,
-        self_name=spawn.name,
         imposed_goal=goal or None,
         introductions=_introductions_for(scenario, spawn),
     )

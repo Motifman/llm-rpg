@@ -198,7 +198,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | 短期記憶 (直近の出来事、いきさつ) | Being の短期記憶 (`BeingId` 鍵、Being の snapshot)。#1824 で移した。世界の側の `UnifiedRecentEventStore` (`PlayerId` 鍵) は、未処理の観測と直近の行動の結果だけを持つ | 済み (design_decisions D1824-22、D1824-24) |
 | 繰り返しの見張り | `ToolCallLoopGuardService` (整数の player 鍵) | Being の store へ。snapshot に入っていなければ再開で消えている (推測) |
 | 人格 | シナリオの `persona_prompt` に、環境での立場と一体で書かれている | Being の人格と、環境が渡す `assigned_role` に分ける。分けるかは #1469 で決める。最初は `persona_prompt` を丸ごと `assigned_role` として受け取れば再現できる |
-| 自分の名前 | `EnvironmentEntry.self_name` (型はあるが run に配線されていない) | 入るときに受け取り、短期記憶や記憶の文の中の自分を見分けるのに使う |
+| 自分の名前 | Being の人柄 (`Persona.name`)。環境は名前を付けない (`EnvironmentEntry.self_name` は消した、design_decisions D1928-3) | 短期記憶や記憶の文の中の自分を見分けるのに使う |
 
 ### 3-3. encounter を Being に移す前に分けるもの
 
