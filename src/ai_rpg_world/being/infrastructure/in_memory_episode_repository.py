@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeRepository
 from ai_rpg_world.being.infrastructure.event_handoff import EventHandoff, save_and_hand_off
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeConflictException,
     EpisodeNotFoundException,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 def _require_no_overlap(episodes: Sequence[Episode]) -> None:

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.memo_book import MemoAdded, MemoBook, MemoKind
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import (
     InMemoryMemoBookRepository,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from tests.event_handoff_helpers import discard_events
 
 ADA = BeingId("being-ada")

@@ -7,10 +7,10 @@ from dataclasses import dataclass
 
 from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory, AddEpisodesToMemoryCommand
 from ai_rpg_world.being.application.write_episodes import WriteEpisodes, WriteEpisodesCommand
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode_writer import EpisodeWriter
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRangeFilledEvent
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.eventing import AsyncEventHandler
 
 

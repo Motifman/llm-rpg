@@ -4,6 +4,7 @@ import dataclasses
 
 import pytest
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.memo_book import (
     KIND_LIMITS,
     Memo,
@@ -21,7 +22,6 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     MemoNotFoundException,
     MemoValidationException,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ADA = BeingId("being-ada")
 

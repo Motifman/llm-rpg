@@ -25,8 +25,8 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.memo_book import MemoBook, MemoKind
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId

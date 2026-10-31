@@ -27,13 +27,13 @@ from ai_rpg_world.application.llm.services.action_result_store import (  # noqa:
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     SpotGraphUiContextBuilder,
 )
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
     InMemoryMemoryTurnClock,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )

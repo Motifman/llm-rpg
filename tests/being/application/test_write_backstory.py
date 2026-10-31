@@ -11,6 +11,7 @@ from ai_rpg_world.being.application.add_backstory_to_short_term_memory import (
 from ai_rpg_world.being.application.write_backstory import WriteBackstory, WriteBackstoryCommand
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
 from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter, WrittenBackstory
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import (
     Backstory,
@@ -22,7 +23,6 @@ from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository im
     InMemoryShortTermMemoryRepository,
 )
 from ai_rpg_world.domain.being.exception.being_exceptions import ShortTermMemoryStaleBackstoryException
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ADA = BeingId("being_p1")
 

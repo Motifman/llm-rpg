@@ -4,8 +4,8 @@ from ai_rpg_world.being.application.episode_index_text import (
     EMPTY_EPISODE_INDEX_TEXT,
     format_episode_index,
 )
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ISLAND = "島"
 MINE = "廃坑の山村"

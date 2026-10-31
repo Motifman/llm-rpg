@@ -8,10 +8,10 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import Resolved
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.memo_book import MemoKind
 from ai_rpg_world.being.domain.short_term_memory import Backstory
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from tests.trace_helpers import RecordingTraceRecorder
 
 _ISLAND = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v4_coop.json"

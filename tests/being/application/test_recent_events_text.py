@@ -12,8 +12,8 @@ from ai_rpg_world.being.contract import (
     OwnActionResult,
     SeenOrHeard,
 )
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.short_term_memory import MemoryOperationOutcome, ObservedOutcome, ShortTermMemory
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ADA = BeingId("being_p1")
 

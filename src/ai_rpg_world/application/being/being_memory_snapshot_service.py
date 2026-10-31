@@ -67,6 +67,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_being_short_term_memory,
 )
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.memo_book import MemoBook, MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock
@@ -75,7 +76,6 @@ from ai_rpg_world.being.domain.short_term_memory import (
     ShortTermMemoryRepository,
 )
 from ai_rpg_world.domain.being.exception.being_exceptions import MemoValidationException
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 CURRENT_PAYLOAD_SCHEMA_VERSION: int = 1
 SUPPORTED_PAYLOAD_SCHEMA_VERSIONS: frozenset[int] = frozenset({1})

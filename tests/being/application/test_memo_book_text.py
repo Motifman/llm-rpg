@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ai_rpg_world.being.application.memo_book_text import format_memo_book
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.memo_book import (
     MemoBook,
     MemoCertainty,
@@ -8,7 +9,6 @@ from ai_rpg_world.being.domain.memo_book import (
     MemoProvenance,
     MemoSource,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ADA = BeingId("being-ada")
 HERE = "水門の町"

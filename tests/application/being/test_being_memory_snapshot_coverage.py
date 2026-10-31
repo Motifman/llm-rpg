@@ -81,7 +81,7 @@ class TestBeingMemorySnapshotServiceCoverage:
     def test_capture_succeeds_with_default_expected_keys(self):
         """既存 5 store + 既定の EXPECTED_PAYLOAD_KEYS で capture が成功する
         (= 後方互換)。"""
-        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+        from ai_rpg_world.being.domain.being_id import BeingId
 
         service = _make_service()
         payload_json = service.capture(BeingId("being-test"))
@@ -91,7 +91,7 @@ class TestBeingMemorySnapshotServiceCoverage:
         """EXPECTED に key を足したが capture() の生成 dict にその key が
         無い場合、capture() 呼び出し時に SnapshotCoverageError。"""
         from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
-        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+        from ai_rpg_world.being.domain.being_id import BeingId
 
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
         monkeypatch.setattr(
@@ -112,7 +112,7 @@ class TestBeingMemorySnapshotServiceCoverage:
             BeingMemoryPayloadFormatError,
             BeingMemorySnapshotService,
         )
-        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+        from ai_rpg_world.being.domain.being_id import BeingId
 
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
         monkeypatch.setattr(

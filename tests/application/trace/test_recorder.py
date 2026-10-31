@@ -2,7 +2,7 @@
 # 伴い、本ファイルの ``being_id`` 参照を deterministic な ``BeingId`` の
 # 既定値で受ける (= テスト内で異なる player_id を使う箇所は個別に上書き)。
 # BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
-from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_BeingId
+from ai_rpg_world.being.domain.being_id import BeingId as _MIG_BeingId
 
 being_id = _MIG_BeingId("being_w1_p1")
 "TraceRecorder と TraceEvent の挙動テスト (Issue #188 Phase 1d)。"

@@ -42,7 +42,7 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     NoulQuestion,
     TypedJudgmentUnavailableException,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.being.domain.being_id import BeingId
 
 DEFAULT_SIMILARITY_THRESHOLD = 0.6
 """重なり判定で hint を出す閾値 (0.0-1.0)。

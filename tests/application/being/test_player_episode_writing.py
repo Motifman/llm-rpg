@@ -14,6 +14,7 @@ from ai_rpg_world.application.trace.recorder import NullTraceRecorder
 from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
 from ai_rpg_world.being.application.write_episodes_on_leaving import WriteEpisodesOnLeaving
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemory
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
@@ -29,7 +30,6 @@ from ai_rpg_world.being.infrastructure.llm_episode_writer import (
     EpisodeWritingCompletion,
     LlmEpisodeWriter,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 ADA = PlayerId(1)

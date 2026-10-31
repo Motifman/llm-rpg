@@ -8,9 +8,9 @@ from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
-from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
@@ -66,7 +66,7 @@ class TestEnsureAttachedNewBeing:
         being = repo.find_by_id(being_id)
         assert being is not None
         assert being.is_attached is True
-        assert being.attachment == BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2))
+        assert being.attachment == BeingAttachment(world_id=1, player_id=2)
 
     def test_persona_is_used_for_new_being(
         self,
@@ -102,7 +102,7 @@ class TestEnsureAttachedNewBeing:
         being = repo.find_by_id(being_id)
         assert being is not None
         assert being.attachment is not None
-        assert being.attachment.world_id == WorldId(99)
+        assert being.attachment.world_id == 99
 
 
 class TestEnsureAttachedIdempotent:
@@ -136,7 +136,7 @@ class TestEnsureAttachedIdempotent:
 
 
 class TestEnsureAttachedReattach:
-    """既存 Being が別 (world, player) に attach 中の場合、再 attach する。"""
+    """同じ BeingId の Being が既にあるとき、Being.move_to でこの (world, player) に入れることを保証する。"""
 
     def test_creates_world_id_provisioning_independent_being(
         self,
@@ -154,7 +154,7 @@ class TestEnsureAttachedReattach:
         being_99 = repo.find_by_id(being_id_99)
         assert being_99 is not None
         assert being_99.attachment is not None
-        assert being_99.attachment.world_id == WorldId(99)
+        assert being_99.attachment.world_id == 99
 
         # 次に default world (= 1) で呼ぶ → 別 ID の新規 Being が作られる (= Case 3)
         new_being_id = service.ensure_attached(PlayerId(2))
@@ -165,17 +165,26 @@ class TestEnsureAttachedReattach:
         assert being_99_after is not None
         assert being_99_after.is_attached is True
 
-    def test_existing_being_id_different_player_detach_then_attach(
+    def test_existing_being_attached_elsewhere_is_moved(
         self,
         repo: InMemoryBeingRepository,
         service: BeingProvisioningService,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """事前に同 BeingId の Being が別 attach 状態で存在する場合、detach → attach。"""
+        """同じ BeingId の Being が別の player に入っていれば、Being.move_to でこの player に移す。人柄は変えない。"""
+        moved: list[BeingAttachment] = []
+        original_move_to = Being.move_to
+
+        def _spy(self: Being, attachment: BeingAttachment) -> None:
+            moved.append(attachment)
+            original_move_to(self, attachment)
+
+        monkeypatch.setattr(Being, "move_to", _spy)
         # 事前に手動で Being を別 player に attach
         being = Being(
             being_id=BeingId("being_w1_p2"),
             persona=Persona(name="既存", first_person="わたし"),
-            attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(99)),
+            attachment=BeingAttachment(world_id=1, player_id=99),
         )
         repo.save(being)
         # ensure_attached(player_id=2) を呼ぶと既存 Being が player=2 に再 attach
@@ -184,9 +193,24 @@ class TestEnsureAttachedReattach:
         reloaded = repo.find_by_id(being_id)
         assert reloaded is not None
         assert reloaded.attachment is not None
-        assert reloaded.attachment.player_id == PlayerId(2)
+        assert reloaded.attachment.player_id == 2
         # identity は既存のものが残る (= 上書きしない)
         assert reloaded.persona.name == "既存"
+        assert moved == [BeingAttachment(world_id=1, player_id=2)]
+
+    def test_existing_detached_being_is_moved_in(
+        self,
+        repo: InMemoryBeingRepository,
+        service: BeingProvisioningService,
+    ) -> None:
+        """同じ BeingId の Being がどこにも入っていなければ、そのままこの player に入れる。"""
+        repo.save(Being(being_id=BeingId("being_w1_p2"), persona=Persona(name="既存")))
+
+        service.ensure_attached(PlayerId(2))
+
+        reloaded = repo.find_by_id(BeingId("being_w1_p2"))
+        assert reloaded is not None
+        assert reloaded.attachment == BeingAttachment(world_id=1, player_id=2)
 
 
 class TestEnsureAttachedTypeGuards:

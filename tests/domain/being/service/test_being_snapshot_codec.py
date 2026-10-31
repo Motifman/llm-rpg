@@ -7,6 +7,8 @@ from dataclasses import replace
 import pytest
 
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingSnapshotIncompleteException,
@@ -15,8 +17,6 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
 from ai_rpg_world.domain.being.service.being_snapshot_codec import (
     BeingSnapshotCodec,
 )
-from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_snapshot import (
     CURRENT_SNAPSHOT_VERSION,
     BeingSnapshot,
@@ -41,7 +41,7 @@ def _attached_being() -> Being:
     return Being(
         being_id=BeingId("ada"),
         persona=_persona(),
-        attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2)),
+        attachment=BeingAttachment(world_id=1, player_id=2),
     )
 
 

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from ai_rpg_world.being.application.backstory_text import backstory_text
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.short_term_memory import Backstory, ShortTermMemory
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ADA = BeingId("being_p1")
 

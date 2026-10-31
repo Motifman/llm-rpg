@@ -31,6 +31,7 @@ from ai_rpg_world.being.contract import (
     SeenOrHeard,
     ToldOrWritten,
 )
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.memo_book import MemoBook, MemoCertainty, MemoKind, MemoProvenance, MemoSource
 from ai_rpg_world.being.domain.short_term_memory import (
@@ -48,7 +49,6 @@ from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMem
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import InMemoryShortTermMemoryRepository
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 

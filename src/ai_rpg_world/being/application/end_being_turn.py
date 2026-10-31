@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 @dataclass(frozen=True)

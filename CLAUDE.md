@@ -127,7 +127,7 @@ infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM ア�
 
 ### Bounded Context
 
-Bounded Context として境界を守れているのは Being だけです。経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳・短期記憶を持ち、環境 (ゲーム) とやりとりするときは `being/contract` の型だけを使います。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは、`domain/being` のうちまだ移していない ID・所属・例外のモジュールだけを一時的に許す)。Being 集約と人柄 (`Persona`) は `being/domain` にあります。
+Bounded Context として境界を守れているのは Being だけです。経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳・短期記憶を持ち、環境 (ゲーム) とやりとりするときは `being/contract` の型だけを使います。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは、`domain/being` のうちまだ移していない例外のモジュールだけを一時的に許す)。Being 集約・人柄 (`Persona`)・`BeingId`・所属 (`BeingAttachment`) は `being/domain` にあります。
 
 `BeingId` をキーに持つ保存先を足すときは、同じ PR で Being の snapshot (`BeingMemorySnapshotService`) まで配線します。配線を忘れると、run を止めて再開したときに記憶が静かに途切れます。キーを足すところまでやって読み書きを忘れた場合は起動時に止まりますが、キーごと忘れた場合はどの検査も気づきません (`docs/design_decisions.md` の #27)。足す前に保存した snapshot も読めるようにするなら、`ADDED_PAYLOAD_KEYS` にも足します (D1824-6)。
 

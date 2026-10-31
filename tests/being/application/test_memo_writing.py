@@ -14,6 +14,7 @@ from ai_rpg_world.being.application.memo_writing import (
     RemoveMemo,
     apply_memo_operations,
 )
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.memo_book import (
     KIND_LIMITS,
     MemoAdded,
@@ -23,7 +24,6 @@ from ai_rpg_world.being.domain.memo_book import (
     MemoProvenance,
     MemoSource,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ADA = BeingId("being-ada")
 SURE_BY_SELF = MemoProvenance(source=MemoSource.SELF, certainty=MemoCertainty.SURE)

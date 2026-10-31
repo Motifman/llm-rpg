@@ -5,12 +5,13 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingAlreadyAttachedException,
+    BeingNotAttachedException,
 )
-from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
@@ -20,7 +21,7 @@ def _persona() -> Persona:
 
 
 def _attachment(world: int = 1, player: int = 2) -> BeingAttachment:
-    return BeingAttachment(world_id=WorldId(world), player_id=PlayerId(player))
+    return BeingAttachment(world_id=world, player_id=player)
 
 
 class TestBeingConstruction:
@@ -107,19 +108,23 @@ class TestBeingAttachDetach:
         assert being.attachment == previous
         assert being.is_attached is initially_attached
 
-    def test_detach_returns_previous_attachment_and_clears_state(self) -> None:
-        """解除は直前の世界・プレイヤー対を返し、主体を未接続にする。"""
-        previous = _attachment()
-        being = Being(being_id=BeingId("ada"), persona=_persona(), attachment=previous)
+    def test_detach_clears_attachment(self) -> None:
+        """入っている Being を外すと、所属が無くなり、未接続になる。"""
+        being = Being(being_id=BeingId("ada"), persona=_persona(), attachment=_attachment())
 
-        assert being.detach() == previous
+        being.detach()
+
         assert being.attachment is None
         assert being.is_attached is False
 
-    def test_attach_detach_none_raises_exception(self) -> None:
-        """未 attach での detach は no-op として None を返す。"""
+    def test_detach_when_not_attached_raises(self) -> None:
+        """どこにも入っていない Being を外そうとすると、BeingNotAttachedException で断り、未接続のまま。"""
         being = Being(being_id=BeingId("ada"), persona=_persona())
-        assert being.detach() is None
+
+        with pytest.raises(BeingNotAttachedException):
+            being.detach()
+
+        assert being.attachment is None
 
     @pytest.mark.parametrize("world, player", [(2, 2), (2, 99)])
     def test_switching_attachments_preserves_id_and_persona(self, world: int, player: int) -> None:
@@ -130,7 +135,7 @@ class TestBeingAttachDetach:
         destination = _attachment(world=world, player=player)
         being = Being(being_id=being_id, persona=persona, attachment=previous)
 
-        assert being.detach() == previous
+        being.detach()
         assert being.attachment is None
         assert being.is_attached is False
         assert being.being_id == being_id
@@ -141,3 +146,37 @@ class TestBeingAttachDetach:
         assert being.is_attached is True
         assert being.being_id == being_id
         assert being.persona == persona
+
+
+class TestBeingMoveTo:
+    """Being.move_to が、入っているかどうかを外に聞かせずに、所属を移すことを保証する。"""
+
+    @pytest.mark.parametrize("world, player", [(1, 2), (2, 2), (2, 99)])
+    def test_attached_being_moves_to_the_new_attachment(self, world: int, player: int) -> None:
+        """入っている Being は、同じ所属も別の所属も、外してから新しい所属に入る。ID と人柄は変わらない。"""
+        persona = _persona()
+        being = Being(being_id=BeingId("ada"), persona=persona, attachment=_attachment(world=1, player=2))
+
+        being.move_to(_attachment(world=world, player=player))
+
+        assert being.attachment == _attachment(world=world, player=player)
+        assert (being.being_id, being.persona) == (BeingId("ada"), persona)
+
+    def test_detached_being_simply_attaches(self) -> None:
+        """どこにも入っていない Being は、そのまま新しい所属に入る。"""
+        being = Being(being_id=BeingId("ada"), persona=_persona())
+
+        being.move_to(_attachment())
+
+        assert being.attachment == _attachment()
+
+    @pytest.mark.parametrize("initially_attached", [False, True])
+    def test_non_attachment_raises_and_keeps_the_attachment(self, initially_attached: bool) -> None:
+        """所属でない値を渡すと TypeError で断り、元の所属を変えない。"""
+        previous = _attachment() if initially_attached else None
+        being = Being(being_id=BeingId("ada"), persona=_persona(), attachment=previous)
+
+        with pytest.raises(TypeError, match="attachment"):
+            being.move_to("not-a-vo")  # type: ignore[arg-type]
+
+        assert being.attachment == previous

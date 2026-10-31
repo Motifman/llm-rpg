@@ -11,10 +11,10 @@ from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.being.application.known_people import render_known_people
 from ai_rpg_world.being.contract import EnvironmentEntry
 from ai_rpg_world.being.domain.acquaintance import Acquaintance, AcquaintanceRepository
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:

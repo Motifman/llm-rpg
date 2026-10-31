@@ -9,12 +9,12 @@ from ai_rpg_world.being.application.handlers.write_episodes_handler import (
 )
 from ai_rpg_world.being.application.write_episodes import WriteEpisodesCommand
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import EpisodeIndex
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents, EpisodeWriter
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemory, ShortTermMemoryRangeFilledEvent
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.eventing import AsyncEventHandler
 from tests.event_handoff_helpers import discard_events
 

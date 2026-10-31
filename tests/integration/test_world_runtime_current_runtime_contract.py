@@ -47,7 +47,7 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
     DefaultObservationContextBuffer,
 )
 from ai_rpg_world.application.trace import TraceEventKind
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -1905,7 +1905,7 @@ def test_phase_b_records_memo_hint_trace(
     rec = _CapturingRecorder()
     runtime = _ContractRuntime()
     runtime.trace_recorder = rec
-    from ai_rpg_world.domain.being.value_object.being_id import BeingId
+    from ai_rpg_world.being.domain.being_id import BeingId
 
     runtime._acting_being_for = lambda player_id: SimpleNamespace(  # noqa: ARG005
         being_id=BeingId("contract-test-being")

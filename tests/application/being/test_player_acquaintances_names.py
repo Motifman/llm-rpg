@@ -10,13 +10,13 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     SubjectUnknownView,
 )
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
     InMemoryMemoryTurnClock,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 ADA = PlayerId(1)

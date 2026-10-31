@@ -6,6 +6,7 @@ from ai_rpg_world.being.application.write_episodes_on_leaving import (
     WriteEpisodesOnLeavingCommand,
 )
 from ai_rpg_world.being.contract import UNKNOWN, AgentMove, Observation, ObservedTime, OwnActionResult, SeenOrHeard
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import EpisodeIndex
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents, EpisodeWriter
 from ai_rpg_world.being.domain.persona import Persona
@@ -14,7 +15,6 @@ from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMem
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from tests.event_handoff_helpers import discard_events
 
 ADA = BeingId("being_p1")

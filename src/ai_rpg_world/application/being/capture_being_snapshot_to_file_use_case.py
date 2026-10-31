@@ -28,9 +28,9 @@ from ai_rpg_world.application.being.being_snapshot_file_gateway import (
     BeingSnapshotFileGateway,
     BeingSnapshotFileMetadata,
 )
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.service.being_snapshot_codec import BeingSnapshotCodec
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 class BeingNotFoundForSnapshotError(Exception):

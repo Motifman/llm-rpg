@@ -27,6 +27,7 @@ from ai_rpg_world.being.contract import (
     ToldOrWritten,
 )
 from ai_rpg_world.being.domain.acquaintance import Acquaintance, HowKnown
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex, IndexRevision
 from ai_rpg_world.being.domain.memo_book import (
     Memo,
@@ -47,7 +48,6 @@ from ai_rpg_world.being.domain.short_term_memory import (
     ShortTermMemory,
     UnknownOutcome,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.common.exception import DomainException
 
 

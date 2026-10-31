@@ -16,14 +16,14 @@ from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case impo
 )
 from ai_rpg_world.application.being.restore_being_snapshot_from_file_use_case import RestoreBeingSnapshotFromFileUseCase
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import InMemoryShortTermMemoryRepository
-from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
@@ -54,7 +54,7 @@ def _make_being() -> Being:
     return Being(
         being_id=BeingId("being_w1_p1"),
         persona=Persona(name="アダ", first_person="わたし"),
-        attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)),
+        attachment=BeingAttachment(world_id=1, player_id=1),
     )
 
 
@@ -248,7 +248,7 @@ class TestRestoreLegacyIdentity:
             Being(
                 being_id=BeingId("being_w1_p1"),
                 persona=scenario_persona,
-                attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)),
+                attachment=BeingAttachment(world_id=1, player_id=1),
             )
         )
 

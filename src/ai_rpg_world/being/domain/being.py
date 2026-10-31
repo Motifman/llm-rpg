@@ -6,10 +6,13 @@
 
 from __future__ import annotations
 
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
-from ai_rpg_world.domain.being.exception.being_exceptions import BeingAlreadyAttachedException
-from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.being.exception.being_exceptions import (
+    BeingAlreadyAttachedException,
+    BeingNotAttachedException,
+)
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 
 
@@ -57,11 +60,21 @@ class Being(AggregateRoot[DomainEvent]):
             )
         self._attachment = attachment
 
-    def detach(self) -> BeingAttachment | None:
-        """解除前の値を返す。未 attach なら None。離れても記憶は Being に残る。"""
-        previous = self._attachment
+    def detach(self) -> None:
+        """入っていなければ ``BeingNotAttachedException`` で断る。離れても記憶は Being に残る。
+
+        外したことを知らせるドメインイベントは、反応する処理ができたときに足す (design_decisions D1469-4)。
+        """
+        if self._attachment is None:
+            raise BeingNotAttachedException(f"Being({self._being_id}) is not attached")
         self._attachment = None
-        return previous
+
+    def move_to(self, attachment: BeingAttachment) -> None:
+        """入っていれば外してから入り、入っていなければそのまま入る。"""
+        if not isinstance(attachment, BeingAttachment):
+            raise TypeError(f"attachment must be BeingAttachment, got {type(attachment).__name__}")
+        self._attachment = None
+        self.attach(attachment)
 
     def __repr__(self) -> str:
         return f"Being(being_id={self._being_id!r}, persona={self._persona!r}, attachment={self._attachment!r})"

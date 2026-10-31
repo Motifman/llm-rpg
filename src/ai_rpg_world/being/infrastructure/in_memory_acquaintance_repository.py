@@ -7,7 +7,7 @@ from ai_rpg_world.being.domain.acquaintance import (
     AcquaintanceInvalid,
     AcquaintanceRepository,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.being.domain.being_id import BeingId
 
 _Key = tuple[str, str]
 

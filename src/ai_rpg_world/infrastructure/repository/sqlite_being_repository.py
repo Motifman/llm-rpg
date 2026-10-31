@@ -36,12 +36,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.service.being_snapshot_codec import (
     BeingSnapshotCodec,
 )
 from ai_rpg_world.domain.being.service.being_snapshot_dict import dict_to_snapshot, snapshot_to_dict
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnInvalid,
     MemoryTurnReader,
@@ -9,7 +10,6 @@ from ai_rpg_world.being.domain.memory_turn_clock import (
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
     InMemoryMemoryTurnClock,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 RIO = BeingId("being-rio")
 NOA = BeingId("being-noa")

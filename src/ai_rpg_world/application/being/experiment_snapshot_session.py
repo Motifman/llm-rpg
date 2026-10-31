@@ -91,7 +91,7 @@ from ai_rpg_world.application.being.world_subsystems import (
     WorldTickSubsystemCodec,
     migrate_legacy_recent_event_subsystems,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import (
     DEFAULT_SINGLE_WORLD_ID,

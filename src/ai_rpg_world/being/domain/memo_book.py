@@ -10,12 +10,12 @@ from datetime import datetime, timezone
 from enum import Enum
 from types import MappingProxyType
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     MemoLimitReachedException,
     MemoNotFoundException,
     MemoValidationException,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 
 MEMO_TEXT_MAX_LENGTH = 60

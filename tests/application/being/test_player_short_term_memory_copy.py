@@ -29,6 +29,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
 from ai_rpg_world.being.contract import AgentMove, ObservedTime, OccurrenceOrder, OwnActionResult, SeenOrHeard
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
     Lapse,
@@ -41,7 +42,6 @@ from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemo
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 ADA = PlayerId(1)
