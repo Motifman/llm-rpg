@@ -53,10 +53,13 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
         }
 
     def test_thinking_and_output_cap_are_kept(self) -> None:
-        """thinking と出力の上限は、比べた全部入りの run と同じ値のまま。"""
+        """thinking はモデルが受け付ける段階の low、出力の上限は比べた全部入りの run と同じ 4096。
+
+        mine_v1_006 は minimal で回したが、deepseek-v4.1-flash は minimal を受け付けない (D1924-2)。
+        """
         being = _load(_BEING_MEMORY)["runtime_config"]
 
-        assert being["LLM_REASONING_EFFORT"] == "minimal"
+        assert being["LLM_REASONING_EFFORT"] == "low"
         assert being["LLM_MAX_OUTPUT_TOKENS"] == 4096
 
     def test_profile_resolves_with_new_memory_on_and_old_memory_off(self) -> None:
