@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ai_rpg_world.being.application.recent_events_text import experiences_text
-from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter
+from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter, WrittenBackstory
 from ai_rpg_world.being.domain.short_term_memory import Backstory, Experience
 
 FLOW_MAX_CHARS = 300
@@ -18,7 +18,7 @@ MOOD_MAX_CHARS = 120
 # まとめる出来事が無い範囲のいきさつ。LLM を呼ばずに、前のいきさつの流れを引き継ぐ。
 NOTHING_HAPPENED_FLOW = "（この間に覚えている出来事は無い）"
 
-SYSTEM_PROMPT = """\
+SYSTEM_PROMPT = f"""\
 あなたはあるキャラクター本人として、少し前の体験を振り返り、
 「ここまでのいきさつ」と「いまの気分」を一人称で書きます。
 出来事そのものは別の記録に残るので、ここでは出来事どうしをつなぐ流れを書きます。
@@ -51,11 +51,15 @@ SYSTEM_PROMPT = """\
 - 「毒キノコは赤い斑点」のような世界ルールの一般化 (同上)
 ここでは「ここまでのいきさつ + いまの気分」だけ書く
 
+【字数】
+- ここまでのいきさつは {FLOW_MAX_CHARS} 字まで、いまの気分は {MOOD_MAX_CHARS} 字まで
+- 超えた分は途中で切れるので、字数の中で文を終える
+
 【出力形式】JSON object (この schema を厳守):
-{
-  "compressed_activity": "ここまでのいきさつ (2-3 文、固有名詞使用)",
-  "emotional_summary": "今の感情の中核 (1 文)"
-}
+{{
+  "compressed_activity": "ここまでのいきさつ (2-3 文、{FLOW_MAX_CHARS} 字まで、固有名詞使用)",
+  "emotional_summary": "今の感情の中核 (1 文、{MOOD_MAX_CHARS} 字まで)"
+}}
 """
 
 
@@ -74,16 +78,21 @@ class LlmBackstoryWriter(BackstoryWriter):
         previous: Backstory | None,
         until_turn: int,
         written_turn: int,
-    ) -> Backstory:
+    ) -> WrittenBackstory:
         if not experiences:
             flow = previous.flow if previous is not None else NOTHING_HAPPENED_FLOW
             mood = previous.mood if previous is not None else ""
-            return Backstory(flow=flow, mood=mood, written_turn=written_turn, until_turn=until_turn)
+            return WrittenBackstory(
+                backstory=Backstory(flow=flow, mood=mood, written_turn=written_turn, until_turn=until_turn)
+            )
         response = self._complete_json(
             _messages(self_name=self_name, persona=persona, experiences=experiences, previous=previous)
         )
-        flow, mood = _read(response)
-        return Backstory(flow=flow, mood=mood, written_turn=written_turn, until_turn=until_turn)
+        flow, mood, truncated = _read(response)
+        return WrittenBackstory(
+            backstory=Backstory(flow=flow, mood=mood, written_turn=written_turn, until_turn=until_turn),
+            truncated=truncated,
+        )
 
 
 def _messages(
@@ -104,15 +113,18 @@ def _messages(
     return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": "\n".join(lines)}]
 
 
-def _read(response: Any) -> tuple[str, str]:
+def _read(response: Any) -> tuple[str, str, dict[str, int]]:
+    """流れと気分と、上限を超えて切り詰めた項目と切り詰める前の長さ。"""
     if not isinstance(response, dict):
         raise ValueError("backstory response must be a JSON object")
     flow = response.get("compressed_activity")
     if not isinstance(flow, str) or not flow.strip():
         raise ValueError("backstory response has no compressed_activity")
     mood = response.get("emotional_summary", "")
-    mood = mood.strip() if isinstance(mood, str) else ""
-    return flow.strip()[:FLOW_MAX_CHARS], mood[:MOOD_MAX_CHARS]
+    texts = {"flow": flow.strip(), "mood": mood.strip() if isinstance(mood, str) else ""}
+    limits = {"flow": FLOW_MAX_CHARS, "mood": MOOD_MAX_CHARS}
+    truncated = {key: len(text) for key, text in texts.items() if len(text) > limits[key]}
+    return texts["flow"][:FLOW_MAX_CHARS], texts["mood"][:MOOD_MAX_CHARS], truncated
 
 
 __all__ = ["FLOW_MAX_CHARS", "MOOD_MAX_CHARS", "NOTHING_HAPPENED_FLOW", "SYSTEM_PROMPT", "LlmBackstoryWriter"]

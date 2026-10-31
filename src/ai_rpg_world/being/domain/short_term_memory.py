@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Final, Protocol, TypeVar
 
@@ -321,10 +322,14 @@ class ShortTermMemoryOldestTurnsDroppedEvent(ShortTermMemoryEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ShortTermMemoryBackstoryAddedEvent(ShortTermMemoryEvent):
-    """いきさつが入り、まとめた範囲までの出来事を外した。``dropped`` は ``recent()`` と同じ順で、上限で先に外していれば空。"""
+    """いきさつが入り、まとめた範囲までの出来事を外した。``dropped`` は ``recent()`` と同じ順で、上限で先に外していれば空。
+
+    ``truncated`` は、書いたときに上限を超えて切り詰めた項目と切り詰める前の長さ。いきさつ自体は持たない。
+    """
 
     backstory: Backstory
     dropped: tuple[Experience, ...]
+    truncated: Mapping[str, int] = field(default_factory=dict)
 
 
 class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
@@ -454,8 +459,11 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
                 ShortTermMemoryBackstoryOverdueEvent, turn=turn, until_turn=until_turn, **self._material(until_turn)
             )
 
-    def add_backstory(self, backstory: Backstory) -> None:
-        """届いたいきさつを入れ、まとめた範囲までの出来事を外す。同じか前の範囲までのいきさつは例外で断る。"""
+    def add_backstory(self, backstory: Backstory, *, truncated: Mapping[str, int] | None = None) -> None:
+        """届いたいきさつを入れ、まとめた範囲までの出来事を外す。同じか前の範囲までのいきさつは例外で断る。
+
+        ``truncated`` (書いたときに切り詰めた項目と元の長さ) は、いきさつが入ったイベントにだけ載せる。
+        """
         if not isinstance(backstory, Backstory):
             raise ShortTermMemoryValidationException("backstory must be Backstory")
         latest = self._backstories[-1].until_turn if self._backstories else None
@@ -470,7 +478,9 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         dropped = _in_recent_order(self._up_to(backstory.until_turn))
         experiences, recent_from, awaiting = self._after_forgetting(backstory.until_turn)
         self._become(experiences, backstories, recent_from, awaiting, awaited)
-        self._add(ShortTermMemoryBackstoryAddedEvent, backstory=backstory, dropped=dropped)
+        self._add(
+            ShortTermMemoryBackstoryAddedEvent, backstory=backstory, dropped=dropped, truncated=dict(truncated or {})
+        )
 
     def _await(self, until_turn: int, *, since_turn: int) -> None:
         awaited = AwaitedBackstory(until_turn=until_turn, since_turn=since_turn)

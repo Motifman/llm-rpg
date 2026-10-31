@@ -219,7 +219,8 @@ class TraceEventKind:
     # design_decisions D1824-18)。書けなかったときと、同じか前の範囲までで短期記憶が断ったとき (design_decisions
     # D1824-17) は、これは残らず async_event_delivery_failed に残る。2026-10 より前の trace には、断ったときの
     # being_backstory_discarded が残っている。payload: being_id / until_turn / written_turn / flow / mood /
-    # dropped_count (いきさつが入って外した出来事の数。上限で先に外していれば 0)。
+    # dropped_count (いきさつが入って外した出来事の数。上限で先に外していれば 0) /
+    # truncated ({flow か mood: 切り詰める前の長さ}。切り詰めなければ空)。
     BEING_BACKSTORY_WRITTEN = "being_backstory_written"
     # エピソードの目次を 1 ターンのプロンプトに出した (#1623)。プロンプトを組むたびに 1 件。
     # payload: being_id / order (並べ方) / limit (N) / total_count (記録の件数) /

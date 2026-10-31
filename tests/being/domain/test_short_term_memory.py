@@ -655,6 +655,16 @@ class TestBackstoryAdded:
             list(range(1, 11)),
         )
 
+    def test_truncation_given_with_the_backstory_is_reported(self) -> None:
+        """いきさつと一緒に渡した切り詰めた項目と元の長さを、いきさつが入ったイベントに載せる。渡さなければ空。いきさつ自体は持たない。"""
+        memory = _empty()
+
+        memory.add_backstory(_backstory(10), truncated={"flow": 310})
+        memory.add_backstory(_backstory(20))
+
+        first, second = memory.get_events()
+        assert (first.truncated, second.truncated) == ({"flow": 310}, {})
+
     def test_backstory_for_turns_already_dropped_reports_nothing_dropped(self) -> None:
         """上限で外したあとに遅れて届いたいきさつを入れると、外した出来事の無いイベントをためる。"""
         memory = TestEndTurn._one_result_per_turn(40)
