@@ -573,7 +573,7 @@ class TestTakingThings:
         _try_on(runtime, _GEN, _HARU, "pickpocket", item="燃料の缶")
 
         seen = [line for line in _prose(runtime, _SAYO)[before:] if "荷" in line]
-        assert [line for line in seen if "ゲン" in line and "測量具を背負った年かさの人" in line] != []
+        assert [line for line in seen if "ゲン" in line and "測量具を背負った年かさの男" in line] != []
         assert [line for line in seen if "ハル" in line] == []
 
     def test_in_the_dark_no_one_sees_who_took_it(self, runtime) -> None:
