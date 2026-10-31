@@ -5749,10 +5749,14 @@ def create_world_runtime(
     from ai_rpg_world.application.being.handlers.record_oldest_turns_dropped_trace_handler import (
         RecordOldestTurnsDroppedTraceHandler,
     )
+    from ai_rpg_world.application.being.handlers.record_range_filled_trace_handler import (
+        RecordRangeFilledTraceHandler,
+    )
     from ai_rpg_world.being.domain.episode import EpisodeWrittenEvent
     from ai_rpg_world.being.domain.short_term_memory import (
         ShortTermMemoryBackstoryAddedEvent,
         ShortTermMemoryOldestTurnsDroppedEvent,
+        ShortTermMemoryRangeFilledEvent,
     )
     from ai_rpg_world.eventing.delivery import DeliveryChannel, DeliveryGuarantee
 
@@ -5760,6 +5764,15 @@ def create_world_runtime(
     being_dispatcher.register_after_commit(
         ShortTermMemoryOldestTurnsDroppedEvent,
         RecordOldestTurnsDroppedTraceHandler(
+            trace_recorder_provider=lambda: runtime._trace_recorder,
+            current_tick_provider=lambda: runtime.current_tick(),
+        ).handle,
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    being_dispatcher.register_after_commit(
+        ShortTermMemoryRangeFilledEvent,
+        RecordRangeFilledTraceHandler(
             trace_recorder_provider=lambda: runtime._trace_recorder,
             current_tick_provider=lambda: runtime.current_tick(),
         ).handle,

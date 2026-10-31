@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Collection, Sequence
-from dataclasses import dataclass
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from ai_rpg_world.domain.being.exception.being_exceptions import (
@@ -105,7 +105,10 @@ class EpisodeIndexRevised(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class EpisodeWrittenEvent(DomainEvent):
-    """本人がエピソードを書き起こし、記憶に加えた。"""
+    """本人がエピソードを書き起こし、記憶に加えた。
+
+    ``truncated`` は、上限を超えて切り詰めた項目と切り詰める前の長さ。エピソード自体は持たない。
+    """
 
     being_id: BeingId
     episode_id: str
@@ -114,6 +117,7 @@ class EpisodeWrittenEvent(DomainEvent):
     written_turn: int
     index: EpisodeIndex
     body: str
+    truncated: Mapping[str, int] = field(default_factory=dict)
 
 
 EpisodeEvent = EpisodeRecalled | EpisodeIndexRevised | EpisodeWrittenEvent
@@ -210,8 +214,12 @@ class Episode(AggregateRoot[EpisodeEvent]):
         index: EpisodeIndex,
         body: str,
         taken_handles: Collection[str] = (),
+        truncated: Mapping[str, int] | None = None,
     ) -> Episode:
-        """``taken_handles`` は同じ Being がもう使っている呼び名。書いたことを ``EpisodeWrittenEvent`` としてためる。"""
+        """``taken_handles`` は同じ Being がもう使っている呼び名。書いたことを ``EpisodeWrittenEvent`` としてためる。
+
+        ``truncated`` (書いたときに切り詰めた項目と元の長さ) はイベントにだけ載せる。
+        """
         episode = cls(
             being_id=being_id,
             episode_id=episode_id,
@@ -232,6 +240,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
                 written_turn=written_turn,
                 index=index,
                 body=body,
+                truncated=dict(truncated or {}),
             )
         )
         return episode

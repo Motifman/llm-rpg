@@ -224,7 +224,7 @@ class TestEpisodeWritingInTheRuntime:
         store.save(memory)
 
     def test_episodes_for_the_filled_range_are_added_at_the_turn_entry(self) -> None:
-        """範囲が埋まった短期記憶を保存すると、書いたエピソード (スタブ) が、その Being の結果を反映したときに記憶に加わり、being_episode_written が残る。反映するまでは加わらない。"""
+        """範囲が埋まった短期記憶を保存すると、being_short_term_memory_range_filled が残り、書いたエピソード (スタブ) が、その Being の結果を反映したときに記憶に加わり、同じ Being と同じターン (written_turn) の being_episode_written が残る。反映するまでは加わらない。"""
         runtime, recorder, being_id = _runtime()
         player = runtime.get_player_ids()[0]
         self._end_turns(runtime, being_id, turns=range(0, 20), end_at=20)
@@ -237,6 +237,27 @@ class TestEpisodeWritingInTheRuntime:
         assert (episode.body.startswith("(スタブ) "), episode.written_turn) == (True, 20)
         (payload,) = recorder.payloads(TraceEventKind.BEING_EPISODE_WRITTEN)
         assert (payload["being_id"], payload["handle"], payload["written_turn"]) == (being_id.value, episode.handle, 20)
+        (filled,) = recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_RANGE_FILLED)
+        assert (filled["being_id"], filled["turn"], filled["until_turn"]) == (being_id.value, 20, 10)
+
+    def test_range_with_no_episodes_leaves_only_the_range_filled_trace(self, monkeypatch) -> None:
+        """書き手が 0 件を返すと、being_short_term_memory_range_filled は残るが、同じ Being・同じターンの being_episode_written は無い。0 件だった範囲が突き合わせで見える (design_decisions D1824-20)。"""
+        monkeypatch.setattr(
+            "ai_rpg_world.application.llm.services.stub_episode_writing_completion.StubEpisodeWritingCompletion.complete_episode_writing_json",
+            lambda self, messages: {"episodes": []},
+        )
+        runtime, recorder, being_id = _runtime()
+        player = runtime.get_player_ids()[0]
+        self._end_turns(runtime, being_id, turns=range(0, 20), end_at=20)
+        runtime.async_event_executor.shutdown(timeout=5)
+
+        runtime.apply_async_results(player)
+
+        (filled,) = recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_RANGE_FILLED)
+        written = recorder.payloads(TraceEventKind.BEING_EPISODE_WRITTEN)
+        assert (filled["being_id"], filled["turn"]) == (being_id.value, 20)
+        assert [w for w in written if (w["being_id"], w["written_turn"]) == (being_id.value, 20)] == []
+        assert runtime._being_episode_store.list_by_being(being_id) == ()
 
     def test_overdue_backstory_does_not_write_episodes_again(self) -> None:
         """いきさつが遅れて同じ範囲を書き直しても (書き直したいきさつは古い範囲として断られる)、エピソードは書き直さない。エピソードを書くハンドラの失敗も残らない。"""
