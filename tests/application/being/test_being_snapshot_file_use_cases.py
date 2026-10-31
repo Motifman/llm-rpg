@@ -54,7 +54,7 @@ def _make_being() -> Being:
     return Being(
         being_id=BeingId("being_w1_p1"),
         persona=Persona(name="アダ", first_person="わたし"),
-        attachment=BeingAttachment(world_id=1, player_id=1),
+        attachment=BeingAttachment(environment_id="w1p1", environment_name="廃坑の山村"),
     )
 
 
@@ -106,8 +106,8 @@ class TestRestoreUseCase:
         snap = BeingSnapshot(
             being_id_value="being_w1_p1",
             persona=Persona(name="アダ", first_person="わたし"),
-            attachment_world_id=1,
-            attachment_player_id=1,
+            attachment_environment_id="w1p1",
+            attachment_environment_name="廃坑の山村",
             snapshot_version=2,
             memory_payload_json=None,
         )
@@ -248,7 +248,7 @@ class TestRestoreLegacyIdentity:
             Being(
                 being_id=BeingId("being_w1_p1"),
                 persona=scenario_persona,
-                attachment=BeingAttachment(world_id=1, player_id=1),
+                attachment=BeingAttachment(environment_id="w1p1", environment_name="廃坑の山村"),
             )
         )
 

@@ -67,11 +67,6 @@ class BeingSnapshotCodec:
             raise TypeError(f"memory_payload_json must be str or None, got {type(memory_payload_json).__name__}")
 
         attachment = being.attachment
-        world_id_value: int | None = None
-        player_id_value: int | None = None
-        if attachment is not None:
-            world_id_value = attachment.world_id
-            player_id_value = attachment.player_id
 
         # encode は常に最新版 (= v2) を出す。memory_payload_json=None でも v2 と
         # して扱う (= 「memory がまだ取得されていない v2 snapshot」は意味的に
@@ -79,8 +74,8 @@ class BeingSnapshotCodec:
         return BeingSnapshot(
             being_id_value=being.being_id.value,
             persona=being.persona,
-            attachment_world_id=world_id_value,
-            attachment_player_id=player_id_value,
+            attachment_environment_id=attachment.environment_id if attachment is not None else None,
+            attachment_environment_name=attachment.environment_name if attachment is not None else None,
             snapshot_version=CURRENT_SNAPSHOT_VERSION,
             memory_payload_json=memory_payload_json,
         )
@@ -130,13 +125,13 @@ class BeingSnapshotCodec:
             # BeingSnapshot.__post_init__ が「両 None or 両非 None」を保証して
             # いるので本来到達不能だが、python -O で assert が剥がれた場合の
             # 安全側として明示ガードする (= 黙って partial state を通さない)。
-            if snapshot.attachment_world_id is None or snapshot.attachment_player_id is None:
+            if snapshot.attachment_environment_id is None or snapshot.attachment_environment_name is None:
                 raise BeingSnapshotIncompleteException(
-                    "has_attachment is True but attachment ids are None (BeingSnapshot invariant violated)"
+                    "has_attachment is True but attachment fields are None (BeingSnapshot invariant violated)"
                 )
             attachment = BeingAttachment(
-                world_id=snapshot.attachment_world_id,
-                player_id=snapshot.attachment_player_id,
+                environment_id=snapshot.attachment_environment_id,
+                environment_name=snapshot.attachment_environment_name,
             )
 
         if snapshot.persona is None:

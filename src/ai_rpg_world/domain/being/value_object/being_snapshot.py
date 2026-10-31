@@ -20,8 +20,9 @@ store ごとの内訳構造は ``BeingMemorySnapshotService`` (application 層) 
 
 1. ``being_id_value`` は非空。人柄は ``Persona`` が自分で検証する。人柄が ``None`` なのは、``persona`` の無い古い
    snapshot から読んだときだけで、そのときは読み捨てる名前と一人称を ``legacy_identity_*`` に持つ
-2. ``attachment_world_id`` と ``attachment_player_id`` は **両方 None または両方
-   非 None** でなければならない (= 片方だけ埋まる部分状態を構造的に禁止)
+2. ``attachment_environment_id`` と ``attachment_environment_name`` は **両方 None または両方
+   空でない文字列** でなければならない (= 片方だけ埋まる部分状態を構造的に禁止)。古い snapshot の番号
+   (``legacy_attachment_*``) も同じく両方そろう
 3. ``snapshot_version`` は正の int
 4. ``memory_payload_json`` は ``str | None`` (= 非 None なら JSON valid を
    codec が責務として保証)。v1 snapshot では常に None
@@ -56,8 +57,9 @@ class BeingSnapshot:
     #: ``persona`` の無い古い snapshot から読んだときだけ None。名前と一人称は読み捨て、起動時にシナリオから入れた
     #: 人柄で埋めてから decode する (design_decisions D1469-2)。
     persona: Persona | None
-    attachment_world_id: int | None
-    attachment_player_id: int | None
+    #: Being が入っていた環境の識別子と表示の名前 (design_decisions D1928-2)。入っていなければ両方 None。
+    attachment_environment_id: str | None
+    attachment_environment_name: str | None
     snapshot_version: int = CURRENT_SNAPSHOT_VERSION
     memory_payload_json: str | None = None
     #: 消した「どの種類の記憶を持つかの宣言」。古い snapshot から読んだときだけ埋まる。読み捨てた件数を
@@ -67,6 +69,10 @@ class BeingSnapshot:
     #: 残すためだけに持ち、書き出さない (design_decisions D1469-2)。
     legacy_identity_name: str | None = None
     legacy_identity_first_person: str | None = None
+    #: 環境の識別子の無い古い snapshot の、世界とプレイヤーの番号。「プレイヤー → Being」の対応表を作り直すのにだけ
+    #: 使い、書き出さない (design_decisions D1928、D1928-2)。
+    legacy_attachment_world_id: int | None = None
+    legacy_attachment_player_id: int | None = None
 
     def __post_init__(self) -> None:
         self._reject_blank("being_id_value", self.being_id_value)
@@ -99,21 +105,28 @@ class BeingSnapshot:
             raise BeingSnapshotIncompleteException(f"BeingSnapshot.{field} must be non-empty")
 
     def _validate_attachment_pair(self) -> None:
-        world = self.attachment_world_id
-        player = self.attachment_player_id
-        if (world is None) ^ (player is None):
+        self._require_both_or_neither(
+            "attachment_environment", self.attachment_environment_id, self.attachment_environment_name, str
+        )
+        for field in ("attachment_environment_id", "attachment_environment_name"):
+            value = getattr(self, field)
+            if value is not None and not value.strip():
+                raise BeingSnapshotIncompleteException(f"{field} must be non-blank")
+        self._require_both_or_neither(
+            "legacy_attachment", self.legacy_attachment_world_id, self.legacy_attachment_player_id, int
+        )
+
+    @staticmethod
+    def _require_both_or_neither(label: str, first: object, second: object, kind: type) -> None:
+        if (first is None) ^ (second is None):
             raise BeingSnapshotIncompleteException(
-                "BeingSnapshot attachment fields must be both None or both set; "
-                f"got world_id={world!r}, player_id={player!r}"
+                f"BeingSnapshot {label} fields must be both None or both set; got {first!r}, {second!r}"
             )
-        if world is not None and not isinstance(world, int):
-            raise BeingSnapshotIncompleteException(
-                f"attachment_world_id must be int or None, got {type(world).__name__}"
-            )
-        if player is not None and not isinstance(player, int):
-            raise BeingSnapshotIncompleteException(
-                f"attachment_player_id must be int or None, got {type(player).__name__}"
-            )
+        for value in (first, second):
+            if value is not None and (not isinstance(value, kind) or isinstance(value, bool)):
+                raise BeingSnapshotIncompleteException(
+                    f"BeingSnapshot {label} fields must be {kind.__name__} or None, got {type(value).__name__}"
+                )
 
     def _validate_memory_kinds(self) -> None:
         if not isinstance(self.legacy_declared_memory_kinds, tuple):
@@ -158,7 +171,7 @@ class BeingSnapshot:
     @property
     def has_attachment(self) -> bool:
         """attachment 情報を持つ snapshot なら True。"""
-        return self.attachment_world_id is not None
+        return self.attachment_environment_id is not None
 
     @property
     def has_memory_payload(self) -> bool:

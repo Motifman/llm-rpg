@@ -36,6 +36,7 @@ import pytest
 from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
 from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment as _BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
@@ -47,6 +48,8 @@ from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
 
+_ENVIRONMENT = _BeingAttachment(environment_id="demo#1", environment_name="試験の世界")
+
 _FIXED_TIME = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 
@@ -55,11 +58,12 @@ def _make_stack():
     repo = InMemoryBeingRepository()
     player_beings = PlayerBeings(DEFAULT_SINGLE_WORLD_ID)
     resolver = BeingAttachmentResolver(repo, player_beings)
-    provisioning = BeingProvisioningService(repo, player_beings)
+    provisioning = BeingProvisioningService(repo, player_beings, _ENVIRONMENT)
     wiring = SimpleNamespace(
         being_repository=repo,
         being_attachment_resolver=resolver,
         player_beings=player_beings,
+        being_environment=_ENVIRONMENT,
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),

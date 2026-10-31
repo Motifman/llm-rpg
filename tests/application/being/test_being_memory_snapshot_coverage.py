@@ -12,11 +12,14 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
     SnapshotCoverageError,
     _validate_snapshot_payload_coverage,
 )
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment as _BeingAttachment
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import InMemoryShortTermMemoryRepository
+
+_ENVIRONMENT = _BeingAttachment(environment_id="demo#1", environment_name="試験の世界")
 
 
 class TestValidateSnapshotPayloadCoverage:
@@ -158,11 +161,12 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
         repo = InMemoryBeingRepository()
         player_beings = PlayerBeings(DEFAULT_SINGLE_WORLD_ID)
         resolver = BeingAttachmentResolver(repo, player_beings)
-        provisioning = BeingProvisioningService(repo, player_beings)
+        provisioning = BeingProvisioningService(repo, player_beings, _ENVIRONMENT)
         wiring = SimpleNamespace(
             being_repository=repo,
             being_attachment_resolver=resolver,
             player_beings=player_beings,
+            being_environment=_ENVIRONMENT,
             acquaintance_store=InMemoryAcquaintanceRepository(),
             being_episode_store=InMemoryEpisodeRepository(),
             being_memo_store=InMemoryMemoBookRepository(),

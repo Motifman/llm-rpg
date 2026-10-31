@@ -21,7 +21,7 @@ def _persona() -> Persona:
 
 
 def _attachment(world: int = 1, player: int = 2) -> BeingAttachment:
-    return BeingAttachment(world_id=world, player_id=player)
+    return BeingAttachment(environment_id=f"w{world}p{player}", environment_name="廃坑の山村")
 
 
 class TestBeingConstruction:

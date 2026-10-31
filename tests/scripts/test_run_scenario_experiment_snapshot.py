@@ -73,6 +73,7 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
         )
+        from ai_rpg_world.being.domain.being_attachment import BeingAttachment
         from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
             InMemoryAcquaintanceRepository,
         )
@@ -99,6 +100,7 @@ class TestExpectedPayloadKeysCoverage:
         return SimpleNamespace(
             _aux_being_repository=repo,
             _player_beings=player_beings,
+            _being_environment=BeingAttachment(environment_id="demo#1", environment_name="試験の世界"),
             aux_being_resolver=BeingAttachmentResolver(repo, player_beings),
             _memory_turn_clock=InMemoryMemoryTurnClock(),
             _acquaintance_store=InMemoryAcquaintanceRepository(),

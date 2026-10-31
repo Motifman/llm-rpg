@@ -79,3 +79,19 @@ def test_action_prompt_tells_the_same_first_person_as_the_persona() -> None:
         being_id = runtime._aux_being_resolver.resolve_being_id(runtime._aux_being_default_world_id, player_id)
         first_person = runtime._aux_being_repository.find_by_id(being_id).persona.first_person
         assert f"一人称は「{first_person}」" in runtime.build_system_prompt(player_id)
+
+
+def test_each_player_being_enters_the_scenario_environment() -> None:
+    """起動時に用意した Being は、シナリオの識別子と世界の番号から作った環境 (mine_village_v1#1、廃坑の山村) に入る (design_decisions D1928-2)。"""
+    from ai_rpg_world.being.domain.being_attachment import BeingAttachment
+
+    runtime = create_world_runtime(_SCENARIO, config=ResolvedLlmRuntimeConfig.for_tests())
+
+    attachments = {
+        runtime._aux_being_repository.find_by_id(
+            runtime._aux_being_resolver.resolve_being_id(runtime._aux_being_default_world_id, player_id)
+        ).attachment
+        for player_id in runtime.get_player_ids()
+    }
+
+    assert attachments == {BeingAttachment(environment_id="mine_village_v1#1", environment_name="廃坑の山村")}

@@ -497,6 +497,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,
         player_beings=getattr(runtime, "_player_beings", None),
+        being_environment=getattr(runtime, "_being_environment", None),
         acquaintance_store=getattr(runtime, "_acquaintance_store", None),
         being_episode_store=getattr(runtime, "_being_episode_store", None),
         being_memo_store=getattr(runtime, "_being_memo_store", None),

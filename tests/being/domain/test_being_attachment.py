@@ -1,4 +1,4 @@
-"""BeingAttachment が、世界とプレイヤーの番号を正の int だけで持つことを保証する (design_decisions D1469-4)。"""
+"""BeingAttachment が、居場所を環境の識別子と表示の名前で持ち、ゲームの番号を持たないことを保証する (design_decisions D1928-2)。"""
 
 from __future__ import annotations
 
@@ -9,40 +9,39 @@ from ai_rpg_world.domain.being.exception.being_exceptions import BeingAttachment
 
 
 class TestBeingAttachmentValidation:
-    """BeingAttachment が受け取る番号の決まりを保証する。"""
+    """BeingAttachment が受け取る値の決まりを保証する。"""
 
-    def test_positive_ints_are_kept(self) -> None:
-        """正の int の世界とプレイヤーの番号をそのまま持つ。"""
-        attachment = BeingAttachment(world_id=1, player_id=2)
+    def test_environment_id_and_name_are_kept(self) -> None:
+        """環境の識別子と表示の名前をそのまま持つ。"""
+        attachment = BeingAttachment(environment_id="mine_village_v1#1", environment_name="廃坑の山村")
 
-        assert (attachment.world_id, attachment.player_id) == (1, 2)
+        assert (attachment.environment_id, attachment.environment_name) == ("mine_village_v1#1", "廃坑の山村")
 
-    @pytest.mark.parametrize("field_name", ["world_id", "player_id"])
-    @pytest.mark.parametrize("value", [0, -1, True, "1", 1.0, None])
-    def test_non_positive_or_non_int_raises(self, field_name: str, value: object) -> None:
-        """0 以下、bool、int でない値を渡すと BeingAttachmentValidationException を投げる。"""
-        fields: dict[str, object] = {"world_id": 1, "player_id": 2, field_name: value}
+    @pytest.mark.parametrize("field_name", ["environment_id", "environment_name"])
+    @pytest.mark.parametrize("value", ["", "   ", 1, None])
+    def test_blank_or_non_text_raises(self, field_name: str, value: object) -> None:
+        """空白だけの文字列か文字列でない値を渡すと BeingAttachmentValidationException を投げる。"""
+        fields: dict[str, object] = {"environment_id": "mine_village_v1#1", "environment_name": "廃坑の山村"}
+        fields[field_name] = value
 
         with pytest.raises(BeingAttachmentValidationException, match=field_name):
             BeingAttachment(**fields)  # type: ignore[arg-type]
 
-    def test_game_id_type_is_rejected(self) -> None:
-        """ゲームの PlayerId を渡すと BeingAttachmentValidationException を投げる。番号はゲームの側で int にしてから渡す。"""
-        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-        with pytest.raises(BeingAttachmentValidationException, match="player_id"):
-            BeingAttachment(world_id=1, player_id=PlayerId(2))  # type: ignore[arg-type]
-
 
 class TestBeingAttachmentEquality:
-    """BeingAttachment の等価性を保証する。"""
+    """同じ環境かを、識別子で見分けることを保証する。"""
 
-    def test_same_world_and_player_are_equal_and_hash_alike(self) -> None:
-        """世界とプレイヤーが同じなら等しく、set では 1 つになる。"""
-        assert BeingAttachment(world_id=1, player_id=2) == BeingAttachment(world_id=1, player_id=2)
-        assert len({BeingAttachment(world_id=1, player_id=2), BeingAttachment(world_id=1, player_id=2)}) == 1
+    def test_same_environment_is_equal_and_hashes_alike(self) -> None:
+        """識別子と表示の名前が同じなら等しく、set では 1 つになる。"""
+        first = BeingAttachment(environment_id="mine_village_v1#1", environment_name="廃坑の山村")
+        second = BeingAttachment(environment_id="mine_village_v1#1", environment_name="廃坑の山村")
 
-    @pytest.mark.parametrize("world, player", [(99, 2), (1, 99)])
-    def test_different_world_or_player_is_not_equal(self, world: int, player: int) -> None:
-        """世界とプレイヤーの一方だけが違っても、等しくない。"""
-        assert BeingAttachment(world_id=1, player_id=2) != BeingAttachment(world_id=world, player_id=player)
+        assert first == second
+        assert len({first, second}) == 1
+
+    def test_same_name_in_another_world_is_another_environment(self) -> None:
+        """同じシナリオの世界が 2 つ立って表示の名前が重なっても、識別子が違えば別の環境。"""
+        first = BeingAttachment(environment_id="mine_village_v1#1", environment_name="廃坑の山村")
+        second = BeingAttachment(environment_id="mine_village_v1#2", environment_name="廃坑の山村")
+
+        assert first != second

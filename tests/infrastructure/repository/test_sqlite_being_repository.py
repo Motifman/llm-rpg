@@ -25,7 +25,7 @@ def _being(
     name: str = "アダ",
     attached: bool = False,
 ) -> Being:
-    attachment = BeingAttachment(world_id=1, player_id=2) if attached else None
+    attachment = BeingAttachment(environment_id="w1p2", environment_name="廃坑の山村") if attached else None
     return Being(
         being_id=BeingId(being_id),
         persona=Persona(name=name, first_person="わたし", traits=("慎重",)),
@@ -95,8 +95,8 @@ class TestSqliteBeingRepositoryAttachmentRoundtrip:
         loaded = repo.find_by_id(BeingId("ada"))
         assert loaded is not None
         assert loaded.attachment is not None
-        assert loaded.attachment.world_id == 1
-        assert loaded.attachment.player_id == 2
+        assert loaded.attachment is not None
+        assert loaded.attachment.environment_id == "w1p2"
 
 
 class TestSqliteBeingRepositorySchema:
@@ -128,8 +128,8 @@ class TestSqliteBeingRepositorySchema:
         data = json.loads(row["snapshot_json"])
         assert data["being_id_value"] == "ada"
         assert data["persona"]["name"] == "アダ"
-        assert data["attachment_world_id"] == 1
-        assert data["attachment_player_id"] == 2
+        assert data["attachment_environment_id"] == "w1p2"
+        assert not {"attachment_world_id", "attachment_player_id"} & data.keys()
         assert "declared_memory_kinds" not in data
 
 
@@ -143,8 +143,8 @@ class TestSqliteBeingRepositoryMemoryPayload:
         snapshot = BeingSnapshot(
             being_id_value="ada",
             persona=Persona(name="アダ", first_person="わたし"),
-            attachment_world_id=1,
-            attachment_player_id=2,
+            attachment_environment_id="w1p2",
+            attachment_environment_name="廃坑の山村",
             snapshot_version=2,
             memory_payload_json='{"memo": [{"id": "m1"}]}',
         )
@@ -152,46 +152,6 @@ class TestSqliteBeingRepositoryMemoryPayload:
         repo.save_snapshot(snapshot)
 
         assert repo.find_snapshot_by_id(BeingId("ada")) == snapshot
-
-
-class TestSqliteBeingRepositoryFindAllAttachedTo:
-    """find_all_attached_to の挙動 (= Phase 3 Step 2 で追加、JSON1 経由クエリ)。"""
-
-    def test_one_attached_being_matches_query(self, repo: SqliteBeingRepository) -> None:
-        """正常系: ある (world, player) に attach 中の Being を 1 件返す。"""
-        repo.save(_being("ada", attached=True))
-        result = repo.find_all_attached_to(WorldId(1), PlayerId(2))
-        assert len(result) == 1
-        assert result[0].being_id == BeingId("ada")
-        assert result[0].is_attached is True
-
-    def test_attach_being(self, repo: SqliteBeingRepository) -> None:
-        """attachment_world_id が NULL の行は WHERE で除外される。"""
-        repo.save(_being("ada", attached=False))
-        assert repo.find_all_attached_to(WorldId(1), PlayerId(2)) == []
-
-    def test_returns_all_world_player_multiple_being(self, repo: SqliteBeingRepository) -> None:
-        """異常状態検出は Resolver の責務なので、ここは全件返す。"""
-        repo.save(_being("ada", attached=True))
-        # ben を同じ (world=1, player=2) に attach 済みで保存
-        from ai_rpg_world.being.domain.being import Being
-        from ai_rpg_world.being.domain.being_attachment import (
-            BeingAttachment,
-        )
-
-        ben = Being(
-            being_id=BeingId("ben"),
-            persona=Persona(name="ベン", first_person="俺"),
-            attachment=BeingAttachment(world_id=1, player_id=2),
-        )
-        repo.save(ben)
-        result = repo.find_all_attached_to(WorldId(1), PlayerId(2))
-        assert {b.being_id.value for b in result} == {"ada", "ben"}
-
-    def test_vo_raises_type_error(self, repo: SqliteBeingRepository) -> None:
-        """型違反は TypeError で弾く。"""
-        with pytest.raises(TypeError, match="world_id"):
-            repo.find_all_attached_to(1, PlayerId(2))  # type: ignore[arg-type]
 
 
 class TestSqliteBeingRepositoryTypeGuards:

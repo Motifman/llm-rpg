@@ -188,6 +188,15 @@ def cmd_load(args: argparse.Namespace) -> int:
         result.memory_restored,
         result.removed_memory_key_counts,
     )
+    if result.legacy_attachment_player_id is not None:
+        # 古い snapshot の居場所 (世界とプレイヤーの番号) は Being の居場所にしない (design_decisions D1928-2)。
+        # 実験の再開では run の環境に入れ直すが、CLI はどの環境にも入れない。
+        logger.warning(
+            "the old snapshot's attachment (world %s, player %s) was not kept; %s is not in any environment",
+            result.legacy_attachment_world_id,
+            result.legacy_attachment_player_id,
+            result.being_id.value,
+        )
     return 0
 
 

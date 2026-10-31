@@ -11,6 +11,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
@@ -41,7 +43,7 @@ def _populate_source_dbs(
     being = Being(
         being_id=BeingId("being_w1_p1"),
         persona=Persona(name="アダ", first_person="わたし"),
-        attachment=BeingAttachment(world_id=1, player_id=1),
+        attachment=BeingAttachment(environment_id="w1p1", environment_name="廃坑の山村"),
     )
     repo.save(being)
 
@@ -95,6 +97,31 @@ class TestBeingSnapshotCliEndToEnd:
         loaded = dst_repo.find_by_id(being_id)
         assert loaded is not None
         assert loaded.persona.name == "アダ"
+
+    def test_loading_an_old_snapshot_warns_that_the_attachment_was_dropped(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """番号の欄の古い snapshot を読むと、Being はどの環境にも入らず、捨てた番号を warning に残す (design_decisions D1928-2)。"""
+        cli = _load_cli_module()
+        src_being_db = tmp_path / "src_beings.db"
+        being_id = _populate_source_dbs(being_db=src_being_db)
+        snapshot_json = tmp_path / "snapshot.json"
+        cli.main(
+            ["save", "--being-db", str(src_being_db), "--being-id", being_id.value, "--output", str(snapshot_json)]
+        )
+        data = json.loads(snapshot_json.read_text(encoding="utf-8"))
+        data.pop("attachment_environment_id")
+        data.pop("attachment_environment_name")
+        data.update(attachment_world_id=1, attachment_player_id=1)
+        snapshot_json.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        dst_being_db = tmp_path / "dst_beings.db"
+
+        with caplog.at_level("WARNING"):
+            rc = cli.main(["load", "--being-db", str(dst_being_db), "--input", str(snapshot_json)])
+
+        assert rc == 0
+        assert SqliteBeingRepository.connect(str(dst_being_db)).find_by_id(being_id).attachment is None
+        assert any("was not kept" in record.getMessage() for record in caplog.records)
 
     def test_save_missing_source_db_exits_one(self, tmp_path: Path) -> None:
         """source DB が無い save は sqlite が自動生成する前に弾かれる。"""

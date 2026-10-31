@@ -1,5 +1,8 @@
 # 主体の接続拒否と人格の保持を確かめる
 
+> D1928-2 で `unique_attached_being` と `find_all_attached_to` は消え、誰がどのプレイヤーを動かすかはゲームの側の対応表 (`PlayerBeings`) が持つ。
+
+
 > D1469-1 で `BeingIdentity` は `Persona` に、`Being` は `being/domain/being.py` に移り、`MemoryKind` と記憶の種類の宣言は消えた。以下は当時の記録。
 
 ## なぜ

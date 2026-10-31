@@ -41,7 +41,7 @@ def _attached_being() -> Being:
     return Being(
         being_id=BeingId("ada"),
         persona=_persona(),
-        attachment=BeingAttachment(world_id=1, player_id=2),
+        attachment=BeingAttachment(environment_id="w1p2", environment_name="廃坑の山村"),
     )
 
 
@@ -49,8 +49,8 @@ def _snapshot(**overrides: object) -> BeingSnapshot:
     fields: dict[str, object] = dict(
         being_id_value="ada",
         persona=_persona(),
-        attachment_world_id=None,
-        attachment_player_id=None,
+        attachment_environment_id=None,
+        attachment_environment_name=None,
     )
     fields.update(overrides)
     return BeingSnapshot(**fields)  # type: ignore[arg-type]
@@ -65,8 +65,8 @@ class TestBeingSnapshotCodecEncode:
         snapshot = BeingSnapshotCodec.encode(being)
         assert snapshot.being_id_value == "ada"
         assert snapshot.persona == _persona()
-        assert snapshot.attachment_world_id is None
-        assert snapshot.attachment_player_id is None
+        assert snapshot.attachment_environment_id is None
+        assert snapshot.attachment_environment_name is None
         assert snapshot.legacy_declared_memory_kinds == ()
         assert snapshot.snapshot_version == CURRENT_SNAPSHOT_VERSION
 
@@ -75,8 +75,8 @@ class TestBeingSnapshotCodecEncode:
     ) -> None:
         """attached Being の snapshot は world / player 両方を持つ。"""
         snapshot = BeingSnapshotCodec.encode(_attached_being())
-        assert snapshot.attachment_world_id == 1
-        assert snapshot.attachment_player_id == 2
+        assert snapshot.attachment_environment_id == "w1p2"
+        assert snapshot.attachment_environment_name == "廃坑の山村"
 
     def test_being_raises_type_error(self) -> None:
         """型違反は TypeError で弾く。"""
@@ -149,7 +149,9 @@ class TestBeingSnapshotCodecMemoryPayload:
 
     def test_v1_snapshot_decode(self) -> None:
         """SUPPORTED_VERSIONS が v1 を含むため後方互換で復元可能。"""
-        snapshot = _snapshot(attachment_world_id=1, attachment_player_id=2, snapshot_version=1)
+        snapshot = _snapshot(
+            attachment_environment_id="w1p2", attachment_environment_name="廃坑の山村", snapshot_version=1
+        )
         being = BeingSnapshotCodec.decode(snapshot)
         assert being.being_id == BeingId("ada")
         assert being.attachment is not None
@@ -201,7 +203,9 @@ class TestRemovedMemoryDeclaration:
     def test_old_declarations_do_not_come_back_on_reencode(self) -> None:
         """古い宣言のある snapshot を decode して encode し直すと、宣言は残らず ID・人柄・所属は保たれる。"""
         snapshot = _snapshot(
-            attachment_world_id=1, attachment_player_id=2, legacy_declared_memory_kinds=("episodic", "memo")
+            attachment_environment_id="w1p2",
+            attachment_environment_name="廃坑の山村",
+            legacy_declared_memory_kinds=("episodic", "memo"),
         )
 
         encoded = BeingSnapshotCodec.encode(BeingSnapshotCodec.decode(snapshot))
