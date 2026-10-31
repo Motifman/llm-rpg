@@ -14,7 +14,7 @@
 - `short_term_summary_generated`: L4 short-term summary 更新
 - `short_term_long_summary_generated`: L5 long summary 生成。L5 は #1824 で消したので、それより後の trace には出ない (出ないのが正常)
 - `being_memo`: メモ帳への書き込み。`payload.applied` / `payload.rejected`
-- `episode_writing`: 目次つきのエピソードの書き起こし。`payload.trigger` (compaction / leaving) / `payload.outcome` (written / failed / skipped) / `payload.episodes`
+- `episode_writing`: 目次つきのエピソードの書き起こし。`payload.trigger` (leaving。2026-10-31 より前の trace では compaction も) / `payload.outcome` (written / failed / skipped) / `payload.episodes`。今の短期記憶を畳むときの書き起こしは #1824 でやめ、Being の短期記憶の範囲が埋まったときに書く (`being_short_term_memory_range_filled` と `being_episode_written`)
 - `being_short_term_memory_range_filled`: Being の短期記憶の直近の範囲が埋まった。`payload.turn` / `payload.until_turn` / `payload.experience_count`。このあと、いきさつとエピソードが別のスレッドで書かれる
 - `being_episode_written`: 書き起こしたエピソード 1 件。`payload.handle` / `payload.written_turn` / `payload.truncated`。範囲が埋まったときの書き起こしで 0 件だった範囲は、`being_short_term_memory_range_filled` と Being・ターン (`turn` = `written_turn`) で突き合わせて見る。今の書き起こし (`episode_writing`) でも出るので、同じ Being・同じターンの `episode_writing` があれば、その件数を引いて見る
 - `episode_index_shown`: 毎ターンのプロンプトに出した目次。`payload.shown_handles` / `payload.total_count`

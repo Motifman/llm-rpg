@@ -295,7 +295,6 @@ class TestSnapshotTraceCarriesMemoryTurns:
             == 0
         )
 
-        writes = self._events(tmp_path / "first" / "trace.jsonl", "episode_writing")
-        assert any(w["payload"]["trigger"] == "compaction" for w in writes)
+        assert self._events(tmp_path / "first" / "trace.jsonl", "being_short_term_memory_range_filled") != []
         assert self._events(tmp_path / "second" / "trace.jsonl", "prompt_section_breakdown") != []
         assert self._events(tmp_path / "second" / "trace.jsonl", "recent_events_shadow_mismatch") == []
