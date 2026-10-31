@@ -1,4 +1,4 @@
-"""本人ごとに受け手を直列実行し、結果の反映を呼び出す側へ戻す。"""
+"""本人ごとにハンドラを直列実行し、結果の反映を呼び出す側へ戻す。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from collections.abc import Callable, Hashable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from threading import RLock
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, Literal, TypeVar
 
 from ai_rpg_world.eventing.async_event_handler import AsyncEventHandler
 from ai_rpg_world.eventing.domain_event import DomainEvent
@@ -44,7 +44,7 @@ class _Work:
 
 
 class AsyncEventExecutor:
-    """未反映の件数を制限し、同じ宛先の受け手を到着順に呼ぶ。"""
+    """未反映の件数を制限し、同じ宛先のハンドラを到着順に呼ぶ。"""
 
     def __init__(
         self,
@@ -205,23 +205,4 @@ class AsyncEventExecutor:
         try:
             self._observer(failure)
         except Exception:
-            logging.getLogger(__name__).exception("非同期の受け手の失敗を知らせられませんでした")
-
-
-@dataclass(frozen=True)
-class AsyncDelivery(Generic[_Event, _Result]):
-    """宛先の取り出し方と結果の反映先を、非同期の受け手に結び付ける。"""
-
-    executor: AsyncEventExecutor
-    recipient_key: Callable[[_Event], Hashable]
-    apply_result: Callable[[_Result], None]
-
-    def bind(self, handler: Callable[[_Event], _Result]) -> Callable[[_Event], None]:
-        """共通の配送器に、完了を待たず受付へ渡す受け手を返す。"""
-
-        def enqueue(event: _Event) -> None:
-            self.executor.submit(
-                key=self.recipient_key(event), event=event, handler=handler, apply_result=self.apply_result
-            )
-
-        return enqueue
+            logging.getLogger(__name__).exception("非同期のハンドラの失敗を知らせられませんでした")

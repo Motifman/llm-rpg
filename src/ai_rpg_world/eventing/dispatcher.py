@@ -1,13 +1,13 @@
-"""確定の前後で受け手を同期的に呼ぶ、文脈に依存しない配送器。"""
+"""確定の前後でハンドラを同期的に呼ぶ、文脈に依存しない配送器。"""
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar, cast, overload
+from typing import Generic, TypeVar, cast
 
-from ai_rpg_world.eventing.async_delivery import AsyncDelivery, AsyncEventExecutor
+from ai_rpg_world.eventing.async_delivery import AsyncEventExecutor
 from ai_rpg_world.eventing.async_event_handler import AsyncEventHandler
 from ai_rpg_world.eventing.delivery import (
     AfterCommitFailureObserver,
@@ -71,12 +71,11 @@ class EventDispatcher(Generic[_Context]):
     ) -> None:
         """失敗を呼び出し元に伝える、確定前の必須処理を登録する。"""
         self._validate_registration(event_type, handler)
-        # 登録時に型引数で結んだイベントと受け手を、型の照合後に呼ぶ。
+        # 登録時に型引数で結んだイベントとハンドラを、型の照合後に呼ぶ。
         self._before_commit.append(
             _BeforeCommitRegistration(event_type, cast("Callable[[DomainEvent, _Context], None]", handler))
         )
 
-    @overload
     def register_after_commit(
         self,
         event_type: type[_Event],
@@ -84,39 +83,13 @@ class EventDispatcher(Generic[_Context]):
         *,
         channel: DeliveryChannel,
         guarantee: DeliveryGuarantee,
-        asynchronous: None = None,
-    ) -> None: ...
-
-    @overload
-    def register_after_commit(
-        self,
-        event_type: type[_Event],
-        handler: Callable[[_Event], _Result],
-        *,
-        channel: DeliveryChannel,
-        guarantee: DeliveryGuarantee,
-        asynchronous: AsyncDelivery[_Event, _Result],
-    ) -> None: ...
-
-    def register_after_commit(
-        self,
-        event_type: type[_Event],
-        handler: Callable[[_Event], Any],
-        *,
-        channel: DeliveryChannel,
-        guarantee: DeliveryGuarantee,
-        asynchronous: AsyncDelivery[_Event, Any] | None = None,
     ) -> None:
-        """確定後の受け手を配送先と保証付きで登録する。"""
+        """確定後のハンドラを配送先と保証付きで登録する。非同期のハンドラは ``register_async_after_commit`` で登録する。"""
         self._validate_registration(event_type, handler)
         if not isinstance(channel, DeliveryChannel):
             raise TypeError("channelはDeliveryChannelである必要があります")
         if not isinstance(guarantee, DeliveryGuarantee):
             raise TypeError("guaranteeはDeliveryGuaranteeである必要があります")
-        if asynchronous is not None:
-            if guarantee is DeliveryGuarantee.DURABLE_RETRY:
-                raise ValueError("非同期の受け手にはDURABLE_RETRYを指定できません")
-            handler = asynchronous.bind(handler)
         self._after_commit.append(
             _AfterCommitRegistration(event_type, cast("AfterCommitHandler", handler), channel, guarantee)
         )
@@ -150,11 +123,11 @@ class EventDispatcher(Generic[_Context]):
                 registration.handler(event, context)
 
     def handoff(self, events: Sequence[DomainEvent]) -> None:
-        """全受け手をイベント順・登録順に呼び、最後に最初の再送必須の失敗を返す。"""
+        """全ハンドラをイベント順・登録順に呼び、最後に最初の再送必須の失敗を返す。"""
         self._handoff(events, durable_only=False)
 
     def handoff_durable(self, events: Sequence[DomainEvent]) -> int:
-        """再送必須の受け手だけを呼び、全件成功なら実行した件数を返す。"""
+        """再送必須のハンドラだけを呼び、全件成功なら実行した件数を返す。"""
         return self._handoff(events, durable_only=True)
 
     def _handoff(self, events: Sequence[DomainEvent], *, durable_only: bool) -> int:
@@ -178,7 +151,7 @@ class EventDispatcher(Generic[_Context]):
         return handled_count
 
     def requires_durable_retry(self, event: DomainEvent) -> bool:
-        """再送必須の受け手が一つでも対象なら True を返す。"""
+        """再送必須のハンドラが一つでも対象なら True を返す。"""
         return any(
             isinstance(event, registration.event_type) and registration.guarantee is DeliveryGuarantee.DURABLE_RETRY
             for registration in self._after_commit

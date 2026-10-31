@@ -198,11 +198,11 @@ class TraceEventKind:
     # Being の短期記憶の直近の範囲が上限に届き、いきさつを待たずに古いターンを外した (#1824、design_decisions D1824-11)。
     # payload: being_id / turn (外したときのターン) / until_turn (外した範囲の終わり) / dropped_count (外した出来事の数)。
     BEING_SHORT_TERM_MEMORY_FOLD_FORCED = "being_short_term_memory_fold_forced"
-    # Being の短期記憶の範囲が埋まったか、いきさつが遅れているときに、いきさつを裏で作り、ターンの始めに
-    # 短期記憶へ入れた (#1824、design_decisions D1824-12)。書けなかったときと、同じか前の範囲までで短期記憶が
-    # 断ったとき (design_decisions D1824-17) は、これは残らず async_event_delivery_failed に残る。
-    # 2026-10 より前の trace には、断ったときの being_backstory_discarded が残っている。
-    # payload: being_id / until_turn / written_turn / flow / mood。
+    # Being の短期記憶に、裏で書いたいきさつが入った (短期記憶の ShortTermMemoryBackstoryAddedEvent。#1824、
+    # design_decisions D1824-18)。書けなかったときと、同じか前の範囲までで短期記憶が断ったとき (design_decisions
+    # D1824-17) は、これは残らず async_event_delivery_failed に残る。2026-10 より前の trace には、断ったときの
+    # being_backstory_discarded が残っている。payload: being_id / until_turn / written_turn / flow / mood /
+    # dropped_count (いきさつが入って外した出来事の数。上限で先に外していれば 0)。
     BEING_BACKSTORY_WRITTEN = "being_backstory_written"
     # エピソードの目次を 1 ターンのプロンプトに出した (#1623)。プロンプトを組むたびに 1 件。
     # payload: being_id / order (並べ方) / limit (N) / total_count (記録の件数) /

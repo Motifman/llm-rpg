@@ -11,6 +11,7 @@ from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, Seen
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.memo_book import MemoKind
 from ai_rpg_world.being.domain.short_term_memory import Backstory
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from tests.trace_helpers import RecordingTraceRecorder
 
 _ISLAND = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v4_coop.json"
@@ -128,7 +129,7 @@ class TestBackstoryWritingInTheRuntime:
         )
         assert memory.backstories[0].flow.startswith("(スタブ) ")
         (payload,) = recorder.payloads(TraceEventKind.BEING_BACKSTORY_WRITTEN)
-        assert (payload["being_id"], payload["until_turn"]) == (being_id.value, 10)
+        assert (payload["being_id"], payload["until_turn"], payload["dropped_count"]) == (being_id.value, 10, 10)
 
     def test_stale_backstory_is_refused_without_stopping_the_turn_entry(self) -> None:
         """範囲が埋まって書いたいきさつと、遅れを知らせて書き直した同じ範囲のいきさつが両方届くと、1 つ目が入り、2 つ目は短期記憶が断る。断ったことは async_event_delivery_failed (application_failed) に残り、結果を反映しても例外は投げない (design_decisions D1824-15、D1824-17)。"""
@@ -145,9 +146,10 @@ class TestBackstoryWritingInTheRuntime:
 
         assert [b.until_turn for b in store.get(being_id).backstories] == [10]
         (failure,) = recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)
-        assert (failure["reason"], failure["event_type"], failure["error_type"]) == (
+        assert (failure["reason"], failure["event_type"], failure["handler"], failure["error_type"]) == (
             "application_failed",
             "ShortTermMemoryBackstoryOverdueEvent",
+            "WriteBackstoryHandler",
             "ShortTermMemoryStaleBackstoryException",
         )
         assert len(recorder.payloads(TraceEventKind.BEING_BACKSTORY_WRITTEN)) == 1
@@ -189,5 +191,22 @@ class TestBackstoryWritingInTheRuntime:
 
         memory = runtime._being_short_term_memory_store.get(being_id)
         assert (memory.backstories, memory.awaited_backstory is not None) == ((), True)
-        assert len(recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)) == 1
+        (failure,) = recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)
+        assert (failure["reason"], failure["handler"]) == ("handler_failed", "WriteBackstoryHandler")
         assert recorder.payloads(TraceEventKind.BEING_BACKSTORY_WRITTEN) == []
+
+    def test_being_without_a_player_is_reported_as_prepare_failed(self) -> None:
+        """どのプレイヤーにも結びつかない Being の範囲が埋まると、名前と人格の文を引けず、prepare_failed として async_event_delivery_failed に残る。裏の仕事は受け付けない。"""
+        runtime, recorder, _ = _runtime()
+        stranger = BeingId("being_nobody")
+
+        self._fill_range(runtime, stranger)
+
+        (failure,) = recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)
+        assert (failure["reason"], failure["handler"], failure["error_type"]) == (
+            "prepare_failed",
+            "WriteBackstoryHandler",
+            "LookupError",
+        )
+        runtime.shutdown_async_events()
+        assert runtime._being_short_term_memory_store.get(stranger).backstories == ()

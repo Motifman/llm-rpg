@@ -1,4 +1,4 @@
-"""Being の短期記憶がためたイベントのうち、trace に残すだけのものを残す (#1824、design_decisions D1824-11)。"""
+"""Being の短期記憶が上限で古いターンを外したことを、trace に残す (#1824、design_decisions D1824-18)。"""
 
 from __future__ import annotations
 
@@ -7,9 +7,12 @@ from collections.abc import Callable
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryOldestTurnsDroppedEvent
+from ai_rpg_world.eventing import EventHandler
 
 
-class ShortTermMemoryEventTraces:
+class RecordOldestTurnsDroppedTraceHandler(EventHandler[ShortTermMemoryOldestTurnsDroppedEvent]):
+    """trace recorder の無い run では、何もせずに戻る。"""
+
     def __init__(
         self,
         *,
@@ -19,7 +22,7 @@ class ShortTermMemoryEventTraces:
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
 
-    def oldest_turns_dropped(self, event: ShortTermMemoryOldestTurnsDroppedEvent) -> None:
+    def handle(self, event: ShortTermMemoryOldestTurnsDroppedEvent) -> None:
         recorder = self._trace_recorder_provider()
         if recorder is None:
             return
@@ -33,4 +36,4 @@ class ShortTermMemoryEventTraces:
         )
 
 
-__all__ = ["ShortTermMemoryEventTraces"]
+__all__ = ["RecordOldestTurnsDroppedTraceHandler"]
