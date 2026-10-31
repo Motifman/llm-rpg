@@ -3,11 +3,11 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.short_term_memory import AwaitedBackstory, Backstory, ShortTermMemory
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from tests.event_handoff_helpers import discard_events
 
 ADA = BeingId("being-ada")

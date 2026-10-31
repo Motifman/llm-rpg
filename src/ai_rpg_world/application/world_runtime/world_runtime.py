@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
         WorldTickFailureIsolator,
     )
-    from ai_rpg_world.domain.being.value_object.being_id import BeingId
+    from ai_rpg_world.being.domain.being_id import BeingId
     from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
         WorldGraphEffectService,
     )

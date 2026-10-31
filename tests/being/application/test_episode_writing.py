@@ -3,12 +3,12 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory, AddEpisodesToMemoryCommand
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex, EpisodeWrittenEvent
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from tests.event_handoff_helpers import discard_events
 
 ADA = BeingId("being_ada")

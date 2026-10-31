@@ -5,11 +5,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeRepository
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeValidationException,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 @dataclass(frozen=True)

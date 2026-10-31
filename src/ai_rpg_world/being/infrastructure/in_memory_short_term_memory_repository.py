@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.short_term_memory import (
     ShortTermMemory,
     ShortTermMemoryRepository,
 )
 from ai_rpg_world.being.infrastructure.event_handoff import EventHandoff, save_and_hand_off
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 def _require_memory(memory: object) -> ShortTermMemory:

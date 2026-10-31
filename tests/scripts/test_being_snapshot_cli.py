@@ -12,9 +12,9 @@ import json
 from pathlib import Path
 
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
-from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
@@ -41,7 +41,7 @@ def _populate_source_dbs(
     being = Being(
         being_id=BeingId("being_w1_p1"),
         persona=Persona(name="アダ", first_person="わたし"),
-        attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)),
+        attachment=BeingAttachment(world_id=1, player_id=1),
     )
     repo.save(being)
 

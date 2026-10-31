@@ -19,12 +19,12 @@ from ai_rpg_world.being.contract import (
     OccurrenceOrder,
     OwnActionResult,
 )
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     ShortTermMemoryStaleBackstoryException,
     ShortTermMemoryUnpairedResultException,
     ShortTermMemoryValidationException,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 
 RECENT_TURNS: Final = 20

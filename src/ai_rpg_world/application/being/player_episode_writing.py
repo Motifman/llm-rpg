@@ -12,9 +12,9 @@ from ai_rpg_world.being.application.write_episodes_on_leaving import (
     WriteEpisodesOnLeaving,
     WriteEpisodesOnLeavingCommand,
 )
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnReader
 from ai_rpg_world.being.domain.persona import Persona
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _logger = logging.getLogger(__name__)

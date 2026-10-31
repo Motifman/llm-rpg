@@ -13,6 +13,7 @@ from ai_rpg_world.application.llm.services.executors.being_episode_recall_tool_e
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_EPISODE_RECALL
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
@@ -20,7 +21,6 @@ from ai_rpg_world.being.domain.memory_turn_clock import (
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 ADA = BeingId("being_ada")

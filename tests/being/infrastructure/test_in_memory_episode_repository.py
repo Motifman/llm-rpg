@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.application.being._memory_payload_codecs import being_episode_to_dict
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex, EpisodeRecalled, EpisodeWrittenEvent
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
@@ -11,7 +12,6 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeConflictException,
     EpisodeNotFoundException,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from tests.event_handoff_helpers import discard_events
 
 ADA = BeingId("being_ada")

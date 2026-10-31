@@ -148,7 +148,7 @@ def test_prompt_builder_uses_only_current_state_source() -> None:
     from ai_rpg_world.application.being.acting_being import ActingBeing
     from ai_rpg_world.application.llm.services.prompt_builder import MESSAGE_WHEN_PLAYER_NOT_PLACED
     from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import SpotGraphUiContextBuilder
-    from ai_rpg_world.domain.being.value_object.being_id import BeingId
+    from ai_rpg_world.being.domain.being_id import BeingId
 
     core = _make_core()
     profile = core.player_profile_repository.find_by_id.return_value

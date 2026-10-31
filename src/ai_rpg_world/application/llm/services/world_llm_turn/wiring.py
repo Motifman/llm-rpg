@@ -82,8 +82,8 @@ from ai_rpg_world.application.observation.services.observation_appender import (
 from ai_rpg_world.application.speech.services.speech_audience_resolver import (
     SpeechAudienceResolver,
 )
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.memo_book import MemoKind
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
     PlayerSpotNavigationState,

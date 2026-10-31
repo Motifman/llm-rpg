@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
 
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.being.domain.being_id import BeingId
 
 
 class AcquaintanceInvalid(ValueError):

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from ai_rpg_world.being.application.write_episodes import WriteEpisodes, WriteEpisodesCommand
 from ai_rpg_world.being.contract import UNKNOWN, AgentMove, Observation, ObservedTime, SeenOrHeard
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import EpisodeIndex
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents, EpisodeWriter
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import Attempt, Perception
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ADA = BeingId("being_p1")
 CONTENTS = EpisodeContents(

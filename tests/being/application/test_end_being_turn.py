@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from ai_rpg_world.being.application.end_being_turn import EndBeingTurn, EndBeingTurnCommand
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.short_term_memory import AwaitedBackstory, ShortTermMemoryRangeFilledEvent
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ADA = BeingId("being_p1")
 

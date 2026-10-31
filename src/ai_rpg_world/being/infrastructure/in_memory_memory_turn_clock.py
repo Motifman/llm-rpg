@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnClock,
     require_memory_turn,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 def _require_being_id(being_id: object) -> BeingId:

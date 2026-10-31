@@ -51,7 +51,7 @@ from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case impo
 from ai_rpg_world.application.being.restore_being_snapshot_from_file_use_case import (  # noqa: E402
     RestoreBeingSnapshotFromFileUseCase,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId  # noqa: E402
+from ai_rpg_world.being.domain.being_id import BeingId  # noqa: E402
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (  # noqa: E402
     SqliteBeingRepository,
 )

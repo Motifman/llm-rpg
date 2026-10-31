@@ -9,9 +9,9 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeRepository
 from ai_rpg_world.being.domain.episode_writer import EpisodeContents
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 @dataclass(frozen=True)

@@ -8,10 +8,10 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeValidationException,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 
 INDEX_TEXT_MAX_LENGTH = 40

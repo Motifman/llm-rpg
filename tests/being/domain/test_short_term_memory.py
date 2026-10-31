@@ -16,6 +16,7 @@ from ai_rpg_world.being.contract import (
     SeenOrHeard,
     ToldOrWritten,
 )
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.short_term_memory import (
     BACKSTORY_GENERATIONS,
     BACKSTORY_OVERDUE_TURNS,
@@ -41,7 +42,6 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     ShortTermMemoryUnpairedResultException,
     ShortTermMemoryValidationException,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 
 ADA = BeingId("being_p1")

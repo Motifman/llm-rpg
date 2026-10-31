@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingIdValidationException,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 class TestBeingIdValidation:

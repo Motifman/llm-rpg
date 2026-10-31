@@ -34,7 +34,7 @@ from ai_rpg_world.application.llm.services.unified_recent_event_store import (
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:

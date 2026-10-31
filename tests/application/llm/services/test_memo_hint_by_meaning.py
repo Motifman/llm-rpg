@@ -41,7 +41,7 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
     PendingTodo,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.being.domain.being_id import BeingId
 
 _BEING = BeingId("being_w1_p1")
 

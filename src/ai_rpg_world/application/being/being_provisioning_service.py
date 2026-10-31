@@ -35,10 +35,10 @@ from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
-from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
@@ -75,7 +75,7 @@ class BeingProvisioningService:
 
         - 既に attach 済みの Being があれば、その BeingId を返す
         - 無ければ ``f"being_w{world_id}_p{player_id}"`` で Being を作って attach
-        - 既存の同 BeingId が別 (world, player) に attach 中なら detach → 再 attach
+        - 既存の同 BeingId が別 (world, player) に attach 中なら、そこから移す (``Being.move_to``)
         - ``persona`` は新しく作るときだけ使う。既にある Being の人柄は変えない
         """
         if not isinstance(player_id, PlayerId):
@@ -93,18 +93,17 @@ class BeingProvisioningService:
             return existing.being_id
 
         # Case 2: 決定論 BeingId で Being が既に存在するなら、それを (world, player)
-        # に attach し直す (= 別箇所に attach 中なら detach してから)。
+        # に入れ直す。別の (world, player) に入っていれば、Being が外してから入る (move_to)。
         #
         # NOTE: ``find_by_id`` は ``BeingSnapshotCodec.decode`` 経由で **毎回
         # 新インスタンス** を返す (Phase 4 Step 4-3 以降、InMemory / Sqlite 共)。
         # 参照共有はないので、ここで mutate しても repo の内部状態は変わらない。
         # **必ず ``save()`` を呼んで永続化すること**。
         being_id = self._derive_being_id(target_world, player_id)
+        attachment = BeingAttachment(world_id=target_world.value, player_id=player_id.value)
         existing_being = self._repo.find_by_id(being_id)
         if existing_being is not None:
-            if existing_being.is_attached:
-                existing_being.detach()
-            existing_being.attach(BeingAttachment(world_id=target_world, player_id=player_id))
+            existing_being.move_to(attachment)
             self._repo.save(existing_being)
             return being_id
 
@@ -112,7 +111,7 @@ class BeingProvisioningService:
         being = Being(
             being_id=being_id,
             persona=persona or Persona(name=f"agent_{player_id.value}"),
-            attachment=BeingAttachment(world_id=target_world, player_id=player_id),
+            attachment=attachment,
         )
         self._repo.save(being)
         return being_id

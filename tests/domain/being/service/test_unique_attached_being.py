@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingMultipleAttachmentException,
@@ -12,8 +14,6 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
 from ai_rpg_world.domain.being.service.unique_attached_being import (
     unique_attached_being,
 )
-from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
@@ -27,11 +27,7 @@ def _being(
     *,
     attached: tuple[int, int] | None = None,
 ) -> Being:
-    attachment = (
-        BeingAttachment(world_id=WorldId(attached[0]), player_id=PlayerId(attached[1]))
-        if attached is not None
-        else None
-    )
+    attachment = BeingAttachment(world_id=attached[0], player_id=attached[1]) if attached is not None else None
     return Being(being_id=BeingId(being_id), persona=_persona(), attachment=attachment)
 
 

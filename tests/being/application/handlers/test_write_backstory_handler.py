@@ -7,6 +7,7 @@ from ai_rpg_world.being.application.handlers.write_backstory_handler import Writ
 from ai_rpg_world.being.application.write_backstory import WriteBackstoryCommand
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
 from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter, WrittenBackstory
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import (
     Backstory,
@@ -18,7 +19,6 @@ from ai_rpg_world.being.domain.short_term_memory import (
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.eventing import AsyncEventHandler
 from tests.event_handoff_helpers import discard_events
 

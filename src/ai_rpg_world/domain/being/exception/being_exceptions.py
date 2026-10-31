@@ -62,6 +62,12 @@ class BeingAlreadyAttachedException(BeingDomainException, StateException):
     error_code = "BEING.ALREADY_ATTACHED"
 
 
+class BeingNotAttachedException(BeingDomainException, StateException):
+    """どの環境にも入っていない Being を、環境から外そうとした。"""
+
+    error_code = "BEING.NOT_ATTACHED"
+
+
 class BeingSnapshotIncompleteException(BeingDomainException, ValidationException):
     """BeingSnapshot の構造が不整合な場合に投げる例外。
 
@@ -163,6 +169,7 @@ __all__ = [
     "BeingDomainException",
     "BeingIdValidationException",
     "BeingMultipleAttachmentException",
+    "BeingNotAttachedException",
     "BeingNotFoundException",
     "BeingSnapshotIncompleteException",
     "BeingSnapshotVersionException",

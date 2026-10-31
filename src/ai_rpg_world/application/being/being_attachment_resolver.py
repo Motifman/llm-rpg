@@ -30,9 +30,9 @@ Repository から複数返ってきたら ``BeingMultipleAttachmentException`` �
 from __future__ import annotations
 
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.service.unique_attached_being import unique_attached_being
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
@@ -86,7 +86,7 @@ class BeingAttachmentResolver:
         being = self._repo.find_by_id(being_id)
         if being is None or being.attachment is None:
             return None
-        return being.attachment.player_id
+        return PlayerId(being.attachment.player_id)
 
 
 __all__ = ["BeingAttachmentResolver"]

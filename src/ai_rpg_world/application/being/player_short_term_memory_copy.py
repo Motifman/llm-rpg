@@ -30,13 +30,13 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
 from ai_rpg_world.being.contract import ContractViolation, OccurrenceOrder
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnReader
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemory, ShortTermMemoryRepository
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     ShortTermMemoryUnpairedResultException,
     ShortTermMemoryValidationException,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _logger = logging.getLogger(__name__)

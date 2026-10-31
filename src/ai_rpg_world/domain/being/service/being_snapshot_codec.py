@@ -21,19 +21,17 @@ store への書き戻しは ``BeingMemorySnapshotService`` (application 層、4-
 from __future__ import annotations
 
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingSnapshotIncompleteException,
     BeingSnapshotVersionException,
 )
-from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_snapshot import (
     CURRENT_SNAPSHOT_VERSION,
     LEGACY_SNAPSHOT_VERSION_V1,
     BeingSnapshot,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 
 class BeingSnapshotCodec:
@@ -72,8 +70,8 @@ class BeingSnapshotCodec:
         world_id_value: int | None = None
         player_id_value: int | None = None
         if attachment is not None:
-            world_id_value = attachment.world_id.value
-            player_id_value = attachment.player_id.value
+            world_id_value = attachment.world_id
+            player_id_value = attachment.player_id
 
         # encode は常に最新版 (= v2) を出す。memory_payload_json=None でも v2 と
         # して扱う (= 「memory がまだ取得されていない v2 snapshot」は意味的に
@@ -137,8 +135,8 @@ class BeingSnapshotCodec:
                     "has_attachment is True but attachment ids are None (BeingSnapshot invariant violated)"
                 )
             attachment = BeingAttachment(
-                world_id=WorldId(snapshot.attachment_world_id),
-                player_id=PlayerId(snapshot.attachment_player_id),
+                world_id=snapshot.attachment_world_id,
+                player_id=snapshot.attachment_player_id,
             )
 
         if snapshot.persona is None:

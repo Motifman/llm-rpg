@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_attachment import BeingAttachment
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.exception.being_exceptions import BeingSnapshotIncompleteException
-from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
@@ -25,7 +25,7 @@ def _being(
     name: str = "アダ",
     attached: bool = False,
 ) -> Being:
-    attachment = BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2)) if attached else None
+    attachment = BeingAttachment(world_id=1, player_id=2) if attached else None
     return Being(
         being_id=BeingId(being_id),
         persona=Persona(name=name, first_person="わたし", traits=("慎重",)),
@@ -95,8 +95,8 @@ class TestSqliteBeingRepositoryAttachmentRoundtrip:
         loaded = repo.find_by_id(BeingId("ada"))
         assert loaded is not None
         assert loaded.attachment is not None
-        assert loaded.attachment.world_id == WorldId(1)
-        assert loaded.attachment.player_id == PlayerId(2)
+        assert loaded.attachment.world_id == 1
+        assert loaded.attachment.player_id == 2
 
 
 class TestSqliteBeingRepositorySchema:
@@ -175,14 +175,14 @@ class TestSqliteBeingRepositoryFindAllAttachedTo:
         repo.save(_being("ada", attached=True))
         # ben を同じ (world=1, player=2) に attach 済みで保存
         from ai_rpg_world.being.domain.being import Being
-        from ai_rpg_world.domain.being.value_object.being_attachment import (
+        from ai_rpg_world.being.domain.being_attachment import (
             BeingAttachment,
         )
 
         ben = Being(
             being_id=BeingId("ben"),
             persona=Persona(name="ベン", first_person="俺"),
-            attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(2)),
+            attachment=BeingAttachment(world_id=1, player_id=2),
         )
         repo.save(ben)
         result = repo.find_all_attached_to(WorldId(1), PlayerId(2))

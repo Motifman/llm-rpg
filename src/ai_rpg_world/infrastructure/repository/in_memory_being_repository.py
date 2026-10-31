@@ -7,11 +7,11 @@ SQLite 実装は後続 PR (Issue #469 checkpoint Stage 2 と統合予定) で追
 from __future__ import annotations
 
 from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.service.being_snapshot_codec import (
     BeingSnapshotCodec,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId

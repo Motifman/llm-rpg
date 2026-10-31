@@ -8,8 +8,8 @@ from ai_rpg_world.application.being.handlers.record_episode_written_trace_handle
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import EpisodeIndex, EpisodeWrittenEvent
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.eventing import EventHandler
 
 ADA = BeingId("being_p1")
