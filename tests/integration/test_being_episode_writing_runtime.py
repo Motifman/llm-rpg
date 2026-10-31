@@ -1,4 +1,4 @@
-"""世界の runtime が、環境を離れるときにエピソードを書き、今の短期記憶を畳むときには書かないことを保証する (#1626、design_decisions D1824-21)。書き起こしは設定で止められない (#1631)。"""
+"""世界の runtime が、環境を離れるときに Being の短期記憶からエピソードを書き、今の短期記憶を畳むときには書かないことを保証する (#1626、design_decisions D1824-21、D1824-23)。書き起こしは設定で止められない (#1631)。"""
 
 from __future__ import annotations
 
@@ -107,8 +107,8 @@ class TestEpisodeWritingInTheRuntime:
         assert (episode.environment_name, episode.written_turn) == (runtime.scenario.metadata.title, RECENT_TURNS)
         assert [k for k, _, _ in recorder.events if k == TraceEventKind.BEING_SHORT_TERM_MEMORY_RANGE_FILLED] != []
 
-    def test_leaving_writes_episodes_from_what_was_not_compacted(self) -> None:
-        """環境を離れるとき、まだ畳まれていない出来事からエピソードを書き、プレイヤーごとに trace に残す。"""
+    def test_leaving_writes_episodes_from_the_being_short_term_memory(self) -> None:
+        """環境を離れるとき、Being の短期記憶のまだまとめていない出来事からエピソードを書き、プレイヤーごとに trace に残す。出来事の無いプレイヤーは no_events で飛ばす。"""
         runtime, recorder = _runtime()
         first, *others = runtime.get_player_ids()
 
@@ -120,6 +120,43 @@ class TestEpisodeWritingInTheRuntime:
         assert writes[int(first.value)]["trigger"] == "leaving"
         assert writes[int(first.value)]["outcome"] == "written"
         assert all(writes[int(o.value)]["skip_reason"] == "no_events" for o in others)
+
+    def test_leaving_does_not_rewrite_the_range_written_when_it_filled(self) -> None:
+        """範囲が埋まってエピソードを書いたあとで環境を離れると、書き手に渡すのは埋まった範囲 (ターン 10 まで) より後の出来事だけになる。いきさつが届いていても待ったままでも同じ数になる。待ったままの境界は短期記憶と WriteEpisodesOnLeaving の試験が見る。"""
+        from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
+
+        runtime, recorder = _runtime()
+        pid = runtime.get_player_ids()[0]
+        being_id = _being_of(runtime, pid)
+        store = runtime._being_short_term_memory_store
+        memory = store.get(being_id)
+        for turn in range(1, RECENT_TURNS + 1):
+            memory.perceive(
+                Observation(
+                    body=f"ターン {turn} の出来事",
+                    route=SeenOrHeard(),
+                    time=ObservedTime(display="朝 6:01"),
+                    subject_is_self=False,
+                    subject_name=UNKNOWN,
+                    source=UNKNOWN,
+                    place=UNKNOWN,
+                    addressed_to_self=UNKNOWN,
+                ),
+                current_turn=turn - 1,
+            )
+        store.save(memory)
+        for _ in range(RECENT_TURNS):
+            runtime.advance_memory_turn(pid)
+        runtime.end_being_turn(pid)
+        runtime.async_event_executor.shutdown(timeout=5)
+        runtime.apply_async_results(pid)
+
+        runtime.write_episodes_on_leaving()
+
+        leaving = {p_id: p for k, p_id, p in recorder.events if k == TraceEventKind.EPISODE_WRITING}[int(pid.value)]
+        assert (leaving["outcome"], leaving["event_count"]) == ("written", RECENT_TURNS - 10)
+        awaited = store.get(being_id).awaited_backstory
+        assert leaving["awaited_until_turn"] == (awaited.until_turn if awaited is not None else None)
 
     def test_leaving_with_a_skip_reason_records_it_without_writing(self) -> None:
         """離れるときに飛ばす理由を渡すと、出来事が残っていても書かず、プレイヤーごとにその理由を残す。"""

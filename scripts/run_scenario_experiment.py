@@ -853,7 +853,7 @@ def _drive_scenario(
         # 確実に元に戻った状態でここに到達する (= main() 以降の Ctrl+C は
         # 通常通り KeyboardInterrupt を raise する)。
 
-        # #1626: 環境を離れるので、まだ畳まれていない出来事からエピソードを書く。
+        # #1626: 環境を離れるので、Being の短期記憶のまだまとめていない出来事からエピソードを書く (design_decisions D1824-23)。
         # 書いたエピソードを snapshot に入れるため、保存より前に置く。LLM が使えずに
         # 終わった run では、呼んでも失敗が並ぶだけなので書かずに理由を残す。
         runtime.write_episodes_on_leaving(skip_reason="llm_unusable" if outcome in _UNUSABLE_OUTCOMES else None)

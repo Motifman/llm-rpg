@@ -865,3 +865,80 @@ class TestDroppedOrder:
 
         (added,) = memory.get_events()
         assert [e.turn for e in added.dropped] == [6, 5]
+
+
+class TestUnsummarized:
+    """ShortTermMemory.unsummarized が、範囲が埋まったときにまとめる材料として渡していない出来事だけを返すことを保証する (環境を離れるときの書き起こし、design_decisions D1824-23)。"""
+
+    def test_all_experiences_before_any_range_fills(self) -> None:
+        """範囲がまだ 1 度も埋まっていなければ、すべての出来事を recent() と同じ順で返す。"""
+        memory = TestEndTurn._one_result_per_turn(3)
+
+        assert memory.unsummarized() == memory.recent()
+
+    def test_experiences_after_the_awaited_range(self) -> None:
+        """範囲が埋まっていきさつを待っているあいだは、待っている範囲 (ターン 10 まで) より後のターン 11 から 21 の出来事だけを返す。"""
+        memory = TestEndTurn._one_result_per_turn(20)
+        memory.end_turn(turn=20)
+        _act_and_answer(memory, "call-21", 21)
+
+        assert [e.turn for e in memory.unsummarized()] == list(range(11, 22))
+
+    def test_experiences_after_the_backstory_arrived(self) -> None:
+        """いきさつが届いて範囲を外したあとは、残ったターン 11 から 20 の出来事を全部返す。"""
+        memory = TestEndTurn._one_result_per_turn(20)
+        memory.end_turn(turn=20)
+        memory.add_backstory(_backstory(10, written_turn=20))
+
+        assert [e.turn for e in memory.unsummarized()] == list(range(11, 21))
+
+    def test_awaiting_move_is_included_as_an_attempt_without_result(self) -> None:
+        """結果を待っている 1 手も、結果の分からない試みとして末尾に含める。"""
+        memory = _empty()
+        memory.act(_move("call-1"), current_turn=1)
+
+        (attempt,) = memory.unsummarized()
+        assert isinstance(attempt, Attempt) and not attempt.is_answered()
+
+    def test_experiences_after_the_oldest_turns_are_dropped_at_the_limit(self) -> None:
+        """いきさつが届かないまま上限 (FORCED_FOLD_TURNS) に届くと、古いターン 1 から 10 を外し、続けて次の範囲 (ターン 20 まで) を待ち始める。返すのは、その範囲より後のターン 21 から 40 の出来事。"""
+        memory = TestEndTurn._one_result_per_turn(FORCED_FOLD_TURNS)
+        memory.end_turn(turn=20)
+        memory.end_turn(turn=FORCED_FOLD_TURNS)
+
+        assert (memory.recent_from, memory.awaited_backstory) == (
+            11,
+            AwaitedBackstory(until_turn=20, since_turn=FORCED_FOLD_TURNS),
+        )
+        assert [e.turn for e in memory.unsummarized()] == list(range(21, FORCED_FOLD_TURNS + 1))
+
+    def test_boundary_does_not_move_when_the_backstory_is_overdue(self) -> None:
+        """いきさつが遅れて待ち直しても、待っている範囲 (ターン 10 まで) は変わらず、返すのはターン 11 からの出来事のまま。"""
+        memory = TestEndTurn._one_result_per_turn(20 + BACKSTORY_OVERDUE_TURNS)
+        memory.end_turn(turn=20)
+        memory.end_turn(turn=20 + BACKSTORY_OVERDUE_TURNS)
+
+        assert memory.awaited_backstory == AwaitedBackstory(until_turn=10, since_turn=20 + BACKSTORY_OVERDUE_TURNS)
+        assert [e.turn for e in memory.unsummarized()] == list(range(11, 20 + BACKSTORY_OVERDUE_TURNS + 1))
+
+    def test_awaiting_move_inside_the_awaited_range_is_left_out(self) -> None:
+        """待っている範囲 (ターン 10 まで) の中で選んだまま結果の来ない 1 手は、範囲の材料に入っているので返さない。"""
+        memory = TestEndTurn._one_result_per_turn(9)
+        memory.act(_move("call-10"), current_turn=10)
+        for turn in range(11, 21):
+            memory.perceive(_observation(SeenOrHeard(), body=f"ターン {turn} の出来事"), current_turn=turn - 1)
+        memory.end_turn(turn=20)
+
+        unsummarized = memory.unsummarized()
+        assert all(e.turn > 10 for e in unsummarized)
+        assert not any(isinstance(e, Attempt) for e in unsummarized)
+
+    def test_asking_changes_nothing(self) -> None:
+        """問い合わせても、中身もためたイベントも変わらない。"""
+        memory = TestEndTurn._one_result_per_turn(20)
+        memory.end_turn(turn=20)
+        before = _state(memory)
+
+        memory.unsummarized()
+
+        assert _state(memory) == before

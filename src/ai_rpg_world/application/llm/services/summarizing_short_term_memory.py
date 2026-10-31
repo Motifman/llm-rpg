@@ -226,10 +226,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
         except Exception:
             _logger.exception("compaction listener raised (player_id=%s); continuing", player_id.value)
 
-    def uncompacted_entries(self, player_id: PlayerId) -> tuple[UnifiedRecentEventEntry, ...]:
-        """まだ畳んでいない出来事。閉じていないターンの分も含む。"""
-        return tuple(self._event_store.get_active_timeline(player_id))
-
     def _emit_compaction(
         self,
         player_id: PlayerId,

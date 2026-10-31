@@ -427,6 +427,15 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         """ターンの順に、同じ環境が続く間は起きた順に並べる。起きた順を持たない出来事は動かさない。"""
         return _in_recent_order(self._experiences)
 
+    def unsummarized(self) -> tuple[Experience, ...]:
+        """範囲が埋まったときに、いきさつとエピソードの材料として渡していない出来事。``recent()`` と同じ順。
+
+        いきさつを待っていれば、待っている範囲より後の出来事。結果を待っている 1 手も、結果の分からない試みとして含める。
+        """
+        experiences = self._experiences if self._awaiting is None else self._with(self._awaiting)
+        until_turn = self._awaited.until_turn if self._awaited is not None else self._recent_from - 1
+        return _in_recent_order(tuple(e for e in experiences if e.turn > until_turn))
+
     def end_turn(self, *, turn: int) -> None:
         """ターンの終わりに、直近の範囲の大きさを見る (design_decisions D1824-11、D1824-17)。
 
