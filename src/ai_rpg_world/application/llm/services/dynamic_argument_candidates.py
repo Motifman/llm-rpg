@@ -381,11 +381,16 @@ def parse_dynamic_argument_candidate_table(text: str) -> list[dict[str, Any]]:
 def inject_dynamic_argument_candidate_table(
     prompt: Mapping[str, Any],
     exposed_tools: set[str],
+    *,
+    in_scene: bool = True,
 ) -> dict[str, Any]:
     """実送信するユーザープロンプトの行動指示直前へ動的候補表を置く。
 
     ``prompt`` 自体は変更しない。候補が空なら本文を byte 単位で保ちつつ、
     保存・評価用の snapshot だけを返り値へ載せる。
+
+    ``in_scene`` が偽なら、場面 (``prompt["scene"]``) には候補表を入れない。reason_first の
+    行動の段は、評価のあとに足した指示の直前に表を置くので、場面の並びとは別の位置になる。
     """
     result = copy.deepcopy(dict(prompt))
     runtime_context = result.get("tool_runtime_context")
@@ -412,11 +417,11 @@ def inject_dynamic_argument_candidate_table(
     body = content[: -len(instruction)].rstrip()
     user_message["content"] = f"{body}\n\n{table}\n\n{instruction}"
     scene = result.get("scene")
-    if isinstance(scene, Scene) and scene.descriptions:
+    if in_scene and isinstance(scene, Scene) and scene.descriptions:
         # 候補表はユーザー文で【現在地と周囲】の直後に入るので、場面でも同じ位置に置く。
         surroundings, *rest = scene.descriptions
         candidates = dynamic_argument_candidate_description(snapshot["entries"])
-        result["scene"] = Scene((surroundings, *([candidates] if candidates else []), *rest))
+        result["scene"] = Scene((surroundings, *([candidates] if candidates else []), *rest), notices=scene.notices)
     return result
 
 

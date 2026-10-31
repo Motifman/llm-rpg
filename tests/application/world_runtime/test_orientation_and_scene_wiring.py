@@ -1,5 +1,5 @@
 """シナリオの runtime が、入るときの案内 (Orientation) と今見えている場面 (Scene) を詰めて渡し、
-プロンプトをそこから組むことを保証する (design_decisions D1630)。"""
+プロンプトをそこから組むことを保証する (design_decisions D1630、D1630-2)。"""
 
 from __future__ import annotations
 
@@ -57,12 +57,13 @@ class TestOrientation:
 class TestScene:
     """1 ターンのプロンプトに載る場面と、ユーザー文の末尾との関係を保証する。"""
 
-    def test_scene_holds_surroundings_then_notices(self, runtime) -> None:
-        """場面は【現在地と周囲】で始まり、知らせ (station_drill では【時間の経過】) が続く。"""
+    def test_scene_holds_surroundings_and_notices_apart(self, runtime) -> None:
+        """場面の説明文は【現在地と周囲】で、知らせ (station_drill では【時間の経過】) は別の並びに入る。"""
         scene = runtime.build_full_prompt(PlayerId(1))["scene"]
 
         assert isinstance(scene, Scene)
-        assert [d.heading for d in scene.descriptions] == ["現在地と周囲", "時間の経過"]
+        assert [d.heading for d in scene.descriptions] == ["現在地と周囲"]
+        assert [d.heading for d in scene.notices] == ["時間の経過"]
 
     def test_active_ongoing_condition_is_a_notice_before_the_elapsed_time(self, runtime) -> None:
         """停電が起きると、場面の知らせに【進行中の異常】が【時間の経過】より前に入る。"""
@@ -71,7 +72,7 @@ class TestScene:
 
         scene = runtime.build_full_prompt(PlayerId(1))["scene"]
 
-        assert [d.heading for d in scene.descriptions] == ["現在地と周囲", "進行中の異常", "時間の経過"]
+        assert [d.heading for d in scene.notices] == ["進行中の異常", "時間の経過"]
 
     def test_candidate_table_is_placed_right_after_the_surroundings(self, runtime) -> None:
         """出すツールが決まって候補表を差し込むと、場面でも【現在地と周囲】の直後に入る。"""
@@ -79,14 +80,26 @@ class TestScene:
 
         prompt = inject_dynamic_argument_candidate_table(runtime.build_full_prompt(PlayerId(1)), tool_names)
 
-        assert [d.heading for d in prompt["scene"].descriptions] == ["現在地と周囲", "現在選べる対象引数", "時間の経過"]
+        assert [d.heading for d in prompt["scene"].descriptions] == ["現在地と周囲", "現在選べる対象引数"]
+        assert [d.heading for d in prompt["scene"].notices] == ["時間の経過"]
+
+    def test_candidate_table_outside_the_scene_leaves_the_scene_alone(self, runtime) -> None:
+        """reason_first の行動の段のように場面の外へ候補表を置くときは、場面に候補表を入れない。"""
+        tool_names = {d.name for d in runtime.get_tool_definitions(player_id=PlayerId(1))}
+        prompt = runtime.build_full_prompt(PlayerId(1))
+
+        injected = inject_dynamic_argument_candidate_table(prompt, tool_names, in_scene=False)
+
+        assert injected["scene"] == prompt["scene"]
+        assert "【現在選べる対象引数】" in injected["messages"][-1]["content"]
 
     def test_user_message_shows_the_scene_in_the_same_order(self, runtime) -> None:
-        """場面の説明文は、文にした形のまま、同じ順でユーザー文に現れる。"""
+        """場面の説明文と知らせは、文にした形のまま、この順でユーザー文に現れる。"""
         tool_names = {d.name for d in runtime.get_tool_definitions(player_id=PlayerId(1))}
         prompt = inject_dynamic_argument_candidate_table(runtime.build_full_prompt(PlayerId(1)), tool_names)
         user = prompt["messages"][-1]["content"]
 
-        positions = [user.index(description_text(d)) for d in prompt["scene"].descriptions]
+        scene = prompt["scene"]
+        positions = [user.index(description_text(d)) for d in (*scene.descriptions, *scene.notices)]
 
         assert positions == sorted(positions)

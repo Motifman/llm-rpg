@@ -417,6 +417,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         result["action_instruction"] = instruction
         result["current_state_snapshot"] = current_state_text
         result["persona_snapshot"] = player_info.persona_block
+        result["objective_text"] = objective_text
+        result["loop_warning"] = loop_warning or None
 
         # 実験 #356 後続: prefix cache 分析用の section 別 char 内訳を trace に
         # 1 件記録する。token ではなく char で吐く理由はモジュール docstring 参照。

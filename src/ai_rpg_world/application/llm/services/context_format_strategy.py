@@ -4,6 +4,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import IContextFormatStra
 from ai_rpg_world.application.llm.services.description_text import description_text
 from ai_rpg_world.being.application.episode_index_text import EPISODE_INDEX_HEADING
 from ai_rpg_world.being.contract import Description
+from ai_rpg_world.being.domain.working_memory import NO_RECENT_EVENTS, RECENT_EVENTS_PREAMBLE
 
 
 class SectionBasedContextFormatStrategy(IContextFormatStrategy):
@@ -68,7 +69,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
 
 
 _PLACEHOLDER_CURRENT_STATE = "（情報なし）"
-_PLACEHOLDER_RECENT_EVENTS = "（なし）"
+_PLACEHOLDER_RECENT_EVENTS = NO_RECENT_EVENTS
 _CURRENT_SURROUNDINGS_HEADING = "現在地と周囲"
 
 
@@ -80,7 +81,7 @@ def current_surroundings_description(current_state_text: str) -> Description:
     )
 
 
-_RECENT_EVENTS_PREAMBLE = "観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。"
+_RECENT_EVENTS_PREAMBLE = RECENT_EVENTS_PREAMBLE
 
 
 def _emit_objective(sections: list[str], objective_text: str) -> None:

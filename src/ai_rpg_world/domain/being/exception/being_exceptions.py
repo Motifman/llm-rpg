@@ -149,6 +149,12 @@ class ShortTermMemoryStaleBackstoryException(BeingDomainException, BusinessRuleE
     error_code = "BEING.SHORT_TERM_MEMORY_STALE_BACKSTORY"
 
 
+class WorkingMemoryOrderException(BeingDomainException, ValidationException):
+    """作業記憶の区画が、書き換わりにくい順に並んでいない (#1630)。"""
+
+    error_code = "BEING.WORKING_MEMORY_ORDER"
+
+
 __all__ = [
     "BeingAlreadyAttachedException",
     "BeingAttachmentValidationException",
@@ -169,4 +175,5 @@ __all__ = [
     "ShortTermMemoryStaleBackstoryException",
     "ShortTermMemoryUnpairedResultException",
     "ShortTermMemoryValidationException",
+    "WorkingMemoryOrderException",
 ]

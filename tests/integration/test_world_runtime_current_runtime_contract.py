@@ -629,6 +629,31 @@ def test_reason_first_action_phase_omits_assessment_tool_and_keeps_action_schema
     assert "expected_result" not in properties
 
 
+def test_reason_first_action_phase_keeps_the_candidate_table_out_of_the_scene(
+    clean_runtime_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """行動の段は、評価のあとに足した指示の直前に候補表を置くので、場面には入れない (design_decisions D1630-2)。"""
+    from ai_rpg_world.application.llm.services.world_llm_turn import phase_a
+
+    calls: list[bool] = []
+    inject = phase_a.inject_dynamic_argument_candidate_table
+
+    def spy(prompt, exposed_tools, *, in_scene=True):  # type: ignore[no-untyped-def]
+        calls.append(in_scene)
+        return inject(prompt, exposed_tools, in_scene=in_scene)
+
+    monkeypatch.setattr(phase_a, "inject_dynamic_argument_candidate_table", spy)
+    runtime = _ReasonFirstRuntime()
+    wiring = _reason_first_wiring(runtime, _reason_first_success_client())
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
+        LlmCommandResultDto(success=True, message="探索した。")
+    )
+
+    wiring.run_turn(PlayerId(1))
+
+    assert calls == [False]
+
+
 def _reason_first_success_client() -> _SequencedLlmClient:
     return _SequencedLlmClient(
         [
