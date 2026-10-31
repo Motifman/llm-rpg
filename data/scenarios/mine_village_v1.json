@@ -2672,6 +2672,7 @@
     {
       "id": "haru",
       "name": "ハル",
+      "first_person": "私",
       "appearance": "測量具を背負った年かさの人",
       "spawn_spot": "north_shaft_head",
       "initial_items": [
@@ -2693,6 +2694,7 @@
     {
       "id": "mio",
       "name": "ミオ",
+      "first_person": "私",
       "appearance": "工具袋を腰に下げた若い人",
       "spawn_spot": "north_shaft_head",
       "initial_items": [
@@ -2713,6 +2715,7 @@
     {
       "id": "gen",
       "name": "ゲン",
+      "first_person": "俺",
       "appearance": "煤けた坑夫の上着を着た初老の男",
       "spawn_spot": "south_adit_mouth",
       "initial_items": [
@@ -2734,6 +2737,7 @@
     {
       "id": "sayo",
       "name": "サヨ",
+      "first_person": "私",
       "appearance": "綿入れを着込んだ若い娘",
       "spawn_spot": "south_adit_mouth",
       "initial_items": [
