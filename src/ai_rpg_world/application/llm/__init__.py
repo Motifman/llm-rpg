@@ -33,7 +33,6 @@ from ai_rpg_world.application.llm.contracts import (
     ICurrentStateFormatter,
     IPromptBuilder,
     IRecentEventsFormatter,
-    IShortTermMemory,
     ISystemPromptBuilder,
     SystemPromptPlayerInfoDto,
 )
@@ -50,7 +49,6 @@ __all__ = [
     "ICurrentStateFormatter",
     "IPromptBuilder",
     "IRecentEventsFormatter",
-    "IShortTermMemory",
     "ISystemPromptBuilder",
     "LlmApplicationException",
     "PlayerProfileNotFoundForPromptException",

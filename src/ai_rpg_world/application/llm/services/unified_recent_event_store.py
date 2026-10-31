@@ -1,48 +1,38 @@
-"""観測と行動結果を記録時から同じ時系列に保持するストア。"""
+"""プレイヤーごとに、未処理の観測と直近の行動の結果を持つストア。
+
+足した観測と行動の結果は、足すたびに聞き手へ知らせる。プロンプトの【直近の出来事】は Being の短期記憶から作るので、
+ここは出来事の並びを持たない (design_decisions D1824-24)。
+"""
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
-from typing import TypeVar
+from typing import Final
 
-from ai_rpg_world.application.llm.contracts.chunk_encoding import (
-    UnifiedRecentEventEntry,
-    UnifiedRecentEventKind,
-)
+from ai_rpg_world.application.llm.contracts.chunk_encoding import UnifiedRecentEventEntry
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-_Entry = TypeVar("_Entry", ObservationEntry, ActionResultEntry)
 AppendListener = Callable[[PlayerId, UnifiedRecentEventEntry], None]
 
-
-@dataclass(frozen=True)
-class CompletedTurnCompaction:
-    """L1 から外れ、L4 へ渡す古いターン群。"""
-
-    turn_count: int
-    entries: tuple[UnifiedRecentEventEntry, ...]
+#: 持っておく直近の行動の結果の件数。読むのは Phase A の起動判定 (直近 2 件) だけだが、起きた時刻の順と足した順が
+#: ずれても新しい 2 件を取りこぼさないよう、今の短期記憶が持っていた範囲 (最大 20 ターン分) と同じだけ残す。
+RECENT_ACTION_RESULTS_KEPT: Final = 20
 
 
 class UnifiedRecentEventStore:
-    """1 player の観測・行動・未処理観測を一つの保管場所で管理する。"""
-
     def __init__(self) -> None:
-        self._entries: dict[int, list[UnifiedRecentEventEntry]] = {}
-        self._pending: dict[int, list[UnifiedRecentEventEntry]] = {}
-        # 完了済みターンごとの entry 数。末尾より後ろが、前回の自分の
-        # ターン完了後から現在までに届いた open bucket になる。空ターンも
-        # 0 として残すため、entry の有無ではターン数を代用しない。
-        self._completed_turn_sizes: dict[int, list[int]] = {}
+        self._action_results: dict[int, deque[ActionResultEntry]] = {}
+        self._pending: dict[int, list[ObservationEntry]] = {}
         self._append_listeners: list[AppendListener] = []
 
     def add_append_listener(self, listener: AppendListener) -> None:
-        """時系列に足した出来事を、足すたびに知らせる。
+        """足した観測と行動の結果を、足すたびに知らせる。
 
-        Being 側の短期記憶へ並べて書くための口 (design_decisions D1824-7)。未処理の
-        観測の預かりと、snapshot から戻す置き換えは知らせない。
+        Being 側の短期記憶へ書くための聞き手 (design_decisions D1824-7)。未処理の観測の預かりと、snapshot から戻す
+        置き換えは知らせない。
         """
         if not callable(listener):
             raise TypeError("listener must be callable")
@@ -51,8 +41,7 @@ class UnifiedRecentEventStore:
     def remove_append_listener(self, listener: AppendListener) -> None:
         self._append_listeners.remove(listener)
 
-    def _append(self, player_id: PlayerId, entry: UnifiedRecentEventEntry) -> None:
-        self._entries.setdefault(self._key(player_id), []).append(entry)
+    def _announce(self, player_id: PlayerId, entry: UnifiedRecentEventEntry) -> None:
         for listener in self._append_listeners:
             listener(player_id, entry)
 
@@ -62,215 +51,58 @@ class UnifiedRecentEventStore:
             raise TypeError("player_id must be PlayerId")
         return player_id.value
 
-    def append_observation(
-        self,
-        player_id: PlayerId,
-        entry: ObservationEntry,
-    ) -> None:
+    def append_observation(self, player_id: PlayerId, entry: ObservationEntry) -> None:
+        """観測は持たず、聞き手に知らせるだけ。"""
         if not isinstance(entry, ObservationEntry):
             raise TypeError("entry must be ObservationEntry")
-        self._append(player_id, UnifiedRecentEventEntry.from_observation(entry))
+        self._key(player_id)
+        self._announce(player_id, UnifiedRecentEventEntry.from_observation(entry))
 
     def append_action_result(self, player_id: PlayerId, entry: ActionResultEntry) -> None:
         if not isinstance(entry, ActionResultEntry):
             raise TypeError("entry must be ActionResultEntry")
-        self._append(player_id, UnifiedRecentEventEntry.from_action_result(entry))
+        self._results_of(self._key(player_id)).append(entry)
+        self._announce(player_id, UnifiedRecentEventEntry.from_action_result(entry))
 
-    def get_timeline(self, player_id: PlayerId) -> list[UnifiedRecentEventEntry]:
-        entries = list(self._entries.get(self._key(player_id), []))
-        return sorted(entries, key=lambda entry: entry.occurred_at.timestamp())
-
-    def get_active_timeline(self, player_id: PlayerId) -> list[UnifiedRecentEventEntry]:
-        """現在のターン窓に残る観測と行動を、件数で切らず時系列順に返す。"""
-        return self.get_timeline(player_id)
-
-    def open_turn_entries(self, player_id: PlayerId) -> list[UnifiedRecentEventEntry]:
-        """前回の自分のターンを閉じたあとに届いた観測と行動を、届いた順に返す。"""
-        key = self._key(player_id)
-        entries = self._entries.get(key, [])
-        return list(entries[sum(self._completed_turn_sizes.get(key, [])) :])
-
-    def close_turn(self, player_id: PlayerId) -> None:
-        """open bucket を閉じる。保持数の政策は短期記憶実装が決める。"""
-        key = self._key(player_id)
-        entries = self._entries.setdefault(key, [])
-        sizes = self._completed_turn_sizes.setdefault(key, [])
-        open_size = len(entries) - sum(sizes)
-        if open_size < 0:  # pragma: no cover - replace 系の契約違反への防御
-            raise RuntimeError("completed turn sizes exceed stored entries")
-        sizes.append(open_size)
-
-    def compact_oldest_turns(self, player_id: PlayerId, turn_count: int) -> CompletedTurnCompaction:
-        """古い完了ターンを指定数だけ L1 から外す。"""
-        if turn_count <= 0:
-            raise ValueError("turn_count must be greater than 0")
-        key = self._key(player_id)
-        sizes = self._completed_turn_sizes.get(key, [])
-        if turn_count > len(sizes):
-            raise ValueError("turn_count exceeds completed turns")
-        entries = self._entries.setdefault(key, [])
-        compact_sizes = sizes[:turn_count]
-        del sizes[:turn_count]
-        compact_entry_count = sum(compact_sizes)
-        compacted = tuple(entries[:compact_entry_count])
-        del entries[:compact_entry_count]
-        return CompletedTurnCompaction(
-            turn_count=turn_count,
-            entries=compacted,
-        )
-
-    def completed_turn_count(self, player_id: PlayerId) -> int:
-        """現在 L1 に残る完了済みターン数を返す。"""
-        return len(self._completed_turn_sizes.get(self._key(player_id), []))
-
-    def completed_turn_sizes(self, player_id: PlayerId) -> tuple[int, ...]:
-        """snapshot codec 用に完了済みターン境界を返す。"""
-        return tuple(self._completed_turn_sizes.get(self._key(player_id), []))
-
-    def replace_completed_turn_sizes(self, player_id: PlayerId, sizes: Iterable[int]) -> None:
-        """snapshot から完了済みターン境界を復元する。"""
-        values = list(sizes)
-        if any(not isinstance(size, int) or size < 0 for size in values):
-            raise ValueError("completed turn sizes must be non-negative integers")
-        if sum(values) > len(self._entries.get(self._key(player_id), [])):
-            raise ValueError("completed turn sizes exceed stored entries")
-        self._completed_turn_sizes[self._key(player_id)] = values
-
-    def get_recent_timeline(
-        self,
-        player_id: PlayerId,
-        *,
-        observation_limit: int,
-        action_result_limit: int,
-        newest_equal_observation_first: bool,
-    ) -> list[UnifiedRecentEventEntry]:
-        """従来の種類別件数と同時刻の順序を保った統一時系列を返す。"""
-        observations = self.get_recent_observations(
-            player_id,
-            observation_limit,
-            newest_equal_first=newest_equal_observation_first,
-        )
-        actions = self.get_recent_action_results(player_id, action_result_limit)
-        selected = [UnifiedRecentEventEntry.from_observation(entry) for entry in observations]
-        selected.extend(UnifiedRecentEventEntry.from_action_result(entry) for entry in actions)
-        selected.sort(key=lambda entry: entry.occurred_at.timestamp())
-        return selected
-
-    def observations_in_storage_order(self, player_id: PlayerId) -> list[ObservationEntry]:
-        # kind と payload の型が一致することは UnifiedRecentEventEntry の
-        # __post_init__ が保証するが、その対応は型では表現されていない
-        return [
-            event.payload
-            for event in self._entries.get(self._key(player_id), [])
-            if isinstance(event.payload, ObservationEntry)
-        ]
-
-    def action_results_in_storage_order(self, player_id: PlayerId) -> list[ActionResultEntry]:
-        return [
-            event.payload
-            for event in self._entries.get(self._key(player_id), [])
-            if isinstance(event.payload, ActionResultEntry)
-        ]
-
-    def get_recent_observations(
-        self,
-        player_id: PlayerId,
-        limit: int,
-        *,
-        newest_equal_first: bool = False,
-    ) -> list[ObservationEntry]:
-        return self._get_recent_kind(
-            player_id,
-            limit,
-            "observation",
-            ObservationEntry,
-            newest_equal_first=newest_equal_first,
-        )
+    def _results_of(self, key: int) -> deque[ActionResultEntry]:
+        return self._action_results.setdefault(key, deque(maxlen=RECENT_ACTION_RESULTS_KEPT))
 
     def get_recent_action_results(self, player_id: PlayerId, limit: int) -> list[ActionResultEntry]:
-        return self._get_recent_kind(player_id, limit, "action_result", ActionResultEntry, newest_equal_first=False)
-
-    def _get_recent_kind(
-        self,
-        player_id: PlayerId,
-        limit: int,
-        kind: UnifiedRecentEventKind,
-        payload_type: type[_Entry],
-        *,
-        newest_equal_first: bool,
-    ) -> list[_Entry]:
+        """起きた時刻の新しい順に ``limit`` 件まで。同じ時刻なら、先に足したものが先 (並びを持っていたころと同じ)。"""
         if limit < 0:
             raise ValueError("limit must be 0 or greater")
-        entries = [
-            (index, event)
-            for index, event in enumerate(self._entries.get(self._key(player_id), []))
-            if event.kind == kind
-        ]
-        entries.sort(
-            key=lambda pair: (
-                pair[1].occurred_at.timestamp(),
-                pair[0] if newest_equal_first else -pair[0],
-            ),
-            reverse=True,
-        )
-        return [payload for _, event in entries[:limit] if isinstance(payload := event.payload, payload_type)]
+        entries = list(enumerate(self._action_results.get(self._key(player_id), ())))
+        entries.sort(key=lambda pair: (pair[1].occurred_at.timestamp(), -pair[0]), reverse=True)
+        return [entry for _, entry in entries[:limit]]
 
-    def pop_oldest_observations(self, player_id: PlayerId, count: int) -> list[ObservationEntry]:
-        if count < 0:
-            raise ValueError("count must be 0 or greater")
+    def action_results_in_storage_order(self, player_id: PlayerId) -> list[ActionResultEntry]:
+        return list(self._action_results.get(self._key(player_id), ()))
+
+    def replace_action_results(self, player_id: PlayerId, entries: Iterable[ActionResultEntry]) -> None:
         key = self._key(player_id)
-        entries = self._entries.get(key, [])
-        observation_indices = [
-            index for index, event in enumerate(entries) if isinstance(event.payload, ObservationEntry)
-        ][:count]
-        remove = set(observation_indices)
-        removed = [
-            payload for index in observation_indices if isinstance(payload := entries[index].payload, ObservationEntry)
-        ]
-        self._entries[key] = [event for index, event in enumerate(entries) if index not in remove]
-        return removed
-
-    def count_observations(self, player_id: PlayerId) -> int:
-        return sum(event.kind == "observation" for event in self._entries.get(self._key(player_id), []))
+        self._action_results[key] = deque(entries, maxlen=RECENT_ACTION_RESULTS_KEPT)
 
     def append_pending_observation(self, player_id: PlayerId, entry: ObservationEntry) -> None:
         if not isinstance(entry, ObservationEntry):
             raise TypeError("entry must be ObservationEntry")
-        key = self._key(player_id)
-        self._pending.setdefault(key, []).append(UnifiedRecentEventEntry.from_observation(entry))
+        self._pending.setdefault(self._key(player_id), []).append(entry)
 
     def get_pending_observations(self, player_id: PlayerId) -> list[ObservationEntry]:
-        return [
-            event.payload
-            for event in self._pending.get(self._key(player_id), [])
-            if isinstance(event.payload, ObservationEntry)
-        ]
+        return list(self._pending.get(self._key(player_id), []))
 
     def drain_pending_observations(self, player_id: PlayerId) -> list[ObservationEntry]:
         key = self._key(player_id)
         entries = self._pending.get(key, [])
         self._pending[key] = []
-        return [event.payload for event in entries if isinstance(event.payload, ObservationEntry)]
-
-    def replace_timeline(self, player_id: PlayerId, entries: Iterable[UnifiedRecentEventEntry]) -> None:
-        key = self._key(player_id)
-        self._entries[key] = list(entries)
-        self._completed_turn_sizes[key] = []
-
-    def replace_observations(self, player_id: PlayerId, entries: Iterable[ObservationEntry]) -> None:
-        key = self._key(player_id)
-        retained = [event for event in self._entries.get(key, []) if event.kind != "observation"]
-        retained.extend(UnifiedRecentEventEntry.from_observation(entry) for entry in entries)
-        self._entries[key] = retained
-
-    def replace_action_results(self, player_id: PlayerId, entries: Iterable[ActionResultEntry]) -> None:
-        key = self._key(player_id)
-        retained = [event for event in self._entries.get(key, []) if event.kind != "action_result"]
-        retained.extend(UnifiedRecentEventEntry.from_action_result(entry) for entry in entries)
-        self._entries[key] = retained
+        return entries
 
     def replace_pending_observations(self, player_id: PlayerId, entries: Iterable[ObservationEntry]) -> None:
-        self._pending[self._key(player_id)] = [UnifiedRecentEventEntry.from_observation(entry) for entry in entries]
+        self._pending[self._key(player_id)] = list(entries)
 
     def player_ids(self) -> set[int]:
-        return set(self._entries) | set(self._pending) | set(self._completed_turn_sizes)
+        return {key for key, results in self._action_results.items() if results} | {
+            key for key, pending in self._pending.items() if pending
+        }
+
+
+__all__ = ["RECENT_ACTION_RESULTS_KEPT", "AppendListener", "UnifiedRecentEventStore"]

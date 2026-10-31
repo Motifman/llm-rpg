@@ -30,9 +30,6 @@ from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
     PromptDatasetCaptureSink,
 )
-from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-    SummarizingShortTermMemory,
-)
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
 )
@@ -141,7 +138,6 @@ class _ContractRuntime:
     def __init__(self, events: list[str] | None = None) -> None:
         self._obs_buffer = DefaultObservationContextBuffer()
         recent_event_store = UnifiedRecentEventStore()
-        self._short_term_memory = SummarizingShortTermMemory(event_store=recent_event_store)
         self._action_result_store = DefaultActionResultStore(event_store=recent_event_store)
         self.events = events if events is not None else []
         self.action_results: list[dict] = []
@@ -395,7 +391,6 @@ def _wiring_for_contract_runtime(runtime: _ContractRuntime) -> _WorldLlmWiring:
     return _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
 
@@ -407,7 +402,6 @@ def _reason_first_wiring(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
     return wiring
@@ -680,7 +674,6 @@ def test_auto_uses_payload_names_and_retries_one_no_tool_call(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
     wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = lambda player_id, arguments, runtime_context: (
@@ -709,7 +702,6 @@ def test_required_no_tool_call_keeps_the_existing_single_attempt(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
 
@@ -821,7 +813,6 @@ def test_reason_first_gated_turn_writes_assess_and_action_phase_prompt_dataset_r
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
         prompt_dataset_sink=sink,
     )
@@ -1007,7 +998,6 @@ def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_acti
         "assess_phase",
         "action_phase",
     ]
-    assert runtime._short_term_memory._event_store.completed_turn_count(PlayerId(1)) == 1
     assert executed == [
         {
             "inner_thought": "一度失敗したので状況を見直す。",
@@ -1112,7 +1102,6 @@ def test_reason_first_action_prompt_places_assessment_before_target_arguments(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
 
@@ -1170,7 +1159,6 @@ def test_memo_completion_hint_service_is_built_with_the_memo_book(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
 
@@ -1559,7 +1547,6 @@ def test_api_exception_detail_remains_in_prompt_dataset_only(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
         prompt_dataset_sink=sink,
     )
@@ -1747,7 +1734,6 @@ def test_explore_handler_threads_subjective_args_into_record(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
 

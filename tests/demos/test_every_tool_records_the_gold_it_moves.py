@@ -36,7 +36,6 @@ def handlers():
     wiring = WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
     return dict(wiring._tool_handlers)
@@ -102,7 +101,6 @@ class TestTheWrappingActuallyWatchesEveryone:
         WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
             llm_client=StubLlmClient(None),
         )
 

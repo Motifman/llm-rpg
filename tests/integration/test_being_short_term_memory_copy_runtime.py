@@ -52,7 +52,6 @@ def _game(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(tool_call),
         typed_judgment_port=ScriptedJudgmentPort(),
     )
@@ -198,14 +197,14 @@ class TestPromptReadsTheBeingShortTermMemory:
         assert _recent_events_section(content) == being_text
 
     def test_recent_events_section_follows_the_being_memory_not_the_current_memory(self) -> None:
-        """今の短期記憶に出来事が残っていても、Being の短期記憶を空にすると、【直近の出来事】は「（直近の出来事はありません）」になる。"""
+        """手番を回したあとで Being の短期記憶を空にすると、【直近の出来事】は「（直近の出来事はありません）」になる。ほかに出来事を持つところは無い。"""
         runtime, wiring, _ = _game()
         _turn(wiring)
         runtime._being_short_term_memory_store.replace_all_by_being(ShortTermMemory.empty(_being_id(runtime)))
 
         content = _user_content(runtime)
 
-        assert runtime._recent_event_store.get_timeline(_ME) != []
+        assert runtime._recent_event_store.action_results_in_storage_order(_ME) != []
         assert _recent_events_section(content) == NO_RECENT_EVENTS
 
     def test_backstory_section_shows_the_being_backstories_newest_first(self) -> None:
@@ -247,7 +246,7 @@ class TestPromptReadsTheBeingShortTermMemory:
         assert breakdown["backstory_chars"] == len("[最新] 改札を抜けた\n  気分: 落ち着かない")
 
     def test_no_backstory_section_until_a_backstory_arrives(self) -> None:
-        """いきさつがまだ無ければ、今の短期記憶の要約があっても【ここまでのいきさつ】は出ない。"""
+        """いきさつがまだ無ければ、【ここまでのいきさつ】は出ない。"""
         runtime, wiring, _ = _game()
         _turn(wiring)
 
@@ -259,8 +258,6 @@ class TestPromptReadsTheBeingShortTermMemory:
 
         for _ in range(RECENT_TURNS + 1):
             _turn(wiring)
-            # 本番では turn_trigger が手番の終わりに閉じる。
-            runtime._short_term_memory.complete_turn(_ME)
         content = _user_content(runtime)
 
         assert recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_RANGE_FILLED) != []

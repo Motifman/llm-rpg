@@ -16,7 +16,6 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ICurrentStateFormatter,
     ILlmUiContextBuilder,
     IPromptBuilder,
-    IShortTermMemory,
     ISystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
@@ -24,6 +23,9 @@ from ai_rpg_world.application.llm.services.prompt_builder_config import (
     PromptBuilderCoreServices,
     PromptLimits,
     PromptSectionProviders,
+)
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
 )
 
 # build_pre_turn_failure_section: Issue #227 chore β で廃止 (#241 後続)
@@ -41,7 +43,7 @@ MESSAGE_WHEN_PLAYER_NOT_PLACED = "現在地: 未配置。ゲームに参加す�
 
 class DefaultPromptBuilder(IPromptBuilder):
     """
-    観測バッファの drain → 短期記憶への append と、現在状態・直近の出来事・
+    観測バッファから取り出した観測を足すことと、現在状態・直近の出来事・
     システムプロンプトの組み立てを行う。直近の出来事といきさつは Being の短期記憶から作る。
     """
 
@@ -88,7 +90,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("core.player_profile_repository must have find_by_id method")
 
         observation_buffer = core.observation_buffer
-        short_term_memory = core.short_term_memory
+        recent_event_store = core.recent_event_store
         world_query_service = core.world_query_service
         player_profile_repository = core.player_profile_repository
         current_state_formatter = core.current_state_formatter
@@ -106,8 +108,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         default_action_instruction = limits.default_action_instruction
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
-        if not isinstance(short_term_memory, IShortTermMemory):
-            raise TypeError("short_term_memory must be IShortTermMemory")
+        if not isinstance(recent_event_store, UnifiedRecentEventStore):
+            raise TypeError("recent_event_store must be UnifiedRecentEventStore")
         # world_query_service / player_profile_repository は __init__ 冒頭で
         # hasattr 構造チェック済み (Issue #227 HIGH-3 Part 2: duck-type 契約)
         if not isinstance(current_state_formatter, ICurrentStateFormatter):
@@ -167,7 +169,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._current_tick_provider = current_tick_provider
 
         self._observation_buffer = observation_buffer
-        self._short_term_memory = short_term_memory
+        self._recent_event_store = recent_event_store
         self._world_query_service = world_query_service
         self._profile_repository = player_profile_repository
         self._current_state_formatter = current_state_formatter
@@ -320,10 +322,9 @@ class DefaultPromptBuilder(IPromptBuilder):
             persona_block=(self._persona_block_provider(player_id) if self._persona_block_provider is not None else ""),
         )
 
-        # 2. drain して短期記憶に append
-        drained = self._observation_buffer.drain(player_id)
-        if drained:
-            self._short_term_memory.append_all(player_id, drained)
+        # 2. 預かった観測を取り出して足す。足すと写す処理が Being の短期記憶に書く。
+        for entry in self._observation_buffer.drain(player_id):
+            self._recent_event_store.append_observation(player_id, entry)
 
         # 3. 現在状態取得（None の場合はプレースホルダ）
         current_state_dto = self._world_query_service.get_player_current_state(
@@ -341,7 +342,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         )
         current_state_text = ui_context.current_state_text
 
-        # 4. 直近の出来事。drain した観測は、上の append で Being の短期記憶にも入っている。
+        # 4. 直近の出来事。取り出した観測は、上で Being の短期記憶に入っている。
         recent_events_text = self._recent_events_text_provider(acting.being_id)
 
         # 5. 利用可能ツール取得

@@ -1,7 +1,6 @@
 """直近の範囲から外す出来事を、LLM でここまでのいきさつにまとめる (#1824、design_decisions D1824-11)。
 
-指示の文面は、今の短期記憶の【ここまでのいきさつ】の要約 (``short_term_memory_summary_service.py``) と同じ。
-渡す出来事の見出しと並べ方は違う (design_decisions D1824-12)。
+指示の文面は、今の短期記憶の要約に使っていた文に、字数の上限を足したもの (design_decisions D1824-12)。
 """
 
 from __future__ import annotations

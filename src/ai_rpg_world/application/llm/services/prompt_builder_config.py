@@ -26,8 +26,10 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
-    IShortTermMemory,
     ISystemPromptBuilder,
+)
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -64,7 +66,8 @@ class PromptBuilderCoreServices:
     """
 
     observation_buffer: IObservationContextBuffer
-    short_term_memory: IShortTermMemory
+    # 取り出した観測を足す先。足すと写す処理が Being の短期記憶に書く (design_decisions D1824-7)。
+    recent_event_store: UnifiedRecentEventStore
     # 本体の service ではなく、必要な 1 メソッドだけを要求する。
     # world_runtime は duck-type adapter を渡す (#1371)。
     world_query_service: _PlayerCurrentStateSource

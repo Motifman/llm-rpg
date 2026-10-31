@@ -14,8 +14,7 @@ prompt の【現在地と周囲】section に「初対面」「再会」等の�
 - ``lookup`` は存在しない場合 ``None`` を返す。「まだ会ったことがない」を表現する
   純粋な query API として使える
 - ``get_records_for(player_id)`` は player ごとの全 record を読み取り専用で返す。
-  snapshot codec が iterate するために使う。``get_*`` 接頭辞は既存 memory
-  interface (IShortTermMemory.get_recent 等) との命名一貫性のため
+  snapshot codec が iterate するために使う
 """
 
 from __future__ import annotations

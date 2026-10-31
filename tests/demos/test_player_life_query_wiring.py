@@ -61,7 +61,6 @@ def _can_take_llm_turn(runtime, player_id: PlayerId) -> bool:
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
     return wiring.llm_turn_trigger._can_player_act(int(player_id))

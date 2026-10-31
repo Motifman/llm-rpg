@@ -24,44 +24,6 @@ from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
-class IShortTermMemory(ABC):
-    """短期記憶: 直近観測を保持する抽象。
-
-    実装は ``SummarizingShortTermMemory`` (L1 raw + L4 mid summary + L5 long
-    summary) だけ。実装方式ではなく、prompt に渡す短期記憶という役割を表す。
-    """
-
-    @abstractmethod
-    def append(self, player_id: PlayerId, entry: ObservationEntry) -> None:
-        """指定プレイヤーの観測を 1 件追加する。"""
-        pass
-
-    @abstractmethod
-    def append_all(self, player_id: PlayerId, entries: list[ObservationEntry]) -> None:
-        """指定プレイヤーに観測を複数件追加する。"""
-        pass
-
-    @abstractmethod
-    def get_recent(self, player_id: PlayerId, limit: int) -> list[ObservationEntry]:
-        """指定プレイヤーの直近 limit 件の観測を新しい順で返す。"""
-        pass
-
-    @abstractmethod
-    def complete_turn(self, player_id: PlayerId) -> None:
-        """本人のターンを閉じ、実装固有の窓政策を適用する。"""
-        pass
-
-    def get_mid_summary_text(self, player_id: PlayerId) -> str:
-        """Phase 2: 中期記憶 (L4 mid summary) を prompt 用テキストに整形する。
-
-        空文字なら prompt §「【ここまでのいきさつ】」section ごと出ない。
-
-        prompt_builder はこのメソッドを直接呼んで context_format_strategy に
-        渡す。
-        """
-        return ""
-
-
 class IActionResultStore(ABC):
     """直近の LLM 行動結果を保持する。"""
 

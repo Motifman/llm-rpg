@@ -233,7 +233,6 @@ class TestTheMessageTheAgentActuallyReads:
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
         label = next(key for key, value in context.targets.items() if "棚卸し帳" in str(value))
@@ -273,7 +272,6 @@ class TestTheMessageTheAgentActuallyReads:
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
 
@@ -324,7 +322,6 @@ class TestTheMessageTheAgentActuallyReads:
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
 
@@ -368,7 +365,6 @@ class TestTheMessageTheAgentActuallyReads:
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
 
@@ -409,7 +405,6 @@ class TestTheMessageTheAgentActuallyReads:
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
 
@@ -507,7 +502,6 @@ class TestTheSameLeakOnThePersonSide:
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
         label = next(key for key, value in ui.tool_runtime_context.targets.items() if target in str(value))

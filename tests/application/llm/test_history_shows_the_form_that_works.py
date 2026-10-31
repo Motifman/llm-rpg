@@ -145,7 +145,6 @@ class TestTheWholePathWithARealWorld:
         wiring = _WorldLlmWiring(
             runtime=race,
             observation_buffer=race._obs_buffer,
-            short_term_memory=race._short_term_memory,
             llm_client=_Client(),
         )
         prompt = race.build_full_prompt(PlayerId(player_int))

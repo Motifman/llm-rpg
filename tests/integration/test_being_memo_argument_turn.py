@@ -36,7 +36,6 @@ def _game(memo: Any) -> tuple[Any, _WorldLlmWiring, RecordingTraceRecorder]:
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(
             {"name": TOOL_NAME_SPOT_GRAPH_WAIT, "arguments": {"inner_thought": "様子を見る", "memo": memo}}
         ),

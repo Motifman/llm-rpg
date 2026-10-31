@@ -1,4 +1,4 @@
-"""世界の runtime が、環境を離れるときに Being の短期記憶からエピソードを書き、今の短期記憶を畳むときには書かないことを保証する (#1626、design_decisions D1824-21、D1824-23)。書き起こしは設定で止められない (#1631)。"""
+"""世界の runtime が、Being の短期記憶の範囲が埋まったときと環境を離れるときに、Being の短期記憶からエピソードを書くことを保証する (#1626、design_decisions D1824-21、D1824-23)。書き起こしは設定で止められない (#1631)。"""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def _runtime():
 
 
 def _observe(runtime, pid, prose: str, minute: int) -> None:
-    runtime._short_term_memory.append(
+    runtime._recent_event_store.append_observation(
         pid,
         ObservationEntry(
             occurred_at=_BASE + timedelta(minutes=minute),
@@ -58,20 +58,7 @@ def _being_of(runtime, pid):
 
 
 class TestEpisodeWritingInTheRuntime:
-    """書き起こしが、世界の runtime で環境を離れるときに繋がり、今の短期記憶を畳むときには繋がっていないことを保証する。"""
-
-    def test_compaction_does_not_write_episodes(self) -> None:
-        """今の短期記憶が古いターンを畳んでも、エピソードは書かず、episode_writing も残らない。範囲の出来事は Being の短期記憶の範囲が埋まったときに書く (design_decisions D1824-21)。"""
-        runtime, recorder = _runtime()
-        pid = runtime.get_player_ids()[0]
-
-        _observe(runtime, pid, "浜で流木を拾った。", 1)
-        for _ in range(RECENT_TURNS):
-            runtime._short_term_memory.complete_turn(pid)
-
-        assert [k for k, _, _ in recorder.events if k == TraceEventKind.SHORT_TERM_MEMORY_COMPACTED] != []
-        assert runtime._being_episode_store.list_by_being(_being_of(runtime, pid)) == ()
-        assert [p for k, _, p in recorder.events if k == TraceEventKind.EPISODE_WRITING] == []
+    """書き起こしが、世界の runtime で、Being の短期記憶の範囲が埋まったときと環境を離れるときに繋がっていることを保証する。"""
 
     def test_end_being_turn_writes_episodes_when_the_range_is_filled(self) -> None:
         """Being の記憶のターンが 20 に届いたところで end_being_turn を呼ぶと、範囲が埋まり、その Being の結果を反映したときにエピソードが記録に入る。"""

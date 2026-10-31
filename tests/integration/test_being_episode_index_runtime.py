@@ -92,7 +92,6 @@ def _first_turn(runtime, pid: PlayerId) -> tuple[str, str, list[dict]]:
     _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
         typed_judgment_port=ScriptedJudgmentPort(),
     ).run_phase_a(pid)
@@ -238,7 +237,6 @@ class TestRecallingInATurn:
         result = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
             llm_client=_RecallClient([episode.handle]),
             typed_judgment_port=ScriptedJudgmentPort(),
         ).run_turn(pid)
@@ -264,7 +262,6 @@ def _turn(runtime, pid: PlayerId, name: str, arguments: dict[str, Any]):
     return _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=_ScriptedClient(name, arguments),
         typed_judgment_port=ScriptedJudgmentPort(),
     ).run_turn(pid)

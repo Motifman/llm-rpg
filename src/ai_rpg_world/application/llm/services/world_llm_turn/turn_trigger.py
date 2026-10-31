@@ -268,7 +268,6 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
         # 「前回の自分のターン終了時 → 次回 prompt」までの変化が delta として
         # 表示される (= 自然 decay + 他者観測の影響 + own action 結果)。
         self._snapshot_needs_after_turn(player_id_value)
-        self.wiring.short_term_memory.complete_turn(PlayerId(player_id_value))
 
     def _retry_after_llm_failure(self, player_id_value: int, result: LlmCommandResultDto) -> None:
         """呼び出しが失敗した人を次の tick に回す (#1595)。

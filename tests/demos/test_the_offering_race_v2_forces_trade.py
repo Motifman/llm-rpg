@@ -635,7 +635,6 @@ class TestTheToolsOfTradeAreOffered:
         wiring = _WorldLlmWiring(
             runtime=race.runtime,
             observation_buffer=race.runtime._obs_buffer,
-            short_term_memory=race.runtime._short_term_memory,
             llm_client=client,
         )
         wiring.run_phase_a(_GAREN)

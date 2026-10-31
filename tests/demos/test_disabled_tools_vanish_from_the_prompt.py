@@ -107,7 +107,6 @@ def _payload_tools(runtime, player_id: PlayerId) -> list:
     _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     ).run_phase_a(player_id)
     return client.tools
@@ -118,7 +117,6 @@ def _auto_prompt(runtime, player_id: PlayerId) -> tuple[str, list[str]]:
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
     wiring.run_phase_a(player_id)
@@ -387,7 +385,6 @@ class TestTheExhaustedRefusalNamesNoTool:
         executor = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
             llm_client=StubLlmClient(None),
         )._spot_graph_executor
         monkeypatch.setattr(executor, "_get_status", lambda player_id: SimpleNamespace(is_exhausted=lambda: True))

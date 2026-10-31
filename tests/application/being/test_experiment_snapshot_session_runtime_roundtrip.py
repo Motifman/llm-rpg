@@ -146,7 +146,7 @@ def _populate_runtime_state(runtime: Any) -> None:
 
     _add_item_fixture(runtime, holder=player_id)
 
-    runtime._short_term_memory.append(player_id, _observation("窓に残る観測"))
+    runtime._recent_event_store.append_observation(player_id, _observation("Being の短期記憶に写る観測"))
     runtime._obs_buffer.append(player_id, _observation("次行動に渡す未処理観測"))
     runtime._action_result_store.append(
         player_id,
@@ -264,8 +264,9 @@ def test_experiment_snapshot_session_restores_state_across_real_world_runtimes(
     assert player_world["spot_interior"]["entries"][0]["ground_items"] == [
         {"item_instance_id": 9002, "item_spec_id": 9}
     ]
-    recent_player = player_world["recent_event_store"]["entries"][0]
-    action_payload = next(entry["payload"] for entry in recent_player["entries"] if entry["kind"] == "action_result")
+    recent_player = player_world["recent_event_store"]["action_results"][0]
+    action_payload = recent_player["entries"][0]
+    assert action_payload["action_summary"] == "snapshot action"
     assert "prediction_context_id" not in action_payload
     assert player_world["encounter_memory"]["entries"][0]["records"][0]["key"] == "spot:ancient_archive"
 

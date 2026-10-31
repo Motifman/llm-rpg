@@ -16,7 +16,8 @@
 - `episodic_recall`: passive recall 結果 (#1631 で受動想起を消す前の trace のみ)
 - `being_memo`: メモ帳への書き込み
 - `episode_writing` / `episode_recall` / `episode_index_revision`: 目次つきのエピソードの書き起こし・呼び出し・目次の直し
-- `short_term_summary_generated` / `short_term_long_summary_generated`: L4/L5 要約 (L5 は #1824 で消したので、それより前の trace のみ)
+- `short_term_summary_generated` / `short_term_long_summary_generated`: 今の短期記憶の L4/L5 要約 (#1824 で消したので、2026-10-31 より前の trace のみ。L5 はそれより前に消した)
+- `being_backstory_written`: Being の短期記憶に入ったいきさつ (流れと気分)。2026-10-31 以後の【ここまでのいきさつ】はこれ
 - `loop_guard_warning`: 同 tool 連発の警告
 - `tick_start` / `tick_end`
 

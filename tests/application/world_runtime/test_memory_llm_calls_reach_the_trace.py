@@ -59,16 +59,24 @@ def _aux_components(recorder: _Recorder) -> list[str]:
 
 
 class TestNewMemoryComponentsReachTheRuntimeTrace:
-    """新しい記憶の部品 (短期記憶の要約、エピソードの書き起こし) の呼び出しが runtime の trace に届くことを保証する。"""
+    """新しい記憶の部品 (いきさつ、エピソードの書き起こし) の呼び出しが runtime の trace に届くことを保証する。"""
 
-    def test_rolling_summary_call_is_traced_as_short_term_summary(self) -> None:
-        """rolling_summary の要約が LLM を呼ぶと、runtime の recorder に component=short_term_summary の aux_llm_call が 1 件届く。"""
+    def test_backstory_writing_call_is_traced_as_short_term_summary(self) -> None:
+        """Being の短期記憶のいきさつを書く処理が LLM を呼ぶと、runtime の recorder に component=short_term_summary の aux_llm_call が 1 件届く。"""
+        from ai_rpg_world.being.application.handlers.write_backstory_handler import WriteBackstoryHandler
+
         runtime, recorder = _runtime_with_recorder()
-        port = runtime._short_term_memory._service._port
+        dispatcher = runtime._being_short_term_memory_store._handoff.__self__
+        (handler,) = [
+            r.handler.handler
+            for r in dispatcher._after_commit
+            if isinstance(getattr(r.handler, "handler", None), WriteBackstoryHandler)
+        ][:1]
+        complete_json = handler._write._writer._complete_json
 
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.return_value = _json_response()
-            port.complete_short_term_summary_json([{"role": "user", "content": "x"}])
+            complete_json([{"role": "user", "content": "x"}])
 
         assert _aux_components(recorder) == ["short_term_summary"]
 

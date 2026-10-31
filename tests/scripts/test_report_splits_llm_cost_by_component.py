@@ -92,7 +92,7 @@ class TestActionAndMemoryCallsAreSeparateRows:
         rows = lines[start + 2 : start + 5]
         assert rows == [
             "| 行動 | 2 | 1 | 300 | 40 | $0.0030 | 3.5 |",
-            "| 短期記憶の要約 (short_term_summary) | 2 | 1 | 110 | 10 | $0.0005 | 1.0 |",
+            "| 短期記憶のいきさつ (short_term_summary) | 2 | 1 | 110 | 10 | $0.0005 | 1.0 |",
             "| エピソードの書き起こし (episode_writing) | 1 | 0 | 900 | 300 | $0.0015 | 4.2 |",
         ]
 

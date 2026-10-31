@@ -1077,10 +1077,10 @@ class LiteLLMClient(
         self,
         messages: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """tools 無しで L4 mid summary JSON object を返す (Phase 2)。
+        """tools 無しで、Being の短期記憶のいきさつの JSON object を返す (#1824)。
 
         既存の json_object 強制完了をそのまま使う (LLM 側から見れば同じ呼出)。
-        prompt 構築や parse は ``ShortTermMemorySummaryService`` 側の責務。
+        prompt 構築や parse は ``LlmBackstoryWriter`` 側の責務。
         """
         return self._complete_aux_json(messages, AuxLlmComponent.SHORT_TERM_SUMMARY)
 

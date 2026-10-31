@@ -61,7 +61,6 @@ def _speak(runtime, speaker: PlayerId, arguments: dict):
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=_StubClient(),
     )
     return wiring._execute_tool(

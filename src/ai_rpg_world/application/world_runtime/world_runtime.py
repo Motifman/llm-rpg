@@ -97,7 +97,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
-from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger, IShortTermMemory
+from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
 from ai_rpg_world.application.llm.services.action_result_recorder import ActionResultRecorder
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.action_summary_format import (
@@ -526,7 +526,6 @@ class WorldRuntime:
     _obs_pipeline: ObservationPipeline
     _obs_buffer: DefaultObservationContextBuffer
     _recent_event_store: UnifiedRecentEventStore
-    _short_term_memory: IShortTermMemory
     _action_result_store: DefaultActionResultStore
     # PR3 (Encounter Memory): familiarity 信号 (初対面 / 再会 / 初訪問 / 再訪)
     # を保持する。observation pipeline 経由で entity / event の encounter を記録、
@@ -1060,14 +1059,6 @@ class WorldRuntime:
         player_interaction_service = getattr(self, "_player_interaction_service", None)
         if player_interaction_service is not None:
             player_interaction_service.set_trace_recorder(recorder, self.current_tick)
-        # 短期記憶の構築時点では recorder が未確定なので、L4 と圧縮発火の
-        # trace provider をここで注入する。実装差は getattr で吸収する。
-        set_recorder = getattr(self._short_term_memory, "set_trace_recorder_provider", None)
-        if callable(set_recorder):
-            set_recorder(lambda: self._trace_recorder)
-        set_tick = getattr(self._short_term_memory, "set_current_tick_provider", None)
-        if callable(set_tick):
-            set_tick(lambda: self.current_tick())
 
     @property
     def trace_recorder(self) -> Any:
@@ -2130,7 +2121,7 @@ class WorldRuntime:
 
         core = PromptBuilderCoreServices(
             observation_buffer=self._obs_buffer,
-            short_term_memory=self._short_term_memory,
+            recent_event_store=self._recent_event_store,
             world_query_service=WorldRuntimeQueryAdapter(self),
             player_profile_repository=WorldProfileRepositoryAdapter(self),
             current_state_formatter=self._formatter,
@@ -3821,86 +3812,6 @@ class WorldRuntime:
         return str(value)
 
 
-def _build_short_term_memory(
-    cfg: ResolvedLlmRuntimeConfig,
-    *,
-    scenario: Any,
-    world_character: CharacterPromptInput | None,
-    persona_block: str,
-    event_store: UnifiedRecentEventStore,
-    aux_llm_call_sink: AuxLlmCallSink | None,
-    on_compacted: Callable[[PlayerId, Sequence[Any]], None] | None = None,
-) -> IShortTermMemory:
-    """PR #451 (PR 6/6): 短期記憶を **「全部揃ってから 1 回 build」** で作る。
-
-    旧構造 (PR #439-#449):
-      1. ``_build_short_term_memory_from_config(cfg)`` で setter 用の「殻」だけ作る
-         (summary_service=None / template fallback only)
-      2. runtime / llm_client が完成した後に
-         ``_wire_short_term_llm_services()`` が setter で LLM 経路を後注入
-
-      → setter 呼び忘れで silent failure を量産 (PR #444 で実害発生)。
-
-    新構造 (本 PR):
-      1. cfg + scenario + persona から LLM client / summary services /
-         persona resolver を **構築時点で全部揃える**
-      2. ``SummarizingShortTermMemory(summary_service=X, persona_resolver=Z)``
-         を ctor 一発で組む
-      3. ``set_summary_services`` 経由の後注入経路は廃止
-
-    trace_recorder / current_tick は runtime instance に依存するため、別経路
-    (``WorldRuntime.set_trace_recorder``) で provider を差し替える。これは
-    PR #449 の NullObject 正規化により呼び忘れても本体が止まらない。
-
-    Args:
-        cfg: resolved runtime config (env を 1 度だけ読んだ DTO)
-        scenario: ScenarioLoader の結果 (persona resolver 構築に使う)
-        world_character: 操作対象キャラ (rich persona を割り当てる対象)
-        persona_block: world_character 由来の persona テキスト
-    """
-    from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
-        ShortTermMemorySummaryService,
-    )
-    from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-        SummarizingShortTermMemory,
-    )
-    from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-        create_llm_client_from_config,
-    )
-    from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-
-    summary_service = None
-    persona_resolver = None
-    if cfg.llm_client_kind == "litellm":
-        try:
-            client = create_llm_client_from_config(cfg, aux_call_sink=aux_llm_call_sink)
-        except Exception:
-            logger.exception("LLM client factory failed; short-term LLM services disabled")
-            client = None
-        if isinstance(client, LiteLLMClient):
-            summary_service = ShortTermMemorySummaryService(client)
-            persona_resolver = _build_persona_resolver(
-                scenario=scenario,
-                world_character=world_character,
-                persona_block=persona_block,
-            )
-            logger.info(
-                "short-term memory: LLM 経路を ctor 注入 (rolling_summary + LiteLLM)。L4 は LLM 圧縮で生成される。"
-            )
-        else:
-            logger.info(
-                "LLM_CLIENT=litellm が未取得。short-term memory は template fallback "
-                "only で動作 (L4 の LLM 圧縮は無効)。"
-            )
-
-    return SummarizingShortTermMemory(
-        summary_service=summary_service,
-        persona_resolver=persona_resolver,
-        event_store=event_store,
-        on_compacted=on_compacted,
-    )
-
-
 def _wire_backstory_writing(
     cfg: ResolvedLlmRuntimeConfig,
     *,
@@ -5292,19 +5203,6 @@ def create_world_runtime(
     )
     recent_event_store = UnifiedRecentEventStore()
     obs_buffer = DefaultObservationContextBuffer(event_store=recent_event_store)
-    # PR #451 (PR 6/6): 短期記憶を「全部揃ってから 1 回 build」式に統合。
-    # LLM 経路 (summary_service / persona_resolver) は
-    # 旧来 setter で後注入していたが、ctor 注入に統一して呼び忘れ silent failure
-    # を構造で排除。trace_recorder / current_tick は runtime instance に依存する
-    # ため別経路 (set_trace_recorder) で差し替え (NullObject 経由で安全)。
-    short_term_memory = _build_short_term_memory(
-        config,
-        scenario=scenario,
-        world_character=world_character,
-        persona_block=persona_block,
-        event_store=recent_event_store,
-        aux_llm_call_sink=aux_llm_call_sink,
-    )
     action_result_store = DefaultActionResultStore(event_store=recent_event_store)
     # encounter_memory は上 (spawn loop 直前) で生成済 (PR4)。
 
@@ -5851,7 +5749,6 @@ def create_world_runtime(
         _obs_pipeline=obs_pipeline,
         _obs_buffer=obs_buffer,
         _recent_event_store=recent_event_store,
-        _short_term_memory=short_term_memory,
         _action_result_store=action_result_store,
         _encounter_memory=encounter_memory,
         _memory_turn_clock=memory_turn_clock,
@@ -6799,10 +6696,6 @@ def create_world_runtime(
             runtime._aux_being_provisioning.ensure_attached(PlayerId(int(spawn.player_id)))
         except Exception as exc:
             raise RuntimeError(f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を渡せない") from exc
-    # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
-    # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
-    # (setter 呼び忘れ silent failure を構造で排除)。
-
     runtime._wire_being_stack()
     from ai_rpg_world.application.observation.being_contract import (
         environment_entry_for_player,
@@ -6899,10 +6792,3 @@ def create_world_runtime(
         for player_id, persona in personas_by_player_id.items()
     }
     return runtime
-
-
-# PR #451 (PR 6/6): _wire_short_term_llm_services は廃止。
-# 旧来は ctor で空殻 (summary_service=None) を作り、後で setter 注入する 2 段階
-# 構築だったが、setter 呼び忘れで silent failure を量産 (PR #444 の実害)。
-# 本 PR で _build_short_term_memory に統合し ctor 一発注入に変更したため、
-# 後注入用のこの helper は不要になった。

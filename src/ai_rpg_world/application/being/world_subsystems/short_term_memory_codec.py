@@ -1,30 +1,18 @@
-"""直近の出来事を保存・復元する subsystem codec 群。
+"""直近の出来事のストア (``UnifiedRecentEventStore``) を保存・復元する subsystem codec。
 
-現在は観測と行動を ``recent_event_store`` の 1 subsystem に保存する。
-resume の互換性を保つため、旧 snapshot の次の 3 subsystem を読む codec と
-統一 payload への移行関数も残す:
+v2 は、未処理の観測と直近の行動の結果だけを持つ。プロンプトの【直近の出来事】は Being の短期記憶から作り、
+Being の snapshot に入るので、世界の側は出来事の並びを持たない (design_decisions D1824-24)。
 
-| Codec | 対象 | 内容 |
-|---|---|---|
-| ``ShortTermMemorySubsystemCodec`` | ``_short_term_memory`` | 要約する短期記憶 (古い sliding の payload も読む) |
-| ``ObservationBufferSubsystemCodec`` | ``_obs_buffer`` | player_id → pending ObservationEntry list (= LLM turn で drain される) |
-| ``ActionResultStoreSubsystemCodec`` | ``_action_result_store`` | player_id → recent ActionResultEntry list (= 直近の tool 実行結果) |
+古い snapshot も読む:
 
-resume 時に直近の出来事が空だと agent は **「直前の出来事を覚えていない」** 状態で
-再開する (= 前 run の最終 tick で何が起きたかが prompt に乗らない)。
-
-``ShortTermMemorySubsystemCodec`` は ``SummarizingShortTermMemory`` の
-L1 raw + L4 mid summary (3 generations) を保存する。L4 が失われると、直近 20 ターン
-より前の流れが空に戻る。
-``mode: "sliding_window"`` (v1 は mode 無しで同じ意味) の payload は、
-固定容量の短期記憶を使っていたころの snapshot で、観測だけを L1 raw に戻す。
-
-すべて dataclass を JSON 化する共通ヘルパを使う。datetime → ISO 8601 文字列で正規化。
+| 形 | 読み方 |
+|---|---|
+| v1 (``recent_event_store``) | 並びの中の行動の結果と、未処理の観測を戻す。並びの観測と、今の短期記憶の要約 (``mid_summaries``) は捨てる |
+| 旧 3 subsystem (``sliding_window`` / ``observation_buffer`` / ``action_result_store``) | ``migrate_legacy_recent_event_subsystems`` で v1 の形にしてから読む |
 """
 
 from __future__ import annotations
 
-from collections import deque
 from datetime import datetime, timezone
 from typing import Any, cast
 
@@ -33,9 +21,6 @@ from ai_rpg_world.application.being.world_state_snapshot_service import (
 )
 from ai_rpg_world.application.common.execution_provenance import ExecutionProvenance
 from ai_rpg_world.application.observation.contracts.dtos import ObservationCategory
-from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
-    L4MidSummary,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 # ----------------------------------------------------------------------------
@@ -144,91 +129,22 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
     )
 
 
-def _check_version(data: dict[str, Any], key: str, expected: int) -> None:
-    version = data.get("schema_version")
-    if version != expected:
-        raise ValueError(f"{key} schema_version={version!r} unsupported (expected {expected})")
-
-
 # ----------------------------------------------------------------------------
-# L4 summary serializer (rolling_summary backend 専用)
-# ----------------------------------------------------------------------------
-
-
-def _l4_mid_summary_to_dict(s: L4MidSummary) -> dict[str, Any]:
-    return {
-        "summary_id": s.summary_id,
-        "player_id": int(s.player_id),
-        "raw_count": int(s.raw_count),
-        "generated_at": _dt_to_iso(s.generated_at),
-        "compressed_activity": s.compressed_activity,
-        "emotional_summary": s.emotional_summary,
-        "is_fallback": bool(s.is_fallback),
-    }
-
-
-def _dict_to_l4_mid_summary(d: dict[str, Any]) -> L4MidSummary:
-    return L4MidSummary(
-        summary_id=str(d["summary_id"]),
-        player_id=int(d["player_id"]),
-        raw_count=int(d["raw_count"]),
-        generated_at=_iso_to_dt(str(d["generated_at"])),
-        compressed_activity=str(d["compressed_activity"]),
-        emotional_summary=str(d["emotional_summary"]),
-        is_fallback=bool(d.get("is_fallback", False)),
-    )
-
-
-# ----------------------------------------------------------------------------
-# 1. 短期記憶 (キー名は固定容量の短期記憶だったころの保存形式のまま)
+# 旧 3 subsystem のキー。読むだけで、もう書かない
 # ----------------------------------------------------------------------------
 _SW_SUBSYSTEM_KEY = "sliding_window"
-# v1: {schema_version: 1, entries: [...]}                     ← sliding 専用
-# v2: {schema_version: 2, mode: "sliding_window", entries: [...]}
-#     {schema_version: 2, mode: "rolling_summary",
-#      raw_entries: [...], mid_summaries: [...]}
-# long_summaries / long_gen_indices (要約の要約 L5) は #1824 で書くのをやめた。版は
-# 据え置き、古い snapshot のこのキーは restore が読み飛ばす。
-_SW_SCHEMA_VERSION = 2
 _SW_MODE_SLIDING = "sliding_window"
 _SW_MODE_ROLLING = "rolling_summary"
+_OB_SUBSYSTEM_KEY = "observation_buffer"
+_AR_SUBSYSTEM_KEY = "action_result_store"
 
 
 # ----------------------------------------------------------------------------
-# 統一 recent event store
+# 直近の出来事のストア
 # ----------------------------------------------------------------------------
 _RECENT_EVENT_SUBSYSTEM_KEY = "recent_event_store"
-_RECENT_EVENT_SCHEMA_VERSION = 1
-
-
-def _event_entry_to_dict(entry: Any) -> dict[str, Any]:
-    if entry.kind == "observation":
-        payload = _observation_entry_to_dict(entry.payload)
-    elif entry.kind == "action_result":
-        payload = _action_result_entry_to_dict(entry.payload)
-    else:  # pragma: no cover - UnifiedRecentEventEntry が構築時に拒否する
-        raise ValueError(f"unknown recent event kind: {entry.kind!r}")
-    return {
-        "occurred_at": _dt_to_iso(entry.occurred_at),
-        "game_time_label": entry.game_time_label,
-        "kind": entry.kind,
-        "payload": payload,
-    }
-
-
-def _dict_to_event_entry(data: dict[str, Any]) -> Any:
-    from ai_rpg_world.application.llm.contracts.chunk_encoding import (
-        UnifiedRecentEventEntry,
-    )
-
-    kind = data["kind"]
-    if kind == "observation":
-        payload = _dict_to_observation_entry(data["payload"])
-        return UnifiedRecentEventEntry.from_observation(payload)
-    if kind == "action_result":
-        payload = _dict_to_action_result_entry(data["payload"])
-        return UnifiedRecentEventEntry.from_action_result(payload)
-    raise ValueError(f"unknown recent event kind: {kind!r}")
+_RECENT_EVENT_SCHEMA_VERSION = 2
+_RECENT_EVENT_SCHEMA_VERSION_WITH_TIMELINE = 1
 
 
 def migrate_legacy_recent_event_subsystems(
@@ -289,7 +205,7 @@ def migrate_legacy_recent_event_subsystems(
     for key in legacy_keys:
         migrated.pop(key)
     migrated[_RECENT_EVENT_SUBSYSTEM_KEY] = {
-        "schema_version": _RECENT_EVENT_SCHEMA_VERSION,
+        "schema_version": _RECENT_EVENT_SCHEMA_VERSION_WITH_TIMELINE,
         "mode": mode,
         "entries": event_groups,
         "completed_turn_sizes": [],
@@ -300,7 +216,7 @@ def migrate_legacy_recent_event_subsystems(
 
 
 class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
-    """統一時系列と未処理観測、L4 を一つの subsystem として往復する。"""
+    """未処理の観測と直近の行動の結果を一つの subsystem として往復する。"""
 
     @property
     def subsystem_key(self) -> str:
@@ -308,319 +224,67 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
 
     def capture(self, runtime: Any) -> dict[str, Any]:
         store = getattr(runtime, "_recent_event_store", None)
-        memory: Any = getattr(runtime, "_short_term_memory", None)
-        if store is None:
-            return {
-                "schema_version": _RECENT_EVENT_SCHEMA_VERSION,
-                "mode": _SW_MODE_SLIDING,
-                "entries": [],
-                "completed_turn_sizes": [],
-                "pending_observations": [],
-                "mid_summaries": [],
-            }
-        entries: list[dict[str, Any]] = []
-        completed_turn_sizes = []
-        pending = []
-        for pid in sorted(store.player_ids()):
-            player_id = PlayerId(pid)
-            timeline = store.get_timeline(player_id)
-            if timeline:
-                entries.append(
-                    {
-                        "player_id": pid,
-                        "entries": [_event_entry_to_dict(entry) for entry in timeline],
-                    }
-                )
-            sizes = store.completed_turn_sizes(player_id)
-            if sizes:
-                completed_turn_sizes.append({"player_id": pid, "sizes": list(sizes)})
-            pending_entries = store.get_pending_observations(player_id)
-            if pending_entries:
-                pending.append(
-                    {
-                        "player_id": pid,
-                        "entries": [_observation_entry_to_dict(entry) for entry in pending_entries],
-                    }
-                )
-        data: dict[str, Any] = {
+        action_results: list[dict[str, Any]] = []
+        pending: list[dict[str, Any]] = []
+        if store is not None:
+            for pid in sorted(store.player_ids()):
+                player_id = PlayerId(pid)
+                results = store.action_results_in_storage_order(player_id)
+                if results:
+                    action_results.append(
+                        {"player_id": pid, "entries": [_action_result_entry_to_dict(entry) for entry in results]}
+                    )
+                pending_entries = store.get_pending_observations(player_id)
+                if pending_entries:
+                    pending.append(
+                        {"player_id": pid, "entries": [_observation_entry_to_dict(entry) for entry in pending_entries]}
+                    )
+        return {
             "schema_version": _RECENT_EVENT_SCHEMA_VERSION,
-            "mode": _SW_MODE_ROLLING if memory is not None else _SW_MODE_SLIDING,
-            "entries": entries,
-            "completed_turn_sizes": completed_turn_sizes,
+            "action_results": action_results,
             "pending_observations": pending,
-            "mid_summaries": [],
         }
-        if memory is not None:
-            with memory._mid_lock:
-                data["mid_summaries"] = sorted(
-                    (
-                        {
-                            "player_id": int(pid),
-                            "summaries": [_l4_mid_summary_to_dict(s) for s in summaries],
-                        }
-                        for pid, summaries in memory._mid.items()
-                    ),
-                    key=lambda group: group["player_id"],
-                )
-        return data
 
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
-        _check_version(data, _RECENT_EVENT_SUBSYSTEM_KEY, _RECENT_EVENT_SCHEMA_VERSION)
+        version = data.get("schema_version")
+        if version not in (_RECENT_EVENT_SCHEMA_VERSION_WITH_TIMELINE, _RECENT_EVENT_SCHEMA_VERSION):
+            raise ValueError(
+                f"{_RECENT_EVENT_SUBSYSTEM_KEY} schema_version={version!r} unsupported "
+                f"(expected {_RECENT_EVENT_SCHEMA_VERSION_WITH_TIMELINE} or {_RECENT_EVENT_SCHEMA_VERSION})"
+            )
         store = getattr(runtime, "_recent_event_store", None)
-        memory: Any = getattr(runtime, "_short_term_memory", None)
         if store is None:
             return
         for pid in store.player_ids():
-            store.replace_timeline(PlayerId(pid), [])
+            store.replace_action_results(PlayerId(pid), [])
             store.replace_pending_observations(PlayerId(pid), [])
-        for group in data.get("entries", []):
-            store.replace_timeline(
-                PlayerId(int(group["player_id"])),
-                [_dict_to_event_entry(entry) for entry in group.get("entries", [])],
-            )
-        for group in data.get("completed_turn_sizes", []):
-            store.replace_completed_turn_sizes(
-                PlayerId(int(group["player_id"])),
-                [int(size) for size in group.get("sizes", [])],
-            )
+        for pid, results in _action_results_by_player(data, version).items():
+            store.replace_action_results(PlayerId(pid), results)
         for group in data.get("pending_observations", []):
             store.replace_pending_observations(
                 PlayerId(int(group["player_id"])),
                 [_dict_to_observation_entry(entry) for entry in group.get("entries", [])],
             )
-        if memory is None:
-            return
-        with memory._mid_lock:
-            memory._mid.clear()
-            for group in data.get("mid_summaries", []):
-                memory._mid[int(group["player_id"])] = deque(
-                    _dict_to_l4_mid_summary(item) for item in group.get("summaries", [])
-                )
 
 
-class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
-    """``_short_term_memory`` の要約する短期記憶を JSON 化する。
-
-    保存は常に ``mode: "rolling_summary"``。固定容量の短期記憶で保存した
-    v1 と v2 の ``mode: "sliding_window"`` も、観測だけを L1 raw に戻して読む。
-    """
-
-    @property
-    def subsystem_key(self) -> str:
-        return _SW_SUBSYSTEM_KEY
-
-    # -------- capture --------
-
-    def capture(self, runtime: Any) -> dict[str, Any]:
-        sw = getattr(runtime, "_short_term_memory", None)
-        if sw is None:
-            return {
-                "schema_version": _SW_SCHEMA_VERSION,
-                "mode": _SW_MODE_SLIDING,
-                "entries": [],
-            }
-        return self._capture_rolling(sw)
-
-    @staticmethod
-    def _capture_raw_entries(sw: Any) -> list[dict[str, Any]]:
-        entries: list[dict[str, Any]] = []
-        for pid in sorted(sw._event_store.player_ids()):
-            observations = sw._event_store.observations_in_storage_order(PlayerId(pid))
-            if observations:
-                entries.append(
-                    {
-                        "player_id": pid,
-                        "entries": [_observation_entry_to_dict(entry) for entry in observations],
-                    }
-                )
-        return entries
-
-    def _capture_rolling(self, sw: Any) -> dict[str, Any]:
-        # L4 は worker thread からも書かれる: 必ず lock 内で snapshot を取る。
-        # L1 (_raw) は main thread 専用なので lock 不要 (SummarizingShortTermMemory
-        # の自己ドキュメント済の不変条件)。
-        with sw._mid_lock:
-            mid_snapshot: dict[int, list[L4MidSummary]] = {int(pid): list(dq) for pid, dq in sw._mid.items()}
-        raw_entries = self._capture_raw_entries(sw)
-        mid_groups: list[dict[str, Any]] = list(
-            {
-                "player_id": int(pid),
-                "summaries": [_l4_mid_summary_to_dict(s) for s in summaries],
-            }
-            for pid, summaries in mid_snapshot.items()
-        )
-        mid_summaries = sorted(mid_groups, key=lambda d: d["player_id"])
+def _action_results_by_player(data: dict[str, Any], version: int) -> dict[int, list[Any]]:
+    """v1 は観測と行動の結果を並べた ``entries`` から、行動の結果だけを並びの順に取り出す。"""
+    if version == _RECENT_EVENT_SCHEMA_VERSION:
         return {
-            "schema_version": _SW_SCHEMA_VERSION,
-            "mode": _SW_MODE_ROLLING,
-            "raw_entries": raw_entries,
-            "mid_summaries": mid_summaries,
+            int(group["player_id"]): [_dict_to_action_result_entry(entry) for entry in group.get("entries", [])]
+            for group in data.get("action_results", [])
         }
-
-    # -------- restore --------
-
-    def restore(self, runtime: Any, data: dict[str, Any]) -> None:
-        version = data.get("schema_version")
-        if version not in (1, _SW_SCHEMA_VERSION):
-            raise ValueError(
-                f"{_SW_SUBSYSTEM_KEY} schema_version={version!r} unsupported (expected 1 or {_SW_SCHEMA_VERSION})"
-            )
-        sw = getattr(runtime, "_short_term_memory", None)
-        if sw is None:
-            return
-        mode = data.get("mode", _SW_MODE_SLIDING)
-        if mode == _SW_MODE_ROLLING:
-            self._restore_rolling_to_rolling(sw, data)
-        elif mode == _SW_MODE_SLIDING:
-            self._restore_sliding_to_rolling(sw, data.get("entries", []))
-        else:
-            raise ValueError(f"{_SW_SUBSYSTEM_KEY} mode={mode!r} unsupported")
-
-    def _restore_rolling_to_rolling(self, sw: Any, data: dict[str, Any]) -> None:
-        # L1 raw queue を clear + repopulate
-        for pid in sw._event_store.player_ids():
-            sw._event_store.replace_observations(PlayerId(pid), [])
-        for player_entry in data.get("raw_entries", []):
-            pid = int(player_entry["player_id"])
-            entries = [_dict_to_observation_entry(d) for d in player_entry.get("entries", [])]
-            sw._event_store.replace_observations(PlayerId(pid), entries)
-        # L4 は lock 内で書き戻す (worker thread と race)
-        with sw._mid_lock:
-            sw._mid.clear()
-            for player_entry in data.get("mid_summaries", []):
-                pid = int(player_entry["player_id"])
-                summaries = [_dict_to_l4_mid_summary(d) for d in player_entry.get("summaries", [])]
-                sw._mid[pid] = deque(summaries)
-            # _raw に居て _mid に居ない player も _mid に空 deque を確保
-            # (_ensure_player の不変条件と一致させる)
-            for pid in sw._event_store.player_ids():
-                if pid not in sw._mid:
-                    sw._mid[pid] = deque()
-
-    def _restore_sliding_to_rolling(self, sw: Any, entries_data: list[dict[str, Any]]) -> None:
-        self._restore_observations(sw, entries_data)
-        with sw._mid_lock:
-            sw._mid.clear()
-            for pid in sw._event_store.player_ids():
-                sw._mid[pid] = deque()
-
-    @staticmethod
-    def _restore_observations(sw: Any, entries_data: list[dict[str, Any]]) -> None:
-        for pid in sw._event_store.player_ids():
-            sw._event_store.replace_observations(PlayerId(pid), [])
-        for player_entry in entries_data:
-            sw._event_store.replace_observations(
-                PlayerId(int(player_entry["player_id"])),
-                [_dict_to_observation_entry(item) for item in player_entry.get("entries", [])],
-            )
-
-
-# ----------------------------------------------------------------------------
-# 2. Observation buffer
-# ----------------------------------------------------------------------------
-_OB_SUBSYSTEM_KEY = "observation_buffer"
-_OB_SCHEMA_VERSION = 1
-
-
-class ObservationBufferSubsystemCodec(WorldSubsystemCodec):
-    """``_obs_buffer._buffer`` (= pending ObservationEntry list per player)。"""
-
-    @property
-    def subsystem_key(self) -> str:
-        return _OB_SUBSYSTEM_KEY
-
-    def capture(self, runtime: Any) -> dict[str, Any]:
-        ob = getattr(runtime, "_obs_buffer", None)
-        if ob is None:
-            return {"schema_version": _OB_SCHEMA_VERSION, "entries": []}
-        return {
-            "schema_version": _OB_SCHEMA_VERSION,
-            "entries": [
-                {
-                    "player_id": pid,
-                    "entries": [
-                        _observation_entry_to_dict(entry)
-                        for entry in ob._event_store.get_pending_observations(PlayerId(pid))
-                    ],
-                }
-                for pid in sorted(ob._event_store.player_ids())
-                if ob._event_store.get_pending_observations(PlayerId(pid))
-            ],
-        }
-
-    def restore(self, runtime: Any, data: dict[str, Any]) -> None:
-        _check_version(data, _OB_SUBSYSTEM_KEY, _OB_SCHEMA_VERSION)
-        ob = getattr(runtime, "_obs_buffer", None)
-        if ob is None:
-            return
-        for pid in ob._event_store.player_ids():
-            ob._event_store.replace_pending_observations(PlayerId(pid), [])
-        for group in data.get("entries", []):
-            ob._event_store.replace_pending_observations(
-                PlayerId(int(group["player_id"])),
-                [_dict_to_observation_entry(entry) for entry in group.get("entries", [])],
-            )
-
-
-# ----------------------------------------------------------------------------
-# 3. Action result store
-# ----------------------------------------------------------------------------
-_AR_SUBSYSTEM_KEY = "action_result_store"
-# v2: expected_result 追加 (PR1)。v3: intention / emotion_hint 追加 (PR2a)。
-# v4: prediction_context_id 追加 (U1)。v5: in_context_belief_ids 追加 (U4)。
-# v2〜v5 は、欠けたキーを data.get で None/() に倒せるので実害は無かったが、
-# 意味の変更を示すため版を上げた。
-# expected_result / prediction_context_id / in_context_belief_ids / scene_boundary /
-# intention / emotion_hint は #1631 で書くのをやめたが、版は 5 のまま据え置いた。
-# 版は完全一致で照合するので、上げるといまある snapshot が読めなくなる。キーの
-# ある古い snapshot は restore が読み飛ばす。
-_AR_SCHEMA_VERSION = 5
-
-
-class ActionResultStoreSubsystemCodec(WorldSubsystemCodec):
-    """``_action_result_store._store`` (= ActionResultEntry list per player)。"""
-
-    @property
-    def subsystem_key(self) -> str:
-        return _AR_SUBSYSTEM_KEY
-
-    def capture(self, runtime: Any) -> dict[str, Any]:
-        ar = getattr(runtime, "_action_result_store", None)
-        if ar is None:
-            return {"schema_version": _AR_SCHEMA_VERSION, "entries": []}
-        return {
-            "schema_version": _AR_SCHEMA_VERSION,
-            "entries": [
-                {
-                    "player_id": pid,
-                    "entries": [
-                        _action_result_entry_to_dict(entry)
-                        for entry in ar._event_store.action_results_in_storage_order(PlayerId(pid))
-                    ],
-                }
-                for pid in sorted(ar._event_store.player_ids())
-                if ar._event_store.action_results_in_storage_order(PlayerId(pid))
-            ],
-        }
-
-    def restore(self, runtime: Any, data: dict[str, Any]) -> None:
-        _check_version(data, _AR_SUBSYSTEM_KEY, _AR_SCHEMA_VERSION)
-        ar = getattr(runtime, "_action_result_store", None)
-        if ar is None:
-            return
-        for pid in ar._event_store.player_ids():
-            ar._event_store.replace_action_results(PlayerId(pid), [])
-        for group in data.get("entries", []):
-            ar._event_store.replace_action_results(
-                PlayerId(int(group["player_id"])),
-                [_dict_to_action_result_entry(entry) for entry in group.get("entries", [])],
-            )
+    return {
+        int(group["player_id"]): [
+            _dict_to_action_result_entry(entry["payload"])
+            for entry in group.get("entries", [])
+            if entry.get("kind") == "action_result"
+        ]
+        for group in data.get("entries", [])
+    }
 
 
 __all__ = [
     "UnifiedRecentEventStoreSubsystemCodec",
     "migrate_legacy_recent_event_subsystems",
-    "ShortTermMemorySubsystemCodec",
-    "ObservationBufferSubsystemCodec",
-    "ActionResultStoreSubsystemCodec",
 ]

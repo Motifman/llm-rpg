@@ -53,7 +53,6 @@ def _prompt_and_offered_tools(runtime, player_id: PlayerId) -> tuple[str, set[st
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
     offered = {t["function"]["name"] for t in wiring._build_tools_payload(player_id)}

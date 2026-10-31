@@ -7,6 +7,7 @@ import pytest
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
 )
+from ai_rpg_world.application.llm.services.unified_recent_event_store import RECENT_ACTION_RESULTS_KEPT
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -92,14 +93,15 @@ class TestDefaultActionResultStore:
         got = store.get_recent(player_id, 1)
         assert got[0].occurred_at == at
 
-    def test_results_are_not_trimmed_by_count(self):
-        """行動の結果は件数で削らない。101 件足すと 101 件とも返る。古い出来事を外すのは短期記憶のターンの範囲の規則 (design_decisions D1824-9)。"""
+    def test_results_are_kept_up_to_the_recent_count(self):
+        """行動の結果は RECENT_ACTION_RESULTS_KEPT 件まで持つ。101 件足すと、新しいものからその件数だけ返る (design_decisions D1824-24)。"""
         store = DefaultActionResultStore()
         player_id = PlayerId(1)
         for i in range(101):
             store.append(player_id, f"a_{i}", f"r_{i}")
         got = store.get_recent(player_id, 200)
-        assert len(got) == 101
+        assert len(got) == RECENT_ACTION_RESULTS_KEPT
+        assert got[0].action_summary == "a_100"
 
     def test_append_player_id_none_raises_type_error(self, store):
         """append に player_id が None のとき TypeError"""

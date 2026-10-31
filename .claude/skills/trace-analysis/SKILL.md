@@ -30,7 +30,7 @@ PYTHONPATH=. python .claude/skills/trace-analysis/extract_metrics.py <run_dir> [
 - 時系列 cache hit 推移 (20 tick 毎)
 - 時系列 per-tick wall time
 - observation category 内訳
-- summary 生成回数 (L4/L5/episode_writing)
+- 書き起こしの回数 (episode_writing、being_backstory_written。2026-10-31 より前の trace では今の短期記憶の要約 L4/L5)
 - loop_guard_warning 詳細
 - baseline 比較 (baseline_dir 指定時)
 - 協調指標 (PR-A, survival_island_v3_coop 系向け): ペア別 / 全員同スポット

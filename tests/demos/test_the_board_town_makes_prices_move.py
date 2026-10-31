@@ -156,7 +156,6 @@ class _Town:
         wiring = _WorldLlmWiring(
             runtime=self.runtime,
             observation_buffer=self.runtime._obs_buffer,
-            short_term_memory=self.runtime._short_term_memory,
             llm_client=client,
         )
         wiring.run_phase_a(player_id)
