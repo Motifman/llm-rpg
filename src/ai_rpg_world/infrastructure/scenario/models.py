@@ -163,6 +163,9 @@ class PlayerSpawnConfig:
     knows_at_start: tuple[str, ...] | None = None
     # #1581: 名前を知らない相手に見せる呼び方。最初から全員に知られている人は無くてよい。
     appearance: str | None = None
+    # #1469: 自分を指す一人称。起動時に Being の人柄 (Persona.first_person) に入る。書かなければ None で、
+    # 一人称を決めないまま (仮の値で埋めない)。
+    first_person: str | None = None
 
 
 @dataclass(frozen=True)

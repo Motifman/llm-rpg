@@ -6705,9 +6705,9 @@ def create_world_runtime(
     runtime._wire_being_stack()
     for spawn in scenario.player_spawns:
         try:
-            # 一人称や人柄はシナリオに書く場所がまだ無い。persona_prompt を分けるとき (#1339 / #1548) に入れる。
+            # 口調や性格などはシナリオに書く場所がまだ無い。persona_prompt を分けるとき (#1339 / #1548) に入れる。
             runtime._aux_being_provisioning.ensure_attached(
-                PlayerId(int(spawn.player_id)), persona=Persona(name=spawn.name)
+                PlayerId(int(spawn.player_id)), persona=Persona(name=spawn.name, first_person=spawn.first_person)
             )
         except Exception as exc:
             raise RuntimeError(f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を渡せない") from exc

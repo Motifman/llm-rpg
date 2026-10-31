@@ -402,6 +402,7 @@ def parse_players(
             player_ids=player_ids,
         )
         appearance = parse_player_appearance(p, owner_id=p["id"])
+        first_person = parse_player_first_person(p, owner_id=p["id"])
         spawns.append(
             PlayerSpawnConfig(
                 string_id=p["id"],
@@ -415,6 +416,7 @@ def parse_players(
                 initial_gold=initial_gold,
                 knows_at_start=knows_at_start,
                 appearance=appearance,
+                first_person=first_person,
             )
         )
     reject_names_strangers_could_learn_without_meeting(spawns)
@@ -428,6 +430,16 @@ def parse_player_appearance(player: dict[str, Any], *, owner_id: str) -> str | N
     raw = player["appearance"]
     if not isinstance(raw, str) or not raw.strip():
         raise ScenarioLoadError(f"players[{owner_id}].appearance は空でない文字列で書いてください (got {raw!r})")
+    return raw.strip()
+
+
+def parse_player_first_person(player: dict[str, Any], *, owner_id: str) -> str | None:
+    """``players[].first_person`` を検証する (design_decisions D1469-3)。書かなければ None。"""
+    if "first_person" not in player:
+        return None
+    raw = player["first_person"]
+    if not isinstance(raw, str) or not raw.strip():
+        raise ScenarioLoadError(f"players[{owner_id}].first_person は空でない文字列で書いてください (got {raw!r})")
     return raw.strip()
 
 

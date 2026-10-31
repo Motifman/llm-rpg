@@ -19,18 +19,17 @@ _SCENARIO = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "mine_v
 
 
 def test_each_player_being_is_named_after_the_scenario_player() -> None:
-    """各プレイヤーの Being は、シナリオの players[].name を名前に持ち、シナリオに無い一人称などは決めない。"""
+    """各プレイヤーの Being は、シナリオの players[].name を名前に、players[].first_person を一人称に持つ。"""
     runtime = create_world_runtime(_SCENARIO, config=ResolvedLlmRuntimeConfig.for_tests())
-    names = [player["name"] for player in json.loads(_SCENARIO.read_text(encoding="utf-8"))["players"]]
+    players = json.loads(_SCENARIO.read_text(encoding="utf-8"))["players"]
+    expected = [Persona(name=player["name"], first_person=player["first_person"]) for player in players]
 
     personas = []
     for player_id in runtime.get_player_ids():
         being_id = runtime._aux_being_resolver.resolve_being_id(runtime._aux_being_default_world_id, player_id)
         personas.append(runtime._aux_being_repository.find_by_id(being_id).persona)
 
-    assert sorted(personas, key=lambda p: p.name) == sorted(
-        (Persona(name=name) for name in names), key=lambda p: p.name
-    )
+    assert sorted(personas, key=lambda p: p.name) == sorted(expected, key=lambda p: p.name)
 
 
 def test_leaving_writer_is_told_the_name_and_first_person_of_the_being(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -69,3 +68,14 @@ def test_leaving_writer_is_told_the_name_and_first_person_of_the_being(monkeypat
     runtime.write_episodes_on_leaving()
 
     assert any("あなた = ゲン\nあなたの一人称 = 俺\n" in messages[-1]["content"] for messages in sent)
+
+
+def test_action_prompt_tells_the_same_first_person_as_the_persona() -> None:
+    """行動を決める LLM の system prompt にも、Being の人柄と同じ一人称が書いてある (persona_prompt に書き足したつなぎ)。"""
+    runtime = create_world_runtime(_SCENARIO, config=ResolvedLlmRuntimeConfig.for_tests())
+    assert len(runtime.get_player_ids()) == 4
+
+    for player_id in runtime.get_player_ids():
+        being_id = runtime._aux_being_resolver.resolve_being_id(runtime._aux_being_default_world_id, player_id)
+        first_person = runtime._aux_being_repository.find_by_id(being_id).persona.first_person
+        assert f"一人称は「{first_person}」" in runtime.build_system_prompt(player_id)
