@@ -25,10 +25,11 @@ class EpisodeContent:
 
 @dataclass(frozen=True)
 class EpisodeContents:
-    """``dropped_count`` は 1 回に書ける件数を超えて捨てた中身の数。"""
+    """``dropped_count`` は 1 回に書ける件数を超えて捨てた中身の数。``rewritten`` は、崩れた応答のあとに書き直させた中身か。"""
 
     contents: tuple[EpisodeContent, ...]
     dropped_count: int = 0
+    rewritten: bool = False
 
 
 class EpisodeWriter(ABC):
@@ -36,7 +37,7 @@ class EpisodeWriter(ABC):
     def write(self, *, self_name: str, persona: str, events_text: str) -> EpisodeContents:
         """``events_text`` は【直近の出来事】と同じ書き方で古い順に並べた範囲。
 
-        書けなければ例外を投げる。応答が崩れていれば 1 件も返さない。中身の薄い記憶を混ぜないため。
+        書けなければ例外を投げる。崩れた応答からは 1 件も拾わない。中身の薄い記憶を混ぜないため。
         """
 
 

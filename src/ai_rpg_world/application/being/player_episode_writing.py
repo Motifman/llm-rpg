@@ -104,6 +104,7 @@ class PlayerEpisodeWriting:
             outcome="written",
             episode_count=len(result.written),
             dropped_count=result.dropped_count,
+            rewritten=result.rewritten,
             written_turn=written_turn,
             environment_name=environment_name,
             episodes=[

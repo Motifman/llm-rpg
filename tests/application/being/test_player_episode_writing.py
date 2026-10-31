@@ -133,6 +133,41 @@ class TestPlayerEpisodeWritingInput:
         assert episode.environment_name == "地下の金庫室"
 
 
+class _Sequence(EpisodeWritingCompletion):
+    def __init__(self, *responses: Any) -> None:
+        self.responses = list(responses)
+
+    def complete_episode_writing_json(self, messages: list[dict[str, str]]) -> Any:
+        return self.responses.pop(0)
+
+
+class TestPlayerEpisodeWritingRewrite:
+    """離れるときの書き起こしで、崩れた応答を書き直させて通ったことが trace に残ることを保証する (design_decisions D1626)。"""
+
+    def test_rewritten_writing_is_traced(self) -> None:
+        """1 回目の応答が崩れて 2 回目で書けたときは、outcome が written で、rewritten が True になる。"""
+        writing, repository, _, recorder = _make(_Sequence({"episodes": [_item(about=" ")]}, {"episodes": [_item()]}))  # type: ignore[arg-type]
+
+        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_LEAVING)
+
+        (payload,) = recorder.of(TraceEventKind.EPISODE_WRITING)
+        assert (payload["outcome"], payload["rewritten"], payload["episode_count"]) == ("written", True, 1)
+        assert len(repository.list_by_being(ADA_BEING)) == 1
+
+    def test_twice_broken_response_is_traced_as_failed_with_both_reasons(self) -> None:
+        """2 回とも応答が崩れていたら、1 件も記録に入れず、outcome が failed で、error に 1 回目と 2 回目の理由が残る。"""
+        writing, repository, _, recorder = _make(
+            _Sequence({"episodes": [_item(about=" ")]}, {"episodes": "金庫"})  # type: ignore[arg-type]
+        )
+
+        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_LEAVING)
+
+        (payload,) = recorder.of(TraceEventKind.EPISODE_WRITING)
+        assert (payload["outcome"], payload["error_type"]) == ("failed", "EpisodeWritingResponseException")
+        assert "episodes list" in payload["error"] and "first attempt: episode about" in payload["error"]
+        assert repository.list_by_being(ADA_BEING) == ()
+
+
 class TestPlayerEpisodeWritingTrace:
     """PlayerEpisodeWriting が書き起こしのたびに、何が起きたかを trace に 1 件残すことを保証する。"""
 
@@ -150,6 +185,7 @@ class TestPlayerEpisodeWritingTrace:
         assert payload["event_count"] == 1
         assert payload["episode_count"] == 2
         assert payload["dropped_count"] == 0
+        assert payload["rewritten"] is False
         assert payload["episodes"] == [
             {
                 "handle": first.handle,

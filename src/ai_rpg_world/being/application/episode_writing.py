@@ -34,6 +34,7 @@ class AddEpisodesToMemoryCommand:
 class EpisodeWritingResult:
     written: tuple[WrittenEpisode, ...]
     dropped_count: int = 0
+    rewritten: bool = False
 
 
 class AddEpisodesToMemory:
@@ -62,12 +63,15 @@ class AddEpisodesToMemory:
                 body=content.body,
                 taken_handles=taken,
                 truncated=content.truncated,
+                rewritten=contents.rewritten,
             )
             taken.add(episode.handle)
             written.append(WrittenEpisode(episode=episode, truncated=content.truncated))
         for w in written:
             self._repository.add(w.episode)
-        return EpisodeWritingResult(written=tuple(written), dropped_count=contents.dropped_count)
+        return EpisodeWritingResult(
+            written=tuple(written), dropped_count=contents.dropped_count, rewritten=contents.rewritten
+        )
 
 
 __all__ = ["AddEpisodesToMemory", "AddEpisodesToMemoryCommand", "EpisodeWritingResult", "WrittenEpisode"]

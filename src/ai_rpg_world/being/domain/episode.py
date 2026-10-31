@@ -107,7 +107,8 @@ class EpisodeIndexRevised(DomainEvent):
 class EpisodeWrittenEvent(DomainEvent):
     """本人がエピソードを書き起こし、記憶に加えた。
 
-    ``truncated`` は、上限を超えて切り詰めた項目と切り詰める前の長さ。エピソード自体は持たない。
+    ``truncated`` は、上限を超えて切り詰めた項目と切り詰める前の長さ。``rewritten`` は、崩れた応答のあとに
+    書き直させて書いたか。どちらも書いたときの事実で、エピソード自体は持たない。
     """
 
     being_id: BeingId
@@ -118,6 +119,7 @@ class EpisodeWrittenEvent(DomainEvent):
     index: EpisodeIndex
     body: str
     truncated: Mapping[str, int] = field(default_factory=dict)
+    rewritten: bool = False
 
 
 EpisodeEvent = EpisodeRecalled | EpisodeIndexRevised | EpisodeWrittenEvent
@@ -215,10 +217,11 @@ class Episode(AggregateRoot[EpisodeEvent]):
         body: str,
         taken_handles: Collection[str] = (),
         truncated: Mapping[str, int] | None = None,
+        rewritten: bool = False,
     ) -> Episode:
         """``taken_handles`` は同じ Being がもう使っている呼び名。書いたことを ``EpisodeWrittenEvent`` としてためる。
 
-        ``truncated`` (書いたときに切り詰めた項目と元の長さ) はイベントにだけ載せる。
+        ``truncated`` (書いたときに切り詰めた項目と元の長さ) と ``rewritten`` (書き直させたか) はイベントにだけ載せる。
         """
         episode = cls(
             being_id=being_id,
@@ -241,6 +244,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
                 index=index,
                 body=body,
                 truncated=dict(truncated or {}),
+                rewritten=rewritten,
             )
         )
         return episode

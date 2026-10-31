@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import replace
 from typing import Any
 
 from ai_rpg_world.being.domain.episode import BODY_MAX_LENGTH, INDEX_TEXT_MAX_LENGTH, EpisodeIndex
@@ -52,16 +53,23 @@ class EpisodeWritingCompletion(ABC):
 
 
 class LlmEpisodeWriter(EpisodeWriter):
+    """応答が崩れていたら、同じ文でもう 1 回だけ書かせる (design_decisions D1626)。崩れた応答の一部は拾わない。"""
+
     def __init__(self, completion: EpisodeWritingCompletion) -> None:
         self._completion = completion
 
     def write(self, *, self_name: str, persona: str, events_text: str) -> EpisodeContents:
         if not events_text.strip():
             raise ValueError("events_text must not be blank")
-        response = self._completion.complete_episode_writing_json(
-            _messages(self_name=self_name, persona=persona, events_text=events_text)
-        )
-        return _contents_from(response)
+        messages = _messages(self_name=self_name, persona=persona, events_text=events_text)
+        try:
+            return _contents_from(self._completion.complete_episode_writing_json(messages))
+        except EpisodeWritingResponseException as first:
+            try:
+                contents = _contents_from(self._completion.complete_episode_writing_json(messages))
+            except EpisodeWritingResponseException as second:
+                raise EpisodeWritingResponseException(f"{second} (first attempt: {first})") from second
+            return replace(contents, rewritten=True)
 
 
 def _content_from(item: object) -> EpisodeContent:

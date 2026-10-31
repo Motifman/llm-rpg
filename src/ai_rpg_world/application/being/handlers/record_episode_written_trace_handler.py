@@ -37,6 +37,7 @@ class RecordEpisodeWrittenTraceHandler(EventHandler[EpisodeWrittenEvent]):
             recall_when=event.index.recall_when,
             body_length=len(event.body),
             truncated=dict(event.truncated),
+            rewritten=event.rewritten,
         )
 
 
