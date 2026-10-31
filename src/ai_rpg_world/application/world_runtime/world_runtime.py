@@ -1916,6 +1916,22 @@ class WorldRuntime:
             return None
         return self._memory_turn_clock.advance_turn(acting.being_id)
 
+    def end_being_turn(self, player_id: PlayerId) -> None:
+        """エージェントの 1 手を処理し終えたときに、Being の短期記憶のターンを終わらせる (design_decisions D1824-21)。
+
+        範囲が埋まったか、いきさつが遅れているか、上限に届いたかを短期記憶が見て、起きたことを配送器に渡す。
+        Being に結びつかないプレイヤーなら何もしない。
+        """
+        from ai_rpg_world.being.application.end_being_turn import EndBeingTurn, EndBeingTurnCommand
+
+        acting = self._acting_being_for(player_id)
+        if acting is None:
+            return
+        turn = self._memory_turn_clock.current_turn(acting.being_id)
+        EndBeingTurn(self._being_short_term_memory_store).execute(
+            EndBeingTurnCommand(being_id=acting.being_id, turn=turn)
+        )
+
     def note_being_memories_restored(self, being_ids: Sequence[BeingId]) -> None:
         """Being の記憶を snapshot から戻した。【直近の出来事】の影に知らせる。"""
         if self._recent_events_shadow is not None:
@@ -1923,19 +1939,13 @@ class WorldRuntime:
                 self._recent_events_shadow.note_restored(being_id)
 
     def _on_short_term_compacted(self, player_id: PlayerId, entries: Sequence[Any]) -> None:
-        """今の短期記憶が古いターンを畳んだ。エピソードを書き、【直近の出来事】の影に知らせる。"""
+        """今の短期記憶が古いターンを畳んだ。【直近の出来事】の影に知らせる。
+
+        畳んだ出来事のエピソードは書かない。Being の短期記憶の範囲が埋まったときに書く (design_decisions D1824-21)。
+        """
+        del entries
         if self._recent_events_shadow is not None:
             self._recent_events_shadow.note_compacted(player_id)
-        self._write_compacted_episodes(player_id, entries)
-
-    def _write_compacted_episodes(self, player_id: PlayerId, entries: Sequence[Any]) -> None:
-        from ai_rpg_world.application.being.player_episode_writing import (
-            TRIGGER_COMPACTION,
-        )
-
-        if self._player_episode_writing is None:
-            raise RuntimeError("episode writing is not wired; build the runtime with create_world_runtime")
-        self._player_episode_writing.write(player_id, entries, trigger=TRIGGER_COMPACTION)
 
     def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
         """環境を離れるとき (run の終わり) に、まだ畳まれていない出来事からエピソードを書く (#1626)。
@@ -4083,7 +4093,7 @@ def _build_player_episode_writing(
     turn_reader: MemoryTurnReader,
     persona_of: Callable[[int], tuple[str, str]],
 ) -> Any:
-    """#1626: 今の短期記憶を畳むときと、環境を離れるときの書き起こしの部品を組む。"""
+    """#1626: 環境を離れるときの書き起こしの部品を組む。"""
     from ai_rpg_world.application.being.player_episode_writing import (
         PlayerEpisodeWriting,
     )

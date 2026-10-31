@@ -119,7 +119,11 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
         llm_call_id=phase_a.llm_call_id,
     )
     with execution_provenance_scope(provenance):
-        return _run_phase_b(wiring, phase_a)
+        result = _run_phase_b(wiring, phase_a)
+    end_being_turn = getattr(runtime, "end_being_turn", None)
+    if callable(end_being_turn):
+        end_being_turn(phase_a.player_id)
+    return result
 
 
 def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:

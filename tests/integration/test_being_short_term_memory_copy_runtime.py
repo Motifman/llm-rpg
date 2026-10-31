@@ -192,7 +192,7 @@ class TestRecentEventsShadowInTheRuntime:
         assert recorder.payloads(TraceEventKind.RECENT_EVENTS_SHADOW_MISMATCH) == []
 
     def test_texts_still_match_after_the_current_memory_compacts(self) -> None:
-        """今の短期記憶が古いターンを畳むまで (21 手) 待ち続けても、畳んだあとの比較で食い違いは残らない。Being の側はまだ外さないので、畳んだことを影に知らせて比べ方を変える。"""
+        """今の短期記憶が古いターンを畳むまで (21 手) 待ち続けても、畳んだあとの比較で食い違いは残らない。畳んだことを影に知らせて比べ方を変える。Being の側も同じころに範囲が埋まり、いきさつが届くと古いターンを外す (design_decisions D1824-21)。"""
         runtime, wiring, recorder = _game()
 
         for _ in range(RECENT_TURNS + 1):
@@ -201,7 +201,7 @@ class TestRecentEventsShadowInTheRuntime:
             runtime._short_term_memory.complete_turn(_ME)
         runtime.build_full_prompt(_ME)
 
-        assert recorder.payloads(TraceEventKind.EPISODE_WRITING) != []
+        assert recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_RANGE_FILLED) != []
         assert recorder.payloads(TraceEventKind.RECENT_EVENTS_SHADOW_MISMATCH) == []
 
     def test_different_being_memory_is_traced(self) -> None:

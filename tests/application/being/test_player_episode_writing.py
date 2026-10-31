@@ -6,7 +6,6 @@ from typing import Any
 from tests.event_handoff_helpers import discard_events
 
 from ai_rpg_world.application.being.player_episode_writing import (
-    TRIGGER_COMPACTION,
     TRIGGER_LEAVING,
     PlayerEpisodeWriting,
 )
@@ -115,7 +114,7 @@ class TestPlayerEpisodeWritingInput:
         completion = _Completion({"episodes": []})
         writing, *_ = _make(completion)
 
-        writing.write(ADA, [_observation("金庫が開いた。", 2), _action("棚を調べた", 1)], trigger=TRIGGER_COMPACTION)
+        writing.write(ADA, [_observation("金庫が開いた。", 2), _action("棚を調べた", 1)], trigger=TRIGGER_LEAVING)
 
         user = completion.messages[0][1]["content"]
         assert user.index("[行動] 棚を調べた") < user.index("金庫が開いた。")
@@ -127,7 +126,7 @@ class TestPlayerEpisodeWritingInput:
         for _ in range(4):
             turns.advance_turn(ADA_BEING)
 
-        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_COMPACTION)
+        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_LEAVING)
 
         (episode,) = repository.list_by_being(ADA_BEING)
         assert episode.written_turn == 4
@@ -172,7 +171,7 @@ class TestPlayerEpisodeWritingTrace:
         """0 件が返ったときも、呼んだことと 0 件だったことを残す。"""
         writing, _, _, recorder = _make(_Completion({"episodes": []}))
 
-        writing.write(ADA, [_observation("雨が降った。", 1)], trigger=TRIGGER_COMPACTION)
+        writing.write(ADA, [_observation("雨が降った。", 1)], trigger=TRIGGER_LEAVING)
 
         (payload,) = recorder.of(TraceEventKind.EPISODE_WRITING)
         assert payload["outcome"] == "written"
@@ -184,7 +183,7 @@ class TestPlayerEpisodeWritingTrace:
             _Completion(error=LlmApiCallException("down", error_code="LLM_RATE_LIMIT"))
         )
 
-        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_COMPACTION)
+        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_LEAVING)
 
         (payload,) = recorder.of(TraceEventKind.EPISODE_WRITING)
         assert payload["outcome"] == "failed"
@@ -196,7 +195,7 @@ class TestPlayerEpisodeWritingTrace:
         """応答の形が崩れていたら、失敗として残し、エピソードを作らない。"""
         writing, repository, _, recorder = _make(_Completion({"episodes": [_item(body="")]}))
 
-        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_COMPACTION)
+        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_LEAVING)
 
         (payload,) = recorder.of(TraceEventKind.EPISODE_WRITING)
         assert payload["outcome"] == "failed"
@@ -213,7 +212,7 @@ class TestPlayerEpisodeWritingTrace:
 
         writing._being_id_of = _broken
 
-        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_COMPACTION)
+        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_LEAVING)
 
         (payload,) = recorder.of(TraceEventKind.EPISODE_WRITING)
         assert payload["outcome"] == "failed"
@@ -225,7 +224,7 @@ class TestPlayerEpisodeWritingTrace:
         completion = _Completion({"episodes": [_item()]})
         writing, _, _, recorder = _make(completion, being=None)
 
-        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_COMPACTION)
+        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_LEAVING)
 
         (payload,) = recorder.of(TraceEventKind.EPISODE_WRITING)
         assert payload["outcome"] == "skipped"

@@ -22,7 +22,6 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _logger = logging.getLogger(__name__)
 
-TRIGGER_COMPACTION = "compaction"
 TRIGGER_LEAVING = "leaving"
 _ERROR_TEXT_MAX_LENGTH = 300
 
@@ -140,4 +139,4 @@ def _render(entries: Sequence[UnifiedRecentEventEntry]) -> str:
     return DefaultRecentEventsFormatter().format_unified_entries(ordered)
 
 
-__all__ = ["TRIGGER_COMPACTION", "TRIGGER_LEAVING", "PlayerEpisodeWriting"]
+__all__ = ["TRIGGER_LEAVING", "PlayerEpisodeWriting"]

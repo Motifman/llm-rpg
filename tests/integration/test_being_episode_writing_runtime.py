@@ -1,4 +1,4 @@
-"""世界の runtime が、畳むときと環境を離れるときにエピソードを書くことを保証する (#1626)。書き起こしは設定で止められない (#1631)。"""
+"""世界の runtime が、環境を離れるときにエピソードを書き、今の短期記憶を畳むときには書かないことを保証する (#1626、design_decisions D1824-21)。書き起こしは設定で止められない (#1631)。"""
 
 from __future__ import annotations
 
@@ -58,10 +58,10 @@ def _being_of(runtime, pid):
 
 
 class TestEpisodeWritingInTheRuntime:
-    """書き起こしが、世界の runtime で畳むときと環境を離れるときの 2 か所に繋がっていることを保証する。"""
+    """書き起こしが、世界の runtime で環境を離れるときに繋がり、今の短期記憶を畳むときには繋がっていないことを保証する。"""
 
-    def test_compaction_writes_episodes_for_the_compacted_turns(self) -> None:
-        """短期記憶が古いターンを畳むと、その Being のエピソードが記録に入り、畳んだきっかけで trace に残る。"""
+    def test_compaction_does_not_write_episodes(self) -> None:
+        """今の短期記憶が古いターンを畳んでも、エピソードは書かず、episode_writing も残らない。範囲の出来事は Being の短期記憶の範囲が埋まったときに書く (design_decisions D1824-21)。"""
         runtime, recorder = _runtime()
         pid = runtime.get_player_ids()[0]
 
@@ -69,11 +69,43 @@ class TestEpisodeWritingInTheRuntime:
         for _ in range(RECENT_TURNS):
             runtime._short_term_memory.complete_turn(pid)
 
-        episodes = runtime._being_episode_store.list_by_being(_being_of(runtime, pid))
-        assert len(episodes) == 1
-        assert episodes[0].environment_name == runtime.scenario.metadata.title
-        writes = [p for k, _, p in recorder.events if k == TraceEventKind.EPISODE_WRITING]
-        assert [(p["trigger"], p["outcome"], p["event_count"]) for p in writes] == [("compaction", "written", 1)]
+        assert [k for k, _, _ in recorder.events if k == TraceEventKind.SHORT_TERM_MEMORY_COMPACTED] != []
+        assert runtime._being_episode_store.list_by_being(_being_of(runtime, pid)) == ()
+        assert [p for k, _, p in recorder.events if k == TraceEventKind.EPISODE_WRITING] == []
+
+    def test_end_being_turn_writes_episodes_when_the_range_is_filled(self) -> None:
+        """Being の記憶のターンが 20 に届いたところで end_being_turn を呼ぶと、範囲が埋まり、その Being の結果を反映したときにエピソードが記録に入る。"""
+        from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
+
+        runtime, recorder = _runtime()
+        pid = runtime.get_player_ids()[0]
+        being_id = _being_of(runtime, pid)
+        store = runtime._being_short_term_memory_store
+        memory = store.get(being_id)
+        memory.perceive(
+            Observation(
+                body="浜で流木を拾った。",
+                route=SeenOrHeard(),
+                time=ObservedTime(display="朝 6:01"),
+                subject_is_self=False,
+                subject_name=UNKNOWN,
+                source=UNKNOWN,
+                place=UNKNOWN,
+                addressed_to_self=UNKNOWN,
+            ),
+            current_turn=0,
+        )
+        store.save(memory)
+        for _ in range(RECENT_TURNS):
+            runtime.advance_memory_turn(pid)
+
+        runtime.end_being_turn(pid)
+        runtime.async_event_executor.shutdown(timeout=5)
+        runtime.apply_async_results(pid)
+
+        (episode,) = runtime._being_episode_store.list_by_being(being_id)
+        assert (episode.environment_name, episode.written_turn) == (runtime.scenario.metadata.title, RECENT_TURNS)
+        assert [k for k, _, _ in recorder.events if k == TraceEventKind.BEING_SHORT_TERM_MEMORY_RANGE_FILLED] != []
 
     def test_leaving_writes_episodes_from_what_was_not_compacted(self) -> None:
         """環境を離れるとき、まだ畳まれていない出来事からエピソードを書き、プレイヤーごとに trace に残す。"""

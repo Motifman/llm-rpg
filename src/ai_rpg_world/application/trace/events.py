@@ -173,18 +173,19 @@ class TraceEventKind:
     # 名前を知らずに会った相手の名前を知った (#1581)。payload: learned_name /
     # appearance (それまでの呼び方) / how (「名乗り」か「呼びかけ」)。
     NAME_LEARNED = "name_learned"
-    # 目次つきのエピソードを書き起こした (#1626)。1 回の書き起こしごとに 1 件。
-    # payload: being_id / trigger (compaction か leaving) / event_count /
+    # 目次つきのエピソードを書き起こした (#1626)。1 回の書き起こしごとに 1 件。今は環境を離れるときだけ。
+    # 2026-10-31 より前の trace には、今の短期記憶を畳んだときの trigger: compaction も残る (design_decisions D1824-21)。
+    # payload: being_id / trigger (leaving。前の trace では compaction も) / event_count /
     # outcome (written / failed / skipped) / episode_count / dropped_count /
     # written_turn / environment_name / episodes: list[{handle, summary,
     # recall_when, body_length, truncated: {鍵: 切り詰める前の長さ}}] /
     # 失敗なら error_type と error、飛ばしたなら skip_reason。
     EPISODE_WRITING = "episode_writing"
     # Being がエピソードを書き起こして記憶に加えた (エピソードの EpisodeWrittenEvent。#1824、design_decisions D1824-19)。
-    # エピソードごとに 1 件。今の短期記憶を畳むときと環境を離れるときの書き起こし (episode_writing) でも、短期記憶の
+    # エピソードごとに 1 件。環境を離れるときの書き起こし (episode_writing) でも、短期記憶の
     # 範囲が埋まったときの書き起こしでも残る。範囲が埋まったときの書き起こしで 0 件だった範囲は、
     # being_short_term_memory_range_filled と突き合わせて見る (Being と、埋まったターン = written_turn が同じ)。
-    # ほかの書き起こし (episode_writing。今の短期記憶を畳むとき、環境を離れるとき) のエピソードと、同じ Being・
+    # ほかの書き起こし (episode_writing。環境を離れるとき) のエピソードと、同じ Being・
     # 同じターンで重なることがある。重なったら episode_writing の件数を引いて見る。
     # payload: being_id / handle / environment_name / written_turn / summary / recall_when / body_length /
     # truncated ({鍵: 切り詰める前の長さ}。切り詰めなければ空。design_decisions D1824-20)。
