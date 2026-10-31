@@ -4,6 +4,7 @@ from ai_rpg_world.being.application.write_episodes import WriteEpisodes, WriteEp
 from ai_rpg_world.being.contract import UNKNOWN, AgentMove, Observation, ObservedTime, SeenOrHeard
 from ai_rpg_world.being.domain.episode import EpisodeIndex
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents, EpisodeWriter
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import Attempt, Perception
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
@@ -33,16 +34,16 @@ class _Writer(EpisodeWriter):
     def __init__(self) -> None:
         self.calls: list[dict[str, str]] = []
 
-    def write(self, *, self_name: str, persona: str, events_text: str) -> EpisodeContents:
-        self.calls.append({"self_name": self_name, "persona": persona, "events_text": events_text})
+    def write(self, *, persona: Persona, persona_text: str, events_text: str) -> EpisodeContents:
+        self.calls.append({"persona": persona, "persona_text": persona_text, "events_text": events_text})
         return CONTENTS
 
 
 def _command(*experiences: object) -> WriteEpisodesCommand:
     return WriteEpisodesCommand(
         being_id=ADA,
-        self_name="エイダ",
-        persona="慎重",
+        persona=Persona(name="エイダ"),
+        persona_text="慎重",
         experiences=experiences,  # type: ignore[arg-type]
         environment_name="廃坑の山村",
         written_turn=20,
@@ -60,8 +61,8 @@ class TestWriteEpisodes:
 
         assert writer.calls == [
             {
-                "self_name": "エイダ",
-                "persona": "慎重",
+                "persona": Persona(name="エイダ"),
+                "persona_text": "慎重",
                 "events_text": "- [1日目 朝] 鐘が鳴った\n- [1日目 朝] 扉が開いた",
             }
         ]

@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from ai_rpg_world.being.domain.episode import EpisodeIndex
+from ai_rpg_world.being.domain.persona import Persona
 
 
 @dataclass(frozen=True)
@@ -34,8 +35,11 @@ class EpisodeContents:
 
 class EpisodeWriter(ABC):
     @abstractmethod
-    def write(self, *, self_name: str, persona: str, events_text: str) -> EpisodeContents:
+    def write(self, *, persona: Persona, persona_text: str, events_text: str) -> EpisodeContents:
         """``events_text`` は【直近の出来事】と同じ書き方で古い順に並べた範囲。
+
+        ``persona`` から名前と一人称を書き手に伝える。``persona_text`` は人格の文で、まだゲームの側の ``persona_prompt``
+        から来る (#1339 / #1548 で ``Persona`` に移す)。
 
         書けなければ例外を投げる。崩れた応答からは 1 件も拾わない。中身の薄い記憶を混ぜないため。
         """

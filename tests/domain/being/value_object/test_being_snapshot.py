@@ -60,6 +60,20 @@ class TestBeingSnapshotPartialStateRejection:
         with pytest.raises(BeingSnapshotIncompleteException, match="being_id_value"):
             _minimal_snapshot(being_id_value="")
 
+    def test_snapshot_without_persona_needs_legacy_name(self) -> None:
+        """人柄の無い snapshot は、読み捨てる古い名前を持たなければ BeingSnapshotIncompleteException を投げる。"""
+        with pytest.raises(BeingSnapshotIncompleteException, match="legacy_identity_name"):
+            _minimal_snapshot(persona=None)
+
+    def test_snapshot_without_persona_is_legacy(self) -> None:
+        """人柄が無く古い名前を持つ snapshot は、古い snapshot から読んだものとして扱う。"""
+        snapshot = _minimal_snapshot(
+            persona=None, legacy_identity_name="agent_1", legacy_identity_first_person="わたし"
+        )
+
+        assert snapshot.has_legacy_identity is True
+        assert _minimal_snapshot().has_legacy_identity is False
+
     def test_non_persona_raises_exception(self) -> None:
         """persona が Persona でなければ BeingSnapshotIncompleteException を投げる。"""
         with pytest.raises(BeingSnapshotIncompleteException, match="persona"):

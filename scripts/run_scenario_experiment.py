@@ -670,6 +670,10 @@ def _drive_scenario(
                         {"being_id": b.value, "counts": counts}
                         for b, counts in restore_report.removed_memory_key_counts.items()
                     ],
+                    removed_legacy_identities=[
+                        {"being_id": b.value, **identity}
+                        for b, identity in restore_report.removed_legacy_identities.items()
+                    ],
                 )
 
                 if world_snapshot is not None:

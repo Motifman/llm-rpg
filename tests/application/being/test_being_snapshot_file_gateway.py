@@ -97,8 +97,8 @@ class TestPersonaInSnapshotDict:
         }
         assert not {"identity_name", "identity_first_person", "declared_memory_kinds"} & data.keys()
 
-    def test_old_snapshot_reads_name_and_first_person_only(self) -> None:
-        """persona の無い古い snapshot は、identity_name と identity_first_person を名前と一人称にし、ほかの人柄を決めない。"""
+    def test_old_snapshot_drops_name_and_first_person(self) -> None:
+        """persona の無い古い snapshot は人柄を持たず、identity_name と identity_first_person は読み捨てる値として持つ。"""
         old = {
             "being_id_value": "being_w1_p1",
             "identity_name": "agent_1",
@@ -112,8 +112,18 @@ class TestPersonaInSnapshotDict:
 
         snapshot = dict_to_snapshot(old)
 
-        assert snapshot.persona == Persona(name="agent_1", first_person="わたし")
+        assert snapshot.persona is None
+        assert (snapshot.legacy_identity_name, snapshot.legacy_identity_first_person) == ("agent_1", "わたし")
         assert snapshot.legacy_declared_memory_kinds == ("episodic", "memo", "semantic")
+
+    def test_snapshot_without_persona_cannot_be_written(self) -> None:
+        """人柄で埋める前の古い snapshot を書き出そうとすると BeingSnapshotIncompleteException を投げる。"""
+        data = snapshot_to_dict(_snapshot())
+        del data["persona"]
+        data.update(identity_name="agent_1", identity_first_person="わたし")
+
+        with pytest.raises(BeingSnapshotIncompleteException, match="persona"):
+            snapshot_to_dict(dict_to_snapshot(data))
 
     def test_persona_with_missing_optional_keys_reads_as_undecided(self) -> None:
         """persona に名前しか無ければ、ほかの人柄は決まっていないものとして読む。"""

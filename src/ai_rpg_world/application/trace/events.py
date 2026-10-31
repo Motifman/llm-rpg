@@ -145,6 +145,10 @@ class TraceEventKind:
     #     現 scenario と異なる場合は cross-scenario transfer)
     #   - removed_memory_keys: list[{being_id, counts: {キー: 件数}}] (= 消した
     #     部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない)
+    #   - removed_declared_memory_kinds: list[{being_id, counts: {種類: 件数}}] (= 古い
+    #     snapshot から読み捨てた記憶の種類の宣言。D1469-1)
+    #   - removed_legacy_identities: list[{being_id, name, first_person}] (= persona の無い
+    #     古い snapshot から読み捨てた仮の名前と一人称。人柄は起動時にシナリオから入れたものを使う。D1469-2)
     # SNAPSHOT_SAVE payload:
     #   - directory: str (= --snapshot-save-dir)
     #   - succeeded_count: int

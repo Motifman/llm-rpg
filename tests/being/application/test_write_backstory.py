@@ -11,6 +11,7 @@ from ai_rpg_world.being.application.add_backstory_to_short_term_memory import (
 from ai_rpg_world.being.application.write_backstory import WriteBackstory, WriteBackstoryCommand
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
 from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter, WrittenBackstory
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import (
     Backstory,
     Experience,
@@ -47,8 +48,8 @@ class _Writer(BackstoryWriter):
     def write(
         self,
         *,
-        self_name: str,
-        persona: str,
+        persona: Persona,
+        persona_text: str,
         experiences: tuple[Experience, ...],
         previous: Backstory | None,
         until_turn: int,
@@ -56,8 +57,8 @@ class _Writer(BackstoryWriter):
     ) -> WrittenBackstory:
         self.calls.append(
             {
-                "self_name": self_name,
                 "persona": persona,
+                "persona_text": persona_text,
                 "experiences": experiences,
                 "previous": previous,
                 "until_turn": until_turn,
@@ -79,8 +80,8 @@ class TestWriteBackstory:
         previous = Backstory(flow="前の流れ", mood="", written_turn=0, until_turn=0)
         command = WriteBackstoryCommand(
             being_id=ADA,
-            self_name="エイダ",
-            persona="慎重",
+            persona=Persona(name="エイダ"),
+            persona_text="慎重",
             experiences=(_seen(1), _seen(2)),
             previous=previous,
             until_turn=10,
@@ -91,8 +92,8 @@ class TestWriteBackstory:
 
         assert writer.calls == [
             {
-                "self_name": "エイダ",
-                "persona": "慎重",
+                "persona": Persona(name="エイダ"),
+                "persona_text": "慎重",
                 "experiences": (_seen(1), _seen(2)),
                 "previous": previous,
                 "until_turn": 10,

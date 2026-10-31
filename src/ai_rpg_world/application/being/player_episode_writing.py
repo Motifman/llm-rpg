@@ -13,6 +13,7 @@ from ai_rpg_world.being.application.write_episodes_on_leaving import (
     WriteEpisodesOnLeavingCommand,
 )
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnReader
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -25,6 +26,9 @@ _ERROR_TEXT_MAX_LENGTH = 300
 class PlayerEpisodeWriting:
     """プレイヤーの Being を引いて ``WriteEpisodesOnLeaving`` を呼び、書き起こしのたびに trace を 1 件残す。
 
+    名前と一人称は Being の人柄 (``persona_of``) から、人格の文はゲームの側 (``persona_text_of``) から引く
+    (design_decisions D1469-2)。
+
     書き起こしの失敗で run を止めない。
     """
 
@@ -35,7 +39,8 @@ class PlayerEpisodeWriting:
         being_id_of: Callable[[PlayerId], BeingId | None],
         turn_reader: MemoryTurnReader,
         environment_name_of: Callable[[PlayerId], str],
-        persona_of: Callable[[int], tuple[str, str]],
+        persona_of: Callable[[BeingId], Persona],
+        persona_text_of: Callable[[int], str],
         trace_recorder_provider: Callable[[], ITraceRecorder],
         current_tick_provider: Callable[[], int | None],
     ) -> None:
@@ -44,6 +49,7 @@ class PlayerEpisodeWriting:
         self._turn_reader = turn_reader
         self._environment_name_of = environment_name_of
         self._persona_of = persona_of
+        self._persona_text_of = persona_text_of
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
 
@@ -57,12 +63,11 @@ class PlayerEpisodeWriting:
             base["being_id"] = being_id.value
             written_turn = self._turn_reader.current_turn(being_id)
             environment_name = self._environment_name_of(player_id)
-            self_name, persona = self._persona_of(int(player_id.value))
             outcome = self._write_episodes.execute(
                 WriteEpisodesOnLeavingCommand(
                     being_id=being_id,
-                    self_name=self_name,
-                    persona=persona,
+                    persona=self._persona_of(being_id),
+                    persona_text=self._persona_text_of(int(player_id.value)),
                     environment_name=environment_name,
                     written_turn=written_turn,
                 )

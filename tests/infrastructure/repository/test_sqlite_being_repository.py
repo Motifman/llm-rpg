@@ -10,6 +10,7 @@ import pytest
 
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.persona import Persona
+from ai_rpg_world.domain.being.exception.being_exceptions import BeingSnapshotIncompleteException
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -208,8 +209,8 @@ class TestSqliteBeingRepositoryTypeGuards:
 
 
 @pytest.mark.parametrize("version", [1, 2])
-def test_old_database_row_is_read_and_resaved_with_persona(tmp_path: Path, version: int) -> None:
-    """persona の無い古い行は、名前と一人称を人柄として読み、宣言を読み捨てて、保存し直すと persona の形になる。"""
+def test_old_database_row_without_persona_is_not_turned_into_a_being(tmp_path: Path, version: int) -> None:
+    """persona の無い古い行は、名前と一人称を読み捨てる値として持つ snapshot として読み、人柄で埋めるまで Being にしない。"""
     database = tmp_path / "old.db"
     repo = SqliteBeingRepository.connect(str(database))
     original = _being(attached=True)
@@ -228,13 +229,11 @@ def test_old_database_row_is_read_and_resaved_with_persona(tmp_path: Path, versi
 
     reopened = SqliteBeingRepository.connect(str(database))
     try:
-        being = reopened.find_by_id(original.being_id)
-        assert being.persona == Persona(name="agent_2", first_person="わたし")
-        assert being.attachment == original.attachment
-        assert reopened.find_all_attached_to(WorldId(1), PlayerId(2))[0].persona == being.persona
-        reopened.save(being)
-        resaved = json.loads(reopened.connection.execute("SELECT snapshot_json FROM beings").fetchone()[0])
-        assert resaved["persona"]["name"] == "agent_2"
-        assert not {"identity_name", "identity_first_person", "declared_memory_kinds"} & resaved.keys()
+        snapshot = reopened.find_snapshot_by_id(original.being_id)
+        assert snapshot.persona is None
+        assert (snapshot.legacy_identity_name, snapshot.legacy_identity_first_person) == ("agent_2", "わたし")
+        assert snapshot.legacy_declared_memory_kinds == ("semantic", "memo")
+        with pytest.raises(BeingSnapshotIncompleteException, match="persona"):
+            reopened.find_by_id(original.being_id)
     finally:
         reopened.connection.close()

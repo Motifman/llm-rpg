@@ -6,17 +6,21 @@ from dataclasses import dataclass
 
 from ai_rpg_world.being.application.recent_events_text import experience_lines
 from ai_rpg_world.being.domain.episode_writer import EpisodeContents, EpisodeWriter
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import Experience
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 @dataclass(frozen=True)
 class WriteEpisodesCommand:
-    """``experiences`` はまとめる範囲の出来事 (``recent()`` と同じ順)。``environment_name`` は記憶に加えるときにだけ使い、書き手には渡さない。"""
+    """``experiences`` はまとめる範囲の出来事 (``recent()`` と同じ順)。``environment_name`` は記憶に加えるときにだけ使い、書き手には渡さない。
+
+    ``persona`` は Being の人柄、``persona_text`` はゲームの側から来る人格の文 (design_decisions D1469-2)。
+    """
 
     being_id: BeingId
-    self_name: str
-    persona: str
+    persona: Persona
+    persona_text: str
     experiences: tuple[Experience, ...]
     environment_name: str
     written_turn: int
@@ -33,7 +37,7 @@ class WriteEpisodes:
         events_text = experience_lines(command.experiences)
         if events_text is None:
             return EpisodeContents(contents=())
-        return self._writer.write(self_name=command.self_name, persona=command.persona, events_text=events_text)
+        return self._writer.write(persona=command.persona, persona_text=command.persona_text, events_text=events_text)
 
 
 __all__ = ["WriteEpisodes", "WriteEpisodesCommand"]

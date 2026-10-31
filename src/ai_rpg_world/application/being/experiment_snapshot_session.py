@@ -191,6 +191,8 @@ class RestoreAllReport:
     # 消した部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない。
     removed_memory_key_counts: dict[BeingId, dict[str, int]] = field(default_factory=dict)
     removed_declared_memory_kind_counts: dict[BeingId, dict[str, int]] = field(default_factory=dict)
+    # persona の無い古い snapshot から読み捨てた名前と一人称。読み捨てなかった Being は載せない (D1469-2)。
+    removed_legacy_identities: dict[BeingId, dict[str, str | None]] = field(default_factory=dict)
 
 
 def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
@@ -526,6 +528,7 @@ class ExperimentSnapshotSession:
         cross_transfers: list[tuple[BeingId, str, str]] = []
         removed_memory_key_counts: dict[BeingId, dict[str, int]] = {}
         removed_declared_memory_kind_counts: dict[BeingId, dict[str, int]] = {}
+        removed_legacy_identities: dict[BeingId, dict[str, str | None]] = {}
         for path in files:
             # metadata は restore_use_case の中では読まないので、別途 gateway
             # から読む (= 失敗しても restore 本体は続行 = silent failure 防止
@@ -546,6 +549,8 @@ class ExperimentSnapshotSession:
                 removed_memory_key_counts[result.being_id] = result.removed_memory_key_counts
             if result.removed_declared_memory_kind_counts:
                 removed_declared_memory_kind_counts[result.being_id] = result.removed_declared_memory_kind_counts
+            if result.removed_legacy_identity is not None:
+                removed_legacy_identities[result.being_id] = result.removed_legacy_identity
             metadata_by_being[result.being_id] = metadata
             logger.info(
                 "snapshot restored: being_id=%s file=%s memory_restored=%s",
@@ -582,6 +587,7 @@ class ExperimentSnapshotSession:
             cross_scenario_transfers=cross_transfers,
             removed_memory_key_counts=removed_memory_key_counts,
             removed_declared_memory_kind_counts=removed_declared_memory_kind_counts,
+            removed_legacy_identities=removed_legacy_identities,
         )
 
 

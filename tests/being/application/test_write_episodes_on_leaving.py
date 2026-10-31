@@ -8,6 +8,7 @@ from ai_rpg_world.being.application.write_episodes_on_leaving import (
 from ai_rpg_world.being.contract import UNKNOWN, AgentMove, Observation, ObservedTime, OwnActionResult, SeenOrHeard
 from ai_rpg_world.being.domain.episode import EpisodeIndex
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents, EpisodeWriter
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import ObservedOutcome, ShortTermMemory
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
@@ -42,7 +43,7 @@ class _Writer(EpisodeWriter):
     def __init__(self) -> None:
         self.events_texts: list[str] = []
 
-    def write(self, *, self_name: str, persona: str, events_text: str) -> EpisodeContents:
+    def write(self, *, persona: Persona, persona_text: str, events_text: str) -> EpisodeContents:
         self.events_texts.append(events_text)
         return CONTENTS
 
@@ -59,7 +60,11 @@ def _remembered_turns(last_turn: int) -> InMemoryShortTermMemoryRepository:
 
 def _command() -> WriteEpisodesOnLeavingCommand:
     return WriteEpisodesOnLeavingCommand(
-        being_id=ADA, self_name="エイダ", persona="慎重", environment_name="廃坑の山村", written_turn=25
+        being_id=ADA,
+        persona=Persona(name="エイダ"),
+        persona_text="慎重",
+        environment_name="廃坑の山村",
+        written_turn=25,
     )
 
 

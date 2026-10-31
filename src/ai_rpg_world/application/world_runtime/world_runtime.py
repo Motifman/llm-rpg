@@ -1931,6 +1931,13 @@ class WorldRuntime:
 
         return recent_events_text(self._being_short_term_memory_store.get(being_id))
 
+    def being_persona(self, being_id: BeingId) -> Persona:
+        """Being の保存先から人柄を引く。いきさつとエピソードの書き手に名前と一人称を渡す (design_decisions D1469-2)。"""
+        being = self._aux_being_repository.find_by_id(being_id)
+        if being is None:
+            raise LookupError(f"no Being {being_id.value}")
+        return being.persona
+
     def being_backstory_text(self, being_id: BeingId) -> str:
         """プロンプトの【ここまでのいきさつ】の本文。Being の短期記憶のいきさつから作る (#1824)。"""
         from ai_rpg_world.being.application.backstory_text import backstory_text
@@ -3819,7 +3826,7 @@ def _wire_backstory_writing(
     runtime: WorldRuntime,
     dispatcher: EventDispatcher[None],
     being_id_of: Callable[[PlayerId], BeingId | None],
-    persona_of_player: Callable[[int], tuple[str, str]],
+    persona_text_of_player: Callable[[int], str],
 ) -> None:
     """短期記憶の範囲が埋まったか、いきさつが遅れているとき、非同期のハンドラでいきさつを書き、その Being のターンの始めに入れる (design_decisions D1824-18)。"""
     from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
@@ -3848,16 +3855,17 @@ def _wire_backstory_writing(
     else:
         complete_json = stub_backstory_completion
 
-    def _persona_of_being(being_id: BeingId) -> tuple[str, str]:
+    def _persona_text_of_being(being_id: BeingId) -> str:
         for player_id in runtime.get_player_ids():
             if being_id_of(player_id) == being_id:
-                return persona_of_player(int(player_id.value))
+                return persona_text_of_player(int(player_id.value))
         raise LookupError(f"no player acts as {being_id.value}")
 
     handler = WriteBackstoryHandler(
         writer=LlmBackstoryWriter(complete_json),
         store=runtime._being_short_term_memory_store,
-        persona_of=_persona_of_being,
+        persona_of=runtime.being_persona,
+        persona_text_of=_persona_text_of_being,
     )
     for event_type in (ShortTermMemoryRangeFilledEvent, ShortTermMemoryBackstoryOverdueEvent):
         dispatcher.register_async_after_commit(
@@ -3875,31 +3883,32 @@ def _build_persona_resolver(
     scenario: Any,
     world_character: CharacterPromptInput | None,
     persona_block: str,
-) -> Callable[[int], tuple[str, str]]:
-    """player_id -> (name, persona_block) を引ける callable を組む。
+) -> Callable[[int], str]:
+    """player_id -> 人格の文 (persona_block) を引ける callable を組む。名前は Being の人柄から引く (design_decisions D1469-2)。
 
     旧 _wire_short_term_llm_services 内に inline されていたロジックを抽出。
     規則:
         - world_character 指定 player には rich persona
         - それ以外は fallback persona
     """
-    name_persona_by_pid: dict[int, tuple[str, str]] = {}
+    persona_by_pid: dict[int, str] = {}
     if scenario.player_spawns:
         if len(scenario.player_spawns) > 1 and world_character is not None:
             ec_cid = (world_character.character_id or "").strip()
             ec_name = (world_character.name or "").strip()
             for s in scenario.player_spawns:
                 if (ec_cid and s.string_id == ec_cid) or (ec_name and s.name == ec_name):
-                    name_persona_by_pid[int(s.player_id)] = (s.name, persona_block)
+                    persona_by_pid[int(s.player_id)] = persona_block
                 else:
-                    fallback = build_persona_block_from_character(None, fallback_display_name=s.name)
-                    name_persona_by_pid[int(s.player_id)] = (s.name, fallback)
+                    persona_by_pid[int(s.player_id)] = build_persona_block_from_character(
+                        None, fallback_display_name=s.name
+                    )
         else:
             for s in scenario.player_spawns:
-                name_persona_by_pid[int(s.player_id)] = (s.name, persona_block)
+                persona_by_pid[int(s.player_id)] = persona_block
 
-    def _resolver(pid: int) -> tuple[str, str]:
-        return name_persona_by_pid.get(int(pid), (f"player_{pid}", ""))
+    def _resolver(pid: int) -> str:
+        return persona_by_pid.get(int(pid), "")
 
     return _resolver
 
@@ -3943,7 +3952,7 @@ def _wire_episode_writing(
     runtime: WorldRuntime,
     dispatcher: EventDispatcher[None],
     being_id_of: Callable[[PlayerId], BeingId | None],
-    persona_of_player: Callable[[int], tuple[str, str]],
+    persona_text_of_player: Callable[[int], str],
 ) -> None:
     """短期記憶の範囲が埋まったとき、非同期のハンドラでその範囲のエピソードを書き、その Being のターンの始めに記憶に加える (design_decisions D1824-19)。"""
     from ai_rpg_world.application.observation.being_contract import (
@@ -3961,10 +3970,10 @@ def _wire_episode_writing(
     def _circumstances_of(being_id: BeingId) -> EpisodeWritingCircumstances:
         for player_id in runtime.get_player_ids():
             if being_id_of(player_id) == being_id:
-                self_name, persona = persona_of_player(int(player_id.value))
                 environment = environment_entry_for_player(runtime.scenario, player_id)
                 return EpisodeWritingCircumstances(
-                    self_name=self_name, persona=persona, environment_name=environment.environment_name
+                    persona_text=persona_text_of_player(int(player_id.value)),
+                    environment_name=environment.environment_name,
                 )
         raise LookupError(f"no player acts as {being_id.value}")
 
@@ -3973,6 +3982,7 @@ def _wire_episode_writing(
         WriteEpisodesHandler(
             writer=LlmEpisodeWriter(_episode_writing_completion(cfg, runtime=runtime)),
             add_episodes=AddEpisodesToMemory(runtime._being_episode_store),
+            persona_of=runtime.being_persona,
             circumstances_of=_circumstances_of,
         ),
         channel=DeliveryChannel.AUXILIARY,
@@ -3987,7 +3997,7 @@ def _build_player_episode_writing(
     *,
     runtime: WorldRuntime,
     turn_reader: MemoryTurnReader,
-    persona_of: Callable[[int], tuple[str, str]],
+    persona_text_of: Callable[[int], str],
 ) -> Any:
     """#1626: 環境を離れるときの書き起こしの部品を組む。"""
     from ai_rpg_world.application.being.player_episode_writing import (
@@ -4015,7 +4025,8 @@ def _build_player_episode_writing(
         being_id_of=_being_id_of,
         turn_reader=turn_reader,
         environment_name_of=lambda pid: environment_entry_for_player(runtime.scenario, pid).environment_name,
-        persona_of=persona_of,
+        persona_of=runtime.being_persona,
+        persona_text_of=persona_text_of,
         trace_recorder_provider=lambda: runtime._trace_recorder,
         current_tick_provider=lambda: runtime.current_tick(),
     )
@@ -6743,7 +6754,7 @@ def create_world_runtime(
         trace_recorder_provider=lambda: runtime._trace_recorder,
     )
     recent_event_store.add_append_listener(runtime._being_short_term_memory_copy.on_appended)
-    persona_of_player = _build_persona_resolver(
+    persona_text_of_player = _build_persona_resolver(
         scenario=scenario,
         world_character=world_character,
         persona_block=persona_block,
@@ -6752,21 +6763,21 @@ def create_world_runtime(
         config,
         runtime=runtime,
         turn_reader=memory_turn_clock,
-        persona_of=persona_of_player,
+        persona_text_of=persona_text_of_player,
     )
     _wire_backstory_writing(
         config,
         runtime=runtime,
         dispatcher=being_dispatcher,
         being_id_of=_being_id_of,
-        persona_of_player=persona_of_player,
+        persona_text_of_player=persona_text_of_player,
     )
     _wire_episode_writing(
         config,
         runtime=runtime,
         dispatcher=being_dispatcher,
         being_id_of=_being_id_of,
-        persona_of_player=persona_of_player,
+        persona_text_of_player=persona_text_of_player,
     )
 
     # disabled_tools の名前が実在するかを、ここで確かめる。

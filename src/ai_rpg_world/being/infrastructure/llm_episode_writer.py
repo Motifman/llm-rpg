@@ -8,6 +8,8 @@ from typing import Any
 
 from ai_rpg_world.being.domain.episode import BODY_MAX_LENGTH, INDEX_TEXT_MAX_LENGTH, EpisodeIndex
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents, EpisodeWriter
+from ai_rpg_world.being.domain.persona import Persona
+from ai_rpg_world.being.infrastructure.self_lines import self_lines
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeWritingResponseException,
 )
@@ -60,10 +62,10 @@ class LlmEpisodeWriter(EpisodeWriter):
     def __init__(self, completion: EpisodeWritingCompletion) -> None:
         self._completion = completion
 
-    def write(self, *, self_name: str, persona: str, events_text: str) -> EpisodeContents:
+    def write(self, *, persona: Persona, persona_text: str, events_text: str) -> EpisodeContents:
         if not events_text.strip():
             raise ValueError("events_text must not be blank")
-        messages = _messages(self_name=self_name, persona=persona, events_text=events_text)
+        messages = _messages(persona=persona, persona_text=persona_text, events_text=events_text)
         try:
             return _contents_from(self._completion.complete_episode_writing_json(messages))
         except EpisodeWritingResponseException as first:
@@ -103,10 +105,10 @@ def _contents_from(response: object) -> EpisodeContents:
     return EpisodeContents(contents=tuple(_content_from(item) for item in kept), dropped_count=len(items) - len(kept))
 
 
-def _messages(*, self_name: str, persona: str, events_text: str) -> list[dict[str, str]]:
-    lines = [f"あなた = {self_name}"]
-    if persona.strip():
-        lines.append(f"あなたの人物像 = {persona.strip()}")
+def _messages(*, persona: Persona, persona_text: str, events_text: str) -> list[dict[str, str]]:
+    lines = self_lines(persona)
+    if persona_text.strip():
+        lines.append(f"あなたの人物像 = {persona_text.strip()}")
     lines += [
         "",
         EVENTS_HEADING,

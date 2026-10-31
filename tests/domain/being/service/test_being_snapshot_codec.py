@@ -101,6 +101,13 @@ class TestBeingSnapshotCodecDecode:
         assert being.attachment is None
         assert being.is_attached is False
 
+    def test_snapshot_without_persona_is_not_decoded(self) -> None:
+        """人柄で埋める前の古い snapshot は decode せず、BeingSnapshotIncompleteException を投げる。"""
+        snapshot = _snapshot(persona=None, legacy_identity_name="agent_1")
+
+        with pytest.raises(BeingSnapshotIncompleteException, match="persona"):
+            BeingSnapshotCodec.decode(snapshot)
+
     def test_raises_unsupported_version_being_snapshot_version_exception(
         self,
     ) -> None:
