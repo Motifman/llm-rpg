@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ai_rpg_world.being.domain.short_term_memory import Backstory, ShortTermMemoryRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -10,8 +10,11 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 @dataclass(frozen=True)
 class AddBackstoryToShortTermMemoryCommand:
+    """``truncated`` は、書いたときに上限を超えて切り詰めた項目と切り詰める前の長さ。"""
+
     being_id: BeingId
     backstory: Backstory
+    truncated: dict[str, int] = field(default_factory=dict)
 
 
 class AddBackstoryToShortTermMemory:
@@ -22,7 +25,7 @@ class AddBackstoryToShortTermMemory:
 
     def execute(self, command: AddBackstoryToShortTermMemoryCommand) -> None:
         memory = self._store.get(command.being_id)
-        memory.add_backstory(command.backstory)
+        memory.add_backstory(command.backstory, truncated=command.truncated)
         self._store.save(memory)
 
 

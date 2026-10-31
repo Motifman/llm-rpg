@@ -6,7 +6,7 @@ from ai_rpg_world.being.application.add_backstory_to_short_term_memory import Ad
 from ai_rpg_world.being.application.handlers.write_backstory_handler import WriteBackstoryHandler
 from ai_rpg_world.being.application.write_backstory import WriteBackstoryCommand
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
-from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter
+from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter, WrittenBackstory
 from ai_rpg_world.being.domain.short_term_memory import (
     Backstory,
     Experience,
@@ -51,9 +51,14 @@ class _Writer(BackstoryWriter):
         previous: Backstory | None,
         until_turn: int,
         written_turn: int,
-    ) -> Backstory:
+    ) -> WrittenBackstory:
         self.calls.append({"self_name": self_name, "experiences": experiences})
-        return Backstory(flow=f"{len(experiences)} 件の流れ", mood="", written_turn=written_turn, until_turn=until_turn)
+        return WrittenBackstory(
+            backstory=Backstory(
+                flow=f"{len(experiences)} 件の流れ", mood="", written_turn=written_turn, until_turn=until_turn
+            ),
+            truncated={"mood": 130},
+        )
 
 
 def _memory_with_filled_range() -> ShortTermMemory:
@@ -119,14 +124,16 @@ class TestHandleAndApply:
     """WriteBackstoryHandler.handle がいきさつを書いて記憶に入れるコマンドにし、apply がそれを記憶に入れることを保証する。"""
 
     def test_handle_writes_and_returns_a_command_to_add_it(self) -> None:
-        """handle はいきさつを書き、その Being にそのいきさつを入れる AddBackstoryToShortTermMemoryCommand を返す。短期記憶はまだ変えない。"""
+        """handle はいきさつを書き、その Being にそのいきさつを入れる AddBackstoryToShortTermMemoryCommand を、切り詰めた項目とともに返す。短期記憶はまだ変えない。"""
         world = _World()
         (event,) = _memory_with_filled_range().get_events()
 
         command = world.handler.handle(world.handler.prepare(event))
 
         assert command == AddBackstoryToShortTermMemoryCommand(
-            being_id=ADA, backstory=Backstory(flow="10 件の流れ", mood="", written_turn=20, until_turn=10)
+            being_id=ADA,
+            backstory=Backstory(flow="10 件の流れ", mood="", written_turn=20, until_turn=10),
+            truncated={"mood": 130},
         )
         assert world.store.get(ADA).backstories == ()
 

@@ -36,6 +36,7 @@ class RecordBackstoryAddedTraceHandler(EventHandler[ShortTermMemoryBackstoryAdde
             flow=backstory.flow,
             mood=backstory.mood,
             dropped_count=len(event.dropped),
+            truncated=dict(event.truncated),
         )
 
 

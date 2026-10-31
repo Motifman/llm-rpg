@@ -54,7 +54,10 @@ class WriteBackstoryHandler(
         )
 
     def handle(self, command: WriteBackstoryCommand) -> AddBackstoryToShortTermMemoryCommand:
-        return AddBackstoryToShortTermMemoryCommand(being_id=command.being_id, backstory=self._write.execute(command))
+        written = self._write.execute(command)
+        return AddBackstoryToShortTermMemoryCommand(
+            being_id=command.being_id, backstory=written.backstory, truncated=written.truncated
+        )
 
     def apply(self, result: AddBackstoryToShortTermMemoryCommand) -> None:
         self._add.execute(result)

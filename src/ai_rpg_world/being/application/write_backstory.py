@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter
+from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter, WrittenBackstory
 from ai_rpg_world.being.domain.short_term_memory import Backstory, Experience
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
@@ -28,7 +28,7 @@ class WriteBackstory:
     def __init__(self, writer: BackstoryWriter) -> None:
         self._writer = writer
 
-    def execute(self, command: WriteBackstoryCommand) -> Backstory:
+    def execute(self, command: WriteBackstoryCommand) -> WrittenBackstory:
         return self._writer.write(
             self_name=command.self_name,
             persona=command.persona,

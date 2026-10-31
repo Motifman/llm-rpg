@@ -10,7 +10,7 @@ from ai_rpg_world.being.application.add_backstory_to_short_term_memory import (
 )
 from ai_rpg_world.being.application.write_backstory import WriteBackstory, WriteBackstoryCommand
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
-from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter
+from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter, WrittenBackstory
 from ai_rpg_world.being.domain.short_term_memory import (
     Backstory,
     Experience,
@@ -53,7 +53,7 @@ class _Writer(BackstoryWriter):
         previous: Backstory | None,
         until_turn: int,
         written_turn: int,
-    ) -> Backstory:
+    ) -> WrittenBackstory:
         self.calls.append(
             {
                 "self_name": self_name,
@@ -64,7 +64,10 @@ class _Writer(BackstoryWriter):
                 "written_turn": written_turn,
             }
         )
-        return Backstory(flow="鐘のあと扉が開いた", mood="", written_turn=written_turn, until_turn=until_turn)
+        return WrittenBackstory(
+            backstory=Backstory(flow="鐘のあと扉が開いた", mood="", written_turn=written_turn, until_turn=until_turn),
+            truncated={"flow": 310},
+        )
 
 
 class TestWriteBackstory:
@@ -84,7 +87,7 @@ class TestWriteBackstory:
             written_turn=20,
         )
 
-        backstory = WriteBackstory(writer).execute(command)
+        written = WriteBackstory(writer).execute(command)
 
         assert writer.calls == [
             {
@@ -96,7 +99,10 @@ class TestWriteBackstory:
                 "written_turn": 20,
             }
         ]
-        assert backstory == Backstory(flow="鐘のあと扉が開いた", mood="", written_turn=20, until_turn=10)
+        assert written == WrittenBackstory(
+            backstory=Backstory(flow="鐘のあと扉が開いた", mood="", written_turn=20, until_turn=10),
+            truncated={"flow": 310},
+        )
 
 
 class TestAddBackstoryToShortTermMemory:
@@ -114,6 +120,19 @@ class TestAddBackstoryToShortTermMemory:
 
         assert store.get(ADA).backstories == (backstory,)
         assert [type(e) for e in handed] == [ShortTermMemoryBackstoryAddedEvent]
+
+    def test_truncation_is_carried_to_the_backstory_added_event(self) -> None:
+        """コマンドの切り詰めた項目と元の長さを、いきさつが入ったイベントに載せる。"""
+        handed: list[object] = []
+        store = InMemoryShortTermMemoryRepository(handoff=handed.extend)
+        backstory = Backstory(flow="流れ", mood="", written_turn=20, until_turn=10)
+
+        AddBackstoryToShortTermMemory(store).execute(
+            AddBackstoryToShortTermMemoryCommand(being_id=ADA, backstory=backstory, truncated={"flow": 310})
+        )
+
+        (event,) = handed
+        assert isinstance(event, ShortTermMemoryBackstoryAddedEvent) and event.truncated == {"flow": 310}
 
     def test_stale_backstory_is_refused_and_nothing_is_saved(self) -> None:
         """いま持っているいきさつと同じ範囲までのいきさつは ShortTermMemoryStaleBackstoryException で断り、保存も配送器への受け渡しもしない。"""

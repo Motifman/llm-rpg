@@ -8,6 +8,7 @@ from ai_rpg_world.being.domain.episode import EpisodeIndex
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents
 from ai_rpg_world.being.infrastructure.llm_episode_writer import (
     MAX_EPISODES_PER_WRITING,
+    SYSTEM_PROMPT,
     EpisodeWritingCompletion,
     LlmEpisodeWriter,
 )
@@ -76,6 +77,15 @@ class TestLlmEpisodeWriterMessages:
         assert "あなた = エイダ" in user["content"]
         assert "あなたの人物像 = 慎重な錠前師" in user["content"]
         assert EVENTS in user["content"]
+
+    def test_system_prompt_asks_for_one_scene_per_episode_and_to_choose_scenes(self) -> None:
+        """書き起こしの指示は、1 件に 1 つの場面だけを書くことと、上限 (MAX_EPISODES_PER_WRITING 件) を超えるなら思い出す値打ちのある場面を選び、ほかは書かないことを伝える。流れは別に残ることも伝える。"""
+        assert "1 件には 1 つの場面だけを書く" in SYSTEM_PROMPT
+        assert (
+            f"{MAX_EPISODES_PER_WRITING} 件を超えるときは、あとで思い出す値打ちのある場面を選び、ほかは書かない"
+            in SYSTEM_PROMPT
+        )
+        assert "流れは別に残る" in SYSTEM_PROMPT
 
     def test_blank_persona_is_left_out(self) -> None:
         """人物像が空なら、人物像の行を出さない。"""

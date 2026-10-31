@@ -92,13 +92,18 @@ class TestRecordBackstoryAddedTraceHandler:
     """RecordBackstoryAddedTraceHandler が、いきさつが入ったことを trace に残すことを保証する。"""
 
     def test_backstory_added_is_recorded(self) -> None:
-        """いきさつが入ったことは、being_backstory_written に、Being・範囲の終わり・書いたターン・流れ・気分・外した出来事の数で残る。"""
+        """いきさつが入ったことは、being_backstory_written に、Being・範囲の終わり・書いたターン・流れ・気分・外した出来事の数・切り詰めた項目と元の長さで残る。"""
         recorder = _Recorder()
         backstory = Backstory(flow="鐘のあと扉が開いた", mood="落ち着かない", written_turn=20, until_turn=10)
 
         RecordBackstoryAddedTraceHandler(**_providers(recorder)).handle(
             ShortTermMemoryBackstoryAddedEvent(
-                event_id=2, occurred_at=_AT, being_id=ADA, backstory=backstory, dropped=(_seen(1),)
+                event_id=2,
+                occurred_at=_AT,
+                being_id=ADA,
+                backstory=backstory,
+                dropped=(_seen(1),),
+                truncated={"flow": 310},
             )
         )
 
@@ -113,6 +118,7 @@ class TestRecordBackstoryAddedTraceHandler:
                     "flow": "鐘のあと扉が開いた",
                     "mood": "落ち着かない",
                     "dropped_count": 1,
+                    "truncated": {"flow": 310},
                 },
             )
         ]

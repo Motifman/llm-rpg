@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
+from ai_rpg_world.being.domain.backstory_writer import WrittenBackstory
 from ai_rpg_world.being.domain.short_term_memory import Backstory, Perception
 from ai_rpg_world.being.infrastructure.llm_backstory_writer import (
     FLOW_MAX_CHARS,
@@ -46,7 +47,7 @@ def _write(
     *,
     experiences: tuple[Perception, ...] = (_seen(1, "鐘が鳴った"), _seen(2, "扉が開いた")),
     previous: Backstory | None = None,
-) -> Backstory:
+) -> WrittenBackstory:
     return writer.write(
         self_name="エイダ", persona="慎重", experiences=experiences, previous=previous, until_turn=10, written_turn=20
     )
@@ -61,8 +62,9 @@ class TestLlmBackstoryWriter:
             _Completion({"compressed_activity": "鐘のあと扉が開いた", "emotional_summary": "落ち着かない"})
         )
 
-        assert _write(writer) == Backstory(
-            flow="鐘のあと扉が開いた", mood="落ち着かない", written_turn=20, until_turn=10
+        assert _write(writer) == WrittenBackstory(
+            backstory=Backstory(flow="鐘のあと扉が開いた", mood="落ち着かない", written_turn=20, until_turn=10),
+            truncated={},
         )
 
     def test_messages_carry_the_system_prompt_person_previous_backstory_and_events_in_order(self) -> None:
@@ -79,20 +81,38 @@ class TestLlmBackstoryWriter:
         assert "流れ: 坑道で鍵を探した" in content and "気分: 焦り" in content
         assert content.index("- [1日目 朝] 鐘が鳴った") < content.index("- [1日目 朝] 扉が開いた")
 
-    def test_system_prompt_is_the_same_as_the_current_summary(self) -> None:
-        """指示の文面は、今の短期記憶の【ここまでのいきさつ】の要約と同じ文字列である。今の要約を消すまで、2 つがずれないように見る。"""
-        from ai_rpg_world.application.llm.services.short_term_memory_summary_service import _SYSTEM_PROMPT
+    def test_system_prompt_tells_the_length_limits(self) -> None:
+        """指示の文面は、流れ (FLOW_MAX_CHARS 字) と気分 (MOOD_MAX_CHARS 字) の文字数の上限を、定数の数字で伝える。超えると切れることも伝える。"""
+        assert f"- ここまでのいきさつは {FLOW_MAX_CHARS} 字まで、いまの気分は {MOOD_MAX_CHARS} 字まで" in SYSTEM_PROMPT
+        assert "- 超えた分は途中で切れるので、字数の中で文を終える" in SYSTEM_PROMPT
+        assert f"ここまでのいきさつ (2-3 文、{FLOW_MAX_CHARS} 字まで、固有名詞使用)" in SYSTEM_PROMPT
+        assert f"今の感情の中核 (1 文、{MOOD_MAX_CHARS} 字まで)" in SYSTEM_PROMPT
 
-        assert SYSTEM_PROMPT == _SYSTEM_PROMPT
-
-    def test_long_flow_and_mood_are_cut(self) -> None:
-        """流れは FLOW_MAX_CHARS 字、気分は MOOD_MAX_CHARS 字までに切る。気分が文字列でなければ空にする。"""
+    def test_long_flow_and_mood_are_cut_and_reported(self) -> None:
+        """流れは FLOW_MAX_CHARS 字、気分は MOOD_MAX_CHARS 字までに切り、切った項目と切る前の長さを truncated に残す。"""
         writer = LlmBackstoryWriter(_Completion({"compressed_activity": "あ" * 400, "emotional_summary": "い" * 200}))
-        backstory = _write(writer)
-        assert (len(backstory.flow), len(backstory.mood)) == (FLOW_MAX_CHARS, MOOD_MAX_CHARS)
 
-        no_mood = _write(LlmBackstoryWriter(_Completion({"compressed_activity": "流れ", "emotional_summary": 3})))
-        assert no_mood.mood == ""
+        written = _write(writer)
+
+        assert (len(written.backstory.flow), len(written.backstory.mood)) == (FLOW_MAX_CHARS, MOOD_MAX_CHARS)
+        assert written.truncated == {"flow": 400, "mood": 200}
+
+    def test_text_at_the_limit_is_not_reported_as_truncated(self) -> None:
+        """ちょうど上限の長さの流れと気分は、切り詰めとして扱わない。上限より 1 字長ければ切り詰める。"""
+        at_limit = _write(
+            LlmBackstoryWriter(
+                _Completion({"compressed_activity": "あ" * FLOW_MAX_CHARS, "emotional_summary": "い" * MOOD_MAX_CHARS})
+            )
+        )
+        over = _write(LlmBackstoryWriter(_Completion({"compressed_activity": "あ" * (FLOW_MAX_CHARS + 1)})))
+
+        assert (at_limit.truncated, over.truncated) == ({}, {"flow": FLOW_MAX_CHARS + 1})
+
+    def test_mood_that_is_not_text_becomes_empty(self) -> None:
+        """気分が文字列でなければ空にする。切り詰めとしては扱わない。"""
+        written = _write(LlmBackstoryWriter(_Completion({"compressed_activity": "流れ", "emotional_summary": 3})))
+
+        assert (written.backstory.mood, written.truncated) == ("", {})
 
     @pytest.mark.parametrize(
         "response",
@@ -113,5 +133,9 @@ class TestLlmBackstoryWriter:
         empty = _write(LlmBackstoryWriter(completion), experiences=())
 
         assert completion.calls == []
-        assert (carried.flow, carried.mood, carried.until_turn) == ("坑道で鍵を探した", "焦り", 10)
-        assert (empty.flow, empty.mood) == (NOTHING_HAPPENED_FLOW, "")
+        assert (carried.backstory.flow, carried.backstory.mood, carried.backstory.until_turn) == (
+            "坑道で鍵を探した",
+            "焦り",
+            10,
+        )
+        assert (empty.backstory.flow, empty.backstory.mood, empty.truncated) == (NOTHING_HAPPENED_FLOW, "", {})
