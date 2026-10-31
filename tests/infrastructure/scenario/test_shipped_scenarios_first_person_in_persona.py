@@ -28,9 +28,16 @@ def _players_with_first_person_or_mention() -> list[tuple[str, dict]]:
 _PLAYERS = _players_with_first_person_or_mention()
 
 
-def test_some_shipped_player_declares_a_first_person() -> None:
-    """一人称を書いたプレイヤーが、同梱のシナリオに少なくとも 1 人いる (下の見張りが空回りしていない)。"""
-    assert [label for label, player in _PLAYERS if "first_person" in player]
+def test_every_mine_village_player_declares_a_first_person() -> None:
+    """mine_village_v1 の 4 人は全員が一人称を書いている。1 人が欄と書き足しを同時に消しても、下の見張りから外れて気づけないため。"""
+    declared = {label for label, player in _PLAYERS if "first_person" in player}
+
+    assert {label for label in declared if label.startswith("mine_village_v1:")} == {
+        "mine_village_v1:haru",
+        "mine_village_v1:mio",
+        "mine_village_v1:gen",
+        "mine_village_v1:sayo",
+    }
 
 
 @pytest.mark.parametrize(("label", "player"), _PLAYERS, ids=[label for label, _ in _PLAYERS])

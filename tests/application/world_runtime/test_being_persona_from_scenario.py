@@ -73,6 +73,7 @@ def test_leaving_writer_is_told_the_name_and_first_person_of_the_being(monkeypat
 def test_action_prompt_tells_the_same_first_person_as_the_persona() -> None:
     """行動を決める LLM の system prompt にも、Being の人柄と同じ一人称が書いてある (persona_prompt に書き足したつなぎ)。"""
     runtime = create_world_runtime(_SCENARIO, config=ResolvedLlmRuntimeConfig.for_tests())
+    assert len(runtime.get_player_ids()) == 4
 
     for player_id in runtime.get_player_ids():
         being_id = runtime._aux_being_resolver.resolve_being_id(runtime._aux_being_default_world_id, player_id)
