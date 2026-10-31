@@ -20,6 +20,8 @@ from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolv
 from ai_rpg_world.application.llm.services._argument_resolvers.target_lookup import (
     label_forms,
 )
+from ai_rpg_world.application.llm.services.description_text import description_text
+from ai_rpg_world.being.contract import Description, Scene
 
 # runtime_context のラベルを require_target_type で直接引くツール。値には
 # display_name ではなく、実際に resolver が受理する label を載せる。
@@ -310,7 +312,15 @@ def render_dynamic_argument_candidate_table(
     entries: Iterable[Mapping[str, Any]],
 ) -> str:
     """保存用の構造化候補を、本番介入で使う日本語表へ変換する。"""
-    lines = ["【現在選べる対象引数】"]
+    description = dynamic_argument_candidate_description(entries)
+    return description_text(description) if description is not None else ""
+
+
+def dynamic_argument_candidate_description(
+    entries: Iterable[Mapping[str, Any]],
+) -> Description | None:
+    """今見えている場面 (Scene) に置く候補表。候補が 1 つも無ければ None。"""
+    lines: list[str] = []
     count = 0
     for entry in entries:
         values = [str(value) for value in entry.get("values", []) if value is not None]
@@ -322,12 +332,13 @@ def render_dynamic_argument_candidate_table(
         lines.append(f"- {entry['tool']}.{entry['argument']}{suffix}: {rendered}")
         count += 1
     if count == 0:
-        return ""
+        return None
     lines.append("※ 一覧にあることは操作の成功を保証しない。現在の状態や前提条件によって失敗する場合がある。")
-    return "\n".join(lines)
+    return Description(heading=_CANDIDATE_TABLE_HEADING_WORD, text="\n".join(lines))
 
 
-_CANDIDATE_TABLE_HEADING = "【現在選べる対象引数】"
+_CANDIDATE_TABLE_HEADING_WORD = "現在選べる対象引数"
+_CANDIDATE_TABLE_HEADING = f"【{_CANDIDATE_TABLE_HEADING_WORD}】"
 _CANDIDATE_LINE = re.compile(
     r"^- (?P<tool>[A-Za-z0-9_]+)\.(?P<argument>[^\s(:]+)"
     r'(?: \((?P<target>"(?:[^"\\]|\\.)*")\))?: (?P<values>.+)$'
@@ -400,6 +411,12 @@ def inject_dynamic_argument_candidate_table(
         raise ValueError("candidate table injection requires action instruction at prompt tail")
     body = content[: -len(instruction)].rstrip()
     user_message["content"] = f"{body}\n\n{table}\n\n{instruction}"
+    scene = result.get("scene")
+    if isinstance(scene, Scene) and scene.descriptions:
+        # 候補表はユーザー文で【現在地と周囲】の直後に入るので、場面でも同じ位置に置く。
+        surroundings, *rest = scene.descriptions
+        candidates = dynamic_argument_candidate_description(snapshot["entries"])
+        result["scene"] = Scene((surroundings, *([candidates] if candidates else []), *rest))
     return result
 
 

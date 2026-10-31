@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ai_rpg_world.application.llm.services.description_text import descriptions_text
 from ai_rpg_world.application.llm.services.persona_prompt_fragment_builder import (
-    PERSONA_HEADING,
     PersonaPromptFragmentBuilder,
 )
+from ai_rpg_world.application.llm.services.world_orientation import world_orientation
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_EPISODE_RECALL
+from ai_rpg_world.being.contract import Orientation
 from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
 from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import PersonaPromptPolicy
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioMetadata
@@ -188,13 +190,6 @@ _MEMO_RULES = """
 """
 
 
-def _persona_section(persona_block: str) -> str:
-    """本文が「上記【ペルソナ】」と指すので、見出しの無い人物像 (シナリオの persona_prompt) に見出しを付ける。"""
-    if persona_block.lstrip().startswith(PERSONA_HEADING):
-        return persona_block
-    return f"{PERSONA_HEADING}\n{persona_block}"
-
-
 def build_world_system_prompt(
     *,
     world_title: str,
@@ -206,7 +201,38 @@ def build_world_system_prompt(
     episode_index_shown: bool = False,
     episode_recall_offered: bool = False,
 ) -> str:
+    """人柄と世界の前提を案内 (Orientation) に詰めて、``build_world_system_prompt_for`` で組む。
+
+    limits_actions:
+        ``False`` なら「行動の制限」の行を出さない。締め切りを置かない世界で、無い制限を
+        信じさせないため。既定 ``True`` は従来どおりで、prompt は不変。
+    """
+    orientation = world_orientation(
+        persona_block=persona_block,
+        world_title=world_title,
+        intro=safe_intro,
+        action_limit_text=limited_action_and_time_pressure_text(has_goal=has_goal) if limits_actions else None,
+    )
+    return build_world_system_prompt_for(
+        orientation,
+        tool_schema_mode=tool_schema_mode,
+        has_goal=has_goal,
+        episode_index_shown=episode_index_shown,
+        episode_recall_offered=episode_recall_offered,
+    )
+
+
+def build_world_system_prompt_for(
+    orientation: Orientation,
+    *,
+    tool_schema_mode: str = "legacy",
+    has_goal: bool = True,
+    episode_index_shown: bool = False,
+    episode_recall_offered: bool = False,
+) -> str:
     """脱出ゲーム用システムプロンプト（1ターン1ツール・文面の意味づけ）。
+
+    入るときの案内 (``orientation``) は、冒頭の一文のすぐ後に、渡された順のまま置く。
 
     誰を知っているかは書かない。Being が知っている人は毎ターンのメッセージの
     【知っている人】に出す (#1520)。ここに書くと、知り合いが増えるたびに
@@ -222,10 +248,6 @@ def build_world_system_prompt(
         【思い出せる出来事】の欄と ``episode_recall`` を出しているか (#1623)。
         どちらも ``False`` (既定) なら prompt は変わらない。
 
-    limits_actions:
-        ``False`` なら「行動の制限」の行を出さない。締め切りを置かない世界で、無い制限を
-        信じさせないため。既定 ``True`` は従来どおりで、prompt は不変。
-
     tool_schema_mode:
         ``"legacy"`` (既定) なら従来通り各行動 tool が ``inner_thought`` を受け取る。
         ``"reason_first"`` なら ``assess_situation`` が主観入力を先に受け取り、
@@ -233,9 +255,6 @@ def build_world_system_prompt(
     """
     if tool_schema_mode not in {"legacy", "reason_first"}:
         raise ValueError("tool_schema_mode must be 'legacy' or 'reason_first'")
-    action_limit_line = (
-        f"\n- 行動の制限: {limited_action_and_time_pressure_text(has_goal=has_goal)}" if limits_actions else ""
-    )
     # 層2: 目的の枠付け。has_goal=True は従来どおり「勝利条件 (最終目的)」前提。
     # has_goal=False (永続世界) は勝敗を否定し、【現在の目的】があれば参照する中立文に。
     if has_goal:
@@ -261,14 +280,9 @@ def build_world_system_prompt(
         # 【独白と一言の書き方】にまとめてあるので、ここでは義務だけを言う。
         else ("- 各ツール呼び出しでは `inner_thought` を必ず含める（書き方は【独白と一言の書き方】）。")
     )
-    persona_section = _persona_section(persona_block)
     body = f"""あなたは次のペルソナとして行動するキャラクターである。
 
-{persona_section}
-
-【世界の前提】
-- 舞台のタイトル: {world_title}
-- 概要: {safe_intro}{action_limit_line}
+{descriptions_text(orientation.descriptions)}
 
 【渡される文面の内訳】
 - 先に与えられる文面: 役割・ルールと世界の前提（このメッセージに相当）。
