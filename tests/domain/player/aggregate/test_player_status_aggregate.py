@@ -209,6 +209,20 @@ class TestPlayerStatusAggregate:
         assert aggregate.is_down is True
         assert aggregate.get_events() == []
 
+    def test_apply_damage_after_revive_adds_downed_event_again(self):
+        """倒れて蘇生した人が再び HP 0 になると、PlayerDownedEvent がもう 1 件積まれる。"""
+        aggregate = create_test_status_aggregate(hp=50)
+        aggregate.apply_damage(50)
+        aggregate.revive(hp_recovery_rate=0.5)
+        aggregate.clear_events()
+
+        aggregate.apply_damage(100)
+
+        events = aggregate.get_events()
+        assert aggregate.is_down is True
+        assert len(events) == 1
+        assert isinstance(events[0], PlayerDownedEvent)
+
     def test_apply_damage_over_kill(self):
         """ダメージがHPを超える場合、HPが0になること"""
         aggregate = create_test_status_aggregate(hp=30)
