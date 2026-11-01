@@ -73,7 +73,7 @@ class TestSystemPromptOrder:
     """システムプロンプトの並びを保証する。"""
 
     def test_opening_conduct_orientation_rules_then_goal(self) -> None:
-        """冒頭の一文、作法の 4 節、人柄、世界の前提、この世界の決まり、現在の目的の順に並ぶ。"""
+        """冒頭の一文、作法の 4 節、世界の前提、この世界の決まり、人柄、現在の目的の順に並ぶ。"""
         prompt = build_world_system_prompt(
             world_title="町",
             persona_block="【ペルソナ】焼き手。",
@@ -89,15 +89,15 @@ class TestSystemPromptOrder:
             "行動のしかた",
             "心がけ",
             "メモの書き方",
-            "ペルソナ",
             "世界の前提",
             "この世界の決まり",
+            "ペルソナ",
             "現在の目的",
         ]
         assert prompt.endswith("\n\n【現在の目的】\n店を開く。")
 
     def test_no_goal_section_without_an_imposed_goal(self) -> None:
-        """課された目的が無ければ、【現在の目的】の節を出さず、この世界の決まりで終わる。"""
+        """課された目的が無ければ、【現在の目的】の節を出さず、人柄で終わる。"""
         prompt = build_world_system_prompt(world_title="町", persona_block="p", safe_intro="i")
 
-        assert _HEADING_LINE.findall(prompt)[-1] == "この世界の決まり"
+        assert _HEADING_LINE.findall(prompt)[-1] == "ペルソナ"

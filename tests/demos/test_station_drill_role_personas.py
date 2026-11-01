@@ -84,7 +84,7 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
     【思い出せる出来事】と `episode_recall` を説明する 1 行ぶんバイトが変わった。
     同じく #1631 で、メモ帳が設定で止められない標準になり、【メモの書き方】の節の
     ぶんバイトが変わった。#1630 で、【現在の目的】をメッセージからシステムプロンプトの末尾へ移し、
-    作法と環境の決まり (【この世界の決まり】) を分けて並べ直したので、バイトが変わった (D1630-4)。
+    作法と環境の決まり (【この世界の決まり】) を分けて並べ直したので、バイトが変わった (D1630-4)。同じく #1630 で、【ペルソナ】を案内の末尾へ移したので、バイトが変わった (D1630-5)。
 
     以後この検査が守るのは「**気づかないうちに system prompt が変わらない**」こと。
     値を更新するときは、prompt を変えた理由が PR にあるはずなので、それを確かめる
@@ -92,12 +92,12 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
     """
     runtime = create_world_runtime(_DRILL)
     expected_by_string_id = {
-        "mori": "ecf4dafa21c26a8c5666d1a132cf19ffd672574794ecfdeb48fabd825786a281",
-        "sena": "0919195282a3fba49e099f9385a2602f13ea28f009cb4457ddc08f6bcb61abb0",
-        "aoi": "360b7f9bccecd67f7e654468ff5a8c1131e76c73c8a5ca816160d85258a2a775",
-        "hagi": "effd4a1cf92cb14a75a392da33d3e3bf90645d95445af03e7715d30c68c71a4a",
-        "yura": "ac17a1e708420b282e94673c67d709f9c9887d4a357ab14c41716eca5b33944a",
-        "saki": "57cbbb5b00e678d15fc95ed2c010cd6d856122b6a409a84b87f34385f98d2c53",
+        "mori": "951c3bc4b34237fcf6bc0be799ba6edfa4c76d63e945982ffc89739d6e677ecf",
+        "sena": "b2d64bda1d5b758804751a5d2bbfdfa52e246d5cb2a4eaa775e84f090d2b202e",
+        "aoi": "0b06ed73f25bc0d6d8a2d2c859f664ba402ffbb4ab0137985b08bbf74f65e63c",
+        "hagi": "6ece8d864dd3a0c845565d4fe3d73818e081de6f3f5d236ca3dffd34d50ae101",
+        "yura": "61ddabb2df868225b9fa54e93c478e8c88b38d63677628186b1ec3efe4f06ded",
+        "saki": "97209b631349a06907fc2370775aef870fa868f02c8fee5b007160b4db76a1d9",
     }
 
     actual_by_string_id = {

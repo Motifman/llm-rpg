@@ -24,11 +24,12 @@ def world_orientation(
     (【このゲームについて】など) も、今のプロンプトでは見出しとして読まれている。
     人柄は、役職ごとの人物像を後ろに足したものも含めて 1 つにする。
 
-    ``rules`` (この世界の決まり) は最後に置く。
+    世界の前提、見取り図、``rules`` (この世界の決まり)、人柄の順に並べる。人柄はプレイヤーごとに
+    違うので最後に置き、全員に同じ文をシステムプロンプトの先頭で共有させる (キャッシュに載る)。
     """
     premise = f"【世界の前提】\n- 舞台のタイトル: {world_title}\n- 概要: {intro}"
     paragraphs = _PARAGRAPH_BREAK.join((premise, *briefing_sections)).split(_PARAGRAPH_BREAK)
-    descriptions = [Description(heading=PERSONA_HEADING[1:-1], text=_persona_text(persona_block))]
+    descriptions: list[Description] = []
     for paragraph in paragraphs:
         heading, _, text = paragraph.partition("\n")
         if heading.startswith("【") and heading.endswith("】") and text.strip():
@@ -37,6 +38,7 @@ def world_orientation(
             descriptions[-1] = _continued(descriptions[-1], _PARAGRAPH_BREAK + paragraph)
     if rules is not None:
         descriptions.append(rules)
+    descriptions.append(Description(heading=PERSONA_HEADING[1:-1], text=_persona_text(persona_block)))
     return Orientation(descriptions)
 
 

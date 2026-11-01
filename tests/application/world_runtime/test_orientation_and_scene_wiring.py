@@ -28,17 +28,17 @@ class TestOrientation:
     """プレイヤーごとの案内と、システムプロンプトとの関係を保証する。"""
 
     def test_orientation_holds_persona_premise_and_briefing_in_order(self, runtime) -> None:
-        """station_drill の案内は、人柄・世界の前提・概要の見出し・見取り図の 3 節・この世界の決まりの順に並ぶ。"""
+        """station_drill の案内は、世界の前提・概要の見出し・見取り図の 3 節・この世界の決まり・人柄の順に並ぶ。"""
         orientation = runtime.orientation_for(PlayerId(1))
 
         assert [d.heading for d in orientation.descriptions] == [
-            "ペルソナ",
             "世界の前提",
             "このゲームについて",
             "この場所の造り",
             "点検の割り当て",
             "話し合いと投票の決まり",
             "この世界の決まり",
+            "ペルソナ",
         ]
 
     def test_system_prompt_is_built_from_the_orientation(self, runtime) -> None:
