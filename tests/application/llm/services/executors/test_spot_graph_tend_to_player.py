@@ -284,6 +284,20 @@ class TestTendToPlayerFailures:
         assert result.success is False
         assert result.error_code == "UNSUPPORTED_TOOL"
 
+    def test_spot_graph_repository_uninjected_unsupported_tool(self) -> None:
+        """グラフの repository が未注入なら、同じ場所にいないとは言わず UNSUPPORTED_TOOL を返す。"""
+        exec, status_repo, _ = _build_executor()
+        exec._spot_graph_repository = None
+        status_repo.find_by_id.side_effect = {
+            PlayerId(1): _build_player(player_id=1, is_down=False, spot_id=10),
+            PlayerId(2): _build_player(player_id=2, is_down=True, spot_id=10, hp_current=0),
+        }.get
+
+        result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
+
+        assert result.success is False
+        assert result.error_code == "UNSUPPORTED_TOOL"
+
 
 class TestDispatch:
     def test_get_handlers_tend_player(self) -> None:

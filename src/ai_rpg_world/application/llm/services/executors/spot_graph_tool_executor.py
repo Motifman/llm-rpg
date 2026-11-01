@@ -2985,6 +2985,7 @@ class SpotGraphToolExecutor:
                     command_executor = copy.copy(self)
                     command_executor._tend_to_player_command_scope_factory = None
                     command_executor._player_status_repository = context.repositories.player_statuses
+                    command_executor._spot_graph_repository = context.repositories.spot_graph
                     command_executor._event_publisher = CommandContextEventPublisher(context)
                     result = command_executor._execute_tend_to_player_in_scope(
                         player_id,
@@ -3014,7 +3015,7 @@ class SpotGraphToolExecutor:
     ) -> LlmCommandResultDto:
         """scope由来status repositoryとevent収集口だけで介抱する。"""
 
-        if self._player_status_repository is None:
+        if self._player_status_repository is None or self._spot_graph_repository is None:
             return LlmCommandResultDto(
                 success=False,
                 message="tend_to_player は現在のワイヤリングでは未対応です。",
@@ -3111,11 +3112,8 @@ class SpotGraphToolExecutor:
             return exception_result(e)
 
     def _is_beside_body_to_tend(self, actor_id: PlayerId, target_id: PlayerId) -> bool:
-        # PlayerStatusAggregate.current_spot_id は出現した場所のまま移動で変わらないので、
-        # 対人行為 (player_interaction_application_service) と同じく、グラフ上の行為者の
-        # 位置と、倒れた身体の位置で比べる。
-        if self._spot_graph_repository is None:
-            return False
+        # PlayerStatusAggregate.current_spot_id は出現した場所のまま移動で変わらないので使わない。
+        assert self._spot_graph_repository is not None
         graph = self._spot_graph_repository.find_graph()
         try:
             actor_spot = graph.get_entity_spot(EntityId.create(int(actor_id)))
