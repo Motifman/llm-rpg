@@ -53,6 +53,13 @@ _DEFAULT_NO_GOAL_INTRO = (
 
 
 WORLD_RULES_HEADING = "この世界の決まり"
+_SAY_INLINE_RULE = (
+    "- `say_inline` を持つツールでは、その行動をしながら一言を添えられる (任意、200 字以内)。"
+    "同じ場所と隣の場所へ届く。"
+    "報告・相談・呼びかけ・確認は、発話専用のターンを使わずここに書く方が、時間を無駄にしない。"
+    "一言には、行動の結果ではなく、これから何をするかを言う。"
+    "行動は断られることがあり、結果は次の観測で分かる。空なら発話しない。"
+)
 
 
 def safe_world_intro_text(metadata: ScenarioMetadata, *, has_goal: bool = True) -> str:
@@ -205,6 +212,7 @@ def build_world_system_prompt(
     limits_actions: bool = True,
     episode_index_shown: bool = False,
     episode_recall_offered: bool = False,
+    say_inline_offered: bool = True,
     imposed_goal: str | None = None,
 ) -> str:
     """人柄と世界の前提と決まりを案内 (Orientation) に詰めて、``build_world_system_prompt_for`` で組む。
@@ -220,6 +228,7 @@ def build_world_system_prompt(
         rules=world_rules(
             has_goal=has_goal,
             action_limit_text=limited_action_and_time_pressure_text(has_goal=has_goal) if limits_actions else None,
+            say_inline_offered=say_inline_offered,
         ),
     )
     return build_world_system_prompt_for(
@@ -250,7 +259,9 @@ def build_world_system_prompt_for(
     )
 
 
-def world_rules(*, has_goal: bool = True, action_limit_text: str | None = None) -> Description:
+def world_rules(
+    *, has_goal: bool = True, action_limit_text: str | None = None, say_inline_offered: bool = True
+) -> Description:
     """案内のうち、この世界での行動の決まり (#1630)。Being の作法ではなく、環境が決めること。
 
     has_goal:
@@ -258,6 +269,9 @@ def world_rules(*, has_goal: bool = True, action_limit_text: str | None = None) 
         ``False`` (勝敗のない永続世界 = U5) なら勝敗を否定し、【現在の目的】があれば参照する中立文 (層2)。
     action_limit_text:
         行動量の制限の文。``None`` なら「行動の制限」の行を出さない。
+    say_inline_offered:
+        出すツールのどれかが ``say_inline`` を持つか (#1940)。``False`` なら一言の書き方を
+        書かない。持たない世界で勧めると、エージェントは無い引数を使おうとする。
     """
     if has_goal:
         objective_rule = (
@@ -274,10 +288,7 @@ def world_rules(*, has_goal: bool = True, action_limit_text: str | None = None) 
     lines = [
         f"- ラベル（接続先・オブジェクト・相手プレイヤー等）は、【{CURRENT_SURROUNDINGS_HEADING}】などに表示されたものだけを使う。",
         "- 行動は条件を満たさないと拒否されることがある。各オブジェクトに表示された操作の中から選ぶこと。",
-        "- `say_inline` を持つツールでは、その行動をしながら一言を添えられる (任意、200 字以内)。"
-        "同じ場所と隣の場所へ届く。報告・相談・呼びかけ・確認は、発話専用のターンを使わずここに書く方が、"
-        "時間を無駄にしない。一言には、行動の結果ではなく、これから何をするかを言う。"
-        "行動は断られることがあり、結果は次の観測で分かる。空なら発話しない。",
+        *((_SAY_INLINE_RULE,) if say_inline_offered else ()),
         objective_rule,
     ]
     if action_limit_text is not None:

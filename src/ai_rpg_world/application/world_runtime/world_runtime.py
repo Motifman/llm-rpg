@@ -1700,6 +1700,13 @@ class WorldRuntime:
         offered = {definition.name for definition in self.get_tool_definitions(for_every_player=True)}
         return self._episode_index_enabled(), TOOL_NAME_EPISODE_RECALL in offered
 
+    def _say_inline_offered(self) -> bool:
+        """出すツールのどれかが ``say_inline`` を持つか (#1940)。持たない世界では一言の書き方を説明しない。"""
+        return any(
+            "say_inline" in definition.parameters.get("properties", {})
+            for definition in self.get_tool_definitions(for_every_player=True)
+        )
+
     def _episode_index_enabled(self) -> bool:
         # create_world_runtime で組んだ runtime には、目次と書き起こしが常に入る (#1631)。
         return self._runtime_config is not None
@@ -4132,9 +4139,10 @@ def create_world_runtime(
         *,
         episode_index_shown: bool,
         episode_recall_offered: bool,
+        say_inline_offered: bool,
     ) -> str:
         return build_world_system_prompt_for(
-            _orientation(persona),
+            _orientation(persona, say_inline_offered=say_inline_offered),
             episode_index_shown=episode_index_shown,
             episode_recall_offered=episode_recall_offered,
             # シナリオに居ないプレイヤーに返す文。目的の解き方 (_resolve_player_objective_text) も、
@@ -4142,7 +4150,7 @@ def create_world_runtime(
             imposed_goal=scenario.metadata.llm_objective_text,
         )
 
-    def _orientation(persona: str) -> Orientation:
+    def _orientation(persona: str, *, say_inline_offered: bool) -> Orientation:
         return world_orientation(
             persona_block=persona,
             world_title=scenario.metadata.title,
@@ -4155,6 +4163,7 @@ def create_world_runtime(
                     if scenario.metadata.limits_actions
                     else None
                 ),
+                say_inline_offered=say_inline_offered,
             ),
         )
 
@@ -6795,17 +6804,20 @@ def create_world_runtime(
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()
     episode_index_shown, episode_recall_offered = runtime._episode_index_parts_named_in_system_prompt()
+    say_inline_offered = runtime._say_inline_offered()
     runtime._world_llm_system_prompt = _world_system_prompt(
         persona_block,
         episode_index_shown=episode_index_shown,
         episode_recall_offered=episode_recall_offered,
+        say_inline_offered=say_inline_offered,
     )
     runtime._conduct_text = world_conduct_text(
         episode_index_shown=episode_index_shown,
         episode_recall_offered=episode_recall_offered,
     )
     runtime._orientations_by_player_id = {
-        player_id: _orientation(persona) for player_id, persona in personas_by_player_id.items()
+        player_id: _orientation(persona, say_inline_offered=say_inline_offered)
+        for player_id, persona in personas_by_player_id.items()
     }
     # 1 ターンのプロンプトと同じ組み方 (作業記憶のシステムプロンプトの区画) で作る (design_decisions D1630-3)。
     # 目的の文は 1 ターンのプロンプトと同じ解き方をする。共通の目的文が無いときに止めるのは、
