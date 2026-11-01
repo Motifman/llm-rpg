@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ai_rpg_world.application.being.world_state_snapshot_service import WorldStateSnapshotService
+from ai_rpg_world.application.being.world_subsystems.world_tick_codec import WorldTickSubsystemCodec
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 _SCENARIO_PATH = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "forbidden_library_demo.json"
@@ -27,14 +29,33 @@ class TestTickBudgetWiring:
     def test_budget_decreases_as_tick_advances(self) -> None:
         """内部 tick を進めると残量が減る。"""
         rt = create_world_runtime(_SCENARIO_PATH)
-        rt._tick = 10
+        rt._time_provider.advance_tick(10)
         assert rt._compute_tick_budget_remaining() == 70
 
     def test_budget_clamped_to_zero_when_exceeded(self) -> None:
         """tick が limit を超えても負にはならない (0 にクランプ)。"""
         rt = create_world_runtime(_SCENARIO_PATH)
-        rt._tick = 99
+        rt._time_provider.advance_tick(99)
         assert rt._compute_tick_budget_remaining() == 0
+
+    def test_budget_uses_world_tick_restored_from_snapshot(self) -> None:
+        """snapshot から復元した world tick が残り時間に反映される。"""
+        source = create_world_runtime(_SCENARIO_PATH)
+        source._time_provider.set_current_tick(25)
+        snapshot_service = WorldStateSnapshotService(subsystem_codecs=[WorldTickSubsystemCodec()])
+        snapshot = snapshot_service.capture(
+            source,
+            source_scenario="forbidden_library_demo",
+            world_tick=source.current_tick(),
+        )
+
+        restored = create_world_runtime(_SCENARIO_PATH)
+        snapshot_service.restore(restored, snapshot, current_scenario="forbidden_library_demo")
+
+        assert restored.current_tick() == 25
+        assert restored._compute_tick_budget_remaining() == 55
+        player_id = restored.get_player_ids()[0]
+        assert "時間切れまで: あと 275 分" in restored.build_observation(player_id)
 
     def test_prompt_contains_remaining_tick_line(self) -> None:
         """build_observation のテキストに残量行が含まれる (フォーマッタ経由)。"""
