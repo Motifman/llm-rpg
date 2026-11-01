@@ -14,7 +14,7 @@ from ai_rpg_world.being.contract import Description, Orientation, Scene
 from ai_rpg_world.domain.being.exception.being_exceptions import WorkingMemoryOrderException
 
 #: システムプロンプトの冒頭の一文。
-OPENING = "あなたは次のペルソナとして行動するキャラクターである。"
+OPENING = "あなたは【ペルソナ】に書かれた人物として行動するキャラクターである。"
 RECENT_EVENTS_PREAMBLE = "観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。"
 NO_RECENT_EVENTS = "（なし）"
 GOAL_HEADING = "現在の目的"
@@ -29,9 +29,9 @@ class Steadiness(IntEnum):
     """区画の書き換わりにくさ。値の小さいほうが書き換わりにくい。"""
 
     FIXED = 1
-    """書き換わらない (冒頭の一文)。"""
+    """書き換わらない (冒頭の一文、作法)。"""
     ON_ENTRY = 2
-    """入るときに決まる (案内、作法と環境の決まり、課された目的)。"""
+    """入るときに決まる (案内、課された目的)。"""
     GROWING = 3
     """末尾に足していく (知っている人、いきさつ、直近の出来事)。いきさつは、直近の出来事の古い分が外れるときに一緒に変わる。"""
     OCCASIONAL = 4
@@ -72,6 +72,8 @@ class MemoryTexts:
 class WorkingMemory:
     """システムプロンプトと毎ターンのメッセージを別々の並びとして持ち、それぞれの中で書き換わりにくい順を守る。
 
+    入るときまでに決まる区画 (FIXED と ON_ENTRY) はシステムプロンプトに、それより後に変わる区画は
+    メッセージに置く。ターンをまたいでシステムプロンプトが変わらないので、キャッシュが切れない。
     ``notices`` (場面に付く知らせ) と ``closing`` は、メッセージの区画の後ろに付く。
     """
 
@@ -85,16 +87,24 @@ class WorkingMemory:
             steadiness = [s.steadiness for s in sections]
             if steadiness != sorted(steadiness):
                 raise WorkingMemoryOrderException(f"{part} sections must go from steadier to less steady: {steadiness}")
+        if any(s.steadiness > Steadiness.ON_ENTRY for s in self.system):
+            raise WorkingMemoryOrderException("system sections must be FIXED or ON_ENTRY")
+        if any(s.steadiness <= Steadiness.ON_ENTRY for s in self.message):
+            raise WorkingMemoryOrderException("message sections must change after entry (GROWING or later)")
         if any(n.steadiness is not Steadiness.EVERY_TURN for n in self.notices):
             raise WorkingMemoryOrderException("notices must be EVERY_TURN sections")
 
     @staticmethod
-    def system_sections(orientation: Orientation, conduct: str) -> tuple[Section, ...]:
-        """システムプロンプトの区画。案内と作法の文だけで決まり、ターンをまたいで変わらない。"""
+    def system_sections(orientation: Orientation, conduct: str, imposed_goal: str | None) -> tuple[Section, ...]:
+        """システムプロンプトの区画。冒頭の一文、作法、案内、課された目的の順で、ターンをまたいで変わらない。
+
+        ``conduct`` は Being の作法の文。見出しを持つ節が並んだ 1 つの区画にする。
+        """
         return (
             Section(heading=None, lines=(OPENING,), steadiness=Steadiness.FIXED),
+            Section(heading=None, lines=tuple(conduct.split("\n")), steadiness=Steadiness.FIXED),
             *_from_descriptions(orientation.descriptions, Steadiness.ON_ENTRY),
-            Section(heading=None, lines=tuple(conduct.split("\n")), steadiness=Steadiness.ON_ENTRY),
+            *_present(((GOAL_HEADING, (imposed_goal or "").strip(), Steadiness.ON_ENTRY),)),
         )
 
     @classmethod
@@ -108,10 +118,8 @@ class WorkingMemory:
         scene: Scene,
         closing: Closing,
     ) -> WorkingMemory:
-        """``conduct`` は、作法と環境の決まりが混ざった今の固定文。分けるまでは見出しの無い 1 つの区画にする。"""
-        system = cls.system_sections(orientation, conduct)
+        system = cls.system_sections(orientation, conduct, imposed_goal)
         optional = (
-            (GOAL_HEADING, (imposed_goal or "").strip(), Steadiness.ON_ENTRY),
             (KNOWN_PEOPLE_HEADING, memory.known_people.strip(), Steadiness.GROWING),
             (BACKSTORY_HEADING, memory.backstory.strip(), Steadiness.GROWING),
         )
@@ -148,8 +156,8 @@ class WorkingMemory:
         )
 
     def section(self, heading: str) -> Section | None:
-        """メッセージの区画を見出しで引く。無ければ None。"""
-        return next((s for s in self.message if s.heading == heading), None)
+        """システムプロンプトとメッセージの区画を見出しで引く。無ければ None。"""
+        return next((s for s in (*self.system, *self.message) if s.heading == heading), None)
 
 
 def _present(candidates: Sequence[tuple[str, str, Steadiness]]) -> tuple[Section, ...]:

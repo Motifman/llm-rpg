@@ -128,6 +128,7 @@ class TraceEventKind:
     # 2026-11-01 から、区画ごとの文字数は作業記憶の区画の本文 (見出しの行を除く) から数える (D1630-3)。
     # recent_events_chars は前置きの一文と改行の分だけ増え、常に 0 だった inventory_chars は無くなった。
     # 出来事の本文が空白だけのときは「（なし）」、現在地の文が空のときは「（情報なし）」も数える (前は 0)。
+    # #1630 の 4 本目から、objective_chars はシステムプロンプトの【現在の目的】を数え、その分は system_chars に入る (D1630-4)。
     # token 数ではなく char 数で出す: 軽量 / モデル非依存 / deterministic。
     # 分析側で同 turn の prompt_tokens 比に換算する (≒ token 内訳)。
     PROMPT_SECTION_BREAKDOWN = "prompt_section_breakdown"

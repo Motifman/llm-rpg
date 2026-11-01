@@ -8,7 +8,7 @@ from ai_rpg_world.application.llm.services.world_llm_prompt import (
     build_world_system_prompt,
 )
 
-BANNED_ENGINE_VOCABULARY = ("LLM", "関数呼び出し", "サーバー", "全キャラクター共通")
+BANNED_ENGINE_VOCABULARY = ("LLM", "関数呼び出し", "サーバー", "全キャラクター共通", "SlidingWindow", "user 文面")
 
 
 def _build_prompt(
@@ -24,13 +24,12 @@ def _build_prompt(
 
 
 def test_action_rules_drop_engine_vocabulary_without_adding_meaning() -> None:
-    """行動ルールから実装注記だけを除き、世界内で必要な制約は短い文面で残す。"""
+    """【行動のしかた】から実装注記だけを除き、tool call だけで働きかけ 1 回に 1 つ選ぶ制約は 1 文で残す。"""
     prompt = _build_prompt()
 
     expected_wording = (
-        "【行動ルール】",
-        "- 世界と相互作用する唯一の手段は、tool call である。",
-        "- 1 回の応答で選べる tool は 1 つだけである。",
+        "【行動のしかた】",
+        "- 世界に働きかける手段は tool call だけで、1 回の応答で選べる tool は 1 つだけである。",
     )
     removed_wording = (
         "【行動ルール（全キャラクター共通）】",

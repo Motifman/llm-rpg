@@ -61,6 +61,23 @@ class TestOrder:
         with pytest.raises(WorkingMemoryOrderException):
             WorkingMemory(**parts)  # type: ignore[arg-type]
 
+    def test_system_section_that_changes_after_entry_is_rejected(self) -> None:
+        """入るときより後に変わる区画 (GROWING) をシステムプロンプトに置くと、並びが順でも WorkingMemoryOrderException を投げる。"""
+        with pytest.raises(WorkingMemoryOrderException, match="system sections must be FIXED or ON_ENTRY"):
+            WorkingMemory(
+                system=(_section(Steadiness.FIXED), _section(Steadiness.GROWING)), message=(), notices=(), closing=None
+            )
+
+    def test_message_section_decided_on_entry_is_rejected(self) -> None:
+        """入るときに決まる区画 (ON_ENTRY) をメッセージに置くと、並びが順でも WorkingMemoryOrderException を投げる。"""
+        with pytest.raises(WorkingMemoryOrderException, match="message sections must change after entry"):
+            WorkingMemory(
+                system=(),
+                message=(_section(Steadiness.ON_ENTRY), _section(Steadiness.GROWING)),
+                notices=(),
+                closing=None,
+            )
+
     def test_notice_that_is_not_every_turn_is_rejected(self) -> None:
         """知らせは毎ターン置き換わるものなので、ほかの書き換わりにくさの区画を置くと拒む。"""
         with pytest.raises(WorkingMemoryOrderException):
@@ -70,22 +87,22 @@ class TestOrder:
 class TestCompose:
     """環境の材料と Being の記憶の文から、今のプロンプトと同じ並びの区画を作ることを保証する。"""
 
-    def test_system_holds_opening_orientation_and_conduct(self) -> None:
-        """システムプロンプトは、冒頭の一文、案内の説明文、作法の文の順に並ぶ。"""
+    def test_system_holds_opening_conduct_orientation_and_goal(self) -> None:
+        """システムプロンプトは、冒頭の一文、作法の文、案内の説明文、課された目的の順に並ぶ。"""
         memory = _compose()
 
         assert [(s.heading, s.steadiness) for s in memory.system] == [
             (None, Steadiness.FIXED),
+            (None, Steadiness.FIXED),
             ("ペルソナ", Steadiness.ON_ENTRY),
-            (None, Steadiness.ON_ENTRY),
+            ("現在の目的", Steadiness.ON_ENTRY),
         ]
 
-    def test_message_holds_goal_memory_then_scene(self) -> None:
-        """メッセージは、課された目的、知っている人、いきさつ、直近の出来事、目次、メモ、場面の説明文の順に並ぶ。"""
+    def test_message_holds_memory_then_scene(self) -> None:
+        """メッセージは、知っている人、いきさつ、直近の出来事、目次、メモ、場面の説明文の順に並び、課された目的を持たない。"""
         memory = _compose()
 
         assert [s.heading for s in memory.message] == [
-            "現在の目的",
             "知っている人",
             "ここまでのいきさつ",
             "直近の出来事",
@@ -105,6 +122,7 @@ class TestCompose:
         """目的、知っている人、いきさつ、目次、メモが空なら、その区画は見出しごと出さない。"""
         memory = _compose(imposed_goal="  ", memory=MemoryTexts(recent_events="[0:00] 風"))
 
+        assert [s.heading for s in memory.system] == [None, None, "ペルソナ"]
         assert [s.heading for s in memory.message] == ["直近の出来事", "現在地と周囲"]
 
     def test_recent_events_always_appear_with_the_placeholder(self) -> None:
@@ -137,8 +155,9 @@ class TestWithScene:
         assert (replaced.system, replaced.closing) == (memory.system, memory.closing)
 
     def test_section_is_looked_up_by_heading(self) -> None:
-        """メッセージの区画は見出しで引け、無い見出しは None。"""
+        """システムプロンプトとメッセージの区画は見出しで引け、無い見出しは None。"""
         memory = _compose()
 
+        assert memory.section("現在の目的") is not None
         assert memory.section("メモ") is not None
         assert memory.section("無い見出し") is None

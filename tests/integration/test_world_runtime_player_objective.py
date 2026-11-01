@@ -44,11 +44,12 @@ def _player_id_of(runtime, string_id: str) -> PlayerId:
 
 
 def _current_objective_section(text: str) -> str:
-    return f"【現在の目的】\n{text}\n\n"
+    """システムプロンプトの末尾の【現在の目的】 (D1630-4)。"""
+    return f"\n\n【現在の目的】\n{text}"
 
 
-def _user_content(runtime, player_id: PlayerId) -> str:
-    return runtime.build_full_prompt(player_id)["messages"][1]["content"]
+def _system_content(runtime, player_id: PlayerId) -> str:
+    return runtime.build_full_prompt(player_id)["messages"][0]["content"]
 
 
 class TestPerPlayerObjective:
@@ -63,7 +64,7 @@ class TestPerPlayerObjective:
         runtime = _runtime(_write_scenario(tmp_path, mutate))
         player_id = _player_id_of(runtime, "player_a")
 
-        assert _current_objective_section("禁書を持ち出して 1 人で逃げる") in _user_content(runtime, player_id)
+        assert _system_content(runtime, player_id).endswith(_current_objective_section("禁書を持ち出して 1 人で逃げる"))
 
     def test_player_without_objective_falls_back_to_scenario_text(self, tmp_path: Path) -> None:
         """objective を書かないプレイヤーの【現在の目的】には、シナリオ共通の目的文が載る。"""
@@ -75,7 +76,7 @@ class TestPerPlayerObjective:
         player_id = _player_id_of(runtime, "player_b")
         scenario_text = runtime._resolve_scenario_llm_objective_text()
 
-        assert _current_objective_section(scenario_text) in _user_content(runtime, player_id)
+        assert _system_content(runtime, player_id).endswith(_current_objective_section(scenario_text))
 
     def test_two_players_can_hold_different_objectives(self, tmp_path: Path) -> None:
         """同じ run の 2 人に別々の目的文が載り、互いに混ざらない。"""
@@ -86,12 +87,12 @@ class TestPerPlayerObjective:
 
         runtime = _runtime(_write_scenario(tmp_path, mutate))
 
-        user_a = _user_content(runtime, _player_id_of(runtime, "player_a"))
-        user_b = _user_content(runtime, _player_id_of(runtime, "player_b"))
-        assert _current_objective_section("禁書を持ち出して 1 人で逃げる") in user_a
-        assert _current_objective_section("禁書を書架に戻して封印する") in user_b
-        assert "禁書を書架に戻して封印する" not in user_a
-        assert "禁書を持ち出して 1 人で逃げる" not in user_b
+        system_a = _system_content(runtime, _player_id_of(runtime, "player_a"))
+        system_b = _system_content(runtime, _player_id_of(runtime, "player_b"))
+        assert system_a.endswith(_current_objective_section("禁書を持ち出して 1 人で逃げる"))
+        assert system_b.endswith(_current_objective_section("禁書を書架に戻して封印する"))
+        assert "禁書を書架に戻して封印する" not in system_a
+        assert "禁書を持ち出して 1 人で逃げる" not in system_b
 
     def test_unmodified_scenario_shows_scenario_text_to_everyone(self, tmp_path: Path) -> None:
         """objective を 1 つも書かない既存シナリオでは、全員の【現在の目的】に共通目的文が載る (挙動不変)。"""
@@ -100,7 +101,7 @@ class TestPerPlayerObjective:
 
         for string_id in ("player_a", "player_b"):
             player_id = _player_id_of(runtime, string_id)
-            assert _current_objective_section(scenario_text) in _user_content(runtime, player_id)
+            assert _system_content(runtime, player_id).endswith(_current_objective_section(scenario_text))
 
 
 class TestUnknownPlayerFallback:
@@ -143,8 +144,8 @@ class TestObjectiveFailFast:
         runtime = _runtime(_write_scenario(tmp_path, mutate))
 
         assert runtime._resolve_scenario_llm_objective_text() == ""
-        user_a = _user_content(runtime, _player_id_of(runtime, "player_a"))
-        assert _current_objective_section("禁書を持ち出して 1 人で逃げる") in user_a
+        system_a = _system_content(runtime, _player_id_of(runtime, "player_a"))
+        assert system_a.endswith(_current_objective_section("禁書を持ち出して 1 人で逃げる"))
 
     def test_empty_scenario_text_raises_when_one_player_lacks_objective(self, tmp_path: Path) -> None:
         """共通目的文が空で objective を欠くプレイヤーが 1 人でもいると、その id を含む例外になる。"""
