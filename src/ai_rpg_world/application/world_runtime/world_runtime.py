@@ -146,6 +146,7 @@ from ai_rpg_world.application.llm.services.world_llm_prompt import (
     limited_action_and_time_pressure_text,
     safe_world_intro_text,
     world_conduct_text,
+    world_rules,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
     DEFAULT_FAILURE_STREAK_ABORT,
@@ -1183,7 +1184,7 @@ class WorldRuntime:
         return ", ".join(names)
 
     def conduct_text(self) -> str:
-        """システムプロンプトのうち、案内の後に置く作法と環境の決まり (#1630)。"""
+        """システムプロンプトのうち、冒頭の一文の後に置く Being の作法 (#1630)。"""
         return self._conduct_text
 
     def orientation_for(self, player_id: PlayerId) -> Orientation | None:
@@ -4134,9 +4135,11 @@ def create_world_runtime(
     ) -> str:
         return build_world_system_prompt_for(
             _orientation(persona),
-            has_goal=_has_goal,
             episode_index_shown=episode_index_shown,
             episode_recall_offered=episode_recall_offered,
+            # シナリオに居ないプレイヤーに返す文。目的の解き方 (_resolve_player_objective_text) も、
+            # 居ないプレイヤーには共通の目的文を返す。
+            imposed_goal=scenario.metadata.llm_objective_text,
         )
 
     def _orientation(persona: str) -> Orientation:
@@ -4145,8 +4148,13 @@ def create_world_runtime(
             world_title=scenario.metadata.title,
             intro=safe_intro,
             briefing_sections=briefing,
-            action_limit_text=(
-                limited_action_and_time_pressure_text(has_goal=_has_goal) if scenario.metadata.limits_actions else None
+            rules=world_rules(
+                has_goal=_has_goal,
+                action_limit_text=(
+                    limited_action_and_time_pressure_text(has_goal=_has_goal)
+                    if scenario.metadata.limits_actions
+                    else None
+                ),
             ),
         )
 
@@ -6793,7 +6801,6 @@ def create_world_runtime(
         episode_recall_offered=episode_recall_offered,
     )
     runtime._conduct_text = world_conduct_text(
-        has_goal=_has_goal,
         episode_index_shown=episode_index_shown,
         episode_recall_offered=episode_recall_offered,
     )
@@ -6801,9 +6808,18 @@ def create_world_runtime(
         player_id: _orientation(persona) for player_id, persona in personas_by_player_id.items()
     }
     # 1 ターンのプロンプトと同じ組み方 (作業記憶のシステムプロンプトの区画) で作る (design_decisions D1630-3)。
+    # 目的の文は 1 ターンのプロンプトと同じ解き方をする。共通の目的文が無いときに止めるのは、
+    # プロンプトを組む部品を作るとき (_resolve_scenario_llm_objective_text) に任せる。
     runtime._world_llm_system_prompts_by_player_id = {
         player_id: system_prompt_text(
-            WorkingMemory(system=WorkingMemory.system_sections(orientation, runtime._conduct_text), message=())
+            WorkingMemory(
+                system=WorkingMemory.system_sections(
+                    orientation,
+                    runtime._conduct_text,
+                    runtime._resolve_player_objective_text(PlayerId(player_id), scenario.metadata.llm_objective_text),
+                ),
+                message=(),
+            )
         )
         for player_id, orientation in runtime._orientations_by_player_id.items()
     }

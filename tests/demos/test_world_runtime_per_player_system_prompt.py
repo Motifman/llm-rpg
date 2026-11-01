@@ -11,6 +11,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FORBIDDEN_LIBRARY = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
+_MINE_VILLAGE = _REPO_ROOT / "data" / "scenarios" / "mine_village_v1.json"
 
 
 class TestWorldRuntimePerPlayerSystemPrompt:
@@ -46,6 +47,17 @@ class TestWorldRuntimePerPlayerSystemPrompt:
         assert systems[0] != systems[1], (
             "per-player system prompt が differentiate されていない (自呼び regression の可能性)"
         )
+
+    def test_turn_prompt_ends_with_each_players_own_objective(self) -> None:
+        """プレイヤーごとの目的 (players[].objective) を持つ廃坑の山村で、1 ターンのシステムプロンプトは per-player prompt と同じで、その人の目的で終わる。"""
+        runtime = create_world_runtime(_MINE_VILLAGE)
+        objective_by_player_id = {spawn.player_id: spawn.objective.strip() for spawn in runtime.scenario.player_spawns}
+
+        for pid in runtime.get_player_ids():
+            system = runtime.build_full_prompt(pid)["messages"][0]["content"]
+            assert system == runtime.build_system_prompt(pid)
+            assert system.endswith(f"\n\n【現在の目的】\n{objective_by_player_id[pid.value]}")
+        assert len(set(objective_by_player_id.values())) > 1, "目的が全員同じだと、取り違えても通る"
 
     def test_known_people_of_each_player_do_not_contain_self(self) -> None:
         """各プレイヤーの【知っている人】には相手の名前が載り、自分の名前は他者として載らない (自呼び回帰 fix の核心)。

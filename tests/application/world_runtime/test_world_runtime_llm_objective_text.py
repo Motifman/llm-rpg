@@ -24,11 +24,20 @@ _SURVIVAL_V2 = _REPO_ROOT / "data" / "scenarios" / "survival_island_v2.json"
 _ABANDONED = _REPO_ROOT / "data" / "scenarios" / "abandoned_hospital.json"
 
 
+def _goal_section(prompt: dict) -> str:
+    """システムプロンプトの末尾の【現在の目的】の本文。目的は入るときに決まるのでシステムプロンプトに置く (D1630-4)。"""
+    system = prompt["messages"][0]["content"]
+    assert "【現在の目的】" not in prompt["messages"][1]["content"]
+    head, sep, goal = system.rpartition("\n\n【現在の目的】\n")
+    assert sep, "システムプロンプトに【現在の目的】が無い"
+    return goal
+
+
 class TestScenarioObjectiveDrivesPrompt:
     """シナリオ JSON の llm_objective_text が LLM 用 prompt にそのまま届く。"""
 
     def test_survival_island_v2_objective_mentions_signal_fire_and_summit(self) -> None:
-        """survival_island_v2 の objective section に「狼煙」と「山頂 (summit)」が含まれる。
+        """survival_island_v2 の【現在の目的】に「狼煙」と「山頂 (summit)」が含まれる。
 
         旧 hardcoded「廃墟から外へ脱出」では絶対に出てこなかった概念。これが出るように
         なって初めて、LLM agent が救助フローを優先するベースが整う。
@@ -36,13 +45,12 @@ class TestScenarioObjectiveDrivesPrompt:
         runtime = create_world_runtime(_SURVIVAL_V2)
         player_id = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(player_id)
-        user = prompt["messages"][1]["content"]
+        goal = _goal_section(prompt)
 
-        assert "【現在の目的】" in user
-        assert "狼煙" in user
-        assert "山頂" in user or "summit" in user.lower()
+        assert "狼煙" in goal
+        assert "山頂" in goal or "summit" in goal.lower()
         # 旧 hardcoded が再混入していないことを保証
-        assert "廃墟から外へ脱出する" not in user
+        assert "廃墟から外へ脱出する" not in goal
 
     def test_abandoned_hospital_objective_still_mentions_escape(self) -> None:
         """abandoned_hospital のように本来「脱出」が目的のシナリオではちゃんと「脱出」と出る。
@@ -52,10 +60,7 @@ class TestScenarioObjectiveDrivesPrompt:
         runtime = create_world_runtime(_ABANDONED)
         player_id = runtime.get_player_ids()[0]
         prompt = runtime.build_full_prompt(player_id)
-        user = prompt["messages"][1]["content"]
-
-        assert "【現在の目的】" in user
-        assert "脱出" in user
+        assert "脱出" in _goal_section(prompt)
 
 
 class TestScenarioObjectiveFailFast:

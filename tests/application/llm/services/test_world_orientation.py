@@ -62,19 +62,22 @@ class TestWorldOrientation:
             heading="世界の前提", text="- 舞台のタイトル: t\n- 概要: 吹雪。\n\n【このゲームについて】"
         )
 
-    def test_action_limit_is_appended_to_the_last_description(self) -> None:
-        """行動の制限は見出しを持たないので、最後の説明文の末尾に 1 行で付く。無ければ付かない。"""
-        limited = world_orientation(
+    def test_rules_come_last_without_touching_the_briefing(self) -> None:
+        """この世界の決まりは見取り図の後ろに別の説明文として付き、見取り図の文は変えない。無ければ付かない。"""
+        rules = Description(heading="この世界の決まり", text="- 行動の制限: 限りがある")
+        with_rules = world_orientation(
             persona_block="p",
             world_title="t",
             intro="i",
             briefing_sections=("【決まり】\n- 棄権も 1 票",),
-            action_limit_text="限りがある",
+            rules=rules,
         )
-        unlimited = world_orientation(persona_block="p", world_title="t", intro="i")
+        without_rules = world_orientation(
+            persona_block="p", world_title="t", intro="i", briefing_sections=("【決まり】\n- 棄権も 1 票",)
+        )
 
-        assert limited.descriptions[-1].text == "- 棄権も 1 票\n- 行動の制限: 限りがある"
-        assert "行動の制限" not in unlimited.descriptions[-1].text
+        assert with_rules.descriptions[-2:] == (Description(heading="決まり", text="- 棄権も 1 票"), rules)
+        assert without_rules.descriptions[-1] == Description(heading="決まり", text="- 棄権も 1 票")
 
     def test_text_reads_back_as_the_original_paragraphs(self) -> None:
         """説明文を見出しの行と空行で文に戻すと、人柄と世界の前提の元の文に一致する。"""
