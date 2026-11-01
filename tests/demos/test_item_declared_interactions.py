@@ -14,11 +14,13 @@ from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
     GameRuntimeManager,
 )
@@ -207,16 +209,50 @@ def test_hidden_item_action_is_neither_named_nor_executable(runtime) -> None:
         runtime.do_interact_with_item(_OWNER, _radio_spec(runtime), "open_service_channel")
 
 
-def test_living_inventory_stays_private_but_fallen_inventory_is_visible(runtime) -> None:
-    """生者の所持品は他人へ漏らさず、倒れた相手の道具名は従来どおり表示する。"""
-    before = runtime.build_full_prompt(_OTHER)["messages"][1]["content"]
-    assert '"携帯無線機"' not in before
+def _surroundings_of(runtime, player_id: PlayerId) -> str:
+    """ユーザー文から【現在地と周囲】の区画だけを切り出す。"""
+    user = runtime.build_full_prompt(player_id)["messages"][1]["content"]
+    section = user.split("【現在地と周囲】", 1)[1]
+    return section.split("\n【", 1)[0]
 
-    status = runtime._player_status_repo.find_by_id(_OWNER)
+
+def _knock_down(runtime, player_id: PlayerId) -> None:
+    """観測配信に状態更新を委ねず、整合したダウン状態を準備する。"""
+    status = runtime._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
+    events = list(status.get_events())
+    status.clear_events()
     runtime._player_status_repo.save(status)
+    current_tick = int(runtime.current_tick())
+    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(EntityId.create(int(player_id)))
+    runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(current_tick))
+    runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
+    runtime._speech_event_publisher.publish_all(events)
 
-    after = runtime.build_full_prompt(_OTHER)["messages"][1]["content"]
-    assert "携帯無線機" in after
-    # 他人の道具は対象の状態として見えるだけで、操作は所持者以外へ宣伝しない。
-    assert "hail_the_mainland" not in after
+
+def test_living_owner_inventory_is_hidden_from_others_surroundings(runtime) -> None:
+    """所持者が立っているあいだ、同じ場所にいる他人の【現在地と周囲】に所持者の道具名は出ない。"""
+    surroundings = _surroundings_of(runtime, _OTHER)
+
+    assert '"通信士"' in surroundings
+    assert "携帯無線機" not in surroundings
+
+
+def test_fallen_owner_inventory_is_shown_in_others_surroundings(runtime) -> None:
+    """所持者が倒れると、同じ場所にいる他人の【現在地と周囲】の所持者の行に、倒れていることと道具名が出る。"""
+    _knock_down(runtime, _OWNER)
+
+    surroundings = _surroundings_of(runtime, _OTHER)
+
+    row = next(line for line in surroundings.splitlines() if '"通信士"' in line)
+    assert "(倒れて動かない)" in row
+    assert "携帯無線機" in row
+
+
+def test_fallen_owner_item_actions_are_not_offered_to_others(runtime) -> None:
+    """倒れた所持者の道具は他人へ状態として見えるだけで、道具の操作は他人のプロンプトに出ない。"""
+    _knock_down(runtime, _OWNER)
+
+    user = runtime.build_full_prompt(_OTHER)["messages"][1]["content"]
+
+    assert "hail_the_mainland" not in user
