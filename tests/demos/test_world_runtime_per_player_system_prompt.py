@@ -67,7 +67,9 @@ class TestWorldRuntimePerPlayerSystemPrompt:
         """人柄とプレイヤーごとの目的より前のシステムプロンプトは、全員で一字一句同じ。先頭が共有されてキャッシュに載る (D1630-5)。"""
         runtime = create_world_runtime(scenario)
 
-        heads = {runtime.build_system_prompt(pid).partition("\n\n【ペルソナ】\n")[0] for pid in runtime.get_player_ids()}
+        heads = {
+            runtime.build_system_prompt(pid).partition("\n\n【ペルソナ】\n")[0] for pid in runtime.get_player_ids()
+        }
 
         assert len(heads) == 1
         assert "【この世界の決まり】" in heads.pop()
