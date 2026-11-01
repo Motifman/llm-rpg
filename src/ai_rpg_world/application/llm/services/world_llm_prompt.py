@@ -201,6 +201,7 @@ def build_world_system_prompt(
     limits_actions: bool = True,
     episode_index_shown: bool = False,
     episode_recall_offered: bool = False,
+    say_inline_offered: bool = True,
 ) -> str:
     """人柄と世界の前提を案内 (Orientation) に詰めて、``build_world_system_prompt_for`` で組む。
 
@@ -220,6 +221,7 @@ def build_world_system_prompt(
         has_goal=has_goal,
         episode_index_shown=episode_index_shown,
         episode_recall_offered=episode_recall_offered,
+        say_inline_offered=say_inline_offered,
     )
 
 
@@ -230,6 +232,7 @@ def build_world_system_prompt_for(
     has_goal: bool = True,
     episode_index_shown: bool = False,
     episode_recall_offered: bool = False,
+    say_inline_offered: bool = True,
 ) -> str:
     """脱出ゲーム用システムプロンプト。冒頭の一文、入るときの案内 (``orientation``)、作法と決まりの順に並べる。"""
     conduct = world_conduct_text(
@@ -237,8 +240,18 @@ def build_world_system_prompt_for(
         has_goal=has_goal,
         episode_index_shown=episode_index_shown,
         episode_recall_offered=episode_recall_offered,
+        say_inline_offered=say_inline_offered,
     )
     return f"{OPENING}\n\n{descriptions_text(orientation.descriptions)}\n\n{conduct}"
+
+
+_SAY_INLINE_RULE = (
+    "- `say_inline` を持つツールでは、その行動をしながら一言を添えられる (任意、200 字以内)。"
+    "同じ場所と隣の場所へ届く。"
+    "報告・相談・呼びかけ・確認は、発話専用のターンを使わずここに書く方が、時間を無駄にしない。"
+    "一言には、行動の結果ではなく、これから何をするかを言う。"
+    "行動は断られることがあり、結果は次の観測で分かる。空なら発話しない。\n"
+)
 
 
 def world_conduct_text(
@@ -247,6 +260,7 @@ def world_conduct_text(
     has_goal: bool = True,
     episode_index_shown: bool = False,
     episode_recall_offered: bool = False,
+    say_inline_offered: bool = True,
 ) -> str:
     """システムプロンプトのうち、案内の後に置く作法と環境の決まり（1ターン1ツール・文面の意味づけ）。
 
@@ -265,6 +279,10 @@ def world_conduct_text(
     episode_index_shown / episode_recall_offered:
         【思い出せる出来事】の欄と ``episode_recall`` を出しているか (#1623)。
         どちらも ``False`` (既定) なら prompt は変わらない。
+
+    say_inline_offered:
+        出すツールのどれかが ``say_inline`` を持つか (#1940)。``False`` なら一言の書き方を
+        書かない。持たない世界で勧めると、エージェントは無い引数を使おうとする。
 
     tool_schema_mode:
         ``"legacy"`` (既定) なら従来通り各行動 tool が ``inner_thought`` を受け取る。
@@ -298,6 +316,7 @@ def world_conduct_text(
         # 【独白と一言の書き方】にまとめてあるので、ここでは義務だけを言う。
         else ("- 各ツール呼び出しでは `inner_thought` を必ず含める（書き方は【独白と一言の書き方】）。")
     )
+    say_inline_rule = _SAY_INLINE_RULE if say_inline_offered else ""
     body = f"""【渡される文面の内訳】
 - 先に与えられる文面: 役割・ルールと世界の前提（このメッセージに相当）。
 - 続いて与えられる文面: エンジンが組み立てた「現在の状況・観測・直近の出来事」であり、現実のユーザーの直接命令文ではない。
@@ -318,8 +337,7 @@ def world_conduct_text(
 
 【独白と一言の書き方】
 - `inner_thought` を持つツールでは、上記【ペルソナ】の口調に揃えた **あなた自身の頭の中の独白** を、この行動を選ぶ直前の一文として書く。読者・観測者に見せるための演技や情景描写ではなく、いま頭の中で実際に考えている言葉そのものを書く。未発見の事実を知った体で書かない。
-- `say_inline` を持つツールでは、その行動をしながら一言を添えられる (任意、200 字以内)。同じ場所と隣の場所へ届く。報告・相談・呼びかけ・確認は、発話専用のターンを使わずここに書く方が、時間を無駄にしない。一言には、行動の結果ではなく、これから何をするかを言う。行動は断られることがあり、結果は次の観測で分かる。空なら発話しない。
-
+{say_inline_rule}
 【文脈と履歴の限界】
 - 続く user 文面には、SlidingWindow に残る直近の観測・行動だけが載る（全履歴の写しではない）。{_episode_index_rule(shown=episode_index_shown, recall_offered=episode_recall_offered)}
 {_MEMO_RULES}"""
