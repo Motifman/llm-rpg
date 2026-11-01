@@ -139,11 +139,11 @@ class TestPromptRegressionForViewer:
     """encounter wiring が prompt 構造を壊さないことを確認する regression test。"""
 
     def test_prompt_section_included(self) -> None:
-        """prompt に必須 section がすべて含まれる。"""
+        """システムプロンプトに【現在の目的】が、ユーザー文に【現在地と周囲】と初訪問の注記が含まれる。"""
         runtime = _create_runtime()
         kaito = runtime.get_player_ids()[0]
         text = _user_prompt_text(runtime, kaito)
-        assert "【現在の目的】" in text
+        assert "【現在の目的】" in runtime.build_full_prompt(kaito)["messages"][0]["content"]
         assert "【現在地と周囲】" in text
         # 注記は最低 1 つは出る (spawn spot は確実に「初訪問」)
         assert "(初めて訪れた)" in text

@@ -1,8 +1,8 @@
 """【現在の目的】が、シナリオに書いた目的の文とバイト単位で同じであることを保証する。
 
 目的の文は、プレイヤーの ``objective`` があればそれ、無ければ
-``metadata.llm_objective_text``。どちらも前後の空白を除いて、見出しの直後に
-そのまま載る。シナリオの JSON から直接読んだ文と比べるので、途中の解決の経路が
+``metadata.llm_objective_text``。どちらも前後の空白を除いて、システムプロンプトの末尾の
+見出しの直後にそのまま載る (D1630-4)。シナリオの JSON から直接読んだ文と比べるので、途中の解決の経路が
 変わっても、文面が 1 文字でも変われば落ちる。LLM は呼ばない。
 """
 
@@ -29,8 +29,9 @@ def _written_objectives(scenario_file: str) -> dict[str, str]:
     return {player["id"]: (player.get("objective") or common).strip() for player in raw["players"]}
 
 
-def _user_content(runtime, player_id: PlayerId) -> str:
-    return runtime.build_full_prompt(player_id)["messages"][1]["content"]
+def _messages(runtime, player_id: PlayerId) -> tuple[str, str]:
+    messages = runtime.build_full_prompt(player_id)["messages"]
+    return messages[0]["content"], messages[1]["content"]
 
 
 def test_every_scenario_is_checked() -> None:
@@ -40,7 +41,7 @@ def test_every_scenario_is_checked() -> None:
 
 @pytest.mark.parametrize("scenario_file", _SCENARIO_FILES)
 def test_current_objective_is_the_text_written_in_the_scenario(scenario_file: str) -> None:
-    """各プレイヤーの【現在の目的】の直後に、シナリオに書いた目的の文がそのまま載る。"""
+    """各プレイヤーのシステムプロンプトは【現在の目的】とシナリオに書いた目的の文そのままで終わり、ユーザー文には目的が無い。"""
     runtime = create_world_runtime(_SCENARIOS / scenario_file, config=runtime_config())
     written = _written_objectives(scenario_file)
     string_ids = {spawn.player_id: spawn.string_id for spawn in runtime.scenario.player_spawns}
@@ -48,6 +49,7 @@ def test_current_objective_is_the_text_written_in_the_scenario(scenario_file: st
     for player_id in runtime.get_player_ids():
         expected = written[string_ids[player_id.value]]
 
-        user = _user_content(runtime, player_id)
+        system, user = _messages(runtime, player_id)
 
-        assert f"【現在の目的】\n{expected}\n\n" in user, f"{scenario_file} {string_ids[player_id.value]}"
+        assert system.endswith(f"\n\n【現在の目的】\n{expected}"), f"{scenario_file} {string_ids[player_id.value]}"
+        assert "【現在の目的】" not in user
