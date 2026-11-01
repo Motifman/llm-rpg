@@ -62,6 +62,15 @@ def _build_player(
     return status
 
 
+def _graph_placing_players_from(status_repo: MagicMock) -> MagicMock:
+    """各プレイヤーを、_build_player に渡した spot_id に置いたグラフの代役を返す。"""
+    graph = MagicMock()
+    graph.get_entity_spot.side_effect = lambda entity_id: (
+        status_repo.find_by_id(PlayerId(entity_id.value)).current_spot_id
+    )
+    return MagicMock(find_graph=MagicMock(return_value=graph))
+
+
 def _build_executor(
     *,
     runtime: SimpleNamespace | None = None,
@@ -90,6 +99,7 @@ def _build_executor(
         item_repository=item_repo,
         event_publisher=publisher,
         player_status_repository=status_repo,
+        spot_graph_repository=_graph_placing_players_from(status_repo),
         runtime=runtime,
     )
     return exec, status_repo, publisher

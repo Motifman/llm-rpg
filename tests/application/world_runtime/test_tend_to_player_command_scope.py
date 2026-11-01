@@ -40,6 +40,7 @@ def _executor(runtime) -> SpotGraphToolExecutor:
         item_repository=runtime._item_repo,
         event_publisher=runtime._speech_event_publisher,
         player_status_repository=runtime._player_status_repo,
+        spot_graph_repository=runtime._spot_graph_repo,
         speech_service=runtime._speech_service,
         tend_to_player_command_scope_factory=(runtime._tend_to_player_command_scope_factory),
         runtime=runtime,
