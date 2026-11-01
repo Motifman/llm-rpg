@@ -437,8 +437,9 @@ class PlayerStatusAggregate(AggregateRoot):
         """
         self._hp = self._hp.damage(damage)
 
-        # HPが0になった場合は戦闘不能状態にする
-        if not self._hp.is_alive():
+        # 倒れている人に重ねて当たっても、倒れたことは 1 度しか起きていない。
+        # 積み直すと、倒れた知らせが重複し、死亡の猶予も数え直しになる。
+        if not self._hp.is_alive() and not self._is_down:
             self._is_down = True
             self.add_event(
                 PlayerDownedEvent.create(

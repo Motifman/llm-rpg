@@ -174,6 +174,26 @@ class TestDeathChain:
         assert status.hp.value == 0
         assert any(isinstance(event, PlayerDownedEvent) for event in status.get_events())
 
+    def test_two_stacked_bleedings_that_down_a_player_emit_one_downed_event(self) -> None:
+        """HP 1 の人に出血が 2 つ重なって倒れても、同じ tick に PlayerDownedEvent は 1 件だけ積まれる。"""
+        status = _make_status(hp=1)
+        for _ in range(2):
+            status.add_status_effect(
+                StatusEffect(
+                    effect_type=StatusEffectType.BLEEDING,
+                    value=1.0,
+                    expiry_tick=WorldTick(10),
+                )
+            )
+        repo = MagicMock()
+        repo.find_all.return_value = [status]
+
+        StatusEffectsTickStageService()._run_with_repository(WorldTick(1), repo)
+
+        downed = [event for event in status.get_events() if isinstance(event, PlayerDownedEvent)]
+        assert status.hp.value == 0
+        assert len(downed) == 1
+
 
 class TestNoEffectNoMutation:
     """active_effects が空のプレイヤーは触らない。"""
