@@ -4,36 +4,12 @@ from __future__ import annotations
 
 import re
 
-import pytest
-
 from ai_rpg_world.application.llm.services.world_llm_prompt import (
     build_world_system_prompt,
-    world_conduct_text,
     world_rules,
 )
 
 _HEADING_LINE = re.compile(r"^【([^】]+)】$", re.MULTILINE)
-
-#: 環境が決めることの目印。作法の文にあってはいけない。
-_ENVIRONMENT_RULE_MARKS = ("ラベル", "say_inline", "勝利条件", "行動の制限", "拒否される")
-
-
-class TestConductHoldsNoEnvironmentRules:
-    """作法の文が、どの環境でも同じ作法だけを持つことを保証する。"""
-
-    @pytest.mark.parametrize("mark", _ENVIRONMENT_RULE_MARKS)
-    def test_conduct_does_not_mention_an_environment_rule(self, mark: str) -> None:
-        """作法の文には、ラベルの使い方・一言・勝利条件・行動の制限・断られる行動を書かない。"""
-        assert mark not in world_conduct_text(episode_index_shown=True, episode_recall_offered=True)
-
-    def test_conduct_sections_are_the_four_manners(self) -> None:
-        """作法は【渡される文面の読み方】【行動のしかた】【心がけ】【メモの書き方】の順に並ぶ。"""
-        assert _HEADING_LINE.findall(world_conduct_text()) == [
-            "渡される文面の読み方",
-            "行動のしかた",
-            "心がけ",
-            "メモの書き方",
-        ]
 
 
 class TestWorldRules:

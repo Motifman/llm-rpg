@@ -11,6 +11,7 @@ import pytest
 from ai_rpg_world.application.llm.services.description_text import description_text, descriptions_text
 from ai_rpg_world.application.llm.services.dynamic_argument_candidates import inject_dynamic_argument_candidate_table
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.being.application.conduct_text import conduct_text
 from ai_rpg_world.being.contract import Scene
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -47,7 +48,7 @@ class TestOrientation:
 
         expected_head = (
             "あなたは【ペルソナ】に書かれた人物として行動するキャラクターである。\n\n"
-            + runtime.conduct_text()
+            + conduct_text(runtime.offered_being_tools())
             + "\n\n"
             + descriptions_text(orientation.descriptions)
         )

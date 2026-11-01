@@ -14,8 +14,7 @@ def _say_inline_guidance_line(prompt: str) -> str:
     return lines[0]
 
 
-@pytest.mark.parametrize("tool_schema_mode", ["legacy", "reason_first"])
-def test_say_inline_guidance_asks_for_intent_not_result(tool_schema_mode: str) -> None:
+def test_say_inline_guidance_asks_for_intent_not_result() -> None:
     """【この世界の決まり】の一言の項は、行動の結果ではなくこれから何をするかを言うよう頼み、
     結果は次の観測で分かると理由を添える。mine_v1_005 T35 で、断られた取得に
     「見つけました」と添えて相手に届いた先取りを防ぐため (#1612)。"""
@@ -23,7 +22,6 @@ def test_say_inline_guidance_asks_for_intent_not_result(tool_schema_mode: str) -
         world_title="廃坑の山村",
         persona_block="名前: サヨ",
         safe_intro="掘り場にいる。",
-        tool_schema_mode=tool_schema_mode,
     )
 
     line = _say_inline_guidance_line(prompt)

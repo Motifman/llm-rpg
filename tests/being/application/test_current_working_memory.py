@@ -12,6 +12,7 @@ from ai_rpg_world.being.contract import (
     Description,
     Observation,
     ObservedTime,
+    OfferedBeingTools,
     Orientation,
     Scene,
     SeenOrHeard,
@@ -73,7 +74,7 @@ def _of(stores: dict[str, object], being_id: BeingId = HAL) -> WorkingMemory:
     return current.of(
         being_id,
         orientation=Orientation([Description(heading="ペルソナ", text="あなたはハル。")]),
-        conduct="【行動ルール】\n- 1 回に 1 つ",
+        being_tools=OfferedBeingTools(),
         imposed_goal="外へ出る",
         scene=Scene([Description(heading="現在地と周囲", text="北の竪坑口")]),
         closing=Closing(instruction="行動を 1 つ選んでください。"),
