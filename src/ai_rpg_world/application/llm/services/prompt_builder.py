@@ -92,8 +92,8 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("working_memory must be CurrentWorkingMemory")
         if not callable(core.orientation_provider):
             raise TypeError("orientation_provider must be callable")
-        if not callable(core.conduct_text_provider):
-            raise TypeError("conduct_text_provider must be callable")
+        if not callable(core.being_tools_provider):
+            raise TypeError("being_tools_provider must be callable")
         if not isinstance(ui_context_builder, ILlmUiContextBuilder):
             raise TypeError("ui_context_builder must be ILlmUiContextBuilder")
         if not isinstance(limits.default_action_instruction, str):
@@ -129,7 +129,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._available_tools_provider = core.available_tools_provider
         self._working_memory = core.working_memory
         self._orientation_provider = core.orientation_provider
-        self._conduct_text_provider = core.conduct_text_provider
+        self._being_tools_provider = core.being_tools_provider
         self._ui_context_builder = ui_context_builder
         self._default_action_instruction = limits.default_action_instruction
         self._trace_recorder = trace_recorder
@@ -282,7 +282,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         memory = self._working_memory.of(
             acting.being_id,
             orientation=orientation,
-            conduct=self._conduct_text_provider(),
+            being_tools=self._being_tools_provider(),
             imposed_goal=objective_text,
             scene=scene,
             closing=Closing(instruction=instruction, warning=loop_warning),

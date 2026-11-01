@@ -21,6 +21,7 @@ from typing import Any
 #: 「何を書く引数か」の一文は必ず残す。
 INNER_THOUGHT_DEFAULT_DESCRIPTION = "この行動を選ぶ直前の、あなた自身の頭の中の独白を一文で。書き方は【行動のしかた】。"
 
+INNER_THOUGHT_FIELD_NAME = "inner_thought"
 INNER_THOUGHT_TYPE_STRING = "string"
 INNER_THOUGHT_MAX_LENGTH = 500
 
@@ -40,6 +41,7 @@ def inner_thought_property(
 
 __all__ = [
     "INNER_THOUGHT_DEFAULT_DESCRIPTION",
+    "INNER_THOUGHT_FIELD_NAME",
     "INNER_THOUGHT_MAX_LENGTH",
     "inner_thought_property",
 ]

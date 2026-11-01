@@ -11,15 +11,13 @@ from ai_rpg_world.application.llm.services.world_llm_prompt import (
 BANNED_ENGINE_VOCABULARY = ("LLM", "関数呼び出し", "サーバー", "全キャラクター共通", "SlidingWindow", "user 文面")
 
 
-def _build_prompt(
-    *,
-    tool_schema_mode: str = "legacy",
-) -> str:
+def _build_prompt() -> str:
     return build_world_system_prompt(
         world_title="テスト世界",
         persona_block="【ペルソナ】名前: エイダ",
         safe_intro="周囲を観察しながら暮らす世界。",
-        tool_schema_mode=tool_schema_mode,
+        episode_index_shown=True,
+        episode_recall_offered=True,
     )
 
 
@@ -44,12 +42,9 @@ def test_action_rules_drop_engine_vocabulary_without_adding_meaning() -> None:
         assert wording not in prompt
 
 
-@pytest.mark.parametrize("tool_schema_mode", ("legacy", "reason_first"))
-def test_system_prompt_never_exposes_banned_engine_vocabulary(
-    tool_schema_mode: str,
-) -> None:
-    """どの生成分岐でもエンジンの実装事情を世界の住人に見せない。"""
-    prompt = _build_prompt(tool_schema_mode=tool_schema_mode)
+def test_system_prompt_never_exposes_banned_engine_vocabulary() -> None:
+    """目次と思い出す道具を出したときも、エンジンの実装事情を世界の住人に見せない。"""
+    prompt = _build_prompt()
 
     for vocabulary in BANNED_ENGINE_VOCABULARY:
         assert vocabulary not in prompt

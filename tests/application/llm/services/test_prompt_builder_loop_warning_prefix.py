@@ -38,8 +38,9 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
 )
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
+from ai_rpg_world.being.application.conduct_text import conduct_text
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
-from ai_rpg_world.being.contract import Description, Orientation
+from ai_rpg_world.being.contract import Description, OfferedBeingTools, Orientation
 from ai_rpg_world.being.domain.working_memory import MemoryTexts, WorkingMemory
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -62,7 +63,7 @@ def _make_core() -> PromptBuilderCoreServices:
         available_tools_provider=MagicMock(spec=IAvailableToolsProvider),
         working_memory=MagicMock(spec=CurrentWorkingMemory),
         orientation_provider=lambda player_id: Orientation([Description(heading="ペルソナ", text="旅人")]),
-        conduct_text_provider=lambda: "【行動ルール】",
+        being_tools_provider=OfferedBeingTools,
     )
 
 
@@ -148,8 +149,8 @@ def test_prompt_builder_uses_only_current_state_source() -> None:
 
     core = _make_core()
     core.observation_buffer.drain.return_value = []
-    core.working_memory.of.side_effect = lambda being_id, **kwargs: WorkingMemory.compose(
-        memory=MemoryTexts(), **kwargs
+    core.working_memory.of.side_effect = lambda being_id, being_tools, **kwargs: WorkingMemory.compose(
+        conduct=conduct_text(being_tools), memory=MemoryTexts(), **kwargs
     )
     builder = DefaultPromptBuilder(core, ui_context_builder=SpotGraphUiContextBuilder())
 
