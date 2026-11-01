@@ -23,7 +23,7 @@ def test_system_prompt_does_not_advertise_memory_tools() -> None:
     assert "facts" not in prompt
     assert "laws" not in prompt
     assert "memo_add" not in prompt
-    assert "【行動ルール】" in prompt
+    assert "【行動のしかた】" in prompt
 
 
 def test_default_tools_register_no_memory_tools() -> None:

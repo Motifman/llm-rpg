@@ -33,7 +33,7 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
-from ai_rpg_world.being.contract import Orientation
+from ai_rpg_world.being.contract import OfferedBeingTools, Orientation
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
@@ -69,8 +69,8 @@ class PromptBuilderCoreServices:
     working_memory: CurrentWorkingMemory
     # 環境が毎ターン渡し直す、入るときの案内。プレイヤーが環境に居なければ None。
     orientation_provider: Callable[[PlayerId], Orientation | None]
-    # システムプロンプトの、案内の後に置く作法と環境の決まりの文。
-    conduct_text_provider: Callable[[], str]
+    # 環境が Being に出している、Being 自身のための道具。Being は作法をここから作る。
+    being_tools_provider: Callable[[], OfferedBeingTools]
 
 
 @dataclass(frozen=True)

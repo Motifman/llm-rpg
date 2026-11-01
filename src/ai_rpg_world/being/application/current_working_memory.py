@@ -5,11 +5,12 @@ from __future__ import annotations
 from typing import Protocol
 
 from ai_rpg_world.being.application.backstory_text import backstory_text
+from ai_rpg_world.being.application.conduct_text import conduct_text
 from ai_rpg_world.being.application.episode_index_text import format_episode_index
 from ai_rpg_world.being.application.known_people import render_known_people
 from ai_rpg_world.being.application.memo_book_text import format_memo_book
 from ai_rpg_world.being.application.recent_events_text import recent_events_text
-from ai_rpg_world.being.contract import Orientation, Scene
+from ai_rpg_world.being.contract import OfferedBeingTools, Orientation, Scene
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_id import BeingId
@@ -55,7 +56,7 @@ class CurrentWorkingMemory:
         being_id: BeingId,
         *,
         orientation: Orientation,
-        conduct: str,
+        being_tools: OfferedBeingTools,
         imposed_goal: str | None,
         scene: Scene,
         closing: Closing,
@@ -74,7 +75,7 @@ class CurrentWorkingMemory:
         )
         return WorkingMemory.compose(
             orientation=orientation,
-            conduct=conduct,
+            conduct=conduct_text(being_tools),
             imposed_goal=imposed_goal,
             memory=memory,
             scene=scene,

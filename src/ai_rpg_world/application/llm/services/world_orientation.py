@@ -16,7 +16,7 @@ def world_orientation(
     world_title: str,
     intro: str,
     briefing_sections: Sequence[str] = (),
-    action_limit_text: str | None = None,
+    rules: Description | None = None,
 ) -> Orientation:
     """見出しの行で始まる段落は 1 つの説明文にし、見出しの無い段落は直前の説明文に続ける。
 
@@ -24,20 +24,21 @@ def world_orientation(
     (【このゲームについて】など) も、今のプロンプトでは見出しとして読まれている。
     人柄は、役職ごとの人物像を後ろに足したものも含めて 1 つにする。
 
-    行動の制限は見出しを持たず、今のプロンプトでは最後の段落の末尾に付いているので、
-    最後の説明文の文に続ける (環境の決まりに分けるのは #1630 の 4 本目)。
+    世界の前提、見取り図、``rules`` (この世界の決まり)、人柄の順に並べる。人柄はプレイヤーごとに
+    違うので最後に置き、全員に同じ文をシステムプロンプトの先頭で共有させる (キャッシュに載る)。
     """
     premise = f"【世界の前提】\n- 舞台のタイトル: {world_title}\n- 概要: {intro}"
     paragraphs = _PARAGRAPH_BREAK.join((premise, *briefing_sections)).split(_PARAGRAPH_BREAK)
-    descriptions = [Description(heading=PERSONA_HEADING[1:-1], text=_persona_text(persona_block))]
+    descriptions: list[Description] = []
     for paragraph in paragraphs:
         heading, _, text = paragraph.partition("\n")
         if heading.startswith("【") and heading.endswith("】") and text.strip():
             descriptions.append(Description(heading=heading[1:-1], text=text))
         else:
             descriptions[-1] = _continued(descriptions[-1], _PARAGRAPH_BREAK + paragraph)
-    if action_limit_text is not None:
-        descriptions[-1] = _continued(descriptions[-1], f"\n- 行動の制限: {action_limit_text}")
+    if rules is not None:
+        descriptions.append(rules)
+    descriptions.append(Description(heading=PERSONA_HEADING[1:-1], text=_persona_text(persona_block)))
     return Orientation(descriptions)
 
 

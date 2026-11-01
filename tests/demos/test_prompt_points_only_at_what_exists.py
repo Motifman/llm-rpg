@@ -29,6 +29,9 @@
   speak の説明が他のツールの say_inline を勧めるように、別のツールの引数を
   指す文が正しく存在するため
 
+シナリオが書いた目的の文 (【現在の目的】) は、指す文として見ない。目的はシステムプロンプトの
+末尾に置くが (D1630-4)、ユーザー文にあったときも見ていなかった。『』は台詞や呼び名の引用にも使う。
+
 ## 限界
 
 「」で囲んだ欄の名前 (「所持アイテム」など) は見ていない。「」は台詞や例の
@@ -83,6 +86,7 @@ _QUOTES_THAT_ARE_NOT_PLACES = {
     '"キー名" が要る': 'interact の操作候補に付く表示 (`"code" が要る`) の形',
 }
 
+_GOAL_SECTION = "\n\n【現在の目的】\n"
 _HEADING_LINE = re.compile(r"^【([^】]+)】", re.MULTILINE)
 _FIELD_LABEL_LINE = re.compile(r"^\s*(?:- )?([^\s:：【「『\"][^:：\n]*)[:：]", re.MULTILINE)
 _HEADING_REF = re.compile(r"【([^】]+)】")
@@ -151,8 +155,12 @@ def captured(request) -> dict[str, Any]:
     wiring.run_phase_a(PlayerId(1))
     system = "\n".join(m["content"] for m in client.messages if m["role"] == "system")
     user = "\n".join(m["content"] for m in client.messages if m["role"] == "user")
+    without_goal, sep, goal = system.rpartition(_GOAL_SECTION)
+    assert sep, "システムプロンプトの末尾に【現在の目的】が無い"
+    assert not _HEADING_LINE.search(goal), "【現在の目的】の後ろに節がある。外す範囲が目的の本文より広い"
     return {
         "system": system,
+        "system_without_goal": without_goal,
         "user": user,
         "tools": client.tools,
         "descriptions": _descriptions(client.tools),
@@ -178,7 +186,7 @@ class TestPromptPointsOnlyAtWhatExists:
     def test_every_section_written_in_brackets_is_a_real_heading(self, captured) -> None:
         """system prompt とツールの説明が【】で指す節は、system prompt か続く文面に、その見出しで始まる行として在る。"""
         headings = _headings(captured)
-        referring_texts = [captured["system"], *captured["descriptions"]]
+        referring_texts = [captured["system_without_goal"], *captured["descriptions"]]
 
         referred = {name for text in referring_texts for name in _HEADING_REF.findall(text)}
         missing = referred - headings
@@ -190,7 +198,7 @@ class TestPromptPointsOnlyAtWhatExists:
     def test_every_quoted_name_is_a_heading_or_field_in_the_prompt(self, captured) -> None:
         """system prompt とツールの説明が『』で囲む名前は、プロンプトに見出しか欄の名前として在るか、節を指していないと宣言したものである。"""
         places = _headings(captured) | {label.strip() for label in _FIELD_LABEL_LINE.findall(captured["user"])}
-        referring_texts = [captured["system"], *captured["descriptions"]]
+        referring_texts = [captured["system_without_goal"], *captured["descriptions"]]
 
         quoted = {name for text in referring_texts for name in _QUOTED.findall(text)}
         missing = quoted - places - set(_QUOTES_THAT_ARE_NOT_PLACES)
@@ -203,7 +211,7 @@ class TestPromptPointsOnlyAtWhatExists:
         """system prompt とツールの説明が引数名を書いたら、このターンに渡したツールのどれかがその引数を受け取る。"""
         offered = _property_names([tool["function"]["parameters"] for tool in captured["tools"]])
         known = _argument_names_the_code_knows()
-        referring_texts = [captured["system"], *captured["descriptions"]]
+        referring_texts = [captured["system_without_goal"], *captured["descriptions"]]
 
         mentioned = {word for text in referring_texts for word in _IDENTIFIER.findall(text) if word in known}
         not_offered = mentioned - offered

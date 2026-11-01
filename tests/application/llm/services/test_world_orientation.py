@@ -8,22 +8,22 @@ from ai_rpg_world.being.contract import Description
 
 
 class TestWorldOrientation:
-    """人柄・世界の前提・見取り図を、見出しの行で始まる段落ごとの説明文に分けることを保証する。"""
+    """世界の前提・見取り図を見出しの行で始まる段落ごとの説明文に分け、人柄を最後に置くことを保証する。"""
 
-    def test_persona_comes_first_and_premise_holds_title_and_intro(self) -> None:
-        """人柄が先頭に、舞台のタイトルと概要が【世界の前提】の文になる。"""
+    def test_premise_holds_title_and_intro_and_persona_comes_last(self) -> None:
+        """舞台のタイトルと概要が先頭の【世界の前提】の文になり、人柄は最後に付く。"""
         orientation = world_orientation(persona_block="あなたはハル。", world_title="廃坑の山村", intro="雪の山村。")
 
         assert orientation.descriptions == (
-            Description(heading="ペルソナ", text="あなたはハル。"),
             Description(heading="世界の前提", text="- 舞台のタイトル: 廃坑の山村\n- 概要: 雪の山村。"),
+            Description(heading="ペルソナ", text="あなたはハル。"),
         )
 
     def test_persona_already_headed_loses_only_the_heading(self) -> None:
         """見出しの行から始まる構造化された人物像は、見出しを外した文になる。"""
         orientation = world_orientation(persona_block="【ペルソナ】\n- 名前: ハル", world_title="t", intro="i")
 
-        assert orientation.descriptions[0] == Description(heading="ペルソナ", text="- 名前: ハル")
+        assert orientation.descriptions[-1] == Description(heading="ペルソナ", text="- 名前: ハル")
 
     def test_headed_paragraphs_become_their_own_descriptions(self) -> None:
         """概要と見取り図のうち、見出しの行で始まる段落はそれぞれ 1 つの説明文になる。"""
@@ -35,10 +35,10 @@ class TestWorldOrientation:
         )
 
         assert [d.heading for d in orientation.descriptions] == [
-            "ペルソナ",
             "世界の前提",
             "このゲームについて",
             "この場所の造り",
+            "ペルソナ",
         ]
 
     def test_paragraph_without_heading_continues_the_previous_description(self) -> None:
@@ -50,7 +50,7 @@ class TestWorldOrientation:
             briefing_sections=("参加者は 8 人。",),
         )
 
-        assert orientation.descriptions[-1] == Description(
+        assert orientation.descriptions[-2] == Description(
             heading="このゲームについて", text="秘匿役職ゲーム。\n\n参加者は 8 人。"
         )
 
@@ -58,31 +58,35 @@ class TestWorldOrientation:
         """見出しの行だけで文の無い段落は、説明文にせず直前の説明文に続ける。"""
         orientation = world_orientation(persona_block="p", world_title="t", intro="吹雪。\n\n【このゲームについて】")
 
-        assert orientation.descriptions[-1] == Description(
+        assert orientation.descriptions[0] == Description(
             heading="世界の前提", text="- 舞台のタイトル: t\n- 概要: 吹雪。\n\n【このゲームについて】"
         )
 
-    def test_action_limit_is_appended_to_the_last_description(self) -> None:
-        """行動の制限は見出しを持たないので、最後の説明文の末尾に 1 行で付く。無ければ付かない。"""
-        limited = world_orientation(
+    def test_rules_follow_the_briefing_without_touching_it(self) -> None:
+        """この世界の決まりは見取り図と人柄のあいだに別の説明文として付き、見取り図の文は変えない。無ければ付かない。"""
+        rules = Description(heading="この世界の決まり", text="- 行動の制限: 限りがある")
+        with_rules = world_orientation(
             persona_block="p",
             world_title="t",
             intro="i",
             briefing_sections=("【決まり】\n- 棄権も 1 票",),
-            action_limit_text="限りがある",
+            rules=rules,
         )
-        unlimited = world_orientation(persona_block="p", world_title="t", intro="i")
+        without_rules = world_orientation(
+            persona_block="p", world_title="t", intro="i", briefing_sections=("【決まり】\n- 棄権も 1 票",)
+        )
 
-        assert limited.descriptions[-1].text == "- 棄権も 1 票\n- 行動の制限: 限りがある"
-        assert "行動の制限" not in unlimited.descriptions[-1].text
+        persona = Description(heading="ペルソナ", text="p")
+        assert with_rules.descriptions[-3:] == (Description(heading="決まり", text="- 棄権も 1 票"), rules, persona)
+        assert without_rules.descriptions[-2:] == (Description(heading="決まり", text="- 棄権も 1 票"), persona)
 
     def test_text_reads_back_as_the_original_paragraphs(self) -> None:
-        """説明文を見出しの行と空行で文に戻すと、人柄と世界の前提の元の文に一致する。"""
+        """説明文を見出しの行と空行で文に戻すと、世界の前提の元の文の後ろに人柄が付いた文に一致する。"""
         intro = "吹雪。\n\n\n【このゲームについて】\n秘匿役職ゲーム。"
         orientation = world_orientation(
             persona_block="p", world_title="t", intro=intro, briefing_sections=("参加者は 8 人。",)
         )
 
         assert descriptions_text(orientation.descriptions) == (
-            f"【ペルソナ】\np\n\n【世界の前提】\n- 舞台のタイトル: t\n- 概要: {intro}\n\n参加者は 8 人。"
+            f"【世界の前提】\n- 舞台のタイトル: t\n- 概要: {intro}\n\n参加者は 8 人。\n\n【ペルソナ】\np"
         )

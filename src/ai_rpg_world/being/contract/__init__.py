@@ -19,6 +19,7 @@ from ai_rpg_world.being.contract.observation import (
     Unknown,
     UnknownValue,
 )
+from ai_rpg_world.being.contract.offered_being_tools import OfferedBeingTools
 
 __all__ = [
     "KNOWN_IF_POSSIBLE_FIELDS",
@@ -32,6 +33,7 @@ __all__ = [
     "Introduction",
     "JsonValue",
     "Observation",
+    "OfferedBeingTools",
     "ObservedTime",
     "OccurrenceOrder",
     "Orientation",

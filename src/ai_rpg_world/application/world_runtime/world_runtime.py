@@ -119,7 +119,9 @@ from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import 
 from ai_rpg_world.application.llm.services.tool_catalog.cross_tool_mentions import (
     without_absent_tool_mentions,
 )
+from ai_rpg_world.application.llm.services.tool_catalog.inner_thought import INNER_THOUGHT_FIELD_NAME
 from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import (
+    MEMO_FIELD_NAME,
     with_memo_schema,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.memory import (
@@ -145,7 +147,7 @@ from ai_rpg_world.application.llm.services.world_llm_prompt import (
     build_world_system_prompt_for,
     limited_action_and_time_pressure_text,
     safe_world_intro_text,
-    world_conduct_text,
+    world_rules,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
     DEFAULT_FAILURE_STREAK_ABORT,
@@ -313,9 +315,10 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
+from ai_rpg_world.being.application.conduct_text import conduct_text
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.working_memory_text import system_prompt_text
-from ai_rpg_world.being.contract import Description, Orientation, Scene
+from ai_rpg_world.being.contract import Description, OfferedBeingTools, Orientation, Scene
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.memo_book import MemoBookRepository
@@ -608,7 +611,7 @@ class WorldRuntime:
     # Being に渡す、入るときの案内 (#1630)。システムプロンプトはここから組む。
     _orientations_by_player_id: dict[int, Orientation] = field(default_factory=dict, repr=False)
     # システムプロンプトのうち、案内の後に置く作法と環境の決まり。全員に同じ。
-    _conduct_text: str = field(default="", repr=False)
+    _offered_being_tools: OfferedBeingTools = field(default_factory=OfferedBeingTools, repr=False)
     # create_world_runtime が構築後に差し込む配線。型は circular import 回避で
     # Any。宣言が無いと、代入側の typo を静かに受け入れてしまう。
     _use_item_command_scope_factory: Any | None = field(default=None, repr=False)
@@ -1182,9 +1185,9 @@ class WorldRuntime:
         names = [d.name for d in self.get_tool_definitions(player_id=player_id)]
         return ", ".join(names)
 
-    def conduct_text(self) -> str:
-        """システムプロンプトのうち、案内の後に置く作法と環境の決まり (#1630)。"""
-        return self._conduct_text
+    def offered_being_tools(self) -> OfferedBeingTools:
+        """この世界が Being に出している、Being 自身のための道具 (#1630)。Being は作法をここから作る。"""
+        return self._offered_being_tools
 
     def orientation_for(self, player_id: PlayerId) -> Orientation | None:
         """プレイヤーを動かす Being が、この世界に入るときに受け取る案内。シナリオに居なければ None。"""
@@ -1691,13 +1694,25 @@ class WorldRuntime:
             )
         ]
 
-    def _episode_index_parts_named_in_system_prompt(self) -> tuple[bool, bool]:
-        """システムプロンプトが指してよい (【思い出せる出来事】, ``episode_recall``) を返す (#1623)。
+    def _being_tools_offered_now(self) -> OfferedBeingTools:
+        """実際に出すツールの一覧から、Being の道具を拾う (#1616、#1623)。作法は出している道具だけを指す。"""
+        definitions = self.get_tool_definitions(for_every_player=True)
+        arguments = {name for definition in definitions for name in definition.parameters.get("properties", {})}
+        return OfferedBeingTools(
+            inner_thought=INNER_THOUGHT_FIELD_NAME if INNER_THOUGHT_FIELD_NAME in arguments else None,
+            memo=MEMO_FIELD_NAME if MEMO_FIELD_NAME in arguments else None,
+            episode_recall=(
+                TOOL_NAME_EPISODE_RECALL if any(d.name == TOOL_NAME_EPISODE_RECALL for d in definitions) else None
+            ),
+            episode_index_shown=self._episode_index_enabled(),
+        )
 
-        ツールは #1616 と同じく、実際に出すツールの一覧から決める。
-        """
-        offered = {definition.name for definition in self.get_tool_definitions(for_every_player=True)}
-        return self._episode_index_enabled(), TOOL_NAME_EPISODE_RECALL in offered
+    def _say_inline_offered(self) -> bool:
+        """出すツールのどれかが ``say_inline`` を持つか (#1940)。持たない世界では一言の書き方を説明しない。"""
+        return any(
+            "say_inline" in definition.parameters.get("properties", {})
+            for definition in self.get_tool_definitions(for_every_player=True)
+        )
 
     def _episode_index_enabled(self) -> bool:
         # create_world_runtime で組んだ runtime には、目次と書き起こしが常に入る (#1631)。
@@ -2128,7 +2143,7 @@ class WorldRuntime:
             available_tools_provider=WorldAvailableToolsProvider(),
             working_memory=self._current_working_memory(),
             orientation_provider=self.orientation_for,
-            conduct_text_provider=self.conduct_text,
+            being_tools_provider=self.offered_being_tools,
         )
         # objective_text は scenario.metadata.llm_objective_text を 1 度だけ解決する。
         # 空のとき ValueError が立つので、prompt builder 構築時点で fail-fast。
@@ -4129,24 +4144,31 @@ def create_world_runtime(
     def _world_system_prompt(
         persona: str,
         *,
-        episode_index_shown: bool,
-        episode_recall_offered: bool,
+        being_tools: OfferedBeingTools,
+        say_inline_offered: bool,
     ) -> str:
         return build_world_system_prompt_for(
-            _orientation(persona),
-            has_goal=_has_goal,
-            episode_index_shown=episode_index_shown,
-            episode_recall_offered=episode_recall_offered,
+            _orientation(persona, say_inline_offered=say_inline_offered),
+            being_tools=being_tools,
+            # シナリオに居ないプレイヤーに返す文。目的の解き方 (_resolve_player_objective_text) も、
+            # 居ないプレイヤーには共通の目的文を返す。
+            imposed_goal=scenario.metadata.llm_objective_text,
         )
 
-    def _orientation(persona: str) -> Orientation:
+    def _orientation(persona: str, *, say_inline_offered: bool) -> Orientation:
         return world_orientation(
             persona_block=persona,
             world_title=scenario.metadata.title,
             intro=safe_intro,
             briefing_sections=briefing,
-            action_limit_text=(
-                limited_action_and_time_pressure_text(has_goal=_has_goal) if scenario.metadata.limits_actions else None
+            rules=world_rules(
+                has_goal=_has_goal,
+                action_limit_text=(
+                    limited_action_and_time_pressure_text(has_goal=_has_goal)
+                    if scenario.metadata.limits_actions
+                    else None
+                ),
+                say_inline_offered=say_inline_offered,
             ),
         )
 
@@ -6786,24 +6808,30 @@ def create_world_runtime(
     runtime._validate_disabled_tool_names()
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()
-    episode_index_shown, episode_recall_offered = runtime._episode_index_parts_named_in_system_prompt()
+    runtime._offered_being_tools = runtime._being_tools_offered_now()
+    say_inline_offered = runtime._say_inline_offered()
     runtime._world_llm_system_prompt = _world_system_prompt(
         persona_block,
-        episode_index_shown=episode_index_shown,
-        episode_recall_offered=episode_recall_offered,
-    )
-    runtime._conduct_text = world_conduct_text(
-        has_goal=_has_goal,
-        episode_index_shown=episode_index_shown,
-        episode_recall_offered=episode_recall_offered,
+        being_tools=runtime._offered_being_tools,
+        say_inline_offered=say_inline_offered,
     )
     runtime._orientations_by_player_id = {
-        player_id: _orientation(persona) for player_id, persona in personas_by_player_id.items()
+        player_id: _orientation(persona, say_inline_offered=say_inline_offered)
+        for player_id, persona in personas_by_player_id.items()
     }
     # 1 ターンのプロンプトと同じ組み方 (作業記憶のシステムプロンプトの区画) で作る (design_decisions D1630-3)。
+    # 目的の文は 1 ターンのプロンプトと同じ解き方をする。共通の目的文が無いときに止めるのは、
+    # プロンプトを組む部品を作るとき (_resolve_scenario_llm_objective_text) に任せる。
     runtime._world_llm_system_prompts_by_player_id = {
         player_id: system_prompt_text(
-            WorkingMemory(system=WorkingMemory.system_sections(orientation, runtime._conduct_text), message=())
+            WorkingMemory(
+                system=WorkingMemory.system_sections(
+                    orientation,
+                    conduct_text(runtime._offered_being_tools),
+                    runtime._resolve_player_objective_text(PlayerId(player_id), scenario.metadata.llm_objective_text),
+                ),
+                message=(),
+            )
         )
         for player_id, orientation in runtime._orientations_by_player_id.items()
     }

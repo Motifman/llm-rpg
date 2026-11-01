@@ -98,26 +98,25 @@ class TestEachToolPointsAtTheSharedRules:
     """引数の説明は、要点を残したうえで共有の節を指す。"""
 
     def test_the_pointer_is_there(self) -> None:
-        """どちらの説明も、共有の節を名指しする。
+        """どちらの説明も、書き方を置いた節 (独白は【行動のしかた】、一言は【この世界の決まり】) を名指しする。
 
         **純粋な指し示しにはしない。** 参照が効かなかったときのために、
         「何を書く引数か」の一文は残す (下の検査)。
         """
-        for text in (INNER_THOUGHT_DEFAULT_DESCRIPTION, SAY_INLINE_DEFAULT_DESCRIPTION):
-            assert "【独白と一言の書き方】" in text
+        assert "【行動のしかた】" in INNER_THOUGHT_DEFAULT_DESCRIPTION
+        assert "【この世界の決まり】" in SAY_INLINE_DEFAULT_DESCRIPTION
 
     def test_the_gist_survives_without_following_the_pointer(self) -> None:
         """参照を辿らなくても、何を書く引数かは分かる。
 
         指し示しだけにすると、**参照が効かないモデルには何も残らない**。
         """
-        # **参照そのものを要点と数えない。** 「書き方は【独白と一言の書き方】」に
-        # 「独白」「一言」が含まれるので、その語だけを見ると**指し示しだけに
-        # しても通る** (変異で実際に生き残った)。参照を取り除いた残りを見る。
-        pointer = "書き方は【独白と一言の書き方】。"
+        # **参照そのものを要点と数えない。** 前の参照先の見出し【独白と一言の書き方】には
+        # 「独白」「一言」が含まれ、その語だけを見ると**指し示しだけに
+        # しても通った** (変異で実際に生き残った)。参照を取り除いた残りを見る。
         gist = {
-            "独白": INNER_THOUGHT_DEFAULT_DESCRIPTION.replace(pointer, ""),
-            "一言": SAY_INLINE_DEFAULT_DESCRIPTION.replace(pointer, ""),
+            "独白": INNER_THOUGHT_DEFAULT_DESCRIPTION.replace("書き方は【行動のしかた】。", ""),
+            "一言": SAY_INLINE_DEFAULT_DESCRIPTION.replace("書き方は【この世界の決まり】。", ""),
         }
         for word, text in gist.items():
             assert word in text, text
