@@ -167,6 +167,11 @@ class _CommandContextEventPublisher:
         self._context.collect_all(events)
 
 
+# 本人への断りの文は使える額と取引に出している額を含む。所持金は本人だけが知ることなので、
+# 周りには額を出さない文を見せる。
+_GOLD_SHORTAGE_SEEN_BY_WITNESSES = "納めるだけの持ち合わせがなかった。"
+
+
 def _hidden_precondition_failed(interaction: Any, actor_state: Any) -> bool:
     """秘匿すべき前提条件で弾かれたか (役割など)。
 
@@ -1279,19 +1284,18 @@ class SpotInteractionApplicationService:
             # 引数が無いのは呼び方の誤りで、目撃者に見せる出来事が無い (D1607)。
             if isinstance(exc, InteractionParameterMissingException):
                 raise
-            if emit_failure_observation:
-                self._maybe_emit_failure_observation(
-                    interior,
-                    object_id,
-                    action_name,
-                    entity_id,
-                    spot_id,
-                    graph,
-                    failure_reason=str(exc) if exc.args else "",
-                    current_tick=current_tick,
-                )
-            elif deferred_failure_observation is not None:
-                deferred_failure_observation(str(exc) if exc.args else "")
+            self._show_failure_to_witnesses(
+                str(exc) if exc.args else "",
+                interior=interior,
+                object_id=object_id,
+                action_name=action_name,
+                entity_id=entity_id,
+                spot_id=spot_id,
+                graph=graph,
+                current_tick=current_tick,
+                emit_failure_observation=emit_failure_observation,
+                deferred_failure_observation=deferred_failure_observation,
+            )
             raise
 
         room_occupancy_messages = self._room_occupancy_messages(result)
@@ -1301,7 +1305,22 @@ class SpotInteractionApplicationService:
             return meeting_result
 
         self._require_removable_items(inv, result.item_spec_ids_to_remove, player_id, item_repository)
-        self._require_payable_gold(player_id, result, player_status_repository)
+        try:
+            self._require_payable_gold(player_id, result, player_status_repository)
+        except InteractionNotAllowedException:
+            self._show_failure_to_witnesses(
+                _GOLD_SHORTAGE_SEEN_BY_WITNESSES,
+                interior=interior,
+                object_id=object_id,
+                action_name=action_name,
+                entity_id=entity_id,
+                spot_id=spot_id,
+                graph=graph,
+                current_tick=current_tick,
+                emit_failure_observation=emit_failure_observation,
+                deferred_failure_observation=deferred_failure_observation,
+            )
+            raise
 
         self._world_flag_state.replace_from_interaction(
             result.new_flags,
@@ -2032,6 +2051,34 @@ class SpotInteractionApplicationService:
     def _next_connection_id(graph: Any) -> ConnectionId:
         """グラフ内の既存接続IDの最大値+1を返す。"""
         return ConnectionId.create(graph.max_connection_id_value() + 1)
+
+    def _show_failure_to_witnesses(
+        self,
+        failure_reason: str,
+        *,
+        interior: SpotInterior,
+        object_id: SpotObjectId,
+        action_name: str,
+        entity_id: EntityId,
+        spot_id: SpotId,
+        graph: SpotGraphAggregate,
+        current_tick: WorldTick | None,
+        emit_failure_observation: bool,
+        deferred_failure_observation: Callable[[str], None] | None,
+    ) -> None:
+        if emit_failure_observation:
+            self._maybe_emit_failure_observation(
+                interior,
+                object_id,
+                action_name,
+                entity_id,
+                spot_id,
+                graph,
+                failure_reason=failure_reason,
+                current_tick=current_tick,
+            )
+        elif deferred_failure_observation is not None:
+            deferred_failure_observation(failure_reason)
 
     def _maybe_emit_failure_observation(
         self,
