@@ -62,6 +62,15 @@ def _build_player(
     return status
 
 
+def _graph_placing_players_from(status_repo: MagicMock) -> MagicMock:
+    """各プレイヤーを、_build_player に渡した spot_id に置いたグラフの代役を返す。"""
+    graph = MagicMock()
+    graph.get_entity_spot.side_effect = lambda entity_id: (
+        status_repo.find_by_id(PlayerId(entity_id.value)).current_spot_id
+    )
+    return MagicMock(find_graph=MagicMock(return_value=graph))
+
+
 def _build_executor(
     *,
     runtime: SimpleNamespace | None = None,
@@ -90,6 +99,7 @@ def _build_executor(
         item_repository=item_repo,
         event_publisher=publisher,
         player_status_repository=status_repo,
+        spot_graph_repository=_graph_placing_players_from(status_repo),
         runtime=runtime,
     )
     return exec, status_repo, publisher
@@ -271,6 +281,20 @@ class TestTendToPlayerFailures:
             player_status_repository=None,  # 未注入
         )
         result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
+        assert result.success is False
+        assert result.error_code == "UNSUPPORTED_TOOL"
+
+    def test_spot_graph_repository_uninjected_unsupported_tool(self) -> None:
+        """グラフの repository が未注入なら、同じ場所にいないとは言わず UNSUPPORTED_TOOL を返す。"""
+        exec, status_repo, _ = _build_executor()
+        exec._spot_graph_repository = None
+        status_repo.find_by_id.side_effect = {
+            PlayerId(1): _build_player(player_id=1, is_down=False, spot_id=10),
+            PlayerId(2): _build_player(player_id=2, is_down=True, spot_id=10, hp_current=0),
+        }.get
+
+        result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
+
         assert result.success is False
         assert result.error_code == "UNSUPPORTED_TOOL"
 

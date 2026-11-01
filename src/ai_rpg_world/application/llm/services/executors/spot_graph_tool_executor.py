@@ -111,6 +111,7 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    EntityNotInGraphException,
     InteractionActorPlaneNotAllowedException,
     InteractionNotAllowedException,
     InteractionNotFoundException,
@@ -2984,6 +2985,7 @@ class SpotGraphToolExecutor:
                     command_executor = copy.copy(self)
                     command_executor._tend_to_player_command_scope_factory = None
                     command_executor._player_status_repository = context.repositories.player_statuses
+                    command_executor._spot_graph_repository = context.repositories.spot_graph
                     command_executor._event_publisher = CommandContextEventPublisher(context)
                     result = command_executor._execute_tend_to_player_in_scope(
                         player_id,
@@ -3013,7 +3015,7 @@ class SpotGraphToolExecutor:
     ) -> LlmCommandResultDto:
         """scope由来status repositoryとevent収集口だけで介抱する。"""
 
-        if self._player_status_repository is None:
+        if self._player_status_repository is None or self._spot_graph_repository is None:
             return LlmCommandResultDto(
                 success=False,
                 message="tend_to_player は現在のワイヤリングでは未対応です。",
@@ -3063,7 +3065,7 @@ class SpotGraphToolExecutor:
                 actor_status=actor,
                 target_status=target,
                 target_outcome=outcome,
-                same_spot=(actor.current_spot_id is not None and actor.current_spot_id == target.current_spot_id),
+                same_spot=self._is_beside_body_to_tend(attacker_id, target_id),
                 requirement=TargetRequirement.INCAPACITATED,
                 target_display_name=display_name,
             )
@@ -3108,3 +3110,20 @@ class SpotGraphToolExecutor:
             )
         except Exception as e:
             return exception_result(e)
+
+    def _is_beside_body_to_tend(self, actor_id: PlayerId, target_id: PlayerId) -> bool:
+        # PlayerStatusAggregate.current_spot_id は出現した場所のまま移動で変わらないので使わない。
+        assert self._spot_graph_repository is not None
+        graph = self._spot_graph_repository.find_graph()
+        try:
+            actor_spot = graph.get_entity_spot(EntityId.create(int(actor_id)))
+        except EntityNotInGraphException:
+            return False
+        registry = getattr(self._runtime, "_fallen_body_registry", None)
+        body = registry.find(target_id) if registry is not None else None
+        if body is not None:
+            return bool(actor_spot == body.spot_id)
+        try:
+            return actor_spot == graph.get_entity_spot(EntityId.create(int(target_id)))
+        except EntityNotInGraphException:
+            return False
