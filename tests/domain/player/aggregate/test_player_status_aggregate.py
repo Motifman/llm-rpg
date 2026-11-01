@@ -197,6 +197,18 @@ class TestPlayerStatusAggregate:
         assert events[0].aggregate_id == aggregate.player_id
         assert events[0].killer_player_id == killer_id
 
+    def test_apply_damage_to_already_downed_player_adds_no_second_downed_event(self):
+        """倒れている人にさらにダメージを当てても、HP は 0 のまま、PlayerDownedEvent は最初の 1 件だけ積まれる。"""
+        aggregate = create_test_status_aggregate(hp=50)
+        aggregate.apply_damage(50)
+        aggregate.clear_events()
+
+        aggregate.apply_damage(10)
+
+        assert aggregate.hp.value == 0
+        assert aggregate.is_down is True
+        assert aggregate.get_events() == []
+
     def test_apply_damage_over_kill(self):
         """ダメージがHPを超える場合、HPが0になること"""
         aggregate = create_test_status_aggregate(hp=30)
