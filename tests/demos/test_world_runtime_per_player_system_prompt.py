@@ -7,11 +7,14 @@
 
 from pathlib import Path
 
+import pytest
+
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FORBIDDEN_LIBRARY = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 _MINE_VILLAGE = _REPO_ROOT / "data" / "scenarios" / "mine_village_v1.json"
+_STATION_DRILL = _REPO_ROOT / "data" / "scenarios" / "station_drill.json"
 
 
 class TestWorldRuntimePerPlayerSystemPrompt:
@@ -58,6 +61,16 @@ class TestWorldRuntimePerPlayerSystemPrompt:
             assert system == runtime.build_system_prompt(pid)
             assert system.endswith(f"\n\n【現在の目的】\n{objective_by_player_id[pid.value]}")
         assert len(set(objective_by_player_id.values())) > 1, "目的が全員同じだと、取り違えても通る"
+
+    @pytest.mark.parametrize("scenario", [_MINE_VILLAGE, _STATION_DRILL])
+    def test_every_player_shares_the_system_prompt_up_to_the_persona(self, scenario: Path) -> None:
+        """人柄とプレイヤーごとの目的より前のシステムプロンプトは、全員で一字一句同じ。先頭が共有されてキャッシュに載る (D1630-5)。"""
+        runtime = create_world_runtime(scenario)
+
+        heads = {runtime.build_system_prompt(pid).partition("\n\n【ペルソナ】\n")[0] for pid in runtime.get_player_ids()}
+
+        assert len(heads) == 1
+        assert "【この世界の決まり】" in heads.pop()
 
     def test_known_people_of_each_player_do_not_contain_self(self) -> None:
         """各プレイヤーの【知っている人】には相手の名前が載り、自分の名前は他者として載らない (自呼び回帰 fix の核心)。

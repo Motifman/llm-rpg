@@ -5,6 +5,7 @@
 ``with_memory``、``after_power_cut``、``every_scenario_sha256.json`` は ``24ec78dab`` (どちらも切り替える前)。
 #1630 の 4 本目で、目的をシステムプロンプトへ移し、作法と環境の決まりを分けたあとの文に書き直した
 (design_decisions D1630-4)。動かした文のほかは、書き直す前の資料と一字一句同じ。
+そのあと、【ペルソナ】を案内の末尾へ移したあとの文に書き直した (D1630-5)。区画の位置のほかは同じ。
 """
 
 from __future__ import annotations
