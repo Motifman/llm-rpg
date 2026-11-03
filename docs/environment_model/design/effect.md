@@ -10,6 +10,8 @@ class Effect(Protocol):
 class WorldAggregates(Protocol):
     """効果が書き換える集約を取り出す口。"""
     def flags(self) -> WorldFlags: ...
+    def passages(self) -> PassageStates: ...
+    def atmospheres(self) -> SpotAtmospheres: ...
     def whereabouts(self) -> Whereabouts: ...
     def vitals(self, person: PersonId) -> PersonVitals: ...
     def outcomes(self) -> PersonOutcomes: ...
@@ -64,6 +66,10 @@ AddToObjectCountEffect(key: ObjectStateKeyDeclaration, amount: int)
 TakeFromObjectStockEffect(key: ObjectStateKeyDeclaration, amount: int)
 WriteTextEffect(key: ObjectStateKeyDeclaration, body_argument: ArgumentName)
 RevealObjectEffect(obj: ObjectDeclaration)
+ChangePassageStateEffect(passage: PassageDeclaration, state: PassageStateName)
+OpenPassageEffect(passage: PassageDeclaration)
+ClosePassageOffEffect(passage: PassageDeclaration)
+ChangeAtmosphereEffect(spot: SpotDeclaration, change: AtmosphereChange)
 GiveItemEffect(who: Subject, item_spec: ItemSpecDeclaration, count: int)
 GiveFromLootTableEffect(who: Subject, table: LootTableDeclaration)
 TakeItemEffect(who: Subject, item_spec: ItemSpecDeclaration, count: int)
