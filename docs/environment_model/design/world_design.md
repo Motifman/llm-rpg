@@ -59,6 +59,8 @@ class ItemSpecDeclaration:
     description: str
     on_use: Effect | NotUsable
     interactions: tuple[InteractionDeclaration, ...]
+    state_keys: tuple[ItemStateKeyDeclaration, ...]
+    lights_up: bool
 
 @final
 @dataclass(frozen=True)

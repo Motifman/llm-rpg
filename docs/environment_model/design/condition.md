@@ -38,6 +38,7 @@ class ChanceOccasion:
 
 
 Subject = Actor | Target | Chosen | Named | Bound   # 誰について。1 人に決まるものだけ
+ItemSubject = ThisItem                             # どの品物について (品物を使う行為、手元の道具への操作のきっかけが答える)
 
 @final
 @dataclass(frozen=True)
@@ -125,6 +126,8 @@ OutcomeIsCondition(who: Subject, outcome: Outcome)
 GoldAtLeastCondition(who: Subject, amount: int)
 NeedAtLeastCondition(who: Subject, need: NeedType, value: int)
 SearchCountAtLeastCondition(who: Subject, count: int)
+ItemAgeAtLeastCondition(item: ItemSubject, ticks: int)
+ItemValueIsCondition(item: ItemSubject, key: ItemStateKeyDeclaration, value: StateValue)
 TicksSinceLastActionAtLeastCondition(who: Subject | Anyone, action: ActionKind | InteractionId, ticks: int, since: SinceStart | SinceWorldStageEntered)
 ArgumentEqualsCondition(argument: ArgumentName, expected: str)
 ```
