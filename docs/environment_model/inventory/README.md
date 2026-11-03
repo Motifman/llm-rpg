@@ -2,7 +2,7 @@
 
 環境とシナリオをドメインモデルとして作り直す (#1771 / #1339) ための材料。モデルを描く前に、今のコードがしている振る舞いと、守っている (または守っていない) 規則を、ファイルと行の根拠つきで書き出した。
 
-- 調べた版: a〜d は origin/main `21a33e4c9`、e〜g は `f231eb62a` (どちらも 2026-11-01)。行番号はそれぞれの版のもの
+- 調べた版: a〜d は origin/main `21a33e4c9`、e〜g は `f231eb62a` (どちらも 2026-11-01)、h は `5b1fd8573` (2026-11-03)。行番号はそれぞれの版のもの
 - サブエージェント 4 つに範囲を分けて読ませた。各ファイルの中で、コードで確かめた事実と推測を分けてある
 - 一部の主張は、調整役のセッションがコードで確かめ直した (下の表の「確かめ直した主張」)
 
@@ -15,6 +15,7 @@
 | [e_actions_objects_items_people.md](e_actions_objects_items_people.md) | 行為: 物体・道具・人への操作、使う、介抱する、渡す、拾う、置く、探す、小部屋に移る (`f231eb62a`) |
 | [f_actions_movement_speech_meeting.md](f_actions_movement_speech_meeting.md) | 行為: 移動、攻撃、話す、耳を澄ます、待つ、死体の報告、投票、行動しながらの一言 (`f231eb62a`) |
 | [g_actions_trade_market.md](g_actions_trade_market.md) | 行為: 商人との売買、人どうしの取引、掲示板の市場 (`f231eb62a`) |
+| [h_perception.md](h_perception.md) | 知覚: 誰に、何が、どう見えるか (聞こえるか)。観測の経路、受け手と見え方を決める要素、場面との食い違い (`5b1fd8573`) |
 
 ## 確かめ直した主張
 
@@ -26,6 +27,8 @@
 | 介抱で回復する HP の割合は 0.6 (docstring は 0.4) | `application/llm/services/executors/spot_graph_tool_executor.py:2904, 2978` |
 | 市場の注文の値を変える・取り下げる行為は、売り注文しか指定できない (`side` の enum が `sell` だけ) | `application/llm/services/tool_catalog/spot_graph.py:884, 915` |
 | 所持金の行は、商人を宣言した世界でしかプロンプトに出ない | `application/world_graph/spot_graph_current_state_builder.py:1520` |
+| 物体の操作は、暗いときの目撃の文 (`witness_observation_message_in_dark`) を使わない。使うのは人への操作だけ | `application/world_graph/player_interaction_application_service.py:1084` (物体の操作の側には読む箇所が無い) |
+| モンスターの攻撃の明るさは、光源の品物を見ずに計算している (TODO が残る) | `application/world_graph/spot_attack_orchestrator.py:506-515` |
 | `PlayerStatusAggregate` の居場所は `__init__` で代入するだけで、移動で更新されない。発言の処理と声が届く相手を探す処理がこの値を読む | `domain/player/aggregate/player_status_aggregate.py:107`、`application/speech/services/player_speech_service.py:123`、`application/observation/services/player_audience_query_service.py:73` |
 | 効果の対象の物体が見つからないと、操作した物体を対象にする | `domain/world_graph/service/effect_application/object_target.py:33` |
 
