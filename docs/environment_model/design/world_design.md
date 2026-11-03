@@ -192,6 +192,21 @@ class EndingDeclaration:
 
 @final
 @dataclass(frozen=True)
+class WeatherDeclaration:
+    initial: WeatherType
+    changes: NoChange | ChangesEvery
+    announce_changes: bool
+
+    def next_after(self, current: WeatherState, roll: float) -> WeatherState: ...
+
+@final
+@dataclass(frozen=True)
+class ChangesEvery:
+    ticks: int
+    transitions: WeatherTransitions        # 書かなければ既定の表
+
+@final
+@dataclass(frozen=True)
 class WorldRules:
     tend: TendRule
     attack: AttackRule

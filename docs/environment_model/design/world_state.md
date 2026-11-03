@@ -171,6 +171,27 @@ class SpotAtmospheres:                            # 世界に 1 つ
     def atmosphere_of(self, spot: SpotDeclaration) -> AtmosphereChange | Unchanged: ...
 
 
+class Weather:                                    # 世界に 1 つ (天候を宣言した世界だけ)
+    def change(self, new_state: WeatherState) -> None: ...
+
+    def current(self) -> WeatherState: ...
+
+
+class ScenarioProgress:                           # 世界に 1 つ
+    def note_happening_fired(self, happening: HappeningDeclaration, now: WorldTick) -> None: ...
+    def note_reaction_truth(self, reaction: ReactionDeclaration, truth: bool) -> None: ...
+
+    def may_fire(self, happening: HappeningDeclaration, now: WorldTick) -> bool: ...
+    def reaction_changed(self, reaction: ReactionDeclaration, truth: bool) -> bool: ...
+    def last_fired_at(self, happening: HappeningDeclaration) -> WorldTick | NeverFired: ...
+
+
+class Monster:                                    # モンスターごと。振る舞いは #1971
+    def take_damage(self, amount: int, now: WorldTick) -> None: ...
+
+    def is_dead(self) -> bool: ...
+
+
 class WorldStage:                                 # 世界に 1 つ
     def enter(self, stage: WorldStageDeclaration, now: WorldTick) -> None: ...
 
@@ -213,6 +234,8 @@ WorldFlagRaisedEvent, WorldFlagLoweredEvent
 PassageStateChangedEvent, PassageOpenedEvent, PassageClosedEvent
 SpotAtmosphereChangedEvent
 WorldStageChangedEvent
+WeatherChangedEvent
+MonsterDiedEvent
 GroupDecisionStartedEvent, GroupDecisionReachedEvent, GroupDecisionUnresolvedEvent
 WorldEndedEvent
 ActionAttemptFailedEvent
