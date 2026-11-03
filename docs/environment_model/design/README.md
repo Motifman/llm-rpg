@@ -9,4 +9,4 @@
 | [world_state.md](world_state.md) | 世界の状態 (集約) |
 | [use_cases.md](use_cases.md) | ユースケースとハンドラ |
 
-まだ書いていないもの: `Weather` (天候)、`HappeningProgress` (出来事の進み)、`Monster`、知覚の決まり。
+まだ書いていないもの: `Monster` の振る舞い (#1971)、知覚の決まり。
