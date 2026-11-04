@@ -44,7 +44,7 @@ Manner = Openly | Stealthily
 ```python
 ObjectInteractionAttempt(actor: PersonId, obj: ObjectDeclaration, interaction: InteractionDeclaration, arguments: ActionArguments, manner: Manner)
 CarriedItemInteractionAttempt(actor: PersonId, item: ItemInstanceId, interaction: InteractionDeclaration, arguments: ActionArguments, manner: Manner)
-PersonInteractionAttempt(actor: PersonId, target: PersonId, interaction: InteractionDeclaration, arguments: ActionArguments, manner: Manner)
+PersonInteractionAttempt(actor: PersonId, target: PersonId | SomeoneInTheDark, interaction: InteractionDeclaration, arguments: ActionArguments, manner: Manner)
 JointActionPreparationAttempt(actor: PersonId, obj: ObjectDeclaration, interaction: InteractionDeclaration)
 
 ItemUseAttempt(actor: PersonId, item: ItemInstanceId)
@@ -72,6 +72,7 @@ MarketOrderRevisionAttempt(actor: PersonId, order: MarketOrderId, price: Gold)
 MarketOrderWithdrawalAttempt(actor: PersonId, order: MarketOrderId)
 
 Whisper(to: PersonId)
+SomeoneInTheDark()      # 暗がりの見分けのつかない人。相手は世界がその場から選ぶ (1 人なら決まる)。真っ暗では人がいることも分からないので使えない
 VoteFor(person: PersonId)
 ```
 
@@ -83,14 +84,14 @@ VoteFor(person: PersonId)
 class ActionRefusal:
     attempt: ActionAttempt
     reason: CommonRuleRefusal | PreconditionRefusal | WorldRuleRefusal
-    text: str
+    text: TextWithPeople
 
 CommonRuleRefusal = ActorCannotAct | NotTogether | TooTired | NotAllowedInThisStage
 
 @final
 @dataclass(frozen=True)
 class PreconditionRefusal:
-    failure: FailureReason
+    failure: FailureReason | HiddenFailure
 
 @final
 @dataclass(frozen=True)
@@ -110,3 +111,26 @@ class ActionPrerequisiteCheck:
         rules: WorldRules,
     ) -> ActionRefusal | None: ...
 ```
+
+## できること
+
+```python
+@final
+@dataclass(frozen=True)
+class AvailableAction:
+    attempt: ActionAttempt
+    standing: Doable | NotNow
+
+@final
+@dataclass(frozen=True)
+class NotNow:
+    reason: TextWithPeople
+
+@final
+@dataclass(frozen=True)
+class AvailableActions:
+    actions: tuple[AvailableAction, ...]
+```
+
+- 実際に試したときと同じ確認 (`ActionPrerequisiteCheck.refusal` と行為ごとの前提の `failure_reason`) で作る。`HiddenFailure` になった行為は入れない。いまできない行為を消さずに理由つきで出すのは design_decisions #37 のとおり (消すと、エージェントが無い操作名を作って呼ぶ)
+- 行為の対象の候補は、場面 (`VisibleSurroundings`) に出ているものに限る。「誰か」(`Unidentified`) には `SomeoneInTheDark` で行う。ターンごとに振り直す呼び方 (「人影1」) は、記憶に残った呼び方が次のターンで別のものを指すので使わない (design_decisions #3)

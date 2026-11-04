@@ -4,7 +4,7 @@
 class Condition(Protocol):
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool: ...
     def requirements(self) -> Requirements: ...
-    def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | None: ...
+    def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None: ...
 
 
 class WorldFacts(Protocol):
@@ -62,8 +62,15 @@ class Requirements:
 @dataclass(frozen=True)
 class FailureReason:
     failed_part: ConditionPath
-    text: str
+    text: TextWithPeople                    # 作者が書いた文。無ければ条件の種類ごとの決まった文
+
+@final
+@dataclass(frozen=True)
+class HiddenFailure:                        # 誰が何者かで決まる条件 (役割など)。理由を見せると伏せた役割が分かる
+    failed_part: ConditionPath
 ```
+
+満たしていない条件のうち、`FailureReason` は「いまできない」に理由つきで出し、`HiddenFailure` は行為ごと一覧に出さない ([action.md](action.md) の `AvailableActions`)。
 
 ## つなぎ
 
@@ -72,33 +79,33 @@ class FailureReason:
 @dataclass(frozen=True)
 class AllOfCondition:
     children: tuple[Condition, ...]
-    failure_text: str | NoText
+    failure_text: TextWithPeople | NoText
 
 @final
 @dataclass(frozen=True)
 class AnyOfCondition:
     children: tuple[Condition, ...]
-    failure_text: str | NoText
+    failure_text: TextWithPeople | NoText
 
 @final
 @dataclass(frozen=True)
 class NotCondition:
     child: Condition
-    failure_text: str | NoText
+    failure_text: TextWithPeople | NoText
 
 @final
 @dataclass(frozen=True)
 class ForSomeoneCondition:
     people: PeopleSelection
     condition: Condition                    # 中では Bound が「その人」を指す
-    failure_text: str | NoText
+    failure_text: TextWithPeople | NoText
 
 @final
 @dataclass(frozen=True)
 class ForEveryoneCondition:
     people: PeopleSelection
     condition: Condition
-    failure_text: str | NoText
+    failure_text: TextWithPeople | NoText
 ```
 
 ## 葉
