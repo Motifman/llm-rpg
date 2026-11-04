@@ -26,11 +26,20 @@ class PassageDeclaration:
     ends: tuple[SpotId, SpotId]
     two_way: bool
     travel_ticks: int
-    kind: PassageKind
+    states: tuple[PassageStateDeclaration, ...]   # 書かなければ「通れる、減衰 0」の 1 つ
     initial_state: PassageStateName
     traversal_condition: Condition
 
     def allows(self, state: PassageStateName) -> bool: ...
+    def state(self, name: PassageStateName) -> PassageStateDeclaration: ...
+
+@final
+@dataclass(frozen=True)
+class PassageStateDeclaration:
+    name: PassageStateName
+    display_name: str
+    traversable: bool
+    sound_loss: SoundLoss
 
 @final
 @dataclass(frozen=True)
@@ -163,11 +172,11 @@ class InteractionDeclaration:
     display_label: str
     precondition: Condition
     effect: Effect
-    success_text: str
+    success_text: TextWithPeople            # 行った本人の体の刺激になる
     shows_on_success: tuple[ShownToActor, ...]
     exertion: Exertion
     actor_requirement: ActorRequirement
-    witness_text: str
+    perceived_as: PerceptionDeclaration
 
 @final
 @dataclass(frozen=True)
@@ -176,6 +185,45 @@ class HappeningDeclaration:
     condition: Condition
     effect: Effect
     once: bool
+    notice: HappeningNotice | NoNotice
+
+HappeningNotice = SightAt | SoundFrom | AnnouncementTo
+
+@final
+@dataclass(frozen=True)
+class SightAt:
+    spot: SpotDeclaration
+    texts: SightTexts
+    salience: Salience
+
+@final
+@dataclass(frozen=True)
+class SoundFrom:
+    spot: SpotDeclaration
+    sound: SoundDeclaration
+    salience: Salience
+
+@final
+@dataclass(frozen=True)
+class AnnouncementTo:
+    audience: PeopleSelection
+    text: TextWithPeople
+    salience: Salience
+
+@final
+@dataclass(frozen=True)
+class PerceptionDeclaration:                # 行為が周りにどう知覚されるか
+    witness: SightTexts
+    target: SightTexts | NoTarget
+    sound: SoundDeclaration | Silent
+    salience: Salience
+
+@final
+@dataclass(frozen=True)
+class SoundDeclaration:
+    loudness: Loudness                      # 書かなければ、開け閉めは大きい、壊すはとても大きい、ほかはふつう
+    clear: TextWithPeople
+    muffled: TextWithPeople
 
 @final
 @dataclass(frozen=True)
@@ -198,6 +246,9 @@ class WeatherDeclaration:
     announce_changes: bool
 
     def next_after(self, current: WeatherState, roll: float) -> WeatherState: ...
+    def obscures_sight(self, state: WeatherState) -> bool: ...   # 書かなければ嵐と霧
+    def visibility(self, state: WeatherState) -> Visibility: ...
+    def display_name(self, state: WeatherState) -> str: ...
 
 @final
 @dataclass(frozen=True)
@@ -213,6 +264,22 @@ class WorldRules:
     fatigue: FatigueRule
     death: DeathRule
     departed_persons_act: bool
+    hearing: HearingValues
+    idle_limit: IdleLimit                   # 何も起きないまま、この間が過ぎたら手番を起こす
+
+@final
+@dataclass(frozen=True)
+class HearingValues:
+    loudness: Mapping[Loudness, SoundLevel]     # ささやき 30、ふつう 60、大きい 75、とても大きい 90
+    loss_per_passage: SoundLoss                 # 15
+    clear_from: SoundLevel                      # 50
+    muffled_from: SoundLevel                    # 35
+    faint_from: SoundLevel                      # 20
+    attentive_allowance: SoundLoss              # 耳を澄ますと 15 だけ小さい音まで聞こえる
+
+    def level_of(self, loudness: Loudness) -> SoundLevel: ...
+    def quietest_audible(self) -> SoundLevel: ...
+    def quality(self, level: SoundLevel | NotReached, attentive: bool) -> HearingQuality: ...
 
 @final
 @dataclass(frozen=True)
@@ -253,11 +320,18 @@ class WorldDesign:
     def discoverables_at(self, spot: SpotId) -> tuple[DiscoverableDeclaration, ...]: ...
     def route(self, start: SpotId, destination: SpotId) -> Route | NoRoute: ...
     def initial_world(self) -> InitialWorld: ...
+    def warnings(self) -> tuple[DesignWarning, ...]: ...
 
 
 @final
 @dataclass(frozen=True)
-class DesignFlaw:
+class DesignFlaw:                           # 読み込みを止める
+    location: DesignLocation
+    reason: str
+
+@final
+@dataclass(frozen=True)
+class DesignWarning:                        # 読み込みは続ける
     location: DesignLocation
     reason: str
 
@@ -273,3 +347,6 @@ infrastructure: JSON を読む
   ② 動詞の宣言 (条件、効果、操作、出来事) を、DeclaredNouns から名詞を引いて作る
   ③ WorldDesign.compose
 ```
+
+- 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、compose が決まった文で埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)
+- 宣言に無い通路の状態の名前、呼び名 (`display_name`) の無い値が文に出るときは、`DesignFlaw` で止める

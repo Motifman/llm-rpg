@@ -7,6 +7,7 @@
 | [effect.md](effect.md) | 効果 |
 | [action.md](action.md) | 行為 |
 | [world_state.md](world_state.md) | 世界の状態 (集約) |
+| [perception.md](perception.md) | 知覚 |
 | [use_cases.md](use_cases.md) | ユースケースとハンドラ |
 
-まだ書いていないもの: `Monster` の振る舞い (#1971)、知覚の決まり。
+まだ書いていないもの: `Monster` の振る舞い (#1971)。
