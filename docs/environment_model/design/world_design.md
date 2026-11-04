@@ -216,6 +216,7 @@ class PerceptionDeclaration:                # 行為が周りにどう知覚さ�
     witness: SightTexts
     target: SightTexts | NoTarget
     sound: SoundDeclaration | Silent
+    announcement: AnnouncementTo | NoAnnouncement   # 緊急の招集など、居場所に関わらず知らせるとき
     salience: Salience
 
 @final

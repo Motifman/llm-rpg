@@ -27,13 +27,15 @@ class SettleWorldConditions:
 
 class RunScheduledTurns:
     def __call__(self, command: RunScheduledTurnsCommand) -> None:
-        # PendingTurns.take_due で手番の来た人を決め、1 人ずつ手番を回す
+        # 手番を取れる人 (起きている人と、去った人の手番がある世界の去った人。移動中は除く) を決め、
+        # PendingTurns.take_due で手番の来た人を決めて、1 人ずつ手番を回す
         ...
 
 class DeliverPerception:
     def __call__(self, command: DeliverPerceptionCommand) -> None:
-        # 刺激ごとに知覚しうる人を選ぶ (見える: その場所の人と去った人、聞こえる: SoundReach が届く場所の人)
+        # 刺激ごとに知覚しうる人を選ぶ (見える: その場所にいる人。その場所にいる去った人を含む。聞こえる: SoundReach が届く場所の人)
         # → Perceiver と LightingConditions / SoundReach を作り、刺激の perceived_by に聞く
+        # → 1 つの出来事の刺激は 本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、1 人には最初に知覚したものだけ
         # → Perceived は観測の出口へ。calls_attention なら PendingTurns.call、どれも PendingTurns.note_activity
         # → NoticedLater は MissedNotices.keep
         ...
@@ -41,6 +43,19 @@ class DeliverPerception:
 class LookAround:
     def __call__(self, command: LookAroundCommand) -> VisibleSurroundings:
         # SpotContents と LightingConditions を集め、VisibleSurroundings.seen_with
+        ...
+
+class DeliverSurroundings:
+    def __call__(self, command: DeliverSurroundingsCommand) -> None:
+        # LookAround → 人、倒れた体、モンスターを 1 つの観測にして出口へ
+        ...
+
+class DeliverNoticesOnWaking:
+    def __call__(self, command: DeliverNoticesOnWakingCommand) -> None:
+        # 1. 起きたことの知らせ (本人の体の刺激) を DeliverPerception で配る
+        # 2. MissedNotices の知らせを古い順に出口へ渡し、MissedNotices.clear
+        # 3. DeliverSurroundings
+        # 見渡した知らせが「目が覚めた」より先に記憶に入らないよう、この順に手順として置く
         ...
 
 class ListAvailableActions:
@@ -95,10 +110,10 @@ class DecideDeathOutcomeHandler(EventHandler[PersonDiedEvent]): ...
 class PlaceDepartedPersonHandler(EventHandler[PersonDiedEvent]): ...   # 体は残し、去った人を体のある場所に置く
 class ApplyWorldStageChangeHandler(EventHandler[WorldStageChangedEvent]): ...   # 出る段階の when_left、入る段階の when_entered
 class ApplyGroupDecisionResultHandler(EventHandler[GroupDecisionReachedEvent | GroupDecisionUnresolvedEvent]): ...
-class DeliverNoticesOnWakingHandler(EventHandler[PersonRevivedEvent]): ...   # 起きたことの知らせ → ためた知らせを古い順に → 見渡した知らせ。MissedNotices.clear
-class DeliverSurroundingsOnArrivalHandler(EventHandler[OccupantEnteredSpotEvent]): ...   # 着いた本人へ、見渡した知らせ
+class DeliverNoticesOnWakingHandler(EventHandler[PersonRevivedEvent]): ...   # DeliverNoticesOnWaking を呼ぶ
+class DeliverSurroundingsOnArrivalHandler(EventHandler[OccupantEnteredSpotEvent]): ...   # 着いた本人について DeliverSurroundings を呼ぶ
 class DeliverSurroundingsOnBrighteningHandler(EventHandler[ItemStateChangedEvent | OccupantEnteredSpotEvent | TimeOfDayChangedEvent | WeatherChangedEvent | SpotAtmosphereChangedEvent]): ...
-    # 出来事の前後の LightingConditions を比べ、明るさが上がった場所にいた人へ、見渡した知らせ
+    # 出来事の前後の LightingConditions を比べ、明るさが上がった場所にいた人ごとに DeliverSurroundings を呼ぶ
 class RemoveDeadMonsterHandler(EventHandler[MonsterDiedEvent]): ...
 ```
 

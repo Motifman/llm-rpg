@@ -12,6 +12,8 @@
 Being の契約の観測 (文は TextWithPeople のまま。人の穴は Being が埋める)
 ```
 
+1 つの出来事から出た刺激は、本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、1 人には最初に知覚したもの 1 つだけを渡す。扉が開くのを見た人に、同じ扉の音を別の観測として重ねないため。
+
 知覚の決まりはドメインサービスにしない。規則は知覚する人 (`Perceiver`) と刺激、明るさと音の値に置き、世界を何でも読める窓口 (`WorldFacts`) は渡さない。
 
 ## 人と文
@@ -106,7 +108,7 @@ class AnnouncementStimulus:
 ## 知覚する人
 
 ```python
-PerceiverState = Awake | Down | Gone | Departed
+PerceiverState = Awake | Unconscious | Gone | Departed   # Gone は、死んで、去った人の手番が無い世界の人
 
 @final
 @dataclass(frozen=True)
@@ -116,12 +118,12 @@ class Perceiver:                          # ユースケースが、生死・居
     location: Location
     attentive: bool                       # 耳を澄ましている
 
-    def notices_surroundings(self, involved: bool) -> SurroundingsAwareness: ...
+    def notices_surroundings(self, involved: bool) -> SurroundingsAwareness: ...   # 各刺激の perceived_by が使う
 
-SurroundingsAwareness = Aware | NoticesLater | Unaware
+SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 ```
 
-| 刺激 | 起きている | 倒れている | 死んだ (`Gone`) | 去った |
+| 刺激 | 起きている (`Awake`) | 倒れている (`Unconscious`) | 死んだ (`Gone`) | 去った (`Departed`) |
 |---|---|---|---|---|
 | 見える | 明るさで決まる | 自分が関わるものは `NoticedLater`、ほかは `NotPerceived` | 知覚しない | 見える |
 | 聞こえる | 音の届き方で決まる | 同上 | 知覚しない | 聞こえる |
@@ -135,7 +137,7 @@ SurroundingsAwareness = Aware | NoticesLater | Unaware
 ```python
 PerceptionOutcome = Perceived | NotPerceived | NoticedLater
 
-PerceivedQuality = SeesClearly | SeesShapes | HearsClearly | HearsMuffled | HearsFaintly | Felt | Told
+PerceivedQuality = SeesClearly | SeesShapes | HearsClearly | HearsMuffled | HearsFaintly | Felt | Told   # SightQuality と HearingQuality の値をそのまま使う
 
 @final
 @dataclass(frozen=True)
@@ -168,12 +170,15 @@ class LightingConditions:                 # 1 つの場所の明るさを決め�
         # 宣言 → 屋外で暗い時間帯か見えにくくする天候なら 1 段暗く (重なっても 1 段)
         # → 光源があれば、暗い・真っ暗を薄暗いへ
 
-Lighting = Bright | Dusky | Dark | PitchDark
+class Lighting(Enum):
+    BRIGHT = "BRIGHT"
+    DUSKY = "DUSKY"
+    DARK = "DARK"
+    PITCH_DARK = "PITCH_DARK"
+
+    def sight(self) -> SightQuality: ...
 
 SightQuality = SeesClearly | SeesShapes | SeesNothing
-
-class Lighting:
-    def sight(self) -> SightQuality: ...
 ```
 
 | 明るさ | 見え方 | 物体 | 人 |
@@ -232,7 +237,7 @@ class SoundReach:
 HearingQuality = HearsClearly | HearsMuffled | HearsFaintly | HearsNothing
 ```
 
-`HearingValues` は `WorldRules` にある ([world_design.md](world_design.md))。ささやきは、宛先にははっきり、同じ場所のほかの人にはかすかに届く。「N 名に届いた」も同じ計算で数え、倒れている人は入れない。
+音の届き方は、出来事が確定した後の通路の状態で計算する (扉を開けた音は、開いた扉を通る)。`HearingValues` は `WorldRules` にある ([world_design.md](world_design.md))。ささやきは、宛先にははっきり、同じ場所のほかの人にはかすかに届く。「N 名に届いた」も同じ計算で数え、倒れている人は入れない。
 
 ## 倒れている間のこと
 

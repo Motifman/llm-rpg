@@ -72,7 +72,7 @@ MarketOrderRevisionAttempt(actor: PersonId, order: MarketOrderId, price: Gold)
 MarketOrderWithdrawalAttempt(actor: PersonId, order: MarketOrderId)
 
 Whisper(to: PersonId)
-SomeoneInTheDark()      # 暗がりの見分けのつかない人。相手は世界がその場から選ぶ (1 人なら決まる)
+SomeoneInTheDark()      # 暗がりの見分けのつかない人。相手は世界がその場から選ぶ (1 人なら決まる)。真っ暗では人がいることも分からないので使えない
 VoteFor(person: PersonId)
 ```
 
