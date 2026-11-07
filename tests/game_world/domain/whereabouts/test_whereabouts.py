@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
@@ -140,6 +142,19 @@ class TestWhereaboutsEnterSection:
             whereabouts.enter_section(BOB, LIFT, NOBODY_DOWN)
 
         assert whereabouts.location_of(BOB) == AtSpot(spot=SpotId("plaza"), section=OpenArea())
+        assert whereabouts.get_events() == []
+
+    def test_full_section_rejected_from_another_section_keeps_the_occupant_where_it_was(self) -> None:
+        """長椅子にいる人が満員の籠に入ろうとして断られると、長椅子に残り、区画を出たイベントも出さない。"""
+        whereabouts = _whereabouts((ALICE, "plaza"), (BOB, "plaza"))
+        whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
+        whereabouts.enter_section(BOB, BENCH, NOBODY_DOWN)
+        whereabouts.clear_events()
+
+        with pytest.raises(SectionFullException):
+            whereabouts.enter_section(BOB, LIFT, NOBODY_DOWN)
+
+        assert whereabouts.is_in_section(BOB, BENCH)
         assert whereabouts.get_events() == []
 
     def test_fallen_or_dead_bodies_are_not_counted_toward_capacity(self) -> None:
@@ -486,3 +501,38 @@ class TestWhereaboutsCanReach:
 
         assert whereabouts.can_reach(ALICE, self.NOTICE_BOARD, (LIFT, BENCH)) is False
         assert whereabouts.can_reach(BOB, self.NOTICE_BOARD, (LIFT, BENCH)) is False
+
+
+class TestWhereaboutsRefusalLeavesNothingBehind:
+    """断る操作が、例外を投げたあと誰の居場所も変えず、イベントもためないことを保証する。"""
+
+    @pytest.mark.parametrize(
+        ("refuse", "expected"),
+        [
+            (lambda w: w.enter_section(BOB, LIFT, NOBODY_DOWN), OccupantNotAtSectionSpotException),
+            (lambda w: w.enter_section(ALICE, BENCH, NOBODY_DOWN), OccupantAlreadyInSectionException),
+            (lambda w: w.leave_section(BOB), OccupantNotInSectionException),
+            (
+                lambda w: w.start_travel(BOB, Route(start=SpotId("plaza"), legs=(STREET,))),
+                OccupantNotAtRouteStartException,
+            ),
+            (lambda w: w.cancel_travel(ALICE), OccupantNotTravellingException),
+            (lambda w: w.teleport(CAROL, MINE), OccupantNotPlacedException),
+            (lambda w: w.remove(CAROL), OccupantNotPlacedException),
+            (lambda w: w.place(ALICE, WELL), OccupantAlreadyPlacedException),
+        ],
+    )
+    def test_refused_operation_changes_no_location_and_records_no_event(
+        self, refuse: Callable[[Whereabouts], None], expected: type[Exception]
+    ) -> None:
+        """広場の長椅子にいる人と井戸にいる人がいる世界で、断られる操作のあとも 2 人の居場所は元のままで、イベントは 0 件。"""
+        whereabouts = _whereabouts((ALICE, "plaza"), (BOB, "well"))
+        whereabouts.enter_section(ALICE, BENCH, NOBODY_DOWN)
+        whereabouts.clear_events()
+        before = (whereabouts.location_of(ALICE), whereabouts.location_of(BOB))
+
+        with pytest.raises(expected):
+            refuse(whereabouts)
+
+        assert (whereabouts.location_of(ALICE), whereabouts.location_of(BOB)) == before
+        assert whereabouts.get_events() == []

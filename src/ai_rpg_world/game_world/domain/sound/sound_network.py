@@ -10,7 +10,7 @@ from ai_rpg_world.game_world.domain.sound.sound_level import SoundLevel, SoundLo
 from ai_rpg_world.game_world.domain.value_object import SpotId
 
 if TYPE_CHECKING:
-    # 通路の宣言が SoundLoss を使うので、実行時に import すると循環する。
+    # 実行時に import すると循環する。
     from ai_rpg_world.game_world.domain.whereabouts import PassageInState
 
 
