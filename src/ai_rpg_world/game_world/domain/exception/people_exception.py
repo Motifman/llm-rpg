@@ -13,5 +13,5 @@ class MalformedTemplateException(GameWorldDomainException):
     error_code = "GAME_WORLD.MALFORMED_TEMPLATE"
 
 
-class HolesAndPeopleMismatchException(GameWorldDomainException):
-    error_code = "GAME_WORLD.HOLES_AND_PEOPLE_MISMATCH"
+class PlaceholdersAndPeopleMismatchException(GameWorldDomainException):
+    error_code = "GAME_WORLD.PLACEHOLDERS_AND_PEOPLE_MISMATCH"
