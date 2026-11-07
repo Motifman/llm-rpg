@@ -178,7 +178,7 @@ class LightingConditions:                 # 1 つの場所の明るさを決め�
     light_source_present: bool            # その場所の誰かが、灯った光源を手に持っているか (荷の中では照らさない)
 
     def lighting(self) -> Lighting: ...
-        # 宣言 → 屋外で暗い時間帯か見えにくくする天候なら 1 段暗く (重なっても 1 段)
+        # 宣言 → 屋外で、暗い時間帯か見えにくくする天候なら 1 段暗く (重なっても 1 段。屋内は天候でも変わらない)
         # → 光源があれば、暗い・真っ暗を薄暗いへ
 
 class Lighting(Enum):
