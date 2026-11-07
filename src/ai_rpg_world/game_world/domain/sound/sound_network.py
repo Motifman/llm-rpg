@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import heapq
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.sound.sound_level import SoundLevel, SoundLoss
 from ai_rpg_world.game_world.domain.value_object import SpotId
+
+if TYPE_CHECKING:
+    # 通路の宣言が SoundLoss を使うので、実行時に import すると循環する。
+    from ai_rpg_world.game_world.domain.whereabouts import PassageInState
 
 
 @final
@@ -38,6 +42,18 @@ class SoundReach:
 @dataclass(frozen=True)
 class SoundNetwork:
     links: tuple[SoundLink, ...]
+
+    @classmethod
+    def through(cls, passages: Iterable[PassageInState], per_passage: SoundLoss) -> SoundNetwork:
+        return cls(
+            links=tuple(
+                SoundLink(
+                    ends=in_state.passage.ends,
+                    loss=per_passage.plus(in_state.passage.state(in_state.state).sound_loss),
+                )
+                for in_state in passages
+            )
+        )
 
     def spread(self, origin: SpotId, start: SoundLevel, stop_below: SoundLevel) -> SoundReach:
         neighbours: dict[SpotId, list[tuple[SpotId, SoundLoss]]] = {}
