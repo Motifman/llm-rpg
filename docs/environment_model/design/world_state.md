@@ -1,5 +1,7 @@
 # 世界の状態 (集約)
 
+集約は自分の ID を持つ。人ごと・物体ごと・品物ごと・場所ごとの集約は、その `PersonId`、`ObjectId`、`ItemInstanceId`、`SpotId` を持つ。世界に 1 つの集約 (`Whereabouts`、`WorldClock` など) は、その世界の `WorldId` を持つ。一時的な遊びの世界が並ぶことがあり、snapshot でもどの世界の状態かを区別するため。
+
 ```python
 Occupant = PersonBody | DepartedPerson | MonsterBody
 # PersonBody(person): 生きている人と、倒れた人・死んだ人の体 / DepartedPerson(person): 死んで去った人 (体は無い)
