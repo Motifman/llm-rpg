@@ -185,6 +185,6 @@ class TurnGuidance:                               # 世界では何も起きて�
 ## そのほかの型
 
 - `CommandScope`: 1 つの確定の範囲。中で断られたら全部巻き戻す。確定したらイベントを配る
-- `DesignLocation`: 宣言の中の場所 (`spots[4].objects[0].interactions[1].precondition` のような道筋)
+- `DesignLocation(declaration: str, name: str, field: str)`: 宣言の中の場所。宣言の種類、名前、欄 (`"object"`, `"lift_lever"`, `"state_keys[0]"`)。シナリオの形式に頼らない言い方にする
 - `RefusalCode`: ドメイン例外の `error_code` (`WHEREABOUTS.SECTION_FULL` など)
 - `HandsNeeded`: 1 か 2
