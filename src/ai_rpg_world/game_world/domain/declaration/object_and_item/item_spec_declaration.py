@@ -28,7 +28,6 @@ class ItemStateKeyDeclaration:
     initial: StateValue
 
     def __post_init__(self) -> None:
-        # 品物の集約は在庫を減らす操作も文を書く操作も持たないので、その種類の鍵は宣言の時点で断る。
         if not isinstance(self.kind, (FlagStateKind, CountStateKind, ChoiceStateKind)):
             raise ItemStateKindNotAllowedException(
                 f"{self.item_spec_id.value}.{self.key.value} cannot be {self.kind!r} on an item"
