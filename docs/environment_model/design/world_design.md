@@ -393,7 +393,7 @@ class FatigueRule:
 class HungerRule:
     per_tick: HungerAmount                      # 1
     limit: HungerAmount
-    starvation_damage: Damage                   # 限界のあいだ毎 tick
+    starvation_damage: Damage | NoStarvationDamage   # 限界のあいだ毎 tick。NoStarvationDamage なら飢えても痛手が無い
     levels: tuple[HungerLevel, ...]
 
 @final
@@ -407,7 +407,7 @@ class StealthRule:                              # こっそり行っても、見
     notice_by_bystander: Mapping[SightQuality, Probability]   # SeesClearly 40%、SeesShapes 15%、SeesNothing 0%
     notice_by_target: Mapping[SightQuality, Probability]      # 60%、30%、0%
     attentive_bonus: Probability                # 耳を澄ましている人 +20%
-    duration_rate: Rate                         # 行っているあいだを 2 倍
+    duration_rate: Multiplier                   # 行っているあいだを 2 倍
     # こっそり行った物音は 1 段小さくする。行った本人には、気づかれたかを伝えない
 
 @final
