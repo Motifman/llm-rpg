@@ -1,0 +1,264 @@
+from __future__ import annotations
+
+from collections import Counter
+from collections.abc import Iterable, Iterator
+from typing import Any, Generic, TypeVar
+
+from ai_rpg_world.game_world.domain.declaration.character import (
+    CharacterDeclaration,
+    GroupDeclaration,
+    GroupingDeclaration,
+)
+from ai_rpg_world.game_world.domain.declaration.object_and_item import (
+    ItemSpecDeclaration,
+    ObjectDeclaration,
+    ObjectStateKeyDeclaration,
+)
+from ai_rpg_world.game_world.domain.declaration.progress import (
+    FlagDeclaration,
+    GroupDecisionDeclaration,
+    OutcomeDeclaration,
+    WorldStageDeclaration,
+)
+from ai_rpg_world.game_world.domain.declaration.spot import (
+    PassageDeclaration,
+    SpotDeclaration,
+    SpotSectionDeclaration,
+)
+from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
+from ai_rpg_world.game_world.domain.exception.world_design_exception import UnknownNameFlaw, WorldDesignFlawsException
+from ai_rpg_world.game_world.domain.value_object import GroupingId, SpotId
+
+_Declaration = TypeVar("_Declaration")
+
+
+class _DeclaredOfKind(Generic[_Declaration]):
+    def __init__(self, kind: str, id_field: str, declarations: Iterable[_Declaration]) -> None:
+        self.kind = kind
+        self._id_field = id_field
+        self._declarations = tuple(declarations)
+        self._by_name = {self.name_of(declaration): declaration for declaration in self._declarations}
+
+    def __iter__(self) -> Iterator[_Declaration]:
+        return iter(self._declarations)
+
+    def name_of(self, declaration: _Declaration) -> str:
+        declared_id: Any = getattr(declaration, self._id_field)
+        return str(declared_id.value)
+
+    def get(self, name: str, at: DesignLocation) -> _Declaration:
+        if name not in self._by_name:
+            raise UnknownNameFlaw(self._unknown(name, at))
+        return self._by_name[name]
+
+    def find(self, name: str) -> _Declaration | None:
+        return self._by_name.get(name)
+
+    def flaws_if_unknown(self, name: str, at: DesignLocation) -> list[DesignFlaw]:
+        if name in self._by_name:
+            return []
+        return [self._unknown(name, at)]
+
+    def duplicated_name_flaws(self) -> list[DesignFlaw]:
+        counts = Counter(self.name_of(declaration) for declaration in self._declarations)
+        return [
+            DesignFlaw(
+                DesignLocation(self.kind, name, self._id_field), f"{self.kind} {name!r} is declared more than once"
+            )
+            for name, count in counts.items()
+            if count > 1
+        ]
+
+    def location(self, declaration: _Declaration, field: str) -> DesignLocation:
+        return DesignLocation(self.kind, self.name_of(declaration), field)
+
+    def _unknown(self, name: str, at: DesignLocation) -> DesignFlaw:
+        return DesignFlaw(at, f"{self.kind} {name!r} is not declared")
+
+
+class DeclaredNouns:
+    def __init__(
+        self,
+        flags: Iterable[FlagDeclaration],
+        spots: Iterable[SpotDeclaration],
+        passages: Iterable[PassageDeclaration],
+        objects: Iterable[ObjectDeclaration],
+        item_specs: Iterable[ItemSpecDeclaration],
+        groupings: Iterable[GroupingDeclaration],
+        groups: Iterable[GroupDeclaration],
+        characters: Iterable[CharacterDeclaration],
+        world_stages: Iterable[WorldStageDeclaration],
+        group_decisions: Iterable[GroupDecisionDeclaration],
+        sections: Iterable[SpotSectionDeclaration],
+        outcomes: Iterable[OutcomeDeclaration],
+    ) -> None:
+        self._flags = _DeclaredOfKind("flag", "flag_id", flags)
+        self._spots = _DeclaredOfKind("spot", "spot_id", spots)
+        self._passages = _DeclaredOfKind("passage", "passage_id", passages)
+        self._objects = _DeclaredOfKind("object", "object_id", objects)
+        self._item_specs = _DeclaredOfKind("item_spec", "item_spec_id", item_specs)
+        self._groupings = _DeclaredOfKind("grouping", "grouping_id", groupings)
+        self._groups = _DeclaredOfKind("group", "group_id", groups)
+        self._characters = _DeclaredOfKind("character", "person_id", characters)
+        self._world_stages = _DeclaredOfKind("world_stage", "stage_id", world_stages)
+        self._group_decisions = _DeclaredOfKind("group_decision", "decision_id", group_decisions)
+        self._sections = _DeclaredOfKind("section", "section_id", sections)
+        self._outcomes = _DeclaredOfKind("outcome", "outcome_id", outcomes)
+        flaws = [
+            *self._duplicated_name_flaws(),
+            *self._passage_flaws(),
+            *self._object_flaws(),
+            *self._section_flaws(),
+            *self._group_flaws(),
+            *self._character_flaws(),
+        ]
+        if flaws:
+            raise WorldDesignFlawsException(flaws)
+
+    def flag(self, name: str, at: DesignLocation) -> FlagDeclaration:
+        return self._flags.get(name, at)
+
+    def spot(self, name: str, at: DesignLocation) -> SpotDeclaration:
+        return self._spots.get(name, at)
+
+    def passage(self, name: str, at: DesignLocation) -> PassageDeclaration:
+        return self._passages.get(name, at)
+
+    def object(self, name: str, at: DesignLocation) -> ObjectDeclaration:
+        return self._objects.get(name, at)
+
+    def object_state_key(self, object_name: str, key: str, at: DesignLocation) -> ObjectStateKeyDeclaration:
+        obj = self._objects.get(object_name, at)
+        for state_key in obj.state_keys:
+            if state_key.key.value == key:
+                return state_key
+        raise UnknownNameFlaw(DesignFlaw(at, f"object {object_name!r} has no state key {key!r}"))
+
+    def item_spec(self, name: str, at: DesignLocation) -> ItemSpecDeclaration:
+        return self._item_specs.get(name, at)
+
+    def group(self, name: str, at: DesignLocation) -> GroupDeclaration:
+        return self._groups.get(name, at)
+
+    def groups_in(self, grouping: GroupingDeclaration) -> tuple[GroupDeclaration, ...]:
+        return tuple(group for group in self._groups if group.grouping.grouping_id == grouping.grouping_id)
+
+    def character(self, name: str, at: DesignLocation) -> CharacterDeclaration:
+        return self._characters.get(name, at)
+
+    def world_stage(self, name: str, at: DesignLocation) -> WorldStageDeclaration:
+        return self._world_stages.get(name, at)
+
+    def group_decision(self, name: str, at: DesignLocation) -> GroupDecisionDeclaration:
+        return self._group_decisions.get(name, at)
+
+    def section(self, name: str, at: DesignLocation) -> SpotSectionDeclaration:
+        return self._sections.get(name, at)
+
+    def sections_at(self, spot: SpotId) -> tuple[SpotSectionDeclaration, ...]:
+        return tuple(section for section in self._sections if section.spot_id == spot)
+
+    def outcome(self, name: str, at: DesignLocation) -> OutcomeDeclaration:
+        return self._outcomes.get(name, at)
+
+    def _duplicated_name_flaws(self) -> list[DesignFlaw]:
+        kinds: tuple[_DeclaredOfKind[Any], ...] = (
+            self._flags,
+            self._spots,
+            self._passages,
+            self._objects,
+            self._item_specs,
+            self._groupings,
+            self._groups,
+            self._characters,
+            self._world_stages,
+            self._group_decisions,
+            self._sections,
+            self._outcomes,
+        )
+        return [flaw for kind in kinds for flaw in kind.duplicated_name_flaws()]
+
+    def _passage_flaws(self) -> list[DesignFlaw]:
+        return [
+            flaw
+            for passage in self._passages
+            for index, end in enumerate(passage.ends)
+            for flaw in self._spots.flaws_if_unknown(end.value, self._passages.location(passage, f"ends[{index}]"))
+        ]
+
+    def _object_flaws(self) -> list[DesignFlaw]:
+        return [
+            flaw
+            for obj in self._objects
+            for flaw in self._spots.flaws_if_unknown(obj.spot_id.value, self._objects.location(obj, "spot_id"))
+        ]
+
+    def _section_flaws(self) -> list[DesignFlaw]:
+        flaws: list[DesignFlaw] = []
+        for section in self._sections:
+            flaws += self._spots.flaws_if_unknown(section.spot_id.value, self._sections.location(section, "spot_id"))
+            for index, object_id in enumerate(section.reachable_objects):
+                at = self._sections.location(section, f"reachable_objects[{index}]")
+                obj = self._objects.find(object_id.value)
+                if obj is None:
+                    flaws += self._objects.flaws_if_unknown(object_id.value, at)
+                elif obj.spot_id != section.spot_id:
+                    flaws.append(
+                        DesignFlaw(
+                            at,
+                            f"object {object_id.value!r} is at spot {obj.spot_id.value!r}, "
+                            f"not {section.spot_id.value!r}",
+                        )
+                    )
+        return flaws
+
+    def _group_flaws(self) -> list[DesignFlaw]:
+        flaws: list[DesignFlaw] = []
+        for group in self._groups:
+            at = self._groups.location(group, "grouping")
+            name = group.grouping.grouping_id.value
+            declared = self._groupings.find(name)
+            if declared is None:
+                flaws += self._groupings.flaws_if_unknown(name, at)
+            elif declared != group.grouping:
+                flaws.append(DesignFlaw(at, f"grouping {name!r} differs from its declaration"))
+        return flaws
+
+    def _character_flaws(self) -> list[DesignFlaw]:
+        flaws: list[DesignFlaw] = []
+        for character in self._characters:
+            flaws += self._spots.flaws_if_unknown(
+                character.spawn_spot.value, self._characters.location(character, "spawn_spot")
+            )
+            for index, item in enumerate(character.initial_items):
+                flaws += self._item_specs.flaws_if_unknown(
+                    item.value, self._characters.location(character, f"initial_items[{index}]")
+                )
+            flaws += self._initial_group_flaws(character)
+            for index, person in enumerate(character.knows_at_start):
+                flaws += self._characters.flaws_if_unknown(
+                    person.value, self._characters.location(character, f"knows_at_start[{index}]")
+                )
+        return flaws
+
+    def _initial_group_flaws(self, character: CharacterDeclaration) -> list[DesignFlaw]:
+        flaws: list[DesignFlaw] = []
+        joined: dict[GroupingId, GroupDeclaration] = {}
+        for index, group_id in enumerate(character.initial_groups):
+            at = self._characters.location(character, f"initial_groups[{index}]")
+            group = self._groups.find(group_id.value)
+            if group is None:
+                flaws += self._groups.flaws_if_unknown(group_id.value, at)
+                continue
+            grouping_id = group.grouping.grouping_id
+            if grouping_id in joined:
+                flaws.append(
+                    DesignFlaw(
+                        at,
+                        f"group {group_id.value!r} and group {joined[grouping_id].group_id.value!r} "
+                        f"both belong to grouping {grouping_id.value!r}",
+                    )
+                )
+                continue
+            joined[grouping_id] = group
+        return flaws

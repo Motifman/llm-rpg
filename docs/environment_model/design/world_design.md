@@ -600,6 +600,7 @@ infrastructure: JSON を読む
 ```
 
 - 名詞の宣言は互いを宣言ではなく ID で指す (`SpotSectionDeclaration.reachable_objects`、`CharacterDeclaration.spawn_spot` など)。ID が宣言にあるかは `DeclaredNouns` が作るときに確かめ、無ければ `DesignFlaw` にする。`GroupDeclaration.grouping` だけは、分け方が集団を指さず循環しないので、宣言のまま持つ
+- `DeclaredNouns` は ID の有無のほかに、次も照らし合わせて `DesignFlaw` にする (#1995)。集まりの持つ分け方が `groupings` に無いか、同じ `grouping_id` の宣言と中身が違う (`groups_in` が返せなくなる)。区画の `reachable_objects` の物が区画と違う場所にある。登場人物の `initial_groups` に同じ分け方の集まりが 2 つある (`group_of` は 1 つしか返せない)
 - 宣言 1 つだけで判断できる誤り (通路の状態名の重複、両端が同じ場所の通路、`initial_state` が `states` に無い、区画の `reachable_objects` の重複、状態の鍵の重複、種類に合わない `initial`) は、宣言の型が作るときにドメイン例外で断る。ほかの宣言と照らし合わせて分かる誤りは `DeclaredNouns` が確かめる。どちらで止めても作者に返るのは `DesignFlaw` で、宣言の型の例外は読み込む側が場所を付けて `DesignFlaw` に包む
 - `Unchanged` (雰囲気を変える効果で、変えない欄) と `NoCapacity` (区画の定員が無い) は、中身の無い型
 
