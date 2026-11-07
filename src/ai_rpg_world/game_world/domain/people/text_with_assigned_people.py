@@ -12,7 +12,7 @@ from ai_rpg_world.game_world.domain.people.person_ref import PersonRef, Unidenti
 
 @final
 @dataclass(frozen=True)
-class TextWithPeople:
+class TextWithAssignedPeople:
     template: str
     people: Mapping[str, PersonRef | Unidentified]
 

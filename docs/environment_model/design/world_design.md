@@ -45,8 +45,8 @@ class SpotSectionDeclaration:               # 場所の中の、体で入る一�
     name: str
     enter_label: str                        # 「籠に乗り込む」
     leave_label: str                        # 「籠から降りる」
-    enter_text: TextWithPersonPlaceholders  # 入った本人の体の刺激
-    leave_text: TextWithPersonPlaceholders
+    enter_text: TextWithUnassignedPeople  # 入った本人の体の刺激
+    leave_text: TextWithUnassignedPeople
     exertion: Exertion
     duration: Ticks | DefaultDuration
     capacity: Capacity | NoCapacity
@@ -171,14 +171,14 @@ class GroupDecisionDeclaration:
 class OutcomeDeclaration:
     outcome_id: OutcomeId
     name: str                               # 「救出」
-    announcement: TextWithPersonPlaceholders # 「{person}は昇降機で外へ出た。」
+    announcement: TextWithUnassignedPeople # 「{person}は昇降機で外へ出た。」
 
 @final
 @dataclass(frozen=True)
 class DiscoverableDeclaration:
     discoverable_id: DiscoverableId
     spot_id: SpotId
-    found_text: TextWithPersonPlaceholders   # 見つけた本人の体の刺激になる
+    found_text: TextWithUnassignedPeople   # 見つけた本人の体の刺激になる
     condition: Condition
     when_found: Effect
     finding: Finding                         # ONCE_IN_WORLD: 誰かが見つけたら終わり / ONCE_PER_PERSON: 人ごとに 1 回
@@ -229,7 +229,7 @@ class InteractionDeclaration:
     display_label: str
     precondition: Condition
     effect: Effect
-    success_text: TextWithPersonPlaceholders # 行った本人の体の刺激になる
+    success_text: TextWithUnassignedPeople # 行った本人の体の刺激になる
     shows_on_success: tuple[ShownToActor, ...]
     exertion: Exertion
     actor_requirement: ActorRequirement
@@ -271,7 +271,7 @@ class SoundFrom:
 @dataclass(frozen=True)
 class AnnouncementTo:
     audience: PeopleSelection
-    text: TextWithPersonPlaceholders
+    text: TextWithUnassignedPeople
     salience: Salience
 
 @final
@@ -289,16 +289,16 @@ class PerceptionDeclaration:                # 行為が周りにどう知覚さ�
 @dataclass(frozen=True)
 class SoundDeclaration:
     loudness: Loudness                      # 書かなければ、開け閉めは大きい、壊すはとても大きい、ほかはふつう
-    clear: TextWithPersonPlaceholders       # 人のプレースホルダーは声 (話す) のときだけ人が分かる。物音では Unidentified になる
-    muffled: TextWithPersonPlaceholders
+    clear: TextWithUnassignedPeople       # 人のプレースホルダーは声 (話す) のときだけ人が分かる。物音では Unidentified になる
+    muffled: TextWithUnassignedPeople
 
 @final
 @dataclass(frozen=True)
-class SightTextsDeclaration:                # 欄の意味は刺激の SightTexts (perception.md) と同じ。刺激を作るときに人で埋める
-    clear: TextWithPersonPlaceholders
-    dim: TextWithPersonPlaceholders | NotSeenInDim
-    unseen_actor: TextWithPersonPlaceholders | NotSeenWithoutActor
-    noticed_later: TextWithPersonPlaceholders | NotNoticedLater
+class SightTextsDeclaration:                # 欄の意味は刺激の SightTexts (perception.md) と同じ。刺激を作るときに人を割り当てる
+    clear: TextWithUnassignedPeople
+    dim: TextWithUnassignedPeople | NotSeenInDim
+    unseen_actor: TextWithUnassignedPeople | NotSeenWithoutActor
+    noticed_later: TextWithUnassignedPeople | NotNoticedLater
 
 @final
 @dataclass(frozen=True)
@@ -350,7 +350,7 @@ class DayPhaseDeclaration:
     name: DayPhaseName
     begins_at: TimeOfDay
     dark: bool                                  # 書かなければ夜だけ真
-    announcement: TextWithPersonPlaceholders | NoAnnouncement
+    announcement: TextWithUnassignedPeople | NoAnnouncement
 
 @final
 @dataclass(frozen=True)
