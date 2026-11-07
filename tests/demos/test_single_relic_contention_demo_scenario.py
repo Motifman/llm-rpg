@@ -67,6 +67,40 @@ class TestSingleRelicContentionDemoScenarioLoad:
 class TestSingleRelicContentionResolution:
     """同一遺物への 2 連続アクションで先勝・後敗が確定する挙動。"""
 
+    def test_tick_limit_is_checked_before_the_post_tick_turn(self, runtime) -> None:
+        """刻限のtickに入った後の手番では遺物を獲得して勝てない。"""
+
+        class _ClaimIfGameIsStillOpen:
+            def __init__(self) -> None:
+                self.end_result_is_lose = False
+                self.claim_attempted = False
+
+            def schedule_turn(self, _player_id: PlayerId) -> None:
+                return None
+
+            def run_scheduled_turns(self) -> None:
+                end_result = runtime.check_game_end()
+                self.end_result_is_lose = (
+                    end_result.is_ended and end_result.result is not None and end_result.result.value == "LOSE"
+                )
+                if end_result.is_ended:
+                    return
+                self.claim_attempted = True
+                runtime.do_interact(PlayerId(1), "ancient_relic", "claim_ancient_relic")
+
+        runtime._time_provider.set_current_tick(29)
+        trigger = _ClaimIfGameIsStillOpen()
+        runtime.set_simulation_llm_turn_trigger(trigger)
+
+        runtime.advance_tick()
+
+        assert runtime.current_tick() == 30
+        assert trigger.end_result_is_lose is True
+        assert trigger.claim_attempted is False
+        final_result = runtime.check_game_end()
+        assert final_result.result is not None
+        assert final_result.result.value == "LOSE"
+
     def test_first_claim_succeeds_and_triggers_win_end(self, runtime) -> None:
         """先に claim_ancient_relic した側は成功し relic_claimed フラグが立つ。"""
         # ゲーム開始前は終了していない
