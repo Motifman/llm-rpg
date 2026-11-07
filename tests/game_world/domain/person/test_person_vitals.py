@@ -348,6 +348,20 @@ class TestPassTimeHunger:
 
         assert vitals.get_events() == []
 
+    def test_hunger_beyond_the_limit_is_not_kept(self) -> None:
+        """限界 3 を超えて進めても空腹は 3 で止まるので、2 食べると 1 になり満腹の段階に戻る。"""
+        vitals = _vitals()
+        rule = _hunger(per_tick=5, limit=3, starvation=None)
+        for tick in (1, 2, 3):
+            vitals.pass_time(WorldTick(tick), _death(), rule)
+        vitals.clear_events()
+
+        vitals.satisfy_hunger(HungerAmount(2), rule)
+
+        [event] = vitals.get_events()
+        assert isinstance(event, HungerLevelChangedEvent)
+        assert event.level_after.name.value == "満腹"
+
     def test_no_starvation_damage_means_starving_does_not_hurt(self) -> None:
         """starvation_damage が NoStarvationDamage なら、限界のあいだも HP は減らない。"""
         vitals = _vitals()
@@ -575,11 +589,22 @@ class TestStatusEffects:
         vitals.clear_events()
 
         vitals.remove_expired_status_effects(WorldTick(5))
-        vitals.remove_expired_status_effects(WorldTick(6))
 
         [event] = vitals.get_events()
         assert isinstance(event, StatusEffectExpiredEvent)
         assert (event.person, event.effect) == (_ALICE, expiring)
+
+    def test_removed_effect_does_not_expire_again(self) -> None:
+        """一度外れた効果は、あとの tick でもう一度外れたことにならず、期限前の効果も残る。"""
+        vitals = _vitals()
+        vitals.add_status_effect(StatusEffect(kind=self._BLEEDING, expires_at=WorldTick(5)))
+        vitals.add_status_effect(StatusEffect(kind=StatusEffectType("poison"), expires_at=WorldTick(9)))
+        vitals.remove_expired_status_effects(WorldTick(5))
+        vitals.clear_events()
+
+        vitals.remove_expired_status_effects(WorldTick(8))
+
+        assert vitals.get_events() == []
 
     @pytest.mark.parametrize("make", [_fallen, _dead])
     def test_adding_to_a_person_not_alive_raises_domain_exception(self, make) -> None:
