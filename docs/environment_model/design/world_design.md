@@ -66,8 +66,8 @@ class PassageDeclaration:
     ends: tuple[SpotId, SpotId]
     two_way: bool
     travel_ticks: Ticks
-    states: tuple[PassageStateDeclaration, ...]   # 書かなければ「通れる、減衰 0」の 1 つ
-    initial_state: PassageStateName
+    states: tuple[PassageStateDeclaration, ...]   # 書かなければ open (「開いている」、通れる、減衰 0) の 1 つ
+    initial_state: PassageStateName               # 書かなければ open
 
     def allows(self, state: PassageStateName) -> bool: ...
     def state(self, name: PassageStateName) -> PassageStateDeclaration: ...
@@ -85,7 +85,32 @@ class PassageStateDeclaration:
 class ObjectStateKeyDeclaration:
     object_id: ObjectId
     key: StateKeyId
-    kind: FlagStateKind | CountStateKind | ChoiceStateKind | StockStateKind | WrittenTextStateKind
+    kind: StateKind
+    initial: StateValue                     # kind.accepts(initial) でなければ作れない。書いた文の鍵は NothingWritten だけ
+
+StateKind = ItemStateKind | StockStateKind | WrittenTextStateKind
+ItemStateKind = FlagStateKind | CountStateKind | ChoiceStateKind   # 品物は在庫と書いた文を持たない
+FlagStateKind()
+CountStateKind()                            # 上限を持たない
+ChoiceStateKind(choices: tuple[ChoiceName, ...])     # 1 つ以上、重ならない
+StockStateKind(capacity: Count, refills_every: Ticks | NoRefill)   # 上限・間隔ともに 1 以上
+WrittenTextStateKind()
+# どの種類も accepts(value: StateValue) -> bool を持つ
+
+StateValue = FlagValue | CountValue | ChoiceValue | StockValue | WrittenText | NothingWritten
+FlagValue(raised: bool)
+CountValue(count: Count)
+ChoiceValue(choice: ChoiceName)
+StockValue(amount: Count)
+WrittenText(body: TextBody, author: PersonId, written_at: WorldTick)
+NothingWritten()
+
+@final
+@dataclass(frozen=True)
+class ItemStateKeyDeclaration:
+    item_spec_id: ItemSpecId
+    key: StateKeyId
+    kind: ItemStateKind
     initial: StateValue
 
 @final
@@ -139,10 +164,10 @@ class CharacterDeclaration:
     person_id: PersonId                      # 人柄 (Persona) は持たない。Being が自分の人柄を持って入る (D1928-3)。シナリオの登場人物の欄は、読み込む側が世界の部分と Being の人柄に分ける
     appearance: DescriptionText
     spawn_spot: SpotId
-    initial_items: tuple[ItemSpecId, ...]
-    initial_held: tuple[ItemSpecId, ...]     # initial_items のうち、最初から手に持っている物
-    initial_groups: tuple[GroupId, ...]
-    knows_at_start: tuple[PersonId, ...]
+    initial_items: tuple[ItemSpecId, ...]    # 同じ品物を 2 回書けば 2 つ持つ
+    initial_held: tuple[ItemSpecId, ...]     # initial_items のうち、最初から手に持っている物。品物ごとに initial_items の数を超えられない
+    initial_groups: tuple[GroupId, ...]      # 重ならない
+    knows_at_start: tuple[PersonId, ...]     # 重ならない。自分を含んでもよい
 
 @final
 @dataclass(frozen=True)
@@ -574,7 +599,9 @@ infrastructure: JSON を読む
   ③ WorldDesign.compose
 ```
 
-- 名詞の宣言は互いを宣言ではなく ID で指す (`SpotSectionDeclaration.reachable_objects`、`CharacterDeclaration.spawn_spot` など)。ID が宣言にあるかは `DeclaredNouns` が作るときに確かめ、無ければ `DesignFlaw` にする
+- 名詞の宣言は互いを宣言ではなく ID で指す (`SpotSectionDeclaration.reachable_objects`、`CharacterDeclaration.spawn_spot` など)。ID が宣言にあるかは `DeclaredNouns` が作るときに確かめ、無ければ `DesignFlaw` にする。`GroupDeclaration.grouping` だけは、分け方が集団を指さず循環しないので、宣言のまま持つ
+- 宣言 1 つだけで判断できる誤り (通路の状態名の重複、両端が同じ場所の通路、`initial_state` が `states` に無い、区画の `reachable_objects` の重複、状態の鍵の重複、種類に合わない `initial`) は、宣言の型が作るときにドメイン例外で断る。ほかの宣言と照らし合わせて分かる誤りは `DeclaredNouns` が確かめる。どちらで止めても作者に返るのは `DesignFlaw` で、宣言の型の例外は読み込む側が場所を付けて `DesignFlaw` に包む
+- `Unchanged` (雰囲気を変える効果で、変えない欄) と `NoCapacity` (区画の定員が無い) は、中身の無い型
 
 - 誤りは最初の 1 つで止めず、集めてから 1 つの `WorldDesignFlawsException` で投げる。どの誤りにも場所 (`DesignLocation`) を付ける。JSON の書き方の誤り (必須キーの欠け、列挙の綴り違い) も infrastructure が `DesignFlaw` に包み、素の `KeyError` / `ValueError` を外に出さない
 - compose は、条件と効果を置いた場所ごとに使える主語 ([condition.md](condition.md)) と、`requirements()` を照らし合わせる
