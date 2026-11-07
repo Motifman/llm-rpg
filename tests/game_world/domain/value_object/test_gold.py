@@ -14,7 +14,7 @@ class TestGold:
 
     def test_zero_is_accepted_for_no_money(self) -> None:
         """一文無しを表す 0 を受け付ける。"""
-        assert Gold(0) == Gold(0)
+        assert Gold(0).value == 0
 
     def test_negative_raises_domain_exception(self) -> None:
         """負の額を渡すと ValueOutOfRangeException を投げる。"""

@@ -12,7 +12,7 @@ class TestRate:
     @pytest.mark.parametrize("raw", [0, 0.6, 1, 1.0])
     def test_values_from_zero_to_one_are_accepted(self, raw: float) -> None:
         """0、0.6、1 を受け付ける (整数でも小数でもよい)。"""
-        assert Rate(raw) == Rate(raw)
+        assert Rate(raw).value == raw
 
     @pytest.mark.parametrize("raw", [-0.01, 1.01, 2.0])
     def test_values_outside_zero_to_one_raise_domain_exception(self, raw: float) -> None:
@@ -33,7 +33,7 @@ class TestMultiplier:
     @pytest.mark.parametrize("raw", [0.5, 1, 2, 2.5])
     def test_positive_values_are_accepted(self, raw: float) -> None:
         """1 未満も 1 を超える値も、0 より大きければ受け付ける。"""
-        assert Multiplier(raw) == Multiplier(raw)
+        assert Multiplier(raw).value == raw
 
     @pytest.mark.parametrize("raw", [0, -1.0])
     def test_zero_or_negative_raises_domain_exception(self, raw: float) -> None:
@@ -54,7 +54,7 @@ class TestProbability:
     @pytest.mark.parametrize("raw", [0, 0.15, 1])
     def test_values_from_zero_to_one_are_accepted(self, raw: float) -> None:
         """0、0.15、1 を受け付ける。"""
-        assert Probability(raw) == Probability(raw)
+        assert Probability(raw).value == raw
 
     @pytest.mark.parametrize("raw", [-0.1, 1.1])
     def test_values_outside_zero_to_one_raise_domain_exception(self, raw: float) -> None:

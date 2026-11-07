@@ -11,7 +11,7 @@ class TestTicks:
 
     def test_zero_is_accepted_because_death_grace_may_be_zero(self) -> None:
         """DeathRule.grace に使う 0 (倒れたらすぐ死ぬ) を受け付ける。"""
-        assert Ticks(0) == Ticks(0)
+        assert Ticks(0).value == 0
 
     def test_negative_raises_domain_exception(self) -> None:
         """負の値を渡すと ValueOutOfRangeException を投げる。"""

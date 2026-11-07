@@ -11,7 +11,7 @@ class TestFatigueAmount:
 
     def test_zero_is_accepted_for_no_fatigue(self) -> None:
         """疲れていないことを表す 0 を受け付ける。"""
-        assert FatigueAmount(0) == FatigueAmount(0)
+        assert FatigueAmount(0).value == 0
 
     def test_negative_raises_domain_exception(self) -> None:
         """負の値を渡すと ValueOutOfRangeException を投げる。"""
@@ -39,7 +39,7 @@ class TestHungerAmount:
 
     def test_zero_is_accepted_for_no_hunger(self) -> None:
         """空腹でないことを表す 0 を受け付ける。"""
-        assert HungerAmount(0) == HungerAmount(0)
+        assert HungerAmount(0).value == 0
 
     def test_negative_raises_domain_exception(self) -> None:
         """負の値を渡すと ValueOutOfRangeException を投げる。"""

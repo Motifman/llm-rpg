@@ -14,7 +14,7 @@ class TestWorldTick:
 
     def test_zero_is_the_first_tick(self) -> None:
         """世界の始まりの時刻 0 を受け付ける。"""
-        assert WorldTick(0) == WorldTick(0)
+        assert WorldTick(0).value == 0
 
     def test_negative_raises_domain_exception(self) -> None:
         """負の時刻を渡すと ValueOutOfRangeException を投げる。"""

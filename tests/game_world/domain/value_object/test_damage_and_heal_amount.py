@@ -11,7 +11,7 @@ class TestDamage:
 
     def test_one_is_the_smallest_damage(self) -> None:
         """1 を受け付ける。"""
-        assert Damage(1) == Damage(1)
+        assert Damage(1).value == 1
 
     @pytest.mark.parametrize("raw", [0, -1])
     def test_zero_or_negative_raises_domain_exception(self, raw: int) -> None:
@@ -31,7 +31,7 @@ class TestHealAmount:
 
     def test_one_is_the_smallest_heal(self) -> None:
         """1 を受け付ける。"""
-        assert HealAmount(1) == HealAmount(1)
+        assert HealAmount(1).value == 1
 
     @pytest.mark.parametrize("raw", [0, -1])
     def test_zero_or_negative_raises_domain_exception(self, raw: int) -> None:

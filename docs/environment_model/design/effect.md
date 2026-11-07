@@ -66,7 +66,7 @@ RaiseFlagEffect(flag: FlagDeclaration)
 LowerFlagEffect(flag: FlagDeclaration)
 SetObjectValueEffect(key: ObjectStateKeyDeclaration, value: StateValue)
 AddToObjectCountEffect(key: ObjectStateKeyDeclaration, amount: Count)
-SubtractFromObjectCountEffect(key: ObjectStateKeyDeclaration, amount: Count)   # 0 を下回るなら集約が断る
+SubtractFromObjectCountEffect(key: ObjectStateKeyDeclaration, amount: Count)   # ObjectState.subtract_from_count。0 を下回るなら集約が断る
 TakeFromObjectStockEffect(key: ObjectStateKeyDeclaration, amount: Count)
 WriteTextEffect(key: ObjectStateKeyDeclaration, body_argument: ArgumentName)
 SetItemValueEffect(item: ItemSubject, key: ItemStateKeyDeclaration, value: StateValue)

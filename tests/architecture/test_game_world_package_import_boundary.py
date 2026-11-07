@@ -89,6 +89,7 @@ def test_game_world_has_domain_application_and_infrastructure_layers() -> None:
         "import ai_rpg_world\n",
         "from ai_rpg_world.being.domain.being_id import BeingId\n",
         "from ai_rpg_world.being import domain\n",
+        "from ai_rpg_world import being\n",
         "from typing import TYPE_CHECKING\n"
         "if TYPE_CHECKING:\n"
         "    from ai_rpg_world.domain.world_graph.value_object.spot_id import SpotId\n",
@@ -126,6 +127,7 @@ def test_similarly_named_package_is_not_mistaken_for_allowed(tmp_path: Path) -> 
         "from ai_rpg_world import eventing\n",
         "from ai_rpg_world.being.contract import Observation\n",
         "from ai_rpg_world.being.contract.observation import Observation\n",
+        "from ai_rpg_world.being import contract\n",
         "from ai_rpg_world.game_world.domain.value_object import Ticks\n",
         "from .value_object import Ticks\n",
         "from dataclasses import dataclass\n",

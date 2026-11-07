@@ -14,7 +14,7 @@ class TestCount:
 
     def test_zero_is_accepted_for_nothing_held_or_searched(self) -> None:
         """持っていない・探していないことを表す 0 を受け付ける (item_count、search_count)。"""
-        assert Count(0) == Count(0)
+        assert Count(0).value == 0
 
     def test_negative_raises_domain_exception(self) -> None:
         """負の値を渡すと ValueOutOfRangeException を投げる。"""

@@ -11,7 +11,7 @@ class TestCapacity:
 
     def test_one_is_the_smallest_capacity(self) -> None:
         """1 人乗りの区画を表す 1 を受け付ける。"""
-        assert Capacity(1) == Capacity(1)
+        assert Capacity(1).value == 1
 
     @pytest.mark.parametrize("raw", [0, -1])
     def test_zero_or_negative_raises_domain_exception(self, raw: int) -> None:
@@ -32,7 +32,7 @@ class TestHandsNeeded:
     @pytest.mark.parametrize("raw", [1, 2])
     def test_one_or_two_hands_are_accepted(self, raw: int) -> None:
         """1 と 2 を受け付ける。"""
-        assert HandsNeeded(raw) == HandsNeeded(raw)
+        assert HandsNeeded(raw).value == raw
 
     @pytest.mark.parametrize("raw", [0, 3, -1])
     def test_other_numbers_raise_domain_exception(self, raw: int) -> None:
