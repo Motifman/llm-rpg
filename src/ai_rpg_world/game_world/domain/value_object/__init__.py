@@ -1,6 +1,8 @@
 from ai_rpg_world.game_world.domain.value_object.capacity import Capacity
 from ai_rpg_world.game_world.domain.value_object.count import Count
 from ai_rpg_world.game_world.domain.value_object.damage import Damage
+from ai_rpg_world.game_world.domain.value_object.description_text import DescriptionText
+from ai_rpg_world.game_world.domain.value_object.display_name import DisplayName
 from ai_rpg_world.game_world.domain.value_object.fatigue_amount import FatigueAmount
 from ai_rpg_world.game_world.domain.value_object.flag_id import FlagId
 from ai_rpg_world.game_world.domain.value_object.gold import Gold
@@ -32,6 +34,8 @@ __all__ = [
     "Capacity",
     "Count",
     "Damage",
+    "DescriptionText",
+    "DisplayName",
     "FatigueAmount",
     "FlagId",
     "Gold",

@@ -74,7 +74,7 @@ RevealObjectEffect(obj: ObjectDeclaration)
 ChangePassageStateEffect(passage: PassageDeclaration, state: PassageStateName)
 RevealPassageEffect(passage: PassageDeclaration)      # 道が現れる。扉を開けるのは ChangePassageStateEffect
 RemovePassageEffect(passage: PassageDeclaration)      # 道が無くなる
-ChangeAtmosphereEffect(spot: SpotDeclaration, lighting: Lighting | Unchanged, temperature: Temperature | Unchanged, ambient_sound: str | NoAmbientSound | Unchanged, smell: str | NoSmell | Unchanged)
+ChangeAtmosphereEffect(spot: SpotDeclaration, lighting: Lighting | Unchanged, temperature: Temperature | Unchanged, ambient_sound: DescriptionText | NoAmbientSound | Unchanged, smell: DescriptionText | NoSmell | Unchanged)
 GiveItemEffect(who: Subject, item_spec: ItemSpecDeclaration, count: Count)
 GiveFromLootTableEffect(who: Subject, table: LootTableDeclaration)
 TakeItemEffect(who: Subject, item_spec: ItemSpecDeclaration, count: Count)
