@@ -1,3 +1,10 @@
+from ai_rpg_world.game_world.domain.person.group_membership import (
+    GroupMembership,
+    GroupMembershipEvent,
+    NotInAnyGroup,
+    PersonJoinedGroupEvent,
+    PersonLeftGroupEvent,
+)
 from ai_rpg_world.game_world.domain.person.life_state import (
     Alive,
     Dead,
@@ -7,6 +14,14 @@ from ai_rpg_world.game_world.domain.person.life_state import (
     Starvation,
     StruckByPerson,
     WorldHappening,
+)
+from ai_rpg_world.game_world.domain.person.person_outcomes import (
+    DeclaredOutcome,
+    Died,
+    Outcome,
+    PersonOutcomeDecidedEvent,
+    PersonOutcomes,
+    Undecided,
 )
 from ai_rpg_world.game_world.domain.person.person_vitals import PersonVitals
 from ai_rpg_world.game_world.domain.person.person_vitals_events import (
@@ -31,17 +46,27 @@ from ai_rpg_world.game_world.domain.person.status_effect import (
 __all__ = [
     "Alive",
     "Dead",
+    "DeclaredOutcome",
+    "Died",
     "Down",
     "FallCause",
     "FatigueLevelChangedEvent",
+    "GroupMembership",
+    "GroupMembershipEvent",
     "HungerLevelChangedEvent",
     "LifeState",
     "NoPreviousStatusEffect",
+    "NotInAnyGroup",
+    "Outcome",
     "PersonBecameBusyEvent",
     "PersonDamagedEvent",
     "PersonDiedEvent",
     "PersonFellEvent",
     "PersonHealedEvent",
+    "PersonJoinedGroupEvent",
+    "PersonLeftGroupEvent",
+    "PersonOutcomeDecidedEvent",
+    "PersonOutcomes",
     "PersonRevivedEvent",
     "PersonVitals",
     "PersonVitalsEvent",
@@ -51,5 +76,6 @@ __all__ = [
     "StatusEffectExpiredEvent",
     "StatusEffectType",
     "StruckByPerson",
+    "Undecided",
     "WorldHappening",
 ]

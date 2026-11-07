@@ -12,6 +12,8 @@ from ai_rpg_world.game_world.domain.person import (
     Alive,
     Dead,
     Down,
+    FatigueLevelChangedEvent,
+    HungerLevelChangedEvent,
     NoPreviousStatusEffect,
     PersonBecameBusyEvent,
     PersonDamagedEvent,
@@ -27,8 +29,6 @@ from ai_rpg_world.game_world.domain.person import (
     StatusEffectType,
     StruckByPerson,
     WorldHappening,
-    FatigueLevelChangedEvent,
-    HungerLevelChangedEvent,
 )
 from ai_rpg_world.game_world.domain.rules.death_rule import DeathRule
 from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueLevel, FatigueLevelName, FatigueRule
