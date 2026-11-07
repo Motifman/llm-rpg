@@ -8,8 +8,6 @@ from ai_rpg_world.game_world.domain.value_object._checks import require_finite_n
 
 @dataclass(frozen=True)
 class Rate:
-    """0 以上 1 以下の割合。1 を超える倍率は Multiplier で表す。"""
-
     value: float
 
     def __post_init__(self) -> None:

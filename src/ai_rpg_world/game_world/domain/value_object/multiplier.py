@@ -8,8 +8,6 @@ from ai_rpg_world.game_world.domain.value_object._checks import require_finite_n
 
 @dataclass(frozen=True)
 class Multiplier:
-    """0 より大きい倍率 (StealthRule.duration_rate の 2 倍など)。"""
-
     value: float
 
     def __post_init__(self) -> None:

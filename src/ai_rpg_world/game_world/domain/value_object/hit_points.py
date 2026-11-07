@@ -10,8 +10,6 @@ from ai_rpg_world.game_world.domain.value_object.heal_amount import HealAmount
 
 @dataclass(frozen=True)
 class HitPoints:
-    """体力の今の値と最大値。最大値は、起こすときの割合 (ReviveEffect.hp_rate) の基準になる。"""
-
     current: int
     maximum: int
 

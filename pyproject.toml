@@ -124,7 +124,6 @@ mypy_path = "src"
 strict = true
 # まだ検査対象に入っていない文脈から型を借りるが、そちらの違反は報告しない。
 follow_imports = "silent"
-# src 配下は全レイヤーが対象。
 files = [
     "src/ai_rpg_world/eventing",
     "src/ai_rpg_world/domain",

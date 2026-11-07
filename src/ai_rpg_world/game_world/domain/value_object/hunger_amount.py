@@ -7,8 +7,6 @@ from ai_rpg_world.game_world.domain.value_object._checks import require_int_at_l
 
 @dataclass(frozen=True, order=True)
 class HungerAmount:
-    """空腹の量。"""
-
     value: int
 
     def __post_init__(self) -> None:

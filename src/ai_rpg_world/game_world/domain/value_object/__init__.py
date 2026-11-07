@@ -1,5 +1,3 @@
-"""game_world の値の型。"""
-
 from ai_rpg_world.game_world.domain.value_object.capacity import Capacity
 from ai_rpg_world.game_world.domain.value_object.count import Count
 from ai_rpg_world.game_world.domain.value_object.damage import Damage

@@ -8,8 +8,6 @@ from ai_rpg_world.game_world.domain.value_object._checks import require_finite_n
 
 @dataclass(frozen=True)
 class Probability:
-    """0 以上 1 以下の確率。"""
-
     value: float
 
     def __post_init__(self) -> None:

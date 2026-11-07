@@ -9,8 +9,6 @@ from ai_rpg_world.game_world.domain.value_object.ticks import Ticks
 
 @dataclass(frozen=True, order=True)
 class WorldTick:
-    """世界の時刻。始まりを 0 として数える。"""
-
     value: int
 
     def __post_init__(self) -> None:
