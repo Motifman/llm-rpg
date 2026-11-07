@@ -27,18 +27,12 @@ class FlagStateKind:
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, FlagValue)
 
-    def accepts_initial(self, value: StateValue) -> bool:
-        return self.accepts(value)
-
 
 @final
 @dataclass(frozen=True)
 class CountStateKind:
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, CountValue)
-
-    def accepts_initial(self, value: StateValue) -> bool:
-        return self.accepts(value)
 
 
 @final
@@ -54,9 +48,6 @@ class ChoiceStateKind:
 
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, ChoiceValue) and value.choice in self.choices
-
-    def accepts_initial(self, value: StateValue) -> bool:
-        return self.accepts(value)
 
 
 @final
@@ -79,14 +70,14 @@ class StockStateKind:
                 f"StockStateKind refills_every must be >= 1 tick, got {self.refills_every.value}"
             )
 
-    def accepts_initial(self, value: StateValue) -> bool:
+    def accepts(self, value: StateValue) -> bool:
         return isinstance(value, StockValue) and value.amount <= self.capacity
 
 
 @final
 @dataclass(frozen=True)
 class WrittenTextStateKind:
-    def accepts_initial(self, value: StateValue) -> bool:
+    def accepts(self, value: StateValue) -> bool:
         return isinstance(value, NothingWritten)
 
 

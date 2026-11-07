@@ -38,7 +38,7 @@ class ItemStateKeyDeclaration:
             raise ItemStateKindNotAllowedException(
                 f"{self.item_spec_id.value}.{self.key.value} cannot be {self.kind!r} on an item"
             )
-        if not self.kind.accepts_initial(self.initial):
+        if not self.kind.accepts(self.initial):
             raise StateValueMismatchesKindException(
                 f"initial {self.initial!r} of {self.item_spec_id.value}.{self.key.value} does not fit {self.kind!r}"
             )
