@@ -12,7 +12,7 @@
 Being の契約の観測 (文は TextWithPeople のまま。人の穴は Being が埋める)
 ```
 
-1 つの出来事から出た刺激は、本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、1 人には最初に知覚したもの 1 つだけを渡す。扉が開くのを見た人に、同じ扉の音を別の観測として重ねないため。
+1 つの確定の範囲 (1 つの行為、1 つの出来事の発火、1 回の時の経過) から出た刺激は、1 人には最初に知覚したもの 1 つだけを渡す。扉が開くのを見た人に、同じ扉の音を別の観測として重ねないため。聞く順は、行為のイベント (`PersonActedEvent`、`ActionAttemptFailedEvent`) から作った刺激が先で、状態のイベントから作った刺激が後。その中では 本人の体 → 見える → 聞こえる → 世界の知らせ。`always_delivered` の刺激 (倒れたこと) だけは、ほかと重なっても届ける。
 
 知覚の決まりはドメインサービスにしない。規則は知覚する人 (`Perceiver`) と刺激、明るさと音の値に置き、世界を何でも読める窓口 (`WorldFacts`) は渡さない。
 
@@ -69,6 +69,7 @@ class SightStimulus:
     manner: Openly | Stealthily
     involved: tuple[PersonId, ...]
     salience: Salience
+    always_delivered: bool                # 作者の目撃の文が倒れたことに触れていなくても、見ていた人が知るため
 
     def perceived_by(self, perceiver: Perceiver, lighting: Lighting) -> PerceptionOutcome: ...
 
@@ -108,27 +109,37 @@ class AnnouncementStimulus:
 ## 知覚する人
 
 ```python
-PerceiverState = Awake | Unconscious | Gone | Departed   # Gone は、死んで、去った人の手番が無い世界の人
+Perceiver = LivingPerceiver | DepartedPerceiver
 
 @final
 @dataclass(frozen=True)
-class Perceiver:                          # ユースケースが、生死・居場所・世界の決まりから作る
+class LivingPerceiver:
     person: PersonId
-    state: PerceiverState
+    life: Alive | Down
     location: Location
     attentive: bool                       # 耳を澄ましている
 
-    def notices_surroundings(self, involved: bool) -> SurroundingsAwareness: ...   # 各刺激の perceived_by が使う
+    def notices_surroundings(self, involved: bool) -> SurroundingsAwareness: ...
+
+@final
+@dataclass(frozen=True)
+class DepartedPerceiver:                  # 死んで、去った人として動く人 (DepartedPerson)
+    person: PersonId
+    location: Location
+
+    def notices_surroundings(self, involved: bool) -> SurroundingsAwareness: ...
 
 SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 ```
 
-| 刺激 | 起きている (`Awake`) | 倒れている (`Unconscious`) | 死んだ (`Gone`) | 去った (`Departed`) |
-|---|---|---|---|---|
-| 見える | 明るさで決まる | 自分が関わるものは `NoticedLater`、ほかは `NotPerceived` | 知覚しない | 見える |
-| 聞こえる | 音の届き方で決まる | 同上 | 知覚しない | 聞こえる |
-| 本人の体 | 感じる | 感じる | 知覚しない | 体が無いので無い |
-| 世界の知らせ | 届く | `NoticedLater` | 知覚しない | 届く |
+死んで、去った人の手番が無い世界 (`departed_persons_act` が偽) の人には、`DeliverPerception` が知覚する人を作らない。何も知覚しない。
+
+| 刺激 | `LivingPerceiver` (`Alive`) | `LivingPerceiver` (`Down`) | `DepartedPerceiver` |
+|---|---|---|---|
+| 見える | 明るさで決まる | 自分が関わるものは `NoticedLater`、ほかは `NotPerceived` | 見える |
+| 聞こえる | 音の届き方で決まる | 同上 | 聞こえる |
+| 本人の体 | 感じる | 感じる | 体が無いので無い |
+| 世界の知らせ | 届く | `NoticedLater` | 届く |
 
 移動中の人はどの場所にもいない。見える刺激には気づかず、区間の両端の場所で起きた「大きい」「とても大きい」音だけを隣の場所の音として聞く。
 
@@ -161,8 +172,8 @@ class NoticedLater:
 @dataclass(frozen=True)
 class LightingConditions:                 # 1 つの場所の明るさを決める材料。ユースケースが集める
     declared: Lighting                    # 場所の宣言 (雰囲気が変わっていれば、変わった値)
-    outdoor: bool
-    dark_time_of_day: bool                # 昼夜の宣言で、今の時間帯が暗いか
+    outdoor: bool                         # SpotAtmosphere.outdoor
+    dark_time_of_day: bool                # DayPhaseDeclaration.dark
     weather_obscures: bool                # WeatherDeclaration.obscures_sight
     light_source_present: bool            # その場所の誰かが、灯った光源を持っているか
 
@@ -256,13 +267,26 @@ class MissedNotice:
 ```python
 @final
 @dataclass(frozen=True)
+class SeenPerson:
+    person: PersonRef | Unidentified
+    section: SpotSectionId | OpenArea     # 籠の中にいる、など
+
+@final
+@dataclass(frozen=True)
+class PresentPerson:                      # その場所にいる人。見えるかはまだ決まっていない
+    person: PersonRef
+    section: SpotSectionId | OpenArea
+
+@final
+@dataclass(frozen=True)
 class SpotContents:                       # その場所にあるもの。ユースケースが集める
     spot: SpotDeclaration
     passages: tuple[PassageInState, ...]
+    sections: tuple[SpotSectionDeclaration, ...]
     objects: tuple[ObjectDeclaration, ...]
     ground_items: tuple[ItemInstanceId, ...]
-    people: tuple[PersonRef, ...]
-    bodies: tuple[PersonRef, ...]
+    people: tuple[PresentPerson, ...]
+    bodies: tuple[PresentPerson, ...]
     monsters: tuple[MonsterId, ...]
 
 @final
@@ -271,10 +295,11 @@ class VisibleSurroundings:
     spot: SpotDeclaration
     shows_description: bool               # 真っ暗なら説明を出さず、音と気温だけ
     passages: tuple[PassageInState, ...]  # 真っ暗でも出す (手探りで分かる)
+    sections: tuple[SpotSectionDeclaration, ...]
     objects: tuple[ObjectDeclaration, ...]
     ground_items: tuple[ItemInstanceId, ...]
-    people: tuple[PersonRef | Unidentified, ...]
-    bodies: tuple[PersonRef | Unidentified, ...]
+    people: tuple[SeenPerson, ...]
+    bodies: tuple[SeenPerson, ...]
     monsters: tuple[MonsterId, ...]
     distant: tuple[DistantSight, ...]     # 屋外で見えるときだけ。視程は天候の宣言から
 
@@ -284,4 +309,4 @@ class VisibleSurroundings:
 
 - 持ち物、体の状態、時刻は、見えているものではなく自分が知っていること。場面に入れず、知覚を通さずに集約から読む。複数の集約にまたがるものはドメインサービスにする
 - 場面は「何が見えるか」だけを持つ。「何ができるか」は `AvailableActions` ([action.md](action.md)) が持ち、行為の対象の候補は場面に出ているものに限る
-- 着いたとき、起き上がったとき、その場所の明るさが上がったとき (灯した、夜が明けた、明かりを持った人が来た) は、場面の人、倒れた体、モンスターを 1 つの観測にして渡す。明るさが上がったかは、出来事の前後の `LightingConditions` を比べて決める
+- 着いたとき、起き上がったとき、その場所の明るさが上がったとき (灯した、夜が明けた、明かりを持った人が来た) は、場面の人、倒れた体、モンスターを 1 つの観測にして渡す (`DeliverSurroundings`)。明るさが上がったかは、出来事の前後の `LightingConditions` を比べて決める

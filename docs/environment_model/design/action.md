@@ -10,17 +10,22 @@ class ActionAttempt(Protocol):
     def exertion(self) -> Exertion: ...
 
 
-Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | WorldTimePassing
+Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | JointActionCompleted | WorldTimePassing
+
+@final
+@dataclass(frozen=True)
+class JointActionCompleted:
+    joint: JointActionDeclaration
 
 @final
 @dataclass(frozen=True)
 class HappeningFired:
-    happening: HappeningId
+    happening: HappeningDeclaration
 
 @final
 @dataclass(frozen=True)
 class ReactionFired:
-    reaction: ReactionId
+    reaction: ReactionDeclaration
 
 @final
 @dataclass(frozen=True)
@@ -36,6 +41,26 @@ class WorldTimePassing:
 ActorRequirement = LivingOnly | LivingOrDeparted
 CopresenceRequirement = WithPerson | WithObject | WithGroundItem | WithMonster | WithMerchant | WithMarketBoard
 Exertion = UsesBody | DoesNotUseBody
+
+class ActionKind(Enum):                     # どの世界にもある行為の種類。作者の操作は InteractionId で指す
+    TRAVEL = "TRAVEL"
+    SPEAK = "SPEAK"
+    LISTEN = "LISTEN"
+    WAIT = "WAIT"
+    TEND = "TEND"
+    HAND_OVER = "HAND_OVER"
+    PICK_UP = "PICK_UP"
+    DROP = "DROP"
+    SEARCH = "SEARCH"
+    USE_ITEM = "USE_ITEM"
+    ENTER_SECTION = "ENTER_SECTION"
+    LEAVE_SECTION = "LEAVE_SECTION"
+    CAST_BALLOT = "CAST_BALLOT"
+    INTERACT_WITH_OBJECT = "INTERACT_WITH_OBJECT"
+    INTERACT_WITH_CARRIED_ITEM = "INTERACT_WITH_CARRIED_ITEM"
+    INTERACT_WITH_PERSON = "INTERACT_WITH_PERSON"
+    ATTACK_MONSTER = "ATTACK_MONSTER"
+    # 取引と市場の種類は、その宣言を設計するときに足す
 Manner = Openly | Stealthily
 ```
 
@@ -45,7 +70,6 @@ Manner = Openly | Stealthily
 ObjectInteractionAttempt(actor: PersonId, obj: ObjectDeclaration, interaction: InteractionDeclaration, arguments: ActionArguments, manner: Manner)
 CarriedItemInteractionAttempt(actor: PersonId, item: ItemInstanceId, interaction: InteractionDeclaration, arguments: ActionArguments, manner: Manner)
 PersonInteractionAttempt(actor: PersonId, target: PersonId | SomeoneInTheDark, interaction: InteractionDeclaration, arguments: ActionArguments, manner: Manner)
-JointActionPreparationAttempt(actor: PersonId, obj: ObjectDeclaration, interaction: InteractionDeclaration)
 
 ItemUseAttempt(actor: PersonId, item: ItemInstanceId)
 TendAttempt(actor: PersonId, target: PersonId)
@@ -53,6 +77,8 @@ ItemHandOverAttempt(actor: PersonId, deliveries: tuple[Delivery, ...])     # 1 �
 GroundItemPickupAttempt(actor: PersonId, item: ItemInstanceId, manner: Manner)
 ItemDropAttempt(actor: PersonId, item: ItemInstanceId, manner: Manner)
 SpotSearchAttempt(actor: PersonId)
+EnterSectionAttempt(actor: PersonId, section: SpotSectionDeclaration)
+LeaveSectionAttempt(actor: PersonId)
 MonsterAttackAttempt(actor: PersonId, monster: MonsterId)
 
 TravelAttempt(actor: PersonId, destination: SpotDeclaration)
@@ -83,10 +109,11 @@ VoteFor(person: PersonId)
 @dataclass(frozen=True)
 class ActionRefusal:
     attempt: ActionAttempt
-    reason: CommonRuleRefusal | PreconditionRefusal | WorldRuleRefusal
+    reason: CommonRuleRefusal | PreconditionRefusal | WorldStateRefusal
     text: TextWithPeople
 
-CommonRuleRefusal = ActorCannotAct | NotTogether | TooTired | NotAllowedInThisStage
+CommonRuleRefusal = ActorCannotAct | NotTogether | OutOfReach | TooTired | NotAllowedInThisStage
+# OutOfReach: 区画の中からしか届かない物に、外から触ろうとした
 
 @final
 @dataclass(frozen=True)
@@ -95,8 +122,8 @@ class PreconditionRefusal:
 
 @final
 @dataclass(frozen=True)
-class WorldRuleRefusal:
-    rule: WorldRuleViolation
+class WorldStateRefusal:                    # 世界を変える途中で集約が断った (満員、相手がその品を持っていない)
+    code: RefusalCode                       # 集約が投げたドメイン例外の error_code
 ```
 
 ## 共通の前提

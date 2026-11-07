@@ -50,7 +50,7 @@ class RandomBranchEffect:
 @dataclass(frozen=True)
 class ForEveryoneEffect:
     people: PeopleSelection
-    effect: Effect                          # 中では Bound が「その人」を指す
+    effect: Effect                          # 中では EachPerson が「その人」を指す
 
 @final
 @dataclass(frozen=True)
@@ -71,12 +71,13 @@ WriteTextEffect(key: ObjectStateKeyDeclaration, body_argument: ArgumentName)
 SetItemValueEffect(item: ItemSubject, key: ItemStateKeyDeclaration, value: StateValue)
 RevealObjectEffect(obj: ObjectDeclaration)
 ChangePassageStateEffect(passage: PassageDeclaration, state: PassageStateName)
-OpenPassageEffect(passage: PassageDeclaration)
-ClosePassageOffEffect(passage: PassageDeclaration)
-ChangeAtmosphereEffect(spot: SpotDeclaration, change: AtmosphereChange)
+RevealPassageEffect(passage: PassageDeclaration)      # 道が現れる。扉を開けるのは ChangePassageStateEffect
+RemovePassageEffect(passage: PassageDeclaration)      # 道が無くなる
+ChangeAtmosphereEffect(spot: SpotDeclaration, lighting: Lighting | Unchanged, temperature: Temperature | Unchanged, ambient_sound: str | NoAmbientSound | Unchanged, smell: str | NoSmell | Unchanged)
 GiveItemEffect(who: Subject, item_spec: ItemSpecDeclaration, count: int)
 GiveFromLootTableEffect(who: Subject, table: LootTableDeclaration)
 TakeItemEffect(who: Subject, item_spec: ItemSpecDeclaration, count: int)
+MoveItemEffect(from_who: Subject, to_who: Subject, item: ItemByArgument)   # 同じ品物のまま移す。持っていなければ集約が断る
 DepositItemToObjectEffect(who: Subject, item_spec: ItemSpecDeclaration, key: ObjectStateKeyDeclaration)
 DepositGoldToObjectEffect(who: Subject, amount: int, key: ObjectStateKeyDeclaration)
 DamageEffect(who: Subject, amount: int)
@@ -85,11 +86,21 @@ ReviveEffect(who: Subject, hp_rate: float)
 StatusEffectInflictionEffect(who: Subject, kind: StatusEffectType, value: float, ticks: int)
 SatisfyNeedEffect(who: Subject, need: NeedType, amount: int)
 TeleportEffect(who: Subject, to: SpotDeclaration)
+PutIntoSectionEffect(who: Subject, section: SpotSectionDeclaration)   # 本人の意思でなく区画に入れる
+TakeOutOfSectionEffect(who: Subject)
 RemoveBodyEffect(who: Subject)
 JoinGroupEffect(who: Subject, group: GroupDeclaration)
 LeaveGroupEffect(who: Subject, group: GroupDeclaration)
-SetOutcomeEffect(who: Subject, outcome: Outcome)
+SetOutcomeEffect(who: Subject, outcome: OutcomeDeclaration)
 EnterWorldStageEffect(stage: WorldStageDeclaration)
 StartGroupDecisionEffect(decision: GroupDecisionDeclaration)
 CloseGroupDecisionEffect(decision: GroupDecisionDeclaration)
+```
+
+```python
+@final
+@dataclass(frozen=True)
+class ItemByArgument:                       # エージェントが引数で、持ち物の一覧の呼び方で指す品物
+    argument: ArgumentName
+    owner: Subject                          # 誰の持ち物から選ぶか
 ```

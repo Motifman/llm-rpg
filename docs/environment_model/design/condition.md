@@ -11,7 +11,7 @@ class WorldFacts(Protocol):
     """条件が世界を読む口。読むだけで、同じ巻き戻しの範囲の中の変化を映す。"""
     def now(self) -> WorldTick: ...
     def flag_is_raised(self, flag: FlagDeclaration) -> bool: ...
-    def world_stage(self) -> WorldStageId | NoWorldStages: ...
+    def world_stage(self) -> WorldStageDeclaration | NoWorldStages: ...   # WorldStage を宣言しない世界は NoWorldStages
     def ticks_in_world_stage(self) -> int: ...
     def time_of_day(self) -> TimeOfDay | NoDayNight: ...
     def weather(self) -> WeatherState | NoWeather: ...
@@ -26,7 +26,7 @@ class WorldFacts(Protocol):
     def outcome_of(self, person: PersonId) -> Outcome: ...
     def search_count(self, person: PersonId, spot: SpotId) -> int: ...
     def ticks_since_last_action(self, who: PersonId | Anyone, action: ActionKind | InteractionId, since: SinceStart | SinceWorldStageEntered) -> int | NeverDone: ...
-    def people(self, scope: PeopleScope) -> tuple[PersonId, ...]: ...
+    def people(self) -> tuple[PersonId, ...]: ...           # 世界の全員 (死んだ人、去った人を含む)
     def roll(self, occasion: ChanceOccasion) -> float: ...
 
 
@@ -38,14 +38,15 @@ class ChanceOccasion:
     position: ConditionPath | EffectPath
 
 
-Subject = Actor | Target | Chosen | Named | Bound   # 誰について。1 人に決まるものだけ
+Subject = Actor | Target | ChosenByGroup | NamedPerson | EachPerson   # 誰について。1 人に決まるものだけ
+# Actor: 行為をした人 / Target: 人への操作の相手 / ChosenByGroup: 集団の決定で選ばれた人
+# NamedPerson(character): 宣言で名指しした人 / EachPerson: ForEveryone などで 1 人ずつ見るときの、その人
 ItemSubject = ThisItem                             # どの品物について (品物を使う行為、手元の道具への操作のきっかけが答える)
 
 @final
 @dataclass(frozen=True)
-class PeopleSelection:
-    among: PeopleScope
-    where: Condition
+class PeopleSelection:                      # 世界の全員から、where が真の人を選ぶ
+    where: Condition                        # 中では EachPerson が「その人」を指す
 
     def select(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]: ...
     def requirements(self) -> Requirements: ...
@@ -97,7 +98,7 @@ class NotCondition:
 @dataclass(frozen=True)
 class ForSomeoneCondition:
     people: PeopleSelection
-    condition: Condition                    # 中では Bound が「その人」を指す
+    condition: Condition                    # 中では EachPerson が「その人」を指す
     failure_text: TextWithPeople | NoText
 
 @final
@@ -126,11 +127,12 @@ ObjectCountGreaterThanCondition(key: ObjectStateKeyDeclaration, other: ObjectSta
 ObjectStockAtLeastCondition(key: ObjectStateKeyDeclaration, amount: int)
 HasItemCondition(who: Subject, item_spec: ItemSpecDeclaration, count: int)
 IsAtSpotCondition(who: Subject, spot: SpotDeclaration)
+IsInSectionCondition(who: Subject, section: SpotSectionDeclaration)
 PeopleCountAtLeastCondition(people: PeopleSelection, count: int)
 IsMemberCondition(who: Subject, group: GroupDeclaration)
 IsDownCondition(who: Subject)
 IsAliveCondition(who: Subject)
-OutcomeIsCondition(who: Subject, outcome: Outcome)
+OutcomeIsCondition(who: Subject, outcome: Outcome)          # Died | DeclaredOutcome
 GoldAtLeastCondition(who: Subject, amount: int)
 NeedAtLeastCondition(who: Subject, need: NeedType, value: int)
 SearchCountAtLeastCondition(who: Subject, count: int)
@@ -141,3 +143,16 @@ ArgumentEqualsCondition(argument: ArgumentName, expected: str)
 HappeningHasFiredCondition(happening: HappeningDeclaration)
 TicksSinceHappeningAtLeastCondition(happening: HappeningDeclaration, ticks: int)
 ```
+
+## 置いた場所ごとに使える主語
+
+| 置いた場所 | 使える主語 |
+|---|---|
+| 物体や持ち物への操作、区画の入る条件 | `Actor` |
+| 人への操作 | `Actor`、`Target` |
+| 見つかる物 | `Actor` (見つけた人) |
+| 集団の決定の結果 (`when_decided`) | `ChosenByGroup` |
+| 出来事、反応、二人で合わせる操作の結果 | なし |
+| `ForEveryone` / `ForSomeone` / `PeopleSelection` の中 | 外の主語 + `EachPerson` |
+
+`NamedPerson` はどこでも使える。行為の引数を見るもの (`ArgumentEqualsCondition`、`ItemByArgument`) は行為の中でしか使えない。compose が `requirements()` と照らし合わせ、使えない主語は `DesignFlaw` にする。
