@@ -68,6 +68,7 @@ class PassageDeclaration:
     travel_ticks: Ticks
     states: tuple[PassageStateDeclaration, ...]   # 書かなければ open (「開いている」、通れる、減衰 0) の 1 つ
     initial_state: PassageStateName               # 書かなければ open
+    hidden_until_revealed: bool                   # RevealPassageEffect までは無い道。書かなければ false
 
     def allows(self, state: PassageStateName) -> bool: ...
     def state(self, name: PassageStateName) -> PassageStateDeclaration: ...
@@ -516,12 +517,12 @@ class StealthRule:                              # こっそり行っても、見
 @final
 @dataclass(frozen=True)
 class Route:
-    legs: tuple[PassageDeclaration, ...]
+    start: SpotId                               # 両方向に通れる通路は、legs だけではどちらの端から出るかが決まらない
+    legs: tuple[PassageDeclaration, ...]        # 1 本以上。start から順にたどれる (片道は ends の前の端から)
 
     @property
-    def start(self) -> SpotId: ...
-    @property
     def destination(self) -> SpotId: ...
+    def end_of_leg(self, leg_index: int) -> SpotId: ...
 
 
 class WorldDesign:

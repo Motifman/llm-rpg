@@ -166,3 +166,30 @@ class TestPassageDeclarationRejectsAmbiguousDeclarations:
                 two_way=True,
                 travel_ticks=Ticks(1),
             )
+
+
+class TestPassageDeclarationHiddenUntilRevealed:
+    """PassageDeclaration が、初めは無い道 (RevealPassageEffect で現れる) を宣言できることを保証する。"""
+
+    def test_passage_is_present_from_the_start_when_hidden_until_revealed_is_omitted(self) -> None:
+        """hidden_until_revealed を書かないと、初めからある道 (False) になる。"""
+        passage = PassageDeclaration(
+            passage_id=PassageId("path"),
+            ends=(SpotId("field"), SpotId("forest")),
+            two_way=True,
+            travel_ticks=Ticks(2),
+        )
+
+        assert passage.hidden_until_revealed is False
+
+    def test_passage_keeps_hidden_until_revealed_when_declared(self) -> None:
+        """hidden_until_revealed=True を渡すと、その値を持つ。"""
+        passage = PassageDeclaration(
+            passage_id=PassageId("secret_tunnel"),
+            ends=(SpotId("cellar"), SpotId("well")),
+            two_way=True,
+            travel_ticks=Ticks(3),
+            hidden_until_revealed=True,
+        )
+
+        assert passage.hidden_until_revealed is True
