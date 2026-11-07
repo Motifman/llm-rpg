@@ -10,6 +10,7 @@
 class FlagDeclaration:
     flag_id: FlagId
     meaning: str
+    initially_raised: bool
 
 @final
 @dataclass(frozen=True)
@@ -21,11 +22,45 @@ class SpotDeclaration:
 
 @final
 @dataclass(frozen=True)
+class SpotAtmosphere:
+    lighting: Lighting
+    outdoor: bool                           # 明るさの計算の材料 (LightingConditions.outdoor)
+    temperature: Temperature
+    ambient_sound: str | NoAmbientSound
+    smell: str | NoSmell
+
+    def with_changes(
+        self,
+        lighting: Lighting | Unchanged,
+        temperature: Temperature | Unchanged,
+        ambient_sound: str | NoAmbientSound | Unchanged,
+        smell: str | NoSmell | Unchanged,
+    ) -> "SpotAtmosphere": ...
+
+@final
+@dataclass(frozen=True)
+class SpotSectionDeclaration:               # 場所の中の、体で入る一角 (籠の中、小舟、檻、見張り台)。中と外は同じ場所
+    section_id: SpotSectionId
+    spot_id: SpotId
+    name: str
+    enter_label: str                        # 「籠に乗り込む」
+    leave_label: str                        # 「籠から降りる」
+    enter_text: TextWithPeople              # 入った本人の体の刺激
+    leave_text: TextWithPeople
+    exertion: Exertion
+    duration: Ticks | DefaultDuration
+    capacity: Capacity | NoCapacity
+    reachable_objects: tuple[ObjectId, ...] # 中からしか届かない物
+    entry_condition: Condition              # 書かなければ、いつでも入れる
+    perceived_as: PerceptionDeclaration
+
+@final
+@dataclass(frozen=True)
 class PassageDeclaration:
     passage_id: PassageId
     ends: tuple[SpotId, SpotId]
     two_way: bool
-    travel_ticks: int
+    travel_ticks: Ticks
     states: tuple[PassageStateDeclaration, ...]   # 書かなければ「通れる、減衰 0」の 1 つ
     initial_state: PassageStateName
     traversal_condition: Condition
@@ -62,6 +97,12 @@ class ObjectDeclaration:
 
 @final
 @dataclass(frozen=True)
+class ObjectAppearance:
+    seen_in_dark: bool                      # 光る物、大きな物。暗い・真っ暗でも場面に出る
+    hidden_until_revealed: bool             # RevealObjectEffect までは場面に出ず、操作もできない
+
+@final
+@dataclass(frozen=True)
 class ItemSpecDeclaration:
     item_spec_id: ItemSpecId
     name: str
@@ -69,7 +110,8 @@ class ItemSpecDeclaration:
     on_use: Effect | NotUsable
     interactions: tuple[InteractionDeclaration, ...]
     state_keys: tuple[ItemStateKeyDeclaration, ...]
-    lights_up: bool
+    lights_up: LitWhen | NotALightSource     # LitWhen(key, value): その状態の値のとき灯っている。手に持っているあいだ場所を照らす
+    hands_needed: HandsNeeded                # 1 (カンテラ) / 2 (つるはし)。書かなければ 1
 
 @final
 @dataclass(frozen=True)
@@ -98,6 +140,7 @@ class CharacterDeclaration:
     appearance: str
     spawn_spot: SpotId
     initial_items: tuple[ItemSpecId, ...]
+    initial_held: tuple[ItemSpecId, ...]     # initial_items のうち、最初から手に持っている物
     initial_groups: tuple[GroupId, ...]
     knows_at_start: tuple[PersonId, ...]
 
@@ -107,7 +150,7 @@ class WorldStageDeclaration:
     stage_id: WorldStageId
     name: str
     description: str
-    allowed_actions: frozenset[ActionKind] | AllActionsAllowed
+    allowed_actions: frozenset[ActionKind | InteractionId] | AllActionsAllowed
     when_entered: Effect
     when_left: Effect
 
@@ -119,18 +162,26 @@ class GroupDecisionDeclaration:
     voters: PeopleSelection
     choices: PeopleSelection
     abstain_allowed: bool
+    reveals_ballots: bool                   # 集計のとき、誰が誰に入れたかを知らせるか
     when_decided: Effect
     when_undecided: Effect
+
+@final
+@dataclass(frozen=True)
+class OutcomeDeclaration:
+    outcome_id: OutcomeId
+    name: str                               # 「救出」
+    announcement: TextWithPeople            # 「{person}は昇降機で外へ出た。」
 
 @final
 @dataclass(frozen=True)
 class DiscoverableDeclaration:
     discoverable_id: DiscoverableId
     spot_id: SpotId
-    found_text: str
+    found_text: TextWithPeople               # 見つけた本人の体の刺激になる
     condition: Condition
     when_found: Effect
-    finding: Finding                         # ONCE_IN_WORLD / ONCE_PER_PERSON
+    finding: Finding                         # ONCE_IN_WORLD: 誰かが見つけたら終わり / ONCE_PER_PERSON: 人ごとに 1 回
 
 
 class DeclaredNouns:
@@ -148,6 +199,8 @@ class DeclaredNouns:
         characters: Iterable[CharacterDeclaration],
         world_stages: Iterable[WorldStageDeclaration],
         group_decisions: Iterable[GroupDecisionDeclaration],
+        sections: Iterable[SpotSectionDeclaration],
+        outcomes: Iterable[OutcomeDeclaration],
     ) -> None: ...
 
     def flag(self, name: str, at: DesignLocation) -> FlagDeclaration: ...
@@ -161,6 +214,10 @@ class DeclaredNouns:
     def character(self, name: str, at: DesignLocation) -> CharacterDeclaration: ...
     def world_stage(self, name: str, at: DesignLocation) -> WorldStageDeclaration: ...
     def group_decision(self, name: str, at: DesignLocation) -> GroupDecisionDeclaration: ...
+    def section(self, name: str, at: DesignLocation) -> SpotSectionDeclaration: ...
+    def sections_at(self, spot: SpotId) -> tuple[SpotSectionDeclaration, ...]: ...
+    def outcome(self, name: str, at: DesignLocation) -> OutcomeDeclaration: ...
+    # 引けなかった名前は UnknownNameFlaw を投げる。読む側はその宣言 1 つを諦めて DesignFlaw を記録し、次へ進む
 
 
 # 動詞の宣言
@@ -177,6 +234,13 @@ class InteractionDeclaration:
     exertion: Exertion
     actor_requirement: ActorRequirement
     perceived_as: PerceptionDeclaration
+    reaches_unseen: bool                    # 暗がりの誰か (SomeoneInTheDark) に向けてできるか
+    duration: Ticks | DefaultDuration       # 行っているあいだ。書かなければ WorldRules.action_durations
+    allows_stealth: bool                    # こっそり行える (Stealthily) か
+
+ShownToActor = PeopleCountAt | WrittenTextOf   # 成功したとき本人だけに見せる、世界の今の値。success_text の後ろに付ける
+PeopleCountAt(spot: SpotDeclaration)
+WrittenTextOf(key: ObjectStateKeyDeclaration)
 
 @final
 @dataclass(frozen=True)
@@ -216,15 +280,29 @@ class PerceptionDeclaration:                # 行為が周りにどう知覚さ�
     witness: SightTexts
     target: SightTexts | NoTarget
     sound: SoundDeclaration | Silent
+    seen_in_dark: bool                              # 真っ暗でも dim の文が届く (光る、大きな動き)
     announcement: AnnouncementTo | NoAnnouncement   # 緊急の招集など、居場所に関わらず知らせるとき
-    salience: Salience
+    on_failure: SightTexts | NoFailureWitness       # 前提か世界を変える途中で断られたとき、見ていた人への文。書かなければ届けない (警告もしない)
+    salience: Salience                              # Notable: 外側が考え直す目安になる / Background: ならない
 
 @final
 @dataclass(frozen=True)
 class SoundDeclaration:
     loudness: Loudness                      # 書かなければ、開け閉めは大きい、壊すはとても大きい、ほかはふつう
-    clear: TextWithPeople
+    clear: TextWithPeople                   # 人の穴は声 (話す) のときだけ人が分かる。物音では Unidentified になる
     muffled: TextWithPeople
+
+@final
+@dataclass(frozen=True)
+class JointActionDeclaration:               # 二人で合わせる操作 (2 つの弁を 3 tick 以内に別々の人が開ける)
+    joint_id: JointActionId
+    required: tuple[tuple[ObjectId, InteractionId], ...]   # どの物体のどの操作か
+    window: Ticks                           # 最初の操作の tick + window + 1 の tick に揃っていなければ時間切れ
+    distinct_people: bool
+    on_complete: Effect
+    on_timeout: Effect                      # 最初の操作から window を過ぎた tick に 1 回だけ
+    complete_notice: HappeningNotice | NoNotice
+    timeout_notice: HappeningNotice | NoNotice
 
 @final
 @dataclass(frozen=True)
@@ -253,20 +331,36 @@ class WeatherDeclaration:
 
 @final
 @dataclass(frozen=True)
+class DayNightDeclaration:
+    ticks_per_day: Ticks
+    starts_at: TimeOfDay
+    phases: tuple[DayPhaseDeclaration, ...]     # 1 日を切れ目なく覆う
+
+@final
+@dataclass(frozen=True)
+class DayPhaseDeclaration:
+    name: DayPhaseName
+    begins_at: TimeOfDay
+    dark: bool                                  # 書かなければ夜だけ真
+    announcement: TextWithPeople | NoAnnouncement
+
+@final
+@dataclass(frozen=True)
 class ChangesEvery:
-    ticks: int
+    ticks: Ticks
     transitions: WeatherTransitions        # 書かなければ既定の表
 
 @final
 @dataclass(frozen=True)
 class WorldRules:
-    tend: TendRule
-    attack: AttackRule
+    tend: TendRule | NoTending              # NoTending なら介抱の行為が無い
     fatigue: FatigueRule
+    hunger: HungerRule
     death: DeathRule
     departed_persons_act: bool
     hearing: HearingValues
-    idle_limit: IdleLimit                   # 何も起きないまま、この間が過ぎたら手番を起こす
+    stealth: StealthRule
+    action_durations: Mapping[ActionKind, Ticks]   # 行っているあいだの既定 (話すは行っているあいだを作らない)。話す・耳を澄ます 1、拾う・置く・渡す・区画・投票・持ち替え 1、操作・品物を使う 2、探す・介抱 3
 
 @final
 @dataclass(frozen=True)
@@ -281,6 +375,40 @@ class HearingValues:
     def level_of(self, loudness: Loudness) -> SoundLevel: ...
     def quietest_audible(self) -> SoundLevel: ...
     def quality(self, level: SoundLevel | NotReached, attentive: bool) -> HearingQuality: ...
+
+@final
+@dataclass(frozen=True)
+class TendRule:
+    revive_hp_rate: Rate                        # 0.6
+
+@final
+@dataclass(frozen=True)
+class FatigueRule:
+    per_exertion: FatigueAmount                 # 2
+    limit: FatigueAmount                        # 100。達すると体を使う行為を断る (TooTired)
+    levels: tuple[FatigueLevel, ...]            # 段階の境目と呼び名
+
+@final
+@dataclass(frozen=True)
+class HungerRule:
+    per_tick: HungerAmount                      # 1
+    limit: HungerAmount
+    starvation_damage: Damage                   # 限界のあいだ毎 tick
+    levels: tuple[HungerLevel, ...]
+
+@final
+@dataclass(frozen=True)
+class DeathRule:
+    grace: Ticks                                # 30。fell_at + grace の tick に死ぬ。0 なら倒れたらすぐ死ぬ
+
+@final
+@dataclass(frozen=True)
+class StealthRule:                              # こっそり行っても、見ていた人ごとに確率で気づく
+    notice_by_bystander: Mapping[SightQuality, Probability]   # SeesClearly 40%、SeesShapes 15%、SeesNothing 0%
+    notice_by_target: Mapping[SightQuality, Probability]      # 60%、30%、0%
+    attentive_bonus: Probability                # 耳を澄ましている人 +20%
+    duration_rate: Rate                         # 行っているあいだを 2 倍
+    # こっそり行った物音は 1 段小さくする。行った本人には、気づかれたかを伝えない
 
 @final
 @dataclass(frozen=True)
@@ -301,10 +429,13 @@ class WorldDesign:
         happenings: Iterable[HappeningDeclaration],
         reactions: Iterable[ReactionDeclaration],
         discoverables: Iterable[DiscoverableDeclaration],
+        joint_actions: Iterable[JointActionDeclaration],
+        person_interactions: Iterable[InteractionDeclaration],
         ending: EndingDeclaration,
         world_rules: WorldRules,
-        initial_stage: WorldStageId | NoWorldStages,
-        initial_flags: Iterable[FlagDeclaration],
+        weather: WeatherDeclaration | NoWeather,
+        day_night: DayNightDeclaration | NoDayNight,
+        initial_stage: WorldStageDeclaration | NoWorldStages,
     ) -> "WorldDesign": ...
 
     @property
@@ -316,7 +447,9 @@ class WorldDesign:
 
     def interaction_on_object(self, obj: ObjectId, interaction: InteractionId) -> InteractionDeclaration: ...
     def interaction_on_item(self, item_spec: ItemSpecId, interaction: InteractionId) -> InteractionDeclaration: ...
+    def person_interaction(self, interaction: InteractionId) -> InteractionDeclaration: ...   # 殴る、盗むなど、人への操作
     def happenings(self) -> tuple[HappeningDeclaration, ...]: ...
+    def joint_actions(self) -> tuple[JointActionDeclaration, ...]: ...
     def reactions(self) -> tuple[ReactionDeclaration, ...]: ...
     def discoverables_at(self, spot: SpotId) -> tuple[DiscoverableDeclaration, ...]: ...
     def route(self, start: SpotId, destination: SpotId) -> Route | NoRoute: ...
@@ -349,5 +482,9 @@ infrastructure: JSON を読む
   ③ WorldDesign.compose
 ```
 
+- 誤りは最初の 1 つで止めず、集めてから 1 つの `WorldDesignFlawsException` で投げる。どの誤りにも場所 (`DesignLocation`) を付ける。JSON の書き方の誤り (必須キーの欠け、列挙の綴り違い) も infrastructure が `DesignFlaw` に包み、素の `KeyError` / `ValueError` を外に出さない
+- compose は、条件と効果を置いた場所ごとに使える主語 ([condition.md](condition.md)) と、`requirements()` を照らし合わせる
+- `initially_raised` でもなく、どの `RaiseFlagEffect` にも出てこない旗を条件が見ていたら `DesignFlaw`。立てるだけで誰も見ない旗は `DesignWarning`
+- 締める出来事 (`CloseGroupDecisionEffect`) が 1 つも無い集団の決定は `DesignWarning`。猶予 (`DeathRule.grace`) が 0 なのに介抱がある世界は `DesignFlaw`
 - 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、compose が決まった文で埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)
 - 宣言に無い通路の状態の名前、呼び名 (`display_name`) の無い値が文に出るときは、`DesignFlaw` で止める
