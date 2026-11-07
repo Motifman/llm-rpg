@@ -34,6 +34,7 @@ class PassageDeclaration:
     travel_ticks: Ticks
     states: tuple[PassageStateDeclaration, ...] = ()
     initial_state: PassageStateName = _OPEN
+    hidden_until_revealed: bool = False
 
     def __post_init__(self) -> None:
         if self.ends[0] == self.ends[1]:
