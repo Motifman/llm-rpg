@@ -33,7 +33,7 @@ class TestDeclaredLighting:
 
 
 class TestDarkeningOutdoors:
-    """屋外で暗い時間帯か見えにくくする天候のとき、明るさが 1 段だけ暗くなることを保証する。"""
+    """屋外の場所で、夜などの暗い時間帯か、霧や嵐など見通しの悪い天候のとき、明るさが 1 段だけ暗くなることを保証する。"""
 
     @pytest.mark.parametrize(
         ("declared", "expected"),
@@ -49,11 +49,11 @@ class TestDarkeningOutdoors:
         assert _conditions(declared, outdoor=True, dark_time_of_day=True).lighting() is expected
 
     def test_outdoor_obscuring_weather_darkens_one_step(self) -> None:
-        """屋外で見えにくくする天候なら、明るい時間帯でも 1 段暗くなる。"""
+        """屋外の場所で見通しの悪い天候なら、昼でも 1 段暗くなる。"""
         assert _conditions(Lighting.BRIGHT, outdoor=True, weather_obscures=True).lighting() is Lighting.DUSKY
 
     def test_dark_time_and_obscuring_weather_together_darken_only_one_step(self) -> None:
-        """暗い時間帯と見えにくくする天候が重なっても、2 段ではなく 1 段だけ暗くなる。"""
+        """暗い時間帯と見通しの悪い天候が重なっても、2 段ではなく 1 段だけ暗くなる。"""
         conditions = _conditions(Lighting.BRIGHT, outdoor=True, dark_time_of_day=True, weather_obscures=True)
 
         assert conditions.lighting() is Lighting.DUSKY
@@ -65,7 +65,7 @@ class TestDarkeningOutdoors:
     def test_indoors_neither_dark_time_nor_weather_darkens(
         self, dark_time_of_day: bool, weather_obscures: bool
     ) -> None:
-        """屋内なら、暗い時間帯でも見えにくくする天候でも宣言の明るさのまま。"""
+        """屋内なら、暗い時間帯でも見通しの悪い天候でも宣言の明るさのまま。"""
         conditions = _conditions(
             Lighting.BRIGHT, outdoor=False, dark_time_of_day=dark_time_of_day, weather_obscures=weather_obscures
         )
