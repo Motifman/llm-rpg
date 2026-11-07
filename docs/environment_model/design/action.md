@@ -116,7 +116,7 @@ VoteFor(person: PersonId)
 class ActionRefusal:
     attempt: ActionAttempt
     reason: CommonRuleRefusal | PreconditionRefusal | WorldStateRefusal
-    text: TextWithPeople
+    text: TextWithAssignedPeople
 
 CommonRuleRefusal = ActorCannotAct | Busy | NotTogether | OutOfReach | TooTired | NotAllowedInThisStage
 # Busy: 前の行為を行っているあいだ (話すことだけはできる)
@@ -159,7 +159,7 @@ class AvailableAction:
 @final
 @dataclass(frozen=True)
 class NotNow:
-    reason: TextWithPeople
+    reason: TextWithAssignedPeople
 
 @final
 @dataclass(frozen=True)
