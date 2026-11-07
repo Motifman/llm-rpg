@@ -2,6 +2,8 @@
 
 ```python
 Occupant = PersonBody | DepartedPerson | MonsterBody
+# PersonBody(person): 生きている人と、倒れた人・死んだ人の体 / DepartedPerson(person): 死んで去った人 (体は無い)
+# MonsterBody(monster)。1 人の人は、死んで去ると PersonBody と DepartedPerson の 2 つの居場所を持つ
 
 @final
 @dataclass(frozen=True)
@@ -60,8 +62,8 @@ class Dead:
 LifeState = Alive | Down | Dead
 
 
-class PersonVitals:                                 # 人ごと
-    def take_damage(self, amount: Damage, now: WorldTick, cause: FallCause) -> None: ...
+class PersonVitals:                                 # 人ごと。体力 (HP) を持ち、0 になると Down
+    def take_damage(self, amount: Damage, now: WorldTick, cause: FallCause) -> None: ...   # FallCause: 殴られた、飢え、出来事 など
     def heal(self, amount: HealAmount) -> None: ...
     def revive(self, hp_rate: Rate, now: WorldTick) -> None: ...
     def pass_time(self, now: WorldTick, death: DeathRule, hunger: HungerRule) -> None: ...
@@ -72,8 +74,9 @@ class PersonVitals:                                 # 人ごと
     def satisfy_need(self, need: NeedType, amount: NeedAmount) -> None: ...
     def exert(self, rule: FatigueRule) -> None: ...      # 段階が変わったら FatigueLevelChangedEvent
     def rest(self, amount: FatigueAmount) -> None: ...
-    def start_action(self, until: WorldTick) -> None: ...   # 行っているあいだは、話す以外の行為を断る (Busy)
+    def start_action(self, until: WorldTick) -> None: ...   # 行っているあいだは、話す以外の行為を断る (Busy)。話すことは呼ばない
     def is_busy(self, now: WorldTick) -> bool: ...
+    def hp(self) -> HitPoints: ...
 
     def can_act(self) -> bool: ...
     def is_dead(self) -> bool: ...
@@ -83,6 +86,8 @@ class PersonVitals:                                 # 人ごと
 
 class PersonOutcomes:                             # 世界に 1 つ
     def decide(self, person: PersonId, outcome: Outcome) -> None: ...
+        # 一度決まった結末は変えない (二度目はドメイン例外)。結末が決まった人はもう行為をしない (ActorCannotAct)。
+        # Died 以外の人は、体と持ち物ごと世界から外れる (Whereabouts.remove)。Died の人は departed_persons_act なら去った人として動く
 
 Outcome = Died | DeclaredOutcome            # DeclaredOutcome(outcome: OutcomeDeclaration)。死だけは組み込み
 
@@ -207,9 +212,10 @@ class ScenarioProgress:                           # 世界に 1 つ
     def reaction_changed(self, reaction: ReactionDeclaration, truth: bool) -> bool: ...
     def last_fired_at(self, happening: HappeningDeclaration) -> WorldTick | NeverFired: ...
 
-    def note_joint_action_started(self, joint: JointActionDeclaration, by: PersonId, now: WorldTick) -> None: ...
+    def note_joint_action_done(self, joint: JointActionDeclaration, part: tuple[ObjectId, InteractionId], by: PersonId, now: WorldTick) -> None: ...
     def note_joint_action_settled(self, joint: JointActionDeclaration) -> None: ...   # 揃ったか、時間切れになった
     def joint_action_progress(self, joint: JointActionDeclaration) -> JointActionProgress | NotStarted: ...
+        # JointActionProgress: どの部分を、誰が、いつ行ったか。distinct_people はこれで確かめる
 
 
 class Monster:                                    # モンスターごと。振る舞いは #1971
@@ -230,7 +236,7 @@ class GroupDecision:                              # 集団の決定の宣言ご�
     def cast(self, voter: PersonId, choice: VoteFor | Abstain) -> None: ...
         # voters にいない人の票、二度目の票、choices にいない人への票はドメイン例外
         # 全員が投じたら、ここで集計する
-    def withdraw_voter(self, voter: PersonId) -> None: ...   # 残りが全員投じ済みなら、ここで集計する
+    def withdraw_voter(self, voter: PersonId) -> None: ...   # 残りが全員投じ済みなら、ここで集計する。死んだ人は withdraw_choice を先に呼ぶ
     def withdraw_choice(self, choice: PersonId) -> None: ...  # その人に入っていた票は投じた人に戻り、投じ直せる
     def close(self) -> None: ...                              # それまでの票で集計する
         # 集計: 最多が 1 人で、棄権より多ければ GroupDecisionReachedEvent(chosen)。それ以外は GroupDecisionUnresolvedEvent

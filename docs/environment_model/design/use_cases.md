@@ -48,7 +48,7 @@ class DeliverSurroundings:
         # LookAround → 人、倒れた体、モンスターを 1 つの観測にして出口へ
         ...
 
-class DeliverNoticesOnWaking:
+class DeliverNoticesOnWaking:                     # 介抱の確定のあと、別の確定の範囲で動く
     def __call__(self, command: DeliverNoticesOnWakingCommand) -> None:
         # 1. 起きたことの知らせ (本人の体の刺激) を DeliverPerception で配る
         # 2. MissedNotices の知らせを古い順に出口へ渡し、MissedNotices.clear
@@ -122,15 +122,19 @@ class ApplyWorldStageChangeHandler(EventHandler[WorldStageChangedEvent]): ...   
 class ApplyGroupDecisionResultHandler(EventHandler[GroupDecisionReachedEvent | GroupDecisionUnresolvedEvent]): ...
 class DeliverNoticesOnWakingHandler(EventHandler[PersonRevivedEvent]): ...   # DeliverNoticesOnWaking を呼ぶ
 class DeliverSurroundingsOnArrivalHandler(EventHandler[OccupantEnteredSpotEvent]): ...   # 着いた本人について DeliverSurroundings を呼ぶ
+class DeliverDarkeningHandler(EventHandler[ItemStateChangedEvent | ItemPutAwayEvent | ItemGivenUpEvent | TimeOfDayChangedEvent | WeatherChangedEvent | SpotAtmosphereChangedEvent]): ...
+    # 明るさが下がった場所にいた人へ、「辺りが暗くなった」の見える刺激を DeliverPerception で配る
 class DeliverSurroundingsOnBrighteningHandler(EventHandler[ItemStateChangedEvent | ItemHeldEvent | ItemPutAwayEvent | OccupantEnteredSpotEvent | TimeOfDayChangedEvent | WeatherChangedEvent | SpotAtmosphereChangedEvent]): ...
     # イベントが持つ前と後の値から、前後の LightingConditions を比べ、明るさが上がった場所にいた人ごとに DeliverSurroundings を呼ぶ
+    # OccupantEnteredSpotEvent のときは、着いた本人を除く (DeliverSurroundingsOnArrivalHandler が渡す)
 class WithdrawFromGroupDecisionHandler(EventHandler[PersonFellEvent | PersonDiedEvent]): ...
-    # 開いている集団の決定から、倒れた人と死んだ人を withdraw_voter。死んだ人は withdraw_choice も
+    # 開いている集団の決定から、死んだ人は先に withdraw_choice (その人に入った票を戻す)、続けて withdraw_voter。倒れた人は withdraw_voter だけ
 class RemoveDeadMonsterHandler(EventHandler[MonsterDiedEvent]): ...
 ```
 
 ## 世界と外側
 
+- コマンドと時間を進めることは同じ待ち行列に並び、届いた順に 1 つずつ処理する
 - 世界がするのは、コマンドを届いた順に 1 つずつ確定させること (1 つの `CommandScope`) と、時間を進めること (`AdvanceWorldTick`) だけ。同時に最後の 1 席を取りに来たら、先に確定したほうが通る
 - `SettleWorldConditions` は、1 つのコマンドが確定するたびと、時間を進めるたびに回す
 - 誰がいつ考えて行動を送るか (手番、目立つ知らせで考え直す、しばらく何も無ければ考える) は世界の外側 (エージェントを動かす側) が決める。今の実験のターン制は、外側の進め方の 1 つ
@@ -177,3 +181,10 @@ class TurnGuidance:                               # 世界では何も起きて�
 
 - 観測の出口は 1 つ。`Perceived` と、倒れている間にためた知らせだけを受け、時刻の札を付けて Being の契約の観測にする。文は `TextWithPeople` のまま渡し、人の穴は Being が覚えた名前か見た目で埋める
 - 外側がエージェントに考えさせる前に集める材料は 3 つに分かれる。場面 (`LookAround`)、できること (`ListAvailableActions`)、自分が知っていること (持ち物、体の状態、時刻。知覚を通さず集約から読む)
+
+## そのほかの型
+
+- `CommandScope`: 1 つの確定の範囲。中で断られたら全部巻き戻す。確定したらイベントを配る
+- `DesignLocation`: 宣言の中の場所 (`spots[4].objects[0].interactions[1].precondition` のような道筋)
+- `RefusalCode`: ドメイン例外の `error_code` (`WHEREABOUTS.SECTION_FULL` など)
+- `HandsNeeded`: 1 か 2

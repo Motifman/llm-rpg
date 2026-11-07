@@ -45,6 +45,10 @@ class SpotSectionDeclaration:               # 場所の中の、体で入る一�
     name: str
     enter_label: str                        # 「籠に乗り込む」
     leave_label: str                        # 「籠から降りる」
+    enter_text: TextWithPeople              # 入った本人の体の刺激
+    leave_text: TextWithPeople
+    exertion: Exertion
+    duration: Ticks | DefaultDuration
     capacity: Capacity | NoCapacity
     reachable_objects: tuple[ObjectId, ...] # 中からしか届かない物
     entry_condition: Condition              # 書かなければ、いつでも入れる
@@ -93,6 +97,12 @@ class ObjectDeclaration:
 
 @final
 @dataclass(frozen=True)
+class ObjectAppearance:
+    seen_in_dark: bool                      # 光る物、大きな物。暗い・真っ暗でも場面に出る
+    hidden_until_revealed: bool             # RevealObjectEffect までは場面に出ず、操作もできない
+
+@final
+@dataclass(frozen=True)
 class ItemSpecDeclaration:
     item_spec_id: ItemSpecId
     name: str
@@ -100,7 +110,7 @@ class ItemSpecDeclaration:
     on_use: Effect | NotUsable
     interactions: tuple[InteractionDeclaration, ...]
     state_keys: tuple[ItemStateKeyDeclaration, ...]
-    lights_up: bool                          # 灯ると、手に持っているあいだ場所を照らす
+    lights_up: LitWhen | NotALightSource     # LitWhen(key, value): その状態の値のとき灯っている。手に持っているあいだ場所を照らす
     hands_needed: HandsNeeded                # 1 (カンテラ) / 2 (つるはし)。書かなければ 1
 
 @final
@@ -226,6 +236,7 @@ class InteractionDeclaration:
     perceived_as: PerceptionDeclaration
     reaches_unseen: bool                    # 暗がりの誰か (SomeoneInTheDark) に向けてできるか
     duration: Ticks | DefaultDuration       # 行っているあいだ。書かなければ WorldRules.action_durations
+    allows_stealth: bool                    # こっそり行える (Stealthily) か
 
 ShownToActor = PeopleCountAt | WrittenTextOf   # 成功したとき本人だけに見せる、世界の今の値。success_text の後ろに付ける
 PeopleCountAt(spot: SpotDeclaration)
@@ -269,8 +280,9 @@ class PerceptionDeclaration:                # 行為が周りにどう知覚さ�
     witness: SightTexts
     target: SightTexts | NoTarget
     sound: SoundDeclaration | Silent
+    seen_in_dark: bool                              # 真っ暗でも dim の文が届く (光る、大きな動き)
     announcement: AnnouncementTo | NoAnnouncement   # 緊急の招集など、居場所に関わらず知らせるとき
-    on_failure: SightTexts | NoFailureWitness       # 前提か世界を変える途中で断られたとき、見ていた人への文
+    on_failure: SightTexts | NoFailureWitness       # 前提か世界を変える途中で断られたとき、見ていた人への文。書かなければ届けない (警告もしない)
     salience: Salience                              # Notable: 外側が考え直す目安になる / Background: ならない
 
 @final
@@ -284,8 +296,8 @@ class SoundDeclaration:
 @dataclass(frozen=True)
 class JointActionDeclaration:               # 二人で合わせる操作 (2 つの弁を 3 tick 以内に別々の人が開ける)
     joint_id: JointActionId
-    required: tuple[InteractionId, ...]
-    window: Ticks
+    required: tuple[tuple[ObjectId, InteractionId], ...]   # どの物体のどの操作か
+    window: Ticks                           # 最初の操作の tick + window + 1 の tick に揃っていなければ時間切れ
     distinct_people: bool
     on_complete: Effect
     on_timeout: Effect                      # 最初の操作から window を過ぎた tick に 1 回だけ
@@ -347,7 +359,8 @@ class WorldRules:
     death: DeathRule
     departed_persons_act: bool
     hearing: HearingValues
-    action_durations: Mapping[ActionKind, Ticks]   # 行っているあいだの既定。話す・耳を澄ます 1、拾う・置く・渡す・区画・投票・持ち替え 1、操作・品物を使う 2、探す・介抱 3
+    stealth: StealthRule
+    action_durations: Mapping[ActionKind, Ticks]   # 行っているあいだの既定 (話すは行っているあいだを作らない)。話す・耳を澄ます 1、拾う・置く・渡す・区画・投票・持ち替え 1、操作・品物を使う 2、探す・介抱 3
 
 @final
 @dataclass(frozen=True)
@@ -386,7 +399,16 @@ class HungerRule:
 @final
 @dataclass(frozen=True)
 class DeathRule:
-    grace: Ticks                                # 30。0 なら倒れたらすぐ死ぬ
+    grace: Ticks                                # 30。fell_at + grace の tick に死ぬ。0 なら倒れたらすぐ死ぬ
+
+@final
+@dataclass(frozen=True)
+class StealthRule:                              # こっそり行っても、見ていた人ごとに確率で気づく
+    notice_by_bystander: Mapping[SightQuality, Probability]   # SeesClearly 40%、SeesShapes 15%、SeesNothing 0%
+    notice_by_target: Mapping[SightQuality, Probability]      # 60%、30%、0%
+    attentive_bonus: Probability                # 耳を澄ましている人 +20%
+    duration_rate: Rate                         # 行っているあいだを 2 倍
+    # こっそり行った物音は 1 段小さくする。行った本人には、気づかれたかを伝えない
 
 @final
 @dataclass(frozen=True)
@@ -408,6 +430,7 @@ class WorldDesign:
         reactions: Iterable[ReactionDeclaration],
         discoverables: Iterable[DiscoverableDeclaration],
         joint_actions: Iterable[JointActionDeclaration],
+        person_interactions: Iterable[InteractionDeclaration],
         ending: EndingDeclaration,
         world_rules: WorldRules,
         weather: WeatherDeclaration | NoWeather,
@@ -424,6 +447,7 @@ class WorldDesign:
 
     def interaction_on_object(self, obj: ObjectId, interaction: InteractionId) -> InteractionDeclaration: ...
     def interaction_on_item(self, item_spec: ItemSpecId, interaction: InteractionId) -> InteractionDeclaration: ...
+    def person_interaction(self, interaction: InteractionId) -> InteractionDeclaration: ...   # 殴る、盗むなど、人への操作
     def happenings(self) -> tuple[HappeningDeclaration, ...]: ...
     def joint_actions(self) -> tuple[JointActionDeclaration, ...]: ...
     def reactions(self) -> tuple[ReactionDeclaration, ...]: ...

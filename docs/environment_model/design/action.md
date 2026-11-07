@@ -63,7 +63,9 @@ class ActionKind(Enum):                     # どの世界にもある行為の�
     INTERACT_WITH_PERSON = "INTERACT_WITH_PERSON"
     ATTACK_MONSTER = "ATTACK_MONSTER"
     # 取引と市場の種類は、その宣言を設計するときに足す
-Manner = Openly | Stealthily               # こっそり行う。見える刺激をどこまで届けるかは未決 (今のコードの witness_policy に当たる)
+Manner = Openly | Stealthily
+# Stealthily: 拾う・置く・渡すと、allows_stealth の操作だけ。見ていた人ごとに StealthRule の確率で気づく
+# (気づいた人にはふつうの文、気づかなかった人には何も届かない)。行っているあいだは StealthRule.duration_rate 倍、物音は 1 段小さい
 ```
 
 ## 行為の型
@@ -118,6 +120,7 @@ class ActionRefusal:
 
 CommonRuleRefusal = ActorCannotAct | Busy | NotTogether | OutOfReach | TooTired | NotAllowedInThisStage
 # Busy: 前の行為を行っているあいだ (話すことだけはできる)
+# ActorCannotAct: 倒れている、結末が決まった、去った人に許されない行為 (ActorRequirement)
 # OutOfReach: 区画の中からしか届かない物に、外から触ろうとした
 
 @final
@@ -128,7 +131,7 @@ class PreconditionRefusal:
 @final
 @dataclass(frozen=True)
 class WorldStateRefusal:                    # 世界を変える途中で集約が断った (満員、相手がその品を持っていない)
-    code: RefusalCode                       # 集約が投げたドメイン例外の error_code
+    code: RefusalCode                       # 集約が投げたドメイン例外の error_code。理由の文は変換役が code ごとに持つ (「荷は空だった」)
 ```
 
 ## 共通の前提
