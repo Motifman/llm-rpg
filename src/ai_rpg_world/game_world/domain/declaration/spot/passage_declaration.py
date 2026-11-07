@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import final
+
+from ai_rpg_world.game_world.domain.exception.spot_declaration_exception import (
+    DuplicatePassageStateNameException,
+    InitialPassageStateNotDeclaredException,
+    PassageEndsAtSameSpotException,
+    UndeclaredPassageStateException,
+)
+from ai_rpg_world.game_world.domain.sound import SoundLoss
+from ai_rpg_world.game_world.domain.value_object import DisplayName, PassageId, PassageStateName, SpotId, Ticks
+
+
+@final
+@dataclass(frozen=True)
+class PassageStateDeclaration:
+    name: PassageStateName
+    display_name: DisplayName
+    traversable: bool
+    sound_loss: SoundLoss
+
+
+_OPEN = PassageStateName("open")
+
+
+@final
+@dataclass(frozen=True)
+class PassageDeclaration:
+    passage_id: PassageId
+    ends: tuple[SpotId, SpotId]
+    two_way: bool
+    travel_ticks: Ticks
+    states: tuple[PassageStateDeclaration, ...] = ()
+    initial_state: PassageStateName = _OPEN
+
+    def __post_init__(self) -> None:
+        if self.ends[0] == self.ends[1]:
+            raise PassageEndsAtSameSpotException(
+                f"PassageDeclaration {self.passage_id.value} leads from {self.ends[0].value!r} back to itself"
+            )
+        if not self.states:
+            object.__setattr__(
+                self,
+                "states",
+                (
+                    PassageStateDeclaration(
+                        name=_OPEN, display_name=DisplayName("開いている"), traversable=True, sound_loss=SoundLoss(0)
+                    ),
+                ),
+            )
+        names = [state.name for state in self.states]
+        if len(set(names)) != len(names):
+            raise DuplicatePassageStateNameException(
+                f"PassageDeclaration {self.passage_id.value} declares a state name more than once"
+            )
+        if all(state.name != self.initial_state for state in self.states):
+            raise InitialPassageStateNotDeclaredException(
+                f"PassageDeclaration {self.passage_id.value} starts in {self.initial_state.value!r}, "
+                f"which is not among its states"
+            )
+
+    def allows(self, state: PassageStateName) -> bool:
+        return self.state(state).traversable
+
+    def state(self, name: PassageStateName) -> PassageStateDeclaration:
+        for declared in self.states:
+            if declared.name == name:
+                return declared
+        raise UndeclaredPassageStateException(f"PassageDeclaration {self.passage_id.value} has no state {name.value!r}")
