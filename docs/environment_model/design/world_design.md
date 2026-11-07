@@ -384,17 +384,33 @@ class TendRule:
 @final
 @dataclass(frozen=True)
 class FatigueRule:
-    per_exertion: FatigueAmount                 # 2
-    limit: FatigueAmount                        # 100。達すると体を使う行為を断る (TooTired)
-    levels: tuple[FatigueLevel, ...]            # 段階の境目と呼び名
+    per_exertion: FatigueAmount                 # 2。0 なら疲れない世界
+    limit: FatigueAmount                        # 100。1 以上。疲れはここで止まる。達すると体を使う行為を断る (TooTired)
+    levels: tuple[FatigueLevel, ...]            # 段階の境目と呼び名。1 つ以上、最初の境目は 0、境目は狭義の昇順で limit 以下、呼び名は重ならない
+
+    def level_of(self, amount: FatigueAmount) -> FatigueLevel: ...   # 境目に達した段階のうち、いちばん境目の大きい段階
+
+@final
+@dataclass(frozen=True)
+class FatigueLevel:
+    starts_at: FatigueAmount
+    name: FatigueLevelName                      # 空でない呼び名
 
 @final
 @dataclass(frozen=True)
 class HungerRule:
-    per_tick: HungerAmount                      # 1
-    limit: HungerAmount
+    per_tick: HungerAmount                      # 1。0 なら腹が減らない世界
+    limit: HungerAmount                         # 1 以上。空腹はここで止まる
     starvation_damage: Damage | NoStarvationDamage   # 限界のあいだ毎 tick。NoStarvationDamage なら飢えても痛手が無い
-    levels: tuple[HungerLevel, ...]
+    levels: tuple[HungerLevel, ...]             # FatigueRule.levels と同じ決まり
+
+    def level_of(self, amount: HungerAmount) -> HungerLevel: ...
+
+@final
+@dataclass(frozen=True)
+class HungerLevel:
+    starts_at: HungerAmount
+    name: HungerLevelName                       # 空でない呼び名
 
 @final
 @dataclass(frozen=True)
