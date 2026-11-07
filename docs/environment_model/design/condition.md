@@ -12,19 +12,21 @@ class WorldFacts(Protocol):
     def now(self) -> WorldTick: ...
     def flag_is_raised(self, flag: FlagDeclaration) -> bool: ...
     def world_stage(self) -> WorldStageDeclaration | NoWorldStages: ...   # WorldStage を宣言しない世界は NoWorldStages
-    def ticks_in_world_stage(self) -> int: ...
+    def ticks_in_world_stage(self) -> Ticks: ...
     def time_of_day(self) -> TimeOfDay | NoDayNight: ...
     def weather(self) -> WeatherState | NoWeather: ...
     def happening_last_fired_at(self, happening: HappeningDeclaration) -> WorldTick | NeverFired: ...
     def object_value(self, key: ObjectStateKeyDeclaration) -> StateValue: ...
-    def item_count(self, person: PersonId, item_spec: ItemSpecDeclaration) -> int: ...
+    def item_count(self, person: PersonId, item_spec: ItemSpecDeclaration) -> Count: ...
+    def is_holding(self, person: PersonId, item_spec: ItemSpecDeclaration) -> bool: ...
     def spot_of(self, occupant: Occupant) -> SpotId | TravelInProgress: ...
     def is_member(self, person: PersonId, group: GroupDeclaration) -> bool: ...
-    def gold_of(self, person: PersonId) -> int: ...
-    def need_of(self, person: PersonId, need: NeedType) -> int: ...
+    def gold_of(self, person: PersonId) -> Gold: ...
+    def need_of(self, person: PersonId, need: NeedType) -> NeedAmount: ...
     def life_state(self, person: PersonId) -> LifeState: ...
-    def outcome_of(self, person: PersonId) -> Outcome: ...
-    def search_count(self, person: PersonId, spot: SpotId) -> int: ...
+    def outcome_of(self, person: PersonId) -> Outcome | Undecided: ...
+    def all_outcomes_decided(self) -> bool: ...
+    def search_count(self, person: PersonId, spot: SpotId) -> Count: ...
     def ticks_since_last_action(self, who: PersonId | Anyone, action: ActionKind | InteractionId, since: SinceStart | SinceWorldStageEntered) -> int | NeverDone: ...
     def people(self) -> tuple[PersonId, ...]: ...           # 世界の全員 (死んだ人、去った人を含む)
     def roll(self, occasion: ChanceOccasion) -> float: ...
@@ -67,7 +69,7 @@ class FailureReason:
 
 @final
 @dataclass(frozen=True)
-class HiddenFailure:                        # 誰が何者かで決まる条件 (役割など)。理由を見せると伏せた役割が分かる
+class HiddenFailure:                        # 誰が何者かで決まる条件 (伏せた属性を見る条件)。理由を見せると伏せた役割が分かる
     failed_part: ConditionPath
 ```
 
@@ -113,35 +115,37 @@ class ForEveryoneCondition:
 
 ```python
 FlagIsRaisedCondition(flag: FlagDeclaration)
-FlagsRaisedAtLeastCondition(flags: tuple[FlagDeclaration, ...], count: int)
-TickAtLeastCondition(tick: int)
-TickModuloCondition(divisor: int, remainder: int)
+FlagsRaisedAtLeastCondition(flags: tuple[FlagDeclaration, ...], count: Count)
+TickAtLeastCondition(tick: WorldTick)
+TickModuloCondition(divisor: Ticks, remainder: Ticks)
 WorldStageIsCondition(stage: WorldStageDeclaration)
-TicksInWorldStageAtLeastCondition(ticks: int)
+TicksInWorldStageAtLeastCondition(ticks: Ticks)
 TimeOfDayIsCondition(phase: DayPhaseName)
 WeatherIsCondition(weather: WeatherType)
 ChanceCondition(probability: Probability)
 ObjectValueIsCondition(key: ObjectStateKeyDeclaration, value: StateValue)
-ObjectCountAtLeastCondition(key: ObjectStateKeyDeclaration, count: int)
+ObjectCountAtLeastCondition(key: ObjectStateKeyDeclaration, count: Count)
 ObjectCountGreaterThanCondition(key: ObjectStateKeyDeclaration, other: ObjectStateKeyDeclaration)
-ObjectStockAtLeastCondition(key: ObjectStateKeyDeclaration, amount: int)
-HasItemCondition(who: Subject, item_spec: ItemSpecDeclaration, count: int)
+ObjectStockAtLeastCondition(key: ObjectStateKeyDeclaration, amount: Count)
+HasItemCondition(who: Subject, item_spec: ItemSpecDeclaration, count: Count)
 IsAtSpotCondition(who: Subject, spot: SpotDeclaration)
 IsInSectionCondition(who: Subject, section: SpotSectionDeclaration)
-PeopleCountAtLeastCondition(people: PeopleSelection, count: int)
+IsHoldingCondition(who: Subject, item_spec: ItemSpecDeclaration)   # 手に持っている。作者が「手に持っていれば」を書くとき
+AllOutcomesDecidedCondition()
+PeopleCountAtLeastCondition(people: PeopleSelection, count: Count)
 IsMemberCondition(who: Subject, group: GroupDeclaration)
 IsDownCondition(who: Subject)
 IsAliveCondition(who: Subject)
 OutcomeIsCondition(who: Subject, outcome: Outcome)          # Died | DeclaredOutcome
-GoldAtLeastCondition(who: Subject, amount: int)
-NeedAtLeastCondition(who: Subject, need: NeedType, value: int)
-SearchCountAtLeastCondition(who: Subject, count: int)
-ItemAgeAtLeastCondition(item: ItemSubject, ticks: int)
+GoldAtLeastCondition(who: Subject, amount: Gold)
+NeedAtLeastCondition(who: Subject, need: NeedType, value: NeedAmount)
+SearchCountAtLeastCondition(who: Subject, count: Count)
+ItemAgeAtLeastCondition(item: ItemSubject, ticks: Ticks)
 ItemValueIsCondition(item: ItemSubject, key: ItemStateKeyDeclaration, value: StateValue)
-TicksSinceLastActionAtLeastCondition(who: Subject | Anyone, action: ActionKind | InteractionId, ticks: int, since: SinceStart | SinceWorldStageEntered)
+TicksSinceLastActionAtLeastCondition(who: Subject | Anyone, action: ActionKind | InteractionId, ticks: Ticks, since: SinceStart | SinceWorldStageEntered)
 ArgumentEqualsCondition(argument: ArgumentName, expected: str)
 HappeningHasFiredCondition(happening: HappeningDeclaration)
-TicksSinceHappeningAtLeastCondition(happening: HappeningDeclaration, ticks: int)
+TicksSinceHappeningAtLeastCondition(happening: HappeningDeclaration, ticks: Ticks)
 ```
 
 ## 置いた場所ごとに使える主語

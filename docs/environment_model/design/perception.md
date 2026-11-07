@@ -65,7 +65,7 @@ class SightStimulus:
     where: SpotId
     witness: SightTexts
     target: SightTexts | NoTarget
-    seen_in_dark: bool
+    seen_in_dark: bool                    # 暗くても見える行為か (光る物、大きな動き)。真なら真っ暗でも dim の文が届く
     manner: Openly | Stealthily
     involved: tuple[PersonId, ...]
     salience: Salience
@@ -132,14 +132,14 @@ class DepartedPerceiver:                  # 死んで、去った人として動
 SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 ```
 
-死んで、去った人の手番が無い世界 (`departed_persons_act` が偽) の人には、`DeliverPerception` が知覚する人を作らない。何も知覚しない。
+死んだ人が去った人として行為をしない世界 (`departed_persons_act` が偽) の人には、`DeliverPerception` が知覚する人を作らない。何も知覚しない。
 
 | 刺激 | `LivingPerceiver` (`Alive`) | `LivingPerceiver` (`Down`) | `DepartedPerceiver` |
 |---|---|---|---|
 | 見える | 明るさで決まる | 自分が関わるものは `NoticedLater`、ほかは `NotPerceived` | 見える |
 | 聞こえる | 音の届き方で決まる | 同上 | 聞こえる |
-| 本人の体 | 感じる | 感じる | 体が無いので無い |
-| 世界の知らせ | 届く | `NoticedLater` | 届く |
+| 本人の体 | 感じる | 感じる (気を失っていても痛みや寒さは体に残る。#1974 の 6.) | 体が無いので無い |
+| 世界の知らせ | 届く | `NoticedLater` (知らせの文をそのままためる) | 届く |
 
 移動中の人はどの場所にもいない。見える刺激には気づかず、区間の両端の場所で起きた「大きい」「とても大きい」音だけを隣の場所の音として聞く。
 
@@ -157,7 +157,7 @@ class Perceived:
     text: TextWithPeople
     quality: PerceivedQuality
     happened_at: WorldTick
-    calls_attention: bool                 # 関わっている、または目立つ刺激をかすか以外で知覚した。真なら手番を起こす
+    calls_attention: bool                 # 関わっている、または目立つ刺激をかすか以外で知覚した。世界は手番を起こさない。外側が考え直す目安に使う
 
 @final
 @dataclass(frozen=True)
@@ -175,7 +175,7 @@ class LightingConditions:                 # 1 つの場所の明るさを決め�
     outdoor: bool                         # SpotAtmosphere.outdoor
     dark_time_of_day: bool                # DayPhaseDeclaration.dark
     weather_obscures: bool                # WeatherDeclaration.obscures_sight
-    light_source_present: bool            # その場所の誰かが、灯った光源を持っているか
+    light_source_present: bool            # その場所の誰かが、灯った光源を手に持っているか (荷の中では照らさない)
 
     def lighting(self) -> Lighting: ...
         # 宣言 → 屋外で暗い時間帯か見えにくくする天候なら 1 段暗く (重なっても 1 段)
@@ -248,7 +248,7 @@ class SoundReach:
 HearingQuality = HearsClearly | HearsMuffled | HearsFaintly | HearsNothing
 ```
 
-音の届き方は、出来事が確定した後の通路の状態で計算する (扉を開けた音は、開いた扉を通る)。`HearingValues` は `WorldRules` にある ([world_design.md](world_design.md))。ささやきは、宛先にははっきり、同じ場所のほかの人にはかすかに届く。「N 名に届いた」も同じ計算で数え、倒れている人は入れない。
+音の届き方は、出来事が確定した後の通路の状態で計算する (扉を開けた音は、開いた扉を通る)。`HearingValues` は `WorldRules` にある ([world_design.md](world_design.md))。聞こえる刺激で人が分かるのは声 (話す) だけ。物音の文の人の穴はいつも `Unidentified`。ささやきは、宛先にははっきり、同じ場所のほかの人にはかすかに届く。「N 名に届いた」も同じ計算で数え、倒れている人は入れない。
 
 ## 倒れている間のこと
 
@@ -270,12 +270,15 @@ class MissedNotice:
 class SeenPerson:
     person: PersonRef | Unidentified
     section: SpotSectionId | OpenArea     # 籠の中にいる、など
+    visible_items: tuple[ItemInstanceId, ...]   # 起きている人は手に持っている物だけ。倒れた人と死んだ人は持ち物すべて
 
 @final
 @dataclass(frozen=True)
 class PresentPerson:                      # その場所にいる人。見えるかはまだ決まっていない
     person: PersonRef
     section: SpotSectionId | OpenArea
+    held_items: tuple[ItemInstanceId, ...]
+    all_items: tuple[ItemInstanceId, ...]
 
 @final
 @dataclass(frozen=True)
@@ -299,7 +302,7 @@ class VisibleSurroundings:
     objects: tuple[ObjectDeclaration, ...]
     ground_items: tuple[ItemInstanceId, ...]
     people: tuple[SeenPerson, ...]
-    bodies: tuple[SeenPerson, ...]
+    bodies: tuple[SeenPerson, ...]        # 倒れている人と死んだ人
     monsters: tuple[MonsterId, ...]
     distant: tuple[DistantSight, ...]     # 屋外で見えるときだけ。視程は天候の宣言から
 

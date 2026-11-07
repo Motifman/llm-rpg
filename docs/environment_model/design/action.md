@@ -35,7 +35,7 @@ class GroupDecisionResult:
 
 @final
 @dataclass(frozen=True)
-class WorldTimePassing:
+class WorldTimePassing:                     # 時間が進んだことがきっかけ (PassWorldTime の中の空腹、死の猶予など)
     tick: WorldTick
 
 ActorRequirement = LivingOnly | LivingOrDeparted
@@ -55,13 +55,15 @@ class ActionKind(Enum):                     # どの世界にもある行為の�
     USE_ITEM = "USE_ITEM"
     ENTER_SECTION = "ENTER_SECTION"
     LEAVE_SECTION = "LEAVE_SECTION"
+    HOLD = "HOLD"
+    PUT_AWAY = "PUT_AWAY"
     CAST_BALLOT = "CAST_BALLOT"
     INTERACT_WITH_OBJECT = "INTERACT_WITH_OBJECT"
     INTERACT_WITH_CARRIED_ITEM = "INTERACT_WITH_CARRIED_ITEM"
     INTERACT_WITH_PERSON = "INTERACT_WITH_PERSON"
     ATTACK_MONSTER = "ATTACK_MONSTER"
     # 取引と市場の種類は、その宣言を設計するときに足す
-Manner = Openly | Stealthily
+Manner = Openly | Stealthily               # こっそり行う。見える刺激をどこまで届けるかは未決 (今のコードの witness_policy に当たる)
 ```
 
 ## 行為の型
@@ -78,6 +80,8 @@ GroundItemPickupAttempt(actor: PersonId, item: ItemInstanceId, manner: Manner)
 ItemDropAttempt(actor: PersonId, item: ItemInstanceId, manner: Manner)
 SpotSearchAttempt(actor: PersonId)
 EnterSectionAttempt(actor: PersonId, section: SpotSectionDeclaration)
+HoldItemAttempt(actor: PersonId, item: ItemInstanceId)        # 手がふさがっていれば、今持っている物を荷にしまう
+PutAwayItemAttempt(actor: PersonId, item: ItemInstanceId)
 LeaveSectionAttempt(actor: PersonId)
 MonsterAttackAttempt(actor: PersonId, monster: MonsterId)
 
@@ -112,7 +116,8 @@ class ActionRefusal:
     reason: CommonRuleRefusal | PreconditionRefusal | WorldStateRefusal
     text: TextWithPeople
 
-CommonRuleRefusal = ActorCannotAct | NotTogether | OutOfReach | TooTired | NotAllowedInThisStage
+CommonRuleRefusal = ActorCannotAct | Busy | NotTogether | OutOfReach | TooTired | NotAllowedInThisStage
+# Busy: 前の行為を行っているあいだ (話すことだけはできる)
 # OutOfReach: 区画の中からしか届かない物に、外から触ろうとした
 
 @final
@@ -160,4 +165,6 @@ class AvailableActions:
 ```
 
 - 実際に試したときと同じ確認 (`ActionPrerequisiteCheck.refusal` と行為ごとの前提の `failure_reason`) で作る。`HiddenFailure` になった行為は入れない。いまできない行為を消さずに理由つきで出すのは design_decisions #37 のとおり (消すと、エージェントが無い操作名を作って呼ぶ)
+- 行為を始めた瞬間に効果が起き、そのあと `WorldRules.action_durations` (または `InteractionDeclaration.duration`) のあいだ `PersonVitals.is_busy` が真になる。そのあいだ、話す以外の行為は `Busy` で断る
+- 一覧は前提を確かめるだけで作る。考えているあいだに世界が変わるので目安で、届いたときに必ず確かめ直す。集約が断るもの (満員など) は届いたときに断る
 - 行為の対象の候補は、場面 (`VisibleSurroundings`) に出ているものに限る。「誰か」(`Unidentified`) には `SomeoneInTheDark` で行う。ターンごとに振り直す呼び方 (「人影1」) は、記憶に残った呼び方が次のターンで別のものを指すので使わない (design_decisions #3)

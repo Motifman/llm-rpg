@@ -56,7 +56,7 @@ class PassageDeclaration:
     passage_id: PassageId
     ends: tuple[SpotId, SpotId]
     two_way: bool
-    travel_ticks: int
+    travel_ticks: Ticks
     states: tuple[PassageStateDeclaration, ...]   # 書かなければ「通れる、減衰 0」の 1 つ
     initial_state: PassageStateName
     traversal_condition: Condition
@@ -100,7 +100,8 @@ class ItemSpecDeclaration:
     on_use: Effect | NotUsable
     interactions: tuple[InteractionDeclaration, ...]
     state_keys: tuple[ItemStateKeyDeclaration, ...]
-    lights_up: bool
+    lights_up: bool                          # 灯ると、手に持っているあいだ場所を照らす
+    hands_needed: HandsNeeded                # 1 (カンテラ) / 2 (つるはし)。書かなければ 1
 
 @final
 @dataclass(frozen=True)
@@ -129,6 +130,7 @@ class CharacterDeclaration:
     appearance: str
     spawn_spot: SpotId
     initial_items: tuple[ItemSpecId, ...]
+    initial_held: tuple[ItemSpecId, ...]     # initial_items のうち、最初から手に持っている物
     initial_groups: tuple[GroupId, ...]
     knows_at_start: tuple[PersonId, ...]
 
@@ -166,10 +168,10 @@ class OutcomeDeclaration:
 class DiscoverableDeclaration:
     discoverable_id: DiscoverableId
     spot_id: SpotId
-    found_text: str
+    found_text: TextWithPeople               # 見つけた本人の体の刺激になる
     condition: Condition
     when_found: Effect
-    finding: Finding                         # ONCE_IN_WORLD / ONCE_PER_PERSON
+    finding: Finding                         # ONCE_IN_WORLD: 誰かが見つけたら終わり / ONCE_PER_PERSON: 人ごとに 1 回
 
 
 class DeclaredNouns:
@@ -223,6 +225,7 @@ class InteractionDeclaration:
     actor_requirement: ActorRequirement
     perceived_as: PerceptionDeclaration
     reaches_unseen: bool                    # 暗がりの誰か (SomeoneInTheDark) に向けてできるか
+    duration: Ticks | DefaultDuration       # 行っているあいだ。書かなければ WorldRules.action_durations
 
 ShownToActor = PeopleCountAt | WrittenTextOf   # 成功したとき本人だけに見せる、世界の今の値。success_text の後ろに付ける
 PeopleCountAt(spot: SpotDeclaration)
@@ -267,13 +270,14 @@ class PerceptionDeclaration:                # 行為が周りにどう知覚さ�
     target: SightTexts | NoTarget
     sound: SoundDeclaration | Silent
     announcement: AnnouncementTo | NoAnnouncement   # 緊急の招集など、居場所に関わらず知らせるとき
-    salience: Salience
+    on_failure: SightTexts | NoFailureWitness       # 前提か世界を変える途中で断られたとき、見ていた人への文
+    salience: Salience                              # Notable: 外側が考え直す目安になる / Background: ならない
 
 @final
 @dataclass(frozen=True)
 class SoundDeclaration:
     loudness: Loudness                      # 書かなければ、開け閉めは大きい、壊すはとても大きい、ほかはふつう
-    clear: TextWithPeople
+    clear: TextWithPeople                   # 人の穴は声 (話す) のときだけ人が分かる。物音では Unidentified になる
     muffled: TextWithPeople
 
 @final
@@ -284,7 +288,9 @@ class JointActionDeclaration:               # 二人で合わせる操作 (2 つ
     window: Ticks
     distinct_people: bool
     on_complete: Effect
-    on_timeout: Effect
+    on_timeout: Effect                      # 最初の操作から window を過ぎた tick に 1 回だけ
+    complete_notice: HappeningNotice | NoNotice
+    timeout_notice: HappeningNotice | NoNotice
 
 @final
 @dataclass(frozen=True)
@@ -341,7 +347,7 @@ class WorldRules:
     death: DeathRule
     departed_persons_act: bool
     hearing: HearingValues
-    idle_limit: IdleLimit                   # 何も起きないまま、この間が過ぎたら手番を起こす
+    action_durations: Mapping[ActionKind, Ticks]   # 行っているあいだの既定。話す・耳を澄ます 1、拾う・置く・渡す・区画・投票・持ち替え 1、操作・品物を使う 2、探す・介抱 3
 
 @final
 @dataclass(frozen=True)
