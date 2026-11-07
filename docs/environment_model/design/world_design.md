@@ -4,6 +4,8 @@
 
 場所を指す `SpotId` は、シナリオが宣言した場所の名前 (`"lift_landing"`) を持つ。連番の数は振らない (D1982)。
 
+名詞の宣言は、その名詞が何であるか (名前、置き場所、見た目、状態) だけを持ち、条件・効果・操作・知覚の宣言を持たない。名詞に付く動詞は、名詞の宣言を指す動詞の側の宣言 (`ObjectInteractionDeclaration` など) に置く。条件と効果は名詞の宣言を持つので、名詞が動詞を持つと、互いを指す仕掛け (レバーが扉を現し、扉がレバーの覆いを外す) や自分を指す仕掛け (籠の中にいる人は籠に入れない) を、値の変わらない型で作れなくなる。名詞を全部作ってから動詞を作れば、どの組み合わせも作れる。シナリオの作者は物の欄の中に操作を書いてよく、読み込む側が名詞と動詞に分けて組み立てる。
+
 ```python
 # 名詞の宣言
 
@@ -21,6 +23,13 @@ class SpotDeclaration:
     name: str
     description: str
     atmosphere: SpotAtmosphere
+
+class Temperature(Enum):                    # 寒い順。比べられる
+    FREEZING
+    COLD
+    NORMAL
+    WARM
+    HOT
 
 @final
 @dataclass(frozen=True)
@@ -45,16 +54,8 @@ class SpotSectionDeclaration:               # 場所の中の、体で入る一�
     section_id: SpotSectionId
     spot_id: SpotId
     name: str
-    enter_label: str                        # 「籠に乗り込む」
-    leave_label: str                        # 「籠から降りる」
-    enter_text: TextWithUnassignedPeople  # 入った本人の体の刺激
-    leave_text: TextWithUnassignedPeople
-    exertion: Exertion
-    duration: Ticks | DefaultDuration
     capacity: Capacity | NoCapacity
     reachable_objects: tuple[ObjectId, ...] # 中からしか届かない物
-    entry_condition: Condition              # 書かなければ、いつでも入れる
-    perceived_as: PerceptionDeclaration
 
 @final
 @dataclass(frozen=True)
@@ -65,7 +66,6 @@ class PassageDeclaration:
     travel_ticks: Ticks
     states: tuple[PassageStateDeclaration, ...]   # 書かなければ「通れる、減衰 0」の 1 つ
     initial_state: PassageStateName
-    traversal_condition: Condition
 
     def allows(self, state: PassageStateName) -> bool: ...
     def state(self, name: PassageStateName) -> PassageStateDeclaration: ...
@@ -94,7 +94,6 @@ class ObjectDeclaration:
     name: str
     description: str
     appearance: ObjectAppearance
-    interactions: tuple[InteractionDeclaration, ...]
     state_keys: tuple[ObjectStateKeyDeclaration, ...]
 
 @final
@@ -109,8 +108,6 @@ class ItemSpecDeclaration:
     item_spec_id: ItemSpecId
     name: str
     description: str
-    on_use: Effect | NotUsable
-    interactions: tuple[InteractionDeclaration, ...]
     state_keys: tuple[ItemStateKeyDeclaration, ...]
     lights_up: LitWhen | NotALightSource     # LitWhen(key, value): その状態の値のとき灯っている。手に持っているあいだ場所を照らす
     hands_needed: HandsNeeded                # 1 (カンテラ) / 2 (つるはし)。書かなければ 1
@@ -137,8 +134,7 @@ class GroupingDeclaration:
 @final
 @dataclass(frozen=True)
 class CharacterDeclaration:
-    person_id: PersonId
-    persona: Persona
+    person_id: PersonId                      # 人柄 (Persona) は持たない。Being が自分の人柄を持って入る (D1928-3)。シナリオの登場人物の欄は、読み込む側が世界の部分と Being の人柄に分ける
     appearance: str
     spawn_spot: SpotId
     initial_items: tuple[ItemSpecId, ...]
@@ -153,20 +149,14 @@ class WorldStageDeclaration:
     name: str
     description: str
     allowed_actions: frozenset[ActionKind | InteractionId] | AllActionsAllowed
-    when_entered: Effect
-    when_left: Effect
 
 @final
 @dataclass(frozen=True)
 class GroupDecisionDeclaration:
     decision_id: GroupDecisionId
     name: str
-    voters: PeopleSelection
-    choices: PeopleSelection
     abstain_allowed: bool
     reveals_ballots: bool                   # 集計のとき、誰が誰に入れたかを知らせるか
-    when_decided: Effect
-    when_undecided: Effect
 
 @final
 @dataclass(frozen=True)
@@ -223,6 +213,63 @@ class DeclaredNouns:
 
 
 # 動詞の宣言
+
+# 名詞に付く動詞。名詞の宣言を指す
+
+@final
+@dataclass(frozen=True)
+class ObjectInteractionDeclaration:
+    obj: ObjectDeclaration
+    interaction: InteractionDeclaration
+
+@final
+@dataclass(frozen=True)
+class ItemInteractionDeclaration:
+    item_spec: ItemSpecDeclaration
+    interaction: InteractionDeclaration
+
+@final
+@dataclass(frozen=True)
+class ItemUseDeclaration:                   # 宣言の無い品物は使えない (NotUsable)
+    item_spec: ItemSpecDeclaration
+    effect: Effect
+
+@final
+@dataclass(frozen=True)
+class SectionAccessDeclaration:             # 区画への出入り。区画ごとに必ず 1 つ。無ければ DesignFlaw
+    section: SpotSectionDeclaration
+    enter_label: str                        # 「籠に乗り込む」
+    leave_label: str                        # 「籠から降りる」
+    enter_text: TextWithUnassignedPeople    # 入った本人の体の刺激
+    leave_text: TextWithUnassignedPeople
+    exertion: Exertion
+    duration: Ticks | DefaultDuration
+    entry_condition: Condition              # 書かなければ、いつでも入れる
+    perceived_as: PerceptionDeclaration
+
+@final
+@dataclass(frozen=True)
+class PassageTraversalDeclaration:          # 宣言の無い通路は、状態が通れればいつでも通れる
+    passage: PassageDeclaration
+    condition: Condition
+
+@final
+@dataclass(frozen=True)
+class WorldStageEffectsDeclaration:         # 宣言の無い段階は、出入りで何も起きない
+    stage: WorldStageDeclaration
+    when_entered: Effect
+    when_left: Effect
+
+@final
+@dataclass(frozen=True)
+class GroupDecisionRulesDeclaration:        # 集団の決定ごとに必ず 1 つ。無ければ DesignFlaw
+    decision: GroupDecisionDeclaration
+    voters: PeopleSelection
+    choices: PeopleSelection
+    when_decided: Effect
+    when_undecided: Effect
+
+# 1 つの名詞に同じ種類の宣言が 2 つあれば DesignFlaw (ObjectInteractionDeclaration と ItemInteractionDeclaration は、同じ操作の名前が 2 つあれば)
 
 @final
 @dataclass(frozen=True)
@@ -455,6 +502,13 @@ class WorldDesign:
     def compose(
         cls,
         nouns: DeclaredNouns,
+        object_interactions: Iterable[ObjectInteractionDeclaration],
+        item_interactions: Iterable[ItemInteractionDeclaration],
+        item_uses: Iterable[ItemUseDeclaration],
+        section_accesses: Iterable[SectionAccessDeclaration],
+        passage_traversals: Iterable[PassageTraversalDeclaration],
+        world_stage_effects: Iterable[WorldStageEffectsDeclaration],
+        group_decision_rules: Iterable[GroupDecisionRulesDeclaration],
         happenings: Iterable[HappeningDeclaration],
         reactions: Iterable[ReactionDeclaration],
         discoverables: Iterable[DiscoverableDeclaration],
@@ -476,6 +530,13 @@ class WorldDesign:
 
     def interaction_on_object(self, obj: ObjectId, interaction: InteractionId) -> InteractionDeclaration: ...
     def interaction_on_item(self, item_spec: ItemSpecId, interaction: InteractionId) -> InteractionDeclaration: ...
+    def interactions_on_object(self, obj: ObjectId) -> tuple[InteractionDeclaration, ...]: ...
+    def interactions_on_item(self, item_spec: ItemSpecId) -> tuple[InteractionDeclaration, ...]: ...
+    def use_of_item(self, item_spec: ItemSpecId) -> ItemUseDeclaration | NotUsable: ...
+    def section_access(self, section: SpotSectionId) -> SectionAccessDeclaration: ...
+    def passage_traversal(self, passage: PassageId) -> Condition: ...                   # 宣言が無ければ、いつでも真の条件
+    def world_stage_effects(self, stage: WorldStageId) -> WorldStageEffectsDeclaration: ...
+    def group_decision_rules(self, decision: GroupDecisionId) -> GroupDecisionRulesDeclaration: ...
     def person_interaction(self, interaction: InteractionId) -> InteractionDeclaration: ...   # 殴る、盗むなど、人への操作
     def happenings(self) -> tuple[HappeningDeclaration, ...]: ...
     def joint_actions(self) -> tuple[JointActionDeclaration, ...]: ...
@@ -507,9 +568,11 @@ class WorldDesignFlawsException(WorldDesignException):
 ```
 infrastructure: JSON を読む
   ① 名詞の宣言を作る → DeclaredNouns
-  ② 動詞の宣言 (条件、効果、操作、出来事) を、DeclaredNouns から名詞を引いて作る
+  ② 動詞の宣言 (名詞に付く動詞、条件、効果、操作、出来事) を、DeclaredNouns から名詞を引いて作る
   ③ WorldDesign.compose
 ```
+
+- 名詞の宣言は互いを宣言ではなく ID で指す (`SpotSectionDeclaration.reachable_objects`、`CharacterDeclaration.spawn_spot` など)。ID が宣言にあるかは `DeclaredNouns` が作るときに確かめ、無ければ `DesignFlaw` にする
 
 - 誤りは最初の 1 つで止めず、集めてから 1 つの `WorldDesignFlawsException` で投げる。どの誤りにも場所 (`DesignLocation`) を付ける。JSON の書き方の誤り (必須キーの欠け、列挙の綴り違い) も infrastructure が `DesignFlaw` に包み、素の `KeyError` / `ValueError` を外に出さない
 - compose は、条件と効果を置いた場所ごとに使える主語 ([condition.md](condition.md)) と、`requirements()` を照らし合わせる
