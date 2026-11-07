@@ -85,6 +85,8 @@ class TestTextWithPeopleMalformedTemplate:
             "{0}が座った。",
             "{actor!r}が座った。",
             "{actor:>3}が座った。",
+            "{actor:}が座った。",
+            "{actor:{target}}が座った。",
             "{actor.name}が座った。",
             "{actor[0]}が座った。",
             "{actor が座った。",
