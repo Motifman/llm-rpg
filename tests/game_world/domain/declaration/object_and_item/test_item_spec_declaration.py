@@ -28,7 +28,14 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
     StateKeyOwnerMismatchException,
     StateValueMismatchesKindException,
 )
-from ai_rpg_world.game_world.domain.value_object import Count, HandsNeeded, ItemSpecId, StateKeyId
+from ai_rpg_world.game_world.domain.value_object import (
+    Count,
+    DescriptionText,
+    DisplayName,
+    HandsNeeded,
+    ItemSpecId,
+    StateKeyId,
+)
 
 _LANTERN = ItemSpecId("lantern")
 _WICK = ChoiceStateKind(choices=(ChoiceName("unlit"), ChoiceName("lit")))
@@ -48,8 +55,8 @@ def _item(
 ) -> ItemSpecDeclaration:
     return ItemSpecDeclaration(
         item_spec_id=item_spec_id,
-        name="カンテラ",
-        description="油で灯る手提げの明かり",
+        name=DisplayName("カンテラ"),
+        description=DescriptionText("油で灯る手提げの明かり"),
         state_keys=state_keys,
         lights_up=lights_up,
     )
@@ -154,8 +161,8 @@ class TestItemSpecDeclarationHandsNeeded:
         """hands_needed に 2 を書いた品物 (つるはし) は HandsNeeded(2) を持つ。"""
         item = ItemSpecDeclaration(
             item_spec_id=ItemSpecId("pickaxe"),
-            name="つるはし",
-            description="両手で振る",
+            name=DisplayName("つるはし"),
+            description=DescriptionText("両手で振る"),
             state_keys=(),
             lights_up=NotALightSource(),
             hands_needed=HandsNeeded(2),

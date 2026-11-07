@@ -27,7 +27,17 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
     StateKeyOwnerMismatchException,
     StateValueMismatchesKindException,
 )
-from ai_rpg_world.game_world.domain.value_object import Count, ObjectId, PersonId, SpotId, StateKeyId, Ticks, WorldTick
+from ai_rpg_world.game_world.domain.value_object import (
+    Count,
+    DescriptionText,
+    DisplayName,
+    ObjectId,
+    PersonId,
+    SpotId,
+    StateKeyId,
+    Ticks,
+    WorldTick,
+)
 
 _LEVER = ObjectId("lift_lever")
 _POSITIONS = ChoiceStateKind(choices=(ChoiceName("up"), ChoiceName("down")))
@@ -43,8 +53,8 @@ def _object(state_keys: tuple[ObjectStateKeyDeclaration, ...], object_id: Object
     return ObjectDeclaration(
         object_id=object_id,
         spot_id=SpotId("lift_landing"),
-        name="レバー",
-        description="昇降機を動かすレバー",
+        name=DisplayName("レバー"),
+        description=DescriptionText("昇降機を動かすレバー"),
         appearance=ObjectAppearance(seen_in_dark=False, hidden_until_revealed=False),
         state_keys=state_keys,
     )

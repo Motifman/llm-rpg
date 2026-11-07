@@ -7,7 +7,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item._state_keys impo
 from ai_rpg_world.game_world.domain.declaration.object_and_item.state_kind import StateKind
 from ai_rpg_world.game_world.domain.declaration.object_and_item.state_value import StateValue
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
-from ai_rpg_world.game_world.domain.value_object import ObjectId, SpotId, StateKeyId
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, ObjectId, SpotId, StateKeyId
 
 
 @final
@@ -37,8 +37,8 @@ class ObjectAppearance:
 class ObjectDeclaration:
     object_id: ObjectId
     spot_id: SpotId
-    name: str
-    description: str
+    name: DisplayName
+    description: DescriptionText
     appearance: ObjectAppearance
     state_keys: tuple[ObjectStateKeyDeclaration, ...]
 

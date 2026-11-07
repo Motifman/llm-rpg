@@ -16,7 +16,13 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
     LightKeyNotDeclaredException,
     StateValueMismatchesKindException,
 )
-from ai_rpg_world.game_world.domain.value_object import HandsNeeded, ItemSpecId, StateKeyId
+from ai_rpg_world.game_world.domain.value_object import (
+    DescriptionText,
+    DisplayName,
+    HandsNeeded,
+    ItemSpecId,
+    StateKeyId,
+)
 
 
 @final
@@ -55,8 +61,8 @@ class NotALightSource:
 @dataclass(frozen=True)
 class ItemSpecDeclaration:
     item_spec_id: ItemSpecId
-    name: str
-    description: str
+    name: DisplayName
+    description: DescriptionText
     state_keys: tuple[ItemStateKeyDeclaration, ...]
     lights_up: LitWhen | NotALightSource
     hands_needed: HandsNeeded = field(default=HandsNeeded(1))
