@@ -2,6 +2,8 @@
 
 シナリオが宣言したもの。run の間は変わらない。
 
+場所を指す `SpotId` は、シナリオが宣言した場所の名前 (`"lift_landing"`) を持つ。連番の数は振らない (D1982)。
+
 ```python
 # 名詞の宣言
 
@@ -371,10 +373,13 @@ class HearingValues:
     muffled_from: SoundLevel                    # 35
     faint_from: SoundLevel                      # 20
     attentive_allowance: SoundLoss              # 耳を澄ますと 15 だけ小さい音まで聞こえる
+    # loudness が 4 段階すべてを持ち、clear_from ≥ muffled_from ≥ faint_from でなければ作れない
 
     def level_of(self, loudness: Loudness) -> SoundLevel: ...
     def quietest_audible(self) -> SoundLevel: ...
+        # faint_from − attentive_allowance (0 で止まる)。spread の stop_below に渡し、耳を澄ました人に届く音を途中で切らない
     def quality(self, level: SoundLevel | NotReached, attentive: bool) -> HearingQuality: ...
+        # 耳を澄ましていれば、3 つの境目をすべて attentive_allowance だけ下げて比べる。境目ちょうどはその段階に入る
 
 @final
 @dataclass(frozen=True)
