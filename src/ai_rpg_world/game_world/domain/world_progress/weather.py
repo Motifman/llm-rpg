@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import final
+
+from ai_rpg_world.eventing import AggregateRoot, DomainEvent
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import WeatherDeclaration, WeatherState
+from ai_rpg_world.game_world.domain.value_object import WorldId
+from ai_rpg_world.game_world.domain.world_progress._event_stamp import new_event_stamp
+
+
+@final
+@dataclass(frozen=True)
+class WeatherChangedEvent(DomainEvent):
+    world_id: WorldId
+    before: WeatherState
+    after: WeatherState
+
+
+class Weather(AggregateRoot[WeatherChangedEvent]):
+    def __init__(self, world_id: WorldId, current: WeatherState) -> None:
+        super().__init__()
+        self._world_id = world_id
+        self._current = current
+
+    @classmethod
+    def open(cls, world_id: WorldId, declaration: WeatherDeclaration) -> Weather:
+        return cls(world_id, WeatherState(declaration.initial))
+
+    @property
+    def world_id(self) -> WorldId:
+        return self._world_id
+
+    def change(self, new_state: WeatherState) -> None:
+        if new_state == self._current:
+            return
+        before = self._current
+        self._current = new_state
+        self.add_event(
+            WeatherChangedEvent(**new_event_stamp(), world_id=self._world_id, before=before, after=new_state)
+        )
+
+    def current(self) -> WeatherState:
+        return self._current
