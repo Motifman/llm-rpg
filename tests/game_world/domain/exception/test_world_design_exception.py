@@ -34,17 +34,19 @@ class TestWorldDesignFlawsException:
         with pytest.raises(NoDesignFlawsException):
             WorldDesignFlawsException([])
 
-    def test_message_shows_location_and_reason_of_every_flaw(self) -> None:
-        """メッセージに、どの誤りについても宣言の種類・名前・欄と理由が出る。"""
+    def test_message_lists_every_flaw_one_per_line(self) -> None:
+        """メッセージは、誤りごとに「宣言の種類 '名前' 欄: 理由」を 1 行で、渡した順に並べる。"""
         exception = WorldDesignFlawsException(
-            [_flaw("lift_lever", "spot 'hal' is not declared"), _flaw("crate", "spot 'cellar' is not declared")]
+            [
+                DesignFlaw(DesignLocation("object", "lift_lever", "spot_id"), "spot 'hal' is not declared"),
+                DesignFlaw(DesignLocation("character", "aki", "spawn_spot"), "spot 'cellar' is not declared"),
+            ]
         )
 
-        message = str(exception)
-
-        assert "object" in message and "spot_id" in message
-        assert "lift_lever" in message and "spot 'hal' is not declared" in message
-        assert "crate" in message and "spot 'cellar' is not declared" in message
+        assert str(exception) == (
+            "object 'lift_lever' spot_id: spot 'hal' is not declared\n"
+            "character 'aki' spawn_spot: spot 'cellar' is not declared"
+        )
 
     def test_is_a_world_design_domain_exception(self) -> None:
         """WorldDesignFlawsException は WorldDesignException であり、game_world のドメイン例外でもある。"""
@@ -64,10 +66,10 @@ class TestUnknownNameFlaw:
         assert UnknownNameFlaw(flaw).flaw == flaw
 
     def test_message_shows_location_and_reason(self) -> None:
-        """メッセージに、宣言の名前と欄、理由が出る。"""
-        message = str(UnknownNameFlaw(_flaw("lift_lever", "spot 'hal' is not declared")))
+        """メッセージは「宣言の種類 '名前' 欄: 理由」の 1 行になる。"""
+        flaw = DesignFlaw(DesignLocation("character", "aki", "spawn_spot"), "spot 'hal' is not declared")
 
-        assert "lift_lever" in message and "spot_id" in message and "spot 'hal' is not declared" in message
+        assert str(UnknownNameFlaw(flaw)) == "character 'aki' spawn_spot: spot 'hal' is not declared"
 
     def test_is_a_world_design_exception_but_not_the_collected_flaws(self) -> None:
         """UnknownNameFlaw は WorldDesignException だが、集めた誤りを投げる WorldDesignFlawsException ではない。"""
