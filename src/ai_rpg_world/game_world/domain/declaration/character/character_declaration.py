@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import final
 
-from ai_rpg_world.game_world.domain.exception.character_exception import HeldItemNotAmongInitialItemsException
+from ai_rpg_world.game_world.domain.exception.character_exception import (
+    DuplicatedInitialGroupException,
+    DuplicatedKnownPersonException,
+    HeldItemNotAmongInitialItemsException,
+)
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, GroupId, ItemSpecId, PersonId, SpotId
 
 
@@ -26,3 +31,17 @@ class CharacterDeclaration:
                 f"{self.person_id.value} holds items not among initial_items: "
                 f"{sorted(item.value for item in not_carried.elements())}"
             )
+        duplicated_groups = _listed_more_than_once(group.value for group in self.initial_groups)
+        if duplicated_groups:
+            raise DuplicatedInitialGroupException(
+                f"{self.person_id.value} lists initial_groups more than once: {duplicated_groups}"
+            )
+        duplicated_people = _listed_more_than_once(person.value for person in self.knows_at_start)
+        if duplicated_people:
+            raise DuplicatedKnownPersonException(
+                f"{self.person_id.value} lists knows_at_start more than once: {duplicated_people}"
+            )
+
+
+def _listed_more_than_once(names: Iterable[str]) -> list[str]:
+    return sorted(name for name, count in Counter(names).items() if count > 1)
