@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import final
 
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.person.life_state import FallCause
@@ -69,6 +70,13 @@ class FatigueLevelChangedEvent(PersonVitalsEvent):
     level_after: FatigueLevel
 
 
+@final
+@dataclass(frozen=True)
+class NoPreviousAction:
+    pass
+
+
 @dataclass(frozen=True, kw_only=True)
 class PersonBecameBusyEvent(PersonVitalsEvent):
     until: WorldTick
+    previous_until: WorldTick | NoPreviousAction

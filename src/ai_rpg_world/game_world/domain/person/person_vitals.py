@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import uuid
 from datetime import datetime, timezone
+from fractions import Fraction
 from typing import Any
 
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
@@ -15,6 +16,7 @@ from ai_rpg_world.game_world.domain.person.life_state import Alive, Dead, Down, 
 from ai_rpg_world.game_world.domain.person.person_vitals_events import (
     FatigueLevelChangedEvent,
     HungerLevelChangedEvent,
+    NoPreviousAction,
     PersonBecameBusyEvent,
     PersonDamagedEvent,
     PersonDiedEvent,
@@ -86,7 +88,8 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         if not isinstance(self._life_state, Down):
             raise PersonNotDownException(f"{self._person.value} is not down: {self._life_state}")
         # 起きたのに HP 0 のままにしないよう、率が小さくても 1 は戻す。
-        current = max(1, math.floor(self._hp.maximum * hp_rate.value))
+        # 100 * 0.29 が 28.99… になって 1 減らないよう、率は書かれた小数のまま掛ける。
+        current = max(1, math.floor(self._hp.maximum * Fraction(str(hp_rate.value))))
         self._hp = HitPoints(current=current, maximum=self._hp.maximum)
         self._life_state = Alive()
         self._add(PersonRevivedEvent, revived_at=now, hp_after=self._hp)
@@ -124,8 +127,9 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
 
     def start_action(self, until: WorldTick) -> None:
         self._require_alive("start an action")
+        previous = NoPreviousAction() if self._busy_until is None else self._busy_until
         self._busy_until = until
-        self._add(PersonBecameBusyEvent, until=until)
+        self._add(PersonBecameBusyEvent, until=until, previous_until=previous)
 
     def is_busy(self, now: WorldTick) -> bool:
         return self._busy_until is not None and now < self._busy_until

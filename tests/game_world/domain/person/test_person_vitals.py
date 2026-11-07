@@ -14,6 +14,7 @@ from ai_rpg_world.game_world.domain.person import (
     Down,
     FatigueLevelChangedEvent,
     HungerLevelChangedEvent,
+    NoPreviousAction,
     NoPreviousStatusEffect,
     PersonBecameBusyEvent,
     PersonDamagedEvent,
@@ -239,6 +240,16 @@ class TestRevive:
         [event] = vitals.get_events()
         assert isinstance(event, PersonRevivedEvent)
         assert (event.person, event.revived_at, event.hp_after) == (_ALICE, WorldTick(6), HitPoints(4, 7))
+
+    @pytest.mark.parametrize(("rate", "expected"), [(0.29, 29), (0.57, 57)])
+    def test_revive_rounds_down_the_exact_product(self, rate: float, expected: int) -> None:
+        """最大 100 を率 0.29 / 0.57 で起こすと、浮動小数の誤差で 1 減らさず、29 / 57 で起きる。"""
+        vitals = PersonVitals.start(_ALICE, HitPoints(current=100, maximum=100))
+        vitals.take_damage(Damage(100), WorldTick(5), _STRUCK)
+
+        vitals.revive(Rate(rate), WorldTick(6))
+
+        assert vitals.hp() == HitPoints(current=expected, maximum=100)
 
     def test_revive_with_zero_rate_still_wakes_with_one_hit_point(self) -> None:
         """率が 0 でも、起きたのに HP 0 にはならず HP 1 で起きる。"""
@@ -526,14 +537,27 @@ class TestBusy:
         assert not vitals.is_busy(WorldTick(7))
 
     def test_start_action_raises_event(self) -> None:
-        """start_action は、いつまで行っているかを持つ PersonBecameBusyEvent をためる。"""
+        """初めての start_action は、いつまで行っているかと、前の行為が無かったことを持つ PersonBecameBusyEvent をためる。"""
         vitals = _vitals()
 
         vitals.start_action(WorldTick(7))
 
         [event] = vitals.get_events()
         assert isinstance(event, PersonBecameBusyEvent)
-        assert (event.person, event.until) == (_ALICE, WorldTick(7))
+        assert (event.person, event.until, event.previous_until) == (_ALICE, WorldTick(7), NoPreviousAction())
+
+    def test_starting_again_replaces_the_end_and_reports_the_previous_end(self) -> None:
+        """もう一度 start_action を呼ぶと終わりの tick を置き換え、イベントに前の終わりを持たせる。"""
+        vitals = _vitals()
+        vitals.start_action(WorldTick(7))
+        vitals.clear_events()
+
+        vitals.start_action(WorldTick(4))
+
+        assert not vitals.is_busy(WorldTick(5))
+        [event] = vitals.get_events()
+        assert isinstance(event, PersonBecameBusyEvent)
+        assert (event.until, event.previous_until) == (WorldTick(4), WorldTick(7))
 
     def test_person_who_never_acted_is_not_busy(self) -> None:
         """一度も行為を始めていない人は is_busy が偽。"""
@@ -605,6 +629,35 @@ class TestStatusEffects:
         vitals.remove_expired_status_effects(WorldTick(8))
 
         assert vitals.get_events() == []
+
+    def test_effects_expire_on_a_fallen_person(self) -> None:
+        """期限で外すのは時の経過なので、倒れた人の効果も期限の tick に外れて StatusEffectExpiredEvent をためる。"""
+        vitals = _vitals()
+        effect = StatusEffect(kind=self._BLEEDING, expires_at=WorldTick(8))
+        vitals.add_status_effect(effect)
+        vitals.take_damage(Damage(10), WorldTick(6), _STRUCK)
+        vitals.clear_events()
+
+        vitals.remove_expired_status_effects(WorldTick(8))
+
+        [event] = vitals.get_events()
+        assert isinstance(event, StatusEffectExpiredEvent)
+        assert event.effect == effect
+
+    def test_effects_expire_on_a_dead_person(self) -> None:
+        """死んだ人の効果も期限の tick に外れ、StatusEffectExpiredEvent をためる。"""
+        vitals = _vitals()
+        effect = StatusEffect(kind=self._BLEEDING, expires_at=WorldTick(20))
+        vitals.add_status_effect(effect)
+        vitals.take_damage(Damage(10), WorldTick(5), _STRUCK)
+        vitals.pass_time(WorldTick(7), _death(grace=2), _no_hunger())
+        vitals.clear_events()
+
+        vitals.remove_expired_status_effects(WorldTick(20))
+
+        [event] = vitals.get_events()
+        assert isinstance(event, StatusEffectExpiredEvent)
+        assert event.effect == effect
 
     @pytest.mark.parametrize("make", [_fallen, _dead])
     def test_adding_to_a_person_not_alive_raises_domain_exception(self, make) -> None:

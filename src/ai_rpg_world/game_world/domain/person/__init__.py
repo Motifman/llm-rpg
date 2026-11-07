@@ -27,6 +27,7 @@ from ai_rpg_world.game_world.domain.person.person_vitals import PersonVitals
 from ai_rpg_world.game_world.domain.person.person_vitals_events import (
     FatigueLevelChangedEvent,
     HungerLevelChangedEvent,
+    NoPreviousAction,
     PersonBecameBusyEvent,
     PersonDamagedEvent,
     PersonDiedEvent,
@@ -55,6 +56,7 @@ __all__ = [
     "GroupMembershipEvent",
     "HungerLevelChangedEvent",
     "LifeState",
+    "NoPreviousAction",
     "NoPreviousStatusEffect",
     "NotInAnyGroup",
     "Outcome",
