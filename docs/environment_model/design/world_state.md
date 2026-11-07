@@ -116,9 +116,10 @@ StateValue = FlagValue | CountValue | ChoiceValue | StockValue | WrittenText | N
 
 class ObjectState:                                # 物体ごと
     @classmethod
-    def open(cls, declaration: ObjectDeclaration) -> "ObjectState": ...
+    def open(cls, declaration: ObjectDeclaration, now: WorldTick) -> "ObjectState": ...
+        # 在庫は refills_every ごとに 1 つ戻り、capacity で止まる。open・set・take_from_stock の now から数え、満杯でなければ端数を持ち越す
 
-    def set(self, key: ObjectStateKeyDeclaration, value: StateValue) -> None: ...
+    def set(self, key: ObjectStateKeyDeclaration, value: StateValue, now: WorldTick) -> None: ...   # 在庫の鍵なら now から数え直す
     def add_to_count(self, key: ObjectStateKeyDeclaration, amount: Count) -> None: ...
     def subtract_from_count(self, key: ObjectStateKeyDeclaration, amount: Count) -> None: ...   # 0 を下回るならドメイン例外
     def take_from_stock(self, key: ObjectStateKeyDeclaration, amount: Count, now: WorldTick) -> None: ...
@@ -152,11 +153,11 @@ class WorldFlags:                                 # 世界に 1 つ
     def is_raised(self, flag: FlagDeclaration) -> bool: ...
 
 
-class PersonInventory:                            # 人ごと
+class PersonInventory:                            # 人ごと。持てる数の上限 (Capacity) を受けて作る
     def receive(self, item: ItemInstanceId) -> None: ...         # 荷に入る
     def give_up(self, item: ItemInstanceId) -> None: ...         # 手の物でも荷の物でも
     def hold(self, item: ItemInstanceId, hands_needed: HandsNeeded) -> None: ...
-        # 荷から手に持つ。手は 2 本。足りなければ、今手に持っている物を荷にしまう
+        # 荷から手に持つ。手は 2 本。足りなければ、今手に持っている物を先に持った順に荷にしまう
     def put_away(self, item: ItemInstanceId) -> None: ...
     def earn(self, amount: Gold) -> None: ...
     def pay(self, amount: Gold) -> None: ...
@@ -171,7 +172,7 @@ class PersonInventory:                            # 人ごと
     def is_reserved(self, item: ItemInstanceId) -> bool: ...   # 取引に出した品は、ほかで使えない
 
 
-class Item:                                       # 品物ごと
+class Item:                                       # 品物ごと。ItemInstanceId は空でない文字列
     @classmethod
     def come_into_world(cls, item_id: ItemInstanceId, spec: ItemSpecDeclaration, now: WorldTick) -> "Item": ...
 
@@ -297,6 +298,8 @@ GroupDecisionReachedEvent, GroupDecisionUnresolvedEvent
 PersonActedEvent, ActionAttemptFailedEvent
 ```
 
-- 前後の値で反応するハンドラのために、状態の変化のイベントは変わる前と後の値を持つ (`ItemStateChangedEvent`、`WeatherChangedEvent`、`TimeOfDayChangedEvent`、`SpotAtmosphereChangedEvent`、`ItemHeldEvent` / `ItemPutAwayEvent` の持ち主の場所)
+- 前後の値で反応するハンドラのために、状態の変化のイベントは変わる前と後の値を持つ (`ItemStateChangedEvent`、`WeatherChangedEvent`、`TimeOfDayChangedEvent`、`SpotAtmosphereChangedEvent`)
+- `ItemHeldEvent` / `ItemPutAwayEvent` / `ItemGivenUpEvent` は持ち主と品物を持つ。`PersonInventory` は持ち主の場所を知らないので、場所は受けるハンドラが `Whereabouts` で引く。`ItemGivenUpEvent` は、手に持っていたかも持つ (手放したあとでは引けないため)
+- 状態が変わらない操作 (同じ値への `set`、現れている物の `reveal`、手にある物の `hold` など) は、断らず、イベントも出さない。断ると `CommandScope` ごと巻き戻り、同じ効果を当て直す出来事や反応が全体を止めるため
 - 世界を表す集約は、状態を変えたら必ずイベントを出す。帳簿の集約 (`ScenarioProgress`、`MissedNotices`) は出さない。漏れはアーキテクチャのテストで見張る
 - 空腹と疲れは、段階 (`HungerRule.levels` / `FatigueRule.levels`) が変わったときだけイベントにする
