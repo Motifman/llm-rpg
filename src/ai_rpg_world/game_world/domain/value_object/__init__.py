@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.value_object.hunger_amount import HungerAmou
 from ai_rpg_world.game_world.domain.value_object.multiplier import Multiplier
 from ai_rpg_world.game_world.domain.value_object.probability import Probability
 from ai_rpg_world.game_world.domain.value_object.rate import Rate
+from ai_rpg_world.game_world.domain.value_object.spot_id import SpotId
 from ai_rpg_world.game_world.domain.value_object.ticks import Ticks
 from ai_rpg_world.game_world.domain.value_object.world_tick import WorldTick
 
@@ -26,6 +27,7 @@ __all__ = [
     "Multiplier",
     "Probability",
     "Rate",
+    "SpotId",
     "Ticks",
     "WorldTick",
 ]

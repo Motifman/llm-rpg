@@ -16,3 +16,7 @@ class CountBelowZeroException(GameWorldDomainException):
 
 class InsufficientGoldException(GameWorldDomainException):
     error_code = "GAME_WORLD.INSUFFICIENT_GOLD"
+
+
+class InvalidSpotIdException(GameWorldDomainException):
+    error_code = "GAME_WORLD.INVALID_SPOT_ID"

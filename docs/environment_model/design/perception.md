@@ -203,10 +203,10 @@ SightQuality = SeesClearly | SeesShapes | SeesNothing
 ```python
 @final
 @dataclass(frozen=True)
-class SoundLevel:
+class SoundLevel:                         # 0 以上
     value: int
 
-    def weakened_by(self, loss: SoundLoss) -> "SoundLevel": ...
+    def weakened_by(self, loss: SoundLoss) -> "SoundLevel": ...   # 0 で止まる
     def is_below(self, other: "SoundLevel") -> bool: ...
 
 @final
@@ -225,7 +225,7 @@ class PassageInState:
 @final
 @dataclass(frozen=True)
 class SoundLink:
-    ends: tuple[SpotId, SpotId]
+    ends: tuple[SpotId, SpotId]           # 向きを持たない。どちらの端で鳴った音も反対の端へ届く
     loss: SoundLoss                       # 通路ごとの減衰 + 通路の状態の減衰
 
 @final
@@ -244,6 +244,16 @@ class SoundReach:
     levels: Mapping[SpotId, SoundLevel]
 
     def level_at(self, spot: SpotId) -> SoundLevel | NotReached: ...
+
+@final
+@dataclass(frozen=True)
+class NotReached: ...
+
+class Loudness(Enum):
+    WHISPER = "WHISPER"
+    NORMAL = "NORMAL"
+    LOUD = "LOUD"
+    VERY_LOUD = "VERY_LOUD"
 
 HearingQuality = HearsClearly | HearsMuffled | HearsFaintly | HearsNothing
 ```
