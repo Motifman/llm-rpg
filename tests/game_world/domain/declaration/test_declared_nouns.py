@@ -116,7 +116,9 @@ def _item_spec(name: str) -> ItemSpecDeclaration:
 
 
 def _grouping(name: str, visibility: MembershipVisibility = MembershipVisibility.SELF_ONLY) -> GroupingDeclaration:
-    return GroupingDeclaration(grouping_id=GroupingId(name), name=DisplayName(name), visibility=visibility, changes=False)
+    return GroupingDeclaration(
+        grouping_id=GroupingId(name), name=DisplayName(name), visibility=visibility, changes=False
+    )
 
 
 def _group(name: str, grouping: GroupingDeclaration) -> GroupDeclaration:
@@ -250,9 +252,7 @@ _KINDS = [
     _Kind("item_spec", "item_spec_id", "item_specs", _item_spec, DeclaredNouns.item_spec),
     _Kind("grouping", "grouping_id", "groupings", _grouping, None),
     _Kind("group", "group_id", "groups", lambda name: _group(name, _FACTION), DeclaredNouns.group),
-    _Kind(
-        "character", "person_id", "characters", lambda name: _character(name, "hall"), DeclaredNouns.character
-    ),
+    _Kind("character", "person_id", "characters", lambda name: _character(name, "hall"), DeclaredNouns.character),
     _Kind("world_stage", "stage_id", "world_stages", _world_stage, DeclaredNouns.world_stage),
     _Kind("group_decision", "decision_id", "group_decisions", _group_decision, DeclaredNouns.group_decision),
     _Kind("section", "section_id", "sections", lambda name: _section(name, "hall"), DeclaredNouns.section),
@@ -366,3 +366,234 @@ class TestSectionsAt:
         nouns = _nouns(spots=[_spot("lift_landing"), _spot("shore")], sections=[_section("boat", "shore")])
 
         assert nouns.sections_at(SpotId("lift_landing")) == ()
+
+
+def _flaw(declaration: str, name: str, field: str, reason: str) -> DesignFlaw:
+    return DesignFlaw(DesignLocation(declaration, name, field), reason)
+
+
+class TestCollectingFlaws:
+    """DeclaredNouns が、作るときに見つけた誤りを最初の 1 つで止めずに集めて投げることを保証する。"""
+
+    def test_consistent_declarations_are_accepted(self) -> None:
+        """どの ID も宣言にあり、名前の重なりも無い宣言なら、断らずに作れる。"""
+        cage_lever = _object("cage_lever", "lift_landing")
+        nouns = _nouns(
+            flags=[_flag("lift_repaired")],
+            spots=[_spot("lift_landing"), _spot("cellar")],
+            passages=[_passage("stairs", ("lift_landing", "cellar"))],
+            objects=[cage_lever],
+            item_specs=[_item_spec("lantern")],
+            groupings=[_FACTION],
+            groups=[_group("villagers", _FACTION)],
+            characters=[
+                _character(
+                    "aki",
+                    "lift_landing",
+                    initial_items=("lantern",),
+                    initial_groups=("villagers",),
+                    knows_at_start=("aki", "haru"),
+                ),
+                _character("haru", "cellar"),
+            ],
+            world_stages=[_world_stage("night")],
+            group_decisions=[_group_decision("exile_vote")],
+            sections=[_section("lift_cage", "lift_landing", reachable_objects=("cage_lever",))],
+            outcomes=[_outcome("rescued")],
+        )
+
+        assert nouns.object("cage_lever", _LOOKUP_AT) == cage_lever
+
+    def test_undeclared_spawn_spot_and_duplicated_object_are_both_reported(self) -> None:
+        """宣言に無い場所を spawn_spot に持つ登場人物と、同じ名前の物が 2 つあるとき、両方の DesignFlaw を持つ WorldDesignFlawsException を投げる。"""
+        flaws = _flaws_of(
+            lambda: _nouns(
+                spots=[_spot("hall")],
+                objects=[_object("lift_lever", "hall"), _object("lift_lever", "hall")],
+                characters=[_character("aki", "cellar")],
+            )
+        )
+
+        assert set(flaws) == {
+            _flaw("character", "aki", "spawn_spot", "spot 'cellar' is not declared"),
+            _flaw("object", "lift_lever", "object_id", "object 'lift_lever' is declared more than once"),
+        }
+
+
+class TestDuplicatedNames:
+    """DeclaredNouns が、同じ種類の宣言で名前が重なると誤りにすることを保証する。"""
+
+    @pytest.mark.parametrize("kind", _KINDS, ids=repr)
+    def test_same_name_declared_twice_is_a_flaw(self, kind: _Kind) -> None:
+        """同じ種類の宣言を同じ名前で 2 つ書くと、その名前の ID の欄を指す DesignFlaw を 1 つだけ持つ WorldDesignFlawsException を投げる。"""
+        flaws = _flaws_of(lambda: _supporting_nouns(kind, [kind.make("lift"), kind.make("lift")]))
+
+        assert flaws == (
+            _flaw(kind.declaration, "lift", kind.id_field, f"{kind.declaration} 'lift' is declared more than once"),
+        )
+
+    def test_same_name_in_different_kinds_is_accepted(self) -> None:
+        """場所と物のように種類が違えば、同じ名前を使っても断らない。"""
+        nouns = _nouns(spots=[_spot("lift")], objects=[_object("lift", "lift")], sections=[_section("lift", "lift")])
+
+        assert nouns.section("lift", _LOOKUP_AT).spot_id == SpotId("lift")
+
+
+class TestReferencesToSpots:
+    """DeclaredNouns が、場所を指す ID が宣言に無いと誤りにすることを保証する。"""
+
+    def test_object_at_undeclared_spot_is_a_flaw(self) -> None:
+        """物の spot_id が宣言に無い場所なら、その物の spot_id を指す DesignFlaw を投げる。"""
+        flaws = _flaws_of(lambda: _nouns(spots=[_spot("hall")], objects=[_object("lift_lever", "cellar")]))
+
+        assert flaws == (_flaw("object", "lift_lever", "spot_id", "spot 'cellar' is not declared"),)
+
+    def test_section_at_undeclared_spot_is_a_flaw(self) -> None:
+        """区画の spot_id が宣言に無い場所なら、その区画の spot_id を指す DesignFlaw を投げる。"""
+        flaws = _flaws_of(lambda: _nouns(spots=[_spot("hall")], sections=[_section("lift_cage", "cellar")]))
+
+        assert flaws == (_flaw("section", "lift_cage", "spot_id", "spot 'cellar' is not declared"),)
+
+    def test_passage_end_at_undeclared_spot_is_a_flaw(self) -> None:
+        """通路の ends の片方が宣言に無い場所なら、その端の位置 (ends[1]) を指す DesignFlaw を投げる。"""
+        flaws = _flaws_of(lambda: _nouns(spots=[_spot("hall")], passages=[_passage("stairs", ("hall", "cellar"))]))
+
+        assert flaws == (_flaw("passage", "stairs", "ends[1]", "spot 'cellar' is not declared"),)
+
+    def test_passage_with_both_ends_undeclared_reports_each_end(self) -> None:
+        """通路の両端がどちらも宣言に無い場所なら、ends[0] と ends[1] の DesignFlaw を両方投げる。"""
+        flaws = _flaws_of(lambda: _nouns(passages=[_passage("stairs", ("hall", "cellar"))]))
+
+        assert flaws == (
+            _flaw("passage", "stairs", "ends[0]", "spot 'hall' is not declared"),
+            _flaw("passage", "stairs", "ends[1]", "spot 'cellar' is not declared"),
+        )
+
+    def test_character_spawning_at_undeclared_spot_is_a_flaw(self) -> None:
+        """登場人物の spawn_spot が宣言に無い場所なら、その登場人物の spawn_spot を指す DesignFlaw を投げる。"""
+        flaws = _flaws_of(lambda: _nouns(spots=[_spot("hall")], characters=[_character("aki", "cellar")]))
+
+        assert flaws == (_flaw("character", "aki", "spawn_spot", "spot 'cellar' is not declared"),)
+
+
+class TestSectionReachableObjects:
+    """DeclaredNouns が、区画の中から届く物が宣言にあり、区画と同じ場所に置かれていることを確かめることを保証する。"""
+
+    def test_undeclared_reachable_object_is_a_flaw(self) -> None:
+        """reachable_objects に宣言に無い物があると、その位置 (reachable_objects[1]) を指す DesignFlaw を投げる。"""
+        flaws = _flaws_of(
+            lambda: _nouns(
+                spots=[_spot("lift_landing")],
+                objects=[_object("cage_lever", "lift_landing")],
+                sections=[_section("lift_cage", "lift_landing", reachable_objects=("cage_lever", "cage_bell"))],
+            )
+        )
+
+        assert flaws == (_flaw("section", "lift_cage", "reachable_objects[1]", "object 'cage_bell' is not declared"),)
+
+    def test_reachable_object_at_another_spot_is_a_flaw(self) -> None:
+        """reachable_objects の物が区画と違う場所に置かれていると、その位置を指し、両方の場所を書いた DesignFlaw を投げる。"""
+        flaws = _flaws_of(
+            lambda: _nouns(
+                spots=[_spot("lift_landing"), _spot("storeroom")],
+                objects=[_object("cage_lever", "storeroom")],
+                sections=[_section("lift_cage", "lift_landing", reachable_objects=("cage_lever",))],
+            )
+        )
+
+        assert flaws == (
+            _flaw(
+                "section",
+                "lift_cage",
+                "reachable_objects[0]",
+                "object 'cage_lever' is at spot 'storeroom', not 'lift_landing'",
+            ),
+        )
+
+
+class TestGroupGrouping:
+    """DeclaredNouns が、集まりの持つ分け方が分け方の宣言と一致することを確かめることを保証する。"""
+
+    def test_group_of_undeclared_grouping_is_a_flaw(self) -> None:
+        """集まりの分け方が groupings に無いと、その集まりの grouping を指す DesignFlaw を投げる。"""
+        flaws = _flaws_of(lambda: _nouns(groupings=[_FACTION], groups=[_group("first_squad", _grouping("squad"))]))
+
+        assert flaws == (_flaw("group", "first_squad", "grouping", "grouping 'squad' is not declared"),)
+
+    def test_group_whose_grouping_differs_from_the_declared_one_is_a_flaw(self) -> None:
+        """集まりの分け方が、groupings にある同じ grouping_id の分け方と中身が違うと、その集まりの grouping を指す DesignFlaw を投げる。"""
+        open_faction = _grouping("faction", visibility=MembershipVisibility.EVERYONE)
+        flaws = _flaws_of(lambda: _nouns(groupings=[_FACTION], groups=[_group("wolves", open_faction)]))
+
+        assert flaws == (_flaw("group", "wolves", "grouping", "grouping 'faction' differs from its declaration"),)
+
+
+class TestCharacterReferences:
+    """DeclaredNouns が、登場人物が最初に持つ物・入る集まり・知っている人が宣言にあることを確かめることを保証する。"""
+
+    def test_undeclared_initial_item_is_a_flaw(self) -> None:
+        """initial_items に宣言に無い品物があると、その位置 (initial_items[1]) を指す DesignFlaw を投げる。"""
+        flaws = _flaws_of(
+            lambda: _nouns(
+                spots=[_spot("hall")],
+                item_specs=[_item_spec("lantern")],
+                characters=[_character("aki", "hall", initial_items=("lantern", "pickaxe"))],
+            )
+        )
+
+        assert flaws == (_flaw("character", "aki", "initial_items[1]", "item_spec 'pickaxe' is not declared"),)
+
+    def test_undeclared_initial_group_is_a_flaw(self) -> None:
+        """initial_groups に宣言に無い集まりがあると、その位置 (initial_groups[0]) を指す DesignFlaw を投げる。"""
+        flaws = _flaws_of(
+            lambda: _nouns(
+                spots=[_spot("hall")],
+                groupings=[_FACTION],
+                characters=[_character("aki", "hall", initial_groups=("wolves",))],
+            )
+        )
+
+        assert flaws == (_flaw("character", "aki", "initial_groups[0]", "group 'wolves' is not declared"),)
+
+    def test_undeclared_known_person_is_a_flaw(self) -> None:
+        """knows_at_start に登場人物として宣言されていない人がいると、その位置 (knows_at_start[1]) を指す DesignFlaw を投げる。"""
+        flaws = _flaws_of(
+            lambda: _nouns(
+                spots=[_spot("hall")],
+                characters=[_character("aki", "hall", knows_at_start=("aki", "natsu"))],
+            )
+        )
+
+        assert flaws == (_flaw("character", "aki", "knows_at_start[1]", "character 'natsu' is not declared"),)
+
+    def test_two_groups_of_the_same_grouping_is_a_flaw(self) -> None:
+        """initial_groups に同じ分け方の集まりを 2 つ書くと、2 つめの位置を指し、両方の集まりと分け方を書いた DesignFlaw を投げる。"""
+        flaws = _flaws_of(
+            lambda: _nouns(
+                spots=[_spot("hall")],
+                groupings=[_FACTION],
+                groups=[_group("villagers", _FACTION), _group("wolves", _FACTION)],
+                characters=[_character("aki", "hall", initial_groups=("villagers", "wolves"))],
+            )
+        )
+
+        assert flaws == (
+            _flaw(
+                "character",
+                "aki",
+                "initial_groups[1]",
+                "group 'wolves' and group 'villagers' both belong to grouping 'faction'",
+            ),
+        )
+
+    def test_groups_of_different_groupings_are_accepted(self) -> None:
+        """initial_groups の集まりの分け方がどれも違えば、断らずに作れる。"""
+        squad = _grouping("squad")
+        nouns = _nouns(
+            spots=[_spot("hall")],
+            groupings=[_FACTION, squad],
+            groups=[_group("villagers", _FACTION), _group("first_squad", squad)],
+            characters=[_character("aki", "hall", initial_groups=("villagers", "first_squad"))],
+        )
+
+        assert nouns.character("aki", _LOOKUP_AT).initial_groups == (GroupId("villagers"), GroupId("first_squad"))
