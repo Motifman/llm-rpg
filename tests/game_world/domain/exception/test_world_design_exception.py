@@ -35,18 +35,13 @@ class TestWorldDesignFlawsException:
             WorldDesignFlawsException([])
 
     def test_message_lists_every_flaw_one_per_line(self) -> None:
-        """メッセージは、誤りごとに「宣言の種類 '名前' 欄: 理由」を 1 行で、渡した順に並べる。"""
-        exception = WorldDesignFlawsException(
-            [
-                DesignFlaw(DesignLocation("object", "lift_lever", "spot_id"), "spot 'hal' is not declared"),
-                DesignFlaw(DesignLocation("character", "aki", "spawn_spot"), "spot 'cellar' is not declared"),
-            ]
-        )
+        """メッセージは、渡した DesignFlaw の文を 1 行に 1 つずつ、渡した順に並べる。"""
+        first = DesignFlaw(DesignLocation("object", "lift_lever", "spot_id"), "spot 'hal' is not declared")
+        second = DesignFlaw(DesignLocation("character", "aki", "spawn_spot"), "spot 'cellar' is not declared")
 
-        assert str(exception) == (
-            "object 'lift_lever' spot_id: spot 'hal' is not declared\n"
-            "character 'aki' spawn_spot: spot 'cellar' is not declared"
-        )
+        exception = WorldDesignFlawsException([first, second])
+
+        assert str(exception).splitlines() == [str(first), str(second)]
 
     def test_is_a_world_design_domain_exception(self) -> None:
         """WorldDesignFlawsException は WorldDesignException であり、game_world のドメイン例外でもある。"""
@@ -65,11 +60,11 @@ class TestUnknownNameFlaw:
 
         assert UnknownNameFlaw(flaw).flaw == flaw
 
-    def test_message_shows_location_and_reason(self) -> None:
-        """メッセージは「宣言の種類 '名前' 欄: 理由」の 1 行になる。"""
+    def test_message_is_the_flaw_itself(self) -> None:
+        """メッセージは、持っている DesignFlaw の文そのものになる。"""
         flaw = DesignFlaw(DesignLocation("character", "aki", "spawn_spot"), "spot 'hal' is not declared")
 
-        assert str(UnknownNameFlaw(flaw)) == "character 'aki' spawn_spot: spot 'hal' is not declared"
+        assert str(UnknownNameFlaw(flaw)) == str(flaw)
 
     def test_is_a_world_design_exception_but_not_the_collected_flaws(self) -> None:
         """UnknownNameFlaw は WorldDesignException だが、集めた誤りを投げる WorldDesignFlawsException ではない。"""

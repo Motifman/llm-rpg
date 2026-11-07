@@ -16,6 +16,10 @@ class TestDesignLocation:
         """種類・名前・欄が同じ DesignLocation は等しい。"""
         assert DesignLocation("object", "lift_lever", "spot_id") == DesignLocation("object", "lift_lever", "spot_id")
 
+    def test_reads_as_declaration_kind_quoted_name_and_field(self) -> None:
+        """DesignLocation("object", "lift_lever", "state_keys[0]") を文にすると「object 'lift_lever' state_keys[0]」になる。"""
+        assert str(DesignLocation("object", "lift_lever", "state_keys[0]")) == "object 'lift_lever' state_keys[0]"
+
 
 class TestDesignFlawAndWarning:
     """読み込みを止める誤り (DesignFlaw) と、読み込みを続ける注意 (DesignWarning) が、場所と理由を持ち、互いに取り違えられないことを保証する。"""
@@ -27,6 +31,12 @@ class TestDesignFlawAndWarning:
         flaw = DesignFlaw(location, "spot 'hal' is not declared")
 
         assert (flaw.location, flaw.reason) == (location, "spot 'hal' is not declared")
+
+    def test_flaw_reads_as_location_then_reason(self) -> None:
+        """DesignFlaw を文にすると「宣言の種類 '名前' 欄: 理由」の 1 行になる。"""
+        flaw = DesignFlaw(DesignLocation("character", "aki", "spawn_spot"), "spot 'hal' is not declared")
+
+        assert str(flaw) == "character 'aki' spawn_spot: spot 'hal' is not declared"
 
     def test_warning_keeps_location_and_reason(self) -> None:
         """DesignWarning は渡した場所と理由をそのまま持つ。"""

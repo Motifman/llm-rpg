@@ -6,11 +6,6 @@ from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw
 from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
 
 
-def _describe(flaw: DesignFlaw) -> str:
-    location = flaw.location
-    return f"{location.declaration} {location.name!r} {location.field}: {flaw.reason}"
-
-
 class BlankDeclaredNameException(GameWorldDomainException):
     error_code = "GAME_WORLD.BLANK_DECLARED_NAME"
 
@@ -30,7 +25,7 @@ class WorldDesignFlawsException(WorldDesignException):
         self.flaws = tuple(flaws)
         if not self.flaws:
             raise NoDesignFlawsException("WorldDesignFlawsException needs at least one DesignFlaw")
-        super().__init__("\n".join(_describe(flaw) for flaw in self.flaws))
+        super().__init__("\n".join(str(flaw) for flaw in self.flaws))
 
 
 class UnknownNameFlaw(WorldDesignException):
@@ -38,4 +33,4 @@ class UnknownNameFlaw(WorldDesignException):
 
     def __init__(self, flaw: DesignFlaw) -> None:
         self.flaw = flaw
-        super().__init__(_describe(flaw))
+        super().__init__(str(flaw))
