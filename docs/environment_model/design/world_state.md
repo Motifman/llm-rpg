@@ -120,8 +120,9 @@ class ObjectState:                                # 物体ごと
     @classmethod
     def open(cls, declaration: ObjectDeclaration, now: WorldTick) -> "ObjectState": ...
         # 在庫は refills_every ごとに 1 つ戻り、capacity で止まる。open・set・take_from_stock の now から数え、満杯でなければ端数を持ち越す
+        # 戻った分は読むときに数えるので、イベントは出さない。次の take_from_stock の before に戻った量が出る
 
-    def set(self, key: ObjectStateKeyDeclaration, value: StateValue, now: WorldTick) -> None: ...   # 在庫の鍵なら now から数え直す
+    def set(self, key: ObjectStateKeyDeclaration, value: StateValue, now: WorldTick) -> None: ...   # 在庫の鍵は、値が変わるとき now から数え直す
     def add_to_count(self, key: ObjectStateKeyDeclaration, amount: Count) -> None: ...
     def subtract_from_count(self, key: ObjectStateKeyDeclaration, amount: Count) -> None: ...   # 0 を下回るならドメイン例外
     def take_from_stock(self, key: ObjectStateKeyDeclaration, amount: Count, now: WorldTick) -> None: ...

@@ -290,6 +290,37 @@ class TestObjectStateStock:
         assert state.value_of(water, WorldTick(7)) == StockValue(Count(0))
         assert state.value_of(water, WorldTick(8)) == StockValue(Count(1))
 
+    def test_take_records_refilled_amount_as_before(self) -> None:
+        """在庫 0 から 2 つ戻ったあとに 1 つ取ると、ObjectStateChangedEvent の before は戻ったあとの 2 になる。"""
+        water = _water(initial=0, refills_every=Ticks(3))
+        state = _opened(_well(water))
+
+        state.take_from_stock(water, Count(1), WorldTick(6))
+
+        [event] = state.get_events()
+        assert isinstance(event, ObjectStateChangedEvent)
+        assert (event.before, event.after) == (StockValue(Count(2)), StockValue(Count(1)))
+
+    def test_taking_zero_records_nothing(self) -> None:
+        """在庫が 0 でも Count(0) の take_from_stock は断らず、在庫もイベントも変わらない。"""
+        water = _water(initial=0, refills_every=NoRefill())
+        state = _opened(_well(water))
+
+        state.take_from_stock(water, Count(0), WorldTick(1))
+
+        assert state.value_of(water, WorldTick(1)) == StockValue(Count(0))
+        assert state.get_events() == []
+
+    def test_setting_the_same_stock_does_not_restart_refill_count(self) -> None:
+        """tick 5 に戻った分と同じ在庫 1 を set しても数え直さず、tick 0 から数えて tick 6 に 2 を返す。"""
+        water = _water(initial=0, refills_every=Ticks(3))
+        state = _opened(_well(water))
+
+        state.set(water, StockValue(Count(1)), WorldTick(5))
+
+        assert state.value_of(water, WorldTick(6)) == StockValue(Count(2))
+        assert state.get_events() == []
+
     def test_no_refill_never_grows(self) -> None:
         """refills_every が NoRefill の在庫は、時が経っても増えない。"""
         water = _water(initial=1, refills_every=NoRefill())
@@ -304,6 +335,17 @@ class TestObjectStateStock:
 
         with pytest.raises(TickOrderException):
             state.value_of(water, WorldTick(9))
+
+    def test_taking_before_refill_count_started_is_refused(self) -> None:
+        """補充を数え始めた tick より前の now で take_from_stock を呼ぶと TickOrderException を投げ、在庫もイベントも変わらない。"""
+        water = _water(initial=2, refills_every=Ticks(3))
+        state = _opened(_well(water), now=WorldTick(10))
+
+        with pytest.raises(TickOrderException):
+            state.take_from_stock(water, Count(1), WorldTick(9))
+
+        assert state.value_of(water, WorldTick(10)) == StockValue(Count(2))
+        assert state.get_events() == []
 
 
 class TestObjectStateWriteText:
