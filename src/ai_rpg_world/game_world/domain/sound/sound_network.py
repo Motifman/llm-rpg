@@ -56,8 +56,9 @@ class SoundNetwork:
             if spot in levels:
                 continue
             level = start.weakened_by(SoundLoss(total))
+            # 合計の小さい順に取り出すので、残りの候補もすべて下限を下回る。
             if level.is_below(stop_below):
-                continue
+                break
             levels[spot] = level
             for neighbour, loss in neighbours.get(spot, ()):
                 candidate = total + loss.value
