@@ -231,6 +231,37 @@ class TestGroupDecisionCast:
 
         assert isinstance(_last_event(decision), GroupDecisionUnresolvedEvent)
 
+    def test_majority_of_split_votes_is_reached(self) -> None:
+        """3 人が bob 2 票・carol 1 票に分かれると、bob に決まる。"""
+        decision = _started()
+
+        decision.cast(_ALICE, VoteFor(_BOB))
+        decision.cast(_BOB, VoteFor(_CAROL))
+        decision.cast(_CAROL, VoteFor(_BOB))
+
+        event = _last_event(decision)
+        assert isinstance(event, GroupDecisionReachedEvent)
+        assert event.chosen == _BOB
+
+    def test_top_choice_outnumbered_by_abstentions_is_unresolved(self) -> None:
+        """bob への 1 票より棄権の 2 票が多いと、GroupDecisionUnresolvedEvent になる。"""
+        decision = _started()
+
+        decision.cast(_ALICE, VoteFor(_BOB))
+        decision.cast(_BOB, Abstain())
+        decision.cast(_CAROL, Abstain())
+
+        assert isinstance(_last_event(decision), GroupDecisionUnresolvedEvent)
+
+    def test_everyone_abstaining_is_unresolved(self) -> None:
+        """全員が棄権すると、GroupDecisionUnresolvedEvent になる。"""
+        decision = _started(frozenset({_ALICE, _BOB}))
+
+        decision.cast(_ALICE, Abstain())
+        decision.cast(_BOB, Abstain())
+
+        assert isinstance(_last_event(decision), GroupDecisionUnresolvedEvent)
+
     def test_cast_after_tally_raises(self) -> None:
         """集計して閉じた決定への票は GroupDecisionNotOpenException で断る。"""
         decision = _started(frozenset({_ALICE}))

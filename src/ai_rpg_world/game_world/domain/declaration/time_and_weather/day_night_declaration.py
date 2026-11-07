@@ -50,7 +50,6 @@ class DayNightDeclaration:
 
     def phase_at(self, time_of_day: TimeOfDay) -> DayPhaseDeclaration:
         begun = [phase for phase in self.phases if phase.begins_at <= time_of_day]
-        # 最初の段階より前の時刻は、前の日の最後の段階が続いている。
         return begun[-1] if begun else self.phases[-1]
 
     def _require_within_day(self, time_of_day: TimeOfDay) -> None:

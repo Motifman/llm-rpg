@@ -80,6 +80,14 @@ class TestWorldClockAdvance:
 
         assert [type(event) for event in clock.get_events()] == [WorldTickAdvancedEvent]
 
+    def test_crossing_midnight_within_night_records_no_time_of_day_event(self) -> None:
+        """夜が 18 から日をまたいで続く昼夜で 23 から 0 へ進んでも、同じ夜なので TimeOfDayChangedEvent はためない。"""
+        clock = WorldClock(_WORLD)
+
+        clock.advance(_day_night(starts_at=23))
+
+        assert [type(event) for event in clock.get_events()] == [WorldTickAdvancedEvent]
+
     def test_no_day_night_records_no_time_of_day_event(self) -> None:
         """昼夜を宣言しない世界では、何 tick 進めても TimeOfDayChangedEvent をためない。"""
         clock = WorldClock(_WORLD)
