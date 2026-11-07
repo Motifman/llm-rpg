@@ -27,6 +27,7 @@ from ai_rpg_world.game_world.domain.value_object.spot_id import SpotId
 from ai_rpg_world.game_world.domain.value_object.spot_section_id import SpotSectionId
 from ai_rpg_world.game_world.domain.value_object.state_key_id import StateKeyId
 from ai_rpg_world.game_world.domain.value_object.ticks import Ticks
+from ai_rpg_world.game_world.domain.value_object.world_id import WorldId
 from ai_rpg_world.game_world.domain.value_object.world_stage_id import WorldStageId
 from ai_rpg_world.game_world.domain.value_object.world_tick import WorldTick
 
@@ -60,6 +61,7 @@ __all__ = [
     "SpotSectionId",
     "StateKeyId",
     "Ticks",
+    "WorldId",
     "WorldStageId",
     "WorldTick",
 ]
