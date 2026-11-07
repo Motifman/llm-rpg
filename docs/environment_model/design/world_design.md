@@ -45,8 +45,8 @@ class SpotSectionDeclaration:               # 場所の中の、体で入る一�
     name: str
     enter_label: str                        # 「籠に乗り込む」
     leave_label: str                        # 「籠から降りる」
-    enter_text: TextWithPeople              # 入った本人の体の刺激
-    leave_text: TextWithPeople
+    enter_text: TextWithPersonHoles         # 入った本人の体の刺激
+    leave_text: TextWithPersonHoles
     exertion: Exertion
     duration: Ticks | DefaultDuration
     capacity: Capacity | NoCapacity
@@ -171,14 +171,14 @@ class GroupDecisionDeclaration:
 class OutcomeDeclaration:
     outcome_id: OutcomeId
     name: str                               # 「救出」
-    announcement: TextWithPeople            # 「{person}は昇降機で外へ出た。」
+    announcement: TextWithPersonHoles       # 「{person}は昇降機で外へ出た。」
 
 @final
 @dataclass(frozen=True)
 class DiscoverableDeclaration:
     discoverable_id: DiscoverableId
     spot_id: SpotId
-    found_text: TextWithPeople               # 見つけた本人の体の刺激になる
+    found_text: TextWithPersonHoles          # 見つけた本人の体の刺激になる
     condition: Condition
     when_found: Effect
     finding: Finding                         # ONCE_IN_WORLD: 誰かが見つけたら終わり / ONCE_PER_PERSON: 人ごとに 1 回
@@ -229,7 +229,7 @@ class InteractionDeclaration:
     display_label: str
     precondition: Condition
     effect: Effect
-    success_text: TextWithPeople            # 行った本人の体の刺激になる
+    success_text: TextWithPersonHoles       # 行った本人の体の刺激になる
     shows_on_success: tuple[ShownToActor, ...]
     exertion: Exertion
     actor_requirement: ActorRequirement
@@ -257,7 +257,7 @@ HappeningNotice = SightAt | SoundFrom | AnnouncementTo
 @dataclass(frozen=True)
 class SightAt:
     spot: SpotDeclaration
-    texts: SightTexts
+    texts: SightTextsDeclaration
     salience: Salience
 
 @final
@@ -271,26 +271,34 @@ class SoundFrom:
 @dataclass(frozen=True)
 class AnnouncementTo:
     audience: PeopleSelection
-    text: TextWithPeople
+    text: TextWithPersonHoles
     salience: Salience
 
 @final
 @dataclass(frozen=True)
 class PerceptionDeclaration:                # 行為が周りにどう知覚されるか
-    witness: SightTexts
-    target: SightTexts | NoTarget
+    witness: SightTextsDeclaration
+    target: SightTextsDeclaration | NoTarget
     sound: SoundDeclaration | Silent
     seen_in_dark: bool                              # 真っ暗でも dim の文が届く (光る、大きな動き)
     announcement: AnnouncementTo | NoAnnouncement   # 緊急の招集など、居場所に関わらず知らせるとき
-    on_failure: SightTexts | NoFailureWitness       # 前提か世界を変える途中で断られたとき、見ていた人への文。書かなければ届けない (警告もしない)
+    on_failure: SightTextsDeclaration | NoFailureWitness       # 前提か世界を変える途中で断られたとき、見ていた人への文。書かなければ届けない (警告もしない)
     salience: Salience                              # Notable: 外側が考え直す目安になる / Background: ならない
 
 @final
 @dataclass(frozen=True)
 class SoundDeclaration:
     loudness: Loudness                      # 書かなければ、開け閉めは大きい、壊すはとても大きい、ほかはふつう
-    clear: TextWithPeople                   # 人の穴は声 (話す) のときだけ人が分かる。物音では Unidentified になる
-    muffled: TextWithPeople
+    clear: TextWithPersonHoles              # 人の穴は声 (話す) のときだけ人が分かる。物音では Unidentified になる
+    muffled: TextWithPersonHoles
+
+@final
+@dataclass(frozen=True)
+class SightTextsDeclaration:                # 欄の意味は刺激の SightTexts (perception.md) と同じ。刺激を作るときに人で埋める
+    clear: TextWithPersonHoles
+    dim: TextWithPersonHoles | NotSeenInDim
+    unseen_actor: TextWithPersonHoles | NotSeenWithoutActor
+    noticed_later: TextWithPersonHoles | NotNoticedLater
 
 @final
 @dataclass(frozen=True)
@@ -342,7 +350,7 @@ class DayPhaseDeclaration:
     name: DayPhaseName
     begins_at: TimeOfDay
     dark: bool                                  # 書かなければ夜だけ真
-    announcement: TextWithPeople | NoAnnouncement
+    announcement: TextWithPersonHoles | NoAnnouncement
 
 @final
 @dataclass(frozen=True)

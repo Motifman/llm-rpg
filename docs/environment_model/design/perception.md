@@ -22,14 +22,14 @@ Being の契約の観測 (文は TextWithPeople のまま。人の穴は Being �
 @final
 @dataclass(frozen=True)
 class PersonHandle:                       # 環境の中で 1 人をずっと指す印。名前ではない
-    value: int
+    value: int                            # 0 以上
 
 @final
 @dataclass(frozen=True)
 class PersonRef:
     handle: PersonHandle
-    appearance: str
-    visible_name: str | NoVisibleName     # 名札の世界、最初から知っている相手だけ
+    appearance: str                       # 空や空白だけは断る
+    visible_name: str | NoVisibleName     # 名札の世界、最初から知っている相手だけ。空や空白だけは断る
 
 @final
 @dataclass(frozen=True)
@@ -38,11 +38,23 @@ class Unidentified: ...                   # 見分けのつかない人。印を
 @final
 @dataclass(frozen=True)
 class TextWithPeople:
-    template: str                         # 穴は人だけ ({actor} {target})。物や操作の名前は作るときに埋める
-    people: Mapping[str, PersonRef | Unidentified]
+    template: str                         # 穴は人だけ ({actor} {target})
+    people: Mapping[str, PersonRef | Unidentified]   # 文の穴と鍵が過不足なく揃う。揃わなければ断る
+
+@final
+@dataclass(frozen=True)
+class TextWithPersonHoles:                # 作者が宣言に書く、人がまだ決まっていない文
+    template: str
+
+    def holes(self) -> frozenset[str]: ...
+    def fill(self, people: Mapping[str, PersonRef | Unidentified]) -> TextWithPeople: ...
 ```
 
 ゲームが作る文には、ほかの人の名前を文字として入れず、必ず `PersonRef` で渡す。列挙の値やキーもそのまま入れず、宣言の呼び名を使う。
+
+- 宣言の文 ([world_design.md](world_design.md)、[condition.md](condition.md) の `failure_text`) は `TextWithPersonHoles`。刺激を作るとき、条件を評価するときに、誰が入るかが決まってから `fill` で `TextWithPeople` にする。刺激、知覚の結果、断られたときの文は `TextWithPeople` で、穴の空いたままの文は Being に渡らない
+- 穴は人だけ。物や操作の名前は、宣言がどの物体・操作のものか分かっているので、作者が文に直接書く
+- 穴の書き方は `{名前}` だけ。名前は識別子に限り、位置の穴 (`{}` `{0}`)、変換 (`{actor!r}`)、書式指定 (`{actor:>3}`)、属性や添字 (`{actor.name}`) と閉じていない括弧は、作るときに断る。`{{` `}}` は文字の括弧
 
 ## 刺激
 
