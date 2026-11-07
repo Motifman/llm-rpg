@@ -4,6 +4,8 @@
 
 場所を指す `SpotId` は、シナリオが宣言した場所の名前 (`"lift_landing"`) を持つ。連番の数は振らない (D1982)。
 
+エージェントに見せる名前・呼び名・操作の言葉は `DisplayName` (空でない 1 行)、説明・見た目・物音・匂いは `DescriptionText` (空でない。改行はあってよい) で持つ。空の名前の品物が「が落ちている」と出たり、改行の入った名前ができることの一覧を崩したりするのを、宣言を作るときに止める。長さの上限は、困る場面が出るまで付けない。人のプレースホルダーを持つ文は `TextWithUnassignedPeople`。
+
 名詞の宣言は、その名詞が何であるか (名前、置き場所、見た目、状態) だけを持ち、条件・効果・操作・知覚の宣言を持たない。名詞に付く動詞は、名詞の宣言を指す動詞の側の宣言 (`ObjectInteractionDeclaration` など) に置く。条件と効果は名詞の宣言を持つので、名詞が動詞を持つと、互いを指す仕掛け (レバーが扉を現し、扉がレバーの覆いを外す) や自分を指す仕掛け (籠の中にいる人は籠に入れない) を、値の変わらない型で作れなくなる。名詞を全部作ってから動詞を作れば、どの組み合わせも作れる。シナリオの作者は物の欄の中に操作を書いてよく、読み込む側が名詞と動詞に分けて組み立てる。
 
 ```python
@@ -13,15 +15,15 @@
 @dataclass(frozen=True)
 class FlagDeclaration:
     flag_id: FlagId
-    meaning: str
+    meaning: DescriptionText
     initially_raised: bool
 
 @final
 @dataclass(frozen=True)
 class SpotDeclaration:
     spot_id: SpotId
-    name: str
-    description: str
+    name: DisplayName
+    description: DescriptionText
     atmosphere: SpotAtmosphere
 
 class Temperature(Enum):                    # 寒い順。比べられる
@@ -37,15 +39,15 @@ class SpotAtmosphere:
     lighting: Lighting
     outdoor: bool                           # 明るさの計算の材料 (LightingConditions.outdoor)
     temperature: Temperature
-    ambient_sound: str | NoAmbientSound
-    smell: str | NoSmell
+    ambient_sound: DescriptionText | NoAmbientSound
+    smell: DescriptionText | NoSmell
 
     def with_changes(
         self,
         lighting: Lighting | Unchanged,
         temperature: Temperature | Unchanged,
-        ambient_sound: str | NoAmbientSound | Unchanged,
-        smell: str | NoSmell | Unchanged,
+        ambient_sound: DescriptionText | NoAmbientSound | Unchanged,
+        smell: DescriptionText | NoSmell | Unchanged,
     ) -> "SpotAtmosphere": ...
 
 @final
@@ -53,7 +55,7 @@ class SpotAtmosphere:
 class SpotSectionDeclaration:               # 場所の中の、体で入る一角 (籠の中、小舟、檻、見張り台)。中と外は同じ場所
     section_id: SpotSectionId
     spot_id: SpotId
-    name: str
+    name: DisplayName
     capacity: Capacity | NoCapacity
     reachable_objects: tuple[ObjectId, ...] # 中からしか届かない物
 
@@ -74,7 +76,7 @@ class PassageDeclaration:
 @dataclass(frozen=True)
 class PassageStateDeclaration:
     name: PassageStateName
-    display_name: str
+    display_name: DisplayName
     traversable: bool
     sound_loss: SoundLoss
 
@@ -91,8 +93,8 @@ class ObjectStateKeyDeclaration:
 class ObjectDeclaration:
     object_id: ObjectId
     spot_id: SpotId
-    name: str
-    description: str
+    name: DisplayName
+    description: DescriptionText
     appearance: ObjectAppearance
     state_keys: tuple[ObjectStateKeyDeclaration, ...]
 
@@ -106,8 +108,8 @@ class ObjectAppearance:
 @dataclass(frozen=True)
 class ItemSpecDeclaration:
     item_spec_id: ItemSpecId
-    name: str
-    description: str
+    name: DisplayName
+    description: DescriptionText
     state_keys: tuple[ItemStateKeyDeclaration, ...]
     lights_up: LitWhen | NotALightSource     # LitWhen(key, value): その状態の値のとき灯っている。手に持っているあいだ場所を照らす
     hands_needed: HandsNeeded                # 1 (カンテラ) / 2 (つるはし)。書かなければ 1
@@ -117,9 +119,9 @@ class ItemSpecDeclaration:
 class GroupDeclaration:
     group_id: GroupId
     grouping: GroupingDeclaration
-    name: str
+    name: DisplayName
     members_know_each_other: bool
-    shared_description: str | NoSharedDescription
+    shared_description: DescriptionText | NoSharedDescription
 
     def members_can_change(self) -> bool: ...
 
@@ -127,7 +129,7 @@ class GroupDeclaration:
 @dataclass(frozen=True)
 class GroupingDeclaration:
     grouping_id: GroupingId
-    name: str
+    name: DisplayName
     visibility: MembershipVisibility        # EVERYONE / SELF_ONLY / NOBODY
     changes: bool
 
@@ -135,7 +137,7 @@ class GroupingDeclaration:
 @dataclass(frozen=True)
 class CharacterDeclaration:
     person_id: PersonId                      # 人柄 (Persona) は持たない。Being が自分の人柄を持って入る (D1928-3)。シナリオの登場人物の欄は、読み込む側が世界の部分と Being の人柄に分ける
-    appearance: str
+    appearance: DescriptionText
     spawn_spot: SpotId
     initial_items: tuple[ItemSpecId, ...]
     initial_held: tuple[ItemSpecId, ...]     # initial_items のうち、最初から手に持っている物
@@ -146,15 +148,15 @@ class CharacterDeclaration:
 @dataclass(frozen=True)
 class WorldStageDeclaration:
     stage_id: WorldStageId
-    name: str
-    description: str
+    name: DisplayName
+    description: DescriptionText
     allowed_actions: frozenset[ActionKind | InteractionId] | AllActionsAllowed
 
 @final
 @dataclass(frozen=True)
 class GroupDecisionDeclaration:
     decision_id: GroupDecisionId
-    name: str
+    name: DisplayName
     abstain_allowed: bool
     reveals_ballots: bool                   # 集計のとき、誰が誰に入れたかを知らせるか
 
@@ -162,7 +164,7 @@ class GroupDecisionDeclaration:
 @dataclass(frozen=True)
 class OutcomeDeclaration:
     outcome_id: OutcomeId
-    name: str                               # 「救出」
+    name: DisplayName                               # 「救出」
     announcement: TextWithUnassignedPeople # 「{person}は昇降機で外へ出た。」
 
 @final
@@ -238,8 +240,8 @@ class ItemUseDeclaration:                   # 宣言の無い品物は使えな�
 @dataclass(frozen=True)
 class SectionAccessDeclaration:             # 区画への出入り。区画ごとに必ず 1 つ。無ければ DesignFlaw
     section: SpotSectionDeclaration
-    enter_label: str                        # 「籠に乗り込む」
-    leave_label: str                        # 「籠から降りる」
+    enter_label: DisplayName                        # 「籠に乗り込む」
+    leave_label: DisplayName                        # 「籠から降りる」
     enter_text: TextWithUnassignedPeople    # 入った本人の体の刺激
     leave_text: TextWithUnassignedPeople
     exertion: Exertion
@@ -275,7 +277,7 @@ class GroupDecisionRulesDeclaration:        # 集団の決定ごとに必ず 1 �
 @dataclass(frozen=True)
 class InteractionDeclaration:
     interaction_id: InteractionId
-    display_label: str
+    display_label: DisplayName
     precondition: Condition
     effect: Effect
     success_text: TextWithUnassignedPeople # 行った本人の体の刺激になる
