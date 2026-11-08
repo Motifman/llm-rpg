@@ -81,17 +81,17 @@ def _well(*state_keys: ObjectStateKeyDeclaration, hidden: bool = False) -> Objec
 
 
 def _opened(declaration: ObjectDeclaration | None = None, now: WorldTick = _START) -> ObjectState:
-    state = ObjectState.open(declaration or _well(), now)
+    state = ObjectState.from_declaration(declaration or _well(), now)
     state.clear_events()
     return state
 
 
-class TestObjectStateOpen:
-    """ObjectState.open が、物の宣言の初めの値と見え方で状態を開くことを保証する。"""
+class TestObjectStateFromDeclaration:
+    """ObjectState.from_declaration が、物の宣言の初めの値と見え方で状態を作ることを保証する。"""
 
     def test_starts_with_declared_initial_values(self) -> None:
-        """開いた直後は物の ID を持ち、どの鍵も宣言の initial を返し、イベントはたまっていない。"""
-        state = ObjectState.open(_well(), _START)
+        """作った直後は物の ID を持ち、どの鍵も宣言の initial を返し、イベントはたまっていない。"""
+        state = ObjectState.from_declaration(_well(), _START)
 
         assert state.object_id == _WELL
         assert state.value_of(_COVERED, _START) == FlagValue(raised=True)
@@ -102,7 +102,7 @@ class TestObjectStateOpen:
     @pytest.mark.parametrize(("hidden", "revealed"), [(True, False), (False, True)])
     def test_revealed_unless_hidden_until_revealed(self, hidden: bool, revealed: bool) -> None:
         """hidden_until_revealed の物は現れていない状態で開き、そうでない物は初めから現れている。"""
-        state = ObjectState.open(_well(hidden=hidden), _START)
+        state = ObjectState.from_declaration(_well(hidden=hidden), _START)
 
         assert state.is_revealed() is revealed
 
@@ -243,7 +243,7 @@ class TestObjectStateStock:
             state.take_from_stock(_BUCKETS, Count(1), _START)
 
     def test_stock_refills_one_per_interval_up_to_capacity(self) -> None:
-        """在庫 0・上限 2・3 tick ごとの補充で開くと、2 tick 後は 0、3 tick 後は 1、6 tick 後は 2、それ以降も 2 を返す。"""
+        """在庫 0・上限 2・3 tick ごとの補充で作ると、2 tick 後は 0、3 tick 後は 1、6 tick 後は 2、それ以降も 2 を返す。"""
         water = _water(capacity=2, initial=0, refills_every=Ticks(3))
         state = _opened(_well(water))
 
@@ -253,7 +253,7 @@ class TestObjectStateStock:
         assert state.value_of(water, WorldTick(30)) == StockValue(Count(2))
 
     def test_refill_counts_from_the_tick_it_was_opened(self) -> None:
-        """tick 100 に開いた在庫 0 の物は、tick 102 では 0、tick 103 で 1 を返す。"""
+        """tick 100 に作った在庫 0 の物は、tick 102 では 0、tick 103 で 1 を返す。"""
         water = _water(initial=0, refills_every=Ticks(3))
         state = _opened(_well(water), now=WorldTick(100))
 

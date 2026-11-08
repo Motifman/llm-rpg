@@ -121,7 +121,7 @@ class TestWorldStageConditions:
     def _world_in(self, stage: WorldStageDeclaration) -> WorldInMemory:
         return WorldInMemory(
             world=WORLD,
-            world_stage=WorldStage.open(WORLD, stage, WorldTick(0)),
+            world_stage=WorldStage.from_initial_stage(WORLD, stage, WorldTick(0)),
             stage_declarations=(_DAYTIME, _VOTING),
         )
 

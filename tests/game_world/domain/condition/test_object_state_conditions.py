@@ -71,7 +71,9 @@ _POND = _object("pond", _FISH)
 def _facts() -> WorldFacts:
     return WorldInMemory(
         world=WORLD,
-        object_states=tuple(ObjectState.open(declaration, WorldTick(0)) for declaration in (_CHEST, _JAR, _POND)),
+        object_states=tuple(
+            ObjectState.from_declaration(declaration, WorldTick(0)) for declaration in (_CHEST, _JAR, _POND)
+        ),
     ).facts()
 
 

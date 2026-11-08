@@ -62,7 +62,7 @@ def _world() -> WorldInMemory:
     return WorldInMemory(
         world=WORLD,
         people=(ALICE, BOB, CAROL),
-        world_stage=WorldStage.open(WORLD, _DAY, WorldTick(0)),
+        world_stage=WorldStage.from_initial_stage(WORLD, _DAY, WorldTick(0)),
         stage_declarations=(_DAY, _NIGHT),
     )
 

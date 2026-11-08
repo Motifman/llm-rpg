@@ -87,7 +87,7 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
         self._revealed = not declaration.appearance.hidden_until_revealed
 
     @classmethod
-    def open(cls, declaration: ObjectDeclaration, now: WorldTick) -> ObjectState:
+    def from_declaration(cls, declaration: ObjectDeclaration, now: WorldTick) -> ObjectState:
         return cls(declaration, now)
 
     @property

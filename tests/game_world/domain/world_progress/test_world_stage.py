@@ -17,20 +17,20 @@ def _stage(stage_id: str) -> WorldStageDeclaration:
     )
 
 
-class TestWorldStageOpen:
-    """WorldStage.open が、最初の段階に入った状態の段階を作ることを保証する。"""
+class TestWorldStageFromInitialStage:
+    """WorldStage.from_initial_stage が、最初の段階に入った状態の段階を作ることを保証する。"""
 
     def test_starts_in_initial_stage_at_given_tick(self) -> None:
         """昼の議論を最初の段階として tick 0 で作ると、current は昼の議論、entered_at は tick 0。"""
-        stage = WorldStage.open(_WORLD, _stage("day_discussion"), WorldTick(0))
+        stage = WorldStage.from_initial_stage(_WORLD, _stage("day_discussion"), WorldTick(0))
 
         assert stage.current() == WorldStageId("day_discussion")
         assert stage.entered_at() == WorldTick(0)
         assert stage.world_id == _WORLD
 
-    def test_opening_records_no_event(self) -> None:
+    def test_creating_records_no_event(self) -> None:
         """作っただけでは、イベントをためない。"""
-        assert WorldStage.open(_WORLD, _stage("day_discussion"), WorldTick(0)).get_events() == []
+        assert WorldStage.from_initial_stage(_WORLD, _stage("day_discussion"), WorldTick(0)).get_events() == []
 
 
 class TestWorldStageEnter:
@@ -38,7 +38,7 @@ class TestWorldStageEnter:
 
     def test_enter_moves_to_new_stage_at_given_tick(self) -> None:
         """tick 12 で夜へ enter すると、current は夜、entered_at は tick 12 になる。"""
-        stage = WorldStage.open(_WORLD, _stage("day"), WorldTick(0))
+        stage = WorldStage.from_initial_stage(_WORLD, _stage("day"), WorldTick(0))
 
         stage.enter(_stage("night"), WorldTick(12))
 
@@ -47,7 +47,7 @@ class TestWorldStageEnter:
 
     def test_enter_records_event_with_left_and_entered_stage(self) -> None:
         """昼から夜への enter は、世界と、出る昼と入る夜と tick を持つ WorldStageChangedEvent をためる。"""
-        stage = WorldStage.open(_WORLD, _stage("day"), WorldTick(0))
+        stage = WorldStage.from_initial_stage(_WORLD, _stage("day"), WorldTick(0))
 
         stage.enter(_stage("night"), WorldTick(12))
 
@@ -62,7 +62,7 @@ class TestWorldStageEnter:
 
     def test_entering_current_stage_changes_nothing(self) -> None:
         """今と同じ昼へ enter しても、entered_at は変わらず、イベントもためない。"""
-        stage = WorldStage.open(_WORLD, _stage("day"), WorldTick(0))
+        stage = WorldStage.from_initial_stage(_WORLD, _stage("day"), WorldTick(0))
 
         stage.enter(_stage("day"), WorldTick(5))
 
@@ -93,7 +93,7 @@ class TestWorldStageDeclarationIn:
     def test_answers_declaration_of_current_stage(self) -> None:
         """昼から夜へ移った段階は、昼と夜を宣言した名詞から夜の宣言を返す。"""
         day, night = _stage("day"), _stage("night")
-        stage = WorldStage.open(_WORLD, day, WorldTick(0))
+        stage = WorldStage.from_initial_stage(_WORLD, day, WorldTick(0))
         stage.enter(night, WorldTick(12))
 
         assert stage.declaration_in(_nouns(day, night)) == night

@@ -382,7 +382,7 @@ _NOTE = _object_key("note", WrittenTextStateKind(), NothingWritten())
 
 
 def _object_state(*, hidden: bool = False) -> ObjectState:
-    state = ObjectState.open(
+    state = ObjectState.from_declaration(
         ObjectDeclaration(
             object_id=_WELL_OBJECT,
             spot_id=_PLAZA.spot_id,
@@ -525,7 +525,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "GroupDecision.withdraw_choice": lambda: _with(_open_decision(), lambda d: d.withdraw_choice(_BOB)),
     "GroupDecision.close": lambda: _with(_open_decision(), lambda d: d.close()),
     "Weather.change": lambda: _with(
-        Weather.open(
+        Weather.from_declaration(
             _WORLD,
             WeatherDeclaration(
                 initial=WeatherType.CLEAR, changes=NoChange(), announce_changes=True, obscuring=frozenset()
@@ -535,7 +535,8 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     ),
     "WorldClock.advance": lambda: _with(WorldClock(_WORLD), lambda c: c.advance(NoDayNight())),
     "WorldStage.enter": lambda: _with(
-        WorldStage.open(_WORLD, _stage("before_dawn"), _NOW), lambda s: s.enter(_stage("dawn"), WorldTick(1))
+        WorldStage.from_initial_stage(_WORLD, _stage("before_dawn"), _NOW),
+        lambda s: s.enter(_stage("dawn"), WorldTick(1)),
     ),
     "WorldFlags.raise_flag": lambda: _with(WorldFlags(_WORLD), lambda f: f.raise_flag(_BELL_RUNG, _TICK_PASSING)),
     "WorldFlags.lower_flag": lambda: _with(WorldFlags(_WORLD), lambda f: f.lower_flag(_GATE_SHUT, _TICK_PASSING)),

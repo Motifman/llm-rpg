@@ -191,7 +191,7 @@ def _stage(allowed: frozenset[ActionKind | InteractionId]) -> WorldStageDeclarat
 
 def _world_in_stage(declaration: WorldStageDeclaration) -> WorldInMemory:
     return _world(
-        world_stage=WorldStage.open(WORLD, declaration, WorldTick(0)),
+        world_stage=WorldStage.from_initial_stage(WORLD, declaration, WorldTick(0)),
         stage_declarations=(declaration,),
     )
 
