@@ -227,7 +227,7 @@ class WorldDesign:
             placement = RulePlacement.in_action(
                 design_location("discoverable", discoverable.discoverable_id, field=""), frozenset()
             )
-            review.placed_condition(placement.at_field("condition"), discoverable.condition)
+            review.condition(placement.at_field("condition"), discoverable.condition)
             review.effect(placement.at_field("when_found"), discoverable.when_found)
         for stage_effects in world_stage_effects:
             placement = RulePlacement.in_world(
@@ -244,12 +244,12 @@ class WorldDesign:
             review.effect(placement.at_field("when_undecided"), rules.when_undecided)
         for happening in happenings:
             placement = RulePlacement.in_world(design_location("happening", happening.happening_id, field=""))
-            review.placed_condition(placement.at_field("condition"), happening.condition)
+            review.condition(placement.at_field("condition"), happening.condition)
             review.effect(placement.at_field("effect"), happening.effect)
             review.notice(placement.at_field("notice"), happening.notice)
         for reaction in reactions:
             placement = RulePlacement.in_world(design_location("reaction", reaction.reaction_id, field=""))
-            review.placed_condition(placement.at_field("condition"), reaction.condition)
+            review.condition(placement.at_field("condition"), reaction.condition)
             review.effect(placement.at_field("when_becomes_true"), reaction.when_becomes_true)
             review.effect(placement.at_field("when_becomes_false"), reaction.when_becomes_false)
         for joint in joint_actions:
@@ -258,9 +258,7 @@ class WorldDesign:
             review.effect(placement.at_field("on_timeout"), joint.on_timeout)
             review.notice(placement.at_field("complete_notice"), joint.complete_notice)
             review.notice(placement.at_field("timeout_notice"), joint.timeout_notice)
-        review.placed_condition(
-            RulePlacement.in_world(DesignLocation("ending", "ending", "ends_when")), ending.ends_when
-        )
+        review.condition(RulePlacement.in_world(DesignLocation("ending", "ending", "ends_when")), ending.ends_when)
 
         for kind, perception in built_in_action_perceptions.by_kind.items():
             review.requirements(
@@ -309,6 +307,14 @@ class WorldDesign:
         review.flaws += duplicate_flaws(
             "world_stage_effects", [(stage_effects.stage.stage_id,) for stage_effects in world_stage_effects], "stage"
         )
+        review.flaws += duplicate_flaws(
+            "happening", [(happening.happening_id,) for happening in happenings], "happening_id"
+        )
+        review.flaws += duplicate_flaws("reaction", [(reaction.reaction_id,) for reaction in reactions], "reaction_id")
+        review.flaws += duplicate_flaws(
+            "discoverable", [(discoverable.discoverable_id,) for discoverable in discoverables], "discoverable_id"
+        )
+        review.flaws += duplicate_flaws("joint_action", [(joint.joint_id,) for joint in joint_actions], "joint_id")
         declared_on_objects = {
             (declared.obj.object_id, declared.interaction.interaction_id) for declared in object_interactions
         }

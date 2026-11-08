@@ -101,13 +101,15 @@ class WorldDesignReview:
         self.warnings: list[DesignWarning] = []
         self._read: list[tuple[DesignLocation, Requirements]] = []
 
-    def placed_condition(self, placement: RulePlacement, condition: Condition) -> None:
-        if not condition.explains_failure():
-            self.flaws.append(DesignFlaw(placement.location, "the root condition needs a failure_text"))
+    def condition(self, placement: RulePlacement, condition: Condition) -> None:
         self.requirements(placement, condition.requirements())
 
     def precondition(self, placement: RulePlacement, condition: Condition) -> None:
-        self.placed_condition(placement, condition)
+        if not condition.explains_failure():
+            self.flaws.append(
+                DesignFlaw(placement.location, "the root condition needs a failure_text to tell the actor why")
+            )
+        self.condition(placement, condition)
         if condition.requirements().may_hide_membership:
             self.warnings.append(
                 DesignWarning(

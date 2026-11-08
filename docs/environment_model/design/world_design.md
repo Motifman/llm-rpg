@@ -695,10 +695,11 @@ infrastructure: JSON を読む
 - 締める出来事 (`CloseGroupDecisionEffect`) が 1 つも無い集団の決定は `DesignWarning`。猶予 (`DeathRule.grace`) が 0 なのに介抱がある世界は `DesignFlaw`
 - 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、読み込む側が既定の文の表 (データ) から埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)
 - 断りの文の表 (`RefusalTexts`) と、組み込みの行為の知覚の文 (`BuiltInActionPerceptions`) の既定は、コードではなくデータ (共通のシナリオの部品) として 1 つ用意し、シナリオはそれを取り込んで必要な行だけ書き換える。起きうる理由や、世界で行える組み込みの行為が表に無ければ `DesignFlaw`
-- 条件を置いた場所 (前提、出来事の条件など) の根に `failure_text` が無ければ `DesignFlaw`
+- 理由が誰かに届く条件 (操作の前提、区画に入る条件、通路を通る条件) の根に `failure_text` が無ければ `DesignFlaw`。出来事・反応・終わり・見つかる物の条件には求めない
 - 効果と条件が読む引数の名前が、操作の宣言の `arguments` に無ければ `DesignFlaw`
 - `WorldStage`・昼夜・天候を宣言していない世界で、それを見る条件を書いていれば `DesignFlaw`。昼夜に宣言していない段階の名前を見る条件も同じ
 - 行う人に知りえない所属 ([condition.md](condition.md) の伏せた所属) を見る前提は `DesignWarning`。前提は、操作の前提、区画の入る条件、通路の通り方の条件
+- 出来事・反応・見つかる物・二人で合わせる操作の ID が重なれば `DesignFlaw`。`ScenarioProgress` などが ID で記録するので、重なると 2 つが混ざる
 - 区画ごとの出入り (`SectionAccessDeclaration`) と、集団の決定ごとの決まり (`GroupDecisionRulesDeclaration`) が 1 つずつ無ければ `DesignFlaw`。二人で合わせる操作が求める物体の操作が宣言に無ければ `DesignFlaw`
 - 組み込みの行為の知覚の文は、世界で行える組み込みの行為 (介抱は `TendRule` があるときだけ) をすべて持たなければ `DesignFlaw`。知らせの相手の選び方は、行為の中に置いた条件として (`Actor`、`Target` を使える) ほかの宣言と同じく照らし合わせる。断りの文の表の `world_state` は、起きうる `RefusalCode` をドメインで列挙できないので compose では確かめない
 - compose が照らし合わせに使う材料 (主語、読む引数、段階・昼夜・天候を読むか、立てる旗、締める決定、伏せられうる所属) は、条件と効果の `requirements()` が答える。根に文があるかは `Condition.explains_failure()` が答える

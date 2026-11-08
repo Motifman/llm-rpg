@@ -580,7 +580,7 @@ def _flag_is_raised(flag: FlagDeclaration) -> FlagIsRaisedCondition:
 
 
 class TestRootFailureText:
-    """条件を置いた場所の根に failure_text があるかを compose が確かめることを保証する。"""
+    """理由が誰かに届く条件 (操作の前提、区画に入る条件、通路を通る条件) の根にだけ、compose が failure_text を求めることを保証する。"""
 
     def test_precondition_root_without_text_is_a_flaw(self) -> None:
         """扉 door の操作 open の前提の根が NoText だと、子に文があっても precondition を場所とする DesignFlaw になる。"""
@@ -590,13 +590,49 @@ class TestRootFailureText:
 
         assert [flaw.location for flaw in flaws] == [DesignLocation("object_interaction", "door/open", "precondition")]
 
-    def test_happening_condition_root_without_text_is_a_flaw(self) -> None:
-        """出来事 cave_in の条件の根が NoText でも DesignFlaw になる。"""
-        condition = TickAtLeastCondition(tick=WorldTick(3), failure_text=NoText())
+    def test_section_entry_and_passage_traversal_roots_without_text_are_flaws(self) -> None:
+        """区画 cage に入る条件と通路 tunnel を通る条件の根が NoText だと、それぞれの条件を場所とする DesignFlaw になる。"""
+        silent = TickAtLeastCondition(tick=WorldTick(3), failure_text=NoText())
+        cage = section("cage", "shaft")
+        tunnel = passage("tunnel", ("hall", "shaft"))
 
-        flaws = flaws_of_composing(happenings=(_happening("cave_in", condition=condition),))
+        flaws = flaws_of_composing(
+            nouns_=nouns(spots=(spot("hall"), spot("shaft")), passages=(tunnel,), sections=(cage,)),
+            section_accesses=(replace(access_to(cage), entry_condition=silent),),
+            passage_traversals=(PassageTraversalDeclaration(passage=tunnel, condition=silent),),
+        )
 
-        assert [flaw.location for flaw in flaws] == [DesignLocation("happening", "cave_in", "condition")]
+        assert [flaw.location for flaw in flaws] == [
+            DesignLocation("section_access", "cage", "entry_condition"),
+            DesignLocation("passage_traversal", "tunnel", "condition"),
+        ]
+
+    def test_roots_whose_reason_reaches_no_one_need_no_text(self) -> None:
+        """出来事・反応・見つかる物・終わりの条件は、偽になっても理由が誰にも届かないので、根が NoText でも compose は断らない。"""
+        silent = TickAtLeastCondition(tick=WorldTick(3), failure_text=NoText())
+
+        compose_world(
+            happenings=(_happening("cave_in", condition=silent),),
+            reactions=(
+                ReactionDeclaration(
+                    reaction_id=ReactionId("panic"),
+                    condition=silent,
+                    when_becomes_true=ChangesNothing(),
+                    when_becomes_false=ChangesNothing(),
+                ),
+            ),
+            discoverables=(
+                DiscoverableDeclaration(
+                    discoverable_id=DiscoverableId("old_map"),
+                    spot_id=SpotId("shaft"),
+                    found_text=TextWithUnassignedPeople("古い地図を見つけた。"),
+                    condition=silent,
+                    when_found=ChangesNothing(),
+                    finding=Finding.ONCE_IN_WORLD,
+                ),
+            ),
+            ending=EndingDeclaration(ends_when=silent),
+        )
 
 
 class TestUndeclaredWorldTime:
@@ -1123,3 +1159,53 @@ class TestEveryPlacementIsReviewed:
         flaws = flaws_of_composing(**declarations)
 
         assert [flaw.location for flaw in flaws] == [location]
+
+
+class TestWorldWideIdsAreUnique:
+    """出来事・反応・見つかる物・二人で合わせる操作の ID が重ならないことを compose が確かめることを保証する。"""
+
+    def test_world_wide_declarations_with_the_same_id_are_flaws(self) -> None:
+        """同じ ID の出来事・反応・見つかる物・二人で合わせる操作が 2 つずつあると、それぞれ ID の欄を場所とする DesignFlaw になる。"""
+        reaction = ReactionDeclaration(
+            reaction_id=ReactionId("panic"),
+            condition=AlwaysHolds(),
+            when_becomes_true=ChangesNothing(),
+            when_becomes_false=ChangesNothing(),
+        )
+        found = DiscoverableDeclaration(
+            discoverable_id=DiscoverableId("old_map"),
+            spot_id=SpotId("shaft"),
+            found_text=TextWithUnassignedPeople("古い地図を見つけた。"),
+            condition=AlwaysHolds(),
+            when_found=ChangesNothing(),
+            finding=Finding.ONCE_IN_WORLD,
+        )
+        joint = JointActionDeclaration(
+            joint_id=JointActionId("two_doors"),
+            required=((ObjectId("door"), InteractionId("open")),),
+            window=Ticks(3),
+            distinct_people=True,
+            on_complete=ChangesNothing(),
+            on_timeout=ChangesNothing(),
+            complete_notice=NoNotice(),
+            timeout_notice=NoNotice(),
+        )
+
+        flaws = flaws_of_composing(
+            object_interactions=(_open_door(),),
+            happenings=(_happening("cave_in"), _happening("cave_in")),
+            reactions=(reaction, reaction),
+            discoverables=(found, replace(found, spot_id=SpotId("hall"))),
+            joint_actions=(joint, joint),
+        )
+
+        assert {flaw.location for flaw in flaws} == {
+            DesignLocation("happening", "cave_in", "happening_id"),
+            DesignLocation("reaction", "panic", "reaction_id"),
+            DesignLocation("discoverable", "old_map", "discoverable_id"),
+            DesignLocation("joint_action", "two_doors", "joint_id"),
+        }
+
+    def test_distinct_ids_are_allowed(self) -> None:
+        """ID の違う出来事 2 つなら compose は断らない。"""
+        compose_world(happenings=(_happening("cave_in"), _happening("flood")))

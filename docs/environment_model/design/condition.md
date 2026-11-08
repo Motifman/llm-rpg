@@ -5,7 +5,7 @@ class Condition(Protocol):
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool: ...
     def requirements(self) -> Requirements: ...
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None: ...
-    def explains_failure(self) -> bool: ...   # 自分の failure_text を持つか。根に置いた条件の文を compose が確かめる
+    def explains_failure(self) -> bool: ...   # 自分の failure_text を持つか。理由が届く条件の根の文を compose が確かめる
 
 
 class WorldFacts(Protocol):
@@ -113,7 +113,7 @@ class HiddenFailure:                        # 行う人が知りえない所属�
 
 - 作者が書いた文は `failure_text` (`TextWithUnassignedPeople`)。評価するとき、プレースホルダーに `PersonId` を当てて `TextAboutPeople` ([perception.md](perception.md)) にする。見る人ごとの呼び方 (`PersonRef`) への置き換えは、見る人が分かる場所で行う。条件は誰が見るかを知らない
 - 葉とつなぎが自分の `failure_text` を持たなければ `NoText` を返し、親が自分の文で埋める。いちばん内側の文が勝つ
-- 前提など、条件を置いた場所の根には `failure_text` を必ず書く。無ければ compose が `DesignFlaw` にする。ドメインは条件の種類ごとの決まった文を持たない
+- 理由が誰かに届く条件の根には `failure_text` を必ず書く。操作の前提 (物・品物・人への操作)、区画に入る条件、通路を通る条件。無ければ compose が `DesignFlaw` にする。出来事・反応・終わり・見つかる物の条件と `PeopleSelection` の中は、偽になっても理由が誰にも届かないので求めない。ドメインは条件の種類ごとの決まった文を持たない
 
 ### 伏せた所属
 
