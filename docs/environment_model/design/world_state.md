@@ -63,20 +63,33 @@ class Dead:
 
 LifeState = Alive | Down | Dead
 
+FallCause = StruckByPerson | Starvation | WorldHappening
+# StruckByPerson(person: PersonId) / Starvation: 飢えの痛手 / WorldHappening: 出来事 (どの出来事かは、出来事の宣言ができたら持たせる)
+
+@final
+@dataclass(frozen=True)
+class StatusEffect:
+    kind: StatusEffectType                  # 空でない種類の名前。毎 tick 何をするかはまだ決めていない
+    expires_at: WorldTick                   # この tick に達したら外れる
+
 
 class PersonVitals:                                 # 人ごと。体力 (HP) を持ち、0 になると Down
+    @classmethod
+    def start(cls, person: PersonId, hp: HitPoints) -> "PersonVitals": ...
+        # Alive、空腹と疲れは 0 で始まる。HP 0 では始められない。最大 HP をどの宣言に書くかはまだ決めていない
+    # 状態を変える操作は Alive の人だけ受ける (Down・Dead ならドメイン例外)。revive だけは Down の人だけ受ける
     def take_damage(self, amount: Damage, now: WorldTick, cause: FallCause) -> None: ...   # FallCause: 殴られた、飢え、出来事 など
     def heal(self, amount: HealAmount) -> None: ...
-    def revive(self, hp_rate: Rate, now: WorldTick) -> None: ...
+    def revive(self, hp_rate: Rate, now: WorldTick) -> None: ...   # HP は最大 × hp_rate を切り捨て、1 は戻す
     def pass_time(self, now: WorldTick, death: DeathRule, hunger: HungerRule) -> None: ...
         # 倒れてから death.grace が過ぎたら Dead (Down.fell_at から数える。別のタイマーは持たない)
         # 起きているあいだだけ空腹を進め、限界のあいだは飢えの痛手 (PersonDamagedEvent)。段階が変わったら HungerLevelChangedEvent
     def add_status_effect(self, effect: StatusEffect) -> None: ...
     def remove_expired_status_effects(self, now: WorldTick) -> None: ...
-    def satisfy_hunger(self, amount: HungerAmount) -> None: ...
+    def satisfy_hunger(self, amount: HungerAmount, rule: HungerRule) -> None: ...   # 段階が変わったら HungerLevelChangedEvent
     def exert(self, rule: FatigueRule) -> None: ...      # 段階が変わったら FatigueLevelChangedEvent
-    def rest(self, amount: FatigueAmount) -> None: ...
-    def start_action(self, until: WorldTick) -> None: ...   # 行っているあいだは、話す以外の行為を断る (Busy)。話すことは呼ばない
+    def rest(self, amount: FatigueAmount, rule: FatigueRule) -> None: ...   # 段階が変わったら FatigueLevelChangedEvent
+    def start_action(self, until: WorldTick) -> None: ...   # 行っているあいだは、話す以外の行為を断る (Busy)。話すことは呼ばない。PersonBecameBusyEvent
     def is_busy(self, now: WorldTick) -> bool: ...
     def hp(self) -> HitPoints: ...
 
@@ -93,7 +106,7 @@ class PersonOutcomes:                             # 世界に 1 つ
 
 Outcome = Died | DeclaredOutcome            # DeclaredOutcome(outcome: OutcomeDeclaration)。死だけは組み込み
 
-    def outcome_of(self, person: PersonId) -> Outcome: ...
+    def outcome_of(self, person: PersonId) -> Outcome | Undecided: ...
     def all_decided(self) -> bool: ...
     def undecided_people(self) -> tuple[PersonId, ...]: ...
 
@@ -101,6 +114,7 @@ Outcome = Died | DeclaredOutcome            # DeclaredOutcome(outcome: OutcomeDe
 class GroupMembership:                            # 世界に 1 つ
     def join(self, person: PersonId, group: GroupDeclaration) -> None: ...
     def leave(self, person: PersonId, group: GroupDeclaration) -> None: ...
+        # 分け方ごとに 1 つの集団にだけ入る。別の集団へ移るときは leave してから join。所属が変わらない分け方 (changes が偽) への出入りはドメイン例外
 
     def is_member(self, person: PersonId, group: GroupDeclaration) -> bool: ...
     def members_of(self, group: GroupDeclaration) -> frozenset[PersonId]: ...
@@ -118,9 +132,11 @@ StateValue = FlagValue | CountValue | ChoiceValue | StockValue | WrittenText | N
 
 class ObjectState:                                # 物体ごと
     @classmethod
-    def open(cls, declaration: ObjectDeclaration) -> "ObjectState": ...
+    def open(cls, declaration: ObjectDeclaration, now: WorldTick) -> "ObjectState": ...
+        # 在庫は refills_every ごとに 1 つ戻り、capacity で止まる。open・set・take_from_stock の now から数え、満杯でなければ端数を持ち越す
+        # 戻った分は読むときに数えるので、イベントは出さない。次の take_from_stock の before に戻った量が出る
 
-    def set(self, key: ObjectStateKeyDeclaration, value: StateValue) -> None: ...
+    def set(self, key: ObjectStateKeyDeclaration, value: StateValue, now: WorldTick) -> None: ...   # 在庫の鍵は、値が変わるとき now から数え直す
     def add_to_count(self, key: ObjectStateKeyDeclaration, amount: Count) -> None: ...
     def subtract_from_count(self, key: ObjectStateKeyDeclaration, amount: Count) -> None: ...   # 0 を下回るならドメイン例外
     def take_from_stock(self, key: ObjectStateKeyDeclaration, amount: Count, now: WorldTick) -> None: ...
@@ -154,11 +170,11 @@ class WorldFlags:                                 # 世界に 1 つ
     def is_raised(self, flag: FlagDeclaration) -> bool: ...
 
 
-class PersonInventory:                            # 人ごと
+class PersonInventory:                            # 人ごと。持てる数の上限 (Capacity) を受けて作る
     def receive(self, item: ItemInstanceId) -> None: ...         # 荷に入る
     def give_up(self, item: ItemInstanceId) -> None: ...         # 手の物でも荷の物でも
     def hold(self, item: ItemInstanceId, hands_needed: HandsNeeded) -> None: ...
-        # 荷から手に持つ。手は 2 本。足りなければ、今手に持っている物を荷にしまう
+        # 荷から手に持つ。手は 2 本。足りなければ、今手に持っている物を先に持った順に荷にしまう
     def put_away(self, item: ItemInstanceId) -> None: ...
     def earn(self, amount: Gold) -> None: ...
     def pay(self, amount: Gold) -> None: ...
@@ -173,7 +189,7 @@ class PersonInventory:                            # 人ごと
     def is_reserved(self, item: ItemInstanceId) -> bool: ...   # 取引に出した品は、ほかで使えない
 
 
-class Item:                                       # 品物ごと
+class Item:                                       # 品物ごと。ItemInstanceId は空でない文字列
     @classmethod
     def come_into_world(cls, item_id: ItemInstanceId, spec: ItemSpecDeclaration, now: WorldTick) -> "Item": ...
 
@@ -277,7 +293,7 @@ OccupantEnteredSpotEvent, TravelBlockedEvent, TravelCancelledEvent, OccupantTele
 OccupantEnteredSectionEvent, OccupantLeftSectionEvent
 
 PersonDamagedEvent, PersonFellEvent, PersonRevivedEvent, PersonDiedEvent, PersonHealedEvent,
-StatusEffectAddedEvent, StatusEffectExpiredEvent, HungerLevelChangedEvent, FatigueLevelChangedEvent
+StatusEffectAddedEvent, StatusEffectExpiredEvent, HungerLevelChangedEvent, FatigueLevelChangedEvent, PersonBecameBusyEvent
 
 PersonOutcomeDecidedEvent
 PersonJoinedGroupEvent, PersonLeftGroupEvent
@@ -299,6 +315,8 @@ GroupDecisionReachedEvent, GroupDecisionUnresolvedEvent
 PersonActedEvent, ActionAttemptFailedEvent
 ```
 
-- 前後の値で反応するハンドラのために、状態の変化のイベントは変わる前と後の値を持つ (`ItemStateChangedEvent`、`WeatherChangedEvent`、`TimeOfDayChangedEvent`、`SpotAtmosphereChangedEvent`、`ItemHeldEvent` / `ItemPutAwayEvent` の持ち主の場所)
+- 前後の値で反応するハンドラのために、状態の変化のイベントは変わる前と後の値を持つ (`ItemStateChangedEvent`、`WeatherChangedEvent`、`TimeOfDayChangedEvent`、`SpotAtmosphereChangedEvent`)
+- `ItemHeldEvent` / `ItemPutAwayEvent` / `ItemGivenUpEvent` は持ち主と品物を持つ。`PersonInventory` は持ち主の場所を知らないので、場所は受けるハンドラが `Whereabouts` で引く。`ItemGivenUpEvent` は、手に持っていたかも持つ (手放したあとでは引けないため)
+- 状態が変わらない操作 (同じ値への `set`、現れている物の `reveal`、手にある物の `hold` など) は、断らず、イベントも出さない。断ると `CommandScope` ごと巻き戻り、同じ効果を当て直す出来事や反応が全体を止めるため
 - 世界を表す集約は、状態を変えたら必ずイベントを出す。帳簿の集約 (`ScenarioProgress`、`MissedNotices`) は出さない。漏れはアーキテクチャのテストで見張る
 - 空腹と疲れは、段階 (`HungerRule.levels` / `FatigueRule.levels`) が変わったときだけイベントにする
