@@ -279,6 +279,7 @@ class MissedNotices:                              # 人ごと。倒れている�
 
 class WorldEnding:                                # 世界に 1 つ
     def end(self, now: WorldTick) -> None: ...      # SettleWorldConditions の終わりの判定が呼ぶ。WorldEndedEvent
+        # 終わった世界への end はドメイン例外 (状態が変わらない操作は断らない、の例外)。終わった世界はもう進まず、終わりの判定は 1 tick に 1 回しか呼ばれないので、二度目の end は呼ぶ側の誤りを示す
 
     def has_ended(self) -> bool: ...
 
