@@ -126,13 +126,17 @@ def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -
 
 def introduction(node: YamlNode) -> WorldIntroduction:
     fields = node.fields("text", "objective")
-    return WorldIntroduction(
-        text=description(fields.required("text")), objective=description(fields.required("objective"))
+    return node.build(
+        lambda: WorldIntroduction(
+            text=description(fields.required("text")), objective=description(fields.required("objective"))
+        )
     )
 
 
 def ending(node: YamlNode, conditions: ConditionReader) -> EndingDeclaration:
-    return EndingDeclaration(ends_when=conditions.read(node.fields("ends_when").required("ends_when")))
+    return node.build(
+        lambda: EndingDeclaration(ends_when=conditions.read(node.fields("ends_when").required("ends_when")))
+    )
 
 
 def day_night(node: YamlNode, defaults: ScenarioDefaults) -> DayNightDeclaration | NoDayNight:

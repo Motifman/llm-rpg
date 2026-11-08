@@ -23,7 +23,7 @@ from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import Sc
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_layout import YamlPath
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_source import read_scenario_source
 from ai_rpg_world.game_world.infrastructure.scenario.verb_reader import VerbReader
-from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import FlawCollector, YamlFields, YamlNode
+from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import FlawCollector, Unreadable, YamlFields, YamlNode
 
 _TOP_FIELDS = (
     "introduction",
@@ -67,7 +67,15 @@ def load_scenario(scenario: Path) -> LoadedScenario:
     if source.flaws:
         raise WorldDesignFlawsException(source.flaws)
     collector = FlawCollector()
-    root = YamlNode(source.value, YamlPath.root())
+    try:
+        return _loaded(source.value, collector)
+    except Unreadable as unreadable:
+        collector.record((unreadable.flaw,))
+        raise WorldDesignFlawsException(collector.flaws) from unreadable
+
+
+def _loaded(value: object, collector: FlawCollector) -> LoadedScenario:
+    root = YamlNode(value, YamlPath.root())
     fields = collector.attempt(lambda: root.fields(*_TOP_FIELDS))
     if fields is None:
         raise WorldDesignFlawsException(collector.flaws)
@@ -113,6 +121,7 @@ class _ScenarioLoading:
         self._collector = collector
         self.warnings: list[DesignWarning] = []
         names = DeclaredNames(nouns, frozenset(read_nouns.unreadable))
+        self._names = names
         self._conditions = ConditionReader(names)
         self._effects = EffectReader(
             names,
@@ -195,4 +204,4 @@ class _ScenarioLoading:
                     "initial_stage is required when world_stages are declared"
                 )
             return NoWorldStages()
-        return self._nouns.world_stage(initial.text(), initial.path.location())
+        return self._names.world_stage(initial)

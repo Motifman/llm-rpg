@@ -235,18 +235,18 @@ class NounReader:
 
     def read(self, scenario: YamlFields) -> ReadNouns:
         self._each(scenario.nested("flags"), "flag", self._read.flags, self._flag)
-        for spot_name, spot in scenario.nested("spots").entries():
+        for spot_name, spot in self._entries(scenario.nested("spots")):
             if self._attempt("spot", spot_name, self._read.spots, lambda: self._spot(spot_name, spot)) is None:
                 self._mark_inside_unreadable(spot)
                 continue
             fields = self._defaults.fill("spot", spot).fields(*SPOT_FIELDS)
-            for name, obj in fields.nested("objects").entries():
+            for name, obj in self._entries(fields.nested("objects")):
                 self._attempt("object", name, self._read.objects, lambda: self._object(name, spot_name, obj))
-            for name, section in fields.nested("sections").entries():
+            for name, section in self._entries(fields.nested("sections")):
                 self._attempt("section", name, self._read.sections, lambda: self._section(name, spot_name, section))
         self._each(scenario.nested("passages"), "passage", self._read.passages, self._passage)
         self._each(scenario.nested("item_specs"), "item_spec", self._read.item_specs, self._item_spec)
-        for grouping_name, grouping_node in scenario.nested("groupings").entries():
+        for grouping_name, grouping_node in self._entries(scenario.nested("groupings")):
             grouping = self._attempt(
                 "grouping", grouping_name, self._read.groupings, lambda: self._grouping(grouping_name, grouping_node)
             )
@@ -255,7 +255,7 @@ class NounReader:
             )
             if groups is None:
                 continue
-            for name, group in groups.entries():
+            for name, group in self._entries(groups):
                 if grouping is None:
                     self._read.unreadable.add(("group", name))
                     continue
@@ -268,6 +268,9 @@ class NounReader:
         )
         self._each(scenario.nested("outcomes"), "outcome", self._read.outcomes, self._outcome)
         return self._read
+
+    def _entries(self, node: YamlNode) -> list[tuple[str, YamlNode]]:
+        return self._collector.attempt(node.entries) or []
 
     def _mark_inside_unreadable(self, spot: YamlNode) -> None:
         if not isinstance(spot.value, dict):
@@ -284,8 +287,7 @@ class NounReader:
         into: list[_Declaration],
         read: Callable[[str, YamlNode], _Declaration],
     ) -> None:
-        entries = self._collector.attempt(declarations.entries)
-        for name, node in entries or ():
+        for name, node in self._entries(declarations):
             self._attempt(kind, name, into, lambda: read(name, node))
 
     def _attempt(
@@ -497,7 +499,9 @@ class NounReader:
         if being is not None:
             if not isinstance(being.value, dict):
                 raise being.unreadable(f"being must be a mapping, got {being.value!r}")
-            self._read.beings[PersonId(name)] = {str(key): value for key, value in being.value.items()}
+            self._read.beings[node.build(lambda: PersonId(name))] = {
+                str(key): value for key, value in being.value.items()
+            }
         return node.build(
             lambda: CharacterDeclaration(
                 person_id=PersonId(name),

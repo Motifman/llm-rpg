@@ -36,7 +36,11 @@ def _included(directory: Path, name: object, at: YamlPath, flaws: list[DesignFla
     if not path.is_file():
         flaws.append(DesignFlaw(at.location(), f"include {name!r} is not found"))
         return {}
-    document = _read_file(path)
+    try:
+        document = _read_file(path)
+    except (OSError, UnicodeDecodeError) as error:
+        flaws.append(DesignFlaw(at.location(), f"include {name!r} is not readable: {error}"))
+        return {}
     flaws.extend(DesignFlaw(flaw.location, f"in {name}: {flaw.reason}") for flaw in document.flaws)
     if not isinstance(document.value, dict):
         if not document.flaws:

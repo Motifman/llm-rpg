@@ -110,6 +110,8 @@ defaults:
     hidden_until_revealed: false
 ```
 
+`includes:` の重ね方は地図を全階層で重ねるので、シナリオで `defaults.passage.states` を書くと、共通の部品の状態に足される。状態を置き換えたいときは、通路の `states` に直接書く。
+
 種類は `flag` `spot` `atmosphere` `section` `section_access` `object` `appearance` `state_key` `discoverable` `interaction` `passage` `passage_state` `item_spec` `grouping` `group` `character` `world_stage` `group_decision` `outcome` `happening` `reaction` `joint_action` `perception` `sight_texts` `sound` `sight_at` `sound_from` `announcement_to` `day_phase` `weather`。知らない種類は `DesignFlaw`。
 
 知覚 (`perceived_as`) の目撃の文 `witness`、音の文 `sound`、された人の文 `target` (人への操作だけ) を書かなかったときは、`perception_defaults:` の文で埋めて `DesignWarning` を残す。`sound: null` と書けば音の無い操作 (`Silent`) で、警告しない。

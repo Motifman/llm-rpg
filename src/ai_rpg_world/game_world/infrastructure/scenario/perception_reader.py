@@ -120,7 +120,9 @@ class PerceptionReader:
         return default
 
     def _target(self, fields: YamlFields, has_target: bool) -> SightTextsDeclaration | NoTarget:
-        if not has_target and not fields.has(_TARGET):
+        if not has_target:
+            if fields.has(_TARGET):
+                raise fields.required(_TARGET).unreadable("this action has no target to tell")
             return NoTarget()
         target = self._written_or_default(fields, _TARGET)
         return NoTarget() if target.is_null() else self.sight_texts(target)

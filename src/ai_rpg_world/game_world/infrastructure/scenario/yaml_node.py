@@ -138,14 +138,14 @@ class FlawCollector:
         try:
             return read()
         except Unreadable as unreadable:
-            self._flaws.append(unreadable.flaw)
+            self.record((unreadable.flaw,))
         except UnknownNameFlaw as unknown:
-            self._flaws.append(unknown.flaw)
+            self.record((unknown.flaw,))
         except WorldDesignFlawsException as flawed:
-            self._flaws.extend(flawed.flaws)
+            self.record(flawed.flaws)
         except ReferencesUnreadable:
             pass
         return None
 
     def record(self, flaws: tuple[DesignFlaw, ...]) -> None:
-        self._flaws.extend(flaws)
+        self._flaws.extend(flaw for flaw in flaws if flaw not in self._flaws)

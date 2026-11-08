@@ -245,6 +245,117 @@ class TestFlawsWhileLoading:
         assert DesignLocation("spot", "shaft_head", "descripton") in [flaw.location for flaw in _flaws(tmp_path, text)]
 
 
+class TestBrokenShapesStayDesignFlaws:
+    """形の崩れた YAML でも、素の例外ではなく DesignFlaw にまとまることを保証する。"""
+
+    @pytest.mark.parametrize(
+        ("broken", "location"),
+        [
+            ("spots:\n", DesignLocation("world", "world", "spots")),
+            ("groupings: [team]\n", DesignLocation("world", "world", "groupings")),
+        ],
+    )
+    def test_top_level_map_that_is_not_a_map_is_a_flaw(
+        self, tmp_path: Path, broken: str, location: DesignLocation
+    ) -> None:
+        """名前で指す宣言の欄を空や一覧にすると、その欄の場所を付けた DesignFlaw になる。"""
+        text = (
+            "includes: [common.yaml]\n"
+            "introduction: { text: 目覚めた。, objective: 出る。 }\n"
+            "ending: { ends_when: all_outcomes_decided }\n" + broken
+        )
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [location]
+
+    def test_objects_left_empty_inside_spot_is_a_flaw(self, tmp_path: Path) -> None:
+        """場所の objects: の中身をすべて消して空にすると、その欄の場所を付けた DesignFlaw になる。"""
+        text = _LIFT_LANDING.replace(
+            "    atmosphere: { lighting: bright }\n", "    atmosphere: { lighting: bright }\n    objects:\n"
+        )
+
+        assert DesignLocation("spot", "shaft_head", "objects") in [flaw.location for flaw in _flaws(tmp_path, text)]
+
+    def test_recursive_anchor_is_a_flaw(self, tmp_path: Path) -> None:
+        """自分を含むアンカー (&a [*a]) を書くと、無限に辿らず DesignFlaw になる。"""
+        flaws = _flaws(tmp_path, _LIFT_LANDING + "loop: &a [*a]\n")
+
+        assert flaws
+
+    def test_number_key_is_a_flaw(self, tmp_path: Path) -> None:
+        """名前に数を書くと (1 と '1' が黙って重ならないよう) その場所の DesignFlaw になる。"""
+        text = _LIFT_LANDING.replace(
+            "  lift_departed: { meaning: 籠が上がった }\n",
+            "  lift_departed: { meaning: 籠が上がった }\n  1: { meaning: 数 }\n",
+        )
+
+        assert DesignLocation("world", "world", "flags") in [flaw.location for flaw in _flaws(tmp_path, text)]
+
+    def test_target_text_on_object_interaction_is_a_flaw(self, tmp_path: Path) -> None:
+        """相手のいない物の操作に、された人の文 target を書くと、誰にも届かない文として DesignFlaw になる。"""
+        text = _LIFT_LANDING.replace(
+            '              witness: { clear: "{actor}が昇降機の操作盤に鍵を差し、把手を引いた。" }\n',
+            '              witness: { clear: "{actor}が昇降機の操作盤に鍵を差し、把手を引いた。" }\n'
+            "              target: { clear: 誰か。 }\n",
+        )
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
+            DesignLocation("object", "lift_panel", "interactions.start_lift.perceived_as.target")
+        ]
+
+    def test_same_flaw_is_reported_once(self, tmp_path: Path) -> None:
+        """場所に知らない欄を 1 つ書くと、名詞と動詞の両方で読んでも誤りは 1 つだけ出る。"""
+        text = _LIFT_LANDING.replace("description: 縦穴の上の小屋。", "description: 縦穴の上の小屋。\n    foo: 1")
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [DesignLocation("spot", "shaft_head", "foo")]
+
+    def test_include_not_in_utf8_is_a_flaw_at_its_place(self, tmp_path: Path) -> None:
+        """UTF-8 でない共通の部品は、includes のその位置の DesignFlaw になる。"""
+        path = _scenario(
+            tmp_path, _LIFT_LANDING.replace("includes: [common.yaml]", "includes: [common.yaml, broken.yaml]")
+        )
+        (tmp_path / "broken.yaml").write_bytes("rules: 規則".encode("shift_jis"))
+
+        with pytest.raises(WorldDesignFlawsException) as raised:
+            load_scenario(path)
+
+        assert [flaw.location for flaw in raised.value.flaws] == [DesignLocation("world", "world", "includes[1]")]
+
+
+class TestSkippingWhatPointsAtUnreadable:
+    """読めなかった名詞を指す宣言を飛ばしても、元の誤りは捨てずに 1 件だけ出すことを保証する。"""
+
+    def test_happening_reading_unreadable_flag_is_skipped_but_flag_flaw_remains(self, tmp_path: Path) -> None:
+        """旗 lift_departed の意味に数を書くと、旗の誤りだけが 1 件出て、その旗を見る出来事や操作の「宣言が無い」は出ない。"""
+        text = _LIFT_LANDING.replace("lift_departed: { meaning: 籠が上がった }", "lift_departed: { meaning: 5 }")
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
+            DesignLocation("flag", "lift_departed", "meaning")
+        ]
+
+    def test_passage_pointing_at_unreadable_spot_is_left_out_without_its_own_flaw(self, tmp_path: Path) -> None:
+        """縦穴の上の明るさを綴り違えると、その場所の誤りだけが出て、そこへ続く梯子の「場所が無い」は出ない。"""
+        text = _LIFT_LANDING.replace("lighting: bright", "lighting: brigth")
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
+            DesignLocation("spot", "shaft_head", "atmosphere.lighting")
+        ]
+
+    def test_written_states_are_not_mixed_with_default_open(self, tmp_path: Path) -> None:
+        """states を書いた梯子は、共通の部品の既定の open を混ぜず、書いた状態だけを持つ。"""
+        text = _LIFT_LANDING.replace(
+            "  ladder: { ends: [lift_landing, shaft_head], travel_ticks: 3 }",
+            "  ladder:\n"
+            "    ends: [lift_landing, shaft_head]\n"
+            "    travel_ticks: 3\n"
+            "    states: { shut: { display_name: 閉じている, traversable: false, sound_loss: 20 } }\n"
+            "    initial_state: shut",
+        )
+
+        ladder = _load(tmp_path, text).design.nouns.passage("ladder", DesignLocation("passage", "ladder", ""))
+
+        assert [state.name.value for state in ladder.states] == ["shut"]
+
+
 class TestFormatDocumentExamples:
     """scenario_format.md に載せた例が、そのまま読み込めることを保証する。"""
 
