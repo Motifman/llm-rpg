@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-from tests.game_world.domain.whereabouts._builders import section, spot
-from tests.game_world.support.declarations_for_tests import SectionAccessForTests
 
 from ai_rpg_world.game_world.domain.action.action_attempt import (
     ActionAttempt,
@@ -66,6 +64,8 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
+from tests.game_world.domain.whereabouts._builders import section, spot
+from tests.game_world.support.declarations_for_tests import SectionAccessForTests
 
 ALICE = PersonId("alice")
 BOB = PersonId("bob")

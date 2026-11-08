@@ -3,8 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import pytest
-from tests.game_world.domain.whereabouts._builders import thing
-from tests.game_world.support.declarations_for_tests import InteractionForTests
 
 from ai_rpg_world.game_world.domain.action.action_arguments import ActionArguments, TextArgumentValue
 from ai_rpg_world.game_world.domain.action.action_attempt import (
@@ -52,6 +50,8 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldStageId,
 )
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
+from tests.game_world.domain.whereabouts._builders import thing
+from tests.game_world.support.declarations_for_tests import InteractionForTests
 
 ALICE = PersonId("alice")
 BOB = PersonId("bob")
@@ -254,7 +254,9 @@ class TestArguments:
     )
     def test_arguments_not_matching_declaration_raise(self, arguments: ActionArguments) -> None:
         """宣言の引数が欠けている、宣言に無い名前がある、文の引数に品物を渡したとき、作るときに ArgumentsDoNotMatchDeclarationException を投げる。"""
-        interaction = InteractionForTests(InteractionId("write"), arguments=(ArgumentDeclaration(WORDS, TextArgument()),))
+        interaction = InteractionForTests(
+            InteractionId("write"), arguments=(ArgumentDeclaration(WORDS, TextArgument()),)
+        )
 
         with pytest.raises(ArgumentsDoNotMatchDeclarationException):
             CarriedItemInteractionAttempt(ALICE, NOTEBOOK, interaction, arguments, Openly())
@@ -266,6 +268,4 @@ class TestArguments:
         )
 
         with pytest.raises(ArgumentsDoNotMatchDeclarationException):
-            PersonInteractionAttempt(
-                ALICE, BOB, interaction, {ArgumentName("gift"): TextArgumentValue("花")}, Openly()
-            )
+            PersonInteractionAttempt(ALICE, BOB, interaction, {ArgumentName("gift"): TextArgumentValue("花")}, Openly())

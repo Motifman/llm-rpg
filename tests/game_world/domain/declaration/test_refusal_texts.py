@@ -68,7 +68,9 @@ class TestRefusalTexts:
 
     def test_text_without_placeholder_assigns_no_one(self) -> None:
         """人を書いていない文は、誰も当てずにそのまま返る。"""
-        texts = RefusalTexts(common_rules=_common_rules(TOO_TIRED="疲れすぎて動けない。"), world_state={}, hidden=HIDDEN)
+        texts = RefusalTexts(
+            common_rules=_common_rules(TOO_TIRED="疲れすぎて動けない。"), world_state={}, hidden=HIDDEN
+        )
 
         assert texts.common_rule_text(TooTired(), ALICE) == TextAboutPeople(
             TextWithUnassignedPeople("疲れすぎて動けない。"), {}

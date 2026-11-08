@@ -13,7 +13,6 @@ from ai_rpg_world.game_world.domain.declaration.character import (
     NoSharedDescription,
 )
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
-from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     FlagStateKind,
     FlagValue,
@@ -41,6 +40,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
     Temperature,
 )
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.world_design_exception import UnknownNameFlaw, WorldDesignFlawsException
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
@@ -367,7 +367,6 @@ class TestSectionsAt:
         nouns = _nouns(spots=[_spot("lift_landing"), _spot("shore")], sections=[_section("boat", "shore")])
 
         assert nouns.sections_at(SpotId("lift_landing")) == ()
-
 
 
 class TestLookupById:

@@ -64,4 +64,6 @@ class NoOneFoundInTheDark:
         return CommonRuleRefusalKind.NO_ONE_FOUND_IN_THE_DARK
 
 
-CommonRuleRefusal = ActorCannotAct | Busy | NotTogether | OutOfReach | TooTired | NotAllowedInThisStage | NoOneFoundInTheDark
+CommonRuleRefusal = (
+    ActorCannotAct | Busy | NotTogether | OutOfReach | TooTired | NotAllowedInThisStage | NoOneFoundInTheDark
+)

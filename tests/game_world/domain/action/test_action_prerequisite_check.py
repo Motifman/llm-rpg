@@ -2,11 +2,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from tests.game_world.domain.whereabouts._builders import WORLD, section, spot, thing
-from tests.game_world.support.declarations_for_tests import InteractionForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
-from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
-
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt, LivingOrDeparted
 from ai_rpg_world.game_world.domain.action.action_prerequisite_check import ActionPrerequisiteCheck
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
@@ -37,8 +32,8 @@ from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, SpeechCo
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.person import DeclaredOutcome, PersonVitals, WorldHappening
 from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.person import DeclaredOutcome, PersonVitals, WorldHappening
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueLevel, FatigueLevelName, FatigueRule
 from ai_rpg_world.game_world.domain.value_object import (
@@ -57,6 +52,10 @@ from ai_rpg_world.game_world.domain.value_object import (
 from ai_rpg_world.game_world.domain.whereabouts import DepartedPerson, PersonBody
 from ai_rpg_world.game_world.domain.world_progress import WorldStage
 from ai_rpg_world.game_world.domain.world_progress.group_decision import VoteFor
+from tests.game_world.domain.whereabouts._builders import WORLD, section, spot, thing
+from tests.game_world.support.declarations_for_tests import InteractionForTests
+from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
 ALICE = PersonId("alice")
 BOB = PersonId("bob")
@@ -69,7 +68,9 @@ EXILE = GroupDecisionDeclaration(
     decision_id=GroupDecisionId("exile"), name=DisplayName("追放"), abstain_allowed=True, reveals_ballots=False
 )
 TEXTS = RefusalTexts(
-    common_rules={kind: TextWithUnassignedPeople(f"{{actor}}は {kind.name} でできない。") for kind in CommonRuleRefusalKind},
+    common_rules={
+        kind: TextWithUnassignedPeople(f"{{actor}}は {kind.name} でできない。") for kind in CommonRuleRefusalKind
+    },
     world_state={},
     hidden=TextWithUnassignedPeople("今はできない。"),
 )
@@ -181,7 +182,10 @@ class TestReach:
 
 def _stage(allowed: frozenset[ActionKind | InteractionId]) -> WorldStageDeclaration:
     return WorldStageDeclaration(
-        stage_id=WorldStageId("night"), name=DisplayName("夜"), description=DescriptionText("夜"), allowed_actions=allowed
+        stage_id=WorldStageId("night"),
+        name=DisplayName("夜"),
+        description=DescriptionText("夜"),
+        allowed_actions=allowed,
     )
 
 
