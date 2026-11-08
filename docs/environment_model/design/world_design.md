@@ -407,18 +407,26 @@ class WeatherDeclaration:
     initial: WeatherType
     changes: NoChange | ChangesEvery
     announce_changes: bool
+    obscuring: frozenset[WeatherType]       # 見通しの悪い天候。書かなければ嵐と霧
 
-    def next_after(self, current: WeatherState, roll: float) -> WeatherState: ...
-    def obscures_sight(self, state: WeatherState) -> bool: ...   # 書かなければ嵐と霧
-    def visibility(self, state: WeatherState) -> Visibility: ...
-    def display_name(self, state: WeatherState) -> str: ...
+    def next_after(self, current: WeatherState, roll: Probability) -> WeatherState: ...
+    def obscures_sight(self, state: WeatherState) -> bool: ...
+    def display_name(self, state: WeatherState) -> DisplayName: ...   # 種類ごとに決まった呼び名 (晴れ、霧 など)
+
+class WeatherType(Enum):                    # CLEAR / CLOUDY / RAIN / HEAVY_RAIN / SNOW / BLIZZARD / FOG / STORM
+WeatherState(type: WeatherType)             # 今の天候。強さは持たない
 
 @final
 @dataclass(frozen=True)
 class DayNightDeclaration:
     ticks_per_day: Ticks
     starts_at: TimeOfDay
-    phases: tuple[DayPhaseDeclaration, ...]     # 1 日を切れ目なく覆う
+    phases: tuple[DayPhaseDeclaration, ...]     # 1 日を切れ目なく覆う。begins_at の昇順で、名前は重ならない。最初の段階より前は前の日の最後の段階が続く
+
+    def time_of_day_at(self, now: WorldTick) -> TimeOfDay: ...   # (starts_at + now) を ticks_per_day で割った余り
+    def phase_at(self, time_of_day: TimeOfDay) -> DayPhaseDeclaration: ...
+
+TimeOfDay(tick_of_day: int)                 # 1 日の中の tick の位置。ticks_per_day 未満
 
 @final
 @dataclass(frozen=True)
@@ -433,6 +441,7 @@ class DayPhaseDeclaration:
 class ChangesEvery:
     ticks: Ticks
     transitions: WeatherTransitions        # 書かなければ既定の表
+    # WeatherTransitions(odds: tuple[NextWeatherOdds, ...]): 今の天候ごとに、次の天候と 1 以上の重み (WeightedWeather) の見込み。roll で重みの累積から選ぶ。見込みの無い天候は変わらない
 
 @final
 @dataclass(frozen=True)
