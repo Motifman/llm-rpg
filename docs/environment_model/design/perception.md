@@ -28,8 +28,8 @@ class PersonHandle:                       # 環境の中で 1 人をずっと指
 @dataclass(frozen=True)
 class PersonRef:
     handle: PersonHandle
-    appearance: str                       # 空や空白だけは断る
-    visible_name: str | NoVisibleName     # 名札の世界、最初から知っている相手だけ。空や空白だけは断る
+    appearance: DescriptionText           # CharacterDeclaration.appearance
+    visible_name: DisplayName | NoVisibleName   # 名札の世界 (WorldRules.name_tags) か、見る人が最初から知っている相手 (knows_at_start) だけ
 
 @final
 @dataclass(frozen=True)
@@ -61,6 +61,17 @@ class TextAboutPeople:                    # プレースホルダーに、誰の
 
 class PeopleAsSeen(Protocol):             # 1 人の見る人から見た、ほかの人の呼び方。知覚を届けるところ、いまできることを組むところが作る
     def ref_of(self, person: PersonId) -> PersonRef: ...
+
+@final
+@dataclass(frozen=True)
+class PeopleSeenBy:                       # PeopleAsSeen の実装
+    viewer: PersonId
+    register: PeopleRegisterReading       # 番号、名前、見た目 (world_state.md の PeopleRegister)
+    name_tags: bool                       # WorldRules.name_tags
+    knows_at_start: frozenset[PersonId]   # 見る人の CharacterDeclaration.knows_at_start
+
+    def ref_of(self, person: PersonId) -> PersonRef: ...
+        # 名前を出すのは、名札の世界か、knows_at_start の相手か、見る人自身
 ```
 
 ゲームが作る文には、ほかの人の名前を文字として入れず、必ず `PersonRef` で渡す。列挙の値やキーもそのまま入れず、宣言の呼び名を使う。
@@ -94,11 +105,14 @@ class SightStimulus:
     target: SightTexts | NoTarget
     seen_in_dark: bool                    # 暗くても見える行為か (光る物、大きな動き)。真なら真っ暗でも dim の文が届く
     manner: Openly | Stealthily
+    actor_departed: bool                  # 行った人が去った人。生きている人には unseen_actor の文を届け、去った人には clear の文を届ける
     involved: tuple[PersonId, ...]
     salience: Salience
     always_delivered: bool                # 作者の目撃の文が倒れたことに触れていなくても、見ていた人が知るため
+    at: WorldTick
 
-    def perceived_by(self, perceiver: Perceiver, lighting: Lighting, view: PeopleAsSeen) -> PerceptionOutcome: ...
+    def perceived_by(self, perceiver: Perceiver, lighting: Lighting, view: PeopleAsSeen, random: RandomSource, stealth: StealthRule) -> PerceptionOutcome: ...
+        # Stealthily の刺激だけ、見ていた人ごとに StealthRule の確率 (見え方ごと、耳を澄ましていれば attentive_bonus を足す) を random から引いて気づくかを決める。気づかなければ NotPerceived
 
 @final
 @dataclass(frozen=True)
@@ -111,6 +125,7 @@ class SoundStimulus:
     whispered_to: PersonId | NotWhispered
     involved: tuple[PersonId, ...]
     salience: Salience
+    at: WorldTick
 
     def perceived_by(self, perceiver: Perceiver, reach: SoundReach, values: HearingValues, view: PeopleAsSeen) -> PerceptionOutcome: ...
 
@@ -120,15 +135,17 @@ class BodilyStimulus:                     # 行った本人の結果もこれ。
     person: PersonId
     text: TextAboutPeople
     salience: Salience
+    at: WorldTick
 
     def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome: ...
 
 @final
 @dataclass(frozen=True)
 class AnnouncementStimulus:
-    audience: PeopleSelection
+    audience: frozenset[PersonId]         # 刺激に変える役が PeopleSelection で選んでおく。知覚の規則には facts を渡さないため
     text: TextAboutPeople
     salience: Salience
+    at: WorldTick
 
     def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome: ...
 ```
@@ -321,13 +338,24 @@ class PresentPerson:                      # その場所にいる人。見える
 @dataclass(frozen=True)
 class SpotContents:                       # その場所にあるもの。ユースケースが集める
     spot: SpotDeclaration
-    passages: tuple[PassageInState, ...]
+    passages: tuple[ContainedPassage, ...]
     sections: tuple[SpotSectionDeclaration, ...]
-    objects: tuple[ObjectDeclaration, ...]
+    objects: tuple[ContainedObject, ...]
     ground_items: tuple[ItemInstanceId, ...]
     people: tuple[PresentPerson, ...]
     bodies: tuple[PresentPerson, ...]
-    monsters: tuple[MonsterId, ...]
+
+@final
+@dataclass(frozen=True)
+class ContainedObject:                    # 現れているかも持つ。隠れた物を場面から外すのは seen_with
+    declaration: ObjectDeclaration
+    revealed: bool
+
+@final
+@dataclass(frozen=True)
+class ContainedPassage:
+    passage: PassageInState
+    revealed: bool
 
 @final
 @dataclass(frozen=True)
@@ -340,13 +368,14 @@ class VisibleSurroundings:
     ground_items: tuple[ItemInstanceId, ...]
     people: tuple[SeenPerson, ...]
     bodies: tuple[SeenPerson, ...]        # 倒れている人と死んだ人
-    monsters: tuple[MonsterId, ...]
-    distant: tuple[DistantSight, ...]     # 屋外で見えるときだけ。視程は天候の宣言から
 
     @classmethod
-    def seen_with(cls, sight: SightQuality, contents: SpotContents, distant: tuple[DistantSight, ...]) -> "VisibleSurroundings": ...
+    def seen_with(cls, sight: SightQuality, contents: SpotContents) -> "VisibleSurroundings": ...
+        # 現れていない物と通路 (hidden_until_revealed) は出さない。暗い・真っ暗では、暗くても見える物体 (seen_in_dark) だけ
+        # 地面の品物は SeesClearly のときだけ出す。区画と通路は真っ暗でも出す (手探りで分かる)
 ```
 
+- モンスターは #1971、遠くの場所が見える仕組み (`DistantSight`) は #2040 で決めてから足す
 - 持ち物、体の状態、時刻は、見えているものではなく自分が知っていること。場面に入れず、知覚を通さずに集約から読む。複数の集約にまたがるものはドメインサービスにする
 - 場面は「何が見えるか」だけを持つ。「何ができるか」は `AvailableActions` ([action.md](action.md)) が持ち、行為の対象の候補は場面に出ているものに限る
 - 着いたとき、起き上がったとき、その場所の明るさが上がったとき (灯した、夜が明けた、明かりを持った人が来た) は、場面の人、倒れた体、モンスターを 1 つの観測にして渡す (`DeliverSurroundings`)。明るさが上がったかは、出来事の前後の `LightingConditions` を比べて決める

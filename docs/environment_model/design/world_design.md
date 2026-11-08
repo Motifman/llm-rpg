@@ -466,6 +466,7 @@ class WorldRules:
     hunger: HungerRule
     death: DeathRule
     departed_persons_act: bool
+    name_tags: bool                         # 名札の世界。真なら、見る人は知り合いでなくても相手の名前が分かる
     hearing: HearingValues
     stealth: StealthRule
     action_durations: Mapping[ActionKind, Ticks]   # 行っているあいだの既定。耳を澄ます 1、拾う・置く・渡す・区画・投票・持ち替え 1、操作・品物を使う 2、探す・介抱 3
