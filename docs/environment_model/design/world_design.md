@@ -534,6 +534,13 @@ class StealthRule:                              # こっそり行っても、見
 
 @final
 @dataclass(frozen=True)
+class BuiltInActionPerceptions:             # どの世界にもある行為 (拾う、置く、渡す、移動する、話すなど) が周りにどう知覚されるか。シナリオが世界全体で 1 つ書く
+    by_kind: Mapping[ActionKind, PerceptionDeclaration]
+    # 文には人のプレースホルダーのほかに、行為が扱う物や場所の呼び名 ({item}、{destination} など) を書ける。
+    # 刺激に変える役が宣言の呼び名 (DisplayName) で先に埋め、人のプレースホルダーだけを残した TextAboutPeople にする
+
+@final
+@dataclass(frozen=True)
 class RefusalTexts:                         # 作者の条件に付かない、断られた理由の文。シナリオが世界全体で 1 つ書く
     common_rules: Mapping[CommonRuleRefusalKind, TextWithUnassignedPeople]   # Busy、TooTired、NotTogether、OutOfReach など ([action.md](action.md))
     world_state: Mapping[RefusalCode, TextWithUnassignedPeople]              # 集約が断ったとき (籠が満員、荷が空)。error_code ごと
@@ -570,6 +577,7 @@ class WorldDesign:
         ending: EndingDeclaration,
         world_rules: WorldRules,
         refusal_texts: RefusalTexts,
+        built_in_action_perceptions: BuiltInActionPerceptions,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
@@ -636,7 +644,7 @@ infrastructure: JSON を読む
 - `initially_raised` でもなく、どの `RaiseFlagEffect` にも出てこない旗を条件が見ていたら `DesignFlaw`。立てるだけで誰も見ない旗は `DesignWarning`
 - 締める出来事 (`CloseGroupDecisionEffect`) が 1 つも無い集団の決定は `DesignWarning`。猶予 (`DeathRule.grace`) が 0 なのに介抱がある世界は `DesignFlaw`
 - 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、読み込む側が既定の文の表 (データ) から埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)
-- 断りの文の表 (`RefusalTexts`) の既定は、コードではなくデータ (共通のシナリオの部品) として 1 つ用意し、シナリオはそれを取り込んで必要な行だけ書き換える。起きうる理由が表に無ければ `DesignFlaw`
+- 断りの文の表 (`RefusalTexts`) と、組み込みの行為の知覚の文 (`BuiltInActionPerceptions`) の既定は、コードではなくデータ (共通のシナリオの部品) として 1 つ用意し、シナリオはそれを取り込んで必要な行だけ書き換える。起きうる理由や、世界で行える組み込みの行為が表に無ければ `DesignFlaw`
 - 条件を置いた場所 (前提、出来事の条件など) の根に `failure_text` が無ければ `DesignFlaw`
 - 効果と条件が読む引数の名前が、操作の宣言の `arguments` に無ければ `DesignFlaw`
 - `WorldStage`・昼夜・天候を宣言していない世界で、それを見る条件を書いていれば `DesignFlaw`

@@ -68,7 +68,7 @@ class PeopleAsSeen(Protocol):             # 1 人の見る人から見た、ほ�
 - 型の名前の Person は 1 人 (`PersonHandle`、`PersonRef`)、People は文の中の人たちを指す。2 つの文の型はどちらもプレースホルダーを持ち、違いは誰が入るかが決まっているかだけ
 - 文は 3 段で決まる。作者が宣言に書く文は `TextWithUnassignedPeople` ([world_design.md](world_design.md)、[condition.md](condition.md) の `failure_text`)。刺激を作るとき、条件を評価するときに、誰のことかが決まって `TextAboutPeople` になる。見る人が決まったところ (知覚を届けるところ、いまできることを組むところ、断られた本人に届けるところ) で、その人から見た呼び方を当てて `TextWithAssignedPeople` にする
 - 同じ出来事や理由を、行った人と見ていた人が別の呼び方で見るので、見る人が決まる前に `PersonRef` を当てない。刺激と断られた理由は `TextAboutPeople` で持ち、知覚の結果 (`Perceived`) から先は `TextWithAssignedPeople`。プレースホルダーが埋まらないままの文は Being に渡らない
-- プレースホルダーは人だけ。物や操作の名前は、宣言がどの物体・操作のものか分かっているので、作者が文に直接書く
+- プレースホルダーは人だけ。物や操作の名前は、宣言がどの物体・操作のものか分かっているので、作者が文に直接書く。例外は組み込みの行為の知覚の文 (`BuiltInActionPerceptions`、[world_design.md](world_design.md)) で、扱う物や場所が行為ごとに変わるので呼び名のプレースホルダーを書ける。刺激に変える役が先に呼び名で埋める
 - プレースホルダーの書き方は `{名前}` だけ。名前は識別子に限り、位置のプレースホルダー (`{}` `{0}`)、変換 (`{actor!r}`)、書式指定 (`{actor:>3}`)、属性や添字 (`{actor.name}`) と閉じていない括弧は、作るときに断る。`{{` `}}` は文字の括弧
 
 ## 刺激
