@@ -669,6 +669,20 @@ class WorldDesign:
 
 @final
 @dataclass(frozen=True)
+class DesignLocation:                       # 宣言の種類・名前・欄 (use_cases.md)
+    declaration: str
+    name: str
+    field: str
+    file: ScenarioFile | NoScenarioFile = NoScenarioFile()   # どのファイルに書いたか。ドメインは知らないので既定のまま作り、読み込む側が in_file で付ける (#2057)
+
+    def in_file(self, file: ScenarioFile | NoScenarioFile) -> "DesignLocation": ...
+    # 文にすると「common/ja_default.yaml: world 'world' rules.fatigue.limit」。ファイルが無ければ名前より前を書かない
+
+ScenarioFile(name: str)                     # シナリオや共通の部品のファイルの名前 (シナリオのあるフォルダからの道筋)
+NoScenarioFile()
+
+@final
+@dataclass(frozen=True)
 class DesignFlaw:                           # 読み込みを止める
     location: DesignLocation
     reason: str

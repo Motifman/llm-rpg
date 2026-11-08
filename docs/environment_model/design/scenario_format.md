@@ -8,7 +8,7 @@
 - 名前で指すものは、欄の値ではなく、地図 (mapping) の鍵に書く (`spots: { lift_landing: { ... } }`)。鍵が `SpotId` などの宣言の名前になる。同じ鍵を 2 回書くと、YAML を読む時点で `DesignFlaw` にする
 - 作者は、名詞の中に、その名詞に付く動詞を書いてよい (物の中に操作、区画の中に出入り)。読み込む側が名詞と動詞に分ける (#1990)
 - 宣言の型は既定値を持たない。書かなかった欄は、読み込む側が共通の部品 (データ) の既定で埋める (#2029 の E2)。埋めたものは `DesignWarning` にしない。作者が書くべきなのに書かなかったもの (知覚の文など) だけを `DesignWarning` にする
-- 誤りの場所 (`DesignLocation`) は、宣言の種類・名前・欄で表す。YAML の道筋 (`spots.lift_landing.objects.lift_panel.interactions.start_lift.precondition`) は、`DesignLocation("object", "lift_panel", "interactions.start_lift.precondition")` に写す
+- 誤りの場所 (`DesignLocation`) は、宣言の種類・名前・欄と、どのファイルに書いたか (シナリオか、取り込んだどの共通の部品か) で表す。誤りの文の先頭にもファイルの名前が出る。`defaults:` で埋めた欄の誤りは、埋めた宣言ではなく `defaults:` を書いた場所を指す。書き忘れた欄は、いちばん近い書かれた親を書いたファイルを指し、どこにも無ければシナリオのファイルを指す。YAML の道筋 (`spots.lift_landing.objects.lift_panel.interactions.start_lift.precondition`) は、`DesignLocation("object", "lift_panel", "interactions.start_lift.precondition")` に写す
 - 文の中の人は、`{actor}` `{target}` `{chosen_by_group}` `{each_person}` だけ。物や場所の名前は、作者が文に直接書く
 
 ## 一番上の欄
@@ -80,7 +80,7 @@ precondition:
 | `happenings.<名前>` | `condition`, `effect`, `once`, `notice` |
 | `reactions.<名前>` | `condition`, `when_becomes_true`, `when_becomes_false` |
 | `joint_actions.<名前>` | `required` (`{ object, interaction }` の一覧), `window`, `distinct_people`, `on_complete`, `on_timeout`, `complete_notice`, `timeout_notice` |
-| `time` | `day_night` (`null` か `{ ticks_per_day, starts_at, phases: { <段階>: { begins_at, dark, announcement } } }`), `weather` (`null` か `{ initial, changes, announce_changes, obscuring }`。`changes` は `null` か `{ ticks, transitions }`、`transitions` は `default` か `{ <今>: { <次>: 重み } }`) |
+| `time` (必須) | `day_night` (`null` か `{ ticks_per_day, starts_at, phases: { <段階>: { begins_at, dark, announcement } } }`), `weather` (`null` か `{ initial, changes, announce_changes, obscuring }`。`changes` は `null` か `{ ticks, transitions }`、`transitions` は `default` か `{ <今>: { <次>: 重み } }`)。天候と昼夜の無い世界でも `null` と書き、欄そのものが無ければ `DesignFlaw`。書き忘れを「無い」として通さないため、`defaults:` でも埋めない |
 | `rules` | `tend` (`null` か `{ revive_hp_rate }`), `fatigue`, `hunger`, `death`, `departed_persons_act`, `name_tags`, `hearing`, `stealth`, `action_durations`, `person_max_hp`, `pack_capacity` |
 
 値の書き方:
@@ -248,3 +248,5 @@ characters:
 2. `PassageDeclaration` の `states` と `ItemSpecDeclaration` の `hands_needed` は型の既定を外し、`defaults:` で埋める
 3. 出来事を読む条件は `HappeningId` を、集団の決定を始める効果は決定と `voters` / `choices` を持つ。自分を読む出来事 (5 tick ごとに襲う) と、決まらなければもう一度投票する決定を書けるようにするため
 4. 登場人物の `being:` は世界の宣言に入れず、地図のまま `LoadedScenario.beings` に返す。地図でなければ `DesignFlaw`
+5. 誤りの場所に、どのファイルに書いたかを持たせ、誤りの文にもファイルの名前を出す。シナリオを作る LLM が、どこを直せばよいかを分かるようにするため
+6. `time` の `day_night` と `weather` は、「無い」ことも `null` で書かせる。欄が無ければ `DesignFlaw`
