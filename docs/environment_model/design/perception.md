@@ -47,13 +47,27 @@ class TextWithUnassignedPeople:       # 作者が宣言に書く、人がまだ�
     template: str
 
     def placeholders(self) -> frozenset[str]: ...
+    def about(self, people: Mapping[str, PersonId]) -> TextAboutPeople: ...
     def assign(self, people: Mapping[str, PersonRef | Unidentified]) -> TextWithAssignedPeople: ...
+
+@final
+@dataclass(frozen=True)
+class TextAboutPeople:                    # プレースホルダーに、誰のことかだけを当てた文。誰が見るかはまだ決まっていない
+    template: TextWithUnassignedPeople
+    people: Mapping[str, PersonId]        # 文のプレースホルダーと鍵が過不足なく揃う。揃わなければ断る
+
+    def seen_by(self, view: PeopleAsSeen) -> TextWithAssignedPeople: ...   # 見る人から見た呼び方を当てる
+    def unidentified(self) -> TextWithAssignedPeople: ...                  # 誰も見分けられない (暗がり、誰の声か分からない)
+
+class PeopleAsSeen(Protocol):             # 1 人の見る人から見た、ほかの人の呼び方。知覚を届けるところ、いまできることを組むところが作る
+    def ref_of(self, person: PersonId) -> PersonRef: ...
 ```
 
 ゲームが作る文には、ほかの人の名前を文字として入れず、必ず `PersonRef` で渡す。列挙の値やキーもそのまま入れず、宣言の呼び名を使う。
 
 - 型の名前の Person は 1 人 (`PersonHandle`、`PersonRef`)、People は文の中の人たちを指す。2 つの文の型はどちらもプレースホルダーを持ち、違いは誰が入るかが決まっているかだけ
-- 宣言の文 ([world_design.md](world_design.md)、[condition.md](condition.md) の `failure_text`) は `TextWithUnassignedPeople`。刺激を作るとき、条件を評価するときに、誰が入るかが決まってから `assign` で `TextWithAssignedPeople` にする。刺激、知覚の結果、断られたときの文は `TextWithAssignedPeople` で、プレースホルダーが埋まらないままの文は Being に渡らない
+- 文は 3 段で決まる。作者が宣言に書く文は `TextWithUnassignedPeople` ([world_design.md](world_design.md)、[condition.md](condition.md) の `failure_text`)。刺激を作るとき、条件を評価するときに、誰のことかが決まって `TextAboutPeople` になる。見る人が決まったところ (知覚を届けるところ、いまできることを組むところ、断られた本人に届けるところ) で、その人から見た呼び方を当てて `TextWithAssignedPeople` にする
+- 同じ出来事や理由を、行った人と見ていた人が別の呼び方で見るので、見る人が決まる前に `PersonRef` を当てない。刺激と断られた理由は `TextAboutPeople` で持ち、知覚の結果 (`Perceived`) から先は `TextWithAssignedPeople`。プレースホルダーが埋まらないままの文は Being に渡らない
 - プレースホルダーは人だけ。物や操作の名前は、宣言がどの物体・操作のものか分かっているので、作者が文に直接書く
 - プレースホルダーの書き方は `{名前}` だけ。名前は識別子に限り、位置のプレースホルダー (`{}` `{0}`)、変換 (`{actor!r}`)、書式指定 (`{actor:>3}`)、属性や添字 (`{actor.name}`) と閉じていない括弧は、作るときに断る。`{{` `}}` は文字の括弧
 
@@ -67,10 +81,10 @@ Salience = Notable | Background
 @final
 @dataclass(frozen=True)
 class SightTexts:
-    clear: TextWithAssignedPeople
-    dim: TextWithAssignedPeople | NotSeenInDim                    # 暗くて人の見分けがつかないとき
-    unseen_actor: TextWithAssignedPeople | NotSeenWithoutActor    # 行った人が見えないとき (去った人の行為)
-    noticed_later: TextWithAssignedPeople | NotNoticedLater       # 倒れていた本人が起きてから気づくとき
+    clear: TextAboutPeople
+    dim: TextAboutPeople | NotSeenInDim                    # 暗くて人の見分けがつかないとき
+    unseen_actor: TextAboutPeople | NotSeenWithoutActor    # 行った人が見えないとき (去った人の行為)
+    noticed_later: TextAboutPeople | NotNoticedLater       # 倒れていた本人が起きてから気づくとき
 
 @final
 @dataclass(frozen=True)
@@ -84,39 +98,39 @@ class SightStimulus:
     salience: Salience
     always_delivered: bool                # 作者の目撃の文が倒れたことに触れていなくても、見ていた人が知るため
 
-    def perceived_by(self, perceiver: Perceiver, lighting: Lighting) -> PerceptionOutcome: ...
+    def perceived_by(self, perceiver: Perceiver, lighting: Lighting, view: PeopleAsSeen) -> PerceptionOutcome: ...
 
 @final
 @dataclass(frozen=True)
 class SoundStimulus:
     origin: SpotId
     loudness: Loudness                    # ささやき / ふつう / 大きい / とても大きい
-    clear: TextWithAssignedPeople
-    muffled: TextWithAssignedPeople               # 誰の声か分からない
-    noticed_later: TextWithAssignedPeople | NotNoticedLater
+    clear: TextAboutPeople
+    muffled: TextAboutPeople               # 誰の声か分からない。届けるときは unidentified() で当てる
+    noticed_later: TextAboutPeople | NotNoticedLater
     whispered_to: PersonId | NotWhispered
     involved: tuple[PersonId, ...]
     salience: Salience
 
-    def perceived_by(self, perceiver: Perceiver, reach: SoundReach, values: HearingValues) -> PerceptionOutcome: ...
+    def perceived_by(self, perceiver: Perceiver, reach: SoundReach, values: HearingValues, view: PeopleAsSeen) -> PerceptionOutcome: ...
 
 @final
 @dataclass(frozen=True)
 class BodilyStimulus:                     # 行った本人の結果もこれ。暗くても自分のしたことは分かる
     person: PersonId
-    text: TextWithAssignedPeople
+    text: TextAboutPeople
     salience: Salience
 
-    def perceived_by(self, perceiver: Perceiver) -> PerceptionOutcome: ...
+    def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome: ...
 
 @final
 @dataclass(frozen=True)
 class AnnouncementStimulus:
     audience: PeopleSelection
-    text: TextWithAssignedPeople
+    text: TextAboutPeople
     salience: Salience
 
-    def perceived_by(self, perceiver: Perceiver) -> PerceptionOutcome: ...
+    def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome: ...
 ```
 
 ## 知覚する人

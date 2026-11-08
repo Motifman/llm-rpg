@@ -6,6 +6,8 @@
 
 エージェントに見せる名前・呼び名・操作の言葉は `DisplayName` (空でない 1 行)、説明・見た目・物音・匂いは `DescriptionText` (空でない。改行はあってよい) で持つ。空の名前の品物が「が落ちている」と出たり、改行の入った名前ができることの一覧を崩したりするのを、宣言を作るときに止める。長さの上限は、困る場面が出るまで付けない。人のプレースホルダーを持つ文は `TextWithUnassignedPeople`。
 
+宣言の型は既定値を持たない。欄のコメントの「書かなければ」は、シナリオを読み込む側が埋める (既定の文や値は、コードではなくデータとして取り込む)。
+
 名詞の宣言は、その名詞が何であるか (名前、置き場所、見た目、状態) だけを持ち、条件・効果・操作・知覚の宣言を持たない。名詞に付く動詞は、名詞の宣言を指す動詞の側の宣言 (`ObjectInteractionDeclaration` など) に置く。条件と効果は名詞の宣言を持つので、名詞が動詞を持つと、互いを指す仕掛け (レバーが扉を現し、扉がレバーの覆いを外す) や自分を指す仕掛け (籠の中にいる人は籠に入れない) を、値の変わらない型で作れなくなる。名詞を全部作ってから動詞を作れば、どの組み合わせも作れる。シナリオの作者は物の欄の中に操作を書いてよく、読み込む側が名詞と動詞に分けて組み立てる。
 
 ```python
@@ -193,16 +195,6 @@ class OutcomeDeclaration:
     name: DisplayName                               # 「救出」
     announcement: TextWithUnassignedPeople # 「{person}は昇降機で外へ出た。」
 
-@final
-@dataclass(frozen=True)
-class DiscoverableDeclaration:
-    discoverable_id: DiscoverableId
-    spot_id: SpotId
-    found_text: TextWithUnassignedPeople   # 見つけた本人の体の刺激になる
-    condition: Condition
-    when_found: Effect
-    finding: Finding                         # ONCE_IN_WORLD: 誰かが見つけたら終わり / ONCE_PER_PERSON: 人ごとに 1 回
-
 
 class DeclaredNouns:
     """名詞の宣言を集め、名前から宣言を引く。"""
@@ -314,6 +306,23 @@ class InteractionDeclaration:
     reaches_unseen: bool                    # 暗がりの誰か (SomeoneInTheDark) に向けてできるか
     duration: Ticks | DefaultDuration       # 行っているあいだ。書かなければ WorldRules.action_durations
     allows_stealth: bool                    # こっそり行える (Stealthily) か
+    arguments: tuple[ArgumentDeclaration, ...]   # エージェントが渡す引数。効果と条件が読む引数の名前はここに無ければならない
+
+@final
+@dataclass(frozen=True)
+class ArgumentDeclaration:
+    name: ArgumentName
+    kind: TextArgument | ItemArgument       # TextArgument: 文 (書く内容、合言葉) / ItemArgument: 場面に見えている品物から 1 つ
+
+@final
+@dataclass(frozen=True)
+class DiscoverableDeclaration:
+    discoverable_id: DiscoverableId
+    spot_id: SpotId
+    found_text: TextWithUnassignedPeople   # 見つけた本人の体の刺激になる
+    condition: Condition
+    when_found: Effect
+    finding: Finding                         # ONCE_IN_WORLD: 誰かが見つけたら終わり / ONCE_PER_PERSON: 人ごとに 1 回
 
 ShownToActor = PeopleCountAt | WrittenTextOf   # 成功したとき本人だけに見せる、世界の今の値。success_text の後ろに付ける
 PeopleCountAt(spot: SpotDeclaration)
@@ -525,6 +534,13 @@ class StealthRule:                              # こっそり行っても、見
 
 @final
 @dataclass(frozen=True)
+class RefusalTexts:                         # 作者の条件に付かない、断られた理由の文。シナリオが世界全体で 1 つ書く
+    common_rules: Mapping[CommonRuleRefusalKind, TextWithUnassignedPeople]   # Busy、TooTired、NotTogether、OutOfReach など ([action.md](action.md))
+    world_state: Mapping[RefusalCode, TextWithUnassignedPeople]              # 集約が断ったとき (籠が満員、荷が空)。error_code ごと
+    hidden: TextWithUnassignedPeople                                         # 行う人が知りえない所属を見て断ったとき。理由を言わない文
+
+@final
+@dataclass(frozen=True)
 class Route:
     start: SpotId                               # 両方向に通れる通路は、passages だけではどちらの端から出るかが決まらない
     passages: tuple[PassageDeclaration, ...]    # 1 本以上。start から順にたどれる (片道は ends の前の端から)
@@ -553,6 +569,7 @@ class WorldDesign:
         person_interactions: Iterable[InteractionDeclaration],
         ending: EndingDeclaration,
         world_rules: WorldRules,
+        refusal_texts: RefusalTexts,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
@@ -618,5 +635,10 @@ infrastructure: JSON を読む
 - compose は、条件と効果を置いた場所ごとに使える主語 ([condition.md](condition.md)) と、`requirements()` を照らし合わせる
 - `initially_raised` でもなく、どの `RaiseFlagEffect` にも出てこない旗を条件が見ていたら `DesignFlaw`。立てるだけで誰も見ない旗は `DesignWarning`
 - 締める出来事 (`CloseGroupDecisionEffect`) が 1 つも無い集団の決定は `DesignWarning`。猶予 (`DeathRule.grace`) が 0 なのに介抱がある世界は `DesignFlaw`
-- 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、compose が決まった文で埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)
+- 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、読み込む側が既定の文の表 (データ) から埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)
+- 断りの文の表 (`RefusalTexts`) の既定は、コードではなくデータ (共通のシナリオの部品) として 1 つ用意し、シナリオはそれを取り込んで必要な行だけ書き換える。起きうる理由が表に無ければ `DesignFlaw`
+- 条件を置いた場所 (前提、出来事の条件など) の根に `failure_text` が無ければ `DesignFlaw`
+- 効果と条件が読む引数の名前が、操作の宣言の `arguments` に無ければ `DesignFlaw`
+- `WorldStage`・昼夜・天候を宣言していない世界で、それを見る条件を書いていれば `DesignFlaw`
+- 行う人に知りえない所属 ([condition.md](condition.md) の伏せた所属) を見る前提は `DesignWarning`
 - 宣言に無い通路の状態の名前、呼び名 (`display_name`) の無い値が文に出るときは、`DesignFlaw` で止める

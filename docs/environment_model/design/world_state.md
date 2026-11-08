@@ -176,7 +176,7 @@ class WorldFlags:                                 # 世界に 1 つ
 
 
 class PersonInventory:                            # 人ごと。持てる数の上限 (Capacity) を受けて作る
-    def receive(self, item: ItemInstanceId) -> None: ...         # 荷に入る
+    def receive(self, item: ItemInstanceId, spec: ItemSpecId) -> None: ...   # 荷に入る。品物の種類も覚える
     def give_up(self, item: ItemInstanceId) -> None: ...         # 手の物でも荷の物でも
     def hold(self, item: ItemInstanceId, hands_needed: HandsNeeded) -> None: ...
         # 荷から手に持つ。手は 2 本。足りなければ、今手に持っている物を先に持った順に荷にしまう
@@ -192,6 +192,11 @@ class PersonInventory:                            # 人ごと。持てる数の�
     def is_full(self) -> bool: ...                               # 手の物も数える
     def available_gold(self) -> Gold: ...
     def is_reserved(self, item: ItemInstanceId) -> bool: ...   # 取引に出した品は、ほかで使えない
+    def count_of(self, spec: ItemSpecId) -> Count: ...
+    def items_to_give_up(self, spec: ItemSpecId, count: Count) -> tuple[ItemInstanceId, ...]: ...
+        # 荷から先に、足りなければ手からも選ぶ。持っている数が足りなければドメイン例外 (TakeItemEffect が 1 つも取らずに断るため)
+    def random_packed_item(self, random: RandomSource) -> ItemInstanceId: ...
+        # 荷の物から 1 つ選ぶ。荷が空ならドメイン例外。手の物は選ばない (見えているので ItemByArgument で指す)
 
 
 class Item:                                       # 品物ごと。ItemInstanceId は空でない文字列
