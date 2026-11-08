@@ -9,6 +9,11 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     ItemNotCarriedException,
     NotEnoughItemsOfSpecException,
 )
+from ai_rpg_world.game_world.domain.exception.person_inventory_exception import (
+    ItemNotHeldException,
+    ItemNotPackedException,
+    PackIsEmptyException,
+)
 from ai_rpg_world.game_world.domain.objects_and_items import (
     GoldEarnedEvent,
     GoldPaidEvent,
@@ -20,6 +25,7 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     PersonInventory,
 )
 from ai_rpg_world.game_world.domain.value_object import Capacity, Count, Gold, HandsNeeded, ItemSpecId, PersonId
+from tests.game_world.support.world_in_memory import FractionsInOrder
 
 _ALICE = PersonId("alice")
 _LANTERN = ItemInstanceId("lantern#1")
@@ -375,3 +381,115 @@ class TestPersonInventoryItemsBySpec:
 
         assert inventory.items() == (_APPLE_1, _APPLE_2)
         assert inventory.get_events() == []
+
+
+class TestPersonInventoryRandomPackedItem:
+    """PersonInventory.random_packed_item が、引いた偶然で荷の物から 1 つを選び、手の物を選ばないことを保証する。"""
+
+    @pytest.mark.parametrize(
+        ("fraction", "expected"),
+        [(0.0, _LANTERN), (0.34, _KNIFE), (0.99, _ROPE)],
+    )
+    def test_chooses_packed_item_by_fraction_in_packing_order(self, fraction: float, expected: ItemInstanceId) -> None:
+        """荷にカンテラ・ナイフ・縄が入った順に並ぶとき、引いた値が [0, 1/3) ならカンテラ、[1/3, 2/3) ならナイフ、[2/3, 1) なら縄を選ぶ。"""
+        inventory = _inventory(_LANTERN, _KNIFE, _ROPE)
+
+        chosen = inventory.random_packed_item(FractionsInOrder((fraction,)))
+
+        assert chosen == expected
+
+    def test_never_chooses_held_item(self) -> None:
+        """カンテラを手に持ち、荷に縄だけがあるとき、引いた値が 0 でも縄を選ぶ。"""
+        inventory = _inventory(_LANTERN, _ROPE)
+        inventory.hold(_LANTERN, _ONE_HAND)
+
+        chosen = inventory.random_packed_item(FractionsInOrder((0.0,)))
+
+        assert chosen == _ROPE
+
+    def test_choosing_changes_nothing(self) -> None:
+        """選ぶだけでは手放さない。持ち物はそのままで、イベントも出ない。"""
+        inventory = _inventory(_LANTERN, _ROPE)
+
+        inventory.random_packed_item(FractionsInOrder((0.5,)))
+
+        assert inventory.items() == (_LANTERN, _ROPE)
+        assert inventory.get_events() == []
+
+    def test_refuses_when_pack_is_empty_even_if_hands_hold_something(self) -> None:
+        """荷が空なら、手にカンテラを持っていても PackIsEmptyException を投げ、偶然も引かない。"""
+        inventory = _inventory(_LANTERN)
+        inventory.hold(_LANTERN, _ONE_HAND)
+        random = FractionsInOrder((0.5,))
+
+        with pytest.raises(PackIsEmptyException):
+            inventory.random_packed_item(random)
+
+        assert random.next_fraction() == 0.5
+
+
+class TestPersonInventoryGiveUpFromHandsOrPack:
+    """PersonInventory.give_up_held / give_up_packed が、指した場所にある物だけを手放させることを保証する。"""
+
+    def test_give_up_held_releases_item_in_hands(self) -> None:
+        """手に持つカンテラを give_up_held すると持ち物から消え、was_held が真の ItemGivenUpEvent を出す。"""
+        inventory = _inventory(_LANTERN, _ROPE)
+        inventory.hold(_LANTERN, _ONE_HAND)
+        inventory.clear_events()
+
+        inventory.give_up_held(_LANTERN)
+
+        assert inventory.items() == (_ROPE,)
+        events = inventory.get_events()
+        assert len(events) == 1
+        assert isinstance(events[0], ItemGivenUpEvent)
+        assert events[0].item == _LANTERN
+        assert events[0].was_held
+
+    def test_give_up_held_refuses_packed_item_and_changes_nothing(self) -> None:
+        """荷にある縄を give_up_held すると ItemNotHeldException を投げ、持ち物もイベントも変わらない。"""
+        inventory = _inventory(_ROPE)
+
+        with pytest.raises(ItemNotHeldException):
+            inventory.give_up_held(_ROPE)
+
+        assert inventory.items() == (_ROPE,)
+        assert inventory.get_events() == []
+
+    def test_give_up_held_refuses_item_not_carried(self) -> None:
+        """持っていない縄を give_up_held すると ItemNotCarriedException を投げる。"""
+        inventory = _inventory()
+
+        with pytest.raises(ItemNotCarriedException):
+            inventory.give_up_held(_ROPE)
+
+    def test_give_up_packed_releases_item_in_pack(self) -> None:
+        """荷にある縄を give_up_packed すると持ち物から消え、was_held が偽の ItemGivenUpEvent を出す。"""
+        inventory = _inventory(_ROPE)
+
+        inventory.give_up_packed(_ROPE)
+
+        assert inventory.items() == ()
+        events = inventory.get_events()
+        assert len(events) == 1
+        assert isinstance(events[0], ItemGivenUpEvent)
+        assert not events[0].was_held
+
+    def test_give_up_packed_refuses_held_item_and_changes_nothing(self) -> None:
+        """手に持つカンテラを give_up_packed すると ItemNotPackedException を投げ、持ち物もイベントも変わらない。"""
+        inventory = _inventory(_LANTERN)
+        inventory.hold(_LANTERN, _ONE_HAND)
+        inventory.clear_events()
+
+        with pytest.raises(ItemNotPackedException):
+            inventory.give_up_packed(_LANTERN)
+
+        assert inventory.items() == (_LANTERN,)
+        assert inventory.get_events() == []
+
+    def test_give_up_packed_refuses_item_not_carried(self) -> None:
+        """持っていない縄を give_up_packed すると ItemNotCarriedException を投げる。"""
+        inventory = _inventory()
+
+        with pytest.raises(ItemNotCarriedException):
+            inventory.give_up_packed(_ROPE)

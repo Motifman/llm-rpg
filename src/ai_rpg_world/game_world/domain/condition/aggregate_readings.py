@@ -20,6 +20,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     TimeOfDay,
     WeatherState,
 )
+from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import LifeState, NotInAnyGroup, Outcome, Undecided
 from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueRule
@@ -136,6 +137,8 @@ class PersonInventoryReading(Protocol):
     def count_of(self, spec: ItemSpecId) -> Count: ...
 
     def items_to_give_up(self, spec: ItemSpecId, count: Count) -> tuple[ItemInstanceId, ...]: ...
+
+    def random_packed_item(self, random: RandomSource) -> ItemInstanceId: ...
 
 
 class ItemReading(Protocol):
