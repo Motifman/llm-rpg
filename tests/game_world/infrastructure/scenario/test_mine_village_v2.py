@@ -32,15 +32,15 @@ def _outcome_by_cage(step: object) -> tuple[str, bool]:
     assert isinstance(step.effect, SetOutcomeEffect)
     where = step.people.where
     assert isinstance(where, AllOfCondition)
-    in_cage = [child for child in where.children if isinstance(child, IsInSectionCondition)]
-    out_of_cage = [
-        child
-        for child in where.children
-        if isinstance(child, NotCondition) and isinstance(child.child, IsInSectionCondition)
-    ]
-    (cage_condition,) = in_cage or [condition.child for condition in out_of_cage]  # type: ignore[attr-defined]
+    cage_conditions: list[tuple[IsInSectionCondition, bool]] = []
+    for child in where.children:
+        if isinstance(child, IsInSectionCondition):
+            cage_conditions.append((child, True))
+        elif isinstance(child, NotCondition) and isinstance(child.child, IsInSectionCondition):
+            cage_conditions.append((child.child, False))
+    ((cage_condition, inside),) = cage_conditions
     assert cage_condition.section.section_id.value == "cage"
-    return step.effect.outcome.outcome_id.value, bool(in_cage)
+    return step.effect.outcome.outcome_id.value, inside
 
 
 class TestMineVillageLoads:
