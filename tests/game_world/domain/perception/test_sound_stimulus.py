@@ -169,6 +169,14 @@ class TestSoundStimulusWhisper:
         assert outcome.quality == HearsFaintly()
         assert outcome.text == _MUFFLED.unidentified()
 
+    def test_a_departed_listener_at_the_spot_hears_it_faintly_too(self) -> None:
+        """宛先でない去った人も、同じ場所にいれば muffled の文に Unidentified を当てて HearsFaintly で聞く。宛先だけに伝える行為を守る。"""
+        outcome = self._whisper().perceived_by(departed(CAROL), self._reach(), _VALUES, VIEW)
+
+        assert isinstance(outcome, Perceived)
+        assert outcome.quality == HearsFaintly()
+        assert outcome.text == _MUFFLED.unidentified()
+
     def test_someone_at_another_spot_does_not_hear_it(self) -> None:
         """別の場所の人には、音が届いていても NotPerceived を返す。"""
         outcome = self._whisper().perceived_by(awake(CAROL, HALL, attentive=True), self._reach(), _VALUES, VIEW)

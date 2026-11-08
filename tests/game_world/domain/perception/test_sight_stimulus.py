@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.game_world.domain.action.manner import Openly, Stealthily
+from ai_rpg_world.game_world.domain.exception.perception_exception import TargetNotInvolvedException
 from ai_rpg_world.game_world.domain.lighting import Lighting, SeesClearly, SeesShapes
 from ai_rpg_world.game_world.domain.people import Unidentified
 from ai_rpg_world.game_world.domain.perception import (
@@ -240,6 +241,26 @@ class TestSightStimulusTarget:
         )
 
         assert outcome == NotPerceived()
+
+
+class TestSightStimulusConstruction:
+    """SightStimulus を作るときに、相手が関わった人に入っているかを確かめることを保証する。"""
+
+    def test_a_target_missing_from_involved_is_refused(self) -> None:
+        """SightTarget.person が involved に無ければ TargetNotInvolvedException を投げる。倒れた相手が後から気づけなくなるのを防ぐ。"""
+        with pytest.raises(TargetNotInvolvedException):
+            SightStimulus(
+                where=SQUARE,
+                witness=_witness(),
+                target=SightTarget(person=BOB, texts=_TARGET_TEXTS),
+                seen_in_dark=False,
+                manner=Openly(),
+                actor_departed=False,
+                involved=(ALICE,),
+                salience=Notable(),
+                always_delivered=False,
+                at=WorldTick(5),
+            )
 
 
 class TestSightStimulusDepartedActor:

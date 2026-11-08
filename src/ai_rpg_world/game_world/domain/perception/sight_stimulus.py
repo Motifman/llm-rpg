@@ -6,6 +6,7 @@ from typing import final
 
 from ai_rpg_world.game_world.domain.action.manner import Openly, Stealthily
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
+from ai_rpg_world.game_world.domain.exception.perception_exception import TargetNotInvolvedException
 from ai_rpg_world.game_world.domain.lighting.lighting import Lighting
 from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SeesNothing, SeesShapes, SightQuality
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
@@ -52,6 +53,12 @@ class SightStimulus:
     salience: Salience
     always_delivered: bool
     at: WorldTick
+
+    def __post_init__(self) -> None:
+        if isinstance(self.target, SightTarget) and self.target.person not in self.involved:
+            raise TargetNotInvolvedException(
+                f"target {self.target.person.value} is not among involved {[p.value for p in self.involved]}"
+            )
 
     def perceived_by(
         self,
