@@ -7,7 +7,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     NoChange,
     WeatherDeclaration,
     WeatherState,
-    WeatherTransitionRow,
+    NextWeatherOdds,
     WeatherTransitions,
     WeatherType,
     WeightedWeather,
@@ -20,12 +20,12 @@ from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import 
 from ai_rpg_world.game_world.domain.value_object import DisplayName, Probability, Ticks
 
 
-def _transitions(*rows: WeatherTransitionRow) -> WeatherTransitions:
-    return WeatherTransitions(rows=rows)
+def _transitions(*odds: NextWeatherOdds) -> WeatherTransitions:
+    return WeatherTransitions(odds=odds)
 
 
-def _row(current: WeatherType, *weighted: tuple[WeatherType, int]) -> WeatherTransitionRow:
-    return WeatherTransitionRow(
+def _odds(current: WeatherType, *weighted: tuple[WeatherType, int]) -> NextWeatherOdds:
+    return NextWeatherOdds(
         current=current, candidates=tuple(WeightedWeather(weather=w, weight=n) for w, n in weighted)
     )
 
@@ -51,55 +51,55 @@ class TestWeightedWeather:
 class TestWeatherTransitionsValidation:
     """WeatherTransitions が、次の天候を 1 つに決められない表を作るときに断ることを保証する。"""
 
-    def test_rejects_row_without_candidates(self) -> None:
-        """次の天候が 1 つも無い行は NoNextWeatherDeclaredException で断る。"""
+    def test_rejects_odds_without_candidates(self) -> None:
+        """次の天候が 1 つも無い見込みは NoNextWeatherDeclaredException で断る。"""
         with pytest.raises(NoNextWeatherDeclaredException):
-            _row(WeatherType.CLEAR)
+            _odds(WeatherType.CLEAR)
 
-    def test_rejects_same_candidate_twice_in_a_row(self) -> None:
-        """1 つの行に同じ次の天候が 2 回出ると WeatherTransitionDuplicatedException で断る。"""
+    def test_rejects_same_candidate_twice_in_a_odds(self) -> None:
+        """1 つの見込みに同じ次の天候が 2 回出ると WeatherTransitionDuplicatedException で断る。"""
         with pytest.raises(WeatherTransitionDuplicatedException):
-            _row(WeatherType.CLEAR, (WeatherType.RAIN, 1), (WeatherType.RAIN, 2))
+            _odds(WeatherType.CLEAR, (WeatherType.RAIN, 1), (WeatherType.RAIN, 2))
 
-    def test_rejects_two_rows_for_same_weather(self) -> None:
-        """同じ今の天候の行が 2 つあると WeatherTransitionDuplicatedException で断る。"""
+    def test_rejects_two_odds_for_same_weather(self) -> None:
+        """同じ今の天候の見込みが 2 つあると WeatherTransitionDuplicatedException で断る。"""
         with pytest.raises(WeatherTransitionDuplicatedException):
             _transitions(
-                _row(WeatherType.CLEAR, (WeatherType.RAIN, 1)),
-                _row(WeatherType.CLEAR, (WeatherType.FOG, 1)),
+                _odds(WeatherType.CLEAR, (WeatherType.RAIN, 1)),
+                _odds(WeatherType.CLEAR, (WeatherType.FOG, 1)),
             )
 
 
 class TestWeatherTransitionsNextAfter:
-    """WeatherTransitions.next_after が、今の天候の行の重みに沿って roll から次の天候を選ぶことを保証する。"""
+    """WeatherTransitions.next_after が、今の天候の見込みの重みに沿って roll から次の天候を選ぶことを保証する。"""
 
     def test_low_roll_picks_first_candidate(self) -> None:
-        """晴れ 3・雨 1 の行で roll 0.0 は晴れを選ぶ。"""
-        table = _transitions(_row(WeatherType.CLEAR, (WeatherType.CLEAR, 3), (WeatherType.RAIN, 1)))
+        """晴れ 3・雨 1 の見込みで roll 0.0 は晴れを選ぶ。"""
+        table = _transitions(_odds(WeatherType.CLEAR, (WeatherType.CLEAR, 3), (WeatherType.RAIN, 1)))
 
         assert table.next_after(WeatherType.CLEAR, Probability(0.0)) == WeatherType.CLEAR
 
     def test_roll_past_cumulative_weight_picks_next_candidate(self) -> None:
-        """晴れ 3・雨 1 の行で、晴れの割合 0.75 ちょうどの roll は雨を選ぶ。"""
-        table = _transitions(_row(WeatherType.CLEAR, (WeatherType.CLEAR, 3), (WeatherType.RAIN, 1)))
+        """晴れ 3・雨 1 の見込みで、晴れの割合 0.75 ちょうどの roll は雨を選ぶ。"""
+        table = _transitions(_odds(WeatherType.CLEAR, (WeatherType.CLEAR, 3), (WeatherType.RAIN, 1)))
 
         assert table.next_after(WeatherType.CLEAR, Probability(0.75)) == WeatherType.RAIN
 
     def test_roll_just_below_cumulative_weight_stays_in_candidate(self) -> None:
-        """晴れ 3・雨 1 の行で roll 0.74 は晴れを選ぶ。"""
-        table = _transitions(_row(WeatherType.CLEAR, (WeatherType.CLEAR, 3), (WeatherType.RAIN, 1)))
+        """晴れ 3・雨 1 の見込みで roll 0.74 は晴れを選ぶ。"""
+        table = _transitions(_odds(WeatherType.CLEAR, (WeatherType.CLEAR, 3), (WeatherType.RAIN, 1)))
 
         assert table.next_after(WeatherType.CLEAR, Probability(0.74)) == WeatherType.CLEAR
 
     def test_roll_of_one_picks_last_candidate(self) -> None:
-        """roll 1.0 は行の最後の天候を選ぶ。"""
-        table = _transitions(_row(WeatherType.CLEAR, (WeatherType.CLEAR, 3), (WeatherType.RAIN, 1)))
+        """roll 1.0 は見込みの最後の天候を選ぶ。"""
+        table = _transitions(_odds(WeatherType.CLEAR, (WeatherType.CLEAR, 3), (WeatherType.RAIN, 1)))
 
         assert table.next_after(WeatherType.CLEAR, Probability(1.0)) == WeatherType.RAIN
 
-    def test_weather_without_row_stays_unchanged(self) -> None:
-        """表に行の無い天候は、roll によらず変わらない。"""
-        table = _transitions(_row(WeatherType.CLEAR, (WeatherType.RAIN, 1)))
+    def test_weather_without_odds_stays_unchanged(self) -> None:
+        """表に見込みの無い天候は、roll によらず変わらない。"""
+        table = _transitions(_odds(WeatherType.CLEAR, (WeatherType.RAIN, 1)))
 
         assert table.next_after(WeatherType.SNOW, Probability(0.5)) == WeatherType.SNOW
 
@@ -107,11 +107,11 @@ class TestWeatherTransitionsNextAfter:
 class TestDefaultWeatherTransitions:
     """WeatherTransitions.default が、作者が表を書かなかったときの既定の表を返すことを保証する。"""
 
-    def test_every_weather_type_has_a_row(self) -> None:
-        """既定の表は、8 種の天候すべてに行を持つ。"""
+    def test_every_weather_type_has_a_odds(self) -> None:
+        """既定の表は、8 種の天候すべてに見込みを持つ。"""
         table = WeatherTransitions.default()
 
-        assert {row.current for row in table.rows} == set(WeatherType)
+        assert {odds.current for odds in table.odds} == set(WeatherType)
 
     def test_clear_weather_never_turns_into_storm_directly(self) -> None:
         """既定の表では、晴れから次に選ばれうるのは晴れ・曇り・霧だけで、嵐にはならない。"""
@@ -142,7 +142,7 @@ class TestWeatherDeclarationNextAfter:
 
     def test_changes_every_follows_transitions(self) -> None:
         """ChangesEvery の天候は、その表で次の天候を選ぶ。"""
-        table = _transitions(_row(WeatherType.CLEAR, (WeatherType.RAIN, 1)))
+        table = _transitions(_odds(WeatherType.CLEAR, (WeatherType.RAIN, 1)))
         declaration = _declaration(ChangesEvery(ticks=Ticks(5), transitions=table))
 
         assert declaration.next_after(WeatherState(WeatherType.CLEAR), Probability(0.3)) == WeatherState(

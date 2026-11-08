@@ -24,7 +24,7 @@ class WeightedWeather:
 
 @final
 @dataclass(frozen=True)
-class WeatherTransitionRow:
+class NextWeatherOdds:
     current: WeatherType
     candidates: tuple[WeightedWeather, ...]
 
@@ -48,18 +48,18 @@ class WeatherTransitionRow:
 @final
 @dataclass(frozen=True)
 class WeatherTransitions:
-    rows: tuple[WeatherTransitionRow, ...]
+    odds: tuple[NextWeatherOdds, ...]
 
     def __post_init__(self) -> None:
-        currents = [row.current for row in self.rows]
+        currents = [odds.current for odds in self.odds]
         if len(set(currents)) != len(currents):
-            raise WeatherTransitionDuplicatedException(f"a weather has two rows: {currents}")
+            raise WeatherTransitionDuplicatedException(f"a weather has two odds: {currents}")
 
     @classmethod
     def default(cls) -> WeatherTransitions:
         return cls(
-            rows=tuple(
-                WeatherTransitionRow(
+            odds=tuple(
+                NextWeatherOdds(
                     current=current,
                     candidates=tuple(WeightedWeather(weather=w, weight=n) for w, n in candidates),
                 )
@@ -68,9 +68,9 @@ class WeatherTransitions:
         )
 
     def next_after(self, current: WeatherType, roll: Probability) -> WeatherType:
-        for row in self.rows:
-            if row.current == current:
-                return row.pick(roll)
+        for odds in self.odds:
+            if odds.current == current:
+                return odds.pick(roll)
         return current
 
 

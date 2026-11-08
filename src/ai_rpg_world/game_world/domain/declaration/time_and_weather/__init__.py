@@ -12,7 +12,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather.time_of_day imp
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_declaration import WeatherDeclaration
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_state import NoWeather, WeatherState
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_transitions import (
-    WeatherTransitionRow,
+    NextWeatherOdds,
     WeatherTransitions,
     WeightedWeather,
 )
@@ -30,7 +30,7 @@ __all__ = [
     "TimeOfDay",
     "WeatherDeclaration",
     "WeatherState",
-    "WeatherTransitionRow",
+    "NextWeatherOdds",
     "WeatherTransitions",
     "WeatherType",
     "WeightedWeather",

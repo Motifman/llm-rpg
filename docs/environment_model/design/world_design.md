@@ -441,7 +441,7 @@ class DayPhaseDeclaration:
 class ChangesEvery:
     ticks: Ticks
     transitions: WeatherTransitions        # 書かなければ既定の表
-    # WeatherTransitions: 今の天候ごとに、次の天候と 1 以上の重み (WeightedWeather) の行。roll で重みの累積から選ぶ。行の無い天候は変わらない
+    # WeatherTransitions(odds: tuple[NextWeatherOdds, ...]): 今の天候ごとに、次の天候と 1 以上の重み (WeightedWeather) の見込み。roll で重みの累積から選ぶ。見込みの無い天候は変わらない
 
 @final
 @dataclass(frozen=True)
