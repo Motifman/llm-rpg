@@ -546,6 +546,7 @@ class BuiltInActionPerceptions:             # どの世界にもある行為 (�
     by_kind: Mapping[ActionKind, PerceptionDeclaration]
     # 文には人のプレースホルダーのほかに、行為が扱う物や場所の呼び名 ({item}、{destination} など) を書ける。
     # 刺激に変える役が宣言の呼び名 (DisplayName) で先に埋め、人のプレースホルダーだけを残した TextAboutPeople にする
+    # 操作 (INTERACT_WITH_*)・区画の出入り (ENTER_SECTION / LEAVE_SECTION) は宣言の perceived_as で知覚されるので、モンスターへの攻撃と同じく書けば作れない (D2026)
 
 @final
 @dataclass(frozen=True)
