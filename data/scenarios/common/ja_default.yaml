@@ -57,7 +57,7 @@ refusal_texts:
   common_rules:
     actor_cannot_act: 今は体が動かない。
     busy: 手が離せない。今していることが済むまで待つしかない。
-    not_together: 相手は同じ場所にいない。
+    not_together: ここには見当たらない。
     out_of_reach: ここからでは手が届かない。
     too_tired: 疲れ切っていて、体が言うことを聞かない。
     not_allowed_in_this_stage: 今はそれをするときではない。
@@ -74,7 +74,7 @@ refusal_texts:
     GAME_WORLD.NOT_ENOUGH_STOCK: もう残っていない。
     GAME_WORLD.COUNT_BELOW_ZERO: もう数が足りない。
     GAME_WORLD.INSUFFICIENT_GOLD: 金が足りない。
-    GAME_WORLD.PERSON_NOT_ALIVE: 相手はもう息をしていない。
+    GAME_WORLD.PERSON_NOT_ALIVE: その人は倒れているか、もう息をしていない。
     GAME_WORLD.PERSON_NOT_DOWN: 相手は倒れていない。
     GAME_WORLD.OUTCOME_ALREADY_DECIDED: その人の行く末は、もう決まっている。
     GAME_WORLD.ALREADY_IN_GROUP: もうその集まりに入っている。
@@ -84,6 +84,7 @@ refusal_texts:
     GAME_WORLD.WHEREABOUTS.OCCUPANT_ALREADY_IN_SECTION: もう中にいる。
     GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_IN_SECTION: 中にはいない。
     GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_AT_SECTION_SPOT: そこはこの場所には無い。
+    GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_PLACED: その人はもうここにはいない。
     GAME_WORLD.WHEREABOUTS.PASSAGE_ALREADY_REMOVED: その道はもう無い。
     GAME_WORLD.WORLD_ALREADY_ENDED: もう終わったことだ。
     GAME_WORLD.GROUP_DECISION_NOT_OPEN: 今は決めるときではない。

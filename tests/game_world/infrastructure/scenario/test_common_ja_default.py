@@ -135,7 +135,7 @@ class TestCommonJaDefaultReads:
 
 
 class TestRefusalTexts:
-    """ja_default.yaml の断りの文の表が、起きうる理由を漏らさず持つことを保証する。"""
+    """ja_default.yaml の断りの文の表が、共通の決まりをすべて持ち、集約の断りの鍵が実在する error_code であることを保証する。"""
 
     def test_common_rule_texts_cover_every_kind(self, tmp_path: Path) -> None:
         """共通の決まりの断りの文は、CommonRuleRefusalKind のすべての種類を持つ。"""
