@@ -140,6 +140,9 @@ class SetItemValueEffect:
     key: ItemStateKeyDeclaration
     value: StateValue
 
+    def __post_init__(self) -> None:
+        self.key.require_fits(self.value)
+
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         world.item(self.item.item_in(trigger)).set(self.key, self.value)
 

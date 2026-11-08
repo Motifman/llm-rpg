@@ -74,6 +74,7 @@ class ForSomeoneEffect:                    # 選ばれた人から facts.random(
 ```python
 RaiseFlagEffect(flag: FlagDeclaration)
 LowerFlagEffect(flag: FlagDeclaration)
+# 物と品物の状態の鍵を扱う効果は、鍵の種類に合わなければ作るときに断る (key.require_fits / require_count / require_stock / require_written_text)。読み込みでは DesignFlaw になる
 SetObjectValueEffect(key: ObjectStateKeyDeclaration, value: StateValue)
 AddToObjectCountEffect(key: ObjectStateKeyDeclaration, amount: Count)
 SubtractFromObjectCountEffect(key: ObjectStateKeyDeclaration, amount: Count)   # ObjectState.subtract_from_count。0 を下回るなら集約が断る

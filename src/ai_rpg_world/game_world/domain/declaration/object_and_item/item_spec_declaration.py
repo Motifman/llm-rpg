@@ -43,6 +43,12 @@ class ItemStateKeyDeclaration:
                 f"initial {self.initial!r} of {self.item_spec_id.value}.{self.key.value} does not fit {self.kind!r}"
             )
 
+    def require_fits(self, value: StateValue) -> None:
+        if not self.kind.accepts(value):
+            raise StateValueMismatchesKindException(
+                f"{value!r} does not fit {self.kind!r} of {self.item_spec_id.value}.{self.key.value}"
+            )
+
 
 @final
 @dataclass(frozen=True)

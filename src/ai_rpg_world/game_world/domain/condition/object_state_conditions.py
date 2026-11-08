@@ -46,6 +46,9 @@ class ObjectValueIsCondition(LeafCondition):
     value: StateValue
     failure_text: TextWithUnassignedPeople | NoText
 
+    def __post_init__(self) -> None:
+        self.key.require_fits(self.value)
+
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool:
         return _value_of(self.key, facts) == self.value
 
@@ -59,6 +62,9 @@ class ObjectCountAtLeastCondition(LeafCondition):
     key: ObjectStateKeyDeclaration
     count: Count
     failure_text: TextWithUnassignedPeople | NoText
+
+    def __post_init__(self) -> None:
+        self.key.require_count()
 
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool:
         return _count_of(self.key, facts) >= self.count
@@ -74,6 +80,10 @@ class ObjectCountGreaterThanCondition(LeafCondition):
     other: ObjectStateKeyDeclaration
     failure_text: TextWithUnassignedPeople | NoText
 
+    def __post_init__(self) -> None:
+        self.key.require_count()
+        self.other.require_count()
+
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool:
         return _count_of(self.key, facts) > _count_of(self.other, facts)
 
@@ -87,6 +97,9 @@ class ObjectStockAtLeastCondition(LeafCondition):
     key: ObjectStateKeyDeclaration
     amount: Count
     failure_text: TextWithUnassignedPeople | NoText
+
+    def __post_init__(self) -> None:
+        self.key.require_stock()
 
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool:
         return _stock_of(self.key, facts) >= self.amount

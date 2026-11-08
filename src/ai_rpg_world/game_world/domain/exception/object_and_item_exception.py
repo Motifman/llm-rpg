@@ -25,6 +25,10 @@ class StateValueMismatchesKindException(GameWorldDomainException):
     error_code = "GAME_WORLD.STATE_VALUE_MISMATCHES_KIND"
 
 
+class StateKeyOfAnotherKindException(GameWorldDomainException):
+    error_code = "GAME_WORLD.STATE_KEY_OF_ANOTHER_KIND"
+
+
 class StateKeyDuplicatedException(GameWorldDomainException):
     error_code = "GAME_WORLD.STATE_KEY_DUPLICATED"
 

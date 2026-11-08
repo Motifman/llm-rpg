@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from ai_rpg_world.game_world.domain.condition.condition import NoText
@@ -7,23 +9,38 @@ from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition,
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
 from ai_rpg_world.game_world.domain.condition.person_conditions import HasItemCondition, IsInSectionCondition
 from ai_rpg_world.game_world.domain.condition.subject import Actor, EachPerson, NamedPerson
+from ai_rpg_world.game_world.domain.declaration.object_and_item import (
+    CountStateKind,
+    CountValue,
+    FlagStateKind,
+    FlagValue,
+    ObjectStateKeyDeclaration,
+)
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
 from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.value_object import Count, DescriptionText, FlagId
+from ai_rpg_world.game_world.domain.value_object import Count, DescriptionText, FlagId, ObjectId, StateKeyId
 from ai_rpg_world.game_world.infrastructure.scenario.condition_reader import ConditionReader
 from ai_rpg_world.game_world.infrastructure.scenario.declared_names import DeclaredNames
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_layout import YamlPath
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_origins import ScenarioOrigins
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_document import read_yaml_document
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import Unreadable, YamlNode
-from tests.game_world.support.world_design_for_tests import character, item_spec, nouns, section, spot
+from tests.game_world.support.world_design_for_tests import character, item_spec, nouns, obj, section, spot
 
 GENERATOR = FlagDeclaration(FlagId("generator_running"), DescriptionText("発電機が動いている"), initially_raised=False)
 DEPARTED = FlagDeclaration(FlagId("lift_departed"), DescriptionText("籠が上がった"), initially_raised=False)
+LIFT_PANEL = replace(
+    obj("lift_panel", "lift_landing"),
+    state_keys=(
+        ObjectStateKeyDeclaration(ObjectId("lift_panel"), StateKeyId("powered"), FlagStateKind(), FlagValue(False)),
+        ObjectStateKeyDeclaration(ObjectId("lift_panel"), StateKeyId("turns"), CountStateKind(), CountValue(Count(0))),
+    ),
+)
 NOUNS = nouns(
     flags=(GENERATOR, DEPARTED),
     spots=(spot("lift_landing"),),
+    objects=(LIFT_PANEL,),
     item_specs=(item_spec("lift_key"),),
     sections=(section("cage", "lift_landing"),),
     characters=(character("haru", "lift_landing"),),
@@ -108,3 +125,29 @@ class TestConditionNode:
             _read("has_item: { who: actor, item_spec: lift_key }")
 
         assert raised.value.flaw.location.field == "interactions.start_lift.precondition.has_item.count"
+
+
+class TestConditionsOnStateKeysOfAnotherKind:
+    """物の状態の鍵を数や在庫として見る条件が、種類に合わない鍵を指すと、その条件の場所で Unreadable になることを保証する。"""
+
+    @pytest.mark.parametrize(
+        ("text", "kind"),
+        [
+            ("object_count_at_least: { key: lift_panel.powered, count: 1 }", "object_count_at_least"),
+            (
+                "object_count_greater_than: { key: lift_panel.powered, other: lift_panel.turns }",
+                "object_count_greater_than",
+            ),
+            (
+                "object_count_greater_than: { key: lift_panel.turns, other: lift_panel.powered }",
+                "object_count_greater_than",
+            ),
+            ("object_stock_at_least: { key: lift_panel.powered, amount: 1 }", "object_stock_at_least"),
+        ],
+    )
+    def test_flag_key_read_as_count_or_stock_is_unreadable_at_the_condition(self, text: str, kind: str) -> None:
+        """旗の鍵 (操作盤の通電) を数や在庫として見る条件は、素のドメイン例外ではなく、その条件の場所を付けた Unreadable になる。"""
+        with pytest.raises(Unreadable) as raised:
+            _read(text)
+
+        assert raised.value.flaw.location.field == f"interactions.start_lift.precondition.{kind}"

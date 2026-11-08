@@ -117,3 +117,25 @@ class TestStateKindHoldsWrittenText:
     def test_other_kinds_do_not_hold_written_text(self, kind: StateKind) -> None:
         """旗・数・選択・在庫の種類は holds_written_text に偽を答える。"""
         assert not kind.holds_written_text()
+
+
+class TestStateKindHoldsCountOrStock:
+    """状態の種類が、数を持つ種類か・在庫を持つ種類かを自分で答えることを保証する。"""
+
+    def test_count_kind_holds_count_and_not_stock(self) -> None:
+        """CountStateKind は holds_count に真、holds_stock に偽を答える。"""
+        assert (CountStateKind().holds_count(), CountStateKind().holds_stock()) == (True, False)
+
+    def test_stock_kind_holds_stock_and_not_count(self) -> None:
+        """StockStateKind は holds_stock に真、holds_count に偽を答える。"""
+        stock = StockStateKind(Count(1), NoRefill())
+
+        assert (stock.holds_count(), stock.holds_stock()) == (False, True)
+
+    @pytest.mark.parametrize(
+        "kind",
+        [FlagStateKind(), ChoiceStateKind((ChoiceName("up"),)), WrittenTextStateKind()],
+    )
+    def test_other_kinds_hold_neither_count_nor_stock(self, kind: StateKind) -> None:
+        """旗・選択・書いた文の種類は holds_count にも holds_stock にも偽を答える。"""
+        assert (kind.holds_count(), kind.holds_stock()) == (False, False)

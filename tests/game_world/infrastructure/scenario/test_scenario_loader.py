@@ -250,6 +250,38 @@ class TestFlawsWhileLoading:
 
         assert _mine("spot", "shaft_head", "descripton") in [flaw.location for flaw in _flaws(tmp_path, text)]
 
+    def test_adding_to_a_flag_key_is_a_flaw_at_that_effect(self, tmp_path: Path) -> None:
+        """旗の状態の鍵 (操作盤の通電) に数を足す効果を書くと、遊ぶ前の読み込みで、その効果の場所を付けた DesignFlaw になる。"""
+        text = _LIFT_LANDING.replace(
+            "        description: 籠の奥の壁にある操作盤。\n",
+            "        description: 籠の奥の壁にある操作盤。\n"
+            "        state_keys: { powered: { kind: flag, initial: false } }\n",
+        ).replace(
+            "              raise_flag: lift_departed\n",
+            "              sequence:\n"
+            "                - raise_flag: lift_departed\n"
+            "                - add_to_object_count: { key: lift_panel.powered, amount: 1 }\n",
+        )
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
+            _mine("object", "lift_panel", "interactions.start_lift.effect.sequence[1].add_to_object_count")
+        ]
+
+    def test_counting_a_flag_key_in_a_condition_is_a_flaw_at_that_condition(self, tmp_path: Path) -> None:
+        """旗の状態の鍵 (操作盤の通電) を数として比べる条件を書くと、読み込みで、その条件の場所を付けた DesignFlaw になる。"""
+        text = _LIFT_LANDING.replace(
+            "        description: 籠の奥の壁にある操作盤。\n",
+            "        description: 籠の奥の壁にある操作盤。\n"
+            "        state_keys: { powered: { kind: flag, initial: false } }\n",
+        ).replace(
+            "    condition: { flag_is_raised: lift_departed }\n",
+            "    condition: { object_count_at_least: { key: lift_panel.powered, count: 1 } }\n",
+        )
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
+            _mine("happening", "lift_leaves", "condition.object_count_at_least")
+        ]
+
 
 class TestBrokenShapesStayDesignFlaws:
     """形の崩れた YAML でも、素の例外ではなく DesignFlaw にまとまることを保証する。"""

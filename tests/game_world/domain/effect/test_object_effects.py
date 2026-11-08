@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson
@@ -44,6 +46,10 @@ from ai_rpg_world.game_world.domain.exception.effect_exception import (
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     CountBelowZeroException,
     InsufficientGoldException,
+)
+from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
+    StateKeyOfAnotherKindException,
+    StateValueMismatchesKindException,
 )
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     NotEnoughItemsOfSpecException,
@@ -307,3 +313,34 @@ class TestDepositToObjectEffects:
 
         assert DepositItemToObjectEffect(Actor(), _APPLE, _OFFERINGS).requirements() == expected
         assert DepositGoldToObjectEffect(Actor(), Gold(1), _OFFERINGS).requirements() == expected
+
+
+class TestEffectsRefuseKeysOfAnotherKind:
+    """物の状態の鍵を読む効果が、鍵の種類に合わない鍵では作れないことを保証する。"""
+
+    @pytest.mark.parametrize(
+        "build",
+        [
+            pytest.param(lambda: AddToObjectCountEffect(key=_LIT, amount=Count(1)), id="add_to_flag"),
+            pytest.param(
+                lambda: SubtractFromObjectCountEffect(key=_HOLY_WATER, amount=Count(1)), id="subtract_from_stock"
+            ),
+            pytest.param(lambda: TakeFromObjectStockEffect(key=_OFFERINGS, amount=Count(1)), id="take_from_count"),
+            pytest.param(lambda: WriteTextEffect(key=_LIT, body_argument=_MESSAGE), id="write_on_flag"),
+            pytest.param(
+                lambda: DepositItemToObjectEffect(who=Actor(), item_spec=_APPLE, key=_PLAQUE), id="deposit_item_on_text"
+            ),
+            pytest.param(
+                lambda: DepositGoldToObjectEffect(who=Actor(), amount=Gold(1), key=_LIT), id="deposit_gold_on_flag"
+            ),
+        ],
+    )
+    def test_key_of_another_kind_is_refused(self, build: Callable[[], object]) -> None:
+        """旗の鍵に数を足す、数の鍵から在庫を取る、旗の鍵に文を書くなど、種類に合わない鍵を渡すと StateKeyOfAnotherKindException を投げる。"""
+        with pytest.raises(StateKeyOfAnotherKindException):
+            build()
+
+    def test_set_object_value_that_does_not_fit_the_key_is_refused(self) -> None:
+        """旗の鍵に数の値を置く SetObjectValueEffect は StateValueMismatchesKindException を投げる。"""
+        with pytest.raises(StateValueMismatchesKindException):
+            SetObjectValueEffect(key=_LIT, value=CountValue(Count(1)))
