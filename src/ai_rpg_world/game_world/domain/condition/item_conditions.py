@@ -38,6 +38,9 @@ class ItemValueIsCondition(LeafCondition):
     value: StateValue
     failure_text: TextWithUnassignedPeople | NoText
 
+    def __post_init__(self) -> None:
+        self.key.require_fits(self.value)
+
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool:
         return facts.item(self.item.item_in(trigger)).value_of(self.key) == self.value
 
