@@ -168,3 +168,23 @@ class TestItemsSeenOnPeople:
         surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(bodies=(person(2),)))
 
         assert [seen.person for seen in surroundings.bodies] == [Unidentified()]
+
+
+class TestHiddenThingsStayOutInTheDark:
+    """VisibleSurroundings.seen_with が、暗くても見える物体であっても、現れていなければ暗がりで出さないことを保証する。"""
+
+    def test_unrevealed_glowing_object_is_left_out_in_shapes(self) -> None:
+        """暗いとき、seen_in_dark が真でも現れていない物体 (隠し戸の光る印) は出ない。"""
+        hidden_glow = thing("hidden_glow", seen_in_dark=True, revealed=False)
+
+        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(objects=(hidden_glow,)))
+
+        assert surroundings.objects == ()
+
+    def test_unrevealed_glowing_object_is_left_out_in_pitch_dark(self) -> None:
+        """真っ暗なとき、seen_in_dark が真でも現れていない物体は出ない。"""
+        hidden_glow = thing("hidden_glow", seen_in_dark=True, revealed=False)
+
+        surroundings = VisibleSurroundings.seen_with(SeesNothing(), contents(objects=(hidden_glow,)))
+
+        assert surroundings.objects == ()

@@ -7,3 +7,7 @@ class HeldItemNotCarriedException(GameWorldDomainException):
 
 class ThingFromAnotherSpotException(GameWorldDomainException):
     error_code = "GAME_WORLD.THING_FROM_ANOTHER_SPOT"
+
+
+class UnrevealedThingNotDeclaredHiddenException(GameWorldDomainException):
+    error_code = "GAME_WORLD.UNREVEALED_THING_NOT_DECLARED_HIDDEN"

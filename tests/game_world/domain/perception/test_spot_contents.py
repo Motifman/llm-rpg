@@ -5,9 +5,10 @@ import pytest
 from ai_rpg_world.game_world.domain.exception.surroundings_exception import (
     HeldItemNotCarriedException,
     ThingFromAnotherSpotException,
+    UnrevealedThingNotDeclaredHiddenException,
 )
 from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonHandle, PersonRef
-from ai_rpg_world.game_world.domain.perception.surroundings import PresentPerson
+from ai_rpg_world.game_world.domain.perception.surroundings import ContainedObject, ContainedPassage, PresentPerson
 from ai_rpg_world.game_world.domain.value_object import DescriptionText
 from ai_rpg_world.game_world.domain.whereabouts.location import OpenArea
 from tests.game_world.domain.perception._surroundings_builders import contents, item, passage, section, thing
@@ -50,3 +51,27 @@ class TestSpotContentsBelongToTheSpot:
         incoming = passage("ladder", at="mine_entrance", to="mine_depths")
 
         assert contents(passages=(incoming,)).passages == (incoming,)
+
+
+class TestOnlyHiddenThingsCanBeUnrevealed:
+    """ContainedObject と ContainedPassage が、隠れていると宣言されていない物を「現れていない」として受け取らないことを保証する。"""
+
+    def test_unrevealed_object_not_declared_hidden_is_refused(self) -> None:
+        """hidden_until_revealed が偽の物体を revealed=False で入れると、UnrevealedThingNotDeclaredHiddenException を投げる。"""
+        declaration = thing("ore_cart").declaration
+
+        with pytest.raises(UnrevealedThingNotDeclaredHiddenException):
+            ContainedObject(declaration=declaration, revealed=False)
+
+    def test_unrevealed_passage_not_declared_hidden_is_refused(self) -> None:
+        """hidden_until_revealed が偽の通路を revealed=False で入れると、UnrevealedThingNotDeclaredHiddenException を投げる。"""
+        in_state = passage("corridor").passage
+
+        with pytest.raises(UnrevealedThingNotDeclaredHiddenException):
+            ContainedPassage(passage=in_state, revealed=False)
+
+    def test_revealed_hidden_object_is_accepted(self) -> None:
+        """hidden_until_revealed が真の物体は、現れたあと revealed=True で受け取る。"""
+        declaration = thing("hidden_door", revealed=False).declaration
+
+        assert ContainedObject(declaration=declaration, revealed=True).revealed

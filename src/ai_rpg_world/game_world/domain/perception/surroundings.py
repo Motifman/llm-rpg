@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import final
 
 from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import ObjectDeclaration
@@ -9,6 +10,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration, Spo
 from ai_rpg_world.game_world.domain.exception.surroundings_exception import (
     HeldItemNotCarriedException,
     ThingFromAnotherSpotException,
+    UnrevealedThingNotDeclaredHiddenException,
 )
 from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesNothing, SeesShapes, SightQuality
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
@@ -28,29 +30,31 @@ class _SightRule:
     shows_objects_unseen_in_dark: bool
 
 
-_RULES: dict[SightQuality, _SightRule] = {
-    SeesClearly(): _SightRule(
-        shows_description=True,
-        shows_people=True,
-        identifies_people=True,
-        shows_ground_items=True,
-        shows_objects_unseen_in_dark=True,
-    ),
-    SeesShapes(): _SightRule(
-        shows_description=True,
-        shows_people=True,
-        identifies_people=False,
-        shows_ground_items=False,
-        shows_objects_unseen_in_dark=False,
-    ),
-    SeesNothing(): _SightRule(
-        shows_description=False,
-        shows_people=False,
-        identifies_people=False,
-        shows_ground_items=False,
-        shows_objects_unseen_in_dark=False,
-    ),
-}
+_RULES: Mapping[SightQuality, _SightRule] = MappingProxyType(
+    {
+        SeesClearly(): _SightRule(
+            shows_description=True,
+            shows_people=True,
+            identifies_people=True,
+            shows_ground_items=True,
+            shows_objects_unseen_in_dark=True,
+        ),
+        SeesShapes(): _SightRule(
+            shows_description=True,
+            shows_people=True,
+            identifies_people=False,
+            shows_ground_items=False,
+            shows_objects_unseen_in_dark=False,
+        ),
+        SeesNothing(): _SightRule(
+            shows_description=False,
+            shows_people=False,
+            identifies_people=False,
+            shows_ground_items=False,
+            shows_objects_unseen_in_dark=False,
+        ),
+    }
+)
 
 
 @final
@@ -98,6 +102,12 @@ class ContainedObject:
     declaration: ObjectDeclaration
     revealed: bool
 
+    def __post_init__(self) -> None:
+        if not self.revealed and not self.declaration.appearance.hidden_until_revealed:
+            raise UnrevealedThingNotDeclaredHiddenException(
+                f"object {self.declaration.object_id.value} is not declared hidden but is unrevealed"
+            )
+
     def is_seen_with(self, sight: SightQuality) -> bool:
         return self.revealed and (
             self.declaration.appearance.seen_in_dark or _RULES[sight].shows_objects_unseen_in_dark
@@ -109,6 +119,12 @@ class ContainedObject:
 class ContainedPassage:
     passage: PassageInState
     revealed: bool
+
+    def __post_init__(self) -> None:
+        if not self.revealed and not self.passage.passage.hidden_until_revealed:
+            raise UnrevealedThingNotDeclaredHiddenException(
+                f"passage {self.passage.passage.passage_id.value} is not declared hidden but is unrevealed"
+            )
 
     def is_seen(self) -> bool:
         return self.revealed
