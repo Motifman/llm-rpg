@@ -83,11 +83,6 @@ class SoundStimulus:
         hearing = _Hearing(stimulus=self, perceiver=perceiver, view=view)
         return self.source.heard_by(perceiver, self.origin, self.loudness, reach, values).read(hearing)
 
-    def noticed_on_waking(self, view: PeopleAsSeen) -> MissedNotice | NotNoticedLater:
-        if isinstance(self.noticed_later, NotNoticedLater):
-            return NotNoticedLater()
-        return MissedNotice(text=self.noticed_later.seen_by(view), happened_at=self.at)
-
 
 @final
 @dataclass(frozen=True)
@@ -97,9 +92,8 @@ class _Hearing:
     view: PeopleAsSeen
 
     def when_clear(self) -> PerceptionOutcome:
-        stimulus = self.stimulus
         return self._reached(
-            lambda: stimulus.source.clear_text(stimulus.clear, self.view), HearsClearly(), stands_out=True
+            lambda: self.stimulus.source.clear_text(self.stimulus.clear, self.view), HearsClearly(), stands_out=True
         )
 
     def when_muffled(self) -> PerceptionOutcome:
@@ -128,5 +122,5 @@ class _Hearing:
                 # かすかに聞こえただけのものは、関わっていても目立っても、考え直す目安にしない。
                 calls_attention=stands_out and (involved or stimulus.salience == Notable()),
             ),
-            on_waking=lambda: stimulus.noticed_on_waking(self.view),
+            on_waking=lambda: MissedNotice.from_text(stimulus.noticed_later, self.view, stimulus.at),
         )

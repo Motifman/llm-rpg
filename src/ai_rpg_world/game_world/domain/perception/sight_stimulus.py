@@ -42,11 +42,6 @@ class SightTexts:
             noticed_later=self.noticed_later,
         )
 
-    def noticed_on_waking(self, view: PeopleAsSeen, at: WorldTick) -> MissedNotice | NotNoticedLater:
-        if isinstance(self.noticed_later, NotNoticedLater):
-            return NotNoticedLater()
-        return MissedNotice(text=self.noticed_later.seen_by(view), happened_at=at)
-
 
 @final
 @dataclass(frozen=True)
@@ -92,7 +87,7 @@ class SightStimulus:
         involved = perceiver.person in self.involved
         return perceiver.notices_surroundings(involved).outcome(
             when_aware=lambda: self._seen(perceiver, texts, lighting, view, random, chances, stealth, involved),
-            on_waking=lambda: texts.noticed_on_waking(view, self.at),
+            on_waking=lambda: MissedNotice.from_text(texts.noticed_later, view, self.at),
         )
 
     def _seen(
@@ -117,7 +112,7 @@ class SightStimulus:
             random=random,
             chances=chances,
             attentive_bonus=stealth.attentive_bonus,
-            worth_attention=involved or self.salience == Notable(),
+            calls_attention=involved or self.salience == Notable(),
         )
         return perceiver.sight_in(lighting).read(sighting)
 
@@ -132,7 +127,7 @@ class _Sighting:
     random: RandomSource
     chances: Mapping[SightQuality, Probability]
     attentive_bonus: Probability
-    worth_attention: bool
+    calls_attention: bool
 
     def when_clear(self) -> PerceptionOutcome:
         return self._seen_as(self.texts.clear.seen_by(self.view), SeesClearly())
@@ -155,5 +150,5 @@ class _Sighting:
             text=text,
             quality=sight,
             happened_at=self.stimulus.at,
-            calls_attention=self.worth_attention,
+            calls_attention=self.calls_attention,
         )
