@@ -303,6 +303,15 @@ class TestSightStimulusDepartedViewer:
 
         assert isinstance(outcome, Perceived)
 
+    def test_a_departed_target_sees_the_target_text(self) -> None:
+        """去った人が相手なら、target の clear の文が届く。"""
+        outcome = _opening(target=SightTarget(person=BOB, texts=_TARGET_TEXTS)).perceived_by(
+            departed(BOB), Lighting.PITCH_DARK, VIEW, _NO_DRAWS, _STEALTH
+        )
+
+        assert isinstance(outcome, Perceived)
+        assert outcome.text.template == "{actor}があなたの荷に手を入れた"
+
     def test_a_departed_viewer_elsewhere_does_not_see_it(self) -> None:
         """別の場所にいる去った人には NotPerceived を返す。"""
         outcome = _opening().perceived_by(departed(BOB, HALL), Lighting.BRIGHT, VIEW, _NO_DRAWS, _STEALTH)

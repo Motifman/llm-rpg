@@ -30,6 +30,7 @@ from tests.game_world.domain.perception._builders import (
     awake,
     departed,
     fallen,
+    setting_out,
     travelling,
 )
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
@@ -209,6 +210,21 @@ class TestSoundStimulusTraveller:
 
         assert outcome == NotPerceived()
 
+    @pytest.mark.parametrize("origin", [SQUARE, HALL])
+    def test_both_ends_of_the_first_passage_count(self, origin) -> None:
+        """最初の区間 (広場→広間) を歩いているときは、出発した広場と行き先の広間の両方で鳴った大きい音が聞こえる。"""
+        outcome = _speech(Loudness.LOUD, origin=origin).perceived_by(setting_out(BOB), self._EMPTY_REACH, _VALUES, VIEW)
+
+        assert isinstance(outcome, Perceived)
+
+    def test_a_loud_sound_beyond_the_first_passage_is_not_heard(self) -> None:
+        """最初の区間を歩いているとき、その先の地下室で鳴った大きい音は NotPerceived を返す。"""
+        outcome = _speech(Loudness.VERY_LOUD, origin=CELLAR).perceived_by(
+            setting_out(BOB), self._EMPTY_REACH, _VALUES, VIEW
+        )
+
+        assert outcome == NotPerceived()
+
     def test_a_loud_sound_away_from_the_passage_is_not_heard(self) -> None:
         """今の区間の端でない場所 (通り過ぎた広場) で鳴った大きい音は NotPerceived を返す。"""
         outcome = _speech(Loudness.VERY_LOUD, origin=SQUARE).perceived_by(
@@ -293,3 +309,19 @@ class TestSoundStimulusFallenListener:
         outcome = _speech(noticed_later=self._LATER).perceived_by(fallen(BOB, HALL), _reach(55), _VALUES, VIEW)
 
         assert outcome == NotPerceived()
+
+    def test_a_fallen_person_involved_without_a_noticed_later_text_perceives_nothing(self) -> None:
+        """関わっていて届いても、noticed_later が NotNoticedLater なら NotPerceived を返す。"""
+        outcome = _speech(involved=(ALICE, BOB)).perceived_by(fallen(BOB, HALL), _reach(55), _VALUES, VIEW)
+
+        assert outcome == NotPerceived()
+
+    def test_a_fallen_addressee_of_a_whisper_notices_later(self) -> None:
+        """ささやきの宛先が同じ場所で倒れていれば、noticed_later を NoticedLater で渡す。"""
+        whisper = _speech(
+            Loudness.WHISPER, source=Voice(whispered_to=BOB), noticed_later=self._LATER, involved=(ALICE, BOB)
+        )
+
+        outcome = whisper.perceived_by(fallen(BOB), SoundReach(levels={SQUARE: SoundLevel(30)}), _VALUES, VIEW)
+
+        assert outcome == NoticedLater(notice=MissedNotice(text=self._LATER.seen_by(VIEW), happened_at=WorldTick(9)))

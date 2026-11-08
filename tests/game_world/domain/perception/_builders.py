@@ -69,3 +69,14 @@ def travelling(person: PersonId, *, attentive: bool = False) -> LivingPerceiver:
         location=TravelInProgress(route=route, passage_index=1, ticks_left_on_passage=Ticks(1), departed_from=SQUARE),
         attentive=attentive,
     )
+
+
+def setting_out(person: PersonId) -> LivingPerceiver:
+    route = Route(start=SQUARE, passages=(path("square_hall", "square", "hall"),))
+    return LivingPerceiver(
+        person=person,
+        life=Alive(),
+        location=TravelInProgress(route=route, passage_index=0, ticks_left_on_passage=Ticks(1), departed_from=SQUARE),
+        attentive=False,
+    )
+
