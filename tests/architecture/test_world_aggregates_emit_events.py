@@ -148,18 +148,24 @@ def _world_aggregates() -> list[type[AggregateRoot[Any]]]:
         module = importlib.import_module(module_info.name)
         for cls in vars(module).values():
             if inspect.isclass(cls) and cls.__module__ == module.__name__ and _is_watched(cls):
-                found[cls.__qualname__] = cls
+                found[f"{cls.__module__}.{cls.__qualname__}"] = cls
     return [found[name] for name in sorted(found)]
 
 
+def _public_methods(cls: type) -> list[tuple[str, Callable[..., Any]]]:
+    return [
+        (name, member)
+        for name, member in inspect.getmembers(cls, inspect.isfunction)
+        if not name.startswith("_") and getattr(AggregateRoot, name, None) is not member
+    ]
+
+
 def _state_changing_operations(cls: type) -> list[str]:
-    operations = []
-    for name, member in inspect.getmembers(cls, inspect.isfunction):
-        if name.startswith("_") or getattr(AggregateRoot, name, None) is member:
-            continue
-        if typing.get_type_hints(member).get("return") is type(None):
-            operations.append(name)
-    return operations
+    return [name for name, member in _public_methods(cls) if typing.get_type_hints(member).get("return") is type(None)]
+
+
+def _methods_without_return_annotation(cls: type) -> list[str]:
+    return [name for name, member in _public_methods(cls) if "return" not in typing.get_type_hints(member)]
 
 
 def _discovered_operations() -> set[str]:
@@ -407,7 +413,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "Whereabouts.start_travel": lambda: _with(
         _whereabouts(), lambda w: w.start_travel(_ALICE_BODY, Route(start=_PLAZA.spot_id, passages=(_STREET,)))
     ),
-    # 道の途中の進みはイベントにせず、着いたときと止められたときだけイベントにする (#2008 で決めた)。
+    # 道の途中の進みはイベントにせず、着いたときと止められたときだけイベントにする。
     "Whereabouts.advance_travels": lambda: _with(_travelling(), lambda w: w.advance_travels(frozenset())),
     "Whereabouts.cancel_travel": lambda: _with(_travelling(), lambda w: w.cancel_travel(_ALICE_BODY)),
     "Whereabouts.teleport": lambda: _with(_whereabouts(), lambda w: w.teleport(_ALICE_BODY, _MINE)),
@@ -426,7 +432,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     ),
     "PersonVitals.heal": lambda: _with(_vitals(current=5), lambda v: v.heal(HealAmount(3))),
     "PersonVitals.revive": lambda: _with(_fallen(), lambda v: v.revive(Rate(0.5), WorldTick(1))),
-    # 空腹と疲れは段階が変わったときだけイベントにする (world_state.md)。段階をまたぐ呼び方を用意する。
+    # 空腹と疲れは段階が変わったときだけイベントにする (world_state.md)。
     "PersonVitals.pass_time": lambda: _with(
         _vitals(), lambda v: v.pass_time(WorldTick(1), DeathRule(grace=Ticks(2)), _hunger_rule())
     ),
@@ -592,3 +598,29 @@ class TestStateChangingOperationDiscovery:
                 return None
 
         assert _state_changing_operations(Lighthouse) == ["light"]
+
+    def test_public_method_without_return_annotation_is_reported(self) -> None:
+        """戻り値の注釈が無い公開メソッドは、状態を変える操作か問い合わせか見分けられないので、見分けられないものとして挙がる。"""
+
+        class Lighthouse(AggregateRoot[Any]):
+            def light(self):  # type: ignore[no-untyped-def]
+                pass
+
+            def dim(self) -> None:
+                pass
+
+        assert _methods_without_return_annotation(Lighthouse) == ["light"]
+
+    def test_every_public_method_of_world_aggregates_has_a_return_annotation(self) -> None:
+        """世界の集約の公開メソッドは、どれも戻り値の注釈を持つ。注釈を書き忘れると、見張りから黙って外れないよう落ちる。"""
+        unannotated = sorted(
+            f"{cls.__name__}.{name}" for cls in _world_aggregates() for name in _methods_without_return_annotation(cls)
+        )
+
+        assert not unannotated, f"戻り値の注釈を書いてください: {unannotated}"
+
+    def test_world_aggregate_names_are_distinct(self) -> None:
+        """世界の集約のクラス名は重ならない。表のキーをクラス名で引くため、同じ名前の集約が別のモジュールにあると落ちる。"""
+        names = [cls.__name__ for cls in _world_aggregates()]
+
+        assert len(names) == len(set(names))
