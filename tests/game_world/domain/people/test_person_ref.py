@@ -3,11 +3,8 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueOutOfRangeException
-from ai_rpg_world.game_world.domain.exception.people_exception import (
-    EmptyAppearanceException,
-    EmptyVisibleNameException,
-)
 from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonHandle, PersonRef, Unidentified
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName
 
 
 class TestPersonHandle:
@@ -29,36 +26,26 @@ class TestPersonHandle:
 
 
 class TestPersonRef:
-    """PersonRef が、見分けられる 1 人を印と見た目と見えている名前で指し、見た目の無い人を断ることを保証する。"""
+    """PersonRef が、見分けられる 1 人を印と見た目と見えている名前で指すことを保証する。"""
 
     def test_name_is_absent_unless_the_world_shows_it(self) -> None:
         """名前が見えない世界の人は、visible_name に NoVisibleName を持って作れる。"""
-        ref = PersonRef(handle=PersonHandle(1), appearance="背の高い男", visible_name=NoVisibleName())
+        ref = PersonRef(handle=PersonHandle(1), appearance=DescriptionText("背の高い男"), visible_name=NoVisibleName())
 
         assert ref.visible_name == NoVisibleName()
 
     def test_visible_name_is_kept_as_given(self) -> None:
         """名札の世界の人は、visible_name に見えている名前を持つ。"""
-        ref = PersonRef(handle=PersonHandle(1), appearance="背の高い男", visible_name="ガレス")
+        ref = PersonRef(
+            handle=PersonHandle(1), appearance=DescriptionText("背の高い男"), visible_name=DisplayName("ガレス")
+        )
 
-        assert ref.visible_name == "ガレス"
-
-    @pytest.mark.parametrize("appearance", ["", "   ", "\n"])
-    def test_blank_appearance_raises_domain_exception(self, appearance: str) -> None:
-        """appearance が空か空白だけだと EmptyAppearanceException を投げる。名前を知らない人の文に書くものが無くなるため。"""
-        with pytest.raises(EmptyAppearanceException):
-            PersonRef(handle=PersonHandle(1), appearance=appearance, visible_name=NoVisibleName())
-
-    @pytest.mark.parametrize("visible_name", ["", "   "])
-    def test_blank_visible_name_raises_domain_exception(self, visible_name: str) -> None:
-        """visible_name が空か空白だけだと EmptyVisibleNameException を投げる。名前が見えないことは NoVisibleName で表すため。"""
-        with pytest.raises(EmptyVisibleNameException):
-            PersonRef(handle=PersonHandle(1), appearance="背の高い男", visible_name=visible_name)
+        assert ref.visible_name == DisplayName("ガレス")
 
     def test_same_handle_with_different_appearance_is_a_different_ref(self) -> None:
         """同じ印でも見た目が違えば別の PersonRef として比べられる (着替えたあとの見え方を区別できる)。"""
-        before = PersonRef(handle=PersonHandle(1), appearance="外套の男", visible_name=NoVisibleName())
-        after = PersonRef(handle=PersonHandle(1), appearance="鎧の男", visible_name=NoVisibleName())
+        before = PersonRef(handle=PersonHandle(1), appearance=DescriptionText("外套の男"), visible_name=NoVisibleName())
+        after = PersonRef(handle=PersonHandle(1), appearance=DescriptionText("鎧の男"), visible_name=NoVisibleName())
 
         assert before != after
 
