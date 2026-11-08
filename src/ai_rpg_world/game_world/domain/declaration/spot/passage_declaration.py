@@ -11,7 +11,14 @@ from ai_rpg_world.game_world.domain.exception.spot_declaration_exception import 
     UndeclaredPassageStateException,
 )
 from ai_rpg_world.game_world.domain.sound import SoundLoss
-from ai_rpg_world.game_world.domain.value_object import DisplayName, PassageId, PassageStateName, SpotId, Ticks
+from ai_rpg_world.game_world.domain.value_object import (
+    DescriptionText,
+    DisplayName,
+    PassageId,
+    PassageStateName,
+    SpotId,
+    Ticks,
+)
 
 
 @final
@@ -27,6 +34,8 @@ class PassageStateDeclaration:
 @dataclass(frozen=True)
 class PassageDeclaration:
     passage_id: PassageId
+    name: DisplayName
+    description: DescriptionText
     ends: tuple[SpotId, SpotId]
     two_way: bool
     travel_ticks: Ticks

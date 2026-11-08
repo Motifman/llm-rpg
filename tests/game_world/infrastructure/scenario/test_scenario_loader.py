@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain.exception.world_design_exception import Worl
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.value_object import (
     Capacity,
+    DescriptionText,
     DisplayName,
     HitPoints,
     InteractionId,
@@ -78,7 +79,7 @@ spots:
     description: 縦穴の上の小屋。
     atmosphere: { lighting: bright }
 passages:
-  ladder: { ends: [lift_landing, shaft_head], travel_ticks: 3 }
+  ladder: { name: 古い梯子, description: 縦穴の壁に打ち付けた木の梯子。, ends: [lift_landing, shaft_head], travel_ticks: 3 }
 item_specs:
   lift_key: { name: 昇降機の鍵, description: 小さな真鍮の鍵。 }
 characters:
@@ -230,6 +231,21 @@ class TestFlawsWhileLoading:
             ]
         )
 
+    def test_passage_keeps_its_written_name_and_description(self, tmp_path: Path) -> None:
+        """梯子に書いた name と description は、そのまま梯子の PassageDeclaration に入る。"""
+        nouns = _load(tmp_path).design.nouns
+
+        ladder = nouns.passage("ladder", DesignLocation("passage", "ladder", ""))
+
+        assert ladder.name == DisplayName("古い梯子")
+        assert ladder.description == DescriptionText("縦穴の壁に打ち付けた木の梯子。")
+
+    def test_passage_without_name_is_a_flaw_not_filled_from_defaults(self, tmp_path: Path) -> None:
+        """梯子の name を書き忘れると、共通の部品で埋めずに、その欄の場所を付けた DesignFlaw になる。"""
+        text = _LIFT_LANDING.replace("name: 古い梯子, ", "")
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [_mine("passage", "ladder", "name")]
+
     def test_missing_required_field_is_a_flaw_not_key_error(self, tmp_path: Path) -> None:
         """操作の success_text を書き忘れても KeyError を出さず、その欄の場所を付けた DesignFlaw になる。"""
         text = _LIFT_LANDING.replace("            success_text: 籠が大きく揺れ、ゆっくりと縦穴を上がりはじめた。\n", "")
@@ -380,8 +396,10 @@ class TestSkippingWhatPointsAtUnreadable:
     def test_written_states_are_not_mixed_with_default_open(self, tmp_path: Path) -> None:
         """states を書いた梯子は、共通の部品の既定の open を混ぜず、書いた状態だけを持つ。"""
         text = _LIFT_LANDING.replace(
-            "  ladder: { ends: [lift_landing, shaft_head], travel_ticks: 3 }",
+            "  ladder: { name: 古い梯子, description: 縦穴の壁に打ち付けた木の梯子。, ends: [lift_landing, shaft_head], travel_ticks: 3 }",
             "  ladder:\n"
+            "    name: 古い梯子\n"
+            "    description: 縦穴の壁に打ち付けた木の梯子。\n"
             "    ends: [lift_landing, shaft_head]\n"
             "    travel_ticks: 3\n"
             "    states: { shut: { display_name: 閉じている, traversable: false, sound_loss: 20 } }\n"

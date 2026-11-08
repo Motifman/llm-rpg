@@ -65,6 +65,8 @@ class SpotSectionDeclaration:               # 場所の中の、体で入る一�
 @dataclass(frozen=True)
 class PassageDeclaration:
     passage_id: PassageId
+    name: DisplayName                             # 場面で通路を指すときの名前 (「古い梯子」)
+    description: DescriptionText                  # 名前だけでは分からない通路の様子。どちらも書き忘れは DesignFlaw で、既定で埋めない
     ends: tuple[SpotId, SpotId]
     two_way: bool
     travel_ticks: Ticks

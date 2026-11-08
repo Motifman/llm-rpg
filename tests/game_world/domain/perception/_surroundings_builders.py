@@ -59,6 +59,8 @@ def spot(name: str = HERE) -> SpotDeclaration:
 def passage(name: str, *, to: str = "mine_entrance", at: str = HERE, revealed: bool = True) -> ContainedPassage:
     declaration = PassageDeclaration(
         passage_id=PassageId(name),
+        name=DisplayName(f"{name} の通路"),
+        description=DescriptionText(f"{name} の様子"),
         ends=(SpotId(at), SpotId(to)),
         two_way=True,
         travel_ticks=Ticks(1),
