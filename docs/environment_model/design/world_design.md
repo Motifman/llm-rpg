@@ -68,9 +68,9 @@ class PassageDeclaration:
     ends: tuple[SpotId, SpotId]
     two_way: bool
     travel_ticks: Ticks
-    states: tuple[PassageStateDeclaration, ...]   # 書かなければ open (「開いている」、通れる、減衰 0) の 1 つ
-    initial_state: PassageStateName               # 書かなければ open
-    hidden_until_revealed: bool                   # RevealPassageEffect までは無い道。書かなければ false
+    states: tuple[PassageStateDeclaration, ...]   # 1 つ以上。書かなければ読み込む側が共通の部品の defaults.passage で埋める
+    initial_state: PassageStateName
+    hidden_until_revealed: bool                   # RevealPassageEffect までは無い道
 
     def allows(self, state: PassageStateName) -> bool: ...
     def state(self, name: PassageStateName) -> PassageStateDeclaration: ...
@@ -140,7 +140,7 @@ class ItemSpecDeclaration:
     description: DescriptionText
     state_keys: tuple[ItemStateKeyDeclaration, ...]
     lights_up: LitWhen | NotALightSource     # LitWhen(key, value): その状態の値のとき灯っている。手に持っているあいだ場所を照らす
-    hands_needed: HandsNeeded                # 1 (カンテラ) / 2 (つるはし)。書かなければ 1
+    hands_needed: HandsNeeded                # 1 (カンテラ) / 2 (つるはし)
 
 @final
 @dataclass(frozen=True)
@@ -171,6 +171,11 @@ class CharacterDeclaration:
     initial_held: tuple[ItemSpecId, ...]     # initial_items のうち、最初から手に持っている物。品物ごとに initial_items の数を超えられない
     initial_groups: tuple[GroupId, ...]      # 重ならない
     knows_at_start: tuple[PersonId, ...]     # 重ならない。自分を含んでもよい
+    max_hp: HitPoints | UsesWorldDefault     # UsesWorldDefault なら WorldRules.person_max_hp で始まる (#2055)
+    pack_capacity: Capacity | UsesWorldDefault   # UsesWorldDefault なら WorldRules.pack_capacity
+
+    def starting_hp(self, world_default: HitPoints) -> HitPoints: ...
+    def starting_pack_capacity(self, world_default: Capacity) -> Capacity: ...
 
 @final
 @dataclass(frozen=True)
@@ -472,6 +477,8 @@ class WorldRules:
     action_durations: Mapping[ActionKind, Ticks]   # 行っているあいだの既定。耳を澄ます 1、拾う・置く・渡す・区画・投票・持ち替え 1、操作・品物を使う 2、探す・介抱 3
     # 移動は通路の時間で決まり、待つことと話すことは行っているあいだを作らない。モンスターへの攻撃は #1971 で決める。
     # action_durations は上の 15 種類をすべて持ち、移動・待つ・話す・モンスターへの攻撃を持たなければ作れない
+    person_max_hp: HitPoints                # 人の最初の体力の世界の既定。登場人物が上書きできる (#2055)
+    pack_capacity: Capacity                 # 荷に持てる数の世界の既定
 
 @final
 @dataclass(frozen=True)
@@ -583,6 +590,8 @@ class StartingPerson:                           # 登場人物の始まり。名
     held: tuple[ItemSpecDeclaration, ...]
     groups: tuple[GroupDeclaration, ...]
     knows: tuple[PersonId, ...]
+    hp: HitPoints                               # 登場人物の値か、無ければ WorldRules の既定
+    pack_capacity: Capacity
 
 @final
 @dataclass(frozen=True)
@@ -591,7 +600,6 @@ class InitialWorld:                             # 宣言どうしを組み合わ
     raised_flags: frozenset[FlagDeclaration]    # initially_raised の旗
     stage: WorldStageDeclaration | NoWorldStages
     weather: WeatherState | NoWeather           # WeatherDeclaration.initial
-    # 最初の体力と荷の上限は、まだ宣言に無い (別の Issue で決める)
 
 
 class WorldDesign:
@@ -678,7 +686,7 @@ class WorldDesignFlawsException(WorldDesignException):
 ## 作る順
 
 ```
-infrastructure: JSON を読む
+infrastructure: YAML を読む (scenario_format.md)
   ① 名詞の宣言を作る → DeclaredNouns
   ② 動詞の宣言 (名詞に付く動詞、条件、効果、操作、出来事) を、DeclaredNouns から名詞を引いて作る
   ③ WorldDesign.compose
@@ -689,7 +697,7 @@ infrastructure: JSON を読む
 - 宣言 1 つだけで判断できる誤り (通路の状態名の重複、両端が同じ場所の通路、`initial_state` が `states` に無い、区画の `reachable_objects` の重複、状態の鍵の重複、種類に合わない `initial`) は、宣言の型が作るときにドメイン例外で断る。ほかの宣言と照らし合わせて分かる誤りは `DeclaredNouns` が確かめる。どちらで止めても作者に返るのは `DesignFlaw` で、宣言の型の例外は読み込む側が場所を付けて `DesignFlaw` に包む
 - `Unchanged` (雰囲気を変える効果で、変えない欄) と `NoCapacity` (区画の定員が無い) は、中身の無い型
 
-- 誤りは最初の 1 つで止めず、集めてから 1 つの `WorldDesignFlawsException` で投げる。どの誤りにも場所 (`DesignLocation`) を付ける。JSON の書き方の誤り (必須キーの欠け、列挙の綴り違い) も infrastructure が `DesignFlaw` に包み、素の `KeyError` / `ValueError` を外に出さない
+- 誤りは最初の 1 つで止めず、集めてから 1 つの `WorldDesignFlawsException` で投げる。どの誤りにも場所 (`DesignLocation`) を付ける。YAML の書き方の誤り (必須キーの欠け、列挙の綴り違い、鍵の重複) も infrastructure が `DesignFlaw` に包み、素の `KeyError` / `ValueError` を外に出さない
 - compose は、条件と効果を置いた場所ごとに使える主語 ([condition.md](condition.md)) と、`requirements()` を照らし合わせる
 - `initially_raised` でもなく、どの `RaiseFlagEffect` にも出てこない旗を条件が見ていたら `DesignFlaw`。立てるだけで誰も見ない旗は `DesignWarning`
 - 締める出来事 (`CloseGroupDecisionEffect`) が 1 つも無い集団の決定は `DesignWarning`。猶予 (`DeathRule.grace`) が 0 なのに介抱がある世界は `DesignFlaw`
@@ -699,8 +707,9 @@ infrastructure: JSON を読む
 - 効果と条件が読む引数の名前が、操作の宣言の `arguments` に無ければ `DesignFlaw`
 - `WorldStage`・昼夜・天候を宣言していない世界で、それを見る条件を書いていれば `DesignFlaw`。昼夜に宣言していない段階の名前を見る条件も同じ
 - 行う人に知りえない所属 ([condition.md](condition.md) の伏せた所属) を見る前提は `DesignWarning`。前提は、操作の前提、区画の入る条件、通路の通り方の条件
+- 条件が読む出来事の ID (`HappeningHasFiredCondition` などは宣言ではなく `HappeningId` を持つ。自分を読む出来事を作れるようにするため) が宣言に無ければ `DesignFlaw` (#2057)
 - 出来事・反応・見つかる物・二人で合わせる操作の ID が重なれば `DesignFlaw`。`ScenarioProgress` などが ID で記録するので、重なると 2 つが混ざる
 - 区画ごとの出入り (`SectionAccessDeclaration`) と、集団の決定ごとの決まり (`GroupDecisionRulesDeclaration`) が 1 つずつ無ければ `DesignFlaw`。二人で合わせる操作が求める物体の操作が宣言に無ければ `DesignFlaw`
 - 組み込みの行為の知覚の文は、世界で行える組み込みの行為 (介抱は `TendRule` があるときだけ) をすべて持たなければ `DesignFlaw`。知らせの相手の選び方は、行為の中に置いた条件として (`Actor`、`Target` を使える) ほかの宣言と同じく照らし合わせる。断りの文の表の `world_state` は、起きうる `RefusalCode` をドメインで列挙できないので compose では確かめない
-- compose が照らし合わせに使う材料 (主語、読む引数、段階・昼夜・天候を読むか、立てる旗、締める決定、伏せられうる所属) は、条件と効果の `requirements()` が答える。根に文があるかは `Condition.explains_failure()` が答える
+- compose が照らし合わせに使う材料 (主語、読む引数、段階・昼夜・天候を読むか、立てる旗、締める決定、伏せられうる所属、読む出来事) は、条件と効果の `requirements()` が答える。根に文があるかは `Condition.explains_failure()` が答える
 - 宣言に無い通路の状態の名前、呼び名 (`display_name`) の無い値が文に出るときは、`DesignFlaw` で止める

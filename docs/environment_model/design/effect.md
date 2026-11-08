@@ -103,7 +103,7 @@ JoinGroupEffect(who: Subject, group: GroupDeclaration)
 LeaveGroupEffect(who: Subject, group: GroupDeclaration)
 SetOutcomeEffect(who: Subject, outcome: OutcomeDeclaration)
 EnterWorldStageEffect(stage: WorldStageDeclaration)
-StartGroupDecisionEffect(rules: GroupDecisionRulesDeclaration)   # 投票する人と候補を rules.voters / rules.choices で選んで始める
+StartGroupDecisionEffect(decision: GroupDecisionDeclaration, voters: PeopleSelection, choices: PeopleSelection)   # 規則の宣言を持たないので、決まらなければもう一度投票する (when_undecided で同じ決定を始める) 仕掛けを作れる。読み込む側が集団の決定の voters / choices から作る (#2057)
 CloseGroupDecisionEffect(decision: GroupDecisionDeclaration)
 ```
 

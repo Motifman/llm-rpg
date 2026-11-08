@@ -198,8 +198,8 @@ TicksSinceLastActionAtLeastCondition(who: Subject | Anyone, action: ActionKind |
     # 起点は 最後に行った tick と since の基準 の遅いほう。まだ行っていなければ基準から数える
     # SinceStart の基準は WorldTick(0)、SinceWorldStageEntered は今の段階に入った tick (段階の無い世界では NotDeclaredInThisWorldException)
 ArgumentEqualsCondition(argument: ArgumentName, expected: str)   # 操作の宣言の arguments にある文の引数だけ
-HappeningHasFiredCondition(happening: HappeningDeclaration)
-TicksSinceHappeningAtLeastCondition(happening: HappeningDeclaration, ticks: Ticks)   # 最後に起きた tick から数える。一度も起きていなければ偽
+HappeningHasFiredCondition(happening: HappeningId)        # 宣言ではなく ID。自分を読む出来事 (5 tick ごとに襲う) を作れるように。ID が宣言にあるかは compose が確かめる (#2057)
+TicksSinceHappeningAtLeastCondition(happening: HappeningId, ticks: Ticks)   # 最後に起きた tick から数える。一度も起きていなければ偽
 ```
 
 ## 置いた場所ごとに使える主語
