@@ -25,6 +25,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from tests.game_world.domain.whereabouts._builders import CLOSED, OPEN, atmosphere, door, path, section, spot
 
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.game_world.domain.declaration.character import (
@@ -43,8 +44,8 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     FlagValue,
     ItemSpecDeclaration,
     ItemStateKeyDeclaration,
-    NothingWritten,
     NotALightSource,
+    NothingWritten,
     ObjectAppearance,
     ObjectDeclaration,
     ObjectStateKeyDeclaration,
@@ -98,10 +99,10 @@ from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
     DisplayName,
     FatigueAmount,
+    Gold,
     GroupDecisionId,
     GroupId,
     GroupingId,
-    Gold,
     HandsNeeded,
     HealAmount,
     HitPoints,
@@ -110,7 +111,6 @@ from ai_rpg_world.game_world.domain.value_object import (
     ObjectId,
     PersonId,
     Rate,
-    SpotId,
     StateKeyId,
     Ticks,
     WorldId,
@@ -132,7 +132,6 @@ from ai_rpg_world.game_world.domain.world_progress import (
     WorldEnding,
     WorldStage,
 )
-from tests.game_world.domain.whereabouts._builders import CLOSED, OPEN, atmosphere, door, path, section, spot
 
 _DOMAIN_PACKAGE = "ai_rpg_world.game_world.domain"
 _LEDGER_AGGREGATES = frozenset({"ScenarioProgress", "MissedNotices"})
@@ -466,9 +465,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "ObjectState.subtract_from_count": lambda: _with(
         _object_state(), lambda o: o.subtract_from_count(_BUCKETS, Count(1))
     ),
-    "ObjectState.take_from_stock": lambda: _with(
-        _object_state(), lambda o: o.take_from_stock(_WATER, Count(2), _NOW)
-    ),
+    "ObjectState.take_from_stock": lambda: _with(_object_state(), lambda o: o.take_from_stock(_WATER, Count(2), _NOW)),
     "ObjectState.write_text": lambda: _with(
         _object_state(), lambda o: o.write_text(_NOTE, TextBody("ここに水あり"), _ALICE, _NOW)
     ),
