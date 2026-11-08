@@ -6,11 +6,17 @@ from typing import final
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
+from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     InventoryFullException,
     ItemAlreadyCarriedException,
     ItemNotCarriedException,
     NotEnoughItemsOfSpecException,
+)
+from ai_rpg_world.game_world.domain.exception.person_inventory_exception import (
+    ItemNotHeldException,
+    ItemNotPackedException,
+    PackIsEmptyException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.value_object import Capacity, Count, Gold, HandsNeeded, ItemSpecId, PersonId
@@ -110,6 +116,18 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         del self._specs[item]
         self.add_event(ItemGivenUpEvent(**new_event_stamp(), person=self._person_id, item=item, was_held=was_held))
 
+    def give_up_held(self, item: ItemInstanceId) -> None:
+        self._require_carried(item)
+        if not self._is_held(item):
+            raise ItemNotHeldException(f"{self._person_id.value} does not hold {item.value}")
+        self.give_up(item)
+
+    def give_up_packed(self, item: ItemInstanceId) -> None:
+        self._require_carried(item)
+        if self._is_held(item):
+            raise ItemNotPackedException(f"{self._person_id.value} holds {item.value} instead of packing it")
+        self.give_up(item)
+
     def hold(self, item: ItemInstanceId, hands_needed: HandsNeeded) -> None:
         self._require_carried(item)
         if self._is_held(item):
@@ -171,6 +189,11 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
                 f"{self._person_id.value} carries {len(candidates)} of {spec.value}, cannot give up {count.value}"
             )
         return candidates[: count.value]
+
+    def random_packed_item(self, random: RandomSource) -> ItemInstanceId:
+        if not self._packed:
+            raise PackIsEmptyException(f"{self._person_id.value} has nothing packed")
+        return self._packed[int(random.next_fraction() * len(self._packed))]
 
     def _items_of(self, spec: ItemSpecId) -> tuple[ItemInstanceId, ...]:
         return tuple(item for item in self.packed_items() + self.held_items() if self._specs[item] == spec)

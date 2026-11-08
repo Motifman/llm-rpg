@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
@@ -50,6 +52,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     Ticks,
     WorldTick,
 )
+from ai_rpg_world.game_world.domain.whereabouts import DepartedPerson, PersonBody
 
 _ALICE = PersonId("alice")
 _BOB = PersonId("bob")
@@ -710,3 +713,23 @@ class TestHungerAndFatigueReadings:
         vitals.exert(_fatigue(per_exertion=2))
 
         assert vitals.fatigue() == FatigueAmount(2)
+
+
+class TestOccupantInWorld:
+    """PersonVitals.occupant_in_world が、体の生死と去った人が動く世界かで、世界の中で居場所を持つ主を答えることを保証する。"""
+
+    @pytest.mark.parametrize("make", [_vitals, _fallen])
+    @pytest.mark.parametrize("departed_persons_act", [True, False])
+    def test_living_or_fallen_person_is_body(
+        self, make: Callable[[], PersonVitals], departed_persons_act: bool
+    ) -> None:
+        """起きている人と倒れた人は、去った人が動く世界でも動かない世界でも PersonBody。"""
+        assert make().occupant_in_world(departed_persons_act) == PersonBody(_ALICE)
+
+    def test_dead_person_is_departed_when_departed_persons_act(self) -> None:
+        """体が死んだ人は、去った人が動く世界では DepartedPerson。"""
+        assert _dead().occupant_in_world(True) == DepartedPerson(_ALICE)
+
+    def test_dead_person_is_body_when_departed_persons_do_not_act(self) -> None:
+        """体が死んだ人は、去った人が動かない世界では PersonBody。"""
+        assert _dead().occupant_in_world(False) == PersonBody(_ALICE)

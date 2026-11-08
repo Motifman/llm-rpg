@@ -462,6 +462,8 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     ),
     "PersonInventory.receive": lambda: _with(_inventory(), lambda i: i.receive(_LANTERN, _LANTERN_SPEC)),
     "PersonInventory.give_up": lambda: _with(_inventory(_LANTERN), lambda i: i.give_up(_LANTERN)),
+    "PersonInventory.give_up_held": lambda: _with(_holding(_ROPE), lambda i: i.give_up_held(_ROPE)),
+    "PersonInventory.give_up_packed": lambda: _with(_inventory(_LANTERN), lambda i: i.give_up_packed(_LANTERN)),
     "PersonInventory.hold": lambda: _with(_inventory(_LANTERN), lambda i: i.hold(_LANTERN, HandsNeeded(1))),
     "PersonInventory.put_away": lambda: _with(_holding(_ROPE), lambda i: i.put_away(_ROPE)),
     "PersonInventory.earn": lambda: _with(_inventory(), lambda i: i.earn(Gold(5))),

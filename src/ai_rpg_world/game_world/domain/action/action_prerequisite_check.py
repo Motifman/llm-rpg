@@ -44,8 +44,9 @@ def _acting_occupant(attempt: ActionAttempt, facts: WorldFacts) -> Occupant | No
     vitals = facts.vitals(attempt.actor)
     if vitals.can_act() and attempt.actor in facts.outcomes().undecided_people():
         return PersonBody(attempt.actor)
-    if facts.rules().departed_persons_act and vitals.is_dead() and attempt.actor_requirement().admits_departed():
-        return DepartedPerson(attempt.actor)
+    occupant = vitals.occupant_in_world(facts.rules().departed_persons_act)
+    if occupant == DepartedPerson(attempt.actor) and attempt.actor_requirement().admits_departed():
+        return occupant
     return None
 
 

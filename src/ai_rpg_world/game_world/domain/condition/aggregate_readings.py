@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.declaration.character import GroupDeclaration, GroupingDeclaration
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ItemStateKeyDeclaration,
@@ -119,6 +120,8 @@ class PersonVitalsReading(Protocol):
 
     def life_state(self) -> LifeState: ...
 
+    def occupant_in_world(self, departed_persons_act: bool) -> Occupant: ...
+
     def fatigue_reached_limit(self, rule: FatigueRule) -> bool: ...
 
 
@@ -136,6 +139,8 @@ class PersonInventoryReading(Protocol):
     def count_of(self, spec: ItemSpecId) -> Count: ...
 
     def items_to_give_up(self, spec: ItemSpecId, count: Count) -> tuple[ItemInstanceId, ...]: ...
+
+    def random_packed_item(self, random: RandomSource) -> ItemInstanceId: ...
 
 
 class ItemReading(Protocol):
