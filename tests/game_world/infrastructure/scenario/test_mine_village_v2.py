@@ -6,10 +6,18 @@ import pytest
 
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition, NotCondition
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
-from ai_rpg_world.game_world.domain.condition.person_conditions import IsInSectionCondition
+from ai_rpg_world.game_world.domain.condition.object_state_conditions import ObjectValueIsCondition
+from ai_rpg_world.game_world.domain.condition.person_conditions import (
+    IsAliveCondition,
+    IsAtSpotCondition,
+    IsDownCondition,
+    IsInSectionCondition,
+)
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import MembershipVisibility
+from ai_rpg_world.game_world.domain.declaration.object_and_item.state_value import ChoiceValue
 from ai_rpg_world.game_world.domain.declaration.verb import HappeningDeclaration
-from ai_rpg_world.game_world.domain.effect.combined_effects import ForEveryoneEffect, SequenceEffect
+from ai_rpg_world.game_world.domain.effect.combined_effects import ConditionalEffect, ForEveryoneEffect, SequenceEffect
+from ai_rpg_world.game_world.domain.effect.flag_effects import LowerFlagEffect
 from ai_rpg_world.game_world.domain.effect.membership_and_outcome_effects import SetOutcomeEffect
 from ai_rpg_world.game_world.domain.value_object import Capacity, ObjectId, PersonId, SpotId
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
@@ -108,4 +116,68 @@ class TestTeams:
             PersonId("mio"): ["team_north"],
             PersonId("gen"): ["team_south"],
             PersonId("sayo"): ["team_south"],
+        }
+
+
+class TestBeastHappenings:
+    """モンスターの代わりの獣の出来事が、痛手を当てられる人だけを襲うことを保証する。"""
+
+    @pytest.mark.parametrize(
+        ("happening", "spot"),
+        [
+            ("beast_north_attacks", "north_tunnel"),
+            ("beast_south_attacks", "south_tunnel"),
+            ("beast_deep_attacks", "mid_junction"),
+        ],
+    )
+    def test_beast_attacks_only_standing_people_at_its_spot(
+        self, mine_village: LoadedScenario, happening: str, spot: str
+    ) -> None:
+        """獣が襲うのは出る場所にいて倒れても死んでもいない人だけで、倒れた人に痛手を当てて出来事ごと断られることが無い。"""
+        attacks = _happening(mine_village, happening)
+        assert isinstance(attacks.effect, ForEveryoneEffect)
+        where = attacks.effect.people.where
+        assert isinstance(where, AllOfCondition)
+
+        kinds = {type(child) for child in where.children}
+        at_spot = [child for child in where.children if isinstance(child, IsAtSpotCondition)]
+        not_down = [
+            child
+            for child in where.children
+            if isinstance(child, NotCondition) and isinstance(child.child, IsDownCondition)
+        ]
+
+        assert [condition.spot.spot_id for condition in at_spot] == [SpotId(spot)]
+        assert IsAliveCondition in kinds
+        assert len(not_down) == 1
+
+
+class TestPumpDrains:
+    """排水ポンプが、弁の先の水門が開いているあいだは水を引かないことを保証する。"""
+
+    def test_pump_lowers_a_flood_only_while_its_gate_is_closed(self, mine_village: LoadedScenario) -> None:
+        """弁の一・二・三はそれぞれ南の出入り口・下層の近道・北の出入り口の水を、水門 A・C・B が閉じているときだけ引かせる。"""
+        pump_drains = _happening(mine_village, "pump_drains")
+        assert isinstance(pump_drains.effect, SequenceEffect)
+
+        drains: dict[str, tuple[str, str]] = {}
+        for step in pump_drains.effect.steps:
+            if not isinstance(step, ConditionalEffect):
+                continue
+            assert isinstance(step.condition, AllOfCondition)
+            assert isinstance(step.then, LowerFlagEffect)
+            (mark,) = [c for c in step.condition.children if isinstance(c, ObjectValueIsCondition)]
+            (gate,) = [
+                c.child
+                for c in step.condition.children
+                if isinstance(c, NotCondition) and isinstance(c.child, FlagIsRaisedCondition)
+            ]
+            assert isinstance(gate, FlagIsRaisedCondition)
+            assert isinstance(mark.value, ChoiceValue)
+            drains[mark.value.choice.value] = (gate.flag.flag_id.value, step.then.flag.flag_id.value)
+
+        assert drains == {
+            "one": ("gate_a_open", "flooded_south_entry"),
+            "two": ("gate_c_open", "flooded_shortcut"),
+            "three": ("gate_b_open", "flooded_north_entry"),
         }

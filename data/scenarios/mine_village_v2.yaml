@@ -16,6 +16,8 @@ rules:
 refusal_texts:
   common_rules:
     out_of_reach: 操作盤は籠の中にある。乗り込まないと、把手に手が届かない。
+  world_state:
+    GAME_WORLD.WHEREABOUTS.SECTION_FULL: 籠はもう人でいっぱいで、乗り込めない。
 
 time:
   day_night:
@@ -282,7 +284,7 @@ spots:
             success_text: 重い把手を回しきると、水門の向こうで水がどっと流れ出す音がした。水はどこかへ落ちていく。
             perceived_as:
               witness: { clear: "{actor}が水門の把手を回している。" }
-              sound: { loudness: very_loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
+              sound: { loudness: loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
           close_gate:
             display_label: 水門を閉じる
             precondition:
@@ -296,7 +298,7 @@ spots:
             success_text: 把手を戻すと、水の流れる音がやんだ。
             perceived_as:
               witness: { clear: "{actor}が水門の把手を回している。" }
-              sound: { loudness: loud, clear: 重い鉄の把手が軋む音がした。, muffled: 遠くで鉄の軋む音がした。 }
+              sound: { loudness: normal, clear: 重い鉄の把手が軋む音がした。, muffled: 遠くで鉄の軋む音がした。 }
       fire_door_bar_north:
         name: 防火扉の閂 (北側)
         description: 防火扉に渡す太い鉄の閂。
@@ -356,7 +358,7 @@ spots:
             success_text: 重い把手を回しきると、水門の向こうで水がどっと流れ出す音がした。水はどこかへ落ちていく。
             perceived_as:
               witness: { clear: "{actor}が水門の把手を回している。" }
-              sound: { loudness: very_loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
+              sound: { loudness: loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
           close_gate:
             display_label: 水門を閉じる
             precondition:
@@ -370,7 +372,7 @@ spots:
             success_text: 把手を戻すと、水の流れる音がやんだ。
             perceived_as:
               witness: { clear: "{actor}が水門の把手を回している。" }
-              sound: { loudness: loud, clear: 重い鉄の把手が軋む音がした。, muffled: 遠くで鉄の軋む音がした。 }
+              sound: { loudness: normal, clear: 重い鉄の把手が軋む音がした。, muffled: 遠くで鉄の軋む音がした。 }
       fire_door_bar_south:
         name: 防火扉の閂 (南側)
         description: 防火扉に渡す太い鉄の閂。
@@ -464,7 +466,7 @@ spots:
             success_text: 重い把手を回しきると、水門の向こうで水がどっと流れ出す音がした。水はどこかへ落ちていく。
             perceived_as:
               witness: { clear: "{actor}が水門の把手を回している。" }
-              sound: { loudness: very_loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
+              sound: { loudness: loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
           close_gate:
             display_label: 水門を閉じる
             precondition:
@@ -478,7 +480,7 @@ spots:
             success_text: 把手を戻すと、水の流れる音がやんだ。
             perceived_as:
               witness: { clear: "{actor}が水門の把手を回している。" }
-              sound: { loudness: loud, clear: 重い鉄の把手が軋む音がした。, muffled: 遠くで鉄の軋む音がした。 }
+              sound: { loudness: normal, clear: 重い鉄の把手が軋む音がした。, muffled: 遠くで鉄の軋む音がした。 }
       noise_deep_tracker:
         name: 坑道の奥の気配
         description: 坑道の奥で何かが眠っている気配。
@@ -555,7 +557,7 @@ spots:
             success_text: 把手を引くと、発電機が荒い唸りを上げて回りはじめた。
             perceived_as:
               witness: { clear: "{actor}が発電機の始動の把手を引いた。" }
-              sound: { loudness: very_loud, clear: 発電機が荒い唸りを上げて回りはじめた。, muffled: 遠くで機械の唸りが起こった。 }
+              sound: { loudness: loud, clear: 発電機が荒い唸りを上げて回りはじめた。, muffled: 遠くで機械の唸りが起こった。 }
       pump:
         name: 排水ポンプ
         description: 太い配管が坑道の奥へ延びる排水ポンプ。脇に始動のスイッチがある。
@@ -992,7 +994,7 @@ person_interactions:
       target:
         clear: "{actor}があなたに殴りかかった。"
         dim: 暗がりで、誰かに殴りつけられた。
-      sound: { loudness: loud, clear: 誰かが誰かを殴りつける鈍い音がした。, muffled: 争うような物音がした。 }
+      sound: { loudness: normal, clear: 誰かが誰かを殴りつける鈍い音がした。, muffled: 争うような物音がした。 }
   pickpocket:
     display_label: 荷から何かを抜き取る
     precondition:
@@ -1218,15 +1220,24 @@ happenings:
         steps:
           - lower_flag: pump_pulse
           - conditional:
-              condition: { object_value_is: { key: valve.mark, value: one } }
+              condition:
+                all_of:
+                  - object_value_is: { key: valve.mark, value: one }
+                  - not: { flag_is_raised: gate_a_open }
               then: { lower_flag: flooded_south_entry }
               otherwise: no_effect
           - conditional:
-              condition: { object_value_is: { key: valve.mark, value: two } }
+              condition:
+                all_of:
+                  - object_value_is: { key: valve.mark, value: two }
+                  - not: { flag_is_raised: gate_c_open }
               then: { lower_flag: flooded_shortcut }
               otherwise: no_effect
           - conditional:
-              condition: { object_value_is: { key: valve.mark, value: three } }
+              condition:
+                all_of:
+                  - object_value_is: { key: valve.mark, value: three }
+                  - not: { flag_is_raised: gate_b_open }
               then: { lower_flag: flooded_north_entry }
               otherwise: no_effect
 
@@ -1349,12 +1360,12 @@ happenings:
       all_of:
         - flag_is_raised: beast_north_awake
         - people_count_at_least:
-            people: { where: { is_at_spot: { who: each_person, spot: north_tunnel } } }
+            people: { where: { all_of: [{ is_at_spot: { who: each_person, spot: north_tunnel } }, { not: { is_down: each_person } }, { is_alive: each_person }] } }
             count: 1
     once: false
     effect:
       for_everyone:
-        people: { where: { is_at_spot: { who: each_person, spot: north_tunnel } } }
+        people: { where: { all_of: [{ is_at_spot: { who: each_person, spot: north_tunnel } }, { not: { is_down: each_person } }, { is_alive: each_person }] } }
         effect: { damage: { who: each_person, amount: 8 } }
     notice:
       sound_from:
@@ -1404,12 +1415,12 @@ happenings:
       all_of:
         - flag_is_raised: beast_south_awake
         - people_count_at_least:
-            people: { where: { is_at_spot: { who: each_person, spot: south_tunnel } } }
+            people: { where: { all_of: [{ is_at_spot: { who: each_person, spot: south_tunnel } }, { not: { is_down: each_person } }, { is_alive: each_person }] } }
             count: 1
     once: false
     effect:
       for_everyone:
-        people: { where: { is_at_spot: { who: each_person, spot: south_tunnel } } }
+        people: { where: { all_of: [{ is_at_spot: { who: each_person, spot: south_tunnel } }, { not: { is_down: each_person } }, { is_alive: each_person }] } }
         effect: { damage: { who: each_person, amount: 8 } }
     notice:
       sound_from:
@@ -1459,12 +1470,12 @@ happenings:
       all_of:
         - flag_is_raised: beast_deep_awake
         - people_count_at_least:
-            people: { where: { is_at_spot: { who: each_person, spot: mid_junction } } }
+            people: { where: { all_of: [{ is_at_spot: { who: each_person, spot: mid_junction } }, { not: { is_down: each_person } }, { is_alive: each_person }] } }
             count: 1
     once: false
     effect:
       for_everyone:
-        people: { where: { is_at_spot: { who: each_person, spot: mid_junction } } }
+        people: { where: { all_of: [{ is_at_spot: { who: each_person, spot: mid_junction } }, { not: { is_down: each_person } }, { is_alive: each_person }] } }
         effect: { damage: { who: each_person, amount: 8 } }
     notice:
       sound_from:
