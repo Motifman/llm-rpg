@@ -82,10 +82,10 @@ class SoundStimulus:
         quality = self.source.heard_by(perceiver, self.origin, self.loudness, reach, values)
         if isinstance(quality, HearsNothing):
             return NotPerceived()
-        heard = quality
+        audible = quality
         involved = perceiver.person in self.involved
         return perceiver.notices_surroundings(involved).outcome(
-            when_aware=lambda: self._heard(perceiver, heard, view, involved),
+            when_aware=lambda: self._heard(perceiver, audible, view, involved),
             on_waking=lambda: self._noticed_on_waking(view),
         )
 

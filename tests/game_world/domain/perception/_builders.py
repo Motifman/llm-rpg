@@ -79,4 +79,3 @@ def setting_out(person: PersonId) -> LivingPerceiver:
         location=TravelInProgress(route=route, passage_index=0, ticks_left_on_passage=Ticks(1), departed_from=SQUARE),
         attentive=False,
     )
-
