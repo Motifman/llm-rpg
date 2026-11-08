@@ -1,8 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import final
 
+from ai_rpg_world.game_world.domain.action.action_attempt import (
+    ActorRequirement,
+    DoesNotUseBody,
+    Exertion,
+    LivingOnly,
+    UsesBody,
+)
+from ai_rpg_world.game_world.domain.action.argument_declaration import ArgumentDeclaration
+from ai_rpg_world.game_world.domain.declaration.spot import SpotSectionDeclaration
+from ai_rpg_world.game_world.domain.value_object import InteractionId
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
@@ -24,3 +34,21 @@ class ReactionForTests:
 @dataclass(frozen=True)
 class JointActionForTests:
     joint_id: JointActionId
+
+
+@final
+@dataclass(frozen=True)
+class InteractionForTests:
+    interaction_id: InteractionId
+    exertion: Exertion = field(default_factory=UsesBody)
+    actor_requirement: ActorRequirement = field(default_factory=LivingOnly)
+    allows_stealth: bool = False
+    reaches_unseen: bool = False
+    arguments: tuple[ArgumentDeclaration, ...] = ()
+
+
+@final
+@dataclass(frozen=True)
+class SectionAccessForTests:
+    section: SpotSectionDeclaration
+    exertion: Exertion = field(default_factory=DoesNotUseBody)

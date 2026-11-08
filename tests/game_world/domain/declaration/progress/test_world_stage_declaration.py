@@ -34,3 +34,34 @@ class TestWorldStageDeclarationAsKey:
 
         assert first == second
         assert len({first, second}) == 1
+
+
+class TestAllows:
+    """WorldStageDeclaration.allows / allows_interaction が、組み込みの行為は ActionKind、作者の操作は InteractionId で許可を照らすことを保証する。"""
+
+    def test_allows_action_kind_listed_in_allowed_actions(self) -> None:
+        """allowed_actions に SPEAK があれば、allows(SPEAK) は真、allows(TRAVEL) は偽を返す。"""
+        stage = _stage(frozenset({ActionKind.SPEAK}))
+
+        assert stage.allows(ActionKind.SPEAK)
+        assert not stage.allows(ActionKind.TRAVEL)
+
+    def test_allows_interaction_listed_in_allowed_actions(self) -> None:
+        """allowed_actions に InteractionId("bite") があれば、allows_interaction("bite") は真、("vote") は偽を返す。"""
+        stage = _stage(frozenset({InteractionId("bite")}))
+
+        assert stage.allows_interaction(InteractionId("bite"))
+        assert not stage.allows_interaction(InteractionId("vote"))
+
+    def test_interaction_kind_does_not_allow_any_interaction_by_itself(self) -> None:
+        """allowed_actions に INTERACT_WITH_PERSON があっても、作者の操作は InteractionId で照らすので allows_interaction は偽を返す。"""
+        stage = _stage(frozenset({ActionKind.INTERACT_WITH_PERSON}))
+
+        assert not stage.allows_interaction(InteractionId("bite"))
+
+    def test_all_actions_allowed_allows_every_kind_and_interaction(self) -> None:
+        """allowed_actions が AllActionsAllowed なら、どの ActionKind も InteractionId も許す。"""
+        stage = _stage(AllActionsAllowed())
+
+        assert all(stage.allows(kind) for kind in ActionKind)
+        assert stage.allows_interaction(InteractionId("bite"))

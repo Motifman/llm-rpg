@@ -22,10 +22,10 @@ from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
-from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration
+from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration, ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
-from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration, SpotDeclaration
+from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration, SpotDeclaration, SpotSectionDeclaration
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration, NoDayNight, NoWeather
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 from ai_rpg_world.game_world.domain.objects_and_items import (
@@ -66,6 +66,8 @@ class WorldInMemory:
         people: tuple[PersonId, ...] = (),
         spots: tuple[SpotDeclaration, ...] = (),
         passages: tuple[PassageDeclaration, ...] = (),
+        objects: tuple[ObjectDeclaration, ...] = (),
+        sections: tuple[SpotSectionDeclaration, ...] = (),
         vitals: tuple[PersonVitals, ...] = (),
         inventories: tuple[PersonInventory, ...] = (),
         items: tuple[Item, ...] = (),
@@ -82,14 +84,14 @@ class WorldInMemory:
             flags=(),
             spots=spots,
             passages=passages,
-            objects=(),
+            objects=objects,
             item_specs=(),
             groupings=(),
             groups=(),
             characters=(),
             world_stages=stage_declarations,
             group_decisions=(),
-            sections=(),
+            sections=sections,
             outcomes=(),
         )
         self.clock_aggregate = WorldClock(world)

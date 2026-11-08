@@ -40,6 +40,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
     Temperature,
 )
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.world_design_exception import UnknownNameFlaw, WorldDesignFlawsException
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
@@ -366,6 +367,33 @@ class TestSectionsAt:
         nouns = _nouns(spots=[_spot("lift_landing"), _spot("shore")], sections=[_section("boat", "shore")])
 
         assert nouns.sections_at(SpotId("lift_landing")) == ()
+
+
+class TestLookupById:
+    """DeclaredNouns.world_stage_of / object_of が、実行時に集約が持つ ID から宣言を引くことを保証する。"""
+
+    def test_world_stage_of_returns_the_declaration_with_the_id(self) -> None:
+        """宣言した段階の WorldStageId を渡すと、その WorldStageDeclaration を返す。"""
+        night = _world_stage("night")
+        nouns = _nouns(world_stages=[_world_stage("day"), night])
+
+        assert nouns.world_stage_of(WorldStageId("night")) == night
+
+    def test_object_of_returns_the_declaration_with_the_id(self) -> None:
+        """宣言した物の ObjectId を渡すと、その ObjectDeclaration を返す。"""
+        lever = _object("lever", "lift_landing")
+        nouns = _nouns(spots=[_spot("lift_landing")], objects=[lever])
+
+        assert nouns.object_of(ObjectId("lever")) == lever
+
+    def test_undeclared_id_raises_undeclared_noun_exception(self) -> None:
+        """宣言に無い WorldStageId や ObjectId を渡すと UndeclaredNounException を投げる。"""
+        nouns = _nouns(world_stages=[_world_stage("day")])
+
+        with pytest.raises(UndeclaredNounException):
+            nouns.world_stage_of(WorldStageId("night"))
+        with pytest.raises(UndeclaredNounException):
+            nouns.object_of(ObjectId("lever"))
 
 
 def _flaw(declaration: str, name: str, field: str, reason: str) -> DesignFlaw:

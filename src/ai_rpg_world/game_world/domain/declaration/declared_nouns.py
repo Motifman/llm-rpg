@@ -26,8 +26,9 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
     SpotSectionDeclaration,
 )
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.world_design_exception import UnknownNameFlaw, WorldDesignFlawsException
-from ai_rpg_world.game_world.domain.value_object import GroupingId, SpotId
+from ai_rpg_world.game_world.domain.value_object import GroupingId, ObjectId, SpotId, WorldStageId
 
 _Declaration = TypeVar("_Declaration")
 
@@ -53,6 +54,12 @@ class _DeclaredOfKind(Generic[_Declaration]):
 
     def find(self, name: str) -> _Declaration | None:
         return self._by_name.get(name)
+
+    def with_id(self, declared_id: Any) -> _Declaration:
+        name = str(declared_id.value)
+        if name not in self._by_name:
+            raise UndeclaredNounException(f"{self.kind} {name!r} is not declared")
+        return self._by_name[name]
 
     def flaws_if_unknown(self, name: str, at: DesignLocation) -> list[DesignFlaw]:
         if name in self._by_name:
@@ -127,6 +134,9 @@ class DeclaredNouns:
     def object(self, name: str, at: DesignLocation) -> ObjectDeclaration:
         return self._objects.get(name, at)
 
+    def object_of(self, object_id: ObjectId) -> ObjectDeclaration:
+        return self._objects.with_id(object_id)
+
     def object_state_key(self, object_name: str, key: str, at: DesignLocation) -> ObjectStateKeyDeclaration:
         obj = self._objects.get(object_name, at)
         for state_key in obj.state_keys:
@@ -148,6 +158,9 @@ class DeclaredNouns:
 
     def world_stage(self, name: str, at: DesignLocation) -> WorldStageDeclaration:
         return self._world_stages.get(name, at)
+
+    def world_stage_of(self, stage_id: WorldStageId) -> WorldStageDeclaration:
+        return self._world_stages.with_id(stage_id)
 
     def group_decision(self, name: str, at: DesignLocation) -> GroupDecisionDeclaration:
         return self._group_decisions.get(name, at)
