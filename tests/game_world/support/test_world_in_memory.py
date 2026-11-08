@@ -39,6 +39,8 @@ from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
 from ai_rpg_world.game_world.domain.objects_and_items import Item, ObjectState, PersonInventory
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import PersonHandle
+from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
+from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.person import (
     Alive,
     Died,
@@ -390,6 +392,18 @@ class TestAggregatesAreTheSameInstances:
 
         assert world.aggregates().flags() is world.aggregates().flags()
         assert world.facts().flags() is world.aggregates().flags()
+
+    def test_missed_notices_kept_through_aggregates_are_seen_by_facts(self) -> None:
+        """aggregates で bob の知らせをためると、facts の missed_notices(bob) がその知らせを読み、alice の分は空のまま。"""
+        world = _world()
+        notice = MissedNotice(
+            text=TextWithAssignedPeople(template="荷が軽くなっている。", people={}), happened_at=WorldTick(3)
+        )
+
+        world.aggregates().missed_notices(_BOB).keep(notice)
+
+        assert world.facts().missed_notices(_BOB).notices() == (notice,)
+        assert world.facts().missed_notices(_ALICE).notices() == ()
 
     def test_scenario_progress_and_latest_actions_are_kept_by_the_world(self) -> None:
         """出来事の帳簿と最後の行為は、世界が 1 つずつ持ち、facts は何度読んでも同じ集約を返す。"""

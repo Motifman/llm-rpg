@@ -5,6 +5,7 @@ from ai_rpg_world.game_world.domain.world_records.latest_actions import (
     NeverDone,
     PersonActedEvent,
 )
+from ai_rpg_world.game_world.domain.world_records.missed_notices import MissedNotices
 from ai_rpg_world.game_world.domain.world_records.scenario_progress import NeverFired, ScenarioProgress
 from ai_rpg_world.game_world.domain.world_records.world_flags import (
     WorldFlagLoweredEvent,
@@ -17,6 +18,7 @@ __all__ = [
     "ActionAttemptFailedEvent",
     "LatestActions",
     "LatestActionsEvent",
+    "MissedNotices",
     "NeverDone",
     "PersonActedEvent",
     "NeverFired",

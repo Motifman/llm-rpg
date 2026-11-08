@@ -16,7 +16,7 @@ from ai_rpg_world.game_world.domain.person import GroupMembership, PersonOutcome
 from ai_rpg_world.game_world.domain.value_object import ObjectId, PersonId, SpotId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import PassageStates, SpotAtmospheres, Whereabouts
 from ai_rpg_world.game_world.domain.world_progress import GroupDecision, Weather, WorldStage
-from ai_rpg_world.game_world.domain.world_records import WorldFlags
+from ai_rpg_world.game_world.domain.world_records import MissedNotices, WorldFlags
 
 
 class WorldAggregates(Protocol):
@@ -43,6 +43,8 @@ class WorldAggregates(Protocol):
     def ground_items(self, spot: SpotId) -> GroundItems: ...
 
     def search_progress(self, spot: SpotId) -> SpotSearchProgress: ...
+
+    def missed_notices(self, person: PersonId) -> MissedNotices: ...
 
     def world_stage(self) -> WorldStage: ...
 

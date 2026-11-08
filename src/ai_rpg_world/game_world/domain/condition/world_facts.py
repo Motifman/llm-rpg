@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
     GroupMembershipReading,
     ItemReading,
     LatestActionsReading,
+    MissedNoticesReading,
     ObjectStateReading,
     PassageStatesReading,
     PeopleRegisterReading,
@@ -81,5 +82,7 @@ class WorldFacts(Protocol):
     def ground_items(self, spot: SpotId) -> GroundItemsReading: ...
 
     def search_progress(self, spot: SpotId) -> SpotSearchProgressReading: ...
+
+    def missed_notices(self, person: PersonId) -> MissedNoticesReading: ...
 
     def group_decision(self, decision: GroupDecisionDeclaration) -> GroupDecisionReading: ...
