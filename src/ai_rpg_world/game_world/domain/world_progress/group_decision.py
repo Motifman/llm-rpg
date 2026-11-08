@@ -177,11 +177,12 @@ class GroupDecision(AggregateRoot[GroupDecisionEvent]):
         ballots = frozenset(Ballot(voter, choice) for voter, choice in self._ballots.items())
         abstentions = sum(1 for choice in self._ballots.values() if isinstance(choice, Abstain))
         votes = Counter(choice.person for choice in self._ballots.values() if isinstance(choice, VoteFor))
-        ranked = votes.most_common(2)
-        if ranked and ranked[0][1] > abstentions and (len(ranked) == 1 or ranked[0][1] > ranked[1][1]):
+        top = max(votes.values(), default=0)
+        leaders = [person for person, count in votes.items() if count == top]
+        if len(leaders) == 1 and top > abstentions:
             self.add_event(
                 GroupDecisionReachedEvent(
-                    **new_event_stamp(), decision_id=self._decision_id, chosen=ranked[0][0], ballots=ballots
+                    **new_event_stamp(), decision_id=self._decision_id, chosen=leaders[0], ballots=ballots
                 )
             )
             return
