@@ -27,3 +27,15 @@ class UnseenTargetNotAllowedException(GameWorldDomainException):
 
 class ArgumentsDoNotMatchDeclarationException(GameWorldDomainException):
     error_code = "GAME_WORLD.ACTION.ARGUMENTS_DO_NOT_MATCH_DECLARATION"
+
+
+class BlankRefusalCodeException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ACTION.BLANK_REFUSAL_CODE"
+
+
+class MissingCommonRuleRefusalTextException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ACTION.MISSING_COMMON_RULE_REFUSAL_TEXT"
+
+
+class UnknownPersonInRefusalTextException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ACTION.UNKNOWN_PERSON_IN_REFUSAL_TEXT"
