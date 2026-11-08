@@ -12,7 +12,7 @@ from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeValidationException,
 )
-from ai_rpg_world.eventing import AggregateRoot, DomainEvent
+from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 
 INDEX_TEXT_MAX_LENGTH = 40
 BODY_MAX_LENGTH = 400
@@ -234,8 +234,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
         )
         episode.add_event(
             EpisodeWrittenEvent(
-                event_id=uuid.uuid4().int,
-                occurred_at=datetime.now(timezone.utc),
+                **new_event_stamp(),
                 being_id=being_id,
                 episode_id=episode_id,
                 handle=episode.handle,
@@ -298,8 +297,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
         self._last_recalled_turn = turn
         self.add_event(
             EpisodeRecalled(
-                event_id=uuid.uuid4().int,
-                occurred_at=datetime.now(timezone.utc),
+                **new_event_stamp(),
                 being_id=self._being_id,
                 episode_id=self._episode_id,
                 handle=self._handle,
@@ -317,8 +315,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
         self._index_history = history
         self.add_event(
             EpisodeIndexRevised(
-                event_id=uuid.uuid4().int,
-                occurred_at=datetime.now(timezone.utc),
+                **new_event_stamp(),
                 being_id=self._being_id,
                 episode_id=self._episode_id,
                 handle=self._handle,

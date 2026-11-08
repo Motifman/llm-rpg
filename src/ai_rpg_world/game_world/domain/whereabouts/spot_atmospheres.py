@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from ai_rpg_world.eventing import AggregateRoot
+from ai_rpg_world.eventing import AggregateRoot, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.spot import SpotAtmosphere, SpotDeclaration
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import UnknownSpotException
 from ai_rpg_world.game_world.domain.value_object import WorldId
-from ai_rpg_world.game_world.domain.whereabouts._new_event import new_event
 from ai_rpg_world.game_world.domain.whereabouts.spot_atmosphere_events import SpotAtmosphereChangedEvent
 
 
@@ -24,8 +23,8 @@ class SpotAtmospheres(AggregateRoot[SpotAtmosphereChangedEvent]):
             return
         self._atmospheres[spot.spot_id] = atmosphere
         self.add_event(
-            new_event(
-                SpotAtmosphereChangedEvent,
+            SpotAtmosphereChangedEvent(
+                **new_event_stamp(),
                 world_id=self._world_id,
                 spot=spot.spot_id,
                 before=before,

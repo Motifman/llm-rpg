@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
+from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
-from ai_rpg_world.game_world.domain.objects_and_items._occurrence import occurrence
 from ai_rpg_world.game_world.domain.value_object import Count, PersonId, SpotId
 
 
@@ -34,7 +34,7 @@ class SpotSearchProgress(AggregateRoot[SpotSearchedEvent]):
         self._search_counts[searcher] = after
         self.add_event(
             SpotSearchedEvent(
-                **occurrence(),
+                **new_event_stamp(),
                 spot_id=self._spot_id,
                 searcher=searcher,
                 count_before=before,

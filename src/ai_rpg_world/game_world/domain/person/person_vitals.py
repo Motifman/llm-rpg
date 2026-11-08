@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fractions import Fraction
 from typing import Any
 
+from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.game_world.domain.exception.person_exception import (
     PersonNotAliveException,
@@ -175,8 +176,7 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
     def _add(self, event_type: type[PersonVitalsEvent], **fields: Any) -> None:
         self.add_event(
             event_type(
-                event_id=uuid.uuid4().int,
-                occurred_at=datetime.now(timezone.utc),
+                **new_event_stamp(),
                 person=self._person,
                 **fields,
             )

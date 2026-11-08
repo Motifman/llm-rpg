@@ -4,7 +4,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import final
 
-from ai_rpg_world.eventing import AggregateRoot, DomainEvent
+from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
 from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
     AbstainNotAllowedException,
@@ -17,7 +17,6 @@ from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
     VoterNotInDecisionException,
 )
 from ai_rpg_world.game_world.domain.value_object import GroupDecisionId, PersonId
-from ai_rpg_world.game_world.domain.world_progress._event_stamp import new_event_stamp
 
 
 @final

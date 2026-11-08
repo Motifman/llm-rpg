@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
+from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
@@ -10,7 +11,6 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     ItemAlreadyCarriedException,
     ItemNotCarriedException,
 )
-from ai_rpg_world.game_world.domain.objects_and_items._occurrence import occurrence
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.value_object import Capacity, Gold, HandsNeeded, PersonId
 
@@ -95,7 +95,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         if self.is_full():
             raise InventoryFullException(f"{self._person_id.value} cannot carry more than {self._capacity.value} items")
         self._packed.append(item)
-        self.add_event(ItemReceivedEvent(**occurrence(), person=self._person_id, item=item))
+        self.add_event(ItemReceivedEvent(**new_event_stamp(), person=self._person_id, item=item))
 
     def give_up(self, item: ItemInstanceId) -> None:
         self._require_carried(item)
@@ -104,7 +104,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
             self._held = [held for held in self._held if held.item != item]
         else:
             self._packed.remove(item)
-        self.add_event(ItemGivenUpEvent(**occurrence(), person=self._person_id, item=item, was_held=was_held))
+        self.add_event(ItemGivenUpEvent(**new_event_stamp(), person=self._person_id, item=item, was_held=was_held))
 
     def hold(self, item: ItemInstanceId, hands_needed: HandsNeeded) -> None:
         self._require_carried(item)
@@ -114,7 +114,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
             self.put_away(self._held[0].item)
         self._packed.remove(item)
         self._held.append(_HeldItem(item, hands_needed))
-        self.add_event(ItemHeldEvent(**occurrence(), person=self._person_id, item=item))
+        self.add_event(ItemHeldEvent(**new_event_stamp(), person=self._person_id, item=item))
 
     def put_away(self, item: ItemInstanceId) -> None:
         self._require_carried(item)
@@ -122,7 +122,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
             return
         self._held = [held for held in self._held if held.item != item]
         self._packed.append(item)
-        self.add_event(ItemPutAwayEvent(**occurrence(), person=self._person_id, item=item))
+        self.add_event(ItemPutAwayEvent(**new_event_stamp(), person=self._person_id, item=item))
 
     def earn(self, amount: Gold) -> None:
         if amount == Gold(0):
@@ -130,7 +130,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         before = self._gold
         self._gold = before + amount
         self.add_event(
-            GoldEarnedEvent(**occurrence(), person=self._person_id, amount=amount, before=before, after=self._gold)
+            GoldEarnedEvent(**new_event_stamp(), person=self._person_id, amount=amount, before=before, after=self._gold)
         )
 
     def pay(self, amount: Gold) -> None:
@@ -139,7 +139,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         before = self._gold
         self._gold = before - amount
         self.add_event(
-            GoldPaidEvent(**occurrence(), person=self._person_id, amount=amount, before=before, after=self._gold)
+            GoldPaidEvent(**new_event_stamp(), person=self._person_id, amount=amount, before=before, after=self._gold)
         )
 
     def items(self) -> tuple[ItemInstanceId, ...]:
