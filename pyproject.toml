@@ -151,6 +151,7 @@ files = [
     "src/ai_rpg_world/application/trace",
     "src/ai_rpg_world/infrastructure",
     "src/ai_rpg_world/presentation",
+    "tests/game_world/support",
 ]
 
 # litellm は __all__ を持たないため、実在する例外クラスの import も

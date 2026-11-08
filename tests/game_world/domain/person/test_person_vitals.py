@@ -682,3 +682,31 @@ class TestRefusalsLeaveStateUnchanged:
             vitals.take_damage(Damage(1), WorldTick(6), WorldHappening())
 
         assert vitals.life_state() == Down(fell_at=WorldTick(5), cause=_STRUCK)
+
+
+class TestHungerAndFatigueReadings:
+    """PersonVitals.hunger / fatigue が、いまの空腹と疲れの量を答えることを保証する。"""
+
+    def test_start_with_no_hunger_and_no_fatigue(self) -> None:
+        """始めたばかりの人の空腹と疲れは、どちらも 0。"""
+        vitals = _vitals()
+
+        assert vitals.hunger() == HungerAmount(0)
+        assert vitals.fatigue() == FatigueAmount(0)
+
+    def test_hunger_grows_as_time_passes(self) -> None:
+        """1 tick に 1 ずつ空腹が進む規則で 2 tick 過ごすと、空腹は 2。"""
+        vitals = _vitals()
+
+        vitals.pass_time(WorldTick(1), _death(), _hunger(per_tick=1))
+        vitals.pass_time(WorldTick(2), _death(), _hunger(per_tick=1))
+
+        assert vitals.hunger() == HungerAmount(2)
+
+    def test_fatigue_grows_with_exertion(self) -> None:
+        """1 回体を使うと 2 疲れる規則で 1 回体を使うと、疲れは 2。"""
+        vitals = _vitals()
+
+        vitals.exert(_fatigue(per_exertion=2))
+
+        assert vitals.fatigue() == FatigueAmount(2)

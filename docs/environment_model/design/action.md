@@ -8,24 +8,33 @@ class ActionAttempt(Protocol):
     def actor_requirement(self) -> ActorRequirement: ...
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]: ...
     def exertion(self) -> Exertion: ...
+    def person_as(self, kind: SubjectKind) -> PersonId: ...   # 答えられない主語は SubjectNotInTriggerException
+    def this_item(self) -> ItemInstanceId: ...                # 品物の無い行為は ItemNotInTriggerException
 
 
-Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | JointActionCompleted | WorldTimePassing
+Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | JointActionCompleted | WorldTimePassing | EachPersonOf
+# どのきっかけも person_as と this_item を持つ。GroupDecisionResult は CHOSEN_BY_GROUP だけを答え、ほかの行為でないきっかけは何も答えない
+
+@final
+@dataclass(frozen=True)
+class EachPersonOf:                         # ForEveryone などの中で、外のきっかけと「その人」を包む
+    outer: Trigger
+    person: PersonId                        # EACH_PERSON にはこの人を、ほかの主語と品物は outer が答える
 
 @final
 @dataclass(frozen=True)
 class JointActionCompleted:
-    joint: JointActionDeclaration
+    joint: CompletedJointAction             # joint_id を答える Protocol。JointActionDeclaration が満たす
 
 @final
 @dataclass(frozen=True)
 class HappeningFired:
-    happening: HappeningDeclaration
+    happening: FiredHappening               # happening_id を答える Protocol。HappeningDeclaration が満たす
 
 @final
 @dataclass(frozen=True)
 class ReactionFired:
-    reaction: ReactionDeclaration
+    reaction: FiredReaction                 # reaction_id を答える Protocol。ReactionDeclaration が満たす
 
 @final
 @dataclass(frozen=True)

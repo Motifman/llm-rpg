@@ -138,6 +138,12 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
     def hp(self) -> HitPoints:
         return self._hp
 
+    def hunger(self) -> HungerAmount:
+        return self._hunger
+
+    def fatigue(self) -> FatigueAmount:
+        return self._fatigue
+
     def can_act(self) -> bool:
         return isinstance(self._life_state, Alive)
 

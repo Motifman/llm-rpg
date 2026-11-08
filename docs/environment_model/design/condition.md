@@ -44,7 +44,20 @@ class ChanceOccasion:
 Subject = Actor | Target | ChosenByGroup | NamedPerson | EachPerson   # 誰について。1 人に決まるものだけ
 # Actor: 行為をした人 / Target: 人への操作の相手 / ChosenByGroup: 集団の決定で選ばれた人
 # NamedPerson(character): 宣言で名指しした人 / EachPerson: ForEveryone などで 1 人ずつ見るときの、その人
+# 主語の各型は次を持つ:
+#   def person_in(self, trigger: Trigger) -> PersonId: ...    # きっかけの person_as(SubjectKind) に尋ねる。NamedPerson はきっかけを見ない
+#   def requirements(self) -> Requirements: ...               # 自分の SubjectKind だけを要る
 ItemSubject = ThisItem                             # どの品物について (品物を使う行為、手元の道具への操作のきっかけが答える)
+# ThisItem.item_in(trigger) -> ItemInstanceId。きっかけの this_item() に尋ねる
+
+class SubjectKind(Enum):                    # ACTOR / TARGET / CHOSEN_BY_GROUP / NAMED_PERSON / EACH_PERSON
+
+@final
+@dataclass(frozen=True)
+class ConditionPath:                        # 条件の木の中の位置。根からの子の位置の並び。EffectPath も同じ形
+    @classmethod
+    def root(cls) -> ConditionPath: ...
+    def child(self, position: int) -> ConditionPath: ...
 
 @final
 @dataclass(frozen=True)
@@ -61,6 +74,10 @@ class Requirements:
     uses_chance: bool
     uses_action_arguments: bool
     waits_for_flags: frozenset[FlagDeclaration]
+
+    @classmethod
+    def nothing(cls) -> Requirements: ...                       # 主語も偶然も引数も待つ旗も要らない
+    def combined_with(self, other: Requirements) -> Requirements: ...   # 主語と旗は和、偶然と引数はどちらかが使えば使う。つなぎが子の要求を合わせる
 
 @final
 @dataclass(frozen=True)
@@ -160,5 +177,7 @@ TicksSinceHappeningAtLeastCondition(happening: HappeningDeclaration, ticks: Tick
 | 集団の決定の結果 (`when_decided`) | `ChosenByGroup` |
 | 出来事、反応、二人で合わせる操作の結果 | なし |
 | `ForEveryone` / `ForSomeone` / `PeopleSelection` の中 | 外の主語 + `EachPerson` |
+
+`ForEveryone` などの中では、外のきっかけを `EachPersonOf(outer, person)` ([action.md](action.md)) で包んで子に渡し、`EachPerson` はその人を指す。きっかけが答えない主語は `SubjectNotInTriggerException` になる。
 
 `NamedPerson` はどこでも使える。行為の引数を見るもの (`ArgumentEqualsCondition`、`ItemByArgument`) は行為の中でしか使えない。compose が `requirements()` と照らし合わせ、使えない主語は `DesignFlaw` にする。
