@@ -5,9 +5,13 @@ import pytest
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ChoiceName,
     ChoiceStateKind,
+    CountStateKind,
+    FlagStateKind,
     NoRefill,
+    StateKind,
     StockStateKind,
     TextBody,
+    WrittenTextStateKind,
 )
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
     ChoiceDuplicatedException,
@@ -92,3 +96,24 @@ class TestTextBody:
         """空、または空白だけの本文は TextBodyBlankException を投げる。"""
         with pytest.raises(TextBodyBlankException):
             TextBody(raw)
+
+
+class TestStateKindHoldsWrittenText:
+    """状態の種類が、書いた文を持つ種類かを自分で答えることを保証する。"""
+
+    def test_written_text_kind_holds_written_text(self) -> None:
+        """WrittenTextStateKind は holds_written_text に真を答える。"""
+        assert WrittenTextStateKind().holds_written_text()
+
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            FlagStateKind(),
+            CountStateKind(),
+            ChoiceStateKind((ChoiceName("up"),)),
+            StockStateKind(Count(1), NoRefill()),
+        ],
+    )
+    def test_other_kinds_do_not_hold_written_text(self, kind: StateKind) -> None:
+        """旗・数・選択・在庫の種類は holds_written_text に偽を答える。"""
+        assert not kind.holds_written_text()

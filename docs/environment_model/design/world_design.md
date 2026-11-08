@@ -98,7 +98,7 @@ CountStateKind()                            # 上限を持たない
 ChoiceStateKind(choices: tuple[ChoiceName, ...])     # 1 つ以上、重ならない
 StockStateKind(capacity: Count, refills_every: Ticks | NoRefill)   # 上限・間隔ともに 1 以上
 WrittenTextStateKind()
-# どの種類も accepts(value: StateValue) -> bool を持つ
+# どの種類も accepts(value: StateValue) -> bool と holds_written_text() -> bool (書いた文を持つ種類か。WrittenTextStateKind だけが真) を持つ
 
 StateValue = FlagValue | CountValue | ChoiceValue | StockValue | WrittenText | NothingWritten
 FlagValue(raised: bool)

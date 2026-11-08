@@ -27,12 +27,18 @@ class FlagStateKind:
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, FlagValue)
 
+    def holds_written_text(self) -> bool:
+        return False
+
 
 @final
 @dataclass(frozen=True)
 class CountStateKind:
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, CountValue)
+
+    def holds_written_text(self) -> bool:
+        return False
 
 
 @final
@@ -48,6 +54,9 @@ class ChoiceStateKind:
 
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, ChoiceValue) and value.choice in self.choices
+
+    def holds_written_text(self) -> bool:
+        return False
 
 
 @final
@@ -73,12 +82,18 @@ class StockStateKind:
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, StockValue) and value.amount <= self.capacity
 
+    def holds_written_text(self) -> bool:
+        return False
+
 
 @final
 @dataclass(frozen=True)
 class WrittenTextStateKind:
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, NothingWritten)
+
+    def holds_written_text(self) -> bool:
+        return True
 
 
 ItemStateKind = FlagStateKind | CountStateKind | ChoiceStateKind
