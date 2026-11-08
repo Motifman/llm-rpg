@@ -12,6 +12,7 @@ docs/environment_model/design/world_state.md の決まり:
 - 状態を変える操作は、公開メソッドのうち戻り値の注釈が None のもの (CLAUDE.md の「状態を変える操作は値を返さない」)
 - 操作ごとに、状態が変わる呼び方を下の表に手で書く。見つけた操作が表に無ければ落ちる
 - 状態が変わらない呼び方 (同じ値への set など) は表に書かない。そこでイベントが出ないのは正しい振る舞いのため
+- 状態を変えずにイベントだけを出す操作 (断られた試みの記録) は、表に書いたうえで _EVENT_ONLY_OPERATIONS に挙げる
 """
 
 from __future__ import annotations
@@ -20,14 +21,19 @@ import copy
 import importlib
 import inspect
 import pkgutil
-import typing
 from collections.abc import Callable
 from typing import Any
 
 import pytest
 from tests.game_world.domain.whereabouts._builders import CLOSED, OPEN, atmosphere, door, path, section, spot
+from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
 
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
+from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
+from ai_rpg_world.game_world.domain.action.common_rule_refusal import TooTired
+from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
+from ai_rpg_world.game_world.domain.condition.condition import NoText
+from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
 from ai_rpg_world.game_world.domain.declaration.character import (
     GroupDeclaration,
     GroupingDeclaration,
@@ -56,6 +62,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
 )
 from ai_rpg_world.game_world.domain.declaration.progress import (
     AllActionsAllowed,
+    FlagDeclaration,
     GroupDecisionDeclaration,
     WorldStageDeclaration,
 )
@@ -66,6 +73,8 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     WeatherState,
     WeatherType,
 )
+from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration, Finding
+from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items import (
     GroundItems,
@@ -75,6 +84,7 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     PersonInventory,
     SpotSearchProgress,
 )
+from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.person import (
     Died,
     GroupMembership,
@@ -99,6 +109,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
     DisplayName,
     FatigueAmount,
+    FlagId,
     Gold,
     GroupDecisionId,
     GroupId,
@@ -117,6 +128,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldStageId,
     WorldTick,
 )
+from ai_rpg_world.game_world.domain.value_object.discoverable_id import DiscoverableId
 from ai_rpg_world.game_world.domain.whereabouts import (
     PassageStates,
     PersonBody,
@@ -132,9 +144,12 @@ from ai_rpg_world.game_world.domain.world_progress import (
     WorldEnding,
     WorldStage,
 )
+from ai_rpg_world.game_world.domain.world_records import LatestActions, WorldFlags
 
 _DOMAIN_PACKAGE = "ai_rpg_world.game_world.domain"
 _LEDGER_AGGREGATES = frozenset({"ScenarioProgress", "MissedNotices"})
+# 断られた試みは最後に行った行為を変えないが、本人と周りに断られたことを届けるためにイベントだけを出す
+_EVENT_ONLY_OPERATIONS = frozenset({"LatestActions.note_failed_attempt"})
 
 
 def _is_watched(cls: type) -> bool:
@@ -160,12 +175,18 @@ def _public_methods(cls: type) -> list[tuple[str, Callable[..., Any]]]:
     ]
 
 
+def _return_annotation(member: Callable[..., Any]) -> Any:
+    # 引数の注釈は TYPE_CHECKING の下でだけ import した型を指すことがあり、評価すると NameError になるので、戻り値だけを
+    # 評価せずに見る。from __future__ import annotations のモジュールでは "None" という文字列になる
+    return inspect.signature(member).return_annotation
+
+
 def _state_changing_operations(cls: type) -> list[str]:
-    return [name for name, member in _public_methods(cls) if typing.get_type_hints(member).get("return") is type(None)]
+    return [name for name, member in _public_methods(cls) if _return_annotation(member) in (None, "None")]
 
 
 def _methods_without_return_annotation(cls: type) -> list[str]:
-    return [name for name, member in _public_methods(cls) if "return" not in typing.get_type_hints(member)]
+    return [name for name, member in _public_methods(cls) if _return_annotation(member) is inspect.Signature.empty]
 
 
 def _discovered_operations() -> set[str]:
@@ -403,6 +424,21 @@ def _stage(stage_id: str) -> WorldStageDeclaration:
     )
 
 
+_FOUNTAIN_COIN = DiscoverableDeclaration(
+    discoverable_id=DiscoverableId("fountain_coin"),
+    spot_id=_PLAZA.spot_id,
+    found_text=TextWithUnassignedPeople("噴水の底に銅貨が沈んでいる"),
+    condition=TickAtLeastCondition(tick=_NOW, failure_text=NoText()),
+    when_found=NoEffect(),
+    finding=Finding.ONCE_IN_WORLD,
+)
+_BELL_RUNG = FlagDeclaration(flag_id=FlagId("bell_rung"), meaning=DescriptionText("鐘が鳴った"), initially_raised=False)
+_GATE_SHUT = FlagDeclaration(
+    flag_id=FlagId("gate_shut"), meaning=DescriptionText("門が閉じている"), initially_raised=True
+)
+_TICK_PASSING = WorldTimePassing(WorldTick(1))
+
+
 def _with(aggregate: AggregateRoot[Any], call: Callable[[Any], None]) -> _PreparedCall:
     return aggregate, lambda: call(aggregate)
 
@@ -460,6 +496,9 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "SpotSearchProgress.record_search": lambda: _with(
         SpotSearchProgress(_PLAZA.spot_id), lambda s: s.record_search(_ALICE)
     ),
+    "SpotSearchProgress.mark_found": lambda: _with(
+        SpotSearchProgress(_PLAZA.spot_id), lambda s: s.mark_found(_FOUNTAIN_COIN, _ALICE)
+    ),
     "PersonInventory.receive": lambda: _with(_inventory(), lambda i: i.receive(_LANTERN, _LANTERN_SPEC)),
     "PersonInventory.give_up": lambda: _with(_inventory(_LANTERN), lambda i: i.give_up(_LANTERN)),
     "PersonInventory.give_up_held": lambda: _with(_holding(_ROPE), lambda i: i.give_up_held(_ROPE)),
@@ -498,6 +537,22 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "WorldStage.enter": lambda: _with(
         WorldStage.open(_WORLD, _stage("before_dawn"), _NOW), lambda s: s.enter(_stage("dawn"), WorldTick(1))
     ),
+    "WorldFlags.raise_flag": lambda: _with(WorldFlags(_WORLD), lambda f: f.raise_flag(_BELL_RUNG, _TICK_PASSING)),
+    "WorldFlags.lower_flag": lambda: _with(WorldFlags(_WORLD), lambda f: f.lower_flag(_GATE_SHUT, _TICK_PASSING)),
+    "LatestActions.note": lambda: _with(
+        LatestActions(_WORLD), lambda a: a.note(ActionAttemptForTests(actor_id=_ALICE), _NOW)
+    ),
+    "LatestActions.note_failed_attempt": lambda: _with(
+        LatestActions(_WORLD),
+        lambda a: a.note_failed_attempt(
+            ActionRefusal(
+                attempt=ActionAttemptForTests(actor_id=_ALICE),
+                reason=TooTired(),
+                text=TextWithUnassignedPeople("{actor}は疲れている").about({"actor": _ALICE}),
+            ),
+            _NOW,
+        ),
+    ),
     "WorldEnding.end": lambda: _with(WorldEnding(_WORLD), lambda e: e.end(WorldTick(1))),
 }
 
@@ -521,7 +576,7 @@ class TestEveryStateChangingOperationIsWatched:
 class TestStateChangingCallRecordsEvents:
     """表に書いた呼び方が実際に集約の状態を変え、そのときドメインイベントを 1 つ以上ためることを保証する。"""
 
-    @pytest.mark.parametrize("operation", sorted(_STATE_CHANGING_CALLS))
+    @pytest.mark.parametrize("operation", sorted(_STATE_CHANGING_CALLS.keys() - _EVENT_ONLY_OPERATIONS))
     def test_call_changes_the_aggregate_state(self, operation: str) -> None:
         """表の呼び方は、呼ぶ前と後で集約の中身 (_events を除く属性) を変える。状態の変わらない呼び方を書いた表は落ちる。"""
         aggregate, call = _STATE_CHANGING_CALLS[operation]()
@@ -530,6 +585,16 @@ class TestStateChangingCallRecordsEvents:
         call()
 
         assert _state_of(aggregate) != before
+
+    @pytest.mark.parametrize("operation", sorted(_EVENT_ONLY_OPERATIONS))
+    def test_event_only_call_leaves_the_aggregate_state(self, operation: str) -> None:
+        """_EVENT_ONLY_OPERATIONS に挙げた呼び方は、集約の中身を変えない。状態を変えるようになったら挙げたままにせず落ちる。"""
+        aggregate, call = _STATE_CHANGING_CALLS[operation]()
+        before = _state_of(aggregate)
+
+        call()
+
+        assert _state_of(aggregate) == before
 
     @pytest.mark.parametrize("operation", sorted(_STATE_CHANGING_CALLS))
     def test_call_records_at_least_one_event(self, operation: str) -> None:

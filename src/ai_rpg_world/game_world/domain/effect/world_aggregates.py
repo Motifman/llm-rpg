@@ -16,9 +16,12 @@ from ai_rpg_world.game_world.domain.person import GroupMembership, PersonOutcome
 from ai_rpg_world.game_world.domain.value_object import ObjectId, PersonId, SpotId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import PassageStates, SpotAtmospheres, Whereabouts
 from ai_rpg_world.game_world.domain.world_progress import GroupDecision, Weather, WorldStage
+from ai_rpg_world.game_world.domain.world_records import WorldFlags
 
 
 class WorldAggregates(Protocol):
+    def flags(self) -> WorldFlags: ...
+
     def passages(self) -> PassageStates: ...
 
     def atmospheres(self) -> SpotAtmospheres: ...

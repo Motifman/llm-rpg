@@ -380,6 +380,20 @@ class TestAggregatesAreTheSameInstances:
         assert world.aggregates().passages() is world.aggregates().passages()
         assert world.aggregates().atmospheres() is world.aggregates().atmospheres()
 
+    def test_flags_are_the_same_aggregate_facts_read(self) -> None:
+        """旗は、aggregates から何度取り出しても同じ集約で、facts の flags もその集約を読む。"""
+        world = _world()
+
+        assert world.aggregates().flags() is world.aggregates().flags()
+        assert world.facts().flags() is world.aggregates().flags()
+
+    def test_scenario_progress_and_latest_actions_are_kept_by_the_world(self) -> None:
+        """出来事の帳簿と最後の行為は、世界が 1 つずつ持ち、facts は何度読んでも同じ集約を返す。"""
+        world = _world()
+
+        assert world.facts().scenario_progress() is world.facts().scenario_progress()
+        assert world.facts().latest_actions() is world.facts().latest_actions()
+
     def test_item_is_the_one_given_to_the_world(self) -> None:
         """世界に渡したりんごは、item で取り出すと同じ集約。"""
         apple = Item.come_into_world(ItemInstanceId("apple-1"), _APPLE, WorldTick(0))

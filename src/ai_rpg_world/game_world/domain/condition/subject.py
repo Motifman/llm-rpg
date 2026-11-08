@@ -82,6 +82,16 @@ Subject = Actor | Target | ChosenByGroup | NamedPerson | EachPerson
 
 @final
 @dataclass(frozen=True)
+class Anyone:
+    def person_in(self, trigger: Trigger) -> Anyone:
+        return self
+
+    def requirements(self) -> Requirements:
+        return Requirements.nothing()
+
+
+@final
+@dataclass(frozen=True)
 class ThisItem:
     def item_in(self, trigger: Trigger) -> ItemInstanceId:
         return trigger.this_item()

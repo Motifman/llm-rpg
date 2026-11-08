@@ -7,16 +7,19 @@ from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
     GroupDecisionReading,
     GroupMembershipReading,
     ItemReading,
+    LatestActionsReading,
     ObjectStateReading,
     PassageStatesReading,
     PersonInventoryReading,
     PersonOutcomesReading,
     PersonVitalsReading,
+    ScenarioProgressReading,
     SpotAtmospheresReading,
     SpotSearchProgressReading,
     WeatherReading,
     WhereaboutsReading,
     WorldClockReading,
+    WorldFlagsReading,
     WorldStageReading,
 )
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
@@ -57,6 +60,12 @@ class WorldFacts(Protocol):
     def weather(self) -> WeatherReading | NoWeather: ...
 
     def world_stage(self) -> WorldStageReading | NoWorldStages: ...
+
+    def flags(self) -> WorldFlagsReading: ...
+
+    def scenario_progress(self) -> ScenarioProgressReading: ...
+
+    def latest_actions(self) -> LatestActionsReading: ...
 
     def vitals(self, person: PersonId) -> PersonVitalsReading: ...
 

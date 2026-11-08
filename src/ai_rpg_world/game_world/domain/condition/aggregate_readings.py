@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.declaration.character import GroupDeclaration, GroupingDeclaration
@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ObjectStateKeyDeclaration,
     StateValue,
 )
+from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import (
     PassageDeclaration,
     SpotAtmosphere,
@@ -31,6 +32,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     GroupId,
     HitPoints,
     HungerAmount,
+    InteractionId,
     ItemSpecId,
     PassageId,
     PersonId,
@@ -39,6 +41,15 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldTick,
 )
 from ai_rpg_world.game_world.domain.whereabouts import Location, Occupant, PassageInState
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.condition.subject import Anyone
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
+    from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration
+    from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
+    from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
+    from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
+    from ai_rpg_world.game_world.domain.world_records import NeverDone, NeverFired
 
 
 class WhereaboutsReading(Protocol):
@@ -104,6 +115,8 @@ class WorldStageReading(Protocol):
 
     def entered_at(self) -> WorldTick: ...
 
+    def declaration_in(self, nouns: DeclaredNouns) -> WorldStageDeclaration: ...
+
 
 class PersonVitalsReading(Protocol):
     def is_busy(self, now: WorldTick) -> bool: ...
@@ -168,6 +181,24 @@ class GroundItemsReading(Protocol):
 
 class SpotSearchProgressReading(Protocol):
     def search_count(self, person: PersonId) -> Count: ...
+
+    def is_found(self, discoverable: DiscoverableDeclaration, person: PersonId) -> bool: ...
+
+
+class ScenarioProgressReading(Protocol):
+    def may_fire(self, happening: HappeningDeclaration, now: WorldTick) -> bool: ...
+
+    def reaction_changed(self, reaction: ReactionDeclaration, truth: bool) -> bool: ...
+
+    def last_fired_at(self, happening: HappeningDeclaration) -> WorldTick | NeverFired: ...
+
+
+class LatestActionsReading(Protocol):
+    def last_done_at(self, who: PersonId | Anyone, action: ActionKind | InteractionId) -> WorldTick | NeverDone: ...
+
+
+class WorldFlagsReading(Protocol):
+    def is_raised(self, flag: FlagDeclaration) -> bool: ...
 
 
 class GroupDecisionReading(Protocol):

@@ -29,6 +29,7 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import (
 from ai_rpg_world.game_world.domain.action.manner import Manner, Openly, Stealthily
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
+from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     ArgumentsDoNotMatchDeclarationException,
     StealthNotAllowedException,
@@ -133,6 +134,20 @@ class TestPropertiesReadFromTheDeclaration:
 
         assert attempt.is_allowed_in(_stage(frozenset({InteractionId("pull")})))
         assert not attempt.is_allowed_in(_stage(frozenset({_KINDS[target]})))
+
+    @pytest.mark.parametrize("target", _BUILDERS)
+    def test_world_without_stages_allows_the_interaction(self, target: str) -> None:
+        """段階を宣言しない世界 (NoWorldStages) では、操作は許される。"""
+        attempt = _BUILDERS[target](InteractionForTests(InteractionId("pull")), Openly(), _NO_ARGUMENTS)
+
+        assert attempt.is_allowed_in(NoWorldStages())
+
+    @pytest.mark.parametrize("target", _BUILDERS)
+    def test_is_done_as_its_kind_and_its_interaction(self, target: str) -> None:
+        """操作は、最後に行った行為として、自分の ActionKind と自分の InteractionId の両方で記録される。"""
+        attempt = _BUILDERS[target](InteractionForTests(InteractionId("pull")), Openly(), _NO_ARGUMENTS)
+
+        assert attempt.done_as() == frozenset({_KINDS[target], InteractionId("pull")})
 
     def test_object_interaction_requires_being_with_the_object(self) -> None:
         """物への操作は、その物の近くにいる必要 (WithObject) を答える。"""

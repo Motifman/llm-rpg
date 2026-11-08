@@ -8,10 +8,11 @@ from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentV
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NotTogether, OutOfReach
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
+from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import ObjectId, PersonId
+from ai_rpg_world.game_world.domain.value_object import InteractionId, ObjectId, PersonId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, Occupant, PersonBody
 
@@ -122,4 +123,6 @@ class ActionAttempt(Protocol):
 
     def can_start_while_busy(self) -> bool: ...
 
-    def is_allowed_in(self, stage: WorldStageDeclaration) -> bool: ...
+    def is_allowed_in(self, stage: WorldStageDeclaration | NoWorldStages) -> bool: ...
+
+    def done_as(self) -> frozenset[ActionKind | InteractionId]: ...

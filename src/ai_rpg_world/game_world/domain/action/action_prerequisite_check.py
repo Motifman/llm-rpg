@@ -10,7 +10,6 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import (
     TooTired,
 )
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
-from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
 from ai_rpg_world.game_world.domain.whereabouts import DepartedPerson, Occupant, PersonBody
 
@@ -51,7 +50,4 @@ def _acting_occupant(attempt: ActionAttempt, facts: WorldFacts) -> Occupant | No
 
 
 def _is_allowed_in_current_stage(attempt: ActionAttempt, facts: WorldFacts) -> bool:
-    stage = facts.world_stage()
-    if isinstance(stage, NoWorldStages):
-        return True
-    return attempt.is_allowed_in(facts.nouns().world_stage_of(stage.current()))
+    return attempt.is_allowed_in(facts.world_stage().declaration_in(facts.nouns()))

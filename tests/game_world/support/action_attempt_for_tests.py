@@ -17,7 +17,7 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
 )
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
-from ai_rpg_world.game_world.domain.declaration.progress.world_stage_declaration import AllActionsAllowed
+from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.exception.trigger_exception import (
     ArgumentNotInTriggerException,
     ItemNotInTriggerException,
@@ -26,7 +26,7 @@ from ai_rpg_world.game_world.domain.exception.trigger_exception import (
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import PersonId
+from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 
 
@@ -89,6 +89,8 @@ class ActionAttemptForTests(ActionAttempt):
     def can_start_while_busy(self) -> bool:
         return self.startable_while_busy
 
-    def is_allowed_in(self, stage: WorldStageDeclaration) -> bool:
-        allowed = stage.allowed_actions
-        return isinstance(allowed, AllActionsAllowed) or self.action_kind in allowed
+    def is_allowed_in(self, stage: WorldStageDeclaration | NoWorldStages) -> bool:
+        return stage.allows(self.action_kind)
+
+    def done_as(self) -> frozenset[ActionKind | InteractionId]:
+        return frozenset({self.action_kind})

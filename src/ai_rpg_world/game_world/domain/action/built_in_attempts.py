@@ -23,6 +23,7 @@ from ai_rpg_world.game_world.domain.action.speech import SpeechContent, SpeechRe
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason, WaitReason
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
+from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.exception.action_exception import NoDeliveriesException
 from ai_rpg_world.game_world.domain.exception.trigger_exception import (
@@ -33,7 +34,7 @@ from ai_rpg_world.game_world.domain.exception.trigger_exception import (
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import PersonId
+from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
 
@@ -54,8 +55,11 @@ class _BuiltInAttempt:
     def can_start_while_busy(self) -> bool:
         return False
 
-    def is_allowed_in(self, stage: WorldStageDeclaration) -> bool:
+    def is_allowed_in(self, stage: WorldStageDeclaration | NoWorldStages) -> bool:
         return stage.allows(self._KIND)
+
+    def done_as(self) -> frozenset[ActionKind | InteractionId]:
+        return frozenset({self._KIND})
 
     def person_as(self, kind: SubjectKind) -> PersonId:
         if kind is SubjectKind.ACTOR:
