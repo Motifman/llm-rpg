@@ -55,7 +55,9 @@ _LANTERN = item_spec("lantern")
 _THE_ITEM = ArgumentName("the_item")
 
 
-def _world(*items: tuple[ItemInstanceId, ItemSpecDeclaration], capacity: int = 10, fractions: tuple[float, ...] = ()) -> WorldInMemory:
+def _world(
+    *items: tuple[ItemInstanceId, ItemSpecDeclaration], capacity: int = 10, fractions: tuple[float, ...] = ()
+) -> WorldInMemory:
     alice = inventory(ALICE, capacity)
     for item_id, spec in items:
         alice.receive(item_id, spec.item_spec_id)

@@ -86,7 +86,7 @@ RemovePassageEffect(passage: PassageDeclaration)      # 道が無くなる
 ChangeAtmosphereEffect(spot: SpotDeclaration, lighting: Lighting | Unchanged, temperature: Temperature | Unchanged, ambient_sound: DescriptionText | NoAmbientSound | Unchanged, smell: DescriptionText | NoSmell | Unchanged)
 GiveItemEffect(who: Subject, item_spec: ItemSpecDeclaration, count: Count)   # bring_item_into_world で count 個作り、who の荷に入れる
 TakeItemEffect(who: Subject, item_spec: ItemSpecDeclaration, count: Count)   # 荷から先に、足りなければ手からも取り、世界から消す。持っている数が足りなければ PersonInventory が断る (1 つも取らない)
-MoveItemEffect(from_who: Subject, to_who: Subject, item: ItemByArgument | RandomItemOf)   # 同じ品物のまま、to_who の荷に移す。無ければ集約が断る
+MoveItemEffect(from_who: Subject, to_who: Subject, item: ItemByArgument | RandomItemOf)   # from_who の持ち物から item で選び、同じ品物のまま to_who の荷に移す。無ければ集約が断る
 DepositItemToObjectEffect(who: Subject, item_spec: ItemSpecDeclaration, key: ObjectStateKeyDeclaration)   # who から 1 つ手放して世界から消し、物の数の鍵を 1 足す
 DepositGoldToObjectEffect(who: Subject, amount: Gold, key: ObjectStateKeyDeclaration)   # who が amount を払い、物の数の鍵を amount 足す
 DamageEffect(who: Subject, amount: Damage)   # 倒れた理由は trigger.fall_cause_for(相手) に尋ねる
@@ -111,14 +111,16 @@ CloseGroupDecisionEffect(decision: GroupDecisionDeclaration)
 @dataclass(frozen=True)
 class ItemByArgument:                       # エージェントが指した品物。行為の引数 (ActionArguments) の ItemInstanceId を読む。呼び方から ID を引くのは外側
     argument: ArgumentName
-    owner: Subject                          # 誰の持ち物から選ぶか
     place: InHands | InPack | Anywhere      # 起きている相手の手から奪うなら InHands、倒れた相手なら Anywhere
+                                            # InHands は PersonInventory.give_up_held、InPack は give_up_packed、Anywhere は give_up を呼ぶ。指した場所に無ければ集約が断る
 
 @final
 @dataclass(frozen=True)
 class RandomItemOf:                         # 見えない荷の中から世界が選ぶ (起きている相手の荷から抜き取る)。PersonInventory が facts.random() を受けて荷の物を 1 つ選んで手放し、荷が空なら断る。手の物は選ばない
-    owner: Subject
+    pass
 ```
+
+誰の持ち物から選ぶかは `MoveItemEffect.from_who` だけが持つ。選び方にも持たせると、手放す人を 2 か所に書けて食い違うため (D2024)。
 
 盗みは作者が書く操作。起きている相手の荷からは `RandomItemOf`、手の物は見えているので `ItemByArgument(..., InHands)`、倒れた人と死んだ人は全部見えるので `ItemByArgument(..., Anywhere)`。荷が空なら集約が断り、盗もうとした人に「荷は空だった」が届く。
 

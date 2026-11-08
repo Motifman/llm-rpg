@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field, replace
+from typing import final
+
+from ai_rpg_world.game_world.domain.action.trigger import Trigger
+from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
+from ai_rpg_world.game_world.domain.condition.requirements import Requirements
+from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
+from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.character.character_declaration import CharacterDeclaration
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration, NotALightSource
 from ai_rpg_world.game_world.domain.objects_and_items import PersonInventory
@@ -49,3 +57,34 @@ def vitals(person: PersonId, hp: int = 10, maximum: int = 10) -> PersonVitals:
 
 def inventory(person: PersonId, capacity: int = 10) -> PersonInventory:
     return PersonInventory(person, Capacity(capacity))
+
+
+@final
+@dataclass(frozen=True)
+class EachPersonIsOneOf:
+    people: frozenset[PersonId]
+
+    def holds(self, facts: WorldFacts, trigger: Trigger) -> bool:
+        return trigger.person_as(SubjectKind.EACH_PERSON) in self.people
+
+    def requirements(self) -> Requirements:
+        return replace(Requirements.nothing(), subjects=frozenset({SubjectKind.EACH_PERSON}))
+
+    def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
+        return None
+
+
+@final
+@dataclass(frozen=True)
+class FixedTruth:
+    truth: bool
+    needs: Requirements = field(default_factory=Requirements.nothing)
+
+    def holds(self, facts: WorldFacts, trigger: Trigger) -> bool:
+        return self.truth
+
+    def requirements(self) -> Requirements:
+        return self.needs
+
+    def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
+        return None

@@ -11,7 +11,7 @@ from ai_rpg_world.game_world.domain.effect.body_effects import (
     ReviveEffect,
     SatisfyHungerEffect,
 )
-from ai_rpg_world.game_world.domain.person import Alive, Down, StruckByPerson, WorldHappening
+from ai_rpg_world.game_world.domain.person import Alive, Down, PersonVitals, StruckByPerson, WorldHappening
 from ai_rpg_world.game_world.domain.value_object import (
     Damage,
     FatigueAmount,
@@ -28,8 +28,8 @@ from tests.game_world.support.declarations_for_tests import HappeningForTests
 from tests.game_world.support.world_in_memory import WorldInMemory
 
 
-def _world(*people_vitals: object, ticks: int = 0) -> WorldInMemory:
-    world = WorldInMemory(world=WORLD, people=(ALICE, BOB), vitals=people_vitals)  # type: ignore[arg-type]
+def _world(*people_vitals: PersonVitals, ticks: int = 0) -> WorldInMemory:
+    world = WorldInMemory(world=WORLD, people=(ALICE, BOB), vitals=people_vitals)
     for _ in range(ticks):
         world.clock().advance(NoDayNight())
     return world
@@ -93,7 +93,9 @@ class TestHealAndReviveEffect:
         """体力 4 の Alice を 3 癒すと、体力は 7 になる。"""
         world = _world(vitals(ALICE, hp=4))
 
-        HealEffect(Actor(), HealAmount(3)).apply(world.facts(), world.aggregates(), ActionAttemptForTests(actor_id=ALICE))
+        HealEffect(Actor(), HealAmount(3)).apply(
+            world.facts(), world.aggregates(), ActionAttemptForTests(actor_id=ALICE)
+        )
 
         assert world.vitals[ALICE].hp() == HitPoints(current=7, maximum=10)
 
@@ -133,6 +135,8 @@ class TestSatisfyHungerAndRestEffect:
         world.vitals[ALICE].exert(rules.fatigue)
         world.vitals[ALICE].exert(rules.fatigue)
 
-        RestEffect(Actor(), FatigueAmount(3)).apply(world.facts(), world.aggregates(), ActionAttemptForTests(actor_id=ALICE))
+        RestEffect(Actor(), FatigueAmount(3)).apply(
+            world.facts(), world.aggregates(), ActionAttemptForTests(actor_id=ALICE)
+        )
 
         assert world.vitals[ALICE].fatigue() == FatigueAmount(1)

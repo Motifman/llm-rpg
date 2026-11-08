@@ -87,7 +87,9 @@ class ItemByArgument:
     argument: ArgumentName
     place: ItemPlace
 
-    def give_up_from(self, owner: PersonId, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> ItemInstanceId:
+    def give_up_from(
+        self, owner: PersonId, facts: WorldFacts, world: WorldAggregates, trigger: Trigger
+    ) -> ItemInstanceId:
         item = trigger.argument(self.argument)
         if not isinstance(item, ItemInstanceId):
             raise ArgumentIsNotAnItemException(f"the argument {self.argument.value!r} holds {item!r}, not an item")
@@ -101,7 +103,9 @@ class ItemByArgument:
 @final
 @dataclass(frozen=True)
 class RandomItemOf:
-    def give_up_from(self, owner: PersonId, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> ItemInstanceId:
+    def give_up_from(
+        self, owner: PersonId, facts: WorldFacts, world: WorldAggregates, trigger: Trigger
+    ) -> ItemInstanceId:
         item = facts.inventory(owner).random_packed_item(facts.random())
         world.inventory(owner).give_up_packed(item)
         return item

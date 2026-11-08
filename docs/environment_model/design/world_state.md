@@ -178,6 +178,8 @@ class WorldFlags:                                 # 世界に 1 つ
 class PersonInventory:                            # 人ごと。持てる数の上限 (Capacity) を受けて作る
     def receive(self, item: ItemInstanceId, spec: ItemSpecId) -> None: ...   # 荷に入る。品物の種類も覚える
     def give_up(self, item: ItemInstanceId) -> None: ...         # 手の物でも荷の物でも
+    def give_up_held(self, item: ItemInstanceId) -> None: ...    # 手の物だけ。荷の物ならドメイン例外 (手から奪う効果が、荷の物を奪わないため)
+    def give_up_packed(self, item: ItemInstanceId) -> None: ...  # 荷の物だけ。手の物ならドメイン例外
     def hold(self, item: ItemInstanceId, hands_needed: HandsNeeded) -> None: ...
         # 荷から手に持つ。手は 2 本。足りなければ、今手に持っている物を先に持った順に荷にしまう
     def put_away(self, item: ItemInstanceId) -> None: ...

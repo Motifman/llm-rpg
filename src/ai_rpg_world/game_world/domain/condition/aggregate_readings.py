@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.declaration.character import GroupDeclaration, GroupingDeclaration
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ItemStateKeyDeclaration,
@@ -20,7 +21,6 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     TimeOfDay,
     WeatherState,
 )
-from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import LifeState, NotInAnyGroup, Outcome, Undecided
 from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueRule

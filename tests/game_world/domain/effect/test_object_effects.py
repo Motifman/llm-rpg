@@ -14,6 +14,8 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     FlagValue,
     NothingWritten,
     ObjectStateKeyDeclaration,
+    StateKind,
+    StateValue,
     StockStateKind,
     StockValue,
     TextBody,
@@ -39,7 +41,6 @@ from ai_rpg_world.game_world.domain.exception.effect_exception import (
     ArgumentIsNotTextException,
     TextHasNoAuthorException,
 )
-from ai_rpg_world.game_world.domain.exception.trigger_exception import ArgumentNotInTriggerException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     CountBelowZeroException,
     InsufficientGoldException,
@@ -48,6 +49,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     NotEnoughItemsOfSpecException,
     NotEnoughStockException,
 )
+from ai_rpg_world.game_world.domain.exception.trigger_exception import ArgumentNotInTriggerException
 from ai_rpg_world.game_world.domain.objects_and_items import Item, ItemInstanceId, ObjectState
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
@@ -73,8 +75,8 @@ _APPLE_1 = ItemInstanceId("apple#1")
 _MESSAGE = ArgumentName("message")
 
 
-def _key(name: str, kind: object, initial: object) -> ObjectStateKeyDeclaration:
-    return ObjectStateKeyDeclaration(object_id=_SHRINE, key=StateKeyId(name), kind=kind, initial=initial)  # type: ignore[arg-type]
+def _key(name: str, kind: StateKind, initial: StateValue) -> ObjectStateKeyDeclaration:
+    return ObjectStateKeyDeclaration(object_id=_SHRINE, key=StateKeyId(name), kind=kind, initial=initial)
 
 
 _LIT = _key("lit", FlagStateKind(), FlagValue(False))

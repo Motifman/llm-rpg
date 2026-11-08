@@ -11,3 +11,7 @@ class ArgumentIsNotTextException(GameWorldDomainException):
 
 class TextHasNoAuthorException(GameWorldDomainException):
     error_code = "GAME_WORLD.TEXT_HAS_NO_AUTHOR"
+
+
+class NoBranchesException(GameWorldDomainException):
+    error_code = "GAME_WORLD.NO_BRANCHES"
