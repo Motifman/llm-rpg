@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from enum import Enum
 
-from ai_rpg_world.eventing import AggregateRoot
+from ai_rpg_world.eventing import AggregateRoot, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration, SpotDeclaration
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     PassageAlreadyRemovedException,
     UnknownPassageException,
 )
 from ai_rpg_world.game_world.domain.value_object import PassageId, PassageStateName, WorldId
-from ai_rpg_world.game_world.domain.whereabouts._new_event import new_event
 from ai_rpg_world.game_world.domain.whereabouts.passage_in_state import PassageInState
 from ai_rpg_world.game_world.domain.whereabouts.passage_state_events import (
     PassageRemovedEvent,
@@ -48,8 +47,8 @@ class PassageStates(AggregateRoot[PassageStatesEvent]):
             return
         self._states[passage.passage_id] = new_state
         self.add_event(
-            new_event(
-                PassageStateChangedEvent,
+            PassageStateChangedEvent(
+                **new_event_stamp(),
                 world_id=self._world_id,
                 passage=passage.passage_id,
                 before=before,
@@ -62,13 +61,13 @@ class PassageStates(AggregateRoot[PassageStatesEvent]):
         if self._presence[passage.passage_id] is _Presence.PRESENT:
             return
         self._presence[passage.passage_id] = _Presence.PRESENT
-        self.add_event(new_event(PassageRevealedEvent, world_id=self._world_id, passage=passage.passage_id))
+        self.add_event(PassageRevealedEvent(**new_event_stamp(), world_id=self._world_id, passage=passage.passage_id))
 
     def remove(self, passage: PassageDeclaration) -> None:
         if self._presence_of(passage) is _Presence.REMOVED:
             return
         self._presence[passage.passage_id] = _Presence.REMOVED
-        self.add_event(new_event(PassageRemovedEvent, world_id=self._world_id, passage=passage.passage_id))
+        self.add_event(PassageRemovedEvent(**new_event_stamp(), world_id=self._world_id, passage=passage.passage_id))
 
     def is_traversable(self, passage: PassageDeclaration) -> bool:
         self._presence_of(passage)

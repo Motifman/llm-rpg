@@ -16,7 +16,7 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     MemoNotFoundException,
     MemoValidationException,
 )
-from ai_rpg_world.eventing import AggregateRoot, DomainEvent
+from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 
 MEMO_TEXT_MAX_LENGTH = 60
 HANDLE_PREFIX = "m_"
@@ -258,8 +258,7 @@ class MemoBook(AggregateRoot[MemoBookEvent]):
         self._memos = _checked((*self._memos, memo))
         self.add_event(
             MemoAdded(
-                event_id=uuid.uuid4().int,
-                occurred_at=datetime.now(timezone.utc),
+                **new_event_stamp(),
                 being_id=self._being_id,
                 memo=memo,
             )
@@ -289,8 +288,7 @@ class MemoBook(AggregateRoot[MemoBookEvent]):
         self._memos = _checked(tuple(edited if m is memo else m for m in self._memos))
         self.add_event(
             MemoEdited(
-                event_id=uuid.uuid4().int,
-                occurred_at=datetime.now(timezone.utc),
+                **new_event_stamp(),
                 being_id=self._being_id,
                 memo=edited,
             )
@@ -301,8 +299,7 @@ class MemoBook(AggregateRoot[MemoBookEvent]):
         self._memos = tuple(m for m in self._memos if m is not memo)
         self.add_event(
             MemoRemoved(
-                event_id=uuid.uuid4().int,
-                occurred_at=datetime.now(timezone.utc),
+                **new_event_stamp(),
                 being_id=self._being_id,
                 memo=memo,
             )

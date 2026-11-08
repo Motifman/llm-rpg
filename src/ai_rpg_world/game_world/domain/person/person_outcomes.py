@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import final
 
+from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclaration
@@ -67,8 +68,7 @@ class PersonOutcomes(AggregateRoot[PersonOutcomeDecidedEvent]):
         self._outcomes[person] = outcome
         self.add_event(
             PersonOutcomeDecidedEvent(
-                event_id=uuid.uuid4().int,
-                occurred_at=datetime.now(timezone.utc),
+                **new_event_stamp(),
                 world=self._world,
                 person=person,
                 outcome=outcome,

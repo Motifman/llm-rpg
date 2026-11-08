@@ -1,12 +1,20 @@
-"""ゲームと Being が共通に使うイベントの基底。"""
-
+import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import TypedDict
 
 
 @dataclass(frozen=True)
 class DomainEvent:
-    """文脈に依存せず、起きた出来事の識別子と日時を保持する。"""
-
     event_id: int
     occurred_at: datetime
+
+
+class EventStamp(TypedDict):
+    event_id: int
+    occurred_at: datetime
+
+
+def new_event_stamp() -> EventStamp:
+    # 観測の流れで occurred_at どうしを比べるので、タイムゾーン無しの日時が混ざると TypeError になる (#311)。
+    return {"event_id": uuid.uuid4().int, "occurred_at": datetime.now(timezone.utc)}

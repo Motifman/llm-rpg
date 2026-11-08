@@ -25,7 +25,7 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     ShortTermMemoryUnpairedResultException,
     ShortTermMemoryValidationException,
 )
-from ai_rpg_world.eventing import AggregateRoot, DomainEvent
+from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 
 RECENT_TURNS: Final = 20
 FOLD_TURNS: Final = 10
@@ -526,8 +526,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
     def _add(self, event_type: type[ShortTermMemoryEvent], **fields: Any) -> None:
         self.add_event(
             event_type(
-                event_id=uuid.uuid4().int,
-                occurred_at=datetime.now(timezone.utc),
+                **new_event_stamp(),
                 being_id=self._being_id,
                 **fields,
             )

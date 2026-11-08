@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
+from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
@@ -16,7 +17,6 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     ItemAlreadyLeftWorldException,
     StateKeyNotOwnedException,
 )
-from ai_rpg_world.game_world.domain.objects_and_items._occurrence import occurrence
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.value_object import ItemSpecId, StateKeyId, Ticks, WorldTick
 
@@ -59,7 +59,9 @@ class Item(AggregateRoot[ItemEvent]):
     @classmethod
     def come_into_world(cls, item_id: ItemInstanceId, spec: ItemSpecDeclaration, now: WorldTick) -> Item:
         item = cls(item_id, spec, now)
-        item.add_event(ItemCameIntoWorldEvent(**occurrence(), item=item_id, spec_id=spec.item_spec_id, came_at=now))
+        item.add_event(
+            ItemCameIntoWorldEvent(**new_event_stamp(), item=item_id, spec_id=spec.item_spec_id, came_at=now)
+        )
         return item
 
     @property
@@ -82,14 +84,14 @@ class Item(AggregateRoot[ItemEvent]):
             return
         self._values[key.key] = value
         self.add_event(
-            ItemStateChangedEvent(**occurrence(), item=self._item_id, key=key.key, before=before, after=value)
+            ItemStateChangedEvent(**new_event_stamp(), item=self._item_id, key=key.key, before=before, after=value)
         )
 
     def leave_world(self) -> None:
         if not self._in_world:
             return
         self._in_world = False
-        self.add_event(ItemLeftWorldEvent(**occurrence(), item=self._item_id))
+        self.add_event(ItemLeftWorldEvent(**new_event_stamp(), item=self._item_id))
 
     def value_of(self, key: ItemStateKeyDeclaration) -> StateValue:
         if key not in self._spec.state_keys:
