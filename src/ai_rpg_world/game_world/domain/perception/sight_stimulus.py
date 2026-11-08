@@ -49,6 +49,18 @@ class SightTarget:
     person: PersonId
     texts: SightTexts
 
+    def require_among(self, involved: tuple[PersonId, ...]) -> None:
+        if self.person not in involved:
+            raise TargetNotInvolvedException(
+                f"target {self.person.value} is not among involved {[p.value for p in involved]}"
+            )
+
+    def texts_for(self, viewer: PersonId, witness: SightTexts) -> SightTexts:
+        return self.texts if viewer == self.person else witness
+
+    def notice_chances_for(self, viewer: PersonId, stealth: StealthRule) -> Mapping[SightQuality, Probability]:
+        return stealth.notice_by_target if viewer == self.person else stealth.notice_by_bystander
+
 
 @final
 @dataclass(frozen=True)
@@ -65,10 +77,7 @@ class SightStimulus:
     at: WorldTick
 
     def __post_init__(self) -> None:
-        if isinstance(self.target, SightTarget) and self.target.person not in self.involved:
-            raise TargetNotInvolvedException(
-                f"target {self.target.person.value} is not among involved {[p.value for p in self.involved]}"
-            )
+        self.target.require_among(self.involved)
 
     def perceived_by(
         self,
@@ -80,10 +89,8 @@ class SightStimulus:
     ) -> PerceptionOutcome:
         if not perceiver.is_at(self.where):
             return NotPerceived()
-        if isinstance(self.target, SightTarget) and self.target.person == perceiver.person:
-            texts, chances = self.target.texts, stealth.notice_by_target
-        else:
-            texts, chances = self.witness, stealth.notice_by_bystander
+        texts = self.target.texts_for(perceiver.person, self.witness)
+        chances = self.target.notice_chances_for(perceiver.person, stealth)
         involved = perceiver.person in self.involved
         return perceiver.notices_surroundings(involved).outcome(
             when_aware=lambda: self._seen(perceiver, texts, lighting, view, random, chances, stealth, involved),
@@ -112,7 +119,7 @@ class SightStimulus:
             random=random,
             chances=chances,
             attentive_bonus=stealth.attentive_bonus,
-            calls_attention=involved or self.salience == Notable(),
+            calls_attention=involved or self.salience.stands_out(),
         )
         return perceiver.sight_in(lighting).read(sighting)
 
@@ -141,8 +148,8 @@ class _Sighting:
         return self.when_shapes() if self.stimulus.seen_in_dark else NotPerceived()
 
     def _seen_as(self, text: TextWithAssignedPeople, sight: SeesClearly | SeesShapes) -> PerceptionOutcome:
-        if self.stimulus.manner == Stealthily() and not self.perceiver.notices_stealthy_act(
-            self.chances[sight], self.attentive_bonus, self.random
+        if not self.stimulus.manner.noticed_when(
+            lambda: self.perceiver.notices_stealthy_act(self.chances[sight], self.attentive_bonus, self.random)
         ):
             return NotPerceived()
         return Perceived(

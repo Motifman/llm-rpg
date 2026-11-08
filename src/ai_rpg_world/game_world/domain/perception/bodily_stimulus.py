@@ -28,5 +28,5 @@ class BodilyStimulus:
             text=self.text.seen_by(view),
             quality=Felt(),
             happened_at=self.at,
-            calls_attention=self.salience == Notable(),
+            calls_attention=self.salience.stands_out(),
         )

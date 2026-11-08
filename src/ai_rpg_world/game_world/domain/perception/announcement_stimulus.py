@@ -31,7 +31,7 @@ class AnnouncementStimulus:
                 text=self.text.seen_by(view),
                 quality=Told(),
                 happened_at=self.at,
-                calls_attention=self.salience == Notable(),
+                calls_attention=self.salience.stands_out(),
             ),
             on_waking=lambda: MissedNotice(text=self.text.seen_by(view), happened_at=self.at),
         )

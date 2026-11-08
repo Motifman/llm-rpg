@@ -120,7 +120,7 @@ class _Hearing:
                 quality=quality,
                 happened_at=stimulus.at,
                 # かすかに聞こえただけのものは、関わっていても目立っても、考え直す目安にしない。
-                calls_attention=stands_out and (involved or stimulus.salience == Notable()),
+                calls_attention=stands_out and (involved or stimulus.salience.stands_out()),
             ),
             on_waking=lambda: MissedNotice.from_text(stimulus.noticed_later, self.view, stimulus.at),
         )

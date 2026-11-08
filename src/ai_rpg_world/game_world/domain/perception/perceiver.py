@@ -46,7 +46,7 @@ class LivingPerceiver:
         return self.person == person
 
     def is_at(self, spot: SpotId) -> bool:
-        return _is_at(self.location, spot)
+        return self.location.is_at(spot)
 
     def sight_in(self, lighting: Lighting) -> SightQuality:
         return lighting.sight()
@@ -60,7 +60,7 @@ class LivingPerceiver:
         return random.next_fraction() < chance.value
 
     def hears(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> HearingQuality:
-        return values.quality(_level_reaching(self.location, origin, loudness, reach, values), self.attentive)
+        return values.quality(self.location.sound_level_from(origin, loudness, reach, values), self.attentive)
 
 
 @final
@@ -76,7 +76,7 @@ class DepartedPerceiver:
         return False
 
     def is_at(self, spot: SpotId) -> bool:
-        return _is_at(self.location, spot)
+        return self.location.is_at(spot)
 
     def sight_in(self, lighting: Lighting) -> SightQuality:
         return SeesClearly()
@@ -88,33 +88,9 @@ class DepartedPerceiver:
         return True
 
     def hears(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> HearingQuality:
-        if isinstance(_level_reaching(self.location, origin, loudness, reach, values), NotReached):
+        if isinstance(self.location.sound_level_from(origin, loudness, reach, values), NotReached):
             return HearsNothing()
         return HearsClearly()
 
 
 Perceiver = LivingPerceiver | DepartedPerceiver
-
-
-def _is_at(location: Location, spot: SpotId) -> bool:
-    return isinstance(location, AtSpot) and location.spot == spot
-
-
-_HEARD_WHILE_TRAVELLING = frozenset({Loudness.LOUD, Loudness.VERY_LOUD})
-
-
-def _level_reaching(
-    location: Location, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues
-) -> SoundLevel | NotReached:
-    if isinstance(location, AtSpot):
-        return reach.level_at(location.spot)
-    if loudness not in _HEARD_WHILE_TRAVELLING or origin not in _ends_of_current_passage(location):
-        return NotReached()
-    # 通路の上はどの場所でもないので、端の場所から 1 つ隣にいるものとして聞く。
-    return values.level_of(loudness).weakened_by(values.loss_per_passage)
-
-
-def _ends_of_current_passage(travel: TravelInProgress) -> tuple[SpotId, SpotId]:
-    index = travel.passage_index
-    start = travel.route.start if index == 0 else travel.route.end_of_passage(index - 1)
-    return (start, travel.route.end_of_passage(index))
