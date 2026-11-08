@@ -4,10 +4,10 @@ import pytest
 
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     ChangesEvery,
+    NextWeatherOdds,
     NoChange,
     WeatherDeclaration,
     WeatherState,
-    NextWeatherOdds,
     WeatherTransitions,
     WeatherType,
     WeightedWeather,
@@ -25,9 +25,7 @@ def _transitions(*odds: NextWeatherOdds) -> WeatherTransitions:
 
 
 def _odds(current: WeatherType, *weighted: tuple[WeatherType, int]) -> NextWeatherOdds:
-    return NextWeatherOdds(
-        current=current, candidates=tuple(WeightedWeather(weather=w, weight=n) for w, n in weighted)
-    )
+    return NextWeatherOdds(current=current, candidates=tuple(WeightedWeather(weather=w, weight=n) for w, n in weighted))
 
 
 def _declaration(changes: NoChange | ChangesEvery) -> WeatherDeclaration:
