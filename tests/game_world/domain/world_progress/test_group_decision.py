@@ -315,6 +315,17 @@ class TestGroupDecisionWithdrawChoice:
         with pytest.raises(ChoiceNotInDecisionException):
             _started().withdraw_choice(_DAVE)
 
+    def test_withdrawing_last_choice_keeps_decision_open_until_close(self) -> None:
+        """最後の候補を外しても決定は開いたままで、棄権を受け、close で GroupDecisionUnresolvedEvent になる。"""
+        decision = _started(frozenset({_ALICE, _BOB}), frozenset({_CAROL}))
+
+        decision.withdraw_choice(_CAROL)
+        decision.cast(_ALICE, Abstain())
+
+        assert decision.is_open() is True
+        decision.close()
+        assert isinstance(_last_event(decision), GroupDecisionUnresolvedEvent)
+
     def test_withdrawing_choice_from_closed_decision_raises(self) -> None:
         """開いていない決定から候補を外そうとすると GroupDecisionNotOpenException で断る。"""
         with pytest.raises(GroupDecisionNotOpenException):
