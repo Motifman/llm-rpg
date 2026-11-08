@@ -122,10 +122,10 @@ ItemHandOverAttempt(actor: PersonId, deliveries: tuple[Delivery, ...], manner: M
 GroundItemPickupAttempt(actor: PersonId, item: ItemInstanceId, manner: Manner)
 ItemDropAttempt(actor: PersonId, item: ItemInstanceId, manner: Manner)
 SpotSearchAttempt(actor: PersonId)
-EnterSectionAttempt(actor: PersonId, section: SpotSectionDeclaration)
+EnterSectionAttempt(actor: PersonId, access: DeclaredSectionAccess)   # 区画の出入りの宣言の欄 (section、exertion) を読む Protocol
 HoldItemAttempt(actor: PersonId, item: ItemInstanceId)        # 手がふさがっていれば、今持っている物を荷にしまう
 PutAwayItemAttempt(actor: PersonId, item: ItemInstanceId)
-LeaveSectionAttempt(actor: PersonId)
+LeaveSectionAttempt(actor: PersonId, access: DeclaredSectionAccess)   # 外側が、本人のいる区画の出入りの宣言を渡す
 
 TravelAttempt(actor: PersonId, destination: SpotDeclaration)
 SpeechAttempt(actor: PersonId, reach: Whisper | OrdinaryVoice | Shout, content: SpeechContent)
