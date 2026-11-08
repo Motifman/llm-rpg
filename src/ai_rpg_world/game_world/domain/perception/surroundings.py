@@ -26,7 +26,7 @@ class _SightRule:
     shows_description: bool
     shows_people: bool
     identifies_people: bool
-    shows_ground_items: bool
+    shows_items: bool
     shows_objects_unseen_in_dark: bool
 
 
@@ -36,21 +36,21 @@ _RULES: Mapping[SightQuality, _SightRule] = MappingProxyType(
             shows_description=True,
             shows_people=True,
             identifies_people=True,
-            shows_ground_items=True,
+            shows_items=True,
             shows_objects_unseen_in_dark=True,
         ),
         SeesShapes(): _SightRule(
             shows_description=True,
             shows_people=True,
             identifies_people=False,
-            shows_ground_items=False,
+            shows_items=False,
             shows_objects_unseen_in_dark=False,
         ),
         SeesNothing(): _SightRule(
             shows_description=False,
             shows_people=False,
             identifies_people=False,
-            shows_ground_items=False,
+            shows_items=False,
             shows_objects_unseen_in_dark=False,
         ),
     }
@@ -92,7 +92,7 @@ class PresentPerson:
         return SeenPerson(
             person=self.person if rule.identifies_people else Unidentified(),
             section=self.section,
-            visible_items=items,
+            visible_items=items if rule.shows_items else (),
         )
 
 
@@ -177,7 +177,7 @@ class VisibleSurroundings:
             passages=tuple(contained.passage for contained in contents.passages if contained.is_seen()),
             sections=contents.sections,
             objects=tuple(contained.declaration for contained in contents.objects if contained.is_seen_with(sight)),
-            ground_items=contents.ground_items if rule.shows_ground_items else (),
+            ground_items=contents.ground_items if rule.shows_items else (),
             people=_present(person.seen_awake_with(sight) for person in contents.people),
             bodies=_present(body.seen_down_with(sight) for body in contents.bodies),
         )

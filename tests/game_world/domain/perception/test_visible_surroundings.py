@@ -188,3 +188,23 @@ class TestHiddenThingsStayOutInTheDark:
         surroundings = VisibleSurroundings.seen_with(SeesNothing(), contents(objects=(hidden_glow,)))
 
         assert surroundings.objects == ()
+
+
+class TestItemsOnPeopleHiddenInTheDark:
+    """VisibleSurroundings.seen_with が SeesShapes (暗い) のとき、地面の品物と同じく人の持ち物も出さないことを保証する。"""
+
+    def test_awake_person_shows_no_held_items(self) -> None:
+        """暗いとき、起きている人が手に持っている物は見えず、visible_items は空になる。"""
+        miner = person(1, held=(item("pickaxe"),))
+
+        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(people=(miner,)))
+
+        assert [seen.visible_items for seen in surroundings.people] == [()]
+
+    def test_body_shows_no_items(self) -> None:
+        """暗いとき、倒れている人の持ち物は手の物も荷の中の物も見えず、visible_items は空になる。"""
+        fallen = person(2, held=(item("lantern"),), carried=(item("map"),))
+
+        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(bodies=(fallen,)))
+
+        assert [seen.visible_items for seen in surroundings.bodies] == [()]
