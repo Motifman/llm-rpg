@@ -216,6 +216,12 @@ class TestMoveItemEffectByArgument:
             uses_chance=False,
             uses_action_arguments=frozenset({_THE_ITEM}),
             waits_for_flags=frozenset(),
+            reads_world_stage=False,
+            reads_day_phases=frozenset(),
+            reads_weather=False,
+            raises_flags=frozenset(),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )
 
 
@@ -248,6 +254,12 @@ class TestMoveItemEffectRandomItemOf:
             uses_chance=True,
             uses_action_arguments=frozenset(),
             waits_for_flags=frozenset(),
+            reads_world_stage=False,
+            reads_day_phases=frozenset(),
+            reads_weather=False,
+            raises_flags=frozenset(),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )
 
 

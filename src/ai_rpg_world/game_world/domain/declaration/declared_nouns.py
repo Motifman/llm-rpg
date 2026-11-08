@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.declaration.character import (
     GroupDeclaration,
     GroupingDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.initial_world import StartingPerson
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ItemSpecDeclaration,
     ObjectDeclaration,
@@ -170,6 +171,34 @@ class DeclaredNouns:
 
     def sections_at(self, spot: SpotId) -> tuple[SpotSectionDeclaration, ...]:
         return tuple(section for section in self._sections if section.spot_id == spot)
+
+    def all_flags(self) -> tuple[FlagDeclaration, ...]:
+        return tuple(self._flags)
+
+    def all_passages(self) -> tuple[PassageDeclaration, ...]:
+        return tuple(self._passages)
+
+    def initially_raised_flags(self) -> frozenset[FlagDeclaration]:
+        return frozenset(flag for flag in self._flags if flag.initially_raised)
+
+    def starting_people(self) -> tuple[StartingPerson, ...]:
+        return tuple(
+            StartingPerson(
+                person=character.person_id,
+                spawn_spot=self._spots.with_id(character.spawn_spot),
+                items=tuple(self._item_specs.with_id(item) for item in character.initial_items),
+                held=tuple(self._item_specs.with_id(item) for item in character.initial_held),
+                groups=tuple(self._groups.with_id(group) for group in character.initial_groups),
+                knows=character.knows_at_start,
+            )
+            for character in self._characters
+        )
+
+    def all_sections(self) -> tuple[SpotSectionDeclaration, ...]:
+        return tuple(self._sections)
+
+    def all_group_decisions(self) -> tuple[GroupDecisionDeclaration, ...]:
+        return tuple(self._group_decisions)
 
     def outcome(self, name: str, at: DesignLocation) -> OutcomeDeclaration:
         return self._outcomes.get(name, at)

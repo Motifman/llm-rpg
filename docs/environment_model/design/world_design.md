@@ -558,6 +558,12 @@ class RefusalTexts:                         # 作者の条件に付かない、�
 
 @final
 @dataclass(frozen=True)
+class WorldIntroduction:                    # エージェントに見せる導入と目的。ステージ 8 で Being の入口 (being.contract の Introduction) に渡す
+    text: DescriptionText
+    objective: DescriptionText
+
+@final
+@dataclass(frozen=True)
 class Route:
     start: SpotId                               # 両方向に通れる通路は、passages だけではどちらの端から出るかが決まらない
     passages: tuple[PassageDeclaration, ...]    # 1 本以上。start から順にたどれる (片道は ends の前の端から)
@@ -565,6 +571,27 @@ class Route:
     @property
     def destination(self) -> SpotId: ...
     def end_of_passage(self, passage_index: int) -> SpotId: ...
+
+NoRoute()                                       # 通れる通路をたどって目的地に着けない。出発地と目的地が同じときも
+
+@final
+@dataclass(frozen=True)
+class StartingPerson:                           # 登場人物の始まり。名前ではなく宣言で持つ
+    person: PersonId
+    spawn_spot: SpotDeclaration
+    items: tuple[ItemSpecDeclaration, ...]
+    held: tuple[ItemSpecDeclaration, ...]
+    groups: tuple[GroupDeclaration, ...]
+    knows: tuple[PersonId, ...]
+
+@final
+@dataclass(frozen=True)
+class InitialWorld:                             # 宣言どうしを組み合わせないと作れない始まりの世界だけ。物の状態などは集約が宣言から作る
+    people: tuple[StartingPerson, ...]
+    raised_flags: frozenset[FlagDeclaration]    # initially_raised の旗
+    stage: WorldStageDeclaration | NoWorldStages
+    weather: WeatherState | NoWeather           # WeatherDeclaration.initial
+    # 最初の体力と荷の上限は、まだ宣言に無い (別の Issue で決める)
 
 
 class WorldDesign:
@@ -591,6 +618,7 @@ class WorldDesign:
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
+        introduction: WorldIntroduction,
     ) -> "WorldDesign": ...
 
     @property
@@ -599,22 +627,34 @@ class WorldDesign:
     def world_rules(self) -> WorldRules: ...
     @property
     def ending(self) -> EndingDeclaration: ...
+    @property
+    def introduction(self) -> WorldIntroduction: ...
+    @property
+    def refusal_texts(self) -> RefusalTexts: ...
+    @property
+    def built_in_action_perceptions(self) -> BuiltInActionPerceptions: ...
+    @property
+    def weather(self) -> WeatherDeclaration | NoWeather: ...
+    @property
+    def day_night(self) -> DayNightDeclaration | NoDayNight: ...
 
-    def interaction_on_object(self, obj: ObjectId, interaction: InteractionId) -> InteractionDeclaration: ...
+    def interaction_on_object(self, obj: ObjectId, interaction: InteractionId) -> InteractionDeclaration: ...   # 宣言が無ければ UndeclaredVerbException。人への操作も同じ
     def interaction_on_item(self, item_spec: ItemSpecId, interaction: InteractionId) -> InteractionDeclaration: ...
     def interactions_on_object(self, obj: ObjectId) -> tuple[InteractionDeclaration, ...]: ...
     def interactions_on_item(self, item_spec: ItemSpecId) -> tuple[InteractionDeclaration, ...]: ...
     def use_of_item(self, item_spec: ItemSpecId) -> ItemUseDeclaration | NotUsable: ...
     def section_access(self, section: SpotSectionId) -> SectionAccessDeclaration: ...
     def passage_traversal(self, passage: PassageId) -> Condition: ...                   # 宣言が無ければ、いつでも真の条件
-    def world_stage_effects(self, stage: WorldStageId) -> WorldStageEffectsDeclaration: ...
+    def world_stage_effects(self, stage: WorldStageId) -> WorldStageEffectsDeclaration: ...   # 宣言が無ければ、出入りで何もしない (NoEffect) 宣言
     def group_decision_rules(self, decision: GroupDecisionId) -> GroupDecisionRulesDeclaration: ...
     def person_interaction(self, interaction: InteractionId) -> InteractionDeclaration: ...   # 殴る、盗むなど、人への操作
     def happenings(self) -> tuple[HappeningDeclaration, ...]: ...
     def joint_actions(self) -> tuple[JointActionDeclaration, ...]: ...
     def reactions(self) -> tuple[ReactionDeclaration, ...]: ...
     def discoverables_at(self, spot: SpotId) -> tuple[DiscoverableDeclaration, ...]: ...
-    def route(self, start: SpotId, destination: SpotId) -> Route | NoRoute: ...
+    def route(self, start: SpotId, destination: SpotId, passable: frozenset[PassageId]) -> Route | NoRoute: ...
+        # passable の通路だけを、宣言の向き (two_way と ends の順) にたどる。呼ぶ側が PassageStates の今の状態から渡す
+        # かかる tick の合計が最も小さい道、同じなら通路の数が少ない道、それも同じなら宣言の並びが先の通路を通る道
     def initial_world(self) -> InitialWorld: ...
     def warnings(self) -> tuple[DesignWarning, ...]: ...
 
@@ -655,8 +695,12 @@ infrastructure: JSON を読む
 - 締める出来事 (`CloseGroupDecisionEffect`) が 1 つも無い集団の決定は `DesignWarning`。猶予 (`DeathRule.grace`) が 0 なのに介抱がある世界は `DesignFlaw`
 - 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、読み込む側が既定の文の表 (データ) から埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)
 - 断りの文の表 (`RefusalTexts`) と、組み込みの行為の知覚の文 (`BuiltInActionPerceptions`) の既定は、コードではなくデータ (共通のシナリオの部品) として 1 つ用意し、シナリオはそれを取り込んで必要な行だけ書き換える。起きうる理由や、世界で行える組み込みの行為が表に無ければ `DesignFlaw`
-- 条件を置いた場所 (前提、出来事の条件など) の根に `failure_text` が無ければ `DesignFlaw`
+- 理由が誰かに届く条件 (操作の前提、区画に入る条件、通路を通る条件) の根に `failure_text` が無ければ `DesignFlaw`。出来事・反応・終わり・見つかる物の条件には求めない
 - 効果と条件が読む引数の名前が、操作の宣言の `arguments` に無ければ `DesignFlaw`
-- `WorldStage`・昼夜・天候を宣言していない世界で、それを見る条件を書いていれば `DesignFlaw`
-- 行う人に知りえない所属 ([condition.md](condition.md) の伏せた所属) を見る前提は `DesignWarning`
+- `WorldStage`・昼夜・天候を宣言していない世界で、それを見る条件を書いていれば `DesignFlaw`。昼夜に宣言していない段階の名前を見る条件も同じ
+- 行う人に知りえない所属 ([condition.md](condition.md) の伏せた所属) を見る前提は `DesignWarning`。前提は、操作の前提、区画の入る条件、通路の通り方の条件
+- 出来事・反応・見つかる物・二人で合わせる操作の ID が重なれば `DesignFlaw`。`ScenarioProgress` などが ID で記録するので、重なると 2 つが混ざる
+- 区画ごとの出入り (`SectionAccessDeclaration`) と、集団の決定ごとの決まり (`GroupDecisionRulesDeclaration`) が 1 つずつ無ければ `DesignFlaw`。二人で合わせる操作が求める物体の操作が宣言に無ければ `DesignFlaw`
+- 組み込みの行為の知覚の文は、世界で行える組み込みの行為 (介抱は `TendRule` があるときだけ) をすべて持たなければ `DesignFlaw`。知らせの相手の選び方は、行為の中に置いた条件として (`Actor`、`Target` を使える) ほかの宣言と同じく照らし合わせる。断りの文の表の `world_state` は、起きうる `RefusalCode` をドメインで列挙できないので compose では確かめない
+- compose が照らし合わせに使う材料 (主語、読む引数、段階・昼夜・天候を読むか、立てる旗、締める決定、伏せられうる所属) は、条件と効果の `requirements()` が答える。根に文があるかは `Condition.explains_failure()` が答える
 - 宣言に無い通路の状態の名前、呼び名 (`display_name`) の無い値が文に出るときは、`DesignFlaw` で止める

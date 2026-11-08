@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
+from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import AnnouncementTo
 from ai_rpg_world.game_world.domain.declaration.verb.sight_texts_declaration import SightTextsDeclaration
@@ -32,3 +33,8 @@ class PerceptionDeclaration:
     announcement: AnnouncementTo | NoAnnouncement
     on_failure: SightTextsDeclaration | NoFailureWitness
     salience: Salience
+
+    def requirements(self) -> Requirements:
+        if isinstance(self.announcement, NoAnnouncement):
+            return Requirements.nothing()
+        return self.announcement.requirements()

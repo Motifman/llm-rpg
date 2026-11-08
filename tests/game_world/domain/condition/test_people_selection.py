@@ -33,6 +33,9 @@ class _IsNotTheActor(Condition):
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         return None
 
+    def explains_failure(self) -> bool:
+        return False
+
 
 @dataclass(frozen=True)
 class _CanAct(Condition):
@@ -44,6 +47,9 @@ class _CanAct(Condition):
 
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         return None
+
+    def explains_failure(self) -> bool:
+        return False
 
 
 def _world() -> WorldInMemory:

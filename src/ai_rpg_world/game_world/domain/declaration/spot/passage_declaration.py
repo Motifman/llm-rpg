@@ -62,6 +62,14 @@ class PassageDeclaration:
                 f"which is not among its states"
             )
 
+    def far_end_from(self, here: SpotId) -> SpotId | None:
+        near, far = self.ends
+        if here == near:
+            return far
+        if here == far and self.two_way:
+            return near
+        return None
+
     def allows(self, state: PassageStateName) -> bool:
         return self.state(state).traversable
 

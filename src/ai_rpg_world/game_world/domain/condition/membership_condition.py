@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson
@@ -10,7 +10,7 @@ from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPat
 from ai_rpg_world.game_world.domain.condition.failure_texts import own_failure
 from ai_rpg_world.game_world.domain.condition.leaf_condition import LeafCondition
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
-from ai_rpg_world.game_world.domain.condition.subject import Subject
+from ai_rpg_world.game_world.domain.condition.subject import Subject, SubjectKind
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import (
     GroupDeclaration,
     MembershipVisibility,
@@ -34,7 +34,16 @@ class IsMemberCondition(LeafCondition):
         return facts.membership().is_member(self.who.person_in(trigger), self.group)
 
     def _requirements_besides_text(self) -> Requirements:
-        return self.who.requirements()
+        return replace(self.who.requirements(), may_hide_membership=self._may_hide_from_actor())
+
+    def _may_hide_from_actor(self) -> bool:
+        visibility = self.group.grouping.visibility
+        if visibility is MembershipVisibility.EVERYONE:
+            return False
+        return not (
+            visibility is MembershipVisibility.SELF_ONLY
+            and self.who.requirements().subjects == frozenset({SubjectKind.ACTOR})
+        )
 
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         if self.holds(facts, trigger):

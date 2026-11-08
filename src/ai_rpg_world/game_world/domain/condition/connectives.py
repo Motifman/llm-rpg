@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, final
 from ai_rpg_world.game_world.domain.action.trigger import EachPersonOf
 from ai_rpg_world.game_world.domain.condition.condition import Condition, FailureReason, HiddenFailure, NoText
 from ai_rpg_world.game_world.domain.condition.failure_texts import (
+    explains,
     failure_of_all_children,
     failure_of_child,
     own_failure,
@@ -47,6 +48,9 @@ class AllOfCondition:
             *(child.requirements() for child in self.children), placeholder_requirements(self.failure_text)
         )
 
+    def explains_failure(self) -> bool:
+        return explains(self.failure_text)
+
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         for position, child in enumerate(self.children):
             reason = child.failure_reason(facts, trigger)
@@ -69,6 +73,9 @@ class AnyOfCondition:
             *(child.requirements() for child in self.children), placeholder_requirements(self.failure_text)
         )
 
+    def explains_failure(self) -> bool:
+        return explains(self.failure_text)
+
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         reasons: list[FailureReason | HiddenFailure] = []
         for child in self.children:
@@ -90,6 +97,9 @@ class NotCondition:
 
     def requirements(self) -> Requirements:
         return self.child.requirements().combined_with(placeholder_requirements(self.failure_text))
+
+    def explains_failure(self) -> bool:
+        return explains(self.failure_text)
 
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         if self.holds(facts, trigger):
@@ -117,6 +127,9 @@ class ForSomeoneCondition:
             placeholder_requirements(self.failure_text),
         )
 
+    def explains_failure(self) -> bool:
+        return explains(self.failure_text)
+
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         reasons: list[FailureReason | HiddenFailure] = []
         for person in _selected_in_world_order(self.people, facts, trigger):
@@ -143,6 +156,9 @@ class ForEveryoneCondition:
     def requirements(self) -> Requirements:
         inside = self.condition.requirements().combined_with(placeholder_requirements(self.failure_text))
         return self.people.requirements().combined_with(inside.without_subject(SubjectKind.EACH_PERSON))
+
+    def explains_failure(self) -> bool:
+        return explains(self.failure_text)
 
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         for person in _selected_in_world_order(self.people, facts, trigger):

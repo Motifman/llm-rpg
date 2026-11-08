@@ -15,4 +15,5 @@ class WeatherState:
 @final
 @dataclass(frozen=True)
 class NoWeather:
-    pass
+    def initial_state(self) -> NoWeather:
+        return self

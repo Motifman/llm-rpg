@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
@@ -48,4 +48,4 @@ class CloseGroupDecisionEffect:
         world.group_decision(self.decision).close()
 
     def requirements(self) -> Requirements:
-        return Requirements.nothing()
+        return replace(Requirements.nothing(), closes_group_decisions=frozenset({self.decision}))

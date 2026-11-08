@@ -6,8 +6,10 @@ from types import MappingProxyType
 from typing import final
 
 from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
+from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import NotBuiltInActionPerceptionException
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
+from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 
 _KINDS_NOT_PERCEIVED_THROUGH_THIS_TABLE = frozenset(
     {
@@ -33,3 +35,12 @@ class BuiltInActionPerceptions:
                 f"BuiltInActionPerceptions.by_kind must not declare {not_built_in}, which are not perceived through it"
             )
         object.__setattr__(self, "by_kind", MappingProxyType(dict(self.by_kind)))
+
+    def flaws_for(self, rules: WorldRules, at: DesignLocation) -> list[DesignFlaw]:
+        performable = frozenset(ActionKind) - _KINDS_NOT_PERCEIVED_THROUGH_THIS_TABLE
+        if not rules.allows_tending():
+            performable -= {ActionKind.TEND}
+        missing = sorted(kind.name for kind in performable - self.by_kind.keys())
+        if missing:
+            return [DesignFlaw(at, f"lacks how {missing} are perceived")]
+        return []

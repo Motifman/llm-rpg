@@ -203,3 +203,37 @@ class TestChance:
     def test_requires_chance(self) -> None:
         """ChanceCondition の requirements() は uses_chance が真。"""
         assert ChanceCondition(probability=Probability(0.3), failure_text=NoText()).requirements().uses_chance
+
+
+class TestWhatWorldTimeConditionsRead:
+    """段階・昼夜・天候を見る条件が、何を読むかを requirements() で答えることを保証する。"""
+
+    def test_world_stage_conditions_read_the_world_stage(self) -> None:
+        """WorldStageIs と TicksInWorldStageAtLeast は段階を読み、昼夜と天候は読まない。"""
+        for condition in (
+            WorldStageIsCondition(stage=_DAYTIME, failure_text=NoText()),
+            TicksInWorldStageAtLeastCondition(ticks=Ticks(2), failure_text=NoText()),
+        ):
+            requirements = condition.requirements()
+            assert requirements.reads_world_stage
+            assert requirements.reads_day_phases == frozenset()
+            assert not requirements.reads_weather
+
+    def test_time_of_day_reads_its_day_phase(self) -> None:
+        """TimeOfDayIs(夜) は昼夜の段階「夜」を読み、段階は読まない。"""
+        requirements = TimeOfDayIsCondition(phase=_NIGHT, failure_text=NoText()).requirements()
+
+        assert requirements.reads_day_phases == frozenset({_NIGHT})
+        assert not requirements.reads_world_stage
+
+    def test_weather_is_reads_the_weather(self) -> None:
+        """WeatherIs は天候を読む。"""
+        assert WeatherIsCondition(weather=WeatherType.FOG, failure_text=NoText()).requirements().reads_weather
+
+    def test_tick_conditions_read_none_of_them(self) -> None:
+        """TickAtLeast は段階も昼夜も天候も読まない。"""
+        requirements = TickAtLeastCondition(tick=WorldTick(3), failure_text=NoText()).requirements()
+
+        assert not requirements.reads_world_stage
+        assert requirements.reads_day_phases == frozenset()
+        assert not requirements.reads_weather

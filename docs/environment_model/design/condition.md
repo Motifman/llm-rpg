@@ -5,6 +5,7 @@ class Condition(Protocol):
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool: ...
     def requirements(self) -> Requirements: ...
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None: ...
+    def explains_failure(self) -> bool: ...   # 自分の failure_text を持つか。理由が届く条件の根の文を compose が確かめる
 
 
 class WorldFacts(Protocol):
@@ -83,6 +84,13 @@ class Requirements:
     uses_chance: bool
     uses_action_arguments: frozenset[ArgumentName]
     waits_for_flags: frozenset[FlagDeclaration]
+    reads_world_stage: bool                          # WorldStageIs、TicksInWorldStageAtLeast、SinceWorldStageEntered
+    reads_day_phases: frozenset[DayPhaseName]        # TimeOfDayIs の段階
+    reads_weather: bool                              # WeatherIs
+    raises_flags: frozenset[FlagDeclaration]         # RaiseFlagEffect
+    closes_group_decisions: frozenset[GroupDecisionDeclaration]   # CloseGroupDecisionEffect
+    may_hide_membership: bool                        # IsMember が、行う人に知りえない所属を見うる (伏せた所属)
+    # 後ろの 6 つは、きっかけに要るものではなく、compose が宣言どうしを照らし合わせる材料。木のどこかにあれば根で答える
 
     @classmethod
     def nothing(cls) -> Requirements: ...
@@ -105,7 +113,7 @@ class HiddenFailure:                        # 行う人が知りえない所属�
 
 - 作者が書いた文は `failure_text` (`TextWithUnassignedPeople`)。評価するとき、プレースホルダーに `PersonId` を当てて `TextAboutPeople` ([perception.md](perception.md)) にする。見る人ごとの呼び方 (`PersonRef`) への置き換えは、見る人が分かる場所で行う。条件は誰が見るかを知らない
 - 葉とつなぎが自分の `failure_text` を持たなければ `NoText` を返し、親が自分の文で埋める。いちばん内側の文が勝つ
-- 前提など、条件を置いた場所の根には `failure_text` を必ず書く。無ければ compose が `DesignFlaw` にする。ドメインは条件の種類ごとの決まった文を持たない
+- 理由が誰かに届く条件の根には `failure_text` を必ず書く。操作の前提 (物・品物・人への操作)、区画に入る条件、通路を通る条件。無ければ compose が `DesignFlaw` にする。出来事・反応・終わり・見つかる物の条件と `PeopleSelection` の中は、偽になっても理由が誰にも届かないので求めない。ドメインは条件の種類ごとの決まった文を持たない
 
 ### 伏せた所属
 
@@ -114,6 +122,7 @@ class HiddenFailure:                        # 行う人が知りえない所属�
 - いまできることの一覧 ([action.md](action.md) の `AvailableActions`) では、`HiddenFailure` の行為を「できる」と出す。一覧に出る / 出ないの差から所属が漏れないため
 - 試したときに `HiddenFailure` なら、理由を言わずに断る。文は断りの文の表 ([world_design.md](world_design.md) の `RefusalTexts`) の、伏せた理由の文
 - 試して分かることは、ゲームの手として許す。compose は、行う人に知りえない所属を見る前提を `DesignWarning` で作者に知らせる
+- `IsMember` は、分け方が `EVERYONE` のとき、または `SELF_ONLY` で主語が `Actor` のときだけ、伏せられない (`may_hide_membership` が偽)。仲間どうしが知る集団でも、仲間でない人には伏せられうる
 
 ## つなぎ
 

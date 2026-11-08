@@ -8,7 +8,7 @@ from ai_rpg_world.game_world.domain.whereabouts.passage_state_events import (
     PassageStatesEvent,
 )
 from ai_rpg_world.game_world.domain.whereabouts.passage_states import PassageStates
-from ai_rpg_world.game_world.domain.whereabouts.route import Route
+from ai_rpg_world.game_world.domain.whereabouts.route import NoRoute, Route
 from ai_rpg_world.game_world.domain.whereabouts.spot_atmosphere_events import SpotAtmosphereChangedEvent
 from ai_rpg_world.game_world.domain.whereabouts.spot_atmospheres import SpotAtmospheres
 from ai_rpg_world.game_world.domain.whereabouts.whereabouts import Whereabouts
@@ -46,6 +46,7 @@ __all__ = [
     "PassageStates",
     "PassageStatesEvent",
     "PersonBody",
+    "NoRoute",
     "Route",
     "SpotAtmosphereChangedEvent",
     "SpotAtmospheres",

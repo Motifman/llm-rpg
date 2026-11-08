@@ -4,7 +4,7 @@
 class Effect(Protocol):
     # 断るときは、集約がドメイン例外を投げる。効果は自分で断らない
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None: ...
-    def requirements(self) -> Requirements: ...
+    def requirements(self) -> Requirements: ...   # Requirements は condition.md。立てる旗と締める決定もここで答える
 
 
 class WorldAggregates(Protocol):

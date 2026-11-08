@@ -72,6 +72,12 @@ class TestFlagIsRaisedCondition:
             uses_chance=False,
             uses_action_arguments=frozenset(),
             waits_for_flags=frozenset({_RED_KEY}),
+            reads_world_stage=False,
+            reads_day_phases=frozenset(),
+            reads_weather=False,
+            raises_flags=frozenset(),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )
 
     def test_requirements_include_placeholder_of_failure_text(self) -> None:
@@ -126,4 +132,10 @@ class TestFlagsRaisedAtLeastCondition:
             uses_chance=False,
             uses_action_arguments=frozenset(),
             waits_for_flags=frozenset({_RED_KEY, _BLUE_KEY}),
+            reads_world_stage=False,
+            reads_day_phases=frozenset(),
+            reads_weather=False,
+            raises_flags=frozenset(),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )

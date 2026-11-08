@@ -324,3 +324,28 @@ class TestHiddenFailureThroughConnectives:
         happening = HappeningFired(HappeningForTests(HappeningId("dawn")))
 
         assert condition.failure_reason(world().facts(), happening) == FailureReason(failed_part=_ROOT, text=NoText())
+
+
+class TestExplainsFailure:
+    """葉とつなぎが、根に置かれたとき自分の failure_text で断られた理由を言えるかを explains_failure() で答えることを保証する。"""
+
+    def test_leaf_with_text_explains_and_without_does_not(self) -> None:
+        """failure_text を書いた葉は理由を言え、NoText の葉は言えない。"""
+        assert _false(text("まだ早い")).explains_failure()
+        assert not _false().explains_failure()
+
+    def test_connective_answers_with_its_own_text_not_its_childrens(self) -> None:
+        """子が文を持っていても、NoText の AllOf / AnyOf / Not / ForEveryone / ForSomeone は理由を言えず、自分の文を書けば言える。"""
+        child = _false(text("まだ早い"))
+        written = text("今はできない")
+        connectives = (
+            lambda failure: AllOfCondition(children=(child,), failure_text=failure),
+            lambda failure: AnyOfCondition(children=(child,), failure_text=failure),
+            lambda failure: NotCondition(child=child, failure_text=failure),
+            lambda failure: ForEveryoneCondition(people=_everyone(), condition=child, failure_text=failure),
+            lambda failure: ForSomeoneCondition(people=_everyone(), condition=child, failure_text=failure),
+        )
+
+        for connective in connectives:
+            assert not connective(NoText()).explains_failure()
+            assert connective(written).explains_failure()
