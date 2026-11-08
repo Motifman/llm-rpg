@@ -80,7 +80,7 @@ class ActionKind(Enum):                     # どの世界にもある行為の�
     # 取引と市場の種類は、その宣言を設計するときに足す
 Manner = Openly | Stealthily
 # Stealthily: 拾う・置く・渡すと、allows_stealth の操作だけ。見ていた人ごとに StealthRule の確率で気づく
-# (気づいた人にはふつうの文、気づかなかった人には何も届かない)。行っているあいだは StealthRule.duration_rate 倍、物音は 1 段小さい
+# (気づいた人にはふつうの文、気づかなかった人には何も届かない)。行っているあいだは StealthRule.duration_multiplier 倍、物音は 1 段小さい
 ```
 
 ### 行為ごとの性質
