@@ -62,7 +62,10 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
             raise OccupantNotAtRouteStartException(f"{occupant} is not at {route.start.value!r}")
         self._leave_section_if_inside(occupant, location)
         self._locations[occupant] = TravelInProgress(
-            route=route, leg_index=0, ticks_left_on_leg=route.legs[0].travel_ticks, departed_from=route.start
+            route=route,
+            passage_index=0,
+            ticks_left_on_passage=route.passages[0].travel_ticks,
+            departed_from=route.start,
         )
         self.add_event(new_event(TravelStartedEvent, world_id=self._world_id, occupant=occupant, route=route))
         self.add_event(new_event(OccupantLeftSpotEvent, world_id=self._world_id, occupant=occupant, spot=route.start))
@@ -148,20 +151,20 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
 
     def _advance(self, occupant: Occupant, travel: TravelInProgress, closed_passages: frozenset[PassageId]) -> None:
         route = travel.route
-        leg_index = travel.leg_index
-        ticks_left = travel.ticks_left_on_leg.value
+        passage_index = travel.passage_index
+        ticks_left = travel.ticks_left_on_passage.value
         departed_from = travel.departed_from
         spare = 1
         while True:
-            passage = route.legs[leg_index].passage_id
-            if passage in closed_passages:
+            passage_id = route.passages[passage_index].passage_id
+            if passage_id in closed_passages:
                 self._stop_at(occupant, departed_from)
                 self.add_event(
                     new_event(
                         TravelBlockedEvent,
                         world_id=self._world_id,
                         occupant=occupant,
-                        passage=passage,
+                        passage=passage_id,
                         stopped_at=departed_from,
                     )
                 )
@@ -170,19 +173,19 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
             if ticks_left > spare:
                 self._locations[occupant] = TravelInProgress(
                     route=route,
-                    leg_index=leg_index,
-                    ticks_left_on_leg=Ticks(ticks_left - spare),
+                    passage_index=passage_index,
+                    ticks_left_on_passage=Ticks(ticks_left - spare),
                     departed_from=departed_from,
                 )
                 return
             spare -= ticks_left
-            departed_from = route.end_of_leg(leg_index)
-            if leg_index + 1 == len(route.legs):
+            departed_from = route.end_of_passage(passage_index)
+            if passage_index + 1 == len(route.passages):
                 self._stop_at(occupant, departed_from)
                 self._announce_arrival(occupant, departed_from)
                 return
-            leg_index += 1
-            ticks_left = route.legs[leg_index].travel_ticks.value
+            passage_index += 1
+            ticks_left = route.passages[passage_index].travel_ticks.value
 
     def _is_full(self, section: SpotSectionDeclaration, not_counted: frozenset[PersonId]) -> bool:
         if isinstance(section.capacity, NoCapacity):

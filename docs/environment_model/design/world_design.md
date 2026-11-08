@@ -517,12 +517,12 @@ class StealthRule:                              # こっそり行っても、見
 @final
 @dataclass(frozen=True)
 class Route:
-    start: SpotId                               # 両方向に通れる通路は、legs だけではどちらの端から出るかが決まらない
-    legs: tuple[PassageDeclaration, ...]        # 1 本以上。start から順にたどれる (片道は ends の前の端から)
+    start: SpotId                               # 両方向に通れる通路は、passages だけではどちらの端から出るかが決まらない
+    passages: tuple[PassageDeclaration, ...]    # 1 本以上。start から順にたどれる (片道は ends の前の端から)
 
     @property
     def destination(self) -> SpotId: ...
-    def end_of_leg(self, leg_index: int) -> SpotId: ...
+    def end_of_passage(self, passage_index: int) -> SpotId: ...
 
 
 class WorldDesign:

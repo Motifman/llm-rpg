@@ -18,43 +18,43 @@ class TestRouteDirection:
         """両方向に通れる通路 1 本の Route は、start を ends の後ろの端にすると、行き先が前の端になる。"""
         shaft = path("shaft", "mine_entrance", "mine_depths")
 
-        back = Route(start=SpotId("mine_depths"), legs=(shaft,))
+        back = Route(start=SpotId("mine_depths"), passages=(shaft,))
 
         assert back.destination == SpotId("mine_entrance")
 
-    def test_destination_follows_every_leg_from_the_start(self) -> None:
+    def test_destination_follows_every_passage_from_the_start(self) -> None:
         """通路を 2 本つないだ Route の行き先は、出発点から 2 本をたどった先の場所になる。"""
         route = Route(
             start=SpotId("plaza"),
-            legs=(path("street", "plaza", "well"), path("lane", "mine_entrance", "well")),
+            passages=(path("street", "plaza", "well"), path("lane", "mine_entrance", "well")),
         )
 
         assert route.destination == SpotId("mine_entrance")
 
-    def test_end_of_leg_is_the_spot_reached_after_walking_that_leg(self) -> None:
-        """end_of_leg(i) は、i 番目の区間を歩き終えたときにいる場所を返す。"""
+    def test_end_of_passage_is_the_spot_reached_after_walking_that_passage(self) -> None:
+        """end_of_passage(i) は、i 番目の通路を歩き終えたときにいる場所を返す。"""
         route = Route(
             start=SpotId("plaza"),
-            legs=(path("street", "plaza", "well"), path("lane", "well", "mine_entrance")),
+            passages=(path("street", "plaza", "well"), path("lane", "well", "mine_entrance")),
         )
 
-        assert (route.end_of_leg(0), route.end_of_leg(1)) == (SpotId("well"), SpotId("mine_entrance"))
+        assert (route.end_of_passage(0), route.end_of_passage(1)) == (SpotId("well"), SpotId("mine_entrance"))
 
 
 class TestRouteRejectsImpossibleWalks:
     """たどれない Route を作れないことを保証する。"""
 
-    def test_route_without_legs_is_rejected(self) -> None:
-        """区間が 0 本の Route は EmptyRouteException を投げる。"""
+    def test_route_without_passages_is_rejected(self) -> None:
+        """通路が 0 本の Route は EmptyRouteException を投げる。"""
         with pytest.raises(EmptyRouteException):
-            Route(start=SpotId("plaza"), legs=())
+            Route(start=SpotId("plaza"), passages=())
 
-    def test_leg_that_does_not_touch_the_current_spot_is_rejected(self) -> None:
+    def test_passage_that_does_not_touch_the_current_spot_is_rejected(self) -> None:
         """前の区間の着いた場所を端に持たない区間があると、BrokenRouteException を投げる。"""
         with pytest.raises(BrokenRouteException):
             Route(
                 start=SpotId("plaza"),
-                legs=(path("street", "plaza", "well"), path("tunnel", "cellar", "mine_depths")),
+                passages=(path("street", "plaza", "well"), path("tunnel", "cellar", "mine_depths")),
             )
 
     def test_one_way_passage_walked_backwards_is_rejected(self) -> None:
@@ -62,12 +62,12 @@ class TestRouteRejectsImpossibleWalks:
         slide = path("slide", "cliff_top", "beach", two_way=False)
 
         with pytest.raises(BrokenRouteException):
-            Route(start=SpotId("beach"), legs=(slide,))
+            Route(start=SpotId("beach"), passages=(slide,))
 
     def test_one_way_passage_walked_forwards_is_accepted(self) -> None:
         """片道の通路を ends の前の端から歩く Route は作れ、行き先は後ろの端になる。"""
         slide = path("slide", "cliff_top", "beach", two_way=False)
 
-        route = Route(start=SpotId("cliff_top"), legs=(slide,))
+        route = Route(start=SpotId("cliff_top"), passages=(slide,))
 
         assert route.destination == SpotId("beach")

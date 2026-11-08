@@ -12,31 +12,31 @@ from ai_rpg_world.game_world.domain.value_object import SpotId
 @dataclass(frozen=True)
 class Route:
     start: SpotId
-    legs: tuple[PassageDeclaration, ...]
+    passages: tuple[PassageDeclaration, ...]
 
     def __post_init__(self) -> None:
-        if not self.legs:
-            raise EmptyRouteException(f"Route from {self.start.value!r} has no legs")
+        if not self.passages:
+            raise EmptyRouteException(f"Route from {self.start.value!r} has no passages")
         self._stops()
 
     @property
     def destination(self) -> SpotId:
         return self._stops()[-1]
 
-    def end_of_leg(self, leg_index: int) -> SpotId:
-        return self._stops()[leg_index + 1]
+    def end_of_passage(self, passage_index: int) -> SpotId:
+        return self._stops()[passage_index + 1]
 
     def _stops(self) -> tuple[SpotId, ...]:
         stops = [self.start]
-        for leg in self.legs:
+        for passage in self.passages:
             here = stops[-1]
-            near, far = leg.ends
+            near, far = passage.ends
             if here == near:
                 stops.append(far)
-            elif here == far and leg.two_way:
+            elif here == far and passage.two_way:
                 stops.append(near)
             else:
                 raise BrokenRouteException(
-                    f"Route from {self.start.value!r} cannot walk {leg.passage_id.value} from {here.value!r}"
+                    f"Route from {self.start.value!r} cannot walk {passage.passage_id.value} from {here.value!r}"
                 )
         return tuple(stops)

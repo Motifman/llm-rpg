@@ -24,8 +24,8 @@ class AtSpot:
 @dataclass(frozen=True)
 class TravelInProgress:
     route: Route
-    leg_index: int
-    ticks_left_on_leg: Ticks
+    passage_index: int
+    ticks_left_on_passage: Ticks
     departed_from: SpotId
 
 
