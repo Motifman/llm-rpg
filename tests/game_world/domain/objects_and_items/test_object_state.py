@@ -80,7 +80,7 @@ def _well(*state_keys: ObjectStateKeyDeclaration, hidden: bool = False) -> Objec
     )
 
 
-def _opened(declaration: ObjectDeclaration | None = None, now: WorldTick = _START) -> ObjectState:
+def _created(declaration: ObjectDeclaration | None = None, now: WorldTick = _START) -> ObjectState:
     state = ObjectState.from_declaration(declaration or _well(), now)
     state.clear_events()
     return state
@@ -101,7 +101,7 @@ class TestObjectStateFromDeclaration:
 
     @pytest.mark.parametrize(("hidden", "revealed"), [(True, False), (False, True)])
     def test_revealed_unless_hidden_until_revealed(self, hidden: bool, revealed: bool) -> None:
-        """hidden_until_revealed の物は現れていない状態で開き、そうでない物は初めから現れている。"""
+        """hidden_until_revealed の物は現れていない状態で作られ、そうでない物は初めから現れている。"""
         state = ObjectState.from_declaration(_well(hidden=hidden), _START)
 
         assert state.is_revealed() is revealed
@@ -252,7 +252,7 @@ class TestObjectStateStock:
         assert state.value_of(water, WorldTick(6)) == StockValue(Count(2))
         assert state.value_of(water, WorldTick(30)) == StockValue(Count(2))
 
-    def test_refill_counts_from_the_tick_it_was_opened(self) -> None:
+    def test_refill_counts_from_the_tick_it_was_created(self) -> None:
         """tick 100 に作った在庫 0 の物は、tick 102 では 0、tick 103 で 1 を返す。"""
         water = _water(initial=0, refills_every=Ticks(3))
         state = _opened(_well(water), now=WorldTick(100))
