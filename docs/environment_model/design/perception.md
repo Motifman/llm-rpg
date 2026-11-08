@@ -372,7 +372,7 @@ class VisibleSurroundings:
     @classmethod
     def seen_with(cls, sight: SightQuality, contents: SpotContents) -> "VisibleSurroundings": ...
         # 現れていない物と通路 (hidden_until_revealed) は出さない。暗い・真っ暗では、暗くても見える物体 (seen_in_dark) だけ
-        # 地面の品物は SeesClearly のときだけ出す。区画と通路は真っ暗でも出す (手探りで分かる)
+        # 地面の品物と人の持ち物は SeesClearly のときだけ出す (暗いときは持ち物を出さない)。区画と通路は真っ暗でも出す (手探りで分かる)
 ```
 
 - モンスターは #1971、遠くの場所が見える仕組み (`DistantSight`) は #2040 で決めてから足す
