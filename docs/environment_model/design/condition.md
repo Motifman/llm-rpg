@@ -8,39 +8,46 @@ class Condition(Protocol):
 
 
 class WorldFacts(Protocol):
-    """条件が世界を読む口。読むだけで、同じ巻き戻しの範囲の中の変化を映す。"""
+    """条件と効果が世界を読む入口。集約ごとに、問い合わせだけを持つ型を返す。ロジックは持たない。同じ巻き戻しの範囲の中の変化を映す。"""
     def now(self) -> WorldTick: ...
-    def flag_is_raised(self, flag: FlagDeclaration) -> bool: ...
-    def world_stage(self) -> WorldStageDeclaration | NoWorldStages: ...   # WorldStage を宣言しない世界は NoWorldStages
-    def ticks_in_world_stage(self) -> Ticks: ...
-    def time_of_day(self) -> TimeOfDay | NoDayNight: ...
-    def weather(self) -> WeatherState | NoWeather: ...
-    def happening_last_fired_at(self, happening: HappeningDeclaration) -> WorldTick | NeverFired: ...
-    def object_value(self, key: ObjectStateKeyDeclaration) -> StateValue: ...
-    def item_count(self, person: PersonId, item_spec: ItemSpecDeclaration) -> Count: ...
-    def is_holding(self, person: PersonId, item_spec: ItemSpecDeclaration) -> bool: ...
-    def spot_of(self, occupant: Occupant) -> SpotId | TravelInProgress: ...
-    def is_member(self, person: PersonId, group: GroupDeclaration) -> bool: ...
-    def gold_of(self, person: PersonId) -> Gold: ...
-    def hunger_of(self, person: PersonId) -> HungerAmount: ...
-    def fatigue_of(self, person: PersonId) -> FatigueAmount: ...
-    def life_state(self, person: PersonId) -> LifeState: ...
-    def outcome_of(self, person: PersonId) -> Outcome | Undecided: ...
-    def all_outcomes_decided(self) -> bool: ...
-    def search_count(self, person: PersonId, spot: SpotId) -> Count: ...
-    def ticks_since_last_action(self, who: PersonId | Anyone, action: ActionKind | InteractionId, since: SinceStart | SinceWorldStageEntered) -> int | NeverDone: ...
+    def rules(self) -> WorldRules: ...
+    def day_night(self) -> DayNightDeclaration | NoDayNight: ...
+    def nouns(self) -> DeclaredNouns: ...                   # 名詞の宣言を引く (区画の中から届く物、今の段階の宣言など)
+    def random(self) -> RandomSource: ...
     def people(self) -> tuple[PersonId, ...]: ...           # 世界の全員 (死んだ人、去った人を含む)
-    def roll(self, occasion: ChanceOccasion) -> float: ...
+
+    def whereabouts(self) -> WhereaboutsReading: ...
+    def passages(self) -> PassageStatesReading: ...
+    def atmospheres(self) -> SpotAtmospheresReading: ...
+    def outcomes(self) -> PersonOutcomesReading: ...
+    def membership(self) -> GroupMembershipReading: ...
+    def clock(self) -> WorldClockReading: ...
+    def weather(self) -> WeatherReading | NoWeather: ...
+    def world_stage(self) -> WorldStageReading | NoWorldStages: ...
+    def flags(self) -> WorldFlagsReading: ...
+    def scenario_progress(self) -> ScenarioProgressReading: ...
+    def latest_actions(self) -> LatestActionsReading: ...
+    def vitals(self, person: PersonId) -> PersonVitalsReading: ...
+    def inventory(self, person: PersonId) -> PersonInventoryReading: ...
+    def item(self, item: ItemInstanceId) -> ItemReading: ...
+    def object_state(self, obj: ObjectId) -> ObjectStateReading: ...
+    def ground_items(self, spot: SpotId) -> GroundItemsReading: ...
+    def search_progress(self, spot: SpotId) -> SpotSearchProgressReading: ...
+    def group_decision(self, decision: GroupDecisionDeclaration) -> GroupDecisionReading: ...
 
 
-@final
-@dataclass(frozen=True)
-class ChanceOccasion:
-    trigger: Trigger
-    tick: WorldTick
-    position: ConditionPath | EffectPath
+class RandomSource(Protocol):               # 偶然の出どころ。本番はふつうの乱数、テストは決めた値を順に返す
+    def next_fraction(self) -> float: ...   # 0 以上 1 未満
+```
 
+- `...Reading` は、同じ名前の集約 ([world_state.md](world_state.md)) の問い合わせのメソッドだけを持つ Protocol。本物の集約がそのまま満たす。条件は集約を書き換えられない
+- 条件は、集約に直接たずねる (`facts.whereabouts().is_in_section(...)`)。集約の規則 (`can_reach` など) を窓口や条件で作り直さない。2 つの集約を組み合わせる処理 (持ち物の中の品物の種類を数える、など) は、それを使う条件の中に書く
+- 窓口のメソッドは集約ごとに 1 つ。集約の問い合わせが増えても窓口は変わらない。窓口が増えるのは集約が増えたときだけ
+- 条件が `facts` を受け取るのは、条件が木で、親や評価する側が子の中身を知らずに同じ形で呼ぶため。宣言である条件に集約を持たせると、宣言と run ごとの状態が混ざる
+- 人の居場所を問う条件と効果 (`IsAtSpot`、`IsInSection`、`Teleport` など) は、その人が去った人として動いていれば `DepartedPerson`、それ以外は `PersonBody` の居場所を見る
+- 偶然は `facts.random()` から順に引く。同じきっかけなら同じ出目、という決まりは持たない。テストは引く順に値を並べて渡し、毎回同じ結果にする
 
+```python
 Subject = Actor | Target | ChosenByGroup | NamedPerson | EachPerson   # 誰について。1 人に決まるものだけ
 # Actor: 行為をした人 / Target: 人への操作の相手 / ChosenByGroup: 集団の決定で選ばれた人
 # NamedPerson(character): 宣言で名指しした人 / EachPerson: ForEveryone などで 1 人ずつ見るときの、その人
@@ -54,10 +61,10 @@ class SubjectKind(Enum):                    # ACTOR / TARGET / CHOSEN_BY_GROUP /
 
 @final
 @dataclass(frozen=True)
-class ConditionPath:                        # 条件の木の中の位置。根からの子の位置の並び。EffectPath も同じ形
+class ConditionPath:                        # 条件の木の中の位置。根からの子の位置の並び
     @classmethod
     def root(cls) -> ConditionPath: ...
-    def child(self, position: int) -> ConditionPath: ...
+    def under(self, position: int) -> ConditionPath: ...   # この位置の前に親の番号を足す。子が返した位置を、親が自分の番号で包む
 
 @final
 @dataclass(frozen=True)
@@ -65,33 +72,46 @@ class PeopleSelection:                      # 世界の全員から、where が�
     where: Condition                        # 中では EachPerson が「その人」を指す
 
     def select(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]: ...
-    def requirements(self) -> Requirements: ...
+    def requirements(self) -> Requirements: ...   # where の要求から EACH_PERSON を除いたもの
 
 @final
 @dataclass(frozen=True)
 class Requirements:
     subjects: frozenset[SubjectKind]
     uses_chance: bool
-    uses_action_arguments: bool
+    uses_action_arguments: frozenset[ArgumentName]
     waits_for_flags: frozenset[FlagDeclaration]
 
     @classmethod
-    def nothing(cls) -> Requirements: ...                       # 主語も偶然も引数も待つ旗も要らない
-    def combined_with(self, other: Requirements) -> Requirements: ...   # 主語と旗は和、偶然と引数はどちらかが使えば使う。つなぎが子の要求を合わせる
+    def nothing(cls) -> Requirements: ...
+    def combined_with(self, other: Requirements) -> Requirements: ...
+    def without_subject(self, kind: SubjectKind) -> Requirements: ...   # ForEveryone などが、中だけで使える EACH_PERSON を外へ出さない
 
 @final
 @dataclass(frozen=True)
 class FailureReason:
     failed_part: ConditionPath
-    text: TextWithAssignedPeople                    # 作者の failure_text のプレースホルダーを評価のときの人を割り当てた文。無ければ条件の種類ごとの決まった文
+    text: TextAboutPeople | NoText          # NoText なら、いちばん近い親の failure_text を使う
 
 @final
 @dataclass(frozen=True)
-class HiddenFailure:                        # 誰が何者かで決まる条件 (伏せた属性を見る条件)。理由を見せると伏せた役割が分かる
+class HiddenFailure:                        # 行う人が知りえない所属を見て偽になった
     failed_part: ConditionPath
 ```
 
-満たしていない条件のうち、`FailureReason` は「いまできない」に理由つきで出し、`HiddenFailure` は行為ごと一覧に出さない ([action.md](action.md) の `AvailableActions`)。
+### 断られた理由の文
+
+- 作者が書いた文は `failure_text` (`TextWithUnassignedPeople`)。評価するとき、プレースホルダーに `PersonId` を当てて `TextAboutPeople` ([perception.md](perception.md)) にする。見る人ごとの呼び方 (`PersonRef`) への置き換えは、見る人が分かる場所で行う。条件は誰が見るかを知らない
+- 葉とつなぎが自分の `failure_text` を持たなければ `NoText` を返し、親が自分の文で埋める。いちばん内側の文が勝つ
+- 前提など、条件を置いた場所の根には `failure_text` を必ず書く。無ければ compose が `DesignFlaw` にする。ドメインは条件の種類ごとの決まった文を持たない
+
+### 伏せた所属
+
+一覧と理由は、行う人が知りうることだけで決める。行う人が知りうる所属は、`EVERYONE` の分け方の所属、自分の `SELF_ONLY` の所属、`members_know_each_other` の集団の仲間の所属。これ以外の所属を見て偽になった条件は `HiddenFailure` を返す。行う人はきっかけの `acting_person()` ([action.md](action.md)) に尋ね、行う人のいないきっかけ (出来事、反応など) では伏せない。
+
+- いまできることの一覧 ([action.md](action.md) の `AvailableActions`) では、`HiddenFailure` の行為を「できる」と出す。一覧に出る / 出ないの差から所属が漏れないため
+- 試したときに `HiddenFailure` なら、理由を言わずに断る。文は断りの文の表 ([world_design.md](world_design.md) の `RefusalTexts`) の、伏せた理由の文
+- 試して分かることは、ゲームの手として許す。compose は、行う人に知りえない所属を見る前提を `DesignWarning` で作者に知らせる
 
 ## つなぎ
 
@@ -131,6 +151,8 @@ class ForEveryoneCondition:
 
 ## 葉
 
+どの葉も、下の欄のあとに `failure_text: TextWithUnassignedPeople | NoText` を持つ。葉ごとに理由を書き分けたいときだけ書く。
+
 ```python
 FlagIsRaisedCondition(flag: FlagDeclaration)
 FlagsRaisedAtLeastCondition(flags: tuple[FlagDeclaration, ...], count: Count)
@@ -140,7 +162,7 @@ WorldStageIsCondition(stage: WorldStageDeclaration)
 TicksInWorldStageAtLeastCondition(ticks: Ticks)
 TimeOfDayIsCondition(phase: DayPhaseName)
 WeatherIsCondition(weather: WeatherType)
-ChanceCondition(probability: Probability)
+ChanceCondition(probability: Probability)          # facts.random() から 1 つ引き、probability より小さければ真
 ObjectValueIsCondition(key: ObjectStateKeyDeclaration, value: StateValue)
 ObjectCountAtLeastCondition(key: ObjectStateKeyDeclaration, count: Count)
 ObjectCountGreaterThanCondition(key: ObjectStateKeyDeclaration, other: ObjectStateKeyDeclaration)
@@ -158,11 +180,11 @@ OutcomeIsCondition(who: Subject, outcome: Outcome)          # Died | DeclaredOut
 GoldAtLeastCondition(who: Subject, amount: Gold)
 HungerAtLeastCondition(who: Subject, value: HungerAmount)
 FatigueAtLeastCondition(who: Subject, value: FatigueAmount)
-SearchCountAtLeastCondition(who: Subject, count: Count)
+SearchCountAtLeastCondition(who: Subject, count: Count)   # その人が今いる場所の回数。移動の途中なら偽
 ItemAgeAtLeastCondition(item: ItemSubject, ticks: Ticks)
 ItemValueIsCondition(item: ItemSubject, key: ItemStateKeyDeclaration, value: StateValue)
 TicksSinceLastActionAtLeastCondition(who: Subject | Anyone, action: ActionKind | InteractionId, ticks: Ticks, since: SinceStart | SinceWorldStageEntered)
-ArgumentEqualsCondition(argument: ArgumentName, expected: str)
+ArgumentEqualsCondition(argument: ArgumentName, expected: str)   # 操作の宣言の arguments にある文の引数だけ
 HappeningHasFiredCondition(happening: HappeningDeclaration)
 TicksSinceHappeningAtLeastCondition(happening: HappeningDeclaration, ticks: Ticks)
 ```
@@ -180,4 +202,6 @@ TicksSinceHappeningAtLeastCondition(happening: HappeningDeclaration, ticks: Tick
 
 `ForEveryone` などの中では、外のきっかけを `EachPersonOf(outer, person)` ([action.md](action.md)) で包んで子に渡し、`EachPerson` はその人を指す。きっかけが答えない主語は `SubjectNotInTriggerException` になる。
 
-`NamedPerson` はどこでも使える。行為の引数を見るもの (`ArgumentEqualsCondition`、`ItemByArgument`) は行為の中でしか使えない。compose が `requirements()` と照らし合わせ、使えない主語は `DesignFlaw` にする。
+`WorldStageIs`・`TicksInWorldStageAtLeast`・`TimeOfDayIs`・`WeatherIs` を、それを宣言していない世界で書くと、compose が `DesignFlaw` にする。動いているときの値は決めない。
+
+`NamedPerson` はどこでも使える。行為の引数を見るもの (`ArgumentEqualsCondition`、`ItemByArgument`) は行為の中でしか使えず、読む引数の名前は操作の宣言の `arguments` ([world_design.md](world_design.md)) に無ければならない。compose が `requirements()` と照らし合わせ、使えない主語は `DesignFlaw` にする。
