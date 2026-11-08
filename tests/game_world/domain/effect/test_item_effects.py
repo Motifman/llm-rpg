@@ -171,7 +171,7 @@ class TestMoveItemEffectByArgument:
         assert world.inventories[BOB].items() == ()
 
     def test_in_pack_refuses_held_item(self) -> None:
-        """手にあるカンテラを InPack で指すと、ItemNotPackedException で断る。"""
+        """手にあるカンテラを InPack で指すと、ItemNotPackedException で断り、どちらの持ち物も変わらない。"""
         world = _world((_LANTERN_1, _LANTERN))
         _held(world, _LANTERN_1)
 
@@ -179,6 +179,9 @@ class TestMoveItemEffectByArgument:
             MoveItemEffect(Target(), Actor(), ItemByArgument(_THE_ITEM, InPack())).apply(
                 world.facts(), world.aggregates(), _bob_acts(the_item=_LANTERN_1)
             )
+
+        assert world.inventories[ALICE].held_items() == (_LANTERN_1,)
+        assert world.inventories[BOB].items() == ()
 
     @pytest.mark.parametrize("held", [True, False])
     def test_anywhere_moves_item_from_hands_or_pack(self, held: bool) -> None:

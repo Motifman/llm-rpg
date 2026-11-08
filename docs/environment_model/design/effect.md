@@ -116,7 +116,7 @@ class ItemByArgument:                       # エージェントが指した品�
 
 @final
 @dataclass(frozen=True)
-class RandomItemOf:                         # 見えない荷の中から世界が選ぶ (起きている相手の荷から抜き取る)。PersonInventory が facts.random() を受けて荷の物を 1 つ選んで手放し、荷が空なら断る。手の物は選ばない
+class RandomItemOf:                         # 見えない荷の中から世界が選ぶ (起きている相手の荷から抜き取る)。facts.inventory(from_who).random_packed_item(facts.random()) で荷の物を 1 つ選び、give_up_packed で手放す。荷が空なら PersonInventory が断る。手の物は選ばない
     pass
 ```
 

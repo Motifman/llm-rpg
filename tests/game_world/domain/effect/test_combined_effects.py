@@ -206,13 +206,13 @@ class TestForEveryoneEffect:
         assert world.vitals[BOB].life_state() == Down(fell_at=WorldTick(0), cause=WorldHappening())
 
     def test_requires_selection_and_effect_without_each_person(self) -> None:
-        """要るものは、選び方と効果の要るものを合わせ、中だけで使う EachPerson を外したもの。"""
+        """要るものは、選び方 (Target を要る) と効果 (EachPerson と Actor を要る) を合わせ、中だけで使う EachPerson を外したもの。"""
+        selection = PeopleSelection(FixedTruth(True, _requiring(SubjectKind.TARGET, SubjectKind.EACH_PERSON)))
         effect = ForEveryoneEffect(
-            _some_of(ALICE),
-            SequenceEffect((HealEffect(EachPerson(), HealAmount(1)), HealEffect(Actor(), HealAmount(1)))),
+            selection, SequenceEffect((HealEffect(EachPerson(), HealAmount(1)), HealEffect(Actor(), HealAmount(1))))
         )
 
-        assert effect.requirements() == _requiring(SubjectKind.ACTOR)
+        assert effect.requirements() == _requiring(SubjectKind.TARGET, SubjectKind.ACTOR)
 
 
 class TestForSomeoneEffect:
@@ -240,8 +240,9 @@ class TestForSomeoneEffect:
         assert (_hp(world, ALICE), _hp(world, BOB), _hp(world, CAROL)) == (10, 10, 10)
         assert world.random.next_fraction() == 0.5
 
-    def test_requires_chance_and_effect_without_each_person(self) -> None:
-        """要るものは、選び方と効果の要るものから EachPerson を外したものと、偶然。"""
-        effect = ForSomeoneEffect(_some_of(ALICE), HealEffect(EachPerson(), HealAmount(1)))
+    def test_requires_chance_selection_and_effect_without_each_person(self) -> None:
+        """要るものは、選び方 (Target を要る) と効果の要るものから EachPerson を外したものと、偶然。"""
+        selection = PeopleSelection(FixedTruth(True, _requiring(SubjectKind.TARGET, SubjectKind.EACH_PERSON)))
+        effect = ForSomeoneEffect(selection, HealEffect(EachPerson(), HealAmount(1)))
 
-        assert effect.requirements() == _requiring(uses_chance=True)
+        assert effect.requirements() == _requiring(SubjectKind.TARGET, uses_chance=True)
