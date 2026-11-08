@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration
     from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
     from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
+    from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
     from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
     from ai_rpg_world.game_world.domain.world_records import NeverDone, NeverFired
 
@@ -194,6 +195,10 @@ class ScenarioProgressReading(Protocol):
     def reaction_changed(self, reaction: ReactionDeclaration, truth: bool) -> bool: ...
 
     def last_fired_at(self, happening: HappeningDeclaration) -> WorldTick | NeverFired: ...
+
+
+class MissedNoticesReading(Protocol):
+    def notices(self) -> tuple[MissedNotice, ...]: ...
 
 
 class LatestActionsReading(Protocol):

@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
     GroupMembershipReading,
     ItemReading,
     LatestActionsReading,
+    MissedNoticesReading,
     ObjectStateReading,
     PassageStatesReading,
     PeopleRegisterReading,
@@ -47,7 +48,7 @@ from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import GroupDecisionId, ObjectId, PersonId, SpotId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import PassageStates, SpotAtmospheres, Whereabouts
 from ai_rpg_world.game_world.domain.world_progress import GroupDecision, Weather, WorldClock, WorldStage
-from ai_rpg_world.game_world.domain.world_records import LatestActions, ScenarioProgress, WorldFlags
+from ai_rpg_world.game_world.domain.world_records import LatestActions, MissedNotices, ScenarioProgress, WorldFlags
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
 
@@ -115,6 +116,7 @@ class WorldInMemory:
         self.object_states = {o.object_id: o for o in object_states}
         self.ground_items: dict[SpotId, GroundItems] = {}
         self.search_progresses: dict[SpotId, SpotSearchProgress] = {}
+        self.missed_notices: dict[PersonId, MissedNotices] = {}
         self.group_decisions: dict[GroupDecisionId, GroupDecision] = {}
         self.world_stage = world_stage
         self.flags = WorldFlags(world)
@@ -138,6 +140,9 @@ class WorldInMemory:
 
     def search_progress_at(self, spot: SpotId) -> SpotSearchProgress:
         return self.search_progresses.setdefault(spot, SpotSearchProgress(spot))
+
+    def missed_notices_of(self, person: PersonId) -> MissedNotices:
+        return self.missed_notices.setdefault(person, MissedNotices(person))
 
     def group_decision_of(self, decision: GroupDecisionDeclaration) -> GroupDecision:
         return self.group_decisions.setdefault(decision.decision_id, GroupDecision(decision))
@@ -219,6 +224,9 @@ class _FactsInMemory(WorldFacts):
     def search_progress(self, spot: SpotId) -> SpotSearchProgressReading:
         return self._world.search_progress_at(spot)
 
+    def missed_notices(self, person: PersonId) -> MissedNoticesReading:
+        return self._world.missed_notices_of(person)
+
     def group_decision(self, decision: GroupDecisionDeclaration) -> GroupDecisionReading:
         return self._world.group_decision_of(decision)
 
@@ -262,6 +270,9 @@ class _AggregatesInMemory(WorldAggregates):
 
     def search_progress(self, spot: SpotId) -> SpotSearchProgress:
         return self._world.search_progress_at(spot)
+
+    def missed_notices(self, person: PersonId) -> MissedNotices:
+        return self._world.missed_notices_of(person)
 
     def world_stage(self) -> WorldStage:
         stage = self._world.world_stage
