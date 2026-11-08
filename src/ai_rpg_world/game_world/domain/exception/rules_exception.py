@@ -27,3 +27,15 @@ class LevelBeyondLimitException(GameWorldDomainException):
 
 class RuleLimitBelowOneException(GameWorldDomainException):
     error_code = "GAME_WORLD.RULE_LIMIT_BELOW_ONE"
+
+
+class MissingSightQualityException(GameWorldDomainException):
+    error_code = "GAME_WORLD.MISSING_SIGHT_QUALITY"
+
+
+class MissingActionDurationException(GameWorldDomainException):
+    error_code = "GAME_WORLD.MISSING_ACTION_DURATION"
+
+
+class ActionDurationNotApplicableException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ACTION_DURATION_NOT_APPLICABLE"

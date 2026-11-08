@@ -35,3 +35,7 @@ class OperationNotForStateKindException(GameWorldDomainException):
 
 class NotEnoughStockException(GameWorldDomainException):
     error_code = "GAME_WORLD.NOT_ENOUGH_STOCK"
+
+
+class NotEnoughItemsOfSpecException(GameWorldDomainException):
+    error_code = "GAME_WORLD.NOT_ENOUGH_ITEMS_OF_SPEC"
