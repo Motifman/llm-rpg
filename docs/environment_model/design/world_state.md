@@ -17,8 +17,8 @@ class AtSpot:
 @dataclass(frozen=True)
 class TravelInProgress:
     route: Route
-    leg_index: int
-    ticks_left_on_leg: Ticks
+    passage_index: int
+    ticks_left_on_passage: Ticks
     departed_from: SpotId
 
 Location = AtSpot | TravelInProgress
@@ -29,10 +29,13 @@ class Whereabouts:                                # 世界に 1 つ
     def remove(self, occupant: Occupant) -> None: ...
     def start_travel(self, occupant: Occupant, route: Route) -> None: ...
     def advance_travels(self, closed_passages: frozenset[PassageId]) -> None: ...
-    def cancel_travel(self, occupant: Occupant) -> None: ...
+        # 1 tick ぶん進める。今の区間の通路が閉じていれば、その区間の出発点 (departed_from) に戻って止まる (TravelBlockedEvent)
+        # 次の区間に差しかかったときも同じ tick の中で確かめる。travel_ticks が 0 の区間は時間を使わない
+    def cancel_travel(self, occupant: Occupant) -> None: ...      # departed_from に戻る
     def teleport(self, occupant: Occupant, spot: SpotDeclaration) -> None: ...
-    def enter_section(self, occupant: Occupant, section: SpotSectionDeclaration) -> None: ...
-        # その場所にいるときだけ。満員ならドメイン例外。定員に数えるのは Alive の人と去った人 (倒れた人と死んだ人の体は数えない)
+    def enter_section(self, occupant: Occupant, section: SpotSectionDeclaration, not_counted: frozenset[PersonId]) -> None: ...
+        # その場所にいるときだけ。満員ならドメイン例外。定員に数えるのは Alive の人と去った人
+        # 倒れた人と死んだ人の体は数えない。Whereabouts は生死を知らないので、その人たちをユースケースが PersonVitals から集めて not_counted に渡す
         # 別の区画にいれば、そこから出て入る
     def leave_section(self, occupant: Occupant) -> None: ...
         # 移動を始める・テレポートすると、区画からも出る
@@ -207,8 +210,10 @@ class PassageStates:                              # 世界に 1 つ
     def remove(self, passage: PassageDeclaration) -> None: ...     # 道が無くなる
 
     def is_traversable(self, passage: PassageDeclaration) -> bool: ...
-    def closed_passages(self) -> frozenset[PassageId]: ...
+    def closed_passages(self) -> frozenset[PassageId]: ...         # 通れない状態の道、現れる前の道 (PassageDeclaration.hidden_until_revealed)、無くなった道
     def passages_from(self, spot: SpotDeclaration, declared: tuple[PassageDeclaration, ...]) -> tuple[PassageId, ...]: ...
+        # その場所から出られる今ある道。閉じた扉も入れる。片道は ends の前の端からだけ
+    def in_state(self, passage: PassageDeclaration) -> PassageInState: ...
 
 
 class SpotAtmospheres:                            # 世界に 1 つ。場所ごとに今の SpotAtmosphere を持つ (初めは宣言の値)
