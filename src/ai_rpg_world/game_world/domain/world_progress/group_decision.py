@@ -140,16 +140,16 @@ class GroupDecision(AggregateRoot[GroupDecisionEvent]):
         self._tally_if_everyone_cast()
 
     def withdraw_voter(self, voter: PersonId) -> None:
-        self._require_open()
-        self._require_voter(voter)
+        if not self._open or voter not in self._voters:
+            return
         self._voters.remove(voter)
         self._ballots.pop(voter, None)
         self.add_event(VoterWithdrawnEvent(**new_event_stamp(), decision_id=self._decision_id, voter=voter))
         self._tally_if_everyone_cast()
 
     def withdraw_choice(self, choice: PersonId) -> None:
-        self._require_open()
-        self._require_choice(choice)
+        if not self._open or choice not in self._choices:
+            return
         self._choices.remove(choice)
         returned_to = frozenset(voter for voter, ballot in self._ballots.items() if ballot == VoteFor(choice))
         for voter in returned_to:
@@ -161,7 +161,8 @@ class GroupDecision(AggregateRoot[GroupDecisionEvent]):
         )
 
     def close(self) -> None:
-        self._require_open()
+        if not self._open:
+            return
         self._tally()
 
     def is_open(self) -> bool:

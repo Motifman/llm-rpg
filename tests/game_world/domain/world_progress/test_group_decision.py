@@ -310,10 +310,14 @@ class TestGroupDecisionWithdrawChoice:
         with pytest.raises(ChoiceNotInDecisionException):
             decision.cast(_ALICE, VoteFor(_BOB))
 
-    def test_withdrawing_unknown_choice_raises(self) -> None:
-        """候補にいない人を外そうとすると ChoiceNotInDecisionException で断る。"""
-        with pytest.raises(ChoiceNotInDecisionException):
-            _started().withdraw_choice(_DAVE)
+    def test_withdrawing_unknown_choice_changes_nothing(self) -> None:
+        """候補にいない人を外しても状態は変わらないので、断らず、イベントもためない。"""
+        decision = _started()
+
+        decision.withdraw_choice(_DAVE)
+
+        assert decision.get_events() == []
+        assert decision.is_open() is True
 
     def test_withdrawing_last_choice_keeps_decision_open_until_close(self) -> None:
         """最後の候補を外しても決定は開いたままで、棄権を受け、close で GroupDecisionUnresolvedEvent になる。"""
@@ -326,10 +330,13 @@ class TestGroupDecisionWithdrawChoice:
         decision.close()
         assert isinstance(_last_event(decision), GroupDecisionUnresolvedEvent)
 
-    def test_withdrawing_choice_from_closed_decision_raises(self) -> None:
-        """開いていない決定から候補を外そうとすると GroupDecisionNotOpenException で断る。"""
-        with pytest.raises(GroupDecisionNotOpenException):
-            _decision().withdraw_choice(_BOB)
+    def test_withdrawing_choice_from_closed_decision_changes_nothing(self) -> None:
+        """開いていない決定から候補を外しても、断らず、イベントもためない。"""
+        decision = _decision()
+
+        decision.withdraw_choice(_BOB)
+
+        assert decision.get_events() == []
 
 
 class TestGroupDecisionWithdrawVoter:
@@ -382,15 +389,32 @@ class TestGroupDecisionWithdrawVoter:
         assert event.ballots == frozenset()
         assert decision.is_open() is False
 
-    def test_withdrawing_unknown_voter_raises(self) -> None:
-        """投票する人にいない人を外そうとすると VoterNotInDecisionException で断る。"""
-        with pytest.raises(VoterNotInDecisionException):
-            _started().withdraw_voter(_DAVE)
+    def test_withdrawing_unknown_voter_changes_nothing(self) -> None:
+        """投票する人にいない人を外しても状態は変わらないので、断らず、イベントもためず、集計もしない。"""
+        decision = _started()
 
-    def test_withdrawing_voter_from_closed_decision_raises(self) -> None:
-        """開いていない決定から投票する人を外そうとすると GroupDecisionNotOpenException で断る。"""
-        with pytest.raises(GroupDecisionNotOpenException):
-            _decision().withdraw_voter(_ALICE)
+        decision.withdraw_voter(_DAVE)
+
+        assert decision.get_events() == []
+        assert decision.is_open() is True
+
+    def test_withdrawing_voter_twice_changes_nothing_the_second_time(self) -> None:
+        """倒れてから死んだ人のように同じ人を 2 回外しても、2 回目は断らず、イベントもためない。"""
+        decision = _started()
+        decision.withdraw_voter(_ALICE)
+        decision.clear_events()
+
+        decision.withdraw_voter(_ALICE)
+
+        assert decision.get_events() == []
+
+    def test_withdrawing_voter_from_closed_decision_changes_nothing(self) -> None:
+        """開いていない決定から投票する人を外しても、断らず、イベントもためない。"""
+        decision = _decision()
+
+        decision.withdraw_voter(_ALICE)
+
+        assert decision.get_events() == []
 
 
 class TestGroupDecisionClose:
@@ -416,10 +440,24 @@ class TestGroupDecisionClose:
 
         assert isinstance(_last_event(decision), GroupDecisionUnresolvedEvent)
 
-    def test_close_when_not_open_raises(self) -> None:
-        """開いていない決定の close は GroupDecisionNotOpenException で断る。"""
-        with pytest.raises(GroupDecisionNotOpenException):
-            _decision().close()
+    def test_close_before_start_changes_nothing(self) -> None:
+        """始まっていない決定の close は、断らず、イベントもためない。"""
+        decision = _decision()
+
+        decision.close()
+
+        assert decision.get_events() == []
+        assert decision.is_open() is False
+
+    def test_close_after_automatic_tally_changes_nothing(self) -> None:
+        """全員が投じて集計し終えた決定を、締める出来事がもう一度 close しても、断らず、集計のイベントを足さない。"""
+        decision = _started(frozenset({_ALICE}))
+        decision.cast(_ALICE, VoteFor(_BOB))
+        events_after_tally = decision.get_events()
+
+        decision.close()
+
+        assert decision.get_events() == events_after_tally
 
 
 class TestGroupDecisionIdentity:
