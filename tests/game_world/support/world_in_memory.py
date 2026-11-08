@@ -37,9 +37,11 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import GroupMembership, PersonOutcomes, PersonVitals
+from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import GroupDecisionId, ObjectId, PersonId, SpotId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import PassageStates, SpotAtmospheres, Whereabouts
 from ai_rpg_world.game_world.domain.world_progress import GroupDecision, Weather, WorldClock, WorldStage
+from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
 
 class FractionsInOrder(RandomSource):
@@ -60,6 +62,7 @@ class WorldInMemory:
         self,
         *,
         world: WorldId,
+        rules: WorldRules | None = None,
         people: tuple[PersonId, ...] = (),
         spots: tuple[SpotDeclaration, ...] = (),
         passages: tuple[PassageDeclaration, ...] = (),
@@ -73,6 +76,7 @@ class WorldInMemory:
         weather: Weather | NoWeather = NoWeather(),
         fractions: tuple[float, ...] = (),
     ) -> None:
+        self.rules = rules if rules is not None else world_rules_for_tests()
         self.people = people
         self.nouns = DeclaredNouns(
             flags=(),
@@ -131,6 +135,9 @@ class _FactsInMemory(WorldFacts):
 
     def now(self) -> WorldTick:
         return self._world.clock_aggregate.now()
+
+    def rules(self) -> WorldRules:
+        return self._world.rules
 
     def day_night(self) -> DayNightDeclaration | NoDayNight:
         return self._world.day_night

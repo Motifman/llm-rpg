@@ -28,7 +28,7 @@ class TestRate:
 
 
 class TestMultiplier:
-    """Multiplier が 0 より大きい倍率 (StealthRule.duration_rate の 2 倍など) だけを表すことを保証する。"""
+    """Multiplier が 0 より大きい倍率 (StealthRule.duration_multiplier の 2 倍など) だけを表すことを保証する。"""
 
     @pytest.mark.parametrize("raw", [0.5, 1, 2, 2.5])
     def test_positive_values_are_accepted(self, raw: float) -> None:

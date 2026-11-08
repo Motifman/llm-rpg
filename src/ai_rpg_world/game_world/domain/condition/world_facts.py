@@ -25,11 +25,14 @@ from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDec
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration, NoDayNight, NoWeather
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
+from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import ObjectId, PersonId, SpotId, WorldTick
 
 
 class WorldFacts(Protocol):
     def now(self) -> WorldTick: ...
+
+    def rules(self) -> WorldRules: ...
 
     def day_night(self) -> DayNightDeclaration | NoDayNight: ...
 

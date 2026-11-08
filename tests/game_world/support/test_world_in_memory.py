@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.declaration.character.group_declaration impo
     MembershipVisibility,
     NoSharedDescription,
 )
+from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     CountStateKind,
     CountValue,
@@ -27,7 +28,6 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     DayNightDeclaration,
     DayPhaseDeclaration,
     DayPhaseName,
-    NoAnnouncement,
     NoDayNight,
     NoWeather,
     TimeOfDay,
@@ -82,6 +82,7 @@ from ai_rpg_world.game_world.domain.whereabouts import AtSpot, OpenArea, PersonB
 from ai_rpg_world.game_world.domain.world_progress import Weather, WorldStage
 from tests.game_world.domain.whereabouts._builders import path, spot
 from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
 _WORLD = WorldId("island")
 _ALICE = PersonId("alice")
@@ -239,11 +240,21 @@ class TestFactsSeeWhatAggregatesChanged:
 
         assert world.facts().inventory(_ALICE).available_gold() == Gold(7)
 
+    def test_received_items_are_counted_by_spec(self) -> None:
+        """alice がりんご 2 つと梨 1 つを受け取ると、facts の inventory はりんごを 2 つと数える。"""
+        world = _world()
+        inventory = world.aggregates().inventory(_ALICE)
+        for spec in (_APPLE, _APPLE, _PEAR):
+            item = world.aggregates().bring_item_into_world(spec, WorldTick(0))
+            inventory.receive(item, spec.item_spec_id)
+
+        assert world.facts().inventory(_ALICE).count_of(_APPLE.item_spec_id) == Count(2)
+
     def test_held_item_is_seen(self) -> None:
         """alice が梨を手に持つと、facts の inventory の手の物は梨だけになる。"""
         pear = Item.come_into_world(ItemInstanceId("pear-1"), _PEAR, WorldTick(0))
         world = _world(items=(pear,))
-        world.aggregates().inventory(_ALICE).receive(pear.item_id)
+        world.aggregates().inventory(_ALICE).receive(pear.item_id, pear.spec_id)
 
         world.aggregates().inventory(_ALICE).hold(pear.item_id, HandsNeeded(1))
 
@@ -433,6 +444,13 @@ class TestClockPeopleAndNouns:
 
         assert world.facts().day_night() == day_night
         assert world.facts().clock().time_of_day(day_night) == TimeOfDay(7)
+
+    def test_rules_are_the_given_world_rules(self) -> None:
+        """渡した世界の規則を、facts の rules がそのまま答える。"""
+        rules = world_rules_for_tests()
+        world = WorldInMemory(world=_WORLD, rules=rules)
+
+        assert world.facts().rules() is rules
 
     def test_people_are_everyone_in_the_world(self) -> None:
         """alice と bob の世界の people は、渡した順の 2 人。"""

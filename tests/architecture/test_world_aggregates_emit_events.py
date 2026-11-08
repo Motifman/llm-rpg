@@ -334,7 +334,7 @@ def _ground(*items: ItemInstanceId) -> GroundItems:
 def _inventory(*items: ItemInstanceId, gold: int = 0) -> PersonInventory:
     inventory = PersonInventory(_ALICE, Capacity(5))
     for item in items:
-        inventory.receive(item)
+        inventory.receive(item, _LANTERN_SPEC)
     inventory.earn(Gold(gold))
     _cleared(inventory)
     return inventory
@@ -460,7 +460,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "SpotSearchProgress.record_search": lambda: _with(
         SpotSearchProgress(_PLAZA.spot_id), lambda s: s.record_search(_ALICE)
     ),
-    "PersonInventory.receive": lambda: _with(_inventory(), lambda i: i.receive(_LANTERN)),
+    "PersonInventory.receive": lambda: _with(_inventory(), lambda i: i.receive(_LANTERN, _LANTERN_SPEC)),
     "PersonInventory.give_up": lambda: _with(_inventory(_LANTERN), lambda i: i.give_up(_LANTERN)),
     "PersonInventory.hold": lambda: _with(_inventory(_LANTERN), lambda i: i.hold(_LANTERN, HandsNeeded(1))),
     "PersonInventory.put_away": lambda: _with(_holding(_ROPE), lambda i: i.put_away(_ROPE)),

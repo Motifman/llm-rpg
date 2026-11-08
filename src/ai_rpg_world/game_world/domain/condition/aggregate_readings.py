@@ -133,6 +133,10 @@ class PersonInventoryReading(Protocol):
 
     def available_gold(self) -> Gold: ...
 
+    def count_of(self, spec: ItemSpecId) -> Count: ...
+
+    def items_to_give_up(self, spec: ItemSpecId, count: Count) -> tuple[ItemInstanceId, ...]: ...
+
 
 class ItemReading(Protocol):
     @property

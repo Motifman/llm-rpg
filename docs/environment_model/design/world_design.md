@@ -98,7 +98,7 @@ CountStateKind()                            # 上限を持たない
 ChoiceStateKind(choices: tuple[ChoiceName, ...])     # 1 つ以上、重ならない
 StockStateKind(capacity: Count, refills_every: Ticks | NoRefill)   # 上限・間隔ともに 1 以上
 WrittenTextStateKind()
-# どの種類も accepts(value: StateValue) -> bool を持つ
+# どの種類も accepts(value: StateValue) -> bool と holds_written_text() -> bool (書いた文を持つ種類か。WrittenTextStateKind だけが真) を持つ
 
 StateValue = FlagValue | CountValue | ChoiceValue | StockValue | WrittenText | NothingWritten
 FlagValue(raised: bool)
@@ -463,7 +463,9 @@ class WorldRules:
     departed_persons_act: bool
     hearing: HearingValues
     stealth: StealthRule
-    action_durations: Mapping[ActionKind, Ticks]   # 行っているあいだの既定 (話すは行っているあいだを作らない)。話す・耳を澄ます 1、拾う・置く・渡す・区画・投票・持ち替え 1、操作・品物を使う 2、探す・介抱 3
+    action_durations: Mapping[ActionKind, Ticks]   # 行っているあいだの既定。耳を澄ます 1、拾う・置く・渡す・区画・投票・持ち替え 1、操作・品物を使う 2、探す・介抱 3
+    # 移動は通路の時間で決まり、待つことと話すことは行っているあいだを作らない。モンスターへの攻撃は #1971 で決める。
+    # action_durations は上の 15 種類をすべて持ち、移動・待つ・話す・モンスターへの攻撃を持たなければ作れない
 
 @final
 @dataclass(frozen=True)
@@ -529,8 +531,9 @@ class StealthRule:                              # こっそり行っても、見
     notice_by_bystander: Mapping[SightQuality, Probability]   # SeesClearly 40%、SeesShapes 15%、SeesNothing 0%
     notice_by_target: Mapping[SightQuality, Probability]      # 60%、30%、0%
     attentive_bonus: Probability                # 耳を澄ましている人 +20%
-    duration_rate: Multiplier                   # 行っているあいだを 2 倍
+    duration_multiplier: Multiplier             # 行っているあいだを 2 倍
     # こっそり行った物音は 1 段小さくする。行った本人には、気づかれたかを伝えない
+    # notice_by_bystander と notice_by_target が SightQuality の 3 つすべてを持たなければ作れない
 
 @final
 @dataclass(frozen=True)
