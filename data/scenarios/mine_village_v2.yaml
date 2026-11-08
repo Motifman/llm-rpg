@@ -1,0 +1,1562 @@
+includes: [common/ja_default.yaml]
+
+introduction:
+  text: |-
+    冬が近い山あいの廃村。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。
+
+    坑道の中は光が無いと何も見えない。古い坑道には、まだ誰も知らない仕掛けが残っているかもしれない。
+  objective: |-
+    - 最終目標は、坑道の奥の昇降機で外へ出ること。
+    - 昇降機は一度しか動かない。
+    - この村と坑道のことは、自分で確かめないと分からないことが多い。
+
+rules:
+  hunger: { starvation_damage: 1 }
+
+refusal_texts:
+  common_rules:
+    out_of_reach: 操作盤は籠の中にある。乗り込まないと、把手に手が届かない。
+
+time:
+  day_night:
+    ticks_per_day: 48
+    starts_at: 0
+    phases:
+      predawn: { begins_at: 0, dark: true, announcement: 夜明け前の、いちばん冷える時刻になった。 }
+      morning: { begins_at: 12, dark: false, announcement: 空が白み、朝になった。 }
+      noon: { begins_at: 24, dark: false, announcement: 日が高くなり、昼になった。 }
+      night: { begins_at: 36, dark: true, announcement: 日が落ち、夜になった。 }
+  weather:
+    initial: snow
+    changes: null
+    announce_changes: false
+    obscuring: [blizzard, storm, fog]
+
+flags:
+  generator_running: { meaning: 発電機が回っている }
+  generator_warm: { meaning: 発電機が温まり、昇降機を動かせる }
+  generator_hum_heard: { meaning: 発電機が回りはじめた唸りを、全員に知らせた }
+  generator_warm_heard: { meaning: 発電機が温まった音を、近くの人に知らせた }
+  pump_pulse: { meaning: この tick にポンプが動いた }
+  gate_a_open: { meaning: 北の坑道の水門が開いている }
+  gate_b_open: { meaning: 南の坑道の水門が開いている }
+  gate_c_open: { meaning: 分岐の大水門が開いている }
+  flooded_south_entry: { meaning: 南の坑道と南の横坑の奥のあいだが水に浸かっている }
+  flooded_north_entry: { meaning: 北の竪坑の底と北の坑道のあいだが水に浸かっている }
+  flooded_shortcut: { meaning: 下層の近道が水に浸かっている }
+  fire_door_barred_north: { meaning: 防火扉の北側の閂が掛かっている }
+  fire_door_barred_south: { meaning: 防火扉の南側の閂が掛かっている }
+  timber_felled: { meaning: 古い支柱が倒れ、乗り場への遠回りが埋まった }
+  safe_opened: { meaning: 金庫が開いた }
+  small_fuel_taken: { meaning: 倉庫の木箱から、燃料が少し残った缶を取った }
+  spare_fuel_taken: { meaning: 掘り場の木箱から、燃料の缶を取った }
+  canary_taken: { meaning: 詰所の鳥籠を下ろした }
+  canary_watched: { meaning: この tick に誰かがカナリアの様子を見た }
+  gas_present: { meaning: 掘り場にガスが溜まっている }
+  noise_north: { meaning: この tick に北の区画で大きな音がした }
+  noise_south: { meaning: この tick に南の区画で大きな音がした }
+  noise_deep: { meaning: この tick に深いところで大きな音がした }
+  beast_north_awake: { meaning: 北の坑道に獣が出ている }
+  beast_south_awake: { meaning: 南の坑道に獣が出ている }
+  beast_deep_awake: { meaning: 中層の分岐に獣が出ている }
+  lift_departed: { meaning: 昇降機の籠が上がった }
+
+groupings:
+  teams:
+    name: 所属
+    visibility: self_only
+    changes: false
+    groups:
+      team_north: { name: チーム北, members_know_each_other: false, shared_description: null }
+      team_south: { name: チーム南, members_know_each_other: false, shared_description: null }
+
+spots:
+  north_shaft_head:
+    name: 北の竪坑口
+    description: 村の北外れ、雪に半ば埋もれた竪坑の口。錆びた鉄の梯子が闇の底へ下りている。
+    atmosphere: { lighting: bright, outdoor: true, temperature: cold, ambient_sound: 竪坑の底から吹き上がる冷たい風の音 }
+
+  snow_pass:
+    name: 雪の峠道
+    description: 村から谷の外へ抜ける峠道。腰まで積もった雪に覆われ、この先へは進めそうにない。
+    atmosphere: { lighting: bright, outdoor: true, temperature: cold, ambient_sound: 吹きだまりを渡る風の音 }
+
+  assembly_hall:
+    name: 集会所
+    description: 村の寄り合いに使われていた板張りの集会所。壁に古い掲示板が掛かっている。
+    atmosphere: { lighting: bright, temperature: cold, ambient_sound: 隙間風が板壁を鳴らす音 }
+
+  village_square:
+    name: 廃村の広場
+    description: 廃村の真ん中の広場。雪をかぶった家々が四方を囲み、足跡ひとつ無い。
+    atmosphere: { lighting: bright, outdoor: true, temperature: cold, ambient_sound: 雪が屋根から落ちる鈍い音 }
+
+  well:
+    name: 井戸
+    description: 石組みの古い井戸。滑車と桶がまだ残っている。
+    atmosphere: { lighting: bright, outdoor: true, temperature: cold, ambient_sound: 井戸の底で水の滴る音 }
+    objects:
+      well_bucket:
+        name: 井戸の釣瓶
+        description: 滑車に掛かった古い釣瓶。
+        state_keys:
+          water: { kind: { stock: { capacity: 4, refills_every: 6 } }, initial: 4 }
+        interactions:
+          draw_water:
+            display_label: 水を汲む
+            precondition:
+              object_stock_at_least: { key: well_bucket.water, amount: 1 }
+              failure_text: 釣瓶は空のまま上がってきた。底の水が溜まるのを待つしかない。
+            effect:
+              sequence:
+                steps:
+                  - take_from_object_stock: { key: well_bucket.water, amount: 1 }
+                  - give_item: { who: actor, item_spec: well_water, count: 1 }
+            success_text: 冷たい水を汲んだ。
+            perceived_as:
+              witness: { clear: "{actor}が井戸の釣瓶で水を汲んでいる。" }
+              sound: { loudness: normal, clear: 滑車の軋む音がした。, muffled: かすかに何かが軋む音がした。 }
+
+  storehouse:
+    name: 倉庫
+    description: 村の共同の倉庫。棚の多くは空で、奥に木箱がいくつか残っている。
+    atmosphere: { lighting: bright, temperature: cold, ambient_sound: 棚の上を鼠が走る音 }
+    objects:
+      oil_barrel:
+        name: 油の樽
+        description: 壁際に置かれた古い油の樽。底の栓から、カンテラに足す油を汲める。
+        state_keys:
+          oil: { kind: { stock: { capacity: 2, refills_every: 12 } }, initial: 2 }
+        interactions:
+          draw_lamp_oil:
+            display_label: 油を汲む
+            precondition:
+              object_stock_at_least: { key: oil_barrel.oil, amount: 1 }
+              failure_text: 栓をひねっても、いまは油が垂れてこない。
+            effect:
+              sequence:
+                steps:
+                  - take_from_object_stock: { key: oil_barrel.oil, amount: 1 }
+                  - give_item: { who: actor, item_spec: lamp_oil, count: 1 }
+            success_text: 栓をひねり、カンテラに足す油を一本ぶん汲んだ。
+            perceived_as:
+              witness: { clear: "{actor}が樽から油を汲んでいる。" }
+              sound: null
+      storehouse_crates:
+        name: 奥の木箱
+        description: 倉庫の奥に積まれた木箱。
+        interactions:
+          take_small_fuel_can:
+            display_label: 木箱を探る
+            precondition:
+              not: { flag_is_raised: small_fuel_taken }
+              failure_text: 木箱にはもう何も残っていない。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: small_fuel_taken
+                  - give_item: { who: actor, item_spec: small_fuel_can, count: 1 }
+            success_text: 中から燃料が少し残った缶を取り出した。
+            perceived_as:
+              witness: { clear: "{actor}が木箱の中を探っている。" }
+              sound: { loudness: whisper, clear: 木箱を探る物音がした。, muffled: かすかな物音がした。 }
+      food_box:
+        name: 棚の食べ物の箱
+        description: 棚に置かれた木の箱。村の人が残していった食べ物が入っている。
+        state_keys:
+          food: { kind: { stock: { capacity: 3, refills_every: 24 } }, initial: 3 }
+        interactions:
+          take_food:
+            display_label: 保存食を取る
+            precondition:
+              object_stock_at_least: { key: food_box.food, amount: 1 }
+              failure_text: 箱はいま空だ。
+            effect:
+              sequence:
+                steps:
+                  - take_from_object_stock: { key: food_box.food, amount: 1 }
+                  - give_item: { who: actor, item_spec: preserved_food, count: 1 }
+            success_text: 保存食を 1 つ取った。
+            perceived_as:
+              witness: { clear: "{actor}が棚の箱から食べ物を取り出した。" }
+              sound: null
+
+  smithy:
+    name: 鍛冶場
+    description: 火の落ちた鍛冶場。金床と炉が残り、隅に布切れと油の瓶が転がっている。
+    atmosphere: { lighting: bright, temperature: cold, ambient_sound: 冷えた炉の中で灰が崩れる音 }
+    objects:
+      smithy_rags:
+        name: 隅の布切れと油の瓶
+        description: 鍛冶場の隅に転がった布切れと、油の残った瓶。古い柄も立てかけてある。
+        state_keys:
+          rags: { kind: { stock: { capacity: 2, refills_every: null } }, initial: 2 }
+        interactions:
+          make_torch:
+            display_label: 布切れと油の瓶を使う
+            precondition:
+              object_stock_at_least: { key: smithy_rags.rags, amount: 1 }
+              failure_text: 使えそうな布切れはもう残っていない。
+            effect:
+              sequence:
+                steps:
+                  - take_from_object_stock: { key: smithy_rags.rags, amount: 1 }
+                  - give_item: { who: actor, item_spec: torch, count: 1 }
+            success_text: 布切れを古い柄に巻きつけて油を染ませ、火打ち石で火を付けた。手に持てば辺りを照らせそうだ。
+            perceived_as:
+              witness: { clear: "{actor}が鍛冶場の隅で布切れを柄に巻いている。" }
+              sound: { loudness: whisper, clear: 火打ち石を打つ音がした。, muffled: かすかな物音がした。 }
+
+  company_office:
+    name: 鉱山会社の事務所
+    description: 鉱山会社の事務所。机と帳簿棚が並び、奥の壁際に重そうな金庫が据えてある。屋根の上に古い鐘が吊るされている。
+    atmosphere: { lighting: bright, temperature: cold, ambient_sound: 鐘の綱が風に揺れて柱をこする音 }
+    objects:
+      office_safe:
+        name: 金庫
+        description: 壁際に据えられた重い鉄の金庫。四桁の番号を合わせるダイヤルが付いている。
+        interactions:
+          open_safe:
+            display_label: 番号を合わせて金庫を開ける
+            arguments: { code: text }
+            precondition:
+              all_of:
+                - not: { flag_is_raised: safe_opened }
+                  failure_text: 金庫の扉はもう開いている。中は空だ。
+                - argument_equals: { argument: code, expected: "1907" }
+              failure_text: ダイヤルを合わせて把手を引いたが、扉はびくともしない。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: safe_opened
+                  - give_item: { who: actor, item_spec: lift_key, count: 1 }
+            success_text: ダイヤルが噛み合う音がして、金庫の扉が開いた。中に鉄でできた太い鍵が 1 本入っていた。昇降機の起動鍵だ。
+            perceived_as:
+              witness: { clear: "{actor}が金庫のダイヤルを回している。" }
+              sound: { loudness: whisper, clear: ダイヤルの回る小さな音がした。, muffled: かすかな物音がした。 }
+      office_desk:
+        name: 事務机
+        description: 埃をかぶった事務机。引き出しが半分開いている。
+        interactions:
+          search_desk_drawer:
+            display_label: 引き出しを探る
+            precondition: { all_of: [], failure_text: 引き出しは開かない。 }
+            success_text: 引き出しの奥に、黄ばんだ紙切れが挟まっていた。「金庫 1907」と鉛筆で走り書きがある。
+            perceived_as:
+              witness: { clear: "{actor}が事務机の引き出しを探っている。" }
+              sound: { loudness: whisper, clear: 引き出しを探る物音がした。, muffled: かすかな物音がした。 }
+
+  south_adit_mouth:
+    name: 南の横坑口
+    description: 村の南の斜面に口を開けた横坑。坑口には朽ちかけた木枠が組まれている。
+    atmosphere: { lighting: bright, outdoor: true, temperature: cold, ambient_sound: 横坑の奥から響く水の音 }
+
+  north_shaft_bottom:
+    name: 北の竪坑の底
+    description: 竪坑の梯子を下りきった底。四方を岩に囲まれ、南へ坑道が延びている。
+    atmosphere: { lighting: dark, temperature: cold, ambient_sound: 頭上の竪坑を抜ける風の音 }
+
+  north_tunnel:
+    name: 北の坑道
+    description: 上層の北の坑道。壁に古い鉄の水門が埋め込まれ、南の端に重い防火扉がある。天井の裂け目から、かすかに光が落ちている。
+    atmosphere: { lighting: dusky, temperature: cold, ambient_sound: 水門の向こうで水が岩を打つ音 }
+    objects:
+      gate_a:
+        name: 北の坑道の水門
+        description: 坑道の壁に埋め込まれた古い鉄の水門。大きな把手で開け閉めする。向こう側で水が岩を打つ音がする。
+        state_keys:
+          ticks_since_closed: { kind: count, initial: 0 }
+        interactions:
+          open_gate:
+            display_label: 水門を開ける
+            precondition:
+              not: { flag_is_raised: gate_a_open }
+              failure_text: 水門はもう開いている。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: noise_north
+                  - raise_flag: gate_a_open
+                  - raise_flag: flooded_south_entry
+                  - set_object_value: { key: gate_a.ticks_since_closed, value: 0 }
+            success_text: 重い把手を回しきると、水門の向こうで水がどっと流れ出す音がした。水はどこかへ落ちていく。
+            perceived_as:
+              witness: { clear: "{actor}が水門の把手を回している。" }
+              sound: { loudness: very_loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
+          close_gate:
+            display_label: 水門を閉じる
+            precondition:
+              flag_is_raised: gate_a_open
+              failure_text: 水門は閉じている。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: noise_north
+                  - lower_flag: gate_a_open
+            success_text: 把手を戻すと、水の流れる音がやんだ。
+            perceived_as:
+              witness: { clear: "{actor}が水門の把手を回している。" }
+              sound: { loudness: loud, clear: 重い鉄の把手が軋む音がした。, muffled: 遠くで鉄の軋む音がした。 }
+      fire_door_bar_north:
+        name: 防火扉の閂 (北側)
+        description: 防火扉に渡す太い鉄の閂。
+        interactions:
+          bar_fire_door:
+            display_label: 閂を掛ける
+            precondition:
+              not: { flag_is_raised: fire_door_barred_north }
+              failure_text: 閂はもう掛かっている。
+            effect:
+              raise_flag: fire_door_barred_north
+            success_text: 閂を渡した。この扉はもう開かない。
+            perceived_as:
+              witness: { clear: "{actor}が防火扉に閂を掛けた。" }
+              sound: { loudness: loud, clear: 鉄の閂が扉に掛かる重い音がした。, muffled: 鉄のぶつかる鈍い音がした。 }
+          unbar_fire_door:
+            display_label: 閂を外す
+            precondition:
+              flag_is_raised: fire_door_barred_north
+              failure_text: この閂は掛かっていない。
+            effect:
+              lower_flag: fire_door_barred_north
+            success_text: 閂を外した。
+            perceived_as:
+              witness: { clear: "{actor}が防火扉の閂を外した。" }
+              sound: { loudness: loud, clear: 鉄の閂が外れる重い音がした。, muffled: 鉄のぶつかる鈍い音がした。 }
+      noise_north_tracker:
+        name: 坑道の奥の気配
+        description: 坑道の奥で何かが眠っている気配。
+        appearance: { hidden_until_revealed: true }
+        state_keys:
+          noise: { kind: count, initial: 0 }
+
+  south_tunnel:
+    name: 南の坑道
+    description: 上層の南の坑道。壁に古い鉄の水門が埋め込まれ、北の端に重い防火扉がある。天井の裂け目から、かすかに光が落ちている。
+    atmosphere: { lighting: dusky, temperature: cold, ambient_sound: 水門の向こうで水が岩を打つ音 }
+    objects:
+      gate_b:
+        name: 南の坑道の水門
+        description: 坑道の壁に埋め込まれた古い鉄の水門。大きな把手で開け閉めする。向こう側で水が岩を打つ音がする。
+        state_keys:
+          ticks_since_closed: { kind: count, initial: 0 }
+        interactions:
+          open_gate:
+            display_label: 水門を開ける
+            precondition:
+              not: { flag_is_raised: gate_b_open }
+              failure_text: 水門はもう開いている。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: noise_south
+                  - raise_flag: gate_b_open
+                  - raise_flag: flooded_north_entry
+                  - set_object_value: { key: gate_b.ticks_since_closed, value: 0 }
+            success_text: 重い把手を回しきると、水門の向こうで水がどっと流れ出す音がした。水はどこかへ落ちていく。
+            perceived_as:
+              witness: { clear: "{actor}が水門の把手を回している。" }
+              sound: { loudness: very_loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
+          close_gate:
+            display_label: 水門を閉じる
+            precondition:
+              flag_is_raised: gate_b_open
+              failure_text: 水門は閉じている。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: noise_south
+                  - lower_flag: gate_b_open
+            success_text: 把手を戻すと、水の流れる音がやんだ。
+            perceived_as:
+              witness: { clear: "{actor}が水門の把手を回している。" }
+              sound: { loudness: loud, clear: 重い鉄の把手が軋む音がした。, muffled: 遠くで鉄の軋む音がした。 }
+      fire_door_bar_south:
+        name: 防火扉の閂 (南側)
+        description: 防火扉に渡す太い鉄の閂。
+        interactions:
+          bar_fire_door:
+            display_label: 閂を掛ける
+            precondition:
+              not: { flag_is_raised: fire_door_barred_south }
+              failure_text: 閂はもう掛かっている。
+            effect:
+              raise_flag: fire_door_barred_south
+            success_text: 閂を渡した。この扉はもう開かない。
+            perceived_as:
+              witness: { clear: "{actor}が防火扉に閂を掛けた。" }
+              sound: { loudness: loud, clear: 鉄の閂が扉に掛かる重い音がした。, muffled: 鉄のぶつかる鈍い音がした。 }
+          unbar_fire_door:
+            display_label: 閂を外す
+            precondition:
+              flag_is_raised: fire_door_barred_south
+              failure_text: この閂は掛かっていない。
+            effect:
+              lower_flag: fire_door_barred_south
+            success_text: 閂を外した。
+            perceived_as:
+              witness: { clear: "{actor}が防火扉の閂を外した。" }
+              sound: { loudness: loud, clear: 鉄の閂が外れる重い音がした。, muffled: 鉄のぶつかる鈍い音がした。 }
+      noise_south_tracker:
+        name: 坑道の奥の気配
+        description: 坑道の奥で何かが眠っている気配。
+        appearance: { hidden_until_revealed: true }
+        state_keys:
+          noise: { kind: count, initial: 0 }
+
+  south_adit_end:
+    name: 南の横坑の奥
+    description: 横坑を奥まで進んだ突き当たり。ここから上層の坑道へつながっている。
+    atmosphere: { lighting: dark, temperature: cold, ambient_sound: 坑口から吹き込む風の音 }
+
+  miners_rest:
+    name: 坑夫の詰所
+    description: 坑夫たちが休んだ詰所。腰掛けと湧き水の溜まり、鳥籠が吊るされている。
+    atmosphere: { lighting: dark, temperature: cold, ambient_sound: 湧き水の細い流れの音 }
+    objects:
+      canary_hook:
+        name: 吊るされた鳥籠
+        description: 天井の鉤に吊るされた鳥籠。中で何かが動いている。
+        interactions:
+          take_canary:
+            display_label: 鳥籠を下ろす
+            precondition:
+              not: { flag_is_raised: canary_taken }
+              failure_text: 鉤にはもう何も吊るされていない。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: canary_taken
+                  - give_item: { who: actor, item_spec: canary, count: 1 }
+            success_text: 鳥籠を下ろした。中で小さなカナリアが身じろぎした。
+            perceived_as:
+              witness: { clear: "{actor}が天井の鳥籠を下ろした。" }
+              sound: { loudness: whisper, clear: 小鳥の羽ばたく音がした。, muffled: かすかな物音がした。 }
+
+  tool_store:
+    name: 道具置き場
+    description: 中層の道具置き場。ロープや古い工具が棚に並んでいる。
+    atmosphere: { lighting: dark, temperature: cold, ambient_sound: 工具が触れ合う乾いた音 }
+
+  mid_junction:
+    name: 中層の分岐
+    description: 坑道がいくつも交わる中層の分岐。壁に大きな水門が埋め込まれている。天井の裂け目から、かすかに光が落ちている。
+    atmosphere: { lighting: dusky, temperature: cold, ambient_sound: 四方の坑道から響く水の音 }
+    objects:
+      gate_c:
+        name: 分岐の大水門
+        description: 分岐の壁に埋め込まれた大きな鉄の水門。大きな把手で開け閉めする。向こう側で水が岩を打つ音がする。
+        state_keys:
+          ticks_since_closed: { kind: count, initial: 0 }
+        interactions:
+          open_gate:
+            display_label: 水門を開ける
+            precondition:
+              not: { flag_is_raised: gate_c_open }
+              failure_text: 水門はもう開いている。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: noise_deep
+                  - raise_flag: gate_c_open
+                  - raise_flag: flooded_shortcut
+                  - set_object_value: { key: gate_c.ticks_since_closed, value: 0 }
+            success_text: 重い把手を回しきると、水門の向こうで水がどっと流れ出す音がした。水はどこかへ落ちていく。
+            perceived_as:
+              witness: { clear: "{actor}が水門の把手を回している。" }
+              sound: { loudness: very_loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
+          close_gate:
+            display_label: 水門を閉じる
+            precondition:
+              flag_is_raised: gate_c_open
+              failure_text: 水門は閉じている。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: noise_deep
+                  - lower_flag: gate_c_open
+            success_text: 把手を戻すと、水の流れる音がやんだ。
+            perceived_as:
+              witness: { clear: "{actor}が水門の把手を回している。" }
+              sound: { loudness: loud, clear: 重い鉄の把手が軋む音がした。, muffled: 遠くで鉄の軋む音がした。 }
+      noise_deep_tracker:
+        name: 坑道の奥の気配
+        description: 坑道の奥で何かが眠っている気配。
+        appearance: { hidden_until_revealed: true }
+        state_keys:
+          noise: { kind: count, initial: 0 }
+
+  machine_room:
+    name: 機械室
+    description: 中層の機械室。古い発電機と排水ポンプが据えられ、太い配管が壁を這っている。
+    atmosphere: { lighting: dark, temperature: cold, ambient_sound: 冷えた機械が軋む音 }
+    objects:
+      fuel_ledger:
+        name: 給油の帳面
+        description: 壁の釘に吊るされた、油じみた帳面。表紙に「給油」と書いてある。
+        interactions:
+          read_fuel_ledger:
+            display_label: 帳面をめくる
+            precondition: { all_of: [], failure_text: 帳面はめくれない。 }
+            success_text: 給油の帳面だ。最後の頁に走り書きがある。「予備の缶は掘り場の木箱に一つ。使いかけの缶が地上の倉庫の奥に一つ」
+            exertion: does_not_use_body
+            perceived_as:
+              witness: { clear: "{actor}が壁の帳面をめくっている。" }
+              sound: null
+              salience: background
+      generator:
+        name: 発電機
+        description: 古い発電機。給油口と始動の把手、燃料計が付いている。
+        state_keys:
+          fuel: { kind: count, initial: 0 }
+        interactions:
+          pour_fuel_can:
+            display_label: 燃料の缶を注ぐ
+            precondition:
+              has_item: { who: actor, item_spec: fuel_can, count: 1 }
+              failure_text: 注げる燃料を持っていない。
+            effect:
+              sequence:
+                steps:
+                  - take_item: { who: actor, item_spec: fuel_can, count: 1 }
+                  - add_to_object_count: { key: generator.fuel, amount: 3 }
+            success_text: 缶の燃料を残らず給油口に注いだ。空になった缶は置いていく。
+            perceived_as:
+              witness: { clear: "{actor}が発電機に燃料を注いでいる。" }
+              sound: { loudness: whisper, clear: 液体を注ぐ音がした。, muffled: かすかな物音がした。 }
+          pour_small_fuel_can:
+            display_label: 燃料が少し残った缶を注ぐ
+            precondition:
+              has_item: { who: actor, item_spec: small_fuel_can, count: 1 }
+              failure_text: 注げる燃料を持っていない。
+            effect:
+              sequence:
+                steps:
+                  - take_item: { who: actor, item_spec: small_fuel_can, count: 1 }
+                  - add_to_object_count: { key: generator.fuel, amount: 1 }
+            success_text: 缶の底に残っていた燃料を給油口に注いだ。
+            perceived_as:
+              witness: { clear: "{actor}が発電機に燃料を注いでいる。" }
+              sound: { loudness: whisper, clear: 液体を注ぐ音がした。, muffled: かすかな物音がした。 }
+          start_generator:
+            display_label: 発電機を動かす
+            precondition:
+              all_of:
+                - not: { flag_is_raised: generator_running }
+                  failure_text: 発電機はもう回っている。
+                - object_count_at_least: { key: generator.fuel, count: 1 }
+                  failure_text: 把手を引いても、発電機は咳き込むだけで回らない。
+              failure_text: 発電機は回らない。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: noise_deep
+                  - raise_flag: generator_running
+            success_text: 把手を引くと、発電機が荒い唸りを上げて回りはじめた。
+            perceived_as:
+              witness: { clear: "{actor}が発電機の始動の把手を引いた。" }
+              sound: { loudness: very_loud, clear: 発電機が荒い唸りを上げて回りはじめた。, muffled: 遠くで機械の唸りが起こった。 }
+      pump:
+        name: 排水ポンプ
+        description: 太い配管が坑道の奥へ延びる排水ポンプ。脇に始動のスイッチがある。
+        interactions:
+          run_pump:
+            display_label: 排水ポンプを動かす
+            precondition:
+              all_of:
+                - flag_is_raised: generator_running
+                  failure_text: スイッチを入れても、ポンプはぴくりとも動かない。
+                - not: { flag_is_raised: pump_pulse }
+                  failure_text: ポンプはいま唸りを上げて動いている最中だ。
+                - object_count_at_least: { key: generator.fuel, count: 1 }
+                  failure_text: スイッチを入れると、ポンプは一瞬唸って、すぐに黙った。
+              failure_text: ポンプは動かない。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: noise_deep
+                  - subtract_from_object_count: { key: generator.fuel, amount: 1 }
+                  - raise_flag: pump_pulse
+            success_text: スイッチを入れると、ポンプが低く唸りはじめた。
+            perceived_as:
+              witness: { clear: "{actor}が排水ポンプのスイッチを入れた。" }
+              sound: { loudness: loud, clear: ポンプが低く唸りはじめた。, muffled: 遠くで機械の唸る音がした。 }
+      valve:
+        name: 切り替え弁
+        description: ポンプの配管に付いた大きな弁。ハンドルの周りに一から三までの目盛りが刻まれている。
+        state_keys:
+          mark: { kind: { choice: [one, two, three] }, initial: one }
+        interactions:
+          turn_valve_to_one:
+            display_label: 弁を一の目盛りに合わせる
+            precondition: { all_of: [], failure_text: ハンドルが回らない。 }
+            effect:
+              set_object_value: { key: valve.mark, value: one }
+            success_text: ハンドルを回し、弁を一の目盛りに合わせた。
+            perceived_as:
+              witness: { clear: "{actor}が切り替え弁のハンドルを回している。" }
+              sound: { loudness: whisper, clear: 弁のハンドルが軋む音がした。, muffled: かすかな物音がした。 }
+          turn_valve_to_two:
+            display_label: 弁を二の目盛りに合わせる
+            precondition: { all_of: [], failure_text: ハンドルが回らない。 }
+            effect:
+              set_object_value: { key: valve.mark, value: two }
+            success_text: ハンドルを回し、弁を二の目盛りに合わせた。
+            perceived_as:
+              witness: { clear: "{actor}が切り替え弁のハンドルを回している。" }
+              sound: { loudness: whisper, clear: 弁のハンドルが軋む音がした。, muffled: かすかな物音がした。 }
+          turn_valve_to_three:
+            display_label: 弁を三の目盛りに合わせる
+            precondition: { all_of: [], failure_text: ハンドルが回らない。 }
+            effect:
+              set_object_value: { key: valve.mark, value: three }
+            success_text: ハンドルを回し、弁を三の目盛りに合わせた。
+            perceived_as:
+              witness: { clear: "{actor}が切り替え弁のハンドルを回している。" }
+              sound: { loudness: whisper, clear: 弁のハンドルが軋む音がした。, muffled: かすかな物音がした。 }
+
+  gas_chamber:
+    name: 掘り場
+    description: 中層の奥の掘り場。掘りかけの岩肌が続く行き止まりで、空気が重い。
+    atmosphere: { lighting: dark, temperature: cold, ambient_sound: どこかで岩がはぜる小さな音 }
+    objects:
+      spare_fuel_crate:
+        name: 予備の燃料の木箱
+        description: 掘り場の隅に置かれた木箱。
+        interactions:
+          take_spare_fuel_can:
+            display_label: 木箱から燃料の缶を取る
+            precondition:
+              all_of:
+                - not: { flag_is_raised: gas_present }
+                  failure_text: 息が苦しい。木箱に手を伸ばす前に、引き返すしかなかった。
+                - not: { flag_is_raised: spare_fuel_taken }
+                  failure_text: 木箱はもう空だ。
+              failure_text: 木箱から何も取り出せなかった。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: spare_fuel_taken
+                  - give_item: { who: actor, item_spec: fuel_can, count: 1 }
+            success_text: 中から燃料の缶を取り出した。
+            perceived_as:
+              witness: { clear: "{actor}が木箱の中を探っている。" }
+              sound: { loudness: whisper, clear: 木箱を探る物音がした。, muffled: かすかな物音がした。 }
+
+  lower_shortcut:
+    name: 下層の近道
+    description: 下層へ下る近道。低い坑道が昇降機の乗り場へまっすぐ続いている。
+    atmosphere: { lighting: dark, temperature: cold, ambient_sound: 足もとを流れる水の音 }
+
+  timber_passage:
+    name: 古い支柱の通路
+    description: 古い支柱が並ぶ下層の通路。乗り場の手前で、傾いた支柱が天井を支えている。
+    atmosphere: { lighting: dark, temperature: cold, ambient_sound: 支柱が重みで軋む音 }
+    objects:
+      old_timber:
+        name: 傾いた支柱
+        description: 乗り場の手前で天井を支える古い支柱。大きく傾き、根元が腐りかけている。
+        interactions:
+          fell_timber:
+            display_label: 支柱を倒す
+            precondition:
+              not: { flag_is_raised: timber_felled }
+              failure_text: 支柱はもう倒れている。
+            effect:
+              sequence:
+                steps:
+                  - raise_flag: noise_deep
+                  - raise_flag: timber_felled
+                  - change_passage_state: { passage: timber_lift, state: buried }
+            success_text: 腐った根元を蹴ると、支柱が倒れ、轟音とともに天井の岩が崩れ落ちた。乗り場へ抜ける道は岩で埋まった。
+            perceived_as:
+              witness: { clear: "{actor}が支柱を蹴り倒した。轟音とともに天井が崩れた。" }
+              sound: { loudness: very_loud, clear: 轟音とともに天井の岩が崩れ落ちた。, muffled: 遠くで岩の崩れる地響きがした。 }
+              seen_in_dark: true
+
+  lift_landing:
+    name: 昇降機の乗り場
+    description: 坑道の最も深い所にある昇降機の乗り場。鉄の籠が地上へ続く縦穴に吊られている。
+    atmosphere: { lighting: dark, temperature: cold, ambient_sound: 縦穴を吹き上がる風の音 }
+    sections:
+      cage:
+        name: 昇降機の籠
+        capacity: 3
+        reachable_objects: [lift_panel]
+        access:
+          enter_label: 籠に乗り込む
+          leave_label: 籠から降りる
+          enter_text: 鉄の籠に乗り込んだ。籠が足もとで小さく揺れた。
+          leave_text: 籠から降りた。籠に一人ぶんの隙間ができた。
+          entry_condition:
+            not: { flag_is_raised: lift_departed }
+            failure_text: 籠はもう上がってしまった。
+          perceived_as:
+            witness: { clear: "{actor}が昇降機の籠に乗り降りした。" }
+            sound: { loudness: whisper, clear: 鉄の籠が小さく軋む音がした。, muffled: かすかに鉄の軋む音がした。 }
+    objects:
+      lift:
+        name: 昇降機
+        description: 地上へ続く縦穴に吊られた鉄の籠。籠の入口の上に「定員三名」と刻んだ鉄の札が打ち付けてある。籠の中の奥の壁に操作盤があり、鍵穴と始動の把手が付いている。乗り込まなければ手が届かない。鍵穴の下に「起動鍵は鉱山会社の事務所で預かる」と書いた古い張り紙が残っている。
+      lift_panel:
+        name: 籠の操作盤
+        description: 籠の奥の壁にある操作盤。鍵穴と始動の把手が付いている。
+        interactions:
+          start_lift:
+            display_label: 鍵を差して昇降機を動かす
+            precondition:
+              all_of:
+                - not: { flag_is_raised: lift_departed }
+                  failure_text: 籠はもう上がってしまった。昇降機は二度と動かない。
+                - has_item: { who: actor, item_spec: lift_key, count: 1 }
+                  failure_text: 鍵穴に合う鍵を持っていない。
+                - flag_is_raised: generator_running
+                  failure_text: 把手を引いても、籠はぴくりとも動かない。
+                - flag_is_raised: generator_warm
+                  failure_text: 把手に手応えはあるが、籠は持ち上がらない。奥で機械の唸りがまだ荒く波打っている。
+                - object_count_at_least: { key: generator.fuel, count: 2 }
+                  failure_text: 籠がわずかに浮きかけて、すぐに力が抜けた。
+              failure_text: 昇降機は動かない。
+            effect:
+              raise_flag: lift_departed
+            success_text: 籠が大きく揺れ、ゆっくりと縦穴を上がりはじめた。
+            perceived_as:
+              witness: { clear: "{actor}が昇降機の操作盤に鍵を差し、把手を引いた。" }
+              sound: { loudness: very_loud, clear: 鉄の籠が軋みながら上がっていく音がした。, muffled: 遠くで重い鉄の軋む音がした。 }
+              seen_in_dark: true
+
+passages:
+  nsh_hall: { ends: [north_shaft_head, assembly_hall], travel_ticks: 1 }
+  nsh_pass: { ends: [north_shaft_head, snow_pass], travel_ticks: 2 }
+  pass_square: { ends: [snow_pass, village_square], travel_ticks: 2 }
+  hall_square: { ends: [assembly_hall, village_square], travel_ticks: 1 }
+  hall_store: { ends: [assembly_hall, storehouse], travel_ticks: 1 }
+  square_well: { ends: [village_square, well], travel_ticks: 1 }
+  square_store: { ends: [village_square, storehouse], travel_ticks: 1 }
+  square_smithy: { ends: [village_square, smithy], travel_ticks: 1 }
+  well_office: { ends: [well, company_office], travel_ticks: 1 }
+  smithy_office: { ends: [smithy, company_office], travel_ticks: 1 }
+  smithy_sam: { ends: [smithy, south_adit_mouth], travel_ticks: 2 }
+  office_sam: { ends: [company_office, south_adit_mouth], travel_ticks: 1 }
+  store_sam: { ends: [storehouse, south_adit_mouth], travel_ticks: 3 }
+  north_shaft: { ends: [north_shaft_head, north_shaft_bottom], travel_ticks: 1 }
+  south_adit: { ends: [south_adit_mouth, south_adit_end], travel_ticks: 1 }
+  nsb_ntun:
+    ends: [north_shaft_bottom, north_tunnel]
+    travel_ticks: 1
+    states: &floodable
+      open: { display_name: 通れる, traversable: true, sound_loss: 0 }
+      flooded: { display_name: 水に浸かっている, traversable: false, sound_loss: 0 }
+  fire_door:
+    ends: [north_tunnel, south_tunnel]
+    travel_ticks: 1
+    states:
+      open: { display_name: 防火扉が開いている, traversable: true, sound_loss: 0 }
+      barred: { display_name: 防火扉に閂が掛かっている, traversable: false, sound_loss: 20 }
+  stun_sab:
+    ends: [south_tunnel, south_adit_end]
+    travel_ticks: 1
+    states: *floodable
+  ntun_rest: { ends: [north_tunnel, miners_rest], travel_ticks: 1 }
+  stun_tools: { ends: [south_tunnel, tool_store], travel_ticks: 1 }
+  rest_junction: { ends: [miners_rest, mid_junction], travel_ticks: 1 }
+  tools_junction: { ends: [tool_store, mid_junction], travel_ticks: 1 }
+  junction_machine: { ends: [mid_junction, machine_room], travel_ticks: 1 }
+  junction_gas: { ends: [mid_junction, gas_chamber], travel_ticks: 1 }
+  junction_shortcut:
+    ends: [mid_junction, lower_shortcut]
+    travel_ticks: 1
+    states: *floodable
+  machine_shortcut:
+    ends: [machine_room, lower_shortcut]
+    travel_ticks: 1
+    states: *floodable
+  shortcut_lift:
+    ends: [lower_shortcut, lift_landing]
+    travel_ticks: 1
+    states: *floodable
+  junction_timber: { ends: [mid_junction, timber_passage], travel_ticks: 2 }
+  timber_lift:
+    ends: [timber_passage, lift_landing]
+    travel_ticks: 2
+    states:
+      open: { display_name: 傾いた支柱の下を抜けられる, traversable: true, sound_loss: 0 }
+      buried: { display_name: 崩れた岩で埋まっている, traversable: false, sound_loss: 30 }
+  rest_machine: { ends: [miners_rest, machine_room], travel_ticks: 2 }
+  tools_timber: { ends: [tool_store, timber_passage], travel_ticks: 2 }
+
+item_specs:
+  lamp:
+    name: カンテラ
+    description: 油を足して灯す手提げのカンテラ。
+    interactions:
+      light_lamp:
+        display_label: 油を足して灯す
+        precondition:
+          has_item: { who: actor, item_spec: lamp_oil, count: 1 }
+          failure_text: カンテラに足す油が無い。
+        effect:
+          sequence:
+            steps:
+              - take_item: { who: actor, item_spec: lamp_oil, count: 1 }
+              - give_item: { who: actor, item_spec: lamp_flame, count: 1 }
+        success_text: カンテラに油を足して火を入れた。灯を手に持てば足もとが明るくなる。
+        perceived_as:
+          witness: { clear: "{actor}がカンテラに火を入れた。" }
+          sound: null
+          seen_in_dark: true
+  fuel_can:
+    name: 燃料の缶
+    description: 発電機用の燃料が詰まった金属の缶。
+  small_fuel_can:
+    name: 燃料が少し残った缶
+    description: 底に少しだけ燃料が残った金属の缶。
+  lift_key:
+    name: 昇降機の起動鍵
+    description: 鉄でできた太い鍵。昇降機の操作盤の鍵穴に合う。
+  lamp_oil:
+    name: カンテラの油
+    description: カンテラに足す油の小瓶。
+  lamp_flame:
+    name: カンテラの灯
+    description: カンテラに灯した火。手に持っているあいだ辺りを照らす。油が尽きれば消える。
+    state_keys:
+      burning: { kind: flag, initial: true }
+    lights_up: { key: burning, value: true }
+  torch:
+    name: たいまつ
+    description: 布を巻いて油を染ませた棒。手に持って燃えているあいだは辺りが見える。
+    state_keys:
+      burning: { kind: flag, initial: true }
+    lights_up: { key: burning, value: true }
+  canary:
+    name: カナリアの籠
+    description: 小さなカナリアの入った鳥籠。
+    interactions:
+      watch_canary:
+        display_label: カナリアの様子を見る
+        precondition: { all_of: [], failure_text: 籠の中がよく見えない。 }
+        effect:
+          raise_flag: canary_watched
+        success_text: 籠の中のカナリアに目を凝らした。
+        exertion: does_not_use_body
+        perceived_as:
+          witness: { clear: "{actor}が鳥籠をのぞき込んでいる。" }
+          sound: null
+          salience: background
+  well_water:
+    name: 井戸の水
+    description: 井戸から汲んだ冷たい水。
+    use:
+      sequence:
+        steps:
+          - take_item: { who: actor, item_spec: well_water, count: 1 }
+          - heal: { who: actor, amount: 8 }
+  preserved_food:
+    name: 保存食
+    description: 干した芋と固い餅。
+    use:
+      sequence:
+        steps:
+          - take_item: { who: actor, item_spec: preserved_food, count: 1 }
+          - satisfy_hunger: { who: actor, amount: 40 }
+
+characters:
+  haru:
+    appearance: 測量具を背負った年かさの男
+    spawn_spot: north_shaft_head
+    initial_items: [lamp, fuel_can, lamp_oil, lamp_oil]
+    initial_groups: [team_north]
+    knows_at_start: [mio]
+    being:
+      name: ハル
+      first_person: 私
+      persona: |-
+        冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。
+
+        あなたはハル、山の測量を請け負う調査隊の隊長で、落ち着いた男。慎重で、確かめてから動く。古い測量日誌を手がかりにしている。
+
+        古い測量日誌には、こうある。中層の分岐の大水門が開いているあいだ、下層の近道は水に浸かって通れない。別の頁には、機械室の排水ポンプで坑道の水を引かせた日のことが、短く書き留めてある。
+
+        話し方: 落ち着いた常体。一人称は「私」。
+      objective: ミオと二人そろって、坑道の奥の昇降機で外へ出る。
+  mio:
+    appearance: 工具袋を腰に下げた若い女の子
+    spawn_spot: north_shaft_head
+    initial_items: [lamp, lamp_oil, lamp_oil]
+    initial_groups: [team_north]
+    knows_at_start: [haru]
+    being:
+      name: ミオ
+      first_person: あたし
+      persona: |-
+        冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。
+
+        あなたはミオ、調査隊の若い隊員で、元気な女の子。身軽で、先に行って様子を見るのが得意。機械いじりが好き。
+
+        古い測量日誌には、こうある。中層の分岐の大水門が開いているあいだ、下層の近道は水に浸かって通れない。別の頁には、機械室の排水ポンプで坑道の水を引かせた日のことが、短く書き留めてある。
+
+        話し方: 気さくな常体。一人称は「あたし」。
+      objective: ハルと二人そろって、坑道の奥の昇降機で外へ出る。
+  gen:
+    appearance: 煤けた坑夫の上着を着た初老の男
+    spawn_spot: south_adit_mouth
+    initial_items: [lamp, lamp_oil, lamp_oil, lamp_oil]
+    initial_groups: [team_south]
+    knows_at_start: [sayo]
+    being:
+      name: ゲン
+      first_person: 俺
+      persona: |-
+        冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。
+
+        あなたはゲン、この鉱山で働いていた元鉱夫。口数は少ないが、坑道の空気には敏い。家族のサヨと村に戻ってきた。
+
+        働いていた頃に、事務所の金庫の番号は 1907 だと覚えた。昇降機を動かす起動鍵も、その金庫にしまわれていた。
+
+        坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。
+
+        話し方: ぶっきらぼうな常体。一人称は「俺」。
+      objective: サヨと二人そろって、坑道の奥の昇降機で外へ出る。
+  sayo:
+    appearance: 綿入れを着込んだ若い娘
+    spawn_spot: south_adit_mouth
+    initial_items: [lamp, lamp_oil, lamp_oil, lamp_oil]
+    initial_groups: [team_south]
+    knows_at_start: [gen]
+    being:
+      name: サヨ
+      first_person: 私
+      persona: |-
+        冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。
+
+        あなたはサヨ、ゲンの娘。子どもの頃に父の職場だった事務所によく出入りしていた。物覚えがよい。
+
+        父から、事務所の金庫の番号は 1907 だと聞いている。昇降機を動かす起動鍵は、その金庫にしまわれていたそうだ。
+
+        坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。
+
+        話し方: はきはきした敬体。一人称は「私」。
+      objective: ゲンと二人そろって、坑道の奥の昇降機で外へ出る。
+
+outcomes:
+  rescued: { name: 救出, announcement: "{each_person}は昇降機で外へ出た。" }
+  stranded: { name: 取り残された, announcement: "{each_person}は坑道に取り残された。" }
+
+person_interactions:
+  strike:
+    display_label: 殴りかかる
+    precondition:
+      all_of:
+        - not: { is_down: target }
+          failure_text: 相手はもう倒れている。
+        - ticks_since_last_action_at_least: { who: actor, action: { interaction: strike }, ticks: 3, since: start }
+          failure_text: まだ息が整わず、続けて殴りかかれない。
+      failure_text: 殴りかかれない。
+    effect:
+      sequence:
+        steps:
+          - damage: { who: target, amount: 10 }
+          - conditional:
+              condition:
+                any_of:
+                  - is_at_spot: { who: actor, spot: north_shaft_bottom }
+                  - is_at_spot: { who: actor, spot: north_tunnel }
+                  - is_at_spot: { who: actor, spot: miners_rest }
+              then: { raise_flag: noise_north }
+              otherwise: no_effect
+          - conditional:
+              condition:
+                any_of:
+                  - is_at_spot: { who: actor, spot: south_tunnel }
+                  - is_at_spot: { who: actor, spot: south_adit_end }
+                  - is_at_spot: { who: actor, spot: tool_store }
+              then: { raise_flag: noise_south }
+              otherwise: no_effect
+          - conditional:
+              condition:
+                any_of:
+                  - is_at_spot: { who: actor, spot: mid_junction }
+                  - is_at_spot: { who: actor, spot: machine_room }
+                  - is_at_spot: { who: actor, spot: gas_chamber }
+                  - is_at_spot: { who: actor, spot: lower_shortcut }
+                  - is_at_spot: { who: actor, spot: timber_passage }
+                  - is_at_spot: { who: actor, spot: lift_landing }
+              then: { raise_flag: noise_deep }
+              otherwise: no_effect
+    success_text: 拳を振るった。
+    perceived_as:
+      witness:
+        clear: "{actor}が{target}に殴りかかった。"
+        dim: 暗がりで、誰かが誰かを殴りつけた。
+      target:
+        clear: "{actor}があなたに殴りかかった。"
+        dim: 暗がりで、誰かに殴りつけられた。
+      sound: { loudness: loud, clear: 誰かが誰かを殴りつける鈍い音がした。, muffled: 争うような物音がした。 }
+  pickpocket:
+    display_label: 荷から何かを抜き取る
+    precondition:
+      all_of:
+        - not: { is_down: target }
+          failure_text: 相手は倒れている。
+        - not: { is_in_section: { who: target, section: cage } }
+          failure_text: 籠の中の相手には手が届かない。
+        - ticks_since_last_action_at_least: { who: actor, action: { interaction: pickpocket }, ticks: 3, since: start }
+          failure_text: 続けて手を伸ばせば気づかれる。
+      failure_text: 荷に手が届かない。
+    effect:
+      move_item: { from_who: target, to_who: actor, item: random_item_of }
+    success_text: 相手の荷から何かを抜き取った。
+    allows_stealth: true
+    perceived_as:
+      witness:
+        clear: "{actor}が{target}の荷から何かを抜き取った。"
+        dim: 暗がりで、誰かが荷を探るような物音がした。
+      target:
+        clear: "{actor}があなたの荷から何かを抜き取った。"
+        dim: 暗がりで、誰かに荷を探られた。
+      sound: { loudness: whisper, clear: 荷を探るような物音がした。, muffled: かすかな物音がした。 }
+  loot_from_downed:
+    display_label: 倒れている相手の持ち物を奪う
+    arguments: { item: item }
+    precondition:
+      all_of:
+        - is_down: target
+          failure_text: 相手は動いている。
+        - not: { is_in_section: { who: target, section: cage } }
+          failure_text: 籠の中の相手には手が届かない。
+        - ticks_since_last_action_at_least: { who: actor, action: { interaction: loot_from_downed }, ticks: 3, since: start }
+          failure_text: まだ手が離せない。
+      failure_text: 持ち物を奪えない。
+    effect:
+      move_item: { from_who: target, to_who: actor, item: { argument: item, place: anywhere } }
+    success_text: 倒れている相手から持ち物を奪った。
+    perceived_as:
+      witness:
+        clear: "{actor}が倒れている{target}の荷を探っている。"
+        dim: 暗がりで、誰かが荷を探るような物音がした。
+      target:
+        clear: "{actor}があなたの荷を探った。"
+        dim: 暗がりで、誰かに荷を探られた。
+      sound: { loudness: whisper, clear: 荷を探るような物音がした。, muffled: かすかな物音がした。 }
+
+reactions:
+  south_entry_floods:
+    condition: { flag_is_raised: flooded_south_entry }
+    when_becomes_true: { change_passage_state: { passage: stun_sab, state: flooded } }
+    when_becomes_false: { change_passage_state: { passage: stun_sab, state: open } }
+  north_entry_floods:
+    condition: { flag_is_raised: flooded_north_entry }
+    when_becomes_true: { change_passage_state: { passage: nsb_ntun, state: flooded } }
+    when_becomes_false: { change_passage_state: { passage: nsb_ntun, state: open } }
+  shortcut_floods:
+    condition: { flag_is_raised: flooded_shortcut }
+    when_becomes_true:
+      sequence:
+        steps:
+          - change_passage_state: { passage: junction_shortcut, state: flooded }
+          - change_passage_state: { passage: machine_shortcut, state: flooded }
+          - change_passage_state: { passage: shortcut_lift, state: flooded }
+    when_becomes_false:
+      sequence:
+        steps:
+          - change_passage_state: { passage: junction_shortcut, state: open }
+          - change_passage_state: { passage: machine_shortcut, state: open }
+          - change_passage_state: { passage: shortcut_lift, state: open }
+  fire_door_barred:
+    condition:
+      any_of:
+        - flag_is_raised: fire_door_barred_north
+        - flag_is_raised: fire_door_barred_south
+    when_becomes_true: { change_passage_state: { passage: fire_door, state: barred } }
+    when_becomes_false: { change_passage_state: { passage: fire_door, state: open } }
+
+happenings:
+  generator_stops_without_fuel:
+    condition:
+      all_of:
+        - flag_is_raised: generator_running
+        - not: { object_count_at_least: { key: generator.fuel, count: 1 } }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - lower_flag: generator_running
+          - lower_flag: generator_warm
+          - lower_flag: generator_hum_heard
+          - lower_flag: generator_warm_heard
+    notice:
+      announcement_to: { audience: { where: { all_of: [] } }, text: 地の底から響いていた機械の唸りが、ふっと途切れた。 }
+
+  generator_hum_heard:
+    condition:
+      all_of:
+        - flag_is_raised: generator_running
+        - not: { flag_is_raised: generator_hum_heard }
+    once: false
+    effect: { raise_flag: generator_hum_heard }
+    notice:
+      announcement_to: { audience: { where: { all_of: [] } }, text: 地の底のほうから、機械の唸りが響いてきた。 }
+
+  generator_warms_up:
+    condition:
+      all_of:
+        - flag_is_raised: generator_running
+        - not: { flag_is_raised: generator_warm }
+        - ticks_since_last_action_at_least: { who: anyone, action: { interaction: start_generator }, ticks: 6, since: start }
+    once: false
+    effect: { raise_flag: generator_warm }
+
+  generator_warm_heard_machine_room:
+    condition: &generator_warm_not_heard
+      all_of:
+        - flag_is_raised: generator_warm
+        - not: { flag_is_raised: generator_warm_heard }
+    once: false
+    effect: no_effect
+    notice:
+      announcement_to:
+        audience: { where: { is_at_spot: { who: each_person, spot: machine_room } } }
+        text: 発電機の荒い唸りが、低く落ち着いた響きに変わった。
+  generator_warm_heard_nearby:
+    condition: *generator_warm_not_heard
+    once: false
+    effect: no_effect
+    notice:
+      announcement_to:
+        audience:
+          where:
+            any_of:
+              - is_at_spot: { who: each_person, spot: mid_junction }
+              - is_at_spot: { who: each_person, spot: lower_shortcut }
+              - is_at_spot: { who: each_person, spot: miners_rest }
+        text: 近くで響いていた機械の荒い唸りが、低く落ち着いた。
+  generator_warm_heard_lift_landing:
+    condition: *generator_warm_not_heard
+    once: false
+    effect: no_effect
+    notice:
+      announcement_to:
+        audience: { where: { is_at_spot: { who: each_person, spot: lift_landing } } }
+        text: 籠の操作盤の奥で、何かが噛み合うような音がした。
+  generator_warm_heard:
+    condition: *generator_warm_not_heard
+    once: false
+    effect: { raise_flag: generator_warm_heard }
+
+  pump_sounds_drained:
+    condition:
+      all_of:
+        - flag_is_raised: pump_pulse
+        - any_of:
+            - all_of:
+                - object_value_is: { key: valve.mark, value: one }
+                - flag_is_raised: flooded_south_entry
+                - not: { flag_is_raised: gate_a_open }
+            - all_of:
+                - object_value_is: { key: valve.mark, value: two }
+                - flag_is_raised: flooded_shortcut
+                - not: { flag_is_raised: gate_c_open }
+            - all_of:
+                - object_value_is: { key: valve.mark, value: three }
+                - flag_is_raised: flooded_north_entry
+                - not: { flag_is_raised: gate_b_open }
+    once: false
+    effect: no_effect
+    notice:
+      announcement_to:
+        audience: &in_machine_room { where: { is_at_spot: { who: each_person, spot: machine_room } } }
+        text: 配管の奥で、水が勢いよく吸い上げられていく音がした。やがて音は軽くなった。
+  pump_sounds_refilling:
+    condition:
+      all_of:
+        - flag_is_raised: pump_pulse
+        - any_of:
+            - all_of:
+                - object_value_is: { key: valve.mark, value: one }
+                - flag_is_raised: flooded_south_entry
+                - flag_is_raised: gate_a_open
+            - all_of:
+                - object_value_is: { key: valve.mark, value: two }
+                - flag_is_raised: flooded_shortcut
+                - flag_is_raised: gate_c_open
+            - all_of:
+                - object_value_is: { key: valve.mark, value: three }
+                - flag_is_raised: flooded_north_entry
+                - flag_is_raised: gate_b_open
+    once: false
+    effect: no_effect
+    notice:
+      announcement_to:
+        audience: *in_machine_room
+        text: 配管の奥で水を吸い上げる音がするが、奥から水の流れ込む音がやまない。
+  pump_sounds_dry:
+    condition:
+      all_of:
+        - flag_is_raised: pump_pulse
+        - any_of:
+            - all_of:
+                - object_value_is: { key: valve.mark, value: one }
+                - not: { flag_is_raised: flooded_south_entry }
+            - all_of:
+                - object_value_is: { key: valve.mark, value: two }
+                - not: { flag_is_raised: flooded_shortcut }
+            - all_of:
+                - object_value_is: { key: valve.mark, value: three }
+                - not: { flag_is_raised: flooded_north_entry }
+    once: false
+    effect: no_effect
+    notice:
+      announcement_to:
+        audience: *in_machine_room
+        text: 配管が空気を吸う音がするばかりで、水の音はしない。
+  pump_drains:
+    condition: { flag_is_raised: pump_pulse }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - lower_flag: pump_pulse
+          - conditional:
+              condition: { object_value_is: { key: valve.mark, value: one } }
+              then: { lower_flag: flooded_south_entry }
+              otherwise: no_effect
+          - conditional:
+              condition: { object_value_is: { key: valve.mark, value: two } }
+              then: { lower_flag: flooded_shortcut }
+              otherwise: no_effect
+          - conditional:
+              condition: { object_value_is: { key: valve.mark, value: three } }
+              then: { lower_flag: flooded_north_entry }
+              otherwise: no_effect
+
+  gate_a_keeps_flooding:
+    condition:
+      all_of:
+        - flag_is_raised: gate_a_open
+        - not: { flag_is_raised: flooded_south_entry }
+    once: false
+    effect: { raise_flag: flooded_south_entry }
+  gate_a_water_drains:
+    condition: &south_entry_draining
+      all_of:
+        - not: { flag_is_raised: gate_a_open }
+        - flag_is_raised: flooded_south_entry
+    once: false
+    effect: { add_to_object_count: { key: gate_a.ticks_since_closed, amount: 1 } }
+  gate_a_water_recedes:
+    condition:
+      all_of:
+        - *south_entry_draining
+        - object_count_at_least: { key: gate_a.ticks_since_closed, count: 12 }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - lower_flag: flooded_south_entry
+          - set_object_value: { key: gate_a.ticks_since_closed, value: 0 }
+  gate_b_keeps_flooding:
+    condition:
+      all_of:
+        - flag_is_raised: gate_b_open
+        - not: { flag_is_raised: flooded_north_entry }
+    once: false
+    effect: { raise_flag: flooded_north_entry }
+  gate_b_water_drains:
+    condition: &north_entry_draining
+      all_of:
+        - not: { flag_is_raised: gate_b_open }
+        - flag_is_raised: flooded_north_entry
+    once: false
+    effect: { add_to_object_count: { key: gate_b.ticks_since_closed, amount: 1 } }
+  gate_b_water_recedes:
+    condition:
+      all_of:
+        - *north_entry_draining
+        - object_count_at_least: { key: gate_b.ticks_since_closed, count: 12 }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - lower_flag: flooded_north_entry
+          - set_object_value: { key: gate_b.ticks_since_closed, value: 0 }
+  gate_c_keeps_flooding:
+    condition:
+      all_of:
+        - flag_is_raised: gate_c_open
+        - not: { flag_is_raised: flooded_shortcut }
+    once: false
+    effect: { raise_flag: flooded_shortcut }
+  gate_c_water_drains:
+    condition: &shortcut_draining
+      all_of:
+        - not: { flag_is_raised: gate_c_open }
+        - flag_is_raised: flooded_shortcut
+    once: false
+    effect: { add_to_object_count: { key: gate_c.ticks_since_closed, amount: 1 } }
+  gate_c_water_recedes:
+    condition:
+      all_of:
+        - *shortcut_draining
+        - object_count_at_least: { key: gate_c.ticks_since_closed, count: 12 }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - lower_flag: flooded_shortcut
+          - set_object_value: { key: gate_c.ticks_since_closed, value: 0 }
+
+  noise_north_builds:
+    condition: { flag_is_raised: noise_north }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - add_to_object_count: { key: noise_north_tracker.noise, amount: 1 }
+          - lower_flag: noise_north
+  beast_north_wakes:
+    condition:
+      all_of:
+        - object_count_at_least: { key: noise_north_tracker.noise, count: 3 }
+        - not: { flag_is_raised: beast_north_awake }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - raise_flag: beast_north_awake
+          - set_object_value: { key: noise_north_tracker.noise, value: 0 }
+    notice:
+      sight_at:
+        spot: north_tunnel
+        texts: { clear: 坑道の奥の暗がりから、大きな黒い獣がのそりと現れた。 }
+  beast_north_sleeps:
+    condition:
+      all_of:
+        - flag_is_raised: beast_north_awake
+        - ticks_since_happening_at_least: { happening: beast_north_wakes, ticks: 20 }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - lower_flag: beast_north_awake
+          - set_object_value: { key: noise_north_tracker.noise, value: 0 }
+    notice:
+      sight_at:
+        spot: north_tunnel
+        texts: { clear: 黒い獣は坑道の奥の暗がりへ戻っていった。 }
+  beast_north_attacks:
+    condition:
+      all_of:
+        - flag_is_raised: beast_north_awake
+        - people_count_at_least:
+            people: { where: { is_at_spot: { who: each_person, spot: north_tunnel } } }
+            count: 1
+    once: false
+    effect:
+      for_everyone:
+        people: { where: { is_at_spot: { who: each_person, spot: north_tunnel } } }
+        effect: { damage: { who: each_person, amount: 8 } }
+    notice:
+      sound_from:
+        spot: north_tunnel
+        sound: { loudness: very_loud, clear: 暗がりから何かが唸り、飛びかかってきた。, muffled: 坑道の奥で獣のような唸り声がした。 }
+
+  noise_south_builds:
+    condition: { flag_is_raised: noise_south }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - add_to_object_count: { key: noise_south_tracker.noise, amount: 1 }
+          - lower_flag: noise_south
+  beast_south_wakes:
+    condition:
+      all_of:
+        - object_count_at_least: { key: noise_south_tracker.noise, count: 3 }
+        - not: { flag_is_raised: beast_south_awake }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - raise_flag: beast_south_awake
+          - set_object_value: { key: noise_south_tracker.noise, value: 0 }
+    notice:
+      sight_at:
+        spot: south_tunnel
+        texts: { clear: 坑道の奥の暗がりから、大きな黒い獣がのそりと現れた。 }
+  beast_south_sleeps:
+    condition:
+      all_of:
+        - flag_is_raised: beast_south_awake
+        - ticks_since_happening_at_least: { happening: beast_south_wakes, ticks: 20 }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - lower_flag: beast_south_awake
+          - set_object_value: { key: noise_south_tracker.noise, value: 0 }
+    notice:
+      sight_at:
+        spot: south_tunnel
+        texts: { clear: 黒い獣は坑道の奥の暗がりへ戻っていった。 }
+  beast_south_attacks:
+    condition:
+      all_of:
+        - flag_is_raised: beast_south_awake
+        - people_count_at_least:
+            people: { where: { is_at_spot: { who: each_person, spot: south_tunnel } } }
+            count: 1
+    once: false
+    effect:
+      for_everyone:
+        people: { where: { is_at_spot: { who: each_person, spot: south_tunnel } } }
+        effect: { damage: { who: each_person, amount: 8 } }
+    notice:
+      sound_from:
+        spot: south_tunnel
+        sound: { loudness: very_loud, clear: 暗がりから何かが唸り、飛びかかってきた。, muffled: 坑道の奥で獣のような唸り声がした。 }
+
+  noise_deep_builds:
+    condition: { flag_is_raised: noise_deep }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - add_to_object_count: { key: noise_deep_tracker.noise, amount: 1 }
+          - lower_flag: noise_deep
+  beast_deep_wakes:
+    condition:
+      all_of:
+        - object_count_at_least: { key: noise_deep_tracker.noise, count: 3 }
+        - not: { flag_is_raised: beast_deep_awake }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - raise_flag: beast_deep_awake
+          - set_object_value: { key: noise_deep_tracker.noise, value: 0 }
+    notice:
+      sight_at:
+        spot: mid_junction
+        texts: { clear: 坑道の奥の暗がりから、大きな黒い獣がのそりと現れた。 }
+  beast_deep_sleeps:
+    condition:
+      all_of:
+        - flag_is_raised: beast_deep_awake
+        - ticks_since_happening_at_least: { happening: beast_deep_wakes, ticks: 20 }
+    once: false
+    effect:
+      sequence:
+        steps:
+          - lower_flag: beast_deep_awake
+          - set_object_value: { key: noise_deep_tracker.noise, value: 0 }
+    notice:
+      sight_at:
+        spot: mid_junction
+        texts: { clear: 黒い獣は坑道の奥の暗がりへ戻っていった。 }
+  beast_deep_attacks:
+    condition:
+      all_of:
+        - flag_is_raised: beast_deep_awake
+        - people_count_at_least:
+            people: { where: { is_at_spot: { who: each_person, spot: mid_junction } } }
+            count: 1
+    once: false
+    effect:
+      for_everyone:
+        people: { where: { is_at_spot: { who: each_person, spot: mid_junction } } }
+        effect: { damage: { who: each_person, amount: 8 } }
+    notice:
+      sound_from:
+        spot: mid_junction
+        sound: { loudness: very_loud, clear: 暗がりから何かが唸り、飛びかかってきた。, muffled: 坑道の奥で獣のような唸り声がした。 }
+
+  office_bell_rings:
+    condition: { flag_is_raised: safe_opened }
+    once: true
+    effect: no_effect
+    notice:
+      announcement_to: { audience: { where: { all_of: [] } }, text: 村のほうで、鐘が大きく鳴り響いた。 }
+
+  lamp_flames_burn_out:
+    condition: { tick_modulo: { divisor: 16, remainder: 0 } }
+    once: false
+    effect:
+      for_everyone:
+        people: &holding_lamp_flame { where: { has_item: { who: each_person, item_spec: lamp_flame, count: 1 } } }
+        effect: { take_item: { who: each_person, item_spec: lamp_flame, count: 1 } }
+    notice:
+      announcement_to: { audience: *holding_lamp_flame, text: カンテラの灯が燃え尽きた。 }
+  torches_burn_out:
+    condition: { tick_modulo: { divisor: 24, remainder: 0 } }
+    once: false
+    effect:
+      for_everyone:
+        people: &holding_torch { where: { has_item: { who: each_person, item_spec: torch, count: 1 } } }
+        effect: { take_item: { who: each_person, item_spec: torch, count: 1 } }
+    notice:
+      announcement_to: { audience: *holding_torch, text: 火が燃え尽き、手もとには焦げた棒だけが残った。 }
+
+  gas_seeps_in:
+    condition:
+      all_of:
+        - not: { flag_is_raised: gas_present }
+        - chance: 0.08
+    once: false
+    effect: { raise_flag: gas_present }
+  gas_clears:
+    condition:
+      all_of:
+        - flag_is_raised: gas_present
+        - ticks_since_happening_at_least: { happening: gas_seeps_in, ticks: 8 }
+    once: false
+    effect: { lower_flag: gas_present }
+
+  canary_falls_silent:
+    condition:
+      all_of:
+        - flag_is_raised: canary_watched
+        - flag_is_raised: gas_present
+    once: false
+    effect: no_effect
+    notice:
+      announcement_to:
+        audience: &holding_canary { where: { has_item: { who: each_person, item_spec: canary, count: 1 } } }
+        text: カナリアは鳴きやんで、籠の底でじっとしている。
+  canary_keeps_singing:
+    condition:
+      all_of:
+        - flag_is_raised: canary_watched
+        - not: { flag_is_raised: gas_present }
+    once: false
+    effect: no_effect
+    notice:
+      announcement_to: { audience: *holding_canary, text: カナリアは小さくさえずっている。 }
+  canary_watch_ends:
+    condition: { flag_is_raised: canary_watched }
+    once: false
+    effect: { lower_flag: canary_watched }
+
+  lift_leaves:
+    condition: { flag_is_raised: lift_departed }
+    once: true
+    effect:
+      sequence:
+        steps:
+          - for_everyone:
+              people:
+                where:
+                  all_of:
+                    - is_in_section: { who: each_person, section: cage }
+                    - not: { outcome_is: { who: each_person, outcome: died } }
+              effect: { set_outcome: { who: each_person, outcome: rescued } }
+          - for_everyone:
+              people:
+                where:
+                  all_of:
+                    - not: { is_in_section: { who: each_person, section: cage } }
+                    - not: { outcome_is: { who: each_person, outcome: died } }
+              effect: { set_outcome: { who: each_person, outcome: stranded } }
+
+ending:
+  ends_when: all_outcomes_decided
