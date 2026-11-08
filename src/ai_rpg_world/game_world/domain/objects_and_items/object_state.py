@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TypeVar, final
 
+from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
@@ -25,7 +26,6 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     OperationNotForStateKindException,
     StateKeyNotOwnedException,
 )
-from ai_rpg_world.game_world.domain.objects_and_items._occurrence import occurrence
 from ai_rpg_world.game_world.domain.value_object import Count, ObjectId, PersonId, StateKeyId, Ticks, WorldTick
 
 
@@ -134,14 +134,14 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
             return
         self._values[key.key] = written
         self.add_event(
-            TextWrittenEvent(**occurrence(), object_id=self.object_id, key=key.key, before=before, after=written)
+            TextWrittenEvent(**new_event_stamp(), object_id=self.object_id, key=key.key, before=before, after=written)
         )
 
     def reveal(self) -> None:
         if self._revealed:
             return
         self._revealed = True
-        self.add_event(ObjectRevealedEvent(**occurrence(), object_id=self.object_id))
+        self.add_event(ObjectRevealedEvent(**new_event_stamp(), object_id=self.object_id))
 
     def value_of(self, key: ObjectStateKeyDeclaration, now: WorldTick) -> StateValue:
         self._require_owned(key)
@@ -172,7 +172,9 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
 
     def _record_change(self, key: ObjectStateKeyDeclaration, before: StateValue, after: StateValue) -> None:
         self.add_event(
-            ObjectStateChangedEvent(**occurrence(), object_id=self.object_id, key=key.key, before=before, after=after)
+            ObjectStateChangedEvent(
+                **new_event_stamp(), object_id=self.object_id, key=key.key, before=before, after=after
+            )
         )
 
     def _require_owned(self, key: ObjectStateKeyDeclaration) -> None:

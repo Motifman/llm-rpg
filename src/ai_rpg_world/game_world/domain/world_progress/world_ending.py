@@ -3,10 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
-from ai_rpg_world.eventing import AggregateRoot, DomainEvent
+from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.exception.world_progress_exception import WorldAlreadyEndedException
 from ai_rpg_world.game_world.domain.value_object import WorldId, WorldTick
-from ai_rpg_world.game_world.domain.world_progress._event_stamp import new_event_stamp
 
 
 @final

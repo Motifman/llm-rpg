@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
+from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     GroundItemAlreadyPlacedException,
     GroundItemNotFoundException,
 )
-from ai_rpg_world.game_world.domain.objects_and_items._occurrence import occurrence
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.value_object import SpotId
 
@@ -45,13 +45,13 @@ class GroundItems(AggregateRoot[GroundItemsEvent]):
         if item in self._items:
             raise GroundItemAlreadyPlacedException(f"{item.value} is already on the ground at {self._spot_id.value}")
         self._items.append(item)
-        self.add_event(GroundItemPlacedEvent(**occurrence(), spot_id=self._spot_id, item=item))
+        self.add_event(GroundItemPlacedEvent(**new_event_stamp(), spot_id=self._spot_id, item=item))
 
     def take(self, item: ItemInstanceId) -> None:
         if item not in self._items:
             raise GroundItemNotFoundException(f"{item.value} is not on the ground at {self._spot_id.value}")
         self._items.remove(item)
-        self.add_event(GroundItemTakenEvent(**occurrence(), spot_id=self._spot_id, item=item))
+        self.add_event(GroundItemTakenEvent(**new_event_stamp(), spot_id=self._spot_id, item=item))
 
     def items(self) -> tuple[ItemInstanceId, ...]:
         return tuple(self._items)

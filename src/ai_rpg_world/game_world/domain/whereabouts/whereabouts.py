@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_rpg_world.eventing import AggregateRoot
+from ai_rpg_world.eventing import AggregateRoot, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import NoCapacity, SpotDeclaration, SpotSectionDeclaration
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
@@ -14,7 +14,6 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     SectionFullException,
 )
 from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, SpotId, Ticks, WorldId
-from ai_rpg_world.game_world.domain.whereabouts._new_event import new_event
 from ai_rpg_world.game_world.domain.whereabouts.location import AtSpot, Location, OpenArea, TravelInProgress
 from ai_rpg_world.game_world.domain.whereabouts.occupant import DepartedPerson, Occupant
 from ai_rpg_world.game_world.domain.whereabouts.route import Route
@@ -47,13 +46,17 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
         if occupant in self._locations:
             raise OccupantAlreadyPlacedException(f"{occupant} is already in {self._world_id.value}")
         self._locations[occupant] = AtSpot(spot=spot.spot_id, section=OpenArea())
-        self.add_event(new_event(OccupantPlacedEvent, world_id=self._world_id, occupant=occupant, spot=spot.spot_id))
+        self.add_event(
+            OccupantPlacedEvent(**new_event_stamp(), world_id=self._world_id, occupant=occupant, spot=spot.spot_id)
+        )
 
     def remove(self, occupant: Occupant) -> None:
         last_location = self.location_of(occupant)
         del self._locations[occupant]
         self.add_event(
-            new_event(OccupantRemovedEvent, world_id=self._world_id, occupant=occupant, last_location=last_location)
+            OccupantRemovedEvent(
+                **new_event_stamp(), world_id=self._world_id, occupant=occupant, last_location=last_location
+            )
         )
 
     def start_travel(self, occupant: Occupant, route: Route) -> None:
@@ -67,8 +70,10 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
             ticks_left_on_passage=route.passages[0].travel_ticks,
             departed_from=route.start,
         )
-        self.add_event(new_event(TravelStartedEvent, world_id=self._world_id, occupant=occupant, route=route))
-        self.add_event(new_event(OccupantLeftSpotEvent, world_id=self._world_id, occupant=occupant, spot=route.start))
+        self.add_event(TravelStartedEvent(**new_event_stamp(), world_id=self._world_id, occupant=occupant, route=route))
+        self.add_event(
+            OccupantLeftSpotEvent(**new_event_stamp(), world_id=self._world_id, occupant=occupant, spot=route.start)
+        )
 
     def advance_travels(self, closed_passages: frozenset[PassageId]) -> None:
         for occupant, location in list(self._locations.items()):
@@ -81,8 +86,8 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
             raise OccupantNotTravellingException(f"{occupant} is not travelling")
         self._stop_at(occupant, location.departed_from)
         self.add_event(
-            new_event(
-                TravelCancelledEvent, world_id=self._world_id, occupant=occupant, returned_to=location.departed_from
+            TravelCancelledEvent(
+                **new_event_stamp(), world_id=self._world_id, occupant=occupant, returned_to=location.departed_from
             )
         )
         self._announce_arrival(occupant, location.departed_from)
@@ -93,8 +98,8 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
             self._leave_section_if_inside(occupant, before)
         self._stop_at(occupant, spot.spot_id)
         self.add_event(
-            new_event(
-                OccupantTeleportedEvent, world_id=self._world_id, occupant=occupant, before=before, after=spot.spot_id
+            OccupantTeleportedEvent(
+                **new_event_stamp(), world_id=self._world_id, occupant=occupant, before=before, after=spot.spot_id
             )
         )
         self._announce_arrival(occupant, spot.spot_id)
@@ -112,8 +117,8 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
         self._leave_section_if_inside(occupant, location)
         self._locations[occupant] = AtSpot(spot=section.spot_id, section=section.section_id)
         self.add_event(
-            new_event(
-                OccupantEnteredSectionEvent, world_id=self._world_id, occupant=occupant, section=section.section_id
+            OccupantEnteredSectionEvent(
+                **new_event_stamp(), world_id=self._world_id, occupant=occupant, section=section.section_id
             )
         )
 
@@ -160,8 +165,8 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
             if passage_id in closed_passages:
                 self._stop_at(occupant, departed_from)
                 self.add_event(
-                    new_event(
-                        TravelBlockedEvent,
+                    TravelBlockedEvent(
+                        **new_event_stamp(),
                         world_id=self._world_id,
                         occupant=occupant,
                         passage=passage_id,
@@ -203,14 +208,18 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
             return
         self._locations[occupant] = AtSpot(spot=location.spot, section=OpenArea())
         self.add_event(
-            new_event(OccupantLeftSectionEvent, world_id=self._world_id, occupant=occupant, section=location.section)
+            OccupantLeftSectionEvent(
+                **new_event_stamp(), world_id=self._world_id, occupant=occupant, section=location.section
+            )
         )
 
     def _stop_at(self, occupant: Occupant, spot: SpotId) -> None:
         self._locations[occupant] = AtSpot(spot=spot, section=OpenArea())
 
     def _announce_arrival(self, occupant: Occupant, spot: SpotId) -> None:
-        self.add_event(new_event(OccupantEnteredSpotEvent, world_id=self._world_id, occupant=occupant, spot=spot))
+        self.add_event(
+            OccupantEnteredSpotEvent(**new_event_stamp(), world_id=self._world_id, occupant=occupant, spot=spot)
+        )
 
     def _spot_of(self, occupant: Occupant) -> SpotId | None:
         location = self._locations.get(occupant)
