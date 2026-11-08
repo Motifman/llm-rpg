@@ -9,7 +9,7 @@
 - 作者は、名詞の中に、その名詞に付く動詞を書いてよい (物の中に操作、区画の中に出入り)。読み込む側が名詞と動詞に分ける (#1990)
 - 宣言の型は既定値を持たない。書かなかった欄は、読み込む側が共通の部品 (データ) の既定で埋める (#2029 の E2)。埋めたものは `DesignWarning` にしない。作者が書くべきなのに書かなかったもの (知覚の文など) だけを `DesignWarning` にする
 - 誤りの場所 (`DesignLocation`) は、宣言の種類・名前・欄と、どのファイルに書いたか (シナリオか、取り込んだどの共通の部品か) で表す。誤りの文の先頭にもファイルの名前が出る。`defaults:` で埋めた欄の誤りは、埋めた宣言ではなく `defaults:` を書いた場所を指す。書き忘れた欄は、いちばん近い書かれた親を書いたファイルを指し、どこにも無ければシナリオのファイルを指す。YAML の道筋 (`spots.lift_landing.objects.lift_panel.interactions.start_lift.precondition`) は、`DesignLocation("object", "lift_panel", "interactions.start_lift.precondition")` に写す
-- 文の中の人は、`{actor}` `{target}` `{chosen_by_group}` `{each_person}` だけ。物や場所の名前は、作者が文に直接書く
+- 文の中の人は、`{actor}` `{target}` `{chosen_by_group}` `{each_person}` だけ。物や場所の名前は、作者が文に直接書く。組み込みの行為の知覚の文だけは、物や行き先の呼び名を書ける (下の「共通の部品」)
 
 ## 一番上の欄
 
@@ -122,6 +122,28 @@ perception_defaults:
   target: { clear: "{actor}があなたに何かをした。" }
   sound: { loudness: normal, clear: 物音がした。, muffled: かすかな物音がした。 }
 ```
+
+## 共通の部品
+
+日本語の世界の共通の部品は `data/scenarios/common/ja_default.yaml`。`rules`、`refusal_texts`、`built_in_action_perceptions`、`perception_defaults`、`defaults` を書き、シナリオは `includes: [common/ja_default.yaml]` で取り込んで、変えたい行だけを書く。
+
+- `rules` の値は [world_design.md](world_design.md) の `WorldRules` に書いた既定。介抱 (`tend`) のある世界にしてあり、介抱の無い世界は `tend: null` と書く
+- `refusal_texts.world_state` には、遊んでいる最中に世界の状態が変わって起きうる集約の断り (拾おうとした品物がもう無い、籠が満員など) の `error_code` を載せる。宣言を作るときの検査や、実装の誤りでしか起きない `error_code` は載せない。断りの文の人のプレースホルダーは `{actor}` だけ
+- `built_in_action_perceptions` の文には、人のほかに、行為が扱う物・行き先・話した中身の呼び名を書ける。刺激に変える役が埋める (#2058)
+
+| 行為 | 書ける呼び名 | 人 |
+|---|---|---|
+| `travel` | `{destination}` (行き先の場所) | `{actor}` |
+| `speak` | `{speech}` (話した中身) | `{actor}` |
+| `hand_over` | `{item}` | `{actor}`、`{target}` (受け取る人) |
+| `tend` | — | `{actor}`、`{target}` (介抱される人) |
+| `pick_up` `drop` `use_item` `hold` `put_away` | `{item}` | `{actor}` |
+| `listen` `wait` `search` `cast_ballot` | — | `{actor}` |
+
+- 表に無い名前は書けない
+- 1 回で複数の相手や品物を渡す `hand_over` は、渡す 1 件ごとに文を作る
+- `travel` の文は、出ていくところを見た人に届く。着いた先の人に届く文は、まだ置き場所が無い
+- `speak` の声の大きさは、宣言の `loudness` ではなく、行為の届け方 (ささやく `whisper`、ふつう `normal`、叫ぶ `very_loud`) で決まる。`speak` の `loudness` は使われない
 
 ## 例: 廃坑の山村の昇降機
 
