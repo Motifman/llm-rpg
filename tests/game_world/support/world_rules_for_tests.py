@@ -39,6 +39,7 @@ def world_rules_for_tests() -> WorldRules:
         ),
         death=DeathRule(grace=Ticks(30)),
         departed_persons_act=False,
+        name_tags=False,
         hearing=HearingValues(
             loudness={
                 Loudness.WHISPER: SoundLevel(30),

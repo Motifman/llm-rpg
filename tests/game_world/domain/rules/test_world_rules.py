@@ -77,6 +77,7 @@ def _rules(action_durations: Mapping[ActionKind, Ticks]) -> WorldRules:
         ),
         death=DeathRule(grace=Ticks(30)),
         departed_persons_act=False,
+        name_tags=False,
         hearing=HearingValues(
             loudness={
                 Loudness.WHISPER: SoundLevel(30),

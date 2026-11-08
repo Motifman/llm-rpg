@@ -35,6 +35,7 @@ from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
 from ai_rpg_world.game_world.domain.declaration.character import (
+    CharacterDeclaration,
     GroupDeclaration,
     GroupingDeclaration,
     MembershipVisibility,
@@ -84,7 +85,7 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     PersonInventory,
     SpotSearchProgress,
 )
-from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.people import PeopleRegister, TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.person import (
     Died,
     GroupMembership,
@@ -239,6 +240,19 @@ def _on_bench() -> Whereabouts:
     whereabouts.enter_section(_ALICE_BODY, _BENCH, frozenset())
     _cleared(whereabouts)
     return whereabouts
+
+
+def _people_register() -> PeopleRegister:
+    alice = CharacterDeclaration(
+        person_id=_ALICE,
+        appearance=DescriptionText("背の高い人"),
+        spawn_spot=_PLAZA.spot_id,
+        initial_items=(),
+        initial_held=(),
+        initial_groups=(),
+        knows_at_start=(),
+    )
+    return PeopleRegister.open(_WORLD, (alice,))
 
 
 def _passages() -> PassageStates:
@@ -484,6 +498,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "PersonVitals.exert": lambda: _with(_vitals(), lambda v: v.exert(_fatigue_rule())),
     "PersonVitals.rest": lambda: _with(_tired(), lambda v: v.rest(FatigueAmount(2), _fatigue_rule())),
     "PersonVitals.start_action": lambda: _with(_vitals(), lambda v: v.start_action(WorldTick(3))),
+    "PeopleRegister.name": lambda: _with(_people_register(), lambda r: r.name(_ALICE, DisplayName("ミナ"))),
     "PersonOutcomes.decide": lambda: _with(PersonOutcomes.start(_WORLD, (_ALICE,)), lambda o: o.decide(_ALICE, Died())),
     "GroupMembership.join": lambda: _with(GroupMembership.start(_WORLD, {}), lambda g: g.join(_ALICE, _RED)),
     "GroupMembership.leave": lambda: _with(
@@ -621,6 +636,18 @@ class TestWatchedAggregates:
 
         assert not _is_watched(ScenarioProgress)
         assert not _is_watched(MissedNotices)
+
+    def test_every_ledger_name_is_a_class_under_the_game_world_domain(self) -> None:
+        """帳簿の名前 (ScenarioProgress、MissedNotices) は、どれも ai_rpg_world.game_world.domain の下にあるクラスの名前。名前を書き違えて、どのクラスも除いていない名前が表に残ると落ちる。"""
+        package = importlib.import_module(_DOMAIN_PACKAGE)
+        class_names = {
+            cls.__name__
+            for module_info in pkgutil.walk_packages(package.__path__, prefix=f"{_DOMAIN_PACKAGE}.")
+            for cls in vars(importlib.import_module(module_info.name)).values()
+            if inspect.isclass(cls)
+        }
+
+        assert _LEDGER_AGGREGATES <= class_names
 
     def test_other_aggregates_are_watched(self) -> None:
         """帳簿の名前でない AggregateRoot の子クラスは、見張りの対象になる。AggregateRoot そのものと集約でないクラスはならない。"""

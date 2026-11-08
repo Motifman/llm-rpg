@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
     LatestActionsReading,
     ObjectStateReading,
     PassageStatesReading,
+    PeopleRegisterReading,
     PersonInventoryReading,
     PersonOutcomesReading,
     PersonVitalsReading,
@@ -44,6 +45,8 @@ class WorldFacts(Protocol):
     def random(self) -> RandomSource: ...
 
     def people(self) -> tuple[PersonId, ...]: ...
+
+    def people_register(self) -> PeopleRegisterReading: ...
 
     def whereabouts(self) -> WhereaboutsReading: ...
 

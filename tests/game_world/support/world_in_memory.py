@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
     LatestActionsReading,
     ObjectStateReading,
     PassageStatesReading,
+    PeopleRegisterReading,
     PersonInventoryReading,
     PersonOutcomesReading,
     PersonVitalsReading,
@@ -24,6 +25,7 @@ from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
 )
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration, ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
@@ -39,7 +41,8 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     SpotSearchProgress,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.person import GroupMembership, PersonOutcomes, PersonVitals
+from ai_rpg_world.game_world.domain.people import PeopleRegister
+from ai_rpg_world.game_world.domain.person import GroupMembership, MissedNotices, PersonOutcomes, PersonVitals
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import GroupDecisionId, ObjectId, PersonId, SpotId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import PassageStates, SpotAtmospheres, Whereabouts
@@ -68,6 +71,7 @@ class WorldInMemory:
         world: WorldId,
         rules: WorldRules | None = None,
         people: tuple[PersonId, ...] = (),
+        characters: tuple[CharacterDeclaration, ...] = (),
         spots: tuple[SpotDeclaration, ...] = (),
         passages: tuple[PassageDeclaration, ...] = (),
         objects: tuple[ObjectDeclaration, ...] = (),
@@ -92,7 +96,7 @@ class WorldInMemory:
             item_specs=(),
             groupings=(),
             groups=(),
-            characters=(),
+            characters=characters,
             world_stages=stage_declarations,
             group_decisions=(),
             sections=sections,
@@ -104,6 +108,8 @@ class WorldInMemory:
         self.atmospheres = SpotAtmospheres(world, spots)
         self.outcomes = PersonOutcomes.start(world, people)
         self.membership = GroupMembership(world)
+        self.people_register = PeopleRegister.open(world, characters)
+        self.missed_notices: dict[PersonId, MissedNotices] = {}
         self.vitals = {v.person: v for v in vitals}
         self.inventories = {i.person_id: i for i in inventories}
         self.items = {i.item_id: i for i in items}
@@ -137,6 +143,9 @@ class WorldInMemory:
     def group_decision_of(self, decision: GroupDecisionDeclaration) -> GroupDecision:
         return self.group_decisions.setdefault(decision.decision_id, GroupDecision(decision))
 
+    def missed_notices_of(self, person: PersonId) -> MissedNotices:
+        return self.missed_notices.setdefault(person, MissedNotices(person))
+
 
 class _FactsInMemory(WorldFacts):
     def __init__(self, world: WorldInMemory) -> None:
@@ -159,6 +168,9 @@ class _FactsInMemory(WorldFacts):
 
     def people(self) -> tuple[PersonId, ...]:
         return self._world.people
+
+    def people_register(self) -> PeopleRegisterReading:
+        return self._world.people_register
 
     def whereabouts(self) -> WhereaboutsReading:
         return self._world.whereabouts
