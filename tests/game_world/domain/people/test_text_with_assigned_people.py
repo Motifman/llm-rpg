@@ -13,10 +13,11 @@ from ai_rpg_world.game_world.domain.people import (
     TextWithAssignedPeople,
     Unidentified,
 )
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName
 
 
 def _ref(handle: int) -> PersonRef:
-    return PersonRef(handle=PersonHandle(handle), appearance="旅装の女", visible_name=NoVisibleName())
+    return PersonRef(handle=PersonHandle(handle), appearance=DescriptionText("旅装の女"), visible_name=NoVisibleName())
 
 
 class TestTextWithAssignedPeoplePlaceholders:
