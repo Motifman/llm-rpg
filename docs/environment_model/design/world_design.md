@@ -68,6 +68,7 @@ class PassageDeclaration:
     travel_ticks: Ticks
     states: tuple[PassageStateDeclaration, ...]   # 書かなければ open (「開いている」、通れる、減衰 0) の 1 つ
     initial_state: PassageStateName               # 書かなければ open
+    hidden_until_revealed: bool                   # RevealPassageEffect までは無い道。書かなければ false
 
     def allows(self, state: PassageStateName) -> bool: ...
     def state(self, name: PassageStateName) -> PassageStateDeclaration: ...
