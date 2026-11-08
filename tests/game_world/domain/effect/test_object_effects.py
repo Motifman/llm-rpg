@@ -109,7 +109,7 @@ def _world(*, hidden: bool = False, apples: int = 0, gold: int = 0, ticks: int =
         people=(ALICE,),
         inventories=(alice,),
         items=tuple(items),
-        object_states=(ObjectState.open(_shrine(hidden=hidden), WorldTick(0)),),
+        object_states=(ObjectState.from_declaration(_shrine(hidden=hidden), WorldTick(0)),),
     )
     for _ in range(ticks):
         world.clock().advance(NoDayNight())

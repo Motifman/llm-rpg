@@ -58,7 +58,7 @@ def _staged_world() -> WorldInMemory:
         world=WORLD,
         people=(ALICE, BOB),
         vitals=(vitals(ALICE), vitals(BOB)),
-        world_stage=WorldStage.open(WORLD, _DAY, WorldTick(0)),
+        world_stage=WorldStage.from_initial_stage(WORLD, _DAY, WorldTick(0)),
         stage_declarations=(_DAY, _NIGHT),
     )
 

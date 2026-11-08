@@ -281,7 +281,7 @@ class TestFactsSeeWhatAggregatesChanged:
 
     def test_changed_object_count_is_seen(self) -> None:
         """井戸の桶の数 2 に 3 を足すと、facts の object_state は 5 を答える。"""
-        world = _world(object_states=(ObjectState.open(_WELL, WorldTick(0)),))
+        world = _world(object_states=(ObjectState.from_declaration(_WELL, WorldTick(0)),))
 
         world.aggregates().object_state(_WELL.object_id).add_to_count(_BUCKETS, Count(3))
 
@@ -289,7 +289,9 @@ class TestFactsSeeWhatAggregatesChanged:
 
     def test_entered_world_stage_is_seen(self) -> None:
         """昼で始まった世界が tick 2 に夜へ入ると、facts の world_stage は夜と、入った tick 2 を答える。"""
-        world = _world(world_stage=WorldStage.open(_WORLD, _DAY, WorldTick(0)), stage_declarations=(_DAY, _NIGHT))
+        world = _world(
+            world_stage=WorldStage.from_initial_stage(_WORLD, _DAY, WorldTick(0)), stage_declarations=(_DAY, _NIGHT)
+        )
         for _ in range(2):
             world.clock().advance(NoDayNight())
 

@@ -28,7 +28,7 @@ class WorldStage(AggregateRoot[WorldStageChangedEvent]):
         self._entered_at = entered_at
 
     @classmethod
-    def open(cls, world_id: WorldId, initial: WorldStageDeclaration, now: WorldTick) -> WorldStage:
+    def from_initial_stage(cls, world_id: WorldId, initial: WorldStageDeclaration, now: WorldTick) -> WorldStage:
         return cls(world_id, initial.stage_id, now)
 
     @property

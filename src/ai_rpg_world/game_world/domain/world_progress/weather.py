@@ -23,7 +23,7 @@ class Weather(AggregateRoot[WeatherChangedEvent]):
         self._current = current
 
     @classmethod
-    def open(cls, world_id: WorldId, declaration: WeatherDeclaration) -> Weather:
+    def from_declaration(cls, world_id: WorldId, declaration: WeatherDeclaration) -> Weather:
         return cls(world_id, WeatherState(declaration.initial))
 
     @property
