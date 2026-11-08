@@ -1,3 +1,4 @@
+from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration, Finding
 from ai_rpg_world.game_world.domain.declaration.verb.ending_declaration import EndingDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
@@ -7,10 +8,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import (
     SightAt,
     SoundFrom,
 )
-from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import (
-    DefaultDuration,
-    InteractionDeclaration,
-)
+from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.item_use_declaration import ItemUseDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.joint_action_declaration import JointActionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.noun_interaction_declarations import (

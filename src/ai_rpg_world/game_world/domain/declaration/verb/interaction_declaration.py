@@ -5,17 +5,12 @@ from typing import final
 
 from ai_rpg_world.game_world.domain.action.action_attempt import ActorRequirement, Exertion
 from ai_rpg_world.game_world.domain.condition.condition import Condition
+from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.shown_to_actor import ShownToActor
 from ai_rpg_world.game_world.domain.effect.effect import Effect
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.value_object import DisplayName, InteractionId, Ticks
-
-
-@final
-@dataclass(frozen=True)
-class DefaultDuration:
-    pass
 
 
 @final
