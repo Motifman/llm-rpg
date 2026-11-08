@@ -33,20 +33,19 @@ class _RegisteredPerson:
 
 
 class PeopleRegister(AggregateRoot[PersonNamedEvent]):
-    def __init__(self, world: WorldId, people: dict[PersonId, _RegisteredPerson]) -> None:
+    def __init__(self, world: WorldId, characters: Sequence[CharacterDeclaration]) -> None:
         super().__init__()
         self._world = world
-        self._people = people
+        self._people: dict[PersonId, _RegisteredPerson] = {}
         self._names: dict[PersonId, DisplayName] = {}
+        for number, character in enumerate(characters):
+            if character.person_id in self._people:
+                raise CharacterListedTwiceException(f"{character.person_id.value} is declared more than once")
+            self._people[character.person_id] = _RegisteredPerson(PersonHandle(number), character.appearance)
 
     @classmethod
     def open(cls, world: WorldId, characters: Sequence[CharacterDeclaration]) -> PeopleRegister:
-        people: dict[PersonId, _RegisteredPerson] = {}
-        for number, character in enumerate(characters):
-            if character.person_id in people:
-                raise CharacterListedTwiceException(f"{character.person_id.value} is declared more than once")
-            people[character.person_id] = _RegisteredPerson(PersonHandle(number), character.appearance)
-        return cls(world, people)
+        return cls(world, characters)
 
     @property
     def world(self) -> WorldId:

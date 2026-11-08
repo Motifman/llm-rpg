@@ -92,5 +92,7 @@ class TestAsPeopleAsSeen:
 
         assigned = text.seen_by(view)
 
-        assert assigned.people["actor"].visible_name == DisplayName("トオル")  # type: ignore[union-attr]
-        assert assigned.people["target"].visible_name == NoVisibleName()  # type: ignore[union-attr]
+        actor, target = assigned.people["actor"], assigned.people["target"]
+        assert isinstance(actor, PersonRef) and isinstance(target, PersonRef)
+        assert actor.visible_name == DisplayName("トオル")
+        assert target.visible_name == NoVisibleName()
