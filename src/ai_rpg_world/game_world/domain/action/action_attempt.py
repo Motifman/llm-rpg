@@ -58,8 +58,8 @@ class WithObject:
         nouns = facts.nouns()
         obj = nouns.object_of(self.obj)
         whereabouts = facts.whereabouts()
-        # 区画を渡さなければ、can_reach は物と同じ場所にいるかだけを答える
-        if not whereabouts.can_reach(actor, obj, ()):
+        at_spot_of_object = whereabouts.can_reach(actor, obj, ())
+        if not at_spot_of_object:
             return NotTogether()
         if not whereabouts.can_reach(actor, obj, nouns.sections_at(obj.spot_id)):
             return OutOfReach()
