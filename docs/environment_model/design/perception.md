@@ -72,6 +72,7 @@ class PeopleSeenBy:                       # PeopleAsSeen の実装
 
     def ref_of(self, person: PersonId) -> PersonRef: ...
         # 名前を出すのは、名札の世界か、knows_at_start の相手か、見る人自身
+        # 名前を出す相手の名前が名簿に記録されていなければ、見た目だけに落とさず断る (PeopleRegister.name_of)
 ```
 
 ゲームが作る文には、ほかの人の名前を文字として入れず、必ず `PersonRef` で渡す。列挙の値やキーもそのまま入れず、宣言の呼び名を使う。
