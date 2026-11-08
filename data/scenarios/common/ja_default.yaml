@@ -1,0 +1,185 @@
+rules:
+  tend: { revive_hp_rate: 0.6 }
+  fatigue:
+    per_exertion: 2
+    limit: 100
+    levels:
+      - { starts_at: 0, name: 元気 }
+      - { starts_at: 30, name: 少し疲れている }
+      - { starts_at: 60, name: 疲れている }
+      - { starts_at: 85, name: ぐったりしている }
+      - { starts_at: 100, name: 疲れ切って動けない }
+  hunger:
+    per_tick: 1
+    limit: 100
+    starvation_damage: null
+    levels:
+      - { starts_at: 0, name: 空腹ではない }
+      - { starts_at: 20, name: 少し空腹 }
+      - { starts_at: 40, name: やや空腹 }
+      - { starts_at: 60, name: 空腹 }
+      - { starts_at: 80, name: ひどく空腹 }
+  death: { grace: 30 }
+  departed_persons_act: false
+  name_tags: false
+  hearing:
+    loudness: { whisper: 30, normal: 60, loud: 75, very_loud: 90 }
+    loss_per_passage: 15
+    clear_from: 50
+    muffled_from: 35
+    faint_from: 20
+    attentive_allowance: 15
+  stealth:
+    notice_by_bystander: { sees_clearly: 0.4, sees_shapes: 0.15, sees_nothing: 0.0 }
+    notice_by_target: { sees_clearly: 0.6, sees_shapes: 0.3, sees_nothing: 0.0 }
+    attentive_bonus: 0.2
+    duration_multiplier: 2.0
+  action_durations:
+    listen: 1
+    tend: 3
+    hand_over: 1
+    pick_up: 1
+    drop: 1
+    search: 3
+    use_item: 2
+    enter_section: 1
+    leave_section: 1
+    hold: 1
+    put_away: 1
+    cast_ballot: 1
+    interact_with_object: 2
+    interact_with_carried_item: 2
+    interact_with_person: 2
+  person_max_hp: 100
+  pack_capacity: 20
+
+refusal_texts:
+  common_rules:
+    actor_cannot_act: 今は体が動かない。
+    busy: 手が離せない。今していることが済むまで待つしかない。
+    not_together: ここには見当たらない。
+    out_of_reach: ここからでは手が届かない。
+    too_tired: 疲れ切っていて、体が言うことを聞かない。
+    not_allowed_in_this_stage: 今はそれをするときではない。
+    no_one_found_in_the_dark: 暗がりを探ったが、誰にも触れなかった。
+  world_state:
+    GAME_WORLD.GROUND_ITEM_NOT_FOUND: それはもう、そこには無かった。
+    GAME_WORLD.ITEM_ALREADY_LEFT_WORLD: それはもう無くなっていた。
+    GAME_WORLD.ITEM_NOT_CARRIED: それを持っていない。
+    GAME_WORLD.INVENTORY_FULL: 荷がいっぱいで、これ以上は持てない。
+    GAME_WORLD.NOT_ENOUGH_ITEMS_OF_SPEC: 足りるだけの数を持っていない。
+    GAME_WORLD.PACK_IS_EMPTY: 荷には何も入っていない。
+    GAME_WORLD.ITEM_NOT_HELD: それを手に持っていない。
+    GAME_WORLD.ITEM_NOT_PACKED: それは荷にしまっていない。
+    GAME_WORLD.NOT_ENOUGH_STOCK: もう残っていない。
+    GAME_WORLD.COUNT_BELOW_ZERO: もう数が足りない。
+    GAME_WORLD.INSUFFICIENT_GOLD: 金が足りない。
+    GAME_WORLD.PERSON_NOT_ALIVE: その人は倒れているか、もう息をしていない。
+    GAME_WORLD.PERSON_NOT_DOWN: 相手は倒れていない。
+    GAME_WORLD.OUTCOME_ALREADY_DECIDED: その人の行く末は、もう決まっている。
+    GAME_WORLD.ALREADY_IN_GROUP: もうその集まりに入っている。
+    GAME_WORLD.ALREADY_IN_ANOTHER_GROUP_OF_GROUPING: もう別の集まりに入っている。
+    GAME_WORLD.NOT_IN_GROUP: その集まりには入っていない。
+    GAME_WORLD.WHEREABOUTS.SECTION_FULL: もう入る余地がない。
+    GAME_WORLD.WHEREABOUTS.OCCUPANT_ALREADY_IN_SECTION: もう中にいる。
+    GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_IN_SECTION: 中にはいない。
+    GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_AT_SECTION_SPOT: そこはこの場所には無い。
+    GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_PLACED: その人はもうここにはいない。
+    GAME_WORLD.WHEREABOUTS.PASSAGE_ALREADY_REMOVED: その道はもう無い。
+    GAME_WORLD.WORLD_ALREADY_ENDED: もう終わったことだ。
+    GAME_WORLD.GROUP_DECISION_NOT_OPEN: 今は決めるときではない。
+    GAME_WORLD.GROUP_DECISION_ALREADY_OPEN: もう決めているところだ。
+    GAME_WORLD.NO_VOTERS_GIVEN: 票を入れられる人がいない。
+    GAME_WORLD.NO_CHOICES_GIVEN: 選べる人がいない。
+    GAME_WORLD.VOTER_NOT_IN_DECISION: この決めごとに加わっていない。
+    GAME_WORLD.CHOICE_NOT_IN_DECISION: その人は選べない。
+    GAME_WORLD.BALLOT_ALREADY_CAST: もう票を入れた。
+    GAME_WORLD.ABSTAIN_NOT_ALLOWED: 票を入れずに済ませることはできない。
+  hidden: 今はできない。
+
+built_in_action_perceptions:
+  travel:
+    witness:
+      clear: "{actor}が{destination}へ去っていった。"
+      dim: "{actor}がどこかへ去っていった。"
+    sound: { loudness: whisper, clear: 足音が遠ざかっていった。, muffled: かすかな足音がした。 }
+  speak:
+    witness: { clear: "{actor}が何か話している。" }
+    sound: { loudness: normal, clear: "{actor}が「{speech}」と言った。", muffled: 誰かの話し声がした。 }
+    salience: background
+  listen:
+    witness: { clear: "{actor}が耳を澄ましている。" }
+    sound: null
+    salience: background
+  wait:
+    witness: { clear: "{actor}はじっとしている。" }
+    sound: null
+    salience: background
+  tend:
+    witness: { clear: "{actor}が{target}を介抱している。" }
+    sound: null
+  hand_over:
+    witness: { clear: "{actor}が{item}を{target}に渡した。" }
+    sound: null
+  pick_up:
+    witness: { clear: "{actor}が{item}を拾い上げた。" }
+    sound: null
+  drop:
+    witness: { clear: "{actor}が{item}を地面に置いた。" }
+    sound: { loudness: whisper, clear: 何かを置く音がした。, muffled: かすかな物音がした。 }
+  search:
+    witness: { clear: "{actor}が辺りを探っている。" }
+    sound: { loudness: whisper, clear: 何かを探る物音がした。, muffled: かすかな物音がした。 }
+  use_item:
+    witness: { clear: "{actor}が{item}を使った。" }
+    sound: null
+  hold:
+    witness: { clear: "{actor}が{item}を手に取った。" }
+    sound: null
+    salience: background
+  put_away:
+    witness: { clear: "{actor}が{item}を荷にしまった。" }
+    sound: null
+    salience: background
+  cast_ballot:
+    witness: { clear: "{actor}が票を入れた。" }
+    sound: null
+    salience: background
+
+perception_defaults:
+  witness: { clear: "{actor}が何かをした。" }
+  target: { clear: "{actor}があなたに何かをした。" }
+  sound: { loudness: normal, clear: 物音がした。, muffled: かすかな物音がした。 }
+
+defaults:
+  flag: { initially_raised: false }
+  atmosphere: { outdoor: false, temperature: normal, ambient_sound: null, smell: null }
+  section: { capacity: null, reachable_objects: [] }
+  section_access:
+    exertion: does_not_use_body
+    duration: default
+    entry_condition: { all_of: [], failure_text: 入れない。 }
+  object: { state_keys: {} }
+  appearance: { seen_in_dark: false, hidden_until_revealed: false }
+  interaction:
+    effect: no_effect
+    shows_on_success: []
+    exertion: uses_body
+    actor_requirement: living_only
+    reaches_unseen: false
+    duration: default
+    allows_stealth: false
+    arguments: {}
+  passage:
+    two_way: true
+    states: { open: { display_name: 開いている, traversable: true, sound_loss: 0 } }
+    initial_state: open
+    hidden_until_revealed: false
+  item_spec: { state_keys: {}, lights_up: null, hands_needed: 1 }
+  character: { initial_items: [], initial_held: [], initial_groups: [], knows_at_start: [] }
+  happening: { notice: null }
+  perception: { seen_in_dark: false, announcement: null, on_failure: null, salience: notable }
+  sight_texts: { dim: null, unseen_actor: null, noticed_later: null }
+  sight_at: { salience: notable }
+  sound_from: { salience: notable }
+  announcement_to: { salience: notable }
