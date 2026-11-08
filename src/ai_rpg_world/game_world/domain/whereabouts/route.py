@@ -30,13 +30,16 @@ class Route:
         stops = [self.start]
         for passage in self.passages:
             here = stops[-1]
-            near, far = passage.ends
-            if here == near:
-                stops.append(far)
-            elif here == far and passage.two_way:
-                stops.append(near)
-            else:
+            there = passage.far_end_from(here)
+            if there is None:
                 raise BrokenRouteException(
                     f"Route from {self.start.value!r} cannot walk {passage.passage_id.value} from {here.value!r}"
                 )
+            stops.append(there)
         return tuple(stops)
+
+
+@final
+@dataclass(frozen=True)
+class NoRoute:
+    pass

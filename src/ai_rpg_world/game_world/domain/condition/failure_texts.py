@@ -49,6 +49,10 @@ def placeholder_requirements(failure_text: TextWithUnassignedPeople | NoText) ->
     )
 
 
+def explains(failure_text: TextWithUnassignedPeople | NoText) -> bool:
+    return not isinstance(failure_text, NoText)
+
+
 def own_failure(failure_text: TextWithUnassignedPeople | NoText, trigger: Trigger) -> FailureReason:
     return FailureReason(failed_part=ConditionPath.root(), text=text_about_people(failure_text, trigger))
 

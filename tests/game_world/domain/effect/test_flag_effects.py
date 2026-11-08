@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
@@ -34,9 +36,11 @@ class TestRaiseFlagEffect:
         assert isinstance(event, WorldFlagRaisedEvent)
         assert event.trigger == _FLOOD
 
-    def test_requirements_need_nothing(self) -> None:
-        """RaiseFlagEffect の requirements() は何も要らない。"""
-        assert RaiseFlagEffect(flag=_BRIDGE_OUT).requirements() == Requirements.nothing()
+    def test_requirements_need_no_subject_chance_or_argument(self) -> None:
+        """RaiseFlagEffect の requirements() は、立てる旗のほかは何も要らない。"""
+        assert replace(RaiseFlagEffect(flag=_BRIDGE_OUT).requirements(), raises_flags=frozenset()) == (
+            Requirements.nothing()
+        )
 
 
 class TestLowerFlagEffect:
@@ -56,3 +60,15 @@ class TestLowerFlagEffect:
     def test_requirements_need_nothing(self) -> None:
         """LowerFlagEffect の requirements() は何も要らない。"""
         assert LowerFlagEffect(flag=_LAMP_LIT).requirements() == Requirements.nothing()
+
+
+class TestWhichFlagsAreRaised:
+    """旗の効果が、どの旗を立てるかを requirements() で答えることを保証する。"""
+
+    def test_raise_flag_reports_the_flag_it_raises(self) -> None:
+        """RaiseFlagEffect(橋が流れた) は、立てる旗として橋が流れた旗だけを答える。"""
+        assert RaiseFlagEffect(flag=_BRIDGE_OUT).requirements().raises_flags == frozenset({_BRIDGE_OUT})
+
+    def test_lower_flag_raises_nothing(self) -> None:
+        """LowerFlagEffect は旗を立てない。"""
+        assert LowerFlagEffect(flag=_LAMP_LIT).requirements().raises_flags == frozenset()

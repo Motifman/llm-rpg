@@ -2,32 +2,50 @@ from __future__ import annotations
 
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
-from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
-from ai_rpg_world.game_world.domain.value_object import DescriptionText, FlagId
+from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration, GroupDecisionDeclaration
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayPhaseName
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, FlagId, GroupDecisionId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 
 _DOOR_OPENED = FlagDeclaration(FlagId("door_opened"), DescriptionText("扉が開いた"), initially_raised=False)
 _BELL_RANG = FlagDeclaration(FlagId("bell_rang"), DescriptionText("鐘が鳴った"), initially_raised=False)
 _PASSWORD = ArgumentName("password")
 _MESSAGE = ArgumentName("message")
+_NIGHT = DayPhaseName("night")
+_DAWN = DayPhaseName("dawn")
+_EXILE = GroupDecisionDeclaration(
+    decision_id=GroupDecisionId("exile"), name=DisplayName("追放"), abstain_allowed=True, reveals_ballots=False
+)
 
 
 class TestCombinedWith:
     """Requirements.combined_with が、2 つの要求を欄ごとに合わせることを保証する。"""
 
     def test_each_field_is_combined(self) -> None:
-        """行為の人・引数 password・旗 1 つを要る要求と、相手・偶然・引数 message・別の旗を要る要求を合わせると、主語・引数・待つ旗は和に、偶然はどちらかが使えば使うになる。"""
+        """行為の人・引数 password・旗 1 つ・段階・夜を読む要求と、相手・偶然・引数 message・別の旗・夜明け・天候・決定の締め・伏せた所属を持つ要求を合わせると、主語・引数・待つ旗・読む昼夜の段階・立てる旗・締める決定は和に、偶然・段階・天候・伏せた所属はどちらかが真なら真になる。"""
         actor_side = Requirements(
             subjects=frozenset({SubjectKind.ACTOR}),
             uses_chance=False,
             uses_action_arguments=frozenset({_PASSWORD}),
             waits_for_flags=frozenset({_DOOR_OPENED}),
+            reads_world_stage=True,
+            reads_day_phases=frozenset({_NIGHT}),
+            reads_weather=False,
+            raises_flags=frozenset({_BELL_RANG}),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )
         target_side = Requirements(
             subjects=frozenset({SubjectKind.TARGET}),
             uses_chance=True,
             uses_action_arguments=frozenset({_MESSAGE}),
             waits_for_flags=frozenset({_BELL_RANG}),
+            reads_world_stage=False,
+            reads_day_phases=frozenset({_DAWN}),
+            reads_weather=True,
+            raises_flags=frozenset({_DOOR_OPENED}),
+            closes_group_decisions=frozenset({_EXILE}),
+            may_hide_membership=True,
         )
 
         combined = actor_side.combined_with(target_side)
@@ -37,6 +55,12 @@ class TestCombinedWith:
             uses_chance=True,
             uses_action_arguments=frozenset({_PASSWORD, _MESSAGE}),
             waits_for_flags=frozenset({_DOOR_OPENED, _BELL_RANG}),
+            reads_world_stage=True,
+            reads_day_phases=frozenset({_NIGHT, _DAWN}),
+            reads_weather=True,
+            raises_flags=frozenset({_DOOR_OPENED, _BELL_RANG}),
+            closes_group_decisions=frozenset({_EXILE}),
+            may_hide_membership=True,
         )
 
     def test_combining_with_nothing_keeps_the_requirements(self) -> None:
@@ -46,18 +70,30 @@ class TestCombinedWith:
             uses_chance=True,
             uses_action_arguments=frozenset({_PASSWORD}),
             waits_for_flags=frozenset({_DOOR_OPENED}),
+            reads_world_stage=False,
+            reads_day_phases=frozenset(),
+            reads_weather=False,
+            raises_flags=frozenset(),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )
 
         assert actor_side.combined_with(Requirements.nothing()) == actor_side
         assert Requirements.nothing().combined_with(actor_side) == actor_side
 
     def test_nothing_needs_no_subject_chance_argument_or_flag(self) -> None:
-        """Requirements.nothing は、主語も偶然も引数も待つ旗も要らない。"""
+        """Requirements.nothing は、主語も偶然も引数も待つ旗も要らず、段階・昼夜・天候を読まず、旗を立てず、決定を締めず、所属を伏せない。"""
         assert Requirements.nothing() == Requirements(
             subjects=frozenset(),
             uses_chance=False,
             uses_action_arguments=frozenset(),
             waits_for_flags=frozenset(),
+            reads_world_stage=False,
+            reads_day_phases=frozenset(),
+            reads_weather=False,
+            raises_flags=frozenset(),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )
 
 
@@ -71,6 +107,12 @@ class TestWithoutSubject:
             uses_chance=True,
             uses_action_arguments=frozenset({_PASSWORD}),
             waits_for_flags=frozenset({_DOOR_OPENED}),
+            reads_world_stage=False,
+            reads_day_phases=frozenset(),
+            reads_weather=False,
+            raises_flags=frozenset(),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )
 
         outside = inside.without_subject(SubjectKind.EACH_PERSON)
@@ -80,6 +122,12 @@ class TestWithoutSubject:
             uses_chance=True,
             uses_action_arguments=frozenset({_PASSWORD}),
             waits_for_flags=frozenset({_DOOR_OPENED}),
+            reads_world_stage=False,
+            reads_day_phases=frozenset(),
+            reads_weather=False,
+            raises_flags=frozenset(),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )
 
     def test_removing_an_absent_subject_changes_nothing(self) -> None:
@@ -89,6 +137,12 @@ class TestWithoutSubject:
             uses_chance=False,
             uses_action_arguments=frozenset(),
             waits_for_flags=frozenset(),
+            reads_world_stage=False,
+            reads_day_phases=frozenset(),
+            reads_weather=False,
+            raises_flags=frozenset(),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )
 
         assert actor_only.without_subject(SubjectKind.EACH_PERSON) == actor_only

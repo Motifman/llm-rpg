@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import final
 
+from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
 from ai_rpg_world.game_world.domain.exception.rules_exception import (
     ActionDurationNotApplicableException,
     MissingActionDurationException,
@@ -48,3 +49,11 @@ class WorldRules:
                 f"WorldRules.action_durations must not declare {not_applicable}, which take no default duration"
             )
         object.__setattr__(self, "action_durations", MappingProxyType(dict(self.action_durations)))
+
+    def allows_tending(self) -> bool:
+        return isinstance(self.tend, TendRule)
+
+    def design_flaws(self, at: DesignLocation) -> list[DesignFlaw]:
+        if self.allows_tending() and self.death.grace == Ticks(0):
+            return [DesignFlaw(at, "a world with tending needs a grace above 0, or no one can be tended before dying")]
+        return []

@@ -17,6 +17,9 @@ class WeatherDeclaration:
     announce_changes: bool
     obscuring: frozenset[WeatherType]
 
+    def initial_state(self) -> WeatherState:
+        return WeatherState(self.initial)
+
     def next_after(self, current: WeatherState, roll: Probability) -> WeatherState:
         return WeatherState(self.changes.next_after(current.type, roll))
 

@@ -73,6 +73,9 @@ class EachPersonIsOneOf:
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         return None
 
+    def explains_failure(self) -> bool:
+        return False
+
 
 @final
 @dataclass(frozen=True)
@@ -88,3 +91,6 @@ class FixedTruth:
 
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         return None
+
+    def explains_failure(self) -> bool:
+        return False

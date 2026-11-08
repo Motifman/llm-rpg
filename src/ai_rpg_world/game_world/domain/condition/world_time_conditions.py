@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.condition.aggregate_readings import WorldStageReading
@@ -72,7 +72,7 @@ class WorldStageIsCondition(LeafCondition):
         return declared_world_stage(facts).current() == self.stage.stage_id
 
     def _requirements_besides_text(self) -> Requirements:
-        return Requirements.nothing()
+        return replace(Requirements.nothing(), reads_world_stage=True)
 
 
 @final
@@ -85,7 +85,7 @@ class TicksInWorldStageAtLeastCondition(LeafCondition):
         return facts.now().ticks_since(declared_world_stage(facts).entered_at()) >= self.ticks
 
     def _requirements_besides_text(self) -> Requirements:
-        return Requirements.nothing()
+        return replace(Requirements.nothing(), reads_world_stage=True)
 
 
 @final
@@ -101,7 +101,7 @@ class TimeOfDayIsCondition(LeafCondition):
         return day_night.phase_at(facts.clock().time_of_day(day_night)).name == self.phase
 
     def _requirements_besides_text(self) -> Requirements:
-        return Requirements.nothing()
+        return replace(Requirements.nothing(), reads_day_phases=frozenset({self.phase}))
 
 
 @final
@@ -117,4 +117,4 @@ class WeatherIsCondition(LeafCondition):
         return weather.current().type is self.weather
 
     def _requirements_besides_text(self) -> Requirements:
-        return Requirements.nothing()
+        return replace(Requirements.nothing(), reads_weather=True)

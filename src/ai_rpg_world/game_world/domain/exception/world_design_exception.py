@@ -34,3 +34,7 @@ class UnknownNameFlaw(WorldDesignException):
     def __init__(self, flaw: DesignFlaw) -> None:
         self.flaw = flaw
         super().__init__(str(flaw))
+
+
+class UndeclaredVerbException(WorldDesignException):
+    error_code = "GAME_WORLD.UNDECLARED_VERB"

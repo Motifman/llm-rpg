@@ -235,6 +235,12 @@ class TestWriteTextEffect:
             uses_chance=False,
             uses_action_arguments=frozenset({_MESSAGE}),
             waits_for_flags=frozenset(),
+            reads_world_stage=False,
+            reads_day_phases=frozenset(),
+            reads_weather=False,
+            raises_flags=frozenset(),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )
 
 
@@ -289,6 +295,12 @@ class TestDepositToObjectEffects:
             uses_chance=False,
             uses_action_arguments=frozenset(),
             waits_for_flags=frozenset(),
+            reads_world_stage=False,
+            reads_day_phases=frozenset(),
+            reads_weather=False,
+            raises_flags=frozenset(),
+            closes_group_decisions=frozenset(),
+            may_hide_membership=False,
         )
 
         assert DepositItemToObjectEffect(Actor(), _APPLE, _OFFERINGS).requirements() == expected

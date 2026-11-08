@@ -122,3 +122,29 @@ def _named_bob() -> NamedPerson:
             knows_at_start=(),
         )
     )
+
+
+class TestMayHideMembership:
+    """IsMemberCondition が、行う人に所属が伏せられうるかを requirements() で答えることを保証する。"""
+
+    def test_everyone_visible_membership_is_never_hidden(self) -> None:
+        """誰にでも見える (EVERYONE) 分け方の所属は、相手のものでも伏せられない。"""
+        assert not _is_wolf(Target(), _wolves(MembershipVisibility.EVERYONE)).requirements().may_hide_membership
+
+    def test_own_self_only_membership_is_not_hidden(self) -> None:
+        """本人だけに見える (SELF_ONLY) 分け方でも、行う人自身 (Actor) の所属は伏せられない。"""
+        assert not _is_wolf(Actor(), _wolves(MembershipVisibility.SELF_ONLY)).requirements().may_hide_membership
+
+    def test_others_self_only_membership_may_be_hidden(self) -> None:
+        """SELF_ONLY の分け方で相手 (Target) の所属を見ると、伏せられうる。"""
+        assert _is_wolf(Target(), _wolves(MembershipVisibility.SELF_ONLY)).requirements().may_hide_membership
+
+    def test_nobody_visible_membership_may_be_hidden_even_for_oneself(self) -> None:
+        """誰にも見えない (NOBODY) 分け方なら、行う人自身の所属でも伏せられうる。"""
+        assert _is_wolf(Actor(), _wolves(MembershipVisibility.NOBODY)).requirements().may_hide_membership
+
+    def test_members_who_know_each_other_may_still_hide_from_outsiders(self) -> None:
+        """仲間どうしが知る集団でも、SELF_ONLY の相手の所属は仲間でない人には伏せられうる。"""
+        wolves = _wolves(MembershipVisibility.SELF_ONLY, members_know_each_other=True)
+
+        assert _is_wolf(Target(), wolves).requirements().may_hide_membership

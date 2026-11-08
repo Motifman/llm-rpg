@@ -164,3 +164,12 @@ class TestTicksSinceLastActionRequirements:
         )
 
         assert condition.requirements().subjects == frozenset({SubjectKind.ACTOR})
+
+
+class TestWhetherTheWorldStageIsRead:
+    """TicksSinceLastActionAtLeastCondition が、起点に段階を使うときだけ段階を読むと答えることを保証する。"""
+
+    def test_since_world_stage_entered_reads_the_world_stage(self) -> None:
+        """起点が SinceWorldStageEntered なら段階を読み、SinceStart なら読まない。"""
+        assert _since_lever(3, SinceWorldStageEntered()).requirements().reads_world_stage
+        assert not _since_lever(3, SinceStart()).requirements().reads_world_stage

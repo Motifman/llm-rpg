@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.condition.condition import NoText
@@ -23,12 +23,18 @@ class SinceStart:
     def baseline(self, facts: WorldFacts) -> WorldTick:
         return WorldTick(0)
 
+    def requirements(self) -> Requirements:
+        return Requirements.nothing()
+
 
 @final
 @dataclass(frozen=True)
 class SinceWorldStageEntered:
     def baseline(self, facts: WorldFacts) -> WorldTick:
         return declared_world_stage(facts).entered_at()
+
+    def requirements(self) -> Requirements:
+        return replace(Requirements.nothing(), reads_world_stage=True)
 
 
 @final
@@ -45,4 +51,4 @@ class TicksSinceLastActionAtLeastCondition(LeafCondition):
         return last_done.later_of(self.since.baseline(facts)).has_passed(self.ticks, facts.now())
 
     def _requirements_besides_text(self) -> Requirements:
-        return self.who.requirements()
+        return self.who.requirements().combined_with(self.since.requirements())

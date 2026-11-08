@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
@@ -21,7 +21,7 @@ class RaiseFlagEffect:
         world.flags().raise_flag(self.flag, trigger)
 
     def requirements(self) -> Requirements:
-        return Requirements.nothing()
+        return replace(Requirements.nothing(), raises_flags=frozenset({self.flag}))
 
 
 @final

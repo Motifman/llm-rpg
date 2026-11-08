@@ -22,6 +22,9 @@ class AlwaysHolds:
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         return None
 
+    def explains_failure(self) -> bool:
+        return True
+
 
 @final
 @dataclass(frozen=True)

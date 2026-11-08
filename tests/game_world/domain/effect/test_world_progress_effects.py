@@ -123,3 +123,15 @@ class TestStartAndCloseGroupDecisionEffect:
         CloseGroupDecisionEffect(_EXILE_VOTE).apply(world.facts(), world.aggregates(), _DUSK)
 
         assert not world.group_decision_of(_EXILE_VOTE).is_open()
+
+
+class TestWhichDecisionsAreClosed:
+    """集団の決定の効果が、どの決定を締めるかを requirements() で答えることを保証する。"""
+
+    def test_close_reports_the_decision_it_closes(self) -> None:
+        """CloseGroupDecisionEffect(追放の投票) は、締める決定として追放の投票だけを答える。"""
+        assert CloseGroupDecisionEffect(_EXILE_VOTE).requirements().closes_group_decisions == frozenset({_EXILE_VOTE})
+
+    def test_entering_a_stage_closes_nothing(self) -> None:
+        """EnterWorldStageEffect は決定を締めない。"""
+        assert EnterWorldStageEffect(stage=_NIGHT).requirements().closes_group_decisions == frozenset()

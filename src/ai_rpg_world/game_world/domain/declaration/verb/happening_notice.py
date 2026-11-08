@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import final
 
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
+from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.sight_texts_declaration import SightTextsDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
@@ -18,6 +19,9 @@ class SightAt:
     texts: SightTextsDeclaration
     salience: Salience
 
+    def requirements(self) -> Requirements:
+        return Requirements.nothing()
+
 
 @final
 @dataclass(frozen=True)
@@ -25,6 +29,9 @@ class SoundFrom:
     spot: SpotDeclaration
     sound: SoundDeclaration
     salience: Salience
+
+    def requirements(self) -> Requirements:
+        return Requirements.nothing()
 
 
 @final
@@ -34,11 +41,15 @@ class AnnouncementTo:
     text: TextWithUnassignedPeople
     salience: Salience
 
+    def requirements(self) -> Requirements:
+        return self.audience.requirements()
+
 
 @final
 @dataclass(frozen=True)
 class NoNotice:
-    pass
+    def requirements(self) -> Requirements:
+        return Requirements.nothing()
 
 
 HappeningNotice = SightAt | SoundFrom | AnnouncementTo
