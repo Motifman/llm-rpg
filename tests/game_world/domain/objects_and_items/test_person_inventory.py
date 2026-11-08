@@ -7,6 +7,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     InventoryFullException,
     ItemAlreadyCarriedException,
     ItemNotCarriedException,
+    NotEnoughItemsOfSpecException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items import (
     GoldEarnedEvent,
@@ -18,21 +19,29 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     ItemReceivedEvent,
     PersonInventory,
 )
-from ai_rpg_world.game_world.domain.value_object import Capacity, Gold, HandsNeeded, PersonId
+from ai_rpg_world.game_world.domain.value_object import Capacity, Count, Gold, HandsNeeded, ItemSpecId, PersonId
 
 _ALICE = PersonId("alice")
 _LANTERN = ItemInstanceId("lantern#1")
 _KNIFE = ItemInstanceId("knife#1")
 _ROPE = ItemInstanceId("rope#1")
 _PICKAXE = ItemInstanceId("pickaxe#1")
+_APPLE = ItemSpecId("apple")
+_APPLE_1 = ItemInstanceId("apple#1")
+_APPLE_2 = ItemInstanceId("apple#2")
+_APPLE_3 = ItemInstanceId("apple#3")
 _ONE_HAND = HandsNeeded(1)
 _TWO_HANDS = HandsNeeded(2)
+
+
+def _spec_of(item: ItemInstanceId) -> ItemSpecId:
+    return ItemSpecId(item.value.split("#")[0])
 
 
 def _inventory(*items: ItemInstanceId, capacity: int = 10) -> PersonInventory:
     inventory = PersonInventory(_ALICE, Capacity(capacity))
     for item in items:
-        inventory.receive(item)
+        inventory.receive(item, _spec_of(item))
     inventory.clear_events()
     return inventory
 
@@ -53,7 +62,7 @@ class TestPersonInventoryReceiveAndGiveUp:
         """receive した品物は荷に入り、手には無く、持ち主と品物を持つ ItemReceivedEvent がたまる。"""
         inventory = _inventory()
 
-        inventory.receive(_LANTERN)
+        inventory.receive(_LANTERN, _spec_of(_LANTERN))
 
         assert inventory.packed_items() == (_LANTERN,)
         assert inventory.held_items() == ()
@@ -66,7 +75,7 @@ class TestPersonInventoryReceiveAndGiveUp:
         inventory = _inventory(_LANTERN)
 
         with pytest.raises(ItemAlreadyCarriedException):
-            inventory.receive(_LANTERN)
+            inventory.receive(_LANTERN, _spec_of(_LANTERN))
 
         assert inventory.items() == (_LANTERN,)
         assert inventory.get_events() == []
@@ -77,7 +86,7 @@ class TestPersonInventoryReceiveAndGiveUp:
         inventory.hold(_LANTERN, _ONE_HAND)
         assert not inventory.is_full()
 
-        inventory.receive(_KNIFE)
+        inventory.receive(_KNIFE, _spec_of(_KNIFE))
 
         assert inventory.is_full()
 
@@ -86,7 +95,7 @@ class TestPersonInventoryReceiveAndGiveUp:
         inventory = _inventory(_LANTERN, _KNIFE, capacity=2)
 
         with pytest.raises(InventoryFullException):
-            inventory.receive(_ROPE)
+            inventory.receive(_ROPE, _spec_of(_ROPE))
 
         assert inventory.items() == (_LANTERN, _KNIFE)
         assert inventory.get_events() == []
@@ -300,4 +309,69 @@ class TestPersonInventoryGold:
         getattr(inventory, operation)(Gold(0))
 
         assert inventory.available_gold() == Gold(0)
+        assert inventory.get_events() == []
+
+
+class TestPersonInventoryItemsBySpec:
+    """PersonInventory が receive で覚えた品物の種類で、持っている数を数え、手放す品物を選ぶことを保証する。"""
+
+    def test_count_of_counts_received_items_of_the_spec(self) -> None:
+        """りんご 2 つとカンテラ 1 つを receive すると、count_of(りんご) は 2 を答える。"""
+        inventory = _inventory(_APPLE_1, _LANTERN, _APPLE_2)
+
+        assert inventory.count_of(_APPLE) == Count(2)
+
+    def test_count_of_includes_held_items(self) -> None:
+        """手に持ったりんごも count_of に数えられる。"""
+        inventory = _inventory(_APPLE_1, _APPLE_2)
+        inventory.hold(_APPLE_1, _ONE_HAND)
+
+        assert inventory.count_of(_APPLE) == Count(2)
+
+    def test_count_of_spec_never_received_is_zero(self) -> None:
+        """一度も受け取っていない種類の count_of は 0 を答える。"""
+        inventory = _inventory(_LANTERN)
+
+        assert inventory.count_of(_APPLE) == Count(0)
+
+    def test_given_up_item_is_no_longer_counted(self) -> None:
+        """りんごを 1 つ give_up すると、count_of(りんご) は 1 つ減る。"""
+        inventory = _inventory(_APPLE_1, _APPLE_2)
+
+        inventory.give_up(_APPLE_1)
+
+        assert inventory.count_of(_APPLE) == Count(1)
+
+    def test_items_to_give_up_takes_from_pack_first_then_hands(self) -> None:
+        """手にりんご 1 つ、荷にりんご 2 つのとき、items_to_give_up(りんご, 3) は荷の 2 つを先に、手の 1 つを最後に選ぶ。"""
+        inventory = _inventory(_APPLE_1, _APPLE_2, _APPLE_3)
+        inventory.hold(_APPLE_1, _ONE_HAND)
+
+        chosen = inventory.items_to_give_up(_APPLE, Count(3))
+
+        assert chosen == (_APPLE_2, _APPLE_3, _APPLE_1)
+
+    def test_items_to_give_up_leaves_held_items_when_pack_is_enough(self) -> None:
+        """荷のりんごで足りるとき、items_to_give_up は手のりんごを選ばない。"""
+        inventory = _inventory(_APPLE_1, _APPLE_2, _APPLE_3)
+        inventory.hold(_APPLE_1, _ONE_HAND)
+
+        chosen = inventory.items_to_give_up(_APPLE, Count(2))
+
+        assert chosen == (_APPLE_2, _APPLE_3)
+
+    def test_items_to_give_up_skips_other_specs(self) -> None:
+        """荷にカンテラが先に入っていても、items_to_give_up(りんご, 1) はりんごだけを選ぶ。"""
+        inventory = _inventory(_LANTERN, _APPLE_1)
+
+        assert inventory.items_to_give_up(_APPLE, Count(1)) == (_APPLE_1,)
+
+    def test_items_to_give_up_refuses_when_too_few_and_changes_nothing(self) -> None:
+        """りんごを 2 つしか持たないのに 3 つ求めると NotEnoughItemsOfSpecException を投げ、持ち物もイベントも変わらない。"""
+        inventory = _inventory(_APPLE_1, _APPLE_2)
+
+        with pytest.raises(NotEnoughItemsOfSpecException):
+            inventory.items_to_give_up(_APPLE, Count(3))
+
+        assert inventory.items() == (_APPLE_1, _APPLE_2)
         assert inventory.get_events() == []

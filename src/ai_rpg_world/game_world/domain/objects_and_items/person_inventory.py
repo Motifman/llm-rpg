@@ -10,9 +10,10 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     InventoryFullException,
     ItemAlreadyCarriedException,
     ItemNotCarriedException,
+    NotEnoughItemsOfSpecException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.value_object import Capacity, Gold, HandsNeeded, PersonId
+from ai_rpg_world.game_world.domain.value_object import Capacity, Count, Gold, HandsNeeded, ItemSpecId, PersonId
 
 _HANDS = 2
 
@@ -83,18 +84,20 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         self._capacity = capacity
         self._packed: list[ItemInstanceId] = []
         self._held: list[_HeldItem] = []
+        self._specs: dict[ItemInstanceId, ItemSpecId] = {}
         self._gold = Gold(0)
 
     @property
     def person_id(self) -> PersonId:
         return self._person_id
 
-    def receive(self, item: ItemInstanceId) -> None:
+    def receive(self, item: ItemInstanceId, spec: ItemSpecId) -> None:
         if self._carries(item):
             raise ItemAlreadyCarriedException(f"{self._person_id.value} already carries {item.value}")
         if self.is_full():
             raise InventoryFullException(f"{self._person_id.value} cannot carry more than {self._capacity.value} items")
         self._packed.append(item)
+        self._specs[item] = spec
         self.add_event(ItemReceivedEvent(**new_event_stamp(), person=self._person_id, item=item))
 
     def give_up(self, item: ItemInstanceId) -> None:
@@ -104,6 +107,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
             self._held = [held for held in self._held if held.item != item]
         else:
             self._packed.remove(item)
+        del self._specs[item]
         self.add_event(ItemGivenUpEvent(**new_event_stamp(), person=self._person_id, item=item, was_held=was_held))
 
     def hold(self, item: ItemInstanceId, hands_needed: HandsNeeded) -> None:
@@ -156,6 +160,20 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
 
     def available_gold(self) -> Gold:
         return self._gold
+
+    def count_of(self, spec: ItemSpecId) -> Count:
+        return Count(len(self._items_of(spec)))
+
+    def items_to_give_up(self, spec: ItemSpecId, count: Count) -> tuple[ItemInstanceId, ...]:
+        candidates = self._items_of(spec)
+        if len(candidates) < count.value:
+            raise NotEnoughItemsOfSpecException(
+                f"{self._person_id.value} carries {len(candidates)} of {spec.value}, cannot give up {count.value}"
+            )
+        return candidates[: count.value]
+
+    def _items_of(self, spec: ItemSpecId) -> tuple[ItemInstanceId, ...]:
+        return tuple(item for item in self.packed_items() + self.held_items() if self._specs[item] == spec)
 
     def _carries(self, item: ItemInstanceId) -> bool:
         return item in self._packed or self._is_held(item)

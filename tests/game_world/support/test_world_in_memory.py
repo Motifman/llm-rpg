@@ -305,9 +305,9 @@ class TestFactsSeeWhatAggregatesChanged:
         world = _world(items=(first, second, pear))
         inventory = world.aggregates().inventory(_ALICE)
 
-        inventory.receive(first.item_id)
-        inventory.receive(second.item_id)
-        inventory.receive(pear.item_id)
+        inventory.receive(first.item_id, first.spec_id)
+        inventory.receive(second.item_id, second.spec_id)
+        inventory.receive(pear.item_id, pear.spec_id)
 
         assert world.facts().item_count(_ALICE, _APPLE) == Count(2)
 
@@ -317,8 +317,8 @@ class TestFactsSeeWhatAggregatesChanged:
         pear = Item.come_into_world(ItemInstanceId("pear-1"), _PEAR, WorldTick(0))
         world = _world(items=(apple, pear))
         inventory = world.aggregates().inventory(_ALICE)
-        inventory.receive(apple.item_id)
-        inventory.receive(pear.item_id)
+        inventory.receive(apple.item_id, apple.spec_id)
+        inventory.receive(pear.item_id, pear.spec_id)
 
         inventory.hold(pear.item_id, HandsNeeded(1))
 
@@ -330,7 +330,7 @@ class TestFactsSeeWhatAggregatesChanged:
         apple = Item.come_into_world(ItemInstanceId("apple-1"), _APPLE, WorldTick(0))
         world = _world(items=(apple,))
 
-        world.aggregates().inventory(_ALICE).receive(apple.item_id)
+        world.aggregates().inventory(_ALICE).receive(apple.item_id, apple.spec_id)
 
         assert not world.facts().is_holding(_ALICE, _APPLE)
 
