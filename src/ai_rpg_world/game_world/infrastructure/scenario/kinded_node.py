@@ -32,7 +32,7 @@ class KindedNode:
 
 def split_kind(node: YamlNode, kinds: Collection[str], explains_failure: bool) -> KindedNode:
     if isinstance(node.value, str) and node.value in kinds:
-        return KindedNode(node.value, YamlNode(None, node.path / node.value), None)
+        return KindedNode(node.value, node.child(node.value, None), None)
     entries = dict(node.entries())
     failure_text = entries.pop(FAILURE_TEXT, None) if explains_failure else None
     written = sorted(entries)

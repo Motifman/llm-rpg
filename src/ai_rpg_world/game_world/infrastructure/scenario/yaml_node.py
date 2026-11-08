@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from typing import TypeVar, final
@@ -11,16 +11,18 @@ from ai_rpg_world.game_world.domain.exception.world_design_exception import (
     UnknownNameFlaw,
     WorldDesignFlawsException,
 )
-from ai_rpg_world.game_world.infrastructure.scenario.scenario_layout import YamlPath
+from ai_rpg_world.game_world.infrastructure.scenario.scenario_layout import Step, YamlPath
+from ai_rpg_world.game_world.infrastructure.scenario.scenario_origins import ScenarioOrigins
 
 _Built = TypeVar("_Built")
 _Enum = TypeVar("_Enum", bound=Enum)
 
 
 class Unreadable(Exception):
-    def __init__(self, flaw: DesignFlaw) -> None:
-        self.flaw = flaw
-        super().__init__(str(flaw))
+    def __init__(self, written_at: YamlPath, reason: str) -> None:
+        self.written_at = written_at
+        self.flaw = DesignFlaw(written_at.location(), reason)
+        super().__init__(str(self.flaw))
 
 
 class ReferencesUnreadable(Exception):
@@ -32,9 +34,20 @@ class ReferencesUnreadable(Exception):
 class YamlNode:
     value: object
     path: YamlPath
+    source: YamlPath | None = None
+    child_sources: Mapping[str, YamlPath] | None = None
+
+    def written_at(self) -> YamlPath:
+        return self.path if self.source is None else self.source
+
+    def child(self, key: Step, value: object) -> YamlNode:
+        sources = self.child_sources or {}
+        if isinstance(key, str) and key in sources:
+            return YamlNode(value, self.path / key, sources[key])
+        return YamlNode(value, self.path / key, None if self.source is None else self.source / key)
 
     def unreadable(self, reason: str) -> Unreadable:
-        return Unreadable(DesignFlaw(self.path.location(), reason))
+        return Unreadable(self.written_at(), reason)
 
     def build(self, construct: Callable[[], _Built]) -> _Built:
         try:
@@ -51,18 +64,16 @@ class YamlNode:
         mapping = self._mapping()
         for key in mapping:
             if key not in allowed:
-                raise YamlNode(None, self.path / key).unreadable(
-                    f"unknown field {key!r}; the fields are {sorted(allowed)}"
-                )
+                raise self.child(key, None).unreadable(f"unknown field {key!r}; the fields are {sorted(allowed)}")
         return YamlFields(self, mapping)
 
     def entries(self) -> list[tuple[str, YamlNode]]:
-        return [(key, YamlNode(value, self.path / key)) for key, value in self._mapping().items()]
+        return [(key, self.child(key, value)) for key, value in self._mapping().items()]
 
     def items(self) -> list[YamlNode]:
         if not isinstance(self.value, list):
             raise self.unreadable(f"expected a list, got {self.value!r}")
-        return [YamlNode(item, self.path / index) for index, item in enumerate(self.value)]
+        return [self.child(index, item) for index, item in enumerate(self.value)]
 
     def text(self) -> str:
         if not isinstance(self.value, str):
@@ -107,19 +118,16 @@ class YamlFields:
 
     def required(self, key: str) -> YamlNode:
         if key not in self._mapping:
-            raise YamlNode(None, self.node.path / key).unreadable(f"field {key!r} is required")
-        return YamlNode(self._mapping[key], self.node.path / key)
+            raise self.node.child(key, None).unreadable(f"field {key!r} is required")
+        return self.node.child(key, self._mapping[key])
 
     def optional(self, key: str) -> YamlNode | None:
         if key not in self._mapping:
             return None
-        return YamlNode(self._mapping[key], self.node.path / key)
+        return self.node.child(key, self._mapping[key])
 
     def nested(self, key: str) -> YamlNode:
-        return YamlNode(self._mapping.get(key, {}), self.node.path / key)
-
-    def nested_or_null(self, key: str) -> YamlNode:
-        return YamlNode(self._mapping.get(key), self.node.path / key)
+        return self.node.child(key, self._mapping.get(key, {}))
 
     def has(self, key: str) -> bool:
         return key in self._mapping
@@ -127,7 +135,8 @@ class YamlFields:
 
 @final
 class FlawCollector:
-    def __init__(self) -> None:
+    def __init__(self, origins: ScenarioOrigins) -> None:
+        self._origins = origins
         self._flaws: list[DesignFlaw] = []
 
     @property
@@ -138,7 +147,7 @@ class FlawCollector:
         try:
             return read()
         except Unreadable as unreadable:
-            self.record((unreadable.flaw,))
+            self.record((DesignFlaw(self._origins.locate(unreadable.written_at), unreadable.flaw.reason),))
         except UnknownNameFlaw as unknown:
             self.record((unknown.flaw,))
         except WorldDesignFlawsException as flawed:
@@ -148,4 +157,7 @@ class FlawCollector:
         return None
 
     def record(self, flaws: tuple[DesignFlaw, ...]) -> None:
-        self._flaws.extend(flaw for flaw in flaws if flaw not in self._flaws)
+        for flaw in flaws:
+            located = self._origins.located(flaw)
+            if located not in self._flaws:
+                self._flaws.append(located)

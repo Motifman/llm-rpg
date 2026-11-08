@@ -40,7 +40,7 @@ DEFAULTED_KINDS = frozenset(
 
 class ScenarioDefaults:
     def __init__(self, node: YamlNode) -> None:
-        self._by_kind: dict[str, dict[object, object]] = {}
+        self._by_kind: dict[str, YamlNode] = {}
         if node.is_null():
             return
         for kind, values in node.entries():
@@ -48,10 +48,12 @@ class ScenarioDefaults:
                 raise values.unreadable(f"unknown kind {kind!r}; the kinds are {sorted(DEFAULTED_KINDS)}")
             if not isinstance(values.value, dict):
                 raise values.unreadable(f"expected a mapping, got {values.value!r}")
-            self._by_kind[kind] = values.value
+            self._by_kind[kind] = values
 
     def fill(self, kind: str, node: YamlNode) -> YamlNode:
         defaults = self._by_kind.get(kind)
-        if defaults is None or not isinstance(node.value, dict):
+        if defaults is None or not isinstance(node.value, dict) or not isinstance(defaults.value, dict):
             return node
-        return YamlNode({**defaults, **node.value}, node.path)
+        filled = {key: value for key, value in defaults.value.items() if key not in node.value}
+        sources = {str(key): defaults.child(str(key), value).written_at() for key, value in filled.items()}
+        return YamlNode({**filled, **node.value}, node.path, node.source, {**(node.child_sources or {}), **sources})

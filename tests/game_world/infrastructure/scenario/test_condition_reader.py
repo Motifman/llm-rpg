@@ -14,6 +14,7 @@ from ai_rpg_world.game_world.domain.value_object import Count, DescriptionText, 
 from ai_rpg_world.game_world.infrastructure.scenario.condition_reader import ConditionReader
 from ai_rpg_world.game_world.infrastructure.scenario.declared_names import DeclaredNames
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_layout import YamlPath
+from ai_rpg_world.game_world.infrastructure.scenario.scenario_origins import ScenarioOrigins
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_document import read_yaml_document
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import Unreadable, YamlNode
 from tests.game_world.support.world_design_for_tests import character, item_spec, nouns, section, spot
@@ -31,7 +32,7 @@ AT = YamlPath.root() / "spots" / "lift_landing" / "objects" / "lift_panel" / "in
 
 
 def _read(text: str) -> object:
-    reader = ConditionReader(DeclaredNames(NOUNS, frozenset()))
+    reader = ConditionReader(DeclaredNames(NOUNS, frozenset(), ScenarioOrigins()))
     return reader.read(YamlNode(read_yaml_document(text).value, AT / "precondition"))
 
 

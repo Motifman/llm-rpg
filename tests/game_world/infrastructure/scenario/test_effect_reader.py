@@ -19,6 +19,7 @@ from ai_rpg_world.game_world.infrastructure.scenario.condition_reader import Con
 from ai_rpg_world.game_world.infrastructure.scenario.declared_names import DeclaredNames
 from ai_rpg_world.game_world.infrastructure.scenario.effect_reader import EffectReader
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_layout import YamlPath
+from ai_rpg_world.game_world.infrastructure.scenario.scenario_origins import ScenarioOrigins
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_document import read_yaml_document
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import Unreadable, YamlNode
 from tests.game_world.support.world_design_for_tests import group_decision, nouns, spot
@@ -31,7 +32,7 @@ EVERYONE_ALIVE = PeopleSelection(where=IsAliveCondition(who=EachPerson(), failur
 
 
 def _reader() -> EffectReader:
-    names = DeclaredNames(NOUNS, frozenset())
+    names = DeclaredNames(NOUNS, frozenset(), ScenarioOrigins())
     conditions = ConditionReader(names)
 
     def voters_and_choices(decision: YamlNode) -> tuple[PeopleSelection, PeopleSelection]:

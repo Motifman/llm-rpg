@@ -20,6 +20,7 @@ from ai_rpg_world.game_world.infrastructure.scenario.condition_reader import Con
 from ai_rpg_world.game_world.infrastructure.scenario.declared_names import DeclaredNames
 from ai_rpg_world.game_world.infrastructure.scenario.kinded_node import split_kind
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import ScenarioDefaults
+from ai_rpg_world.game_world.infrastructure.scenario.scenario_origins import ScenarioOrigins
 from ai_rpg_world.game_world.infrastructure.scenario.value_readers import people_text, salience
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import YamlFields, YamlNode
 
@@ -38,7 +39,9 @@ class PerceptionReader:
         names: DeclaredNames,
         conditions: ConditionReader,
         warnings: list[DesignWarning],
+        origins: ScenarioOrigins,
     ) -> None:
+        self._origins = origins
         self._defaults = defaults
         self._perception_defaults = perception_defaults
         self._names = names
@@ -115,7 +118,10 @@ class PerceptionReader:
         if default is None:
             return fields.required(field)
         self._warnings.append(
-            DesignWarning((fields.node.path / field).location(), f"{field} is not written; the default text is used")
+            DesignWarning(
+                self._origins.locate(fields.node.child(field, None).written_at()),
+                f"{field} is not written; the default text is used",
+            )
         )
         return default
 

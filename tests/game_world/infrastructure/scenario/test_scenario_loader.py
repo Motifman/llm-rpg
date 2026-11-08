@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
-from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoDayNight, NoWeather
+from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, ScenarioFile
 from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.value_object import (
@@ -110,7 +111,14 @@ happenings:
             effect: { set_outcome: { who: each_person, outcome: stranded } }
 ending:
   ends_when: all_outcomes_decided
+time:
+  day_night: null
+  weather: null
 """
+
+
+def _mine(declaration: str, name: str, field: str) -> DesignLocation:
+    return DesignLocation(declaration, name, field).in_file(ScenarioFile("mine.yaml"))
 
 
 def _scenario(tmp_path: Path, text: str) -> Path:
@@ -176,8 +184,8 @@ class TestLoadingTheLiftLanding:
         """籠の出入りに音の文を書かないと、共通の部品の既定の文で埋め、その場所の DesignWarning を残す。"""
         loaded = _load(tmp_path)
 
-        assert DesignLocation("section", "cage", "access.perceived_as.sound") in [
-            warning.location for warning in loaded.warnings()
+        assert _mine("section", "cage", "access.perceived_as.sound") in [
+            warning.location for warning in loaded.warnings
         ]
 
 
@@ -204,9 +212,7 @@ class TestFlawsWhileLoading:
             "    condition: { flag_is_raised: lift_departed, is_down: actor }\n",
         )
 
-        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
-            DesignLocation("happening", "lift_leaves", "condition")
-        ]
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [_mine("happening", "lift_leaves", "condition")]
 
     def test_three_mistakes_are_all_collected(self, tmp_path: Path) -> None:
         """綴り違いの列挙、知らない種類、宣言の無い品物の 3 か所を書き間違えると、3 つとも集めて 1 つの例外で投げる。"""
@@ -218,9 +224,9 @@ class TestFlawsWhileLoading:
 
         assert sorted(str(flaw.location) for flaw in _flaws(tmp_path, text)) == sorted(
             [
-                str(DesignLocation("spot", "shaft_head", "atmosphere.lighting")),
-                str(DesignLocation("object", "lift_panel", "interactions.start_lift.effect.raise_flags")),
-                str(DesignLocation("character", "haru", "initial_items[0]")),
+                str(_mine("spot", "shaft_head", "atmosphere.lighting")),
+                str(_mine("object", "lift_panel", "interactions.start_lift.effect.raise_flags")),
+                str(_mine("character", "haru", "initial_items[0]")),
             ]
         )
 
@@ -229,20 +235,20 @@ class TestFlawsWhileLoading:
         text = _LIFT_LANDING.replace("            success_text: 籠が大きく揺れ、ゆっくりと縦穴を上がりはじめた。\n", "")
 
         assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
-            DesignLocation("object", "lift_panel", "interactions.start_lift.success_text")
+            _mine("object", "lift_panel", "interactions.start_lift.success_text")
         ]
 
     def test_duplicated_key_is_a_flaw(self, tmp_path: Path) -> None:
         """同じ名前の場所を 2 回書くと、その場所の DesignFlaw になる。"""
         text = _LIFT_LANDING.replace("  shaft_head:\n", "  lift_landing:\n    name: もう一つ\n  shaft_head:\n", 1)
 
-        assert DesignLocation("spot", "lift_landing", "") in [flaw.location for flaw in _flaws(tmp_path, text)]
+        assert _mine("spot", "lift_landing", "") in [flaw.location for flaw in _flaws(tmp_path, text)]
 
     def test_unknown_field_is_a_flaw(self, tmp_path: Path) -> None:
         """宣言に無い欄 (綴り違いの descripton) を書くと、その欄の場所を付けた DesignFlaw になる。"""
         text = _LIFT_LANDING.replace("description: 縦穴の上の小屋。", "descripton: 縦穴の上の小屋。")
 
-        assert DesignLocation("spot", "shaft_head", "descripton") in [flaw.location for flaw in _flaws(tmp_path, text)]
+        assert _mine("spot", "shaft_head", "descripton") in [flaw.location for flaw in _flaws(tmp_path, text)]
 
 
 class TestBrokenShapesStayDesignFlaws:
@@ -251,8 +257,8 @@ class TestBrokenShapesStayDesignFlaws:
     @pytest.mark.parametrize(
         ("broken", "location"),
         [
-            ("spots:\n", DesignLocation("world", "world", "spots")),
-            ("groupings: [team]\n", DesignLocation("world", "world", "groupings")),
+            ("spots:\n", _mine("world", "world", "spots")),
+            ("groupings: [team]\n", _mine("world", "world", "groupings")),
         ],
     )
     def test_top_level_map_that_is_not_a_map_is_a_flaw(
@@ -262,7 +268,8 @@ class TestBrokenShapesStayDesignFlaws:
         text = (
             "includes: [common.yaml]\n"
             "introduction: { text: 目覚めた。, objective: 出る。 }\n"
-            "ending: { ends_when: all_outcomes_decided }\n" + broken
+            "ending: { ends_when: all_outcomes_decided }\n"
+            "time: { day_night: null, weather: null }\n" + broken
         )
 
         assert [flaw.location for flaw in _flaws(tmp_path, text)] == [location]
@@ -273,7 +280,7 @@ class TestBrokenShapesStayDesignFlaws:
             "    atmosphere: { lighting: bright }\n", "    atmosphere: { lighting: bright }\n    objects:\n"
         )
 
-        assert DesignLocation("spot", "shaft_head", "objects") in [flaw.location for flaw in _flaws(tmp_path, text)]
+        assert _mine("spot", "shaft_head", "objects") in [flaw.location for flaw in _flaws(tmp_path, text)]
 
     def test_recursive_anchor_is_a_flaw(self, tmp_path: Path) -> None:
         """自分を含むアンカー (&a [*a]) を書くと、無限に辿らず DesignFlaw になる。"""
@@ -288,7 +295,7 @@ class TestBrokenShapesStayDesignFlaws:
             "  lift_departed: { meaning: 籠が上がった }\n  1: { meaning: 数 }\n",
         )
 
-        assert DesignLocation("world", "world", "flags") in [flaw.location for flaw in _flaws(tmp_path, text)]
+        assert _mine("world", "world", "flags") in [flaw.location for flaw in _flaws(tmp_path, text)]
 
     def test_target_text_on_object_interaction_is_a_flaw(self, tmp_path: Path) -> None:
         """相手のいない物の操作に、された人の文 target を書くと、誰にも届かない文として DesignFlaw になる。"""
@@ -299,14 +306,14 @@ class TestBrokenShapesStayDesignFlaws:
         )
 
         assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
-            DesignLocation("object", "lift_panel", "interactions.start_lift.perceived_as.target")
+            _mine("object", "lift_panel", "interactions.start_lift.perceived_as.target")
         ]
 
     def test_same_flaw_is_reported_once(self, tmp_path: Path) -> None:
         """場所に知らない欄を 1 つ書くと、名詞と動詞の両方で読んでも誤りは 1 つだけ出る。"""
         text = _LIFT_LANDING.replace("description: 縦穴の上の小屋。", "description: 縦穴の上の小屋。\n    foo: 1")
 
-        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [DesignLocation("spot", "shaft_head", "foo")]
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [_mine("spot", "shaft_head", "foo")]
 
     def test_include_not_in_utf8_is_a_flaw_at_its_place(self, tmp_path: Path) -> None:
         """UTF-8 でない共通の部品は、includes のその位置の DesignFlaw になる。"""
@@ -318,7 +325,7 @@ class TestBrokenShapesStayDesignFlaws:
         with pytest.raises(WorldDesignFlawsException) as raised:
             load_scenario(path)
 
-        assert [flaw.location for flaw in raised.value.flaws] == [DesignLocation("world", "world", "includes[1]")]
+        assert [flaw.location for flaw in raised.value.flaws] == [_mine("world", "world", "includes[1]")]
 
 
 class TestSkippingWhatPointsAtUnreadable:
@@ -328,16 +335,14 @@ class TestSkippingWhatPointsAtUnreadable:
         """旗 lift_departed の意味に数を書くと、旗の誤りだけが 1 件出て、その旗を見る出来事や操作の「宣言が無い」は出ない。"""
         text = _LIFT_LANDING.replace("lift_departed: { meaning: 籠が上がった }", "lift_departed: { meaning: 5 }")
 
-        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
-            DesignLocation("flag", "lift_departed", "meaning")
-        ]
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [_mine("flag", "lift_departed", "meaning")]
 
     def test_passage_pointing_at_unreadable_spot_is_left_out_without_its_own_flaw(self, tmp_path: Path) -> None:
         """縦穴の上の明るさを綴り違えると、その場所の誤りだけが出て、そこへ続く梯子の「場所が無い」は出ない。"""
         text = _LIFT_LANDING.replace("lighting: bright", "lighting: brigth")
 
         assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
-            DesignLocation("spot", "shaft_head", "atmosphere.lighting")
+            _mine("spot", "shaft_head", "atmosphere.lighting")
         ]
 
     def test_written_states_are_not_mixed_with_default_open(self, tmp_path: Path) -> None:
@@ -354,6 +359,157 @@ class TestSkippingWhatPointsAtUnreadable:
         ladder = _load(tmp_path, text).design.nouns.passage("ladder", DesignLocation("passage", "ladder", ""))
 
         assert [state.name.value for state in ladder.states] == ["shut"]
+
+
+class TestTimeMustBeWritten:
+    """天候と昼夜は「無い」ことも null で書かせ、書き忘れを「無い」として通さないことを保証する。"""
+
+    def test_null_weather_and_day_night_mean_none(self, tmp_path: Path) -> None:
+        """weather: null と day_night: null を書けば、天候も昼夜も無い世界になる。"""
+        design = _load(tmp_path).design
+
+        assert (design.weather, design.day_night) == (NoWeather(), NoDayNight())
+
+    @pytest.mark.parametrize(
+        ("written", "missing"),
+        [
+            ("time:\n  day_night: null\n  weather: null\n", None),
+            ("time:\n  day_night: null\n", "time.weather"),
+            ("time:\n  weather: null\n", "time.day_night"),
+        ],
+    )
+    def test_forgetting_weather_or_day_night_is_a_flaw(self, tmp_path: Path, written: str, missing: str | None) -> None:
+        """time: を書かないか、その中の weather か day_night を書き忘れると、その欄の場所の DesignFlaw になる。"""
+        text = (
+            _LIFT_LANDING.replace(written, "")
+            if missing is None
+            else _LIFT_LANDING.replace("time:\n  day_night: null\n  weather: null\n", written)
+        )
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [_mine("world", "world", missing or "time")]
+
+
+class TestFlawsNameTheirFile:
+    """誤りの場所が、シナリオか、取り込んだどの共通の部品かを持ち、文にもファイルの名前が出ることを保証する。"""
+
+    def test_mistake_inside_include_names_the_include(self, tmp_path: Path) -> None:
+        """共通の部品の規則の疲れの上限に文を書くと、その誤りは共通の部品 common.yaml の場所になり、文の先頭に common.yaml が付く。"""
+        path = _scenario(tmp_path, _LIFT_LANDING)
+        common = tmp_path / "common.yaml"
+        common.write_text(
+            common.read_text(encoding="utf-8").replace(
+                "limit: 100\n    levels: [{ starts_at: 0, name: 元気 }]",
+                "limit: たくさん\n    levels: [{ starts_at: 0, name: 元気 }]",
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(WorldDesignFlawsException) as raised:
+            load_scenario(path)
+
+        (flaw,) = raised.value.flaws
+        assert flaw.location == DesignLocation("world", "world", "rules.fatigue.limit").in_file(
+            ScenarioFile("common.yaml")
+        )
+        assert str(flaw).startswith("common.yaml: ")
+
+    def test_field_the_scenario_overrides_names_the_scenario(self, tmp_path: Path) -> None:
+        """シナリオが共通の部品の疲れの上限だけを書き換えて間違えると、その誤りはシナリオ mine.yaml の場所になる。"""
+        text = _LIFT_LANDING + "rules:\n  fatigue:\n    limit: たくさん\n"
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [_mine("world", "world", "rules.fatigue.limit")]
+
+    def test_mistake_in_a_filled_default_names_the_defaults(self, tmp_path: Path) -> None:
+        """共通の部品の defaults.flag の initially_raised を文にすると、その既定で埋めた旗の誤りは、旗ではなく common.yaml の defaults の場所になる。"""
+        path = _scenario(tmp_path, _LIFT_LANDING)
+        common = tmp_path / "common.yaml"
+        common.write_text(
+            common.read_text(encoding="utf-8").replace(
+                "flag: { initially_raised: false }", "flag: { initially_raised: いいえ }"
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(WorldDesignFlawsException) as raised:
+            load_scenario(path)
+
+        assert [flaw.location for flaw in raised.value.flaws] == [
+            DesignLocation("world", "world", "defaults.flag.initially_raised").in_file(ScenarioFile("common.yaml"))
+        ]
+
+    def test_flaw_found_by_compose_names_the_file_of_its_declaration(self, tmp_path: Path) -> None:
+        """宣言の無い出来事を読む出来事 rumble の誤りは compose が見つけ、rumble を書いたシナリオ mine.yaml の場所になる。"""
+        text = _LIFT_LANDING.replace(
+            "happenings:\n",
+            "happenings:\n"
+            "  rumble:\n"
+            "    condition: { happening_has_fired: landslide }\n"
+            "    once: true\n"
+            "    effect: no_effect\n",
+        )
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [_mine("happening", "rumble", "condition")]
+
+
+class TestFilesAcrossSeveralIncludes:
+    """宣言を共通の部品とシナリオに分けて書いたときも、誤りがそれを書いたファイルを指すことを保証する。"""
+
+    def test_missing_field_in_a_replaced_list_names_the_scenario(self, tmp_path: Path) -> None:
+        """シナリオが疲れの段階の一覧を置き換え、その中の starts_at を書き忘れると、共通の部品ではなく mine.yaml を指す。"""
+        text = _LIFT_LANDING + "rules:\n  fatigue:\n    levels: [{ name: 元気 }]\n"
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
+            _mine("world", "world", "rules.fatigue.levels[0].starts_at")
+        ]
+
+    def test_compose_flaw_in_an_included_interaction_names_that_include(self, tmp_path: Path) -> None:
+        """parts.yaml に書いた操作の前提が宣言の無い出来事を読むと、シナリオが同じ物の説明だけを書き換えていても、誤りは parts.yaml を指す。"""
+        parts = (
+            "happenings:\n"
+            "  rumble:\n"
+            "    condition: { tick_at_least: 1 }\n"
+            "    once: true\n"
+            "    effect: no_effect\n"
+            "spots:\n"
+            "  lift_landing:\n"
+            "    objects:\n"
+            "      lift_panel:\n"
+            "        interactions:\n"
+            "          start_lift:\n"
+            "            precondition: { happening_has_fired: ghost, failure_text: 動かない。 }\n"
+        )
+        text = _LIFT_LANDING.replace("includes: [common.yaml]", "includes: [common.yaml, parts.yaml]").replace(
+            "            precondition:\n"
+            "              all_of:\n"
+            "                - not: { flag_is_raised: lift_departed }\n"
+            "                  failure_text: 籠はもう上がってしまった。\n"
+            "                - has_item: { who: actor, item_spec: lift_key, count: 1 }\n"
+            "                  failure_text: 鍵穴に合う鍵を持っていない。\n"
+            "                - flag_is_raised: generator_running\n"
+            "              failure_text: 昇降機は動かない。\n",
+            "",
+        )
+        path = _scenario(tmp_path, text)
+        (tmp_path / "parts.yaml").write_text(parts, encoding="utf-8")
+
+        with pytest.raises(WorldDesignFlawsException) as raised:
+            load_scenario(path)
+
+        assert [flaw.location.file for flaw in raised.value.flaws] == [ScenarioFile("parts.yaml")]
+
+    def test_compose_warning_names_the_file_of_its_declaration(self, tmp_path: Path) -> None:
+        """立てるだけで誰も見ない旗 bell の警告は、bell を宣言したシナリオ mine.yaml を指す。"""
+        text = _LIFT_LANDING.replace(
+            "  lift_departed: { meaning: 籠が上がった }\n",
+            "  lift_departed: { meaning: 籠が上がった }\n  bell: { meaning: 鐘が鳴った }\n",
+        ).replace(
+            "              raise_flag: lift_departed\n",
+            "              sequence: [{ raise_flag: lift_departed }, { raise_flag: bell }]\n",
+        )
+
+        warnings = _load(tmp_path, text).warnings
+
+        assert _mine("flag", "bell", "flag_id") in [warning.location for warning in warnings]
 
 
 class TestFormatDocumentExamples:

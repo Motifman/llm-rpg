@@ -21,6 +21,7 @@ from ai_rpg_world.game_world.infrastructure.scenario.noun_reader import NounRead
 from ai_rpg_world.game_world.infrastructure.scenario.perception_reader import PerceptionReader
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import ScenarioDefaults
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_layout import YamlPath
+from ai_rpg_world.game_world.infrastructure.scenario.scenario_origins import ScenarioOrigins
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_source import read_scenario_source
 from ai_rpg_world.game_world.infrastructure.scenario.verb_reader import VerbReader
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import FlawCollector, Unreadable, YamlFields, YamlNode
@@ -56,25 +57,22 @@ _TOP_FIELDS = (
 class LoadedScenario:
     design: WorldDesign
     beings: Mapping[PersonId, Mapping[str, object]]
-    loading_warnings: tuple[DesignWarning, ...]
-
-    def warnings(self) -> tuple[DesignWarning, ...]:
-        return (*self.loading_warnings, *self.design.warnings())
+    warnings: tuple[DesignWarning, ...]
 
 
 def load_scenario(scenario: Path) -> LoadedScenario:
     source = read_scenario_source(scenario)
     if source.flaws:
         raise WorldDesignFlawsException(source.flaws)
-    collector = FlawCollector()
+    collector = FlawCollector(source.origins)
     try:
-        return _loaded(source.value, collector)
+        return _loaded(source.value, source.origins, collector)
     except Unreadable as unreadable:
         collector.record((unreadable.flaw,))
         raise WorldDesignFlawsException(collector.flaws) from unreadable
 
 
-def _loaded(value: object, collector: FlawCollector) -> LoadedScenario:
+def _loaded(value: object, origins: ScenarioOrigins, collector: FlawCollector) -> LoadedScenario:
     root = YamlNode(value, YamlPath.root())
     fields = collector.attempt(lambda: root.fields(*_TOP_FIELDS))
     if fields is None:
@@ -86,12 +84,12 @@ def _loaded(value: object, collector: FlawCollector) -> LoadedScenario:
     nouns = _declared_nouns(read_nouns, collector)
     if nouns is None:
         raise WorldDesignFlawsException(collector.flaws)
-    loading = _ScenarioLoading(fields, defaults, read_nouns, nouns, collector)
+    loading = _ScenarioLoading(fields, defaults, read_nouns, nouns, origins, collector)
     design = loading.compose()
     return LoadedScenario(
         design=design,
         beings=MappingProxyType({person: MappingProxyType(being) for person, being in read_nouns.beings.items()}),
-        loading_warnings=tuple(loading.warnings),
+        warnings=(*loading.warnings, *(origins.located_warning(warning) for warning in design.warnings())),
     )
 
 
@@ -113,14 +111,16 @@ class _ScenarioLoading:
         defaults: ScenarioDefaults,
         read_nouns: ReadNouns,
         nouns: DeclaredNouns,
+        origins: ScenarioOrigins,
         collector: FlawCollector,
     ) -> None:
+        self._origins = origins
         self._fields = fields
         self._defaults = defaults
         self._nouns = nouns
         self._collector = collector
         self.warnings: list[DesignWarning] = []
-        names = DeclaredNames(nouns, frozenset(read_nouns.unreadable))
+        names = DeclaredNames(nouns, frozenset(read_nouns.unreadable), origins)
         self._names = names
         self._conditions = ConditionReader(names)
         self._effects = EffectReader(
@@ -129,15 +129,14 @@ class _ScenarioLoading:
             lambda decision: self._verbs.voters_and_choices(decision, fields.nested("group_decisions")),
         )
         self._perceptions = PerceptionReader(
-            defaults, fields.nested("perception_defaults"), names, self._conditions, self.warnings
+            defaults, fields.nested("perception_defaults"), names, self._conditions, self.warnings, origins
         )
         self._verbs = VerbReader(defaults, names, self._conditions, self._effects, self._perceptions, collector)
 
     def compose(self) -> WorldDesign:
         verbs = self._verbs.read(self._fields)
         collector = self._collector
-        time = self._fields.nested("time")
-        time_fields = collector.attempt(lambda: time.fields("day_night", "weather"))
+        time_fields = collector.attempt(lambda: self._fields.required("time").fields("day_night", "weather"))
         rules = collector.attempt(lambda: world_reader.world_rules(self._fields.required("rules")))
         refusal_texts = collector.attempt(lambda: world_reader.refusal_texts(self._fields.required("refusal_texts")))
         built_in = collector.attempt(
@@ -151,14 +150,12 @@ class _ScenarioLoading:
         day_night = (
             None
             if time_fields is None
-            else collector.attempt(
-                lambda: world_reader.day_night(time_fields.nested_or_null("day_night"), self._defaults)
-            )
+            else collector.attempt(lambda: world_reader.day_night(time_fields.required("day_night"), self._defaults))
         )
         weather = (
             None
             if time_fields is None
-            else collector.attempt(lambda: world_reader.weather(time_fields.nested_or_null("weather"), self._defaults))
+            else collector.attempt(lambda: world_reader.weather(time_fields.required("weather"), self._defaults))
         )
         if (
             collector.flaws
@@ -172,29 +169,32 @@ class _ScenarioLoading:
             or weather is None
         ):
             raise WorldDesignFlawsException(collector.flaws)
-        return WorldDesign.compose(
-            nouns=self._nouns,
-            object_interactions=verbs.object_interactions,
-            item_interactions=verbs.item_interactions,
-            item_uses=verbs.item_uses,
-            section_accesses=verbs.section_accesses,
-            passage_traversals=verbs.passage_traversals,
-            world_stage_effects=verbs.world_stage_effects,
-            group_decision_rules=verbs.group_decision_rules,
-            happenings=verbs.happenings,
-            reactions=verbs.reactions,
-            discoverables=verbs.discoverables,
-            joint_actions=verbs.joint_actions,
-            person_interactions=verbs.person_interactions,
-            ending=ending,
-            world_rules=rules,
-            refusal_texts=refusal_texts,
-            built_in_action_perceptions=built_in,
-            weather=weather,
-            day_night=day_night,
-            initial_stage=initial_stage,
-            introduction=introduction,
-        )
+        try:
+            return WorldDesign.compose(
+                nouns=self._nouns,
+                object_interactions=verbs.object_interactions,
+                item_interactions=verbs.item_interactions,
+                item_uses=verbs.item_uses,
+                section_accesses=verbs.section_accesses,
+                passage_traversals=verbs.passage_traversals,
+                world_stage_effects=verbs.world_stage_effects,
+                group_decision_rules=verbs.group_decision_rules,
+                happenings=verbs.happenings,
+                reactions=verbs.reactions,
+                discoverables=verbs.discoverables,
+                joint_actions=verbs.joint_actions,
+                person_interactions=verbs.person_interactions,
+                ending=ending,
+                world_rules=rules,
+                refusal_texts=refusal_texts,
+                built_in_action_perceptions=built_in,
+                weather=weather,
+                day_night=day_night,
+                initial_stage=initial_stage,
+                introduction=introduction,
+            )
+        except WorldDesignFlawsException as flawed:
+            raise WorldDesignFlawsException(self._origins.located(flaw) for flaw in flawed.flaws) from flawed
 
     def _initial_stage(self) -> WorldStageDeclaration | NoWorldStages:
         initial = self._fields.optional("initial_stage")

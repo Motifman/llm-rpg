@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.value_object import Count, StateKeyId
 from ai_rpg_world.game_world.infrastructure.scenario.noun_reader import NounReader, ReadNouns
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import ScenarioDefaults
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_layout import YamlPath
+from ai_rpg_world.game_world.infrastructure.scenario.scenario_origins import ScenarioOrigins
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_document import read_yaml_document
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import FlawCollector, YamlNode
 
@@ -30,7 +31,7 @@ defaults:
 def _read(text: str) -> tuple[ReadNouns, FlawCollector]:
     root = YamlNode(read_yaml_document(_DEFAULTS + text).value, YamlPath.root())
     fields = root.fields("defaults", "spots", "item_specs", "passages")
-    collector = FlawCollector()
+    collector = FlawCollector(ScenarioOrigins())
     return NounReader(ScenarioDefaults(fields.nested("defaults")), collector).read(fields), collector
 
 

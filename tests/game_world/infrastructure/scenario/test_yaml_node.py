@@ -7,6 +7,7 @@ import pytest
 from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
 from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueOutOfRangeException
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_layout import YamlPath
+from ai_rpg_world.game_world.infrastructure.scenario.scenario_origins import ScenarioOrigins
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import FlawCollector, Unreadable, YamlNode
 
 
@@ -79,7 +80,7 @@ class TestFlawCollector:
 
     def test_collects_every_unreadable_and_keeps_readable_results(self) -> None:
         """読めない宣言が 2 つあっても止まらず、2 つの誤りを集め、読めた宣言だけを返す。"""
-        collector = FlawCollector()
+        collector = FlawCollector(ScenarioOrigins())
         results = [
             collector.attempt(lambda: _node({}).fields("name").required("name")),
             collector.attempt(lambda: "読めた"),

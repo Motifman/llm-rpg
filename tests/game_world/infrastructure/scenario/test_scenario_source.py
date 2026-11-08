@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
+from ai_rpg_world.game_world.domain.design_flaw import DesignLocation, ScenarioFile
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_source import read_scenario_source
 
 
@@ -56,15 +56,16 @@ class TestIncludes:
         scenario = _write(tmp_path, "mine.yaml", "includes: [nowhere.yaml]\n")
 
         assert [flaw.location for flaw in read_scenario_source(scenario).flaws] == [
-            DesignLocation("world", "world", "includes[0]")
+            DesignLocation("world", "world", "includes[0]").in_file(ScenarioFile("mine.yaml"))
         ]
 
     def test_duplicated_key_in_include_is_reported_with_its_file(self, tmp_path: Path) -> None:
-        """共通の部品の中の鍵の重複も DesignFlaw になり、理由にそのファイルの名前が入る。"""
+        """共通の部品の中の鍵の重複も DesignFlaw になり、場所にその共通の部品のファイルが付く。"""
         _write(tmp_path, "a.yaml", "rules:\n  name_tags: true\n  name_tags: false\n")
         scenario = _write(tmp_path, "mine.yaml", "includes: [a.yaml]\n")
 
         flaws = read_scenario_source(scenario).flaws
 
-        assert [flaw.location for flaw in flaws] == [DesignLocation("world", "world", "rules.name_tags")]
-        assert "a.yaml" in flaws[0].reason
+        assert [flaw.location for flaw in flaws] == [
+            DesignLocation("world", "world", "rules.name_tags").in_file(ScenarioFile("a.yaml"))
+        ]
