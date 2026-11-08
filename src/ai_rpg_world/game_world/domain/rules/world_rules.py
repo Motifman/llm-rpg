@@ -33,6 +33,7 @@ class WorldRules:
     hunger: HungerRule
     death: DeathRule
     departed_persons_act: bool
+    name_tags: bool
     hearing: HearingValues
     stealth: StealthRule
     action_durations: Mapping[ActionKind, Ticks]

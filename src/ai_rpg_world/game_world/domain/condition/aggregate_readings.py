@@ -23,10 +23,13 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     WeatherState,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
+from ai_rpg_world.game_world.domain.people.person_handle import PersonHandle
 from ai_rpg_world.game_world.domain.person import LifeState, NotInAnyGroup, Outcome, Undecided
 from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueRule
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
+    DescriptionText,
+    DisplayName,
     FatigueAmount,
     Gold,
     GroupId,
@@ -203,3 +206,11 @@ class WorldFlagsReading(Protocol):
 
 class GroupDecisionReading(Protocol):
     def is_open(self) -> bool: ...
+
+
+class PeopleRegisterReading(Protocol):
+    def handle_of(self, person: PersonId) -> PersonHandle: ...
+
+    def name_of(self, person: PersonId) -> DisplayName: ...
+
+    def appearance_of(self, person: PersonId) -> DescriptionText: ...

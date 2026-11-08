@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import (
     GroupDeclaration,
     GroupingDeclaration,
@@ -37,6 +38,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
 from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
 from ai_rpg_world.game_world.domain.objects_and_items import Item, ObjectState, PersonInventory
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
+from ai_rpg_world.game_world.domain.people import PersonHandle
 from ai_rpg_world.game_world.domain.person import (
     Alive,
     Died,
@@ -496,3 +498,41 @@ class TestRandom:
 
         with pytest.raises(LookupError):
             world.facts().random().next_fraction()
+
+
+def _character(person: PersonId, appearance: str) -> CharacterDeclaration:
+    return CharacterDeclaration(
+        person_id=person,
+        appearance=DescriptionText(appearance),
+        spawn_spot=_SQUARE.spot_id,
+        initial_items=(),
+        initial_held=(),
+        initial_groups=(),
+        knows_at_start=(),
+    )
+
+
+class TestPeopleRegister:
+    """WorldInMemory が、登場人物の宣言から名簿を開き、facts から読めるようにすることを保証する。"""
+
+    def test_register_is_opened_from_the_given_characters(self) -> None:
+        """characters に bob、alice の順で渡すと、facts の people_register は bob に番号 0、alice に番号 1 と見た目を答える。"""
+        world = WorldInMemory(
+            world=_WORLD,
+            spots=(_SQUARE,),
+            characters=(_character(_BOB, "赤い帽子の人"), _character(_ALICE, "背の高い人")),
+        )
+
+        register = world.facts().people_register()
+
+        assert register.handle_of(_BOB) == PersonHandle(0)
+        assert register.handle_of(_ALICE) == PersonHandle(1)
+        assert register.appearance_of(_ALICE) == DescriptionText("背の高い人")
+
+    def test_recorded_name_is_seen_by_facts(self) -> None:
+        """名簿に alice の名前「ミナ」を記録すると、facts の people_register の name_of がそれを答える。"""
+        world = WorldInMemory(world=_WORLD, spots=(_SQUARE,), characters=(_character(_ALICE, "背の高い人"),))
+
+        world.people_register.name(_ALICE, DisplayName("ミナ"))
+
+        assert world.facts().people_register().name_of(_ALICE) == DisplayName("ミナ")
