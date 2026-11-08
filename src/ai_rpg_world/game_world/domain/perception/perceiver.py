@@ -17,10 +17,9 @@ from ai_rpg_world.game_world.domain.person.life_state import Alive, Down
 from ai_rpg_world.game_world.domain.sound.hearing_quality import HearingQuality, HearsClearly, HearsNothing
 from ai_rpg_world.game_world.domain.sound.hearing_values import HearingValues
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
-from ai_rpg_world.game_world.domain.sound.sound_level import SoundLevel
 from ai_rpg_world.game_world.domain.sound.sound_network import NotReached, SoundReach
 from ai_rpg_world.game_world.domain.value_object import PersonId, Probability, SpotId
-from ai_rpg_world.game_world.domain.whereabouts.location import AtSpot, Location, TravelInProgress
+from ai_rpg_world.game_world.domain.whereabouts.location import Location
 
 
 @final

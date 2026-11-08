@@ -11,7 +11,7 @@ from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNoticedLater
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
-from ai_rpg_world.game_world.domain.perception.salience import Notable, Salience
+from ai_rpg_world.game_world.domain.perception.salience import Salience
 from ai_rpg_world.game_world.domain.sound.hearing_quality import (
     HearingQuality,
     HearsClearly,

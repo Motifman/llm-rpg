@@ -19,7 +19,7 @@ from ai_rpg_world.game_world.domain.perception.not_seen_in_dim import NotSeenInD
 from ai_rpg_world.game_world.domain.perception.not_seen_without_actor import NotSeenWithoutActor
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
-from ai_rpg_world.game_world.domain.perception.salience import Notable, Salience
+from ai_rpg_world.game_world.domain.perception.salience import Salience
 from ai_rpg_world.game_world.domain.rules.stealth_rule import StealthRule
 from ai_rpg_world.game_world.domain.value_object import PersonId, Probability, SpotId, WorldTick
 

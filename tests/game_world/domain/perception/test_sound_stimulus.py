@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.game_world.domain.people import Unidentified
 from ai_rpg_world.game_world.domain.perception import Notable, NotNoticedLater
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NoticedLater, NotPerceived, Perceived

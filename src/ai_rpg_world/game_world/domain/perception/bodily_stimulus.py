@@ -8,7 +8,7 @@ from ai_rpg_world.game_world.domain.people.text_about_people import TextAboutPeo
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
-from ai_rpg_world.game_world.domain.perception.salience import Notable, Salience
+from ai_rpg_world.game_world.domain.perception.salience import Salience
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 
 
