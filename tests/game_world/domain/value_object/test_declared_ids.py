@@ -20,6 +20,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     StateKeyId,
     WorldStageId,
 )
+from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 
 DECLARED_ID_TYPES = [
     FlagId,
@@ -36,6 +37,7 @@ DECLARED_ID_TYPES = [
     StateKeyId,
     PassageStateName,
     InteractionId,
+    ArgumentName,
 ]
 
 

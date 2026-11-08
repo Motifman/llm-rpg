@@ -7,3 +7,7 @@ class SubjectNotInTriggerException(GameWorldDomainException):
 
 class ItemNotInTriggerException(GameWorldDomainException):
     error_code = "GAME_WORLD.ITEM_NOT_IN_TRIGGER"
+
+
+class ArgumentNotInTriggerException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ARGUMENT_NOT_IN_TRIGGER"

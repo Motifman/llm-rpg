@@ -15,6 +15,6 @@ class ConditionPath:
     def root(cls) -> ConditionPath:
         return cls(())
 
-    def child(self, position: int) -> ConditionPath:
+    def under(self, position: int) -> ConditionPath:
         require_int_at_least("ConditionPath position", position, 0)
-        return ConditionPath((*self._steps, position))
+        return ConditionPath((position, *self._steps))

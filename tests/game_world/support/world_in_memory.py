@@ -1,26 +1,32 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from types import MappingProxyType
+import uuid
 
-from ai_rpg_world.game_world.domain.condition.chance_occasion import ChanceOccasion
-from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
-from ai_rpg_world.game_world.domain.declaration.character.group_declaration import GroupDeclaration
-from ai_rpg_world.game_world.domain.declaration.object_and_item import (
-    ItemSpecDeclaration,
-    ObjectStateKeyDeclaration,
-    StateValue,
+from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
+    GroundItemsReading,
+    GroupDecisionReading,
+    GroupMembershipReading,
+    ItemReading,
+    ObjectStateReading,
+    PassageStatesReading,
+    PersonInventoryReading,
+    PersonOutcomesReading,
+    PersonVitalsReading,
+    SpotAtmospheresReading,
+    SpotSearchProgressReading,
+    WeatherReading,
+    WhereaboutsReading,
+    WorldClockReading,
+    WorldStageReading,
 )
+from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
+from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
+from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration, SpotDeclaration
-from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
-    DayNightDeclaration,
-    NoDayNight,
-    NoWeather,
-    TimeOfDay,
-    WeatherState,
-)
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration, NoDayNight, NoWeather
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 from ai_rpg_world.game_world.domain.objects_and_items import (
     GroundItems,
@@ -30,36 +36,25 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     SpotSearchProgress,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.person import (
-    GroupMembership,
-    LifeState,
-    Outcome,
-    PersonOutcomes,
-    PersonVitals,
-    Undecided,
-)
-from ai_rpg_world.game_world.domain.value_object import (
-    Count,
-    FatigueAmount,
-    Gold,
-    GroupDecisionId,
-    HungerAmount,
-    ObjectId,
-    PersonId,
-    SpotId,
-    Ticks,
-    WorldId,
-    WorldTick,
-)
-from ai_rpg_world.game_world.domain.whereabouts import (
-    AtSpot,
-    Occupant,
-    PassageStates,
-    SpotAtmospheres,
-    TravelInProgress,
-    Whereabouts,
-)
+from ai_rpg_world.game_world.domain.person import GroupMembership, PersonOutcomes, PersonVitals
+from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
+from ai_rpg_world.game_world.domain.value_object import GroupDecisionId, ObjectId, PersonId, SpotId, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.whereabouts import PassageStates, SpotAtmospheres, Whereabouts
 from ai_rpg_world.game_world.domain.world_progress import GroupDecision, Weather, WorldClock, WorldStage
+from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
+
+
+class FractionsInOrder(RandomSource):
+    def __init__(self, fractions: tuple[float, ...]) -> None:
+        for fraction in fractions:
+            if not 0.0 <= fraction < 1.0:
+                raise ValueError(f"a fraction must be in [0, 1), got {fraction}")
+        self._left = list(fractions)
+
+    def next_fraction(self) -> float:
+        if not self._left:
+            raise LookupError("every fraction the test gave has been drawn")
+        return self._left.pop(0)
 
 
 class WorldInMemory:
@@ -67,6 +62,7 @@ class WorldInMemory:
         self,
         *,
         world: WorldId,
+        rules: WorldRules | None = None,
         people: tuple[PersonId, ...] = (),
         spots: tuple[SpotDeclaration, ...] = (),
         passages: tuple[PassageDeclaration, ...] = (),
@@ -78,9 +74,24 @@ class WorldInMemory:
         stage_declarations: tuple[WorldStageDeclaration, ...] = (),
         day_night: DayNightDeclaration | NoDayNight = NoDayNight(),
         weather: Weather | NoWeather = NoWeather(),
-        rolls: Mapping[ChanceOccasion, float] = MappingProxyType({}),
+        fractions: tuple[float, ...] = (),
     ) -> None:
+        self.rules = rules if rules is not None else world_rules_for_tests()
         self.people = people
+        self.nouns = DeclaredNouns(
+            flags=(),
+            spots=spots,
+            passages=passages,
+            objects=(),
+            item_specs=(),
+            groupings=(),
+            groups=(),
+            characters=(),
+            world_stages=stage_declarations,
+            group_decisions=(),
+            sections=(),
+            outcomes=(),
+        )
         self.clock_aggregate = WorldClock(world)
         self.whereabouts = Whereabouts(world)
         self.passages = PassageStates(world, passages)
@@ -95,10 +106,9 @@ class WorldInMemory:
         self.search_progresses: dict[SpotId, SpotSearchProgress] = {}
         self.group_decisions: dict[GroupDecisionId, GroupDecision] = {}
         self.world_stage = world_stage
-        self.stage_declarations = {s.stage_id: s for s in stage_declarations}
         self.day_night = day_night
         self.weather = weather
-        self.rolls = dict(rolls)
+        self.random = FractionsInOrder(fractions)
 
     def facts(self) -> WorldFacts:
         return _FactsInMemory(self)
@@ -109,8 +119,14 @@ class WorldInMemory:
     def clock(self) -> WorldClock:
         return self.clock_aggregate
 
-    def search_progress(self, spot: SpotId) -> SpotSearchProgress:
+    def ground_items_at(self, spot: SpotId) -> GroundItems:
+        return self.ground_items.setdefault(spot, GroundItems(spot))
+
+    def search_progress_at(self, spot: SpotId) -> SpotSearchProgress:
         return self.search_progresses.setdefault(spot, SpotSearchProgress(spot))
+
+    def group_decision_of(self, decision: GroupDecisionDeclaration) -> GroupDecision:
+        return self.group_decisions.setdefault(decision.decision_id, GroupDecision(decision))
 
 
 class _FactsInMemory(WorldFacts):
@@ -120,80 +136,65 @@ class _FactsInMemory(WorldFacts):
     def now(self) -> WorldTick:
         return self._world.clock_aggregate.now()
 
-    def world_stage(self) -> WorldStageDeclaration | NoWorldStages:
-        stage = self._world.world_stage
-        if isinstance(stage, NoWorldStages):
-            return stage
-        return self._world.stage_declarations[stage.current()]
+    def rules(self) -> WorldRules:
+        return self._world.rules
 
-    def ticks_in_world_stage(self) -> Ticks:
-        stage = self._world.world_stage
-        if isinstance(stage, NoWorldStages):
-            raise LookupError("this world declares no world stages")
-        return self.now().ticks_since(stage.entered_at())
+    def day_night(self) -> DayNightDeclaration | NoDayNight:
+        return self._world.day_night
 
-    def time_of_day(self) -> TimeOfDay | NoDayNight:
-        day_night = self._world.day_night
-        if isinstance(day_night, NoDayNight):
-            return day_night
-        return self._world.clock_aggregate.time_of_day(day_night)
+    def nouns(self) -> DeclaredNouns:
+        return self._world.nouns
 
-    def weather(self) -> WeatherState | NoWeather:
-        weather = self._world.weather
-        if isinstance(weather, NoWeather):
-            return weather
-        return weather.current()
-
-    def object_value(self, key: ObjectStateKeyDeclaration) -> StateValue:
-        return self._world.object_states[key.object_id].value_of(key, self.now())
-
-    def item_count(self, person: PersonId, item_spec: ItemSpecDeclaration) -> Count:
-        carried = self._world.inventories[person].items()
-        return Count(sum(1 for item in carried if self._is_of(item, item_spec)))
-
-    def is_holding(self, person: PersonId, item_spec: ItemSpecDeclaration) -> bool:
-        return any(self._is_of(item, item_spec) for item in self._world.inventories[person].held_items())
-
-    def spot_of(self, occupant: Occupant) -> SpotId | TravelInProgress:
-        location = self._world.whereabouts.location_of(occupant)
-        if isinstance(location, AtSpot):
-            return location.spot
-        return location
-
-    def is_member(self, person: PersonId, group: GroupDeclaration) -> bool:
-        return self._world.membership.is_member(person, group)
-
-    def gold_of(self, person: PersonId) -> Gold:
-        return self._world.inventories[person].available_gold()
-
-    def hunger_of(self, person: PersonId) -> HungerAmount:
-        return self._world.vitals[person].hunger()
-
-    def fatigue_of(self, person: PersonId) -> FatigueAmount:
-        return self._world.vitals[person].fatigue()
-
-    def life_state(self, person: PersonId) -> LifeState:
-        return self._world.vitals[person].life_state()
-
-    def outcome_of(self, person: PersonId) -> Outcome | Undecided:
-        return self._world.outcomes.outcome_of(person)
-
-    def all_outcomes_decided(self) -> bool:
-        return self._world.outcomes.all_decided()
-
-    def search_count(self, person: PersonId, spot: SpotId) -> Count:
-        return self._world.search_progress(spot).search_count(person)
+    def random(self) -> RandomSource:
+        return self._world.random
 
     def people(self) -> tuple[PersonId, ...]:
         return self._world.people
 
-    def roll(self, occasion: ChanceOccasion) -> float:
-        if occasion not in self._world.rolls:
-            raise LookupError(f"no roll was given for {occasion!r}")
-        return self._world.rolls[occasion]
+    def whereabouts(self) -> WhereaboutsReading:
+        return self._world.whereabouts
 
-    def _is_of(self, item: ItemInstanceId, item_spec: ItemSpecDeclaration) -> bool:
-        return self._world.items[item].spec_id == item_spec.item_spec_id
+    def passages(self) -> PassageStatesReading:
+        return self._world.passages
+
+    def atmospheres(self) -> SpotAtmospheresReading:
+        return self._world.atmospheres
+
+    def outcomes(self) -> PersonOutcomesReading:
+        return self._world.outcomes
+
+    def membership(self) -> GroupMembershipReading:
+        return self._world.membership
+
+    def clock(self) -> WorldClockReading:
+        return self._world.clock_aggregate
+
+    def weather(self) -> WeatherReading | NoWeather:
+        return self._world.weather
+
+    def world_stage(self) -> WorldStageReading | NoWorldStages:
+        return self._world.world_stage
+
+    def vitals(self, person: PersonId) -> PersonVitalsReading:
+        return self._world.vitals[person]
+
+    def inventory(self, person: PersonId) -> PersonInventoryReading:
+        return self._world.inventories[person]
+
+    def item(self, item: ItemInstanceId) -> ItemReading:
+        return self._world.items[item]
+
+    def object_state(self, obj: ObjectId) -> ObjectStateReading:
+        return self._world.object_states[obj]
+
+    def ground_items(self, spot: SpotId) -> GroundItemsReading:
+        return self._world.ground_items_at(spot)
+
+    def search_progress(self, spot: SpotId) -> SpotSearchProgressReading:
+        return self._world.search_progress_at(spot)
+
+    def group_decision(self, decision: GroupDecisionDeclaration) -> GroupDecisionReading:
+        return self._world.group_decision_of(decision)
 
 
 class _AggregatesInMemory(WorldAggregates):
@@ -228,7 +229,10 @@ class _AggregatesInMemory(WorldAggregates):
         return self._world.object_states[obj]
 
     def ground_items(self, spot: SpotId) -> GroundItems:
-        return self._world.ground_items.setdefault(spot, GroundItems(spot))
+        return self._world.ground_items_at(spot)
+
+    def search_progress(self, spot: SpotId) -> SpotSearchProgress:
+        return self._world.search_progress_at(spot)
 
     def world_stage(self) -> WorldStage:
         stage = self._world.world_stage
@@ -237,10 +241,18 @@ class _AggregatesInMemory(WorldAggregates):
         return stage
 
     def group_decision(self, decision: GroupDecisionDeclaration) -> GroupDecision:
-        return self._world.group_decisions.setdefault(decision.decision_id, GroupDecision(decision))
+        return self._world.group_decision_of(decision)
 
     def weather(self) -> Weather:
         weather = self._world.weather
         if isinstance(weather, NoWeather):
             raise LookupError("this world declares no weather")
         return weather
+
+    def bring_item_into_world(self, spec: ItemSpecDeclaration, now: WorldTick) -> ItemInstanceId:
+        item = Item.come_into_world(ItemInstanceId(str(uuid.uuid4())), spec, now)
+        self._world.items[item.item_id] = item
+        return item.item_id
+
+    def take_item_out_of_world(self, item: ItemInstanceId) -> None:
+        self._world.items.pop(item).leave_world()

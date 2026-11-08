@@ -7,29 +7,29 @@ from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueO
 
 
 class TestConditionPath:
-    """ConditionPath が、条件の木の中の位置を根からの子の位置の並びで区別することを保証する。"""
+    """ConditionPath が、子の返した位置を親が自分の番号で包んで作った位置を、包んだ番号と順で区別することを保証する。"""
 
-    def test_same_steps_from_root_are_equal(self) -> None:
-        """根から同じ順に子をたどった道筋どうしは等しく、同じ鍵として使える。"""
-        first = ConditionPath.root().child(0).child(1)
-        second = ConditionPath.root().child(0).child(1)
+    def test_same_wrapping_gives_equal_positions(self) -> None:
+        """根を 1 で包み、さらに 0 で包んだ位置を 2 回作ると、等しく、同じ鍵として使える。"""
+        first = ConditionPath.root().under(1).under(0)
+        second = ConditionPath.root().under(1).under(0)
 
         assert first == second
         assert hash(first) == hash(second)
 
-    def test_root_and_its_child_differ(self) -> None:
-        """根と、根の最初の子は別の位置。"""
-        assert ConditionPath.root() != ConditionPath.root().child(0)
+    def test_order_of_wrapping_matters(self) -> None:
+        """0 で包んでから 1 で包んだ位置と、1 で包んでから 0 で包んだ位置は別の位置。"""
+        assert ConditionPath.root().under(0).under(1) != ConditionPath.root().under(1).under(0)
+
+    def test_root_and_a_wrapped_position_differ(self) -> None:
+        """根と、根を 0 で包んだ位置は別の位置。"""
+        assert ConditionPath.root() != ConditionPath.root().under(0)
 
     def test_siblings_differ(self) -> None:
-        """同じ親の 1 番目の子と 2 番目の子は別の位置。"""
-        assert ConditionPath.root().child(0) != ConditionPath.root().child(1)
-
-    def test_same_position_under_different_parents_differs(self) -> None:
-        """親が違えば、同じ位置の子でも別の位置。"""
-        assert ConditionPath.root().child(0).child(0) != ConditionPath.root().child(1).child(0)
+        """同じ親が 0 で包んだ子と 1 で包んだ子は別の位置。"""
+        assert ConditionPath.root().under(0) != ConditionPath.root().under(1)
 
     def test_negative_position_raises_domain_exception(self) -> None:
-        """子の位置に負の数を渡すと ValueOutOfRangeException を投げる。"""
+        """位置に負の数を渡すと ValueOutOfRangeException を投げる。"""
         with pytest.raises(ValueOutOfRangeException):
-            ConditionPath.root().child(-1)
+            ConditionPath.root().under(-1)
