@@ -10,7 +10,8 @@ from ai_rpg_world.game_world.domain.value_object import DescriptionText, Display
 @final
 @dataclass(frozen=True)
 class AllActionsAllowed:
-    pass
+    def __contains__(self, action: object) -> bool:
+        return True
 
 
 @final
@@ -20,3 +21,9 @@ class WorldStageDeclaration:
     name: DisplayName
     description: DescriptionText
     allowed_actions: frozenset[ActionKind | InteractionId] | AllActionsAllowed
+
+    def allows(self, kind: ActionKind) -> bool:
+        return kind in self.allowed_actions
+
+    def allows_interaction(self, interaction: InteractionId) -> bool:
+        return interaction in self.allowed_actions
