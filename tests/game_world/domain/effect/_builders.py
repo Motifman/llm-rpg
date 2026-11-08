@@ -8,7 +8,10 @@ from ai_rpg_world.game_world.domain.condition.condition import FailureReason, Hi
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
-from ai_rpg_world.game_world.domain.declaration.character.character_declaration import CharacterDeclaration
+from ai_rpg_world.game_world.domain.declaration.character.character_declaration import (
+    CharacterDeclaration,
+    UsesWorldDefault,
+)
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration, NotALightSource
 from ai_rpg_world.game_world.domain.objects_and_items import PersonInventory
 from ai_rpg_world.game_world.domain.person import PersonVitals
@@ -22,6 +25,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     SpotId,
     WorldId,
 )
+from ai_rpg_world.game_world.domain.value_object.hands_needed import HandsNeeded
 
 WORLD = WorldId("effect_world")
 ALICE = PersonId("alice")
@@ -36,6 +40,7 @@ def item_spec(name: str) -> ItemSpecDeclaration:
         description=DescriptionText(f"{name} の説明"),
         state_keys=(),
         lights_up=NotALightSource(),
+        hands_needed=HandsNeeded(1),
     )
 
 
@@ -48,6 +53,8 @@ def character(person: PersonId) -> CharacterDeclaration:
         initial_held=(),
         initial_groups=(),
         knows_at_start=(),
+        max_hp=UsesWorldDefault(),
+        pack_capacity=UsesWorldDefault(),
     )
 
 

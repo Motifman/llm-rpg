@@ -67,6 +67,7 @@ _APPLE = ItemSpecDeclaration(
     description=DescriptionText("赤いりんご"),
     state_keys=(),
     lights_up=NotALightSource(),
+    hands_needed=HandsNeeded(1),
 )
 _PEAR = ItemSpecDeclaration(
     item_spec_id=ItemSpecId("pear"),
@@ -74,6 +75,7 @@ _PEAR = ItemSpecDeclaration(
     description=DescriptionText("黄色い梨"),
     state_keys=(),
     lights_up=NotALightSource(),
+    hands_needed=HandsNeeded(1),
 )
 _HUNGER = HungerRule(
     per_tick=HungerAmount(1),

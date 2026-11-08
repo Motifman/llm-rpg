@@ -6,6 +6,7 @@ from typing import final
 from ai_rpg_world.game_world.domain.exception.spot_declaration_exception import (
     DuplicatePassageStateNameException,
     InitialPassageStateNotDeclaredException,
+    NoPassageStatesException,
     PassageEndsAtSameSpotException,
     UndeclaredPassageStateException,
 )
@@ -22,9 +23,6 @@ class PassageStateDeclaration:
     sound_loss: SoundLoss
 
 
-_OPEN = PassageStateName("open")
-
-
 @final
 @dataclass(frozen=True)
 class PassageDeclaration:
@@ -32,9 +30,9 @@ class PassageDeclaration:
     ends: tuple[SpotId, SpotId]
     two_way: bool
     travel_ticks: Ticks
-    states: tuple[PassageStateDeclaration, ...] = ()
-    initial_state: PassageStateName = _OPEN
-    hidden_until_revealed: bool = False
+    states: tuple[PassageStateDeclaration, ...]
+    initial_state: PassageStateName
+    hidden_until_revealed: bool
 
     def __post_init__(self) -> None:
         if self.ends[0] == self.ends[1]:
@@ -42,15 +40,7 @@ class PassageDeclaration:
                 f"PassageDeclaration {self.passage_id.value} leads from {self.ends[0].value!r} back to itself"
             )
         if not self.states:
-            object.__setattr__(
-                self,
-                "states",
-                (
-                    PassageStateDeclaration(
-                        name=_OPEN, display_name=DisplayName("開いている"), traversable=True, sound_loss=SoundLoss(0)
-                    ),
-                ),
-            )
+            raise NoPassageStatesException(f"PassageDeclaration {self.passage_id.value} declares no state")
         names = [state.name for state in self.states]
         if len(set(names)) != len(names):
             raise DuplicatePassageStateNameException(

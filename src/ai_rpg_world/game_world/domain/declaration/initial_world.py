@@ -9,7 +9,7 @@ from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration,
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoWeather, WeatherState
-from ai_rpg_world.game_world.domain.value_object import PersonId
+from ai_rpg_world.game_world.domain.value_object import Capacity, HitPoints, PersonId
 
 
 @final
@@ -21,6 +21,8 @@ class StartingPerson:
     held: tuple[ItemSpecDeclaration, ...]
     groups: tuple[GroupDeclaration, ...]
     knows: tuple[PersonId, ...]
+    hp: HitPoints
+    pack_capacity: Capacity
 
 
 @final

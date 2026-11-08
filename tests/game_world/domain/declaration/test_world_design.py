@@ -12,6 +12,10 @@ from ai_rpg_world.game_world.domain.condition.argument_condition import Argument
 from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
+from ai_rpg_world.game_world.domain.condition.happening_conditions import (
+    HappeningHasFiredCondition,
+    TicksSinceHappeningAtLeastCondition,
+)
 from ai_rpg_world.game_world.domain.condition.membership_condition import IsMemberCondition
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.condition.person_conditions import IsDownCondition
@@ -77,6 +81,7 @@ from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.death_rule import DeathRule
 from ai_rpg_world.game_world.domain.rules.tend_rule import TendRule
 from ai_rpg_world.game_world.domain.value_object import (
+    Capacity,
     Damage,
     DescriptionText,
     DisplayName,
@@ -84,6 +89,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     GroupDecisionId,
     GroupId,
     GroupingId,
+    HitPoints,
     InteractionId,
     ItemSpecId,
     ObjectId,
@@ -743,6 +749,41 @@ class TestFlagsRaisedAndRead:
         assert design.warnings() == ()
 
 
+class TestHappeningsRead:
+    """出来事を読む条件が、宣言された出来事の ID を指しているかを compose が照らし合わせることを保証する。"""
+
+    def test_reading_undeclared_happening_is_a_flaw(self) -> None:
+        """宣言の無い出来事 landslide が起きたかを見る出来事 rescue は、その条件の場所を付けた DesignFlaw になる。"""
+        flaws = flaws_of_composing(
+            happenings=(
+                _happening(
+                    "rescue",
+                    condition=HappeningHasFiredCondition(happening=HappeningId("landslide"), failure_text=NoText()),
+                ),
+            ),
+        )
+
+        assert [flaw.location for flaw in flaws] == [DesignLocation("happening", "rescue", "condition")]
+        assert "landslide" in flaws[0].reason
+
+    def test_happening_may_read_itself(self) -> None:
+        """最後に襲ってから 5 tick 経ったらまた襲う出来事 beast_attacks のように、自分を読む出来事も作れる。"""
+        attacks = HappeningId("beast_attacks")
+
+        design = compose_world(
+            happenings=(
+                _happening(
+                    "beast_attacks",
+                    condition=TicksSinceHappeningAtLeastCondition(
+                        happening=attacks, ticks=Ticks(5), failure_text=NoText()
+                    ),
+                ),
+            ),
+        )
+
+        assert design.happenings()[0].happening_id == attacks
+
+
 class TestGroupDecisionsClosed:
     """締める出来事の無い集団の決定を compose が警告することを保証する。"""
 
@@ -951,9 +992,42 @@ class TestInitialWorld:
                 held=(lamp,),
                 groups=(miners,),
                 knows=(PersonId("bob"),),
+                hp=HitPoints(100, 100),
+                pack_capacity=Capacity(20),
             ),
-            StartingPerson(person=PersonId("bob"), spawn_spot=hall, items=(), held=(), groups=(), knows=()),
+            StartingPerson(
+                person=PersonId("bob"),
+                spawn_spot=hall,
+                items=(),
+                held=(),
+                groups=(),
+                knows=(),
+                hp=HitPoints(100, 100),
+                pack_capacity=Capacity(20),
+            ),
         )
+
+    def test_people_without_their_own_values_start_with_the_world_defaults(self) -> None:
+        """体力と荷の上限を書かない登場人物は、WorldRules の既定 (体力 80、荷 12) で始まる。"""
+        rules = replace(world_rules_for_tests(), person_max_hp=HitPoints(80, 80), pack_capacity=Capacity(12))
+
+        (person,) = (
+            compose_world(
+                nouns_=nouns(spots=(spot("hall"),), characters=(character("alice", "hall"),)), world_rules=rules
+            )
+            .initial_world()
+            .people
+        )
+
+        assert (person.hp, person.pack_capacity) == (HitPoints(80, 80), Capacity(12))
+
+    def test_person_with_own_values_overrides_the_world_defaults(self) -> None:
+        """屈強な鉱夫 goro が体力 150 と荷 30 を書けば、世界の既定ではなくその値で始まる。"""
+        goro = replace(character("goro", "hall"), max_hp=HitPoints(150, 150), pack_capacity=Capacity(30))
+
+        (person,) = compose_world(nouns_=nouns(spots=(spot("hall"),), characters=(goro,))).initial_world().people
+
+        assert (person.hp, person.pack_capacity) == (HitPoints(150, 150), Capacity(30))
 
     def test_only_initially_raised_flags_start_raised(self) -> None:
         """initially_raised の旗 lamp_lit だけが最初に立ち、beast_awake は立っていない。"""

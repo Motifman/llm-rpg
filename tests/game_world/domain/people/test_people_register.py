@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
+from ai_rpg_world.game_world.domain.declaration.character.character_declaration import UsesWorldDefault
 from ai_rpg_world.game_world.domain.exception.people_register_exception import (
     CharacterListedTwiceException,
     PersonAlreadyNamedException,
@@ -28,6 +29,8 @@ def _character(person: PersonId, appearance: str = "背の高い人") -> Charact
         initial_held=(),
         initial_groups=(),
         knows_at_start=(),
+        max_hp=UsesWorldDefault(),
+        pack_capacity=UsesWorldDefault(),
     )
 
 

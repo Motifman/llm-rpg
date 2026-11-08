@@ -20,7 +20,6 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     SightTextsDeclaration,
     Silent,
 )
-from ai_rpg_world.game_world.domain.effect.declared_group_decision_rules import DeclaredGroupDecisionRules
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import (
     Background,
@@ -100,10 +99,6 @@ def everyone_votes_on(decision: GroupDecisionDeclaration) -> GroupDecisionRulesD
 
 
 def as_declared_interaction(declaration: InteractionDeclaration) -> DeclaredInteraction:
-    return declaration
-
-
-def as_declared_group_decision_rules(declaration: GroupDecisionRulesDeclaration) -> DeclaredGroupDecisionRules:
     return declaration
 
 

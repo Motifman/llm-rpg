@@ -29,7 +29,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.world_design_exception import UnknownNameFlaw, WorldDesignFlawsException
-from ai_rpg_world.game_world.domain.value_object import GroupingId, ObjectId, SpotId, WorldStageId
+from ai_rpg_world.game_world.domain.value_object import Capacity, GroupingId, HitPoints, ObjectId, SpotId, WorldStageId
 
 _Declaration = TypeVar("_Declaration")
 
@@ -181,7 +181,7 @@ class DeclaredNouns:
     def initially_raised_flags(self) -> frozenset[FlagDeclaration]:
         return frozenset(flag for flag in self._flags if flag.initially_raised)
 
-    def starting_people(self) -> tuple[StartingPerson, ...]:
+    def starting_people(self, default_hp: HitPoints, default_pack_capacity: Capacity) -> tuple[StartingPerson, ...]:
         return tuple(
             StartingPerson(
                 person=character.person_id,
@@ -190,6 +190,8 @@ class DeclaredNouns:
                 held=tuple(self._item_specs.with_id(item) for item in character.initial_held),
                 groups=tuple(self._groups.with_id(group) for group in character.initial_groups),
                 knows=character.knows_at_start,
+                hp=character.starting_hp(default_hp),
+                pack_capacity=character.starting_pack_capacity(default_pack_capacity),
             )
             for character in self._characters
         )

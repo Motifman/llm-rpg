@@ -5,6 +5,10 @@ class InitialPassageStateNotDeclaredException(GameWorldDomainException):
     error_code = "GAME_WORLD.SPOT_DECLARATION.INITIAL_PASSAGE_STATE_NOT_DECLARED"
 
 
+class NoPassageStatesException(GameWorldDomainException):
+    error_code = "GAME_WORLD.SPOT_DECLARATION.NO_PASSAGE_STATES"
+
+
 class UndeclaredPassageStateException(GameWorldDomainException):
     error_code = "GAME_WORLD.SPOT_DECLARATION.UNDECLARED_PASSAGE_STATE"
 

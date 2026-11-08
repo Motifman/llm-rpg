@@ -10,7 +10,21 @@ from ai_rpg_world.game_world.domain.exception.character_exception import (
     DuplicatedKnownPersonException,
     HeldItemNotAmongInitialItemsException,
 )
-from ai_rpg_world.game_world.domain.value_object import DescriptionText, GroupId, ItemSpecId, PersonId, SpotId
+from ai_rpg_world.game_world.domain.value_object import (
+    Capacity,
+    DescriptionText,
+    GroupId,
+    HitPoints,
+    ItemSpecId,
+    PersonId,
+    SpotId,
+)
+
+
+@final
+@dataclass(frozen=True)
+class UsesWorldDefault:
+    pass
 
 
 @final
@@ -23,6 +37,8 @@ class CharacterDeclaration:
     initial_held: tuple[ItemSpecId, ...]
     initial_groups: tuple[GroupId, ...]
     knows_at_start: tuple[PersonId, ...]
+    max_hp: HitPoints | UsesWorldDefault
+    pack_capacity: Capacity | UsesWorldDefault
 
     def __post_init__(self) -> None:
         not_carried = Counter(self.initial_held) - Counter(self.initial_items)
@@ -41,6 +57,12 @@ class CharacterDeclaration:
             raise DuplicatedKnownPersonException(
                 f"{self.person_id.value} lists knows_at_start more than once: {duplicated_people}"
             )
+
+    def starting_hp(self, world_default: HitPoints) -> HitPoints:
+        return world_default if isinstance(self.max_hp, UsesWorldDefault) else self.max_hp
+
+    def starting_pack_capacity(self, world_default: Capacity) -> Capacity:
+        return world_default if isinstance(self.pack_capacity, UsesWorldDefault) else self.pack_capacity
 
 
 def _listed_more_than_once(names: Iterable[str]) -> list[str]:

@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.declaration.character import (
     GroupDeclaration,
     GroupingDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.character.character_declaration import UsesWorldDefault
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ItemSpecDeclaration,
@@ -80,6 +81,9 @@ from ai_rpg_world.game_world.domain.value_object import (
     Ticks,
     WorldStageId,
 )
+from ai_rpg_world.game_world.domain.value_object.hands_needed import HandsNeeded
+from tests.game_world.support.declarations_for_tests import OPEN as OPEN_STATE
+from tests.game_world.support.declarations_for_tests import open_passage_states
 from tests.game_world.support.verb_declarations_for_tests import lever_pulled_quietly
 from tests.game_world.support.verb_parts_for_tests import AlwaysHolds
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
@@ -117,6 +121,9 @@ def passage(name: str, ends: tuple[str, str], travel_ticks: int = 1, two_way: bo
         ends=(SpotId(ends[0]), SpotId(ends[1])),
         two_way=two_way,
         travel_ticks=Ticks(travel_ticks),
+        states=open_passage_states(),
+        initial_state=OPEN_STATE,
+        hidden_until_revealed=False,
     )
 
 
@@ -148,6 +155,7 @@ def item_spec(name: str) -> ItemSpecDeclaration:
         description=DescriptionText(f"{name} の見た目"),
         state_keys=(),
         lights_up=NotALightSource(),
+        hands_needed=HandsNeeded(1),
     )
 
 
@@ -189,6 +197,8 @@ def character(name: str, spawn_spot: str) -> CharacterDeclaration:
         initial_held=(),
         initial_groups=(),
         knows_at_start=(),
+        max_hp=UsesWorldDefault(),
+        pack_capacity=UsesWorldDefault(),
     )
 
 

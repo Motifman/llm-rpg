@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, final
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration, GroupDecisionDeclaration
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_phase_name import DayPhaseName
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
+from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
@@ -24,6 +25,7 @@ class Requirements:
     raises_flags: frozenset[FlagDeclaration]
     closes_group_decisions: frozenset[GroupDecisionDeclaration]
     may_hide_membership: bool
+    reads_happenings: frozenset[HappeningId]
 
     @classmethod
     def nothing(cls) -> Requirements:
@@ -38,6 +40,7 @@ class Requirements:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
     def combined_with(self, other: Requirements) -> Requirements:
@@ -52,6 +55,7 @@ class Requirements:
             raises_flags=self.raises_flags | other.raises_flags,
             closes_group_decisions=self.closes_group_decisions | other.closes_group_decisions,
             may_hide_membership=self.may_hide_membership or other.may_hide_membership,
+            reads_happenings=self.reads_happenings | other.reads_happenings,
         )
 
     def without_subject(self, kind: SubjectKind) -> Requirements:

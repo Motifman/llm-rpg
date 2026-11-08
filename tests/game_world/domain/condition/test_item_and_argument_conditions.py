@@ -27,6 +27,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldTick,
 )
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
+from ai_rpg_world.game_world.domain.value_object.hands_needed import HandsNeeded
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from tests.game_world.domain.condition._builders import ALICE, WORLD
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
@@ -42,6 +43,7 @@ _TORCH = ItemSpecDeclaration(
     description=DescriptionText("油を染みこませた松明"),
     state_keys=(_LIT,),
     lights_up=NotALightSource(),
+    hands_needed=HandsNeeded(1),
 )
 _PASSWORD = ArgumentName("password")
 

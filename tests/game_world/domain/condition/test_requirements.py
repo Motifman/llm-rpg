@@ -6,6 +6,7 @@ from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration,
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayPhaseName
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, FlagId, GroupDecisionId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
+from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 
 _DOOR_OPENED = FlagDeclaration(FlagId("door_opened"), DescriptionText("扉が開いた"), initially_raised=False)
 _BELL_RANG = FlagDeclaration(FlagId("bell_rang"), DescriptionText("鐘が鳴った"), initially_raised=False)
@@ -13,6 +14,8 @@ _PASSWORD = ArgumentName("password")
 _MESSAGE = ArgumentName("message")
 _NIGHT = DayPhaseName("night")
 _DAWN = DayPhaseName("dawn")
+_LANDSLIDE = HappeningId("landslide")
+_QUAKE = HappeningId("quake")
 _EXILE = GroupDecisionDeclaration(
     decision_id=GroupDecisionId("exile"), name=DisplayName("追放"), abstain_allowed=True, reveals_ballots=False
 )
@@ -22,7 +25,7 @@ class TestCombinedWith:
     """Requirements.combined_with が、2 つの要求を欄ごとに合わせることを保証する。"""
 
     def test_each_field_is_combined(self) -> None:
-        """行為の人・引数 password・旗 1 つ・段階・夜を読む要求と、相手・偶然・引数 message・別の旗・夜明け・天候・決定の締め・伏せた所属を持つ要求を合わせると、主語・引数・待つ旗・読む昼夜の段階・立てる旗・締める決定は和に、偶然・段階・天候・伏せた所属はどちらかが真なら真になる。"""
+        """行為の人・引数 password・旗 1 つ・段階・夜を読む要求と、相手・偶然・引数 message・別の旗・夜明け・天候・決定の締め・伏せた所属を持つ要求を合わせると、主語・引数・待つ旗・読む昼夜の段階・立てる旗・締める決定・読む出来事は和に、偶然・段階・天候・伏せた所属はどちらかが真なら真になる。"""
         actor_side = Requirements(
             subjects=frozenset({SubjectKind.ACTOR}),
             uses_chance=False,
@@ -34,6 +37,7 @@ class TestCombinedWith:
             raises_flags=frozenset({_BELL_RANG}),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset({_LANDSLIDE}),
         )
         target_side = Requirements(
             subjects=frozenset({SubjectKind.TARGET}),
@@ -46,6 +50,7 @@ class TestCombinedWith:
             raises_flags=frozenset({_DOOR_OPENED}),
             closes_group_decisions=frozenset({_EXILE}),
             may_hide_membership=True,
+            reads_happenings=frozenset({_QUAKE}),
         )
 
         combined = actor_side.combined_with(target_side)
@@ -61,6 +66,7 @@ class TestCombinedWith:
             raises_flags=frozenset({_DOOR_OPENED, _BELL_RANG}),
             closes_group_decisions=frozenset({_EXILE}),
             may_hide_membership=True,
+            reads_happenings=frozenset({_LANDSLIDE, _QUAKE}),
         )
 
     def test_combining_with_nothing_keeps_the_requirements(self) -> None:
@@ -76,6 +82,7 @@ class TestCombinedWith:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
         assert actor_side.combined_with(Requirements.nothing()) == actor_side
@@ -94,6 +101,7 @@ class TestCombinedWith:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
 
@@ -113,6 +121,7 @@ class TestWithoutSubject:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
         outside = inside.without_subject(SubjectKind.EACH_PERSON)
@@ -128,6 +137,7 @@ class TestWithoutSubject:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
     def test_removing_an_absent_subject_changes_nothing(self) -> None:
@@ -143,6 +153,7 @@ class TestWithoutSubject:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
         assert actor_only.without_subject(SubjectKind.EACH_PERSON) == actor_only

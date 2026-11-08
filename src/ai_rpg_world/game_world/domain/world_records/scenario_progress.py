@@ -45,5 +45,5 @@ class ScenarioProgress:
         noted = self._reaction_truths.get(reaction.reaction_id)
         return noted is not None and noted != truth
 
-    def last_fired_at(self, happening: HappeningDeclaration) -> WorldTick | NeverFired:
-        return self._last_fired.get(happening.happening_id, NeverFired())
+    def last_fired_at(self, happening: HappeningId) -> WorldTick | NeverFired:
+        return self._last_fired.get(happening, NeverFired())

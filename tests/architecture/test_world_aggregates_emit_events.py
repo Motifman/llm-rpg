@@ -41,6 +41,7 @@ from ai_rpg_world.game_world.domain.declaration.character import (
     MembershipVisibility,
     NoSharedDescription,
 )
+from ai_rpg_world.game_world.domain.declaration.character.character_declaration import UsesWorldDefault
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ChoiceName,
     ChoiceStateKind,
@@ -251,6 +252,8 @@ def _people_register() -> PeopleRegister:
         initial_held=(),
         initial_groups=(),
         knows_at_start=(),
+        max_hp=UsesWorldDefault(),
+        pack_capacity=UsesWorldDefault(),
     )
     return PeopleRegister.from_characters(_WORLD, (alice,))
 
@@ -351,6 +354,7 @@ def _item() -> Item:
             description=DescriptionText("油で灯る手提げの明かり"),
             state_keys=(_WICK,),
             lights_up=NotALightSource(),
+            hands_needed=HandsNeeded(1),
         ),
         _NOW,
     )
