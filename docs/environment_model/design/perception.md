@@ -100,10 +100,16 @@ class SightTexts:
 
 @final
 @dataclass(frozen=True)
+class SightTarget:                        # 行為の相手と、相手が見る文。相手は notice_by_target の確率で気づく
+    person: PersonId
+    texts: SightTexts
+
+@final
+@dataclass(frozen=True)
 class SightStimulus:
     where: SpotId
     witness: SightTexts
-    target: SightTexts | NoTarget
+    target: SightTarget | NoTarget
     seen_in_dark: bool                    # 暗くても見える行為か (光る物、大きな動き)。真なら真っ暗でも dim の文が届く
     manner: Openly | Stealthily
     actor_departed: bool                  # 行った人が去った人。生きている人には unseen_actor の文を届け、去った人には clear の文を届ける
@@ -121,14 +127,23 @@ class SoundStimulus:
     origin: SpotId
     loudness: Loudness                    # ささやき / ふつう / 大きい / とても大きい
     clear: TextAboutPeople
-    muffled: TextAboutPeople               # 誰の声か分からない。届けるときは unidentified() で当てる
+    muffled: TextAboutPeople               # 誰の声か分からない。くぐもる・かすかなときに unidentified() で当てる
     noticed_later: TextAboutPeople | NotNoticedLater
-    whispered_to: PersonId | NotWhispered
+    source: Voice | Noise
     involved: tuple[PersonId, ...]
     salience: Salience
     at: WorldTick
 
     def perceived_by(self, perceiver: Perceiver, reach: SoundReach, values: HearingValues, view: PeopleAsSeen) -> PerceptionOutcome: ...
+
+@final
+@dataclass(frozen=True)
+class Voice:                              # 話す声。はっきり聞こえたときだけ、clear の文に見る人から見た呼び方を当てる
+    whispered_to: PersonId | NotWhispered
+
+@final
+@dataclass(frozen=True)
+class Noise: ...                          # 物音。はっきり聞こえても clear の文は unidentified() で当てる
 
 @final
 @dataclass(frozen=True)
@@ -186,7 +201,11 @@ SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 | 本人の体 | 感じる | 感じる (気を失っていても痛みや寒さは体に残る。#1974 の 6.) | 体が無いので無い |
 | 世界の知らせ | 届く | `NoticedLater` (知らせの文をそのままためる) | 届く |
 
-移動中の人はどの場所にもいない。見える刺激には気づかず、区間の両端の場所で起きた「大きい」「とても大きい」音だけを隣の場所の音として聞く。
+- 去った人は、同じ場所の見える刺激を、明るさとこっそりに関わらず `SeesClearly` で clear の文で見る。音は、その場所に届いていれば `HearsClearly` で聞く
+- 倒れている人は、見える刺激なら同じ場所にいること、音なら届くことだけで `NoticedLater` を受ける。明るさとこっそりの確率は見ない。文は、相手なら `target` の、ほかは `witness` の `noticed_later` で、`NotNoticedLater` なら `NotPerceived`
+- 去った人の行為を生きている人が見るときは、明るさの規則はふだんどおりで、文は `unseen_actor`。`SeesShapes` なら `unidentified()` で当てる
+
+移動中の人はどの場所にもいない。見える刺激には気づかず、区間の両端の場所で起きた「大きい」「とても大きい」音だけを隣の場所の音として聞く。聞こえ方は、その音の大きさを `loss_per_passage` 1 つぶん弱めて決める。
 
 ## 知覚の結果
 
@@ -202,7 +221,7 @@ class Perceived:
     text: TextWithAssignedPeople
     quality: PerceivedQuality
     happened_at: WorldTick
-    calls_attention: bool                 # 関わっている、または目立つ刺激をかすか以外で知覚した。世界は手番を起こさない。外側が考え直す目安に使う
+    calls_attention: bool                 # 関わっている、または目立つ刺激をかすか以外で知覚した。本人の体と世界の知らせは目立つときだけ。世界は手番を起こさない。外側が考え直す目安に使う
 
 @final
 @dataclass(frozen=True)
@@ -303,7 +322,7 @@ class Loudness(Enum):
 HearingQuality = HearsClearly | HearsMuffled | HearsFaintly | HearsNothing
 ```
 
-音の届き方は、出来事が確定した後の通路の状態で計算する (扉を開けた音は、開いた扉を通る)。`HearingValues` は `WorldRules` にある ([world_design.md](world_design.md))。聞こえる刺激で人が分かるのは声 (話す) だけ。物音の文の人のプレースホルダーはいつも `Unidentified`。ささやきは、宛先にははっきり、同じ場所のほかの人にはかすかに届く。「N 名に届いた」も同じ計算で数え、倒れている人は入れない。
+音の届き方は、出来事が確定した後の通路の状態で計算する (扉を開けた音は、開いた扉を通る)。`HearingValues` は `WorldRules` にある ([world_design.md](world_design.md))。聞こえる刺激で人が分かるのは声 (話す) だけ。物音の文の人のプレースホルダーはいつも `Unidentified`。ささやきは、鳴った場所にいる宛先にははっきり、同じ場所のほかの人にはかすかに届く。かすかなときの文はくぐもったときと同じ (`muffled` を `unidentified()` で当てる)。「N 名に届いた」も同じ計算で数え、倒れている人は入れない。
 
 ## 倒れている間のこと
 
