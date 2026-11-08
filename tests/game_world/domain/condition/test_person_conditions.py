@@ -182,7 +182,7 @@ class TestWhereaboutsOfPeople:
         a_world = _world(departed_persons_act=True)
         a_world.whereabouts.place(PersonBody(ALICE), _SQUARE)
         a_world.whereabouts.place(DepartedPerson(ALICE), _WELL_SIDE)
-        a_world.outcomes.decide(ALICE, Died())
+        _kill_alice(a_world)
 
         assert IsAtSpotCondition(who=Actor(), spot=_WELL_SIDE, failure_text=NoText()).holds(a_world.facts(), _BY_ALICE)
         assert not IsAtSpotCondition(who=Actor(), spot=_SQUARE, failure_text=NoText()).holds(a_world.facts(), _BY_ALICE)
@@ -192,7 +192,7 @@ class TestWhereaboutsOfPeople:
         a_world = _world(departed_persons_act=False)
         a_world.whereabouts.place(PersonBody(ALICE), _SQUARE)
         a_world.whereabouts.place(DepartedPerson(ALICE), _WELL_SIDE)
-        a_world.outcomes.decide(ALICE, Died())
+        _kill_alice(a_world)
 
         assert IsAtSpotCondition(who=Actor(), spot=_SQUARE, failure_text=NoText()).holds(a_world.facts(), _BY_ALICE)
 

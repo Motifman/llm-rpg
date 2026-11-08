@@ -28,9 +28,9 @@ def _with_chance(requirements: Requirements) -> Requirements:
     return replace(requirements, uses_chance=True)
 
 
-# frozenset の並びは実行ごとに変わるので、偶然で選ぶ人が実行ごとにずれないよう ID の順に並べる
-def _in_order(people: frozenset[PersonId]) -> tuple[PersonId, ...]:
-    return tuple(sorted(people, key=lambda person: person.value))
+# frozenset の並びは実行ごとに変わるので、偶然で選ぶ人が実行ごとにずれないよう世界の並びに従う
+def _in_world_order(selected: frozenset[PersonId], facts: WorldFacts) -> tuple[PersonId, ...]:
+    return tuple(person for person in facts.people() if person in selected)
 
 
 @final
@@ -100,7 +100,7 @@ class ForEveryoneEffect:
     effect: Effect
 
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
-        for person in _in_order(self.people.select(facts, trigger)):
+        for person in _in_world_order(self.people.select(facts, trigger), facts):
             self.effect.apply(facts, world, EachPersonOf(trigger, person))
 
     def requirements(self) -> Requirements:
@@ -116,7 +116,7 @@ class ForSomeoneEffect:
     effect: Effect
 
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
-        candidates = _in_order(self.people.select(facts, trigger))
+        candidates = _in_world_order(self.people.select(facts, trigger), facts)
         if not candidates:
             return
         chosen = candidates[int(facts.random().next_fraction() * len(candidates))]

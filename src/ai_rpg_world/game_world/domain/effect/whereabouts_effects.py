@@ -16,9 +16,7 @@ if TYPE_CHECKING:
 
 
 def _occupant_of(person: PersonId, facts: WorldFacts) -> Occupant:
-    if facts.rules().departed_persons_act and facts.vitals(person).is_dead():
-        return DepartedPerson(person)
-    return PersonBody(person)
+    return facts.vitals(person).occupant_in_world(facts.rules().departed_persons_act)
 
 
 @final

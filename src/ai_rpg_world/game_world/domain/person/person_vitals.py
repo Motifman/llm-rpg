@@ -46,6 +46,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     Rate,
     WorldTick,
 )
+from ai_rpg_world.game_world.domain.whereabouts.occupant import DepartedPerson, Occupant, PersonBody
 
 
 class PersonVitals(AggregateRoot[PersonVitalsEvent]):
@@ -152,6 +153,11 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
 
     def life_state(self) -> LifeState:
         return self._life_state
+
+    def occupant_in_world(self, departed_persons_act: bool) -> Occupant:
+        if departed_persons_act and self.is_dead():
+            return DepartedPerson(self._person)
+        return PersonBody(self._person)
 
     def fatigue_reached_limit(self, rule: FatigueRule) -> bool:
         return self._fatigue >= rule.limit

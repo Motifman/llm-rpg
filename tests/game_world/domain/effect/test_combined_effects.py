@@ -48,10 +48,10 @@ _QUAKE = HappeningFired(HappeningForTests(HappeningId("quake")))
 _ALICE_ACTS = ActionAttemptForTests(actor_id=ALICE)
 
 
-def _world(fractions: tuple[float, ...] = ()) -> WorldInMemory:
+def _world(fractions: tuple[float, ...] = (), people: tuple[PersonId, ...] = (ALICE, BOB, CAROL)) -> WorldInMemory:
     return WorldInMemory(
         world=WORLD,
-        people=(ALICE, BOB, CAROL),
+        people=people,
         vitals=(vitals(ALICE), vitals(BOB), vitals(CAROL)),
         inventories=(inventory(ALICE), inventory(BOB), inventory(CAROL)),
         fractions=fractions,
@@ -194,6 +194,15 @@ class TestForEveryoneEffect:
 
         assert (_hp(world, ALICE), _hp(world, BOB), _hp(world, CAROL)) == (7, 7, 10)
 
+    def test_visits_people_in_world_order(self) -> None:
+        """世界の並びが Carol・Alice のとき、1 人ずつ偶然を引いて半々で傷つけると、先に引く 0.0 は Carol に、次の 0.9 は Alice に当たる。"""
+        world = _world(fractions=(0.0, 0.9), people=(CAROL, ALICE, BOB))
+        maybe_hurt = RandomBranchEffect(((Weight(1), DamageEffect(EachPerson(), Damage(3))), (Weight(1), NoEffect())))
+
+        ForEveryoneEffect(_some_of(ALICE, CAROL), maybe_hurt).apply(world.facts(), world.aggregates(), _QUAKE)
+
+        assert (_hp(world, CAROL), _hp(world, ALICE)) == (7, 10)
+
     def test_outer_trigger_still_answers_fall_cause(self) -> None:
         """Bob の行為で Alice と Bob の全員に体力ぶんの痛手を与えると、Alice は Bob に、Bob は世界の出来事で倒れる。"""
         world = _world()
@@ -228,6 +237,16 @@ class TestForSomeoneEffect:
         )
 
         assert {person for person in (ALICE, BOB, CAROL) if _hp(world, person) == 7} == {hurt}
+
+    def test_chooses_by_world_order(self) -> None:
+        """世界の並びが Carol・Alice・Bob のとき、0.0 を引くと、ID の順で先の Alice ではなく、世界の並びで先の Carol が傷つく。"""
+        world = _world(fractions=(0.0,), people=(CAROL, ALICE, BOB))
+
+        ForSomeoneEffect(_some_of(ALICE, BOB, CAROL), DamageEffect(EachPerson(), Damage(3))).apply(
+            world.facts(), world.aggregates(), _QUAKE
+        )
+
+        assert {person for person in (ALICE, BOB, CAROL) if _hp(world, person) == 7} == {CAROL}
 
     def test_does_nothing_without_anyone_selected(self) -> None:
         """選ばれた人がいなければ、偶然を引かず、誰も傷つかない。"""
