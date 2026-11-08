@@ -59,6 +59,7 @@ def _item(
         description=DescriptionText("油で灯る手提げの明かり"),
         state_keys=state_keys,
         lights_up=lights_up,
+        hands_needed=HandsNeeded(1),
     )
 
 
@@ -151,11 +152,7 @@ class TestItemSpecDeclarationLightsUp:
 
 
 class TestItemSpecDeclarationHandsNeeded:
-    """ItemSpecDeclaration.hands_needed が、書かなければ片手になることを保証する。"""
-
-    def test_hands_needed_defaults_to_one(self) -> None:
-        """hands_needed を書かない品物は HandsNeeded(1) になる。"""
-        assert _item().hands_needed == HandsNeeded(1)
+    """ItemSpecDeclaration.hands_needed が、宣言した手の数を持つことを保証する。"""
 
     def test_declared_hands_needed_is_kept(self) -> None:
         """hands_needed に 2 を書いた品物 (つるはし) は HandsNeeded(2) を持つ。"""

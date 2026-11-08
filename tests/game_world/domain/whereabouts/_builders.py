@@ -29,6 +29,8 @@ from ai_rpg_world.game_world.domain.value_object import (
     Ticks,
     WorldId,
 )
+from tests.game_world.support.declarations_for_tests import OPEN as OPEN_STATE
+from tests.game_world.support.declarations_for_tests import open_passage_states
 
 WORLD = WorldId("abandoned_mine_village")
 OPEN = PassageStateName("open")
@@ -68,6 +70,8 @@ def path(
         ends=(SpotId(a), SpotId(b)),
         two_way=two_way,
         travel_ticks=Ticks(ticks),
+        states=open_passage_states(),
+        initial_state=OPEN_STATE,
         hidden_until_revealed=hidden_until_revealed,
     )
 
@@ -87,6 +91,7 @@ def door(name: str, a: str, b: str, *, initial: PassageStateName = CLOSED, ticks
             ),
         ),
         initial_state=initial,
+        hidden_until_revealed=False,
     )
 
 

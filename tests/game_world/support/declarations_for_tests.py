@@ -11,8 +11,9 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     UsesBody,
 )
 from ai_rpg_world.game_world.domain.action.argument_declaration import ArgumentDeclaration
-from ai_rpg_world.game_world.domain.declaration.spot import SpotSectionDeclaration
-from ai_rpg_world.game_world.domain.value_object import InteractionId
+from ai_rpg_world.game_world.domain.declaration.spot import PassageStateDeclaration, SpotSectionDeclaration
+from ai_rpg_world.game_world.domain.sound import SoundLoss
+from ai_rpg_world.game_world.domain.value_object import DisplayName, InteractionId, PassageStateName
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
@@ -52,3 +53,14 @@ class InteractionForTests:
 class SectionAccessForTests:
     section: SpotSectionDeclaration
     exertion: Exertion = field(default_factory=DoesNotUseBody)
+
+
+OPEN = PassageStateName("open")
+
+
+def open_passage_states() -> tuple[PassageStateDeclaration, ...]:
+    return (
+        PassageStateDeclaration(
+            name=OPEN, display_name=DisplayName("開いている"), traversable=True, sound_loss=SoundLoss(0)
+        ),
+    )

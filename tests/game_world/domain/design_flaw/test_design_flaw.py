@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, DesignWarning
+from ai_rpg_world.game_world.domain.design_flaw import (
+    DesignFlaw,
+    DesignLocation,
+    DesignWarning,
+    NoScenarioFile,
+    ScenarioFile,
+)
 
 
 class TestDesignLocation:
@@ -19,6 +25,24 @@ class TestDesignLocation:
     def test_reads_as_declaration_kind_quoted_name_and_field(self) -> None:
         """DesignLocation("object", "lift_lever", "state_keys[0]") を文にすると「object 'lift_lever' state_keys[0]」になる。"""
         assert str(DesignLocation("object", "lift_lever", "state_keys[0]")) == "object 'lift_lever' state_keys[0]"
+
+    def test_location_without_file_is_not_from_any_scenario_file(self) -> None:
+        """ファイルを渡さずに作った場所 (ドメインが照らし合わせて見つけた誤り) は、NoScenarioFile を持つ。"""
+        assert DesignLocation("object", "lift_lever", "spot_id").file == NoScenarioFile()
+
+    def test_location_in_file_reads_with_the_file_first(self) -> None:
+        """共通の部品 common/ja_default.yaml の中の場所を文にすると、ファイルの名前が先頭に付く。"""
+        location = DesignLocation("world", "world", "rules.fatigue.limit").in_file(
+            ScenarioFile("common/ja_default.yaml")
+        )
+
+        assert str(location) == "common/ja_default.yaml: world 'world' rules.fatigue.limit"
+
+    def test_same_place_in_different_files_are_different_locations(self) -> None:
+        """種類・名前・欄が同じでも、シナリオと共通の部品のように、ファイルが違えば等しくない。"""
+        location = DesignLocation("spot", "mine", "name")
+
+        assert location.in_file(ScenarioFile("mine.yaml")) != location.in_file(ScenarioFile("common.yaml"))
 
 
 class TestDesignFlawAndWarning:

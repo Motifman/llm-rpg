@@ -35,6 +35,8 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.whereabouts.location import OpenArea
 from ai_rpg_world.game_world.domain.whereabouts.passage_in_state import PassageInState
+from tests.game_world.support.declarations_for_tests import OPEN as OPEN_STATE
+from tests.game_world.support.declarations_for_tests import open_passage_states
 
 HERE = "mine_depths"
 
@@ -60,6 +62,8 @@ def passage(name: str, *, to: str = "mine_entrance", at: str = HERE, revealed: b
         ends=(SpotId(at), SpotId(to)),
         two_way=True,
         travel_ticks=Ticks(1),
+        states=open_passage_states(),
+        initial_state=OPEN_STATE,
         hidden_until_revealed=not revealed,
     )
     return ContainedPassage(passage=PassageInState(declaration, PassageStateName("open")), revealed=revealed)

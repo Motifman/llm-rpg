@@ -25,7 +25,9 @@ from ai_rpg_world.game_world.domain.sound.hearing_values import HearingValues
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
 from ai_rpg_world.game_world.domain.sound.sound_level import SoundLevel, SoundLoss
 from ai_rpg_world.game_world.domain.value_object import (
+    Capacity,
     FatigueAmount,
+    HitPoints,
     HungerAmount,
     Multiplier,
     Probability,
@@ -106,6 +108,8 @@ def _rules(action_durations: Mapping[ActionKind, Ticks]) -> WorldRules:
             duration_multiplier=Multiplier(2.0),
         ),
         action_durations=action_durations,
+        person_max_hp=HitPoints(100, 100),
+        pack_capacity=Capacity(20),
     )
 
 

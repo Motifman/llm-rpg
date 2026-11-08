@@ -17,7 +17,7 @@ from ai_rpg_world.game_world.domain.rules.hunger_rule import HungerRule
 from ai_rpg_world.game_world.domain.rules.stealth_rule import StealthRule
 from ai_rpg_world.game_world.domain.rules.tend_rule import NoTending, TendRule
 from ai_rpg_world.game_world.domain.sound.hearing_values import HearingValues
-from ai_rpg_world.game_world.domain.value_object import Ticks
+from ai_rpg_world.game_world.domain.value_object import Capacity, HitPoints, Ticks
 
 # 移動は通る通路の時間で決まり、話すことと待つことは行っているあいだを作らない
 _KINDS_WITHOUT_DEFAULT_DURATION = frozenset(
@@ -38,6 +38,8 @@ class WorldRules:
     hearing: HearingValues
     stealth: StealthRule
     action_durations: Mapping[ActionKind, Ticks]
+    person_max_hp: HitPoints
+    pack_capacity: Capacity
 
     def __post_init__(self) -> None:
         missing = sorted(kind.name for kind in _KINDS_WITH_DEFAULT_DURATION - self.action_durations.keys())

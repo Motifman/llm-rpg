@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
+from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
-from ai_rpg_world.game_world.domain.effect.declared_group_decision_rules import DeclaredGroupDecisionRules
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.trigger import Trigger
@@ -28,15 +28,17 @@ class EnterWorldStageEffect:
 @final
 @dataclass(frozen=True)
 class StartGroupDecisionEffect:
-    rules: DeclaredGroupDecisionRules
+    decision: GroupDecisionDeclaration
+    voters: PeopleSelection
+    choices: PeopleSelection
 
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
-        world.group_decision(self.rules.decision).start(
-            self.rules.voters.select(facts, trigger), self.rules.choices.select(facts, trigger)
+        world.group_decision(self.decision).start(
+            self.voters.select(facts, trigger), self.choices.select(facts, trigger)
         )
 
     def requirements(self) -> Requirements:
-        return self.rules.voters.requirements().combined_with(self.rules.choices.requirements())
+        return self.voters.requirements().combined_with(self.choices.requirements())
 
 
 @final

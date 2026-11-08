@@ -241,6 +241,7 @@ class TestWriteTextEffect:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
 
@@ -301,6 +302,7 @@ class TestDepositToObjectEffects:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
         assert DepositItemToObjectEffect(Actor(), _APPLE, _OFFERINGS).requirements() == expected

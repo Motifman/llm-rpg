@@ -19,7 +19,10 @@ from ai_rpg_world.game_world.domain.condition.subject import (
     Target,
     ThisItem,
 )
-from ai_rpg_world.game_world.domain.declaration.character.character_declaration import CharacterDeclaration
+from ai_rpg_world.game_world.domain.declaration.character.character_declaration import (
+    CharacterDeclaration,
+    UsesWorldDefault,
+)
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
 from ai_rpg_world.game_world.domain.exception.trigger_exception import (
     ItemNotInTriggerException,
@@ -49,6 +52,8 @@ _DAVE_DECLARED = CharacterDeclaration(
     initial_held=(),
     initial_groups=(),
     knows_at_start=(),
+    max_hp=UsesWorldDefault(),
+    pack_capacity=UsesWorldDefault(),
 )
 _EXILE_VOTE = GroupDecisionDeclaration(
     decision_id=GroupDecisionId("exile_vote"),
@@ -116,6 +121,7 @@ class TestRequirements:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
 

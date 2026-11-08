@@ -222,6 +222,7 @@ class TestMoveItemEffectByArgument:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
 
@@ -260,6 +261,7 @@ class TestMoveItemEffectRandomItemOf:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
 
@@ -277,6 +279,7 @@ class TestSetItemValueEffect:
             description=DescriptionText("古いカンテラ"),
             state_keys=(lit,),
             lights_up=NotALightSource(),
+            hands_needed=HandsNeeded(1),
         )
         world = _world((_LANTERN_1, lantern))
 

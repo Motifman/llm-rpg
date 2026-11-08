@@ -78,6 +78,7 @@ class TestFlagIsRaisedCondition:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
     def test_requirements_include_placeholder_of_failure_text(self) -> None:
@@ -138,4 +139,5 @@ class TestFlagsRaisedAtLeastCondition:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )

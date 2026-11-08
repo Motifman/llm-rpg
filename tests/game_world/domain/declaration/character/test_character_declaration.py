@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
+from ai_rpg_world.game_world.domain.declaration.character.character_declaration import UsesWorldDefault
 from ai_rpg_world.game_world.domain.exception.character_exception import (
     DuplicatedInitialGroupException,
     DuplicatedKnownPersonException,
@@ -29,6 +30,8 @@ def _character(
         initial_held=initial_held,
         initial_groups=initial_groups,
         knows_at_start=knows_at_start,
+        max_hp=UsesWorldDefault(),
+        pack_capacity=UsesWorldDefault(),
     )
 
 

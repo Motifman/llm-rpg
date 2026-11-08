@@ -36,7 +36,7 @@ class TestScenarioProgressHappenings:
         progress = ScenarioProgress(_WORLD)
 
         assert progress.world_id == _WORLD
-        assert progress.last_fired_at(_SHIP_ARRIVES) == NeverFired()
+        assert progress.last_fired_at(_SHIP_ARRIVES.happening_id) == NeverFired()
         assert progress.may_fire(_SHIP_ARRIVES, WorldTick(0))
 
     def test_once_happening_may_not_fire_after_it_fired(self) -> None:
@@ -55,7 +55,7 @@ class TestScenarioProgressHappenings:
         progress.note_happening_fired(_TIDE_TURNS, WorldTick(2))
         progress.note_happening_fired(_TIDE_TURNS, WorldTick(7))
 
-        assert progress.last_fired_at(_TIDE_TURNS) == WorldTick(7)
+        assert progress.last_fired_at(_TIDE_TURNS.happening_id) == WorldTick(7)
 
     def test_firing_one_happening_leaves_others_unfired(self) -> None:
         """潮の変わり目が起きても、船の入港は NeverFired のままで、起きてよい。"""
@@ -63,7 +63,7 @@ class TestScenarioProgressHappenings:
 
         progress.note_happening_fired(_TIDE_TURNS, WorldTick(2))
 
-        assert progress.last_fired_at(_SHIP_ARRIVES) == NeverFired()
+        assert progress.last_fired_at(_SHIP_ARRIVES.happening_id) == NeverFired()
         assert progress.may_fire(_SHIP_ARRIVES, WorldTick(3))
 
     def test_happening_may_not_fire_twice_in_the_same_tick(self) -> None:

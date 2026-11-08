@@ -43,6 +43,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldStageId,
     WorldTick,
 )
+from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.whereabouts import Location, Occupant, PassageInState
 
 if TYPE_CHECKING:
@@ -194,7 +195,7 @@ class ScenarioProgressReading(Protocol):
 
     def reaction_changed(self, reaction: ReactionDeclaration, truth: bool) -> bool: ...
 
-    def last_fired_at(self, happening: HappeningDeclaration) -> WorldTick | NeverFired: ...
+    def last_fired_at(self, happening: HappeningId) -> WorldTick | NeverFired: ...
 
 
 class MissedNoticesReading(Protocol):

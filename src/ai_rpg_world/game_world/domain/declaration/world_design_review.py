@@ -30,6 +30,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
 )
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, DesignWarning
 from ai_rpg_world.game_world.domain.effect.effect import Effect
+from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 
 
 def design_location(declaration: str, *ids: Any, field: str) -> DesignLocation:
@@ -154,6 +155,13 @@ class WorldDesignReview:
             for flag in declared
             if flag in raised and flag not in read
         ]
+
+    def happenings(self, declared: Iterable[HappeningId]) -> None:
+        known = frozenset(declared)
+        for location, requirements in self._read:
+            undeclared = sorted(happening.value for happening in requirements.reads_happenings - known)
+            if undeclared:
+                self.flaws.append(DesignFlaw(location, f"reads happenings {undeclared} that are not declared"))
 
     def group_decisions(self, declared: Iterable[GroupDecisionDeclaration]) -> None:
         closed = self._everything().closes_group_decisions

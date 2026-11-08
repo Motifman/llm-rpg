@@ -16,7 +16,15 @@ from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.sound.hearing_values import HearingValues
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
 from ai_rpg_world.game_world.domain.sound.sound_level import SoundLevel, SoundLoss
-from ai_rpg_world.game_world.domain.value_object import FatigueAmount, HungerAmount, Multiplier, Probability, Ticks
+from ai_rpg_world.game_world.domain.value_object import (
+    Capacity,
+    FatigueAmount,
+    HitPoints,
+    HungerAmount,
+    Multiplier,
+    Probability,
+    Ticks,
+)
 
 _KINDS_WITHOUT_DEFAULT_DURATION = frozenset(
     {ActionKind.SPEAK, ActionKind.WAIT, ActionKind.TRAVEL, ActionKind.ATTACK_MONSTER}
@@ -68,4 +76,6 @@ def world_rules_for_tests() -> WorldRules:
             duration_multiplier=Multiplier(2.0),
         ),
         action_durations={kind: Ticks(1) for kind in frozenset(ActionKind) - _KINDS_WITHOUT_DEFAULT_DURATION},
+        person_max_hp=HitPoints(100, 100),
+        pack_capacity=Capacity(20),
     )

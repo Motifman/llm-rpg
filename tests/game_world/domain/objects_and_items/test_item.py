@@ -37,6 +37,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     Ticks,
     WorldTick,
 )
+from ai_rpg_world.game_world.domain.value_object.hands_needed import HandsNeeded
 
 _LANTERN_SPEC = ItemSpecId("lantern")
 _UNLIT = ChoiceName("unlit")
@@ -64,6 +65,7 @@ def _lantern(lights_up: LitWhen | NotALightSource = LitWhen(_WICK.key, ChoiceVal
         description=DescriptionText("油で灯る手提げの明かり"),
         state_keys=(_WICK, _OIL),
         lights_up=lights_up,
+        hands_needed=HandsNeeded(1),
     )
 
 

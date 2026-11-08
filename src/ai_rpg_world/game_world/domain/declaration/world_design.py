@@ -330,6 +330,7 @@ class WorldDesign:
 
         review.flags(nouns.all_flags())
         review.group_decisions(nouns.all_group_decisions())
+        review.happenings(happening.happening_id for happening in happenings)
 
         if review.flaws:
             raise WorldDesignFlawsException(review.flaws)
@@ -470,7 +471,7 @@ class WorldDesign:
 
     def initial_world(self) -> InitialWorld:
         return InitialWorld(
-            people=self._nouns.starting_people(),
+            people=self._nouns.starting_people(self._world_rules.person_max_hp, self._world_rules.pack_capacity),
             raised_flags=self._nouns.initially_raised_flags(),
             stage=self._initial_stage,
             weather=self._weather.initial_state(),

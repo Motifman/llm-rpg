@@ -8,7 +8,7 @@
 - 名前で指すものは、欄の値ではなく、地図 (mapping) の鍵に書く (`spots: { lift_landing: { ... } }`)。鍵が `SpotId` などの宣言の名前になる。同じ鍵を 2 回書くと、YAML を読む時点で `DesignFlaw` にする
 - 作者は、名詞の中に、その名詞に付く動詞を書いてよい (物の中に操作、区画の中に出入り)。読み込む側が名詞と動詞に分ける (#1990)
 - 宣言の型は既定値を持たない。書かなかった欄は、読み込む側が共通の部品 (データ) の既定で埋める (#2029 の E2)。埋めたものは `DesignWarning` にしない。作者が書くべきなのに書かなかったもの (知覚の文など) だけを `DesignWarning` にする
-- 誤りの場所 (`DesignLocation`) は、宣言の種類・名前・欄で表す。YAML の道筋 (`spots.lift_landing.objects.lift_panel.interactions.start_lift.precondition`) は、`DesignLocation("object", "lift_panel", "interactions.start_lift.precondition")` に写す
+- 誤りの場所 (`DesignLocation`) は、宣言の種類・名前・欄と、どのファイルに書いたか (シナリオか、取り込んだどの共通の部品か) で表す。誤りの文の先頭にもファイルの名前が出る。`defaults:` で埋めた欄の誤りは、埋めた宣言ではなく `defaults:` を書いた場所を指す。書き忘れた欄は、いちばん近い書かれた親を書いたファイルを指し、どこにも無ければシナリオのファイルを指す。YAML の道筋 (`spots.lift_landing.objects.lift_panel.interactions.start_lift.precondition`) は、`DesignLocation("object", "lift_panel", "interactions.start_lift.precondition")` に写す
 - 文の中の人は、`{actor}` `{target}` `{chosen_by_group}` `{each_person}` だけ。物や場所の名前は、作者が文に直接書く
 
 ## 一番上の欄
@@ -27,14 +27,21 @@ passages: { ... }
 item_specs: { ... }
 characters: { ... }
 world_stages: { ... }
+initial_stage: ...                    # 最初の段階の名前。world_stages を書いたら必須、書かなければ NoWorldStages
 group_decisions: { ... }
 outcomes: { ... }
 happenings: { ... }
 reactions: { ... }
 joint_actions: { ... }
 person_interactions: { ... }          # 殴る、盗むなど、人への操作
-ending: ...
+ending: { ends_when: ... }
+refusal_texts: { ... }                # RefusalTexts。ふつうは includes から取り込み、行を書き換える
+built_in_action_perceptions: { ... }  # 組み込みの行為ごとの知覚 (行為は travel、hand_over などの snake_case)
+defaults: { ... }                     # 書かなかった欄の既定。下の「書かなかった欄」
+perception_defaults: { ... }          # 書かなかった知覚の文の既定。下の「書かなかった欄」
 ```
+
+宣言に無い欄を書くと `DesignFlaw` にする (綴り違いを見逃さない)。
 
 ## 条件と効果の書き方
 
@@ -50,6 +57,71 @@ precondition:
 
 - `failure_text` は、その節の欄と並べて書く。条件を置いた場所の根には必ず書く (#2029 の B1)
 - 主語は `actor` `target` `chosen_by_group` `each_person` と、名指しの人 (`{ named: haru }`)
+
+## 宣言ごとの欄
+
+欄の名前は、宣言の型の欄の名前と同じ。名詞の中に書く動詞の欄 (物の `interactions`、区画の `access`、通路の `condition`、品物の `use` と `interactions`、段階の `when_entered` と `when_left`、集団の決定の `voters` から `when_undecided`) は、読み込む側が動詞の宣言に分ける。
+
+| 書く場所 | 欄 |
+|---|---|
+| `flags.<名前>` | `meaning`, `initially_raised` |
+| `spots.<名前>` | `name`, `description`, `atmosphere` (`lighting`, `outdoor`, `temperature`, `ambient_sound`, `smell`), `sections`, `objects`, `discoverables` |
+| `spots.<場所>.sections.<名前>` | `name`, `capacity` (`null` は定員なし), `reachable_objects`, `access` (`enter_label`, `leave_label`, `enter_text`, `leave_text`, `exertion`, `duration`, `entry_condition`, `perceived_as`) |
+| `spots.<場所>.objects.<名前>` | `name`, `description`, `appearance` (`seen_in_dark`, `hidden_until_revealed`), `state_keys`, `interactions` |
+| `spots.<場所>.discoverables.<名前>` | `found_text`, `condition`, `when_found`, `finding` (`once_in_world` / `once_per_person`) |
+| 操作 (`interactions.<名前>`、`person_interactions.<名前>`) | `display_label`, `precondition`, `effect`, `success_text`, `shows_on_success`, `exertion`, `actor_requirement`, `perceived_as`, `reaches_unseen`, `duration`, `allows_stealth`, `arguments` |
+| `passages.<名前>` | `ends` (2 つ), `two_way`, `travel_ticks`, `states` (`<状態>: { display_name, traversable, sound_loss }`), `initial_state`, `hidden_until_revealed`, `condition` (書けば `PassageTraversalDeclaration`) |
+| `item_specs.<名前>` | `name`, `description`, `state_keys`, `lights_up` (`null` か `{ key, value }`), `hands_needed`, `interactions`, `use` (書けば `ItemUseDeclaration`) |
+| `groupings.<名前>` | `name`, `visibility`, `changes`, `groups` (`<集まり>: { name, members_know_each_other, shared_description }`) |
+| `characters.<名前>` | `appearance`, `spawn_spot`, `initial_items`, `initial_held`, `initial_groups`, `knows_at_start`, `max_hp`, `pack_capacity`, `being` |
+| `world_stages.<名前>` | `name`, `description`, `allowed_actions` (`all` か一覧), `when_entered`, `when_left` |
+| `group_decisions.<名前>` | `name`, `abstain_allowed`, `reveals_ballots`, `voters`, `choices`, `when_decided`, `when_undecided` |
+| `outcomes.<名前>` | `name`, `announcement` |
+| `happenings.<名前>` | `condition`, `effect`, `once`, `notice` |
+| `reactions.<名前>` | `condition`, `when_becomes_true`, `when_becomes_false` |
+| `joint_actions.<名前>` | `required` (`{ object, interaction }` の一覧), `window`, `distinct_people`, `on_complete`, `on_timeout`, `complete_notice`, `timeout_notice` |
+| `time` (必須) | `day_night` (`null` か `{ ticks_per_day, starts_at, phases: { <段階>: { begins_at, dark, announcement } } }`), `weather` (`null` か `{ initial, changes, announce_changes, obscuring }`。`changes` は `null` か `{ ticks, transitions }`、`transitions` は `default` か `{ <今>: { <次>: 重み } }`)。天候と昼夜の無い世界でも `null` と書き、欄そのものが無ければ `DesignFlaw`。書き忘れを「無い」として通さないため、`defaults:` でも埋めない |
+| `rules` | `tend` (`null` か `{ revive_hp_rate }`), `fatigue`, `hunger`, `death`, `departed_persons_act`, `name_tags`, `hearing`, `stealth`, `action_durations`, `person_max_hp`, `pack_capacity` |
+
+値の書き方:
+
+- 列挙 (`lighting`、`loudness`、`ActionKind` など) は名前を小文字の snake_case で書く (`very_dark`、`hand_over`)
+- 「無い」を表す型 (`NoSmell`、`NoCapacity`、`Silent`、`NoFailureWitness`、`NoNotice`、`NotSeenInDim` など) は `null`
+- 雰囲気を変える効果 (`change_atmosphere`) で書かなかった欄は変えない (`Unchanged`)。`null` は「無くす」
+- 状態の鍵は `<名前>: { kind, initial }`。`kind` は `flag` / `count` / `written_text` / `{ choice: [...] }` / `{ stock: { capacity, refills_every } }` (`refills_every: null` は補充しない)。`initial` は種類に合わせて真偽・数・選択肢の名前で、書いた文の鍵は `null`
+- 状態の鍵を指すときは `<物か品物>.<鍵>` (`lift_panel.power`、`lamp.lit`)
+- 行為は組み込みの行為の名前か `{ interaction: <名前> }`。人の結末は結末の名前か `died`
+- `exertion` は `uses_body` / `does_not_use_body`、`actor_requirement` は `living_only` / `living_or_departed`、`salience` は `notable` / `background`、`duration` は tick の数か `default`、操作の引数は `<名前>: text` / `<名前>: item`
+- 知らせ (`notice`) は `sight_at: { spot, texts, salience }` / `sound_from: { spot, sound, salience }` / `announcement_to: { audience, text, salience }`
+- 体力 `max_hp` と荷 `pack_capacity` を書かない登場人物は、`rules` の `person_max_hp` と `pack_capacity` で始まる (#2055)
+
+## 書かなかった欄
+
+宣言の型は既定値を持たない。書かなかった欄は、読み込む側が `defaults:` の、その宣言の種類の欄で埋める。`defaults:` は共通の部品に書き、シナリオでも `includes:` と同じく鍵ごとに上書きできる。埋めるのは欄の 1 段だけで、地図の中までは重ねない (`passage.states` の既定は、`states` を書かなかった通路だけに入る)。
+
+```yaml
+defaults:
+  flag: { initially_raised: false }
+  atmosphere: { outdoor: false, temperature: normal, ambient_sound: null, smell: null }
+  passage:
+    two_way: true
+    states: { open: { display_name: 開いている, traversable: true, sound_loss: 0 } }
+    initial_state: open
+    hidden_until_revealed: false
+```
+
+`includes:` の重ね方は地図を全階層で重ねるので、シナリオで `defaults.passage.states` を書くと、共通の部品の状態に足される。状態を置き換えたいときは、通路の `states` に直接書く。
+
+種類は `flag` `spot` `atmosphere` `section` `section_access` `object` `appearance` `state_key` `discoverable` `interaction` `passage` `passage_state` `item_spec` `grouping` `group` `character` `world_stage` `group_decision` `outcome` `happening` `reaction` `joint_action` `perception` `sight_texts` `sound` `sight_at` `sound_from` `announcement_to` `day_phase` `weather`。知らない種類は `DesignFlaw`。
+
+知覚 (`perceived_as`) の目撃の文 `witness`、音の文 `sound`、された人の文 `target` (人への操作だけ) を書かなかったときは、`perception_defaults:` の文で埋めて `DesignWarning` を残す。`sound: null` と書けば音の無い操作 (`Silent`) で、警告しない。
+
+```yaml
+perception_defaults:
+  witness: { clear: "{actor}が何かをした。" }
+  target: { clear: "{actor}があなたに何かをした。" }
+  sound: { loudness: normal, clear: 物音がした。, muffled: かすかな物音がした。 }
+```
 
 ## 例: 廃坑の山村の昇降機
 
@@ -169,3 +241,12 @@ characters:
 3. 名前は地図の鍵に書く (`id:` の欄は使わない)
 4. `includes:` は、地図を鍵ごとに重ね、シナリオに書いた鍵だけを置き換える
 5. Being に渡す人柄は、登場人物の `being:` の中に書く
+
+## 決めたこと (#2057)
+
+1. 書かなかった欄の既定は、共通の部品の `defaults:` に宣言の種類ごとに書く。「無い」を表す型は `null`
+2. `PassageDeclaration` の `states` と `ItemSpecDeclaration` の `hands_needed` は型の既定を外し、`defaults:` で埋める
+3. 出来事を読む条件は `HappeningId` を、集団の決定を始める効果は決定と `voters` / `choices` を持つ。自分を読む出来事 (5 tick ごとに襲う) と、決まらなければもう一度投票する決定を書けるようにするため
+4. 登場人物の `being:` は世界の宣言に入れず、地図のまま `LoadedScenario.beings` に返す。地図でなければ `DesignFlaw`
+5. 誤りの場所に、どのファイルに書いたかを持たせ、誤りの文にもファイルの名前を出す。シナリオを作る LLM が、どこを直せばよいかを分かるようにするため
+6. `time` の `day_night` と `weather` は、「無い」ことも `null` で書かせる。欄が無ければ `DesignFlaw`

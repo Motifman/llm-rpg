@@ -6,6 +6,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration, 
 from ai_rpg_world.game_world.domain.exception.spot_declaration_exception import (
     DuplicatePassageStateNameException,
     InitialPassageStateNotDeclaredException,
+    NoPassageStatesException,
     PassageEndsAtSameSpotException,
     UndeclaredPassageStateException,
 )
@@ -36,43 +37,25 @@ def _door(initial_state: PassageStateName = CLOSED) -> PassageDeclaration:
         travel_ticks=Ticks(1),
         states=_door_states(),
         initial_state=initial_state,
+        hidden_until_revealed=False,
     )
 
 
 class TestPassageDeclarationWithoutStates:
-    """states を書かない PassageDeclaration が、通れる・減衰 0 の状態を 1 つだけ持つことを保証する。"""
+    """PassageDeclaration が状態を既定で埋めず、1 つも無い宣言を断ることを保証する。"""
 
-    def test_omitted_states_become_a_single_open_traversable_state_without_sound_loss(self) -> None:
-        """states と initial_state を書かないと、名前 open・呼び名「開いている」・通れる・減衰 0 の状態 1 つを持ち、それが初めの状態になる。"""
-        passage = PassageDeclaration(
-            passage_id=PassageId("path"),
-            ends=(SpotId("field"), SpotId("forest")),
-            two_way=True,
-            travel_ticks=Ticks(2),
-        )
-
-        assert passage.states == (
-            PassageStateDeclaration(
-                name=OPEN, display_name=DisplayName("開いている"), traversable=True, sound_loss=SoundLoss(0)
-            ),
-        )
-        assert passage.initial_state == OPEN
-
-    def test_empty_states_tuple_is_treated_the_same_as_omitted_states(self) -> None:
-        """states に空の tuple を渡しても、書かなかったときと同じ 1 つの状態を持つ。"""
-        passage = PassageDeclaration(
-            passage_id=PassageId("path"),
-            ends=(SpotId("field"), SpotId("forest")),
-            two_way=True,
-            travel_ticks=Ticks(2),
-            states=(),
-        )
-
-        assert passage.states == (
-            PassageStateDeclaration(
-                name=OPEN, display_name=DisplayName("開いている"), traversable=True, sound_loss=SoundLoss(0)
-            ),
-        )
+    def test_empty_states_raise(self) -> None:
+        """states に空の tuple を渡すと、状態を補わずに NoPassageStatesException を投げる。"""
+        with pytest.raises(NoPassageStatesException):
+            PassageDeclaration(
+                passage_id=PassageId("path"),
+                ends=(SpotId("field"), SpotId("forest")),
+                two_way=True,
+                travel_ticks=Ticks(2),
+                states=(),
+                initial_state=OPEN,
+                hidden_until_revealed=False,
+            )
 
 
 class TestPassageDeclarationInitialState:
@@ -82,23 +65,6 @@ class TestPassageDeclarationInitialState:
         """initial_state に states に無い名前を渡すと InitialPassageStateNotDeclaredException を投げる。"""
         with pytest.raises(InitialPassageStateNotDeclaredException):
             _door(initial_state=LOCKED)
-
-    def test_written_states_without_initial_state_raises_unless_open_is_declared(self) -> None:
-        """states を書いて initial_state を省くと、初めの状態は open になり、states に open が無ければ InitialPassageStateNotDeclaredException を投げる。"""
-        states = (
-            PassageStateDeclaration(
-                name=CLOSED, display_name=DisplayName("閉じている"), traversable=False, sound_loss=SoundLoss(20)
-            ),
-        )
-
-        with pytest.raises(InitialPassageStateNotDeclaredException):
-            PassageDeclaration(
-                passage_id=PassageId("gate"),
-                ends=(SpotId("yard"), SpotId("road")),
-                two_way=True,
-                travel_ticks=Ticks(1),
-                states=states,
-            )
 
 
 class TestPassageDeclarationAllows:
@@ -155,6 +121,7 @@ class TestPassageDeclarationRejectsAmbiguousDeclarations:
                 travel_ticks=Ticks(1),
                 states=states,
                 initial_state=CLOSED,
+                hidden_until_revealed=False,
             )
 
     def test_passage_whose_two_ends_are_the_same_spot_raises(self) -> None:
@@ -165,22 +132,14 @@ class TestPassageDeclarationRejectsAmbiguousDeclarations:
                 ends=(SpotId("hall"), SpotId("hall")),
                 two_way=True,
                 travel_ticks=Ticks(1),
+                states=_door_states(),
+                initial_state=CLOSED,
+                hidden_until_revealed=False,
             )
 
 
 class TestPassageDeclarationHiddenUntilRevealed:
     """PassageDeclaration が、初めは無い道 (RevealPassageEffect で現れる) を宣言できることを保証する。"""
-
-    def test_passage_is_present_from_the_start_when_hidden_until_revealed_is_omitted(self) -> None:
-        """hidden_until_revealed を書かないと、初めからある道 (False) になる。"""
-        passage = PassageDeclaration(
-            passage_id=PassageId("path"),
-            ends=(SpotId("field"), SpotId("forest")),
-            two_way=True,
-            travel_ticks=Ticks(2),
-        )
-
-        assert passage.hidden_until_revealed is False
 
     def test_passage_keeps_hidden_until_revealed_when_declared(self) -> None:
         """hidden_until_revealed=True を渡すと、その値を持つ。"""
@@ -189,6 +148,8 @@ class TestPassageDeclarationHiddenUntilRevealed:
             ends=(SpotId("cellar"), SpotId("well")),
             two_way=True,
             travel_ticks=Ticks(3),
+            states=_door_states(),
+            initial_state=OPEN,
             hidden_until_revealed=True,
         )
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
+from ai_rpg_world.game_world.domain.declaration.character.character_declaration import UsesWorldDefault
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import (
     GroupDeclaration,
     GroupingDeclaration,
@@ -100,6 +101,7 @@ _PEAR = ItemSpecDeclaration(
     description=DescriptionText("黄色い梨"),
     state_keys=(),
     lights_up=NotALightSource(),
+    hands_needed=HandsNeeded(1),
 )
 _APPLE = ItemSpecDeclaration(
     item_spec_id=ItemSpecId("apple"),
@@ -107,6 +109,7 @@ _APPLE = ItemSpecDeclaration(
     description=DescriptionText("赤いりんご"),
     state_keys=(),
     lights_up=NotALightSource(),
+    hands_needed=HandsNeeded(1),
 )
 _BUCKETS = ObjectStateKeyDeclaration(
     object_id=ObjectId("well"), key=StateKeyId("buckets"), kind=CountStateKind(), initial=CountValue(Count(2))
@@ -523,6 +526,8 @@ def _character(person: PersonId, appearance: str) -> CharacterDeclaration:
         initial_held=(),
         initial_groups=(),
         knows_at_start=(),
+        max_hp=UsesWorldDefault(),
+        pack_capacity=UsesWorldDefault(),
     )
 
 

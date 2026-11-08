@@ -1,0 +1,108 @@
+rules:
+  tend: null
+  fatigue:
+    per_exertion: 2
+    limit: 100
+    levels: [{ starts_at: 0, name: 元気 }]
+  hunger:
+    per_tick: 1
+    limit: 100
+    starvation_damage: null
+    levels: [{ starts_at: 0, name: 満腹 }]
+  death: { grace: 30 }
+  departed_persons_act: false
+  name_tags: false
+  hearing:
+    loudness: { whisper: 30, normal: 60, loud: 75, very_loud: 90 }
+    loss_per_passage: 15
+    clear_from: 50
+    muffled_from: 35
+    faint_from: 20
+    attentive_allowance: 15
+  stealth:
+    notice_by_bystander: { sees_clearly: 0.4, sees_shapes: 0.15, sees_nothing: 0.0 }
+    notice_by_target: { sees_clearly: 0.6, sees_shapes: 0.3, sees_nothing: 0.0 }
+    attentive_bonus: 0.2
+    duration_multiplier: 2.0
+  action_durations:
+    listen: 1
+    tend: 3
+    hand_over: 1
+    pick_up: 1
+    drop: 1
+    search: 3
+    use_item: 2
+    enter_section: 1
+    leave_section: 1
+    hold: 1
+    put_away: 1
+    cast_ballot: 1
+    interact_with_object: 2
+    interact_with_carried_item: 2
+    interact_with_person: 2
+  person_max_hp: 100
+  pack_capacity: 20
+
+refusal_texts:
+  common_rules:
+    actor_cannot_act: 今は体が動かない。
+    busy: 手が離せない。
+    not_together: そこには届かない。
+    out_of_reach: 手が届かない。
+    too_tired: 疲れて動けない。
+    not_allowed_in_this_stage: 今はできない。
+    no_one_found_in_the_dark: 暗くて誰も見つからない。
+  world_state: {}
+  hidden: 今はできない。
+
+built_in_action_perceptions:
+  travel: &quiet { witness: { clear: "{actor}が動いた。" }, sound: null }
+  speak: *quiet
+  listen: *quiet
+  wait: *quiet
+  hand_over: *quiet
+  pick_up: *quiet
+  drop: *quiet
+  search: *quiet
+  use_item: *quiet
+  hold: *quiet
+  put_away: *quiet
+  cast_ballot: *quiet
+
+perception_defaults:
+  witness: { clear: "{actor}が何かをした。" }
+  target: { clear: "{actor}があなたに何かをした。" }
+  sound: { loudness: normal, clear: 物音がした。, muffled: かすかな物音がした。 }
+
+defaults:
+  flag: { initially_raised: false }
+  atmosphere: { outdoor: false, temperature: normal, ambient_sound: null, smell: null }
+  section: { capacity: null, reachable_objects: [] }
+  section_access:
+    exertion: does_not_use_body
+    duration: default
+    entry_condition: { all_of: [], failure_text: 入れない。 }
+  object: { state_keys: {} }
+  appearance: { seen_in_dark: false, hidden_until_revealed: false }
+  interaction:
+    effect: no_effect
+    shows_on_success: []
+    exertion: uses_body
+    actor_requirement: living_only
+    reaches_unseen: false
+    duration: default
+    allows_stealth: false
+    arguments: {}
+  passage:
+    two_way: true
+    states: { open: { display_name: 開いている, traversable: true, sound_loss: 0 } }
+    initial_state: open
+    hidden_until_revealed: false
+  item_spec: { state_keys: {}, lights_up: null, hands_needed: 1 }
+  character: { initial_items: [], initial_held: [], initial_groups: [], knows_at_start: [] }
+  happening: { notice: null }
+  perception: { seen_in_dark: false, announcement: null, on_failure: null, salience: notable }
+  sight_texts: { dim: null, unseen_actor: null, noticed_later: null }
+  sight_at: { salience: notable }
+  sound_from: { salience: notable }
+  announcement_to: { salience: notable }

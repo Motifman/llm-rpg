@@ -89,6 +89,7 @@ class TestDamageEffect:
             raises_flags=frozenset(),
             closes_group_decisions=frozenset(),
             may_hide_membership=False,
+            reads_happenings=frozenset(),
         )
 
 

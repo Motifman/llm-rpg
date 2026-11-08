@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import final
 
 from ai_rpg_world.game_world.domain.declaration.object_and_item._state_keys import require_own_distinct_keys
@@ -65,7 +65,7 @@ class ItemSpecDeclaration:
     description: DescriptionText
     state_keys: tuple[ItemStateKeyDeclaration, ...]
     lights_up: LitWhen | NotALightSource
-    hands_needed: HandsNeeded = field(default=HandsNeeded(1))
+    hands_needed: HandsNeeded
 
     def __post_init__(self) -> None:
         require_own_distinct_keys(

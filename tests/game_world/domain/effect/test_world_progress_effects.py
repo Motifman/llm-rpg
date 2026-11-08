@@ -50,14 +50,6 @@ _DAY = _stage("day")
 _NIGHT = _stage("night")
 
 
-@final
-@dataclass(frozen=True)
-class _VoteRules:
-    decision: GroupDecisionDeclaration
-    voters: PeopleSelection
-    choices: PeopleSelection
-
-
 def _world() -> WorldInMemory:
     return WorldInMemory(
         world=WORLD,
@@ -89,13 +81,13 @@ class TestStartAndCloseGroupDecisionEffect:
     def test_starts_with_voters_and_choices_selected_by_rules(self) -> None:
         """投票する人を Alice と Bob、候補を Bob と Carol に選ぶ規則で始めると、その顔ぶれで決定が開く。"""
         world = _world()
-        rules = _VoteRules(
-            _EXILE_VOTE,
+        start = StartGroupDecisionEffect(
+            decision=_EXILE_VOTE,
             voters=PeopleSelection(EachPersonIsOneOf(frozenset({ALICE, BOB}))),
             choices=PeopleSelection(EachPersonIsOneOf(frozenset({BOB, CAROL}))),
         )
 
-        StartGroupDecisionEffect(rules).apply(world.facts(), world.aggregates(), _DUSK)
+        start.apply(world.facts(), world.aggregates(), _DUSK)
 
         decision = world.group_decision_of(_EXILE_VOTE)
         assert decision.is_open()
@@ -107,13 +99,13 @@ class TestStartAndCloseGroupDecisionEffect:
     def test_requires_what_selections_require_outside(self) -> None:
         """要るものは、投票する人と候補の選び方が外に求めるものを合わせたもの (EachPerson は含まない)。"""
         needs_actor = replace(Requirements.nothing(), subjects=frozenset({SubjectKind.ACTOR}))
-        rules = _VoteRules(
-            _EXILE_VOTE,
+        start = StartGroupDecisionEffect(
+            decision=_EXILE_VOTE,
             voters=PeopleSelection(EachPersonIsOneOf(frozenset({ALICE}))),
             choices=PeopleSelection(FixedTruth(True, needs_actor)),
         )
 
-        assert StartGroupDecisionEffect(rules).requirements() == needs_actor
+        assert start.requirements() == needs_actor
 
     def test_close_tallies_open_decision(self) -> None:
         """開いている追放の投票を締めると、決定は閉じる。"""
