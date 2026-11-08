@@ -107,7 +107,7 @@ class TestRequirements:
         assert subject.requirements() == Requirements(
             subjects=frozenset({kind}),
             uses_chance=False,
-            uses_action_arguments=False,
+            uses_action_arguments=frozenset(),
             waits_for_flags=frozenset(),
         )
 

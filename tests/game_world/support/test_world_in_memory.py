@@ -1,13 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from types import MappingProxyType
-
 import pytest
 
-from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
-from ai_rpg_world.game_world.domain.condition.chance_occasion import ChanceOccasion
-from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import (
     GroupDeclaration,
     GroupingDeclaration,
@@ -40,7 +34,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     WeatherState,
     WeatherType,
 )
-from ai_rpg_world.game_world.domain.effect.effect_path import EffectPath
+from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
 from ai_rpg_world.game_world.domain.objects_and_items import Item, ObjectState, PersonInventory
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import (
@@ -84,7 +78,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldStageId,
     WorldTick,
 )
-from ai_rpg_world.game_world.domain.whereabouts import PersonBody, Route, TravelInProgress
+from ai_rpg_world.game_world.domain.whereabouts import AtSpot, OpenArea, PersonBody, Route, TravelInProgress
 from ai_rpg_world.game_world.domain.world_progress import Weather, WorldStage
 from tests.game_world.domain.whereabouts._builders import path, spot
 from tests.game_world.support.world_in_memory import WorldInMemory
@@ -170,7 +164,7 @@ def _world(
     stage_declarations: tuple[WorldStageDeclaration, ...] = (),
     day_night: DayNightDeclaration | NoDayNight = NoDayNight(),
     weather: Weather | NoWeather = NoWeather(),
-    rolls: Mapping[ChanceOccasion, float] = MappingProxyType({}),
+    fractions: tuple[float, ...] = (),
 ) -> WorldInMemory:
     return WorldInMemory(
         world=_WORLD,
@@ -188,24 +182,26 @@ def _world(
         stage_declarations=stage_declarations,
         day_night=day_night,
         weather=weather,
-        rolls=rolls,
+        fractions=fractions,
     )
 
 
 class TestFactsSeeWhatAggregatesChanged:
-    """WorldInMemory の aggregates で集約を書き換えると、同じ世界の facts がその変化を読むことを保証する。"""
+    """WorldInMemory の aggregates で集約を書き換えると、同じ世界の facts の読む型がその変化を読むことを保証する。"""
 
     def test_teleport_is_seen_as_the_new_spot(self) -> None:
-        """広場にいる alice を井戸端へテレポートすると、facts の spot_of は井戸端を答える。"""
+        """広場にいる alice を井戸端へテレポートすると、facts の whereabouts は alice が井戸端にいると答える。"""
         world = _world()
         world.aggregates().whereabouts().place(PersonBody(_ALICE), _SQUARE)
 
         world.aggregates().whereabouts().teleport(PersonBody(_ALICE), _WELL_SIDE)
 
-        assert world.facts().spot_of(PersonBody(_ALICE)) == _WELL_SIDE.spot_id
+        assert world.facts().whereabouts().location_of(PersonBody(_ALICE)) == AtSpot(
+            spot=_WELL_SIDE.spot_id, section=OpenArea()
+        )
 
     def test_travel_is_seen_as_travel_in_progress(self) -> None:
-        """広場から 2 tick かかる小道で井戸端へ歩き出した alice は、spot_of が場所でなく移動中を答える。"""
+        """広場から 2 tick かかる小道で井戸端へ歩き出した alice は、facts の whereabouts で移動中と読める。"""
         world = _world()
         world.aggregates().whereabouts().place(PersonBody(_ALICE), _SQUARE)
 
@@ -213,139 +209,85 @@ class TestFactsSeeWhatAggregatesChanged:
             PersonBody(_ALICE), Route(start=_SQUARE.spot_id, passages=(_LANE,))
         )
 
-        assert isinstance(world.facts().spot_of(PersonBody(_ALICE)), TravelInProgress)
-
-    def test_life_state_starts_alive(self) -> None:
-        """何もしていない alice の life_state は Alive。"""
-        assert _world().facts().life_state(_ALICE) == Alive()
+        assert isinstance(world.facts().whereabouts().location_of(PersonBody(_ALICE)), TravelInProgress)
 
     def test_damage_is_seen_as_the_new_life_state(self) -> None:
-        """HP 5 の alice に 5 の痛手を与えると、facts の life_state は倒れた状態を答える。"""
+        """HP 5 の alice に 5 の痛手を与えると、facts の vitals は倒れた状態を答える。"""
         world = _world()
+        assert world.facts().vitals(_ALICE).life_state() == Alive()
 
         world.aggregates().vitals(_ALICE).take_damage(Damage(5), WorldTick(0), StruckByPerson(_BOB))
 
-        assert world.facts().life_state(_ALICE) == Down(fell_at=WorldTick(0), cause=StruckByPerson(_BOB))
+        assert world.facts().vitals(_ALICE).life_state() == Down(fell_at=WorldTick(0), cause=StruckByPerson(_BOB))
 
-    def test_hunger_is_seen_apart_from_fatigue(self) -> None:
-        """alice の空腹だけを 2 tick 進めると、hunger_of は 2、fatigue_of は 0 を答える。"""
+    def test_hunger_and_fatigue_are_seen(self) -> None:
+        """alice の空腹を 2 tick 進め、1 回 3 疲れる体の使い方をすると、facts の vitals は空腹 2、疲れ 3 を答える。"""
         world = _world()
 
         world.aggregates().vitals(_ALICE).pass_time(WorldTick(1), _DEATH, _HUNGER)
         world.aggregates().vitals(_ALICE).pass_time(WorldTick(2), _DEATH, _HUNGER)
-
-        assert world.facts().hunger_of(_ALICE) == HungerAmount(2)
-        assert world.facts().fatigue_of(_ALICE) == FatigueAmount(0)
-
-    def test_fatigue_is_seen_apart_from_hunger(self) -> None:
-        """alice が 1 回 3 疲れる体の使い方をすると、fatigue_of は 3、hunger_of は 0 を答える。"""
-        world = _world()
-
         world.aggregates().vitals(_ALICE).exert(_FATIGUE)
 
-        assert world.facts().fatigue_of(_ALICE) == FatigueAmount(3)
-        assert world.facts().hunger_of(_ALICE) == HungerAmount(0)
+        assert world.facts().vitals(_ALICE).hunger() == HungerAmount(2)
+        assert world.facts().vitals(_ALICE).fatigue() == FatigueAmount(3)
 
     def test_earned_gold_is_seen(self) -> None:
-        """alice が 7 ゴールド得ると、facts の gold_of は 7 を答える。"""
+        """alice が 7 ゴールド得ると、facts の inventory は 7 ゴールドを答える。"""
         world = _world()
 
         world.aggregates().inventory(_ALICE).earn(Gold(7))
 
-        assert world.facts().gold_of(_ALICE) == Gold(7)
+        assert world.facts().inventory(_ALICE).available_gold() == Gold(7)
+
+    def test_held_item_is_seen(self) -> None:
+        """alice が梨を手に持つと、facts の inventory の手の物は梨だけになる。"""
+        pear = Item.come_into_world(ItemInstanceId("pear-1"), _PEAR, WorldTick(0))
+        world = _world(items=(pear,))
+        world.aggregates().inventory(_ALICE).receive(pear.item_id)
+
+        world.aggregates().inventory(_ALICE).hold(pear.item_id, HandsNeeded(1))
+
+        assert world.facts().inventory(_ALICE).held_items() == (pear.item_id,)
 
     def test_decided_outcome_is_seen(self) -> None:
-        """alice の結末を死に決めると、facts の outcome_of は alice に死を答える。"""
+        """alice の結末だけを死に決めると、facts の outcomes は alice に死、bob に Undecided を答え、全員は決まっていない。"""
         world = _world()
 
         world.aggregates().outcomes().decide(_ALICE, Died())
 
-        assert world.facts().outcome_of(_ALICE) == Died()
-
-    def test_others_stay_undecided_until_everyone_is_decided(self) -> None:
-        """alice の結末だけを決めると、bob は Undecided のままで、all_outcomes_decided は偽。"""
-        world = _world()
-
-        world.aggregates().outcomes().decide(_ALICE, Died())
-
-        assert world.facts().outcome_of(_BOB) == Undecided()
-        assert not world.facts().all_outcomes_decided()
-
-    def test_all_outcomes_decided_when_everyone_is_decided(self) -> None:
-        """alice と bob の結末を両方決めると、all_outcomes_decided は真。"""
-        world = _world()
-
-        world.aggregates().outcomes().decide(_ALICE, Died())
-        world.aggregates().outcomes().decide(_BOB, Died())
-
-        assert world.facts().all_outcomes_decided()
+        assert world.facts().outcomes().outcome_of(_ALICE) == Died()
+        assert world.facts().outcomes().outcome_of(_BOB) == Undecided()
+        assert not world.facts().outcomes().all_decided()
 
     def test_joined_group_is_seen(self) -> None:
-        """alice が村人に入ると、facts の is_member は alice に真を、入っていない bob に偽を答える。"""
+        """alice が村人に入ると、facts の membership は alice に真を、入っていない bob に偽を答える。"""
         world = _world()
 
         world.aggregates().membership().join(_ALICE, _VILLAGERS)
 
-        assert world.facts().is_member(_ALICE, _VILLAGERS)
-        assert not world.facts().is_member(_BOB, _VILLAGERS)
+        assert world.facts().membership().is_member(_ALICE, _VILLAGERS)
+        assert not world.facts().membership().is_member(_BOB, _VILLAGERS)
 
     def test_changed_object_count_is_seen(self) -> None:
-        """井戸の桶の数 2 に 3 を足すと、facts の object_value は 5 を答える。"""
+        """井戸の桶の数 2 に 3 を足すと、facts の object_state は 5 を答える。"""
         world = _world(object_states=(ObjectState.open(_WELL, WorldTick(0)),))
 
         world.aggregates().object_state(_WELL.object_id).add_to_count(_BUCKETS, Count(3))
 
-        assert world.facts().object_value(_BUCKETS) == CountValue(Count(5))
+        assert world.facts().object_state(_WELL.object_id).value_of(_BUCKETS, WorldTick(0)) == CountValue(Count(5))
 
-    def test_received_items_are_counted_by_spec(self) -> None:
-        """alice がりんご 2 つと梨 1 つを受け取ると、りんごの item_count は 2。"""
-        first = Item.come_into_world(ItemInstanceId("apple-1"), _APPLE, WorldTick(0))
-        second = Item.come_into_world(ItemInstanceId("apple-2"), _APPLE, WorldTick(0))
-        pear = Item.come_into_world(ItemInstanceId("pear-1"), _PEAR, WorldTick(0))
-        world = _world(items=(first, second, pear))
-        inventory = world.aggregates().inventory(_ALICE)
-
-        inventory.receive(first.item_id)
-        inventory.receive(second.item_id)
-        inventory.receive(pear.item_id)
-
-        assert world.facts().item_count(_ALICE, _APPLE) == Count(2)
-
-    def test_held_item_is_seen_by_spec(self) -> None:
-        """alice が梨を手に持ち、りんごを荷に入れると、is_holding は梨に真、りんごに偽を答える。"""
-        apple = Item.come_into_world(ItemInstanceId("apple-1"), _APPLE, WorldTick(0))
-        pear = Item.come_into_world(ItemInstanceId("pear-1"), _PEAR, WorldTick(0))
-        world = _world(items=(apple, pear))
-        inventory = world.aggregates().inventory(_ALICE)
-        inventory.receive(apple.item_id)
-        inventory.receive(pear.item_id)
-
-        inventory.hold(pear.item_id, HandsNeeded(1))
-
-        assert world.facts().is_holding(_ALICE, _PEAR)
-        assert not world.facts().is_holding(_ALICE, _APPLE)
-
-    def test_packed_item_is_not_held(self) -> None:
-        """りんごを荷に入れただけでは、is_holding は偽を答える。"""
-        apple = Item.come_into_world(ItemInstanceId("apple-1"), _APPLE, WorldTick(0))
-        world = _world(items=(apple,))
-
-        world.aggregates().inventory(_ALICE).receive(apple.item_id)
-
-        assert not world.facts().is_holding(_ALICE, _APPLE)
-
-    def test_entered_world_stage_is_seen_with_ticks_spent(self) -> None:
-        """昼で始まった世界が tick 2 に夜へ入り tick 5 まで進むと、world_stage は夜、ticks_in_world_stage は 3 を答える。"""
+    def test_entered_world_stage_is_seen(self) -> None:
+        """昼で始まった世界が tick 2 に夜へ入ると、facts の world_stage は夜と、入った tick 2 を答える。"""
         world = _world(world_stage=WorldStage.open(_WORLD, _DAY, WorldTick(0)), stage_declarations=(_DAY, _NIGHT))
         for _ in range(2):
             world.clock().advance(NoDayNight())
 
         world.aggregates().world_stage().enter(_NIGHT, world.facts().now())
-        for _ in range(3):
-            world.clock().advance(NoDayNight())
 
-        assert world.facts().world_stage() == _NIGHT
-        assert world.facts().ticks_in_world_stage() == Ticks(3)
+        stage = world.facts().world_stage()
+        assert not isinstance(stage, NoWorldStages)
+        assert stage.current() == _NIGHT.stage_id
+        assert stage.entered_at() == WorldTick(2)
 
     def test_changed_weather_is_seen(self) -> None:
         """晴れの世界で天候を雨に変えると、facts の weather は雨を答える。"""
@@ -353,29 +295,72 @@ class TestFactsSeeWhatAggregatesChanged:
 
         world.aggregates().weather().change(WeatherState(WeatherType.RAIN))
 
-        assert world.facts().weather() == WeatherState(WeatherType.RAIN)
+        weather = world.facts().weather()
+        assert not isinstance(weather, NoWeather)
+        assert weather.current() == WeatherState(WeatherType.RAIN)
 
     def test_recorded_search_is_counted(self) -> None:
-        """alice が広場を 1 回探すと、alice の広場の search_count は 1、井戸端と、bob の広場は 0 を答える。"""
+        """alice が広場を 1 回探すと、facts の search_progress は alice の広場に 1、井戸端と、bob の広場に 0 を答える。"""
         world = _world()
 
-        world.search_progress(_SQUARE.spot_id).record_search(_ALICE)
+        world.aggregates().search_progress(_SQUARE.spot_id).record_search(_ALICE)
 
-        assert world.facts().search_count(_ALICE, _SQUARE.spot_id) == Count(1)
-        assert world.facts().search_count(_ALICE, _WELL_SIDE.spot_id) == Count(0)
-        assert world.facts().search_count(_BOB, _SQUARE.spot_id) == Count(0)
+        assert world.facts().search_progress(_SQUARE.spot_id).search_count(_ALICE) == Count(1)
+        assert world.facts().search_progress(_WELL_SIDE.spot_id).search_count(_ALICE) == Count(0)
+        assert world.facts().search_progress(_SQUARE.spot_id).search_count(_BOB) == Count(0)
 
-
-class TestAggregatesAreTheSameInstances:
-    """aggregates が同じ鍵に対して毎回同じ集約を返し、変化が消えないことを保証する。"""
-
-    def test_ground_items_of_a_spot_keep_placed_items(self) -> None:
-        """広場の地面にりんごを置くと、次に広場の地面を取り出してもりんごがある。"""
+    def test_placed_ground_item_is_seen(self) -> None:
+        """広場の地面にりんごを置くと、facts の ground_items は広場にりんごがあると答える。"""
         world = _world()
 
         world.aggregates().ground_items(_SQUARE.spot_id).place(ItemInstanceId("apple-1"))
 
-        assert world.aggregates().ground_items(_SQUARE.spot_id).contains(ItemInstanceId("apple-1"))
+        assert world.facts().ground_items(_SQUARE.spot_id).contains(ItemInstanceId("apple-1"))
+
+    def test_opened_group_decision_is_seen(self) -> None:
+        """追放の投票を始めると、facts の group_decision は開いていると答える。"""
+        world = _world()
+
+        world.aggregates().group_decision(_EXILE_VOTE).start(frozenset({_ALICE, _BOB}), frozenset({_ALICE, _BOB}))
+
+        assert world.facts().group_decision(_EXILE_VOTE).is_open()
+
+
+class TestItemsComingIntoAndLeavingTheWorld:
+    """bring_item_into_world と take_item_out_of_world が、品物を作って登録し、登録から外すことを保証する。"""
+
+    def test_each_brought_item_gets_its_own_id(self) -> None:
+        """りんごを 2 回世界に出すと、別々の ID の品物になり、どちらも facts の item でりんごとして引ける。"""
+        world = _world()
+
+        first = world.aggregates().bring_item_into_world(_APPLE, WorldTick(0))
+        second = world.aggregates().bring_item_into_world(_APPLE, WorldTick(0))
+
+        assert first != second
+        assert world.facts().item(first).spec_id == _APPLE.item_spec_id
+        assert world.facts().item(second).spec_id == _APPLE.item_spec_id
+
+    def test_brought_item_ages_from_when_it_came(self) -> None:
+        """tick 2 に世界に出した梨は、tick 5 に 3 tick 経っている。"""
+        world = _world()
+
+        pear = world.aggregates().bring_item_into_world(_PEAR, WorldTick(2))
+
+        assert world.facts().item(pear).age(WorldTick(5)) == Ticks(3)
+
+    def test_item_taken_out_can_no_longer_be_found(self) -> None:
+        """世界に出したりんごを世界から消すと、facts の item で引くと LookupError を投げる。"""
+        world = _world()
+        apple = world.aggregates().bring_item_into_world(_APPLE, WorldTick(0))
+
+        world.aggregates().take_item_out_of_world(apple)
+
+        with pytest.raises(LookupError):
+            world.facts().item(apple)
+
+
+class TestAggregatesAreTheSameInstances:
+    """aggregates が同じ鍵に対して毎回同じ集約を返し、変化が消えないことを保証する。"""
 
     def test_passages_and_atmospheres_are_the_same_each_time(self) -> None:
         """通路の状態と場所の雰囲気は、何度取り出しても同じ集約。"""
@@ -391,14 +376,6 @@ class TestAggregatesAreTheSameInstances:
 
         assert world.aggregates().item(apple.item_id) is apple
 
-    def test_group_decision_keeps_its_opened_state(self) -> None:
-        """追放の投票を始めると、次に同じ投票を取り出しても開いている。"""
-        world = _world()
-
-        world.aggregates().group_decision(_EXILE_VOTE).start(frozenset({_ALICE, _BOB}), frozenset({_ALICE, _BOB}))
-
-        assert world.aggregates().group_decision(_EXILE_VOTE).is_open()
-
 
 class TestWorldWithoutOptionalDeclarations:
     """段階・昼夜・天候を宣言しない世界で、facts がそれぞれ「無い」を答えることを保証する。"""
@@ -406,11 +383,6 @@ class TestWorldWithoutOptionalDeclarations:
     def test_no_world_stages(self) -> None:
         """段階を宣言しない世界の world_stage は NoWorldStages。"""
         assert _world().facts().world_stage() == NoWorldStages()
-
-    def test_ticks_in_world_stage_without_stages_fails_loudly(self) -> None:
-        """段階を宣言しない世界で ticks_in_world_stage を尋ねると LookupError を投げる。"""
-        with pytest.raises(LookupError):
-            _world().facts().ticks_in_world_stage()
 
     def test_world_stage_aggregate_without_stages_fails_loudly(self) -> None:
         """段階を宣言しない世界で aggregates の world_stage を取り出すと LookupError を投げる。"""
@@ -423,28 +395,29 @@ class TestWorldWithoutOptionalDeclarations:
             _world().aggregates().weather()
 
     def test_no_day_night(self) -> None:
-        """昼夜を宣言しない世界の time_of_day は NoDayNight。"""
-        assert _world().facts().time_of_day() == NoDayNight()
+        """昼夜を宣言しない世界の day_night は NoDayNight。"""
+        assert _world().facts().day_night() == NoDayNight()
 
     def test_no_weather(self) -> None:
         """天候を宣言しない世界の weather は NoWeather。"""
         assert _world().facts().weather() == NoWeather()
 
 
-class TestClockAndPeople:
-    """facts が世界の時計と世界の人を読むことを保証する。"""
+class TestClockPeopleAndNouns:
+    """facts が世界の時計・昼夜の宣言・世界の人・名詞の宣言を読むことを保証する。"""
 
     def test_now_follows_the_clock(self) -> None:
-        """時計を 2 回進めると、now は tick 2。"""
+        """時計を 2 回進めると、now と clock の now は tick 2。"""
         world = _world()
 
         world.clock().advance(NoDayNight())
         world.clock().advance(NoDayNight())
 
         assert world.facts().now() == WorldTick(2)
+        assert world.facts().clock().now() == WorldTick(2)
 
     def test_time_of_day_follows_the_declared_day(self) -> None:
-        """1 日 24 tick で 6 時から始まる世界で時計を 1 回進めると、time_of_day は 7。"""
+        """1 日 24 tick で 6 時から始まる世界で時計を 1 回進めると、facts の day_night はその宣言で、clock の time_of_day は 7。"""
         day_night = DayNightDeclaration(
             ticks_per_day=Ticks(24),
             starts_at=TimeOfDay(6),
@@ -458,36 +431,34 @@ class TestClockAndPeople:
 
         world.clock().advance(day_night)
 
-        assert world.facts().time_of_day() == TimeOfDay(7)
+        assert world.facts().day_night() == day_night
+        assert world.facts().clock().time_of_day(day_night) == TimeOfDay(7)
 
     def test_people_are_everyone_in_the_world(self) -> None:
         """alice と bob の世界の people は、渡した順の 2 人。"""
         assert _world().facts().people() == (_ALICE, _BOB)
 
+    def test_nouns_know_the_declared_spots(self) -> None:
+        """広場と井戸端を宣言した世界の nouns は、広場の名前から広場の宣言を引ける。"""
+        at = DesignLocation("test_world", "nouns", "spot")
 
-class TestRoll:
-    """facts.roll が、テストが渡した出目だけを返すことを保証する。"""
+        assert _world().facts().nouns().spot("square", at) == _SQUARE
 
-    def test_returns_the_roll_given_for_the_occasion(self) -> None:
-        """tick 3 の時間の経過で根の条件に 0.25 を渡しておくと、その機会の roll は 0.25。"""
-        occasion = ChanceOccasion(WorldTimePassing(WorldTick(3)), WorldTick(3), ConditionPath.root())
-        world = _world(rolls={occasion: 0.25})
 
-        assert world.facts().roll(occasion) == 0.25
+class TestRandom:
+    """facts.random が、テストが並べた値を引いた順に返すことを保証する。"""
 
-    def test_rolls_for_different_positions_are_separate(self) -> None:
-        """同じきっかけでも、条件の根と効果の根には別々の出目を渡せる。"""
-        trigger = WorldTimePassing(WorldTick(3))
-        on_condition = ChanceOccasion(trigger, WorldTick(3), ConditionPath.root())
-        on_effect = ChanceOccasion(trigger, WorldTick(3), EffectPath.root())
-        world = _world(rolls={on_condition: 0.1, on_effect: 0.9})
+    def test_returns_the_given_fractions_in_order(self) -> None:
+        """0.25、0.9 を並べると、1 回目に 0.25、2 回目に 0.9 を返す。"""
+        world = _world(fractions=(0.25, 0.9))
 
-        assert world.facts().roll(on_condition) == 0.1
-        assert world.facts().roll(on_effect) == 0.9
+        assert world.facts().random().next_fraction() == 0.25
+        assert world.facts().random().next_fraction() == 0.9
 
-    def test_occasion_without_a_given_roll_fails_loudly(self) -> None:
-        """出目を渡していない機会の roll は、適当な値を返さず LookupError を投げる。"""
-        occasion = ChanceOccasion(WorldTimePassing(WorldTick(3)), WorldTick(3), ConditionPath.root())
+    def test_drawing_past_the_given_fractions_fails_loudly(self) -> None:
+        """並べた値を引き尽くしたあとに引くと、適当な値を返さず LookupError を投げる。"""
+        world = _world(fractions=(0.5,))
+        world.facts().random().next_fraction()
 
         with pytest.raises(LookupError):
-            _world().facts().roll(occasion)
+            world.facts().random().next_fraction()

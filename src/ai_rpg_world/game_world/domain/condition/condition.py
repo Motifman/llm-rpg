@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Protocol, final
 
 from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
-from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
+from ai_rpg_world.game_world.domain.people import TextAboutPeople
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.trigger import Trigger
@@ -14,9 +14,15 @@ if TYPE_CHECKING:
 
 @final
 @dataclass(frozen=True)
+class NoText:
+    pass
+
+
+@final
+@dataclass(frozen=True)
 class FailureReason:
     failed_part: ConditionPath
-    text: TextWithAssignedPeople
+    text: TextAboutPeople | NoText
 
 
 @final

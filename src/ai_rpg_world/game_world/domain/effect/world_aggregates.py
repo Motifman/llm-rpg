@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
-from ai_rpg_world.game_world.domain.objects_and_items import GroundItems, Item, ObjectState, PersonInventory
+from ai_rpg_world.game_world.domain.objects_and_items import (
+    GroundItems,
+    Item,
+    ObjectState,
+    PersonInventory,
+    SpotSearchProgress,
+)
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import GroupMembership, PersonOutcomes, PersonVitals
-from ai_rpg_world.game_world.domain.value_object import ObjectId, PersonId, SpotId
+from ai_rpg_world.game_world.domain.value_object import ObjectId, PersonId, SpotId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import PassageStates, SpotAtmospheres, Whereabouts
 from ai_rpg_world.game_world.domain.world_progress import GroupDecision, Weather, WorldStage
 
@@ -32,8 +39,15 @@ class WorldAggregates(Protocol):
 
     def ground_items(self, spot: SpotId) -> GroundItems: ...
 
+    def search_progress(self, spot: SpotId) -> SpotSearchProgress: ...
+
     def world_stage(self) -> WorldStage: ...
 
     def group_decision(self, decision: GroupDecisionDeclaration) -> GroupDecision: ...
 
     def weather(self) -> Weather: ...
+
+    # 集約の操作ではなく、作って登録するリポジトリの操作なので ID を返す。
+    def bring_item_into_world(self, spec: ItemSpecDeclaration, now: WorldTick) -> ItemInstanceId: ...
+
+    def take_item_out_of_world(self, item: ItemInstanceId) -> None: ...
