@@ -14,6 +14,7 @@ from ai_rpg_world.game_world.domain.declaration.character.group_declaration impo
     MembershipVisibility,
     NoSharedDescription,
 )
+from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     CountStateKind,
     CountValue,
@@ -33,7 +34,6 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     DayNightDeclaration,
     DayPhaseDeclaration,
     DayPhaseName,
-    NoAnnouncement,
     NoDayNight,
     NoWeather,
     TimeOfDay,

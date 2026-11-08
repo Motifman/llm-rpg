@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     DayNightDeclaration,
     DayPhaseDeclaration,
     DayPhaseName,
-    NoAnnouncement,
     TimeOfDay,
 )
 from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueOutOfRangeException
