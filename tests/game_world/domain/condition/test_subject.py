@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.action.trigger import (
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.subject import (
     Actor,
+    Anyone,
     ChosenByGroup,
     EachPerson,
     NamedPerson,
@@ -110,6 +111,19 @@ class TestRequirements:
             uses_action_arguments=frozenset(),
             waits_for_flags=frozenset(),
         )
+
+
+class TestAnyone:
+    """Anyone が、きっかけによらず「誰でも」のまま答え、主語を何も要らないことを保証する。"""
+
+    def test_person_in_answers_anyone_whatever_the_trigger(self) -> None:
+        """行為のきっかけでも時間の経過のきっかけでも、person_in は Anyone を返す。"""
+        assert Anyone().person_in(ActionAttemptForTests(actor_id=_ALICE)) == Anyone()
+        assert Anyone().person_in(WorldTimePassing(WorldTick(3))) == Anyone()
+
+    def test_requires_nothing(self) -> None:
+        """Anyone の requirements() は何も要らない。"""
+        assert Anyone().requirements() == Requirements.nothing()
 
 
 class TestThisItem:

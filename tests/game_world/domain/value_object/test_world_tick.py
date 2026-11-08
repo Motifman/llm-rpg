@@ -52,3 +52,17 @@ class TestWorldTick:
         """TickAtLeastCondition と行っているあいだの判定のため、時刻どうしを大小で比べられる。"""
         assert WorldTick(5) < WorldTick(6)
         assert WorldTick(6) >= WorldTick(6)
+
+
+class TestWorldTickElapsed:
+    """WorldTick.has_passed と later_of が、ある時刻からの経過と、基準の時刻との後先を答えることを保証する。"""
+
+    def test_has_passed_when_enough_ticks_elapsed_by_now(self) -> None:
+        """tick 3 から見て、tick 7 では 4 tick 経っているが 5 tick は経っていない。"""
+        assert WorldTick(3).has_passed(Ticks(4), WorldTick(7))
+        assert not WorldTick(3).has_passed(Ticks(5), WorldTick(7))
+
+    def test_later_of_answers_the_later_tick(self) -> None:
+        """tick 3 と tick 5 の later_of は、どちらから問うても tick 5。"""
+        assert WorldTick(3).later_of(WorldTick(5)) == WorldTick(5)
+        assert WorldTick(5).later_of(WorldTick(3)) == WorldTick(5)

@@ -244,9 +244,13 @@ class ScenarioProgress:                           # 世界に 1 つ
     def note_reaction_truth(self, reaction: ReactionDeclaration, truth: bool) -> None: ...
 
     def may_fire(self, happening: HappeningDeclaration, now: WorldTick) -> bool: ...
+        # once の出来事は一度起きたら偽。once でなくても、同じ tick にすでに起きていたら偽
     def reaction_changed(self, reaction: ReactionDeclaration, truth: bool) -> bool: ...
+        # 一度も note_reaction_truth していない反応は偽。世界の始まりには何も変わっていないので、最初に見た真偽は記録するだけで変わり目にしない
+        # 例: 最初から閉じている扉の「閉じたら知らせる」反応は、tick 0 では知らせず、一度開いてまた閉じたときに初めて知らせる
     def last_fired_at(self, happening: HappeningDeclaration) -> WorldTick | NeverFired: ...
 
+    # 二人で合わせる操作の帳簿 (下の 3 つ) は、それを使うユースケースの Issue で JointActionProgress と一緒に作る
     def note_joint_action_done(self, joint: JointActionDeclaration, part: tuple[ObjectId, InteractionId], by: PersonId, now: WorldTick) -> None: ...
     def note_joint_action_settled(self, joint: JointActionDeclaration) -> None: ...   # 揃ったか、時間切れになった
     def joint_action_progress(self, joint: JointActionDeclaration) -> JointActionProgress | NotStarted: ...
@@ -264,6 +268,9 @@ class WorldStage:                                 # 世界に 1 つ (WorldStage 
 
     def current(self) -> WorldStageId: ...
     def entered_at(self) -> WorldTick: ...
+    def declaration_in(self, nouns: DeclaredNouns) -> WorldStageDeclaration: ...
+        # 今の段階の宣言。段階の無い世界の NoWorldStages も declaration_in で自分自身を返し、allows / allows_interaction でどの行為も許すと答える
+        # 共通の前提は attempt.is_allowed_in(facts.world_stage().declaration_in(facts.nouns())) と、段階の有無を見分けずに尋ねる
 
 
 class GroupDecision:                              # 集団の決定の宣言ごとに 1 つ
@@ -297,9 +304,10 @@ class WorldEnding:                                # 世界に 1 つ
 
 class LatestActions:                              # 世界に 1 つ
     def note(self, attempt: ActionAttempt, now: WorldTick) -> None: ...   # PersonActedEvent(attempt, at)
-    def note_failed_attempt(self, refusal: ActionRefusal, now: WorldTick) -> None: ...
+    def note_failed_attempt(self, refusal: ActionRefusal, now: WorldTick) -> None: ...   # ActionAttemptFailedEvent(refusal, at) を出すだけで、last_done_at は変えない
 
     def last_done_at(self, who: PersonId | Anyone, action: ActionKind | InteractionId) -> WorldTick | NeverDone: ...
+        # note は attempt.done_as() の鍵ごとに、行った人と Anyone の両方へ時刻を記録する
 ```
 
 ## ドメインイベント
@@ -335,6 +343,7 @@ PersonActedEvent, ActionAttemptFailedEvent
 - 前後の値で反応するハンドラのために、状態の変化のイベントは変わる前と後の値を持つ (`ItemStateChangedEvent`、`WeatherChangedEvent`、`TimeOfDayChangedEvent`、`SpotAtmosphereChangedEvent`)
 - `ItemHeldEvent` / `ItemPutAwayEvent` / `ItemGivenUpEvent` は持ち主と品物を持つ。`PersonInventory` は持ち主の場所を知らないので、場所は受けるハンドラが `Whereabouts` で引く。`ItemGivenUpEvent` は、手に持っていたかも持つ (手放したあとでは引けないため)
 - 状態が変わらない操作 (同じ値への `set`、現れている物の `reveal`、手にある物の `hold` など) は、断らず、イベントも出さない。断ると `CommandScope` ごと巻き戻り、同じ効果を当て直す出来事や反応が全体を止めるため
+- 行為の記録 (`LatestActions` の `note` / `note_failed_attempt`) は、状態が変わらなくてもイベントを出す。行為が起きたこと、断られたことそのものを知らせるため (知覚は `PersonActedEvent` / `ActionAttemptFailedEvent` から刺激を作る)
 - 世界を表す集約は、状態を変えたら必ずイベントを出す。帳簿の集約 (`ScenarioProgress`、`MissedNotices`) は出さない。漏れはアーキテクチャのテストで見張る
 - 空腹と疲れは、段階 (`HungerRule.levels` / `FatigueRule.levels`) が変わったときだけイベントにする
 - 移動 (`Whereabouts.advance_travels`) は、着いたとき (`OccupantEnteredSpotEvent`) と止められたとき (`TravelBlockedEvent`) だけイベントにする。道の途中で残りの tick が減ること、途中の場所を通り過ぎることはイベントにしない。tick ごとに出すと、何も起きていない知らせがハンドラと観測に流れるため。見張りのテスト (`tests/architecture/test_world_aggregates_emit_events.py`) もこの例外を持つ

@@ -7,13 +7,18 @@ from typing import final
 from ai_rpg_world.game_world.domain.condition.condition import Condition
 from ai_rpg_world.game_world.domain.effect.effect import Effect
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.value_object import SpotId
+from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId
 from ai_rpg_world.game_world.domain.value_object.discoverable_id import DiscoverableId
 
 
 class Finding(Enum):
     ONCE_IN_WORLD = "ONCE_IN_WORLD"
     ONCE_PER_PERSON = "ONCE_PER_PERSON"
+
+    def is_found_by(self, person: PersonId, finders: frozenset[PersonId]) -> bool:
+        if self is Finding.ONCE_IN_WORLD:
+            return bool(finders)
+        return person in finders
 
 
 @final

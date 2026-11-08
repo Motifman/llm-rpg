@@ -23,3 +23,9 @@ class WorldTick:
         if earlier > self:
             raise TickOrderException(f"{earlier} is later than {self}")
         return Ticks(self.value - earlier.value)
+
+    def has_passed(self, ticks: Ticks, now: WorldTick) -> bool:
+        return now.ticks_since(self) >= ticks
+
+    def later_of(self, other: WorldTick) -> WorldTick:
+        return max(self, other)

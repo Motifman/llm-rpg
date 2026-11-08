@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
 from ai_rpg_world.game_world.domain.value_object import WorldId, WorldStageId, WorldTick
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -49,3 +52,6 @@ class WorldStage(AggregateRoot[WorldStageChangedEvent]):
 
     def entered_at(self) -> WorldTick:
         return self._entered_at
+
+    def declaration_in(self, nouns: DeclaredNouns) -> WorldStageDeclaration:
+        return nouns.world_stage_of(self._current)

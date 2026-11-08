@@ -46,6 +46,7 @@ class RandomSource(Protocol):               # 偶然の出どころ。本番は�
 - 条件が `facts` を受け取るのは、条件が木で、親や評価する側が子の中身を知らずに同じ形で呼ぶため。宣言である条件に集約を持たせると、宣言と run ごとの状態が混ざる
 - 人の居場所を問う条件と効果 (`IsAtSpot`、`IsInSection`、`Teleport` など) は、その人が去った人として動いていれば `DepartedPerson`、それ以外は `PersonBody` の居場所を見る
 - 偶然は `facts.random()` から順に引く。同じきっかけなら同じ出目、という決まりは持たない。テストは引く順に値を並べて渡し、毎回同じ結果にする
+- `holds` と `failure_reason` は、どちらも呼ぶたびに偶然を引く。真偽と理由の両方が要るときは `failure_reason` だけを呼び、`None` なら真として扱う
 
 ```python
 Subject = Actor | Target | ChosenByGroup | NamedPerson | EachPerson   # 誰について。1 人に決まるものだけ
@@ -184,9 +185,11 @@ SearchCountAtLeastCondition(who: Subject, count: Count)   # その人が今い�
 ItemAgeAtLeastCondition(item: ItemSubject, ticks: Ticks)
 ItemValueIsCondition(item: ItemSubject, key: ItemStateKeyDeclaration, value: StateValue)
 TicksSinceLastActionAtLeastCondition(who: Subject | Anyone, action: ActionKind | InteractionId, ticks: Ticks, since: SinceStart | SinceWorldStageEntered)
+    # 起点は 最後に行った tick と since の基準 の遅いほう。まだ行っていなければ基準から数える
+    # SinceStart の基準は WorldTick(0)、SinceWorldStageEntered は今の段階に入った tick (段階の無い世界では NotDeclaredInThisWorldException)
 ArgumentEqualsCondition(argument: ArgumentName, expected: str)   # 操作の宣言の arguments にある文の引数だけ
 HappeningHasFiredCondition(happening: HappeningDeclaration)
-TicksSinceHappeningAtLeastCondition(happening: HappeningDeclaration, ticks: Ticks)
+TicksSinceHappeningAtLeastCondition(happening: HappeningDeclaration, ticks: Ticks)   # 最後に起きた tick から数える。一度も起きていなければ偽
 ```
 
 ## 置いた場所ごとに使える主語

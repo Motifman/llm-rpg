@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import final
@@ -18,6 +19,7 @@ from ai_rpg_world.game_world.domain.action.manner import Manner
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
+from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     ArgumentsDoNotMatchDeclarationException,
     UnseenTargetNotAllowedException,
@@ -30,7 +32,7 @@ from ai_rpg_world.game_world.domain.exception.trigger_exception import (
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import PersonId
+from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 
 
@@ -40,11 +42,14 @@ class SomeoneInTheDark:
     pass
 
 
-class _InteractionAttempt:
+class _InteractionAttempt(ABC):
     actor: PersonId
     interaction: DeclaredInteraction
     arguments: ActionArguments
     manner: Manner
+
+    @abstractmethod
+    def kind(self) -> ActionKind: ...
 
     def __post_init__(self) -> None:
         self.manner.require_allowed_by(self.interaction)
@@ -70,8 +75,11 @@ class _InteractionAttempt:
     def can_start_while_busy(self) -> bool:
         return False
 
-    def is_allowed_in(self, stage: WorldStageDeclaration) -> bool:
+    def is_allowed_in(self, stage: WorldStageDeclaration | NoWorldStages) -> bool:
         return stage.allows_interaction(self.interaction.interaction_id)
+
+    def done_as(self) -> frozenset[ActionKind | InteractionId]:
+        return frozenset({self.kind(), self.interaction.interaction_id})
 
     def person_as(self, kind: SubjectKind) -> PersonId:
         if kind is SubjectKind.ACTOR:

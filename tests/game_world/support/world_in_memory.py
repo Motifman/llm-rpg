@@ -7,16 +7,19 @@ from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
     GroupDecisionReading,
     GroupMembershipReading,
     ItemReading,
+    LatestActionsReading,
     ObjectStateReading,
     PassageStatesReading,
     PersonInventoryReading,
     PersonOutcomesReading,
     PersonVitalsReading,
+    ScenarioProgressReading,
     SpotAtmospheresReading,
     SpotSearchProgressReading,
     WeatherReading,
     WhereaboutsReading,
     WorldClockReading,
+    WorldFlagsReading,
     WorldStageReading,
 )
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
@@ -41,6 +44,7 @@ from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import GroupDecisionId, ObjectId, PersonId, SpotId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import PassageStates, SpotAtmospheres, Whereabouts
 from ai_rpg_world.game_world.domain.world_progress import GroupDecision, Weather, WorldClock, WorldStage
+from ai_rpg_world.game_world.domain.world_records import LatestActions, ScenarioProgress, WorldFlags
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
 
@@ -108,6 +112,9 @@ class WorldInMemory:
         self.search_progresses: dict[SpotId, SpotSearchProgress] = {}
         self.group_decisions: dict[GroupDecisionId, GroupDecision] = {}
         self.world_stage = world_stage
+        self.flags = WorldFlags(world)
+        self.scenario_progress = ScenarioProgress(world)
+        self.latest_actions = LatestActions(world)
         self.day_night = day_night
         self.weather = weather
         self.random = FractionsInOrder(fractions)
@@ -177,6 +184,15 @@ class _FactsInMemory(WorldFacts):
     def world_stage(self) -> WorldStageReading | NoWorldStages:
         return self._world.world_stage
 
+    def flags(self) -> WorldFlagsReading:
+        return self._world.flags
+
+    def scenario_progress(self) -> ScenarioProgressReading:
+        return self._world.scenario_progress
+
+    def latest_actions(self) -> LatestActionsReading:
+        return self._world.latest_actions
+
     def vitals(self, person: PersonId) -> PersonVitalsReading:
         return self._world.vitals[person]
 
@@ -202,6 +218,9 @@ class _FactsInMemory(WorldFacts):
 class _AggregatesInMemory(WorldAggregates):
     def __init__(self, world: WorldInMemory) -> None:
         self._world = world
+
+    def flags(self) -> WorldFlags:
+        return self._world.flags
 
     def passages(self) -> PassageStates:
         return self._world.passages

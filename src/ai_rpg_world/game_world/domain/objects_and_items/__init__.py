@@ -29,9 +29,15 @@ from ai_rpg_world.game_world.domain.objects_and_items.person_inventory import (
     PersonInventory,
     PersonInventoryEvent,
 )
-from ai_rpg_world.game_world.domain.objects_and_items.spot_search_progress import SpotSearchedEvent, SpotSearchProgress
+from ai_rpg_world.game_world.domain.objects_and_items.spot_search_progress import (
+    DiscoverableFoundEvent,
+    SpotSearchedEvent,
+    SpotSearchProgress,
+    SpotSearchProgressEvent,
+)
 
 __all__ = [
+    "DiscoverableFoundEvent",
     "GoldEarnedEvent",
     "GoldPaidEvent",
     "GroundItemPlacedEvent",
@@ -55,6 +61,7 @@ __all__ = [
     "PersonInventory",
     "PersonInventoryEvent",
     "SpotSearchProgress",
+    "SpotSearchProgressEvent",
     "SpotSearchedEvent",
     "TextWrittenEvent",
 ]

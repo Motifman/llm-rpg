@@ -55,7 +55,7 @@ class TickModuloCondition(LeafCondition):
         return Requirements.nothing()
 
 
-def _declared_world_stage(facts: WorldFacts) -> WorldStageReading:
+def declared_world_stage(facts: WorldFacts) -> WorldStageReading:
     stage = facts.world_stage()
     if isinstance(stage, NoWorldStages):
         raise NotDeclaredInThisWorldException("this world declares no world stages")
@@ -69,7 +69,7 @@ class WorldStageIsCondition(LeafCondition):
     failure_text: TextWithUnassignedPeople | NoText
 
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool:
-        return _declared_world_stage(facts).current() == self.stage.stage_id
+        return declared_world_stage(facts).current() == self.stage.stage_id
 
     def _requirements_besides_text(self) -> Requirements:
         return Requirements.nothing()
@@ -82,7 +82,7 @@ class TicksInWorldStageAtLeastCondition(LeafCondition):
     failure_text: TextWithUnassignedPeople | NoText
 
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool:
-        return facts.now().ticks_since(_declared_world_stage(facts).entered_at()) >= self.ticks
+        return facts.now().ticks_since(declared_world_stage(facts).entered_at()) >= self.ticks
 
     def _requirements_besides_text(self) -> Requirements:
         return Requirements.nothing()

@@ -14,7 +14,8 @@ class ActionAttempt(Protocol):
     def argument(self, name: ArgumentName) -> TextArgumentValue | ItemInstanceId: ...   # 引数の無い行為と、行為でないきっかけは ArgumentNotInTriggerException
     def fall_cause_for(self, victim: PersonId) -> FallCause: ...   # acting_person() が答える人で、傷ついたのがその人以外なら StruckByPerson、それ以外は WorldHappening()。action/ の共通の関数を呼ぶ
     def can_start_while_busy(self) -> bool: ...               # 前の行為を行っているあいだに始められるか。話すことだけが真
-    def is_allowed_in(self, stage: WorldStageDeclaration) -> bool: ...   # 組み込みの行為は ActionKind、作者の操作は InteractionId で allowed_actions と照らす
+    def is_allowed_in(self, stage: WorldStageDeclaration | NoWorldStages) -> bool: ...   # 組み込みの行為は stage.allows(ActionKind)、作者の操作は stage.allows_interaction(InteractionId) に尋ねる。NoWorldStages はどの行為も許す
+    def done_as(self) -> frozenset[ActionKind | InteractionId]: ...   # 最後に行った行為として記録する鍵。組み込みの行為は {kind}、作者の操作は {kind, interaction_id}
 
 
 Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | JointActionCompleted | WorldTimePassing | EachPersonOf

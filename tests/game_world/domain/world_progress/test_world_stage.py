@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 from ai_rpg_world.game_world.domain.declaration.progress import AllActionsAllowed, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, WorldId, WorldStageId, WorldTick
 from ai_rpg_world.game_world.domain.world_progress import WorldStage, WorldStageChangedEvent
@@ -67,3 +68,32 @@ class TestWorldStageEnter:
 
         assert stage.entered_at() == WorldTick(0)
         assert stage.get_events() == []
+
+
+def _nouns(*stages: WorldStageDeclaration) -> DeclaredNouns:
+    return DeclaredNouns(
+        flags=(),
+        spots=(),
+        passages=(),
+        objects=(),
+        item_specs=(),
+        groupings=(),
+        groups=(),
+        characters=(),
+        world_stages=stages,
+        group_decisions=(),
+        sections=(),
+        outcomes=(),
+    )
+
+
+class TestWorldStageDeclarationIn:
+    """WorldStage.declaration_in が、名詞の宣言から今の段階の宣言を引いて返すことを保証する。"""
+
+    def test_answers_declaration_of_current_stage(self) -> None:
+        """昼から夜へ移った段階は、昼と夜を宣言した名詞から夜の宣言を返す。"""
+        day, night = _stage("day"), _stage("night")
+        stage = WorldStage.open(_WORLD, day, WorldTick(0))
+        stage.enter(night, WorldTick(12))
+
+        assert stage.declaration_in(_nouns(day, night)) == night

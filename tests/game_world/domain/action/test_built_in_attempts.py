@@ -42,6 +42,7 @@ from ai_rpg_world.game_world.domain.declaration.progress import (
     GroupDecisionDeclaration,
     WorldStageDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     BlankSpeechContentException,
     BlankWaitReasonException,
@@ -217,6 +218,15 @@ class TestPropertiesOfBuiltInAttempts:
         """行為で傷ついたのが行った人以外なら StruckByPerson(行った人)、行った人自身なら WorldHappening を答える。"""
         assert row.attempt.fall_cause_for(BOB) == StruckByPerson(ALICE)
         assert row.attempt.fall_cause_for(ALICE) == WorldHappening()
+
+    def test_world_without_stages_allows_every_built_in_attempt(self) -> None:
+        """段階を宣言しない世界 (NoWorldStages) では、どの組み込みの行為も許される。"""
+        assert all(row.attempt.is_allowed_in(NoWorldStages()) for row in _TABLE)
+
+    @pytest.mark.parametrize("row", _TABLE, ids=str)
+    def test_is_done_as_its_own_kind_only(self, row: _Row) -> None:
+        """組み込みの行為は、最後に行った行為として自分の ActionKind だけで記録される。"""
+        assert row.attempt.done_as() == frozenset({row.kind})
 
     def test_all_actions_allowed_allows_every_built_in_attempt(self) -> None:
         """段階の allowed_actions が AllActionsAllowed なら、どの組み込みの行為も許される。"""
