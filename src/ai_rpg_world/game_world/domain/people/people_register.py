@@ -45,7 +45,7 @@ class PeopleRegister(AggregateRoot[PersonNamedEvent]):
             self._people[character.person_id] = _RegisteredPerson(PersonHandle(number), character.appearance)
 
     @classmethod
-    def open(cls, world: WorldId, characters: Sequence[CharacterDeclaration]) -> PeopleRegister:
+    def from_characters(cls, world: WorldId, characters: Sequence[CharacterDeclaration]) -> PeopleRegister:
         return cls(world, characters)
 
     @property

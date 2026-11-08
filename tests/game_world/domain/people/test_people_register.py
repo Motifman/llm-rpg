@@ -32,14 +32,14 @@ def _character(person: PersonId, appearance: str = "背の高い人") -> Charact
 
 
 def _register() -> PeopleRegister:
-    return PeopleRegister.open(
+    return PeopleRegister.from_characters(
         _WORLD,
         (_character(_BOB, "赤い帽子の人"), _character(_ALICE, "背の高い人"), _character(_CAROL, "杖をついた人")),
     )
 
 
-class TestOpen:
-    """PeopleRegister.open が、登場人物の宣言から番号と見た目の名簿を作ることを保証する。"""
+class TestFromCharacters:
+    """PeopleRegister.from_characters が、登場人物の宣言から番号と見た目の名簿を作ることを保証する。"""
 
     def test_handles_are_numbered_from_zero_in_declaration_order(self) -> None:
         """登場人物の宣言の順 (bob, alice, carol) に、番号が 0, 1, 2 と振られる。PersonId の並びには従わない。"""
@@ -63,7 +63,7 @@ class TestOpen:
     def test_declaring_a_character_twice_raises_domain_exception(self) -> None:
         """同じ人の宣言を 2 回渡すと CharacterListedTwiceException を投げる。"""
         with pytest.raises(CharacterListedTwiceException):
-            PeopleRegister.open(_WORLD, (_character(_ALICE), _character(_ALICE)))
+            PeopleRegister.from_characters(_WORLD, (_character(_ALICE), _character(_ALICE)))
 
 
 class TestName:

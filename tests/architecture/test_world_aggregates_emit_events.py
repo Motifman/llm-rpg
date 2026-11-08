@@ -252,7 +252,7 @@ def _people_register() -> PeopleRegister:
         initial_groups=(),
         knows_at_start=(),
     )
-    return PeopleRegister.open(_WORLD, (alice,))
+    return PeopleRegister.from_characters(_WORLD, (alice,))
 
 
 def _passages() -> PassageStates:

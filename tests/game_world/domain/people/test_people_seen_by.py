@@ -33,7 +33,7 @@ def _character(person: PersonId, appearance: str) -> CharacterDeclaration:
 
 
 def _register() -> PeopleRegister:
-    register = PeopleRegister.open(
+    register = PeopleRegister.from_characters(
         WorldId("island"),
         (_character(_ALICE, "背の高い人"), _character(_BOB, "赤い帽子の人"), _character(_CAROL, "杖をついた人")),
     )
@@ -91,7 +91,7 @@ class TestPersonNotYetNamed:
     def test_a_person_whose_name_should_show_but_is_not_recorded_raises_domain_exception(self) -> None:
         """名札の世界で、名簿にいるが名前を記録していない dave を alice が見ると、PersonNotNamedException を投げる。"""
         dave = PersonId("dave")
-        register_with_dave = PeopleRegister.open(
+        register_with_dave = PeopleRegister.from_characters(
             WorldId("island"), (_character(_ALICE, "背の高い人"), _character(dave, "髭の人"))
         )
         register_with_dave.name(_ALICE, DisplayName("ミナ"))
@@ -103,7 +103,7 @@ class TestPersonNotYetNamed:
     def test_an_unnamed_stranger_in_a_world_without_name_tags_is_seen_by_appearance(self) -> None:
         """名札の無い世界で、知らない相手は名前を問わないので、名前を記録していなくても見た目だけの PersonRef になる。"""
         dave = PersonId("dave")
-        register = PeopleRegister.open(
+        register = PeopleRegister.from_characters(
             WorldId("island"), (_character(_ALICE, "背の高い人"), _character(dave, "髭の人"))
         )
         view = PeopleSeenBy(viewer=_ALICE, register=register, name_tags=False, knows_at_start=frozenset())
