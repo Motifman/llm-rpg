@@ -90,7 +90,17 @@ from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import FlawCollec
 SPOT_FIELDS = ("name", "description", "atmosphere", "sections", "objects", "discoverables")
 SECTION_FIELDS = ("name", "capacity", "reachable_objects", "access")
 OBJECT_FIELDS = ("name", "description", "appearance", "state_keys", "interactions")
-PASSAGE_FIELDS = ("ends", "two_way", "travel_ticks", "states", "initial_state", "hidden_until_revealed", "condition")
+PASSAGE_FIELDS = (
+    "name",
+    "description",
+    "ends",
+    "two_way",
+    "travel_ticks",
+    "states",
+    "initial_state",
+    "hidden_until_revealed",
+    "condition",
+)
 ITEM_SPEC_FIELDS = ("name", "description", "state_keys", "lights_up", "hands_needed", "interactions", "use")
 GROUPING_FIELDS = ("name", "visibility", "changes", "groups")
 CHARACTER_FIELDS = (
@@ -412,6 +422,8 @@ class NounReader:
         return node.build(
             lambda: PassageDeclaration(
                 passage_id=PassageId(name),
+                name=display_name(fields.required("name")),
+                description=description(fields.required("description")),
                 ends=(SpotId(ends[0].text()), SpotId(ends[1].text())),
                 two_way=fields.required("two_way").boolean(),
                 travel_ticks=ticks(fields.required("travel_ticks")),
