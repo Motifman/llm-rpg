@@ -11,3 +11,7 @@ class PersonNotInRegisterException(GameWorldDomainException):
 
 class PersonNotNamedException(GameWorldDomainException):
     error_code = "GAME_WORLD.PERSON_NOT_NAMED"
+
+
+class PersonAlreadyNamedException(GameWorldDomainException):
+    error_code = "GAME_WORLD.PERSON_ALREADY_NAMED"

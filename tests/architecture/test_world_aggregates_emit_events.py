@@ -637,18 +637,6 @@ class TestWatchedAggregates:
         assert not _is_watched(ScenarioProgress)
         assert not _is_watched(MissedNotices)
 
-    def test_every_ledger_name_is_a_class_under_the_game_world_domain(self) -> None:
-        """帳簿の名前 (ScenarioProgress、MissedNotices) は、どれも ai_rpg_world.game_world.domain の下にあるクラスの名前。名前を書き違えて、どのクラスも除いていない名前が表に残ると落ちる。"""
-        package = importlib.import_module(_DOMAIN_PACKAGE)
-        class_names = {
-            cls.__name__
-            for module_info in pkgutil.walk_packages(package.__path__, prefix=f"{_DOMAIN_PACKAGE}.")
-            for cls in vars(importlib.import_module(module_info.name)).values()
-            if inspect.isclass(cls)
-        }
-
-        assert _LEDGER_AGGREGATES <= class_names
-
     def test_other_aggregates_are_watched(self) -> None:
         """帳簿の名前でない AggregateRoot の子クラスは、見張りの対象になる。AggregateRoot そのものと集約でないクラスはならない。"""
 

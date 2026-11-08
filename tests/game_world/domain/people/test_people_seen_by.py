@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
+from ai_rpg_world.game_world.domain.exception.people_register_exception import PersonNotNamedException
 from ai_rpg_world.game_world.domain.people import (
     NoVisibleName,
     PeopleAsSeen,
@@ -79,6 +82,34 @@ class TestWorldWithoutNameTags:
 
         assert ref == PersonRef(
             handle=PersonHandle(2), appearance=DescriptionText("杖をついた人"), visible_name=NoVisibleName()
+        )
+
+
+class TestPersonNotYetNamed:
+    """名前を出すべき相手の名前がまだ記録されていないとき、PeopleSeenBy.ref_of が見た目だけに落とさず断ることを保証する。"""
+
+    def test_a_person_whose_name_should_show_but_is_not_recorded_raises_domain_exception(self) -> None:
+        """名札の世界で、名簿にいるが名前を記録していない dave を alice が見ると、PersonNotNamedException を投げる。"""
+        dave = PersonId("dave")
+        register_with_dave = PeopleRegister.open(
+            WorldId("island"), (_character(_ALICE, "背の高い人"), _character(dave, "髭の人"))
+        )
+        register_with_dave.name(_ALICE, DisplayName("ミナ"))
+        view = PeopleSeenBy(viewer=_ALICE, register=register_with_dave, name_tags=True, knows_at_start=frozenset())
+
+        with pytest.raises(PersonNotNamedException):
+            view.ref_of(dave)
+
+    def test_an_unnamed_stranger_in_a_world_without_name_tags_is_seen_by_appearance(self) -> None:
+        """名札の無い世界で、知らない相手は名前を問わないので、名前を記録していなくても見た目だけの PersonRef になる。"""
+        dave = PersonId("dave")
+        register = PeopleRegister.open(
+            WorldId("island"), (_character(_ALICE, "背の高い人"), _character(dave, "髭の人"))
+        )
+        view = PeopleSeenBy(viewer=_ALICE, register=register, name_tags=False, knows_at_start=frozenset())
+
+        assert view.ref_of(dave) == PersonRef(
+            handle=PersonHandle(1), appearance=DescriptionText("髭の人"), visible_name=NoVisibleName()
         )
 
 

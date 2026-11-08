@@ -42,7 +42,7 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import PeopleRegister
-from ai_rpg_world.game_world.domain.person import GroupMembership, MissedNotices, PersonOutcomes, PersonVitals
+from ai_rpg_world.game_world.domain.person import GroupMembership, PersonOutcomes, PersonVitals
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import GroupDecisionId, ObjectId, PersonId, SpotId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import PassageStates, SpotAtmospheres, Whereabouts
@@ -109,7 +109,6 @@ class WorldInMemory:
         self.outcomes = PersonOutcomes.start(world, people)
         self.membership = GroupMembership(world)
         self.people_register = PeopleRegister.open(world, characters)
-        self.missed_notices: dict[PersonId, MissedNotices] = {}
         self.vitals = {v.person: v for v in vitals}
         self.inventories = {i.person_id: i for i in inventories}
         self.items = {i.item_id: i for i in items}
@@ -142,9 +141,6 @@ class WorldInMemory:
 
     def group_decision_of(self, decision: GroupDecisionDeclaration) -> GroupDecision:
         return self.group_decisions.setdefault(decision.decision_id, GroupDecision(decision))
-
-    def missed_notices_of(self, person: PersonId) -> MissedNotices:
-        return self.missed_notices.setdefault(person, MissedNotices(person))
 
 
 class _FactsInMemory(WorldFacts):

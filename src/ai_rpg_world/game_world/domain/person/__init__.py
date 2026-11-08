@@ -15,7 +15,6 @@ from ai_rpg_world.game_world.domain.person.life_state import (
     StruckByPerson,
     WorldHappening,
 )
-from ai_rpg_world.game_world.domain.person.missed_notices import MissedNotice, MissedNotices
 from ai_rpg_world.game_world.domain.person.person_outcomes import (
     DeclaredOutcome,
     Died,
@@ -46,8 +45,6 @@ from ai_rpg_world.game_world.domain.person.status_effect import (
 )
 
 __all__ = [
-    "MissedNotice",
-    "MissedNotices",
     "Alive",
     "Dead",
     "DeclaredOutcome",

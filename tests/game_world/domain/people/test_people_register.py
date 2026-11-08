@@ -5,7 +5,9 @@ import pytest
 from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
 from ai_rpg_world.game_world.domain.exception.people_register_exception import (
     CharacterListedTwiceException,
+    PersonAlreadyNamedException,
     PersonNotInRegisterException,
+    PersonNotNamedException,
 )
 from ai_rpg_world.game_world.domain.people import PeopleRegister, PersonHandle, PersonNamedEvent
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, PersonId, SpotId, WorldId
@@ -90,6 +92,18 @@ class TestName:
         assert register.name_of(_ALICE) == DisplayName("ミナ")
         assert register.get_events() == []
 
+    def test_renaming_with_a_different_name_raises_domain_exception(self) -> None:
+        """「ミナ」と記録済みの alice に「ミナミ」を記録すると PersonAlreadyNamedException を投げ、名前は「ミナ」のまま、イベントもためない。"""
+        register = _register()
+        register.name(_ALICE, DisplayName("ミナ"))
+        register.clear_events()
+
+        with pytest.raises(PersonAlreadyNamedException):
+            register.name(_ALICE, DisplayName("ミナミ"))
+
+        assert register.name_of(_ALICE) == DisplayName("ミナ")
+        assert register.get_events() == []
+
     def test_naming_a_person_not_in_the_register_raises_domain_exception(self) -> None:
         """登場人物にいない人に名前を記録すると PersonNotInRegisterException を投げ、イベントもためない。"""
         register = _register()
@@ -109,3 +123,15 @@ class TestReadingsOfPeopleNotInTheRegister:
 
         with pytest.raises(PersonNotInRegisterException):
             getattr(register, reading)(_STRANGER)
+
+
+class TestNameOfUnnamedPerson:
+    """名前をまだ記録していない人の名前を問うと、黙って空の名前を返さずに断ることを保証する。"""
+
+    def test_name_of_a_person_not_yet_named_raises_domain_exception(self) -> None:
+        """登場人物にいるが名前を記録していない bob に name_of を呼ぶと PersonNotNamedException を投げる。"""
+        register = _register()
+        register.name(_ALICE, DisplayName("ミナ"))
+
+        with pytest.raises(PersonNotNamedException):
+            register.name_of(_BOB)

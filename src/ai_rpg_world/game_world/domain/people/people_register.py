@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, final
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.exception.people_register_exception import (
     CharacterListedTwiceException,
+    PersonAlreadyNamedException,
     PersonNotInRegisterException,
     PersonNotNamedException,
 )
@@ -53,8 +54,13 @@ class PeopleRegister(AggregateRoot[PersonNamedEvent]):
 
     def name(self, person: PersonId, name: DisplayName) -> None:
         self._registered(person)
-        if self._names.get(person) == name:
+        recorded = self._names.get(person)
+        if recorded == name:
             return
+        if recorded is not None:
+            raise PersonAlreadyNamedException(
+                f"{person.value} is already named {recorded.text!r} and cannot be renamed {name.text!r}"
+            )
         self._names[person] = name
         self.add_event(PersonNamedEvent(**new_event_stamp(), world=self._world, person=person, name=name))
 
