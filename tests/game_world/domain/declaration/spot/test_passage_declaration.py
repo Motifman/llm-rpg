@@ -11,7 +11,14 @@ from ai_rpg_world.game_world.domain.exception.spot_declaration_exception import 
     UndeclaredPassageStateException,
 )
 from ai_rpg_world.game_world.domain.sound import SoundLoss
-from ai_rpg_world.game_world.domain.value_object import DisplayName, PassageId, PassageStateName, SpotId, Ticks
+from ai_rpg_world.game_world.domain.value_object import (
+    DescriptionText,
+    DisplayName,
+    PassageId,
+    PassageStateName,
+    SpotId,
+    Ticks,
+)
 
 OPEN = PassageStateName("open")
 CLOSED = PassageStateName("closed")
@@ -32,6 +39,8 @@ def _door_states() -> tuple[PassageStateDeclaration, ...]:
 def _door(initial_state: PassageStateName = CLOSED) -> PassageDeclaration:
     return PassageDeclaration(
         passage_id=PassageId("cellar_door"),
+        name=DisplayName("cellar_door の通路"),
+        description=DescriptionText("cellar_door の様子"),
         ends=(SpotId("hall"), SpotId("cellar")),
         two_way=True,
         travel_ticks=Ticks(1),
@@ -49,6 +58,8 @@ class TestPassageDeclarationWithoutStates:
         with pytest.raises(NoPassageStatesException):
             PassageDeclaration(
                 passage_id=PassageId("path"),
+                name=DisplayName("path の通路"),
+                description=DescriptionText("path の様子"),
                 ends=(SpotId("field"), SpotId("forest")),
                 two_way=True,
                 travel_ticks=Ticks(2),
@@ -116,6 +127,8 @@ class TestPassageDeclarationRejectsAmbiguousDeclarations:
         with pytest.raises(DuplicatePassageStateNameException):
             PassageDeclaration(
                 passage_id=PassageId("cellar_door"),
+                name=DisplayName("cellar_door の通路"),
+                description=DescriptionText("cellar_door の様子"),
                 ends=(SpotId("hall"), SpotId("cellar")),
                 two_way=True,
                 travel_ticks=Ticks(1),
@@ -129,6 +142,8 @@ class TestPassageDeclarationRejectsAmbiguousDeclarations:
         with pytest.raises(PassageEndsAtSameSpotException):
             PassageDeclaration(
                 passage_id=PassageId("loop"),
+                name=DisplayName("loop の通路"),
+                description=DescriptionText("loop の様子"),
                 ends=(SpotId("hall"), SpotId("hall")),
                 two_way=True,
                 travel_ticks=Ticks(1),
@@ -145,6 +160,8 @@ class TestPassageDeclarationHiddenUntilRevealed:
         """hidden_until_revealed=True を渡すと、その値を持つ。"""
         passage = PassageDeclaration(
             passage_id=PassageId("secret_tunnel"),
+            name=DisplayName("secret_tunnel の通路"),
+            description=DescriptionText("secret_tunnel の様子"),
             ends=(SpotId("cellar"), SpotId("well")),
             two_way=True,
             travel_ticks=Ticks(3),

@@ -67,6 +67,8 @@ def path(
 ) -> PassageDeclaration:
     return PassageDeclaration(
         passage_id=PassageId(name),
+        name=DisplayName(f"{name} の通路"),
+        description=DescriptionText(f"{name} の様子"),
         ends=(SpotId(a), SpotId(b)),
         two_way=two_way,
         travel_ticks=Ticks(ticks),
@@ -79,6 +81,8 @@ def path(
 def door(name: str, a: str, b: str, *, initial: PassageStateName = CLOSED, ticks: int = 1) -> PassageDeclaration:
     return PassageDeclaration(
         passage_id=PassageId(name),
+        name=DisplayName(f"{name} の通路"),
+        description=DescriptionText(f"{name} の様子"),
         ends=(SpotId(a), SpotId(b)),
         two_way=True,
         travel_ticks=Ticks(ticks),

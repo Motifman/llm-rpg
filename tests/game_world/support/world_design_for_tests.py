@@ -118,6 +118,8 @@ def spot(name: str) -> SpotDeclaration:
 def passage(name: str, ends: tuple[str, str], travel_ticks: int = 1, two_way: bool = True) -> PassageDeclaration:
     return PassageDeclaration(
         passage_id=PassageId(name),
+        name=DisplayName(f"{name} の通路"),
+        description=DescriptionText(f"{name} の様子"),
         ends=(SpotId(ends[0]), SpotId(ends[1])),
         two_way=two_way,
         travel_ticks=Ticks(travel_ticks),

@@ -70,7 +70,7 @@ precondition:
 | `spots.<場所>.objects.<名前>` | `name`, `description`, `appearance` (`seen_in_dark`, `hidden_until_revealed`), `state_keys`, `interactions` |
 | `spots.<場所>.discoverables.<名前>` | `found_text`, `condition`, `when_found`, `finding` (`once_in_world` / `once_per_person`) |
 | 操作 (`interactions.<名前>`、`person_interactions.<名前>`) | `display_label`, `precondition`, `effect`, `success_text`, `shows_on_success`, `exertion`, `actor_requirement`, `perceived_as`, `reaches_unseen`, `duration`, `allows_stealth`, `arguments` |
-| `passages.<名前>` | `ends` (2 つ), `two_way`, `travel_ticks`, `states` (`<状態>: { display_name, traversable, sound_loss }`), `initial_state`, `hidden_until_revealed`, `condition` (書けば `PassageTraversalDeclaration`) |
+| `passages.<名前>` | `name`, `description`, `ends` (2 つ), `two_way`, `travel_ticks`, `states` (`<状態>: { display_name, traversable, sound_loss }`), `initial_state`, `hidden_until_revealed`, `condition` (書けば `PassageTraversalDeclaration`) |
 | `item_specs.<名前>` | `name`, `description`, `state_keys`, `lights_up` (`null` か `{ key, value }`), `hands_needed`, `interactions`, `use` (書けば `ItemUseDeclaration`) |
 | `groupings.<名前>` | `name`, `visibility`, `changes`, `groups` (`<集まり>: { name, members_know_each_other, shared_description }`) |
 | `characters.<名前>` | `appearance`, `spawn_spot`, `initial_items`, `initial_held`, `initial_groups`, `knows_at_start`, `max_hp`, `pack_capacity`, `being` |
