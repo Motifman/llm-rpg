@@ -32,6 +32,9 @@ class SetObjectValueEffect:
     key: ObjectStateKeyDeclaration
     value: StateValue
 
+    def __post_init__(self) -> None:
+        self.key.require_fits(self.value)
+
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         world.object_state(self.key.object_id).set(self.key, self.value, facts.now())
 
@@ -44,6 +47,9 @@ class SetObjectValueEffect:
 class AddToObjectCountEffect:
     key: ObjectStateKeyDeclaration
     amount: Count
+
+    def __post_init__(self) -> None:
+        self.key.require_count()
 
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         world.object_state(self.key.object_id).add_to_count(self.key, self.amount)
@@ -58,6 +64,9 @@ class SubtractFromObjectCountEffect:
     key: ObjectStateKeyDeclaration
     amount: Count
 
+    def __post_init__(self) -> None:
+        self.key.require_count()
+
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         world.object_state(self.key.object_id).subtract_from_count(self.key, self.amount)
 
@@ -71,6 +80,9 @@ class TakeFromObjectStockEffect:
     key: ObjectStateKeyDeclaration
     amount: Count
 
+    def __post_init__(self) -> None:
+        self.key.require_stock()
+
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         world.object_state(self.key.object_id).take_from_stock(self.key, self.amount, facts.now())
 
@@ -83,6 +95,9 @@ class TakeFromObjectStockEffect:
 class WriteTextEffect:
     key: ObjectStateKeyDeclaration
     body_argument: ArgumentName
+
+    def __post_init__(self) -> None:
+        self.key.require_written_text()
 
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         body = trigger.argument(self.body_argument)
@@ -116,6 +131,9 @@ class DepositItemToObjectEffect:
     item_spec: ItemSpecDeclaration
     key: ObjectStateKeyDeclaration
 
+    def __post_init__(self) -> None:
+        self.key.require_count()
+
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         person = self.who.person_in(trigger)
         (deposited,) = facts.inventory(person).items_to_give_up(self.item_spec.item_spec_id, Count(1))
@@ -133,6 +151,9 @@ class DepositGoldToObjectEffect:
     who: Subject
     amount: Gold
     key: ObjectStateKeyDeclaration
+
+    def __post_init__(self) -> None:
+        self.key.require_count()
 
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         world.inventory(self.who.person_in(trigger)).pay(self.amount)

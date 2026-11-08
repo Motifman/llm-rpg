@@ -174,6 +174,7 @@ TicksInWorldStageAtLeastCondition(ticks: Ticks)
 TimeOfDayIsCondition(phase: DayPhaseName)
 WeatherIsCondition(weather: WeatherType)
 ChanceCondition(probability: Probability)          # facts.random() から 1 つ引き、probability より小さければ真
+# 物と品物の状態の鍵を見る条件は、鍵の種類に合わなければ作るときに断る (key.require_fits / require_count / require_stock)。読み込みでは DesignFlaw になる
 ObjectValueIsCondition(key: ObjectStateKeyDeclaration, value: StateValue)
 ObjectCountAtLeastCondition(key: ObjectStateKeyDeclaration, count: Count)
 ObjectCountGreaterThanCondition(key: ObjectStateKeyDeclaration, other: ObjectStateKeyDeclaration)

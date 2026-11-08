@@ -91,6 +91,9 @@ class ObjectStateKeyDeclaration:
     kind: StateKind
     initial: StateValue                     # kind.accepts(initial) でなければ作れない。書いた文の鍵は NothingWritten だけ
 
+    def require_fits(self, value: StateValue) -> None: ...   # kind.accepts(value) でなければ StateValueMismatchesKindException
+    def require_count(self) -> None: ...                     # 数の鍵でなければ StateKeyOfAnotherKindException。require_stock・require_written_text も同じ形
+
 StateKind = ItemStateKind | StockStateKind | WrittenTextStateKind
 ItemStateKind = FlagStateKind | CountStateKind | ChoiceStateKind   # 品物は在庫と書いた文を持たない
 FlagStateKind()
@@ -99,6 +102,7 @@ ChoiceStateKind(choices: tuple[ChoiceName, ...])     # 1 つ以上、重なら�
 StockStateKind(capacity: Count, refills_every: Ticks | NoRefill)   # 上限・間隔ともに 1 以上
 WrittenTextStateKind()
 # どの種類も accepts(value: StateValue) -> bool と holds_written_text() -> bool (書いた文を持つ種類か。WrittenTextStateKind だけが真) を持つ
+# holds_count() -> bool は CountStateKind だけ、holds_stock() -> bool は StockStateKind だけが真
 
 StateValue = FlagValue | CountValue | ChoiceValue | StockValue | WrittenText | NothingWritten
 FlagValue(raised: bool)
@@ -115,6 +119,8 @@ class ItemStateKeyDeclaration:
     key: StateKeyId
     kind: ItemStateKind
     initial: StateValue
+
+    def require_fits(self, value: StateValue) -> None: ...   # kind.accepts(value) でなければ StateValueMismatchesKindException
 
 @final
 @dataclass(frozen=True)
@@ -708,7 +714,7 @@ infrastructure: YAML を読む (scenario_format.md)
 
 - 名詞の宣言は互いを宣言ではなく ID で指す (`SpotSectionDeclaration.reachable_objects`、`CharacterDeclaration.spawn_spot` など)。ID が宣言にあるかは `DeclaredNouns` が作るときに確かめ、無ければ `DesignFlaw` にする。`GroupDeclaration.grouping` だけは、分け方が集団を指さず循環しないので、宣言のまま持つ
 - `DeclaredNouns` は ID の有無のほかに、次も照らし合わせて `DesignFlaw` にする (#1995)。集まりの持つ分け方が `groupings` に無いか、同じ `grouping_id` の宣言と中身が違う (`groups_in` が返せなくなる)。区画の `reachable_objects` の物が区画と違う場所にある。登場人物の `initial_groups` に同じ分け方の集まりが 2 つある (`group_of` は 1 つしか返せない)
-- 宣言 1 つだけで判断できる誤り (通路の状態名の重複、両端が同じ場所の通路、`initial_state` が `states` に無い、区画の `reachable_objects` の重複、状態の鍵の重複、種類に合わない `initial`) は、宣言の型が作るときにドメイン例外で断る。ほかの宣言と照らし合わせて分かる誤りは `DeclaredNouns` が確かめる。どちらで止めても作者に返るのは `DesignFlaw` で、宣言の型の例外は読み込む側が場所を付けて `DesignFlaw` に包む
+- 宣言 1 つだけで判断できる誤り (通路の状態名の重複、両端が同じ場所の通路、`initial_state` が `states` に無い、区画の `reachable_objects` の重複、状態の鍵の重複、種類に合わない `initial`、状態の鍵の種類に合わない効果と条件 (旗の鍵に数を足す、など。#2062)) は、宣言の型が作るときにドメイン例外で断る。ほかの宣言と照らし合わせて分かる誤りは `DeclaredNouns` が確かめる。どちらで止めても作者に返るのは `DesignFlaw` で、宣言の型の例外は読み込む側が場所を付けて `DesignFlaw` に包む
 - `Unchanged` (雰囲気を変える効果で、変えない欄) と `NoCapacity` (区画の定員が無い) は、中身の無い型
 
 - 誤りは最初の 1 つで止めず、集めてから 1 つの `WorldDesignFlawsException` で投げる。どの誤りにも場所 (`DesignLocation`) を付ける。YAML の書き方の誤り (必須キーの欠け、列挙の綴り違い、鍵の重複) も infrastructure が `DesignFlaw` に包み、素の `KeyError` / `ValueError` を外に出さない

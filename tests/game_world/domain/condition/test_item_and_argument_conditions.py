@@ -9,16 +9,19 @@ from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.item_conditions import ItemAgeAtLeastCondition, ItemValueIsCondition
 from ai_rpg_world.game_world.domain.condition.subject import ThisItem
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
+    CountValue,
     FlagStateKind,
     FlagValue,
     ItemSpecDeclaration,
     ItemStateKeyDeclaration,
     NotALightSource,
 )
+from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
 from ai_rpg_world.game_world.domain.exception.trigger_exception import ArgumentNotInTriggerException
 from ai_rpg_world.game_world.domain.objects_and_items import Item
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.value_object import (
+    Count,
     DescriptionText,
     DisplayName,
     ItemSpecId,
@@ -82,6 +85,11 @@ class TestItemConditions:
         assert not ItemValueIsCondition(item=ThisItem(), key=_LIT, value=FlagValue(True), failure_text=NoText()).holds(
             a_world.facts(), using_torch
         )
+
+    def test_item_value_that_does_not_fit_the_key_is_refused(self) -> None:
+        """旗の鍵 (灯している) と数の値を比べる ItemValueIsCondition は StateValueMismatchesKindException を投げる。"""
+        with pytest.raises(StateValueMismatchesKindException):
+            ItemValueIsCondition(item=ThisItem(), key=_LIT, value=CountValue(Count(1)), failure_text=NoText())
 
 
 class TestArgumentEquals:

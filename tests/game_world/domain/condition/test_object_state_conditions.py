@@ -24,7 +24,10 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     StockValue,
 )
 from ai_rpg_world.game_world.domain.declaration.object_and_item.state_kind import NoRefill, StateKind
-from ai_rpg_world.game_world.domain.exception.condition_exception import StateValueOfAnotherKindException
+from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
+    StateKeyOfAnotherKindException,
+    StateValueMismatchesKindException,
+)
 from ai_rpg_world.game_world.domain.objects_and_items import ObjectState
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
@@ -89,6 +92,11 @@ class TestObjectValueIs:
             facts, _BY_ALICE
         )
 
+    def test_value_that_does_not_fit_the_key_is_refused(self) -> None:
+        """蓋の開け閉めの鍵を、選択肢に無い値 (割れた) と比べる ObjectValueIsCondition は StateValueMismatchesKindException を投げる。"""
+        with pytest.raises(StateValueMismatchesKindException):
+            ObjectValueIsCondition(key=_LID, value=ChoiceValue(ChoiceName("broken")), failure_text=NoText())
+
 
 class TestObjectCounts:
     """ObjectCountAtLeastCondition と ObjectCountGreaterThanCondition が数の値を比べることを保証する。"""
@@ -113,10 +121,20 @@ class TestObjectCounts:
             facts, _BY_ALICE
         )
 
-    def test_count_of_a_key_that_is_not_a_count_fails_loudly(self) -> None:
-        """数でない値 (蓋の開け閉め) を数として見ると、StateValueOfAnotherKindException を投げる。"""
-        with pytest.raises(StateValueOfAnotherKindException):
-            ObjectCountAtLeastCondition(key=_LID, count=Count(1), failure_text=NoText()).holds(_facts(), _BY_ALICE)
+    def test_count_at_least_of_a_key_that_is_not_a_count_is_refused(self) -> None:
+        """数でない鍵 (蓋の開け閉め) を数として見る ObjectCountAtLeastCondition は StateKeyOfAnotherKindException を投げる。"""
+        with pytest.raises(StateKeyOfAnotherKindException):
+            ObjectCountAtLeastCondition(key=_LID, count=Count(1), failure_text=NoText())
+
+    @pytest.mark.parametrize(
+        ("key", "other"), [pytest.param(_LID, _COINS, id="key"), pytest.param(_COINS, _FISH, id="other")]
+    )
+    def test_count_greater_than_with_a_key_that_is_not_a_count_is_refused(
+        self, key: ObjectStateKeyDeclaration, other: ObjectStateKeyDeclaration
+    ) -> None:
+        """比べる 2 つの鍵のどちらかが数でない (蓋の開け閉め・池の魚の在庫) と、StateKeyOfAnotherKindException を投げる。"""
+        with pytest.raises(StateKeyOfAnotherKindException):
+            ObjectCountGreaterThanCondition(key=key, other=other, failure_text=NoText())
 
 
 class TestObjectStockAtLeast:
@@ -131,7 +149,7 @@ class TestObjectStockAtLeast:
             facts, _BY_ALICE
         )
 
-    def test_stock_of_a_key_that_is_not_a_stock_fails_loudly(self) -> None:
-        """在庫でない値 (硬貨の数) を在庫として見ると、StateValueOfAnotherKindException を投げる。"""
-        with pytest.raises(StateValueOfAnotherKindException):
-            ObjectStockAtLeastCondition(key=_COINS, amount=Count(1), failure_text=NoText()).holds(_facts(), _BY_ALICE)
+    def test_stock_of_a_key_that_is_not_a_stock_is_refused(self) -> None:
+        """在庫でない鍵 (硬貨の数) を在庫として見る ObjectStockAtLeastCondition は StateKeyOfAnotherKindException を投げる。"""
+        with pytest.raises(StateKeyOfAnotherKindException):
+            ObjectStockAtLeastCondition(key=_COINS, amount=Count(1), failure_text=NoText())

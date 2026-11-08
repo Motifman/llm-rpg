@@ -6,6 +6,7 @@ from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentV
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.subject import Actor, SubjectKind, Target, ThisItem
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
+    CountValue,
     FlagStateKind,
     FlagValue,
     ItemSpecDeclaration,
@@ -24,6 +25,7 @@ from ai_rpg_world.game_world.domain.effect.item_effects import (
     TakeItemEffect,
 )
 from ai_rpg_world.game_world.domain.exception.effect_exception import ArgumentIsNotAnItemException
+from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     InventoryFullException,
     NotEnoughItemsOfSpecException,
@@ -288,3 +290,12 @@ class TestSetItemValueEffect:
         )
 
         assert world.items[_LANTERN_1].value_of(lit) == FlagValue(True)
+
+    def test_value_that_does_not_fit_the_key_is_refused(self) -> None:
+        """旗の鍵に数の値を置く SetItemValueEffect は StateValueMismatchesKindException を投げる。"""
+        lit = ItemStateKeyDeclaration(
+            item_spec_id=ItemSpecId("lantern"), key=StateKeyId("lit"), kind=FlagStateKind(), initial=FlagValue(False)
+        )
+
+        with pytest.raises(StateValueMismatchesKindException):
+            SetItemValueEffect(ThisItem(), lit, CountValue(Count(1)))
