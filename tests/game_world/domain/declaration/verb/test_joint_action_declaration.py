@@ -10,7 +10,8 @@ from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import 
 )
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ObjectId, Ticks
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
-from tests.game_world.domain.declaration.verb.verb_parts import ChangesNothing
+from tests.game_world.support.verb_declarations_for_tests import as_completed_joint_action
+from tests.game_world.support.verb_parts_for_tests import ChangesNothing
 
 _OPEN_VALVE_A = (ObjectId("valve_a"), InteractionId("open_valve"))
 _OPEN_VALVE_B = (ObjectId("valve_b"), InteractionId("open_valve"))
@@ -54,6 +55,8 @@ class TestJointActionDeclarationAsTrigger:
 
     def test_completed_trigger_answers_the_declared_joint_id(self) -> None:
         """JointActionCompleted に宣言を包むと、きっかけから宣言の joint_id が読める。"""
-        trigger = JointActionCompleted(joint=_joint_action(required=(_OPEN_VALVE_A, _OPEN_VALVE_B)))
+        trigger = JointActionCompleted(
+            joint=as_completed_joint_action(_joint_action(required=(_OPEN_VALVE_A, _OPEN_VALVE_B)))
+        )
 
         assert trigger.joint.joint_id == JointActionId("open_both_valves")

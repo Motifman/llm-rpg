@@ -11,3 +11,11 @@ class NoJointActionPartsException(GameWorldDomainException):
 
 class DuplicateJointActionPartException(GameWorldDomainException):
     error_code = "GAME_WORLD.VERB_DECLARATION.DUPLICATE_JOINT_ACTION_PART"
+
+
+class DuplicateArgumentNameException(GameWorldDomainException):
+    error_code = "GAME_WORLD.VERB_DECLARATION.DUPLICATE_ARGUMENT_NAME"
+
+
+class NotBuiltInActionPerceptionException(GameWorldDomainException):
+    error_code = "GAME_WORLD.VERB_DECLARATION.NOT_BUILT_IN_ACTION_PERCEPTION"

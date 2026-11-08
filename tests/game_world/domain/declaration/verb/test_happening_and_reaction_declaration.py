@@ -4,7 +4,8 @@ from ai_rpg_world.game_world.domain.action.trigger import HappeningFired, Reacti
 from ai_rpg_world.game_world.domain.declaration.verb import HappeningDeclaration, NoNotice, ReactionDeclaration
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
-from tests.game_world.domain.declaration.verb.verb_parts import AlwaysHolds, ChangesNothing
+from tests.game_world.support.verb_declarations_for_tests import as_fired_happening, as_fired_reaction
+from tests.game_world.support.verb_parts_for_tests import AlwaysHolds, ChangesNothing
 
 
 class TestHappeningDeclarationAsTrigger:
@@ -20,7 +21,9 @@ class TestHappeningDeclarationAsTrigger:
             notice=NoNotice(),
         )
 
-        assert HappeningFired(happening=happening).happening.happening_id == HappeningId("lights_go_out")
+        trigger = HappeningFired(happening=as_fired_happening(happening))
+
+        assert trigger.happening.happening_id == HappeningId("lights_go_out")
 
 
 class TestReactionDeclarationAsTrigger:
@@ -35,4 +38,6 @@ class TestReactionDeclarationAsTrigger:
             when_becomes_false=ChangesNothing(),
         )
 
-        assert ReactionFired(reaction=reaction).reaction.reaction_id == ReactionId("door_follows_lever")
+        trigger = ReactionFired(reaction=as_fired_reaction(reaction))
+
+        assert trigger.reaction.reaction_id == ReactionId("door_follows_lever")
