@@ -7,13 +7,15 @@ from typing import final
 @final
 @dataclass(frozen=True)
 class Notable:
-    pass
+    def stands_out(self) -> bool:
+        return True
 
 
 @final
 @dataclass(frozen=True)
 class Background:
-    pass
+    def stands_out(self) -> bool:
+        return False
 
 
 Salience = Notable | Background
