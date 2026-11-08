@@ -26,12 +26,12 @@ class AnnouncementStimulus:
             return NotPerceived()
         # 知らせは選ばれた本人に宛てたものなので、倒れていれば起きてから知る。
         return perceiver.notices_surroundings(involved=True).outcome(
-            when_aware=lambda: Perceived.of(
+            when_aware=lambda: Perceived(
                 perceiver=perceiver.person,
                 text=self.text.seen_by(view),
                 quality=Told(),
                 happened_at=self.at,
-                worth_attention=self.salience == Notable(),
+                calls_attention=self.salience == Notable(),
             ),
             on_waking=lambda: MissedNotice(text=self.text.seen_by(view), happened_at=self.at),
         )

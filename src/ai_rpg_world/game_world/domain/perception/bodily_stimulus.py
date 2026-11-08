@@ -23,10 +23,10 @@ class BodilyStimulus:
     def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome:
         if not perceiver.feels_body_of(self.person):
             return NotPerceived()
-        return Perceived.of(
+        return Perceived(
             perceiver=perceiver.person,
             text=self.text.seen_by(view),
             quality=Felt(),
             happened_at=self.at,
-            worth_attention=self.salience == Notable(),
+            calls_attention=self.salience == Notable(),
         )

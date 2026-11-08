@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import final
 
@@ -79,33 +80,53 @@ class SoundStimulus:
     def perceived_by(
         self, perceiver: Perceiver, reach: SoundReach, values: HearingValues, view: PeopleAsSeen
     ) -> PerceptionOutcome:
-        quality = self.source.heard_by(perceiver, self.origin, self.loudness, reach, values)
-        if isinstance(quality, HearsNothing):
-            return NotPerceived()
-        audible = quality
-        involved = perceiver.person in self.involved
-        return perceiver.notices_surroundings(involved).outcome(
-            when_aware=lambda: self._heard(perceiver, audible, view, involved),
-            on_waking=lambda: self._noticed_on_waking(view),
-        )
+        hearing = _Hearing(stimulus=self, perceiver=perceiver, view=view)
+        return self.source.heard_by(perceiver, self.origin, self.loudness, reach, values).read(hearing)
 
-    def _heard(
-        self,
-        perceiver: Perceiver,
-        quality: HearsClearly | HearsMuffled | HearsFaintly,
-        view: PeopleAsSeen,
-        involved: bool,
-    ) -> PerceptionOutcome:
-        text = self.source.clear_text(self.clear, view) if quality == HearsClearly() else self.muffled.unidentified()
-        return Perceived.of(
-            perceiver=perceiver.person,
-            text=text,
-            quality=quality,
-            happened_at=self.at,
-            worth_attention=involved or self.salience == Notable(),
-        )
-
-    def _noticed_on_waking(self, view: PeopleAsSeen) -> MissedNotice | NotNoticedLater:
+    def noticed_on_waking(self, view: PeopleAsSeen) -> MissedNotice | NotNoticedLater:
         if isinstance(self.noticed_later, NotNoticedLater):
             return NotNoticedLater()
         return MissedNotice(text=self.noticed_later.seen_by(view), happened_at=self.at)
+
+
+@final
+@dataclass(frozen=True)
+class _Hearing:
+    stimulus: SoundStimulus
+    perceiver: Perceiver
+    view: PeopleAsSeen
+
+    def when_clear(self) -> PerceptionOutcome:
+        stimulus = self.stimulus
+        return self._reached(
+            lambda: stimulus.source.clear_text(stimulus.clear, self.view), HearsClearly(), stands_out=True
+        )
+
+    def when_muffled(self) -> PerceptionOutcome:
+        return self._reached(self.stimulus.muffled.unidentified, HearsMuffled(), stands_out=True)
+
+    def when_faint(self) -> PerceptionOutcome:
+        return self._reached(self.stimulus.muffled.unidentified, HearsFaintly(), stands_out=False)
+
+    def when_nothing(self) -> PerceptionOutcome:
+        return NotPerceived()
+
+    def _reached(
+        self,
+        text: Callable[[], TextWithAssignedPeople],
+        quality: HearsClearly | HearsMuffled | HearsFaintly,
+        stands_out: bool,
+    ) -> PerceptionOutcome:
+        stimulus, perceiver = self.stimulus, self.perceiver
+        involved = perceiver.person in stimulus.involved
+        return perceiver.notices_surroundings(involved).outcome(
+            when_aware=lambda: Perceived(
+                perceiver=perceiver.person,
+                text=text(),
+                quality=quality,
+                happened_at=stimulus.at,
+                # かすかに聞こえただけのものは、関わっていても目立っても、考え直す目安にしない。
+                calls_attention=stands_out and (involved or stimulus.salience == Notable()),
+            ),
+            on_waking=lambda: stimulus.noticed_on_waking(self.view),
+        )

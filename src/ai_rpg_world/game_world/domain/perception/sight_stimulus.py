@@ -8,7 +8,7 @@ from ai_rpg_world.game_world.domain.action.manner import Openly, Stealthily
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.exception.perception_exception import TargetNotInvolvedException
 from ai_rpg_world.game_world.domain.lighting.lighting import Lighting
-from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SeesNothing, SeesShapes, SightQuality
+from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SeesShapes, SightQuality
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 from ai_rpg_world.game_world.domain.people.text_about_people import TextAboutPeople
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
@@ -31,6 +31,21 @@ class SightTexts:
     dim: TextAboutPeople | NotSeenInDim
     unseen_actor: TextAboutPeople | NotSeenWithoutActor
     noticed_later: TextAboutPeople | NotNoticedLater
+
+    def without_actor(self) -> SightTexts | NotSeenWithoutActor:
+        if isinstance(self.unseen_actor, NotSeenWithoutActor):
+            return NotSeenWithoutActor()
+        return SightTexts(
+            clear=self.unseen_actor,
+            dim=self.unseen_actor,
+            unseen_actor=self.unseen_actor,
+            noticed_later=self.noticed_later,
+        )
+
+    def noticed_on_waking(self, view: PeopleAsSeen, at: WorldTick) -> MissedNotice | NotNoticedLater:
+        if isinstance(self.noticed_later, NotNoticedLater):
+            return NotNoticedLater()
+        return MissedNotice(text=self.noticed_later.seen_by(view), happened_at=at)
 
 
 @final
@@ -77,7 +92,7 @@ class SightStimulus:
         involved = perceiver.person in self.involved
         return perceiver.notices_surroundings(involved).outcome(
             when_aware=lambda: self._seen(perceiver, texts, lighting, view, random, chances, stealth, involved),
-            on_waking=lambda: self._noticed_on_waking(texts, view),
+            on_waking=lambda: texts.noticed_on_waking(view, self.at),
         )
 
     def _seen(
@@ -91,40 +106,54 @@ class SightStimulus:
         stealth: StealthRule,
         involved: bool,
     ) -> PerceptionOutcome:
-        sight = perceiver.sight_in(lighting)
-        if isinstance(sight, SeesNothing):
-            if not self.seen_in_dark:
-                return NotPerceived()
-            sight = SeesShapes()
-        text = self._text_for(perceiver, texts, sight, view)
-        if text is None:
+        visible = texts if not self.actor_departed or perceiver.sees_departed_people() else texts.without_actor()
+        if isinstance(visible, NotSeenWithoutActor):
             return NotPerceived()
-        if self.manner == Stealthily() and not perceiver.notices_stealthy_act(
-            chances[sight], stealth.attentive_bonus, random
-        ):
-            return NotPerceived()
-        return Perceived.of(
-            perceiver=perceiver.person,
-            text=text,
-            quality=sight,
-            happened_at=self.at,
+        sighting = _Sighting(
+            stimulus=self,
+            perceiver=perceiver,
+            texts=visible,
+            view=view,
+            random=random,
+            chances=chances,
+            attentive_bonus=stealth.attentive_bonus,
             worth_attention=involved or self.salience == Notable(),
         )
+        return perceiver.sight_in(lighting).read(sighting)
 
-    def _text_for(
-        self, perceiver: Perceiver, texts: SightTexts, sight: SeesClearly | SeesShapes, view: PeopleAsSeen
-    ) -> TextWithAssignedPeople | None:
-        if self.actor_departed and not perceiver.sees_departed_people():
-            if isinstance(texts.unseen_actor, NotSeenWithoutActor):
-                return None
-            return texts.unseen_actor.seen_by(view) if sight == SeesClearly() else texts.unseen_actor.unidentified()
-        if sight == SeesClearly():
-            return texts.clear.seen_by(view)
-        if isinstance(texts.dim, NotSeenInDim):
-            return None
-        return texts.dim.unidentified()
 
-    def _noticed_on_waking(self, texts: SightTexts, view: PeopleAsSeen) -> MissedNotice | NotNoticedLater:
-        if isinstance(texts.noticed_later, NotNoticedLater):
-            return NotNoticedLater()
-        return MissedNotice(text=texts.noticed_later.seen_by(view), happened_at=self.at)
+@final
+@dataclass(frozen=True)
+class _Sighting:
+    stimulus: SightStimulus
+    perceiver: Perceiver
+    texts: SightTexts
+    view: PeopleAsSeen
+    random: RandomSource
+    chances: Mapping[SightQuality, Probability]
+    attentive_bonus: Probability
+    worth_attention: bool
+
+    def when_clear(self) -> PerceptionOutcome:
+        return self._seen_as(self.texts.clear.seen_by(self.view), SeesClearly())
+
+    def when_shapes(self) -> PerceptionOutcome:
+        if isinstance(self.texts.dim, NotSeenInDim):
+            return NotPerceived()
+        return self._seen_as(self.texts.dim.unidentified(), SeesShapes())
+
+    def when_nothing(self) -> PerceptionOutcome:
+        return self.when_shapes() if self.stimulus.seen_in_dark else NotPerceived()
+
+    def _seen_as(self, text: TextWithAssignedPeople, sight: SeesClearly | SeesShapes) -> PerceptionOutcome:
+        if self.stimulus.manner == Stealthily() and not self.perceiver.notices_stealthy_act(
+            self.chances[sight], self.attentive_bonus, self.random
+        ):
+            return NotPerceived()
+        return Perceived(
+            perceiver=self.perceiver.person,
+            text=text,
+            quality=sight,
+            happened_at=self.stimulus.at,
+            calls_attention=self.worth_attention,
+        )

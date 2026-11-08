@@ -24,7 +24,12 @@ class TestHearingQualityRead:
 
     @pytest.mark.parametrize(
         ("quality", "expected"),
-        [(HearsClearly(), "clear"), (HearsMuffled(), "muffled"), (HearsFaintly(), "faint"), (HearsNothing(), "nothing")],
+        [
+            (HearsClearly(), "clear"),
+            (HearsMuffled(), "muffled"),
+            (HearsFaintly(), "faint"),
+            (HearsNothing(), "nothing"),
+        ],
     )
     def test_each_quality_asks_the_texts_for_its_own_case(self, quality: HearingQuality, expected: str) -> None:
         """HearsClearly は when_clear、HearsMuffled は when_muffled、HearsFaintly は when_faint、HearsNothing は when_nothing の戻り値を返す。"""
