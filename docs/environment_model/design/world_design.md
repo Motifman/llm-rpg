@@ -402,9 +402,14 @@ class AnnouncementTo:
 
 @final
 @dataclass(frozen=True)
+class NoticedOnWaking:                      # 倒れていた相手が、目が覚めてから気づく文。倒れている相手には行為の最中の文 (clear など) が届かない (#2076)
+    text: TextWithUnassignedPeople
+
+@final
+@dataclass(frozen=True)
 class PerceptionDeclaration:                # 行為が周りにどう知覚されるか
     witness: SightTextsDeclaration
-    target: SightTextsDeclaration | NoTarget
+    target: SightTextsDeclaration | NoticedOnWaking | NoTarget   # NoticedOnWaking は相手が倒れている組み込みの行為 (介抱) だけ
     sound: SoundDeclaration | Silent
     seen_in_dark: bool                              # 真っ暗でも dim の文が届く (光る、大きな動き)
     announcement: AnnouncementTo | NoAnnouncement   # 緊急の招集など、居場所に関わらず知らせるとき
@@ -599,6 +604,7 @@ class BuiltInActionPerceptions:             # どの世界にもある行為 (�
 class BuiltInPerceptionRow:                 # 組み込みの行為の知覚の表の 1 行。その行為に相手がいるかと、文に書ける呼び名を 1 か所で決める (#2076)
     name: str                               # ActionKind の名前 (PICK_UP など)、または whisper / speak / shout / arrival
     has_target: bool                        # 渡す・介抱する・ささやくだけ相手がいる
+    target_is_down: bool                    # 介抱だけ真。相手の文は NoticedOnWaking だけを持て、書かなければ気づかない (NoTarget)
     names_of_things: frozenset[str]         # 人のほかに書ける呼び名 ({item}、{destination}、{speech}、{origin})
 
     @classmethod
@@ -610,7 +616,7 @@ class BuiltInPerceptionRow:                 # 組み込みの行為の知覚の�
     def nameable(self) -> frozenset[str]: ...   # names_of_things と {actor}。相手がいれば {target} も
     def placement(self, location: DesignLocation) -> RulePlacement: ...
     # 相手がいれば RulePlacement.in_person_interaction、いなければ in_action。相手のいない行為の知らせの相手で Target を選べば DesignFlaw
-    # 読み込みは has_target で、相手が見る文 (target) を読むかを決める
+    # 読み込みは has_target と target_is_down で、相手の文 (target) を読むか、どの形で読むかを決める
 
 @final
 @dataclass(frozen=True)
