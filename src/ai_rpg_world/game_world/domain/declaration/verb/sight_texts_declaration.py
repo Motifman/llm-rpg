@@ -14,3 +14,7 @@ class SightTextsDeclaration:
     dim: TextWithUnassignedPeople | NotSeenInDim
     unseen_actor: TextWithUnassignedPeople | NotSeenWithoutActor
     noticed_later: TextWithUnassignedPeople | NotNoticedLater
+
+    def placeholders(self) -> frozenset[str]:
+        texts = (self.clear, self.dim, self.unseen_actor, self.noticed_later)
+        return frozenset().union(*(text.placeholders() for text in texts if isinstance(text, TextWithUnassignedPeople)))

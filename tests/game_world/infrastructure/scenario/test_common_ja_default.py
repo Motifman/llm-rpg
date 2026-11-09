@@ -10,9 +10,12 @@ import pytest
 
 from ai_rpg_world.game_world.domain import exception as game_world_exception
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
+from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
 from ai_rpg_world.game_world.domain.people._person_placeholders import person_placeholders_in
+from ai_rpg_world.game_world.domain.perception.salience import Background, Notable
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
+from ai_rpg_world.game_world.domain.sound.loudness import Loudness
 from ai_rpg_world.game_world.domain.value_object import Capacity, HitPoints
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_document import read_yaml_document
@@ -20,26 +23,9 @@ from ai_rpg_world.game_world.infrastructure.scenario.yaml_document import read_y
 _COMMON = Path(__file__).parents[4] / "data" / "scenarios" / "common" / "ja_default.yaml"
 
 _PEOPLE = frozenset({"actor", "target", "chosen_by_group", "each_person"})
-_PLACEHOLDERS_BY_BUILT_IN_ACTION = {
-    "travel": frozenset({"actor", "destination"}),
-    "speak": frozenset({"actor", "speech"}),
-    "hand_over": frozenset({"actor", "item", "target"}),
-    "tend": frozenset({"actor", "target"}),
-    "pick_up": frozenset({"actor", "item"}),
-    "drop": frozenset({"actor", "item"}),
-    "use_item": frozenset({"actor", "item"}),
-    "hold": frozenset({"actor", "item"}),
-    "put_away": frozenset({"actor", "item"}),
-    "listen": frozenset({"actor"}),
-    "wait": frozenset({"actor"}),
-    "search": frozenset({"actor"}),
-    "cast_ballot": frozenset({"actor"}),
-}
-
 _BUILT_IN_ACTIONS = frozenset(
     {
         ActionKind.TRAVEL,
-        ActionKind.SPEAK,
         ActionKind.LISTEN,
         ActionKind.WAIT,
         ActionKind.TEND,
@@ -154,10 +140,38 @@ class TestBuiltInActionPerceptions:
     """ja_default.yaml の組み込みの行為の知覚の文が、世界で行える組み込みの行為をすべて持つことを保証する。"""
 
     def test_every_built_in_action_has_its_perception(self, tmp_path: Path) -> None:
-        """移動・話す・耳を澄ます・待つ・介抱・渡す・拾う・置く・探す・品物を使う・持ち替え・投票の知覚の文がある。"""
+        """by_kind に、移動・耳を澄ます・待つ・介抱・渡す・拾う・置く・探す・品物を使う・持ち替え・投票の知覚の文がある。話すことは声の大きさごとの欄に書くので by_kind に無い。"""
         perceptions = _load_smallest_scenario(tmp_path).design.built_in_action_perceptions
 
         assert set(perceptions.by_kind) == _BUILT_IN_ACTIONS
+
+    def test_voices_sound_as_loud_as_their_reach(self, tmp_path: Path) -> None:
+        """ささやく・ふつうに話す・叫ぶの音の大きさは、それぞれ whisper・normal・very_loud になる。"""
+        perceptions = _load_smallest_scenario(tmp_path).design.built_in_action_perceptions
+
+        loudness = [
+            sound.loudness
+            for sound in (perceptions.whisper.sound, perceptions.ordinary_voice.sound, perceptions.shout.sound)
+            if isinstance(sound, SoundDeclaration)
+        ]
+
+        assert loudness == [Loudness.WHISPER, Loudness.NORMAL, Loudness.VERY_LOUD]
+
+    def test_shout_is_notable(self, tmp_path: Path) -> None:
+        """叫ぶ知覚は目立つ (Notable)。ささやく・ふつうに話すは目立たない (Background)。"""
+        perceptions = _load_smallest_scenario(tmp_path).design.built_in_action_perceptions
+
+        assert (perceptions.whisper.salience, perceptions.ordinary_voice.salience, perceptions.shout.salience) == (
+            Background(),
+            Background(),
+            Notable(),
+        )
+
+    def test_arrival_tells_where_the_actor_came_from(self, tmp_path: Path) -> None:
+        """着いた側の見た人の文は、来た場所の呼び名 {origin} を書いている。"""
+        arrival = _load_smallest_scenario(tmp_path).design.built_in_action_perceptions.arrival
+
+        assert "origin" in arrival.witness.clear.placeholders()
 
 
 class TestPlaceholders:
@@ -170,18 +184,6 @@ class TestPlaceholders:
             path: sorted(person_placeholders_in(text) - _PEOPLE)
             for path, text in _texts(_common()[section], section)
             if person_placeholders_in(text) - _PEOPLE
-        }
-
-        assert unknown == {}
-
-    @pytest.mark.parametrize("action", sorted(_PLACEHOLDERS_BY_BUILT_IN_ACTION))
-    def test_built_in_action_texts_name_only_what_the_action_fills(self, action: str) -> None:
-        """組み込みの行為の知覚の文は、scenario_format.md の表でその行為に載せたプレースホルダーだけを書く (拾うなら actor と item)。"""
-        perception = _common()["built_in_action_perceptions"][action]  # type: ignore[index]
-        unknown = {
-            path: sorted(person_placeholders_in(text) - _PLACEHOLDERS_BY_BUILT_IN_ACTION[action])
-            for path, text in _texts(perception, action)
-            if person_placeholders_in(text) - _PLACEHOLDERS_BY_BUILT_IN_ACTION[action]
         }
 
         assert unknown == {}

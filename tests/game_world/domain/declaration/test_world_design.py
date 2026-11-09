@@ -1131,14 +1131,13 @@ def _every_placement() -> list[tuple[str, dict[str, object], DesignLocation]]:
         "initial_stage": dawn,
     }
     door = _open_door()
-    loud_perceptions = built_in_action_perceptions(without=(ActionKind.TEND,))
-    loud_perceptions = BuiltInActionPerceptions(
+    perceptions = built_in_action_perceptions(without=(ActionKind.TEND,))
+    loud_perceptions = replace(
+        perceptions,
         by_kind={
-            **loud_perceptions.by_kind,
-            ActionKind.PICK_UP: replace(
-                loud_perceptions.by_kind[ActionKind.PICK_UP], announcement=_AUDIENCE_READING_FOG
-            ),
-        }
+            **perceptions.by_kind,
+            ActionKind.PICK_UP: replace(perceptions.by_kind[ActionKind.PICK_UP], announcement=_AUDIENCE_READING_FOG),
+        },
     )
     cases: list[tuple[str, dict[str, object], DesignLocation]] = [
         (
@@ -1239,6 +1238,24 @@ def _every_placement() -> list[tuple[str, dict[str, object], DesignLocation]]:
             "built_in_action_perceptions",
             {"built_in_action_perceptions_": loud_perceptions},
             DesignLocation("built_in_action_perceptions", "PICK_UP", "announcement"),
+        ),
+        *(
+            (
+                f"built_in_action_perceptions.{row}",
+                {
+                    "built_in_action_perceptions_": replace(
+                        perceptions,
+                        **{field: replace(getattr(perceptions, field), announcement=_AUDIENCE_READING_FOG)},
+                    )
+                },
+                DesignLocation("built_in_action_perceptions", row, "announcement"),
+            )
+            for row, field in (
+                ("whisper", "whisper"),
+                ("speak", "ordinary_voice"),
+                ("shout", "shout"),
+                ("arrival", "arrival"),
+            )
         ),
     ]
     return [(name, {**base, **declarations}, location) for name, declarations, location in cases]

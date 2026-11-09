@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
+from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoDayNight, NoWeather
@@ -204,6 +205,58 @@ class TestIncludes:
 
         assert texts[CommonRuleRefusalKind.BUSY] == TextWithUnassignedPeople("今はそれどころではない。")
         assert texts[CommonRuleRefusalKind.TOO_TIRED] == TextWithUnassignedPeople("疲れて動けない。")
+
+
+class TestSpeechAndArrivalPerceptions:
+    """built_in_action_perceptions の whisper・speak・shout・arrival が、声の大きさごとの欄と着いた側の欄に読まれることを保証する。"""
+
+    def test_speak_is_read_as_ordinary_voice(self, tmp_path: Path) -> None:
+        """シナリオで speak の見た人の文を書き換えると、その文が OrdinaryVoice の知覚になる。"""
+        text = (
+            _LIFT_LANDING + 'built_in_action_perceptions:\n  speak:\n    witness: { clear: "{actor}が口を開いた。" }\n'
+        )
+
+        perceptions = _load(tmp_path, text).design.built_in_action_perceptions
+
+        assert perceptions.speech(OrdinaryVoice()).witness.clear == TextWithUnassignedPeople("{actor}が口を開いた。")
+
+    def test_missing_shout_without_include_is_a_flaw(self, tmp_path: Path) -> None:
+        """取り込んだ共通の部品にもシナリオにも shout が無いと、その欄の場所を付けた DesignFlaw になる。"""
+        path = _scenario(tmp_path, _LIFT_LANDING)
+        common = tmp_path / "common.yaml"
+        common.write_text(common.read_text(encoding="utf-8").replace("  shout: *quiet\n", ""), encoding="utf-8")
+
+        with pytest.raises(WorldDesignFlawsException) as raised:
+            load_scenario(path)
+
+        assert [flaw.location for flaw in raised.value.flaws] == [
+            DesignLocation("world", "world", "built_in_action_perceptions.shout").in_file(ScenarioFile("common.yaml"))
+        ]
+
+    def test_arrival_naming_origin_and_whisper_naming_target_load(self, tmp_path: Path) -> None:
+        """arrival の文に {origin}、whisper の文に {target} を書いても、DesignFlaw を出さずに読み込める。"""
+        text = _LIFT_LANDING + (
+            "built_in_action_perceptions:\n"
+            '  arrival:\n    witness: { clear: "{actor}が{origin}から来た。" }\n'
+            '  whisper:\n    witness: { clear: "{actor}が{target}に耳打ちした。" }\n'
+        )
+
+        perceptions = _load(tmp_path, text).design.built_in_action_perceptions
+
+        assert perceptions.arrival.witness.clear == TextWithUnassignedPeople("{actor}が{origin}から来た。")
+        assert perceptions.whisper.witness.clear == TextWithUnassignedPeople("{actor}が{target}に耳打ちした。")
+
+    def test_speak_naming_target_is_a_flaw(self, tmp_path: Path) -> None:
+        """speak の文に、ふつうの声では埋まらない {target} を書くと、組み込みの行為の知覚の表の DesignFlaw になる。"""
+        text = (
+            _LIFT_LANDING
+            + 'built_in_action_perceptions:\n  speak:\n    witness: { clear: "{actor}が{target}に話した。" }\n'
+        )
+
+        flaws = _flaws(tmp_path, text)
+
+        assert [flaw.location.field for flaw in flaws] == ["built_in_action_perceptions"]
+        assert "speak" in flaws[0].reason
 
 
 class TestFlawsWhileLoading:
