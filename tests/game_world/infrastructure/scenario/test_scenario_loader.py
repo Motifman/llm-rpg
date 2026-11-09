@@ -278,6 +278,26 @@ class TestBuiltInTargetTexts:
         assert isinstance(tend.target, SightTextsDeclaration)
         assert tend.target.clear == TextWithUnassignedPeople("{actor}があなたを介抱している。")
 
+    @pytest.mark.parametrize(
+        "action",
+        [
+            "interact_with_object",
+            "interact_with_carried_item",
+            "interact_with_person",
+            "enter_section",
+            "leave_section",
+            "attack_monster",
+        ],
+    )
+    def test_action_not_in_the_table_is_a_flaw(self, tmp_path: Path, action: str) -> None:
+        """組み込みの行為の表に書けない行為 (操作、区画の出入り、モンスターへの攻撃) を書くと、素の例外ではなく表の場所を付けた DesignFlaw になる。"""
+        text = (
+            _LIFT_LANDING
+            + f'built_in_action_perceptions:\n  {action}:\n    witness: {{ clear: "{{actor}}が動いた。" }}\n'
+        )
+
+        assert [flaw.location.field for flaw in _flaws(tmp_path, text)] == ["built_in_action_perceptions"]
+
     def test_travel_target_text_is_a_flaw_at_that_field(self, tmp_path: Path) -> None:
         """相手のいない移動の行に target の文を書くと、その欄の場所を付けた DesignFlaw になる。"""
         text = _LIFT_LANDING + (

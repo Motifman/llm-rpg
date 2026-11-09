@@ -6,6 +6,7 @@ from typing import final
 
 from ai_rpg_world.game_world.domain.declaration.rule_placement import RulePlacement
 from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
+from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import NotBuiltInActionPerceptionException
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 
 _ACTOR = "actor"
@@ -21,6 +22,8 @@ class BuiltInPerceptionRow:
 
     @classmethod
     def of_kind(cls, kind: ActionKind) -> BuiltInPerceptionRow:
+        if kind not in _ROW_OF_KIND:
+            raise NotBuiltInActionPerceptionException(f"{kind.name} is not perceived through the built-in table")
         return _ROW_OF_KIND[kind]
 
     @classmethod

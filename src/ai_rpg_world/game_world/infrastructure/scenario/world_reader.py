@@ -62,7 +62,6 @@ from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import Sc
 from ai_rpg_world.game_world.infrastructure.scenario.value_readers import description, people_text, ticks
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import YamlNode
 
-_SPEECH_AND_ARRIVAL_ROWS = frozenset({"whisper", "speak", "shout", "arrival"})
 _RULE_FIELDS = (
     "tend",
     "fatigue",
@@ -123,23 +122,34 @@ def refusal_texts(node: YamlNode) -> RefusalTexts:
 
 
 def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -> BuiltInActionPerceptions:
+    speech_and_arrival = (
+        BuiltInPerceptionRow.whisper(),
+        BuiltInPerceptionRow.speak(),
+        BuiltInPerceptionRow.shout(),
+        BuiltInPerceptionRow.arrival(),
+    )
+    entries = node.entries()
+    rows = node.fields(*(name for name, _ in entries))
+
     def read(written: YamlNode, row: BuiltInPerceptionRow) -> PerceptionDeclaration:
         return perceptions.perception(written, has_target=row.has_target)
 
-    entries = node.entries()
-    rows = node.fields(*(name for name, _ in entries))
+    def read_row(row: BuiltInPerceptionRow) -> PerceptionDeclaration:
+        return read(rows.required(row.name), row)
+
     by_kind = {
         YamlNode(name, written.path).enum(ActionKind): written
         for name, written in entries
-        if name not in _SPEECH_AND_ARRIVAL_ROWS
+        if name not in {row.name for row in speech_and_arrival}
     }
+    whisper, ordinary_voice, shout, arrival = speech_and_arrival
     return node.build(
         lambda: BuiltInActionPerceptions(
             by_kind={kind: read(written, BuiltInPerceptionRow.of_kind(kind)) for kind, written in by_kind.items()},
-            whisper=read(rows.required("whisper"), BuiltInPerceptionRow.whisper()),
-            ordinary_voice=read(rows.required("speak"), BuiltInPerceptionRow.speak()),
-            shout=read(rows.required("shout"), BuiltInPerceptionRow.shout()),
-            arrival=read(rows.required("arrival"), BuiltInPerceptionRow.arrival()),
+            whisper=read_row(whisper),
+            ordinary_voice=read_row(ordinary_voice),
+            shout=read_row(shout),
+            arrival=read_row(arrival),
         )
     )
 
