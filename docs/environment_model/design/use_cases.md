@@ -15,7 +15,8 @@ class PassWorldTime:
     def __call__(self, command: PassWorldTimeCommand) -> None:
         # WorldClock.advance → Whereabouts.advance_travels → PersonVitals.pass_time(now, death, hunger) (全員)
         # → 品物の時間 (Lasts の時間が過ぎた品物を、持っている人の PersonInventory か置かれた場所の GroundItems から手放させ、Item.run_out)
-        # → 状態異常 → 天候 → モンスター
+        # → 天候 → モンスター (湧きを確かめ、個体ごとに感じて動き、SoundsThisTick を空にする。monster.md)
+        # 状態効果は #2014 で決めてから足す
         ...
 
 class SettleWorldConditions:
@@ -37,6 +38,7 @@ class DeliverPerception:
         # → 1 つの出来事の刺激は 本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、1 人には最初に知覚したものだけ
         # → Perceived は観測の出口へ
         # → NoticedLater は MissedNotices.keep
+        # → 音の刺激は、計算した SoundReach を SoundsThisTick.note にも書く (モンスターが次の tick に聞く)
         ...
 
 class LookAround:
@@ -131,7 +133,7 @@ class DeliverSurroundingsOnBrighteningHandler(EventHandler[ItemStateChangedEvent
     # OccupantEnteredSpotEvent のときは、着いた本人を除く (DeliverSurroundingsOnArrivalHandler が渡す)
 class WithdrawFromGroupDecisionHandler(EventHandler[PersonFellEvent | PersonDiedEvent]): ...
     # 開いている集団の決定から、死んだ人は先に withdraw_choice (その人に入った票を戻す)、続けて withdraw_voter。倒れた人は withdraw_voter だけ
-class RemoveDeadMonsterHandler(EventHandler[MonsterDiedEvent]): ...
+class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ場所の地面に落とす物を置く。死骸は湧きの present_while が偽になるまで残る
 ```
 
 ## 世界と外側

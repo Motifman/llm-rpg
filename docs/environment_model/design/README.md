@@ -9,5 +9,4 @@
 | [world_state.md](world_state.md) | 世界の状態 (集約) |
 | [perception.md](perception.md) | 知覚 |
 | [use_cases.md](use_cases.md) | ユースケースとハンドラ |
-
-まだ書いていないもの: `Monster` の振る舞い (#1971)。
+| [monster.md](monster.md) | モンスター (第 1 段。群れと生態系はまだ) |

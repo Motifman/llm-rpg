@@ -34,7 +34,7 @@ class WorldAggregates(Protocol):
 
 - `bring_item_into_world` は集約の操作ではなく「作って入れる」リポジトリの操作なので、値を返す
 - 品物の ID (`ItemInstanceId`) はエージェントに見せない。エージェントには場面の呼び方で見せ、trace には ID と並べて品物の名前を出す
-- モンスターの集約は #1971 で足す
+- モンスターの集約 (`Monster`) と帳簿 (`SoundsThisTick`、`MonsterSpawnRecords`) も、ここから取り出す ([monster.md](monster.md))
 
 ## つなぎ
 

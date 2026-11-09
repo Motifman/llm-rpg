@@ -66,8 +66,8 @@ class Dead:
 
 LifeState = Alive | Down | Dead
 
-FallCause = StruckByPerson | Starvation | WorldHappening
-# StruckByPerson(person: PersonId) / Starvation: 飢えの痛手 / WorldHappening: 出来事 (どの出来事かは、出来事の宣言ができたら持たせる)
+FallCause = StruckByPerson | StruckByMonster | Starvation | WorldHappening
+# StruckByPerson(person: PersonId) / StruckByMonster(monster: MonsterId) / Starvation: 飢えの痛手 / WorldHappening: 出来事 (どの出来事かは、出来事の宣言ができたら持たせる)
 
 @final
 @dataclass(frozen=True)
@@ -275,10 +275,11 @@ class ScenarioProgress:                           # 世界に 1 つ
         # JointActionProgress: どの部分を、誰が、いつ行ったか。distinct_people はこれで確かめる
 
 
-class Monster:                                    # モンスターごと。振る舞いは #1971
-    def take_damage(self, amount: Damage, now: WorldTick) -> None: ...   # MonsterDamagedEvent、死ねば MonsterDamagedEvent, MonsterDiedEvent
+class Monster: ...                                # 個体ごと。操作と振る舞いは monster.md
 
-    def is_dead(self) -> bool: ...
+class SoundsThisTick: ...                         # 世界に 1 つの帳簿。monster.md
+
+class MonsterSpawnRecords: ...                    # 世界に 1 つの帳簿。湧きの真偽の変わり目と、倒された記録。monster.md
 
 
 class WorldStage:                                 # 世界に 1 つ (WorldStage を宣言した世界だけ)
@@ -352,7 +353,7 @@ SpotAtmosphereChangedEvent
 WorldStageChangedEvent
 WorldEndedEvent
 WeatherChangedEvent
-MonsterDamagedEvent, MonsterDiedEvent
+MonsterSpawnedEvent, MonsterDamagedEvent, MonsterDiedEvent, MonsterStateChangedEvent, MonsterLeftWorldEvent
 GroupDecisionStartedEvent, BallotCastEvent, VoterWithdrawnEvent, ChoiceWithdrawnEvent,
 GroupDecisionReachedEvent, GroupDecisionUnresolvedEvent
 PersonActedEvent, ActionAttemptFailedEvent

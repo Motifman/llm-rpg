@@ -236,6 +236,8 @@ class DeclaredNouns:
         group_decisions: Iterable[GroupDecisionDeclaration],
         sections: Iterable[SpotSectionDeclaration],
         outcomes: Iterable[OutcomeDeclaration],
+        monster_specs: Iterable[MonsterSpecDeclaration],     # monster.md
+        monster_spawns: Iterable[MonsterSpawnDeclaration],
     ) -> None: ...
 
     def flag(self, name: str, at: DesignLocation) -> FlagDeclaration: ...
@@ -254,6 +256,8 @@ class DeclaredNouns:
     def section(self, name: str, at: DesignLocation) -> SpotSectionDeclaration: ...
     def sections_at(self, spot: SpotId) -> tuple[SpotSectionDeclaration, ...]: ...
     def outcome(self, name: str, at: DesignLocation) -> OutcomeDeclaration: ...
+    def monster_spec(self, name: str, at: DesignLocation) -> MonsterSpecDeclaration: ...
+    def monster_spawn(self, name: str, at: DesignLocation) -> MonsterSpawnDeclaration: ...
     # 引けなかった名前は UnknownNameFlaw を投げる。読む側はその宣言 1 つを諦めて DesignFlaw を記録し、次へ進む
 
 
@@ -510,10 +514,11 @@ class WorldRules:
     hearing: HearingValues
     stealth: StealthRule
     action_durations: Mapping[ActionKind, Ticks]   # 行っているあいだの既定。耳を澄ます 1、拾う・置く・渡す・区画・投票・持ち替え 1、操作・品物を使う 2、探す・介抱 3
-    # 移動は通路の時間で決まり、待つことと話すことは行っているあいだを作らない。モンスターへの攻撃は #1971 で決める。
+    # 移動は通路の時間で決まり、待つこと・話すこと・モンスターへの攻撃は行っているあいだを作らない (#1971)
     # action_durations は上の 15 種類をすべて持ち、移動・待つ・話す・モンスターへの攻撃を持たなければ作れない
     person_max_hp: HitPoints                # 人の最初の体力の世界の既定。登場人物が上書きできる (#2055)
     pack_capacity: Capacity                 # 荷に持てる数の世界の既定
+    person_attack_damage: Damage            # 人がモンスターに与える痛手。共通の部品の既定 10。武器・防御・命中は持たない (#1971)
 
 @final
 @dataclass(frozen=True)
@@ -597,7 +602,8 @@ class BuiltInActionPerceptions:             # どの世界にもある行為 (�
     # 各行の文は、その行の BuiltInPerceptionRow.nameable にある呼び名だけを書ける。相手のいない行に相手が見る文 (target) を書けば作れない
     # 文には人のプレースホルダーのほかに、行為が扱う物や場所の呼び名 ({item}、{destination} など) を書ける。
     # 刺激に変える役が宣言の呼び名 (DisplayName) で先に埋め、人のプレースホルダーだけを残した TextAboutPeople にする
-    # 操作 (INTERACT_WITH_*)・区画の出入り (ENTER_SECTION / LEAVE_SECTION) は宣言の perceived_as で知覚されるので、モンスターへの攻撃と同じく書けば作れない (D2026)
+    # 操作 (INTERACT_WITH_*)・区画の出入り (ENTER_SECTION / LEAVE_SECTION) は宣言の perceived_as で知覚されるので、書けば作れない (D2026)
+    # モンスターへの攻撃 (ATTACK_MONSTER) は表の行に持ち、{monster} を書ける (#1971、monster.md)
 
 @final
 @dataclass(frozen=True)
@@ -676,6 +682,8 @@ class WorldDesign:
         passage_traversals: Iterable[PassageTraversalDeclaration],
         world_stage_effects: Iterable[WorldStageEffectsDeclaration],
         object_looks: Iterable[ObjectLooksDeclaration],
+        monster_presences: Iterable[MonsterPresenceDeclaration],          # monster.md
+        monster_perceptions_by_spec: Iterable[MonsterPerceptionsDeclaration],
         group_decision_rules: Iterable[GroupDecisionRulesDeclaration],
         happenings: Iterable[HappeningDeclaration],
         reactions: Iterable[ReactionDeclaration],
@@ -686,6 +694,9 @@ class WorldDesign:
         world_rules: WorldRules,
         refusal_texts: RefusalTexts,
         built_in_action_perceptions: BuiltInActionPerceptions,
+        monster_perceptions: MonsterPerceptions,            # 種類ごとに書き換えなかったときの既定
+        monster_health: MonsterHealthTexts,                 # 傷の具合の境と文
+        monster_doing: MonsterDoingTexts,                   # 状態ごとの、いましていることの文
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
@@ -717,7 +728,9 @@ class WorldDesign:
     def section_access(self, section: SpotSectionId) -> SectionAccessDeclaration: ...
     def passage_traversal(self, passage: PassageId) -> Condition: ...                   # 宣言が無ければ、いつでも真の条件
     def world_stage_effects(self, stage: WorldStageId) -> WorldStageEffectsDeclaration: ...   # 宣言が無ければ、出入りで何もしない (NoEffect) 宣言
-    def looks_of(self, obj: ObjectId) -> ObjectLooksDeclaration: ...                     # 宣言が無ければ、見え方が空の宣言
+    def looks_of(self, obj: ObjectId) -> ObjectLooksDeclaration: ...
+    def presence_of(self, spawn: MonsterSpawnId) -> MonsterPresenceDeclaration: ...      # 宣言が無ければ AlwaysPresent
+    def monster_perceptions_of(self, spec: MonsterSpecId) -> MonsterPerceptions: ...    # 宣言が無ければ世界の既定                     # 宣言が無ければ、見え方が空の宣言
     def group_decision_rules(self, decision: GroupDecisionId) -> GroupDecisionRulesDeclaration: ...
     def person_interaction(self, interaction: InteractionId) -> InteractionDeclaration: ...   # 殴る、盗むなど、人への操作
     def happenings(self) -> tuple[HappeningDeclaration, ...]: ...
