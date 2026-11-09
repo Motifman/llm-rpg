@@ -5,13 +5,15 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ChoiceStateKind,
     ChoiceValue,
     FlagValue,
+    Lasts,
+    LastsIndefinitely,
     LitWhen,
     NoRefill,
     StockStateKind,
     StockValue,
 )
 from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
-from ai_rpg_world.game_world.domain.value_object import Count, StateKeyId
+from ai_rpg_world.game_world.domain.value_object import Count, DescriptionText, StateKeyId, Ticks
 from ai_rpg_world.game_world.infrastructure.scenario.noun_reader import NounReader, ReadNouns
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import ScenarioDefaults
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_layout import YamlPath
@@ -90,3 +92,42 @@ class TestStateKeys:
 
         assert [flaw.location for flaw in collector.flaws] == [DesignLocation("item_spec", "sack", "state_keys.grain")]
         assert ("item_spec", "sack") in read.unreadable
+
+
+class TestItemLasts:
+    """NounReader が品物の lasts を、書いてあれば Lasts、書かなければ LastsIndefinitely として読むことを保証する。"""
+
+    def test_written_lasts_is_read_as_ticks_and_ended_text(self) -> None:
+        """lasts に { ticks: 16, ended_text: ... } を書いた品物は、その時間と文を持つ Lasts になる。"""
+        read, collector = _read(
+            "item_specs:\n"
+            "  lamp_flame:\n"
+            "    name: カンテラの灯\n"
+            "    description: カンテラに灯した火。\n"
+            "    lasts: { ticks: 16, ended_text: カンテラの灯が燃え尽きた。 }\n"
+        )
+
+        assert collector.flaws == ()
+        assert read.item_specs[0].lasts == Lasts(
+            ticks=Ticks(16), ended_text=DescriptionText("カンテラの灯が燃え尽きた。")
+        )
+
+    def test_item_without_lasts_lasts_indefinitely(self) -> None:
+        """lasts を書かない品物は LastsIndefinitely になる。"""
+        read, collector = _read("item_specs:\n  rope:\n    name: 縄\n    description: 麻の縄。\n")
+
+        assert collector.flaws == ()
+        assert read.item_specs[0].lasts == LastsIndefinitely()
+
+    def test_zero_ticks_is_a_flaw_at_lasts(self) -> None:
+        """lasts の ticks に 0 を書くと、lasts の場所を付けた誤りになり、品物は読めなかったものとして残る。"""
+        read, collector = _read(
+            "item_specs:\n"
+            "  lamp_flame:\n"
+            "    name: カンテラの灯\n"
+            "    description: カンテラに灯した火。\n"
+            "    lasts: { ticks: 0, ended_text: カンテラの灯が燃え尽きた。 }\n"
+        )
+
+        assert [flaw.location for flaw in collector.flaws] == [DesignLocation("item_spec", "lamp_flame", "lasts")]
+        assert ("item_spec", "lamp_flame") in read.unreadable

@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     FlagValue,
     ItemSpecDeclaration,
     ItemStateKeyDeclaration,
+    LastsIndefinitely,
     NotALightSource,
 )
 from ai_rpg_world.game_world.domain.effect.item_effects import (
@@ -282,6 +283,7 @@ class TestSetItemValueEffect:
             state_keys=(lit,),
             lights_up=NotALightSource(),
             hands_needed=HandsNeeded(1),
+            lasts=LastsIndefinitely(),
         )
         world = _world((_LANTERN_1, lantern))
 

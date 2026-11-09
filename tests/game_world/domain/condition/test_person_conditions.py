@@ -22,7 +22,11 @@ from ai_rpg_world.game_world.domain.condition.person_conditions import (
 )
 from ai_rpg_world.game_world.domain.condition.subject import Actor, EachPerson, SubjectKind, Target
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import MembershipVisibility
-from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration, NotALightSource
+from ai_rpg_world.game_world.domain.declaration.object_and_item import (
+    ItemSpecDeclaration,
+    LastsIndefinitely,
+    NotALightSource,
+)
 from ai_rpg_world.game_world.domain.objects_and_items import Item, PersonInventory
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import Died, StruckByPerson
@@ -68,6 +72,7 @@ _APPLE = ItemSpecDeclaration(
     state_keys=(),
     lights_up=NotALightSource(),
     hands_needed=HandsNeeded(1),
+    lasts=LastsIndefinitely(),
 )
 _PEAR = ItemSpecDeclaration(
     item_spec_id=ItemSpecId("pear"),
@@ -76,6 +81,7 @@ _PEAR = ItemSpecDeclaration(
     state_keys=(),
     lights_up=NotALightSource(),
     hands_needed=HandsNeeded(1),
+    lasts=LastsIndefinitely(),
 )
 _HUNGER = HungerRule(
     per_tick=HungerAmount(1),

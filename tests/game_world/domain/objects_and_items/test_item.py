@@ -12,6 +12,8 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     FlagValue,
     ItemSpecDeclaration,
     ItemStateKeyDeclaration,
+    Lasts,
+    LastsIndefinitely,
     LitWhen,
     NotALightSource,
 )
@@ -19,20 +21,27 @@ from ai_rpg_world.game_world.domain.exception.game_world_exception import TickOr
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     ItemAlreadyLeftWorldException,
+    ItemDoesNotRunOutException,
+    ItemHasNotRunOutException,
     StateKeyNotOwnedException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items import (
+    CarriedBy,
     Item,
     ItemCameIntoWorldEvent,
     ItemInstanceId,
     ItemLeftWorldEvent,
+    ItemRanOutEvent,
     ItemStateChangedEvent,
+    LyingAt,
 )
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
     DescriptionText,
     DisplayName,
     ItemSpecId,
+    PersonId,
+    SpotId,
     StateKeyId,
     Ticks,
     WorldTick,
@@ -58,7 +67,15 @@ _ITEM_ID = ItemInstanceId("lantern#1")
 _CAME_AT = WorldTick(10)
 
 
-def _lantern(lights_up: LitWhen | NotALightSource = LitWhen(_WICK.key, ChoiceValue(_LIT))) -> ItemSpecDeclaration:
+_FLAME_LASTS = Lasts(ticks=Ticks(16), ended_text=DescriptionText("カンテラの灯が燃え尽きた。"))
+_HARU = PersonId("haru")
+_SHAFT = SpotId("shaft")
+
+
+def _lantern(
+    lights_up: LitWhen | NotALightSource = LitWhen(_WICK.key, ChoiceValue(_LIT)),
+    lasts: Lasts | LastsIndefinitely = LastsIndefinitely(),
+) -> ItemSpecDeclaration:
     return ItemSpecDeclaration(
         item_spec_id=_LANTERN_SPEC,
         name=DisplayName("カンテラ"),
@@ -66,6 +83,7 @@ def _lantern(lights_up: LitWhen | NotALightSource = LitWhen(_WICK.key, ChoiceVal
         state_keys=(_WICK, _OIL),
         lights_up=lights_up,
         hands_needed=HandsNeeded(1),
+        lasts=lasts,
     )
 
 
@@ -232,5 +250,71 @@ class TestItemLeaveWorld:
         item.clear_events()
 
         item.leave_world()
+
+        assert item.get_events() == []
+
+
+class TestItemRunOut:
+    """Item.run_out が、宣言の Lasts の時間が過ぎた品物だけを、どこにあったかを添えて世界から出すことを保証する。"""
+
+    def test_before_its_time_is_refused_and_records_nothing(self) -> None:
+        """ticks: 16 の灯が世界に出て 15 tick のとき run_out すると ItemHasNotRunOutException を投げ、イベントはたまらず、品物は世界に残る。"""
+        item = _came_into_world(_lantern(lasts=_FLAME_LASTS))
+
+        with pytest.raises(ItemHasNotRunOutException):
+            item.run_out(WorldTick(25), CarriedBy(_HARU))
+
+        assert item.get_events() == []
+        item.set(_WICK, ChoiceValue(_LIT))
+
+    def test_carried_item_runs_out_with_its_holder(self) -> None:
+        """ticks: 16 の灯が世界に出て 16 tick のとき CarriedBy(haru) で run_out すると、品物・宣言・持ち主・時刻を持つ ItemRanOutEvent を 1 つだけためる。"""
+        item = _came_into_world(_lantern(lasts=_FLAME_LASTS))
+
+        item.run_out(WorldTick(26), CarriedBy(_HARU))
+
+        [event] = item.get_events()
+        assert isinstance(event, ItemRanOutEvent)
+        assert (event.item, event.spec_id, event.where, event.at) == (
+            _ITEM_ID,
+            _LANTERN_SPEC,
+            CarriedBy(_HARU),
+            WorldTick(26),
+        )
+
+    def test_item_lying_on_the_ground_runs_out_with_its_spot(self) -> None:
+        """地面にある灯を LyingAt(shaft) で run_out すると、ItemRanOutEvent の where がその場所になる。"""
+        item = _came_into_world(_lantern(lasts=_FLAME_LASTS))
+
+        item.run_out(WorldTick(40), LyingAt(_SHAFT))
+
+        [event] = item.get_events()
+        assert isinstance(event, ItemRanOutEvent)
+        assert event.where == LyingAt(_SHAFT)
+
+    def test_item_that_ran_out_has_left_the_world(self) -> None:
+        """run_out した品物に set すると ItemAlreadyLeftWorldException を投げる。"""
+        item = _came_into_world(_lantern(lasts=_FLAME_LASTS))
+        item.run_out(WorldTick(26), CarriedBy(_HARU))
+
+        with pytest.raises(ItemAlreadyLeftWorldException):
+            item.set(_WICK, ChoiceValue(_LIT))
+
+    def test_item_that_lasts_indefinitely_is_refused(self) -> None:
+        """LastsIndefinitely の品物に run_out すると ItemDoesNotRunOutException を投げ、イベントはたまらない。"""
+        item = _came_into_world(_lantern(lasts=LastsIndefinitely()))
+
+        with pytest.raises(ItemDoesNotRunOutException):
+            item.run_out(WorldTick(1000), CarriedBy(_HARU))
+
+        assert item.get_events() == []
+
+    def test_item_that_already_left_records_nothing(self) -> None:
+        """世界から外れた品物に run_out しても断らず、イベントもたまらない。"""
+        item = _came_into_world(_lantern(lasts=_FLAME_LASTS))
+        item.leave_world()
+        item.clear_events()
+
+        item.run_out(WorldTick(26), CarriedBy(_HARU))
 
         assert item.get_events() == []

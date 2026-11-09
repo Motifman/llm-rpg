@@ -43,3 +43,7 @@ class ItemStateKindNotAllowedException(GameWorldDomainException):
 
 class LightKeyNotDeclaredException(GameWorldDomainException):
     error_code = "GAME_WORLD.LIGHT_KEY_NOT_DECLARED"
+
+
+class LastingTicksBelowOneException(GameWorldDomainException):
+    error_code = "GAME_WORLD.LASTING_TICKS_BELOW_ONE"

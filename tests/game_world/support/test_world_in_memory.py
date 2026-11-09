@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     CountStateKind,
     CountValue,
     ItemSpecDeclaration,
+    LastsIndefinitely,
     NotALightSource,
     ObjectAppearance,
     ObjectDeclaration,
@@ -102,6 +103,7 @@ _PEAR = ItemSpecDeclaration(
     state_keys=(),
     lights_up=NotALightSource(),
     hands_needed=HandsNeeded(1),
+    lasts=LastsIndefinitely(),
 )
 _APPLE = ItemSpecDeclaration(
     item_spec_id=ItemSpecId("apple"),
@@ -110,6 +112,7 @@ _APPLE = ItemSpecDeclaration(
     state_keys=(),
     lights_up=NotALightSource(),
     hands_needed=HandsNeeded(1),
+    lasts=LastsIndefinitely(),
 )
 _BUCKETS = ObjectStateKeyDeclaration(
     object_id=ObjectId("well"), key=StateKeyId("buckets"), kind=CountStateKind(), initial=CountValue(Count(2))

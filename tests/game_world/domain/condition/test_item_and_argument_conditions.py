@@ -14,6 +14,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     FlagValue,
     ItemSpecDeclaration,
     ItemStateKeyDeclaration,
+    LastsIndefinitely,
     NotALightSource,
 )
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
@@ -47,6 +48,7 @@ _TORCH = ItemSpecDeclaration(
     state_keys=(_LIT,),
     lights_up=NotALightSource(),
     hands_needed=HandsNeeded(1),
+    lasts=LastsIndefinitely(),
 )
 _PASSWORD = ArgumentName("password")
 

@@ -15,7 +15,7 @@ from ai_rpg_world.game_world.domain.condition.person_conditions import (
     IsInSectionCondition,
 )
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import MembershipVisibility
-from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration
+from ai_rpg_world.game_world.domain.declaration.object_and_item import Lasts, ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.object_and_item.state_value import ChoiceName, ChoiceValue
 from ai_rpg_world.game_world.domain.declaration.verb import HappeningDeclaration, ObjectLooksDeclaration
 from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
@@ -30,6 +30,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     ObjectId,
     PersonId,
     SpotId,
+    Ticks,
     WorldId,
     WorldTick,
 )
@@ -274,3 +275,31 @@ class TestObjectLooks:
         look = _looks(mine_village, "valve").look_now(_world_with(mine_village, states=(state,)).facts())
 
         assert look == DescriptionText(text)
+
+
+class TestLightsBurnOut:
+    """カンテラの灯とたいまつが、決まった tick の一斉の出来事ではなく、品物ごとの持つ時間で燃え尽きることを保証する。"""
+
+    @pytest.mark.parametrize(
+        ("item_spec", "lasts"),
+        [
+            ("lamp_flame", Lasts(ticks=Ticks(16), ended_text=DescriptionText("カンテラの灯が燃え尽きた。"))),
+            (
+                "torch",
+                Lasts(ticks=Ticks(24), ended_text=DescriptionText("火が燃え尽き、手もとには焦げた棒だけが残った。")),
+            ),
+        ],
+    )
+    def test_light_lasts_its_own_ticks_with_the_v1_text(
+        self, mine_village: LoadedScenario, item_spec: str, lasts: Lasts
+    ) -> None:
+        """灯は 16 tick、たいまつは 24 tick の Lasts を持ち、燃え尽きた文は v1 の event_removal_message と同じになる。"""
+        declared = mine_village.design.nouns.item_spec(item_spec, DesignLocation("item_spec", item_spec, "lasts"))
+
+        assert declared.lasts == lasts
+
+    def test_no_happening_burns_lights_out_all_at_once(self, mine_village: LoadedScenario) -> None:
+        """燃え尽きの出来事 lamp_flames_burn_out と torches_burn_out は宣言に無い。"""
+        names = {happening.happening_id.value for happening in mine_village.design.happenings()}
+
+        assert names.isdisjoint({"lamp_flames_burn_out", "torches_burn_out"})

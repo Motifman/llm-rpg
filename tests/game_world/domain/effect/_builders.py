@@ -12,7 +12,11 @@ from ai_rpg_world.game_world.domain.declaration.character.character_declaration 
     CharacterDeclaration,
     UsesWorldDefault,
 )
-from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration, NotALightSource
+from ai_rpg_world.game_world.domain.declaration.object_and_item import (
+    ItemSpecDeclaration,
+    LastsIndefinitely,
+    NotALightSource,
+)
 from ai_rpg_world.game_world.domain.objects_and_items import PersonInventory
 from ai_rpg_world.game_world.domain.person import PersonVitals
 from ai_rpg_world.game_world.domain.value_object import (
@@ -41,6 +45,7 @@ def item_spec(name: str) -> ItemSpecDeclaration:
         state_keys=(),
         lights_up=NotALightSource(),
         hands_needed=HandsNeeded(1),
+        lasts=LastsIndefinitely(),
     )
 
 

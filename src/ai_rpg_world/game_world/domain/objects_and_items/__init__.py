@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.objects_and_items.item import (
     ItemCameIntoWorldEvent,
     ItemEvent,
     ItemLeftWorldEvent,
+    ItemRanOutEvent,
     ItemStateChangedEvent,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
@@ -35,8 +36,10 @@ from ai_rpg_world.game_world.domain.objects_and_items.spot_search_progress impor
     SpotSearchProgress,
     SpotSearchProgressEvent,
 )
+from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt, WhereItemWas
 
 __all__ = [
+    "CarriedBy",
     "DiscoverableFoundEvent",
     "GoldEarnedEvent",
     "GoldPaidEvent",
@@ -52,8 +55,10 @@ __all__ = [
     "ItemInstanceId",
     "ItemLeftWorldEvent",
     "ItemPutAwayEvent",
+    "ItemRanOutEvent",
     "ItemReceivedEvent",
     "ItemStateChangedEvent",
+    "LyingAt",
     "ObjectRevealedEvent",
     "ObjectState",
     "ObjectStateChangedEvent",
@@ -64,4 +69,5 @@ __all__ = [
     "SpotSearchProgressEvent",
     "SpotSearchedEvent",
     "TextWrittenEvent",
+    "WhereItemWas",
 ]
