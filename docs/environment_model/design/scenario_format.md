@@ -25,6 +25,8 @@ groupings: { ... }                    # 分け方と、その中の集まり
 spots: { ... }                        # 場所。中に区画・物・見つかる物を書く
 passages: { ... }
 item_specs: { ... }
+monster_kinds: { ... }                # モンスターの種類 (monster.md)
+monster_spawns: { ... }               # どこに何匹いるか
 characters: { ... }
 world_stages: { ... }
 initial_stage: ...                    # 最初の段階の名前。world_stages を書いたら必須、書かなければ NoWorldStages
@@ -37,6 +39,9 @@ person_interactions: { ... }          # 殴る、盗むなど、人への操作
 ending: { ends_when: ... }
 refusal_texts: { ... }                # RefusalTexts。ふつうは includes から取り込み、行を書き換える
 built_in_action_perceptions: { ... }  # 組み込みの行為ごとの知覚 (行為は travel、hand_over などの snake_case)
+monster_perceptions: { ... }          # モンスターのしたこと (現れた、去った、襲った、逃げた、死んだ) の知覚の既定。ふつうは includes から取り込む
+monster_health: [ ... ]               # 傷の具合の境と文 ({ at_least, text } の並び)
+monster_doing: { ... }                # 状態ごとの、いましていることの文
 defaults: { ... }                     # 書かなかった欄の既定。下の「書かなかった欄」
 perception_defaults: { ... }          # 書かなかった知覚の文の既定。下の「書かなかった欄」
 ```
@@ -73,6 +78,8 @@ precondition:
 | `passages.<名前>` | `name`, `description`, `ends` (2 つ), `two_way`, `travel_ticks`, `states` (`<状態>: { display_name, traversable, sound_loss }`), `initial_state`, `hidden_until_revealed`, `condition` (書けば `PassageTraversalDeclaration`) |
 | `item_specs.<名前>` | `name`, `description`, `state_keys`, `lights_up` (`null` か `{ key, value }`), `hands_needed`, `interactions`, `use` (書けば `ItemUseDeclaration`), `lasts` (`{ ticks, ended_text }`。書かなければ消えない) |
 | `groupings.<名前>` | `name`, `visibility`, `changes`, `groups` (`<集まり>: { name, members_know_each_other, shared_description }`) |
+| `monster_kinds.<名前>` | `name`, `description`, `max_hp`, `attack` (`{ damage, every }`), `senses` (`{ sees_in_dark, hears_from }`), `temperament` (`hostile` / `territorial` / `retaliating` / `timid`), `flees_below` (`null` か割合), `gives_up_after`, `wander_chance`, `drops` (`- { item_spec, count, chance }`。`chance` を書かなければ必ず落とす), `perceptions` (書かなければ `monster_perceptions`) |
+| `monster_spawns.<名前>` | `kind`, `count`, `home`, `territory`, `present_while` (書かなければ最初からいる) |
 | `characters.<名前>` | `appearance`, `spawn_spot`, `initial_items`, `initial_held`, `initial_groups`, `knows_at_start`, `max_hp`, `pack_capacity`, `being` |
 | `world_stages.<名前>` | `name`, `description`, `allowed_actions` (`all` か一覧), `when_entered`, `when_left` |
 | `group_decisions.<名前>` | `name`, `abstain_allowed`, `reveals_ballots`, `voters`, `choices`, `when_decided`, `when_undecided` |
@@ -81,7 +88,7 @@ precondition:
 | `reactions.<名前>` | `condition`, `when_becomes_true`, `when_becomes_false` |
 | `joint_actions.<名前>` | `required` (`{ object, interaction }` の一覧), `window`, `distinct_people`, `on_complete`, `on_timeout`, `complete_notice`, `timeout_notice` |
 | `time` (必須) | `day_night` (`null` か `{ ticks_per_day, starts_at, phases: { <段階>: { begins_at, dark, announcement } } }`), `weather` (`null` か `{ initial, changes, announce_changes, obscuring }`。`changes` は `null` か `{ ticks, transitions }`、`transitions` は `default` か `{ <今>: { <次>: 重み } }`)。天候と昼夜の無い世界でも `null` と書き、欄そのものが無ければ `DesignFlaw`。書き忘れを「無い」として通さないため、`defaults:` でも埋めない |
-| `rules` | `tend` (`null` か `{ revive_hp_rate }`), `fatigue`, `hunger`, `death`, `departed_persons_act`, `name_tags`, `hearing`, `stealth`, `action_durations`, `person_max_hp`, `pack_capacity` |
+| `rules` | `tend` (`null` か `{ revive_hp_rate }`), `fatigue`, `hunger`, `death`, `departed_persons_act`, `name_tags`, `hearing`, `stealth`, `action_durations`, `person_max_hp`, `pack_capacity`, `person_attack_damage` |
 
 値の書き方:
 
@@ -141,6 +148,7 @@ perception_defaults:
 | `tend` | — | `{actor}`、`{target}` (介抱される人) |
 | `pick_up` `drop` `use_item` `hold` `put_away` | `{item}` | `{actor}` |
 | `listen` `wait` `search` `cast_ballot` | — | `{actor}` |
+| `attack_monster` | `{monster}` (モンスターの呼び名) | `{actor}` |
 
 - 表に無い名前は書けない
 - 相手 (`{target}`) のいる `whisper`・`hand_over`・`tend` にだけ、相手が見る文 (`target`) と、知らせの相手で `target` を選ぶ条件を書ける。ほかの行に書けば `DesignFlaw` になる (#2076)

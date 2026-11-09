@@ -402,7 +402,7 @@ class VisibleSurroundings:
         # 地面の品物と人の持ち物は SeesClearly のときだけ出す (暗いときは持ち物を出さない)。区画と通路は真っ暗でも出す (手探りで分かる)
 ```
 
-- モンスターは #1971、遠くの場所が見える仕組み (`DistantSight`) は #2040 で決めてから足す
+- モンスター (`SeenMonster`) は [monster.md](monster.md)。遠くの場所が見える仕組み (`DistantSight`) は #2040 で決めてから足す
 - 持ち物、体の状態、時刻は、見えているものではなく自分が知っていること。場面に入れず、知覚を通さずに集約から読む。複数の集約にまたがるものはドメインサービスにする
 - 場面は「何が見えるか」だけを持つ。「何ができるか」は `AvailableActions` ([action.md](action.md)) が持ち、行為の対象の候補は場面に出ているものに限る
 - 人が着いたことは、行為ではなく `OccupantEnteredSpotEvent` から、`BuiltInActionPerceptions.arrival` の文で、着いた場所にいた人へ刺激を作る。文には `{origin}` (来た場所の名前) を書ける。着いた本人には届けない (本人には場面が渡る) (#2061)

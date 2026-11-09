@@ -60,7 +60,7 @@ class LookingAround:                        # 物の見え方 (ObjectLook) を�
     tick: WorldTick
 
 ActorRequirement = LivingOnly | LivingOrDeparted
-CopresenceRequirement = WithPerson | WithObject | WithGroundItem   # モンスター (#1971)、商人と市場 (取引の Issue) は、それぞれを設計するときに足す
+CopresenceRequirement = WithPerson | WithObject | WithGroundItem | WithMonster   # 商人と市場 (取引の Issue) は、設計するときに足す
 Exertion = UsesBody | DoesNotUseBody
 
 class ActionKind(Enum):                     # どの世界にもある行為の種類。作者の操作は InteractionId で指す
@@ -154,7 +154,7 @@ TextArgumentValue(text: str)            # 空でない文
 
 物・品物・人への操作は、操作の宣言 (`InteractionDeclaration`) の欄 (`interaction_id`、`exertion`、`actor_requirement`、`allows_stealth`、`reaches_unseen`、`arguments`) を読んで性質を答える。
 
-モンスターへの攻撃 (#1971) と、商人・取引・市場の行為 (取引の Issue) は、それぞれを設計するときに足す。
+モンスターへの攻撃は `AttackMonsterAttempt(actor, monster: MonsterId)` ([monster.md](monster.md))。商人・取引・市場の行為 (取引の Issue) は、設計するときに足す。
 
 ## 断られたとき
 
