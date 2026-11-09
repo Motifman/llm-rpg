@@ -370,7 +370,7 @@ class SpotContents:                       # その場所にあるもの。ユー
 class ContainedObject:                    # 現れているかも持つ。隠れた物を場面から外すのは seen_with
     declaration: ObjectDeclaration
     revealed: bool
-    look: DescriptionText | NoLook        # ユースケースが集めるときに ObjectDeclaration.look_now で決める (#2067)
+    look: DescriptionText | NoLook        # ユースケースが集めるときに WorldDesign.looks_of(物).look_now で決める (#2067、#2070)
 
 @final
 @dataclass(frozen=True)

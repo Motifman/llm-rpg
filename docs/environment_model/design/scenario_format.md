@@ -60,7 +60,7 @@ precondition:
 
 ## 宣言ごとの欄
 
-欄の名前は、宣言の型の欄の名前と同じ。名詞の中に書く動詞の欄 (物の `interactions`、区画の `access`、通路の `condition`、品物の `use` と `interactions`、段階の `when_entered` と `when_left`、集団の決定の `voters` から `when_undecided`) は、読み込む側が動詞の宣言に分ける。
+欄の名前は、宣言の型の欄の名前と同じ。名詞の中に書く動詞の欄 (物の `interactions` と `looks`、区画の `access`、通路の `condition`、品物の `use` と `interactions`、段階の `when_entered` と `when_left`、集団の決定の `voters` から `when_undecided`) は、読み込む側が動詞の宣言に分ける。
 
 | 書く場所 | 欄 |
 |---|---|

@@ -42,7 +42,7 @@ class DeliverPerception:
 class LookAround:
     def __call__(self, command: LookAroundCommand) -> VisibleSurroundings:
         # SpotContents と LightingConditions を集め、VisibleSurroundings.seen_with
-        # 物を集めるときに ObjectDeclaration.look_now で、いまの見え方を決める
+        # 物を集めるときに WorldDesign.looks_of(物).look_now で、いまの見え方を決める
         ...
 
 class DeliverSurroundings:
