@@ -52,6 +52,8 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     FlagValue,
     ItemSpecDeclaration,
     ItemStateKeyDeclaration,
+    Lasts,
+    LastsIndefinitely,
     NotALightSource,
     NothingWritten,
     ObjectAppearance,
@@ -79,6 +81,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration im
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items import (
+    CarriedBy,
     GroundItems,
     Item,
     ItemInstanceId,
@@ -345,7 +348,7 @@ _WICK = ItemStateKeyDeclaration(
 )
 
 
-def _item() -> Item:
+def _item(lasts: Lasts | LastsIndefinitely = LastsIndefinitely()) -> Item:
     item = Item.come_into_world(
         _LANTERN,
         ItemSpecDeclaration(
@@ -355,6 +358,7 @@ def _item() -> Item:
             state_keys=(_WICK,),
             lights_up=NotALightSource(),
             hands_needed=HandsNeeded(1),
+            lasts=lasts,
         ),
         _NOW,
     )
@@ -510,6 +514,10 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     ),
     "Item.set": lambda: _with(_item(), lambda i: i.set(_WICK, ChoiceValue(ChoiceName("lit")))),
     "Item.leave_world": lambda: _with(_item(), lambda i: i.leave_world()),
+    "Item.run_out": lambda: _with(
+        _item(Lasts(ticks=Ticks(1), ended_text=DescriptionText("灯が燃え尽きた。"))),
+        lambda i: i.run_out(_NOW + Ticks(1), CarriedBy(_ALICE)),
+    ),
     "GroundItems.place": lambda: _with(_ground(), lambda g: g.place(_LANTERN)),
     "GroundItems.take": lambda: _with(_ground(_LANTERN), lambda g: g.take(_LANTERN)),
     "SpotSearchProgress.record_search": lambda: _with(

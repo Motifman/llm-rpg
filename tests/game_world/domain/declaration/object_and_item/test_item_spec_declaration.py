@@ -12,6 +12,8 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     FlagValue,
     ItemSpecDeclaration,
     ItemStateKeyDeclaration,
+    Lasts,
+    LastsIndefinitely,
     LitWhen,
     NoRefill,
     NotALightSource,
@@ -23,6 +25,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
 )
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
     ItemStateKindNotAllowedException,
+    LastingTicksBelowOneException,
     LightKeyNotDeclaredException,
     StateKeyDuplicatedException,
     StateKeyOwnerMismatchException,
@@ -35,6 +38,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     HandsNeeded,
     ItemSpecId,
     StateKeyId,
+    Ticks,
 )
 
 _LANTERN = ItemSpecId("lantern")
@@ -60,6 +64,7 @@ def _item(
         state_keys=state_keys,
         lights_up=lights_up,
         hands_needed=HandsNeeded(1),
+        lasts=LastsIndefinitely(),
     )
 
 
@@ -163,6 +168,22 @@ class TestItemSpecDeclarationHandsNeeded:
             state_keys=(),
             lights_up=NotALightSource(),
             hands_needed=HandsNeeded(2),
+            lasts=LastsIndefinitely(),
         )
 
         assert item.hands_needed == HandsNeeded(2)
+
+
+class TestLasts:
+    """Lasts が、世界に出てから消えるまでの時間を 1 tick 以上でだけ持てることを保証する。"""
+
+    def test_zero_ticks_is_refused(self) -> None:
+        """ticks に 0 を渡すと LastingTicksBelowOneException を投げる。"""
+        with pytest.raises(LastingTicksBelowOneException):
+            Lasts(ticks=Ticks(0), ended_text=DescriptionText("灯が燃え尽きた。"))
+
+    def test_one_tick_is_accepted(self) -> None:
+        """ticks に 1 を渡すと、その時間と ended_text を持つ Lasts になる。"""
+        lasts = Lasts(ticks=Ticks(1), ended_text=DescriptionText("灯が燃え尽きた。"))
+
+        assert (lasts.ticks, lasts.ended_text) == (Ticks(1), DescriptionText("灯が燃え尽きた。"))

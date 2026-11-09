@@ -1,6 +1,8 @@
 from ai_rpg_world.game_world.domain.declaration.object_and_item.item_spec_declaration import (
     ItemSpecDeclaration,
     ItemStateKeyDeclaration,
+    Lasts,
+    LastsIndefinitely,
     LitWhen,
     NotALightSource,
 )
@@ -42,6 +44,8 @@ __all__ = [
     "ItemSpecDeclaration",
     "ItemStateKeyDeclaration",
     "ItemStateKind",
+    "Lasts",
+    "LastsIndefinitely",
     "LitWhen",
     "NoRefill",
     "NotALightSource",

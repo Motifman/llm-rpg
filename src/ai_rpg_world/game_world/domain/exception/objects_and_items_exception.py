@@ -17,6 +17,14 @@ class ItemAlreadyLeftWorldException(GameWorldDomainException):
     error_code = "GAME_WORLD.ITEM_ALREADY_LEFT_WORLD"
 
 
+class ItemDoesNotRunOutException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ITEM_DOES_NOT_RUN_OUT"
+
+
+class ItemHasNotRunOutException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ITEM_HAS_NOT_RUN_OUT"
+
+
 class ItemAlreadyCarriedException(GameWorldDomainException):
     error_code = "GAME_WORLD.ITEM_ALREADY_CARRIED"
 

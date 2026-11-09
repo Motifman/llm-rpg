@@ -18,6 +18,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     StateKeyNotOwnedException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
+from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import WhereItemWas
 from ai_rpg_world.game_world.domain.value_object import ItemSpecId, StateKeyId, Ticks, WorldTick
 
 
@@ -44,7 +45,16 @@ class ItemLeftWorldEvent(DomainEvent):
     item: ItemInstanceId
 
 
-ItemEvent = ItemCameIntoWorldEvent | ItemStateChangedEvent | ItemLeftWorldEvent
+@final
+@dataclass(frozen=True, kw_only=True)
+class ItemRanOutEvent(DomainEvent):
+    item: ItemInstanceId
+    spec_id: ItemSpecId
+    where: WhereItemWas
+    at: WorldTick
+
+
+ItemEvent = ItemCameIntoWorldEvent | ItemStateChangedEvent | ItemLeftWorldEvent | ItemRanOutEvent
 
 
 class Item(AggregateRoot[ItemEvent]):
@@ -92,6 +102,15 @@ class Item(AggregateRoot[ItemEvent]):
             return
         self._in_world = False
         self.add_event(ItemLeftWorldEvent(**new_event_stamp(), item=self._item_id))
+
+    def run_out(self, now: WorldTick, where: WhereItemWas) -> None:
+        if not self._in_world:
+            return
+        self._spec.lasts.require_run_out(self.age(now))
+        self._in_world = False
+        self.add_event(
+            ItemRanOutEvent(**new_event_stamp(), item=self._item_id, spec_id=self.spec_id, where=where, at=now)
+        )
 
     def value_of(self, key: ItemStateKeyDeclaration) -> StateValue:
         if key not in self._spec.state_keys:
