@@ -125,6 +125,18 @@ class WorldTimePassing(_NotAnAction):
 
 @final
 @dataclass(frozen=True)
+class LookingAround(_NotAnAction):
+    tick: WorldTick
+
+    def person_as(self, kind: SubjectKind) -> PersonId:
+        _no_subject(self, kind)
+
+    def this_item(self) -> ItemInstanceId:
+        _no_item(self)
+
+
+@final
+@dataclass(frozen=True)
 class EachPersonOf:
     outer: Trigger
     person: PersonId
@@ -154,5 +166,6 @@ Trigger = (
     | GroupDecisionResult
     | JointActionCompleted
     | WorldTimePassing
+    | LookingAround
     | EachPersonOf
 )

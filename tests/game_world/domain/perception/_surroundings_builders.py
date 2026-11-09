@@ -14,6 +14,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
     SpotSectionDeclaration,
     Temperature,
 )
+from ai_rpg_world.game_world.domain.declaration.verb import NoLook
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonHandle, PersonRef
@@ -21,6 +22,7 @@ from ai_rpg_world.game_world.domain.perception.surroundings import (
     ContainedObject,
     ContainedPassage,
     PresentPerson,
+    SeenObject,
     SpotContents,
 )
 from ai_rpg_world.game_world.domain.value_object import (
@@ -71,7 +73,14 @@ def passage(name: str, *, to: str = "mine_entrance", at: str = HERE, revealed: b
     return ContainedPassage(passage=PassageInState(declaration, PassageStateName("open")), revealed=revealed)
 
 
-def thing(name: str, *, seen_in_dark: bool = False, revealed: bool = True, at: str = HERE) -> ContainedObject:
+def thing(
+    name: str,
+    *,
+    seen_in_dark: bool = False,
+    revealed: bool = True,
+    at: str = HERE,
+    look: DescriptionText | NoLook = NoLook(),
+) -> ContainedObject:
     declaration = ObjectDeclaration(
         object_id=ObjectId(name),
         spot_id=SpotId(at),
@@ -80,7 +89,11 @@ def thing(name: str, *, seen_in_dark: bool = False, revealed: bool = True, at: s
         appearance=ObjectAppearance(seen_in_dark=seen_in_dark, hidden_until_revealed=not revealed),
         state_keys=(),
     )
-    return ContainedObject(declaration=declaration, revealed=revealed)
+    return ContainedObject(declaration=declaration, revealed=revealed, look=look)
+
+
+def seen(contained: ContainedObject) -> SeenObject:
+    return SeenObject(declaration=contained.declaration, look=contained.look)
 
 
 def section(name: str, *, at: str = HERE) -> SpotSectionDeclaration:

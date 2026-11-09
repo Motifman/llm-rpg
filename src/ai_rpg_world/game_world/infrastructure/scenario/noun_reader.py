@@ -89,7 +89,7 @@ from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import FlawCollec
 
 SPOT_FIELDS = ("name", "description", "atmosphere", "sections", "objects", "discoverables")
 SECTION_FIELDS = ("name", "capacity", "reachable_objects", "access")
-OBJECT_FIELDS = ("name", "description", "appearance", "state_keys", "interactions")
+OBJECT_FIELDS = ("name", "description", "appearance", "state_keys", "looks", "interactions")
 PASSAGE_FIELDS = (
     "name",
     "description",

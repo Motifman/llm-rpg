@@ -16,6 +16,8 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     ItemUseDeclaration,
     JointActionDeclaration,
     ObjectInteractionDeclaration,
+    ObjectLook,
+    ObjectLooksDeclaration,
     PassageTraversalDeclaration,
     PeopleCountAt,
     ReactionDeclaration,
@@ -47,6 +49,7 @@ from ai_rpg_world.game_world.infrastructure.scenario.perception_reader import Pe
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import ScenarioDefaults
 from ai_rpg_world.game_world.infrastructure.scenario.value_readers import (
     actor_requirement,
+    description,
     display_name,
     duration,
     exertion,
@@ -96,6 +99,7 @@ class ReadVerbs:
     section_accesses: list[SectionAccessDeclaration] = field(default_factory=list)
     passage_traversals: list[PassageTraversalDeclaration] = field(default_factory=list)
     world_stage_effects: list[WorldStageEffectsDeclaration] = field(default_factory=list)
+    object_looks: list[ObjectLooksDeclaration] = field(default_factory=list)
     group_decision_rules: list[GroupDecisionRulesDeclaration] = field(default_factory=list)
     happenings: list[HappeningDeclaration] = field(default_factory=list)
     reactions: list[ReactionDeclaration] = field(default_factory=list)
@@ -128,7 +132,7 @@ class VerbReader:
             if spot_fields is None:
                 continue
             for name, obj in self._entries(spot_fields.nested("objects")):
-                self._object_interactions(name, obj)
+                self._object_verbs(name, obj)
             for name, section in self._entries(spot_fields.nested("sections")):
                 self._add(self._read.section_accesses, lambda: self._section_access(name, section))
             for name, discoverable in self._entries(spot_fields.nested("discoverables")):
@@ -192,10 +196,13 @@ class VerbReader:
         if declaration is not None:
             into.append(declaration)
 
-    def _object_interactions(self, name: str, node: YamlNode) -> None:
+    def _object_verbs(self, name: str, node: YamlNode) -> None:
         fields = self._collector.attempt(lambda: self._defaults.fill("object", node).fields(*OBJECT_FIELDS))
         if fields is None:
             return
+        looks = fields.optional("looks")
+        if looks is not None:
+            self._add(self._read.object_looks, lambda: self._object_looks(name, node, looks))
         for interaction_name, interaction in self._entries(fields.nested("interactions")):
             self._add(
                 self._read.object_interactions,
@@ -204,6 +211,20 @@ class VerbReader:
                     interaction=self.interaction(interaction_name, interaction, has_target=False),
                 ),
             )
+
+    def _object_looks(self, name: str, node: YamlNode, looks: YamlNode) -> ObjectLooksDeclaration:
+        return ObjectLooksDeclaration(
+            object_id=self._names.object(YamlNode(name, node.path)).object_id,
+            looks=tuple(self._object_look(look) for look in looks.items()),
+        )
+
+    def _object_look(self, node: YamlNode) -> ObjectLook:
+        fields = node.fields("when", "text")
+        return node.build(
+            lambda: ObjectLook(
+                when=self._conditions.read(fields.required("when")), text=description(fields.required("text"))
+            )
+        )
 
     def _item_verbs(self, name: str, node: YamlNode) -> None:
         fields = self._collector.attempt(lambda: self._defaults.fill("item_spec", node).fields(*ITEM_SPEC_FIELDS))

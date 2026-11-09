@@ -133,16 +133,6 @@ class ObjectDeclaration:
     description: DescriptionText
     appearance: ObjectAppearance
     state_keys: tuple[ObjectStateKeyDeclaration, ...]
-    looks: tuple[ObjectLook, ...]           # 書いた順に確かめ、最初に当てはまった 1 つの文を説明に続けて場面に出す (#2067)
-
-    def look_now(self, facts: WorldFacts) -> DescriptionText | NoLook: ...
-        # 条件はきっかけ LookingAround で確かめる。どれにも当てはまらなければ NoLook で、場面には説明だけが出る
-
-@final
-@dataclass(frozen=True)
-class ObjectLook:                           # 「この条件のときはこう見える」(水門が開いていれば「開いていて、水の流れる音がする」)
-    when: Condition
-    text: DescriptionText
 
 @final
 @dataclass(frozen=True)
@@ -314,6 +304,21 @@ class WorldStageEffectsDeclaration:         # 宣言の無い段階は、出入�
     stage: WorldStageDeclaration
     when_entered: Effect
     when_left: Effect
+
+@final
+@dataclass(frozen=True)
+class ObjectLooksDeclaration:               # 物の見え方。条件を持つので名詞ではなく動詞の側に置く。宣言の無い物は見え方を持たない (#2067、#2070)
+    object_id: ObjectId
+    looks: tuple[ObjectLook, ...]           # 書いた順に確かめ、最初に当てはまった 1 つの文を説明に続けて場面に出す
+
+    def look_now(self, facts: WorldFacts) -> DescriptionText | NoLook: ...
+        # 条件はきっかけ LookingAround で確かめる。どれにも当てはまらなければ NoLook で、場面には説明だけが出る
+
+@final
+@dataclass(frozen=True)
+class ObjectLook:                           # 「この条件のときはこう見える」(水門が開いていれば「開いていて、水の流れる音がする」)
+    when: Condition
+    text: DescriptionText
 
 @final
 @dataclass(frozen=True)
@@ -644,6 +649,7 @@ class WorldDesign:
         section_accesses: Iterable[SectionAccessDeclaration],
         passage_traversals: Iterable[PassageTraversalDeclaration],
         world_stage_effects: Iterable[WorldStageEffectsDeclaration],
+        object_looks: Iterable[ObjectLooksDeclaration],
         group_decision_rules: Iterable[GroupDecisionRulesDeclaration],
         happenings: Iterable[HappeningDeclaration],
         reactions: Iterable[ReactionDeclaration],
@@ -685,6 +691,7 @@ class WorldDesign:
     def section_access(self, section: SpotSectionId) -> SectionAccessDeclaration: ...
     def passage_traversal(self, passage: PassageId) -> Condition: ...                   # 宣言が無ければ、いつでも真の条件
     def world_stage_effects(self, stage: WorldStageId) -> WorldStageEffectsDeclaration: ...   # 宣言が無ければ、出入りで何もしない (NoEffect) 宣言
+    def looks_of(self, obj: ObjectId) -> ObjectLooksDeclaration: ...                     # 宣言が無ければ、見え方が空の宣言
     def group_decision_rules(self, decision: GroupDecisionId) -> GroupDecisionRulesDeclaration: ...
     def person_interaction(self, interaction: InteractionId) -> InteractionDeclaration: ...   # 殴る、盗むなど、人への操作
     def happenings(self) -> tuple[HappeningDeclaration, ...]: ...
@@ -757,5 +764,5 @@ infrastructure: YAML を読む (scenario_format.md)
 - 区画ごとの出入り (`SectionAccessDeclaration`) と、集団の決定ごとの決まり (`GroupDecisionRulesDeclaration`) が 1 つずつ無ければ `DesignFlaw`。二人で合わせる操作が求める物体の操作が宣言に無ければ `DesignFlaw`
 - 組み込みの行為の知覚の文は、世界で行える組み込みの行為 (介抱は `TendRule` があるときだけ) をすべて持たなければ `DesignFlaw`。知らせの相手の選び方は、行為の中に置いた条件として (`Actor`、`Target` を使える) ほかの宣言と同じく照らし合わせる。断りの文の表の `world_state` は、起きうる `RefusalCode` をドメインで列挙できないので compose では確かめない
 - compose が照らし合わせに使う材料 (主語、読む引数、段階・昼夜・天候を読むか、立てる旗、締める決定、伏せられうる所属、読む出来事) は、条件と効果の `requirements()` が答える。根に文があるかは `Condition.explains_failure()` が答える
-- 物の見え方 (`ObjectLook.when`) の条件は、世界の状態だけで決まるものに限る。`requirements()` の主語・`uses_chance`・`uses_action_arguments` のどれかがあれば `DesignFlaw`。人によって変わる見え方や、見渡すたびに変わる見え方になるため (#2067)
+- 物の見え方の宣言 (`ObjectLooksDeclaration`) は物ごとに 1 つまで。宣言に無い物を指せば `DesignFlaw`。見え方 (`ObjectLook.when`) の条件は、世界の状態だけで決まるものに限る。`requirements()` が、きっかけから人を引く主語 (名指しした人 `NAMED_PERSON` は除く)・`uses_chance`・`uses_action_arguments` のどれかを持てば `DesignFlaw`。人によって変わる見え方や、見渡すたびに変わる見え方になるため。名指しした人の状態は見る人で変わらないので使える (#2067、#2070)
 - 宣言に無い通路の状態の名前、呼び名 (`display_name`) の無い値が文に出るときは、`DesignFlaw` で止める

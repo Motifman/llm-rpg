@@ -138,6 +138,9 @@ class DeclaredNouns:
     def object_of(self, object_id: ObjectId) -> ObjectDeclaration:
         return self._objects.with_id(object_id)
 
+    def object_flaws_if_unknown(self, object_id: ObjectId, at: DesignLocation) -> list[DesignFlaw]:
+        return self._objects.flaws_if_unknown(object_id.value, at)
+
     def object_state_key(self, object_name: str, key: str, at: DesignLocation) -> ObjectStateKeyDeclaration:
         obj = self._objects.get(object_name, at)
         for state_key in obj.state_keys:

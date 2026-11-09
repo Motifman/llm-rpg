@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
+from ai_rpg_world.game_world.domain.condition.condition import NoText
+from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoDayNight, NoWeather
+from ai_rpg_world.game_world.domain.declaration.verb import ObjectLook
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, ScenarioFile
 from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
@@ -631,3 +634,68 @@ def test_passage_id_is_declared_by_its_key(tmp_path: Path) -> None:
     nouns = _load(tmp_path).design.nouns
 
     assert nouns.passage("ladder", DesignLocation("passage", "ladder", "")).passage_id == PassageId("ladder")
+
+
+_PANEL_DESCRIPTION = "        description: 籠の奥の壁にある操作盤。\n"
+
+
+def _with_panel_looks(looks: str) -> str:
+    return _LIFT_LANDING.replace(_PANEL_DESCRIPTION, _PANEL_DESCRIPTION + looks, 1)
+
+
+class TestObjectLooks:
+    """load_scenario が、物の中に書いた looks を、書いた順の ObjectLook を持つその物の見え方の宣言にすることを保証する。"""
+
+    def test_written_looks_are_kept_in_order(self, tmp_path: Path) -> None:
+        """操作盤に籠が上がったときと発電機が動いているときの見え方を書くと、その順の条件と文を持つ。"""
+        text = _with_panel_looks(
+            "        looks:\n"
+            "          - { when: { flag_is_raised: lift_departed }, text: 鍵穴の鍵は抜かれている }\n"
+            "          - { when: { flag_is_raised: generator_running }, text: 小さな灯りがともっている }\n"
+        )
+
+        design = _load(tmp_path, text).design
+        nouns = design.nouns
+
+        assert design.looks_of(ObjectId("lift_panel")).looks == (
+            ObjectLook(
+                when=FlagIsRaisedCondition(
+                    flag=nouns.flag("lift_departed", DesignLocation("flag", "lift_departed", "")), failure_text=NoText()
+                ),
+                text=DescriptionText("鍵穴の鍵は抜かれている"),
+            ),
+            ObjectLook(
+                when=FlagIsRaisedCondition(
+                    flag=nouns.flag("generator_running", DesignLocation("flag", "generator_running", "")),
+                    failure_text=NoText(),
+                ),
+                text=DescriptionText("小さな灯りがともっている"),
+            ),
+        )
+
+    def test_unwritten_looks_are_empty(self, tmp_path: Path) -> None:
+        """looks を書かない操作盤は、見え方を 1 つも持たない。"""
+        design = _load(tmp_path).design
+
+        assert design.looks_of(ObjectId("lift_panel")).looks == ()
+
+    def test_look_reading_the_actor_is_a_flaw_of_that_look(self, tmp_path: Path) -> None:
+        """見え方の条件が行う人 (actor) を読むと、その物の looks[0] の DesignFlaw で読み込みが止まる。"""
+        text = _with_panel_looks(
+            "        looks:\n          - { when: { is_down: { who: actor } }, text: 誰かが倒れている }\n"
+        )
+
+        flaws = _flaws(tmp_path, text)
+
+        assert [flaw.location for flaw in flaws] == [_mine("object_looks", "lift_panel", "looks[0]")]
+
+    def test_look_reading_an_undeclared_flag_is_a_flaw(self, tmp_path: Path) -> None:
+        """見え方の条件が宣言に無い旗を読むと、読み込みは DesignFlaw で止まる。"""
+        text = _with_panel_looks(
+            "        looks:\n          - { when: { flag_is_raised: no_such_flag }, text: 何かが変わった }\n"
+        )
+
+        flaws = _flaws(tmp_path, text)
+
+        assert len(flaws) == 1
+        assert "no_such_flag" in flaws[0].reason

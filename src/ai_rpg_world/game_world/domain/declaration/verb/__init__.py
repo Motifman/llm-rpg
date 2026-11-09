@@ -20,6 +20,11 @@ from ai_rpg_world.game_world.domain.declaration.verb.noun_interaction_declaratio
     ItemInteractionDeclaration,
     ObjectInteractionDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.verb.object_looks_declaration import (
+    NoLook,
+    ObjectLook,
+    ObjectLooksDeclaration,
+)
 from ai_rpg_world.game_world.domain.declaration.verb.passage_traversal_declaration import PassageTraversalDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import (
     NoFailureWitness,
@@ -50,8 +55,11 @@ __all__ = [
     "ItemUseDeclaration",
     "JointActionDeclaration",
     "NoFailureWitness",
+    "NoLook",
     "NoNotice",
     "ObjectInteractionDeclaration",
+    "ObjectLook",
+    "ObjectLooksDeclaration",
     "PassageTraversalDeclaration",
     "PeopleCountAt",
     "PerceptionDeclaration",

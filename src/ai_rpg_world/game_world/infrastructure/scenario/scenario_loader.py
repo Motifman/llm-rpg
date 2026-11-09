@@ -178,6 +178,7 @@ class _ScenarioLoading:
                 section_accesses=verbs.section_accesses,
                 passage_traversals=verbs.passage_traversals,
                 world_stage_effects=verbs.world_stage_effects,
+                object_looks=verbs.object_looks,
                 group_decision_rules=verbs.group_decision_rules,
                 happenings=verbs.happenings,
                 reactions=verbs.reactions,
