@@ -25,6 +25,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
 )
 from ai_rpg_world.game_world.domain.declaration.verb import (
     BuiltInActionPerceptions,
+    BuiltInPerceptionRow,
     EndingDeclaration,
     PerceptionDeclaration,
 )
@@ -122,22 +123,23 @@ def refusal_texts(node: YamlNode) -> RefusalTexts:
 
 
 def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -> BuiltInActionPerceptions:
-    def read(written: YamlNode) -> PerceptionDeclaration:
-        return perceptions.perception(written, has_target=False)
+    def read(written: YamlNode, row: BuiltInPerceptionRow) -> PerceptionDeclaration:
+        return perceptions.perception(written, has_target=row.has_target)
 
     entries = node.entries()
     rows = node.fields(*(name for name, _ in entries))
+    by_kind = {
+        YamlNode(name, written.path).enum(ActionKind): written
+        for name, written in entries
+        if name not in _SPEECH_AND_ARRIVAL_ROWS
+    }
     return node.build(
         lambda: BuiltInActionPerceptions(
-            by_kind={
-                YamlNode(name, written.path).enum(ActionKind): read(written)
-                for name, written in entries
-                if name not in _SPEECH_AND_ARRIVAL_ROWS
-            },
-            whisper=read(rows.required("whisper")),
-            ordinary_voice=read(rows.required("speak")),
-            shout=read(rows.required("shout")),
-            arrival=read(rows.required("arrival")),
+            by_kind={kind: read(written, BuiltInPerceptionRow.of_kind(kind)) for kind, written in by_kind.items()},
+            whisper=read(rows.required("whisper"), BuiltInPerceptionRow.whisper()),
+            ordinary_voice=read(rows.required("speak"), BuiltInPerceptionRow.speak()),
+            shout=read(rows.required("shout"), BuiltInPerceptionRow.shout()),
+            arrival=read(rows.required("arrival"), BuiltInPerceptionRow.arrival()),
         )
     )
 

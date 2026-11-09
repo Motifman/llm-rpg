@@ -273,17 +273,9 @@ class WorldDesign:
                     look.when,
                 )
 
-        for row, perception in (
-            *((kind.name, perception) for kind, perception in built_in_action_perceptions.by_kind.items()),
-            ("whisper", built_in_action_perceptions.whisper),
-            ("speak", built_in_action_perceptions.ordinary_voice),
-            ("shout", built_in_action_perceptions.shout),
-            ("arrival", built_in_action_perceptions.arrival),
-        ):
+        for row, perception in built_in_action_perceptions.rows():
             review.requirements(
-                RulePlacement.in_person_interaction(
-                    DesignLocation("built_in_action_perceptions", row, "announcement"), frozenset()
-                ),
+                row.placement(DesignLocation("built_in_action_perceptions", row.name, "announcement")),
                 perception.requirements(),
             )
         review.flaws += world_rules.design_flaws(replace(_WORLD_LOCATION, field="world_rules"))

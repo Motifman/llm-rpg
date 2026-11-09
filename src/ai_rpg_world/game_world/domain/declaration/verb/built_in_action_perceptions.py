@@ -8,46 +8,17 @@ from typing import final
 from typing_extensions import assert_never
 
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, SpeechReach, Whisper
+from ai_rpg_world.game_world.domain.declaration.verb.built_in_perception_row import BuiltInPerceptionRow
 from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
     NotBuiltInActionPerceptionException,
+    TargetTextWithoutTargetException,
     UnfilledNameInBuiltInActionPerceptionException,
 )
+from ai_rpg_world.game_world.domain.perception import NoTarget
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
-
-_KINDS_NOT_PERCEIVED_THROUGH_THIS_TABLE = frozenset(
-    {
-        ActionKind.INTERACT_WITH_OBJECT,
-        ActionKind.INTERACT_WITH_CARRIED_ITEM,
-        ActionKind.INTERACT_WITH_PERSON,
-        ActionKind.ENTER_SECTION,
-        ActionKind.LEAVE_SECTION,
-        ActionKind.ATTACK_MONSTER,
-    }
-)
-_KINDS_PERCEIVED_BY_VOICE = frozenset({ActionKind.SPEAK})
-
-_ACTOR = frozenset({"actor"})
-_ACTOR_AND_TARGET = frozenset({"actor", "target"})
-_NAMES_BY_KIND: Mapping[ActionKind, frozenset[str]] = {
-    ActionKind.TRAVEL: _ACTOR | {"destination"},
-    ActionKind.HAND_OVER: _ACTOR_AND_TARGET | {"item"},
-    ActionKind.TEND: _ACTOR_AND_TARGET,
-    ActionKind.PICK_UP: _ACTOR | {"item"},
-    ActionKind.DROP: _ACTOR | {"item"},
-    ActionKind.USE_ITEM: _ACTOR | {"item"},
-    ActionKind.HOLD: _ACTOR | {"item"},
-    ActionKind.PUT_AWAY: _ACTOR | {"item"},
-    ActionKind.LISTEN: _ACTOR,
-    ActionKind.WAIT: _ACTOR,
-    ActionKind.SEARCH: _ACTOR,
-    ActionKind.CAST_BALLOT: _ACTOR,
-}
-_WHISPER_NAMES = _ACTOR_AND_TARGET | {"speech"}
-_VOICE_NAMES = _ACTOR | {"speech"}
-_ARRIVAL_NAMES = _ACTOR | {"origin"}
 
 
 @final
@@ -60,28 +31,31 @@ class BuiltInActionPerceptions:
     arrival: PerceptionDeclaration
 
     def __post_init__(self) -> None:
-        not_built_in = sorted(
-            kind.name
-            for kind in self.by_kind.keys() & (_KINDS_NOT_PERCEIVED_THROUGH_THIS_TABLE | _KINDS_PERCEIVED_BY_VOICE)
-        )
+        not_built_in = sorted(kind.name for kind in self.by_kind.keys() - BuiltInPerceptionRow.kinds())
         if not_built_in:
             raise NotBuiltInActionPerceptionException(
                 f"BuiltInActionPerceptions.by_kind must not declare {not_built_in}, which are not perceived through it"
             )
-        rows = [
-            *((kind.name, perception, _NAMES_BY_KIND[kind]) for kind, perception in self.by_kind.items()),
-            ("whisper", self.whisper, _WHISPER_NAMES),
-            ("speak", self.ordinary_voice, _VOICE_NAMES),
-            ("shout", self.shout, _VOICE_NAMES),
-            ("arrival", self.arrival, _ARRIVAL_NAMES),
-        ]
-        for row, perception, fillable in rows:
-            unfilled = sorted(perception.placeholders() - fillable)
+        for row, perception in self.rows():
+            unfilled = sorted(perception.placeholders() - row.nameable)
             if unfilled:
                 raise UnfilledNameInBuiltInActionPerceptionException(
-                    f"the {row} perception can name only {sorted(fillable)}, but names {unfilled}"
+                    f"the {row.name} perception can name only {sorted(row.nameable)}, but names {unfilled}"
+                )
+            if not row.has_target and not isinstance(perception.target, NoTarget):
+                raise TargetTextWithoutTargetException(
+                    f"the {row.name} perception has no target to tell, but writes a target text"
                 )
         object.__setattr__(self, "by_kind", MappingProxyType(dict(self.by_kind)))
+
+    def rows(self) -> tuple[tuple[BuiltInPerceptionRow, PerceptionDeclaration], ...]:
+        return (
+            *((BuiltInPerceptionRow.of_kind(kind), perception) for kind, perception in self.by_kind.items()),
+            (BuiltInPerceptionRow.whisper(), self.whisper),
+            (BuiltInPerceptionRow.speak(), self.ordinary_voice),
+            (BuiltInPerceptionRow.shout(), self.shout),
+            (BuiltInPerceptionRow.arrival(), self.arrival),
+        )
 
     def speech(self, reach: SpeechReach) -> PerceptionDeclaration:
         if isinstance(reach, Whisper):
@@ -93,7 +67,7 @@ class BuiltInActionPerceptions:
         assert_never(reach)
 
     def flaws_for(self, rules: WorldRules, at: DesignLocation) -> list[DesignFlaw]:
-        performable = frozenset(ActionKind) - _KINDS_NOT_PERCEIVED_THROUGH_THIS_TABLE - _KINDS_PERCEIVED_BY_VOICE
+        performable = BuiltInPerceptionRow.kinds()
         if not rules.allows_tending():
             performable -= {ActionKind.TEND}
         missing = sorted(kind.name for kind in performable - self.by_kind.keys())

@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import BuiltInActionPercept
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
     NotBuiltInActionPerceptionException,
+    TargetTextWithoutTargetException,
     UnfilledNameInBuiltInActionPerceptionException,
 )
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
@@ -186,9 +187,9 @@ class TestBuiltInActionPerceptionsNames:
         ],
     )
     def test_unfilled_name_in_any_text_raises(self, perception: PerceptionDeclaration) -> None:
-        """ふつうの声の知覚の、見た人の dim・unseen_actor・noticed_later、された人の文、失敗の文、音の clear・muffled、知らせのどれか 1 つに、埋まらない {origin} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
+        """ささやく知覚の、見た人の dim・unseen_actor・noticed_later、相手が見る文、失敗の文、音の clear・muffled、知らせのどれか 1 つに、埋まらない {origin} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
         with pytest.raises(UnfilledNameInBuiltInActionPerceptionException):
-            _perceptions(ordinary_voice=perception)
+            _perceptions(whisper=perception)
 
     def test_by_kind_text_naming_what_the_action_does_not_fill_raises(self) -> None:
         """by_kind の拾う文に、拾うことでは埋まらない {destination} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
@@ -200,6 +201,37 @@ class TestBuiltInActionPerceptionsNames:
         hand_over = _seen_as("{actor}が{item}を{target}に渡した。")
 
         assert _perceptions(by_kind={ActionKind.HAND_OVER: hand_over}).by_kind[ActionKind.HAND_OVER] == hand_over
+
+
+class TestBuiltInActionPerceptionsTargetTexts:
+    """BuiltInActionPerceptions が、相手が見る文 (target) を相手のいる行にだけ持てることを保証する。"""
+
+    def test_tend_keeps_its_target_text(self) -> None:
+        """介抱するの行に相手が見る文を書くと、断らずにその文を持つ。"""
+        tend = replace(lever_pulled_quietly(), target=seen_clearly_only("{actor}があなたを介抱している。"))
+
+        assert _perceptions(by_kind={ActionKind.TEND: tend}).by_kind[ActionKind.TEND].target == tend.target
+
+    def test_whisper_keeps_its_target_text(self) -> None:
+        """ささやくの行に相手が見る文を書くと、断らずにその文を持つ。"""
+        whisper = replace(lever_pulled_quietly(), target=seen_clearly_only("{actor}があなたに耳打ちした。"))
+
+        assert _perceptions(whisper=whisper).whisper.target == whisper.target
+
+    def test_travel_with_target_text_raises(self) -> None:
+        """相手のいない移動の行に相手が見る文を書くと TargetTextWithoutTargetException を投げる。"""
+        travel = replace(lever_pulled_quietly(), target=seen_clearly_only("{actor}が去った。"))
+
+        with pytest.raises(TargetTextWithoutTargetException):
+            _perceptions(by_kind={ActionKind.TRAVEL: travel})
+
+    @pytest.mark.parametrize("field", ["ordinary_voice", "shout", "arrival"])
+    def test_voice_or_arrival_with_target_text_raises(self, field: str) -> None:
+        """相手のいない、ふつうに話す・叫ぶ・着いたの行に相手が見る文を書くと TargetTextWithoutTargetException を投げる。"""
+        perception = replace(lever_pulled_quietly(), target=seen_clearly_only("{actor}が来た。"))
+
+        with pytest.raises(TargetTextWithoutTargetException):
+            _perceptions(**{field: perception})
 
 
 class TestBuiltInActionPerceptionsKeepsItsOwnTable:

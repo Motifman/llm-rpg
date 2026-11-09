@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRule
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
 from ai_rpg_world.game_world.domain.people._person_placeholders import person_placeholders_in
+from ai_rpg_world.game_world.domain.perception import NoTarget
 from ai_rpg_world.game_world.domain.perception.salience import Background, Notable
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
@@ -166,6 +167,14 @@ class TestBuiltInActionPerceptions:
             Background(),
             Notable(),
         )
+
+    def test_only_actions_with_a_target_tell_the_target(self, tmp_path: Path) -> None:
+        """相手が見る文は、相手のいる渡す・介抱・ささやくにだけあり、ほかの行には無い。"""
+        perceptions = _load_smallest_scenario(tmp_path).design.built_in_action_perceptions
+
+        telling = {row.name for row, perception in perceptions.rows() if not isinstance(perception.target, NoTarget)}
+
+        assert telling == {"HAND_OVER", "TEND", "whisper"}
 
     def test_arrival_tells_where_the_actor_came_from(self, tmp_path: Path) -> None:
         """着いた側の見た人の文は、来た場所の呼び名 {origin} を書いている。"""

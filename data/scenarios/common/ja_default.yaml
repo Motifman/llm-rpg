@@ -110,6 +110,7 @@ built_in_action_perceptions:
     sound: { loudness: whisper, clear: 足音が近づいてきた。, muffled: かすかな足音がした。 }
   whisper:
     witness: { clear: "{actor}が{target}に何かささやいた。" }
+    target: { clear: "{actor}があなたに顔を寄せた。" }
     sound: { loudness: whisper, clear: "{actor}が「{speech}」とささやいた。", muffled: 誰かがささやく声がした。 }
     salience: background
   speak:
@@ -130,9 +131,11 @@ built_in_action_perceptions:
     salience: background
   tend:
     witness: { clear: "{actor}が{target}を介抱している。" }
+    target: { clear: "{actor}があなたを介抱している。" }
     sound: null
   hand_over:
     witness: { clear: "{actor}が{item}を{target}に渡した。" }
+    target: { clear: "{actor}があなたに{item}を渡した。" }
     sound: null
   pick_up:
     witness: { clear: "{actor}が{item}を拾い上げた。" }
