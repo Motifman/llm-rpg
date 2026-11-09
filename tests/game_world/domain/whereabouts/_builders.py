@@ -123,5 +123,4 @@ def thing(name: str, at: str) -> ObjectDeclaration:
         description=DescriptionText(f"{name} の説明"),
         appearance=ObjectAppearance(seen_in_dark=False, hidden_until_revealed=False),
         state_keys=(),
-        looks=(),
     )

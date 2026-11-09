@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.game_world.domain.declaration.object_and_item import NoLook
+from ai_rpg_world.game_world.domain.declaration.verb import NoLook
 from ai_rpg_world.game_world.domain.exception.surroundings_exception import (
     HeldItemNotCarriedException,
     ThingFromAnotherSpotException,

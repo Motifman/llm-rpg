@@ -17,7 +17,7 @@ from ai_rpg_world.game_world.domain.condition.person_conditions import (
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import MembershipVisibility
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.object_and_item.state_value import ChoiceName, ChoiceValue
-from ai_rpg_world.game_world.domain.declaration.verb import HappeningDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb import HappeningDeclaration, ObjectLooksDeclaration
 from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
 from ai_rpg_world.game_world.domain.effect.combined_effects import ConditionalEffect, ForEveryoneEffect, SequenceEffect
 from ai_rpg_world.game_world.domain.effect.flag_effects import LowerFlagEffect
@@ -204,6 +204,10 @@ def _object(loaded: LoadedScenario, name: str) -> ObjectDeclaration:
     return loaded.design.nouns.object(name, DesignLocation("object", name, ""))
 
 
+def _looks(loaded: LoadedScenario, name: str) -> ObjectLooksDeclaration:
+    return loaded.design.looks_of(ObjectId(name))
+
+
 def _world_with(loaded: LoadedScenario, *raised: str, states: tuple[ObjectState, ...] = ()) -> WorldInMemory:
     a_world = WorldInMemory(world=WorldId("mine_village"), object_states=states)
     for name in raised:
@@ -231,10 +235,10 @@ class TestObjectLooks:
         self, mine_village: LoadedScenario, name: str, flag: str, raised_text: str, lowered_text: str
     ) -> None:
         """旗が立っているときと立っていないときで、物の見え方が v1 の 2 つの文に分かれる。"""
-        declaration = _object(mine_village, name)
+        looks = _looks(mine_village, name)
 
-        raised = declaration.look_now(_world_with(mine_village, flag).facts())
-        lowered = declaration.look_now(_world_with(mine_village).facts())
+        raised = looks.look_now(_world_with(mine_village, flag).facts())
+        lowered = looks.look_now(_world_with(mine_village).facts())
 
         assert (raised, lowered) == (DescriptionText(raised_text), DescriptionText(lowered_text))
 
@@ -252,7 +256,7 @@ class TestObjectLooks:
         state = ObjectState.from_declaration(generator, _START)
         state.add_to_count(fuel_key, Count(fuel))
 
-        look = generator.look_now(_world_with(mine_village, states=(state,)).facts())
+        look = _looks(mine_village, "generator").look_now(_world_with(mine_village, states=(state,)).facts())
 
         assert look == DescriptionText(text)
 
@@ -267,6 +271,6 @@ class TestObjectLooks:
         state = ObjectState.from_declaration(valve, _START)
         state.set(mark_key, ChoiceValue(ChoiceName(mark)), _START)
 
-        look = valve.look_now(_world_with(mine_village, states=(state,)).facts())
+        look = _looks(mine_village, "valve").look_now(_world_with(mine_village, states=(state,)).facts())
 
         assert look == DescriptionText(text)

@@ -99,7 +99,6 @@ def _shrine(*, hidden: bool = False) -> ObjectDeclaration:
         description=DescriptionText("小さな祠"),
         appearance=ObjectAppearance(seen_in_dark=False, hidden_until_revealed=hidden),
         state_keys=(_LIT, _OFFERINGS, _HOLY_WATER, _PLAQUE),
-        looks=(),
     )
 
 

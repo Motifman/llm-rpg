@@ -37,7 +37,6 @@ from ai_rpg_world.game_world.domain.declaration.character import (
 )
 from ai_rpg_world.game_world.domain.declaration.initial_world import StartingPerson
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
-from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration, ObjectLook
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration
@@ -65,6 +64,8 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     JointActionDeclaration,
     NoNotice,
     ObjectInteractionDeclaration,
+    ObjectLook,
+    ObjectLooksDeclaration,
     PassageTraversalDeclaration,
     ReactionDeclaration,
     WorldStageEffectsDeclaration,
@@ -1076,9 +1077,9 @@ _EFFECT_READING_FOG = ConditionalEffect(condition=_READS_FOG, then=NoEffect(), o
 _AUDIENCE_READING_FOG = AnnouncementTo(audience=PeopleSelection(where=_READS_FOG), text=_REFUSED, salience=Notable())
 
 
-def _looking(declared: ObjectDeclaration, *whens: Condition) -> ObjectDeclaration:
-    return replace(
-        declared,
+def _looking(name: str, *whens: Condition) -> ObjectLooksDeclaration:
+    return ObjectLooksDeclaration(
+        object_id=ObjectId(name),
         looks=tuple(ObjectLook(when=when, text=DescriptionText(f"見え方 {index}")) for index, when in enumerate(whens)),
     )
 
@@ -1228,10 +1229,11 @@ def _every_placement() -> list[tuple[str, dict[str, object], DesignLocation]]:
                     sections=(cage,),
                     world_stages=(dawn,),
                     group_decisions=(exile,),
-                    objects=(_looking(obj("lamp", "hall"), _READS_FOG),),
-                )
+                    objects=(obj("lamp", "hall"),),
+                ),
+                "object_looks": (_looking("lamp", _READS_FOG),),
             },
-            DesignLocation("object", "lamp", "looks[0]"),
+            DesignLocation("object_looks", "lamp", "looks[0]"),
         ),
         (
             "built_in_action_perceptions",
@@ -1267,32 +1269,65 @@ class TestObjectLookConditions:
         gate_open = FlagDeclaration(
             flag_id=FlagId("gate_open"), meaning=DescriptionText("水門が開いている"), initially_raised=True
         )
-        gate = _looking(
-            obj("gate", "hall"),
+        gate_looks = _looking(
+            "gate",
             FlagIsRaisedCondition(flag=gate_open, failure_text=NoText()),
             IsDownCondition(who=Actor(), failure_text=NoText()),
         )
 
-        flaws = flaws_of_composing(nouns_=nouns(flags=(gate_open,), spots=(spot("hall"),), objects=(gate,)))
+        flaws = flaws_of_composing(
+            nouns_=nouns(flags=(gate_open,), spots=(spot("hall"),), objects=(obj("gate", "hall"),)),
+            object_looks=(gate_looks,),
+        )
 
-        assert [flaw.location for flaw in flaws] == [DesignLocation("object", "gate", "looks[1]")]
+        assert [flaw.location for flaw in flaws] == [DesignLocation("object_looks", "gate", "looks[1]")]
 
     def test_look_using_chance_is_a_flaw(self) -> None:
         """見え方が偶然 (chance) を読むと、見渡すたびに変わる見え方になるので looks[0] の DesignFlaw になる。"""
-        gate = _looking(obj("gate", "hall"), ChanceCondition(probability=Probability(0.5), failure_text=NoText()))
+        gate_looks = _looking("gate", ChanceCondition(probability=Probability(0.5), failure_text=NoText()))
 
-        flaws = flaws_of_composing(nouns_=nouns(spots=(spot("hall"),), objects=(gate,)))
+        flaws = flaws_of_composing(
+            nouns_=nouns(spots=(spot("hall"),), objects=(obj("gate", "hall"),)), object_looks=(gate_looks,)
+        )
 
-        assert [flaw.location for flaw in flaws] == [DesignLocation("object", "gate", "looks[0]")]
+        assert [flaw.location for flaw in flaws] == [DesignLocation("object_looks", "gate", "looks[0]")]
 
     def test_look_reading_a_named_person_is_allowed(self) -> None:
         """詰所の机の見え方が、名指しした源三が倒れているかを読むのは、見る人で変わらないので通る (源三の帽子が置きっぱなしになっている)。"""
         genzo = character("genzo", "hall")
-        desk = _looking(obj("desk", "hall"), IsDownCondition(who=NamedPerson(character=genzo), failure_text=NoText()))
+        desk_looks = _looking("desk", IsDownCondition(who=NamedPerson(character=genzo), failure_text=NoText()))
 
-        design = compose_world(nouns_=nouns(spots=(spot("hall"),), characters=(genzo,), objects=(desk,)))
+        design = compose_world(
+            nouns_=nouns(spots=(spot("hall"),), characters=(genzo,), objects=(obj("desk", "hall"),)),
+            object_looks=(desk_looks,),
+        )
 
-        assert design.warnings() == ()
+        assert design.looks_of(ObjectId("desk")) == desk_looks
+
+
+class TestObjectLooksDeclared:
+    """物の見え方の宣言を、物ごとに 1 つ、宣言にある物に対してだけ持てることを compose が確かめることを保証する。"""
+
+    def test_object_without_declared_looks_has_empty_looks(self) -> None:
+        """見え方を宣言していない物を looks_of で引くと、見え方が空の宣言が返る。"""
+        design = compose_world(nouns_=nouns(spots=(spot("hall"),), objects=(obj("desk", "hall"),)))
+
+        assert design.looks_of(ObjectId("desk")) == ObjectLooksDeclaration(object_id=ObjectId("desk"), looks=())
+
+    def test_looks_of_an_undeclared_object_is_a_flaw(self) -> None:
+        """宣言に無い物 ghost_lamp の見え方を宣言すると、object_id の DesignFlaw になる。"""
+        flaws = flaws_of_composing(object_looks=(_looking("ghost_lamp"),))
+
+        assert [flaw.location for flaw in flaws] == [DesignLocation("object_looks", "ghost_lamp", "object_id")]
+
+    def test_two_looks_declarations_for_one_object_is_a_flaw(self) -> None:
+        """同じ机に見え方の宣言を 2 つ置くと、どちらを使うか決まらないので DesignFlaw になる。"""
+        flaws = flaws_of_composing(
+            nouns_=nouns(spots=(spot("hall"),), objects=(obj("desk", "hall"),)),
+            object_looks=(_looking("desk"), _looking("desk")),
+        )
+
+        assert [flaw.location for flaw in flaws] == [DesignLocation("object_looks", "desk", "object_id")]
 
 
 class TestWorldWideIdsAreUnique:

@@ -59,7 +59,6 @@ def _object(object_id: str, *keys: ObjectStateKeyDeclaration) -> ObjectDeclarati
         description=DescriptionText(f"{object_id}がある"),
         appearance=ObjectAppearance(seen_in_dark=False, hidden_until_revealed=False),
         state_keys=keys,
-        looks=(),
     )
 
 

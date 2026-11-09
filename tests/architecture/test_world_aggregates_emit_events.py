@@ -408,7 +408,6 @@ def _object_state(*, hidden: bool = False) -> ObjectState:
             description=DescriptionText("石を積んだ古い井戸"),
             appearance=ObjectAppearance(seen_in_dark=False, hidden_until_revealed=hidden),
             state_keys=(_COVERED, _BUCKETS, _WATER, _NOTE),
-            looks=(),
         ),
         _NOW,
     )

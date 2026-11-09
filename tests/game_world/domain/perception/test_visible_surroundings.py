@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_rpg_world.game_world.domain.declaration.object_and_item import NoLook
+from ai_rpg_world.game_world.domain.declaration.verb import NoLook
 from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesNothing, SeesShapes
 from ai_rpg_world.game_world.domain.people import Unidentified
 from ai_rpg_world.game_world.domain.perception.surroundings import SeenObject, SeenPerson, VisibleSurroundings

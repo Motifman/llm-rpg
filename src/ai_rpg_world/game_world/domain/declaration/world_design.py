@@ -31,6 +31,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     ItemUseDeclaration,
     JointActionDeclaration,
     ObjectInteractionDeclaration,
+    ObjectLooksDeclaration,
     PassageTraversalDeclaration,
     ReactionDeclaration,
     SectionAccessDeclaration,
@@ -88,6 +89,7 @@ class WorldDesign:
         section_accesses: tuple[SectionAccessDeclaration, ...],
         passage_traversals: tuple[PassageTraversalDeclaration, ...],
         world_stage_effects: tuple[WorldStageEffectsDeclaration, ...],
+        object_looks: tuple[ObjectLooksDeclaration, ...],
         group_decision_rules: tuple[GroupDecisionRulesDeclaration, ...],
         happenings: tuple[HappeningDeclaration, ...],
         reactions: tuple[ReactionDeclaration, ...],
@@ -117,6 +119,7 @@ class WorldDesign:
         self._section_accesses = {declared.section.section_id: declared for declared in section_accesses}
         self._passage_traversals = {declared.passage.passage_id: declared.condition for declared in passage_traversals}
         self._world_stage_effects = {declared.stage.stage_id: declared for declared in world_stage_effects}
+        self._object_looks = {declared.object_id: declared for declared in object_looks}
         self._group_decision_rules = {declared.decision.decision_id: declared for declared in group_decision_rules}
         self._happenings = happenings
         self._reactions = reactions
@@ -143,6 +146,7 @@ class WorldDesign:
         section_accesses: Iterable[SectionAccessDeclaration],
         passage_traversals: Iterable[PassageTraversalDeclaration],
         world_stage_effects: Iterable[WorldStageEffectsDeclaration],
+        object_looks: Iterable[ObjectLooksDeclaration],
         group_decision_rules: Iterable[GroupDecisionRulesDeclaration],
         happenings: Iterable[HappeningDeclaration],
         reactions: Iterable[ReactionDeclaration],
@@ -164,6 +168,7 @@ class WorldDesign:
         section_accesses = tuple(section_accesses)
         passage_traversals = tuple(passage_traversals)
         world_stage_effects = tuple(world_stage_effects)
+        object_looks = tuple(object_looks)
         group_decision_rules = tuple(group_decision_rules)
         happenings = tuple(happenings)
         reactions = tuple(reactions)
@@ -259,11 +264,11 @@ class WorldDesign:
             review.notice(placement.at_field("complete_notice"), joint.complete_notice)
             review.notice(placement.at_field("timeout_notice"), joint.timeout_notice)
         review.condition(RulePlacement.in_world(DesignLocation("ending", "ending", "ends_when")), ending.ends_when)
-        for declared_object in nouns.all_objects():
-            for index, look in enumerate(declared_object.looks):
+        for declared_looks in object_looks:
+            for index, look in enumerate(declared_looks.looks):
                 review.condition(
                     RulePlacement.in_object_look(
-                        design_location("object", declared_object.object_id, field=f"looks[{index}]")
+                        design_location("object_looks", declared_looks.object_id, field=f"looks[{index}]")
                     ),
                     look.when,
                 )
@@ -316,6 +321,16 @@ class WorldDesign:
             "world_stage_effects", [(stage_effects.stage.stage_id,) for stage_effects in world_stage_effects], "stage"
         )
         review.flaws += duplicate_flaws(
+            "object_looks", [(declared_looks.object_id,) for declared_looks in object_looks], "object_id"
+        )
+        review.flaws += [
+            flaw
+            for declared_looks in object_looks
+            for flaw in nouns.object_flaws_if_unknown(
+                declared_looks.object_id, design_location("object_looks", declared_looks.object_id, field="object_id")
+            )
+        ]
+        review.flaws += duplicate_flaws(
             "happening", [(happening.happening_id,) for happening in happenings], "happening_id"
         )
         review.flaws += duplicate_flaws("reaction", [(reaction.reaction_id,) for reaction in reactions], "reaction_id")
@@ -350,6 +365,7 @@ class WorldDesign:
             section_accesses=section_accesses,
             passage_traversals=passage_traversals,
             world_stage_effects=world_stage_effects,
+            object_looks=object_looks,
             group_decision_rules=group_decision_rules,
             happenings=happenings,
             reactions=reactions,
@@ -430,6 +446,9 @@ class WorldDesign:
         return WorldStageEffectsDeclaration(
             stage=self._nouns.world_stage_of(stage), when_entered=NoEffect(), when_left=NoEffect()
         )
+
+    def looks_of(self, obj: ObjectId) -> ObjectLooksDeclaration:
+        return self._object_looks.get(obj, ObjectLooksDeclaration(object_id=obj, looks=()))
 
     def group_decision_rules(self, decision: GroupDecisionId) -> GroupDecisionRulesDeclaration:
         return self._group_decision_rules[decision]

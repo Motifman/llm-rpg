@@ -5,8 +5,9 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import final
 
-from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import NoLook, ObjectDeclaration
+from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration, SpotSectionDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb.object_looks_declaration import NoLook
 from ai_rpg_world.game_world.domain.exception.surroundings_exception import (
     HeldItemNotCarriedException,
     ThingFromAnotherSpotException,

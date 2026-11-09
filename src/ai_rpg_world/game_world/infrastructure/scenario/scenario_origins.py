@@ -16,6 +16,7 @@ _VERB_INSIDE_NOUN: dict[str, tuple[str, tuple[str, ...]]] = {
     "item_interaction": ("item_spec", ("interactions",)),
     "item_use": ("item_spec", ("use",)),
     "section_access": ("section", ("access",)),
+    "object_looks": ("object", ()),
     "passage_traversal": ("passage", ()),
     "world_stage_effects": ("world_stage", ()),
     "group_decision_rules": ("group_decision", ()),

@@ -55,6 +55,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     ItemUseDeclaration,
     JointActionDeclaration,
     ObjectInteractionDeclaration,
+    ObjectLooksDeclaration,
     PassageTraversalDeclaration,
     ReactionDeclaration,
     SectionAccessDeclaration,
@@ -147,7 +148,6 @@ def obj(name: str, at_spot: str) -> ObjectDeclaration:
         description=DescriptionText(f"{name} の見た目"),
         appearance=ObjectAppearance(seen_in_dark=False, hidden_until_revealed=False),
         state_keys=(),
-        looks=(),
     )
 
 
@@ -264,6 +264,7 @@ def compose_world(
     section_accesses: Iterable[SectionAccessDeclaration] = (),
     passage_traversals: Iterable[PassageTraversalDeclaration] = (),
     world_stage_effects: Iterable[WorldStageEffectsDeclaration] = (),
+    object_looks: Iterable[ObjectLooksDeclaration] = (),
     group_decision_rules: Iterable[GroupDecisionRulesDeclaration] = (),
     happenings: Iterable[HappeningDeclaration] = (),
     reactions: Iterable[ReactionDeclaration] = (),
@@ -286,6 +287,7 @@ def compose_world(
         section_accesses=section_accesses,
         passage_traversals=passage_traversals,
         world_stage_effects=world_stage_effects,
+        object_looks=object_looks,
         group_decision_rules=group_decision_rules,
         happenings=happenings,
         reactions=reactions,

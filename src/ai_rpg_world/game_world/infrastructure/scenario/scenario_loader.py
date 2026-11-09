@@ -17,7 +17,7 @@ from ai_rpg_world.game_world.infrastructure.scenario import world_reader
 from ai_rpg_world.game_world.infrastructure.scenario.condition_reader import ConditionReader
 from ai_rpg_world.game_world.infrastructure.scenario.declared_names import DeclaredNames
 from ai_rpg_world.game_world.infrastructure.scenario.effect_reader import EffectReader
-from ai_rpg_world.game_world.infrastructure.scenario.noun_reader import NounReader, ReadNouns, object_looks
+from ai_rpg_world.game_world.infrastructure.scenario.noun_reader import NounReader, ReadNouns
 from ai_rpg_world.game_world.infrastructure.scenario.perception_reader import PerceptionReader
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import ScenarioDefaults
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_layout import YamlPath
@@ -84,9 +84,6 @@ def _loaded(value: object, origins: ScenarioOrigins, collector: FlawCollector) -
     nouns = _declared_nouns(read_nouns, collector)
     if nouns is None:
         raise WorldDesignFlawsException(collector.flaws)
-    nouns = _with_object_looks(read_nouns, nouns, origins, collector)
-    if nouns is None:
-        raise WorldDesignFlawsException(collector.flaws)
     loading = _ScenarioLoading(fields, defaults, read_nouns, nouns, origins, collector)
     design = loading.compose()
     return LoadedScenario(
@@ -105,16 +102,6 @@ def _declared_nouns(read_nouns: ReadNouns, collector: FlawCollector) -> Declared
             flawed_nouns = {(flaw.location.declaration, flaw.location.name) for flaw in flawed.flaws}
             if not read_nouns.leave_out(flawed_nouns):
                 return None
-
-
-def _with_object_looks(
-    read_nouns: ReadNouns, nouns: DeclaredNouns, origins: ScenarioOrigins, collector: FlawCollector
-) -> DeclaredNouns | None:
-    # 見え方の条件は旗や物の状態の鍵を名前で引くので、見え方の無い名詞の宣言がそろってから読み、物を差し替える。
-    # 条件が ObjectDeclaration そのものを持つと、差し替える前の物が条件の中に残る
-    conditions = ConditionReader(DeclaredNames(nouns, frozenset(read_nouns.unreadable), origins))
-    read_nouns.give_looks(lambda written: object_looks(written, conditions), collector)
-    return _declared_nouns(read_nouns, collector)
 
 
 class _ScenarioLoading:
@@ -191,6 +178,7 @@ class _ScenarioLoading:
                 section_accesses=verbs.section_accesses,
                 passage_traversals=verbs.passage_traversals,
                 world_stage_effects=verbs.world_stage_effects,
+                object_looks=verbs.object_looks,
                 group_decision_rules=verbs.group_decision_rules,
                 happenings=verbs.happenings,
                 reactions=verbs.reactions,

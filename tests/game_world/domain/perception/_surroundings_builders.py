@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import (
-    NoLook,
     ObjectAppearance,
     ObjectDeclaration,
 )
@@ -15,6 +14,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
     SpotSectionDeclaration,
     Temperature,
 )
+from ai_rpg_world.game_world.domain.declaration.verb import NoLook
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonHandle, PersonRef
@@ -88,7 +88,6 @@ def thing(
         description=DescriptionText(f"{name} の説明"),
         appearance=ObjectAppearance(seen_in_dark=seen_in_dark, hidden_until_revealed=not revealed),
         state_keys=(),
-        looks=(),
     )
     return ContainedObject(declaration=declaration, revealed=revealed, look=look)
 
