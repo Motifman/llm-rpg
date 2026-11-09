@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentV
 from ai_rpg_world.game_world.domain.action.argument_declaration import ArgumentDeclaration, TextArgument
 from ai_rpg_world.game_world.domain.action.trigger import Trigger
 from ai_rpg_world.game_world.domain.condition.argument_condition import ArgumentEqualsCondition
+from ai_rpg_world.game_world.domain.condition.chance_condition import ChanceCondition
 from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
@@ -36,6 +37,7 @@ from ai_rpg_world.game_world.domain.declaration.character import (
 )
 from ai_rpg_world.game_world.domain.declaration.initial_world import StartingPerson
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
+from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration, ObjectLook
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration
@@ -95,6 +97,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     ObjectId,
     PassageId,
     PersonId,
+    Probability,
     Rate,
     SpotId,
     SpotSectionId,
@@ -1073,6 +1076,13 @@ _EFFECT_READING_FOG = ConditionalEffect(condition=_READS_FOG, then=NoEffect(), o
 _AUDIENCE_READING_FOG = AnnouncementTo(audience=PeopleSelection(where=_READS_FOG), text=_REFUSED, salience=Notable())
 
 
+def _looking(declared: ObjectDeclaration, *whens: Condition) -> ObjectDeclaration:
+    return replace(
+        declared,
+        looks=tuple(ObjectLook(when=when, text=DescriptionText(f"見え方 {index}")) for index, when in enumerate(whens)),
+    )
+
+
 def _every_placement() -> list[tuple[str, dict[str, object], DesignLocation]]:
     exile = group_decision("exile")
     cage = section("cage", "shaft")
@@ -1210,6 +1220,20 @@ def _every_placement() -> list[tuple[str, dict[str, object], DesignLocation]]:
             DesignLocation("ending", "ending", "ends_when"),
         ),
         (
+            "object_look",
+            {
+                "nouns_": nouns(
+                    spots=(spot("hall"), spot("shaft")),
+                    passages=(tunnel,),
+                    sections=(cage,),
+                    world_stages=(dawn,),
+                    group_decisions=(exile,),
+                    objects=(_looking(obj("lamp", "hall"), _READS_FOG),),
+                )
+            },
+            DesignLocation("object", "lamp", "looks[0]"),
+        ),
+        (
             "built_in_action_perceptions",
             {"built_in_action_perceptions_": loud_perceptions},
             DesignLocation("built_in_action_perceptions", "PICK_UP", "announcement"),
@@ -1233,6 +1257,42 @@ class TestEveryPlacementIsReviewed:
         flaws = flaws_of_composing(**declarations)
 
         assert [flaw.location for flaw in flaws] == [location]
+
+
+class TestObjectLookConditions:
+    """物の見え方の条件が世界の状態だけで決まるかを compose が確かめることを保証する。"""
+
+    def test_look_reading_the_actor_is_a_flaw(self) -> None:
+        """水門の 2 つ目の見え方が行う人 (actor) が倒れているかを読むと、looks[1] の DesignFlaw になる。"""
+        gate_open = FlagDeclaration(
+            flag_id=FlagId("gate_open"), meaning=DescriptionText("水門が開いている"), initially_raised=True
+        )
+        gate = _looking(
+            obj("gate", "hall"),
+            FlagIsRaisedCondition(flag=gate_open, failure_text=NoText()),
+            IsDownCondition(who=Actor(), failure_text=NoText()),
+        )
+
+        flaws = flaws_of_composing(nouns_=nouns(flags=(gate_open,), spots=(spot("hall"),), objects=(gate,)))
+
+        assert [flaw.location for flaw in flaws] == [DesignLocation("object", "gate", "looks[1]")]
+
+    def test_look_using_chance_is_a_flaw(self) -> None:
+        """見え方が偶然 (chance) を読むと、見渡すたびに変わる見え方になるので looks[0] の DesignFlaw になる。"""
+        gate = _looking(obj("gate", "hall"), ChanceCondition(probability=Probability(0.5), failure_text=NoText()))
+
+        flaws = flaws_of_composing(nouns_=nouns(spots=(spot("hall"),), objects=(gate,)))
+
+        assert [flaw.location for flaw in flaws] == [DesignLocation("object", "gate", "looks[0]")]
+
+    def test_look_reading_a_named_person_is_allowed(self) -> None:
+        """詰所の机の見え方が、名指しした源三が倒れているかを読むのは、見る人で変わらないので通る (源三の帽子が置きっぱなしになっている)。"""
+        genzo = character("genzo", "hall")
+        desk = _looking(obj("desk", "hall"), IsDownCondition(who=NamedPerson(character=genzo), failure_text=NoText()))
+
+        design = compose_world(nouns_=nouns(spots=(spot("hall"),), characters=(genzo,), objects=(desk,)))
+
+        assert design.warnings() == ()
 
 
 class TestWorldWideIdsAreUnique:

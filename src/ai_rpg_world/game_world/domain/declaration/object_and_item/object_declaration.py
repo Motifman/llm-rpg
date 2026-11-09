@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.declaration.object_and_item._state_keys import require_own_distinct_keys
 from ai_rpg_world.game_world.domain.declaration.object_and_item.state_kind import StateKind
@@ -11,6 +11,10 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
     StateValueMismatchesKindException,
 )
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, ObjectId, SpotId, StateKeyId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.condition.condition import Condition
+    from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 
 
 @final
@@ -59,6 +63,19 @@ class ObjectAppearance:
 
 @final
 @dataclass(frozen=True)
+class NoLook:
+    pass
+
+
+@final
+@dataclass(frozen=True)
+class ObjectLook:
+    when: Condition
+    text: DescriptionText
+
+
+@final
+@dataclass(frozen=True)
 class ObjectDeclaration:
     object_id: ObjectId
     spot_id: SpotId
@@ -66,6 +83,7 @@ class ObjectDeclaration:
     description: DescriptionText
     appearance: ObjectAppearance
     state_keys: tuple[ObjectStateKeyDeclaration, ...]
+    looks: tuple[ObjectLook, ...]
 
     def __post_init__(self) -> None:
         require_own_distinct_keys(
@@ -73,3 +91,13 @@ class ObjectDeclaration:
             [state_key.object_id for state_key in self.state_keys],
             [state_key.key for state_key in self.state_keys],
         )
+
+    def look_now(self, facts: WorldFacts) -> DescriptionText | NoLook:
+        # 上で import すると循環する
+        from ai_rpg_world.game_world.domain.action.trigger import LookingAround
+
+        looking_around = LookingAround(facts.now())
+        for look in self.looks:
+            if look.when.holds(facts, looking_around):
+                return look.text
+        return NoLook()

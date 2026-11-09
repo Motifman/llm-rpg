@@ -259,6 +259,14 @@ class WorldDesign:
             review.notice(placement.at_field("complete_notice"), joint.complete_notice)
             review.notice(placement.at_field("timeout_notice"), joint.timeout_notice)
         review.condition(RulePlacement.in_world(DesignLocation("ending", "ending", "ends_when")), ending.ends_when)
+        for declared_object in nouns.all_objects():
+            for index, look in enumerate(declared_object.looks):
+                review.condition(
+                    RulePlacement.in_object_look(
+                        design_location("object", declared_object.object_id, field=f"looks[{index}]")
+                    ),
+                    look.when,
+                )
 
         for kind, perception in built_in_action_perceptions.by_kind.items():
             review.requirements(

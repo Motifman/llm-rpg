@@ -175,6 +175,9 @@ class DeclaredNouns:
     def all_flags(self) -> tuple[FlagDeclaration, ...]:
         return tuple(self._flags)
 
+    def all_objects(self) -> tuple[ObjectDeclaration, ...]:
+        return tuple(self._objects)
+
     def all_passages(self) -> tuple[PassageDeclaration, ...]:
         return tuple(self._passages)
 

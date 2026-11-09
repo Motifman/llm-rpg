@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.game_world.domain.action.trigger import LookingAround
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition, NotCondition
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
 from ai_rpg_world.game_world.domain.condition.object_state_conditions import ObjectValueIsCondition
@@ -14,13 +15,26 @@ from ai_rpg_world.game_world.domain.condition.person_conditions import (
     IsInSectionCondition,
 )
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import MembershipVisibility
-from ai_rpg_world.game_world.domain.declaration.object_and_item.state_value import ChoiceValue
+from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration
+from ai_rpg_world.game_world.domain.declaration.object_and_item.state_value import ChoiceName, ChoiceValue
 from ai_rpg_world.game_world.domain.declaration.verb import HappeningDeclaration
+from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
 from ai_rpg_world.game_world.domain.effect.combined_effects import ConditionalEffect, ForEveryoneEffect, SequenceEffect
 from ai_rpg_world.game_world.domain.effect.flag_effects import LowerFlagEffect
 from ai_rpg_world.game_world.domain.effect.membership_and_outcome_effects import SetOutcomeEffect
-from ai_rpg_world.game_world.domain.value_object import Capacity, ObjectId, PersonId, SpotId
+from ai_rpg_world.game_world.domain.objects_and_items.object_state import ObjectState
+from ai_rpg_world.game_world.domain.value_object import (
+    Capacity,
+    Count,
+    DescriptionText,
+    ObjectId,
+    PersonId,
+    SpotId,
+    WorldId,
+    WorldTick,
+)
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
+from tests.game_world.support.world_in_memory import WorldInMemory
 
 _MINE_VILLAGE = Path(__file__).parents[4] / "data" / "scenarios" / "mine_village_v2.yaml"
 
@@ -181,3 +195,78 @@ class TestPumpDrains:
             "two": ("gate_c_open", "flooded_shortcut"),
             "three": ("gate_b_open", "flooded_north_entry"),
         }
+
+
+_START = WorldTick(0)
+
+
+def _object(loaded: LoadedScenario, name: str) -> ObjectDeclaration:
+    return loaded.design.nouns.object(name, DesignLocation("object", name, ""))
+
+
+def _world_with(loaded: LoadedScenario, *raised: str, states: tuple[ObjectState, ...] = ()) -> WorldInMemory:
+    a_world = WorldInMemory(world=WorldId("mine_village"), object_states=states)
+    for name in raised:
+        a_world.flags.raise_flag(
+            loaded.design.nouns.flag(name, DesignLocation("flag", name, "")), LookingAround(_START)
+        )
+    return a_world
+
+
+class TestObjectLooks:
+    """廃坑の山村の物が、v1 の state_display と同じ文で、いまの状態ごとの見え方を持つことを保証する。"""
+
+    @pytest.mark.parametrize(
+        ("name", "flag", "raised_text", "lowered_text"),
+        [
+            ("office_safe", "safe_opened", "扉が開いていて、中は空だ", "扉は固く閉じている"),
+            ("gate_a", "gate_a_open", "開いていて、水の流れる音がする", "閉じている"),
+            ("gate_b", "gate_b_open", "開いていて、水の流れる音がする", "閉じている"),
+            ("gate_c", "gate_c_open", "開いていて、水の流れる音がする", "閉じている"),
+            ("old_timber", "timber_felled", "倒れて、崩れた岩が道を埋めている", "傾きながらも天井を支えている"),
+            ("lift", "lift_departed", "籠はもう上がってしまった", "籠は乗り場に止まっている"),
+        ],
+    )
+    def test_look_follows_the_world_flag(
+        self, mine_village: LoadedScenario, name: str, flag: str, raised_text: str, lowered_text: str
+    ) -> None:
+        """旗が立っているときと立っていないときで、物の見え方が v1 の 2 つの文に分かれる。"""
+        declaration = _object(mine_village, name)
+
+        raised = declaration.look_now(_world_with(mine_village, flag).facts())
+        lowered = declaration.look_now(_world_with(mine_village).facts())
+
+        assert (raised, lowered) == (DescriptionText(raised_text), DescriptionText(lowered_text))
+
+    @pytest.mark.parametrize(
+        ("fuel", "text"),
+        [
+            (0, "燃料計の針は空を指している"),
+            *((n, f"燃料計の針は{n}つ目の目盛りを指している") for n in range(1, 8)),
+        ],
+    )
+    def test_fuel_gauge_text_changes_with_each_amount(self, mine_village: LoadedScenario, fuel: int, text: str) -> None:
+        """発電機の燃料が 0 から 7 のどれかのとき、燃料計の文はその量の目盛りを言う。"""
+        generator = _object(mine_village, "generator")
+        (fuel_key,) = generator.state_keys
+        state = ObjectState.from_declaration(generator, _START)
+        state.add_to_count(fuel_key, Count(fuel))
+
+        look = generator.look_now(_world_with(mine_village, states=(state,)).facts())
+
+        assert look == DescriptionText(text)
+
+    @pytest.mark.parametrize(
+        ("mark", "text"),
+        [("one", "一の目盛りを指している"), ("two", "二の目盛りを指している"), ("three", "三の目盛りを指している")],
+    )
+    def test_valve_text_follows_its_mark(self, mine_village: LoadedScenario, mark: str, text: str) -> None:
+        """切り替え弁の目盛りが一・二・三のどれかのとき、その目盛りを指している文になる。"""
+        valve = _object(mine_village, "valve")
+        (mark_key,) = valve.state_keys
+        state = ObjectState.from_declaration(valve, _START)
+        state.set(mark_key, ChoiceValue(ChoiceName(mark)), _START)
+
+        look = valve.look_now(_world_with(mine_village, states=(state,)).facts())
+
+        assert look == DescriptionText(text)

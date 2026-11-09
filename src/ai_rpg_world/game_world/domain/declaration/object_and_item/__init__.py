@@ -5,8 +5,10 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item.item_spec_declar
     NotALightSource,
 )
 from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import (
+    NoLook,
     ObjectAppearance,
     ObjectDeclaration,
+    ObjectLook,
     ObjectStateKeyDeclaration,
 )
 from ai_rpg_world.game_world.domain.declaration.object_and_item.state_kind import (
@@ -43,11 +45,13 @@ __all__ = [
     "ItemStateKeyDeclaration",
     "ItemStateKind",
     "LitWhen",
+    "NoLook",
     "NoRefill",
     "NotALightSource",
     "NothingWritten",
     "ObjectAppearance",
     "ObjectDeclaration",
+    "ObjectLook",
     "ObjectStateKeyDeclaration",
     "StateKind",
     "StateValue",

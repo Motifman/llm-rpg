@@ -121,6 +121,7 @@ _WELL = ObjectDeclaration(
     description=DescriptionText("古い井戸"),
     appearance=ObjectAppearance(seen_in_dark=False, hidden_until_revealed=False),
     state_keys=(_BUCKETS,),
+    looks=(),
 )
 _VILLAGERS = GroupDeclaration(
     group_id=GroupId("villagers"),

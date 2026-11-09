@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, TypeVar, final
 
 from ai_rpg_world.game_world.domain.declaration.character import (
@@ -26,6 +26,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     NotALightSource,
     ObjectAppearance,
     ObjectDeclaration,
+    ObjectLook,
     ObjectStateKeyDeclaration,
     StateKind,
     StateValue,
@@ -74,6 +75,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     Ticks,
     WorldStageId,
 )
+from ai_rpg_world.game_world.infrastructure.scenario.condition_reader import ConditionReader
 from ai_rpg_world.game_world.infrastructure.scenario.kinded_node import split_kind
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import ScenarioDefaults
 from ai_rpg_world.game_world.infrastructure.scenario.value_readers import (
@@ -89,7 +91,7 @@ from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import FlawCollec
 
 SPOT_FIELDS = ("name", "description", "atmosphere", "sections", "objects", "discoverables")
 SECTION_FIELDS = ("name", "capacity", "reachable_objects", "access")
-OBJECT_FIELDS = ("name", "description", "appearance", "state_keys", "interactions")
+OBJECT_FIELDS = ("name", "description", "appearance", "state_keys", "looks", "interactions")
 PASSAGE_FIELDS = (
     "name",
     "description",
@@ -148,6 +150,19 @@ class ReadNouns:
     outcomes: list[OutcomeDeclaration] = field(default_factory=list)
     beings: dict[PersonId, dict[str, object]] = field(default_factory=dict)
     unreadable: set[tuple[str, str]] = field(default_factory=set)
+    written_looks: dict[ObjectId, YamlNode] = field(default_factory=dict)
+
+    def give_looks(self, looks_of: Callable[[YamlNode], tuple[ObjectLook, ...]], collector: FlawCollector) -> None:
+        self.objects = [self._with_looks(obj, looks_of, collector) for obj in self.objects]
+
+    def _with_looks(
+        self, obj: ObjectDeclaration, looks_of: Callable[[YamlNode], tuple[ObjectLook, ...]], collector: FlawCollector
+    ) -> ObjectDeclaration:
+        written = self.written_looks.get(obj.object_id)
+        if written is None:
+            return obj
+        looks = collector.attempt(lambda: looks_of(written))
+        return obj if looks is None else replace(obj, looks=looks)
 
     def declared(self) -> DeclaredNouns:
         self._leave_out_those_pointing_at_unreadable()
@@ -357,6 +372,9 @@ class NounReader:
 
     def _object(self, name: str, spot: str, node: YamlNode) -> ObjectDeclaration:
         fields = self._defaults.fill("object", node).fields(*OBJECT_FIELDS)
+        looks = fields.optional("looks")
+        if looks is not None:
+            self._read.written_looks[ObjectId(name)] = looks
         appearance = self._defaults.fill("appearance", fields.nested("appearance")).fields(
             "seen_in_dark", "hidden_until_revealed"
         )
@@ -378,6 +396,7 @@ class NounReader:
                     )
                     for key_name, key, kind, initial in self._state_keys(fields.required("state_keys"))
                 ),
+                looks=(),
             )
         )
 
@@ -572,6 +591,17 @@ class NounReader:
                 announcement=people_text(fields.required("announcement")),
             )
         )
+
+
+def object_looks(node: YamlNode, conditions: ConditionReader) -> tuple[ObjectLook, ...]:
+    return tuple(_object_look(look, conditions) for look in node.items())
+
+
+def _object_look(node: YamlNode, conditions: ConditionReader) -> ObjectLook:
+    fields = node.fields("when", "text")
+    return node.build(
+        lambda: ObjectLook(when=conditions.read(fields.required("when")), text=description(fields.required("text")))
+    )
 
 
 def _item_kind(kind: StateKind, node: YamlNode) -> ItemStateKind:

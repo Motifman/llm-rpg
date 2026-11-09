@@ -77,6 +77,7 @@ def _well(*state_keys: ObjectStateKeyDeclaration, hidden: bool = False) -> Objec
         description=DescriptionText("石を積んだ古い井戸"),
         appearance=ObjectAppearance(seen_in_dark=False, hidden_until_revealed=hidden),
         state_keys=state_keys or (_COVERED, _BUCKETS, _NOTE),
+        looks=(),
     )
 
 

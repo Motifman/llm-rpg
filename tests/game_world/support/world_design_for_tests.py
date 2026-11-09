@@ -147,6 +147,7 @@ def obj(name: str, at_spot: str) -> ObjectDeclaration:
         description=DescriptionText(f"{name} の見た目"),
         appearance=ObjectAppearance(seen_in_dark=False, hidden_until_revealed=False),
         state_keys=(),
+        looks=(),
     )
 
 

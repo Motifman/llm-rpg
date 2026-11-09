@@ -217,6 +217,9 @@ spots:
       office_safe:
         name: 金庫
         description: 壁際に据えられた重い鉄の金庫。四桁の番号を合わせるダイヤルが付いている。
+        looks:
+          - { when: { flag_is_raised: safe_opened }, text: 扉が開いていて、中は空だ }
+          - { when: { not: { flag_is_raised: safe_opened } }, text: 扉は固く閉じている }
         interactions:
           open_safe:
             display_label: 番号を合わせて金庫を開ける
@@ -266,6 +269,9 @@ spots:
       gate_a:
         name: 北の坑道の水門
         description: 坑道の壁に埋め込まれた古い鉄の水門。大きな把手で開け閉めする。向こう側で水が岩を打つ音がする。
+        looks:
+          - { when: { flag_is_raised: gate_a_open }, text: 開いていて、水の流れる音がする }
+          - { when: { not: { flag_is_raised: gate_a_open } }, text: 閉じている }
         state_keys:
           ticks_since_closed: { kind: count, initial: 0 }
         interactions:
@@ -340,6 +346,9 @@ spots:
       gate_b:
         name: 南の坑道の水門
         description: 坑道の壁に埋め込まれた古い鉄の水門。大きな把手で開け閉めする。向こう側で水が岩を打つ音がする。
+        looks:
+          - { when: { flag_is_raised: gate_b_open }, text: 開いていて、水の流れる音がする }
+          - { when: { not: { flag_is_raised: gate_b_open } }, text: 閉じている }
         state_keys:
           ticks_since_closed: { kind: count, initial: 0 }
         interactions:
@@ -448,6 +457,9 @@ spots:
       gate_c:
         name: 分岐の大水門
         description: 分岐の壁に埋め込まれた大きな鉄の水門。大きな把手で開け閉めする。向こう側で水が岩を打つ音がする。
+        looks:
+          - { when: { flag_is_raised: gate_c_open }, text: 開いていて、水の流れる音がする }
+          - { when: { not: { flag_is_raised: gate_c_open } }, text: 閉じている }
         state_keys:
           ticks_since_closed: { kind: count, initial: 0 }
         interactions:
@@ -509,6 +521,15 @@ spots:
       generator:
         name: 発電機
         description: 古い発電機。給油口と始動の把手、燃料計が付いている。
+        looks:
+          - { when: { object_value_is: { key: generator.fuel, value: 0 } }, text: 燃料計の針は空を指している }
+          - { when: { object_value_is: { key: generator.fuel, value: 1 } }, text: 燃料計の針は1つ目の目盛りを指している }
+          - { when: { object_value_is: { key: generator.fuel, value: 2 } }, text: 燃料計の針は2つ目の目盛りを指している }
+          - { when: { object_value_is: { key: generator.fuel, value: 3 } }, text: 燃料計の針は3つ目の目盛りを指している }
+          - { when: { object_value_is: { key: generator.fuel, value: 4 } }, text: 燃料計の針は4つ目の目盛りを指している }
+          - { when: { object_value_is: { key: generator.fuel, value: 5 } }, text: 燃料計の針は5つ目の目盛りを指している }
+          - { when: { object_value_is: { key: generator.fuel, value: 6 } }, text: 燃料計の針は6つ目の目盛りを指している }
+          - { when: { object_value_is: { key: generator.fuel, value: 7 } }, text: 燃料計の針は7つ目の目盛りを指している }
         state_keys:
           fuel: { kind: count, initial: 0 }
         interactions:
@@ -586,6 +607,10 @@ spots:
       valve:
         name: 切り替え弁
         description: ポンプの配管に付いた大きな弁。ハンドルの周りに一から三までの目盛りが刻まれている。
+        looks:
+          - { when: { object_value_is: { key: valve.mark, value: one } }, text: 一の目盛りを指している }
+          - { when: { object_value_is: { key: valve.mark, value: two } }, text: 二の目盛りを指している }
+          - { when: { object_value_is: { key: valve.mark, value: three } }, text: 三の目盛りを指している }
         state_keys:
           mark: { kind: { choice: [one, two, three] }, initial: one }
         interactions:
@@ -658,6 +683,9 @@ spots:
       old_timber:
         name: 傾いた支柱
         description: 乗り場の手前で天井を支える古い支柱。大きく傾き、根元が腐りかけている。
+        looks:
+          - { when: { flag_is_raised: timber_felled }, text: 倒れて、崩れた岩が道を埋めている }
+          - { when: { not: { flag_is_raised: timber_felled } }, text: 傾きながらも天井を支えている }
         interactions:
           fell_timber:
             display_label: 支柱を倒す
@@ -700,6 +728,9 @@ spots:
       lift:
         name: 昇降機
         description: 地上へ続く縦穴に吊られた鉄の籠。籠の入口の上に「定員三名」と刻んだ鉄の札が打ち付けてある。籠の中の奥の壁に操作盤があり、鍵穴と始動の把手が付いている。乗り込まなければ手が届かない。鍵穴の下に「起動鍵は鉱山会社の事務所で預かる」と書いた古い張り紙が残っている。
+        looks:
+          - { when: { flag_is_raised: lift_departed }, text: 籠はもう上がってしまった }
+          - { when: { not: { flag_is_raised: lift_departed } }, text: 籠は乗り場に止まっている }
       lift_panel:
         name: 籠の操作盤
         description: 籠の奥の壁にある操作盤。鍵穴と始動の把手が付いている。

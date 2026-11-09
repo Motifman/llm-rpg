@@ -112,6 +112,7 @@ def _object(name: str, spot: str, state_keys: tuple[str, ...] = ()) -> ObjectDec
             )
             for key in state_keys
         ),
+        looks=(),
     )
 
 

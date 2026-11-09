@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from ai_rpg_world.game_world.domain.declaration.object_and_item import NoLook
 from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesNothing, SeesShapes
 from ai_rpg_world.game_world.domain.people import Unidentified
-from ai_rpg_world.game_world.domain.perception.surroundings import SeenPerson, VisibleSurroundings
-from ai_rpg_world.game_world.domain.value_object import SpotSectionId
+from ai_rpg_world.game_world.domain.perception.surroundings import SeenObject, SeenPerson, VisibleSurroundings
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, SpotSectionId
 from tests.game_world.domain.perception._surroundings_builders import (
     contents,
     item,
     passage,
     person,
     section,
+    seen,
     thing,
 )
 
@@ -33,7 +35,7 @@ class TestHiddenThingsStayOutOfSurroundings:
 
         surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(objects=(lamp_stand, hidden_door)))
 
-        assert surroundings.objects == (lamp_stand.declaration,)
+        assert surroundings.objects == (seen(lamp_stand),)
 
 
 class TestClearSightShowsEverythingRevealed:
@@ -60,7 +62,7 @@ class TestClearSightShowsEverythingRevealed:
 
         assert surroundings.shows_description
         assert surroundings.sections == (cage,)
-        assert surroundings.objects == (ore_cart.declaration,)
+        assert surroundings.objects == (seen(ore_cart),)
         assert surroundings.ground_items == (item("rusty_key"),)
 
 
@@ -90,7 +92,7 @@ class TestShapesInTheDark:
 
         surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(objects=(glowing_moss, ore_cart)))
 
-        assert surroundings.objects == (glowing_moss.declaration,)
+        assert surroundings.objects == (seen(glowing_moss),)
 
     def test_description_passages_and_sections_are_still_shown(self) -> None:
         """暗くても、場所の説明は出て、通路と区画も出る。"""
@@ -139,7 +141,7 @@ class TestNothingInPitchDark:
             SeesNothing(), contents(objects=(glowing_moss, ore_cart), ground_items=(item("rusty_key"),))
         )
 
-        assert surroundings.objects == (glowing_moss.declaration,)
+        assert surroundings.objects == (seen(glowing_moss),)
         assert surroundings.ground_items == ()
 
 
@@ -208,3 +210,25 @@ class TestItemsOnPeopleHiddenInTheDark:
         surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(bodies=(fallen,)))
 
         assert [seen.visible_items for seen in surroundings.bodies] == [()]
+
+
+class TestObjectLooksReachSurroundings:
+    """VisibleSurroundings.seen_with が、集めたときに決めた物の見え方を、場面に出る物へそのまま運ぶことを保証する。"""
+
+    def test_look_of_a_seen_object_is_carried_into_surroundings(self) -> None:
+        """「開いていて、水の流れる音がする」と決めた水門は、その見え方を持った SeenObject として場面に出る。"""
+        floodgate = thing("floodgate", look=DescriptionText("開いていて、水の流れる音がする"))
+
+        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(objects=(floodgate,)))
+
+        assert surroundings.objects == (
+            SeenObject(declaration=floodgate.declaration, look=DescriptionText("開いていて、水の流れる音がする")),
+        )
+
+    def test_object_without_a_look_is_shown_with_no_look(self) -> None:
+        """どの見え方にも当てはまらなかった物は、NoLook を持った SeenObject として場面に出る。"""
+        ore_cart = thing("ore_cart")
+
+        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(objects=(ore_cart,)))
+
+        assert surroundings.objects == (SeenObject(declaration=ore_cart.declaration, look=NoLook()),)

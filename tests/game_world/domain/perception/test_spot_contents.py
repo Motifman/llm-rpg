@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.domain.declaration.object_and_item import NoLook
 from ai_rpg_world.game_world.domain.exception.surroundings_exception import (
     HeldItemNotCarriedException,
     ThingFromAnotherSpotException,
@@ -61,7 +62,7 @@ class TestOnlyHiddenThingsCanBeUnrevealed:
         declaration = thing("ore_cart").declaration
 
         with pytest.raises(UnrevealedThingNotDeclaredHiddenException):
-            ContainedObject(declaration=declaration, revealed=False)
+            ContainedObject(declaration=declaration, revealed=False, look=NoLook())
 
     def test_unrevealed_passage_not_declared_hidden_is_refused(self) -> None:
         """hidden_until_revealed が偽の通路を revealed=False で入れると、UnrevealedThingNotDeclaredHiddenException を投げる。"""
@@ -74,4 +75,4 @@ class TestOnlyHiddenThingsCanBeUnrevealed:
         """hidden_until_revealed が真の物体は、現れたあと revealed=True で受け取る。"""
         declaration = thing("hidden_door", revealed=False).declaration
 
-        assert ContainedObject(declaration=declaration, revealed=True).revealed
+        assert ContainedObject(declaration=declaration, revealed=True, look=NoLook()).revealed

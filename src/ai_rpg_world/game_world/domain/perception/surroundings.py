@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import final
 
-from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import ObjectDeclaration
+from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import NoLook, ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration, SpotSectionDeclaration
 from ai_rpg_world.game_world.domain.exception.surroundings_exception import (
     HeldItemNotCarriedException,
@@ -15,7 +15,7 @@ from ai_rpg_world.game_world.domain.exception.surroundings_exception import (
 from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesNothing, SeesShapes, SightQuality
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import PersonRef, Unidentified
-from ai_rpg_world.game_world.domain.value_object import SpotSectionId
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, SpotSectionId
 from ai_rpg_world.game_world.domain.whereabouts.location import OpenArea
 from ai_rpg_world.game_world.domain.whereabouts.passage_in_state import PassageInState
 
@@ -98,9 +98,17 @@ class PresentPerson:
 
 @final
 @dataclass(frozen=True)
+class SeenObject:
+    declaration: ObjectDeclaration
+    look: DescriptionText | NoLook
+
+
+@final
+@dataclass(frozen=True)
 class ContainedObject:
     declaration: ObjectDeclaration
     revealed: bool
+    look: DescriptionText | NoLook
 
     def __post_init__(self) -> None:
         if not self.revealed and not self.declaration.appearance.hidden_until_revealed:
@@ -112,6 +120,9 @@ class ContainedObject:
         return self.revealed and (
             self.declaration.appearance.seen_in_dark or _RULES[sight].shows_objects_unseen_in_dark
         )
+
+    def seen(self) -> SeenObject:
+        return SeenObject(declaration=self.declaration, look=self.look)
 
 
 @final
@@ -163,7 +174,7 @@ class VisibleSurroundings:
     shows_description: bool
     passages: tuple[PassageInState, ...]
     sections: tuple[SpotSectionDeclaration, ...]
-    objects: tuple[ObjectDeclaration, ...]
+    objects: tuple[SeenObject, ...]
     ground_items: tuple[ItemInstanceId, ...]
     people: tuple[SeenPerson, ...]
     bodies: tuple[SeenPerson, ...]
@@ -176,7 +187,7 @@ class VisibleSurroundings:
             shows_description=rule.shows_description,
             passages=tuple(contained.passage for contained in contents.passages if contained.is_seen()),
             sections=contents.sections,
-            objects=tuple(contained.declaration for contained in contents.objects if contained.is_seen_with(sight)),
+            objects=tuple(contained.seen() for contained in contents.objects if contained.is_seen_with(sight)),
             ground_items=contents.ground_items if rule.shows_items else (),
             people=_present(person.seen_awake_with(sight) for person in contents.people),
             bodies=_present(body.seen_down_with(sight) for body in contents.bodies),
