@@ -13,3 +13,6 @@ class SoundDeclaration:
     loudness: Loudness
     clear: TextWithUnassignedPeople
     muffled: TextWithUnassignedPeople
+
+    def placeholders(self) -> frozenset[str]:
+        return self.clear.placeholders() | self.muffled.placeholders()

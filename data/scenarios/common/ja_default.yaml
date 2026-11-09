@@ -103,10 +103,23 @@ built_in_action_perceptions:
       clear: "{actor}が{destination}へ去っていった。"
       dim: "{actor}がどこかへ去っていった。"
     sound: { loudness: whisper, clear: 足音が遠ざかっていった。, muffled: かすかな足音がした。 }
+  arrival:
+    witness:
+      clear: "{actor}が{origin}からやって来た。"
+      dim: "{actor}がどこからかやって来た。"
+    sound: { loudness: whisper, clear: 足音が近づいてきた。, muffled: かすかな足音がした。 }
+  whisper:
+    witness: { clear: "{actor}が{target}に何かささやいた。" }
+    sound: { loudness: whisper, clear: "{actor}が「{speech}」とささやいた。", muffled: 誰かがささやく声がした。 }
+    salience: background
   speak:
     witness: { clear: "{actor}が何か話している。" }
     sound: { loudness: normal, clear: "{actor}が「{speech}」と言った。", muffled: 誰かの話し声がした。 }
     salience: background
+  shout:
+    witness: { clear: "{actor}が叫んでいる。" }
+    sound: { loudness: very_loud, clear: "{actor}が「{speech}」と叫んだ。", muffled: 遠くで誰かの叫び声がした。 }
+    salience: notable
   listen:
     witness: { clear: "{actor}が耳を澄ましている。" }
     sound: null

@@ -57,7 +57,10 @@ refusal_texts:
 
 built_in_action_perceptions:
   travel: &quiet { witness: { clear: "{actor}が動いた。" }, sound: null }
+  whisper: *quiet
   speak: *quiet
+  shout: *quiet
+  arrival: *quiet
   listen: *quiet
   wait: *quiet
   hand_over: *quiet

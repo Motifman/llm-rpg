@@ -88,7 +88,7 @@ from tests.game_world.support.verb_declarations_for_tests import lever_pulled_qu
 from tests.game_world.support.verb_parts_for_tests import AlwaysHolds
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
-_KINDS_PERCEIVED_THROUGH_DECLARATIONS = frozenset(
+_KINDS_PERCEIVED_OUTSIDE_BY_KIND = frozenset(
     {
         ActionKind.INTERACT_WITH_OBJECT,
         ActionKind.INTERACT_WITH_CARRIED_ITEM,
@@ -96,6 +96,7 @@ _KINDS_PERCEIVED_THROUGH_DECLARATIONS = frozenset(
         ActionKind.ENTER_SECTION,
         ActionKind.LEAVE_SECTION,
         ActionKind.ATTACK_MONSTER,
+        ActionKind.SPEAK,
     }
 )
 
@@ -244,8 +245,14 @@ def refusal_texts() -> RefusalTexts:
 
 
 def built_in_action_perceptions(without: Iterable[ActionKind] = ()) -> BuiltInActionPerceptions:
-    kinds = frozenset(ActionKind) - _KINDS_PERCEIVED_THROUGH_DECLARATIONS - frozenset(without)
-    return BuiltInActionPerceptions(by_kind={kind: lever_pulled_quietly() for kind in kinds})
+    kinds = frozenset(ActionKind) - _KINDS_PERCEIVED_OUTSIDE_BY_KIND - frozenset(without)
+    return BuiltInActionPerceptions(
+        by_kind={kind: lever_pulled_quietly() for kind in kinds},
+        whisper=lever_pulled_quietly(),
+        ordinary_voice=lever_pulled_quietly(),
+        shout=lever_pulled_quietly(),
+        arrival=lever_pulled_quietly(),
+    )
 
 
 def introduction() -> WorldIntroduction:

@@ -260,10 +260,16 @@ class WorldDesign:
             review.notice(placement.at_field("timeout_notice"), joint.timeout_notice)
         review.condition(RulePlacement.in_world(DesignLocation("ending", "ending", "ends_when")), ending.ends_when)
 
-        for kind, perception in built_in_action_perceptions.by_kind.items():
+        for row, perception in (
+            *((kind.name, perception) for kind, perception in built_in_action_perceptions.by_kind.items()),
+            ("whisper", built_in_action_perceptions.whisper),
+            ("speak", built_in_action_perceptions.ordinary_voice),
+            ("shout", built_in_action_perceptions.shout),
+            ("arrival", built_in_action_perceptions.arrival),
+        ):
             review.requirements(
                 RulePlacement.in_person_interaction(
-                    DesignLocation("built_in_action_perceptions", kind.name, "announcement"), frozenset()
+                    DesignLocation("built_in_action_perceptions", row, "announcement"), frozenset()
                 ),
                 perception.requirements(),
             )
