@@ -133,6 +133,16 @@ class ObjectDeclaration:
     description: DescriptionText
     appearance: ObjectAppearance
     state_keys: tuple[ObjectStateKeyDeclaration, ...]
+    looks: tuple[ObjectLook, ...]           # 書いた順に確かめ、最初に当てはまった 1 つの文を説明に続けて場面に出す (#2067)
+
+    def look_now(self, facts: WorldFacts) -> DescriptionText | NoLook: ...
+        # 条件はきっかけ LookingAround で確かめる。どれにも当てはまらなければ NoLook で、場面には説明だけが出る
+
+@final
+@dataclass(frozen=True)
+class ObjectLook:                           # 「この条件のときはこう見える」(水門が開いていれば「開いていて、水の流れる音がする」)
+    when: Condition
+    text: DescriptionText
 
 @final
 @dataclass(frozen=True)
@@ -149,6 +159,13 @@ class ItemSpecDeclaration:
     state_keys: tuple[ItemStateKeyDeclaration, ...]
     lights_up: LitWhen | NotALightSource     # LitWhen(key, value): その状態の値のとき灯っている。手に持っているあいだ場所を照らす
     hands_needed: HandsNeeded                # 1 (カンテラ) / 2 (つるはし)
+    lasts: Lasts | LastsIndefinitely         # 書かなければ LastsIndefinitely。共通の部品に既定は置かない (#2068)
+
+@final
+@dataclass(frozen=True)
+class Lasts:                                # 世界に出てから ticks で、荷・手・地面のどこにあっても世界から消える (カンテラの灯、たいまつ)
+    ticks: Ticks                            # 1 以上
+    ended_text: DescriptionText             # 持っていた本人と、地面にあればその場所で見えていた人に届く文。消えたあと何も残さない
 
 @final
 @dataclass(frozen=True)
@@ -559,7 +576,13 @@ class StealthRule:                              # こっそり行っても、見
 @final
 @dataclass(frozen=True)
 class BuiltInActionPerceptions:             # どの世界にもある行為 (拾う、置く、渡す、移動する、話すなど) が周りにどう知覚されるか。シナリオが世界全体で 1 つ書く
-    by_kind: Mapping[ActionKind, PerceptionDeclaration]
+    by_kind: Mapping[ActionKind, PerceptionDeclaration]   # SPEAK は持たない (声の大きさごとに下の 3 つ)
+    whisper: PerceptionDeclaration
+    ordinary_voice: PerceptionDeclaration
+    shout: PerceptionDeclaration
+    arrival: PerceptionDeclaration          # 着いた場所にいた人へ。行為ではなく OccupantEnteredSpotEvent から作り、着いた本人には届けない (#2061)
+
+    def speech(self, reach: Whisper | OrdinaryVoice | Shout) -> PerceptionDeclaration: ...
     # 文には人のプレースホルダーのほかに、行為が扱う物や場所の呼び名 ({item}、{destination} など) を書ける。
     # 刺激に変える役が宣言の呼び名 (DisplayName) で先に埋め、人のプレースホルダーだけを残した TextAboutPeople にする
     # 操作 (INTERACT_WITH_*)・区画の出入り (ENTER_SECTION / LEAVE_SECTION) は宣言の perceived_as で知覚されるので、モンスターへの攻撃と同じく書けば作れない (D2026)
@@ -734,4 +757,5 @@ infrastructure: YAML を読む (scenario_format.md)
 - 区画ごとの出入り (`SectionAccessDeclaration`) と、集団の決定ごとの決まり (`GroupDecisionRulesDeclaration`) が 1 つずつ無ければ `DesignFlaw`。二人で合わせる操作が求める物体の操作が宣言に無ければ `DesignFlaw`
 - 組み込みの行為の知覚の文は、世界で行える組み込みの行為 (介抱は `TendRule` があるときだけ) をすべて持たなければ `DesignFlaw`。知らせの相手の選び方は、行為の中に置いた条件として (`Actor`、`Target` を使える) ほかの宣言と同じく照らし合わせる。断りの文の表の `world_state` は、起きうる `RefusalCode` をドメインで列挙できないので compose では確かめない
 - compose が照らし合わせに使う材料 (主語、読む引数、段階・昼夜・天候を読むか、立てる旗、締める決定、伏せられうる所属、読む出来事) は、条件と効果の `requirements()` が答える。根に文があるかは `Condition.explains_failure()` が答える
+- 物の見え方 (`ObjectLook.when`) の条件は、世界の状態だけで決まるものに限る。`requirements()` の主語・`uses_chance`・`uses_action_arguments` のどれかがあれば `DesignFlaw`。人によって変わる見え方や、見渡すたびに変わる見え方になるため (#2067)
 - 宣言に無い通路の状態の名前、呼び名 (`display_name`) の無い値が文に出るときは、`DesignFlaw` で止める

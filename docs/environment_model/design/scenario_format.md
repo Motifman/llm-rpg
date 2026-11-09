@@ -67,11 +67,11 @@ precondition:
 | `flags.<名前>` | `meaning`, `initially_raised` |
 | `spots.<名前>` | `name`, `description`, `atmosphere` (`lighting`, `outdoor`, `temperature`, `ambient_sound`, `smell`), `sections`, `objects`, `discoverables` |
 | `spots.<場所>.sections.<名前>` | `name`, `capacity` (`null` は定員なし), `reachable_objects`, `access` (`enter_label`, `leave_label`, `enter_text`, `leave_text`, `exertion`, `duration`, `entry_condition`, `perceived_as`) |
-| `spots.<場所>.objects.<名前>` | `name`, `description`, `appearance` (`seen_in_dark`, `hidden_until_revealed`), `state_keys`, `interactions` |
+| `spots.<場所>.objects.<名前>` | `name`, `description`, `appearance` (`seen_in_dark`, `hidden_until_revealed`), `state_keys`, `interactions`, `looks` (`- { when, text }` の並び。書かなければ空) |
 | `spots.<場所>.discoverables.<名前>` | `found_text`, `condition`, `when_found`, `finding` (`once_in_world` / `once_per_person`) |
 | 操作 (`interactions.<名前>`、`person_interactions.<名前>`) | `display_label`, `precondition`, `effect`, `success_text`, `shows_on_success`, `exertion`, `actor_requirement`, `perceived_as`, `reaches_unseen`, `duration`, `allows_stealth`, `arguments` |
 | `passages.<名前>` | `name`, `description`, `ends` (2 つ), `two_way`, `travel_ticks`, `states` (`<状態>: { display_name, traversable, sound_loss }`), `initial_state`, `hidden_until_revealed`, `condition` (書けば `PassageTraversalDeclaration`) |
-| `item_specs.<名前>` | `name`, `description`, `state_keys`, `lights_up` (`null` か `{ key, value }`), `hands_needed`, `interactions`, `use` (書けば `ItemUseDeclaration`) |
+| `item_specs.<名前>` | `name`, `description`, `state_keys`, `lights_up` (`null` か `{ key, value }`), `hands_needed`, `interactions`, `use` (書けば `ItemUseDeclaration`), `lasts` (`{ ticks, ended_text }`。書かなければ消えない) |
 | `groupings.<名前>` | `name`, `visibility`, `changes`, `groups` (`<集まり>: { name, members_know_each_other, shared_description }`) |
 | `characters.<名前>` | `appearance`, `spawn_spot`, `initial_items`, `initial_held`, `initial_groups`, `knows_at_start`, `max_hp`, `pack_capacity`, `being` |
 | `world_stages.<名前>` | `name`, `description`, `allowed_actions` (`all` か一覧), `when_entered`, `when_left` |
@@ -134,7 +134,9 @@ perception_defaults:
 | 行為 | 書ける呼び名 | 人 |
 |---|---|---|
 | `travel` | `{destination}` (行き先の場所) | `{actor}` |
-| `speak` | `{speech}` (話した中身) | `{actor}` |
+| `arrival` | `{origin}` (来た場所) | `{actor}` |
+| `whisper` | `{speech}` (話した中身) | `{actor}`、`{target}` (ささやかれた人) |
+| `speak` `shout` | `{speech}` (話した中身) | `{actor}` |
 | `hand_over` | `{item}` | `{actor}`、`{target}` (受け取る人) |
 | `tend` | — | `{actor}`、`{target}` (介抱される人) |
 | `pick_up` `drop` `use_item` `hold` `put_away` | `{item}` | `{actor}` |
@@ -142,8 +144,8 @@ perception_defaults:
 
 - 表に無い名前は書けない
 - 1 回で複数の相手や品物を渡す `hand_over` は、渡す 1 件ごとに文を作る
-- `travel` の文は、出ていくところを見た人に届く。着いた先の人に届く文は、まだ置き場所が無い
-- `speak` の声の大きさは、宣言の `loudness` ではなく、行為の届け方 (ささやく `whisper`、ふつう `normal`、叫ぶ `very_loud`) で決まる。`speak` の `loudness` は使われない
+- `travel` の文は、出ていくところを見た人に届く。着いた先にいた人には `arrival` の文が届く。着いた本人には届けない (#2061)
+- 話す文は、声の大きさごとに `whisper` (ささやく)、`speak` (ふつう)、`shout` (叫ぶ) に書く。音の大きさは、それぞれの `loudness` を使う。共通の部品は `whisper`、`normal`、`very_loud` にしてある (#2061)
 
 ## 例: 廃坑の山村の昇降機
 

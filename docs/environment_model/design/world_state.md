@@ -224,6 +224,9 @@ class Item:                                       # 品物ごと。ItemInstanceI
 
     def set(self, key: ItemStateKeyDeclaration, value: StateValue) -> None: ...
     def leave_world(self) -> None: ...
+    def run_out(self, now: WorldTick, where: CarriedBy | LyingAt) -> None: ...
+        # 宣言の Lasts の時間が過ぎていなければ断る。過ぎていれば ItemRanOutEvent(item, spec, where, at) を出して世界から出る
+        # どこにあったかは Item が知らないので、手放させたユースケースが渡す (CarriedBy(person) / LyingAt(spot))
 
     def value_of(self, key: ItemStateKeyDeclaration) -> StateValue: ...
     def age(self, now: WorldTick) -> Ticks: ...
@@ -339,7 +342,7 @@ PersonOutcomeDecidedEvent
 PersonJoinedGroupEvent, PersonLeftGroupEvent
 WorldTickAdvancedEvent, TimeOfDayChangedEvent
 ObjectStateChangedEvent, ObjectRevealedEvent, TextWrittenEvent
-ItemStateChangedEvent, ItemCameIntoWorldEvent, ItemLeftWorldEvent
+ItemStateChangedEvent, ItemCameIntoWorldEvent, ItemLeftWorldEvent, ItemRanOutEvent
 ItemReceivedEvent, ItemGivenUpEvent, ItemHeldEvent, ItemPutAwayEvent, GoldEarnedEvent, GoldPaidEvent, ItemsReservedEvent, ReservationReleasedEvent
 GroundItemPlacedEvent, GroundItemTakenEvent
 SpotSearchedEvent, DiscoverableFoundEvent
