@@ -38,3 +38,12 @@ class PerceptionDeclaration:
         if isinstance(self.announcement, NoAnnouncement):
             return Requirements.nothing()
         return self.announcement.requirements()
+
+    def placeholders(self) -> frozenset[str]:
+        names = set(self.witness.placeholders())
+        for part in (self.target, self.sound, self.on_failure):
+            if isinstance(part, (SightTextsDeclaration, SoundDeclaration)):
+                names |= part.placeholders()
+        if isinstance(self.announcement, AnnouncementTo):
+            names |= self.announcement.text.placeholders()
+        return frozenset(names)

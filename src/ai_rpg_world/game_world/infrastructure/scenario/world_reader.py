@@ -23,7 +23,11 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     WeatherType,
     WeightedWeather,
 )
-from ai_rpg_world.game_world.domain.declaration.verb import BuiltInActionPerceptions, EndingDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb import (
+    BuiltInActionPerceptions,
+    EndingDeclaration,
+    PerceptionDeclaration,
+)
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
 from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SeesNothing, SeesShapes, SightQuality
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
@@ -57,6 +61,7 @@ from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import Sc
 from ai_rpg_world.game_world.infrastructure.scenario.value_readers import description, people_text, ticks
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import YamlNode
 
+_SPEECH_AND_ARRIVAL_ROWS = frozenset({"whisper", "speak", "shout", "arrival"})
 _RULE_FIELDS = (
     "tend",
     "fatigue",
@@ -117,9 +122,22 @@ def refusal_texts(node: YamlNode) -> RefusalTexts:
 
 
 def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -> BuiltInActionPerceptions:
+    def read(written: YamlNode) -> PerceptionDeclaration:
+        return perceptions.perception(written, has_target=False)
+
+    entries = node.entries()
+    rows = node.fields(*(name for name, _ in entries))
     return node.build(
         lambda: BuiltInActionPerceptions(
-            by_kind=_by_enum(node, ActionKind, lambda written: perceptions.perception(written, has_target=False))
+            by_kind={
+                YamlNode(name, written.path).enum(ActionKind): read(written)
+                for name, written in entries
+                if name not in _SPEECH_AND_ARRIVAL_ROWS
+            },
+            whisper=read(rows.required("whisper")),
+            ordinary_voice=read(rows.required("speak")),
+            shout=read(rows.required("shout")),
+            arrival=read(rows.required("arrival")),
         )
     )
 
