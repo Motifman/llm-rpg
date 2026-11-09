@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.declaration.character.character_declaration 
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ItemSpecDeclaration,
+    LastsIndefinitely,
     NotALightSource,
     ObjectAppearance,
     ObjectDeclaration,
@@ -158,6 +159,7 @@ def item_spec(name: str) -> ItemSpecDeclaration:
         state_keys=(),
         lights_up=NotALightSource(),
         hands_needed=HandsNeeded(1),
+        lasts=LastsIndefinitely(),
     )
 
 

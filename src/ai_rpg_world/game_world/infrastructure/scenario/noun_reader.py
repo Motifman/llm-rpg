@@ -21,6 +21,8 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ItemSpecDeclaration,
     ItemStateKeyDeclaration,
     ItemStateKind,
+    Lasts,
+    LastsIndefinitely,
     LitWhen,
     NoRefill,
     NotALightSource,
@@ -101,7 +103,7 @@ PASSAGE_FIELDS = (
     "hidden_until_revealed",
     "condition",
 )
-ITEM_SPEC_FIELDS = ("name", "description", "state_keys", "lights_up", "hands_needed", "interactions", "use")
+ITEM_SPEC_FIELDS = ("name", "description", "state_keys", "lights_up", "hands_needed", "lasts", "interactions", "use")
 GROUPING_FIELDS = ("name", "visibility", "changes", "groups")
 CHARACTER_FIELDS = (
     "appearance",
@@ -466,6 +468,17 @@ class NounReader:
                 state_keys=state_keys,
                 lights_up=self._lights_up(fields.required("lights_up"), state_keys),
                 hands_needed=hands_needed.build(lambda: HandsNeeded(hands_needed.integer())),
+                lasts=self._lasts(fields.optional("lasts")),
+            )
+        )
+
+    def _lasts(self, node: YamlNode | None) -> Lasts | LastsIndefinitely:
+        if node is None:
+            return LastsIndefinitely()
+        fields = node.fields("ticks", "ended_text")
+        return node.build(
+            lambda: Lasts(
+                ticks=Ticks(fields.required("ticks").integer()), ended_text=description(fields.required("ended_text"))
             )
         )
 

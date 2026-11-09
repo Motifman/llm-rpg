@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item.state_kind impor
 from ai_rpg_world.game_world.domain.declaration.object_and_item.state_value import StateValue
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
     ItemStateKindNotAllowedException,
+    LastingTicksBelowOneException,
     LightKeyNotDeclaredException,
     StateValueMismatchesKindException,
 )
@@ -22,6 +23,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     HandsNeeded,
     ItemSpecId,
     StateKeyId,
+    Ticks,
 )
 
 
@@ -65,6 +67,23 @@ class NotALightSource:
 
 @final
 @dataclass(frozen=True)
+class Lasts:
+    ticks: Ticks
+    ended_text: DescriptionText
+
+    def __post_init__(self) -> None:
+        if self.ticks < Ticks(1):
+            raise LastingTicksBelowOneException(f"Lasts ticks must be >= 1 tick, got {self.ticks.value}")
+
+
+@final
+@dataclass(frozen=True)
+class LastsIndefinitely:
+    pass
+
+
+@final
+@dataclass(frozen=True)
 class ItemSpecDeclaration:
     item_spec_id: ItemSpecId
     name: DisplayName
@@ -72,6 +91,7 @@ class ItemSpecDeclaration:
     state_keys: tuple[ItemStateKeyDeclaration, ...]
     lights_up: LitWhen | NotALightSource
     hands_needed: HandsNeeded
+    lasts: Lasts | LastsIndefinitely
 
     def __post_init__(self) -> None:
         require_own_distinct_keys(

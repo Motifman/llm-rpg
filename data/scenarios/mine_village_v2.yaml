@@ -839,12 +839,14 @@ item_specs:
     state_keys:
       burning: { kind: flag, initial: true }
     lights_up: { key: burning, value: true }
+    lasts: { ticks: 16, ended_text: カンテラの灯が燃え尽きた。 }
   torch:
     name: たいまつ
     description: 布を巻いて油を染ませた棒。手に持って燃えているあいだは辺りが見える。
     state_keys:
       burning: { kind: flag, initial: true }
     lights_up: { key: burning, value: true }
+    lasts: { ticks: 24, ended_text: 火が燃え尽き、手もとには焦げた棒だけが残った。 }
   canary:
     name: カナリアの籠
     description: 小さなカナリアの入った鳥籠。
@@ -1502,25 +1504,6 @@ happenings:
     effect: no_effect
     notice:
       announcement_to: { audience: { where: { all_of: [] } }, text: 村のほうで、鐘が大きく鳴り響いた。 }
-
-  lamp_flames_burn_out:
-    condition: { tick_modulo: { divisor: 16, remainder: 0 } }
-    once: false
-    effect:
-      for_everyone:
-        people: &holding_lamp_flame { where: { has_item: { who: each_person, item_spec: lamp_flame, count: 1 } } }
-        effect: { take_item: { who: each_person, item_spec: lamp_flame, count: 1 } }
-    notice:
-      announcement_to: { audience: *holding_lamp_flame, text: カンテラの灯が燃え尽きた。 }
-  torches_burn_out:
-    condition: { tick_modulo: { divisor: 24, remainder: 0 } }
-    once: false
-    effect:
-      for_everyone:
-        people: &holding_torch { where: { has_item: { who: each_person, item_spec: torch, count: 1 } } }
-        effect: { take_item: { who: each_person, item_spec: torch, count: 1 } }
-    notice:
-      announcement_to: { audience: *holding_torch, text: 火が燃え尽き、手もとには焦げた棒だけが残った。 }
 
   gas_seeps_in:
     condition:

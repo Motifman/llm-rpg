@@ -18,6 +18,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     FlagStateKind,
     FlagValue,
     ItemSpecDeclaration,
+    LastsIndefinitely,
     NotALightSource,
     ObjectAppearance,
     ObjectDeclaration,
@@ -123,6 +124,7 @@ def _item_spec(name: str) -> ItemSpecDeclaration:
         state_keys=(),
         lights_up=NotALightSource(),
         hands_needed=HandsNeeded(1),
+        lasts=LastsIndefinitely(),
     )
 
 
