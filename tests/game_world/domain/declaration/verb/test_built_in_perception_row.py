@@ -54,6 +54,23 @@ class TestBuiltInPerceptionRowTarget:
         )
 
 
+class TestBuiltInPerceptionRowDownedTarget:
+    """BuiltInPerceptionRow が、相手が倒れている行を介抱だけと決めることを保証する。"""
+
+    def test_tend_target_is_down(self) -> None:
+        """介抱の行は、相手が倒れている。"""
+        assert BuiltInPerceptionRow.of_kind(ActionKind.TEND).target_is_down
+
+    @pytest.mark.parametrize(
+        "row",
+        [BuiltInPerceptionRow.of_kind(ActionKind.HAND_OVER), BuiltInPerceptionRow.whisper()],
+        ids=["hand_over", "whisper"],
+    )
+    def test_other_rows_with_target_have_standing_target(self, row: BuiltInPerceptionRow) -> None:
+        """渡す・ささやくの行は、相手がいても倒れていない。"""
+        assert not row.target_is_down
+
+
 class TestBuiltInPerceptionRowNames:
     """BuiltInPerceptionRow が、文に書ける呼び名に {target} を入れるかを、相手がいるかから決めることを保証する。"""
 

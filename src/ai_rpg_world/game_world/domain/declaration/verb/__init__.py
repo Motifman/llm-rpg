@@ -17,6 +17,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import (
 from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.item_use_declaration import ItemUseDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.joint_action_declaration import JointActionDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb.noticed_on_waking import NoticedOnWaking
 from ai_rpg_world.game_world.domain.declaration.verb.noun_interaction_declarations import (
     ItemInteractionDeclaration,
     ObjectInteractionDeclaration,
@@ -45,6 +46,7 @@ __all__ = [
     "AnnouncementTo",
     "BuiltInActionPerceptions",
     "BuiltInPerceptionRow",
+    "NoticedOnWaking",
     "DefaultDuration",
     "DiscoverableDeclaration",
     "EndingDeclaration",

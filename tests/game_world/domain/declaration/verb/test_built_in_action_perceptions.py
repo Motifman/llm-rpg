@@ -5,10 +5,15 @@ from dataclasses import replace
 import pytest
 
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, Whisper
-from ai_rpg_world.game_world.domain.declaration.verb import BuiltInActionPerceptions, PerceptionDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb import (
+    BuiltInActionPerceptions,
+    NoticedOnWaking,
+    PerceptionDeclaration,
+)
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
     NotBuiltInActionPerceptionException,
+    TargetTextNotFittingTargetException,
     TargetTextWithoutTargetException,
     UnfilledNameInBuiltInActionPerceptionException,
 )
@@ -206,11 +211,36 @@ class TestBuiltInActionPerceptionsNames:
 class TestBuiltInActionPerceptionsTargetTexts:
     """BuiltInActionPerceptions が、相手が見る文 (target) を相手のいる行にだけ持てることを保証する。"""
 
-    def test_tend_keeps_its_target_text(self) -> None:
-        """介抱するの行に相手が見る文を書くと、断らずにその文を持つ。"""
-        tend = replace(lever_pulled_quietly(), target=seen_clearly_only("{actor}があなたを介抱している。"))
+    def test_tend_keeps_its_text_noticed_on_waking(self) -> None:
+        """相手が倒れている介抱の行に、目が覚めてから気づく文を書くと、断らずにその文を持つ。"""
+        tend = replace(
+            lever_pulled_quietly(), target=NoticedOnWaking(TextWithUnassignedPeople("{actor}が介抱してくれたようだ。"))
+        )
 
         assert _perceptions(by_kind={ActionKind.TEND: tend}).by_kind[ActionKind.TEND].target == tend.target
+
+    def test_tend_with_seen_target_text_raises(self) -> None:
+        """介抱の行に、相手が見る文 (SightTextsDeclaration) を書くと TargetTextNotFittingTargetException を投げる。倒れている相手は介抱を見ない。"""
+        tend = replace(lever_pulled_quietly(), target=seen_clearly_only("{actor}があなたを介抱している。"))
+
+        with pytest.raises(TargetTextNotFittingTargetException):
+            _perceptions(by_kind={ActionKind.TEND: tend})
+
+    def test_hand_over_with_text_noticed_on_waking_raises(self) -> None:
+        """倒れていない相手に渡す行に、目が覚めてから気づく文だけを書くと TargetTextNotFittingTargetException を投げる。"""
+        hand_over = replace(
+            lever_pulled_quietly(), target=NoticedOnWaking(TextWithUnassignedPeople("何かを受け取ったようだ。"))
+        )
+
+        with pytest.raises(TargetTextNotFittingTargetException):
+            _perceptions(by_kind={ActionKind.HAND_OVER: hand_over})
+
+    def test_text_noticed_on_waking_naming_what_tend_does_not_fill_raises(self) -> None:
+        """介抱の、目が覚めてから気づく文に、介抱では埋まらない {item} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
+        tend = replace(lever_pulled_quietly(), target=NoticedOnWaking(TextWithUnassignedPeople("{item}が置いてある。")))
+
+        with pytest.raises(UnfilledNameInBuiltInActionPerceptionException):
+            _perceptions(by_kind={ActionKind.TEND: tend})
 
     def test_whisper_keeps_its_target_text(self) -> None:
         """ささやくの行に相手が見る文を書くと、断らずにその文を持つ。"""

@@ -18,6 +18,7 @@ _TARGET = "target"
 class BuiltInPerceptionRow:
     name: str
     has_target: bool
+    target_is_down: bool
     names_of_things: frozenset[str]
 
     @classmethod
@@ -58,7 +59,12 @@ class BuiltInPerceptionRow:
 
 
 _ROW_OF_KIND: Mapping[ActionKind, BuiltInPerceptionRow] = {
-    kind: BuiltInPerceptionRow(name=kind.name, has_target=has_target, names_of_things=frozenset(names_of_things))
+    kind: BuiltInPerceptionRow(
+        name=kind.name,
+        has_target=has_target,
+        target_is_down=kind is ActionKind.TEND,
+        names_of_things=frozenset(names_of_things),
+    )
     for kind, has_target, names_of_things in (
         (ActionKind.TRAVEL, False, {"destination"}),
         (ActionKind.HAND_OVER, True, {"item"}),
@@ -74,7 +80,15 @@ _ROW_OF_KIND: Mapping[ActionKind, BuiltInPerceptionRow] = {
         (ActionKind.CAST_BALLOT, False, set()),
     )
 }
-_WHISPER = BuiltInPerceptionRow(name="whisper", has_target=True, names_of_things=frozenset({"speech"}))
-_SPEAK = BuiltInPerceptionRow(name="speak", has_target=False, names_of_things=frozenset({"speech"}))
-_SHOUT = BuiltInPerceptionRow(name="shout", has_target=False, names_of_things=frozenset({"speech"}))
-_ARRIVAL = BuiltInPerceptionRow(name="arrival", has_target=False, names_of_things=frozenset({"origin"}))
+_WHISPER = BuiltInPerceptionRow(
+    name="whisper", target_is_down=False, has_target=True, names_of_things=frozenset({"speech"})
+)
+_SPEAK = BuiltInPerceptionRow(
+    name="speak", target_is_down=False, has_target=False, names_of_things=frozenset({"speech"})
+)
+_SHOUT = BuiltInPerceptionRow(
+    name="shout", target_is_down=False, has_target=False, names_of_things=frozenset({"speech"})
+)
+_ARRIVAL = BuiltInPerceptionRow(
+    name="arrival", target_is_down=False, has_target=False, names_of_things=frozenset({"origin"})
+)

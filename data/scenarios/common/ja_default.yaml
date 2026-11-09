@@ -131,7 +131,7 @@ built_in_action_perceptions:
     salience: background
   tend:
     witness: { clear: "{actor}が{target}を介抱している。" }
-    target: { clear: "{actor}があなたを介抱している。" }
+    target: { noticed_later: "{actor}が介抱してくれたようだ。" }
     sound: null
   hand_over:
     witness: { clear: "{actor}が{item}を{target}に渡した。" }

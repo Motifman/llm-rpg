@@ -27,3 +27,7 @@ class UnfilledNameInBuiltInActionPerceptionException(GameWorldDomainException):
 
 class TargetTextWithoutTargetException(GameWorldDomainException):
     error_code = "GAME_WORLD.VERB_DECLARATION.TARGET_TEXT_WITHOUT_TARGET"
+
+
+class TargetTextNotFittingTargetException(GameWorldDomainException):
+    error_code = "GAME_WORLD.VERB_DECLARATION.TARGET_TEXT_NOT_FITTING_TARGET"

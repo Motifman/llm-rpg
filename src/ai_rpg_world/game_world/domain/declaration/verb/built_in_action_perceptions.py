@@ -9,10 +9,12 @@ from typing_extensions import assert_never
 
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, SpeechReach, Whisper
 from ai_rpg_world.game_world.domain.declaration.verb.built_in_perception_row import BuiltInPerceptionRow
+from ai_rpg_world.game_world.domain.declaration.verb.noticed_on_waking import NoticedOnWaking
 from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
     NotBuiltInActionPerceptionException,
+    TargetTextNotFittingTargetException,
     TargetTextWithoutTargetException,
     UnfilledNameInBuiltInActionPerceptionException,
 )
@@ -42,9 +44,16 @@ class BuiltInActionPerceptions:
                 raise UnfilledNameInBuiltInActionPerceptionException(
                     f"the {row.name} perception can name only {sorted(row.nameable)}, but names {unfilled}"
                 )
-            if not row.has_target and not isinstance(perception.target, NoTarget):
+            if isinstance(perception.target, NoTarget):
+                continue
+            if not row.has_target:
                 raise TargetTextWithoutTargetException(
                     f"the {row.name} perception has no target to tell, but writes a target text"
+                )
+            if row.target_is_down != isinstance(perception.target, NoticedOnWaking):
+                raise TargetTextNotFittingTargetException(
+                    f"the {row.name} perception tells its target only "
+                    + ("what is noticed on waking" if row.target_is_down else "what is seen")
                 )
         object.__setattr__(self, "by_kind", MappingProxyType(dict(self.by_kind)))
 

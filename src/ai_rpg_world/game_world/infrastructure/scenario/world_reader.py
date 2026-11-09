@@ -132,7 +132,7 @@ def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -
     rows = node.fields(*(name for name, _ in entries))
 
     def read(written: YamlNode, row: BuiltInPerceptionRow) -> PerceptionDeclaration:
-        return perceptions.perception(written, has_target=row.has_target)
+        return perceptions.perception(written, has_target=row.has_target, target_is_down=row.target_is_down)
 
     def read_row(row: BuiltInPerceptionRow) -> PerceptionDeclaration:
         return read(rows.required(row.name), row)

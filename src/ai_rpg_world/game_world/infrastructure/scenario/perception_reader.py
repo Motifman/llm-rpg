@@ -6,6 +6,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     HappeningNotice,
     NoFailureWitness,
     NoNotice,
+    NoticedOnWaking,
     PerceptionDeclaration,
     SightAt,
     Silent,
@@ -48,12 +49,12 @@ class PerceptionReader:
         self._conditions = conditions
         self._warnings = warnings
 
-    def perception(self, node: YamlNode, has_target: bool) -> PerceptionDeclaration:
+    def perception(self, node: YamlNode, has_target: bool, target_is_down: bool = False) -> PerceptionDeclaration:
         fields = self._defaults.fill("perception", node).fields(*_PERCEPTION_FIELDS)
         return node.build(
             lambda: PerceptionDeclaration(
                 witness=self.sight_texts(self._written_or_default(fields, _WITNESS)),
-                target=self._target(fields, has_target),
+                target=self._noticed_on_waking(fields) if target_is_down else self._target(fields, has_target),
                 sound=self._sound_or_silent(self._written_or_default(fields, _SOUND)),
                 seen_in_dark=fields.required("seen_in_dark").boolean(),
                 announcement=self._announcement(fields.required("announcement")),
@@ -132,6 +133,12 @@ class PerceptionReader:
             return NoTarget()
         target = self._written_or_default(fields, _TARGET)
         return NoTarget() if target.is_null() else self.sight_texts(target)
+
+    def _noticed_on_waking(self, fields: YamlFields) -> NoticedOnWaking | NoTarget:
+        written = fields.optional(_TARGET)
+        if written is None or written.is_null():
+            return NoTarget()
+        return NoticedOnWaking(people_text(written.fields("noticed_later").required("noticed_later")))
 
     def _sound_or_silent(self, node: YamlNode) -> SoundDeclaration | Silent:
         return Silent() if node.is_null() else self.sound(node)
