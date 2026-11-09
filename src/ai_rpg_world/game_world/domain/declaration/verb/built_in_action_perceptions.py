@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import final
 
-from ai_rpg_world.game_world.domain.action.speech import Shout, SpeechReach, Whisper
+from typing_extensions import assert_never
+
+from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, SpeechReach, Whisper
 from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
@@ -69,7 +71,7 @@ class BuiltInActionPerceptions:
         rows = [
             *((kind.name, perception, _NAMES_BY_KIND[kind]) for kind, perception in self.by_kind.items()),
             ("whisper", self.whisper, _WHISPER_NAMES),
-            ("ordinary_voice", self.ordinary_voice, _VOICE_NAMES),
+            ("speak", self.ordinary_voice, _VOICE_NAMES),
             ("shout", self.shout, _VOICE_NAMES),
             ("arrival", self.arrival, _ARRIVAL_NAMES),
         ]
@@ -84,9 +86,11 @@ class BuiltInActionPerceptions:
     def speech(self, reach: SpeechReach) -> PerceptionDeclaration:
         if isinstance(reach, Whisper):
             return self.whisper
+        if isinstance(reach, OrdinaryVoice):
+            return self.ordinary_voice
         if isinstance(reach, Shout):
             return self.shout
-        return self.ordinary_voice
+        assert_never(reach)
 
     def flaws_for(self, rules: WorldRules, at: DesignLocation) -> list[DesignFlaw]:
         performable = frozenset(ActionKind) - _KINDS_NOT_PERCEIVED_THROUGH_THIS_TABLE - _KINDS_PERCEIVED_BY_VOICE

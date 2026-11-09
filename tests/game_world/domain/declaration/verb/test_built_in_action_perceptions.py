@@ -6,11 +6,14 @@ import pytest
 
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, Whisper
 from ai_rpg_world.game_world.domain.declaration.verb import BuiltInActionPerceptions, PerceptionDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
     NotBuiltInActionPerceptionException,
     UnfilledNameInBuiltInActionPerceptionException,
 )
+from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
+from ai_rpg_world.game_world.domain.sound.loudness import Loudness
 from ai_rpg_world.game_world.domain.value_object import PersonId
 from tests.game_world.support.verb_declarations_for_tests import (
     bell_rung_for_everyone,
@@ -41,6 +44,10 @@ _KEPT_KINDS = (
     ActionKind.PUT_AWAY,
     ActionKind.CAST_BALLOT,
 )
+
+
+_ORIGIN_UNFILLED = TextWithUnassignedPeople("{origin}の方から物音がした。")
+_NO_ONE = TextWithUnassignedPeople("物音がした。")
 
 
 def _seen_as(clear: str) -> PerceptionDeclaration:
@@ -137,6 +144,51 @@ class TestBuiltInActionPerceptionsNames:
         """着いた側の文に、移動の文でしか埋まらない {destination} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
         with pytest.raises(UnfilledNameInBuiltInActionPerceptionException):
             _perceptions(arrival=_seen_as("{actor}が{destination}に着いた。"))
+
+    @pytest.mark.parametrize(
+        "perception",
+        [
+            replace(
+                lever_pulled_quietly(), witness=replace(seen_clearly_only("{actor}が来た。"), dim=_ORIGIN_UNFILLED)
+            ),
+            replace(
+                lever_pulled_quietly(),
+                witness=replace(seen_clearly_only("{actor}が来た。"), unseen_actor=_ORIGIN_UNFILLED),
+            ),
+            replace(
+                lever_pulled_quietly(),
+                witness=replace(seen_clearly_only("{actor}が来た。"), noticed_later=_ORIGIN_UNFILLED),
+            ),
+            replace(lever_pulled_quietly(), target=seen_clearly_only("{origin}から来た。")),
+            replace(lever_pulled_quietly(), on_failure=seen_clearly_only("{origin}から来た。")),
+            replace(
+                lever_pulled_quietly(),
+                sound=SoundDeclaration(loudness=Loudness.NORMAL, clear=_ORIGIN_UNFILLED, muffled=_NO_ONE),
+            ),
+            replace(
+                lever_pulled_quietly(),
+                sound=SoundDeclaration(loudness=Loudness.NORMAL, clear=_NO_ONE, muffled=_ORIGIN_UNFILLED),
+            ),
+            replace(
+                bell_rung_for_everyone(),
+                announcement=replace(bell_rung_for_everyone().announcement, text=_ORIGIN_UNFILLED),
+            ),
+        ],
+        ids=[
+            "dim",
+            "unseen_actor",
+            "noticed_later",
+            "target",
+            "on_failure",
+            "sound_clear",
+            "sound_muffled",
+            "announcement",
+        ],
+    )
+    def test_unfilled_name_in_any_text_raises(self, perception: PerceptionDeclaration) -> None:
+        """ふつうの声の知覚の、見た人の dim・unseen_actor・noticed_later、された人の文、失敗の文、音の clear・muffled、知らせのどれか 1 つに、埋まらない {origin} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
+        with pytest.raises(UnfilledNameInBuiltInActionPerceptionException):
+            _perceptions(ordinary_voice=perception)
 
     def test_by_kind_text_naming_what_the_action_does_not_fill_raises(self) -> None:
         """by_kind の拾う文に、拾うことでは埋まらない {destination} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""

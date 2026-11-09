@@ -253,7 +253,7 @@ class TestSpeechAndArrivalPerceptions:
         flaws = _flaws(tmp_path, text)
 
         assert [flaw.location.field for flaw in flaws] == ["built_in_action_perceptions"]
-        assert "ordinary_voice" in flaws[0].reason
+        assert "speak" in flaws[0].reason
 
 
 class TestFlawsWhileLoading:
