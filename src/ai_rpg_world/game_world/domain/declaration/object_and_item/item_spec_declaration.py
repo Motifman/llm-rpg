@@ -17,6 +17,10 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
     LightKeyNotDeclaredException,
     StateValueMismatchesKindException,
 )
+from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
+    ItemDoesNotRunOutException,
+    ItemHasNotRunOutException,
+)
 from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
     DisplayName,
@@ -75,11 +79,16 @@ class Lasts:
         if self.ticks < Ticks(1):
             raise LastingTicksBelowOneException(f"Lasts ticks must be >= 1 tick, got {self.ticks.value}")
 
+    def require_run_out(self, age: Ticks) -> None:
+        if age < self.ticks:
+            raise ItemHasNotRunOutException(f"lasts {self.ticks.value} ticks and is {age.value} ticks old")
+
 
 @final
 @dataclass(frozen=True)
 class LastsIndefinitely:
-    pass
+    def require_run_out(self, age: Ticks) -> None:
+        raise ItemDoesNotRunOutException(f"lasts indefinitely and is {age.value} ticks old")
 
 
 @final
