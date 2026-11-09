@@ -10,10 +10,12 @@ from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoDayNight, NoWeather
-from ai_rpg_world.game_world.domain.declaration.verb import ObjectLook
+from ai_rpg_world.game_world.domain.declaration.verb import NoticedOnWaking, ObjectLook
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, ScenarioFile
 from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.perception import NoTarget
+from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import (
     Capacity,
     DescriptionText,
@@ -257,6 +259,79 @@ class TestSpeechAndArrivalPerceptions:
 
         assert [flaw.location.field for flaw in flaws] == ["built_in_action_perceptions"]
         assert "speak" in flaws[0].reason
+
+
+class TestBuiltInTargetTexts:
+    """built_in_action_perceptions の相手が見る文 (target) を、相手のいる行為にだけ書けることを保証する。"""
+
+    def test_tend_text_noticed_on_waking_is_read_into_the_declaration(self, tmp_path: Path) -> None:
+        """介抱の行の target に noticed_later を書くと、倒れていた相手が目が覚めてから気づく文として宣言に入る。"""
+        text = _LIFT_LANDING + (
+            "rules:\n  tend: { revive_hp_rate: 0.6 }\n"
+            "built_in_action_perceptions:\n"
+            '  tend:\n    witness: { clear: "{actor}が{target}を介抱している。" }\n'
+            '    target: { noticed_later: "{actor}が介抱してくれたようだ。" }\n'
+        )
+
+        tend = _load(tmp_path, text).design.built_in_action_perceptions.by_kind[ActionKind.TEND]
+
+        assert tend.target == NoticedOnWaking(TextWithUnassignedPeople("{actor}が介抱してくれたようだ。"))
+
+    def test_tend_target_with_clear_is_a_flaw_at_that_field(self, tmp_path: Path) -> None:
+        """介抱の行の target に、倒れている相手には届かない clear を書くと、その欄の場所を付けた DesignFlaw になる。"""
+        text = _LIFT_LANDING + (
+            "rules:\n  tend: { revive_hp_rate: 0.6 }\n"
+            "built_in_action_perceptions:\n"
+            '  tend:\n    witness: { clear: "{actor}が{target}を介抱している。" }\n'
+            '    target: { clear: "{actor}があなたを介抱している。", noticed_later: "{actor}が介抱してくれたようだ。" }\n'
+        )
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
+            _mine("world", "world", "built_in_action_perceptions.tend.target.clear")
+        ]
+
+    def test_tend_without_target_text_is_not_noticed_and_not_warned(self, tmp_path: Path) -> None:
+        """介抱の行に target を書かないと、既定の文で埋めずに気づかない (NoTarget) ことになり、DesignWarning も残さない。"""
+        text = _LIFT_LANDING + (
+            "rules:\n  tend: { revive_hp_rate: 0.6 }\n"
+            "built_in_action_perceptions:\n"
+            '  tend:\n    witness: { clear: "{actor}が{target}を介抱している。" }\n    sound: null\n'
+        )
+
+        loaded = _load(tmp_path, text)
+
+        assert loaded.design.built_in_action_perceptions.by_kind[ActionKind.TEND].target == NoTarget()
+        assert [w for w in loaded.warnings if w.location.field.startswith("built_in_action_perceptions.tend")] == []
+
+    @pytest.mark.parametrize(
+        "action",
+        [
+            "interact_with_object",
+            "interact_with_carried_item",
+            "interact_with_person",
+            "enter_section",
+            "leave_section",
+            "attack_monster",
+        ],
+    )
+    def test_action_not_in_the_table_is_a_flaw(self, tmp_path: Path, action: str) -> None:
+        """組み込みの行為の表に書けない行為 (操作、区画の出入り、モンスターへの攻撃) を書くと、素の例外ではなく表の場所を付けた DesignFlaw になる。"""
+        text = (
+            _LIFT_LANDING
+            + f'built_in_action_perceptions:\n  {action}:\n    witness: {{ clear: "{{actor}}が動いた。" }}\n'
+        )
+
+        assert [flaw.location.field for flaw in _flaws(tmp_path, text)] == ["built_in_action_perceptions"]
+
+    def test_travel_target_text_is_a_flaw_at_that_field(self, tmp_path: Path) -> None:
+        """相手のいない移動の行に target の文を書くと、その欄の場所を付けた DesignFlaw になる。"""
+        text = _LIFT_LANDING + (
+            'built_in_action_perceptions:\n  travel:\n    target: { clear: "{actor}があなたから離れた。" }\n'
+        )
+
+        assert [flaw.location for flaw in _flaws(tmp_path, text)] == [
+            _mine("world", "world", "built_in_action_perceptions.travel.target")
+        ]
 
 
 class TestFlawsWhileLoading:

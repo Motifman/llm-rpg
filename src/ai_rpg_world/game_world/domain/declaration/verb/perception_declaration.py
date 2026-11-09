@@ -6,6 +6,7 @@ from typing import final
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import AnnouncementTo
+from ai_rpg_world.game_world.domain.declaration.verb.noticed_on_waking import NoticedOnWaking
 from ai_rpg_world.game_world.domain.declaration.verb.sight_texts_declaration import SightTextsDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.perception import NoTarget, Salience
@@ -27,7 +28,7 @@ class NoFailureWitness:
 @dataclass(frozen=True)
 class PerceptionDeclaration:
     witness: SightTextsDeclaration
-    target: SightTextsDeclaration | NoTarget
+    target: SightTextsDeclaration | NoticedOnWaking | NoTarget
     sound: SoundDeclaration | Silent
     seen_in_dark: bool
     announcement: AnnouncementTo | NoAnnouncement
@@ -42,7 +43,7 @@ class PerceptionDeclaration:
     def placeholders(self) -> frozenset[str]:
         names = set(self.witness.placeholders())
         for part in (self.target, self.sound, self.on_failure):
-            if isinstance(part, (SightTextsDeclaration, SoundDeclaration)):
+            if isinstance(part, (SightTextsDeclaration, SoundDeclaration, NoticedOnWaking)):
                 names |= part.placeholders()
         if isinstance(self.announcement, AnnouncementTo):
             names |= self.announcement.text.placeholders()

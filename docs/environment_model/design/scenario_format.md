@@ -143,6 +143,8 @@ perception_defaults:
 | `listen` `wait` `search` `cast_ballot` | — | `{actor}` |
 
 - 表に無い名前は書けない
+- 相手 (`{target}`) のいる `whisper`・`hand_over`・`tend` にだけ、相手が見る文 (`target`) と、知らせの相手で `target` を選ぶ条件を書ける。ほかの行に書けば `DesignFlaw` になる (#2076)
+- `tend` の相手は倒れているので、`target` には目が覚めてから気づく文 `noticed_later` だけを書く (`target: { noticed_later: "{actor}が介抱してくれたようだ。" }`)。`clear` などを書けば `DesignFlaw`。書かなければ気づかない (#2076)
 - 1 回で複数の相手や品物を渡す `hand_over` は、渡す 1 件ごとに文を作る
 - `travel` の文は、出ていくところを見た人に届く。着いた先にいた人には `arrival` の文が届く。着いた本人には届けない (#2061)
 - 話す文は、声の大きさごとに `whisper` (ささやく)、`speak` (ふつう)、`shout` (叫ぶ) に書く。音の大きさは、それぞれの `loudness` を使う。共通の部品は `whisper`、`normal`、`very_loud` にしてある (#2061)

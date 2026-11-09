@@ -402,9 +402,14 @@ class AnnouncementTo:
 
 @final
 @dataclass(frozen=True)
+class NoticedOnWaking:                      # 倒れていた相手が、目が覚めてから気づく文。倒れている相手には行為の最中の文 (clear など) が届かない (#2076)
+    text: TextWithUnassignedPeople
+
+@final
+@dataclass(frozen=True)
 class PerceptionDeclaration:                # 行為が周りにどう知覚されるか
     witness: SightTextsDeclaration
-    target: SightTextsDeclaration | NoTarget
+    target: SightTextsDeclaration | NoticedOnWaking | NoTarget   # NoticedOnWaking は相手が倒れている組み込みの行為 (介抱) だけ
     sound: SoundDeclaration | Silent
     seen_in_dark: bool                              # 真っ暗でも dim の文が届く (光る、大きな動き)
     announcement: AnnouncementTo | NoAnnouncement   # 緊急の招集など、居場所に関わらず知らせるとき
@@ -588,9 +593,30 @@ class BuiltInActionPerceptions:             # どの世界にもある行為 (�
     arrival: PerceptionDeclaration          # 着いた場所にいた人へ。行為ではなく OccupantEnteredSpotEvent から作り、着いた本人には届けない (#2061)
 
     def speech(self, reach: Whisper | OrdinaryVoice | Shout) -> PerceptionDeclaration: ...
+    def rows(self) -> tuple[tuple[BuiltInPerceptionRow, PerceptionDeclaration], ...]: ...
+    # 各行の文は、その行の BuiltInPerceptionRow.nameable にある呼び名だけを書ける。相手のいない行に相手が見る文 (target) を書けば作れない
     # 文には人のプレースホルダーのほかに、行為が扱う物や場所の呼び名 ({item}、{destination} など) を書ける。
     # 刺激に変える役が宣言の呼び名 (DisplayName) で先に埋め、人のプレースホルダーだけを残した TextAboutPeople にする
     # 操作 (INTERACT_WITH_*)・区画の出入り (ENTER_SECTION / LEAVE_SECTION) は宣言の perceived_as で知覚されるので、モンスターへの攻撃と同じく書けば作れない (D2026)
+
+@final
+@dataclass(frozen=True)
+class BuiltInPerceptionRow:                 # 組み込みの行為の知覚の表の 1 行。その行為に相手がいるかと、文に書ける呼び名を 1 か所で決める (#2076)
+    name: str                               # ActionKind の名前 (PICK_UP など)、または whisper / speak / shout / arrival
+    has_target: bool                        # 渡す・介抱する・ささやくだけ相手がいる
+    target_is_down: bool                    # 介抱だけ真。相手の文は NoticedOnWaking だけを持て、書かなければ気づかない (NoTarget)
+    names_of_things: frozenset[str]         # 人のほかに書ける呼び名 ({item}、{destination}、{speech}、{origin})
+
+    @classmethod
+    def of_kind(cls, kind: ActionKind) -> "BuiltInPerceptionRow": ...
+    @classmethod
+    def kinds(cls) -> frozenset[ActionKind]: ...   # by_kind に書ける行為の種類
+    # whisper()、speak()、shout()、arrival() も同じく行を返す
+    @property
+    def nameable(self) -> frozenset[str]: ...   # names_of_things と {actor}。相手がいれば {target} も
+    def placement(self, location: DesignLocation) -> RulePlacement: ...
+    # 相手がいれば RulePlacement.in_person_interaction、いなければ in_action。相手のいない行為の知らせの相手で Target を選べば DesignFlaw
+    # 読み込みは has_target と target_is_down で、相手の文 (target) を読むか、どの形で読むかを決める
 
 @final
 @dataclass(frozen=True)
@@ -753,7 +779,7 @@ infrastructure: YAML を読む (scenario_format.md)
 - compose は、条件と効果を置いた場所ごとに使える主語 ([condition.md](condition.md)) と、`requirements()` を照らし合わせる
 - `initially_raised` でもなく、どの `RaiseFlagEffect` にも出てこない旗を条件が見ていたら `DesignFlaw`。立てるだけで誰も見ない旗は `DesignWarning`
 - 締める出来事 (`CloseGroupDecisionEffect`) が 1 つも無い集団の決定は `DesignWarning`。猶予 (`DeathRule.grace`) が 0 なのに介抱がある世界は `DesignFlaw`
-- 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、読み込む側が既定の文の表 (データ) から埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)
+- 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、読み込む側が既定の文の表 (データ) から埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)。介抱の相手の文 (`NoticedOnWaking`) も同じで、書かなければ `NoTarget` になり、警告もしない (#2076)
 - 断りの文の表 (`RefusalTexts`) と、組み込みの行為の知覚の文 (`BuiltInActionPerceptions`) の既定は、コードではなくデータ (共通のシナリオの部品) として 1 つ用意し、シナリオはそれを取り込んで必要な行だけ書き換える。起きうる理由や、世界で行える組み込みの行為が表に無ければ `DesignFlaw`
 - 理由が誰かに届く条件 (操作の前提、区画に入る条件、通路を通る条件) の根に `failure_text` が無ければ `DesignFlaw`。出来事・反応・終わり・見つかる物の条件には求めない
 - 効果と条件が読む引数の名前が、操作の宣言の `arguments` に無ければ `DesignFlaw`
@@ -762,7 +788,7 @@ infrastructure: YAML を読む (scenario_format.md)
 - 条件が読む出来事の ID (`HappeningHasFiredCondition` などは宣言ではなく `HappeningId` を持つ。自分を読む出来事を作れるようにするため) が宣言に無ければ `DesignFlaw` (#2057)
 - 出来事・反応・見つかる物・二人で合わせる操作の ID が重なれば `DesignFlaw`。`ScenarioProgress` などが ID で記録するので、重なると 2 つが混ざる
 - 区画ごとの出入り (`SectionAccessDeclaration`) と、集団の決定ごとの決まり (`GroupDecisionRulesDeclaration`) が 1 つずつ無ければ `DesignFlaw`。二人で合わせる操作が求める物体の操作が宣言に無ければ `DesignFlaw`
-- 組み込みの行為の知覚の文は、世界で行える組み込みの行為 (介抱は `TendRule` があるときだけ) をすべて持たなければ `DesignFlaw`。知らせの相手の選び方は、行為の中に置いた条件として (`Actor`、`Target` を使える) ほかの宣言と同じく照らし合わせる。断りの文の表の `world_state` は、起きうる `RefusalCode` をドメインで列挙できないので compose では確かめない
+- 組み込みの行為の知覚の文は、世界で行える組み込みの行為 (介抱は `TendRule` があるときだけ) をすべて持たなければ `DesignFlaw`。知らせの相手の選び方は、行為の中に置いた条件として、ほかの宣言と同じく照らし合わせる。`Actor` はどの行でも、`Target` は相手のいる行 (`BuiltInPerceptionRow.has_target`) でだけ使える (#2076)。断りの文の表の `world_state` は、起きうる `RefusalCode` をドメインで列挙できないので compose では確かめない
 - compose が照らし合わせに使う材料 (主語、読む引数、段階・昼夜・天候を読むか、立てる旗、締める決定、伏せられうる所属、読む出来事) は、条件と効果の `requirements()` が答える。根に文があるかは `Condition.explains_failure()` が答える
 - 物の見え方の宣言 (`ObjectLooksDeclaration`) は物ごとに 1 つまで。宣言に無い物を指せば `DesignFlaw`。見え方 (`ObjectLook.when`) の条件は、世界の状態だけで決まるものに限る。`requirements()` が、きっかけから人を引く主語 (名指しした人 `NAMED_PERSON` は除く)・`uses_chance`・`uses_action_arguments` のどれかを持てば `DesignFlaw`。人によって変わる見え方や、見渡すたびに変わる見え方になるため。名指しした人の状態は見る人で変わらないので使える (#2067、#2070)
 - 宣言に無い通路の状態の名前、呼び名 (`display_name`) の無い値が文に出るときは、`DesignFlaw` で止める

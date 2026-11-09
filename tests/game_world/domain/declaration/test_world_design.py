@@ -346,6 +346,51 @@ class TestTablesCoverTheWorld:
         assert [flaw.location.field for flaw in flaws] == ["built_in_action_perceptions"]
 
 
+_TO_DOWNED_TARGET = AnnouncementTo(
+    audience=PeopleSelection(where=IsDownCondition(who=Target(), failure_text=NoText())),
+    text=TextWithUnassignedPeople("物音がした。"),
+    salience=Notable(),
+)
+
+
+def _announcing_to_target(kind: ActionKind) -> BuiltInActionPerceptions:
+    perceptions = built_in_action_perceptions(without=(ActionKind.TEND,))
+    return replace(
+        perceptions,
+        by_kind={**perceptions.by_kind, kind: replace(perceptions.by_kind[kind], announcement=_TO_DOWNED_TARGET)},
+    )
+
+
+class TestBuiltInAnnouncementsReadTargetOnlyWithTarget:
+    """組み込みの行為の知らせの相手で Target を選べるのは、相手のいる行為だけであることを compose が確かめることを保証する。"""
+
+    def test_pick_up_announcing_to_target_is_a_flaw_at_its_row(self) -> None:
+        """相手のいない拾う (PICK_UP) の知らせの相手で Target を選ぶと、その行の announcement を場所とする DesignFlaw になる。"""
+        flaws = flaws_of_composing(built_in_action_perceptions_=_announcing_to_target(ActionKind.PICK_UP))
+
+        assert [flaw.location for flaw in flaws] == [
+            DesignLocation("built_in_action_perceptions", "PICK_UP", "announcement")
+        ]
+
+    def test_hand_over_announcing_to_target_is_allowed(self) -> None:
+        """相手のいる渡す (HAND_OVER) の知らせの相手で Target を選んでも、compose は断らない。"""
+        compose_world(built_in_action_perceptions_=_announcing_to_target(ActionKind.HAND_OVER))
+
+    def test_shout_announcing_to_target_is_a_flaw_at_its_row(self) -> None:
+        """相手のいない叫ぶの知らせの相手で Target を選ぶと、shout の行の announcement を場所とする DesignFlaw になる。"""
+        perceptions = built_in_action_perceptions(without=(ActionKind.TEND,))
+
+        flaws = flaws_of_composing(
+            built_in_action_perceptions_=replace(
+                perceptions, shout=replace(perceptions.shout, announcement=_TO_DOWNED_TARGET)
+            )
+        )
+
+        assert [flaw.location for flaw in flaws] == [
+            DesignLocation("built_in_action_perceptions", "shout", "announcement")
+        ]
+
+
 class TestVerbsDeclaredOncePerNoun:
     """区画の出入りと集団の決定の宣言が 1 つずつあり、名詞に付く動詞が重ならないことを compose が確かめることを保証する。"""
 

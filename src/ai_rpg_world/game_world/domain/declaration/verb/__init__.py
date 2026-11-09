@@ -1,4 +1,5 @@
 from ai_rpg_world.game_world.domain.declaration.verb.built_in_action_perceptions import BuiltInActionPerceptions
+from ai_rpg_world.game_world.domain.declaration.verb.built_in_perception_row import BuiltInPerceptionRow
 from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration, Finding
 from ai_rpg_world.game_world.domain.declaration.verb.ending_declaration import EndingDeclaration
@@ -16,6 +17,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import (
 from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.item_use_declaration import ItemUseDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.joint_action_declaration import JointActionDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb.noticed_on_waking import NoticedOnWaking
 from ai_rpg_world.game_world.domain.declaration.verb.noun_interaction_declarations import (
     ItemInteractionDeclaration,
     ObjectInteractionDeclaration,
@@ -43,6 +45,8 @@ from ai_rpg_world.game_world.domain.declaration.verb.world_stage_effects_declara
 __all__ = [
     "AnnouncementTo",
     "BuiltInActionPerceptions",
+    "BuiltInPerceptionRow",
+    "NoticedOnWaking",
     "DefaultDuration",
     "DiscoverableDeclaration",
     "EndingDeclaration",
