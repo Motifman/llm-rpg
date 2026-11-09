@@ -190,7 +190,7 @@ class TurnGuidance:                               # 世界では何も起きて�
 
 ## そのほかの型
 
-- `CommandScope`: 1 つの確定の範囲。中で断られたら全部巻き戻す。確定したらイベントを配る
+- `CommandScope`: 1 つの確定の範囲。`WorldStore.session()` で 1 つのトランザクションを始め、中で断られたら `roll_back` で全部巻き戻す。確定したら `commit` が返したイベントを配る ([persistence.md](persistence.md))
 - `DesignLocation(declaration: str, name: str, field: str, file: ScenarioFile | NoScenarioFile)`: 宣言の中の場所。宣言の種類、名前、欄 (`"object"`, `"lift_lever"`, `"state_keys[0]"`) と、どのファイルに書いたか (シナリオか、取り込んだどの共通の部品か)。ファイルは読み込む側が付け、ドメインが照らし合わせて見つけた誤りは `NoScenarioFile` で作る。シナリオを作る LLM が誤りを直すときに、どのファイルのどこを直せばよいかが分かるようにする (#2057)
 - `RefusalCode`: ドメイン例外の `error_code` (`WHEREABOUTS.SECTION_FULL` など)
 - `HandsNeeded`: 1 か 2

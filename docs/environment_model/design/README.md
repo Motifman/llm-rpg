@@ -10,3 +10,4 @@
 | [perception.md](perception.md) | 知覚 |
 | [use_cases.md](use_cases.md) | ユースケースとハンドラ |
 | [monster.md](monster.md) | モンスター (第 1 段。群れと生態系はまだ) |
+| [persistence.md](persistence.md) | 世界の状態の保存 (SQLite) |
