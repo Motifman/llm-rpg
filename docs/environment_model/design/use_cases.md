@@ -14,6 +14,7 @@ class AdvanceWorldTick:
 class PassWorldTime:
     def __call__(self, command: PassWorldTimeCommand) -> None:
         # WorldClock.advance → Whereabouts.advance_travels → PersonVitals.pass_time(now, death, hunger) (全員)
+        # → 品物の時間 (Lasts の時間が過ぎた品物を、持っている人の PersonInventory か置かれた場所の GroundItems から手放させ、Item.run_out)
         # → 状態異常 → 天候 → モンスター
         ...
 
@@ -41,6 +42,7 @@ class DeliverPerception:
 class LookAround:
     def __call__(self, command: LookAroundCommand) -> VisibleSurroundings:
         # SpotContents と LightingConditions を集め、VisibleSurroundings.seen_with
+        # 物を集めるときに ObjectDeclaration.look_now で、いまの見え方を決める
         ...
 
 class DeliverSurroundings:
@@ -166,6 +168,7 @@ class RemoveDeadMonsterHandler(EventHandler[MonsterDiedEvent]): ...
 class StimulusTranslator:                         # ドメインイベントの種類ごと。今の formatter の後継
     def stimuli_of(self, event: DomainEvent, design: WorldDesign) -> tuple[Stimulus, ...]: ...
         # 行為の目撃は PersonActedEvent から、失敗は ActionAttemptFailedEvent から作る
+        # 着いたことは OccupantEnteredSpotEvent から arrival の文で、品物の時間切れは ItemRanOutEvent から Lasts.ended_text で作る
         # 作者が宣言した操作や出来事は宣言の文を使い、どの世界にもある行為 (拾う、移動するなど) はシナリオの BuiltInActionPerceptions の文を使う
         # コードに決まった文を持たない
         # 受け手を決める、暗さで文を変える、はしない

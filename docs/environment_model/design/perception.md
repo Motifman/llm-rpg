@@ -370,6 +370,13 @@ class SpotContents:                       # その場所にあるもの。ユー
 class ContainedObject:                    # 現れているかも持つ。隠れた物を場面から外すのは seen_with
     declaration: ObjectDeclaration
     revealed: bool
+    look: DescriptionText | NoLook        # ユースケースが集めるときに ObjectDeclaration.look_now で決める (#2067)
+
+@final
+@dataclass(frozen=True)
+class SeenObject:
+    declaration: ObjectDeclaration
+    look: DescriptionText | NoLook        # 場面には説明に続けてこの文を出す (「北の坑道の水門: 鉄の水門。開いていて、水の流れる音がする」)
 
 @final
 @dataclass(frozen=True)
@@ -384,7 +391,7 @@ class VisibleSurroundings:
     shows_description: bool               # 真っ暗なら説明を出さず、音と気温だけ
     passages: tuple[PassageInState, ...]  # 真っ暗でも出す (手探りで分かる)
     sections: tuple[SpotSectionDeclaration, ...]
-    objects: tuple[ObjectDeclaration, ...]
+    objects: tuple[SeenObject, ...]
     ground_items: tuple[ItemInstanceId, ...]
     people: tuple[SeenPerson, ...]
     bodies: tuple[SeenPerson, ...]        # 倒れている人と死んだ人
@@ -398,4 +405,7 @@ class VisibleSurroundings:
 - モンスターは #1971、遠くの場所が見える仕組み (`DistantSight`) は #2040 で決めてから足す
 - 持ち物、体の状態、時刻は、見えているものではなく自分が知っていること。場面に入れず、知覚を通さずに集約から読む。複数の集約にまたがるものはドメインサービスにする
 - 場面は「何が見えるか」だけを持つ。「何ができるか」は `AvailableActions` ([action.md](action.md)) が持ち、行為の対象の候補は場面に出ているものに限る
+- 人が着いたことは、行為ではなく `OccupantEnteredSpotEvent` から、`BuiltInActionPerceptions.arrival` の文で、着いた場所にいた人へ刺激を作る。文には `{origin}` (来た場所の名前) を書ける。着いた本人には届けない (本人には場面が渡る) (#2061)
+- 話すことは、声の大きさ (`Whisper` / `OrdinaryVoice` / `Shout`) ごとの宣言 (`BuiltInActionPerceptions.speech`) で刺激を作る。音の大きさも、その宣言の `loudness` を使う (#2061)
+- 品物の時間が切れて消えたこと (`ItemRanOutEvent`) は、持っていた本人には本人の体の刺激、地面にあったときはその場所の見える刺激として、`Lasts.ended_text` で作る。暗くなったことは `DeliverDarkeningHandler` が別に届ける (#2068)
 - 着いたとき、起き上がったとき、その場所の明るさが上がったとき (灯した、夜が明けた、明かりを持った人が来た) は、場面の人、倒れた体、モンスターを 1 つの観測にして渡す (`DeliverSurroundings`)。明るさが上がったかは、出来事の前後の `LightingConditions` を比べて決める
