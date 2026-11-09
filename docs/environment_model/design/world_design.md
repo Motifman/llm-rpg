@@ -779,7 +779,7 @@ infrastructure: YAML を読む (scenario_format.md)
 - compose は、条件と効果を置いた場所ごとに使える主語 ([condition.md](condition.md)) と、`requirements()` を照らし合わせる
 - `initially_raised` でもなく、どの `RaiseFlagEffect` にも出てこない旗を条件が見ていたら `DesignFlaw`。立てるだけで誰も見ない旗は `DesignWarning`
 - 締める出来事 (`CloseGroupDecisionEffect`) が 1 つも無い集団の決定は `DesignWarning`。猶予 (`DeathRule.grace`) が 0 なのに介抱がある世界は `DesignFlaw`
-- 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、読み込む側が既定の文の表 (データ) から埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)
+- 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、読み込む側が既定の文の表 (データ) から埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)。介抱の相手の文 (`NoticedOnWaking`) も同じで、書かなければ `NoTarget` になり、警告もしない (#2076)
 - 断りの文の表 (`RefusalTexts`) と、組み込みの行為の知覚の文 (`BuiltInActionPerceptions`) の既定は、コードではなくデータ (共通のシナリオの部品) として 1 つ用意し、シナリオはそれを取り込んで必要な行だけ書き換える。起きうる理由や、世界で行える組み込みの行為が表に無ければ `DesignFlaw`
 - 理由が誰かに届く条件 (操作の前提、区画に入る条件、通路を通る条件) の根に `failure_text` が無ければ `DesignFlaw`。出来事・反応・終わり・見つかる物の条件には求めない
 - 効果と条件が読む引数の名前が、操作の宣言の `arguments` に無ければ `DesignFlaw`
