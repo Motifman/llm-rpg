@@ -50,7 +50,7 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
 
 ## 作業単位
 
-application は保存の仕方を知らず、次の形だけを知る。
+`WorldSession` は作業単位 (Unit of Work)。1 つの確定の範囲の中で読み込んだ集約を覚えておき、確定するなら変わったものをまとめて書き、取り消すなら何も書かずに捨てる。application は保存の仕方を知らず、次の形だけを知る。
 
 ```python
 class WorldStore(Protocol):
@@ -88,7 +88,7 @@ SQLite の実装 (`SqliteWorldSession`) は次のように動く。
 
 差し替えられるように、application とドメインは次を守る。
 
-- `WorldStore` / `WorldSession` の形だけを知り、SQLite も、メモリに持つかどうかも知らない
+- ドメインは `WorldFacts` / `WorldAggregates` だけを知り、範囲の始め方も保存されるかも知らない。application は `WorldStore` / `WorldSession` だけを知り、SQLite であることも、メモリに持つかどうかも知らない
 - 集約を範囲の外へ持ち出さない。範囲が終わったら、引いた集約は使わない
 - イベントは `commit` が返したものだけを配る。集約から直接取り出さない
 - `WorldStore` の実装が守る約束 (範囲の中で書き換えたものがすぐ読める、断られたら何も残らない、世界から出た集約のイベントも返す、無い集約は作らない) は、実装に依らない共通のテストにまとめる。実装を差し替えたら、同じテストを通す
