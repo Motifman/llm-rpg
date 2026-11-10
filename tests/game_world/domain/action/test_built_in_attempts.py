@@ -290,7 +290,6 @@ class TestSubjectsAndItemsOfBuiltInAttempts:
         with pytest.raises(ItemNotInTriggerException):
             attempt.this_item()
 
-
     def test_unanswered_subject_message_names_the_attempt_and_the_kind(self) -> None:
         """探す行為に TARGET を尋ねると、文は「<行為の repr> does not answer TARGET」。"""
         attempt = SpotSearchAttempt(ALICE)
