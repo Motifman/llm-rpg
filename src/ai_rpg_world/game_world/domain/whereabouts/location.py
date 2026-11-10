@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import final
 
 from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration
+from ai_rpg_world.game_world.domain.exception.whereabouts_exception import TravelPositionOutsideRouteException
 from ai_rpg_world.game_world.domain.sound.hearing_values import HearingValues
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
 from ai_rpg_world.game_world.domain.sound.sound_level import SoundLevel
@@ -75,6 +76,12 @@ class TravelPosition:
     passage_index: int
     ticks_left_on_passage: Ticks
     departed_from: SpotId
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.passage_index < len(self.route_passages):
+            raise TravelPositionOutsideRouteException(
+                f"passage {self.passage_index} is outside a route of {len(self.route_passages)} passages"
+            )
 
     def resumed_on(self, passages: tuple[PassageDeclaration, ...]) -> TravelInProgress:
         return TravelInProgress(

@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     OccupantNotPlacedException,
     OccupantNotTravellingException,
     SectionFullException,
+    TravelPositionOutsideRouteException,
 )
 from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, SpotId, SpotSectionId, Ticks
 from ai_rpg_world.game_world.domain.whereabouts import (
@@ -41,7 +42,7 @@ from ai_rpg_world.game_world.domain.whereabouts import (
 )
 from tests.game_world.domain.whereabouts._builders import WORLD, path, section, spot, thing
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
-from tests.game_world.support.world_design_for_tests import compose_world, nouns
+from tests.game_world.support.world_design_for_tests import access_to, compose_world, nouns
 
 ALICE = PersonBody(PersonId("alice"))
 BOB = PersonBody(PersonId("bob"))
@@ -55,7 +56,15 @@ BENCH = section("bench", "plaza")
 STREET = path("street", "plaza", "well", ticks=2)
 LANE = path("lane", "well", "mine_entrance", ticks=1)
 NOBODY_DOWN: frozenset[PersonId] = frozenset()
-DESIGN = compose_world(nouns(spots=(PLAZA, WELL, MINE), passages=(STREET, LANE)))
+DESIGN = compose_world(
+    nouns(
+        spots=(PLAZA, WELL, MINE),
+        passages=(STREET, LANE),
+        objects=(thing("lift_lever", "plaza"),),
+        sections=(LIFT, BENCH),
+    ),
+    section_accesses=(access_to(LIFT), access_to(BENCH)),
+)
 
 
 def _whereabouts(*placed: tuple[PersonBody | DepartedPerson, str]) -> Whereabouts:
@@ -619,6 +628,39 @@ class TestWhereaboutsMemento:
 
         with pytest.raises(UndeclaredNounException):
             Whereabouts.from_memento(memento, DESIGN)
+
+    @pytest.mark.parametrize(
+        "location",
+        [
+            AtSpot(spot=SpotId("attic"), section=OpenArea()),
+            AtSpot(spot=SpotId("plaza"), section=SpotSectionId("trapdoor")),
+            TravelPosition(
+                route_start=SpotId("attic"),
+                route_passages=(PassageId("street"),),
+                passage_index=0,
+                ticks_left_on_passage=Ticks(1),
+                departed_from=SpotId("attic"),
+            ),
+        ],
+        ids=["undeclared_spot", "undeclared_section", "undeclared_route_start"],
+    )
+    def test_memento_at_an_undeclared_place_is_rejected(self, location: AtSpot | TravelPosition) -> None:
+        """宣言に無い場所 attic・宣言に無い区画 trapdoor・attic から出た移動のどれかを持つ memento から作り直すと UndeclaredNounException を投げる。"""
+        memento = WhereaboutsMemento(world_id=WORLD, locations=frozenset({OccupantLocation(ALICE, location)}))
+
+        with pytest.raises(UndeclaredNounException):
+            Whereabouts.from_memento(memento, DESIGN)
+
+    def test_travel_position_beyond_the_last_passage_is_rejected(self) -> None:
+        """通路が 1 本の道のりで 2 本目 (passage_index 1) にいる TravelPosition は、作るときに TravelPositionOutsideRouteException を投げる。"""
+        with pytest.raises(TravelPositionOutsideRouteException):
+            TravelPosition(
+                route_start=SpotId("plaza"),
+                route_passages=(PassageId("street"),),
+                passage_index=1,
+                ticks_left_on_passage=Ticks(1),
+                departed_from=SpotId("well"),
+            )
 
     def test_memento_with_one_occupant_at_two_places_is_rejected(self) -> None:
         """同じ人が広場と井戸の 2 か所にいる memento は、作るときに RepeatedMementoKeyException を投げる。"""

@@ -37,6 +37,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     ObjectId,
     PassageId,
     SpotId,
+    SpotSectionId,
     WorldStageId,
 )
 
@@ -189,6 +190,9 @@ class DeclaredNouns:
 
     def section(self, name: str, at: DesignLocation) -> SpotSectionDeclaration:
         return self._sections.get(name, at)
+
+    def section_of(self, section_id: SpotSectionId) -> SpotSectionDeclaration:
+        return self._sections.with_id(section_id)
 
     def sections_at(self, spot: SpotId) -> tuple[SpotSectionDeclaration, ...]:
         return tuple(section for section in self._sections if section.spot_id == spot)

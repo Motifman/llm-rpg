@@ -51,3 +51,7 @@ class OccupantNotInSectionException(GameWorldDomainException):
 
 class SectionFullException(GameWorldDomainException):
     error_code = "GAME_WORLD.WHEREABOUTS.SECTION_FULL"
+
+
+class TravelPositionOutsideRouteException(GameWorldDomainException):
+    error_code = "GAME_WORLD.WHEREABOUTS.TRAVEL_POSITION_OUTSIDE_ROUTE"
