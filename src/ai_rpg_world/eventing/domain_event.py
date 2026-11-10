@@ -18,7 +18,7 @@ def _next_sequence() -> int:
 class DomainEvent:
     event_id: int
     occurred_at: datetime
-    # 旧ドメインのイベントは印を通さずに位置引数で作るので、既定値を同じ数え器から取って出た順を揃える (#2086)。
+    # 印を通さずに作られるイベントとも出た順を比べられるよう、既定値を印と同じ数え器から取る (#2086)。
     # outbox から復元すると番号は振り直されるので、等しさには含めない。
     sequence: int = field(default_factory=_next_sequence, kw_only=True, compare=False)
 
