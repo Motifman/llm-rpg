@@ -571,6 +571,20 @@ class TestObjectStateMementoRefusesRepeatedKey:
             )
 
 
+    def test_same_stock_with_two_levels_is_refused_by_constructor(self) -> None:
+        """water の在庫が 1 と 2 の 2 つある在庫で ObjectState を直に作ると、RepeatedMementoKeyException を投げる。"""
+        water = _water()
+
+        with pytest.raises(RepeatedMementoKeyException):
+            ObjectState(
+                _well(water),
+                values=frozenset(),
+                stock_levels=frozenset(
+                    {ObjectStockLevel(water.key, Count(1), _START), ObjectStockLevel(water.key, Count(2), _START)}
+                ),
+                revealed=True,
+            )
+
 class TestObjectStateMementoReveal:
     """ObjectState を memento から作り直すとき、隠れない物が見つかっていない状態からは始まらないことを保証する。"""
 
