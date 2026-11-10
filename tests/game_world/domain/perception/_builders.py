@@ -66,7 +66,9 @@ def travelling(person: PersonId, *, attentive: bool = False) -> LivingPerceiver:
     return LivingPerceiver(
         person=person,
         life=Alive(),
-        location=TravelInProgress(route=route, passage_index=1, ticks_left_on_passage=Ticks(1), departed_from=SQUARE),
+        location=TravelInProgress(
+            route=route, passage_index=1, ticks_left_on_passage=Ticks(1), departed_from=SpotId("hall")
+        ),
         attentive=attentive,
     )
 

@@ -15,7 +15,10 @@ _ROUTE = Route(start=SQUARE, passages=(path("square_hall", "square", "hall"), pa
 
 
 def _on_passage(index: int) -> TravelInProgress:
-    return TravelInProgress(route=_ROUTE, passage_index=index, ticks_left_on_passage=Ticks(1), departed_from=SQUARE)
+    departed_from = SQUARE if index == 0 else _ROUTE.end_of_passage(index - 1)
+    return TravelInProgress(
+        route=_ROUTE, passage_index=index, ticks_left_on_passage=Ticks(1), departed_from=departed_from
+    )
 
 
 class TestLocationIsAt:

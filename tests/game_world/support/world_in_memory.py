@@ -104,9 +104,9 @@ class WorldInMemory:
             outcomes=(),
         )
         self.clock_aggregate = WorldClock(world)
-        self.whereabouts = Whereabouts(world)
-        self.passages = PassageStates(world, passages)
-        self.atmospheres = SpotAtmospheres(world, spots)
+        self.whereabouts = Whereabouts.start(world)
+        self.passages = PassageStates.start(world, passages)
+        self.atmospheres = SpotAtmospheres.start(world, spots)
         self.outcomes = PersonOutcomes.start(world, people)
         self.membership = GroupMembership.start(world, {})
         self.people_register = PeopleRegister.from_characters(world, characters)
@@ -145,7 +145,7 @@ class WorldInMemory:
         return self.missed_notices.setdefault(person, MissedNotices(person))
 
     def group_decision_of(self, decision: GroupDecisionDeclaration) -> GroupDecision:
-        return self.group_decisions.setdefault(decision.decision_id, GroupDecision(decision))
+        return self.group_decisions.setdefault(decision.decision_id, GroupDecision.not_started(decision))
 
 
 class _FactsInMemory(WorldFacts):
