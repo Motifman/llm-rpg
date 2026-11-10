@@ -69,32 +69,31 @@ class PersonLeftGroupEvent(GroupMembershipEvent):
 
 
 class GroupMembership(AggregateRoot[GroupMembershipEvent]):
-    def __init__(self, world: WorldId) -> None:
+    def __init__(self, world: WorldId, groups: Mapping[PersonId, tuple[GroupDeclaration, ...]]) -> None:
         super().__init__()
         self._world = world
         self._groups: dict[PersonId, dict[GroupingId, GroupId]] = {}
+        for person, declarations in groups.items():
+            for group in declarations:
+                self._enter(person, group)
 
     @classmethod
     def start(cls, world: WorldId, initial: Mapping[PersonId, tuple[GroupDeclaration, ...]]) -> GroupMembership:
-        membership = cls(world)
-        for person, groups in initial.items():
-            for group in groups:
-                membership._enter(person, group)
-        return membership
+        return cls(world, initial)
 
     @classmethod
     def from_memento(cls, memento: GroupMembershipMemento, design: WorldDesign) -> GroupMembership:
         nouns = design.nouns
-        membership = cls(memento.world_id)
+        groups: dict[PersonId, tuple[GroupDeclaration, ...]] = {}
         for entry in memento.groups:
             nouns.character_of(entry.person)
-            declared_grouping = nouns.group_of(entry.group).grouping.grouping_id
-            if declared_grouping != entry.grouping:
+            group = nouns.group_of(entry.group)
+            if group.grouping.grouping_id != entry.grouping:
                 raise MementoDoesNotMatchDesignException(
-                    f"{entry.group.value} belongs to {declared_grouping.value}, not {entry.grouping.value}"
+                    f"{entry.group.value} belongs to {group.grouping.grouping_id.value}, not {entry.grouping.value}"
                 )
-            membership._groups.setdefault(entry.person, {})[entry.grouping] = entry.group
-        return membership
+            groups[entry.person] = (*groups.get(entry.person, ()), group)
+        return cls(memento.world_id, groups)
 
     @property
     def world(self) -> WorldId:

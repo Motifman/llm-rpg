@@ -4,7 +4,10 @@ import pytest
 
 from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclaration
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
-from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import (
+    MementoDoesNotMatchDesignException,
+    RepeatedMementoKeyException,
+)
 from ai_rpg_world.game_world.domain.exception.person_exception import (
     OutcomeAlreadyDecidedException,
     PersonListedTwiceException,
@@ -174,7 +177,14 @@ class TestPersonOutcomesMementoRefusals:
 
     def test_outcome_not_declared_is_refused(self) -> None:
         """alice の結末が宣言に無い drowned の memento から作り直すと、UndeclaredNounException を投げる。"""
-        memento = PersonOutcomesMemento(world_id=_WORLD, outcomes=(OutcomeOfPerson(_ALICE, OutcomeId("drowned")),))
+        memento = PersonOutcomesMemento(
+            world_id=_WORLD,
+            outcomes=(
+                OutcomeOfPerson(_ALICE, OutcomeId("drowned")),
+                OutcomeOfPerson(_BOB, Undecided()),
+                OutcomeOfPerson(_CAROL, Undecided()),
+            ),
+        )
 
         with pytest.raises(UndeclaredNounException):
             PersonOutcomes.from_memento(memento, _DESIGN)
@@ -184,6 +194,15 @@ class TestPersonOutcomesMementoRefusals:
         memento = PersonOutcomesMemento(world_id=_WORLD, outcomes=(OutcomeOfPerson(PersonId("dave"), Undecided()),))
 
         with pytest.raises(UndeclaredNounException):
+            PersonOutcomes.from_memento(memento, _DESIGN)
+
+    def test_declared_person_missing_is_refused(self) -> None:
+        """宣言にいる carol の行が無く、alice と bob だけが未決の memento から作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        memento = PersonOutcomesMemento(
+            world_id=_WORLD, outcomes=(OutcomeOfPerson(_ALICE, Undecided()), OutcomeOfPerson(_BOB, Undecided()))
+        )
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
             PersonOutcomes.from_memento(memento, _DESIGN)
 
     def test_same_person_twice_is_refused(self) -> None:

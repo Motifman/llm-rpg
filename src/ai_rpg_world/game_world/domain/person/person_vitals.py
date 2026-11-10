@@ -9,9 +9,11 @@ from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.person_exception import (
+    HitPointsDoNotMatchLifeStateException,
     PersonNotAliveException,
     PersonNotDownException,
     PersonStartsFallenException,
+    StatusEffectKindRepeatedException,
 )
 from ai_rpg_world.game_world.domain.person.life_state import (
     Alive,
@@ -84,34 +86,53 @@ class PersonVitalsMemento:
 
 
 class PersonVitals(AggregateRoot[PersonVitalsEvent]):
-    def __init__(self, person: PersonId, hp: HitPoints) -> None:
+    def __init__(
+        self,
+        person: PersonId,
+        hp: HitPoints,
+        life_state: LifeState,
+        hunger: HungerAmount,
+        fatigue: FatigueAmount,
+        status_effects: frozenset[StatusEffect],
+        busy_until: WorldTick | NotBusy,
+    ) -> None:
         super().__init__()
+        has_hit_points = hp.current > 0
+        if has_hit_points != isinstance(life_state, Alive):
+            raise HitPointsDoNotMatchLifeStateException(
+                f"{person.value} cannot have {hp.current} hit points while {life_state}"
+            )
+        effects = {effect.kind: effect for effect in status_effects}
+        if len(effects) != len(status_effects):
+            raise StatusEffectKindRepeatedException(f"{person.value} has one kind of status effect more than once")
         self._person = person
         self._hp = hp
-        self._life_state: LifeState = Alive()
-        self._hunger = HungerAmount(0)
-        self._fatigue = FatigueAmount(0)
-        self._status_effects: dict[StatusEffectType, StatusEffect] = {}
-        self._busy_until: WorldTick | NotBusy = NotBusy()
+        self._life_state = life_state
+        self._hunger = hunger
+        self._fatigue = fatigue
+        self._status_effects = effects
+        self._busy_until = busy_until
 
     @classmethod
     def start(cls, person: PersonId, hp: HitPoints) -> PersonVitals:
         if hp.current == 0:
             raise PersonStartsFallenException(f"{person.value} cannot start with 0 hit points")
-        return cls(person, hp)
+        return cls(person, hp, Alive(), HungerAmount(0), FatigueAmount(0), frozenset(), NotBusy())
 
     @classmethod
     def from_memento(cls, memento: PersonVitalsMemento, design: WorldDesign) -> PersonVitals:
         design.nouns.character_of(memento.person)
         if isinstance(memento.life_state, Down) and isinstance(memento.life_state.cause, StruckByPerson):
             design.nouns.character_of(memento.life_state.cause.person)
-        vitals = cls(memento.person, memento.hp)
-        vitals._life_state = memento.life_state
-        vitals._hunger = memento.hunger
-        vitals._fatigue = memento.fatigue
-        vitals._status_effects = {effect.kind: effect for effect in memento.status_effects}
-        vitals._busy_until = memento.busy_until
-        return vitals
+        return cls(
+            memento.person,
+            memento.hp,
+            memento.life_state,
+            memento.hunger,
+            memento.fatigue,
+            memento.status_effects,
+            memento.busy_until,
+        )
 
     def memento(self) -> PersonVitalsMemento:
         return PersonVitalsMemento(

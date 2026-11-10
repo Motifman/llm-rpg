@@ -108,7 +108,7 @@ class WorldInMemory:
         self.passages = PassageStates(world, passages)
         self.atmospheres = SpotAtmospheres(world, spots)
         self.outcomes = PersonOutcomes.start(world, people)
-        self.membership = GroupMembership(world)
+        self.membership = GroupMembership.start(world, {})
         self.people_register = PeopleRegister.from_characters(world, characters)
         self.vitals = {v.person: v for v in vitals}
         self.inventories = {i.person_id: i for i in inventories}

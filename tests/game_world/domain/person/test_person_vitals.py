@@ -10,9 +10,11 @@ from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     RepeatedMementoKeyException,
 )
 from ai_rpg_world.game_world.domain.exception.person_exception import (
+    HitPointsDoNotMatchLifeStateException,
     PersonNotAliveException,
     PersonNotDownException,
     PersonStartsFallenException,
+    StatusEffectKindRepeatedException,
 )
 from ai_rpg_world.game_world.domain.person import (
     Alive,
@@ -751,12 +753,13 @@ _POISONED = StatusEffectType("毒")
 
 def _memento(
     person: PersonId = _ALICE,
+    hp: int = 10,
     life_state: Alive | Down | Dead = Alive(),
     status_effects: frozenset[StatusEffect] = frozenset(),
 ) -> PersonVitalsMemento:
     return PersonVitalsMemento(
         person=person,
-        hp=HitPoints(current=10, maximum=10),
+        hp=HitPoints(current=hp, maximum=10),
         life_state=life_state,
         hunger=HungerAmount(0),
         fatigue=FatigueAmount(0),
@@ -834,7 +837,41 @@ class TestPersonVitalsMementoRefusals:
         fallen = Down(fell_at=WorldTick(1), cause=StruckByPerson(PersonId("carol")))
 
         with pytest.raises(UndeclaredNounException):
-            PersonVitals.from_memento(_memento(life_state=fallen), _DESIGN)
+            PersonVitals.from_memento(_memento(hp=0, life_state=fallen), _DESIGN)
+
+    def test_alive_with_zero_hit_points_is_refused(self) -> None:
+        """HP 0 で起きている alice の memento から作り直すと、HitPointsDoNotMatchLifeStateException を投げる。"""
+        with pytest.raises(HitPointsDoNotMatchLifeStateException):
+            PersonVitals.from_memento(_memento(hp=0, life_state=Alive()), _DESIGN)
+
+    def test_down_with_hit_points_left_is_refused(self) -> None:
+        """HP が 3 残ったまま倒れている alice の memento から作り直すと、HitPointsDoNotMatchLifeStateException を投げる。"""
+        fallen = Down(fell_at=WorldTick(1), cause=_STRUCK)
+
+        with pytest.raises(HitPointsDoNotMatchLifeStateException):
+            PersonVitals.from_memento(_memento(hp=3, life_state=fallen), _DESIGN)
+
+    def test_dead_with_hit_points_left_is_refused(self) -> None:
+        """HP が 3 残ったまま死んでいる alice の memento から作り直すと、HitPointsDoNotMatchLifeStateException を投げる。"""
+        with pytest.raises(HitPointsDoNotMatchLifeStateException):
+            PersonVitals.from_memento(_memento(hp=3, life_state=Dead(died_at=WorldTick(7))), _DESIGN)
+
+    def test_constructing_with_same_status_effect_kind_twice_is_refused(self) -> None:
+        """切れる tick だけが違う毒を 2 つ渡して PersonVitals を作ると、StatusEffectKindRepeatedException を投げる。"""
+        poisons = frozenset(
+            {StatusEffect(_POISONED, expires_at=WorldTick(4)), StatusEffect(_POISONED, expires_at=WorldTick(6))}
+        )
+
+        with pytest.raises(StatusEffectKindRepeatedException):
+            PersonVitals(
+                _ALICE,
+                HitPoints(current=10, maximum=10),
+                Alive(),
+                HungerAmount(0),
+                FatigueAmount(0),
+                poisons,
+                NotBusy(),
+            )
 
     def test_same_status_effect_kind_twice_is_refused(self) -> None:
         """切れる tick だけが違う毒を 2 つ持つ memento を作ると、RepeatedMementoKeyException を投げる。"""

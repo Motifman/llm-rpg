@@ -79,6 +79,15 @@ class TestFromCharacters:
             PeopleRegister.from_characters(_WORLD, (_character(_ALICE), _character(_ALICE)))
 
 
+class TestConstructor:
+    """PeopleRegister のコンストラクタが、名簿に無い人の名前を受け取らないことを保証する。"""
+
+    def test_name_of_person_not_in_register_is_refused(self) -> None:
+        """登場人物が alice だけの名簿に、stranger の名前を渡して作ると PersonNotInRegisterException を投げる。"""
+        with pytest.raises(PersonNotInRegisterException):
+            PeopleRegister(_WORLD, (_character(_ALICE),), {_STRANGER: DisplayName("旅人")})
+
+
 class TestName:
     """PeopleRegister.name が、人の名前を記録してイベントをためることを保証する。"""
 

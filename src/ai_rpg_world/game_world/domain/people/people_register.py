@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
@@ -55,28 +55,33 @@ class _RegisteredPerson:
 
 
 class PeopleRegister(AggregateRoot[PersonNamedEvent]):
-    def __init__(self, world: WorldId, characters: Sequence[CharacterDeclaration]) -> None:
+    def __init__(
+        self,
+        world: WorldId,
+        characters: Sequence[CharacterDeclaration],
+        names: Mapping[PersonId, DisplayName],
+    ) -> None:
         super().__init__()
         self._world = world
         self._people: dict[PersonId, _RegisteredPerson] = {}
-        self._names: dict[PersonId, DisplayName] = {}
         for number, character in enumerate(characters):
             if character.person_id in self._people:
                 raise CharacterListedTwiceException(f"{character.person_id.value} is declared more than once")
             self._people[character.person_id] = _RegisteredPerson(PersonHandle(number), character.appearance)
+        for person in names:
+            self._registered(person)
+        self._names = dict(names)
 
     @classmethod
     def from_characters(cls, world: WorldId, characters: Sequence[CharacterDeclaration]) -> PeopleRegister:
-        return cls(world, characters)
+        return cls(world, characters, {})
 
     @classmethod
     def from_memento(cls, memento: PeopleRegisterMemento, design: WorldDesign) -> PeopleRegister:
         nouns = design.nouns
-        register = cls(memento.world_id, nouns.all_characters())
         for entry in memento.names:
             nouns.character_of(entry.person)
-            register._names[entry.person] = entry.name
-        return register
+        return cls(memento.world_id, nouns.all_characters(), {entry.person: entry.name for entry in memento.names})
 
     @property
     def world(self) -> WorldId:
