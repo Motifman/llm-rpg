@@ -16,6 +16,7 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
 )
 from ai_rpg_world.game_world.domain.action.declared_interaction import DeclaredInteraction
 from ai_rpg_world.game_world.domain.action.manner import Manner
+from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
@@ -23,11 +24,6 @@ from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import 
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     ArgumentsDoNotMatchDeclarationException,
     UnseenTargetNotAllowedException,
-)
-from ai_rpg_world.game_world.domain.exception.trigger_exception import (
-    ArgumentNotInTriggerException,
-    ItemNotInTriggerException,
-    SubjectNotInTriggerException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
@@ -42,7 +38,7 @@ class SomeoneInTheDark:
     pass
 
 
-class _InteractionAttempt(ABC):
+class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
     actor: PersonId
     interaction: DeclaredInteraction
     arguments: ActionArguments
@@ -84,18 +80,15 @@ class _InteractionAttempt(ABC):
     def person_as(self, kind: SubjectKind) -> PersonId:
         if kind is SubjectKind.ACTOR:
             return self.actor
-        raise SubjectNotInTriggerException(f"{self!r} does not answer {kind.name}")
-
-    def this_item(self) -> ItemInstanceId:
-        raise ItemNotInTriggerException(f"{self!r} does not answer the item")
+        return super().person_as(kind)
 
     def acting_person(self) -> PersonId | NoActingPerson:
         return self.actor
 
     def argument(self, name: ArgumentName) -> TextArgumentValue | ItemInstanceId:
-        if name not in self.arguments:
-            raise ArgumentNotInTriggerException(f"{self!r} does not answer the argument {name.value!r}")
-        return self.arguments[name]
+        if name in self.arguments:
+            return self.arguments[name]
+        return super().argument(name)
 
     def fall_cause_for(self, victim: PersonId) -> FallCause:
         return fall_cause_from(self.acting_person(), victim)

@@ -97,6 +97,34 @@ class TestTriggersThatAreNotActions:
         assert trigger.fall_cause_for(_BOB) == WorldHappening()
 
 
+class TestMessagesOfUnansweredQuestions:
+    """行為でないきっかけが答えない主語・品物・引数を聞かれたとき、何を答えないかを文に書いて投げることを保証する。"""
+
+    @pytest.mark.parametrize("trigger", _TRIGGERS_NOT_ACTIONS)
+    def test_subject_message_names_the_trigger_and_the_kind(self, trigger: Trigger) -> None:
+        """ACTOR を尋ねると、文は「<きっかけの repr> does not answer ACTOR」。"""
+        with pytest.raises(SubjectNotInTriggerException) as raised:
+            trigger.person_as(SubjectKind.ACTOR)
+
+        assert str(raised.value) == f"{trigger!r} does not answer ACTOR"
+
+    @pytest.mark.parametrize("trigger", _TRIGGERS_NOT_ACTIONS)
+    def test_item_message_names_the_trigger(self, trigger: Trigger) -> None:
+        """品物を尋ねると、文は「<きっかけの repr> does not answer the item」。"""
+        with pytest.raises(ItemNotInTriggerException) as raised:
+            trigger.this_item()
+
+        assert str(raised.value) == f"{trigger!r} does not answer the item"
+
+    @pytest.mark.parametrize("trigger", _TRIGGERS_NOT_ACTIONS)
+    def test_argument_message_names_the_trigger_and_the_argument(self, trigger: Trigger) -> None:
+        """引数 message を尋ねると、文は「<きっかけの repr> does not answer the argument 'message'」。"""
+        with pytest.raises(ArgumentNotInTriggerException) as raised:
+            trigger.argument(_MESSAGE)
+
+        assert str(raised.value) == f"{trigger!r} does not answer the argument 'message'"
+
+
 class TestGroupDecisionResult:
     """GroupDecisionResult が、集団の決定で選ばれた人だけを答えることを保証する。"""
 

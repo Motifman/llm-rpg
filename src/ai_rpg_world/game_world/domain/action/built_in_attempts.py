@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import ClassVar, final
 
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson, fall_cause_from
-from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentValue
 from ai_rpg_world.game_world.domain.action.action_attempt import (
     ActorRequirement,
     CopresenceRequirement,
@@ -20,26 +19,21 @@ from ai_rpg_world.game_world.domain.action.declared_section_access import Declar
 from ai_rpg_world.game_world.domain.action.delivery import Delivery
 from ai_rpg_world.game_world.domain.action.manner import Manner
 from ai_rpg_world.game_world.domain.action.speech import SpeechContent, SpeechReach
+from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason, WaitReason
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.exception.action_exception import NoDeliveriesException
-from ai_rpg_world.game_world.domain.exception.trigger_exception import (
-    ArgumentNotInTriggerException,
-    ItemNotInTriggerException,
-    SubjectNotInTriggerException,
-)
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId
-from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
 
 
-class _BuiltInAttempt:
+class _BuiltInAttempt(TriggerAnswersNothingByDefault):
     actor: PersonId
     _KIND: ClassVar[ActionKind]
 
@@ -64,16 +58,10 @@ class _BuiltInAttempt:
     def person_as(self, kind: SubjectKind) -> PersonId:
         if kind is SubjectKind.ACTOR:
             return self.actor
-        raise SubjectNotInTriggerException(f"{self!r} does not answer {kind.name}")
-
-    def this_item(self) -> ItemInstanceId:
-        raise ItemNotInTriggerException(f"{self!r} does not answer the item")
+        return super().person_as(kind)
 
     def acting_person(self) -> PersonId | NoActingPerson:
         return self.actor
-
-    def argument(self, name: ArgumentName) -> TextArgumentValue | ItemInstanceId:
-        raise ArgumentNotInTriggerException(f"{self!r} does not answer the argument {name.value!r}")
 
     def fall_cause_for(self, victim: PersonId) -> FallCause:
         return fall_cause_from(self.acting_person(), victim)
