@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     NotEnoughItemsOfSpecException,
 )
 from ai_rpg_world.game_world.domain.exception.person_inventory_exception import (
+    HeldItemsExceedHandsException,
     ItemNotHeldException,
     ItemNotPackedException,
     PackIsEmptyException,
@@ -118,25 +119,39 @@ class PersonInventoryMemento:
 
 
 class PersonInventory(AggregateRoot[PersonInventoryEvent]):
-    def __init__(self, person_id: PersonId, capacity: Capacity) -> None:
+    def __init__(
+        self,
+        person_id: PersonId,
+        capacity: Capacity,
+        *,
+        gold: Gold,
+        held: tuple[HeldItem, ...],
+        packed: tuple[PackedItem, ...],
+    ) -> None:
         super().__init__()
+        carried = [held_item.item for held_item in held] + [packed_item.item for packed_item in packed]
+        if len(set(carried)) != len(carried):
+            raise ItemAlreadyCarriedException(f"{person_id.value} carries an item twice")
+        if len(carried) > capacity.value:
+            raise InventoryFullException(f"{person_id.value} carries {len(carried)} items over {capacity.value}")
+        if sum(held_item.hands_needed.value for held_item in held) > _HANDS:
+            raise HeldItemsExceedHandsException(f"{person_id.value} holds more than {_HANDS} hands can")
         self._person_id = person_id
         self._capacity = capacity
-        self._packed: list[ItemInstanceId] = []
-        self._held: list[_ItemInHand] = []
-        self._specs: dict[ItemInstanceId, ItemSpecId] = {}
-        self._gold = Gold(0)
+        self._packed = [packed_item.item for packed_item in packed]
+        self._held = [_ItemInHand(held_item.item, held_item.hands_needed) for held_item in held]
+        self._specs: dict[ItemInstanceId, ItemSpecId] = {held_item.item: held_item.spec for held_item in held} | {
+            packed_item.item: packed_item.spec for packed_item in packed
+        }
+        self._gold = gold
+
+    @classmethod
+    def start(cls, person_id: PersonId, capacity: Capacity) -> PersonInventory:
+        return cls(person_id, capacity, gold=Gold(0), held=(), packed=())
 
     @classmethod
     def from_memento(cls, memento: PersonInventoryMemento, design: WorldDesign) -> PersonInventory:
-        inventory = cls(memento.person_id, memento.capacity)
-        inventory._held = [_ItemInHand(held.item, held.hands_needed) for held in memento.held]
-        inventory._packed = [packed.item for packed in memento.packed]
-        inventory._specs = {held.item: held.spec for held in memento.held} | {
-            packed.item: packed.spec for packed in memento.packed
-        }
-        inventory._gold = memento.gold
-        return inventory
+        return cls(memento.person_id, memento.capacity, gold=memento.gold, held=memento.held, packed=memento.packed)
 
     @property
     def person_id(self) -> PersonId:

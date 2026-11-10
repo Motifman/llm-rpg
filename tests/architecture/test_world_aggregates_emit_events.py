@@ -367,7 +367,7 @@ def _item(lasts: Lasts | LastsIndefinitely = LastsIndefinitely()) -> Item:
 
 
 def _ground(*items: ItemInstanceId) -> GroundItems:
-    ground = GroundItems(_PLAZA.spot_id)
+    ground = GroundItems.start(_PLAZA.spot_id)
     for item in items:
         ground.place(item)
     _cleared(ground)
@@ -375,7 +375,7 @@ def _ground(*items: ItemInstanceId) -> GroundItems:
 
 
 def _inventory(*items: ItemInstanceId, gold: int = 0) -> PersonInventory:
-    inventory = PersonInventory(_ALICE, Capacity(5))
+    inventory = PersonInventory.start(_ALICE, Capacity(5))
     for item in items:
         inventory.receive(item, _LANTERN_SPEC)
     inventory.earn(Gold(gold))
@@ -521,10 +521,10 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "GroundItems.place": lambda: _with(_ground(), lambda g: g.place(_LANTERN)),
     "GroundItems.take": lambda: _with(_ground(_LANTERN), lambda g: g.take(_LANTERN)),
     "SpotSearchProgress.record_search": lambda: _with(
-        SpotSearchProgress(_PLAZA.spot_id), lambda s: s.record_search(_ALICE)
+        SpotSearchProgress.start(_PLAZA.spot_id), lambda s: s.record_search(_ALICE)
     ),
     "SpotSearchProgress.mark_found": lambda: _with(
-        SpotSearchProgress(_PLAZA.spot_id), lambda s: s.mark_found(_FOUNTAIN_COIN, _ALICE)
+        SpotSearchProgress.start(_PLAZA.spot_id), lambda s: s.mark_found(_FOUNTAIN_COIN, _ALICE)
     ),
     "PersonInventory.receive": lambda: _with(_inventory(), lambda i: i.receive(_LANTERN, _LANTERN_SPEC)),
     "PersonInventory.give_up": lambda: _with(_inventory(_LANTERN), lambda i: i.give_up(_LANTERN)),

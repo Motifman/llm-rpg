@@ -410,13 +410,13 @@ class TestItemMementoAgainstDesign:
             Item.from_memento(memento, _design_with(_lantern()))
 
     def test_value_not_fitting_the_key_kind_is_refused(self) -> None:
-        """選択の鍵 wick に数の値を持つ memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        """選択の鍵 wick に数の値を持つ memento を作り直すと、StateValueMismatchesKindException を投げる。"""
         memento = _lantern_memento(
             ItemStateKeyValue(_WICK.key, CountValue(Count(1))),
             ItemStateKeyValue(_OIL.key, CountValue(Count(1))),
         )
 
-        with pytest.raises(MementoDoesNotMatchDesignException):
+        with pytest.raises(StateValueMismatchesKindException):
             Item.from_memento(memento, _design_with(_lantern()))
 
 

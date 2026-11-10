@@ -7,7 +7,11 @@ from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
-from ai_rpg_world.game_world.domain.exception.world_records_exception import DiscoverableElsewhereException
+from ai_rpg_world.game_world.domain.exception.world_records_exception import (
+    DiscoverableElsewhereException,
+    OnceInWorldFoundByManyException,
+    SearchCountIsZeroException,
+)
 from ai_rpg_world.game_world.domain.value_object import Count, PersonId, SpotId
 from ai_rpg_world.game_world.domain.value_object.discoverable_id import DiscoverableId
 
@@ -64,21 +68,42 @@ class SpotSearchProgressMemento:
 
 
 class SpotSearchProgress(AggregateRoot[SpotSearchProgressEvent]):
-    def __init__(self, spot_id: SpotId) -> None:
+    def __init__(
+        self,
+        spot_id: SpotId,
+        *,
+        search_counts: frozenset[PersonSearchCount],
+        finders: frozenset[DiscoverableFinder],
+        discoverables_here: tuple[DiscoverableDeclaration, ...],
+    ) -> None:
         super().__init__()
+        for search_count in search_counts:
+            if search_count.count == Count(0):
+                raise SearchCountIsZeroException(f"{search_count.person.value} has searched {spot_id.value} 0 times")
         self._spot_id = spot_id
-        self._search_counts: dict[PersonId, Count] = {}
+        self._search_counts = {search_count.person: search_count.count for search_count in search_counts}
         self._finders: dict[DiscoverableId, frozenset[PersonId]] = {}
+        for found in finders:
+            self._finders[found.discoverable] = self._finders.get(found.discoverable, frozenset()) | {found.finder}
+        declared = {discoverable.discoverable_id: discoverable for discoverable in discoverables_here}
+        for discoverable_id, people in self._finders.items():
+            if discoverable_id not in declared:
+                raise DiscoverableElsewhereException(f"{discoverable_id.value} is not declared at {spot_id.value}")
+            if not declared[discoverable_id].finding.can_be_found_by_all_of(people):
+                raise OnceInWorldFoundByManyException(f"{discoverable_id.value} is found by {len(people)} people")
+
+    @classmethod
+    def start(cls, spot_id: SpotId) -> SpotSearchProgress:
+        return cls(spot_id, search_counts=frozenset(), finders=frozenset(), discoverables_here=())
 
     @classmethod
     def from_memento(cls, memento: SpotSearchProgressMemento, design: WorldDesign) -> SpotSearchProgress:
-        progress = cls(memento.spot_id)
-        progress._search_counts = {search_count.person: search_count.count for search_count in memento.search_counts}
-        for found in memento.finders:
-            progress._finders[found.discoverable] = progress._finders.get(found.discoverable, frozenset()) | {
-                found.finder
-            }
-        return progress
+        return cls(
+            memento.spot_id,
+            search_counts=memento.search_counts,
+            finders=memento.finders,
+            discoverables_here=design.discoverables_at(memento.spot_id),
+        )
 
     @property
     def spot_id(self) -> SpotId:

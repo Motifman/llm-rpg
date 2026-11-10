@@ -113,30 +113,48 @@ class ObjectStateMemento:
 
 
 class ObjectState(AggregateRoot[ObjectStateEvent]):
-    def __init__(self, declaration: ObjectDeclaration, now: WorldTick) -> None:
+    def __init__(
+        self,
+        declaration: ObjectDeclaration,
+        *,
+        values: frozenset[ObjectStateKeyValue],
+        stock_levels: frozenset[ObjectStockLevel],
+        revealed: bool,
+    ) -> None:
         super().__init__()
+        self._values = {key_value.key: key_value.value for key_value in values}
+        self._stocks = {level.key: _StockLevel(level.amount, level.counted_from) for level in stock_levels}
+        _require_matches(declaration, self._values, self._stocks)
         self._declaration = declaration
-        self._values: dict[StateKeyId, StateValue] = {}
-        self._stocks: dict[StateKeyId, _StockLevel] = {}
-        for state_key in declaration.state_keys:
-            self._store(state_key, state_key.initial, now)
-        self._revealed = not declaration.appearance.hidden_until_revealed
+        self._revealed = revealed
 
     @classmethod
     def from_declaration(cls, declaration: ObjectDeclaration, now: WorldTick) -> ObjectState:
-        return cls(declaration, now)
+        values = frozenset(
+            ObjectStateKeyValue(state_key.key, state_key.initial)
+            for state_key in declaration.state_keys
+            if not isinstance(state_key.initial, StockValue)
+        )
+        stock_levels = frozenset(
+            ObjectStockLevel(state_key.key, state_key.initial.amount, now)
+            for state_key in declaration.state_keys
+            if isinstance(state_key.initial, StockValue)
+        )
+        return cls(
+            declaration,
+            values=values,
+            stock_levels=stock_levels,
+            revealed=not declaration.appearance.hidden_until_revealed,
+        )
 
     @classmethod
     def from_memento(cls, memento: ObjectStateMemento, design: WorldDesign) -> ObjectState:
-        declaration = design.nouns.object_of(memento.object_id)
-        values = {key_value.key: key_value.value for key_value in memento.values}
-        stocks = {level.key: _StockLevel(level.amount, level.counted_from) for level in memento.stock_levels}
-        _require_matches(declaration, values, stocks)
-        state = cls(declaration, WorldTick(0))
-        state._values = values
-        state._stocks = stocks
-        state._revealed = memento.revealed
-        return state
+        return cls(
+            design.nouns.object_of(memento.object_id),
+            values=memento.values,
+            stock_levels=memento.stock_levels,
+            revealed=memento.revealed,
+        )
 
     @property
     def object_id(self) -> ObjectId:
@@ -263,6 +281,6 @@ def _require_matches(
     for state_key in declaration.state_keys:
         value = StockValue(stocks[state_key.key].amount) if state_key.key in stocks else values[state_key.key]
         if not state_key.kind.can_hold(value):
-            raise MementoDoesNotMatchDesignException(
+            raise StateValueMismatchesKindException(
                 f"{value!r} of {declaration.object_id.value} does not fit {state_key.kind!r} of {state_key.key.value}"
             )

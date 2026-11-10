@@ -136,10 +136,10 @@ class WorldInMemory:
         return self.clock_aggregate
 
     def ground_items_at(self, spot: SpotId) -> GroundItems:
-        return self.ground_items.setdefault(spot, GroundItems(spot))
+        return self.ground_items.setdefault(spot, GroundItems.start(spot))
 
     def search_progress_at(self, spot: SpotId) -> SpotSearchProgress:
-        return self.search_progresses.setdefault(spot, SpotSearchProgress(spot))
+        return self.search_progresses.setdefault(spot, SpotSearchProgress.start(spot))
 
     def missed_notices_of(self, person: PersonId) -> MissedNotices:
         return self.missed_notices.setdefault(person, MissedNotices(person))

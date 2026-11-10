@@ -87,17 +87,27 @@ class ItemMemento:
 
 
 class Item(AggregateRoot[ItemEvent]):
-    def __init__(self, item_id: ItemInstanceId, spec: ItemSpecDeclaration, came_at: WorldTick) -> None:
+    def __init__(
+        self,
+        item_id: ItemInstanceId,
+        spec: ItemSpecDeclaration,
+        came_at: WorldTick,
+        *,
+        values: frozenset[ItemStateKeyValue],
+        in_world: bool,
+    ) -> None:
         super().__init__()
+        self._values = {key_value.key: key_value.value for key_value in values}
+        _require_matches(spec, self._values, item_id)
         self._item_id = item_id
         self._spec = spec
         self._came_at = came_at
-        self._values: dict[StateKeyId, StateValue] = {state_key.key: state_key.initial for state_key in spec.state_keys}
-        self._in_world = True
+        self._in_world = in_world
 
     @classmethod
     def come_into_world(cls, item_id: ItemInstanceId, spec: ItemSpecDeclaration, now: WorldTick) -> Item:
-        item = cls(item_id, spec, now)
+        initial = frozenset(ItemStateKeyValue(state_key.key, state_key.initial) for state_key in spec.state_keys)
+        item = cls(item_id, spec, now, values=initial, in_world=True)
         item.add_event(
             ItemCameIntoWorldEvent(**new_event_stamp(), item=item_id, spec_id=spec.item_spec_id, came_at=now)
         )
@@ -105,13 +115,13 @@ class Item(AggregateRoot[ItemEvent]):
 
     @classmethod
     def from_memento(cls, memento: ItemMemento, design: WorldDesign) -> Item:
-        spec = design.nouns.item_spec_of(memento.spec_id)
-        values = {key_value.key: key_value.value for key_value in memento.values}
-        _require_matches(spec, values, memento.item_id)
-        item = cls(memento.item_id, spec, memento.came_at)
-        item._values = values
-        item._in_world = memento.in_world
-        return item
+        return cls(
+            memento.item_id,
+            design.nouns.item_spec_of(memento.spec_id),
+            memento.came_at,
+            values=memento.values,
+            in_world=memento.in_world,
+        )
 
     @property
     def item_id(self) -> ItemInstanceId:
@@ -183,6 +193,6 @@ def _require_matches(spec: ItemSpecDeclaration, values: dict[StateKeyId, StateVa
         )
     for state_key in spec.state_keys:
         if not state_key.kind.can_hold(values[state_key.key]):
-            raise MementoDoesNotMatchDesignException(
+            raise StateValueMismatchesKindException(
                 f"{values[state_key.key]!r} of {item.value} does not fit {state_key.kind!r} of {state_key.key.value}"
             )

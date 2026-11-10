@@ -20,6 +20,9 @@ class Finding(Enum):
             return bool(finders)
         return person in finders
 
+    def can_be_found_by_all_of(self, finders: frozenset[PersonId]) -> bool:
+        return self is Finding.ONCE_PER_PERSON or len(finders) <= 1
+
 
 @final
 @dataclass(frozen=True)

@@ -68,7 +68,7 @@ def vitals(person: PersonId, hp: int = 10, maximum: int = 10) -> PersonVitals:
 
 
 def inventory(person: PersonId, capacity: int = 10) -> PersonInventory:
-    return PersonInventory(person, Capacity(capacity))
+    return PersonInventory.start(person, Capacity(capacity))
 
 
 @final

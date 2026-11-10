@@ -47,16 +47,20 @@ class GroundItemsMemento:
 
 
 class GroundItems(AggregateRoot[GroundItemsEvent]):
-    def __init__(self, spot_id: SpotId) -> None:
+    def __init__(self, spot_id: SpotId, *, items: tuple[ItemInstanceId, ...]) -> None:
         super().__init__()
+        if len(set(items)) != len(items):
+            raise GroundItemAlreadyPlacedException(f"an item lies twice on the ground at {spot_id.value}")
         self._spot_id = spot_id
-        self._items: list[ItemInstanceId] = []
+        self._items = list(items)
+
+    @classmethod
+    def start(cls, spot_id: SpotId) -> GroundItems:
+        return cls(spot_id, items=())
 
     @classmethod
     def from_memento(cls, memento: GroundItemsMemento, design: WorldDesign) -> GroundItems:
-        ground = cls(memento.spot_id)
-        ground._items = list(memento.items)
-        return ground
+        return cls(memento.spot_id, items=memento.items)
 
     @property
     def spot_id(self) -> SpotId:

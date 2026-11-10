@@ -512,18 +512,18 @@ class TestObjectStateMementoAgainstDesign:
             ObjectState.from_memento(memento, _design_with(_well(_water())))
 
     def test_value_not_fitting_the_key_kind_is_refused(self) -> None:
-        """旗の鍵 covered に数の値を持つ memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        """旗の鍵 covered に数の値を持つ memento を作り直すと、StateValueMismatchesKindException を投げる。"""
         memento = _well_memento((ObjectStateKeyValue(_COVERED.key, CountValue(Count(1))),))
 
-        with pytest.raises(MementoDoesNotMatchDesignException):
+        with pytest.raises(StateValueMismatchesKindException):
             ObjectState.from_memento(memento, _design_with(_well(_COVERED)))
 
     def test_stock_over_capacity_is_refused(self) -> None:
-        """入れ物が 5 の在庫 water に 6 を持つ memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        """入れ物が 5 の在庫 water に 6 を持つ memento を作り直すと、StateValueMismatchesKindException を投げる。"""
         water = _water(capacity=5)
         memento = _well_memento((), (ObjectStockLevel(water.key, Count(6), WorldTick(0)),))
 
-        with pytest.raises(MementoDoesNotMatchDesignException):
+        with pytest.raises(StateValueMismatchesKindException):
             ObjectState.from_memento(memento, _design_with(_well(water)))
 
 
