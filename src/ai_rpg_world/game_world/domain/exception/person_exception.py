@@ -43,3 +43,11 @@ class AlreadyInAnotherGroupOfGroupingException(GameWorldDomainException):
 
 class NotInGroupException(GameWorldDomainException):
     error_code = "GAME_WORLD.NOT_IN_GROUP"
+
+
+class HitPointsDoNotMatchLifeStateException(GameWorldDomainException):
+    error_code = "GAME_WORLD.HIT_POINTS_DO_NOT_MATCH_LIFE_STATE"
+
+
+class StatusEffectKindRepeatedException(GameWorldDomainException):
+    error_code = "GAME_WORLD.STATUS_EFFECT_KIND_REPEATED"

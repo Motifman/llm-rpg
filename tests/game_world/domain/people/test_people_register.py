@@ -4,14 +4,24 @@ import pytest
 
 from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
 from ai_rpg_world.game_world.domain.declaration.character.character_declaration import UsesWorldDefault
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.people_register_exception import (
     CharacterListedTwiceException,
     PersonAlreadyNamedException,
     PersonNotInRegisterException,
     PersonNotNamedException,
 )
-from ai_rpg_world.game_world.domain.people import PeopleRegister, PersonHandle, PersonNamedEvent
+from ai_rpg_world.game_world.domain.people import (
+    PeopleRegister,
+    PeopleRegisterMemento,
+    PersonHandle,
+    PersonName,
+    PersonNamedEvent,
+)
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, PersonId, SpotId, WorldId
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_design_for_tests import compose_world, nouns, spot
 
 _WORLD = WorldId("island")
 _ALICE = PersonId("alice")
@@ -67,6 +77,15 @@ class TestFromCharacters:
         """同じ人の宣言を 2 回渡すと CharacterListedTwiceException を投げる。"""
         with pytest.raises(CharacterListedTwiceException):
             PeopleRegister.from_characters(_WORLD, (_character(_ALICE), _character(_ALICE)))
+
+
+class TestConstructor:
+    """PeopleRegister のコンストラクタが、名簿に無い人の名前を受け取らないことを保証する。"""
+
+    def test_name_of_person_not_in_register_is_refused(self) -> None:
+        """登場人物が alice だけの名簿に、stranger の名前を渡して作ると PersonNotInRegisterException を投げる。"""
+        with pytest.raises(PersonNotInRegisterException):
+            PeopleRegister(_WORLD, (_character(_ALICE),), {_STRANGER: DisplayName("旅人")})
 
 
 class TestName:
@@ -138,3 +157,63 @@ class TestNameOfUnnamedPerson:
 
         with pytest.raises(PersonNotNamedException):
             register.name_of(_BOB)
+
+
+_DESIGN = compose_world(
+    nouns(
+        spots=(spot("beach"),),
+        characters=(
+            _character(_BOB, "赤い帽子の人"),
+            _character(_ALICE, "背の高い人"),
+            _character(_CAROL, "杖をついた人"),
+        ),
+    )
+)
+
+
+class TestPeopleRegisterMemento:
+    """PeopleRegister を memento から作り直すと、名前が元と同じになり、番号と見た目は宣言から同じに作られ、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_register_answers_like_the_original(self) -> None:
+        """alice をアリスと名付けたあと作り直すと、memento も名前・番号・見た目の答えも元と同じで、carol はまだ名前が無い。"""
+        register = _register()
+        register.name(_ALICE, DisplayName("アリス"))
+
+        rebuilt = rebuilt_from_memento(register, _DESIGN)
+
+        assert rebuilt.memento() == register.memento()
+        assert rebuilt.memento() != _register().memento()
+        assert rebuilt.world == _WORLD
+        assert rebuilt.name_of(_ALICE) == DisplayName("アリス")
+        assert rebuilt.handle_of(_ALICE) == register.handle_of(_ALICE)
+        assert rebuilt.appearance_of(_CAROL) == DescriptionText("杖をついた人")
+        with pytest.raises(PersonNotNamedException):
+            rebuilt.name_of(_CAROL)
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """名付けたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        register = _register()
+        register.name(_ALICE, DisplayName("アリス"))
+
+        assert rebuilt_from_memento(register, _DESIGN).get_events() == []
+
+
+class TestPeopleRegisterMementoRefusals:
+    """PeopleRegister の memento が、宣言に無い人の名前や同じ人の名前の重なりを持つとき、作り直しを断ることを保証する。"""
+
+    def test_name_of_person_not_declared_is_refused(self) -> None:
+        """宣言に無い stranger の名前を持つ memento から作り直すと、UndeclaredNounException を投げる。"""
+        memento = PeopleRegisterMemento(
+            world_id=_WORLD, names=frozenset({PersonName(_STRANGER, DisplayName("謎の人"))})
+        )
+
+        with pytest.raises(UndeclaredNounException):
+            PeopleRegister.from_memento(memento, _DESIGN)
+
+    def test_two_names_for_one_person_is_refused(self) -> None:
+        """alice にアリスとアリサの 2 つの名前がある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            PeopleRegisterMemento(
+                world_id=_WORLD,
+                names=frozenset({PersonName(_ALICE, DisplayName("アリス")), PersonName(_ALICE, DisplayName("アリサ"))}),
+            )
