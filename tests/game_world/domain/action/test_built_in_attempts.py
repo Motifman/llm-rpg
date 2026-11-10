@@ -291,6 +291,34 @@ class TestSubjectsAndItemsOfBuiltInAttempts:
             attempt.this_item()
 
 
+    def test_unanswered_subject_message_names_the_attempt_and_the_kind(self) -> None:
+        """探す行為に TARGET を尋ねると、文は「<行為の repr> does not answer TARGET」。"""
+        attempt = SpotSearchAttempt(ALICE)
+
+        with pytest.raises(SubjectNotInTriggerException) as raised:
+            attempt.person_as(SubjectKind.TARGET)
+
+        assert str(raised.value) == f"{attempt!r} does not answer TARGET"
+
+    def test_unanswered_item_message_names_the_attempt(self) -> None:
+        """探す行為に品物を尋ねると、文は「<行為の repr> does not answer the item」。"""
+        attempt = SpotSearchAttempt(ALICE)
+
+        with pytest.raises(ItemNotInTriggerException) as raised:
+            attempt.this_item()
+
+        assert str(raised.value) == f"{attempt!r} does not answer the item"
+
+    def test_unanswered_argument_message_names_the_attempt_and_the_argument(self) -> None:
+        """探す行為に引数 words を尋ねると、文は「<行為の repr> does not answer the argument 'words'」。"""
+        attempt = SpotSearchAttempt(ALICE)
+
+        with pytest.raises(ArgumentNotInTriggerException) as raised:
+            attempt.argument(ArgumentName("words"))
+
+        assert str(raised.value) == f"{attempt!r} does not answer the argument 'words'"
+
+
 class TestHandOver:
     """渡す行為 (ItemHandOverAttempt) の届け先と、形の誤りを保証する。"""
 

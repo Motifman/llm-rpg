@@ -186,6 +186,25 @@ class TestPropertiesReadFromTheDeclaration:
             attempt.this_item()
 
 
+    def test_unanswered_subject_message_names_the_attempt_and_the_kind(self) -> None:
+        """物への操作に TARGET を尋ねると、文は「<操作の repr> does not answer TARGET」。"""
+        attempt = ObjectInteractionAttempt(ALICE, LEVER, InteractionForTests(InteractionId("pull")), {}, Openly())
+
+        with pytest.raises(SubjectNotInTriggerException) as raised:
+            attempt.person_as(SubjectKind.TARGET)
+
+        assert str(raised.value) == f"{attempt!r} does not answer TARGET"
+
+    def test_unanswered_item_message_names_the_attempt(self) -> None:
+        """物への操作に品物を尋ねると、文は「<操作の repr> does not answer the item」。"""
+        attempt = ObjectInteractionAttempt(ALICE, LEVER, InteractionForTests(InteractionId("pull")), {}, Openly())
+
+        with pytest.raises(ItemNotInTriggerException) as raised:
+            attempt.this_item()
+
+        assert str(raised.value) == f"{attempt!r} does not answer the item"
+
+
 class TestStealthily:
     """こっそり (Stealthily) 行えるのが、allows_stealth の操作だけであることを保証する。"""
 
@@ -257,6 +276,17 @@ class TestArguments:
 
         with pytest.raises(ArgumentNotInTriggerException):
             attempt.argument(WORDS)
+
+    def test_undeclared_argument_message_names_the_attempt_and_the_argument(self) -> None:
+        """宣言に無い引数 words を尋ねると、文は「<操作の repr> does not answer the argument 'words'」。"""
+        attempt = CarriedItemInteractionAttempt(
+            ALICE, NOTEBOOK, InteractionForTests(InteractionId("read")), {}, Openly()
+        )
+
+        with pytest.raises(ArgumentNotInTriggerException) as raised:
+            attempt.argument(WORDS)
+
+        assert str(raised.value) == f"{attempt!r} does not answer the argument 'words'"
 
     @pytest.mark.parametrize(
         "arguments",
