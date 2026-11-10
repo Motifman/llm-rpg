@@ -8,6 +8,11 @@ from ai_rpg_world.game_world.domain.declaration.character import (
     MembershipVisibility,
     NoSharedDescription,
 )
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import (
+    MementoDoesNotMatchDesignException,
+    RepeatedMementoKeyException,
+)
 from ai_rpg_world.game_world.domain.exception.person_exception import (
     AlreadyInAnotherGroupOfGroupingException,
     AlreadyInGroupException,
@@ -16,11 +21,15 @@ from ai_rpg_world.game_world.domain.exception.person_exception import (
 )
 from ai_rpg_world.game_world.domain.person import (
     GroupMembership,
+    GroupMembershipMemento,
     NotInAnyGroup,
+    PersonGroupInGrouping,
     PersonJoinedGroupEvent,
     PersonLeftGroupEvent,
 )
 from ai_rpg_world.game_world.domain.value_object import DisplayName, GroupId, GroupingId, PersonId, WorldId
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
 
 _WORLD = WorldId("island")
 _ALICE = PersonId("alice")
@@ -177,3 +186,77 @@ class TestQueries:
         assert not membership.is_member(_ALICE, _RED)
         assert membership.group_of(_ALICE, _TEAMS) == NotInAnyGroup()
         assert membership.members_of(_RED) == frozenset()
+
+
+_DESIGN = compose_world(
+    nouns(
+        spots=(spot("beach"),),
+        characters=(character("alice", "beach"), character("bob", "beach")),
+        groupings=(_TEAMS, _ROLES),
+        groups=(_RED, _BLUE, _KEEPER, _CREW),
+    )
+)
+
+
+def _memento(*groups: PersonGroupInGrouping) -> GroupMembershipMemento:
+    return GroupMembershipMemento(world_id=_WORLD, groups=frozenset(groups))
+
+
+class TestGroupMembershipMemento:
+    """GroupMembership を memento から作り直すと、組分けごとの所属が元と同じになり、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_membership_answers_like_the_original(self) -> None:
+        """alice が red と keeper、bob が blue に入ってから blue を抜けたあと作り直すと、memento も所属の答えも元と同じ。"""
+        membership = _membership({_ALICE: (_RED, _KEEPER)})
+        membership.join(_BOB, _BLUE)
+        membership.leave(_BOB, _BLUE)
+
+        rebuilt = rebuilt_from_memento(membership, _DESIGN)
+
+        assert rebuilt.memento() == membership.memento()
+        assert rebuilt.memento() != _membership().memento()
+        assert rebuilt.world == _WORLD
+        assert rebuilt.group_of(_ALICE, _TEAMS) == GroupId("red")
+        assert rebuilt.group_of(_ALICE, _ROLES) == GroupId("keeper")
+        assert rebuilt.group_of(_BOB, _TEAMS) == NotInAnyGroup()
+        assert rebuilt.members_of(_RED) == frozenset({_ALICE})
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """集団に入ったあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        membership = _membership()
+        membership.join(_ALICE, _RED)
+
+        assert rebuilt_from_memento(membership, _DESIGN).get_events() == []
+
+
+class TestGroupMembershipMementoRefusals:
+    """GroupMembership の memento が、宣言と食い違う所属や同じ組分けの重なりを持つとき、作り直しを断ることを保証する。"""
+
+    def test_group_not_declared_is_refused(self) -> None:
+        """宣言に無い green に alice が入っている memento から作り直すと、UndeclaredNounException を投げる。"""
+        memento = _memento(PersonGroupInGrouping(_ALICE, GroupingId("teams"), GroupId("green")))
+
+        with pytest.raises(UndeclaredNounException):
+            GroupMembership.from_memento(memento, _DESIGN)
+
+    def test_person_not_declared_is_refused(self) -> None:
+        """宣言に無い carol が red に入っている memento から作り直すと、UndeclaredNounException を投げる。"""
+        memento = _memento(PersonGroupInGrouping(PersonId("carol"), GroupingId("teams"), GroupId("red")))
+
+        with pytest.raises(UndeclaredNounException):
+            GroupMembership.from_memento(memento, _DESIGN)
+
+    def test_group_of_another_grouping_is_refused(self) -> None:
+        """roles の集団 keeper を teams の所属として持つ memento から作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        memento = _memento(PersonGroupInGrouping(_ALICE, GroupingId("teams"), GroupId("keeper")))
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            GroupMembership.from_memento(memento, _DESIGN)
+
+    def test_two_groups_of_one_grouping_for_a_person_is_refused(self) -> None:
+        """alice が teams で red と blue の両方に入っている memento を作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            _memento(
+                PersonGroupInGrouping(_ALICE, GroupingId("teams"), GroupId("red")),
+                PersonGroupInGrouping(_ALICE, GroupingId("teams"), GroupId("blue")),
+            )
