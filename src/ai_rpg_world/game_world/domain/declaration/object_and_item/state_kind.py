@@ -13,7 +13,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item.state_value impo
     StockValue,
     WrittenText,
 )
-from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
+from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_exception import (
     ChoiceDuplicatedException,
     NoChoicesDeclaredException,
     StockCapacityBelowOneException,

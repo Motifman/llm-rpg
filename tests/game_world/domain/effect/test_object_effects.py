@@ -47,7 +47,7 @@ from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     CountBelowZeroException,
     InsufficientGoldException,
 )
-from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
+from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_exception import (
     StateKeyOfAnotherKindException,
     StateValueMismatchesKindException,
 )
