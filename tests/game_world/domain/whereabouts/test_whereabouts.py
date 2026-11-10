@@ -4,6 +4,8 @@ from collections.abc import Callable
 
 import pytest
 
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     OccupantAlreadyInSectionException,
     OccupantAlreadyPlacedException,
@@ -22,6 +24,7 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     OccupantEnteredSpotEvent,
     OccupantLeftSectionEvent,
     OccupantLeftSpotEvent,
+    OccupantLocation,
     OccupantPlacedEvent,
     OccupantRemovedEvent,
     OccupantTeleportedEvent,
@@ -31,10 +34,14 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     TravelBlockedEvent,
     TravelCancelledEvent,
     TravelInProgress,
+    TravelPosition,
     TravelStartedEvent,
     Whereabouts,
+    WhereaboutsMemento,
 )
 from tests.game_world.domain.whereabouts._builders import WORLD, path, section, spot, thing
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_design_for_tests import compose_world, nouns
 
 ALICE = PersonBody(PersonId("alice"))
 BOB = PersonBody(PersonId("bob"))
@@ -48,6 +55,7 @@ BENCH = section("bench", "plaza")
 STREET = path("street", "plaza", "well", ticks=2)
 LANE = path("lane", "well", "mine_entrance", ticks=1)
 NOBODY_DOWN: frozenset[PersonId] = frozenset()
+DESIGN = compose_world(nouns(spots=(PLAZA, WELL, MINE), passages=(STREET, LANE)))
 
 
 def _whereabouts(*placed: tuple[PersonBody | DepartedPerson, str]) -> Whereabouts:
@@ -536,3 +544,75 @@ class TestWhereaboutsRefusalLeavesNothingBehind:
 
         assert (whereabouts.location_of(ALICE), whereabouts.location_of(BOB)) == before
         assert whereabouts.get_events() == []
+
+
+class TestWhereaboutsMemento:
+    """Whereabouts を memento から作り直すと、区画の中にいる人も、移動の途中の人も元の居場所から続くことを保証する。"""
+
+    def test_traveller_rebuilt_halfway_continues_on_the_same_passage(self) -> None:
+        """2 tick の通りを 1 tick 歩いた人を作り直すと、通りの残り 1 tick から続き、次の小道を歩いて鉱山の入口に着く。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        route = Route(start=SpotId("plaza"), passages=(STREET, LANE))
+        whereabouts.start_travel(ALICE, route)
+        whereabouts.advance_travels(frozenset())
+
+        rebuilt = rebuilt_from_memento(whereabouts, DESIGN)
+
+        assert rebuilt.location_of(ALICE) == TravelInProgress(
+            route=route, passage_index=0, ticks_left_on_passage=Ticks(1), departed_from=SpotId("plaza")
+        )
+        rebuilt.advance_travels(frozenset())
+        assert rebuilt.location_of(ALICE) == TravelInProgress(
+            route=route, passage_index=1, ticks_left_on_passage=Ticks(1), departed_from=SpotId("well")
+        )
+        rebuilt.advance_travels(frozenset())
+        assert rebuilt.is_at(ALICE, MINE)
+
+    def test_rebuilt_whereabouts_answer_the_same(self) -> None:
+        """籠の中の人・移動中の人・去った人のいる居場所を作り直すと、memento も居場所の答えも元と同じになる。"""
+        departed = DepartedPerson(PersonId("carol"))
+        whereabouts = _whereabouts((ALICE, "plaza"), (BOB, "plaza"), (departed, "well"))
+        whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
+        whereabouts.start_travel(BOB, Route(start=SpotId("plaza"), passages=(STREET,)))
+
+        rebuilt = rebuilt_from_memento(whereabouts, DESIGN)
+
+        assert rebuilt.memento() == whereabouts.memento()
+        assert rebuilt.is_in_section(ALICE, LIFT)
+        assert rebuilt.location_of(BOB) == whereabouts.location_of(BOB)
+        assert rebuilt.is_at(departed, WELL)
+        assert rebuilt.world_id == WORLD
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """移動を始めたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
+
+        assert rebuilt_from_memento(whereabouts, DESIGN).get_events() == []
+
+    def test_memento_travelling_an_undeclared_passage_is_rejected(self) -> None:
+        """宣言に無い通路 tunnel を歩いている途中の memento から作り直すと UndeclaredNounException を投げる。"""
+        position = TravelPosition(
+            route_start=SpotId("plaza"),
+            route_passages=(PassageId("tunnel"),),
+            passage_index=0,
+            ticks_left_on_passage=Ticks(1),
+            departed_from=SpotId("plaza"),
+        )
+        memento = WhereaboutsMemento(world_id=WORLD, locations=frozenset({OccupantLocation(ALICE, position)}))
+
+        with pytest.raises(UndeclaredNounException):
+            Whereabouts.from_memento(memento, DESIGN)
+
+    def test_memento_with_one_occupant_at_two_places_is_rejected(self) -> None:
+        """同じ人が広場と井戸の 2 か所にいる memento は、作るときに RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            WhereaboutsMemento(
+                world_id=WORLD,
+                locations=frozenset(
+                    {
+                        OccupantLocation(ALICE, AtSpot(spot=SpotId("plaza"), section=OpenArea())),
+                        OccupantLocation(ALICE, AtSpot(spot=SpotId("well"), section=OpenArea())),
+                    }
+                ),
+            )

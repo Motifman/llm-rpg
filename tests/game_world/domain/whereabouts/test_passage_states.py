@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import (
+    MementoDoesNotMatchDesignException,
+    RepeatedMementoKeyException,
+)
 from ai_rpg_world.game_world.domain.exception.spot_declaration_exception import UndeclaredPassageStateException
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     PassageAlreadyRemovedException,
@@ -9,13 +14,18 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
 )
 from ai_rpg_world.game_world.domain.value_object import PassageId, PassageStateName
 from ai_rpg_world.game_world.domain.whereabouts import (
+    PassageCondition,
     PassageInState,
+    PassagePresence,
     PassageRemovedEvent,
     PassageRevealedEvent,
     PassageStateChangedEvent,
     PassageStates,
+    PassageStatesMemento,
 )
 from tests.game_world.domain.whereabouts._builders import CLOSED, OPEN, WORLD, door, path, spot
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_design_for_tests import compose_world, nouns
 
 CELLAR_DOOR = door("cellar_door", "hall", "cellar")
 STREET = path("street", "plaza", "hall")
@@ -25,6 +35,18 @@ SLIDE = path("slide", "hall", "beach", two_way=False)
 
 def _states() -> PassageStates:
     return PassageStates(WORLD, (CELLAR_DOOR, STREET, SECRET, SLIDE))
+
+
+_DESIGN = compose_world(
+    nouns(
+        spots=tuple(spot(name) for name in ("hall", "cellar", "plaza", "well", "beach")),
+        passages=(CELLAR_DOOR, STREET, SECRET, SLIDE),
+    )
+)
+
+
+def _conditions_of(states: PassageStates) -> set[PassageCondition]:
+    return set(states.memento().passages)
 
 
 class TestPassageStatesInitially:
@@ -191,3 +213,77 @@ class TestPassageInState:
         """通路の宣言に無い状態名で PassageInState を作ると UndeclaredPassageStateException を投げる。"""
         with pytest.raises(UndeclaredPassageStateException):
             PassageInState(passage=CELLAR_DOOR, state=PassageStateName("ajar"))
+
+
+class TestPassageStatesMemento:
+    """PassageStates を memento から作り直すと、通路ごとの状態と、現れたか消えたかが元と同じになることを保証する。"""
+
+    def test_rebuilt_states_answer_the_same(self) -> None:
+        """扉を開け、隠し通路を現し、滑り台を消した状態を作り直すと、memento も通れるかの答えも元と同じになる。"""
+        states = _states()
+        states.change_state(CELLAR_DOOR, OPEN)
+        states.reveal(SECRET)
+        states.remove(SLIDE)
+
+        rebuilt = rebuilt_from_memento(states, _DESIGN)
+
+        assert rebuilt.memento() == states.memento()
+        assert (rebuilt.is_traversable(CELLAR_DOOR), rebuilt.is_traversable(SECRET)) == (True, True)
+        assert rebuilt.closed_passages() == frozenset({PassageId("slide")})
+        with pytest.raises(PassageAlreadyRemovedException):
+            rebuilt.reveal(SLIDE)
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """状態を変えたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        states = _states()
+        states.change_state(CELLAR_DOOR, OPEN)
+
+        assert rebuilt_from_memento(states, _DESIGN).get_events() == []
+
+    def test_memento_with_an_undeclared_passage_is_rejected(self) -> None:
+        """宣言に無い通路 well_tunnel を持つ memento から作り直すと UndeclaredNounException を投げる。"""
+        memento = PassageStatesMemento(
+            world_id=WORLD,
+            passages=frozenset(
+                {*_conditions_of(_states()), PassageCondition(PassageId("well_tunnel"), OPEN, PassagePresence.PRESENT)}
+            ),
+        )
+
+        with pytest.raises(UndeclaredNounException):
+            PassageStates.from_memento(memento, _DESIGN)
+
+    def test_memento_missing_a_declared_passage_is_rejected(self) -> None:
+        """宣言にある滑り台が memento に無いと、初めの状態で埋めずに MementoDoesNotMatchDesignException を投げる。"""
+        memento = PassageStatesMemento(
+            world_id=WORLD,
+            passages=frozenset(c for c in _conditions_of(_states()) if c.passage != PassageId("slide")),
+        )
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            PassageStates.from_memento(memento, _DESIGN)
+
+    def test_memento_with_an_undeclared_state_is_rejected(self) -> None:
+        """扉の宣言に無い状態 ajar を持つ memento から作り直すと UndeclaredPassageStateException を投げる。"""
+        others = {c for c in _conditions_of(_states()) if c.passage != PassageId("cellar_door")}
+        memento = PassageStatesMemento(
+            world_id=WORLD,
+            passages=frozenset(
+                {*others, PassageCondition(PassageId("cellar_door"), PassageStateName("ajar"), PassagePresence.PRESENT)}
+            ),
+        )
+
+        with pytest.raises(UndeclaredPassageStateException):
+            PassageStates.from_memento(memento, _DESIGN)
+
+    def test_memento_with_one_passage_twice_is_rejected(self) -> None:
+        """扉が開いていると閉じているの 2 つで書かれた memento は、作るときに RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            PassageStatesMemento(
+                world_id=WORLD,
+                passages=frozenset(
+                    {
+                        PassageCondition(PassageId("cellar_door"), OPEN, PassagePresence.PRESENT),
+                        PassageCondition(PassageId("cellar_door"), CLOSED, PassagePresence.PRESENT),
+                    }
+                ),
+            )

@@ -1,10 +1,39 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, final
+
 from ai_rpg_world.eventing import AggregateRoot, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.spot import SpotAtmosphere, SpotDeclaration
+from ai_rpg_world.game_world.domain.exception.game_world_exception import (
+    MementoDoesNotMatchDesignException,
+    RepeatedMementoKeyException,
+)
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import UnknownSpotException
-from ai_rpg_world.game_world.domain.value_object import WorldId
+from ai_rpg_world.game_world.domain.value_object import SpotId, WorldId
 from ai_rpg_world.game_world.domain.whereabouts.spot_atmosphere_events import SpotAtmosphereChangedEvent
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+
+
+@final
+@dataclass(frozen=True)
+class AtmosphereAtSpot:
+    spot: SpotId
+    atmosphere: SpotAtmosphere
+
+
+@final
+@dataclass(frozen=True)
+class SpotAtmospheresMemento:
+    world_id: WorldId
+    atmospheres: frozenset[AtmosphereAtSpot]
+
+    def __post_init__(self) -> None:
+        spots = [entry.spot for entry in self.atmospheres]
+        if len(set(spots)) != len(spots):
+            raise RepeatedMementoKeyException(f"world {self.world_id} has a spot with two atmospheres")
 
 
 class SpotAtmospheres(AggregateRoot[SpotAtmosphereChangedEvent]):
@@ -13,9 +42,27 @@ class SpotAtmospheres(AggregateRoot[SpotAtmosphereChangedEvent]):
         self._world_id = world_id
         self._atmospheres = {declared.spot_id: declared.atmosphere for declared in spots}
 
+    @classmethod
+    def from_memento(cls, memento: SpotAtmospheresMemento, design: WorldDesign) -> SpotAtmospheres:
+        remembered = {design.nouns.spot_of(entry.spot).spot_id: entry.atmosphere for entry in memento.atmospheres}
+        declared = design.nouns.all_spots()
+        if remembered.keys() != {spot.spot_id for spot in declared}:
+            raise MementoDoesNotMatchDesignException(
+                f"SpotAtmospheres of {memento.world_id.value} does not have every declared spot"
+            )
+        atmospheres = cls(memento.world_id, declared)
+        atmospheres._atmospheres = remembered
+        return atmospheres
+
     @property
     def world_id(self) -> WorldId:
         return self._world_id
+
+    def memento(self) -> SpotAtmospheresMemento:
+        return SpotAtmospheresMemento(
+            world_id=self._world_id,
+            atmospheres=frozenset(AtmosphereAtSpot(spot, atmosphere) for spot, atmosphere in self._atmospheres.items()),
+        )
 
     def change(self, spot: SpotDeclaration, atmosphere: SpotAtmosphere) -> None:
         before = self.atmosphere_of(spot)

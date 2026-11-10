@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
     AbstainNotAllowedException,
     BallotAlreadyCastException,
@@ -17,6 +18,9 @@ from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
     VoterNotInDecisionException,
 )
 from ai_rpg_world.game_world.domain.value_object import GroupDecisionId, PersonId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -94,6 +98,21 @@ GroupDecisionEvent = (
 )
 
 
+@final
+@dataclass(frozen=True)
+class GroupDecisionMemento:
+    decision_id: GroupDecisionId
+    open: bool
+    voters: frozenset[PersonId]
+    choices: frozenset[PersonId]
+    ballots: frozenset[Ballot]
+
+    def __post_init__(self) -> None:
+        voters = [ballot.voter for ballot in self.ballots]
+        if len(set(voters)) != len(voters):
+            raise RepeatedMementoKeyException(f"{self.decision_id} has two ballots of one voter")
+
+
 class GroupDecision(AggregateRoot[GroupDecisionEvent]):
     def __init__(self, declaration: GroupDecisionDeclaration) -> None:
         super().__init__()
@@ -104,9 +123,27 @@ class GroupDecision(AggregateRoot[GroupDecisionEvent]):
         self._choices: set[PersonId] = set()
         self._ballots: dict[PersonId, VoteFor | Abstain] = {}
 
+    @classmethod
+    def from_memento(cls, memento: GroupDecisionMemento, design: WorldDesign) -> GroupDecision:
+        decision = cls(design.nouns.group_decision_of(memento.decision_id))
+        decision._open = memento.open
+        decision._voters = set(memento.voters)
+        decision._choices = set(memento.choices)
+        decision._ballots = {ballot.voter: ballot.choice for ballot in memento.ballots}
+        return decision
+
     @property
     def decision_id(self) -> GroupDecisionId:
         return self._decision_id
+
+    def memento(self) -> GroupDecisionMemento:
+        return GroupDecisionMemento(
+            decision_id=self._decision_id,
+            open=self._open,
+            voters=frozenset(self._voters),
+            choices=frozenset(self._choices),
+            ballots=frozenset(Ballot(voter, choice) for voter, choice in self._ballots.items()),
+        )
 
     def start(self, voters: frozenset[PersonId], choices: frozenset[PersonId]) -> None:
         if self._open:
