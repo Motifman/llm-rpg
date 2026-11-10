@@ -230,8 +230,8 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
     def is_dead(self) -> bool:
         return isinstance(self._life_state, Dead)
 
-    def life_state(self) -> LifeState:
-        return self._life_state
+    def is_down(self) -> bool:
+        return isinstance(self._life_state, Down)
 
     def occupant_in_world(self, departed_persons_act: bool) -> Occupant:
         if departed_persons_act and self.is_dead():

@@ -45,7 +45,7 @@ class TestDamageEffect:
 
         DamageEffect(Target(), Damage(10)).apply(world.facts(), world.aggregates(), bob_hits_alice)
 
-        assert world.vitals[ALICE].life_state() == Down(fell_at=WorldTick(3), cause=StruckByPerson(BOB))
+        assert world.vitals[ALICE].memento().life_state == Down(fell_at=WorldTick(3), cause=StruckByPerson(BOB))
 
     def test_person_hurt_by_own_action_falls_by_world_happening(self) -> None:
         """Alice が罠に触れて自分が傷つくと、倒れた理由は WorldHappening()。"""
@@ -54,7 +54,7 @@ class TestDamageEffect:
 
         DamageEffect(Actor(), Damage(4)).apply(world.facts(), world.aggregates(), alice_touches_trap)
 
-        assert world.vitals[ALICE].life_state() == Down(fell_at=WorldTick(0), cause=WorldHappening())
+        assert world.vitals[ALICE].memento().life_state == Down(fell_at=WorldTick(0), cause=WorldHappening())
 
     def test_person_hurt_by_happening_falls_by_world_happening(self) -> None:
         """出来事が名指しした Alice を傷つけると、倒れた理由は WorldHappening()。"""
@@ -63,7 +63,7 @@ class TestDamageEffect:
 
         DamageEffect(NamedPerson(character(ALICE)), Damage(4)).apply(world.facts(), world.aggregates(), rockfall)
 
-        assert world.vitals[ALICE].life_state() == Down(fell_at=WorldTick(0), cause=WorldHappening())
+        assert world.vitals[ALICE].memento().life_state == Down(fell_at=WorldTick(0), cause=WorldHappening())
 
     def test_damage_short_of_hit_points_only_lowers_them(self) -> None:
         """体力 10 の Alice に 3 の痛手を与えると、体力は 7 になり、起きたまま。"""
@@ -74,7 +74,7 @@ class TestDamageEffect:
         )
 
         assert world.vitals[ALICE].hp() == HitPoints(current=7, maximum=10)
-        assert world.vitals[ALICE].life_state() == Alive()
+        assert world.vitals[ALICE].memento().life_state == Alive()
 
     def test_requires_only_its_subject(self) -> None:
         """要るものは、傷つける人の主語 (Target) だけ。"""
@@ -115,7 +115,7 @@ class TestHealAndReviveEffect:
             world.facts(), world.aggregates(), ActionAttemptForTests(actor_id=BOB, target=ALICE)
         )
 
-        assert world.vitals[ALICE].life_state() == Alive()
+        assert world.vitals[ALICE].memento().life_state == Alive()
         assert world.vitals[ALICE].hp() == HitPoints(current=5, maximum=10)
 
 

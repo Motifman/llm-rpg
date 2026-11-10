@@ -211,8 +211,8 @@ class TestForEveryoneEffect:
             world.facts(), world.aggregates(), ActionAttemptForTests(actor_id=BOB)
         )
 
-        assert world.vitals[ALICE].life_state() == Down(fell_at=WorldTick(0), cause=StruckByPerson(BOB))
-        assert world.vitals[BOB].life_state() == Down(fell_at=WorldTick(0), cause=WorldHappening())
+        assert world.vitals[ALICE].memento().life_state == Down(fell_at=WorldTick(0), cause=StruckByPerson(BOB))
+        assert world.vitals[BOB].memento().life_state == Down(fell_at=WorldTick(0), cause=WorldHappening())
 
     def test_requires_selection_and_effect_without_each_person(self) -> None:
         """要るものは、選び方 (Target を要る) と効果 (EachPerson と Actor を要る) を合わせ、中だけで使う EachPerson を外したもの。"""
