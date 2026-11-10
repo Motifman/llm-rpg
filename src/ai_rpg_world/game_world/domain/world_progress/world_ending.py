@@ -26,16 +26,18 @@ class WorldEndingMemento:
 
 
 class WorldEnding(AggregateRoot[WorldEndedEvent]):
-    def __init__(self, world_id: WorldId) -> None:
+    def __init__(self, world_id: WorldId, ended: bool) -> None:
         super().__init__()
         self._world_id = world_id
-        self._ended = False
+        self._ended = ended
+
+    @classmethod
+    def start(cls, world_id: WorldId) -> WorldEnding:
+        return cls(world_id, False)
 
     @classmethod
     def from_memento(cls, memento: WorldEndingMemento, design: WorldDesign) -> WorldEnding:
-        ending = cls(memento.world_id)
-        ending._ended = memento.ended
-        return ending
+        return cls(memento.world_id, memento.ended)
 
     @property
     def world_id(self) -> WorldId:

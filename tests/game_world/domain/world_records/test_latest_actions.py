@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInt
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.condition.subject import Anyone
 from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
+from ai_rpg_world.game_world.domain.exception.world_records_exception import LatestActionsDisagreeWithAnyoneException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId, WorldId, WorldTick
@@ -32,7 +33,7 @@ _BOB_SEARCHES = ActionAttemptForTests(actor_id=_BOB, action_kind=ActionKind.SEAR
 _ALICE_PULLS_LEVER = ObjectInteractionAttempt(
     _ALICE, thing("lever", "lift_landing"), InteractionForTests(_PULL_LEVER), {}, Openly()
 )
-from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.memento_for_tests import empty_design, rebuilt_from_memento
 
 
 class TestLatestActionsNote:
@@ -40,7 +41,7 @@ class TestLatestActionsNote:
 
     def test_nothing_has_been_done_at_first(self) -> None:
         """作った直後は自分の世界の ID を持ち、誰の、誰でもの、どの行為の last_done_at も NeverDone。"""
-        latest = LatestActions(_WORLD)
+        latest = LatestActions.start(_WORLD)
 
         assert latest.world_id == _WORLD
         assert latest.last_done_at(_ALICE, ActionKind.SEARCH) == NeverDone()
@@ -48,7 +49,7 @@ class TestLatestActionsNote:
 
     def test_note_records_the_tick_for_the_actor_and_for_anyone(self) -> None:
         """alice が tick 4 に探したら、alice の SEARCH も誰でもの SEARCH も tick 4、bob の SEARCH は NeverDone。"""
-        latest = LatestActions(_WORLD)
+        latest = LatestActions.start(_WORLD)
 
         latest.note(_ALICE_SEARCHES, WorldTick(4))
 
@@ -58,7 +59,7 @@ class TestLatestActionsNote:
 
     def test_anyone_answers_the_latest_among_everyone(self) -> None:
         """alice が tick 4、bob が tick 6 に探したら、誰でもの SEARCH は tick 6、alice の SEARCH は tick 4 のまま。"""
-        latest = LatestActions(_WORLD)
+        latest = LatestActions.start(_WORLD)
 
         latest.note(_ALICE_SEARCHES, WorldTick(4))
         latest.note(_BOB_SEARCHES, WorldTick(6))
@@ -68,7 +69,7 @@ class TestLatestActionsNote:
 
     def test_interaction_is_recorded_by_its_kind_and_its_interaction(self) -> None:
         """alice が tick 3 にレバーを引いたら、INTERACT_WITH_OBJECT でも pull_lever でも tick 3 を答える。"""
-        latest = LatestActions(_WORLD)
+        latest = LatestActions.start(_WORLD)
 
         latest.note(_ALICE_PULLS_LEVER, WorldTick(3))
 
@@ -78,7 +79,7 @@ class TestLatestActionsNote:
 
     def test_note_records_person_acted_event(self) -> None:
         """note は、世界・行った行為・tick を持つ PersonActedEvent をためる。"""
-        latest = LatestActions(_WORLD)
+        latest = LatestActions.start(_WORLD)
 
         latest.note(_ALICE_SEARCHES, WorldTick(4))
 
@@ -92,7 +93,7 @@ class TestLatestActionsFailedAttempt:
 
     def test_failed_attempt_is_not_done(self) -> None:
         """alice の探す試みが tick 5 に断られても、alice の SEARCH の last_done_at は NeverDone のまま。"""
-        latest = LatestActions(_WORLD)
+        latest = LatestActions.start(_WORLD)
 
         latest.note_failed_attempt(_refusal_of(_ALICE_SEARCHES), WorldTick(5))
 
@@ -100,7 +101,7 @@ class TestLatestActionsFailedAttempt:
 
     def test_failed_attempt_records_event_with_refusal(self) -> None:
         """note_failed_attempt は、世界・断った理由 (ActionRefusal)・tick を持つ ActionAttemptFailedEvent をためる。"""
-        latest = LatestActions(_WORLD)
+        latest = LatestActions.start(_WORLD)
         refusal = _refusal_of(_ALICE_SEARCHES)
 
         latest.note_failed_attempt(refusal, WorldTick(5))
@@ -131,7 +132,7 @@ class TestLatestActionsMemento:
 
     def test_rebuilt_latest_actions_answer_the_same_ticks(self) -> None:
         """alice が tick 4 に探し tick 5 にレバーを引き、bob が tick 6 に探したあと作り直すと、どの last_done_at も元と同じ。"""
-        latest = LatestActions(_WORLD)
+        latest = LatestActions.start(_WORLD)
         latest.note(_ALICE_SEARCHES, WorldTick(4))
         latest.note(_ALICE_PULLS_LEVER, WorldTick(5))
         latest.note(_BOB_SEARCHES, WorldTick(6))
@@ -147,10 +148,10 @@ class TestLatestActionsMemento:
 
     def test_memento_does_not_depend_on_the_order_of_noting(self) -> None:
         """tick 4 に alice と bob が探したとき、alice から記録しても bob から記録しても、memento は等しい。"""
-        alice_first = LatestActions(_WORLD)
+        alice_first = LatestActions.start(_WORLD)
         alice_first.note(_ALICE_SEARCHES, WorldTick(4))
         alice_first.note(_BOB_SEARCHES, WorldTick(4))
-        bob_first = LatestActions(_WORLD)
+        bob_first = LatestActions.start(_WORLD)
         bob_first.note(_BOB_SEARCHES, WorldTick(4))
         bob_first.note(_ALICE_SEARCHES, WorldTick(4))
 
@@ -158,7 +159,7 @@ class TestLatestActionsMemento:
 
     def test_rebuilding_records_no_event(self) -> None:
         """行為を記録したあとの memento から作り直しても、作り直したものはイベントをためていない。"""
-        latest = LatestActions(_WORLD)
+        latest = LatestActions.start(_WORLD)
         latest.note(_ALICE_SEARCHES, WorldTick(4))
 
         assert rebuilt_from_memento(latest).get_events() == []
@@ -179,3 +180,44 @@ class TestLatestActionsMementoRefusesRepeatedKey:
                     }
                 ),
             )
+
+
+def _rebuilt_from(*last_done: ActionLastDoneAt) -> LatestActions:
+    return LatestActions.from_memento(
+        LatestActionsMemento(world_id=_WORLD, last_done=frozenset(last_done)), empty_design()
+    )
+
+
+class TestLatestActionsRefusesDisagreementWithAnyone:
+    """LatestActions を作るとき、人ごとの行と誰でもの行が、note で作れない食い違い方をしていると断ることを保証する。"""
+
+    def test_person_did_it_but_anyone_has_no_row_is_refused(self) -> None:
+        """alice が tick 4 に探した行だけがあり、誰でもの SEARCH の行が無い memento から作ると、LatestActionsDisagreeWithAnyoneException を投げる。"""
+        with pytest.raises(LatestActionsDisagreeWithAnyoneException):
+            _rebuilt_from(ActionLastDoneAt(_ALICE, ActionKind.SEARCH, WorldTick(4)))
+
+    def test_anyone_did_it_but_no_person_has_a_row_is_refused(self) -> None:
+        """誰でもの SEARCH が tick 4 の行だけがあり、人の行が無い memento から作ると、LatestActionsDisagreeWithAnyoneException を投げる。"""
+        with pytest.raises(LatestActionsDisagreeWithAnyoneException):
+            _rebuilt_from(ActionLastDoneAt(Anyone(), ActionKind.SEARCH, WorldTick(4)))
+
+    def test_anyone_at_a_tick_no_person_did_it_is_refused(self) -> None:
+        """alice が tick 4、bob が tick 6 に探し、誰でもの SEARCH が tick 5 の memento から作ると、LatestActionsDisagreeWithAnyoneException を投げる。"""
+        with pytest.raises(LatestActionsDisagreeWithAnyoneException):
+            _rebuilt_from(
+                ActionLastDoneAt(_ALICE, ActionKind.SEARCH, WorldTick(4)),
+                ActionLastDoneAt(_BOB, ActionKind.SEARCH, WorldTick(6)),
+                ActionLastDoneAt(Anyone(), ActionKind.SEARCH, WorldTick(5)),
+            )
+
+    def test_anyone_at_an_earlier_person_tick_is_accepted(self) -> None:
+        """alice が tick 6、bob が tick 4 に探し、誰でもの SEARCH が tick 4 の memento からは作れる。note が now の後戻りを断らないので、bob を後から tick 4 で記録すると作れる状態だから。"""
+        latest = _rebuilt_from(
+            ActionLastDoneAt(_ALICE, ActionKind.SEARCH, WorldTick(6)),
+            ActionLastDoneAt(_BOB, ActionKind.SEARCH, WorldTick(4)),
+            ActionLastDoneAt(Anyone(), ActionKind.SEARCH, WorldTick(4)),
+        )
+
+        assert latest.last_done_at(_ALICE, ActionKind.SEARCH) == WorldTick(6)
+        assert latest.last_done_at(_BOB, ActionKind.SEARCH) == WorldTick(4)
+        assert latest.last_done_at(Anyone(), ActionKind.SEARCH) == WorldTick(4)

@@ -18,14 +18,14 @@ class TestMissedNotices:
 
     def test_holds_nothing_at_first(self) -> None:
         """作った直後は、その人の知らせを 1 つも持たない。"""
-        notices = MissedNotices(_BOB)
+        notices = MissedNotices.start(_BOB)
 
         assert notices.person == _BOB
         assert notices.notices() == ()
 
     def test_returns_notices_in_the_order_they_were_kept(self) -> None:
         """tick 3 に「荷が軽くなっている」、tick 5 に「遠くで鐘が鳴った」をためると、その順で返す。"""
-        notices = MissedNotices(_BOB)
+        notices = MissedNotices.start(_BOB)
         lighter = _notice("荷が軽くなっている。", 3)
         bell = _notice("遠くで鐘が鳴った。", 5)
 
@@ -36,7 +36,7 @@ class TestMissedNotices:
 
     def test_clear_empties_the_notices(self) -> None:
         """起きて届け終えたあと clear すると、ためていた知らせは無くなる。"""
-        notices = MissedNotices(_BOB)
+        notices = MissedNotices.start(_BOB)
         notices.keep(_notice("荷が軽くなっている。", 3))
 
         notices.clear()
@@ -49,7 +49,7 @@ class TestMissedNoticesMemento:
 
     def test_rebuilt_notices_keep_the_order(self) -> None:
         """tick 3 と tick 5 の知らせをためたあと作り直すと、同じ人の、同じ知らせを同じ順で返す。"""
-        notices = MissedNotices(_BOB)
+        notices = MissedNotices.start(_BOB)
         lighter = _notice("荷が軽くなっている。", 3)
         bell = _notice("遠くで鐘が鳴った。", 5)
         notices.keep(lighter)

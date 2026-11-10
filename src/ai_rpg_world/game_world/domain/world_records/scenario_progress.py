@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
@@ -52,17 +53,27 @@ class ScenarioProgressMemento:
 
 
 class ScenarioProgress:
-    def __init__(self, world_id: WorldId) -> None:
+    def __init__(
+        self,
+        world_id: WorldId,
+        last_fired: Mapping[HappeningId, WorldTick],
+        reaction_truths: Mapping[ReactionId, bool],
+    ) -> None:
         self._world_id = world_id
-        self._last_fired: dict[HappeningId, WorldTick] = {}
-        self._reaction_truths: dict[ReactionId, bool] = {}
+        self._last_fired = dict(last_fired)
+        self._reaction_truths = dict(reaction_truths)
+
+    @classmethod
+    def start(cls, world_id: WorldId) -> ScenarioProgress:
+        return cls(world_id, {}, {})
 
     @classmethod
     def from_memento(cls, memento: ScenarioProgressMemento, design: WorldDesign) -> ScenarioProgress:
-        progress = cls(memento.world_id)
-        progress._last_fired = {fired.happening: fired.at for fired in memento.last_fired}
-        progress._reaction_truths = {noted.reaction: noted.truth for noted in memento.reaction_truths}
-        return progress
+        return cls(
+            memento.world_id,
+            {fired.happening: fired.at for fired in memento.last_fired},
+            {noted.reaction: noted.truth for noted in memento.reaction_truths},
+        )
 
     @property
     def world_id(self) -> WorldId:

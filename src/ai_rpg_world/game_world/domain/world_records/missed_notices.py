@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
@@ -18,15 +19,17 @@ class MissedNoticesMemento:
 
 
 class MissedNotices:
-    def __init__(self, person: PersonId) -> None:
+    def __init__(self, person: PersonId, notices: Sequence[MissedNotice]) -> None:
         self._person = person
-        self._notices: list[MissedNotice] = []
+        self._notices = list(notices)
+
+    @classmethod
+    def start(cls, person: PersonId) -> MissedNotices:
+        return cls(person, ())
 
     @classmethod
     def from_memento(cls, memento: MissedNoticesMemento, design: WorldDesign) -> MissedNotices:
-        missed = cls(memento.person)
-        missed._notices = list(memento.notices)
-        return missed
+        return cls(memento.person, memento.notices)
 
     @property
     def person(self) -> PersonId:
