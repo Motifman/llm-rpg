@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
@@ -12,6 +12,10 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     LitWhen,
     StateValue,
 )
+from ai_rpg_world.game_world.domain.exception.game_world_exception import (
+    MementoDoesNotMatchDesignException,
+    RepeatedMementoKeyException,
+)
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     ItemAlreadyLeftWorldException,
@@ -20,6 +24,9 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import WhereItemWas
 from ai_rpg_world.game_world.domain.value_object import ItemSpecId, StateKeyId, Ticks, WorldTick
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -57,6 +64,28 @@ class ItemRanOutEvent(DomainEvent):
 ItemEvent = ItemCameIntoWorldEvent | ItemStateChangedEvent | ItemLeftWorldEvent | ItemRanOutEvent
 
 
+@final
+@dataclass(frozen=True)
+class ItemStateKeyValue:
+    key: StateKeyId
+    value: StateValue
+
+
+@final
+@dataclass(frozen=True)
+class ItemMemento:
+    item_id: ItemInstanceId
+    spec_id: ItemSpecId
+    came_at: WorldTick
+    values: frozenset[ItemStateKeyValue]
+    in_world: bool
+
+    def __post_init__(self) -> None:
+        keys = [key_value.key for key_value in self.values]
+        if len(set(keys)) != len(keys):
+            raise RepeatedMementoKeyException(f"{self.item_id.value} has a state key with two values")
+
+
 class Item(AggregateRoot[ItemEvent]):
     def __init__(self, item_id: ItemInstanceId, spec: ItemSpecDeclaration, came_at: WorldTick) -> None:
         super().__init__()
@@ -74,6 +103,16 @@ class Item(AggregateRoot[ItemEvent]):
         )
         return item
 
+    @classmethod
+    def from_memento(cls, memento: ItemMemento, design: WorldDesign) -> Item:
+        spec = design.nouns.item_spec_of(memento.spec_id)
+        values = {key_value.key: key_value.value for key_value in memento.values}
+        _require_matches(spec, values, memento.item_id)
+        item = cls(memento.item_id, spec, memento.came_at)
+        item._values = values
+        item._in_world = memento.in_world
+        return item
+
     @property
     def item_id(self) -> ItemInstanceId:
         return self._item_id
@@ -81,6 +120,15 @@ class Item(AggregateRoot[ItemEvent]):
     @property
     def spec_id(self) -> ItemSpecId:
         return self._spec.item_spec_id
+
+    def memento(self) -> ItemMemento:
+        return ItemMemento(
+            item_id=self._item_id,
+            spec_id=self.spec_id,
+            came_at=self._came_at,
+            values=frozenset(ItemStateKeyValue(key, value) for key, value in self._values.items()),
+            in_world=self._in_world,
+        )
 
     def set(self, key: ItemStateKeyDeclaration, value: StateValue) -> None:
         if not self._in_world:
@@ -125,3 +173,16 @@ class Item(AggregateRoot[ItemEvent]):
     def gives_light(self) -> bool:
         lights_up = self._spec.lights_up
         return isinstance(lights_up, LitWhen) and self._values[lights_up.key] == lights_up.value
+
+
+def _require_matches(spec: ItemSpecDeclaration, values: dict[StateKeyId, StateValue], item: ItemInstanceId) -> None:
+    if {state_key.key for state_key in spec.state_keys} != values.keys():
+        raise MementoDoesNotMatchDesignException(
+            f"{item.value} has state keys {sorted(key.value for key in values)}, "
+            f"but {spec.item_spec_id.value} declares {sorted(state_key.key.value for state_key in spec.state_keys)}"
+        )
+    for state_key in spec.state_keys:
+        if not state_key.kind.can_hold(values[state_key.key]):
+            raise MementoDoesNotMatchDesignException(
+                f"{values[state_key.key]!r} of {item.value} does not fit {state_key.kind!r} of {state_key.key.value}"
+            )

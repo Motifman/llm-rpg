@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     InventoryFullException,
     ItemAlreadyCarriedException,
@@ -20,6 +21,9 @@ from ai_rpg_world.game_world.domain.exception.person_inventory_exception import 
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.value_object import Capacity, Count, Gold, HandsNeeded, ItemSpecId, PersonId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 _HANDS = 2
 
@@ -78,9 +82,39 @@ PersonInventoryEvent = (
 
 @final
 @dataclass(frozen=True)
-class _HeldItem:
+class _ItemInHand:
     item: ItemInstanceId
     hands_needed: HandsNeeded
+
+
+@final
+@dataclass(frozen=True)
+class HeldItem:
+    item: ItemInstanceId
+    spec: ItemSpecId
+    hands_needed: HandsNeeded
+
+
+@final
+@dataclass(frozen=True)
+class PackedItem:
+    item: ItemInstanceId
+    spec: ItemSpecId
+
+
+@final
+@dataclass(frozen=True)
+class PersonInventoryMemento:
+    person_id: PersonId
+    capacity: Capacity
+    gold: Gold
+    held: tuple[HeldItem, ...]
+    packed: tuple[PackedItem, ...]
+
+    def __post_init__(self) -> None:
+        items = [held.item for held in self.held] + [packed.item for packed in self.packed]
+        if len(set(items)) != len(items):
+            raise RepeatedMementoKeyException(f"{self.person_id.value} carries an item twice")
 
 
 class PersonInventory(AggregateRoot[PersonInventoryEvent]):
@@ -89,13 +123,33 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         self._person_id = person_id
         self._capacity = capacity
         self._packed: list[ItemInstanceId] = []
-        self._held: list[_HeldItem] = []
+        self._held: list[_ItemInHand] = []
         self._specs: dict[ItemInstanceId, ItemSpecId] = {}
         self._gold = Gold(0)
+
+    @classmethod
+    def from_memento(cls, memento: PersonInventoryMemento, design: WorldDesign) -> PersonInventory:
+        inventory = cls(memento.person_id, memento.capacity)
+        inventory._held = [_ItemInHand(held.item, held.hands_needed) for held in memento.held]
+        inventory._packed = [packed.item for packed in memento.packed]
+        inventory._specs = {held.item: held.spec for held in memento.held} | {
+            packed.item: packed.spec for packed in memento.packed
+        }
+        inventory._gold = memento.gold
+        return inventory
 
     @property
     def person_id(self) -> PersonId:
         return self._person_id
+
+    def memento(self) -> PersonInventoryMemento:
+        return PersonInventoryMemento(
+            person_id=self._person_id,
+            capacity=self._capacity,
+            gold=self._gold,
+            held=tuple(HeldItem(held.item, self._specs[held.item], held.hands_needed) for held in self._held),
+            packed=tuple(PackedItem(item, self._specs[item]) for item in self._packed),
+        )
 
     def receive(self, item: ItemInstanceId, spec: ItemSpecId) -> None:
         if self._carries(item):
@@ -135,7 +189,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         while _HANDS - self._hands_in_use() < hands_needed.value:
             self.put_away(self._held[0].item)
         self._packed.remove(item)
-        self._held.append(_HeldItem(item, hands_needed))
+        self._held.append(_ItemInHand(item, hands_needed))
         self.add_event(ItemHeldEvent(**new_event_stamp(), person=self._person_id, item=item))
 
     def put_away(self, item: ItemInstanceId) -> None:

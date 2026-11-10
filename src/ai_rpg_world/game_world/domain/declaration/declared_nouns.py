@@ -29,7 +29,15 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.world_design_exception import UnknownNameFlaw, WorldDesignFlawsException
-from ai_rpg_world.game_world.domain.value_object import Capacity, GroupingId, HitPoints, ObjectId, SpotId, WorldStageId
+from ai_rpg_world.game_world.domain.value_object import (
+    Capacity,
+    GroupingId,
+    HitPoints,
+    ItemSpecId,
+    ObjectId,
+    SpotId,
+    WorldStageId,
+)
 
 _Declaration = TypeVar("_Declaration")
 
@@ -150,6 +158,9 @@ class DeclaredNouns:
 
     def item_spec(self, name: str, at: DesignLocation) -> ItemSpecDeclaration:
         return self._item_specs.get(name, at)
+
+    def item_spec_of(self, item_spec_id: ItemSpecId) -> ItemSpecDeclaration:
+        return self._item_specs.with_id(item_spec_id)
 
     def group(self, name: str, at: DesignLocation) -> GroupDeclaration:
         return self._groups.get(name, at)

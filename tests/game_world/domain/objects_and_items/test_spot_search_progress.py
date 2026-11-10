@@ -6,15 +6,19 @@ from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
 from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration, Finding
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.world_records_exception import DiscoverableElsewhereException
 from ai_rpg_world.game_world.domain.objects_and_items import (
     DiscoverableFoundEvent,
+    PersonSearchCount,
     SpotSearchedEvent,
     SpotSearchProgress,
+    SpotSearchProgressMemento,
 )
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.value_object import Count, PersonId, SpotId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.discoverable_id import DiscoverableId
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 _CAVE = SpotId("cave")
 _ALICE = PersonId("alice")
@@ -150,3 +154,42 @@ class TestSpotSearchProgressFinding:
             progress.mark_found(elsewhere, _ALICE)
 
         assert not progress.is_found(elsewhere, _ALICE)
+
+
+class TestSpotSearchProgressMemento:
+    """SpotSearchProgress を memento から作り直すと、人ごとの探した回数と、誰が何を見つけたかが元と同じで、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_progress_keeps_counts_and_finders(self) -> None:
+        """alice が 2 回・bob が 1 回探し、alice が壁の彫り物を見つけたあと作り直すと、回数も見つけたかも同じ。"""
+        progress = SpotSearchProgress(_CAVE)
+        progress.record_search(_ALICE)
+        progress.record_search(_ALICE)
+        progress.record_search(_BOB)
+        progress.mark_found(_PERSONAL_HINT, _ALICE)
+
+        rebuilt = rebuilt_from_memento(progress)
+
+        assert rebuilt.memento() == progress.memento()
+        assert rebuilt.memento() != SpotSearchProgress(_CAVE).memento()
+        assert rebuilt.spot_id == _CAVE
+        assert rebuilt.search_count(_ALICE) == Count(2)
+        assert rebuilt.search_count(_BOB) == Count(1)
+        assert rebuilt.is_found(_PERSONAL_HINT, _ALICE)
+        assert not rebuilt.is_found(_PERSONAL_HINT, _BOB)
+        assert not rebuilt.is_found(_SHARED_CHEST, _ALICE)
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """探したあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        progress = SpotSearchProgress(_CAVE)
+        progress.record_search(_ALICE)
+
+        assert rebuilt_from_memento(progress).get_events() == []
+
+    def test_same_person_with_two_counts_is_refused(self) -> None:
+        """alice の探した回数が 1 と 2 の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            SpotSearchProgressMemento(
+                spot_id=_CAVE,
+                search_counts=frozenset({PersonSearchCount(_ALICE, Count(1)), PersonSearchCount(_ALICE, Count(2))}),
+                finders=frozenset(),
+            )

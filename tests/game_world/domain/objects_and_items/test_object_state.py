@@ -20,7 +20,14 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     WrittenText,
     WrittenTextStateKind,
 )
-from ai_rpg_world.game_world.domain.exception.game_world_exception import CountBelowZeroException, TickOrderException
+from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import (
+    CountBelowZeroException,
+    MementoDoesNotMatchDesignException,
+    RepeatedMementoKeyException,
+    TickOrderException,
+)
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     NotEnoughStockException,
@@ -31,6 +38,9 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     ObjectRevealedEvent,
     ObjectState,
     ObjectStateChangedEvent,
+    ObjectStateKeyValue,
+    ObjectStateMemento,
+    ObjectStockLevel,
     TextWrittenEvent,
 )
 from ai_rpg_world.game_world.domain.value_object import (
@@ -44,6 +54,8 @@ from ai_rpg_world.game_world.domain.value_object import (
     Ticks,
     WorldTick,
 )
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_design_for_tests import compose_world, nouns, spot
 
 _WELL = ObjectId("well")
 _ALICE = PersonId("alice")
@@ -395,3 +407,145 @@ class TestObjectStateReveal:
         state.reveal()
 
         assert state.get_events() == []
+
+
+def _design_with(declaration: ObjectDeclaration) -> WorldDesign:
+    return compose_world(nouns(spots=(spot("square"),), objects=(declaration,)))
+
+
+def _well_memento(
+    values: tuple[ObjectStateKeyValue, ...], stock_levels: tuple[ObjectStockLevel, ...] = ()
+) -> ObjectStateMemento:
+    return ObjectStateMemento(
+        object_id=_WELL, values=frozenset(values), stock_levels=frozenset(stock_levels), revealed=True
+    )
+
+
+class TestObjectStateMemento:
+    """ObjectState を memento から作り直すと、値・在庫の補充の数え始め・見つかったかが元と同じで、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_well_keeps_values_text_and_reveal(self) -> None:
+        """隠れた井戸の蓋を開け、桶を 1 つ足し、文を書き、見つけたあと作り直すと、どの値も同じで見つかったまま。"""
+        declaration = _well(_COVERED, _BUCKETS, _NOTE, hidden=True)
+        state = _created(declaration)
+        state.set(_COVERED, FlagValue(raised=False), WorldTick(1))
+        state.add_to_count(_BUCKETS, Count(1))
+        state.write_text(_NOTE, TextBody("水は濁っている"), _ALICE, WorldTick(2))
+        state.reveal()
+
+        rebuilt = rebuilt_from_memento(state, _design_with(declaration))
+
+        assert rebuilt.memento() == state.memento()
+        assert rebuilt.memento() != _created(declaration).memento()
+        assert rebuilt.object_id == _WELL
+        assert rebuilt.value_of(_COVERED, WorldTick(3)) == FlagValue(raised=False)
+        assert rebuilt.value_of(_BUCKETS, WorldTick(3)) == CountValue(Count(3))
+        assert rebuilt.value_of(_NOTE, WorldTick(3)) == WrittenText(
+            body=TextBody("水は濁っている"), author=_ALICE, written_at=WorldTick(2)
+        )
+        assert rebuilt.is_revealed()
+
+    def test_rebuilt_stock_keeps_the_refill_progress(self) -> None:
+        """3 tick ごとの補充で tick 4 に 1 つ取ったあと作り直しても、tick 5 では 0 のまま、tick 6 に 1 つ戻る。"""
+        water = _water(initial=0, refills_every=Ticks(3))
+        declaration = _well(water)
+        state = _created(declaration)
+        state.take_from_stock(water, Count(1), WorldTick(4))
+
+        rebuilt = rebuilt_from_memento(state, _design_with(declaration))
+
+        assert rebuilt.memento() == state.memento()
+        assert rebuilt.value_of(water, WorldTick(5)) == StockValue(Count(0))
+        assert rebuilt.value_of(water, WorldTick(6)) == StockValue(Count(1))
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """蓋を開けたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        declaration = _well()
+        state = _created(declaration)
+        state.set(_COVERED, FlagValue(raised=False), WorldTick(1))
+
+        assert rebuilt_from_memento(state, _design_with(declaration)).get_events() == []
+
+
+class TestObjectStateMementoAgainstDesign:
+    """ObjectState.from_memento が、宣言と食い違う memento を作り直さずに止めることを保証する。"""
+
+    def test_undeclared_object_is_refused(self) -> None:
+        """物 well を宣言していない世界で well の memento を作り直すと、UndeclaredNounException を投げる。"""
+        memento = _created().memento()
+
+        with pytest.raises(UndeclaredNounException):
+            ObjectState.from_memento(memento, compose_world())
+
+    def test_missing_state_key_is_refused(self) -> None:
+        """宣言にある buckets と note の値が無い memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        memento = _well_memento((ObjectStateKeyValue(_COVERED.key, FlagValue(raised=True)),))
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            ObjectState.from_memento(memento, _design_with(_well(_COVERED, _BUCKETS, _NOTE)))
+
+    def test_undeclared_state_key_is_refused(self) -> None:
+        """宣言に無い鍵 rope の値を持つ memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        memento = _well_memento(
+            (
+                ObjectStateKeyValue(_COVERED.key, FlagValue(raised=True)),
+                ObjectStateKeyValue(StateKeyId("rope"), FlagValue(raised=True)),
+            )
+        )
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            ObjectState.from_memento(memento, _design_with(_well(_COVERED)))
+
+    def test_stock_key_among_plain_values_is_refused(self) -> None:
+        """在庫の鍵 water を在庫の欄でなく値の欄に持つ memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        water = _water(initial=2)
+        memento = _well_memento((ObjectStateKeyValue(water.key, StockValue(Count(2))),))
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            ObjectState.from_memento(memento, _design_with(_well(water)))
+
+    def test_missing_stock_level_is_refused(self) -> None:
+        """宣言にある在庫 water の在庫が無い memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        memento = _well_memento(())
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            ObjectState.from_memento(memento, _design_with(_well(_water())))
+
+    def test_value_not_fitting_the_key_kind_is_refused(self) -> None:
+        """旗の鍵 covered に数の値を持つ memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        memento = _well_memento((ObjectStateKeyValue(_COVERED.key, CountValue(Count(1))),))
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            ObjectState.from_memento(memento, _design_with(_well(_COVERED)))
+
+    def test_stock_over_capacity_is_refused(self) -> None:
+        """入れ物が 5 の在庫 water に 6 を持つ memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        water = _water(capacity=5)
+        memento = _well_memento((), (ObjectStockLevel(water.key, Count(6), WorldTick(0)),))
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            ObjectState.from_memento(memento, _design_with(_well(water)))
+
+
+class TestObjectStateMementoRefusesRepeatedKey:
+    """ObjectStateMemento が、同じ鍵を値と在庫で合わせて 2 つ以上持つ memento を作ることを断ることを保証する。"""
+
+    def test_same_key_with_two_values_is_refused(self) -> None:
+        """covered が立っていると下りているの 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            _well_memento(
+                (
+                    ObjectStateKeyValue(_COVERED.key, FlagValue(raised=True)),
+                    ObjectStateKeyValue(_COVERED.key, FlagValue(raised=False)),
+                )
+            )
+
+    def test_same_key_as_value_and_stock_is_refused(self) -> None:
+        """water を値の欄と在庫の欄の両方に持つ memento を作ると、RepeatedMementoKeyException を投げる。"""
+        water = StateKeyId("water")
+
+        with pytest.raises(RepeatedMementoKeyException):
+            _well_memento(
+                (ObjectStateKeyValue(water, StockValue(Count(1))),),
+                (ObjectStockLevel(water, Count(1), WorldTick(0)),),
+            )

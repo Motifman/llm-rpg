@@ -6,12 +6,14 @@ from typing import TYPE_CHECKING, final
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.world_records_exception import DiscoverableElsewhereException
 from ai_rpg_world.game_world.domain.value_object import Count, PersonId, SpotId
 from ai_rpg_world.game_world.domain.value_object.discoverable_id import DiscoverableId
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -34,6 +36,33 @@ class DiscoverableFoundEvent(DomainEvent):
 SpotSearchProgressEvent = SpotSearchedEvent | DiscoverableFoundEvent
 
 
+@final
+@dataclass(frozen=True)
+class PersonSearchCount:
+    person: PersonId
+    count: Count
+
+
+@final
+@dataclass(frozen=True)
+class DiscoverableFinder:
+    discoverable: DiscoverableId
+    finder: PersonId
+
+
+@final
+@dataclass(frozen=True)
+class SpotSearchProgressMemento:
+    spot_id: SpotId
+    search_counts: frozenset[PersonSearchCount]
+    finders: frozenset[DiscoverableFinder]
+
+    def __post_init__(self) -> None:
+        people = [search_count.person for search_count in self.search_counts]
+        if len(set(people)) != len(people):
+            raise RepeatedMementoKeyException(f"someone has two search counts at {self.spot_id.value}")
+
+
 class SpotSearchProgress(AggregateRoot[SpotSearchProgressEvent]):
     def __init__(self, spot_id: SpotId) -> None:
         super().__init__()
@@ -41,9 +70,30 @@ class SpotSearchProgress(AggregateRoot[SpotSearchProgressEvent]):
         self._search_counts: dict[PersonId, Count] = {}
         self._finders: dict[DiscoverableId, frozenset[PersonId]] = {}
 
+    @classmethod
+    def from_memento(cls, memento: SpotSearchProgressMemento, design: WorldDesign) -> SpotSearchProgress:
+        progress = cls(memento.spot_id)
+        progress._search_counts = {search_count.person: search_count.count for search_count in memento.search_counts}
+        for found in memento.finders:
+            progress._finders[found.discoverable] = progress._finders.get(found.discoverable, frozenset()) | {
+                found.finder
+            }
+        return progress
+
     @property
     def spot_id(self) -> SpotId:
         return self._spot_id
+
+    def memento(self) -> SpotSearchProgressMemento:
+        return SpotSearchProgressMemento(
+            spot_id=self._spot_id,
+            search_counts=frozenset(PersonSearchCount(person, count) for person, count in self._search_counts.items()),
+            finders=frozenset(
+                DiscoverableFinder(discoverable, finder)
+                for discoverable, finders in self._finders.items()
+                for finder in finders
+            ),
+        )
 
     def record_search(self, searcher: PersonId) -> None:
         before = self.search_count(searcher)

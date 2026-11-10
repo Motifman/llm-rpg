@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypeVar, final
+from typing import TYPE_CHECKING, TypeVar, final
 
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
@@ -20,6 +20,10 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     WrittenText,
     WrittenTextStateKind,
 )
+from ai_rpg_world.game_world.domain.exception.game_world_exception import (
+    MementoDoesNotMatchDesignException,
+    RepeatedMementoKeyException,
+)
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     NotEnoughStockException,
@@ -27,6 +31,9 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     StateKeyNotOwnedException,
 )
 from ai_rpg_world.game_world.domain.value_object import Count, ObjectId, PersonId, StateKeyId, Ticks, WorldTick
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -76,6 +83,35 @@ class _StockLevel:
         return _StockLevel(amount, self.counted_from + Ticks(refills * interval))
 
 
+@final
+@dataclass(frozen=True)
+class ObjectStateKeyValue:
+    key: StateKeyId
+    value: StateValue
+
+
+@final
+@dataclass(frozen=True)
+class ObjectStockLevel:
+    key: StateKeyId
+    amount: Count
+    counted_from: WorldTick
+
+
+@final
+@dataclass(frozen=True)
+class ObjectStateMemento:
+    object_id: ObjectId
+    values: frozenset[ObjectStateKeyValue]
+    stock_levels: frozenset[ObjectStockLevel]
+    revealed: bool
+
+    def __post_init__(self) -> None:
+        keys = [key_value.key for key_value in self.values] + [level.key for level in self.stock_levels]
+        if len(set(keys)) != len(keys):
+            raise RepeatedMementoKeyException(f"{self.object_id.value} has a state key more than once")
+
+
 class ObjectState(AggregateRoot[ObjectStateEvent]):
     def __init__(self, declaration: ObjectDeclaration, now: WorldTick) -> None:
         super().__init__()
@@ -90,9 +126,31 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
     def from_declaration(cls, declaration: ObjectDeclaration, now: WorldTick) -> ObjectState:
         return cls(declaration, now)
 
+    @classmethod
+    def from_memento(cls, memento: ObjectStateMemento, design: WorldDesign) -> ObjectState:
+        declaration = design.nouns.object_of(memento.object_id)
+        values = {key_value.key: key_value.value for key_value in memento.values}
+        stocks = {level.key: _StockLevel(level.amount, level.counted_from) for level in memento.stock_levels}
+        _require_matches(declaration, values, stocks)
+        state = cls(declaration, WorldTick(0))
+        state._values = values
+        state._stocks = stocks
+        state._revealed = memento.revealed
+        return state
+
     @property
     def object_id(self) -> ObjectId:
         return self._declaration.object_id
+
+    def memento(self) -> ObjectStateMemento:
+        return ObjectStateMemento(
+            object_id=self.object_id,
+            values=frozenset(ObjectStateKeyValue(key, value) for key, value in self._values.items()),
+            stock_levels=frozenset(
+                ObjectStockLevel(key, level.amount, level.counted_from) for key, level in self._stocks.items()
+            ),
+            revealed=self._revealed,
+        )
 
     def set(self, key: ObjectStateKeyDeclaration, value: StateValue, now: WorldTick) -> None:
         before = self.value_of(key, now)
@@ -190,3 +248,21 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
                 f"{self.object_id.value}.{key.key.value} is {key.kind!r}, not {kind_type.__name__}"
             )
         return key.kind
+
+
+def _require_matches(
+    declaration: ObjectDeclaration, values: dict[StateKeyId, StateValue], stocks: dict[StateKeyId, _StockLevel]
+) -> None:
+    declared_stocks = {key.key for key in declaration.state_keys if isinstance(key.kind, StockStateKind)}
+    declared_values = {key.key for key in declaration.state_keys} - declared_stocks
+    if declared_values != values.keys() or declared_stocks != stocks.keys():
+        raise MementoDoesNotMatchDesignException(
+            f"{declaration.object_id.value} has values {sorted(key.value for key in values)} "
+            f"and stocks {sorted(key.value for key in stocks)}, which its declaration does not have"
+        )
+    for state_key in declaration.state_keys:
+        value = StockValue(stocks[state_key.key].amount) if state_key.key in stocks else values[state_key.key]
+        if not state_key.kind.can_hold(value):
+            raise MementoDoesNotMatchDesignException(
+                f"{value!r} of {declaration.object_id.value} does not fit {state_key.kind!r} of {state_key.key.value}"
+            )

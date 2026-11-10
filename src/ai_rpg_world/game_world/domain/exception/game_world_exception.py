@@ -24,3 +24,7 @@ class InvalidSpotIdException(GameWorldDomainException):
 
 class RepeatedMementoKeyException(GameWorldDomainException):
     error_code = "GAME_WORLD.REPEATED_MEMENTO_KEY"
+
+
+class MementoDoesNotMatchDesignException(GameWorldDomainException):
+    error_code = "GAME_WORLD.MEMENTO_DOES_NOT_MATCH_DESIGN"

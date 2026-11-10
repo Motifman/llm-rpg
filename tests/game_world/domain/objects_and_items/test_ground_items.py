@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     GroundItemAlreadyPlacedException,
     GroundItemNotFoundException,
@@ -9,10 +10,12 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
 from ai_rpg_world.game_world.domain.objects_and_items import (
     GroundItemPlacedEvent,
     GroundItems,
+    GroundItemsMemento,
     GroundItemTakenEvent,
     ItemInstanceId,
 )
 from ai_rpg_world.game_world.domain.value_object import SpotId
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 _SQUARE = SpotId("square")
 _LANTERN = ItemInstanceId("lantern#1")
@@ -78,3 +81,36 @@ class TestGroundItems:
             ground.take(_LANTERN)
 
         assert ground.get_events() == []
+
+
+class TestGroundItemsMemento:
+    """GroundItems を memento から作り直すと、地面の品物が置いた順のまま同じで、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_ground_keeps_items_in_placed_order(self) -> None:
+        """つるはし・カンテラの順に置き、もう 1 つ置いて拾ったあと作り直すと、つるはし・カンテラの順で地面にある。"""
+        rope = ItemInstanceId("rope#1")
+        ground = GroundItems(_SQUARE)
+        ground.place(_PICKAXE)
+        ground.place(rope)
+        ground.place(_LANTERN)
+        ground.take(rope)
+
+        rebuilt = rebuilt_from_memento(ground)
+
+        assert rebuilt.memento() == ground.memento()
+        assert rebuilt.memento() != GroundItems(_SQUARE).memento()
+        assert rebuilt.spot_id == _SQUARE
+        assert rebuilt.items() == (_PICKAXE, _LANTERN)
+        assert not rebuilt.contains(rope)
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """品物を置いたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        ground = GroundItems(_SQUARE)
+        ground.place(_LANTERN)
+
+        assert rebuilt_from_memento(ground).get_events() == []
+
+    def test_same_item_twice_is_refused(self) -> None:
+        """カンテラが 2 度ある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            GroundItemsMemento(spot_id=_SQUARE, items=(_LANTERN, _LANTERN))
